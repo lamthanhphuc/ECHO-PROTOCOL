@@ -1,0 +1,46 @@
+# Unity (client at KLTN/)
+KLTN/Library/
+KLTN/Temp/
+KLTN/Logs/
+KLTN/UserSettings/
+KLTN/obj/
+KLTN/Build/
+KLTN/Builds/
+KLTN/Recordings/
+KLTN/MemoryCaptures/
+
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Secrets & local config
+.env
+.env.*
+appsettings.Production.json
+appsettings.*.local.json
+**/secrets.json
+
+# IDE / OS
+.vs/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# CodeGraph local cache (optional - keep .codegraph if team wants shared index)
+# .codegraph/
+
+.codegraph/
+
+KLTN/.git.backup/

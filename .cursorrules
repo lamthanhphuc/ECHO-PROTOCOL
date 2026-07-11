@@ -1,0 +1,36 @@
+# ECHO PROTOCOL — Unity & Agent Rules
+
+## Project paths
+- Workspace root: `d:\Bin\KLTN`
+- Unity client: `d:\Bin\KLTN\KLTN` (EchoProtocol.Client)
+- Backend: `d:\Bin\KLTN\EchoProtocol.Backend`
+- Unity version: 6000.3.19f1 (Unity 6.3 LTS)
+- Render pipeline: URP
+
+## MCP Unity (bắt buộc cho Editor ops)
+- Dùng `unity-editor` MCP cho scene, GameObject, Component, Prefab
+- Unity Editor phải mở và **không** ở Play mode
+- Nếu MCP lỗi: kiểm tra Console `[MCP] Server started on port 6400`
+
+## Manual reminder — dừng và nhắc user khi:
+- Unity Editor chưa mở hoặc đang Play mode
+- Photon Fusion chưa import / chưa có App ID
+- Docker Desktop chưa chạy
+- Cần secret production thật hoặc deploy cloud
+
+## C# conventions
+- `PascalCase` types/methods; `_camelCase` private fields; `camelCase` locals
+- One responsibility per MonoBehaviour; `[SerializeField]` over public fields
+- Input System for player input; no legacy Input API
+
+## Shell
+- Prefix commands with `rtk` when possible
+
+## Architecture reference
+- `gamecodex` MCP for game patterns
+- `codegraph` before refactors
+- `context7` for package/API docs
+
+## Security
+- Never commit secrets, JWT keys, DB passwords, Photon App ID in source
+- Use `appsettings.Development.json` placeholders only for local dev
