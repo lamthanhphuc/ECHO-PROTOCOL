@@ -40,39 +40,106 @@ Or via MCP `execute_menu_item` when `unity-editor` is connected.
 
 ```powershell
 cd d:\Bin\KLTN
-docker compose -f docker/docker-compose.yml up -d
+rtk docker compose -f docker/docker-compose.yml up -d
 ```
 
-**Dev connection string only** (never use in production):
+**Dev connection string** lives in `appsettings.Development.json` only (never use in production):
 
 ```
 Host=localhost;Port=5433;Database=echo_protocol;Username=postgres;Password=postgres
 ```
 
+Production: set `ConnectionStrings__DefaultConnection` via environment variable or secret manager.
+
 Stop:
 
 ```powershell
-docker compose -f docker/docker-compose.yml down
+rtk docker compose -f docker/docker-compose.yml down
 ```
 
 ## Backend API
 
-```powershell
-cd d:\Bin\KLTN\EchoProtocol.Backend
-dotnet restore
-dotnet build
-dotnet run --project src/EchoProtocol.Api
-```
-
-Swagger (Development): `https://localhost:7xxx/swagger` or `http://localhost:5xxx/swagger`
-
-Health check:
+### Build
 
 ```powershell
-curl http://localhost:5000/api/health
+cd d:\Bin\KLTN
+rtk dotnet build EchoProtocol.Backend/EchoProtocol.sln
 ```
 
-Adjust port per `src/EchoProtocol.Api/Properties/launchSettings.json`.
+### EF Core migration
+
+Install tool once if needed:
+
+```powershell
+rtk dotnet tool install --global dotnet-ef
+```
+
+**Fresh setup (clone repo):** apply committed migrations only — do **not** recreate `InitialAuthSchema`:
+
+```powershell
+rtk dotnet ef database update --project EchoProtocol.Backend/src/EchoProtocol.Api --startup-project EchoProtocol.Backend/src/EchoProtocol.Api
+```
+
+Migration `InitialAuthSchema` is already committed. New team members only need `database update`.
+
+**When schema changes** (new tables/columns after auth foundation):
+
+```powershell
+rtk dotnet ef migrations add <NewMigrationName> --project EchoProtocol.Backend/src/EchoProtocol.Api --startup-project EchoProtocol.Backend/src/EchoProtocol.Api
+rtk dotnet ef database update --project EchoProtocol.Backend/src/EchoProtocol.Api --startup-project EchoProtocol.Backend/src/EchoProtocol.Api
+```
+
+Production secrets (`ConnectionStrings__DefaultConnection`, `JwtSettings__SecretKey`, admin seed) must use environment variables, user-secrets, or a cloud secret manager — never commit real production values.
+
+In **Development**, the API also runs `MigrateAsync()` and admin seed on startup.
+
+### Run
+
+```powershell
+rtk dotnet run --project EchoProtocol.Backend/src/EchoProtocol.Api
+```
+
+- Swagger: `http://localhost:5042/swagger`
+- Health: `http://localhost:5042/api/health`
+
+### Configuration
+
+| Setting | Local dev | Production |
+|---|---|---|
+| Connection string | `appsettings.Development.json` | `ConnectionStrings__DefaultConnection` env |
+| JWT `SecretKey` | `appsettings.Development.json` (≥ 32 UTF-8 bytes) | `JwtSettings__SecretKey` env / user-secrets / secret manager |
+| Admin seed | `AdminSeed` section in Development | Configure via env; no auto-seed in Production |
+
+**Dev admin seed** (local only — change for real demos):
+
+- Username: `admin`
+- Password: see `appsettings.Development.json` (not logged by API)
+- Role: `ADMIN`
+
+### Test auth (PowerShell)
+
+```powershell
+$base = "http://localhost:5042/api"
+
+# Register
+$body = @{ username = "player01"; password = "123456"; confirmPassword = "123456" } | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "$base/auth/register" -Method Post -ContentType "application/json" -Body $body
+
+# Login
+$loginBody = @{ username = "player01"; password = "123456" } | ConvertTo-Json -Compress
+$login = Invoke-RestMethod -Uri "$base/auth/login" -Method Post -ContentType "application/json" -Body $loginBody
+$token = $login.data.accessToken
+
+# Me
+Invoke-RestMethod -Uri "$base/auth/me" -Headers @{ Authorization = "Bearer $token" }
+```
+
+### Swagger Bearer
+
+1. Open `http://localhost:5042/swagger`
+2. Click **Authorize**
+3. Paste raw JWT token (Swagger adds `Bearer` prefix)
+4. Call `GET /api/auth/me`
 
 ## Photon Fusion (manual)
 
@@ -91,6 +158,7 @@ Adjust port per `src/EchoProtocol.Api/Properties/launchSettings.json`.
 
 - [ ] Docker Postgres running on port 5433
 - [ ] Backend builds and `/api/health` returns success
+- [ ] Auth register/login/me work
 - [ ] Unity opens without compile errors
 - [ ] Photon Fusion + App ID configured
 - [ ] 2–4 laptops on same network for multiplayer test (later phase)
@@ -101,5 +169,6 @@ Adjust port per `src/EchoProtocol.Api/Properties/launchSettings.json`.
 |---|---|
 | MCP ECONNREFUSED | Open Unity; check port 6400 |
 | Docker fails | Start Docker Desktop |
-| EF connection failed | Verify Postgres container `docker ps` |
+| EF connection failed | Verify Postgres container `rtk docker ps` |
+| JWT startup error | Ensure `JwtSettings:SecretKey` in Development is ≥ 32 bytes |
 | Unity compile error | Window → Console, fix scripts under `Assets/Scripts/` |

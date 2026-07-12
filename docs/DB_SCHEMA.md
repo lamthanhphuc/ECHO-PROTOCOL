@@ -25,12 +25,14 @@ Wallets 1──* WalletTransactions
 | Column | Type | Notes |
 |---|---|---|
 | Id | UUID PK | |
-| Username | VARCHAR(50) UNIQUE | |
-| Email | VARCHAR(255) UNIQUE | |
+| Username | VARCHAR(100) UNIQUE | Stored normalized lowercase |
 | PasswordHash | VARCHAR(255) | BCrypt |
-| Role | VARCHAR(20) | Player, Admin |
-| CreatedAt | TIMESTAMPTZ | |
-| UpdatedAt | TIMESTAMPTZ | |
+| Role | VARCHAR(20) | `PLAYER`, `ADMIN` (string) |
+| Status | VARCHAR(20) | `ACTIVE`, `LOCKED` (string) |
+| CreatedAt | TIMESTAMPTZ | UTC |
+| UpdatedAt | TIMESTAMPTZ | UTC |
+
+**No Email column in Auth Foundation phase.**
 
 ---
 
@@ -39,10 +41,12 @@ Wallets 1──* WalletTransactions
 | Column | Type | Notes |
 |---|---|---|
 | Id | UUID PK | |
-| UserId | UUID FK → Users | UNIQUE |
-| DisplayName | VARCHAR(50) | |
-| AvatarUrl | VARCHAR(500) NULL | |
-| CreatedAt | TIMESTAMPTZ | |
+| UserId | UUID FK → Users | UNIQUE, ON DELETE RESTRICT |
+| DisplayName | VARCHAR(100) | |
+| TotalMatches | INT | Default 0, CHECK >= 0 |
+| TotalWins | INT | Default 0, CHECK >= 0, CHECK <= TotalMatches |
+| CreatedAt | TIMESTAMPTZ | UTC |
+| UpdatedAt | TIMESTAMPTZ | UTC |
 
 ---
 
@@ -51,9 +55,9 @@ Wallets 1──* WalletTransactions
 | Column | Type | Notes |
 |---|---|---|
 | Id | UUID PK | |
-| UserId | UUID FK → Users | UNIQUE |
-| Balance | INT | In-game currency |
-| UpdatedAt | TIMESTAMPTZ | |
+| UserId | UUID FK → Users | UNIQUE, ON DELETE RESTRICT |
+| Balance | INT | CHECK >= 0; default 500 for new players |
+| UpdatedAt | TIMESTAMPTZ | UTC |
 
 ---
 
