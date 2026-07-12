@@ -141,6 +141,102 @@ Invoke-RestMethod -Uri "$base/auth/me" -Headers @{ Authorization = "Bearer $toke
 3. Paste raw JWT token (Swagger adds `Bearer` prefix)
 4. Call `GET /api/auth/me`
 
+## Unity Auth UI
+
+Unity project root: `d:\Bin\KLTN\KLTN`
+
+### Prerequisites
+
+1. Backend running: `rtk dotnet run --project EchoProtocol.Backend/src/EchoProtocol.Api`
+2. Base URL (Unity): `http://localhost:5042` — endpoints are `/api/auth/...` (built via `ApiConfiguration.BuildApiUrl`)
+3. Open Unity **6000.3.19f1** on the KLTN project
+
+### Wire scenes (Editor)
+
+Run once (idempotent — safe to re-run):
+
+**ECHO PROTOCOL → Setup Auth UI**
+
+Or batchmode (when Unity path is known):
+
+**Close the Unity Editor before running batchmode.** Do not run two Unity instances on the same project.
+
+```powershell
+& "<UnityEditorPath>\Unity.exe" `
+  -batchmode `
+  -quit `
+  -projectPath "<RepoRoot>\KLTN" `
+  -executeMethod AuthUiSceneSetup.SetupAuthUi `
+  -logFile "<RepoRoot>\unity-auth-ui-compile.log"
+```
+
+Example with concrete paths:
+
+```powershell
+& "C:\Program Files\Unity\Hub\Editor\6000.3.19f1\Editor\Unity.exe" `
+  -batchmode `
+  -quit `
+  -projectPath "d:\Bin\KLTN\KLTN" `
+  -executeMethod AuthUiSceneSetup.SetupAuthUi `
+  -logFile "d:\Bin\KLTN\unity-auth-ui-compile.log"
+```
+
+Batchmode compile success does **not** replace Play Mode testing — always verify auth flows in the Editor after wiring changes.
+
+This creates/wires:
+
+- `Bootstrap` — `AuthRuntime`, `BootstrapSceneFlowController` (add-only; preserves NetworkBootstrap/LobbyManager)
+- `Login` — uGUI auth UI + `InputSystemUIInputModule`
+- `MainMenu` — profile placeholder + logout
+- `Assets/Resources/ApiConfiguration.asset` — dev base URL
+
+### Play Mode flow
+
+| Entry scene | Behavior |
+|---|---|
+| **Bootstrap** (recommended) | Token check → `/api/auth/me` → MainMenu or Login |
+| **Login** | Auth forms; `AuthRuntime.EnsureExists()` if entered directly |
+
+**Login success flow:** Login API → save token → `/api/auth/me` → MainMenu (never skip `/me`).
+
+**Logout:** Main Menu → Logout → clears PlayerPrefs token + session → Login.
+
+### PlayerPrefs (MVP local only)
+
+Keys: `echo_protocol.auth.access_token`, `echo_protocol.auth.expires_at`
+
+Not secure production storage — replace with OS keychain/encrypted storage before release.
+
+### Change backend URL (cloud later)
+
+Edit `Assets/Resources/ApiConfiguration.asset` → `baseUrl` (host only, no `/api` suffix).
+
+### Play Mode test checklist
+
+- [ ] Register new user → success message → Login panel
+- [ ] Duplicate username (case-insensitive) → error
+- [ ] Login wrong password → `INVALID_CREDENTIALS`
+- [ ] Login success → MainMenu shows username, role, wallet
+- [ ] Logout → Login scene, token cleared
+- [ ] Restart Play from Bootstrap with valid token → MainMenu
+- [ ] Backend stopped on restore → network message, **token not cleared**
+- [ ] Run **Setup Auth UI** twice → no duplicate Canvas/EventSystem/AuthRuntime
+
+### Manual wiring (if Editor menu unavailable)
+
+Manual step 1
+- Lý do: Unity Editor menu `ECHO PROTOCOL/Setup Auth UI` cannot be run.
+- Mở: `Assets/Scenes/Login.unity`
+- Thực hiện:
+  1. Create Canvas `AuthCanvas` (Screen Space Overlay)
+  2. Add `EventSystem` + `InputSystemUIInputModule` (remove `StandaloneInputModule` if present)
+  3. Create `AuthRoot` with `AuthScreenController`
+  4. Create `LoginPanel` / `RegisterPanel` with uGUI `InputField` + `Button` children
+  5. Wire all serialized fields on `AuthScreenController`
+- Giá trị: `mainMenuSceneName` = `MainMenu`
+- Kết quả mong đợi: Play Mode shows Login panel, Console has no errors.
+- Báo lại: Inspector screenshot + Console output.
+
 ## Photon Fusion (manual)
 
 1. Import **Photon Fusion** compatible with Unity 6.3 LTS
