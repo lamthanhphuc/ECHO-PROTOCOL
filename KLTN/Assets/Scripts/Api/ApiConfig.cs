@@ -1,15 +1,13 @@
 namespace EchoProtocol.Api
 {
     /// <summary>
-    /// Development API configuration. Change BaseUrl when deploying backend.
+    /// Development API configuration fallback. Prefer Resources/ApiConfiguration asset.
     /// </summary>
     public static class ApiConfig
     {
         /// <summary>
-        /// Local ASP.NET Core API (see EchoProtocol.Backend launchSettings.json http profile).
+        /// Local ASP.NET Core host (no /api suffix). Endpoints include /api/... via ApiConfiguration.BuildApiUrl.
         /// </summary>
-        public const string DevApiBaseUrl = "http://localhost:5042/api";
-
-        // Production: set via build scripting or remote config — never hard-code secrets here.
+        public const string DevBaseUrl = "http://localhost:5042";
     }
 }
