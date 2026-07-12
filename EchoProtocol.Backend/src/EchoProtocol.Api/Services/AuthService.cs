@@ -50,11 +50,18 @@ public class AuthService : IAuthService
                 ErrorCodes.ValidationError);
         }
 
-        if (request.Password.Length < 6)
+        if (PasswordPolicy.IsTooShort(request.Password))
         {
             return ServiceResult<UserSummaryResponse>.Failure(
                 "Validation failed",
                 ErrorCodes.ValidationError);
+        }
+
+        if (PasswordPolicy.ExceedsMaxUtf8ByteLength(request.Password))
+        {
+            return ServiceResult<UserSummaryResponse>.Failure(
+                "Password must not exceed 72 UTF-8 bytes",
+                ErrorCodes.PasswordTooLong);
         }
 
         if (request.Password != request.ConfirmPassword)
@@ -142,6 +149,13 @@ public class AuthService : IAuthService
                 ErrorCodes.ValidationError);
         }
 
+        if (PasswordPolicy.ExceedsMaxUtf8ByteLength(request.Password))
+        {
+            return ServiceResult<AuthResponse>.Failure(
+                "Password must not exceed 72 UTF-8 bytes",
+                ErrorCodes.PasswordTooLong);
+        }
+
         var normalized = UsernameNormalizer.Normalize(request.Username);
 
         var user = await _db.Users
@@ -210,6 +224,13 @@ public class AuthService : IAuthService
             return ServiceResult<MeResponse>.Failure(
                 "User not found",
                 ErrorCodes.NotFound);
+        }
+
+        if (user.Status == UserStatus.LOCKED)
+        {
+            return ServiceResult<MeResponse>.Failure(
+                "Account is locked",
+                ErrorCodes.AccountLocked);
         }
 
         if (user.PlayerProfile is null)

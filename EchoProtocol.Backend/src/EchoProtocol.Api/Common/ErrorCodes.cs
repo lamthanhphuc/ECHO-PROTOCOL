@@ -12,5 +12,6 @@ public static class ErrorCodes
     public const string InvalidCredentials = "INVALID_CREDENTIALS";
     public const string AccountLocked = "ACCOUNT_LOCKED";
     public const string PasswordConfirmationMismatch = "PASSWORD_CONFIRMATION_MISMATCH";
+    public const string PasswordTooLong = "PASSWORD_TOO_LONG";
     public const string TokenInvalid = "TOKEN_INVALID";
 }

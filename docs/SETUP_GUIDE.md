@@ -74,12 +74,22 @@ Install tool once if needed:
 rtk dotnet tool install --global dotnet-ef
 ```
 
-Create / apply migration:
+**Fresh setup (clone repo):** apply committed migrations only — do **not** recreate `InitialAuthSchema`:
 
 ```powershell
-rtk dotnet ef migrations add InitialAuthSchema --project EchoProtocol.Backend/src/EchoProtocol.Api --startup-project EchoProtocol.Backend/src/EchoProtocol.Api
 rtk dotnet ef database update --project EchoProtocol.Backend/src/EchoProtocol.Api --startup-project EchoProtocol.Backend/src/EchoProtocol.Api
 ```
+
+Migration `InitialAuthSchema` is already committed. New team members only need `database update`.
+
+**When schema changes** (new tables/columns after auth foundation):
+
+```powershell
+rtk dotnet ef migrations add <NewMigrationName> --project EchoProtocol.Backend/src/EchoProtocol.Api --startup-project EchoProtocol.Backend/src/EchoProtocol.Api
+rtk dotnet ef database update --project EchoProtocol.Backend/src/EchoProtocol.Api --startup-project EchoProtocol.Backend/src/EchoProtocol.Api
+```
+
+Production secrets (`ConnectionStrings__DefaultConnection`, `JwtSettings__SecretKey`, admin seed) must use environment variables, user-secrets, or a cloud secret manager — never commit real production values.
 
 In **Development**, the API also runs `MigrateAsync()` and admin seed on startup.
 
