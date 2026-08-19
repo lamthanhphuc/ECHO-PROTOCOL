@@ -32,7 +32,7 @@ namespace UnityEditorMCP.Handlers
                 // Find all canvases in the scene
                 Canvas[] allCanvases = includeInactive 
                     ? Resources.FindObjectsOfTypeAll<Canvas>() 
-                    : UnityEngine.Object.FindObjectsOfType<Canvas>();
+                    : UnityEngine.Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None);
 
                 List<object> elements = new List<object>();
 

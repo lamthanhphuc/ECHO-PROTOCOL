@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEditor;
 using Newtonsoft.Json.Linq;
 using UnityEditorMCP.Helpers;
@@ -517,7 +518,7 @@ namespace UnityEditorMCP.Handlers
                     ? Resources.FindObjectsOfTypeAll<GameObject>()
                         .Where(go => go.scene == scene)
                         .ToArray()
-                    : GameObject.FindObjectsOfType<GameObject>();
+                    : GameObject.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
 
                 // Basic statistics
                 var statistics = new Dictionary<string, object>();
@@ -1077,12 +1078,12 @@ namespace UnityEditorMCP.Handlers
             var shader = material.shader;
             if (shader == null) yield break;
 
-            var propertyCount = ShaderUtil.GetPropertyCount(shader);
+            var propertyCount = shader.GetPropertyCount();
             for (int i = 0; i < propertyCount; i++)
             {
-                if (ShaderUtil.GetPropertyType(shader, i) == ShaderUtil.ShaderPropertyType.TexEnv)
+                if (shader.GetPropertyType(i) == ShaderPropertyType.Texture)
                 {
-                    var propertyName = ShaderUtil.GetPropertyName(shader, i);
+                    var propertyName = shader.GetPropertyName(i);
                     var texture = material.GetTexture(propertyName);
                     if (texture != null)
                     {
@@ -1140,7 +1141,7 @@ namespace UnityEditorMCP.Handlers
                         ? Resources.FindObjectsOfTypeAll<GameObject>()
                             .Where(go => go.scene.IsValid() && go.scene == UnityEngine.SceneManagement.SceneManager.GetActiveScene())
                             .ToArray()
-                        : GameObject.FindObjectsOfType<GameObject>();
+                        : GameObject.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
 
                     foreach (var go in sceneObjects)
                     {

@@ -238,7 +238,7 @@ public static class AuthUiSceneSetup
 
   private static void EnsureEventSystem()
   {
-    var eventSystem = Object.FindFirstObjectByType<EventSystem>();
+    var eventSystem = Object.FindAnyObjectByType<EventSystem>();
     if (eventSystem == null)
     {
       var go = new GameObject("EventSystem");

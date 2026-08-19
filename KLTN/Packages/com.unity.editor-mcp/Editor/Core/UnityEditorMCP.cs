@@ -251,13 +251,18 @@ namespace UnityEditorMCP.Core
             }
             catch (SocketException ex)
             {
-                Status = McpStatus.Error;
-                Debug.LogError($"[Unity Editor MCP] Failed to start TCP listener on port {currentPort}: {ex.Message}");
-                
                 if (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
                 {
-                    Debug.LogError($"[Unity Editor MCP] Port {currentPort} is already in use. Please ensure no other instance is running.");
+                    Status = McpStatus.Disconnected;
+                    tcpListener = null;
+                    cancellationTokenSource?.Dispose();
+                    cancellationTokenSource = null;
+                    Debug.LogWarning($"[Unity Editor MCP] Port {currentPort} is already in use, so this Editor instance will not start another MCP listener. Close duplicate Unity Editors if MCP connection is needed here.");
+                    return;
                 }
+
+                Status = McpStatus.Error;
+                Debug.LogError($"[Unity Editor MCP] Failed to start TCP listener on port {currentPort}: {ex.Message}");
             }
             catch (Exception ex)
             {

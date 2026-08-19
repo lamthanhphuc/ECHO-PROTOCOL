@@ -565,17 +565,17 @@ namespace UnityEditorMCP.Handlers
             string button = parameters["button"]?.ToString() ?? "left";
             int clickCount = parameters["clickCount"]?.ToObject<int>() ?? 1;
             
-            MouseButton mouseButton;
+            ButtonControl mouseButton;
             switch (button.ToLower())
             {
                 case "left":
-                    mouseButton = MouseButton.Left;
+                    mouseButton = mouse.leftButton;
                     break;
                 case "right":
-                    mouseButton = MouseButton.Right;
+                    mouseButton = mouse.rightButton;
                     break;
                 case "middle":
-                    mouseButton = MouseButton.Middle;
+                    mouseButton = mouse.middleButton;
                     break;
                 default:
                     return new { error = $"Invalid mouse button: {button}" };
@@ -586,14 +586,14 @@ namespace UnityEditorMCP.Handlers
                 // Press
                 using (StateEvent.From(mouse, out var pressEvent))
                 {
-                    mouse.leftButton.WriteValueIntoEvent(1.0f, pressEvent);
+                    mouseButton.WriteValueIntoEvent(1.0f, pressEvent);
                     InputSystem.QueueEvent(pressEvent);
                 }
                 
                 // Release
                 using (StateEvent.From(mouse, out var releaseEvent))
                 {
-                    mouse.leftButton.WriteValueIntoEvent(0.0f, releaseEvent);
+                    mouseButton.WriteValueIntoEvent(0.0f, releaseEvent);
                     InputSystem.QueueEvent(releaseEvent);
                 }
             }

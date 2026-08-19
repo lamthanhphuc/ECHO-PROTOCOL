@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEditor;
+using UnityEditor.Build;
 using Newtonsoft.Json.Linq;
 
 namespace UnityEditorMCP.Handlers
@@ -184,21 +185,21 @@ namespace UnityEditorMCP.Handlers
 
         private static JObject GetPlayerSettings()
         {
-            var buildTargetGroup = EditorUserBuildSettings.selectedBuildTargetGroup;
+            var namedBuildTarget = NamedBuildTarget.FromBuildTargetGroup(EditorUserBuildSettings.selectedBuildTargetGroup);
             
             return new JObject
             {
                 ["companyName"] = PlayerSettings.companyName,
                 ["productName"] = PlayerSettings.productName,
                 ["version"] = PlayerSettings.bundleVersion,
-                ["bundleIdentifier"] = PlayerSettings.GetApplicationIdentifier(buildTargetGroup),
+                ["bundleIdentifier"] = PlayerSettings.GetApplicationIdentifier(namedBuildTarget),
                 ["defaultScreenWidth"] = PlayerSettings.defaultScreenWidth,
                 ["defaultScreenHeight"] = PlayerSettings.defaultScreenHeight,
                 ["runInBackground"] = PlayerSettings.runInBackground,
                 ["colorSpace"] = PlayerSettings.colorSpace.ToString(),
                 ["fullScreenMode"] = PlayerSettings.defaultIsNativeResolution ? "ExclusiveFullScreen" : "Windowed",
-                ["apiCompatibilityLevel"] = PlayerSettings.GetApiCompatibilityLevel(buildTargetGroup).ToString(),
-                ["scriptingBackend"] = PlayerSettings.GetScriptingBackend(buildTargetGroup).ToString(),
+                ["apiCompatibilityLevel"] = PlayerSettings.GetApiCompatibilityLevel(namedBuildTarget).ToString(),
+                ["scriptingBackend"] = PlayerSettings.GetScriptingBackend(namedBuildTarget).ToString(),
                 ["targetFrameRate"] = Application.targetFrameRate
             };
         }
@@ -267,7 +268,7 @@ namespace UnityEditorMCP.Handlers
                 ["bounceThreshold"] = Physics.bounceThreshold,
                 ["sleepThreshold"] = Physics.sleepThreshold,
                 ["defaultContactOffset"] = Physics.defaultContactOffset,
-                ["autoSimulation"] = Physics.autoSimulation,
+                ["autoSimulation"] = Physics.simulationMode != SimulationMode.Script,
                 ["queriesHitTriggers"] = Physics.queriesHitTriggers,
                 ["queriesHitBackfaces"] = Physics.queriesHitBackfaces
             };

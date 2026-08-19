@@ -423,8 +423,7 @@ namespace UnityEditorMCP.Handlers
                 }
                 else
                 {
-                    // In scene mode, use FindObjectsOfType
-                    allObjects = GameObject.FindObjectsOfType<GameObject>(true);
+                    allObjects = GameObject.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
                 }
                 
                 foreach (var obj in allObjects)

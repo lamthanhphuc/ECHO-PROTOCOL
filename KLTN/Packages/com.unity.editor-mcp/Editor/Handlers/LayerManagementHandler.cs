@@ -206,7 +206,7 @@ namespace UnityEditorMCP.Handlers
                 }
 
                 // Check if any GameObjects are using this layer
-                var allGameObjects = GameObject.FindObjectsOfType<GameObject>();
+                var allGameObjects = GameObject.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
                 var gameObjectsWithLayer = allGameObjects.Where(go => go.layer == layerIndex).ToArray();
                 
                 if (gameObjectsWithLayer.Length > 0)
