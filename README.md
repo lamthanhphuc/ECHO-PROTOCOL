@@ -6,7 +6,7 @@ Online cooperative first-person horror game — capstone project (4 months, team
 
 | Layer | Technology |
 |---|---|
-| Game client | Unity 6.3 LTS (`KLTN/`) |
+| Game client | Unity 6.5 (`6000.5.8f1`, `KLTN/`) |
 | Multiplayer | Photon Fusion Host Mode (manual setup required) |
 | Backend | ASP.NET Core Web API (`EchoProtocol.Backend/`) |
 | Database | PostgreSQL (local Docker → Neon/Supabase later) |
@@ -52,14 +52,14 @@ Health check: `GET http://localhost:5000/api/health` (port may vary — see `lau
 ### 3. Unity client
 
 1. Open Unity Hub → project `d:\Bin\KLTN\KLTN`
-2. Unity version: **6000.3.19f1** (6.3 LTS)
+2. Unity version: **6000.5.8f1**
 3. Ensure MCP bridge: Console shows `[MCP] Server started on port 6400`
 
 See [`docs/SETUP_GUIDE.md`](docs/SETUP_GUIDE.md) for full instructions.
 
 ## Manual requirements (not automated)
 
-- [ ] Photon Fusion package imported (Unity 6.3 compatible)
+- [ ] Photon Fusion package imported (Unity 6000.5 compatible)
 - [ ] Photon Fusion App ID from [Photon Dashboard](https://dashboard.photonengine.com)
 - [ ] Docker Desktop running for local PostgreSQL
 - [ ] Production secrets via env / user-secrets (never commit)
