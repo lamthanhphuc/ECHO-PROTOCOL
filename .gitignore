@@ -38,13 +38,5 @@ appsettings.*.local.json
 .DS_Store
 Thumbs.db
 
-# CodeGraph local cache (optional - keep .codegraph if team wants shared index)
-# .codegraph/
-
 .codegraph/
-
-KLTN/.git.backup/
-
-.codegraph/
-
 KLTN/.git.backup/
