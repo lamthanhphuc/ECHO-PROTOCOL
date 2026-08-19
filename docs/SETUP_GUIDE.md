@@ -4,7 +4,7 @@
 
 | Tool | Version / Notes |
 |---|---|
-| Unity Hub | Unity **6.3 LTS** (`6000.3.19f1`) |
+| Unity Hub | Unity **6000.5.8f1** |
 | .NET SDK | 8.x |
 | Docker Desktop | For local PostgreSQL |
 | Git | Optional but recommended |
@@ -13,7 +13,7 @@
 ## Unity client
 
 1. Open Unity Hub → **Add/Open** → `d:\Bin\KLTN\KLTN`
-2. Confirm version `6000.3.19f1` in Project Settings
+2. Confirm version `6000.5.8f1` in Project Settings
 3. Wait for package resolve (`com.unity.editor-mcp`, URP, Input System)
 4. Console should show: `[MCP] Server started on port 6400`
 5. **Do not** enter Play mode when using MCP for scene edits
@@ -149,7 +149,7 @@ Unity project root: `d:\Bin\KLTN\KLTN`
 
 1. Backend running: `rtk dotnet run --project EchoProtocol.Backend/src/EchoProtocol.Api`
 2. Base URL (Unity): `http://localhost:5042` — endpoints are `/api/auth/...` (built via `ApiConfiguration.BuildApiUrl`)
-3. Open Unity **6000.3.19f1** on the KLTN project
+3. Open Unity **6000.5.8f1** on the KLTN project
 
 ### Wire scenes (Editor)
 
@@ -173,7 +173,7 @@ Or batchmode (when Unity path is known):
 Example with concrete paths:
 
 ```powershell
-& "C:\Program Files\Unity\Hub\Editor\6000.3.19f1\Editor\Unity.exe" `
+& "C:\Program Files\Unity\Hub\Editor\6000.5.8f1\Editor\Unity.exe" `
   -batchmode `
   -quit `
   -projectPath "d:\Bin\KLTN\KLTN" `
@@ -239,7 +239,7 @@ Manual step 1
 
 ## Photon Fusion (manual)
 
-1. Import **Photon Fusion** compatible with Unity 6.3 LTS
+1. Import **Photon Fusion** compatible with Unity 6000.5
 2. Create app at [Photon Dashboard](https://dashboard.photonengine.com) → Fusion
 3. Copy **App ID** into Fusion Network Project Config (Inspector — not in source control)
 4. Report: *"Đã import Photon Fusion và có App ID"*

@@ -32,6 +32,8 @@ appsettings.*.local.json
 
 # IDE / OS
 .vs/
+.vscode/
+*.slnx
 .idea/
 *.swp
 *~

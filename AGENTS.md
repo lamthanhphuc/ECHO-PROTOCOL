@@ -8,7 +8,7 @@
 | Workspace | `d:\Bin\KLTN` |
 | Unity client | `d:\Bin\KLTN\KLTN` |
 | Backend | `d:\Bin\KLTN\EchoProtocol.Backend` |
-| Engine | Unity 6.3 LTS (`6000.3.19f1`) |
+| Engine | Unity `6000.5.8f1` |
 | Docs | `docs/SRS.md`, `docs/API_SPEC.md`, `docs/DB_SCHEMA.md` |
 
 ## MCP usage
