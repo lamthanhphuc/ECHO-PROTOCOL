@@ -33,10 +33,13 @@ Canonical SRS: [`docs/SRS.md`](docs/SRS.md)
 ### 1. PostgreSQL (Docker)
 
 ```powershell
+Copy-Item .env.example .env
+# Replace all placeholders in .env locally before continuing.
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-Connection (dev only): `Host=localhost;Port=5433;Database=echo_protocol;Username=postgres;Password=postgres`
+Local credentials and the backend connection string come from untracked environment variables;
+see [`EchoProtocol.Backend/README.md`](EchoProtocol.Backend/README.md).
 
 ### 2. Backend API
 
@@ -47,7 +50,7 @@ dotnet build
 dotnet run --project src/EchoProtocol.Api
 ```
 
-Health check: `GET http://localhost:5000/api/health` (port may vary — see `launchSettings.json`)
+Health check: `GET http://localhost:5042/health`
 
 ### 3. Unity client
 

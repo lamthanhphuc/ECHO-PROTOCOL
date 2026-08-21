@@ -21,15 +21,26 @@ Error responses set `success: false` and include `errorCode`.
 
 ## Health
 
-### `GET /api/health`
+### `GET /health`
 
 **Auth:** None  
 **Status:** Implemented
 
-**Response data:**
+Compatibility route: `GET /api/health`
+
+The endpoint uses ASP.NET Core Health Checks and verifies PostgreSQL connectivity.
+It returns HTTP 200 only when the API can connect to the database, otherwise HTTP 503.
+
+**Healthy response:**
 
 ```json
-{ "service": "EchoProtocol.Api" }
+{
+  "status": "Healthy",
+  "service": "EchoProtocol.Api",
+  "checks": {
+    "postgresql": "Healthy"
+  }
+}
 ```
 
 ---

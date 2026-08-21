@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
+using EchoProtocol.Api.Health;
 using EchoProtocol.Api.Services;
 using EchoProtocol.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -75,6 +76,9 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
+
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("postgresql");
 
 var jwtSettings = builder.Configuration
     .GetSection(JwtSettings.SectionName)

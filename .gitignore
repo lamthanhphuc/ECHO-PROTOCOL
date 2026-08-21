@@ -27,6 +27,8 @@ KLTN/MemoryCaptures/
 # Secrets & local config
 .env
 .env.*
+!.env.example
+!**/.env.example
 appsettings.Production.json
 appsettings.*.local.json
 **/secrets.json

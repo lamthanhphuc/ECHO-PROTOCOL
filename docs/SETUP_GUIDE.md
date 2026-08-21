@@ -40,16 +40,15 @@ Or via MCP `execute_menu_item` when `unity-editor` is connected.
 
 ```powershell
 cd d:\Bin\KLTN
+Copy-Item .env.example .env
+# Replace all placeholders in .env locally before continuing.
 rtk docker compose -f docker/docker-compose.yml up -d
 ```
 
-**Dev connection string** lives in `appsettings.Development.json` only (never use in production):
-
-```
-Host=localhost;Port=5433;Database=echo_protocol;Username=postgres;Password=postgres
-```
-
-Production: set `ConnectionStrings__DefaultConnection` via environment variable or secret manager.
+The development connection string is supplied through
+`ConnectionStrings__DefaultConnection`; it is not committed in an appsettings file.
+Load `.env` values into the current PowerShell process before running `dotnet`, or use
+.NET user-secrets. Production must use environment variables or a secret manager.
 
 Stop:
 
@@ -63,15 +62,16 @@ rtk docker compose -f docker/docker-compose.yml down
 
 ```powershell
 cd d:\Bin\KLTN
+rtk dotnet tool restore
 rtk dotnet build EchoProtocol.Backend/EchoProtocol.sln
 ```
 
 ### EF Core migration
 
-Install tool once if needed:
+Restore the repository-pinned EF Core 8 tool:
 
 ```powershell
-rtk dotnet tool install --global dotnet-ef
+rtk dotnet tool restore
 ```
 
 **Fresh setup (clone repo):** apply committed migrations only — do **not** recreate `InitialAuthSchema`:
@@ -100,21 +100,19 @@ rtk dotnet run --project EchoProtocol.Backend/src/EchoProtocol.Api
 ```
 
 - Swagger: `http://localhost:5042/swagger`
-- Health: `http://localhost:5042/api/health`
+- Health: `http://localhost:5042/health` (database-aware)
+- Compatibility route: `http://localhost:5042/api/health`
 
 ### Configuration
 
 | Setting | Local dev | Production |
 |---|---|---|
-| Connection string | `appsettings.Development.json` | `ConnectionStrings__DefaultConnection` env |
-| JWT `SecretKey` | `appsettings.Development.json` (≥ 32 UTF-8 bytes) | `JwtSettings__SecretKey` env / user-secrets / secret manager |
-| Admin seed | `AdminSeed` section in Development | Configure via env; no auto-seed in Production |
+| Connection string | `ConnectionStrings__DefaultConnection` env / user-secrets | Environment variable / secret manager |
+| JWT `SecretKey` | `JwtSettings__SecretKey` env / user-secrets (≥ 32 UTF-8 bytes) | Environment variable / secret manager |
+| Admin seed | Optional `AdminSeed__*` environment variables | Configure securely; no auto-seed in Production |
 
-**Dev admin seed** (local only — change for real demos):
-
-- Username: `admin`
-- Password: see `appsettings.Development.json` (not logged by API)
-- Role: `ADMIN`
+The optional development admin seed is skipped unless both
+`AdminSeed__Username` and `AdminSeed__Password` are configured locally.
 
 ### Test auth (PowerShell)
 
