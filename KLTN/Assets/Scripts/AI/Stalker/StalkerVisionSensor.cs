@@ -16,6 +16,7 @@ namespace EchoProtocol.AI.Stalker
 
         public bool IsCandidateVisible => isCandidateVisible;
         public Vector3 LastObservedPosition => lastObservedPosition;
+        public Transform Candidate => candidate;
 
         private void Update()
         {
