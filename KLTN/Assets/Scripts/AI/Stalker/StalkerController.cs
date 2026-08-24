@@ -14,12 +14,16 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float detectionFillRate = 0.5f;
         [SerializeField] private float detectionDecayRate = 0.5f;
 
+        [Header("Search Spike Defaults")]
+        [SerializeField] private float searchDuration = 5f;
+
         [Header("Debug Runtime")]
         [SerializeField] private StalkerState currentState = StalkerState.PATROL;
         [SerializeField] private float detectionMeter;
         [SerializeField] private Transform detectionTarget;
         [SerializeField] private Transform currentTarget;
         [SerializeField] private Vector3 lastKnownPosition;
+        [SerializeField] private float searchElapsedTime;
 
         private NavMeshAgent _agent;
         private int _currentPatrolIndex;
@@ -30,6 +34,7 @@ namespace EchoProtocol.AI.Stalker
         public Transform DetectionTarget => detectionTarget;
         public Transform CurrentTarget => currentTarget;
         public Vector3 LastKnownPosition => lastKnownPosition;
+        public float SearchElapsedTime => searchElapsedTime;
 
         private void Awake()
         {
@@ -62,6 +67,9 @@ namespace EchoProtocol.AI.Stalker
                     break;
                 case StalkerState.CHASE:
                     TickChase();
+                    break;
+                case StalkerState.SEARCH:
+                    TickSearch();
                     break;
             }
         }
@@ -197,13 +205,53 @@ namespace EchoProtocol.AI.Stalker
 
             if (!TryGetVisibleCurrentTargetObservation(out var observedPosition))
             {
-                currentState = StalkerState.SEARCH;
-                StopAgentPath();
+                EnterSearch();
                 return;
             }
 
             lastKnownPosition = observedPosition;
             SetChaseDestination(observedPosition);
+        }
+
+        private void EnterSearch()
+        {
+            currentState = StalkerState.SEARCH;
+            searchElapsedTime = 0f;
+            SetSearchDestination();
+        }
+
+        private void TickSearch()
+        {
+            if (currentTarget == null)
+            {
+                ClearSearchContext();
+                currentState = StalkerState.PATROL;
+                StopAgentPath();
+                SetCurrentPatrolDestination();
+                return;
+            }
+
+            if (TryGetVisibleCurrentTargetObservation(out var observedPosition))
+            {
+                lastKnownPosition = observedPosition;
+                ClearSearchRuntimeContext();
+                currentState = StalkerState.CHASE;
+                SetChaseDestination(observedPosition);
+                return;
+            }
+
+            SetSearchDestination();
+
+            searchElapsedTime += Time.deltaTime;
+            if (searchElapsedTime < GetSearchDuration())
+            {
+                return;
+            }
+
+            ClearSearchContext();
+            currentState = StalkerState.PATROL;
+            StopAgentPath();
+            SetCurrentPatrolDestination();
         }
 
         private bool TryGetVisibleCurrentTargetObservation(out Vector3 observedPosition)
@@ -243,6 +291,25 @@ namespace EchoProtocol.AI.Stalker
             }
         }
 
+        private void SetSearchDestination()
+        {
+            if (!CanUseAgent())
+            {
+                _activeDestination = null;
+                return;
+            }
+
+            if (_activeDestination.HasValue && _activeDestination.Value == lastKnownPosition)
+            {
+                return;
+            }
+
+            if (_agent.SetDestination(lastKnownPosition))
+            {
+                _activeDestination = lastKnownPosition;
+            }
+        }
+
         private void ClearDetectionContext()
         {
             detectionTarget = null;
@@ -253,6 +320,18 @@ namespace EchoProtocol.AI.Stalker
         {
             currentTarget = null;
             ClearDetectionContext();
+        }
+
+        private void ClearSearchContext()
+        {
+            currentTarget = null;
+            ClearDetectionContext();
+            ClearSearchRuntimeContext();
+        }
+
+        private void ClearSearchRuntimeContext()
+        {
+            searchElapsedTime = 0f;
         }
 
         private float ClampDetectionMeter(float value)
@@ -273,6 +352,11 @@ namespace EchoProtocol.AI.Stalker
         private float GetDetectionDecayRate()
         {
             return Mathf.Max(0f, detectionDecayRate);
+        }
+
+        private float GetSearchDuration()
+        {
+            return Mathf.Max(0f, searchDuration);
         }
 
         private void StopAgentPath()
