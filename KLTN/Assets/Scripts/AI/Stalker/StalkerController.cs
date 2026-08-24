@@ -3,6 +3,13 @@ using UnityEngine.AI;
 
 namespace EchoProtocol.AI.Stalker
 {
+    public enum StalkerAttackResult
+    {
+        None,
+        Hit,
+        Miss
+    }
+
     [RequireComponent(typeof(NavMeshAgent))]
     public sealed class StalkerController : MonoBehaviour
     {
@@ -17,6 +24,11 @@ namespace EchoProtocol.AI.Stalker
         [Header("Search Spike Defaults")]
         [SerializeField] private float searchDuration = 5f;
 
+        [Header("Attack Spike Defaults")]
+        [SerializeField] private float attackRange = 1.5f;
+        [SerializeField] private float attackWindup = 0.75f;
+        [SerializeField] private float attackRecovery = 1f;
+
         [Header("Debug Runtime")]
         [SerializeField] private StalkerState currentState = StalkerState.PATROL;
         [SerializeField] private float detectionMeter;
@@ -24,6 +36,9 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private Transform currentTarget;
         [SerializeField] private Vector3 lastKnownPosition;
         [SerializeField] private float searchElapsedTime;
+        [SerializeField] private float attackElapsedTime;
+        [SerializeField] private StalkerAttackResult lastAttackResult;
+        [SerializeField] private float recoverElapsedTime;
 
         private NavMeshAgent _agent;
         private int _currentPatrolIndex;
@@ -35,6 +50,9 @@ namespace EchoProtocol.AI.Stalker
         public Transform CurrentTarget => currentTarget;
         public Vector3 LastKnownPosition => lastKnownPosition;
         public float SearchElapsedTime => searchElapsedTime;
+        public float AttackElapsedTime => attackElapsedTime;
+        public StalkerAttackResult LastAttackResult => lastAttackResult;
+        public float RecoverElapsedTime => recoverElapsedTime;
 
         private void Awake()
         {
@@ -67,6 +85,12 @@ namespace EchoProtocol.AI.Stalker
                     break;
                 case StalkerState.CHASE:
                     TickChase();
+                    break;
+                case StalkerState.ATTACK:
+                    TickAttack();
+                    break;
+                case StalkerState.RECOVER:
+                    TickRecover();
                     break;
                 case StalkerState.SEARCH:
                     TickSearch();
@@ -210,7 +234,88 @@ namespace EchoProtocol.AI.Stalker
             }
 
             lastKnownPosition = observedPosition;
+            if (IsWithinAttackRange(observedPosition))
+            {
+                EnterAttack();
+                return;
+            }
+
             SetChaseDestination(observedPosition);
+        }
+
+        private void EnterAttack()
+        {
+            currentState = StalkerState.ATTACK;
+            attackElapsedTime = 0f;
+            lastAttackResult = StalkerAttackResult.None;
+            StopAgentPath();
+        }
+
+        private void TickAttack()
+        {
+            if (currentTarget == null)
+            {
+                lastAttackResult = StalkerAttackResult.Miss;
+                EnterRecover();
+                return;
+            }
+
+            attackElapsedTime += Time.deltaTime;
+            if (attackElapsedTime < GetAttackWindup())
+            {
+                return;
+            }
+
+            ResolveAttackHitMoment();
+            EnterRecover();
+        }
+
+        private void ResolveAttackHitMoment()
+        {
+            if (currentTarget == null || !IsWithinAttackRange(currentTarget.position))
+            {
+                lastAttackResult = StalkerAttackResult.Miss;
+                return;
+            }
+
+            lastAttackResult = StalkerAttackResult.Hit;
+        }
+
+        private void EnterRecover()
+        {
+            currentState = StalkerState.RECOVER;
+            recoverElapsedTime = 0f;
+            StopAgentPath();
+        }
+
+        private void TickRecover()
+        {
+            recoverElapsedTime += Time.deltaTime;
+            if (recoverElapsedTime < GetAttackRecovery())
+            {
+                return;
+            }
+
+            attackElapsedTime = 0f;
+            recoverElapsedTime = 0f;
+
+            if (currentTarget == null)
+            {
+                ClearTargetContext();
+                currentState = StalkerState.PATROL;
+                SetCurrentPatrolDestination();
+                return;
+            }
+
+            if (TryGetVisibleCurrentTargetObservation(out var observedPosition))
+            {
+                lastKnownPosition = observedPosition;
+                currentState = StalkerState.CHASE;
+                SetChaseDestination(observedPosition);
+                return;
+            }
+
+            EnterSearch();
         }
 
         private void EnterSearch()
@@ -310,6 +415,12 @@ namespace EchoProtocol.AI.Stalker
             }
         }
 
+        private bool IsWithinAttackRange(Vector3 targetPosition)
+        {
+            var delta = targetPosition - transform.position;
+            return delta.sqrMagnitude <= GetAttackRange() * GetAttackRange();
+        }
+
         private void ClearDetectionContext()
         {
             detectionTarget = null;
@@ -357,6 +468,21 @@ namespace EchoProtocol.AI.Stalker
         private float GetSearchDuration()
         {
             return Mathf.Max(0f, searchDuration);
+        }
+
+        private float GetAttackRange()
+        {
+            return Mathf.Max(0f, attackRange);
+        }
+
+        private float GetAttackWindup()
+        {
+            return Mathf.Max(0f, attackWindup);
+        }
+
+        private float GetAttackRecovery()
+        {
+            return Mathf.Max(0f, attackRecovery);
         }
 
         private void StopAgentPath()
