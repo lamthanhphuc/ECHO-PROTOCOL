@@ -19,6 +19,7 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float detectionMeter;
         [SerializeField] private Transform detectionTarget;
         [SerializeField] private Transform currentTarget;
+        [SerializeField] private Vector3 lastKnownPosition;
 
         private NavMeshAgent _agent;
         private int _currentPatrolIndex;
@@ -28,6 +29,7 @@ namespace EchoProtocol.AI.Stalker
         public float DetectionMeter => detectionMeter;
         public Transform DetectionTarget => detectionTarget;
         public Transform CurrentTarget => currentTarget;
+        public Vector3 LastKnownPosition => lastKnownPosition;
 
         private void Awake()
         {
@@ -57,6 +59,9 @@ namespace EchoProtocol.AI.Stalker
                     break;
                 case StalkerState.DETECT:
                     TickDetect();
+                    break;
+                case StalkerState.CHASE:
+                    TickChase();
                     break;
             }
         }
@@ -110,14 +115,14 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            if (IsDetectionTargetVisible())
+            if (TryGetVisibleDetectionTargetObservation(out var observedPosition))
             {
                 detectionMeter += GetDetectionFillRate() * Time.deltaTime;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
 
                 if (detectionMeter >= GetDetectionMeterFull())
                 {
-                    PromoteDetectionTargetToCurrentTarget();
+                    PromoteDetectionTargetToCurrentTarget(observedPosition);
                 }
 
                 return;
@@ -143,7 +148,7 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            if (!visionSensor.TryGetVisibleCandidate(out _))
+            if (!visionSensor.RefreshVisibility())
             {
                 return false;
             }
@@ -152,29 +157,102 @@ namespace EchoProtocol.AI.Stalker
             return visibleCandidate != null;
         }
 
-        private bool IsDetectionTargetVisible()
+        private bool TryGetVisibleDetectionTargetObservation(out Vector3 observedPosition)
         {
+            observedPosition = default;
+
             if (visionSensor == null || visionSensor.Candidate != detectionTarget)
             {
                 return false;
             }
 
-            return visionSensor.TryGetVisibleCandidate(out _);
+            if (!visionSensor.RefreshVisibility())
+            {
+                return false;
+            }
+
+            observedPosition = visionSensor.LastObservedPosition;
+            return true;
         }
 
-        private void PromoteDetectionTargetToCurrentTarget()
+        private void PromoteDetectionTargetToCurrentTarget(Vector3 observedPosition)
         {
             currentTarget = detectionTarget;
+            lastKnownPosition = observedPosition;
             detectionTarget = null;
             detectionMeter = 0f;
             currentState = StalkerState.CHASE;
             StopAgentPath();
         }
 
+        private void TickChase()
+        {
+            if (currentTarget == null)
+            {
+                ClearTargetContext();
+                currentState = StalkerState.PATROL;
+                SetCurrentPatrolDestination();
+                return;
+            }
+
+            if (!TryGetVisibleCurrentTargetObservation(out var observedPosition))
+            {
+                currentState = StalkerState.SEARCH;
+                StopAgentPath();
+                return;
+            }
+
+            lastKnownPosition = observedPosition;
+            SetChaseDestination(observedPosition);
+        }
+
+        private bool TryGetVisibleCurrentTargetObservation(out Vector3 observedPosition)
+        {
+            observedPosition = default;
+
+            if (visionSensor == null || visionSensor.Candidate != currentTarget)
+            {
+                return false;
+            }
+
+            if (!visionSensor.RefreshVisibility())
+            {
+                return false;
+            }
+
+            observedPosition = visionSensor.LastObservedPosition;
+            return true;
+        }
+
+        private void SetChaseDestination(Vector3 observedPosition)
+        {
+            if (!CanUseAgent())
+            {
+                _activeDestination = null;
+                return;
+            }
+
+            if (_activeDestination.HasValue && _activeDestination.Value == observedPosition)
+            {
+                return;
+            }
+
+            if (_agent.SetDestination(observedPosition))
+            {
+                _activeDestination = observedPosition;
+            }
+        }
+
         private void ClearDetectionContext()
         {
             detectionTarget = null;
             detectionMeter = 0f;
+        }
+
+        private void ClearTargetContext()
+        {
+            currentTarget = null;
+            ClearDetectionContext();
         }
 
         private float ClampDetectionMeter(float value)

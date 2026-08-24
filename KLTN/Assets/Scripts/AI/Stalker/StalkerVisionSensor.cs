@@ -20,7 +20,13 @@ namespace EchoProtocol.AI.Stalker
 
         private void Update()
         {
+            RefreshVisibility();
+        }
+
+        public bool RefreshVisibility()
+        {
             isCandidateVisible = TryGetVisibleCandidate(out lastObservedPosition);
+            return isCandidateVisible;
         }
 
         public bool TryGetVisibleCandidate(out Vector3 observedPosition)
