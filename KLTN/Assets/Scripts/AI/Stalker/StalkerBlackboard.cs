@@ -2,7 +2,9 @@ namespace EchoProtocol.AI.Stalker
 {
     public sealed class StalkerBlackboard
     {
-        // Phase 1 scaffold only. Serialized runtime state remains on StalkerController
-        // to preserve existing scene and Inspector compatibility.
+        // Serialized FSM state remains on StalkerController; this keeps lightweight runtime spatial context.
+        public int CurrentSpatialNodeId { get; set; } = -1;
+        public int DestinationSpatialNodeId { get; set; } = -1;
+        public int PreviousSpatialNodeId { get; set; } = -1;
     }
 }

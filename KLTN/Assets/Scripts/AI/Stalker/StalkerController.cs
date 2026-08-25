@@ -1,3 +1,4 @@
+using EchoProtocol.AI.Stalker.Spatial;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -15,6 +16,16 @@ namespace EchoProtocol.AI.Stalker
     {
         [SerializeField] private PatrolRoute patrolRoute;
         [SerializeField] private StalkerVisionSensor visionSensor;
+
+        [Header("Patrol Mode")]
+        [SerializeField] private StalkerPatrolMode patrolMode = StalkerPatrolMode.FixedWaypoint;
+
+        [Header("Dynamic Patrol Spike Defaults")]
+        [SerializeField] private int candidateBfsDepth = 3;
+        [SerializeField] private float stalenessHorizon = 15f;
+        [SerializeField] private float stalenessWeight = 1f;
+        [SerializeField] private float connectivityWeight = 0.15f;
+        [SerializeField] private float immediateBacktrackPenalty = 0.75f;
 
         [Header("Detection Spike Defaults")]
         [SerializeField] private float detectionMeterFull = 1f;
@@ -40,10 +51,24 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private StalkerAttackResult lastAttackResult;
         [SerializeField] private float recoverElapsedTime;
 
+        [Header("Dynamic Patrol Debug Runtime")]
+        [SerializeField] private int dynamicCurrentSpatialNodeId = -1;
+        [SerializeField] private int dynamicDestinationSpatialNodeId = -1;
+        [SerializeField] private int dynamicPreviousSpatialNodeId = -1;
+        [SerializeField] private float lastPatrolScore;
+        [SerializeField] private int plannerRunCount;
+        [SerializeField] private int candidateCount;
+
         private readonly StalkerBlackboard _blackboard = new StalkerBlackboard();
         private StalkerNavigationController _navigation;
+        private NavMeshSpatialGraph _spatialPatrolGraph;
+        private SpatialPatrolMemory _spatialPatrolMemory;
+        private SpatialPatrolPlanner _spatialPatrolPlanner;
         private int _currentPatrolIndex;
+        private bool _spatialPatrolInitializationAttempted;
+        private bool _dynamicPatrolFallbackActive;
 
+        public StalkerPatrolMode PatrolMode => patrolMode;
         public StalkerState CurrentState => currentState;
         public float DetectionMeter => detectionMeter;
         public Transform DetectionTarget => detectionTarget;
@@ -54,6 +79,12 @@ namespace EchoProtocol.AI.Stalker
         public StalkerAttackResult LastAttackResult => lastAttackResult;
         public float RecoverElapsedTime => recoverElapsedTime;
         public StalkerBlackboard Blackboard => _blackboard;
+        public int DynamicCurrentSpatialNodeId => dynamicCurrentSpatialNodeId;
+        public int DynamicDestinationSpatialNodeId => dynamicDestinationSpatialNodeId;
+        public int DynamicPreviousSpatialNodeId => dynamicPreviousSpatialNodeId;
+        public float LastPatrolScore => lastPatrolScore;
+        public int PlannerRunCount => plannerRunCount;
+        public int CandidateCount => candidateCount;
 
         private void Awake()
         {
@@ -98,6 +129,17 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickPatrol()
         {
+            if (patrolMode == StalkerPatrolMode.DynamicSpatial)
+            {
+                TickDynamicSpatialPatrol();
+                return;
+            }
+
+            TickFixedWaypointPatrol();
+        }
+
+        private void TickFixedWaypointPatrol()
+        {
             if (!CanUseNavigation() || patrolRoute == null || patrolRoute.PointCount == 0)
             {
                 return;
@@ -105,7 +147,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (!_navigation.HasActiveDestination)
             {
-                SetCurrentPatrolDestination();
+                SetCurrentFixedPatrolDestination();
                 return;
             }
 
@@ -115,6 +157,48 @@ namespace EchoProtocol.AI.Stalker
             }
 
             AdvancePatrolDestination();
+        }
+
+        private void TickDynamicSpatialPatrol()
+        {
+            if (_dynamicPatrolFallbackActive)
+            {
+                TickFixedWaypointPatrol();
+                return;
+            }
+
+            if (!CanUseNavigation())
+            {
+                _navigation?.ClearDestinationCache();
+                return;
+            }
+
+            if (!EnsureSpatialPatrolInitialized())
+            {
+                ActivateDynamicPatrolFallback();
+                return;
+            }
+
+            if (!_navigation.HasActiveDestination)
+            {
+                if (!SetDynamicSpatialPatrolDestination())
+                {
+                    ActivateDynamicPatrolFallback();
+                }
+
+                return;
+            }
+
+            if (!_navigation.HasArrived())
+            {
+                return;
+            }
+
+            MarkDynamicSpatialDestinationReached();
+            if (!SetDynamicSpatialPatrolDestination())
+            {
+                ActivateDynamicPatrolFallback();
+            }
         }
 
         private void TryAcquireDetectionTargetFromPatrol()
@@ -470,10 +554,28 @@ namespace EchoProtocol.AI.Stalker
         private void AdvancePatrolDestination()
         {
             _currentPatrolIndex++;
-            SetCurrentPatrolDestination();
+            SetCurrentFixedPatrolDestination();
         }
 
         private void SetCurrentPatrolDestination()
+        {
+            if (patrolMode == StalkerPatrolMode.DynamicSpatial)
+            {
+                _dynamicPatrolFallbackActive = false;
+
+                if (SetDynamicSpatialPatrolDestination())
+                {
+                    return;
+                }
+
+                ActivateDynamicPatrolFallback();
+                return;
+            }
+
+            SetCurrentFixedPatrolDestination();
+        }
+
+        private void SetCurrentFixedPatrolDestination()
         {
             if (!CanUseNavigation() || patrolRoute == null)
             {
@@ -491,6 +593,125 @@ namespace EchoProtocol.AI.Stalker
             var destination = point.position;
 
             _navigation.TrySetDestination(destination);
+        }
+
+        private bool EnsureSpatialPatrolInitialized()
+        {
+            if (_spatialPatrolPlanner != null)
+            {
+                return true;
+            }
+
+            if (_spatialPatrolInitializationAttempted)
+            {
+                return false;
+            }
+
+            _spatialPatrolInitializationAttempted = true;
+            _spatialPatrolGraph = NavMeshSpatialGraphBuilder.Build();
+            if (_spatialPatrolGraph == null || _spatialPatrolGraph.IsEmpty)
+            {
+                return false;
+            }
+
+            _spatialPatrolMemory = new SpatialPatrolMemory(_spatialPatrolGraph.NodeCount);
+            _spatialPatrolPlanner = new SpatialPatrolPlanner(
+                _spatialPatrolGraph,
+                _spatialPatrolMemory,
+                candidateBfsDepth,
+                stalenessHorizon,
+                stalenessWeight,
+                connectivityWeight,
+                immediateBacktrackPenalty);
+
+            SyncDynamicPatrolDebugFields();
+            return _spatialPatrolPlanner.CanPlan;
+        }
+
+        private bool SetDynamicSpatialPatrolDestination()
+        {
+            if (!EnsureSpatialPatrolInitialized())
+            {
+                return false;
+            }
+
+            if (!_spatialPatrolPlanner.TryResolveNearestNode(transform.position, out var currentNodeId))
+            {
+                ClearDynamicPatrolDestination();
+                return false;
+            }
+
+            if (_blackboard.CurrentSpatialNodeId != currentNodeId)
+            {
+                if (_blackboard.CurrentSpatialNodeId >= 0)
+                {
+                    _blackboard.PreviousSpatialNodeId = _blackboard.CurrentSpatialNodeId;
+                }
+
+                _blackboard.CurrentSpatialNodeId = currentNodeId;
+            }
+
+            _spatialPatrolMemory.MarkVisited(currentNodeId, Time.time);
+
+            plannerRunCount++;
+            if (!_spatialPatrolPlanner.TrySelectDestination(
+                currentNodeId,
+                _blackboard.PreviousSpatialNodeId,
+                Time.time,
+                out var plan))
+            {
+                ClearDynamicPatrolDestination();
+                return false;
+            }
+
+            if (!_navigation.TrySetDestination(plan.DestinationNode.Position))
+            {
+                ClearDynamicPatrolDestination();
+                return false;
+            }
+
+            _blackboard.DestinationSpatialNodeId = plan.DestinationNode.Id;
+            lastPatrolScore = plan.Score;
+            candidateCount = plan.CandidateCount;
+            SyncDynamicPatrolDebugFields();
+            return true;
+        }
+
+        private void MarkDynamicSpatialDestinationReached()
+        {
+            var destinationNodeId = _blackboard.DestinationSpatialNodeId;
+            if (destinationNodeId < 0)
+            {
+                return;
+            }
+
+            _blackboard.PreviousSpatialNodeId = _blackboard.CurrentSpatialNodeId;
+            _blackboard.CurrentSpatialNodeId = destinationNodeId;
+            _blackboard.DestinationSpatialNodeId = -1;
+            _spatialPatrolMemory?.MarkVisited(destinationNodeId, Time.time);
+            SyncDynamicPatrolDebugFields();
+        }
+
+        private void ClearDynamicPatrolDestination()
+        {
+            _blackboard.DestinationSpatialNodeId = -1;
+            lastPatrolScore = 0f;
+            candidateCount = 0;
+            SyncDynamicPatrolDebugFields();
+        }
+
+        private void ActivateDynamicPatrolFallback()
+        {
+            _dynamicPatrolFallbackActive = true;
+            ClearDynamicPatrolDestination();
+            TickFixedWaypointPatrol();
+        }
+
+        private void SyncDynamicPatrolDebugFields()
+        {
+            dynamicCurrentSpatialNodeId = _blackboard.CurrentSpatialNodeId;
+            dynamicDestinationSpatialNodeId = _blackboard.DestinationSpatialNodeId;
+            dynamicPreviousSpatialNodeId = _blackboard.PreviousSpatialNodeId;
         }
 
         private void InitializeNavigation()
