@@ -40,9 +40,9 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private StalkerAttackResult lastAttackResult;
         [SerializeField] private float recoverElapsedTime;
 
-        private NavMeshAgent _agent;
+        private readonly StalkerBlackboard _blackboard = new StalkerBlackboard();
+        private StalkerNavigationController _navigation;
         private int _currentPatrolIndex;
-        private Vector3? _activeDestination;
 
         public StalkerState CurrentState => currentState;
         public float DetectionMeter => detectionMeter;
@@ -53,18 +53,16 @@ namespace EchoProtocol.AI.Stalker
         public float AttackElapsedTime => attackElapsedTime;
         public StalkerAttackResult LastAttackResult => lastAttackResult;
         public float RecoverElapsedTime => recoverElapsedTime;
+        public StalkerBlackboard Blackboard => _blackboard;
 
         private void Awake()
         {
-            _agent = GetComponent<NavMeshAgent>();
+            InitializeNavigation();
         }
 
         private void OnEnable()
         {
-            if (_agent == null)
-            {
-                _agent = GetComponent<NavMeshAgent>();
-            }
+            InitializeNavigation();
 
             if (currentState == StalkerState.PATROL)
             {
@@ -100,23 +98,18 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickPatrol()
         {
-            if (!CanUseAgent() || patrolRoute == null || patrolRoute.PointCount == 0)
+            if (!CanUseNavigation() || patrolRoute == null || patrolRoute.PointCount == 0)
             {
                 return;
             }
 
-            if (!_activeDestination.HasValue)
+            if (!_navigation.HasActiveDestination)
             {
                 SetCurrentPatrolDestination();
                 return;
             }
 
-            if (_agent.pathPending)
-            {
-                return;
-            }
-
-            if (_agent.remainingDistance > _agent.stoppingDistance)
+            if (!_navigation.HasArrived())
             {
                 return;
             }
@@ -379,40 +372,24 @@ namespace EchoProtocol.AI.Stalker
 
         private void SetChaseDestination(Vector3 observedPosition)
         {
-            if (!CanUseAgent())
+            if (!CanUseNavigation())
             {
-                _activeDestination = null;
+                _navigation?.ClearDestinationCache();
                 return;
             }
 
-            if (_activeDestination.HasValue && _activeDestination.Value == observedPosition)
-            {
-                return;
-            }
-
-            if (_agent.SetDestination(observedPosition))
-            {
-                _activeDestination = observedPosition;
-            }
+            _navigation.TrySetDestination(observedPosition);
         }
 
         private void SetSearchDestination()
         {
-            if (!CanUseAgent())
+            if (!CanUseNavigation())
             {
-                _activeDestination = null;
+                _navigation?.ClearDestinationCache();
                 return;
             }
 
-            if (_activeDestination.HasValue && _activeDestination.Value == lastKnownPosition)
-            {
-                return;
-            }
-
-            if (_agent.SetDestination(lastKnownPosition))
-            {
-                _activeDestination = lastKnownPosition;
-            }
+            _navigation.TrySetDestination(lastKnownPosition);
         }
 
         private bool IsWithinAttackRange(Vector3 targetPosition)
@@ -487,12 +464,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void StopAgentPath()
         {
-            if (CanUseAgent())
-            {
-                _agent.ResetPath();
-            }
-
-            _activeDestination = null;
+            _navigation?.Stop();
         }
 
         private void AdvancePatrolDestination()
@@ -503,37 +475,35 @@ namespace EchoProtocol.AI.Stalker
 
         private void SetCurrentPatrolDestination()
         {
-            if (!CanUseAgent() || patrolRoute == null)
+            if (!CanUseNavigation() || patrolRoute == null)
             {
-                _activeDestination = null;
+                _navigation?.ClearDestinationCache();
                 return;
             }
 
             if (!patrolRoute.TryGetNextValidPoint(_currentPatrolIndex, out var pointIndex, out var point))
             {
-                _activeDestination = null;
+                _navigation.ClearDestinationCache();
                 return;
             }
 
             _currentPatrolIndex = pointIndex;
             var destination = point.position;
 
-            if (_activeDestination.HasValue && _activeDestination.Value == destination)
-            {
-                return;
-            }
+            _navigation.TrySetDestination(destination);
+        }
 
-            if (_agent.SetDestination(destination))
+        private void InitializeNavigation()
+        {
+            if (_navigation == null)
             {
-                _activeDestination = destination;
+                _navigation = new StalkerNavigationController(GetComponent<NavMeshAgent>());
             }
         }
 
-        private bool CanUseAgent()
+        private bool CanUseNavigation()
         {
-            return _agent != null
-                && _agent.enabled
-                && _agent.isOnNavMesh;
+            return _navigation != null && _navigation.IsUsable;
         }
     }
 }
