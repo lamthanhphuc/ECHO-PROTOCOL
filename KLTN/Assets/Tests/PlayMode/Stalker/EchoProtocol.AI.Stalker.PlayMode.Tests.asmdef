@@ -1,0 +1,20 @@
+{
+    "name": "EchoProtocol.AI.Stalker.PlayMode.Tests",
+    "rootNamespace": "EchoProtocol.AI.Stalker.Tests",
+    "references": [
+        "UnityEngine.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
