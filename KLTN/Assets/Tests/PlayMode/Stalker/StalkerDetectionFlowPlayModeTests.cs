@@ -15,6 +15,8 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string StalkerVisionSensorTypeName = "EchoProtocol.AI.Stalker.StalkerVisionSensor";
         private const int MaxDetectFrames = 5;
         private const int MaxChaseFrames = 30;
+        private const int MaxSearchFrames = 5;
+        private const int MaxVisibleLkpUpdateFrames = 3;
         private const float FloatTolerance = 0.0001f;
         private const float VectorTolerance = 0.001f;
 
@@ -69,7 +71,67 @@ namespace EchoProtocol.AI.Stalker.Tests
                 Is.LessThanOrEqualTo(VectorTolerance));
         }
 
-        private StalkerFixture CreateFixture(float detectionMeterFull, float detectionFillRate, float detectionDecayRate)
+        [UnityTest]
+        public IEnumerator STK_R_006_ChaseLosesVisibility_EntersSearch()
+        {
+            var fixture = CreateFixture(0.1f, 10f, 0f, 30f);
+            fixture.Stalker.SetActive(true);
+
+            yield return WaitUntilState(fixture.Controller, "DETECT", MaxDetectFrames);
+            yield return WaitUntilState(fixture.Controller, "CHASE", MaxChaseFrames);
+            yield return null;
+
+            var lastVisibleLkp = GetVector3Property(fixture.Controller, "LastKnownPosition");
+            fixture.PlayerDummy.transform.position = new Vector3(0f, 1f, 25f);
+
+            yield return WaitUntilState(fixture.Controller, "SEARCH", MaxSearchFrames);
+
+            AssertState(fixture.Controller, "SEARCH");
+            Assert.That(GetTransformProperty(fixture.Controller, "CurrentTarget"), Is.SameAs(fixture.PlayerDummy.transform));
+            Assert.That(GetTransformProperty(fixture.Controller, "DetectionTarget"), Is.Null);
+            Assert.That(GetFloatProperty(fixture.Controller, "DetectionMeter"), Is.EqualTo(0f).Within(FloatTolerance));
+            Assert.That(
+                Vector3.Distance(GetVector3Property(fixture.Controller, "LastKnownPosition"), lastVisibleLkp),
+                Is.LessThanOrEqualTo(VectorTolerance));
+            Assert.That(GetBoolProperty(fixture.VisionSensor, "IsCandidateVisible"), Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator STK_R_007_HiddenTargetMovement_DoesNotMutateLastKnownPosition()
+        {
+            var fixture = CreateFixture(0.1f, 10f, 0f, 30f);
+            fixture.Stalker.SetActive(true);
+
+            yield return WaitUntilState(fixture.Controller, "DETECT", MaxDetectFrames);
+            yield return WaitUntilState(fixture.Controller, "CHASE", MaxChaseFrames);
+
+            var visiblePosition = new Vector3(2f, 1f, 5f);
+            fixture.PlayerDummy.transform.position = visiblePosition;
+            yield return WaitUntilLastKnownPosition(fixture.Controller, visiblePosition, MaxVisibleLkpUpdateFrames);
+
+            fixture.PlayerDummy.transform.position = new Vector3(2f, 1f, 25f);
+            yield return WaitUntilState(fixture.Controller, "SEARCH", MaxSearchFrames);
+
+            var frozenLkp = GetVector3Property(fixture.Controller, "LastKnownPosition");
+            fixture.PlayerDummy.transform.position = new Vector3(-8f, 1f, 30f);
+
+            for (var frame = 0; frame < MaxSearchFrames; frame++)
+            {
+                yield return null;
+            }
+
+            AssertState(fixture.Controller, "SEARCH");
+            Assert.That(GetTransformProperty(fixture.Controller, "CurrentTarget"), Is.SameAs(fixture.PlayerDummy.transform));
+            Assert.That(GetBoolProperty(fixture.VisionSensor, "IsCandidateVisible"), Is.False);
+            Assert.That(
+                Vector3.Distance(GetVector3Property(fixture.Controller, "LastKnownPosition"), frozenLkp),
+                Is.LessThanOrEqualTo(VectorTolerance));
+            Assert.That(
+                Vector3.Distance(GetVector3Property(fixture.Controller, "LastKnownPosition"), fixture.PlayerDummy.transform.position),
+                Is.GreaterThan(VectorTolerance));
+        }
+
+        private StalkerFixture CreateFixture(float detectionMeterFull, float detectionFillRate, float detectionDecayRate, float? searchDuration = null)
         {
             var controllerType = ResolveType(StalkerControllerTypeName);
             var visionSensorType = ResolveType(StalkerVisionSensorTypeName);
@@ -107,8 +169,12 @@ namespace EchoProtocol.AI.Stalker.Tests
             SetPrivateField(controller, "detectionMeterFull", detectionMeterFull);
             SetPrivateField(controller, "detectionFillRate", detectionFillRate);
             SetPrivateField(controller, "detectionDecayRate", detectionDecayRate);
+            if (searchDuration.HasValue)
+            {
+                SetPrivateField(controller, "searchDuration", searchDuration.Value);
+            }
 
-            return new StalkerFixture(stalker, playerDummy, controller);
+            return new StalkerFixture(stalker, playerDummy, controller, visionSensor);
         }
 
         private static IEnumerator WaitUntilState(Component controller, string expectedStateName, int maxFrames)
@@ -124,6 +190,21 @@ namespace EchoProtocol.AI.Stalker.Tests
             }
 
             Assert.Fail($"Expected Stalker CurrentState '{expectedStateName}' within {maxFrames} frames, but was '{GetEnumPropertyName(controller, "CurrentState")}'.");
+        }
+
+        private static IEnumerator WaitUntilLastKnownPosition(Component controller, Vector3 expectedPosition, int maxFrames)
+        {
+            for (var frame = 0; frame < maxFrames; frame++)
+            {
+                yield return null;
+
+                if (Vector3.Distance(GetVector3Property(controller, "LastKnownPosition"), expectedPosition) <= VectorTolerance)
+                {
+                    yield break;
+                }
+            }
+
+            Assert.Fail($"Expected LastKnownPosition near {expectedPosition} within {maxFrames} frames, but was {GetVector3Property(controller, "LastKnownPosition")}.");
         }
 
         private static Type ResolveType(string fullTypeName)
@@ -174,6 +255,13 @@ namespace EchoProtocol.AI.Stalker.Tests
             return (float)value;
         }
 
+        private static bool GetBoolProperty(Component component, string propertyName)
+        {
+            var value = GetProperty(component, propertyName);
+            Assert.That(value, Is.TypeOf<bool>(), $"Property '{propertyName}' must return bool.");
+            return (bool)value;
+        }
+
         private static Transform GetTransformProperty(Component component, string propertyName)
         {
             var value = GetProperty(component, propertyName);
@@ -200,16 +288,18 @@ namespace EchoProtocol.AI.Stalker.Tests
 
         private readonly struct StalkerFixture
         {
-            public StalkerFixture(GameObject stalker, GameObject playerDummy, Component controller)
+            public StalkerFixture(GameObject stalker, GameObject playerDummy, Component controller, Component visionSensor)
             {
                 Stalker = stalker;
                 PlayerDummy = playerDummy;
                 Controller = controller;
+                VisionSensor = visionSensor;
             }
 
             public GameObject Stalker { get; }
             public GameObject PlayerDummy { get; }
             public Component Controller { get; }
+            public Component VisionSensor { get; }
         }
     }
 }
