@@ -17,6 +17,7 @@ namespace EchoProtocol.AI.Stalker
             && _agent.enabled
             && _agent.isOnNavMesh;
 
+        // This is the controller's accepted destination cache, not proof of a complete Unity path.
         public bool HasActiveDestination => _activeDestination.HasValue;
 
         public bool HasArrived()
@@ -41,26 +42,64 @@ namespace EchoProtocol.AI.Stalker
             ClearDestinationCache();
         }
 
-        public bool TrySetDestination(Vector3 destination)
+        public NavigationPlanResult RequestDestination(Vector3 destination)
         {
-            if (!IsUsable)
+            if (_agent == null || !_agent.enabled)
             {
                 ClearDestinationCache();
-                return false;
+                return new NavigationPlanResult(NavigationPlanStatus.AgentUnavailable, destination);
+            }
+
+            if (!_agent.isOnNavMesh)
+            {
+                ClearDestinationCache();
+                return new NavigationPlanResult(NavigationPlanStatus.AgentNotOnNavMesh, destination);
             }
 
             if (_activeDestination.HasValue && _activeDestination.Value == destination)
             {
-                return true;
+                return new NavigationPlanResult(NavigationPlanStatus.AlreadyActive, destination);
             }
 
+            // SetDestination accepts a request; it does not prove the resulting path is complete.
             if (!_agent.SetDestination(destination))
             {
-                return false;
+                ClearDestinationCache();
+                return new NavigationPlanResult(NavigationPlanStatus.DestinationRequestFailed, destination);
             }
 
             _activeDestination = destination;
-            return true;
+            return new NavigationPlanResult(NavigationPlanStatus.Accepted, destination);
+        }
+
+        public bool TrySetDestination(Vector3 destination)
+        {
+            return RequestDestination(destination).IsAccepted;
+        }
+
+        public NavigationExecutionStatus GetExecutionStatus()
+        {
+            if (_agent == null || !_agent.enabled || !_agent.isOnNavMesh)
+            {
+                return NavigationExecutionStatus.Failed;
+            }
+
+            if (!HasActiveDestination)
+            {
+                return NavigationExecutionStatus.Idle;
+            }
+
+            if (_agent.pathPending)
+            {
+                return NavigationExecutionStatus.RepathPending;
+            }
+
+            if (HasArrived())
+            {
+                return NavigationExecutionStatus.Arrived;
+            }
+
+            return NavigationExecutionStatus.Moving;
         }
     }
 }
