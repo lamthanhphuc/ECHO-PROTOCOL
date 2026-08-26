@@ -37,4 +37,16 @@ namespace EchoProtocol.AI.Stalker
         Stuck,
         Failed
     }
+
+    public enum NavigationPathStatus
+    {
+        NoDestination,
+        Pending,
+        Complete,
+        Partial,
+        Invalid,
+        Stale,
+        AgentUnavailable,
+        AgentNotOnNavMesh
+    }
 }

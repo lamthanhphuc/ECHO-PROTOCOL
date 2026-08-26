@@ -44,6 +44,11 @@ namespace EchoProtocol.AI.Stalker
 
         public NavigationPlanResult RequestDestination(Vector3 destination)
         {
+            return RequestDestination(destination, false);
+        }
+
+        public NavigationPlanResult RequestDestination(Vector3 destination, bool forceRepath)
+        {
             if (_agent == null || !_agent.enabled)
             {
                 ClearDestinationCache();
@@ -56,7 +61,8 @@ namespace EchoProtocol.AI.Stalker
                 return new NavigationPlanResult(NavigationPlanStatus.AgentNotOnNavMesh, destination);
             }
 
-            if (_activeDestination.HasValue && _activeDestination.Value == destination)
+            // forceRepath bypasses the cache but still only issues a path request.
+            if (!forceRepath && _activeDestination.HasValue && _activeDestination.Value == destination)
             {
                 return new NavigationPlanResult(NavigationPlanStatus.AlreadyActive, destination);
             }
@@ -79,27 +85,66 @@ namespace EchoProtocol.AI.Stalker
 
         public NavigationExecutionStatus GetExecutionStatus()
         {
-            if (_agent == null || !_agent.enabled || !_agent.isOnNavMesh)
+            switch (GetPathStatus())
             {
-                return NavigationExecutionStatus.Failed;
+                case NavigationPathStatus.AgentUnavailable:
+                case NavigationPathStatus.AgentNotOnNavMesh:
+                case NavigationPathStatus.Stale:
+                case NavigationPathStatus.Partial:
+                case NavigationPathStatus.Invalid:
+                    return NavigationExecutionStatus.Failed;
+                case NavigationPathStatus.NoDestination:
+                    return NavigationExecutionStatus.Idle;
+                case NavigationPathStatus.Pending:
+                    return NavigationExecutionStatus.RepathPending;
+                case NavigationPathStatus.Complete:
+                    return HasArrived()
+                        ? NavigationExecutionStatus.Arrived
+                        : NavigationExecutionStatus.Moving;
+                default:
+                    return NavigationExecutionStatus.Failed;
+            }
+        }
+
+        public NavigationPathStatus GetPathStatus()
+        {
+            if (_agent == null || !_agent.enabled)
+            {
+                return NavigationPathStatus.AgentUnavailable;
             }
 
-            if (!HasActiveDestination)
+            if (!_agent.isOnNavMesh)
             {
-                return NavigationExecutionStatus.Idle;
+                return NavigationPathStatus.AgentNotOnNavMesh;
+            }
+
+            if (!_activeDestination.HasValue)
+            {
+                return NavigationPathStatus.NoDestination;
             }
 
             if (_agent.pathPending)
             {
-                return NavigationExecutionStatus.RepathPending;
+                return NavigationPathStatus.Pending;
             }
 
-            if (HasArrived())
+            // Observational only; recovery policy belongs to the caller.
+            if (_agent.isPathStale)
             {
-                return NavigationExecutionStatus.Arrived;
+                return NavigationPathStatus.Stale;
             }
 
-            return NavigationExecutionStatus.Moving;
+            switch (_agent.pathStatus)
+            {
+                case NavMeshPathStatus.PathComplete:
+                    return NavigationPathStatus.Complete;
+                case NavMeshPathStatus.PathPartial:
+                    return NavigationPathStatus.Partial;
+                case NavMeshPathStatus.PathInvalid:
+                    return NavigationPathStatus.Invalid;
+                default:
+                    return NavigationPathStatus.Invalid;
+            }
         }
     }
 }

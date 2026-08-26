@@ -13,6 +13,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string NavigationPlanResultTypeName = "EchoProtocol.AI.Stalker.NavigationPlanResult";
         private const string NavigationPlanStatusTypeName = "EchoProtocol.AI.Stalker.NavigationPlanStatus";
         private const string NavigationExecutionStatusTypeName = "EchoProtocol.AI.Stalker.NavigationExecutionStatus";
+        private const string NavigationPathStatusTypeName = "EchoProtocol.AI.Stalker.NavigationPathStatus";
 
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
 
@@ -88,6 +89,68 @@ namespace EchoProtocol.AI.Stalker.Tests
             AssertPlanResultContract("DestinationRequestFailed", destination, false);
         }
 
+        [Test]
+        public void NAV_2_NavigationPathStatus_ContainsExpectedFoundationMembers()
+        {
+            AssertExactEnumNames(
+                NavigationPathStatusTypeName,
+                new[]
+                {
+                    "NoDestination",
+                    "Pending",
+                    "Complete",
+                    "Partial",
+                    "Invalid",
+                    "Stale",
+                    "AgentUnavailable",
+                    "AgentNotOnNavMesh"
+                });
+        }
+
+        [Test]
+        public void NAV_2_NullAgent_GetPathStatus_ReturnsAgentUnavailable()
+        {
+            var controller = CreateNavigationController(null);
+
+            Assert.That(GetPathStatusName(controller), Is.EqualTo("AgentUnavailable"));
+            Assert.That(GetExecutionStatusName(controller), Is.EqualTo("Failed"));
+        }
+
+        [Test]
+        public void NAV_2_DisabledAgent_GetPathStatus_ReturnsAgentUnavailable()
+        {
+            var agent = CreateInactiveAgent("STK_Test_NAV2_DisabledAgent");
+            agent.enabled = false;
+            var controller = CreateNavigationController(agent);
+
+            Assert.That(GetPathStatusName(controller), Is.EqualTo("AgentUnavailable"));
+            Assert.That(GetExecutionStatusName(controller), Is.EqualTo("Failed"));
+        }
+
+        [Test]
+        public void NAV_2_EnabledOffNavMeshAgent_GetPathStatus_ReturnsAgentNotOnNavMesh()
+        {
+            var agent = CreateInactiveAgent("STK_Test_NAV2_EnabledOffNavMeshAgent");
+            agent.enabled = true;
+            Assert.That(agent.isOnNavMesh, Is.False, "Inactive test agent should remain off NavMesh without a baked NavMesh fixture.");
+            var controller = CreateNavigationController(agent);
+
+            Assert.That(GetPathStatusName(controller), Is.EqualTo("AgentNotOnNavMesh"));
+            Assert.That(GetExecutionStatusName(controller), Is.EqualTo("Failed"));
+        }
+
+        [Test]
+        public void NAV_2_ForceRepathOverload_UnusableAgentPreservesTypedFailureSemantics()
+        {
+            var destination = new Vector3(1f, 0f, 2f);
+            var controller = CreateNavigationController(null);
+
+            var result = RequestDestination(controller, destination, true);
+
+            AssertNavigationPlanResult(result, "AgentUnavailable", destination, false);
+            Assert.That(GetBoolProperty(controller, "HasActiveDestination"), Is.False);
+        }
+
         private NavMeshAgent CreateInactiveAgent(string name)
         {
             var root = new GameObject(name);
@@ -111,7 +174,20 @@ namespace EchoProtocol.AI.Stalker.Tests
 
         private static object RequestDestination(object controller, Vector3 destination)
         {
-            return InvokeMethod(controller, "RequestDestination", new object[] { destination });
+            return InvokeMethod(
+                controller,
+                "RequestDestination",
+                new[] { typeof(Vector3) },
+                new object[] { destination });
+        }
+
+        private static object RequestDestination(object controller, Vector3 destination, bool forceRepath)
+        {
+            return InvokeMethod(
+                controller,
+                "RequestDestination",
+                new[] { typeof(Vector3), typeof(bool) },
+                new object[] { destination, forceRepath });
         }
 
         private static bool TrySetDestination(object controller, Vector3 destination)
@@ -125,6 +201,12 @@ namespace EchoProtocol.AI.Stalker.Tests
         {
             var value = InvokeMethod(controller, "GetExecutionStatus", Array.Empty<object>());
             return GetEnumName(value, NavigationExecutionStatusTypeName);
+        }
+
+        private static string GetPathStatusName(object controller)
+        {
+            var value = InvokeMethod(controller, "GetPathStatus", Array.Empty<object>());
+            return GetEnumName(value, NavigationPathStatusTypeName);
         }
 
         private static void AssertPlanResultContract(string statusName, Vector3 destination, bool expectedAccepted)
@@ -149,6 +231,19 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static object InvokeMethod(object target, string methodName, object[] args)
         {
             var method = target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(method, Is.Not.Null, $"Missing public method '{methodName}' on '{target.GetType().FullName}'.");
+
+            return method.Invoke(target, args);
+        }
+
+        private static object InvokeMethod(object target, string methodName, Type[] parameterTypes, object[] args)
+        {
+            var method = target.GetType().GetMethod(
+                methodName,
+                BindingFlags.Instance | BindingFlags.Public,
+                null,
+                parameterTypes,
+                null);
             Assert.That(method, Is.Not.Null, $"Missing public method '{methodName}' on '{target.GetType().FullName}'.");
 
             return method.Invoke(target, args);
@@ -187,6 +282,26 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(property, Is.Not.Null, $"Missing public property '{propertyName}' on '{target.GetType().FullName}'.");
 
             return property.GetValue(target);
+        }
+
+        private static void AssertExactEnumNames(string fullTypeName, string[] expectedNames)
+        {
+            var enumType = ResolveType(fullTypeName);
+            Assert.That(enumType.IsEnum, Is.True, $"Production type '{fullTypeName}' must be an enum.");
+
+            var actualNames = Enum.GetNames(enumType);
+            var expectedNameSet = new HashSet<string>(expectedNames);
+            Assert.That(actualNames, Has.Length.EqualTo(expectedNames.Length), $"Enum '{fullTypeName}' must contain exactly the expected member count.");
+
+            for (var i = 0; i < expectedNames.Length; i++)
+            {
+                Assert.That(actualNames, Does.Contain(expectedNames[i]), $"Missing enum member '{expectedNames[i]}' on '{fullTypeName}'.");
+            }
+
+            for (var i = 0; i < actualNames.Length; i++)
+            {
+                Assert.That(expectedNameSet.Contains(actualNames[i]), Is.True, $"Unexpected enum member '{actualNames[i]}' on '{fullTypeName}'.");
+            }
         }
 
         private static Type ResolveType(string fullTypeName)
