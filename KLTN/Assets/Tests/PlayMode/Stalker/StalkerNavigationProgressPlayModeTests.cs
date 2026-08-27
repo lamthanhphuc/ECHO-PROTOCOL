@@ -24,6 +24,9 @@ namespace EchoProtocol.AI.Stalker.Tests
 
         private static readonly Vector3 AgentStart = new Vector3(-3f, 0f, 0f);
         private static readonly Vector3 Destination = new Vector3(3f, 0f, 0f);
+        private static readonly Vector3 IslandACenter = new Vector3(-3f, -0.05f, 0f);
+        private static readonly Vector3 IslandBCenter = new Vector3(3f, -0.05f, 0f);
+        private static readonly Vector3 IslandSize = new Vector3(3f, 0.1f, 4f);
         private static readonly Vector3 TrackedDestination = new Vector3(2.5f, 0f, 1f);
         private static readonly Vector3 NewGoalDestination = new Vector3(2.5f, 0f, -1f);
         private static readonly Vector3 ChaseDestinationA = new Vector3(1f, 0f, 0f);
@@ -361,6 +364,76 @@ namespace EchoProtocol.AI.Stalker.Tests
             AssertVectorApproximately(fixture.Agent.destination, fixture.Destination);
         }
 
+        [UnityTest]
+        public IEnumerator NAV_REC_StalePath_UsesSingleRecoveryBudget()
+        {
+            var fixture = CreateRecoveryPolicyFixture();
+            yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
+            yield return PrepareStaleRecoveryPath(fixture);
+
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Stale"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Failed"));
+
+            InvokeTickNavigationRecovery(fixture.StalkerController);
+
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
+            yield return WaitUntilComplete(fixture.Agent, fixture.Navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Moving"));
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Complete"));
+            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.True);
+            AssertVectorApproximately(fixture.Agent.destination, fixture.Destination);
+        }
+
+        [UnityTest]
+        public IEnumerator NAV_REC_StaleAfterBudgetUsed_DoesNotIssueSecondRepath()
+        {
+            var fixture = CreateRecoveryPolicyFixture();
+            yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
+            yield return PrepareStaleRecoveryPath(fixture);
+
+            InvokeTickNavigationRecovery(fixture.StalkerController);
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
+            yield return WaitUntilComplete(fixture.Agent, fixture.Navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Moving"));
+
+            InduceStalePath(fixture);
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Stale"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Failed"));
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
+
+            InvokeTickNavigationRecovery(fixture.StalkerController);
+
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Stale"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Failed"));
+            AssertVectorApproximately(fixture.Agent.destination, fixture.Destination);
+        }
+
+        [UnityTest]
+        public IEnumerator NAV_REC_PartialPath_DoesNotConsumeRecoveryBudget()
+        {
+            var fixture = CreatePartialRecoveryPolicyFixture();
+            yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
+
+            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("PATROL"));
+            AssertPlanResult(RequestDestination(fixture.Navigation, fixture.Destination), "Accepted", true);
+            yield return WaitUntilPathStatus(fixture.Agent, fixture.Navigation, "Partial", PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Partial"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Failed"));
+            Assert.That(HasArrived(fixture.Navigation), Is.False);
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+
+            InvokeTickNavigationRecovery(fixture.StalkerController);
+
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Partial"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Failed"));
+            Assert.That(HasArrived(fixture.Navigation), Is.False);
+        }
+
         private NavigationFixture CreateFixture()
         {
             BuildRuntimeNavMesh();
@@ -440,6 +513,33 @@ namespace EchoProtocol.AI.Stalker.Tests
             return new RecoveryPolicyFixture(agent, stalkerController, destination);
         }
 
+        private RecoveryPolicyFixture CreatePartialRecoveryPolicyFixture()
+        {
+            BuildDisconnectedIslandNavMesh();
+
+            var destination = SampleChaseDestinationPointOnNavMesh(Destination);
+            var stalkerRoot = new GameObject("STK_Test_PartialRecoveryPolicyStalker");
+            stalkerRoot.SetActive(false);
+            stalkerRoot.transform.position = AgentStart;
+            _createdObjects.Add(stalkerRoot);
+
+            var agent = stalkerRoot.AddComponent<NavMeshAgent>();
+            ConfigureAgent(agent);
+
+            var patrolRouteObject = new GameObject("STK_Test_PartialRecoveryPolicyPatrolRoute");
+            _createdObjects.Add(patrolRouteObject);
+
+            var waypoint = new GameObject("STK_Test_PartialRecoveryPolicyWaypoint");
+            waypoint.transform.SetParent(patrolRouteObject.transform, false);
+            waypoint.transform.position = destination;
+
+            var patrolRoute = patrolRouteObject.AddComponent(ResolveType(PatrolRouteTypeName));
+            var stalkerController = stalkerRoot.AddComponent(ResolveType(StalkerControllerTypeName));
+            SetPrivateField(stalkerController, "patrolRoute", patrolRoute);
+
+            return new RecoveryPolicyFixture(agent, stalkerController, destination);
+        }
+
         private void BuildRuntimeNavMesh()
         {
             var buildSettings = NavMesh.GetSettingsByID(0);
@@ -473,6 +573,44 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             _navMeshDataInstance = NavMesh.AddNavMeshData(navMeshData);
             Assert.That(_navMeshDataInstance.valid, Is.True, "Runtime NavMeshDataInstance was not valid after AddNavMeshData.");
+        }
+
+        private void BuildDisconnectedIslandNavMesh()
+        {
+            var buildSettings = NavMesh.GetSettingsByID(0);
+            if (buildSettings.agentTypeID == -1)
+            {
+                Assert.Fail("Default NavMesh agent build settings for agentTypeID 0 are unavailable.");
+            }
+
+            var sources = new List<NavMeshBuildSource>
+            {
+                CreateBoxSource(IslandACenter, IslandSize),
+                CreateBoxSource(IslandBCenter, IslandSize)
+            };
+            var bounds = new Bounds(Vector3.zero, new Vector3(12f, 4f, 8f));
+            var navMeshData = NavMeshBuilder.BuildNavMeshData(
+                buildSettings,
+                sources,
+                bounds,
+                Vector3.zero,
+                Quaternion.identity);
+
+            Assert.That(navMeshData, Is.Not.Null, "Runtime disconnected-island NavMeshBuilder.BuildNavMeshData returned null.");
+
+            _navMeshDataInstance = NavMesh.AddNavMeshData(navMeshData);
+            Assert.That(_navMeshDataInstance.valid, Is.True, "Runtime disconnected-island NavMeshDataInstance was not valid after AddNavMeshData.");
+        }
+
+        private static NavMeshBuildSource CreateBoxSource(Vector3 center, Vector3 size)
+        {
+            return new NavMeshBuildSource
+            {
+                shape = NavMeshBuildSourceShape.Box,
+                transform = Matrix4x4.TRS(center, Quaternion.identity, Vector3.one),
+                size = size,
+                area = 0
+            };
         }
 
         private NavMeshAgent CreateInactiveConfiguredAgent(Vector3 position)
@@ -520,6 +658,43 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Stuck"));
         }
 
+        private static IEnumerator PrepareStaleRecoveryPath(RecoveryPolicyFixture fixture)
+        {
+            fixture.Agent.autoRepath = false;
+            fixture.Agent.areaMask = NavMesh.AllAreas;
+
+            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("PATROL"));
+            AssertPlanResult(RequestDestination(fixture.Navigation, fixture.Destination), "Accepted", true);
+            yield return WaitUntilComplete(fixture.Agent, fixture.Navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            StopAgent(fixture.Agent);
+            yield return null;
+            Assert.That(fixture.Agent.pathStatus, Is.EqualTo(NavMeshPathStatus.PathComplete));
+            Assert.That(fixture.Agent.isPathStale, Is.False);
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Complete"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Moving"));
+            Assert.That(HasArrived(fixture.Navigation), Is.False);
+
+            InduceStalePath(fixture);
+        }
+
+        private static void InduceStalePath(RecoveryPolicyFixture fixture)
+        {
+            fixture.Agent.areaMask = fixture.Agent.areaMask == NavMesh.AllAreas
+                ? 1 << 0
+                : NavMesh.AllAreas;
+
+            Assert.That(fixture.Agent.isOnNavMesh, Is.True, "Stale recovery fixture agent should remain on NavMesh after areaMask change.");
+            Assert.That(fixture.Agent.isPathStale, Is.True, "Stale recovery fixture path should become stale after areaMask change.");
+            Assert.That(fixture.Agent.pathPending, Is.False, "Stale recovery fixture path should not be pending after areaMask change.");
+            Assert.That(fixture.Agent.hasPath, Is.True, "Stale recovery fixture should retain a path after areaMask change.");
+            Assert.That(fixture.Agent.pathStatus, Is.EqualTo(NavMeshPathStatus.PathComplete), "Stale recovery fixture underlying Unity path should remain complete.");
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Stale"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Failed"));
+            Assert.That(HasArrived(fixture.Navigation), Is.False);
+            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.True);
+        }
+
         private static IEnumerator WaitUntilComplete(NavMeshAgent agent, object controller, float timeoutSeconds, int frameCap)
         {
             var elapsed = 0f;
@@ -545,6 +720,29 @@ namespace EchoProtocol.AI.Stalker.Tests
                 HasArrived(controller),
                 Is.False,
                 "Progress integration tests require the Complete path to remain non-arrived before progress sampling.");
+        }
+
+        private static IEnumerator WaitUntilPathStatus(NavMeshAgent agent, object controller, string expectedStatus, float timeoutSeconds, int frameCap)
+        {
+            var elapsed = 0f;
+            var frames = 0;
+            while ((agent.pathPending || GetPathStatusName(controller) != expectedStatus)
+                && elapsed < timeoutSeconds
+                && frames < frameCap)
+            {
+                yield return null;
+                elapsed += Time.deltaTime;
+                frames++;
+            }
+
+            Assert.That(
+                agent.pathPending,
+                Is.False,
+                $"Expected NavMeshAgent.pathPending to clear within {timeoutSeconds:0.###} gameplay seconds and {frameCap} frames.");
+            Assert.That(
+                GetPathStatusName(controller),
+                Is.EqualTo(expectedStatus),
+                $"Expected {expectedStatus} path within {timeoutSeconds:0.###} gameplay seconds and {frameCap} frames.");
         }
 
         private static void StopAgent(NavMeshAgent agent)

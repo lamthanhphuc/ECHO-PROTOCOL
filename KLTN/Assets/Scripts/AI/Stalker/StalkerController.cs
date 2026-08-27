@@ -606,11 +606,26 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            if (_navigation.GetExecutionStatus() != NavigationExecutionStatus.Stuck)
+            var executionStatus = _navigation.GetExecutionStatus();
+            if (executionStatus == NavigationExecutionStatus.Stuck)
+            {
+                TryIssueNavigationRecoveryRepath();
+                return;
+            }
+
+            if (executionStatus != NavigationExecutionStatus.Failed)
             {
                 return;
             }
 
+            if (_navigation.GetPathStatus() == NavigationPathStatus.Stale)
+            {
+                TryIssueNavigationRecoveryRepath();
+            }
+        }
+
+        private void TryIssueNavigationRecoveryRepath()
+        {
             if (_navigationRecoveryAttemptUsed)
             {
                 return;
