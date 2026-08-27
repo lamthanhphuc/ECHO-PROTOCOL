@@ -27,6 +27,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static readonly Vector3 IslandACenter = new Vector3(-3f, -0.05f, 0f);
         private static readonly Vector3 IslandBCenter = new Vector3(3f, -0.05f, 0f);
         private static readonly Vector3 IslandSize = new Vector3(3f, 0.1f, 4f);
+        private static readonly Vector3 ReachableFallbackDestination = new Vector3(-2f, 0f, 1f);
         private static readonly Vector3 TrackedDestination = new Vector3(2.5f, 0f, 1f);
         private static readonly Vector3 NewGoalDestination = new Vector3(2.5f, 0f, -1f);
         private static readonly Vector3 ChaseDestinationA = new Vector3(1f, 0f, 0f);
@@ -42,6 +43,12 @@ namespace EchoProtocol.AI.Stalker.Tests
         [UnityTearDown]
         public IEnumerator TearDown()
         {
+            if (_navMeshDataInstance.valid)
+            {
+                _navMeshDataInstance.Remove();
+                _navMeshDataInstance = default;
+            }
+
             for (var i = _createdObjects.Count - 1; i >= 0; i--)
             {
                 if (_createdObjects[i] != null)
@@ -52,12 +59,6 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             _createdObjects.Clear();
             yield return null;
-
-            if (_navMeshDataInstance.valid)
-            {
-                _navMeshDataInstance.Remove();
-                _navMeshDataInstance = default;
-            }
         }
 
         [UnityTest]
@@ -434,6 +435,112 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(HasArrived(fixture.Navigation), Is.False);
         }
 
+        [UnityTest]
+        public IEnumerator NAV_FBK_FixedPatrolPartial_AdvancesToNextWaypoint()
+        {
+            var fixture = CreateFixedPatrolFallbackFixture(
+                true,
+                Destination,
+                ReachableFallbackDestination);
+            yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
+
+            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(0));
+            AssertPlanResult(RequestDestination(fixture.Navigation, fixture.FirstDestination), "Accepted", true);
+            yield return WaitUntilPathStatus(fixture.Agent, fixture.Navigation, "Partial", PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Partial"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Failed"));
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+
+            InvokeTickNavigationRecovery(fixture.StalkerController);
+
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+
+            InvokeTickNavigationFallback(fixture.StalkerController);
+
+            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(1));
+            Assert.That(GetFixedPatrolFallbackFailureCount(fixture.StalkerController), Is.EqualTo(1));
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+            AssertVectorApproximately(GetActiveNavigationDestination(fixture.Navigation), fixture.SecondDestination);
+            yield return WaitUntilComplete(fixture.Agent, fixture.Navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
+        }
+
+        [UnityTest]
+        public IEnumerator NAV_FBK_FixedPatrolExhaustedStuck_AdvancesToNextWaypoint()
+        {
+            var fixture = CreateFixedPatrolFallbackFixture(
+                false,
+                Destination,
+                NewGoalDestination);
+            yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
+
+            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(0));
+            AssertPlanResult(RequestDestination(fixture.Navigation, fixture.FirstDestination), "Accepted", true);
+            yield return WaitUntilComplete(fixture.Agent, fixture.Navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            StopAgent(fixture.Agent);
+            yield return null;
+            AssertStoppedCompletePath(fixture.Agent, fixture.Navigation);
+
+            TickUntilStuck(fixture.Navigation);
+            InvokeTickNavigationRecovery(fixture.StalkerController);
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
+            yield return WaitUntilComplete(fixture.Agent, fixture.Navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            TickUntilStuck(fixture.Navigation);
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Stuck"));
+            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(0));
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
+
+            InvokeTickNavigationRecovery(fixture.StalkerController);
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Stuck"));
+
+            InvokeTickNavigationFallback(fixture.StalkerController);
+
+            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(1));
+            Assert.That(GetFixedPatrolFallbackFailureCount(fixture.StalkerController), Is.EqualTo(1));
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+            AssertVectorApproximately(fixture.Agent.destination, fixture.SecondDestination);
+        }
+
+        [UnityTest]
+        public IEnumerator NAV_FBK_FixedPatrolAllWaypointsFail_HoldsWithoutRouteWrap()
+        {
+            var fixture = CreateFixedPatrolFallbackFixture(
+                true,
+                Destination,
+                TrackedDestination);
+            yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
+
+            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(0));
+            AssertPlanResult(RequestDestination(fixture.Navigation, fixture.FirstDestination), "Accepted", true);
+            yield return WaitUntilPathStatus(fixture.Agent, fixture.Navigation, "Partial", PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            InvokeTickNavigationFallback(fixture.StalkerController);
+
+            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(1));
+            Assert.That(GetFixedPatrolFallbackFailureCount(fixture.StalkerController), Is.EqualTo(1));
+            AssertVectorApproximately(GetActiveNavigationDestination(fixture.Navigation), fixture.SecondDestination);
+            yield return WaitUntilPathStatus(fixture.Agent, fixture.Navigation, "Partial", PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            InvokeTickNavigationFallback(fixture.StalkerController);
+
+            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(1));
+            Assert.That(GetFixedPatrolFallbackFailureCount(fixture.StalkerController), Is.EqualTo(2));
+            AssertVectorApproximately(GetActiveNavigationDestination(fixture.Navigation), fixture.SecondDestination);
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Partial"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Failed"));
+
+            InvokeTickNavigationFallback(fixture.StalkerController);
+            InvokeTickNavigationFallback(fixture.StalkerController);
+
+            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(1));
+            Assert.That(GetFixedPatrolFallbackFailureCount(fixture.StalkerController), Is.EqualTo(2));
+            AssertVectorApproximately(GetActiveNavigationDestination(fixture.Navigation), fixture.SecondDestination);
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Partial"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Failed"));
+        }
+
         private NavigationFixture CreateFixture()
         {
             BuildRuntimeNavMesh();
@@ -538,6 +645,53 @@ namespace EchoProtocol.AI.Stalker.Tests
             SetPrivateField(stalkerController, "patrolRoute", patrolRoute);
 
             return new RecoveryPolicyFixture(agent, stalkerController, destination);
+        }
+
+        private FixedPatrolFallbackFixture CreateFixedPatrolFallbackFixture(
+            bool disconnectedIslands,
+            Vector3 firstRequestedDestination,
+            Vector3 secondRequestedDestination)
+        {
+            if (disconnectedIslands)
+            {
+                BuildDisconnectedIslandNavMesh();
+            }
+            else
+            {
+                BuildRuntimeNavMesh();
+            }
+
+            var firstDestination = SampleChaseDestinationPointOnNavMesh(firstRequestedDestination);
+            var secondDestination = SampleChaseDestinationPointOnNavMesh(secondRequestedDestination);
+            Assert.That(Vector3.Distance(firstDestination, secondDestination), Is.GreaterThan(0.1f));
+
+            var stalkerRoot = new GameObject("STK_Test_FixedPatrolFallbackStalker");
+            stalkerRoot.SetActive(false);
+            stalkerRoot.transform.position = AgentStart;
+            _createdObjects.Add(stalkerRoot);
+
+            var agent = stalkerRoot.AddComponent<NavMeshAgent>();
+            ConfigureAgent(agent);
+
+            var patrolRouteObject = new GameObject("STK_Test_FixedPatrolFallbackPatrolRoute");
+            _createdObjects.Add(patrolRouteObject);
+
+            CreateWaypoint(patrolRouteObject.transform, "STK_Test_FixedPatrolFallbackWaypoint0", firstDestination);
+            CreateWaypoint(patrolRouteObject.transform, "STK_Test_FixedPatrolFallbackWaypoint1", secondDestination);
+
+            var patrolRoute = patrolRouteObject.AddComponent(ResolveType(PatrolRouteTypeName));
+            var stalkerController = stalkerRoot.AddComponent(ResolveType(StalkerControllerTypeName));
+            SetPrivateField(stalkerController, "patrolRoute", patrolRoute);
+            SetPrivateField(stalkerController, "patrolMode", ResolveEnumValue("EchoProtocol.AI.Stalker.StalkerPatrolMode", "FixedWaypoint"));
+
+            return new FixedPatrolFallbackFixture(agent, stalkerController, firstDestination, secondDestination);
+        }
+
+        private static void CreateWaypoint(Transform parent, string name, Vector3 position)
+        {
+            var waypoint = new GameObject(name);
+            waypoint.transform.SetParent(parent, false);
+            waypoint.transform.position = position;
         }
 
         private void BuildRuntimeNavMesh()
@@ -904,6 +1058,11 @@ namespace EchoProtocol.AI.Stalker.Tests
             InvokePrivateMethod(stalkerController, "TickNavigationRecovery", Type.EmptyTypes, Array.Empty<object>());
         }
 
+        private static void InvokeTickNavigationFallback(object stalkerController)
+        {
+            InvokePrivateMethod(stalkerController, "TickNavigationFallback", Type.EmptyTypes, Array.Empty<object>());
+        }
+
         private static bool GetHasLastChaseRequestedDestination(object stalkerController)
         {
             return GetPrivateField<bool>(stalkerController, "_hasLastChaseRequestedDestination");
@@ -912,6 +1071,16 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static bool GetNavigationRecoveryAttemptUsed(object stalkerController)
         {
             return GetPrivateField<bool>(stalkerController, "_navigationRecoveryAttemptUsed");
+        }
+
+        private static int GetFixedPatrolFallbackFailureCount(object stalkerController)
+        {
+            return GetPrivateField<int>(stalkerController, "_fixedPatrolFallbackFailureCount");
+        }
+
+        private static int GetCurrentPatrolIndex(object stalkerController)
+        {
+            return GetPrivateField<int>(stalkerController, "_currentPatrolIndex");
         }
 
         private static Vector3 GetLastChaseRequestedDestination(object stalkerController)
@@ -927,6 +1096,13 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static object GetInternalNavigation(object stalkerController)
         {
             return GetPrivateField<object>(stalkerController, "_navigation");
+        }
+
+        private static Vector3 GetActiveNavigationDestination(object navigation)
+        {
+            var destination = GetPrivateField<Vector3?>(navigation, "_activeDestination");
+            Assert.That(destination.HasValue, Is.True, "Expected navigation controller to retain an active requested destination.");
+            return destination.Value;
         }
 
         private static void AssertVectorApproximately(Vector3 actual, Vector3 expected)
@@ -1045,6 +1221,13 @@ namespace EchoProtocol.AI.Stalker.Tests
             return null;
         }
 
+        private static object ResolveEnumValue(string fullTypeName, string valueName)
+        {
+            var enumType = ResolveType(fullTypeName);
+            Assert.That(enumType.IsEnum, Is.True, $"Production type '{fullTypeName}' must be an enum.");
+            return Enum.Parse(enumType, valueName);
+        }
+
         private readonly struct NavigationFixture
         {
             public NavigationFixture(NavMeshAgent agent, object controller)
@@ -1154,6 +1337,55 @@ namespace EchoProtocol.AI.Stalker.Tests
                 Assert.That(behaviour.enabled, Is.False, "StalkerController must be disabled before manual TickNavigationRecovery invocation.");
 
                 Assert.That(Navigation, Is.Not.Null, "Recovery policy fixture must install a short-threshold navigation controller.");
+            }
+        }
+
+        private sealed class FixedPatrolFallbackFixture
+        {
+            public FixedPatrolFallbackFixture(
+                NavMeshAgent agent,
+                object stalkerController,
+                Vector3 firstDestination,
+                Vector3 secondDestination)
+            {
+                Agent = agent;
+                StalkerController = stalkerController;
+                FirstDestination = firstDestination;
+                SecondDestination = secondDestination;
+            }
+
+            public NavMeshAgent Agent { get; }
+
+            public object StalkerController { get; }
+
+            public Vector3 FirstDestination { get; }
+
+            public Vector3 SecondDestination { get; }
+
+            public object Navigation { get; private set; }
+
+            public IEnumerator ActivateInitializeReplaceNavigationAndDisable()
+            {
+                Agent.gameObject.SetActive(true);
+                yield return null;
+
+                Assert.That(Agent.enabled, Is.True, "Runtime fixed patrol fallback test NavMeshAgent must be enabled.");
+                Assert.That(Agent.isOnNavMesh, Is.True, "Runtime fixed patrol fallback test NavMeshAgent must be placed on the generated NavMesh.");
+
+                var navigation = CreateController(Agent);
+                SetPrivateField(StalkerController, "_navigation", navigation);
+                SetPrivateField(StalkerController, "_currentPatrolIndex", 0);
+                SetPrivateField(StalkerController, "_navigationRecoveryAttemptUsed", false);
+                SetPrivateField(StalkerController, "_fixedPatrolFallbackFailureCount", 0);
+                Navigation = navigation;
+
+                var behaviour = (Behaviour)StalkerController;
+                behaviour.enabled = false;
+                Assert.That(behaviour.enabled, Is.False, "StalkerController must be disabled before manual TickNavigationFallback invocation.");
+
+                Assert.That(GetEnumPropertyName(StalkerController, "CurrentState"), Is.EqualTo("PATROL"));
+                Assert.That(GetFixedPatrolFallbackFailureCount(StalkerController), Is.EqualTo(0));
+                Assert.That(Navigation, Is.Not.Null, "Fixed patrol fallback fixture must install a short-threshold navigation controller.");
             }
         }
     }

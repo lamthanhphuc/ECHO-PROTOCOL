@@ -75,6 +75,7 @@ namespace EchoProtocol.AI.Stalker
         private Vector3 _lastChaseRequestedDestination;
         private float _chaseDestinationRefreshElapsed;
         private bool _navigationRecoveryAttemptUsed;
+        private int _fixedPatrolFallbackFailureCount;
 
         public StalkerPatrolMode PatrolMode => patrolMode;
         public StalkerState CurrentState => currentState;
@@ -136,6 +137,7 @@ namespace EchoProtocol.AI.Stalker
 
             _navigation?.TickProgress(Time.deltaTime);
             TickNavigationRecovery();
+            TickNavigationFallback();
         }
 
         private void TickPatrol()
@@ -527,6 +529,7 @@ namespace EchoProtocol.AI.Stalker
             currentTarget = null;
             ResetChaseDestinationTracking();
             ResetNavigationRecoveryBudget();
+            ResetFixedPatrolFallbackState();
             ClearDetectionContext();
         }
 
@@ -596,6 +599,7 @@ namespace EchoProtocol.AI.Stalker
         {
             ResetChaseDestinationTracking();
             ResetNavigationRecoveryBudget();
+            ResetFixedPatrolFallbackState();
             _navigation?.Stop();
         }
 
@@ -638,6 +642,34 @@ namespace EchoProtocol.AI.Stalker
 
             _navigationRecoveryAttemptUsed = true;
             _navigation.RequestDestination(destination, NavigationRequestIntent.RecoveryRepath);
+        }
+
+        private void TickNavigationFallback()
+        {
+            if (_navigation == null
+                || currentState != StalkerState.PATROL
+                || patrolMode != StalkerPatrolMode.FixedWaypoint)
+            {
+                return;
+            }
+
+            if (patrolRoute == null || patrolRoute.PointCount == 0)
+            {
+                return;
+            }
+
+            var executionStatus = _navigation.GetExecutionStatus();
+            var pathStatus = _navigation.GetPathStatus();
+            var shouldFallback = pathStatus == NavigationPathStatus.Partial
+                || (executionStatus == NavigationExecutionStatus.Stuck && _navigationRecoveryAttemptUsed)
+                || (pathStatus == NavigationPathStatus.Stale && _navigationRecoveryAttemptUsed);
+
+            if (!shouldFallback)
+            {
+                return;
+            }
+
+            AdvanceFixedPatrolFallbackDestination();
         }
 
         private bool IsLocomotionState()
@@ -722,8 +754,37 @@ namespace EchoProtocol.AI.Stalker
             _navigationRecoveryAttemptUsed = false;
         }
 
+        private void ResetFixedPatrolFallbackState()
+        {
+            _fixedPatrolFallbackFailureCount = 0;
+        }
+
         private void AdvancePatrolDestination()
         {
+            ResetFixedPatrolFallbackState();
+            _currentPatrolIndex++;
+            SetCurrentFixedPatrolDestination();
+        }
+
+        private void AdvanceFixedPatrolFallbackDestination()
+        {
+            if (patrolRoute == null)
+            {
+                return;
+            }
+
+            var pointCount = patrolRoute.PointCount;
+            if (pointCount == 0 || _fixedPatrolFallbackFailureCount >= pointCount)
+            {
+                return;
+            }
+
+            _fixedPatrolFallbackFailureCount++;
+            if (_fixedPatrolFallbackFailureCount >= pointCount)
+            {
+                return;
+            }
+
             _currentPatrolIndex++;
             SetCurrentFixedPatrolDestination();
         }
