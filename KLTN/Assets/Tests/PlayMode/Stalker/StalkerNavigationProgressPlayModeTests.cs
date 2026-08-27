@@ -317,6 +317,50 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("PATROL"));
         }
 
+        [UnityTest]
+        public IEnumerator NAV_REC_StuckCompletePath_RequestsSingleRecoveryRepath()
+        {
+            var fixture = CreateRecoveryPolicyFixture();
+            yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
+            yield return PrepareStoppedStuckRecoveryPath(fixture);
+
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Stuck"));
+
+            InvokeTickNavigationRecovery(fixture.StalkerController);
+
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
+            yield return WaitUntilComplete(fixture.Agent, fixture.Navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Moving"));
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Complete"));
+            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.True);
+            AssertVectorApproximately(fixture.Agent.destination, fixture.Destination);
+        }
+
+        [UnityTest]
+        public IEnumerator NAV_REC_RepeatedStuckAfterRecovery_DoesNotIssueSecondRepath()
+        {
+            var fixture = CreateRecoveryPolicyFixture();
+            yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
+            yield return PrepareStoppedStuckRecoveryPath(fixture);
+
+            InvokeTickNavigationRecovery(fixture.StalkerController);
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
+            yield return WaitUntilComplete(fixture.Agent, fixture.Navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Moving"));
+
+            TickUntilStuck(fixture.Navigation);
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Stuck"));
+
+            InvokeTickNavigationRecovery(fixture.StalkerController);
+
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Stuck"));
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Complete"));
+            AssertVectorApproximately(fixture.Agent.destination, fixture.Destination);
+        }
+
         private NavigationFixture CreateFixture()
         {
             BuildRuntimeNavMesh();
@@ -367,6 +411,33 @@ namespace EchoProtocol.AI.Stalker.Tests
             SetPrivateField(stalkerController, "patrolRoute", patrolRoute);
 
             return new UpdateDrivenProgressFixture(agent, stalkerController, destination);
+        }
+
+        private RecoveryPolicyFixture CreateRecoveryPolicyFixture()
+        {
+            BuildRuntimeNavMesh();
+
+            var destination = SampleChaseDestinationPointOnNavMesh(Destination);
+            var stalkerRoot = new GameObject("STK_Test_RecoveryPolicyStalker");
+            stalkerRoot.SetActive(false);
+            stalkerRoot.transform.position = AgentStart;
+            _createdObjects.Add(stalkerRoot);
+
+            var agent = stalkerRoot.AddComponent<NavMeshAgent>();
+            ConfigureAgent(agent);
+
+            var patrolRouteObject = new GameObject("STK_Test_RecoveryPolicyPatrolRoute");
+            _createdObjects.Add(patrolRouteObject);
+
+            var waypoint = new GameObject("STK_Test_RecoveryPolicyWaypoint");
+            waypoint.transform.SetParent(patrolRouteObject.transform, false);
+            waypoint.transform.position = destination;
+
+            var patrolRoute = patrolRouteObject.AddComponent(ResolveType(PatrolRouteTypeName));
+            var stalkerController = stalkerRoot.AddComponent(ResolveType(StalkerControllerTypeName));
+            SetPrivateField(stalkerController, "patrolRoute", patrolRoute);
+
+            return new RecoveryPolicyFixture(agent, stalkerController, destination);
         }
 
         private void BuildRuntimeNavMesh()
@@ -435,6 +506,20 @@ namespace EchoProtocol.AI.Stalker.Tests
             yield return WaitUntilComplete(fixture.Agent, fixture.Controller, PathSettleTimeoutSeconds, PathSettleFrameCap);
         }
 
+        private static IEnumerator PrepareStoppedStuckRecoveryPath(RecoveryPolicyFixture fixture)
+        {
+            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("PATROL"));
+            AssertPlanResult(RequestDestination(fixture.Navigation, fixture.Destination), "Accepted", true);
+            yield return WaitUntilComplete(fixture.Agent, fixture.Navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            StopAgent(fixture.Agent);
+            yield return null;
+            AssertStoppedCompletePath(fixture.Agent, fixture.Navigation);
+
+            TickUntilStuck(fixture.Navigation);
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Stuck"));
+        }
+
         private static IEnumerator WaitUntilComplete(NavMeshAgent agent, object controller, float timeoutSeconds, int frameCap)
         {
             var elapsed = 0f;
@@ -473,6 +558,17 @@ namespace EchoProtocol.AI.Stalker.Tests
             TickProgress(controller, ProgressTickDeltaTime);
             TickProgress(controller, ProgressTickDeltaTime);
             Assert.That(GetExecutionStatusName(controller), Is.EqualTo("NoProgress"));
+        }
+
+        private static void TickUntilStuck(object controller)
+        {
+            TickProgress(controller, ProgressTickDeltaTime);
+            for (var i = 0; i < 5; i++)
+            {
+                TickProgress(controller, ProgressTickDeltaTime);
+            }
+
+            Assert.That(GetExecutionStatusName(controller), Is.EqualTo("Stuck"));
         }
 
         private static void AssertStoppedCompletePath(NavMeshAgent agent, object controller)
@@ -605,9 +701,19 @@ namespace EchoProtocol.AI.Stalker.Tests
             InvokePrivateMethod(stalkerController, "ResetChaseDestinationTracking", Type.EmptyTypes, Array.Empty<object>());
         }
 
+        private static void InvokeTickNavigationRecovery(object stalkerController)
+        {
+            InvokePrivateMethod(stalkerController, "TickNavigationRecovery", Type.EmptyTypes, Array.Empty<object>());
+        }
+
         private static bool GetHasLastChaseRequestedDestination(object stalkerController)
         {
             return GetPrivateField<bool>(stalkerController, "_hasLastChaseRequestedDestination");
+        }
+
+        private static bool GetNavigationRecoveryAttemptUsed(object stalkerController)
+        {
+            return GetPrivateField<bool>(stalkerController, "_navigationRecoveryAttemptUsed");
         }
 
         private static Vector3 GetLastChaseRequestedDestination(object stalkerController)
@@ -812,6 +918,44 @@ namespace EchoProtocol.AI.Stalker.Tests
                 Assert.That(Agent.enabled, Is.True, "Runtime Update-driven progress test NavMeshAgent must be enabled.");
                 Assert.That(Agent.isOnNavMesh, Is.True, "Runtime Update-driven progress test NavMeshAgent must be placed on the generated NavMesh.");
                 Assert.That(((Behaviour)StalkerController).enabled, Is.True, "StalkerController must remain enabled so Update can drive TickProgress.");
+            }
+        }
+
+        private sealed class RecoveryPolicyFixture
+        {
+            public RecoveryPolicyFixture(NavMeshAgent agent, object stalkerController, Vector3 destination)
+            {
+                Agent = agent;
+                StalkerController = stalkerController;
+                Destination = destination;
+            }
+
+            public NavMeshAgent Agent { get; }
+
+            public object StalkerController { get; }
+
+            public Vector3 Destination { get; }
+
+            public object Navigation { get; private set; }
+
+            public IEnumerator ActivateInitializeReplaceNavigationAndDisable()
+            {
+                Agent.gameObject.SetActive(true);
+                yield return null;
+
+                Assert.That(Agent.enabled, Is.True, "Runtime recovery policy test NavMeshAgent must be enabled.");
+                Assert.That(Agent.isOnNavMesh, Is.True, "Runtime recovery policy test NavMeshAgent must be placed on the generated NavMesh.");
+
+                var navigation = CreateController(Agent);
+                SetPrivateField(StalkerController, "_navigation", navigation);
+                SetPrivateField(StalkerController, "_navigationRecoveryAttemptUsed", false);
+                Navigation = navigation;
+
+                var behaviour = (Behaviour)StalkerController;
+                behaviour.enabled = false;
+                Assert.That(behaviour.enabled, Is.False, "StalkerController must be disabled before manual TickNavigationRecovery invocation.");
+
+                Assert.That(Navigation, Is.Not.Null, "Recovery policy fixture must install a short-threshold navigation controller.");
             }
         }
     }

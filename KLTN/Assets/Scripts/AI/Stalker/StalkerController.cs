@@ -74,6 +74,7 @@ namespace EchoProtocol.AI.Stalker
         private bool _hasLastChaseRequestedDestination;
         private Vector3 _lastChaseRequestedDestination;
         private float _chaseDestinationRefreshElapsed;
+        private bool _navigationRecoveryAttemptUsed;
 
         public StalkerPatrolMode PatrolMode => patrolMode;
         public StalkerState CurrentState => currentState;
@@ -134,6 +135,7 @@ namespace EchoProtocol.AI.Stalker
             }
 
             _navigation?.TickProgress(Time.deltaTime);
+            TickNavigationRecovery();
         }
 
         private void TickPatrol()
@@ -397,6 +399,7 @@ namespace EchoProtocol.AI.Stalker
             {
                 lastKnownPosition = observedPosition;
                 ResetChaseDestinationTracking();
+                ResetNavigationRecoveryBudget();
                 currentState = StalkerState.CHASE;
                 SetChaseDestination(observedPosition);
                 return;
@@ -408,6 +411,7 @@ namespace EchoProtocol.AI.Stalker
         private void EnterSearch()
         {
             ResetChaseDestinationTracking();
+            ResetNavigationRecoveryBudget();
             currentState = StalkerState.SEARCH;
             searchElapsedTime = 0f;
             SetSearchDestination();
@@ -429,6 +433,7 @@ namespace EchoProtocol.AI.Stalker
                 lastKnownPosition = observedPosition;
                 ClearSearchRuntimeContext();
                 ResetChaseDestinationTracking();
+                ResetNavigationRecoveryBudget();
                 currentState = StalkerState.CHASE;
                 SetChaseDestination(observedPosition);
                 return;
@@ -521,6 +526,7 @@ namespace EchoProtocol.AI.Stalker
         {
             currentTarget = null;
             ResetChaseDestinationTracking();
+            ResetNavigationRecoveryBudget();
             ClearDetectionContext();
         }
 
@@ -589,7 +595,84 @@ namespace EchoProtocol.AI.Stalker
         private void StopAgentPath()
         {
             ResetChaseDestinationTracking();
+            ResetNavigationRecoveryBudget();
             _navigation?.Stop();
+        }
+
+        private void TickNavigationRecovery()
+        {
+            if (_navigation == null || !IsLocomotionState())
+            {
+                return;
+            }
+
+            if (_navigation.GetExecutionStatus() != NavigationExecutionStatus.Stuck)
+            {
+                return;
+            }
+
+            if (_navigationRecoveryAttemptUsed)
+            {
+                return;
+            }
+
+            if (!TryGetCurrentNavigationRecoveryDestination(out var destination))
+            {
+                return;
+            }
+
+            _navigationRecoveryAttemptUsed = true;
+            _navigation.RequestDestination(destination, NavigationRequestIntent.RecoveryRepath);
+        }
+
+        private bool IsLocomotionState()
+        {
+            return currentState == StalkerState.PATROL
+                || currentState == StalkerState.CHASE
+                || currentState == StalkerState.SEARCH;
+        }
+
+        private bool TryGetCurrentNavigationRecoveryDestination(out Vector3 destination)
+        {
+            destination = default;
+            switch (currentState)
+            {
+                case StalkerState.PATROL:
+                    return TryGetCurrentPatrolRecoveryDestination(out destination);
+                case StalkerState.CHASE:
+                    if (!_hasLastChaseRequestedDestination)
+                    {
+                        return false;
+                    }
+
+                    destination = _lastChaseRequestedDestination;
+                    return true;
+                case StalkerState.SEARCH:
+                    destination = lastKnownPosition;
+                    return currentTarget != null;
+                default:
+                    return false;
+            }
+        }
+
+        private bool TryGetCurrentPatrolRecoveryDestination(out Vector3 destination)
+        {
+            destination = default;
+            if (patrolMode == StalkerPatrolMode.DynamicSpatial
+                && _spatialPatrolGraph != null
+                && _spatialPatrolGraph.TryGetNode(_blackboard.DestinationSpatialNodeId, out var node))
+            {
+                destination = node.Position;
+                return true;
+            }
+
+            if (patrolRoute == null || !patrolRoute.TryGetPoint(_currentPatrolIndex, out var point) || point == null)
+            {
+                return false;
+            }
+
+            destination = point.position;
+            return true;
         }
 
         private bool ShouldRefreshChaseDestination(Vector3 observedPosition)
@@ -617,6 +700,11 @@ namespace EchoProtocol.AI.Stalker
             _hasLastChaseRequestedDestination = false;
             _lastChaseRequestedDestination = default;
             _chaseDestinationRefreshElapsed = 0f;
+        }
+
+        private void ResetNavigationRecoveryBudget()
+        {
+            _navigationRecoveryAttemptUsed = false;
         }
 
         private void AdvancePatrolDestination()
@@ -660,7 +748,10 @@ namespace EchoProtocol.AI.Stalker
             _currentPatrolIndex = pointIndex;
             var destination = point.position;
 
-            _navigation.TrySetDestination(destination);
+            if (_navigation.TrySetDestination(destination))
+            {
+                ResetNavigationRecoveryBudget();
+            }
         }
 
         private bool EnsureSpatialPatrolInitialized()
@@ -738,6 +829,7 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
+            ResetNavigationRecoveryBudget();
             _blackboard.DestinationSpatialNodeId = plan.DestinationNode.Id;
             lastPatrolScore = plan.Score;
             candidateCount = plan.CandidateCount;
