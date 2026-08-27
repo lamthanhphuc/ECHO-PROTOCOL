@@ -51,10 +51,19 @@ namespace EchoProtocol.AI.Stalker
 
         public NavigationPlanResult RequestDestination(Vector3 destination)
         {
-            return RequestDestination(destination, false);
+            return RequestDestination(destination, NavigationRequestIntent.NewGoal);
         }
 
         public NavigationPlanResult RequestDestination(Vector3 destination, bool forceRepath)
+        {
+            return RequestDestination(
+                destination,
+                forceRepath
+                    ? NavigationRequestIntent.RecoveryRepath
+                    : NavigationRequestIntent.NewGoal);
+        }
+
+        public NavigationPlanResult RequestDestination(Vector3 destination, NavigationRequestIntent intent)
         {
             if (_agent == null || !_agent.enabled)
             {
@@ -68,8 +77,10 @@ namespace EchoProtocol.AI.Stalker
                 return new NavigationPlanResult(NavigationPlanStatus.AgentNotOnNavMesh, destination);
             }
 
-            // forceRepath bypasses the cache but still only issues a path request.
-            if (!forceRepath && _activeDestination.HasValue && _activeDestination.Value == destination)
+            // RecoveryRepath bypasses the cache but still only issues a path request.
+            if (intent != NavigationRequestIntent.RecoveryRepath
+                && _activeDestination.HasValue
+                && _activeDestination.Value == destination)
             {
                 return new NavigationPlanResult(NavigationPlanStatus.AlreadyActive, destination);
             }
@@ -82,7 +93,12 @@ namespace EchoProtocol.AI.Stalker
             }
 
             _activeDestination = destination;
-            _progressMonitor.Reset();
+            if (intent == NavigationRequestIntent.NewGoal
+                || intent == NavigationRequestIntent.RecoveryRepath)
+            {
+                _progressMonitor.Reset();
+            }
+
             return new NavigationPlanResult(NavigationPlanStatus.Accepted, destination);
         }
 
@@ -94,6 +110,11 @@ namespace EchoProtocol.AI.Stalker
         public void TickProgress(float deltaTime)
         {
             var pathStatus = GetPathStatus();
+            if (pathStatus == NavigationPathStatus.Pending)
+            {
+                return;
+            }
+
             if (pathStatus != NavigationPathStatus.Complete)
             {
                 _progressMonitor.Reset();

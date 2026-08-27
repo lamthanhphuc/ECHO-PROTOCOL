@@ -13,6 +13,7 @@ namespace EchoProtocol.AI.Stalker.Tests
     {
         private const string NavigationControllerTypeName = "EchoProtocol.AI.Stalker.StalkerNavigationController";
         private const string NavigationProgressSettingsTypeName = "EchoProtocol.AI.Stalker.NavigationProgressSettings";
+        private const string NavigationRequestIntentTypeName = "EchoProtocol.AI.Stalker.NavigationRequestIntent";
 
         private const float PathSettleTimeoutSeconds = 2f;
         private const int PathSettleFrameCap = 1000;
@@ -20,6 +21,8 @@ namespace EchoProtocol.AI.Stalker.Tests
 
         private static readonly Vector3 AgentStart = new Vector3(-3f, 0f, 0f);
         private static readonly Vector3 Destination = new Vector3(3f, 0f, 0f);
+        private static readonly Vector3 TrackedDestination = new Vector3(2.5f, 0f, 1f);
+        private static readonly Vector3 NewGoalDestination = new Vector3(2.5f, 0f, -1f);
 
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
         private NavMeshDataInstance _navMeshDataInstance;
@@ -108,6 +111,60 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetExecutionStatusName(fixture.Controller), Is.EqualTo("NoProgress"));
 
             AssertPlanResult(RequestDestination(fixture.Controller, Destination, true), "Accepted", true);
+            yield return WaitUntilComplete(fixture.Agent, fixture.Controller, PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            Assert.That(GetExecutionStatusName(fixture.Controller), Is.EqualTo("Moving"));
+
+            TickProgress(fixture.Controller, ProgressTickDeltaTime);
+            Assert.That(GetExecutionStatusName(fixture.Controller), Is.EqualTo("Moving"));
+        }
+
+        [UnityTest]
+        public IEnumerator NAV_4C_TrackMovingGoalAccepted_PreservesNoProgressHistory()
+        {
+            var fixture = CreateFixture();
+            yield return fixture.ActivateAndWait();
+            yield return RequestAndSettleCompletePath(fixture);
+
+            StopAgent(fixture.Agent);
+            yield return null;
+            AssertStoppedCompletePath(fixture.Agent, fixture.Controller);
+            TickUntilNoProgress(fixture.Controller);
+
+            Assert.That(GetPathStatusName(fixture.Controller), Is.EqualTo("Complete"));
+            Assert.That(HasArrived(fixture.Controller), Is.False);
+            Assert.That(GetExecutionStatusName(fixture.Controller), Is.EqualTo("NoProgress"));
+            AssertPointOnNavMesh(TrackedDestination);
+
+            AssertPlanResult(
+                RequestDestination(fixture.Controller, TrackedDestination, "TrackMovingGoal"),
+                "Accepted",
+                true);
+            yield return WaitUntilComplete(fixture.Agent, fixture.Controller, PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            Assert.That(GetExecutionStatusName(fixture.Controller), Is.EqualTo("NoProgress"));
+            Assert.That(HasArrived(fixture.Controller), Is.False);
+            Assert.That(fixture.Agent.isStopped, Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator NAV_4C_NewGoalAccepted_ResetsNoProgressHistory()
+        {
+            var fixture = CreateFixture();
+            yield return fixture.ActivateAndWait();
+            yield return RequestAndSettleCompletePath(fixture);
+
+            StopAgent(fixture.Agent);
+            yield return null;
+            AssertStoppedCompletePath(fixture.Agent, fixture.Controller);
+            TickUntilNoProgress(fixture.Controller);
+            Assert.That(GetExecutionStatusName(fixture.Controller), Is.EqualTo("NoProgress"));
+            AssertPointOnNavMesh(NewGoalDestination);
+
+            AssertPlanResult(
+                RequestDestination(fixture.Controller, NewGoalDestination, "NewGoal"),
+                "Accepted",
+                true);
             yield return WaitUntilComplete(fixture.Agent, fixture.Controller, PathSettleTimeoutSeconds, PathSettleFrameCap);
 
             Assert.That(GetExecutionStatusName(fixture.Controller), Is.EqualTo("Moving"));
@@ -216,12 +273,28 @@ namespace EchoProtocol.AI.Stalker.Tests
             agent.isStopped = true;
         }
 
+        private static void TickUntilNoProgress(object controller)
+        {
+            TickProgress(controller, ProgressTickDeltaTime);
+            TickProgress(controller, ProgressTickDeltaTime);
+            TickProgress(controller, ProgressTickDeltaTime);
+            Assert.That(GetExecutionStatusName(controller), Is.EqualTo("NoProgress"));
+        }
+
         private static void AssertStoppedCompletePath(NavMeshAgent agent, object controller)
         {
             Assert.That(agent.isStopped, Is.True);
             Assert.That(agent.pathStatus, Is.EqualTo(NavMeshPathStatus.PathComplete));
             Assert.That(GetPathStatusName(controller), Is.EqualTo("Complete"));
             Assert.That(HasArrived(controller), Is.False);
+        }
+
+        private static void AssertPointOnNavMesh(Vector3 point)
+        {
+            Assert.That(
+                NavMesh.SamplePosition(point, out _, 0.5f, NavMesh.AllAreas),
+                Is.True,
+                $"Expected test destination {point} to sample onto the runtime NavMesh.");
         }
 
         private static object CreateController(NavMeshAgent agent)
@@ -267,6 +340,17 @@ namespace EchoProtocol.AI.Stalker.Tests
                 "RequestDestination",
                 new[] { typeof(Vector3), typeof(bool) },
                 new object[] { destination, forceRepath });
+        }
+
+        private static object RequestDestination(object controller, Vector3 destination, string intentName)
+        {
+            var intentType = ResolveType(NavigationRequestIntentTypeName);
+            var intent = Enum.Parse(intentType, intentName);
+            return InvokeMethod(
+                controller,
+                "RequestDestination",
+                new[] { typeof(Vector3), intentType },
+                new[] { destination, intent });
         }
 
         private static void TickProgress(object controller, float deltaTime)

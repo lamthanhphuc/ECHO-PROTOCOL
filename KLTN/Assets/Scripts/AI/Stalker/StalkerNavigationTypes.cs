@@ -11,6 +11,13 @@ namespace EchoProtocol.AI.Stalker
         DestinationRequestFailed
     }
 
+    public enum NavigationRequestIntent
+    {
+        NewGoal,
+        TrackMovingGoal,
+        RecoveryRepath
+    }
+
     public readonly struct NavigationPlanResult
     {
         public NavigationPlanResult(NavigationPlanStatus status, Vector3 requestedDestination)
