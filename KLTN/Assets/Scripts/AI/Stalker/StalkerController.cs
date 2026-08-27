@@ -786,7 +786,8 @@ namespace EchoProtocol.AI.Stalker
             }
 
             _currentPatrolIndex++;
-            SetCurrentFixedPatrolDestination();
+            ResetNavigationRecoveryBudget();
+            _navigation?.Stop();
         }
 
         private void SetCurrentPatrolDestination()
@@ -815,6 +816,13 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            if (patrolMode == StalkerPatrolMode.FixedWaypoint
+                && patrolRoute.PointCount > 0
+                && _fixedPatrolFallbackFailureCount >= patrolRoute.PointCount)
+            {
+                return;
+            }
+
             if (!patrolRoute.TryGetNextValidPoint(_currentPatrolIndex, out var pointIndex, out var point))
             {
                 _navigation.ClearDestinationCache();
@@ -823,6 +831,23 @@ namespace EchoProtocol.AI.Stalker
 
             _currentPatrolIndex = pointIndex;
             var destination = point.position;
+
+            if (patrolMode == StalkerPatrolMode.FixedWaypoint)
+            {
+                var evaluation = _navigation.EvaluateDestination(destination);
+                if (evaluation.Status == NavigationEvaluationStatus.Partial
+                    || evaluation.Status == NavigationEvaluationStatus.Invalid
+                    || evaluation.Status == NavigationEvaluationStatus.DestinationInvalid)
+                {
+                    AdvanceFixedPatrolFallbackDestination();
+                    return;
+                }
+
+                if (!evaluation.IsComplete)
+                {
+                    return;
+                }
+            }
 
             if (_navigation.TrySetDestination(destination))
             {

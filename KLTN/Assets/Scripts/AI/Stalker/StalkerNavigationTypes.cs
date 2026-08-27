@@ -34,6 +34,31 @@ namespace EchoProtocol.AI.Stalker
             || Status == NavigationPlanStatus.AlreadyActive;
     }
 
+    public enum NavigationEvaluationStatus
+    {
+        Complete,
+        Partial,
+        Invalid,
+        DestinationInvalid,
+        AgentUnavailable,
+        AgentNotOnNavMesh
+    }
+
+    public readonly struct NavigationEvaluationResult
+    {
+        public NavigationEvaluationResult(NavigationEvaluationStatus status, Vector3 requestedDestination)
+        {
+            Status = status;
+            RequestedDestination = requestedDestination;
+        }
+
+        public NavigationEvaluationStatus Status { get; }
+
+        public Vector3 RequestedDestination { get; }
+
+        public bool IsComplete => Status == NavigationEvaluationStatus.Complete;
+    }
+
     public enum NavigationExecutionStatus
     {
         Idle,

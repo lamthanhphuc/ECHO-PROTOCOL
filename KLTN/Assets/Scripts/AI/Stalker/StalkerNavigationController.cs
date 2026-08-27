@@ -7,6 +7,7 @@ namespace EchoProtocol.AI.Stalker
     {
         private readonly NavMeshAgent _agent;
         private readonly NavigationProgressMonitor _progressMonitor;
+        private readonly NavMeshPath _evaluationPath = new NavMeshPath();
         private Vector3? _activeDestination;
 
         public StalkerNavigationController(NavMeshAgent agent)
@@ -31,6 +32,41 @@ namespace EchoProtocol.AI.Stalker
         {
             return GetPathStatus() == NavigationPathStatus.Complete
                 && _agent.remainingDistance <= _agent.stoppingDistance;
+        }
+
+        public NavigationEvaluationResult EvaluateDestination(Vector3 destination)
+        {
+            if (_agent == null || !_agent.enabled)
+            {
+                return new NavigationEvaluationResult(NavigationEvaluationStatus.AgentUnavailable, destination);
+            }
+
+            if (!_agent.isOnNavMesh)
+            {
+                return new NavigationEvaluationResult(NavigationEvaluationStatus.AgentNotOnNavMesh, destination);
+            }
+
+            if (!IsFinite(destination))
+            {
+                return new NavigationEvaluationResult(NavigationEvaluationStatus.DestinationInvalid, destination);
+            }
+
+            if (!_agent.CalculatePath(destination, _evaluationPath))
+            {
+                return new NavigationEvaluationResult(NavigationEvaluationStatus.Invalid, destination);
+            }
+
+            switch (_evaluationPath.status)
+            {
+                case NavMeshPathStatus.PathComplete:
+                    return new NavigationEvaluationResult(NavigationEvaluationStatus.Complete, destination);
+                case NavMeshPathStatus.PathPartial:
+                    return new NavigationEvaluationResult(NavigationEvaluationStatus.Partial, destination);
+                case NavMeshPathStatus.PathInvalid:
+                    return new NavigationEvaluationResult(NavigationEvaluationStatus.Invalid, destination);
+                default:
+                    return new NavigationEvaluationResult(NavigationEvaluationStatus.Invalid, destination);
+            }
         }
 
         public void ClearDestinationCache()
@@ -208,6 +244,18 @@ namespace EchoProtocol.AI.Stalker
                 default:
                     return NavigationPathStatus.Invalid;
             }
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return IsFinite(value.x)
+                && IsFinite(value.y)
+                && IsFinite(value.z);
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
     }
 }
