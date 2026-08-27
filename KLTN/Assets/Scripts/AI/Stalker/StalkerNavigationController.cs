@@ -22,8 +22,7 @@ namespace EchoProtocol.AI.Stalker
 
         public bool HasArrived()
         {
-            return IsUsable
-                && !_agent.pathPending
+            return GetPathStatus() == NavigationPathStatus.Complete
                 && _agent.remainingDistance <= _agent.stoppingDistance;
         }
 
