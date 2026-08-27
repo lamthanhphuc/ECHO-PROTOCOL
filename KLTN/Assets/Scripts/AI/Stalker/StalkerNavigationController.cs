@@ -6,11 +6,18 @@ namespace EchoProtocol.AI.Stalker
     public sealed class StalkerNavigationController
     {
         private readonly NavMeshAgent _agent;
+        private readonly NavigationProgressMonitor _progressMonitor;
         private Vector3? _activeDestination;
 
         public StalkerNavigationController(NavMeshAgent agent)
+            : this(agent, NavigationProgressSettings.Default)
+        {
+        }
+
+        public StalkerNavigationController(NavMeshAgent agent, NavigationProgressSettings progressSettings)
         {
             _agent = agent;
+            _progressMonitor = new NavigationProgressMonitor(progressSettings);
         }
 
         public bool IsUsable => _agent != null
@@ -29,6 +36,7 @@ namespace EchoProtocol.AI.Stalker
         public void ClearDestinationCache()
         {
             _activeDestination = null;
+            _progressMonitor.Reset();
         }
 
         public void Stop()
@@ -74,12 +82,34 @@ namespace EchoProtocol.AI.Stalker
             }
 
             _activeDestination = destination;
+            _progressMonitor.Reset();
             return new NavigationPlanResult(NavigationPlanStatus.Accepted, destination);
         }
 
         public bool TrySetDestination(Vector3 destination)
         {
             return RequestDestination(destination).IsAccepted;
+        }
+
+        public void TickProgress(float deltaTime)
+        {
+            var pathStatus = GetPathStatus();
+            if (pathStatus != NavigationPathStatus.Complete)
+            {
+                _progressMonitor.Reset();
+                return;
+            }
+
+            if (HasArrived())
+            {
+                _progressMonitor.Reset();
+                return;
+            }
+
+            _progressMonitor.Observe(
+                _agent.transform.position,
+                _agent.remainingDistance,
+                deltaTime);
         }
 
         public NavigationExecutionStatus GetExecutionStatus()
@@ -97,9 +127,22 @@ namespace EchoProtocol.AI.Stalker
                 case NavigationPathStatus.Pending:
                     return NavigationExecutionStatus.RepathPending;
                 case NavigationPathStatus.Complete:
-                    return HasArrived()
-                        ? NavigationExecutionStatus.Arrived
-                        : NavigationExecutionStatus.Moving;
+                    if (HasArrived())
+                    {
+                        return NavigationExecutionStatus.Arrived;
+                    }
+
+                    switch (_progressMonitor.State)
+                    {
+                        case NavigationProgressState.Stuck:
+                            return NavigationExecutionStatus.Stuck;
+                        case NavigationProgressState.NoProgress:
+                            return NavigationExecutionStatus.NoProgress;
+                        case NavigationProgressState.Moving:
+                            return NavigationExecutionStatus.Moving;
+                        default:
+                            return NavigationExecutionStatus.Moving;
+                    }
                 default:
                     return NavigationExecutionStatus.Failed;
             }
