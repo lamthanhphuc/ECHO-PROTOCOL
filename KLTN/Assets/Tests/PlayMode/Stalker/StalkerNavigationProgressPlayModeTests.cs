@@ -14,6 +14,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string NavigationControllerTypeName = "EchoProtocol.AI.Stalker.StalkerNavigationController";
         private const string NavigationProgressSettingsTypeName = "EchoProtocol.AI.Stalker.NavigationProgressSettings";
         private const string NavigationRequestIntentTypeName = "EchoProtocol.AI.Stalker.NavigationRequestIntent";
+        private const string StalkerControllerTypeName = "EchoProtocol.AI.Stalker.StalkerController";
 
         private const float PathSettleTimeoutSeconds = 2f;
         private const int PathSettleFrameCap = 1000;
@@ -23,6 +24,12 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static readonly Vector3 Destination = new Vector3(3f, 0f, 0f);
         private static readonly Vector3 TrackedDestination = new Vector3(2.5f, 0f, 1f);
         private static readonly Vector3 NewGoalDestination = new Vector3(2.5f, 0f, -1f);
+        private static readonly Vector3 ChaseDestinationA = new Vector3(1f, 0f, 0f);
+        private static readonly Vector3 ChaseDestinationB = new Vector3(1.1f, 0f, 0f);
+        private static readonly Vector3 ChaseDestinationC = new Vector3(1.2f, 0f, 0f);
+        private static readonly Vector3 ChaseDestinationD = new Vector3(1.3f, 0f, 0f);
+        private static readonly Vector3 ChaseDestinationE = new Vector3(1.4f, 0f, 0f);
+        private static readonly Vector3 ChaseDestinationF = new Vector3(1.5f, 0f, 0f);
 
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
         private NavMeshDataInstance _navMeshDataInstance;
@@ -173,11 +180,123 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetExecutionStatusName(fixture.Controller), Is.EqualTo("Moving"));
         }
 
+        [UnityTest]
+        public IEnumerator NAV_4C2_ChaseWithoutRecordedDestination_RequestsImmediately()
+        {
+            var fixture = CreateChaseCadenceFixture(0.5f, 100f);
+            yield return fixture.ActivateInitializeAndDisable();
+            ResetChaseCadence(fixture.StalkerController);
+
+            Assert.That(GetHasLastChaseRequestedDestination(fixture.StalkerController), Is.False);
+            var destination = SampleChaseDestinationPointOnNavMesh(Destination);
+
+            InvokeSetChaseDestination(fixture.StalkerController, destination);
+
+            Assert.That(GetHasLastChaseRequestedDestination(fixture.StalkerController), Is.True);
+            AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), destination);
+            Assert.That(GetNavigationHasActiveDestination(fixture.StalkerController), Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator NAV_4C2_ChaseSmallCumulativeMotion_SuppressedUntilThreshold()
+        {
+            var fixture = CreateChaseCadenceFixture(0.5f, 100f);
+            yield return fixture.ActivateInitializeAndDisable();
+
+            var destinationA = SampleChaseDestinationPointOnNavMesh(ChaseDestinationA);
+            var destinationB = SampleChaseDestinationPointOnNavMesh(ChaseDestinationB);
+            var destinationC = SampleChaseDestinationPointOnNavMesh(ChaseDestinationC);
+            var destinationD = SampleChaseDestinationPointOnNavMesh(ChaseDestinationD);
+            var destinationE = SampleChaseDestinationPointOnNavMesh(ChaseDestinationE);
+            var destinationF = SampleChaseDestinationPointOnNavMesh(ChaseDestinationF);
+
+            Assert.That(Vector3.Distance(destinationA, destinationB), Is.LessThan(0.5f));
+            Assert.That(Vector3.Distance(destinationA, destinationC), Is.LessThan(0.5f));
+            Assert.That(Vector3.Distance(destinationA, destinationD), Is.LessThan(0.5f));
+            Assert.That(Vector3.Distance(destinationA, destinationE), Is.LessThan(0.5f));
+            Assert.That(Vector3.Distance(destinationA, destinationF), Is.GreaterThanOrEqualTo(0.5f));
+
+            InvokeSetChaseDestination(fixture.StalkerController, destinationA);
+            Assert.That(GetHasLastChaseRequestedDestination(fixture.StalkerController), Is.True);
+            AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), destinationA);
+
+            InvokeSetChaseDestination(fixture.StalkerController, destinationB);
+            AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), destinationA);
+
+            InvokeSetChaseDestination(fixture.StalkerController, destinationC);
+            AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), destinationA);
+
+            InvokeSetChaseDestination(fixture.StalkerController, destinationD);
+            AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), destinationA);
+
+            InvokeSetChaseDestination(fixture.StalkerController, destinationE);
+            AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), destinationA);
+
+            InvokeSetChaseDestination(fixture.StalkerController, destinationF);
+
+            Assert.That(GetHasLastChaseRequestedDestination(fixture.StalkerController), Is.True);
+            AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), destinationF);
+        }
+
+        [UnityTest]
+        public IEnumerator NAV_4C2_ChaseSmallMotion_RefreshesAtMaxInterval()
+        {
+            const float RefreshInterval = 0.15f;
+            const float TimeoutSeconds = 2f;
+
+            var fixture = CreateChaseCadenceFixture(100f, RefreshInterval);
+            yield return fixture.ActivateInitializeAndDisable();
+
+            var destinationA = SampleChaseDestinationPointOnNavMesh(ChaseDestinationA);
+            var destinationB = SampleChaseDestinationPointOnNavMesh(ChaseDestinationB);
+            var sampledDistance = Vector3.Distance(destinationA, destinationB);
+            Assert.That(sampledDistance, Is.GreaterThan(0.001f));
+            Assert.That(sampledDistance, Is.LessThan(100f));
+
+            InvokeSetChaseDestination(fixture.StalkerController, destinationA);
+            Assert.That(GetHasLastChaseRequestedDestination(fixture.StalkerController), Is.True);
+            AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), destinationA);
+
+            var elapsed = 0f;
+            while (Vector3.Distance(GetLastChaseRequestedDestination(fixture.StalkerController), destinationA) <= 0.01f
+                && elapsed < TimeoutSeconds)
+            {
+                yield return null;
+                elapsed += Time.deltaTime;
+                InvokeSetChaseDestination(fixture.StalkerController, destinationB);
+            }
+
+            Assert.That(
+                elapsed,
+                Is.LessThan(TimeoutSeconds),
+                $"Expected CHASE max refresh interval {RefreshInterval:0.###}s to refresh within {TimeoutSeconds:0.###} gameplay seconds.");
+            Assert.That(GetHasLastChaseRequestedDestination(fixture.StalkerController), Is.True);
+            AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), destinationB);
+        }
+
         private NavigationFixture CreateFixture()
         {
             BuildRuntimeNavMesh();
             var agent = CreateInactiveConfiguredAgent(AgentStart);
             return new NavigationFixture(agent, CreateController(agent));
+        }
+
+        private ChaseCadenceFixture CreateChaseCadenceFixture(float refreshDistance, float refreshInterval)
+        {
+            BuildRuntimeNavMesh();
+
+            var stalkerRoot = new GameObject("STK_Test_ChaseCadenceStalker");
+            stalkerRoot.SetActive(false);
+            stalkerRoot.transform.position = AgentStart;
+            _createdObjects.Add(stalkerRoot);
+
+            var agent = stalkerRoot.AddComponent<NavMeshAgent>();
+            ConfigureAgent(agent);
+
+            var stalkerController = stalkerRoot.AddComponent(ResolveType(StalkerControllerTypeName));
+            SetPrivateFloatField(stalkerController, "chaseDestinationRefreshDistance", refreshDistance);
+            SetPrivateFloatField(stalkerController, "chaseDestinationRefreshInterval", refreshInterval);
+            return new ChaseCadenceFixture(agent, stalkerController);
         }
 
         private void BuildRuntimeNavMesh()
@@ -223,6 +342,12 @@ namespace EchoProtocol.AI.Stalker.Tests
             _createdObjects.Add(agentRoot);
 
             var agent = agentRoot.AddComponent<NavMeshAgent>();
+            ConfigureAgent(agent);
+            return agent;
+        }
+
+        private static void ConfigureAgent(NavMeshAgent agent)
+        {
             agent.radius = 0.25f;
             agent.height = 1.8f;
             agent.speed = 1f;
@@ -232,7 +357,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             agent.autoBraking = true;
             agent.updatePosition = true;
             agent.updateRotation = true;
-            return agent;
         }
 
         private static IEnumerator RequestAndSettleCompletePath(NavigationFixture fixture)
@@ -295,6 +419,16 @@ namespace EchoProtocol.AI.Stalker.Tests
                 NavMesh.SamplePosition(point, out _, 0.5f, NavMesh.AllAreas),
                 Is.True,
                 $"Expected test destination {point} to sample onto the runtime NavMesh.");
+        }
+
+        private static Vector3 SampleChaseDestinationPointOnNavMesh(Vector3 requestedPoint)
+        {
+            Assert.That(
+                NavMesh.SamplePosition(requestedPoint, out var hit, 0.25f, NavMesh.AllAreas),
+                Is.True,
+                $"Expected CHASE cadence destination {requestedPoint} to sample onto the runtime NavMesh.");
+
+            return hit.position;
         }
 
         private static object CreateController(NavMeshAgent agent)
@@ -387,6 +521,43 @@ namespace EchoProtocol.AI.Stalker.Tests
             return (bool)value;
         }
 
+        private static void InvokeSetChaseDestination(object stalkerController, Vector3 observedPosition)
+        {
+            InvokePrivateMethod(
+                stalkerController,
+                "SetChaseDestination",
+                new[] { typeof(Vector3) },
+                new object[] { observedPosition });
+        }
+
+        private static void ResetChaseCadence(object stalkerController)
+        {
+            InvokePrivateMethod(stalkerController, "ResetChaseDestinationTracking", Type.EmptyTypes, Array.Empty<object>());
+        }
+
+        private static bool GetHasLastChaseRequestedDestination(object stalkerController)
+        {
+            return GetPrivateField<bool>(stalkerController, "_hasLastChaseRequestedDestination");
+        }
+
+        private static Vector3 GetLastChaseRequestedDestination(object stalkerController)
+        {
+            return GetPrivateField<Vector3>(stalkerController, "_lastChaseRequestedDestination");
+        }
+
+        private static bool GetNavigationHasActiveDestination(object stalkerController)
+        {
+            return GetBoolProperty(GetPrivateField<object>(stalkerController, "_navigation"), "HasActiveDestination");
+        }
+
+        private static void AssertVectorApproximately(Vector3 actual, Vector3 expected)
+        {
+            Assert.That(
+                Vector3.Distance(actual, expected),
+                Is.LessThanOrEqualTo(0.01f),
+                $"Expected Vector3 {actual} to match {expected} within tolerance.");
+        }
+
         private static void AssertPlanResult(object result, string expectedStatusName, bool expectedAccepted)
         {
             Assert.That(result, Is.Not.Null, "NavigationPlanResult invocation returned null.");
@@ -430,6 +601,36 @@ namespace EchoProtocol.AI.Stalker.Tests
             return method.Invoke(target, args);
         }
 
+        private static object InvokePrivateMethod(object target, string methodName, Type[] parameterTypes, object[] args)
+        {
+            var method = target.GetType().GetMethod(
+                methodName,
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                null,
+                parameterTypes,
+                null);
+            Assert.That(method, Is.Not.Null, $"Missing private method '{methodName}' on '{target.GetType().FullName}'.");
+
+            return method.Invoke(target, args);
+        }
+
+        private static T GetPrivateField<T>(object target, string fieldName)
+        {
+            var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"Missing private field '{fieldName}' on '{target.GetType().FullName}'.");
+
+            return (T)field.GetValue(target);
+        }
+
+        private static void SetPrivateFloatField(object target, string fieldName, float value)
+        {
+            var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"Missing private float field '{fieldName}' on '{target.GetType().FullName}'.");
+            Assert.That(field.FieldType, Is.EqualTo(typeof(float)), $"Private field '{fieldName}' must be float.");
+
+            field.SetValue(target, value);
+        }
+
         private static Type ResolveType(string fullTypeName)
         {
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -465,6 +666,32 @@ namespace EchoProtocol.AI.Stalker.Tests
 
                 Assert.That(Agent.enabled, Is.True, "Runtime test NavMeshAgent must be enabled.");
                 Assert.That(Agent.isOnNavMesh, Is.True, "Runtime test NavMeshAgent must be placed on the generated NavMesh.");
+            }
+        }
+
+        private readonly struct ChaseCadenceFixture
+        {
+            public ChaseCadenceFixture(NavMeshAgent agent, object stalkerController)
+            {
+                Agent = agent;
+                StalkerController = stalkerController;
+            }
+
+            public NavMeshAgent Agent { get; }
+
+            public object StalkerController { get; }
+
+            public IEnumerator ActivateInitializeAndDisable()
+            {
+                Agent.gameObject.SetActive(true);
+                yield return null;
+
+                Assert.That(Agent.enabled, Is.True, "Runtime CHASE cadence test NavMeshAgent must be enabled.");
+                Assert.That(Agent.isOnNavMesh, Is.True, "Runtime CHASE cadence test NavMeshAgent must be placed on the generated NavMesh.");
+
+                var behaviour = (Behaviour)StalkerController;
+                behaviour.enabled = false;
+                Assert.That(behaviour.enabled, Is.False, "StalkerController must be disabled before manual SetChaseDestination invocation.");
             }
         }
     }

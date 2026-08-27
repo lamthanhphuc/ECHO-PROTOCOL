@@ -35,6 +35,10 @@ namespace EchoProtocol.AI.Stalker
         [Header("Search Spike Defaults")]
         [SerializeField] private float searchDuration = 5f;
 
+        [Header("Chase Navigation Defaults")]
+        [SerializeField] private float chaseDestinationRefreshDistance = 0.5f;
+        [SerializeField] private float chaseDestinationRefreshInterval = 0.5f;
+
         [Header("Attack Spike Defaults")]
         [SerializeField] private float attackRange = 1.5f;
         [SerializeField] private float attackWindup = 0.75f;
@@ -67,6 +71,9 @@ namespace EchoProtocol.AI.Stalker
         private int _currentPatrolIndex;
         private bool _spatialPatrolInitializationAttempted;
         private bool _dynamicPatrolFallbackActive;
+        private bool _hasLastChaseRequestedDestination;
+        private Vector3 _lastChaseRequestedDestination;
+        private float _chaseDestinationRefreshElapsed;
 
         public StalkerPatrolMode PatrolMode => patrolMode;
         public StalkerState CurrentState => currentState;
@@ -387,6 +394,7 @@ namespace EchoProtocol.AI.Stalker
             if (TryGetVisibleCurrentTargetObservation(out var observedPosition))
             {
                 lastKnownPosition = observedPosition;
+                ResetChaseDestinationTracking();
                 currentState = StalkerState.CHASE;
                 SetChaseDestination(observedPosition);
                 return;
@@ -397,6 +405,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void EnterSearch()
         {
+            ResetChaseDestinationTracking();
             currentState = StalkerState.SEARCH;
             searchElapsedTime = 0f;
             SetSearchDestination();
@@ -417,6 +426,7 @@ namespace EchoProtocol.AI.Stalker
             {
                 lastKnownPosition = observedPosition;
                 ClearSearchRuntimeContext();
+                ResetChaseDestinationTracking();
                 currentState = StalkerState.CHASE;
                 SetChaseDestination(observedPosition);
                 return;
@@ -459,10 +469,27 @@ namespace EchoProtocol.AI.Stalker
             if (!CanUseNavigation())
             {
                 _navigation?.ClearDestinationCache();
+                ResetChaseDestinationTracking();
                 return;
             }
 
-            _navigation.TrySetDestination(observedPosition);
+            _chaseDestinationRefreshElapsed += Time.deltaTime;
+            if (!ShouldRefreshChaseDestination(observedPosition))
+            {
+                return;
+            }
+
+            var result = _navigation.RequestDestination(
+                observedPosition,
+                NavigationRequestIntent.TrackMovingGoal);
+            if (!result.IsAccepted)
+            {
+                return;
+            }
+
+            _lastChaseRequestedDestination = observedPosition;
+            _hasLastChaseRequestedDestination = true;
+            _chaseDestinationRefreshElapsed = 0f;
         }
 
         private void SetSearchDestination()
@@ -491,6 +518,7 @@ namespace EchoProtocol.AI.Stalker
         private void ClearTargetContext()
         {
             currentTarget = null;
+            ResetChaseDestinationTracking();
             ClearDetectionContext();
         }
 
@@ -531,6 +559,16 @@ namespace EchoProtocol.AI.Stalker
             return Mathf.Max(0f, searchDuration);
         }
 
+        private float GetChaseDestinationRefreshDistance()
+        {
+            return Mathf.Max(0f, chaseDestinationRefreshDistance);
+        }
+
+        private float GetChaseDestinationRefreshInterval()
+        {
+            return Mathf.Max(0f, chaseDestinationRefreshInterval);
+        }
+
         private float GetAttackRange()
         {
             return Mathf.Max(0f, attackRange);
@@ -548,7 +586,35 @@ namespace EchoProtocol.AI.Stalker
 
         private void StopAgentPath()
         {
+            ResetChaseDestinationTracking();
             _navigation?.Stop();
+        }
+
+        private bool ShouldRefreshChaseDestination(Vector3 observedPosition)
+        {
+            if (!_navigation.HasActiveDestination)
+            {
+                return true;
+            }
+
+            if (!_hasLastChaseRequestedDestination)
+            {
+                return true;
+            }
+
+            if (Vector3.Distance(_lastChaseRequestedDestination, observedPosition) >= GetChaseDestinationRefreshDistance())
+            {
+                return true;
+            }
+
+            return _chaseDestinationRefreshElapsed >= GetChaseDestinationRefreshInterval();
+        }
+
+        private void ResetChaseDestinationTracking()
+        {
+            _hasLastChaseRequestedDestination = false;
+            _lastChaseRequestedDestination = default;
+            _chaseDestinationRefreshElapsed = 0f;
         }
 
         private void AdvancePatrolDestination()
