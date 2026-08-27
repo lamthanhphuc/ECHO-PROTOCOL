@@ -132,6 +132,8 @@ namespace EchoProtocol.AI.Stalker
                     TickSearch();
                     break;
             }
+
+            _navigation?.TickProgress(Time.deltaTime);
         }
 
         private void TickPatrol()

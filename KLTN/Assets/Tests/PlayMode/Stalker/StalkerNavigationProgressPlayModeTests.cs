@@ -15,10 +15,12 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string NavigationProgressSettingsTypeName = "EchoProtocol.AI.Stalker.NavigationProgressSettings";
         private const string NavigationRequestIntentTypeName = "EchoProtocol.AI.Stalker.NavigationRequestIntent";
         private const string StalkerControllerTypeName = "EchoProtocol.AI.Stalker.StalkerController";
+        private const string PatrolRouteTypeName = "EchoProtocol.AI.Stalker.PatrolRoute";
 
         private const float PathSettleTimeoutSeconds = 2f;
         private const int PathSettleFrameCap = 1000;
         private const float ProgressTickDeltaTime = 0.11f;
+        private const float UpdateDrivenNoProgressTimeoutSeconds = 2f;
 
         private static readonly Vector3 AgentStart = new Vector3(-3f, 0f, 0f);
         private static readonly Vector3 Destination = new Vector3(3f, 0f, 0f);
@@ -274,6 +276,47 @@ namespace EchoProtocol.AI.Stalker.Tests
             AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), destinationB);
         }
 
+        [UnityTest]
+        public IEnumerator NAV_4C3_StalkerControllerUpdate_DrivesNavigationProgressToNoProgress()
+        {
+            var fixture = CreateUpdateDrivenProgressFixture();
+            yield return fixture.ActivateAndWait();
+
+            var navigation = GetInternalNavigation(fixture.StalkerController);
+            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("PATROL"));
+            Assert.That(((Behaviour)fixture.StalkerController).enabled, Is.True);
+            Assert.That(fixture.Agent.isOnNavMesh, Is.True);
+            Assert.That(GetBoolProperty(navigation, "HasActiveDestination"), Is.True);
+
+            AssertPlanResultAccepted(RequestDestination(navigation, fixture.Destination));
+            yield return WaitUntilComplete(fixture.Agent, navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            fixture.Agent.isStopped = true;
+            yield return null;
+
+            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("PATROL"));
+            Assert.That(((Behaviour)fixture.StalkerController).enabled, Is.True);
+            Assert.That(fixture.Agent.isOnNavMesh, Is.True);
+            Assert.That(GetBoolProperty(navigation, "HasActiveDestination"), Is.True);
+            Assert.That(GetPathStatusName(navigation), Is.EqualTo("Complete"));
+            Assert.That(HasArrived(navigation), Is.False);
+            Assert.That(fixture.Agent.isStopped, Is.True);
+
+            var elapsed = 0f;
+            while (GetExecutionStatusName(navigation) != "NoProgress"
+                && elapsed < UpdateDrivenNoProgressTimeoutSeconds)
+            {
+                yield return null;
+                elapsed += Time.deltaTime;
+            }
+
+            Assert.That(
+                GetExecutionStatusName(navigation),
+                Is.EqualTo("NoProgress"),
+                $"Expected enabled StalkerController.Update to drive navigation progress to NoProgress within {UpdateDrivenNoProgressTimeoutSeconds:0.###} gameplay seconds.");
+            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("PATROL"));
+        }
+
         private NavigationFixture CreateFixture()
         {
             BuildRuntimeNavMesh();
@@ -297,6 +340,33 @@ namespace EchoProtocol.AI.Stalker.Tests
             SetPrivateFloatField(stalkerController, "chaseDestinationRefreshDistance", refreshDistance);
             SetPrivateFloatField(stalkerController, "chaseDestinationRefreshInterval", refreshInterval);
             return new ChaseCadenceFixture(agent, stalkerController);
+        }
+
+        private UpdateDrivenProgressFixture CreateUpdateDrivenProgressFixture()
+        {
+            BuildRuntimeNavMesh();
+
+            var destination = SampleChaseDestinationPointOnNavMesh(Destination);
+            var stalkerRoot = new GameObject("STK_Test_UpdateDrivenProgressStalker");
+            stalkerRoot.SetActive(false);
+            stalkerRoot.transform.position = AgentStart;
+            _createdObjects.Add(stalkerRoot);
+
+            var agent = stalkerRoot.AddComponent<NavMeshAgent>();
+            ConfigureAgent(agent);
+
+            var patrolRouteObject = new GameObject("STK_Test_UpdateDrivenProgressPatrolRoute");
+            _createdObjects.Add(patrolRouteObject);
+
+            var waypoint = new GameObject("STK_Test_UpdateDrivenProgressWaypoint");
+            waypoint.transform.SetParent(patrolRouteObject.transform, false);
+            waypoint.transform.position = destination;
+
+            var patrolRoute = patrolRouteObject.AddComponent(ResolveType(PatrolRouteTypeName));
+            var stalkerController = stalkerRoot.AddComponent(ResolveType(StalkerControllerTypeName));
+            SetPrivateField(stalkerController, "patrolRoute", patrolRoute);
+
+            return new UpdateDrivenProgressFixture(agent, stalkerController, destination);
         }
 
         private void BuildRuntimeNavMesh()
@@ -550,6 +620,11 @@ namespace EchoProtocol.AI.Stalker.Tests
             return GetBoolProperty(GetPrivateField<object>(stalkerController, "_navigation"), "HasActiveDestination");
         }
 
+        private static object GetInternalNavigation(object stalkerController)
+        {
+            return GetPrivateField<object>(stalkerController, "_navigation");
+        }
+
         private static void AssertVectorApproximately(Vector3 actual, Vector3 expected)
         {
             Assert.That(
@@ -563,6 +638,17 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(result, Is.Not.Null, "NavigationPlanResult invocation returned null.");
             Assert.That(GetEnumPropertyName(result, "Status"), Is.EqualTo(expectedStatusName));
             Assert.That(GetBoolProperty(result, "IsAccepted"), Is.EqualTo(expectedAccepted));
+        }
+
+        private static void AssertPlanResultAccepted(object result)
+        {
+            Assert.That(result, Is.Not.Null, "NavigationPlanResult invocation returned null.");
+            Assert.That(GetBoolProperty(result, "IsAccepted"), Is.True);
+            var statusName = GetEnumPropertyName(result, "Status");
+            Assert.That(
+                statusName == "Accepted" || statusName == "AlreadyActive",
+                Is.True,
+                "Update-driven progress setup accepts either a fresh NewGoal request or an already-active matching patrol destination.");
         }
 
         private static string GetEnumPropertyName(object target, string propertyName)
@@ -631,6 +717,14 @@ namespace EchoProtocol.AI.Stalker.Tests
             field.SetValue(target, value);
         }
 
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"Missing private field '{fieldName}' on '{target.GetType().FullName}'.");
+
+            field.SetValue(target, value);
+        }
+
         private static Type ResolveType(string fullTypeName)
         {
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -692,6 +786,32 @@ namespace EchoProtocol.AI.Stalker.Tests
                 var behaviour = (Behaviour)StalkerController;
                 behaviour.enabled = false;
                 Assert.That(behaviour.enabled, Is.False, "StalkerController must be disabled before manual SetChaseDestination invocation.");
+            }
+        }
+
+        private readonly struct UpdateDrivenProgressFixture
+        {
+            public UpdateDrivenProgressFixture(NavMeshAgent agent, object stalkerController, Vector3 destination)
+            {
+                Agent = agent;
+                StalkerController = stalkerController;
+                Destination = destination;
+            }
+
+            public NavMeshAgent Agent { get; }
+
+            public object StalkerController { get; }
+
+            public Vector3 Destination { get; }
+
+            public IEnumerator ActivateAndWait()
+            {
+                Agent.gameObject.SetActive(true);
+                yield return null;
+
+                Assert.That(Agent.enabled, Is.True, "Runtime Update-driven progress test NavMeshAgent must be enabled.");
+                Assert.That(Agent.isOnNavMesh, Is.True, "Runtime Update-driven progress test NavMeshAgent must be placed on the generated NavMesh.");
+                Assert.That(((Behaviour)StalkerController).enabled, Is.True, "StalkerController must remain enabled so Update can drive TickProgress.");
             }
         }
     }
