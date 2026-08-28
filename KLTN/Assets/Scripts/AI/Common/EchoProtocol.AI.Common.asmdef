@@ -1,0 +1,14 @@
+{
+    "name": "EchoProtocol.AI.Common",
+    "rootNamespace": "EchoProtocol.AI.Common",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}
