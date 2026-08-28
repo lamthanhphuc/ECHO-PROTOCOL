@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace EchoProtocol.AI.Stalker
@@ -33,13 +35,28 @@ namespace EchoProtocol.AI.Stalker
         {
             observedPosition = default;
 
-            if (visionOrigin == null || candidate == null || visionDistance <= 0f || visionAngle <= 0f)
+            if (!TryEvaluateCandidate(candidate, out var observation))
+            {
+                return false;
+            }
+
+            observedPosition = observation.ObservedPosition;
+            return true;
+        }
+
+        public bool TryEvaluateCandidate(
+            Transform targetCandidate,
+            out StalkerPhysicalVisionObservation observation)
+        {
+            observation = default;
+
+            if (visionOrigin == null || targetCandidate == null || visionDistance <= 0f || visionAngle <= 0f)
             {
                 return false;
             }
 
             var originPosition = visionOrigin.position;
-            var candidatePosition = candidate.position;
+            var candidatePosition = targetCandidate.position;
             var toCandidate = candidatePosition - originPosition;
             var sqrDistance = toCandidate.sqrMagnitude;
             var maxSqrDistance = visionDistance * visionDistance;
@@ -56,16 +73,58 @@ namespace EchoProtocol.AI.Stalker
             }
 
             var distance = Mathf.Sqrt(sqrDistance);
-            if (HasLineOfSightBlocker(originPosition, toCandidate.normalized, distance))
+            var observedDirection = toCandidate.normalized;
+            if (HasLineOfSightBlocker(targetCandidate, originPosition, observedDirection, distance))
             {
                 return false;
             }
 
-            observedPosition = candidatePosition;
+            observation = new StalkerPhysicalVisionObservation(
+                targetCandidate,
+                candidatePosition,
+                observedDirection,
+                distance);
             return true;
         }
 
-        private bool HasLineOfSightBlocker(Vector3 originPosition, Vector3 direction, float distance)
+        public int CollectVisibleCandidates(
+            IReadOnlyList<Transform> candidates,
+            List<StalkerPhysicalVisionObservation> results)
+        {
+            if (candidates == null)
+            {
+                throw new ArgumentNullException(nameof(candidates));
+            }
+
+            if (results == null)
+            {
+                throw new ArgumentNullException(nameof(results));
+            }
+
+            results.Clear();
+
+            for (var i = 0; i < candidates.Count; i++)
+            {
+                var targetCandidate = candidates[i];
+                if (targetCandidate == null)
+                {
+                    continue;
+                }
+
+                if (TryEvaluateCandidate(targetCandidate, out var observation))
+                {
+                    results.Add(observation);
+                }
+            }
+
+            return results.Count;
+        }
+
+        private bool HasLineOfSightBlocker(
+            Transform targetCandidate,
+            Vector3 originPosition,
+            Vector3 direction,
+            float distance)
         {
             var hits = Physics.RaycastAll(
                 originPosition,
@@ -84,7 +143,7 @@ namespace EchoProtocol.AI.Stalker
             for (var i = 0; i < hits.Length; i++)
             {
                 var hitTransform = hits[i].transform;
-                if (ShouldIgnoreHit(hitTransform))
+                if (ShouldIgnoreHit(hitTransform, targetCandidate))
                 {
                     continue;
                 }
@@ -95,14 +154,14 @@ namespace EchoProtocol.AI.Stalker
             return false;
         }
 
-        private bool ShouldIgnoreHit(Transform hitTransform)
+        private bool ShouldIgnoreHit(Transform hitTransform, Transform targetCandidate)
         {
             if (hitTransform == null)
             {
                 return true;
             }
 
-            if (hitTransform == candidate || hitTransform.IsChildOf(candidate))
+            if (hitTransform == targetCandidate || hitTransform.IsChildOf(targetCandidate))
             {
                 return true;
             }
