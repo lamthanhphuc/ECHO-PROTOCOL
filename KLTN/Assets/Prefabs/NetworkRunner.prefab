@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 9010087636424723565}
   - component: {fileID: 8928447514881880283}
   - component: {fileID: 3009730127060634976}
+  - component: {fileID: 7581113200018207744}
   m_Layer: 0
   m_Name: NetworkRunner
   m_TagString: Untagged
@@ -44,7 +45,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: -1199893898, guid: e725a070cec140c4caffb81624c8c787, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkRunner
 --- !u!114 &8928447514881880283
 MonoBehaviour:
@@ -73,3 +74,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Fusion.Unity::Fusion.NetworkObjectProviderDefault
   DelayIfSceneManagerIsBusy: 1
+--- !u!114 &7581113200018207744
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5817334110359865705}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bb1dd5f7dda1458fa1fdd0df49cabb0b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.FusionPlayerLifecycle
+  playerPrefab: {fileID: 7895686353458454673, guid: 2cfcae9d0a2489d44a82b7f63ff08ffc, type: 3}
+  spawnOrigin: {x: 0, y: 0, z: 0}
+  spawnSpacing: 2
