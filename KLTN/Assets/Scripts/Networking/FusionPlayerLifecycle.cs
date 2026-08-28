@@ -47,8 +47,11 @@ namespace EchoProtocol.Networking
 
         public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
         {
+            Debug.Log($"FPL|JOIN_CALLBACK|player={player}|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
+
             if (!CanMutateLifecycle(runner))
             {
+                Debug.Log($"FPL|JOIN_REJECT|player={player}|reason=Authority|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                 return;
             }
 
@@ -56,15 +59,18 @@ namespace EchoProtocol.Networking
             {
                 if (IsCommitted(player, existingObject))
                 {
+                    Debug.Log($"FPL|JOIN_REJECT|player={player}|reason=AlreadyCommitted|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                     return;
                 }
 
+                Debug.Log($"FPL|JOIN_REJECT|player={player}|reason=InconsistentExistingPlayerObject|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                 Debug.LogError($"[FusionPlayerLifecycle] Player {player} already has an inconsistent player object.");
                 return;
             }
 
             if (playerPrefab == null)
             {
+                Debug.Log($"FPL|JOIN_REJECT|player={player}|reason=MissingPlayerPrefab|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                 Debug.LogError("[FusionPlayerLifecycle] Player prefab is not assigned.");
                 return;
             }
@@ -79,6 +85,7 @@ namespace EchoProtocol.Networking
             {
                 if (!_identityRegistry.TryRegister(player, out playerId))
                 {
+                    Debug.Log($"FPL|JOIN_REJECT|player={player}|reason=IdentityRegistryRejected|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                     Debug.LogError($"[FusionPlayerLifecycle] Failed to register logical identity for player {player}.");
                     return;
                 }
@@ -118,18 +125,24 @@ namespace EchoProtocol.Networking
                 {
                     throw new InvalidOperationException("Runner.SetPlayerObject did not commit the spawned object.");
                 }
+
+                Debug.Log($"FPL|JOIN_COMMIT|player={player}|playerId={playerId.Value}");
             }
             catch (Exception ex)
             {
                 RollbackJoin(runner, player, playerId, identity, spawnedObject, entityRegistered, playerObjectCommitted);
+                Debug.Log($"FPL|JOIN_REJECT|player={player}|reason=TransactionFailed|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                 Debug.LogError($"[FusionPlayerLifecycle] Failed to spawn/register player {player}: {ex.Message}");
             }
         }
 
         public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
         {
+            Debug.Log($"FPL|LEFT_CALLBACK|player={player}|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
+
             if (!CanMutateLifecycle(runner))
             {
+                Debug.Log($"FPL|LEFT_REJECT|player={player}|reason=Authority|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                 return;
             }
 
@@ -165,6 +178,8 @@ namespace EchoProtocol.Networking
                     Debug.LogError($"[FusionPlayerLifecycle] Failed to despawn player object for {player}: {ex.Message}");
                 }
             }
+
+            Debug.Log($"FPL|LEFT_COMMIT|player={player}|playerId={(oldPlayerId.IsValid ? oldPlayerId.Value.ToString() : "none")}|hadPlayerObject={playerObject != null}");
         }
 
         private void RegisterCallbacks()
@@ -203,8 +218,17 @@ namespace EchoProtocol.Networking
         {
             return runner != null
                 && runner == _runner
-                && runner.IsRunning
                 && runner.IsServer;
+        }
+
+        private static bool IsServer(NetworkRunner runner)
+        {
+            return runner != null && runner.IsServer;
+        }
+
+        private static bool IsRunning(NetworkRunner runner)
+        {
+            return runner != null && runner.IsRunning;
         }
 
         private bool IsCommitted(PlayerRef player, NetworkObject existingObject)
