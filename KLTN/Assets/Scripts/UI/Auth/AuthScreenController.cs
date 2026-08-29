@@ -22,6 +22,7 @@ namespace EchoProtocol.UI.Auth
     [SerializeField] private Button goToRegisterButton;
 
     [Header("Register")]
+    [SerializeField] private InputField registerEmailInput;
     [SerializeField] private InputField registerUsernameInput;
     [SerializeField] private InputField registerPasswordInput;
     [SerializeField] private InputField registerConfirmPasswordInput;
@@ -237,20 +238,21 @@ namespace EchoProtocol.UI.Auth
     {
       if (_busy) return;
 
+      var email = registerEmailInput != null ? registerEmailInput.text.Trim() : string.Empty;
       var username = registerUsernameInput != null ? registerUsernameInput.text.Trim() : string.Empty;
       var password = registerPasswordInput != null ? registerPasswordInput.text : string.Empty;
       var confirm = registerConfirmPasswordInput != null ? registerConfirmPasswordInput.text : string.Empty;
 
-      if (!ValidateRegisterInput(username, password, confirm, out var validationMessage))
+      if (!ValidateRegisterInput(email, username, password, confirm, out var validationMessage))
       {
         SetStatus(validationMessage);
         return;
       }
 
-      StartCoroutine(RegisterFlow(username, password, confirm));
+      StartCoroutine(RegisterFlow(email, username, password, confirm));
     }
 
-    private IEnumerator RegisterFlow(string username, string password, string confirmPassword)
+    private IEnumerator RegisterFlow(string email, string username, string password, string confirmPassword)
     {
       SetBusy(true);
       SetStatus("Registering...");
@@ -258,7 +260,7 @@ namespace EchoProtocol.UI.Auth
       var completed = false;
       ApiResult<AuthDomain.RegisterApiResponse> registerResult = null;
 
-      _runtime.AuthService.Register(username, password, confirmPassword, result =>
+      _runtime.AuthService.Register(email, username, password, confirmPassword, result =>
       {
         registerResult = result;
         completed = true;
@@ -335,8 +337,14 @@ namespace EchoProtocol.UI.Auth
       return true;
     }
 
-    private static bool ValidateRegisterInput(string username, string password, string confirmPassword, out string message)
+    private static bool ValidateRegisterInput(string email, string username, string password, string confirmPassword, out string message)
     {
+      if (string.IsNullOrWhiteSpace(email) || email.Length > 255 || !email.Contains("@"))
+      {
+        message = "A valid email is required.";
+        return false;
+      }
+
       if (string.IsNullOrWhiteSpace(username))
       {
         message = "Username is required.";

@@ -56,6 +56,7 @@ It returns HTTP 200 only when the API can connect to the database, otherwise HTT
 
 ```json
 {
+  "email": "player01@echo.invalid",
   "username": "player01",
   "password": "123456",
   "confirmPassword": "123456"

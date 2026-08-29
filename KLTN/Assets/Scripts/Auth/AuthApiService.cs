@@ -15,10 +15,11 @@ namespace EchoProtocol.Auth
 
     public bool IsInitialized => _apiClient != null;
 
-    public void Register(string username, string password, string confirmPassword, Action<ApiResult<RegisterApiResponse>> callback)
+    public void Register(string email, string username, string password, string confirmPassword, Action<ApiResult<RegisterApiResponse>> callback)
     {
       var request = new RegisterRequestDto
       {
+        email = email,
         username = username,
         password = password,
         confirmPassword = confirmPassword

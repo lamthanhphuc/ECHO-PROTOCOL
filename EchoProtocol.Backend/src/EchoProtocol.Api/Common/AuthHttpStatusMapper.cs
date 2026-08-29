@@ -14,6 +14,7 @@ public static class AuthHttpStatusMapper
         ErrorCodes.Forbidden => StatusCodes.Status403Forbidden,
         ErrorCodes.NotFound => StatusCodes.Status404NotFound,
         ErrorCodes.Conflict => StatusCodes.Status409Conflict,
+        ErrorCodes.EmailAlreadyExists => StatusCodes.Status409Conflict,
         ErrorCodes.UsernameAlreadyExists => StatusCodes.Status409Conflict,
         ErrorCodes.InternalServerError => StatusCodes.Status500InternalServerError,
         _ => StatusCodes.Status500InternalServerError

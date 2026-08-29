@@ -120,7 +120,7 @@ The optional development admin seed is skipped unless both
 $base = "http://localhost:5042/api"
 
 # Register
-$body = @{ username = "player01"; password = "123456"; confirmPassword = "123456" } | ConvertTo-Json -Compress
+$body = @{ email = "player01@echo.invalid"; username = "player01"; password = "123456"; confirmPassword = "123456" } | ConvertTo-Json -Compress
 Invoke-RestMethod -Uri "$base/auth/register" -Method Post -ContentType "application/json" -Body $body
 
 # Login

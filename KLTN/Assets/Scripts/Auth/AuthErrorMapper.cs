@@ -34,6 +34,7 @@ namespace EchoProtocol.Auth
 
       return errorCode switch
       {
+        "EMAIL_ALREADY_EXISTS" => "Email is already registered",
         "USERNAME_ALREADY_EXISTS" => "Username already exists",
         "INVALID_CREDENTIALS" => "Invalid username or password",
         "ACCOUNT_LOCKED" => "Account is locked",

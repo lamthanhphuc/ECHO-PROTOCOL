@@ -4,6 +4,7 @@ using EchoProtocol.Api.DTOs.Auth;
 using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services.Interfaces;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -29,6 +30,15 @@ public class AuthService : IAuthService
         RegisterRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(request.Email)
+            || request.Email.Length > 255
+            || !new EmailAddressAttribute().IsValid(request.Email))
+        {
+            return ServiceResult<UserSummaryResponse>.Failure(
+                "Validation failed",
+                ErrorCodes.ValidationError);
+        }
+
         if (string.IsNullOrWhiteSpace(request.Username))
         {
             return ServiceResult<UserSummaryResponse>.Failure(
@@ -71,8 +81,16 @@ public class AuthService : IAuthService
                 ErrorCodes.PasswordConfirmationMismatch);
         }
 
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var normalized = UsernameNormalizer.Normalize(request.Username);
         var displayName = request.Username.Trim();
+
+        if (await _db.Users.AnyAsync(u => u.Email == normalizedEmail, cancellationToken))
+        {
+            return ServiceResult<UserSummaryResponse>.Failure(
+                "Email already exists",
+                ErrorCodes.EmailAlreadyExists);
+        }
 
         if (await _db.Users.AnyAsync(u => u.Username == normalized, cancellationToken))
         {
@@ -85,6 +103,7 @@ public class AuthService : IAuthService
         var user = new User
         {
             Id = Guid.NewGuid(),
+            Email = normalizedEmail,
             Username = normalized,
             PasswordHash = _passwordHasher.Hash(request.Password),
             Role = UserRole.PLAYER,
@@ -114,7 +133,13 @@ public class AuthService : IAuthService
         {
             await _db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException ex) when (IsUsernameUniqueViolation(ex))
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex, "IX_Users_Email"))
+        {
+            return ServiceResult<UserSummaryResponse>.Failure(
+                "Email already exists",
+                ErrorCodes.EmailAlreadyExists);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex, "IX_Users_Username"))
         {
             return ServiceResult<UserSummaryResponse>.Failure(
                 "Username already exists",
@@ -125,6 +150,7 @@ public class AuthService : IAuthService
             new UserSummaryResponse
             {
                 Id = user.Id,
+                Email = user.Email,
                 Username = user.Username,
                 Role = user.Role.ToString()
             },
@@ -199,6 +225,7 @@ public class AuthService : IAuthService
                 User = new UserSummaryResponse
                 {
                     Id = user.Id,
+                    Email = user.Email,
                     Username = user.Username,
                     Role = user.Role.ToString()
                 },
@@ -249,6 +276,7 @@ public class AuthService : IAuthService
             new MeResponse
             {
                 Id = user.Id,
+                Email = user.Email,
                 Username = user.Username,
                 Role = user.Role.ToString(),
                 DisplayName = user.PlayerProfile.DisplayName,
@@ -257,10 +285,10 @@ public class AuthService : IAuthService
             "Current user loaded");
     }
 
-    private static bool IsUsernameUniqueViolation(DbUpdateException ex)
+    private static bool IsUniqueViolation(DbUpdateException ex, string constraintName)
     {
         return ex.InnerException is PostgresException pg
             && pg.SqlState == PostgresErrorCodes.UniqueViolation
-            && pg.ConstraintName == "IX_Users_Username";
+            && pg.ConstraintName == constraintName;
     }
 }

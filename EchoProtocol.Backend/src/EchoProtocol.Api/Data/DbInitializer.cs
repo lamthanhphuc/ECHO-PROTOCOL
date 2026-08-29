@@ -39,11 +39,16 @@ public static class DbInitializer
         }
 
         var normalizedAdmin = UsernameNormalizer.Normalize(settings.Username);
+        var normalizedEmail = string.IsNullOrWhiteSpace(settings.Email)
+            ? $"{normalizedAdmin}@admin.echo.invalid"
+            : settings.Email.Trim().ToLowerInvariant();
         var displayName = string.IsNullOrWhiteSpace(settings.DisplayName)
             ? settings.Username.Trim()
             : settings.DisplayName.Trim();
 
-        if (await db.Users.AnyAsync(u => u.Username == normalizedAdmin, cancellationToken))
+        if (await db.Users.AnyAsync(
+                u => u.Username == normalizedAdmin || u.Email == normalizedEmail,
+                cancellationToken))
         {
             return;
         }
@@ -52,6 +57,7 @@ public static class DbInitializer
         var admin = new User
         {
             Id = Guid.NewGuid(),
+            Email = normalizedEmail,
             Username = normalizedAdmin,
             PasswordHash = passwordHasher.Hash(settings.Password),
             Role = UserRole.ADMIN,
@@ -82,16 +88,17 @@ public static class DbInitializer
             await db.SaveChangesAsync(cancellationToken);
             logger.LogInformation("Admin user seeded successfully.");
         }
-        catch (DbUpdateException ex) when (IsUsernameUniqueViolation(ex))
+        catch (DbUpdateException ex) when (IsUserUniqueViolation(ex))
         {
             logger.LogInformation("Admin already exists (race).");
         }
     }
 
-    private static bool IsUsernameUniqueViolation(DbUpdateException ex)
+    private static bool IsUserUniqueViolation(DbUpdateException ex)
     {
         return ex.InnerException is PostgresException pg
             && pg.SqlState == PostgresErrorCodes.UniqueViolation
-            && pg.ConstraintName == "IX_Users_Username";
+            && (pg.ConstraintName == "IX_Users_Username"
+                || pg.ConstraintName == "IX_Users_Email");
     }
 }

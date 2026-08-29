@@ -21,6 +21,10 @@ public class AppDbContext : DbContext
             entity.ToTable("Users");
             entity.HasKey(e => e.Id);
 
+            entity.Property(e => e.Email)
+                .IsRequired()
+                .HasMaxLength(255);
+
             entity.Property(e => e.Username)
                 .IsRequired()
                 .HasMaxLength(100);
@@ -43,6 +47,10 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.Username)
                 .IsUnique()
                 .HasDatabaseName("IX_Users_Username");
+
+            entity.HasIndex(e => e.Email)
+                .IsUnique()
+                .HasDatabaseName("IX_Users_Email");
 
             entity.HasOne(e => e.PlayerProfile)
                 .WithOne(e => e.User)

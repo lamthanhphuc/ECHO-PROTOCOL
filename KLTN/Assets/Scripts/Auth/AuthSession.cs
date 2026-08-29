@@ -3,6 +3,7 @@ namespace EchoProtocol.Auth
   public static class AuthSession
   {
     public static string CurrentUserId { get; private set; } = string.Empty;
+    public static string Email { get; private set; } = string.Empty;
     public static string Username { get; private set; } = string.Empty;
     public static string Role { get; private set; } = string.Empty;
     public static string DisplayName { get; private set; } = string.Empty;
@@ -12,6 +13,7 @@ namespace EchoProtocol.Auth
     public static void ApplyFromMe(MeDto me)
     {
       CurrentUserId = me.id ?? string.Empty;
+      Email = me.email ?? string.Empty;
       Username = me.username ?? string.Empty;
       Role = me.role ?? string.Empty;
       DisplayName = me.displayName ?? string.Empty;
@@ -22,6 +24,7 @@ namespace EchoProtocol.Auth
     public static void Clear()
     {
       CurrentUserId = string.Empty;
+      Email = string.Empty;
       Username = string.Empty;
       Role = string.Empty;
       DisplayName = string.Empty;

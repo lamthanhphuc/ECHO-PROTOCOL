@@ -5,6 +5,7 @@ namespace EchoProtocol.Auth
   [Serializable]
   public class RegisterRequestDto
   {
+    public string email;
     public string username;
     public string password;
     public string confirmPassword;
@@ -56,6 +57,7 @@ namespace EchoProtocol.Auth
   public class UserSummaryDto
   {
     public string id;
+    public string email;
     public string username;
     public string role;
   }
@@ -79,6 +81,7 @@ namespace EchoProtocol.Auth
   public class MeDto
   {
     public string id;
+    public string email;
     public string username;
     public string role;
     public string displayName;

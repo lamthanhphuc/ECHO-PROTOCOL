@@ -5,6 +5,11 @@ namespace EchoProtocol.Api.DTOs.Auth;
 public class RegisterRequest
 {
     [Required]
+    [EmailAddress]
+    [MaxLength(255)]
+    public string Email { get; set; } = string.Empty;
+
+    [Required]
     [MaxLength(100)]
     public string Username { get; set; } = string.Empty;
 

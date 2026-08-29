@@ -8,6 +8,7 @@ public static class ErrorCodes
     public const string NotFound = "NOT_FOUND";
     public const string Conflict = "CONFLICT";
     public const string InternalServerError = "INTERNAL_SERVER_ERROR";
+    public const string EmailAlreadyExists = "EMAIL_ALREADY_EXISTS";
     public const string UsernameAlreadyExists = "USERNAME_ALREADY_EXISTS";
     public const string InvalidCredentials = "INVALID_CREDENTIALS";
     public const string AccountLocked = "ACCOUNT_LOCKED";
