@@ -143,6 +143,62 @@ namespace EchoProtocol.AI.Stalker.Tests
             yield return null;
         }
 
+        [UnityTest]
+        public IEnumerator STK_VIS_TargetHierarchyRootCollider_DoesNotOccludeChildSamplePoint()
+        {
+            var fixture = CreateSensorFixture();
+            var playerRoot = CreatePrimitive("STK_Test_PlayerRoot", PrimitiveType.Cube, new Vector3(0f, 1f, 5f));
+            var visionTargetPoint = CreateChild("VisionTargetPoint", playerRoot.transform, Vector3.zero);
+            var blockerMask = 1 << playerRoot.layer;
+            SetSensorFields(fixture.Sensor, fixture.Origin, null, 10f, 90f, blockerMask);
+            Physics.SyncTransforms();
+
+            var accepted = TryEvaluateCandidate(fixture.Sensor, visionTargetPoint, playerRoot.transform, out var observation);
+
+            Assert.That(accepted, Is.True);
+            Assert.That(GetTransformProperty(observation, "Candidate"), Is.SameAs(visionTargetPoint));
+            Assert.That(GetVector3Property(observation, "ObservedPosition"), Is.EqualTo(visionTargetPoint.position));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator STK_VIS_TargetHierarchyRootCollider_ExternalBlockerStillOccludesChildSamplePoint()
+        {
+            var fixture = CreateSensorFixture();
+            var playerRoot = CreatePrimitive("STK_Test_BlockedPlayerRoot", PrimitiveType.Cube, new Vector3(0f, 1f, 5f));
+            var visionTargetPoint = CreateChild("VisionTargetPoint", playerRoot.transform, Vector3.zero);
+            var blocker = CreatePrimitive("STK_Test_ExternalBlocker", PrimitiveType.Cube, new Vector3(0f, 1f, 2.5f));
+            blocker.layer = playerRoot.layer;
+            var blockerMask = 1 << blocker.layer;
+            SetSensorFields(fixture.Sensor, fixture.Origin, null, 10f, 90f, blockerMask);
+            Physics.SyncTransforms();
+            AssertRayHitsTransform(fixture.Origin.position, visionTargetPoint.position, blocker.transform, blockerMask);
+
+            var accepted = TryEvaluateCandidate(fixture.Sensor, visionTargetPoint, playerRoot.transform, out _);
+
+            Assert.That(accepted, Is.False);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator STK_VIS_InvalidSampleRootRelationship_FailsClosed()
+        {
+            var fixture = CreateSensorFixture();
+            var playerRoot = CreateCandidate("STK_Test_UnrelatedRoot", new Vector3(0f, 1f, 5f));
+            var unrelatedSample = CreateCandidate("STK_Test_UnrelatedSample", new Vector3(0f, 1f, 5f));
+            SetSensorFields(fixture.Sensor, fixture.Origin, null, 10f, 90f, 0);
+            Physics.SyncTransforms();
+
+            var accepted = TryEvaluateCandidate(fixture.Sensor, unrelatedSample, playerRoot, out var observation);
+
+            Assert.That(accepted, Is.False);
+            Assert.That(GetProperty(observation, "Candidate"), Is.Null);
+            Assert.That(GetVector3Property(observation, "ObservedPosition"), Is.EqualTo(default(Vector3)));
+            Assert.That(GetVector3Property(observation, "ObservedDirection"), Is.EqualTo(default(Vector3)));
+            Assert.That(GetFloatProperty(observation, "Distance"), Is.EqualTo(0f));
+            yield return null;
+        }
+
         private SensorFixture CreateSensorFixture()
         {
             var sensorType = ResolveType(StalkerVisionSensorTypeName);
@@ -173,6 +229,14 @@ namespace EchoProtocol.AI.Stalker.Tests
             primitive.transform.position = position;
             _createdObjects.Add(primitive);
             return primitive;
+        }
+
+        private static Transform CreateChild(string name, Transform parent, Vector3 localPosition)
+        {
+            var child = new GameObject(name);
+            child.transform.SetParent(parent, false);
+            child.transform.localPosition = localPosition;
+            return child.transform;
         }
 
         private static void SetSensorFields(
@@ -214,7 +278,10 @@ namespace EchoProtocol.AI.Stalker.Tests
         {
             var method = sensor.GetType().GetMethod(
                 "TryEvaluateCandidate",
-                BindingFlags.Instance | BindingFlags.Public);
+                BindingFlags.Instance | BindingFlags.Public,
+                null,
+                new[] { typeof(Transform), ResolveType(PhysicalObservationTypeName).MakeByRefType() },
+                null);
             Assert.That(method, Is.Not.Null, "Missing StalkerVisionSensor.TryEvaluateCandidate.");
 
             var args = new object[] { candidate, null };
@@ -223,6 +290,28 @@ namespace EchoProtocol.AI.Stalker.Tests
             observation = args[1];
             return (bool)accepted;
         }
+
+        private static bool TryEvaluateCandidate(
+            Component sensor,
+            Transform sample,
+            Transform hierarchyRoot,
+            out object observation)
+        {
+            var method = sensor.GetType().GetMethod(
+                "TryEvaluateCandidate",
+                BindingFlags.Instance | BindingFlags.Public,
+                null,
+                new[] { typeof(Transform), typeof(Transform), ResolveType(PhysicalObservationTypeName).MakeByRefType() },
+                null);
+            Assert.That(method, Is.Not.Null, "Missing StalkerVisionSensor.TryEvaluateCandidate sample/root overload.");
+
+            var args = new object[] { sample, hierarchyRoot, null };
+            var accepted = method.Invoke(sensor, args);
+            Assert.That(accepted, Is.TypeOf<bool>());
+            observation = args[2];
+            return (bool)accepted;
+        }
+
 
         private static void AssertRayHitsTransform(Vector3 origin, Vector3 targetPosition, Transform expectedHit, int mask)
         {

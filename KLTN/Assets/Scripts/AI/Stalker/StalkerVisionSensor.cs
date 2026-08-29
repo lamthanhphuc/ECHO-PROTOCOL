@@ -48,15 +48,32 @@ namespace EchoProtocol.AI.Stalker
             Transform targetCandidate,
             out StalkerPhysicalVisionObservation observation)
         {
+            return TryEvaluateCandidate(targetCandidate, targetCandidate, out observation);
+        }
+
+        public bool TryEvaluateCandidate(
+            Transform targetSample,
+            Transform targetHierarchyRoot,
+            out StalkerPhysicalVisionObservation observation)
+        {
             observation = default;
 
-            if (visionOrigin == null || targetCandidate == null || visionDistance <= 0f || visionAngle <= 0f)
+            if (visionOrigin == null
+                || targetSample == null
+                || targetHierarchyRoot == null
+                || visionDistance <= 0f
+                || visionAngle <= 0f)
+            {
+                return false;
+            }
+
+            if (targetSample != targetHierarchyRoot && !targetSample.IsChildOf(targetHierarchyRoot))
             {
                 return false;
             }
 
             var originPosition = visionOrigin.position;
-            var candidatePosition = targetCandidate.position;
+            var candidatePosition = targetSample.position;
             var toCandidate = candidatePosition - originPosition;
             var sqrDistance = toCandidate.sqrMagnitude;
             var maxSqrDistance = visionDistance * visionDistance;
@@ -74,13 +91,13 @@ namespace EchoProtocol.AI.Stalker
 
             var distance = Mathf.Sqrt(sqrDistance);
             var observedDirection = toCandidate.normalized;
-            if (HasLineOfSightBlocker(targetCandidate, originPosition, observedDirection, distance))
+            if (HasLineOfSightBlocker(targetHierarchyRoot, originPosition, observedDirection, distance))
             {
                 return false;
             }
 
             observation = new StalkerPhysicalVisionObservation(
-                targetCandidate,
+                targetSample,
                 candidatePosition,
                 observedDirection,
                 distance);
@@ -121,7 +138,7 @@ namespace EchoProtocol.AI.Stalker
         }
 
         private bool HasLineOfSightBlocker(
-            Transform targetCandidate,
+            Transform targetHierarchyRoot,
             Vector3 originPosition,
             Vector3 direction,
             float distance)
@@ -143,7 +160,7 @@ namespace EchoProtocol.AI.Stalker
             for (var i = 0; i < hits.Length; i++)
             {
                 var hitTransform = hits[i].transform;
-                if (ShouldIgnoreHit(hitTransform, targetCandidate))
+                if (ShouldIgnoreHit(hitTransform, targetHierarchyRoot))
                 {
                     continue;
                 }
@@ -154,14 +171,14 @@ namespace EchoProtocol.AI.Stalker
             return false;
         }
 
-        private bool ShouldIgnoreHit(Transform hitTransform, Transform targetCandidate)
+        private bool ShouldIgnoreHit(Transform hitTransform, Transform targetHierarchyRoot)
         {
             if (hitTransform == null)
             {
                 return true;
             }
 
-            if (hitTransform == targetCandidate || hitTransform.IsChildOf(targetCandidate))
+            if (hitTransform == targetHierarchyRoot || hitTransform.IsChildOf(targetHierarchyRoot))
             {
                 return true;
             }
