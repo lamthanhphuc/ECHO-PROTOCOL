@@ -28,11 +28,24 @@ namespace EchoProtocol.AI.Stalker
 
         public VisionObservation LastCurrentTargetObservation { get; private set; }
 
+        public bool HasLastDetectionTargetObservation { get; private set; }
+
+        public VisionObservation LastDetectionTargetObservation { get; private set; }
+
         public void SetDetectionTarget(PlayerId playerId)
         {
             if (!playerId.IsValid)
             {
                 throw new ArgumentException("Detection target requires a valid player id.", nameof(playerId));
+            }
+
+            if (DetectionTargetId != playerId)
+            {
+                ClearDetectionTargetObservation();
+                if (!CurrentTargetId.IsValid)
+                {
+                    ClearObservedKnowledge();
+                }
             }
 
             DetectionTargetId = playerId;
@@ -43,6 +56,11 @@ namespace EchoProtocol.AI.Stalker
         {
             DetectionTargetId = PlayerId.Invalid;
             DetectionMeter = 0f;
+            ClearDetectionTargetObservation();
+            if (!CurrentTargetId.IsValid)
+            {
+                ClearObservedKnowledge();
+            }
         }
 
         public void SetDetectionMeter(float value)
@@ -100,7 +118,44 @@ namespace EchoProtocol.AI.Stalker
             return true;
         }
 
+        public bool TryAcceptDetectionTargetObservation(VisionObservation observation)
+        {
+            if (!DetectionTargetId.IsValid || observation.PlayerId != DetectionTargetId)
+            {
+                return false;
+            }
+
+            if (HasLastDetectionTargetObservation
+                && observation.ObservedAt.CompareTo(LastDetectionTargetObservation.ObservedAt) < 0)
+            {
+                return false;
+            }
+
+            LastKnownPosition = observation.ObservedPosition;
+            HasLastKnownPosition = true;
+            LastSeenDirection = observation.ObservedDirection;
+            HasLastSeenDirection = true;
+            TargetLastSeenTime = observation.ObservedAt;
+            HasTargetLastSeenTime = true;
+            LastDetectionTargetObservation = observation;
+            HasLastDetectionTargetObservation = true;
+            return true;
+        }
+
         private void ClearCurrentTargetKnowledge()
+        {
+            ClearObservedKnowledge();
+            LastCurrentTargetObservation = default;
+            HasLastCurrentTargetObservation = false;
+        }
+
+        private void ClearDetectionTargetObservation()
+        {
+            LastDetectionTargetObservation = default;
+            HasLastDetectionTargetObservation = false;
+        }
+
+        private void ClearObservedKnowledge()
         {
             LastKnownPosition = default;
             HasLastKnownPosition = false;
@@ -108,8 +163,6 @@ namespace EchoProtocol.AI.Stalker
             HasLastSeenDirection = false;
             TargetLastSeenTime = AiSimulationTime.Invalid;
             HasTargetLastSeenTime = false;
-            LastCurrentTargetObservation = default;
-            HasLastCurrentTargetObservation = false;
         }
     }
 }

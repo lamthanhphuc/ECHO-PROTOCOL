@@ -65,6 +65,9 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private int plannerRunCount;
         [SerializeField] private int candidateCount;
 
+        private const float TargetSelectionTieEpsilon = 0f;
+
+        private readonly StalkerMemory _memory = new StalkerMemory();
         private readonly StalkerBlackboard _blackboard = new StalkerBlackboard();
         private StalkerNavigationController _navigation;
         private NavMeshSpatialGraph _spatialPatrolGraph;
@@ -83,6 +86,7 @@ namespace EchoProtocol.AI.Stalker
         private double _currentSimulationSeconds;
         private long _legacySimulationTick;
         private IReadOnlyList<StalkerTargetCandidate> _currentVisibleTargetCandidates;
+        private IReadOnlyList<StalkerTargetStatus> _currentTargetStatuses;
 
         public StalkerPatrolMode PatrolMode => patrolMode;
         public StalkerState CurrentState => currentState;
@@ -141,6 +145,7 @@ namespace EchoProtocol.AI.Stalker
             _currentSimulationDeltaSeconds = input.Step.DeltaSeconds;
             _currentSimulationSeconds = input.Step.Time.Seconds;
             _currentVisibleTargetCandidates = input.VisibleTargetCandidates;
+            _currentTargetStatuses = input.TargetStatuses;
 
             try
             {
@@ -153,6 +158,7 @@ namespace EchoProtocol.AI.Stalker
             finally
             {
                 _currentVisibleTargetCandidates = null;
+                _currentTargetStatuses = null;
                 _currentSimulationDeltaSeconds = 0f;
                 _currentSimulationSeconds = 0d;
                 _isSimulating = false;
@@ -165,7 +171,14 @@ namespace EchoProtocol.AI.Stalker
             {
                 case StalkerState.PATROL:
                     TickPatrol();
-                    TryAcquireDetectionTargetFromPatrol();
+                    if (HasTypedTargetFrame)
+                    {
+                        TryAcquireTypedDetectionTargetFromPatrol();
+                    }
+                    else
+                    {
+                        TryAcquireDetectionTargetFromPatrol();
+                    }
                     break;
                 case StalkerState.DETECT:
                     TickDetect();
@@ -272,8 +285,37 @@ namespace EchoProtocol.AI.Stalker
             StopAgentPath();
         }
 
+        private void TryAcquireTypedDetectionTargetFromPatrol()
+        {
+            if (_currentVisibleTargetCandidates == null)
+            {
+                return;
+            }
+
+            if (!StalkerTargetSelector.TrySelectNearestEligibleVisible(
+                    _currentVisibleTargetCandidates,
+                    TargetSelectionTieEpsilon,
+                    out var selectedObservation))
+            {
+                return;
+            }
+
+            _memory.SetDetectionTarget(selectedObservation.PlayerId);
+            _memory.TryAcceptDetectionTargetObservation(selectedObservation);
+            detectionTarget = null;
+            detectionMeter = 0f;
+            currentState = StalkerState.DETECT;
+            StopAgentPath();
+        }
+
         private void TickDetect()
         {
+            if (HasTypedTargetFrame)
+            {
+                TickDetectTyped();
+                return;
+            }
+
             if (detectionTarget == null)
             {
                 ClearDetectionContext();
@@ -303,6 +345,65 @@ namespace EchoProtocol.AI.Stalker
                 ClearDetectionContext();
                 currentState = StalkerState.PATROL;
                 SetCurrentPatrolDestination();
+            }
+        }
+
+        private void TickDetectTyped()
+        {
+            var detectionTargetId = _memory.DetectionTargetId;
+            if (!detectionTargetId.IsValid)
+            {
+                InvalidateDetectionTarget();
+                return;
+            }
+
+            if (!TryGetUniqueTargetStatus(detectionTargetId, out var status) || !status.Eligible)
+            {
+                InvalidateDetectionTarget();
+                return;
+            }
+
+            if (TryGetUniqueVisibleTargetCandidate(detectionTargetId, out var candidate, out var hasDuplicate))
+            {
+                if (!candidate.Eligibility.Eligible)
+                {
+                    InvalidateDetectionTarget();
+                    return;
+                }
+
+                var observation = candidate.Observation;
+                if (!_memory.TryAcceptDetectionTargetObservation(observation))
+                {
+                    InvalidateDetectionTarget();
+                    return;
+                }
+
+                lastKnownPosition = _memory.LastKnownPosition;
+                detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
+                detectionMeter = ClampDetectionMeter(detectionMeter);
+                _memory.SetDetectionMeter(detectionMeter);
+
+                if (detectionMeter >= GetDetectionMeterFull())
+                {
+                    PromoteDetectionTargetToCurrentTarget(observation);
+                }
+
+                return;
+            }
+
+            if (hasDuplicate)
+            {
+                InvalidateDetectionTarget();
+                return;
+            }
+
+            detectionMeter -= GetDetectionDecayRate() * CurrentSimulationDeltaSeconds;
+            detectionMeter = ClampDetectionMeter(detectionMeter);
+            _memory.SetDetectionMeter(detectionMeter);
+
+            if (detectionMeter <= 0f)
+            {
+                InvalidateDetectionTarget();
             }
         }
 
@@ -352,8 +453,27 @@ namespace EchoProtocol.AI.Stalker
             StopAgentPath();
         }
 
+        private void PromoteDetectionTargetToCurrentTarget(VisionObservation observation)
+        {
+            _memory.SetCurrentTarget(observation.PlayerId);
+            _memory.TryAcceptCurrentTargetObservation(observation);
+            _memory.ClearDetectionTarget();
+            currentTarget = null;
+            detectionTarget = null;
+            detectionMeter = 0f;
+            lastKnownPosition = _memory.LastKnownPosition;
+            currentState = StalkerState.CHASE;
+            StopAgentPath();
+        }
+
         private void TickChase()
         {
+            if (HasTypedTargetFrame)
+            {
+                TickChaseTyped();
+                return;
+            }
+
             if (currentTarget == null)
             {
                 ClearTargetContext();
@@ -376,6 +496,56 @@ namespace EchoProtocol.AI.Stalker
             }
 
             SetChaseDestination(observedPosition);
+        }
+
+        private void TickChaseTyped()
+        {
+            var currentTargetId = _memory.CurrentTargetId;
+            if (!currentTargetId.IsValid)
+            {
+                InvalidateCurrentTarget();
+                return;
+            }
+
+            if (!TryGetUniqueTargetStatus(currentTargetId, out var status) || !status.Eligible)
+            {
+                InvalidateCurrentTarget();
+                return;
+            }
+
+            if (TryGetUniqueVisibleTargetCandidate(currentTargetId, out var candidate, out var hasDuplicate))
+            {
+                if (!candidate.Eligibility.Eligible)
+                {
+                    InvalidateCurrentTarget();
+                    return;
+                }
+
+                var observation = candidate.Observation;
+                if (!_memory.TryAcceptCurrentTargetObservation(observation))
+                {
+                    InvalidateCurrentTarget();
+                    return;
+                }
+
+                lastKnownPosition = _memory.LastKnownPosition;
+                if (IsWithinAttackRange(observation.ObservedPosition))
+                {
+                    EnterAttack();
+                    return;
+                }
+
+                SetChaseDestination(observation.ObservedPosition);
+                return;
+            }
+
+            if (hasDuplicate)
+            {
+                InvalidateCurrentTarget();
+                return;
+            }
+
+            EnterSearch();
         }
 
         private void EnterAttack()
@@ -459,13 +629,31 @@ namespace EchoProtocol.AI.Stalker
         {
             ResetChaseDestinationTracking();
             ResetNavigationRecoveryBudget();
+            if (HasTypedTargetFrame && !_memory.HasLastKnownPosition)
+            {
+                InvalidateCurrentTarget();
+                return;
+            }
+
             currentState = StalkerState.SEARCH;
             searchElapsedTime = 0f;
+            if (HasTypedTargetFrame)
+            {
+                SetSearchDestination(_memory.LastKnownPosition);
+                return;
+            }
+
             SetSearchDestination();
         }
 
         private void TickSearch()
         {
+            if (HasTypedTargetFrame)
+            {
+                TickSearchTyped();
+                return;
+            }
+
             if (currentTarget == null)
             {
                 ClearSearchContext();
@@ -487,6 +675,65 @@ namespace EchoProtocol.AI.Stalker
             }
 
             SetSearchDestination();
+
+            searchElapsedTime += CurrentSimulationDeltaSeconds;
+            if (searchElapsedTime < GetSearchDuration())
+            {
+                return;
+            }
+
+            ClearSearchContext();
+            currentState = StalkerState.PATROL;
+            StopAgentPath();
+            SetCurrentPatrolDestination();
+        }
+
+        private void TickSearchTyped()
+        {
+            var currentTargetId = _memory.CurrentTargetId;
+            if (!currentTargetId.IsValid)
+            {
+                InvalidateCurrentTarget();
+                return;
+            }
+
+            if (!TryGetUniqueTargetStatus(currentTargetId, out var status) || !status.Eligible)
+            {
+                InvalidateCurrentTarget();
+                return;
+            }
+
+            if (TryGetUniqueVisibleTargetCandidate(currentTargetId, out var candidate, out var hasDuplicate))
+            {
+                if (!candidate.Eligibility.Eligible)
+                {
+                    InvalidateCurrentTarget();
+                    return;
+                }
+
+                var observation = candidate.Observation;
+                if (!_memory.TryAcceptCurrentTargetObservation(observation))
+                {
+                    InvalidateCurrentTarget();
+                    return;
+                }
+
+                lastKnownPosition = _memory.LastKnownPosition;
+                ClearSearchRuntimeContext();
+                ResetChaseDestinationTracking();
+                ResetNavigationRecoveryBudget();
+                currentState = StalkerState.CHASE;
+                SetChaseDestination(observation.ObservedPosition);
+                return;
+            }
+
+            if (hasDuplicate || !_memory.HasLastKnownPosition)
+            {
+                InvalidateCurrentTarget();
+                return;
+            }
+
+            SetSearchDestination(_memory.LastKnownPosition);
 
             searchElapsedTime += CurrentSimulationDeltaSeconds;
             if (searchElapsedTime < GetSearchDuration())
@@ -548,13 +795,18 @@ namespace EchoProtocol.AI.Stalker
 
         private void SetSearchDestination()
         {
+            SetSearchDestination(lastKnownPosition);
+        }
+
+        private void SetSearchDestination(Vector3 rememberedPosition)
+        {
             if (!CanUseNavigation())
             {
                 _navigation?.ClearDestinationCache();
                 return;
             }
 
-            _navigation.TrySetDestination(lastKnownPosition);
+            _navigation.TrySetDestination(rememberedPosition);
         }
 
         private bool IsWithinAttackRange(Vector3 targetPosition)
@@ -567,11 +819,17 @@ namespace EchoProtocol.AI.Stalker
         {
             detectionTarget = null;
             detectionMeter = 0f;
+            _memory.ClearDetectionTarget();
+            if (!_memory.CurrentTargetId.IsValid)
+            {
+                _memory.ClearCurrentTarget();
+            }
         }
 
         private void ClearTargetContext()
         {
             currentTarget = null;
+            _memory.ClearCurrentTarget();
             ResetChaseDestinationTracking();
             ResetNavigationRecoveryBudget();
             ResetFixedPatrolFallbackState();
@@ -581,8 +839,23 @@ namespace EchoProtocol.AI.Stalker
         private void ClearSearchContext()
         {
             currentTarget = null;
+            _memory.ClearCurrentTarget();
             ClearDetectionContext();
             ClearSearchRuntimeContext();
+        }
+
+        private void InvalidateDetectionTarget()
+        {
+            ClearDetectionContext();
+            currentState = StalkerState.PATROL;
+            SetCurrentPatrolDestination();
+        }
+
+        private void InvalidateCurrentTarget()
+        {
+            ClearTargetContext();
+            currentState = StalkerState.PATROL;
+            SetCurrentPatrolDestination();
         }
 
         private void ClearSearchRuntimeContext()
@@ -643,6 +916,25 @@ namespace EchoProtocol.AI.Stalker
         private float CurrentSimulationDeltaSeconds => _currentSimulationDeltaSeconds;
 
         private float CurrentSimulationTimeSeconds => (float)_currentSimulationSeconds;
+
+        private bool HasTypedTargetFrame => _currentVisibleTargetCandidates != null || _currentTargetStatuses != null;
+
+        private bool TryGetUniqueTargetStatus(PlayerId playerId, out StalkerTargetEligibilityResult eligibility)
+        {
+            return StalkerTargetStatusLookup.TryGetUnique(_currentTargetStatuses, playerId, out eligibility);
+        }
+
+        private bool TryGetUniqueVisibleTargetCandidate(
+            PlayerId playerId,
+            out StalkerTargetCandidate candidate,
+            out bool hasDuplicate)
+        {
+            return StalkerTargetCandidateLookup.TryGetUnique(
+                _currentVisibleTargetCandidates,
+                playerId,
+                out candidate,
+                out hasDuplicate);
+        }
 
         private void StopAgentPath()
         {

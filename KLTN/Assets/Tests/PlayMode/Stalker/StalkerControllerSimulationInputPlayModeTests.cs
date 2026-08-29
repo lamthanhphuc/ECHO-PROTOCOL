@@ -18,6 +18,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string StalkerVisionSensorTypeName = "EchoProtocol.AI.Stalker.StalkerVisionSensor";
         private const string StalkerSimulationInputTypeName = "EchoProtocol.AI.Stalker.StalkerSimulationInput";
         private const string StalkerTargetCandidateTypeName = "EchoProtocol.AI.Stalker.StalkerTargetCandidate";
+        private const string StalkerTargetStatusTypeName = "EchoProtocol.AI.Stalker.StalkerTargetStatus";
         private const string StalkerTargetEligibilityResultTypeName = "EchoProtocol.AI.Stalker.StalkerTargetEligibilityResult";
         private const string VisionObservationTypeName = "EchoProtocol.AI.Stalker.VisionObservation";
         private const float FloatTolerance = 0.0001f;
@@ -162,13 +163,18 @@ namespace EchoProtocol.AI.Stalker.Tests
         {
             var fixture = CreateFixture();
             var candidates = CreateTargetCandidateList(CreateTargetCandidate(3));
+            var statuses = CreateTargetStatusList(CreateTargetStatus(3));
             var firstBefore = GetListItem(candidates, 0);
+            var firstStatusBefore = GetListItem(statuses, 0);
 
-            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(0.25f, candidates)), Is.True);
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(0.25f, candidates, statuses)), Is.True);
 
             Assert.That(GetListCount(candidates), Is.EqualTo(1));
             Assert.That(GetListItem(candidates, 0), Is.EqualTo(firstBefore));
+            Assert.That(GetListCount(statuses), Is.EqualTo(1));
+            Assert.That(GetListItem(statuses, 0), Is.EqualTo(firstStatusBefore));
             Assert.That(GetPrivateField(fixture.Controller, "_currentVisibleTargetCandidates"), Is.Null);
+            Assert.That(GetPrivateField(fixture.Controller, "_currentTargetStatuses"), Is.Null);
             Assert.That((float)GetPrivateField(fixture.Controller, "_currentSimulationDeltaSeconds"), Is.EqualTo(0f));
             Assert.That((double)GetPrivateField(fixture.Controller, "_currentSimulationSeconds"), Is.EqualTo(0d));
             Assert.That((bool)GetPrivateField(fixture.Controller, "_isSimulating"), Is.False);
@@ -246,17 +252,28 @@ namespace EchoProtocol.AI.Stalker.Tests
 
         private static object CreateSimulationInput(float deltaSeconds, object candidates)
         {
+            return CreateSimulationInput(deltaSeconds, candidates, null);
+        }
+
+        private static object CreateSimulationInput(float deltaSeconds, object candidates, object statuses)
+        {
             return CreateSimulationInput(
                 Activator.CreateInstance(
                     ResolveType(AiSimulationStepTypeName),
                     Activator.CreateInstance(ResolveType(AiSimulationTimeTypeName), 1L, 0d),
                     deltaSeconds),
-                candidates);
+                candidates,
+                statuses);
         }
 
         private static object CreateSimulationInput(object step, object candidates)
         {
-            return Activator.CreateInstance(ResolveType(StalkerSimulationInputTypeName), step, candidates);
+            return CreateSimulationInput(step, candidates, null);
+        }
+
+        private static object CreateSimulationInput(object step, object candidates, object statuses)
+        {
+            return Activator.CreateInstance(ResolveType(StalkerSimulationInputTypeName), step, candidates, statuses);
         }
 
         private static object CreateTargetCandidateList(object candidate)
@@ -280,6 +297,25 @@ namespace EchoProtocol.AI.Stalker.Tests
                 .Invoke(null, Array.Empty<object>());
 
             return Activator.CreateInstance(ResolveType(StalkerTargetCandidateTypeName), observation, eligibility);
+        }
+
+        private static object CreateTargetStatusList(object status)
+        {
+            var list = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(ResolveType(StalkerTargetStatusTypeName)));
+            list.Add(status);
+            return list;
+        }
+
+        private static object CreateTargetStatus(int playerId)
+        {
+            var eligibility = ResolveType(StalkerTargetEligibilityResultTypeName)
+                .GetMethod("EligibleTarget", BindingFlags.Public | BindingFlags.Static)
+                .Invoke(null, Array.Empty<object>());
+
+            return Activator.CreateInstance(
+                ResolveType(StalkerTargetStatusTypeName),
+                Activator.CreateInstance(ResolveType(PlayerIdTypeName), playerId),
+                eligibility);
         }
 
         private static bool Simulate(Component controller, object simulationInput)

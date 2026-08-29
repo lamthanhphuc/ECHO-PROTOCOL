@@ -65,6 +65,108 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
+        public void STK_MEM_DetectionTargetObservation_UpdatesKnowledgeWithoutCurrentTargetPromotion()
+        {
+            var memory = CreateMemory();
+            var player = CreatePlayerId(1);
+            var observedAt = CreateSimulationTime(10, 1.25d);
+            var position = new Vector3(2f, 1f, 4f);
+            var direction = new Vector3(3f, 0f, 4f);
+            var observation = CreateVisionObservation(player, position, direction, observedAt, 5f);
+
+            InvokeMethod(memory, "SetDetectionTarget", new[] { ResolveType(PlayerIdTypeName) }, new[] { player });
+            var accepted = InvokeMethod(memory, "TryAcceptDetectionTargetObservation", new[] { ResolveType(VisionObservationTypeName) }, new[] { observation });
+
+            Assert.That(accepted, Is.EqualTo(true));
+            AssertPlayerIdValue(GetProperty(memory, "DetectionTargetId"), 1);
+            Assert.That(IsValidPlayerId(GetProperty(memory, "CurrentTargetId")), Is.False);
+            Assert.That(GetVector3Property(memory, "LastKnownPosition"), Is.EqualTo(position));
+            Assert.That(GetVector3Property(memory, "LastSeenDirection"), Is.EqualTo(direction.normalized));
+            Assert.That(GetProperty(memory, "TargetLastSeenTime"), Is.EqualTo(observedAt));
+            Assert.That(GetBoolProperty(memory, "HasLastDetectionTargetObservation"), Is.True);
+            Assert.That(GetProperty(memory, "LastDetectionTargetObservation"), Is.EqualTo(observation));
+        }
+
+        [Test]
+        public void STK_MEM_DifferentPlayerObservation_CannotMutateDetectionTargetKnowledge()
+        {
+            var memory = CreateMemory();
+            var detectionTarget = CreatePlayerId(1);
+            var differentPlayer = CreatePlayerId(2);
+            var observation = CreateVisionObservation(
+                differentPlayer,
+                new Vector3(2f, 1f, 4f),
+                new Vector3(0f, 0f, 1f),
+                CreateSimulationTime(10, 1.25d),
+                5f);
+
+            InvokeMethod(memory, "SetDetectionTarget", new[] { ResolveType(PlayerIdTypeName) }, new[] { detectionTarget });
+            var accepted = InvokeMethod(memory, "TryAcceptDetectionTargetObservation", new[] { ResolveType(VisionObservationTypeName) }, new[] { observation });
+
+            Assert.That(accepted, Is.EqualTo(false));
+            AssertObservedKnowledgeAbsent(memory);
+            Assert.That(GetBoolProperty(memory, "HasLastDetectionTargetObservation"), Is.False);
+        }
+
+        [Test]
+        public void STK_MEM_SetDetectionTarget_NewPlayer_ClearsPreviousDetectionObservation()
+        {
+            var memory = CreateMemory();
+            var playerOne = CreatePlayerId(1);
+            var playerTwo = CreatePlayerId(2);
+            var newerPlayerOneObservation = CreateVisionObservation(
+                playerOne,
+                new Vector3(1f, 1f, 1f),
+                Vector3.forward,
+                CreateSimulationTime(20, 2d),
+                2f);
+            var olderPlayerTwoObservation = CreateVisionObservation(
+                playerTwo,
+                new Vector3(2f, 1f, 2f),
+                Vector3.right,
+                CreateSimulationTime(10, 1d),
+                3f);
+
+            InvokeMethod(memory, "SetDetectionTarget", new[] { ResolveType(PlayerIdTypeName) }, new[] { playerOne });
+            Assert.That(InvokeMethod(memory, "TryAcceptDetectionTargetObservation", new[] { ResolveType(VisionObservationTypeName) }, new[] { newerPlayerOneObservation }), Is.EqualTo(true));
+
+            InvokeMethod(memory, "SetDetectionTarget", new[] { ResolveType(PlayerIdTypeName) }, new[] { playerTwo });
+
+            AssertPlayerIdValue(GetProperty(memory, "DetectionTargetId"), 2);
+            Assert.That(GetFloatProperty(memory, "DetectionMeter"), Is.EqualTo(0f));
+            AssertObservedKnowledgeAbsent(memory);
+            Assert.That(GetBoolProperty(memory, "HasLastDetectionTargetObservation"), Is.False);
+            Assert.That(InvokeMethod(memory, "TryAcceptDetectionTargetObservation", new[] { ResolveType(VisionObservationTypeName) }, new[] { olderPlayerTwoObservation }), Is.EqualTo(true));
+            Assert.That(GetVector3Property(memory, "LastKnownPosition"), Is.EqualTo(new Vector3(2f, 1f, 2f)));
+            Assert.That(GetProperty(memory, "TargetLastSeenTime"), Is.EqualTo(CreateSimulationTime(10, 1d)));
+        }
+
+        [Test]
+        public void STK_MEM_SetDetectionTarget_SamePlayer_PreservesDetectionObservationHistory()
+        {
+            var memory = CreateMemory();
+            var playerOne = CreatePlayerId(1);
+            var observedAt = CreateSimulationTime(20, 2d);
+            var position = new Vector3(3f, 1f, 5f);
+            var direction = Vector3.right;
+            var observation = CreateVisionObservation(playerOne, position, direction, observedAt, 6f);
+
+            InvokeMethod(memory, "SetDetectionTarget", new[] { ResolveType(PlayerIdTypeName) }, new[] { playerOne });
+            Assert.That(InvokeMethod(memory, "TryAcceptDetectionTargetObservation", new[] { ResolveType(VisionObservationTypeName) }, new[] { observation }), Is.EqualTo(true));
+            InvokeMethod(memory, "SetDetectionMeter", new[] { typeof(float) }, new object[] { 2.5f });
+
+            InvokeMethod(memory, "SetDetectionTarget", new[] { ResolveType(PlayerIdTypeName) }, new[] { playerOne });
+
+            AssertPlayerIdValue(GetProperty(memory, "DetectionTargetId"), 1);
+            Assert.That(GetFloatProperty(memory, "DetectionMeter"), Is.EqualTo(0f));
+            Assert.That(GetBoolProperty(memory, "HasLastDetectionTargetObservation"), Is.True);
+            Assert.That(GetProperty(memory, "LastDetectionTargetObservation"), Is.EqualTo(observation));
+            Assert.That(GetVector3Property(memory, "LastKnownPosition"), Is.EqualTo(position));
+            Assert.That(GetVector3Property(memory, "LastSeenDirection"), Is.EqualTo(direction.normalized));
+            Assert.That(GetProperty(memory, "TargetLastSeenTime"), Is.EqualTo(observedAt));
+        }
+
+        [Test]
         public void STK_MEM_DifferentPlayerObservation_CannotMutateCurrentTargetKnowledge()
         {
             var memory = CreateMemory();
@@ -204,6 +306,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetBoolProperty(memory, "HasLastSeenDirection"), Is.False);
             Assert.That(GetBoolProperty(memory, "HasTargetLastSeenTime"), Is.False);
             Assert.That(GetBoolProperty(memory, "HasLastCurrentTargetObservation"), Is.False);
+            Assert.That(GetBoolProperty(memory, "HasLastDetectionTargetObservation"), Is.False);
         }
 
         private static void AssertObservedKnowledgePresent(object memory)
