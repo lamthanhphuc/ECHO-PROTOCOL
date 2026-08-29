@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
+using EchoProtocol.AI.Common;
+using EchoProtocol.Player;
 using Fusion;
 using UnityEngine;
 
@@ -31,6 +33,9 @@ namespace EchoProtocol.Networking.Diagnostics
         private int _lastTopologyActiveCount;
         private readonly List<string> _topologyPlayerRefs = new List<string>();
         private readonly StringBuilder _topologyBuilder = new StringBuilder();
+        private readonly Dictionary<PlayerRef, HostPlayerDiagnosticRecord> _hostPlayerRecords =
+            new Dictionary<PlayerRef, HostPlayerDiagnosticRecord>(PlayerRef.Comparer);
+        private readonly List<PlayerRef> _departedPlayers = new List<PlayerRef>();
 
         public NetworkRunner Runner => _runner;
 
@@ -110,6 +115,7 @@ namespace EchoProtocol.Networking.Diagnostics
                     await WaitForInitialSnapshotReadinessAsync();
                     CaptureProbeSnapshot();
                     RecordCurrentTopology();
+                    RefreshHostPlayerRecordsIfReady();
                     StartTopologyMonitor();
                 }
                 else
@@ -268,11 +274,18 @@ namespace EchoProtocol.Networking.Diagnostics
                 {
                     var previousActiveCount = _lastTopologyActiveCount;
                     var previousSignature = _lastTopologySignature;
+                    CollectDepartedPlayers();
                     Debug.Log($"C2C|TOPOLOGY_CHANGE|role={_launchConfiguration.Mode}|from={previousActiveCount}|to={activeCount}|fromSet={previousSignature}|toSet={topologySignature}");
 
-                    await WaitForTopologyReadinessAsync(activeCount);
+                    var topologyReady = await WaitForTopologyReadinessAsync(activeCount);
+                    if (topologyReady)
+                    {
+                        CheckDepartedPlayers();
+                    }
+
                     CaptureProbeSnapshot();
                     RecordCurrentTopology();
+                    RefreshHostPlayerRecordsIfReady();
                 }
 
                 await Task.Yield();
@@ -281,7 +294,7 @@ namespace EchoProtocol.Networking.Diagnostics
             _topologyMonitorTask = null;
         }
 
-        private async Task WaitForTopologyReadinessAsync(int expectedActiveCount)
+        private async Task<bool> WaitForTopologyReadinessAsync(int expectedActiveCount)
         {
             var role = _launchConfiguration.Mode.ToString();
             var timeoutSeconds = Mathf.Max(0f, initialSnapshotTimeoutSeconds);
@@ -294,13 +307,14 @@ namespace EchoProtocol.Networking.Diagnostics
                 if (IsTopologyReady(expectedActiveCount, out var reason))
                 {
                     Debug.Log(CreateTopologyReadyLog(role, expectedActiveCount, reason));
-                    return;
+                    return true;
                 }
 
                 await Task.Yield();
             }
 
             Debug.LogWarning(CreateTopologyTimeoutLog(role, expectedActiveCount));
+            return false;
         }
 
         private bool IsInitialSnapshotReady(out string reason)
@@ -426,7 +440,7 @@ namespace EchoProtocol.Networking.Diagnostics
                     return false;
                 }
 
-                var identity = playerObject.GetComponent<EchoProtocol.Player.PlayerRuntimeIdentity>();
+                var identity = playerObject.GetComponent<PlayerRuntimeIdentity>();
                 if (identity == null)
                 {
                     reason = $"MissingRuntimeIdentity|player={player}";
@@ -549,6 +563,127 @@ namespace EchoProtocol.Networking.Diagnostics
             return $"C2C|TOPOLOGY_TIMEOUT|role={role}|active={activeCount}|{CreateInitialStateSummary()}";
         }
 
+        private void RefreshHostPlayerRecordsIfReady()
+        {
+            if (_launchConfiguration.Mode != FusionC2CHarnessMode.Host || _runner == null)
+            {
+                return;
+            }
+
+            var activeCount = CountActivePlayers();
+            if (!IsHostTopologyReady(activeCount, out _))
+            {
+                return;
+            }
+
+            var lifecycle = _runner.GetComponent<FusionPlayerLifecycle>();
+            _hostPlayerRecords.Clear();
+
+            foreach (var player in _runner.ActivePlayers)
+            {
+                if (!lifecycle.IdentityRegistry.TryGetPlayerId(player, out var playerId)
+                    || !_runner.TryGetPlayerObject(player, out var playerObject)
+                    || playerObject == null)
+                {
+                    continue;
+                }
+
+                var identity = playerObject.GetComponent<PlayerRuntimeIdentity>();
+                if (identity == null)
+                {
+                    continue;
+                }
+
+                _hostPlayerRecords[player] = new HostPlayerDiagnosticRecord(
+                    player,
+                    playerId,
+                    playerObject,
+                    identity,
+                    identity.EntityRoot);
+            }
+        }
+
+        private void CollectDepartedPlayers()
+        {
+            _departedPlayers.Clear();
+
+            if (_launchConfiguration.Mode != FusionC2CHarnessMode.Host || _runner == null)
+            {
+                return;
+            }
+
+            foreach (var recordedPlayer in _hostPlayerRecords.Keys)
+            {
+                if (!IsActivePlayer(recordedPlayer))
+                {
+                    _departedPlayers.Add(recordedPlayer);
+                }
+            }
+        }
+
+        private void CheckDepartedPlayers()
+        {
+            if (_departedPlayers.Count == 0
+                || _launchConfiguration.Mode != FusionC2CHarnessMode.Host
+                || _runner == null)
+            {
+                return;
+            }
+
+            var lifecycle = _runner.GetComponent<FusionPlayerLifecycle>();
+            if (lifecycle == null)
+            {
+                Debug.LogError($"C2C|DEPARTED_DIRTY|count={_departedPlayers.Count}|reason=MissingFusionPlayerLifecycle");
+                _departedPlayers.Clear();
+                return;
+            }
+
+            var dirtyCount = 0;
+
+            for (var i = 0; i < _departedPlayers.Count; i++)
+            {
+                var departedPlayer = _departedPlayers[i];
+                if (!_hostPlayerRecords.TryGetValue(departedPlayer, out var record))
+                {
+                    continue;
+                }
+
+                var playerRefMapped = lifecycle.IdentityRegistry.TryGetPlayerId(record.PlayerRef, out _);
+                var entityMapped = lifecycle.EntityRegistry.TryGetEntity(record.PlayerId, out _);
+                var transformMapped = lifecycle.EntityRegistry.TryResolvePlayerId(record.EntityRoot, out _);
+                var playerObjectMapped = _runner.TryGetPlayerObject(record.PlayerRef, out var currentPlayerObject)
+                    && currentPlayerObject != null;
+                var sameOldObject = playerObjectMapped && currentPlayerObject == record.NetworkObject;
+                var oldObjectAlive = record.NetworkObject != null && record.NetworkObject.IsValid;
+                var clean = !playerRefMapped
+                    && !entityMapped
+                    && !transformMapped
+                    && !sameOldObject
+                    && !oldObjectAlive;
+
+                if (!clean)
+                {
+                    dirtyCount++;
+                }
+
+                Debug.Log(
+                    $"C2C|DEPARTED_CHECK|ref={record.PlayerRef}|oldId={record.PlayerId}|playerRefMapped={playerRefMapped}|entityMapped={entityMapped}|transformMapped={transformMapped}|playerObjectMapped={playerObjectMapped}|sameOldObject={sameOldObject}|oldObjectAlive={oldObjectAlive}");
+
+                _hostPlayerRecords.Remove(departedPlayer);
+            }
+
+            if (dirtyCount == 0)
+            {
+                Debug.Log($"C2C|DEPARTED_CLEAN|count={_departedPlayers.Count}");
+            }
+            else
+            {
+                Debug.LogError($"C2C|DEPARTED_DIRTY|count={_departedPlayers.Count}|dirty={dirtyCount}");
+            }
+
+            _departedPlayers.Clear();
+        }
+
         private void RecordCurrentTopology()
         {
             _lastTopologySignature = CreateActiveTopologySignature(out _lastTopologyActiveCount);
@@ -563,6 +698,19 @@ namespace EchoProtocol.Networking.Diagnostics
             }
 
             return count;
+        }
+
+        private bool IsActivePlayer(PlayerRef playerRef)
+        {
+            foreach (var activePlayer in _runner.ActivePlayers)
+            {
+                if (activePlayer == playerRef)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private string CreateActiveTopologySignature(out int activeCount)
@@ -628,5 +776,32 @@ namespace EchoProtocol.Networking.Diagnostics
         public string SessionName { get; }
 
         public bool Autostart { get; }
+    }
+
+    internal readonly struct HostPlayerDiagnosticRecord
+    {
+        public HostPlayerDiagnosticRecord(
+            PlayerRef playerRef,
+            PlayerId playerId,
+            NetworkObject networkObject,
+            PlayerRuntimeIdentity identity,
+            Transform entityRoot)
+        {
+            PlayerRef = playerRef;
+            PlayerId = playerId;
+            NetworkObject = networkObject;
+            Identity = identity;
+            EntityRoot = entityRoot;
+        }
+
+        public PlayerRef PlayerRef { get; }
+
+        public PlayerId PlayerId { get; }
+
+        public NetworkObject NetworkObject { get; }
+
+        public PlayerRuntimeIdentity Identity { get; }
+
+        public Transform EntityRoot { get; }
     }
 }
