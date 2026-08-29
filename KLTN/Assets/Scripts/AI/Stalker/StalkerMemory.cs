@@ -131,12 +131,6 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            LastKnownPosition = observation.ObservedPosition;
-            HasLastKnownPosition = true;
-            LastSeenDirection = observation.ObservedDirection;
-            HasLastSeenDirection = true;
-            TargetLastSeenTime = observation.ObservedAt;
-            HasTargetLastSeenTime = true;
             LastDetectionTargetObservation = observation;
             HasLastDetectionTargetObservation = true;
             return true;

@@ -177,12 +177,36 @@ namespace EchoProtocol.AI.Stalker.Tests
             AssertState(fixture.Controller, "DETECT");
             Assert.That(GetFloatProperty(fixture.Controller, "DetectionMeter"), Is.EqualTo(0.5f).Within(FloatTolerance));
             AssertVectorNear(GetVector3Property(fixture.Controller, "LastKnownPosition"), oldPosition);
-            AssertVectorNear(GetVector3Property(GetMemory(fixture.Controller), "LastKnownPosition"), oldPosition);
+            Assert.That((bool)GetProperty(GetMemory(fixture.Controller), "HasLastKnownPosition"), Is.False);
             yield return null;
         }
 
         [UnityTest]
-        public IEnumerator STK_AUTH_DETECT_HiddenIneligibleInvalidatesAndReturnsPatrol()
+        public IEnumerator STK_AUTH_DETECT_IneligibleLockedTarget_ReselectsVisibleEligiblePlayer()
+        {
+            var fixture = CreateFixture();
+            SetDetectLock(fixture.Controller, 1, 1f);
+            SetPrivateField(fixture.Controller, "detectionFillRate", 100f);
+
+            Assert.That(Simulate(
+                fixture.Controller,
+                0.25f,
+                CreateCandidateList(CreateCandidate(2, new Vector3(0f, 1f, 2f), 2f, true)),
+                CreateStatusList(CreateStatus(1, false), CreateStatus(2, true))),
+                Is.True);
+
+            var memory = GetMemory(fixture.Controller);
+            AssertState(fixture.Controller, "DETECT");
+            AssertPlayerIdValue(GetProperty(memory, "DetectionTargetId"), 2);
+            AssertInvalidPlayerId(GetProperty(memory, "CurrentTargetId"));
+            Assert.That(GetFloatProperty(fixture.Controller, "DetectionMeter"), Is.EqualTo(0f).Within(FloatTolerance));
+            Assert.That((bool)GetProperty(memory, "HasLastDetectionTargetObservation"), Is.True);
+            AssertPlayerIdValue(GetProperty(GetProperty(memory, "LastDetectionTargetObservation"), "PlayerId"), 2);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator STK_AUTH_DETECT_IneligibleLockedTarget_NoReplacement_ReturnsPatrol()
         {
             var fixture = CreateFixture();
             SetDetectLock(fixture.Controller, 1, 1f);
@@ -334,7 +358,31 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
-        public IEnumerator STK_AUTH_CHASE_IneligibleCurrentTargetInvalidatesToPatrol()
+        public IEnumerator STK_AUTH_CHASE_IneligibleCurrentTarget_ReselectsVisibleEligiblePlayerToDetect()
+        {
+            var fixture = CreateFixture();
+            SetCurrentTarget(fixture.Controller, 1, new Vector3(0f, 1f, 4f));
+            SetPrivateField(fixture.Controller, "detectionFillRate", 100f);
+
+            Assert.That(Simulate(
+                fixture.Controller,
+                0.25f,
+                CreateCandidateList(CreateCandidate(2, new Vector3(0f, 1f, 2f), 2f, true)),
+                CreateStatusList(CreateStatus(1, false), CreateStatus(2, true))),
+                Is.True);
+
+            var memory = GetMemory(fixture.Controller);
+            AssertState(fixture.Controller, "DETECT");
+            AssertInvalidPlayerId(GetProperty(memory, "CurrentTargetId"));
+            AssertPlayerIdValue(GetProperty(memory, "DetectionTargetId"), 2);
+            Assert.That(GetFloatProperty(fixture.Controller, "DetectionMeter"), Is.EqualTo(0f).Within(FloatTolerance));
+            Assert.That((bool)GetProperty(memory, "HasLastDetectionTargetObservation"), Is.True);
+            AssertPlayerIdValue(GetProperty(GetProperty(memory, "LastDetectionTargetObservation"), "PlayerId"), 2);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator STK_AUTH_CHASE_IneligibleCurrentTarget_NoReplacement_ReturnsPatrol()
         {
             var fixture = CreateFixture();
             SetCurrentTarget(fixture.Controller, 1, new Vector3(0f, 1f, 4f));

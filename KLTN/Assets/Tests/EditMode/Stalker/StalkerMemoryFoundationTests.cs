@@ -65,7 +65,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
-        public void STK_MEM_DetectionTargetObservation_UpdatesKnowledgeWithoutCurrentTargetPromotion()
+        public void STK_MEM_DetectionTargetObservation_DoesNotCreateCurrentTargetKnowledge()
         {
             var memory = CreateMemory();
             var player = CreatePlayerId(1);
@@ -80,11 +80,12 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(accepted, Is.EqualTo(true));
             AssertPlayerIdValue(GetProperty(memory, "DetectionTargetId"), 1);
             Assert.That(IsValidPlayerId(GetProperty(memory, "CurrentTargetId")), Is.False);
-            Assert.That(GetVector3Property(memory, "LastKnownPosition"), Is.EqualTo(position));
-            Assert.That(GetVector3Property(memory, "LastSeenDirection"), Is.EqualTo(direction.normalized));
-            Assert.That(GetProperty(memory, "TargetLastSeenTime"), Is.EqualTo(observedAt));
             Assert.That(GetBoolProperty(memory, "HasLastDetectionTargetObservation"), Is.True);
             Assert.That(GetProperty(memory, "LastDetectionTargetObservation"), Is.EqualTo(observation));
+            Assert.That(GetBoolProperty(memory, "HasLastKnownPosition"), Is.False);
+            Assert.That(GetBoolProperty(memory, "HasLastSeenDirection"), Is.False);
+            Assert.That(GetBoolProperty(memory, "HasTargetLastSeenTime"), Is.False);
+            Assert.That(GetBoolProperty(memory, "HasLastCurrentTargetObservation"), Is.False);
         }
 
         [Test]
@@ -137,8 +138,10 @@ namespace EchoProtocol.AI.Stalker.Tests
             AssertObservedKnowledgeAbsent(memory);
             Assert.That(GetBoolProperty(memory, "HasLastDetectionTargetObservation"), Is.False);
             Assert.That(InvokeMethod(memory, "TryAcceptDetectionTargetObservation", new[] { ResolveType(VisionObservationTypeName) }, new[] { olderPlayerTwoObservation }), Is.EqualTo(true));
-            Assert.That(GetVector3Property(memory, "LastKnownPosition"), Is.EqualTo(new Vector3(2f, 1f, 2f)));
-            Assert.That(GetProperty(memory, "TargetLastSeenTime"), Is.EqualTo(CreateSimulationTime(10, 1d)));
+            Assert.That(GetBoolProperty(memory, "HasLastDetectionTargetObservation"), Is.True);
+            Assert.That(GetProperty(memory, "LastDetectionTargetObservation"), Is.EqualTo(olderPlayerTwoObservation));
+            Assert.That(GetBoolProperty(memory, "HasLastKnownPosition"), Is.False);
+            Assert.That(GetBoolProperty(memory, "HasTargetLastSeenTime"), Is.False);
         }
 
         [Test]
@@ -161,9 +164,10 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetFloatProperty(memory, "DetectionMeter"), Is.EqualTo(0f));
             Assert.That(GetBoolProperty(memory, "HasLastDetectionTargetObservation"), Is.True);
             Assert.That(GetProperty(memory, "LastDetectionTargetObservation"), Is.EqualTo(observation));
-            Assert.That(GetVector3Property(memory, "LastKnownPosition"), Is.EqualTo(position));
-            Assert.That(GetVector3Property(memory, "LastSeenDirection"), Is.EqualTo(direction.normalized));
-            Assert.That(GetProperty(memory, "TargetLastSeenTime"), Is.EqualTo(observedAt));
+            Assert.That(GetBoolProperty(memory, "HasLastKnownPosition"), Is.False);
+            Assert.That(GetBoolProperty(memory, "HasLastSeenDirection"), Is.False);
+            Assert.That(GetBoolProperty(memory, "HasTargetLastSeenTime"), Is.False);
+            Assert.That(GetBoolProperty(memory, "HasLastCurrentTargetObservation"), Is.False);
         }
 
         [Test]

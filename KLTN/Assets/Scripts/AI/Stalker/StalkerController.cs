@@ -173,7 +173,7 @@ namespace EchoProtocol.AI.Stalker
                     TickPatrol();
                     if (HasTypedTargetFrame)
                     {
-                        TryAcquireTypedDetectionTargetFromPatrol();
+                        TryAcquireTypedDetectionTargetFromVisibleFrame();
                     }
                     else
                     {
@@ -285,11 +285,11 @@ namespace EchoProtocol.AI.Stalker
             StopAgentPath();
         }
 
-        private void TryAcquireTypedDetectionTargetFromPatrol()
+        private bool TryAcquireTypedDetectionTargetFromVisibleFrame()
         {
             if (_currentVisibleTargetCandidates == null)
             {
-                return;
+                return false;
             }
 
             if (!StalkerTargetSelector.TrySelectNearestEligibleVisible(
@@ -297,15 +297,24 @@ namespace EchoProtocol.AI.Stalker
                     TargetSelectionTieEpsilon,
                     out var selectedObservation))
             {
-                return;
+                return false;
             }
 
             _memory.SetDetectionTarget(selectedObservation.PlayerId);
-            _memory.TryAcceptDetectionTargetObservation(selectedObservation);
+            if (!_memory.TryAcceptDetectionTargetObservation(selectedObservation))
+            {
+                ClearDetectionContext();
+                currentState = StalkerState.PATROL;
+                SetCurrentPatrolDestination();
+                return false;
+            }
+
             detectionTarget = null;
+            currentTarget = null;
             detectionMeter = 0f;
             currentState = StalkerState.DETECT;
             StopAgentPath();
+            return true;
         }
 
         private void TickDetect()
@@ -357,9 +366,21 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            if (!TryGetUniqueTargetStatus(detectionTargetId, out var status) || !status.Eligible)
+            if (!TryGetUniqueTargetStatus(detectionTargetId, out var status))
             {
                 InvalidateDetectionTarget();
+                return;
+            }
+
+            if (!status.Eligible)
+            {
+                ClearDetectionContext();
+                if (!TryAcquireTypedDetectionTargetFromVisibleFrame())
+                {
+                    currentState = StalkerState.PATROL;
+                    SetCurrentPatrolDestination();
+                }
+
                 return;
             }
 
@@ -378,7 +399,6 @@ namespace EchoProtocol.AI.Stalker
                     return;
                 }
 
-                lastKnownPosition = _memory.LastKnownPosition;
                 detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
                 _memory.SetDetectionMeter(detectionMeter);
@@ -507,9 +527,21 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            if (!TryGetUniqueTargetStatus(currentTargetId, out var status) || !status.Eligible)
+            if (!TryGetUniqueTargetStatus(currentTargetId, out var status))
             {
                 InvalidateCurrentTarget();
+                return;
+            }
+
+            if (!status.Eligible)
+            {
+                ClearTargetContext();
+                if (!TryAcquireTypedDetectionTargetFromVisibleFrame())
+                {
+                    currentState = StalkerState.PATROL;
+                    SetCurrentPatrolDestination();
+                }
+
                 return;
             }
 
