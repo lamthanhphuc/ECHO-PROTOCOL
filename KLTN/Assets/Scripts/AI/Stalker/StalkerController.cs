@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Stalker.Spatial;
 using UnityEngine;
 using UnityEngine.AI;
@@ -76,6 +78,11 @@ namespace EchoProtocol.AI.Stalker
         private float _chaseDestinationRefreshElapsed;
         private bool _navigationRecoveryAttemptUsed;
         private int _fixedPatrolFallbackFailureCount;
+        private bool _isSimulating;
+        private float _currentSimulationDeltaSeconds;
+        private double _currentSimulationSeconds;
+        private long _legacySimulationTick;
+        private IReadOnlyList<StalkerTargetCandidate> _currentVisibleTargetCandidates;
 
         public StalkerPatrolMode PatrolMode => patrolMode;
         public StalkerState CurrentState => currentState;
@@ -104,13 +111,55 @@ namespace EchoProtocol.AI.Stalker
         {
             InitializeNavigation();
 
-            if (currentState == StalkerState.PATROL)
+            if (currentState == StalkerState.PATROL && patrolMode != StalkerPatrolMode.DynamicSpatial)
             {
                 SetCurrentPatrolDestination();
             }
         }
 
         private void Update()
+        {
+            // Temporary migration facade for spike scenes until authoritative runtime drives Simulate.
+            var legacyStep = new AiSimulationStep(
+                new AiSimulationTime(_legacySimulationTick, Time.time),
+                Time.deltaTime);
+            _legacySimulationTick++;
+
+            Simulate(new StalkerSimulationInput(
+                legacyStep,
+                null));
+        }
+
+        public bool Simulate(StalkerSimulationInput input)
+        {
+            if (!input.Step.IsValid || _isSimulating)
+            {
+                return false;
+            }
+
+            _isSimulating = true;
+            _currentSimulationDeltaSeconds = input.Step.DeltaSeconds;
+            _currentSimulationSeconds = input.Step.Time.Seconds;
+            _currentVisibleTargetCandidates = input.VisibleTargetCandidates;
+
+            try
+            {
+                TickCurrentState();
+                _navigation?.TickProgress(CurrentSimulationDeltaSeconds);
+                TickNavigationRecovery();
+                TickNavigationFallback();
+                return true;
+            }
+            finally
+            {
+                _currentVisibleTargetCandidates = null;
+                _currentSimulationDeltaSeconds = 0f;
+                _currentSimulationSeconds = 0d;
+                _isSimulating = false;
+            }
+        }
+
+        private void TickCurrentState()
         {
             switch (currentState)
             {
@@ -134,10 +183,6 @@ namespace EchoProtocol.AI.Stalker
                     TickSearch();
                     break;
             }
-
-            _navigation?.TickProgress(Time.deltaTime);
-            TickNavigationRecovery();
-            TickNavigationFallback();
         }
 
         private void TickPatrol()
@@ -239,7 +284,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (TryGetVisibleDetectionTargetObservation(out var observedPosition))
             {
-                detectionMeter += GetDetectionFillRate() * Time.deltaTime;
+                detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
 
                 if (detectionMeter >= GetDetectionMeterFull())
@@ -250,7 +295,7 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            detectionMeter -= GetDetectionDecayRate() * Time.deltaTime;
+            detectionMeter -= GetDetectionDecayRate() * CurrentSimulationDeltaSeconds;
             detectionMeter = ClampDetectionMeter(detectionMeter);
 
             if (detectionMeter <= 0f)
@@ -350,7 +395,7 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            attackElapsedTime += Time.deltaTime;
+            attackElapsedTime += CurrentSimulationDeltaSeconds;
             if (attackElapsedTime < GetAttackWindup())
             {
                 return;
@@ -380,7 +425,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickRecover()
         {
-            recoverElapsedTime += Time.deltaTime;
+            recoverElapsedTime += CurrentSimulationDeltaSeconds;
             if (recoverElapsedTime < GetAttackRecovery())
             {
                 return;
@@ -443,7 +488,7 @@ namespace EchoProtocol.AI.Stalker
 
             SetSearchDestination();
 
-            searchElapsedTime += Time.deltaTime;
+            searchElapsedTime += CurrentSimulationDeltaSeconds;
             if (searchElapsedTime < GetSearchDuration())
             {
                 return;
@@ -482,7 +527,7 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            _chaseDestinationRefreshElapsed += Time.deltaTime;
+            _chaseDestinationRefreshElapsed += CurrentSimulationDeltaSeconds;
             if (!ShouldRefreshChaseDestination(observedPosition))
             {
                 return;
@@ -594,6 +639,10 @@ namespace EchoProtocol.AI.Stalker
         {
             return Mathf.Max(0f, attackRecovery);
         }
+
+        private float CurrentSimulationDeltaSeconds => _currentSimulationDeltaSeconds;
+
+        private float CurrentSimulationTimeSeconds => (float)_currentSimulationSeconds;
 
         private void StopAgentPath()
         {
@@ -911,13 +960,13 @@ namespace EchoProtocol.AI.Stalker
                 _blackboard.CurrentSpatialNodeId = currentNodeId;
             }
 
-            _spatialPatrolMemory.MarkVisited(currentNodeId, Time.time);
+            _spatialPatrolMemory.MarkVisited(currentNodeId, CurrentSimulationTimeSeconds);
 
             plannerRunCount++;
             if (!_spatialPatrolPlanner.TrySelectDestination(
                 currentNodeId,
                 _blackboard.PreviousSpatialNodeId,
-                Time.time,
+                CurrentSimulationTimeSeconds,
                 out var plan))
             {
                 ClearDynamicPatrolDestination();
@@ -949,7 +998,7 @@ namespace EchoProtocol.AI.Stalker
             _blackboard.PreviousSpatialNodeId = _blackboard.CurrentSpatialNodeId;
             _blackboard.CurrentSpatialNodeId = destinationNodeId;
             _blackboard.DestinationSpatialNodeId = -1;
-            _spatialPatrolMemory?.MarkVisited(destinationNodeId, Time.time);
+            _spatialPatrolMemory?.MarkVisited(destinationNodeId, CurrentSimulationTimeSeconds);
             SyncDynamicPatrolDebugFields();
         }
 
