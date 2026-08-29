@@ -19,6 +19,7 @@ namespace EchoProtocol.Networking.Diagnostics
         [SerializeField] private FusionC2CHarnessMode mode = FusionC2CHarnessMode.Host;
         [SerializeField] private string sessionName = DefaultSessionName;
         [SerializeField] private bool autostart = true;
+        [SerializeField] private float initialSnapshotTimeoutSeconds = 5f;
 
         private NetworkRunner _runner;
         private Task _startTask;
@@ -99,6 +100,7 @@ namespace EchoProtocol.Networking.Diagnostics
                 if (result.Ok)
                 {
                     Debug.Log($"C2C|START_OK|mode={_launchConfiguration.Mode}|session={_launchConfiguration.SessionName}");
+                    await WaitForInitialSnapshotReadinessAsync();
                     CaptureProbeSnapshot();
                 }
                 else
@@ -214,6 +216,137 @@ namespace EchoProtocol.Networking.Diagnostics
             return harnessMode == FusionC2CHarnessMode.Client
                 ? GameMode.Client
                 : GameMode.Host;
+        }
+
+        private async Task WaitForInitialSnapshotReadinessAsync()
+        {
+            var role = _launchConfiguration.Mode.ToString();
+            var timeoutSeconds = Mathf.Max(0f, initialSnapshotTimeoutSeconds);
+            var deadline = Time.realtimeSinceStartup + timeoutSeconds;
+
+            Debug.Log($"C2C|INITIAL_WAIT|role={role}|timeout={timeoutSeconds}");
+
+            while (Time.realtimeSinceStartup <= deadline)
+            {
+                if (IsInitialSnapshotReady(out var reason))
+                {
+                    Debug.Log(CreateInitialReadyLog(role, reason));
+                    return;
+                }
+
+                await Task.Yield();
+            }
+
+            Debug.LogWarning(CreateInitialTimeoutLog(role));
+        }
+
+        private bool IsInitialSnapshotReady(out string reason)
+        {
+            if (_runner == null)
+            {
+                reason = "MissingRunner";
+                return false;
+            }
+
+            if (!_runner.IsRunning)
+            {
+                reason = "RunnerNotRunning";
+                return false;
+            }
+
+            var localPlayer = _runner.LocalPlayer;
+            if (!localPlayer.IsRealPlayer)
+            {
+                reason = "LocalPlayerNotReal";
+                return false;
+            }
+
+            if (!_runner.TryGetPlayerObject(localPlayer, out var playerObject) || playerObject == null)
+            {
+                reason = "MissingLocalPlayerObject";
+                return false;
+            }
+
+            if (_launchConfiguration.Mode == FusionC2CHarnessMode.Client)
+            {
+                if (!playerObject.HasInputAuthority)
+                {
+                    reason = "MissingInputAuthority";
+                    return false;
+                }
+
+                reason = "ClientLocalPlayerObjectReady";
+                return true;
+            }
+
+            var lifecycle = _runner.GetComponent<FusionPlayerLifecycle>();
+            if (lifecycle == null)
+            {
+                reason = "MissingFusionPlayerLifecycle";
+                return false;
+            }
+
+            if (!lifecycle.IdentityRegistry.TryGetPlayerId(localPlayer, out var playerId) || !playerId.IsValid)
+            {
+                reason = "MissingLogicalPlayerId";
+                return false;
+            }
+
+            if (!lifecycle.EntityRegistry.TryGetEntity(playerId, out var entity) || entity == null)
+            {
+                reason = "MissingRuntimeEntity";
+                return false;
+            }
+
+            reason = $"HostLifecycleReady|playerId={playerId}";
+            return true;
+        }
+
+        private string CreateInitialReadyLog(string role, string reason)
+        {
+            return $"C2C|INITIAL_READY|role={role}|reason={reason}|{CreateInitialStateSummary()}";
+        }
+
+        private string CreateInitialTimeoutLog(string role)
+        {
+            return $"C2C|INITIAL_TIMEOUT|role={role}|{CreateInitialStateSummary()}";
+        }
+
+        private string CreateInitialStateSummary()
+        {
+            var activeCount = 0;
+            var localPlayer = PlayerRef.None;
+            var hasLocalObject = false;
+            var hasInputAuthority = false;
+            var identityRegistryCount = 0;
+            var entityRegistryCount = 0;
+
+            if (_runner != null)
+            {
+                localPlayer = _runner.LocalPlayer;
+
+                foreach (var _ in _runner.ActivePlayers)
+                {
+                    activeCount++;
+                }
+
+                if (localPlayer.IsRealPlayer
+                    && _runner.TryGetPlayerObject(localPlayer, out var playerObject)
+                    && playerObject != null)
+                {
+                    hasLocalObject = true;
+                    hasInputAuthority = playerObject.HasInputAuthority;
+                }
+
+                var lifecycle = _runner.GetComponent<FusionPlayerLifecycle>();
+                if (lifecycle != null)
+                {
+                    identityRegistryCount = lifecycle.IdentityRegistry.Count;
+                    entityRegistryCount = lifecycle.EntityRegistry.Count;
+                }
+            }
+
+            return $"running={(_runner != null && _runner.IsRunning)}|local={localPlayer}|active={activeCount}|localObject={hasLocalObject}|inputAuth={hasInputAuthority}|identityRegistry={identityRegistryCount}|entityRegistry={entityRegistryCount}";
         }
 
         private static string Sanitize(string value)
