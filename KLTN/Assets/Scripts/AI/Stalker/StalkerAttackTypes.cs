@@ -109,7 +109,6 @@ namespace EchoProtocol.AI.Stalker
             return expectedPlayerId.IsValid
                 && PlayerId == expectedPlayerId
                 && GameplayValid
-                && HasConsequenceReceiver
                 && IsFinite(AuthoritativePosition);
         }
 

@@ -77,11 +77,34 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
-        public void STK_ATTACK_ResolveHitMoment_MissesForOutOfRangeInvalidOrMissingTarget()
+        public void STK_ATTACK_ResolveHitMoment_HitsWithoutConsequenceSink_WhenTargetIsValidCorrectAndInRange()
+        {
+            var controller = CreateController();
+            var step = CreateStep(11L, 1.1d, 0.25f);
+            var episode = BeginAttack(controller, true, CreatePlayerId(1), step);
+            var snapshot = CreateTargetSnapshot(1, true, Vector3.forward, false);
+
+            var result = ResolveHitMoment(
+                controller,
+                true,
+                GetProperty(episode, "EpisodeId"),
+                Vector3.zero,
+                2f,
+                snapshot,
+                null,
+                step);
+
+            Assert.That(GetEnumName(result, AttackResolutionResultTypeName), Is.EqualTo("ResolvedHit"));
+            Assert.That(GetEnumPropertyName(controller, "Outcome", AttackOutcomeTypeName), Is.EqualTo("Hit"));
+            Assert.That(GetIntProperty(controller, "ResolutionCount"), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void STK_ATTACK_ResolveHitMoment_MissesForOutOfRangeInvalidOrWrongTarget()
         {
             AssertMiss(CreateTargetSnapshot(1, true, new Vector3(0f, 0f, 5f), true));
             AssertMiss(CreateTargetSnapshot(1, false, new Vector3(0f, 0f, 1f), true));
-            AssertMiss(CreateTargetSnapshot(1, true, new Vector3(0f, 0f, 1f), false));
+            AssertMiss(CreateTargetSnapshot(2, true, new Vector3(0f, 0f, 1f), true));
         }
 
         [Test]

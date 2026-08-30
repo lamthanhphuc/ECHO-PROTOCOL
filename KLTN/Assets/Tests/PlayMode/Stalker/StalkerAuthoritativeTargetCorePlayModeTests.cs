@@ -467,6 +467,50 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
+        public IEnumerator STK_AUTH_SEARCH_DifferentVisibleTargetSelectsNearestEligible()
+        {
+            var fixture = CreateFixture();
+            SetCurrentTarget(fixture.Controller, 9, new Vector3(0f, 1f, 4f));
+            SetState(fixture.Controller, "SEARCH");
+
+            Assert.That(Simulate(
+                fixture.Controller,
+                0.1f,
+                CreateCandidateList(
+                    CreateCandidate(1, new Vector3(0f, 1f, 8f), 8f, true),
+                    CreateCandidate(2, new Vector3(0f, 1f, 3f), 3f, true)),
+                CreateStatusList(CreateStatus(9, true), CreateStatus(1, true), CreateStatus(2, true))),
+                Is.True);
+
+            AssertState(fixture.Controller, "DETECT");
+            AssertPlayerIdValue(GetProperty(GetMemory(fixture.Controller), "DetectionTargetId"), 2);
+            Assert.That(GetFloatProperty(fixture.Controller, "DetectionMeter"), Is.EqualTo(0f).Within(FloatTolerance));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator STK_AUTH_SEARCH_DifferentVisibleTargetEqualDistanceUsesStablePlayerId()
+        {
+            var fixture = CreateFixture();
+            SetCurrentTarget(fixture.Controller, 9, new Vector3(0f, 1f, 4f));
+            SetState(fixture.Controller, "SEARCH");
+
+            Assert.That(Simulate(
+                fixture.Controller,
+                0.1f,
+                CreateCandidateList(
+                    CreateCandidate(2, new Vector3(1f, 1f, 3f), 3f, true),
+                    CreateCandidate(1, new Vector3(-1f, 1f, 3f), 3f, true)),
+                CreateStatusList(CreateStatus(9, true), CreateStatus(1, true), CreateStatus(2, true))),
+                Is.True);
+
+            AssertState(fixture.Controller, "DETECT");
+            AssertPlayerIdValue(GetProperty(GetMemory(fixture.Controller), "DetectionTargetId"), 1);
+            Assert.That(GetFloatProperty(fixture.Controller, "DetectionMeter"), Is.EqualTo(0f).Within(FloatTolerance));
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator STK_AUTH_SEARCH_InvalidTargetStatus_ReturnsPatrol()
         {
             var fixture = CreateFixture();

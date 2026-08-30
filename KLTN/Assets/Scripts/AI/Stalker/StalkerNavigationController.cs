@@ -46,6 +46,30 @@ namespace EchoProtocol.AI.Stalker
 
         public NavigationRecoveryReason CurrentRecoveryReason => _currentRecoveryReason;
 
+        public bool TryGetActiveDestination(out Vector3 destination)
+        {
+            if (_activeDestination.HasValue)
+            {
+                destination = _activeDestination.Value;
+                return true;
+            }
+
+            destination = default;
+            return false;
+        }
+
+        public bool TryGetCurrentPathCorners(out Vector3[] corners)
+        {
+            if (_agent != null && _agent.enabled && _agent.hasPath)
+            {
+                corners = _agent.path.corners;
+                return corners != null && corners.Length >= 2;
+            }
+
+            corners = null;
+            return false;
+        }
+
         public void RecordRecoveryReason(NavigationRecoveryReason reason)
         {
             _currentRecoveryReason = reason;
@@ -79,6 +103,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (!_agent.CalculatePath(destination, _evaluationPath))
             {
+                _currentFailureReason = NavigationFailureReason.PathInvalid;
                 return new NavigationEvaluationResult(NavigationEvaluationStatus.Invalid, destination);
             }
 
@@ -169,9 +194,10 @@ namespace EchoProtocol.AI.Stalker
             _pathPendingElapsedSeconds = 0f;
             _pathPendingTimedOut = false;
             _currentFailureReason = NavigationFailureReason.None;
-            _currentRecoveryReason = intent == NavigationRequestIntent.RecoveryRepath
-                ? NavigationRecoveryReason.RetryLogicalObjective
-                : NavigationRecoveryReason.None;
+            if (intent != NavigationRequestIntent.RecoveryRepath)
+            {
+                _currentRecoveryReason = NavigationRecoveryReason.None;
+            }
             if (intent == NavigationRequestIntent.NewGoal
                 || intent == NavigationRequestIntent.RecoveryRepath)
             {

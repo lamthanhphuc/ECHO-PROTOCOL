@@ -67,6 +67,23 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetProperty(planner, "LastRejectReason").ToString(), Is.EqualTo("PathPartial"));
         }
 
+        [Test]
+        public void STK_P4_SearchPlanner_RejectsRegionGraphBlockedCandidateBeforeStaleNavMeshPath()
+        {
+            var graph = CreateGraph(2f);
+            var regionGraph = CreateRegionGraph(GetProperty(graph, "CompatibilityIdentity"));
+            Invoke(regionGraph, "TrySetEdgeOpen", new[] { typeof(RegionId), typeof(RegionId), typeof(bool) }, new RegionId(1), new RegionId(2), false);
+            var coverage = Activator.CreateInstance(CoverageMemoryType, GetProperty(graph, "NodeCount"));
+            var planner = Activator.CreateInstance(SearchPlannerType, graph, regionGraph, coverage, CreateSearchPathEvaluator("Complete"));
+            var context = CreateSearchContext(1, Vector3.zero, Vector3.right, new RegionId(1));
+            var args = new object[] { context, 5f, 0, -1, null };
+
+            var selected = (bool)Invoke(planner, "TrySelectCandidate", TrySelectCandidateSignature, args);
+
+            Assert.That(selected, Is.False);
+            Assert.That(GetProperty(planner, "LastRejectReason").ToString(), Is.EqualTo("DoorBlocked"));
+        }
+
         private static object CreateSearchPlanner(object graph, string statusName)
         {
             var coverage = Activator.CreateInstance(CoverageMemoryType, GetProperty(graph, "NodeCount"));
@@ -105,15 +122,51 @@ namespace EchoProtocol.AI.Stalker.Tests
                 Node(1, new Vector3(candidateX, 0f, 0f), 0)));
         }
 
+        private static object CreateRegionGraph(object identity)
+        {
+            return Activator.CreateInstance(
+                RegionGraphType,
+                RegionNodeArray(
+                    RegionNode(new RegionId(1), Edge(new RegionId(2), DoorId.Invalid)),
+                    RegionNode(new RegionId(2), Edge(new RegionId(1), DoorId.Invalid))),
+                new[] { new RegionId(1), new RegionId(2) },
+                identity,
+                1);
+        }
+
         private static object Node(int id, Vector3 position, params int[] neighbors)
         {
             return Activator.CreateInstance(NodeType, id, position, 0, id, id * 3, id * 3 + 1, id * 3 + 2, new List<int>(neighbors));
+        }
+
+        private static object RegionNode(RegionId regionId, params object[] edges)
+        {
+            return Activator.CreateInstance(RegionNodeType, regionId, RegionEdgeArray(edges));
+        }
+
+        private static object Edge(RegionId toRegionId, DoorId doorId)
+        {
+            return Activator.CreateInstance(RegionEdgeType, toRegionId, doorId);
         }
 
         private static Array NodeArray(params object[] values)
         {
             var array = Array.CreateInstance(NodeType, values.Length);
             for (var i = 0; i < values.Length; i++)
+            {
+                array.SetValue(values[i], i);
+            }
+
+            return array;
+        }
+
+        private static Array RegionNodeArray(params object[] values) => ToArray(RegionNodeType, values);
+        private static Array RegionEdgeArray(params object[] values) => ToArray(RegionEdgeType, values);
+
+        private static Array ToArray(Type elementType, object[] values)
+        {
+            var array = Array.CreateInstance(elementType, values?.Length ?? 0);
+            for (var i = 0; i < array.Length; i++)
             {
                 array.SetValue(values[i], i);
             }
@@ -152,6 +205,9 @@ namespace EchoProtocol.AI.Stalker.Tests
 
         private static Type GraphType => ResolveType("EchoProtocol.AI.Stalker.Spatial.NavMeshSpatialGraph");
         private static Type NodeType => ResolveType("EchoProtocol.AI.Stalker.Spatial.SpatialNode");
+        private static Type RegionGraphType => ResolveType("EchoProtocol.AI.Stalker.Spatial.RegionGraph");
+        private static Type RegionNodeType => ResolveType("EchoProtocol.AI.Stalker.Spatial.RegionNode");
+        private static Type RegionEdgeType => ResolveType("EchoProtocol.AI.Stalker.Spatial.RegionEdge");
         private static Type CoverageMemoryType => ResolveType("EchoProtocol.AI.Stalker.Spatial.CoverageMemory");
         private static Type SearchContextType => ResolveType("EchoProtocol.AI.Stalker.StalkerSearchContext");
         private static Type SearchEpisodeIdType => ResolveType("EchoProtocol.AI.Stalker.SearchEpisodeId");

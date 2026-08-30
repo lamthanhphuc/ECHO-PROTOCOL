@@ -74,6 +74,8 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private int searchCandidateNodeId = -1;
 
         private const float TargetSelectionTieEpsilon = 0f;
+        private const float TopologyPathSegmentSampleSpacing = 1f;
+        private const int MaxTopologyPathSegmentSamples = 8;
 
         private readonly StalkerMemory _memory = new StalkerMemory();
         private readonly StalkerAttackController _attackController = new StalkerAttackController();
@@ -105,6 +107,7 @@ namespace EchoProtocol.AI.Stalker
         private readonly HashSet<int> _rejectedCanonicalLocalNodeIds = new HashSet<int>();
         private readonly HashSet<RegionId> _rejectedCanonicalGlobalRegionIds = new HashSet<RegionId>();
         private int _fixedPatrolFallbackFailureCount;
+        private bool _searchCandidatePlanningExhausted;
         private bool _isSimulating;
         private float _currentSimulationDeltaSeconds;
         private double _currentSimulationSeconds;
@@ -154,13 +157,25 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            var changed = _regionGraph.TrySetEdgeOpen(new RegionId(fromRegionId), new RegionId(toRegionId), open);
+            var from = new RegionId(fromRegionId);
+            var to = new RegionId(toRegionId);
+            var affectsCurrentRoute = !open && IsTopologyEdgeRelevantToCurrentNavigation(from, to);
+            var changed = _regionGraph.TrySetEdgeOpen(from, to, open);
             if (!changed || open)
             {
+                if (changed && open && currentState == StalkerState.SEARCH)
+                {
+                    _searchCandidatePlanningExhausted = false;
+                }
+
                 return changed;
             }
 
-            HandleTopologyBlockedByDoor();
+            if (affectsCurrentRoute)
+            {
+                HandleTopologyBlockedByDoor();
+            }
+
             return true;
         }
 
@@ -378,7 +393,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (!_navigation.HasActiveDestination)
             {
-                if (!SetCanonicalPatrolDestination())
+                if (!SetCanonicalPatrolDestinationWithGlobalAlternates())
                 {
                     ActivateCanonicalPatrolFallback();
                 }
@@ -392,7 +407,7 @@ namespace EchoProtocol.AI.Stalker
             }
 
             MarkCanonicalDestinationReached();
-            if (!SetCanonicalPatrolDestination())
+            if (!SetCanonicalPatrolDestinationWithGlobalAlternates())
             {
                 ActivateCanonicalPatrolFallback();
             }
@@ -920,7 +935,7 @@ namespace EchoProtocol.AI.Stalker
             EnsureSearchContext();
             if (HasTypedTargetFrame)
             {
-                if (!TrySetSearchDestination(_memory.LastKnownPosition))
+                if (!TrySetSearchOriginDestination(_memory.LastKnownPosition))
                 {
                     TryPlanNextSearchCandidate();
                 }
@@ -928,7 +943,7 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            if (!TrySetSearchDestination(lastKnownPosition))
+            if (!TrySetSearchOriginDestination(lastKnownPosition))
             {
                 TryPlanNextSearchCandidate();
             }
@@ -969,7 +984,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (_navigation == null || !_navigation.HasActiveDestination)
             {
-                TryPlanNextSearchCandidate();
+                TryPlanNextSearchCandidateIfNotHolding();
             }
 
             searchElapsedTime += CurrentSimulationDeltaSeconds;
@@ -1047,7 +1062,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (_navigation == null || !_navigation.HasActiveDestination)
             {
-                TryPlanNextSearchCandidate();
+                TryPlanNextSearchCandidateIfNotHolding();
             }
 
             searchElapsedTime += CurrentSimulationDeltaSeconds;
@@ -1115,7 +1130,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void SetSearchDestination()
         {
-            TrySetSearchDestination(lastKnownPosition);
+            TrySetSearchOriginDestination(lastKnownPosition);
         }
 
         private void EnsureSearchContext()
@@ -1146,6 +1161,7 @@ namespace EchoProtocol.AI.Stalker
                 startTime,
                 originRegionId);
             searchEpisodeId = _searchContext.EpisodeId.Value;
+            _searchCandidatePlanningExhausted = false;
         }
 
         private void MarkSearchCandidateReached()
@@ -1160,7 +1176,13 @@ namespace EchoProtocol.AI.Stalker
             _coverageMemory?.RecordPhysicalNodeArrival(searchCandidateNodeId, CurrentSimulationTimeSeconds);
             searchCandidateNodeId = -1;
             _blackboard.DestinationSpatialNodeId = -1;
+            _searchCandidatePlanningExhausted = false;
             _navigation?.Stop();
+        }
+
+        private bool TryPlanNextSearchCandidateIfNotHolding()
+        {
+            return !_searchCandidatePlanningExhausted && TryPlanNextSearchCandidate();
         }
 
         private bool TryPlanNextSearchCandidate()
@@ -1179,34 +1201,52 @@ namespace EchoProtocol.AI.Stalker
             if (_searchPlanner == null || !TryResolveNearestSpatialNode(transform.position, out var currentNodeId))
             {
                 _navigation?.Stop();
+                _searchCandidatePlanningExhausted = true;
                 return false;
             }
 
-            if (!_searchPlanner.TrySelectCandidate(
-                    _searchContext,
-                    searchRadius,
-                    currentNodeId,
-                    _blackboard.PreviousSpatialNodeId,
-                    out var selection))
+            var maxAttempts = _spatialPatrolGraph?.Nodes?.Count ?? 0;
+            for (var attempt = 0; attempt < maxAttempts; attempt++)
             {
-                _navigation?.Stop();
-                return false;
+                if (!_searchPlanner.TrySelectCandidate(
+                        _searchContext,
+                        searchRadius,
+                        currentNodeId,
+                        _blackboard.PreviousSpatialNodeId,
+                        out var selection))
+                {
+                    _navigation?.Stop();
+                    _searchCandidatePlanningExhausted = true;
+                    return false;
+                }
+
+                var destinationStatus = TryRequestSearchDestination(selection.DestinationNode.Position);
+                if (destinationStatus == NavigationEvaluationStatus.Complete)
+                {
+                    _searchContext.RecordCandidateAttempt(selection.DestinationNode.Id);
+                    searchCandidateNodeId = selection.DestinationNode.Id;
+                    _blackboard.DestinationSpatialNodeId = selection.DestinationNode.Id;
+                    _searchCandidatePlanningExhausted = false;
+                    SetNavigationObjective(new StalkerNavigationObjectiveKey(
+                        StalkerNavigationObjectiveKind.SearchCandidate,
+                        selection.DestinationNode.Id,
+                        -1,
+                        _memory.CurrentTargetId.IsValid ? _memory.CurrentTargetId.Value : -1));
+                    return true;
+                }
+
+                if (!IsSearchCandidateSpecificDestinationFailure(destinationStatus))
+                {
+                    _navigation?.Stop();
+                    return false;
+                }
+
+                _searchContext.RecordCandidateAttempt(selection.DestinationNode.Id);
             }
 
-            if (!TrySetSearchDestination(selection.DestinationNode.Position))
-            {
-                return false;
-            }
-
-            _searchContext.RecordCandidateAttempt(selection.DestinationNode.Id);
-            searchCandidateNodeId = selection.DestinationNode.Id;
-            _blackboard.DestinationSpatialNodeId = selection.DestinationNode.Id;
-            SetNavigationObjective(new StalkerNavigationObjectiveKey(
-                StalkerNavigationObjectiveKind.SearchCandidate,
-                selection.DestinationNode.Id,
-                -1,
-                _memory.CurrentTargetId.IsValid ? _memory.CurrentTargetId.Value : -1));
-            return true;
+            _navigation?.Stop();
+            _searchCandidatePlanningExhausted = true;
+            return false;
         }
 
         private bool TryAcquireDifferentVisibleTargetDuringSearch(PlayerId currentTargetId)
@@ -1227,7 +1267,7 @@ namespace EchoProtocol.AI.Stalker
                 }
 
                 if (!hasCandidate
-                    || candidate.Observation.PlayerId.CompareTo(bestCandidate.Observation.PlayerId) < 0)
+                    || IsHigherPrioritySearchReplacement(candidate.Observation, bestCandidate.Observation))
                 {
                     bestCandidate = candidate;
                     hasCandidate = true;
@@ -1255,21 +1295,87 @@ namespace EchoProtocol.AI.Stalker
             return true;
         }
 
+        private static bool IsHigherPrioritySearchReplacement(
+            VisionObservation candidate,
+            VisionObservation currentBest)
+        {
+            if (candidate.Distance < currentBest.Distance - TargetSelectionTieEpsilon)
+            {
+                return true;
+            }
+
+            if (candidate.Distance > currentBest.Distance + TargetSelectionTieEpsilon)
+            {
+                return false;
+            }
+
+            return DeterministicTieBreak.ComparePrimaryThenStableKey(
+                0,
+                candidate.PlayerId,
+                currentBest.PlayerId) < 0;
+        }
+
         private bool TrySetSearchDestination(Vector3 rememberedPosition)
+        {
+            return TryRequestSearchDestination(rememberedPosition) == NavigationEvaluationStatus.Complete;
+        }
+
+        private NavigationEvaluationStatus TryRequestSearchDestination(Vector3 rememberedPosition)
         {
             if (!CanUseNavigation())
             {
                 _navigation?.ClearDestinationCache();
-                return false;
+                return _navigation == null
+                    ? NavigationEvaluationStatus.AgentUnavailable
+                    : NavigationEvaluationStatus.AgentNotOnNavMesh;
             }
 
             var evaluation = _navigation.EvaluateDestination(rememberedPosition);
             if (!evaluation.IsComplete)
             {
+                return evaluation.Status;
+            }
+
+            return ToSearchDestinationRequestStatus(_navigation.RequestDestination(
+                rememberedPosition,
+                NavigationRequestIntent.NewGoal));
+        }
+
+        private static NavigationEvaluationStatus ToSearchDestinationRequestStatus(NavigationPlanResult result)
+        {
+            switch (result.Status)
+            {
+                case NavigationPlanStatus.Accepted:
+                case NavigationPlanStatus.AlreadyActive:
+                    return NavigationEvaluationStatus.Complete;
+                case NavigationPlanStatus.AgentUnavailable:
+                    return NavigationEvaluationStatus.AgentUnavailable;
+                case NavigationPlanStatus.AgentNotOnNavMesh:
+                    return NavigationEvaluationStatus.AgentNotOnNavMesh;
+                case NavigationPlanStatus.DestinationRequestFailed:
+                    return NavigationEvaluationStatus.DestinationInvalid;
+                default:
+                    return NavigationEvaluationStatus.Invalid;
+            }
+        }
+
+        private bool TrySetSearchOriginDestination(Vector3 rememberedPosition)
+        {
+            if (!TrySetSearchDestination(rememberedPosition))
+            {
                 return false;
             }
 
-            return _navigation.TrySetDestination(rememberedPosition);
+            searchCandidateNodeId = -1;
+            _blackboard.DestinationSpatialNodeId = -1;
+            SetNavigationObjective(new StalkerNavigationObjectiveKey(
+                StalkerNavigationObjectiveKind.SearchOriginLkp,
+                -1,
+                _searchContext != null && _searchContext.SearchOriginRegionId.IsValid
+                    ? _searchContext.SearchOriginRegionId.Value
+                    : -1,
+                _memory.CurrentTargetId.IsValid ? _memory.CurrentTargetId.Value : -1));
+            return true;
         }
 
         private bool IsWithinAttackRange(Vector3 targetPosition)
@@ -1327,6 +1433,7 @@ namespace EchoProtocol.AI.Stalker
             _searchContext = null;
             searchEpisodeId = 0;
             searchCandidateNodeId = -1;
+            _searchCandidatePlanningExhausted = false;
         }
 
         private float ClampDetectionMeter(float value)
@@ -1462,9 +1569,15 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            _navigationRecoveryAttemptUsed = true;
             _navigation.RecordRecoveryReason(recoveryReason);
-            return _navigation.RequestDestination(destination, NavigationRequestIntent.RecoveryRepath).IsAccepted;
+            _navigationRecoveryAttemptUsed = true;
+            var result = _navigation.RequestDestination(destination, NavigationRequestIntent.RecoveryRepath);
+            if (result.IsAccepted)
+            {
+                _navigation.RecordRecoveryReason(recoveryReason);
+            }
+
+            return result.IsAccepted;
         }
 
         private void HandlePatrolNavigationFailure(NavigationFailureReason failureReason)
@@ -1483,7 +1596,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (IsNavigationExecutionRetryableFailure(failureReason)
                 && HasRecoveryBudgetForCurrentObjective()
-                && TryIssueNavigationRecoveryRepath(NavigationRecoveryReason.RetryLogicalObjective))
+                && TryIssueNavigationRecoveryRepath(ToSameObjectiveRecoveryReason(failureReason)))
             {
                 return;
             }
@@ -1498,7 +1611,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (IsNavigationExecutionRetryableFailure(failureReason)
                 && HasRecoveryBudgetForCurrentObjective()
-                && TryIssueNavigationRecoveryRepath(NavigationRecoveryReason.RetryLogicalObjective))
+                && TryIssueNavigationRecoveryRepath(ToSameObjectiveRecoveryReason(failureReason)))
             {
                 return;
             }
@@ -1529,7 +1642,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (IsNavigationExecutionRetryableFailure(failureReason)
                 && HasRecoveryBudgetForCurrentObjective()
-                && TryIssueNavigationRecoveryRepath(NavigationRecoveryReason.RetryLogicalObjective))
+                && TryIssueNavigationRecoveryRepath(ToSameObjectiveRecoveryReason(failureReason)))
             {
                 return;
             }
@@ -1542,24 +1655,13 @@ namespace EchoProtocol.AI.Stalker
             _navigation?.Stop();
             _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
             ClearDynamicPatrolDestination();
-            if (SetCanonicalPatrolDestination())
+            if (TrySetCanonicalPatrolDestinationWithGlobalAlternates(
+                    ToGlobalInvalidationReason(failureReason),
+                    out var recoveryReason))
             {
-                _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
-                return;
-            }
-
-            var objective = _globalPatrolPlanner?.CurrentObjective ?? GlobalPatrolObjective.Invalid;
-            if (objective.TargetRegionId.IsValid)
-            {
-                _rejectedCanonicalGlobalRegionIds.Add(objective.TargetRegionId);
-                _globalPatrolPlanner?.Invalidate(ToGlobalInvalidationReason(failureReason));
-            }
-
-            _rejectedCanonicalLocalNodeIds.Clear();
-            _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateGlobalObjective);
-            if (SetCanonicalPatrolDestination())
-            {
-                _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateGlobalObjective);
+                _navigation?.RecordRecoveryReason(recoveryReason == NavigationRecoveryReason.None
+                    ? NavigationRecoveryReason.AlternateLocalCandidate
+                    : recoveryReason);
                 return;
             }
 
@@ -1570,14 +1672,9 @@ namespace EchoProtocol.AI.Stalker
         {
             if (IsSearchRetryableFailure(failureReason)
                 && HasRecoveryBudgetForCurrentObjective()
-                && TryIssueNavigationRecoveryRepath(NavigationRecoveryReason.RetryLogicalObjective))
+                && TryIssueNavigationRecoveryRepath(ToSameObjectiveRecoveryReason(failureReason)))
             {
                 return;
-            }
-
-            if (searchCandidateNodeId >= 0 && _searchContext != null)
-            {
-                _searchContext.RecordCandidateAttempt(searchCandidateNodeId);
             }
 
             searchCandidateNodeId = -1;
@@ -1586,6 +1683,7 @@ namespace EchoProtocol.AI.Stalker
             _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
             _navigationObjectiveKey = StalkerNavigationObjectiveKey.None;
             ResetNavigationRecoveryBudget();
+            _searchCandidatePlanningExhausted = false;
             if (!TryPlanNextSearchCandidate())
             {
                 _navigation?.Stop();
@@ -1598,10 +1696,10 @@ namespace EchoProtocol.AI.Stalker
 
         private void HandleChaseNavigationFailure(NavigationFailureReason failureReason)
         {
-            if (IsNavigationExecutionRetryableFailure(failureReason)
+            if (IsChaseSameObjectiveRetryableFailure(failureReason)
                 && HasRecoveryBudgetForCurrentObjective())
             {
-                TryIssueNavigationRecoveryRepath(NavigationRecoveryReason.RetryLogicalObjective);
+                TryIssueNavigationRecoveryRepath(ToSameObjectiveRecoveryReason(failureReason));
             }
         }
 
@@ -1622,9 +1720,199 @@ namespace EchoProtocol.AI.Stalker
             }
         }
 
+        private bool IsTopologyEdgeRelevantToCurrentNavigation(RegionId from, RegionId to)
+        {
+            if (_regionGraph == null || !IsLocomotionState())
+            {
+                return false;
+            }
+
+            if (!TryGetCurrentNavigationRegions(out var currentRegion, out var destinationRegion)
+                || currentRegion == destinationRegion)
+            {
+                return false;
+            }
+
+            if (TryActiveNavigationPathUsesTopologyEdge(from, to))
+            {
+                return true;
+            }
+
+            var routeCursor = currentRegion;
+            var maxHops = _regionGraph.Regions?.Count ?? 0;
+            for (var hop = 0; hop < maxHops; hop++)
+            {
+                if (!_regionGraph.TryGetNextRegionOnRoute(routeCursor, destinationRegion, out var nextRegion)
+                    || !nextRegion.IsValid)
+                {
+                    return false;
+                }
+
+                if ((routeCursor == from && nextRegion == to)
+                    || (routeCursor == to && nextRegion == from))
+                {
+                    return true;
+                }
+
+                if (nextRegion == destinationRegion)
+                {
+                    return false;
+                }
+
+                routeCursor = nextRegion;
+            }
+
+            return false;
+        }
+
+        private bool TryGetCurrentNavigationRegions(out RegionId currentRegion, out RegionId destinationRegion)
+        {
+            currentRegion = RegionId.Invalid;
+            destinationRegion = RegionId.Invalid;
+
+            if (_spatialPatrolGraph == null
+                || _regionGraph == null
+                || !TryResolveNearestSpatialNode(transform.position, out var currentNodeId)
+                || !_regionGraph.TryGetRegionForNode(currentNodeId, out currentRegion))
+            {
+                return false;
+            }
+
+            switch (currentState)
+            {
+                case StalkerState.CHASE:
+                    return _hasLastChaseRequestedDestination
+                        && TryResolveNearestSpatialNode(_lastChaseRequestedDestination, out var chaseDestinationNodeId)
+                        && _regionGraph.TryGetRegionForNode(chaseDestinationNodeId, out destinationRegion);
+                case StalkerState.SEARCH:
+                    if (searchCandidateNodeId >= 0)
+                    {
+                        return _regionGraph.TryGetRegionForNode(searchCandidateNodeId, out destinationRegion);
+                    }
+
+                    return _searchContext != null
+                        && TryResolveNearestSpatialNode(_searchContext.SearchOriginLKP, out var searchOriginNodeId)
+                        && _regionGraph.TryGetRegionForNode(searchOriginNodeId, out destinationRegion);
+                case StalkerState.PATROL:
+                    return _blackboard.DestinationSpatialNodeId >= 0
+                        && _regionGraph.TryGetRegionForNode(_blackboard.DestinationSpatialNodeId, out destinationRegion);
+                default:
+                    return false;
+            }
+        }
+
+        private bool TryActiveNavigationPathUsesTopologyEdge(RegionId from, RegionId to)
+        {
+            if (_navigation == null
+                || !_navigation.TryGetCurrentPathCorners(out var corners)
+                || corners == null
+                || corners.Length < 2)
+            {
+                return false;
+            }
+
+            return TryPathSegmentsUseTopologyEdge(corners, from, to);
+        }
+
+        private bool TryPathSegmentsUseTopologyEdge(IReadOnlyList<Vector3> corners, RegionId from, RegionId to)
+        {
+            if (corners == null || corners.Count < 2)
+            {
+                return false;
+            }
+
+            var previousRegion = RegionId.Invalid;
+            for (var segmentIndex = 0; segmentIndex < corners.Count - 1; segmentIndex++)
+            {
+                var start = corners[segmentIndex];
+                var end = corners[segmentIndex + 1];
+                var segmentLength = Vector3.Distance(start, end);
+                var sampleCount = Mathf.Clamp(
+                    Mathf.CeilToInt(segmentLength / TopologyPathSegmentSampleSpacing),
+                    1,
+                    MaxTopologyPathSegmentSamples);
+
+                for (var sample = 0; sample <= sampleCount; sample++)
+                {
+                    if (segmentIndex > 0 && sample == 0)
+                    {
+                        continue;
+                    }
+
+                    var point = Vector3.Lerp(start, end, (float)sample / sampleCount);
+                    if (!TryResolveNearestSpatialNode(point, out var nodeId)
+                        || !_regionGraph.TryGetRegionForNode(nodeId, out var regionId))
+                    {
+                        continue;
+                    }
+
+                    if (!previousRegion.IsValid)
+                    {
+                        previousRegion = regionId;
+                        continue;
+                    }
+
+                    if (regionId == previousRegion)
+                    {
+                        continue;
+                    }
+
+                    if (!AreRegionsDirectlyAdjacent(previousRegion, regionId))
+                    {
+                        return false;
+                    }
+
+                    if (IsSameUndirectedRegionEdge(previousRegion, regionId, from, to))
+                    {
+                        return true;
+                    }
+
+                    previousRegion = regionId;
+                }
+            }
+
+            return false;
+        }
+
+        private bool AreRegionsDirectlyAdjacent(RegionId a, RegionId b)
+        {
+            return _regionGraph != null
+                && a.IsValid
+                && b.IsValid
+                && (_regionGraph.IsEdgeTraversable(a, b)
+                    || _regionGraph.IsEdgeTraversable(b, a));
+        }
+
+        private static bool IsSameUndirectedRegionEdge(RegionId a, RegionId b, RegionId from, RegionId to)
+        {
+            return (a == from && b == to)
+                || (a == to && b == from);
+        }
+
+        private static NavigationRecoveryReason ToSameObjectiveRecoveryReason(NavigationFailureReason failureReason)
+        {
+            return failureReason == NavigationFailureReason.DoorBlocked
+                ? NavigationRecoveryReason.TopologyChangedRepath
+                : NavigationRecoveryReason.RetryLogicalObjective;
+        }
+
         private static bool IsSearchRetryableFailure(NavigationFailureReason failureReason)
         {
             return IsNavigationExecutionRetryableFailure(failureReason);
+        }
+
+        private static bool IsSearchCandidateSpecificDestinationFailure(NavigationEvaluationStatus status)
+        {
+            return status == NavigationEvaluationStatus.DestinationInvalid
+                || status == NavigationEvaluationStatus.Partial
+                || status == NavigationEvaluationStatus.Invalid;
+        }
+
+        private static bool IsChaseSameObjectiveRetryableFailure(NavigationFailureReason failureReason)
+        {
+            return IsNavigationExecutionRetryableFailure(failureReason)
+                || failureReason == NavigationFailureReason.PathPartial
+                || failureReason == NavigationFailureReason.PathInvalid;
         }
 
         private static bool IsNavigationAgentUnavailableFailure(NavigationFailureReason failureReason)
@@ -1638,7 +1926,8 @@ namespace EchoProtocol.AI.Stalker
             return failureReason == NavigationFailureReason.PathStale
                 || failureReason == NavigationFailureReason.NoProgress
                 || failureReason == NavigationFailureReason.Stuck
-                || failureReason == NavigationFailureReason.PathPendingTimeout;
+                || failureReason == NavigationFailureReason.PathPendingTimeout
+                || failureReason == NavigationFailureReason.DoorBlocked;
         }
 
         private static NavigationFailureReason ResolveNavigationFailureReason(
@@ -1731,8 +2020,13 @@ namespace EchoProtocol.AI.Stalker
                         return true;
                     }
 
-                    destination = _memory.HasLastKnownPosition ? _memory.LastKnownPosition : lastKnownPosition;
-                    return _memory.CurrentTargetId.IsValid || currentTarget != null;
+                    if (_searchContext != null)
+                    {
+                        destination = _searchContext.SearchOriginLKP;
+                        return true;
+                    }
+
+                    return false;
                 default:
                     return false;
             }
@@ -1867,7 +2161,7 @@ namespace EchoProtocol.AI.Stalker
                 _canonicalPatrolFallbackActive = false;
                 regionGraphFallbackReason = RegionGraphFallbackReason.None;
 
-                if (SetCanonicalPatrolDestination())
+                if (SetCanonicalPatrolDestinationWithGlobalAlternates())
                 {
                     return;
                 }
@@ -2135,6 +2429,61 @@ namespace EchoProtocol.AI.Stalker
             regionGraphFallbackReason = RegionGraphFallbackReason.None;
             SyncDynamicPatrolDebugFields();
             return true;
+        }
+
+        private bool SetCanonicalPatrolDestinationWithGlobalAlternates()
+        {
+            return TrySetCanonicalPatrolDestinationWithGlobalAlternates(out _);
+        }
+
+        private bool TrySetCanonicalPatrolDestinationWithGlobalAlternates(out NavigationRecoveryReason recoveryReason)
+        {
+            return TrySetCanonicalPatrolDestinationWithGlobalAlternates(
+                GlobalPatrolObjectiveInvalidationReason.NavigationRecoveryFailed,
+                out recoveryReason);
+        }
+
+        private bool TrySetCanonicalPatrolDestinationWithGlobalAlternates(
+            GlobalPatrolObjectiveInvalidationReason invalidationReason,
+            out NavigationRecoveryReason recoveryReason)
+        {
+            recoveryReason = NavigationRecoveryReason.None;
+            if (SetCanonicalPatrolDestination())
+            {
+                return true;
+            }
+
+            if (regionGraphFallbackReason != RegionGraphFallbackReason.NoCompleteLocalPath)
+            {
+                return false;
+            }
+
+            var maxGlobalAttempts = _regionGraph?.Regions?.Count ?? 0;
+            for (var attempt = 0; attempt < maxGlobalAttempts; attempt++)
+            {
+                var objective = _globalPatrolPlanner?.CurrentObjective ?? GlobalPatrolObjective.Invalid;
+                if (!objective.TargetRegionId.IsValid)
+                {
+                    return false;
+                }
+
+                _rejectedCanonicalGlobalRegionIds.Add(objective.TargetRegionId);
+                _globalPatrolPlanner?.Invalidate(invalidationReason);
+                _rejectedCanonicalLocalNodeIds.Clear();
+                recoveryReason = NavigationRecoveryReason.AlternateGlobalObjective;
+
+                if (SetCanonicalPatrolDestination())
+                {
+                    return true;
+                }
+
+                if (regionGraphFallbackReason != RegionGraphFallbackReason.NoCompleteLocalPath)
+                {
+                    return false;
+                }
+            }
+
+            return false;
         }
 
         private void MarkCanonicalDestinationReached()

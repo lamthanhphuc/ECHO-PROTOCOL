@@ -52,6 +52,7 @@ namespace EchoProtocol.AI.Stalker
         FixedWaypoint,
         DynamicSpatialNode,
         ConfidenceSpatialNode,
+        SearchOriginLkp,
         SearchCandidate,
         ChaseTarget
     }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Common.Spatial;
 using NUnit.Framework;
 using UnityEngine;
@@ -105,6 +106,144 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
+        public void STK_P4_GlobalPatrolPlanner_SelectsAlternateGlobalBeforeExhaustion()
+        {
+            var graph = CreateThreeRegionLineGraph();
+            var regionGraph = CreateThreeRegionGraph(GetProperty(graph, "CompatibilityIdentity"));
+            var coverage = Activator.CreateInstance(CoverageMemoryType, GetIntProperty(graph, "NodeCount"), regionGraph);
+            var planner = Activator.CreateInstance(GlobalPatrolPlannerType, regionGraph, coverage);
+            var rejected = new HashSet<RegionId> { new RegionId(2) };
+            var args = new object[] { new RegionId(1), RegionId.Invalid, rejected, null };
+
+            Assert.That((bool)Invoke(planner, "TryGetOrCreateObjective", TryGetObjectiveWithRejectedSignature, args), Is.True);
+
+            var objective = args[3];
+            Assert.That((RegionId)GetProperty(objective, "TargetRegionId"), Is.EqualTo(new RegionId(3)));
+            Assert.That((RegionId)GetProperty(objective, "NextRegionId"), Is.EqualTo(new RegionId(2)));
+        }
+
+        [Test]
+        public void STK_P4_GlobalPatrolPlanner_ReturnsFalseOnlyAfterReachableGlobalObjectivesExhausted()
+        {
+            var graph = CreateThreeRegionLineGraph();
+            var regionGraph = CreateThreeRegionGraph(GetProperty(graph, "CompatibilityIdentity"));
+            var coverage = Activator.CreateInstance(CoverageMemoryType, GetIntProperty(graph, "NodeCount"), regionGraph);
+            var planner = Activator.CreateInstance(GlobalPatrolPlannerType, regionGraph, coverage);
+            var rejected = new HashSet<RegionId> { new RegionId(2), new RegionId(3) };
+            var args = new object[] { new RegionId(1), RegionId.Invalid, rejected, null };
+
+            Assert.That((bool)Invoke(planner, "TryGetOrCreateObjective", TryGetObjectiveWithRejectedSignature, args), Is.False);
+        }
+
+        [Test]
+        public void STK_P4_TopologyRelevance_ChaseUsesChaseDestinationBeforeStalePatrolBlackboard()
+        {
+            var fixture = CreateTopologyControllerFixture("CHASE");
+            try
+            {
+                SetBlackboardDestination(fixture.Controller, 1);
+                SetPrivateField(fixture.Controller, "_hasLastChaseRequestedDestination", true);
+                SetPrivateField(fixture.Controller, "_lastChaseRequestedDestination", new Vector3(20f, 0f, 0f));
+
+                Assert.That(IsTopologyEdgeRelevant(fixture.Controller, new RegionId(1), new RegionId(2)), Is.False);
+                Assert.That(IsTopologyEdgeRelevant(fixture.Controller, new RegionId(1), new RegionId(3)), Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(fixture.GameObject);
+            }
+        }
+
+        [Test]
+        public void STK_P4_TopologyRelevance_SearchLkpUsesFrozenOriginBeforeStalePatrolBlackboard()
+        {
+            var fixture = CreateTopologyControllerFixture("SEARCH");
+            try
+            {
+                SetBlackboardDestination(fixture.Controller, 1);
+                SetPrivateField(fixture.Controller, "searchCandidateNodeId", -1);
+                SetPrivateField(fixture.Controller, "_searchContext", CreateSearchContext(7, new Vector3(20f, 0f, 0f), Vector3.forward, new RegionId(3)));
+
+                Assert.That(IsTopologyEdgeRelevant(fixture.Controller, new RegionId(1), new RegionId(2)), Is.False);
+                Assert.That(IsTopologyEdgeRelevant(fixture.Controller, new RegionId(1), new RegionId(3)), Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(fixture.GameObject);
+            }
+        }
+
+        [Test]
+        public void STK_P4_TopologyRelevance_SearchCandidateUsesCandidateBeforeStalePatrolBlackboard()
+        {
+            var fixture = CreateTopologyControllerFixture("SEARCH");
+            try
+            {
+                SetBlackboardDestination(fixture.Controller, 1);
+                SetPrivateField(fixture.Controller, "searchCandidateNodeId", 2);
+                SetPrivateField(fixture.Controller, "_searchContext", CreateSearchContext(8, Vector3.zero, Vector3.forward, new RegionId(1)));
+
+                Assert.That(IsTopologyEdgeRelevant(fixture.Controller, new RegionId(1), new RegionId(2)), Is.False);
+                Assert.That(IsTopologyEdgeRelevant(fixture.Controller, new RegionId(1), new RegionId(3)), Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(fixture.GameObject);
+            }
+        }
+
+        [Test]
+        public void STK_P4_TopologyRelevance_PatrolUsesActivePatrolDestinationOnly()
+        {
+            var fixture = CreateTopologyControllerFixture("PATROL");
+            try
+            {
+                SetBlackboardDestination(fixture.Controller, 1);
+
+                Assert.That(IsTopologyEdgeRelevant(fixture.Controller, new RegionId(1), new RegionId(2)), Is.True);
+                Assert.That(IsTopologyEdgeRelevant(fixture.Controller, new RegionId(1), new RegionId(3)), Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(fixture.GameObject);
+            }
+        }
+
+        [Test]
+        public void STK_P4_TopologyRelevance_PathSegmentSamplingDetectsIntermediateRegionBetweenAdjacentEndpoints()
+        {
+            var fixture = CreateIntermediateSampleTopologyControllerFixture("PATROL");
+            try
+            {
+                var corners = new[] { Vector3.zero, new Vector3(10f, 0f, 0f) };
+
+                var usesIntermediateEdge = (bool)InvokePrivate(
+                    fixture.Controller,
+                    "TryPathSegmentsUseTopologyEdge",
+                    new[] { typeof(IReadOnlyList<Vector3>), typeof(RegionId), typeof(RegionId) },
+                    corners,
+                    new RegionId(1),
+                    new RegionId(3));
+
+                Assert.That(usesIntermediateEdge, Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(fixture.GameObject);
+            }
+        }
+
+        [Test]
+        public void STK_P4_RegionGraph_SetEdgeOpenNoOpDoesNotReportTopologyChange()
+        {
+            var graph = CreateBranchGraph();
+            var regionGraph = CreateBranchRegionGraph(GetProperty(graph, "CompatibilityIdentity"));
+
+            Assert.That((bool)Invoke(regionGraph, "TrySetEdgeOpen", new[] { typeof(RegionId), typeof(RegionId), typeof(bool) }, new RegionId(1), new RegionId(2), false), Is.True);
+            Assert.That((bool)Invoke(regionGraph, "TrySetEdgeOpen", new[] { typeof(RegionId), typeof(RegionId), typeof(bool) }, new RegionId(1), new RegionId(2), false), Is.False);
+        }
+
+        [Test]
         public void STK_P3_LocalPatrolSelector_RequiresCompletePath()
         {
             var graph = CreateLineGraph();
@@ -129,6 +268,30 @@ namespace EchoProtocol.AI.Stalker.Tests
                 Node(2, 2f, 1)));
         }
 
+        private static object CreateBranchGraph()
+        {
+            return Activator.CreateInstance(GraphType, NodeArray(
+                Node(0, 0f, 1, 2),
+                Node(1, 10f, 0),
+                Node(2, 20f, 0)));
+        }
+
+        private static object CreateIntermediateSampleGraph()
+        {
+            return Activator.CreateInstance(GraphType, NodeArray(
+                Node(0, 0f, 1, 2),
+                Node(1, 10f, 0, 2),
+                Node(2, 5f, 0, 1)));
+        }
+
+        private static object CreateThreeRegionLineGraph()
+        {
+            return Activator.CreateInstance(GraphType, NodeArray(
+                Node(0, 0f, 1),
+                Node(1, 1f, 0, 2),
+                Node(2, 2f, 1)));
+        }
+
         private static object CreateRegionGraph(object identity)
         {
             return Activator.CreateInstance(
@@ -137,6 +300,45 @@ namespace EchoProtocol.AI.Stalker.Tests
                     RegionNode(new RegionId(1), Edge(new RegionId(2), DoorId.Invalid)),
                     RegionNode(new RegionId(2), Edge(new RegionId(1), DoorId.Invalid))),
                 new[] { new RegionId(1), new RegionId(1), new RegionId(2) },
+                identity,
+                1);
+        }
+
+        private static object CreateBranchRegionGraph(object identity)
+        {
+            return Activator.CreateInstance(
+                RegionGraphType,
+                RegionNodeArray(
+                    RegionNode(new RegionId(1), Edge(new RegionId(2), DoorId.Invalid), Edge(new RegionId(3), DoorId.Invalid)),
+                    RegionNode(new RegionId(2), Edge(new RegionId(1), DoorId.Invalid)),
+                    RegionNode(new RegionId(3), Edge(new RegionId(1), DoorId.Invalid))),
+                new[] { new RegionId(1), new RegionId(2), new RegionId(3) },
+                identity,
+                1);
+        }
+
+        private static object CreateIntermediateSampleRegionGraph(object identity)
+        {
+            return Activator.CreateInstance(
+                RegionGraphType,
+                RegionNodeArray(
+                    RegionNode(new RegionId(1), Edge(new RegionId(2), DoorId.Invalid), Edge(new RegionId(3), DoorId.Invalid)),
+                    RegionNode(new RegionId(2), Edge(new RegionId(1), DoorId.Invalid), Edge(new RegionId(3), DoorId.Invalid)),
+                    RegionNode(new RegionId(3), Edge(new RegionId(1), DoorId.Invalid), Edge(new RegionId(2), DoorId.Invalid))),
+                new[] { new RegionId(1), new RegionId(2), new RegionId(3) },
+                identity,
+                1);
+        }
+
+        private static object CreateThreeRegionGraph(object identity)
+        {
+            return Activator.CreateInstance(
+                RegionGraphType,
+                RegionNodeArray(
+                    RegionNode(new RegionId(1), Edge(new RegionId(2), DoorId.Invalid)),
+                    RegionNode(new RegionId(2), Edge(new RegionId(1), DoorId.Invalid), Edge(new RegionId(3), DoorId.Invalid)),
+                    RegionNode(new RegionId(3), Edge(new RegionId(2), DoorId.Invalid))),
+                new[] { new RegionId(1), new RegionId(2), new RegionId(3) },
                 identity,
                 1);
         }
@@ -188,6 +390,112 @@ namespace EchoProtocol.AI.Stalker.Tests
             return method.Invoke(target is Type ? null : target, args);
         }
 
+        private static object InvokePrivate(object target, string methodName, Type[] parameterTypes, params object[] args)
+        {
+            var method = target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic, null, parameterTypes, null);
+            Assert.That(method, Is.Not.Null, $"Missing private method '{methodName}' on '{target.GetType().FullName}'.");
+            return method.Invoke(target, args);
+        }
+
+        private static object GetPrivateField(object target, string fieldName)
+        {
+            var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"Missing private field '{fieldName}' on '{target.GetType().FullName}'.");
+            return field.GetValue(target);
+        }
+
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"Missing private field '{fieldName}' on '{target.GetType().FullName}'.");
+            field.SetValue(target, value);
+        }
+
+        private static void SetBlackboardDestination(object controller, int nodeId)
+        {
+            var blackboard = GetPrivateField(controller, "_blackboard");
+            GetProperty(blackboard, "DestinationSpatialNodeId");
+            blackboard.GetType().GetProperty("DestinationSpatialNodeId").SetValue(blackboard, nodeId);
+        }
+
+        private static bool IsTopologyEdgeRelevant(object controller, RegionId from, RegionId to)
+        {
+            return (bool)InvokePrivate(
+                controller,
+                "IsTopologyEdgeRelevantToCurrentNavigation",
+                new[] { typeof(RegionId), typeof(RegionId) },
+                from,
+                to);
+        }
+
+        private static object CreateSearchContext(long episodeId, Vector3 lkp, Vector3 direction, RegionId regionId)
+        {
+            return Activator.CreateInstance(
+                SearchContextType,
+                Activator.CreateInstance(SearchEpisodeIdType, episodeId),
+                lkp,
+                direction,
+                new AiSimulationTime(episodeId, episodeId * 0.1d),
+                regionId);
+        }
+
+        private static TopologyControllerFixture CreateTopologyControllerFixture(string stateName)
+        {
+            var graph = CreateBranchGraph();
+            var regionGraph = CreateBranchRegionGraph(GetProperty(graph, "CompatibilityIdentity"));
+            var gameObject = new GameObject("STK_P4_TopologyRelevance_Controller");
+            var controller = gameObject.AddComponent(ResolveType("EchoProtocol.AI.Stalker.StalkerController"));
+            gameObject.transform.position = Vector3.zero;
+
+            SetPrivateField(controller, "currentState", Enum.Parse(ResolveType("EchoProtocol.AI.Stalker.StalkerState"), stateName));
+            SetPrivateField(controller, "_spatialPatrolGraph", graph);
+            SetPrivateField(controller, "_regionGraph", regionGraph);
+            SetPrivateField(controller, "searchCandidateNodeId", -1);
+            return new TopologyControllerFixture(gameObject, controller);
+        }
+
+        private static TopologyControllerFixture CreateLineTopologyControllerFixture(string stateName)
+        {
+            var graph = CreateThreeRegionLineGraph();
+            var regionGraph = CreateThreeRegionGraph(GetProperty(graph, "CompatibilityIdentity"));
+            var gameObject = new GameObject("STK_P4_LineTopologyRelevance_Controller");
+            var controller = gameObject.AddComponent(ResolveType("EchoProtocol.AI.Stalker.StalkerController"));
+            gameObject.transform.position = Vector3.zero;
+
+            SetPrivateField(controller, "currentState", Enum.Parse(ResolveType("EchoProtocol.AI.Stalker.StalkerState"), stateName));
+            SetPrivateField(controller, "_spatialPatrolGraph", graph);
+            SetPrivateField(controller, "_regionGraph", regionGraph);
+            SetPrivateField(controller, "searchCandidateNodeId", -1);
+            return new TopologyControllerFixture(gameObject, controller);
+        }
+
+        private static TopologyControllerFixture CreateIntermediateSampleTopologyControllerFixture(string stateName)
+        {
+            var graph = CreateIntermediateSampleGraph();
+            var regionGraph = CreateIntermediateSampleRegionGraph(GetProperty(graph, "CompatibilityIdentity"));
+            var gameObject = new GameObject("STK_P4_IntermediateSampleTopology_Controller");
+            var controller = gameObject.AddComponent(ResolveType("EchoProtocol.AI.Stalker.StalkerController"));
+            gameObject.transform.position = Vector3.zero;
+
+            SetPrivateField(controller, "currentState", Enum.Parse(ResolveType("EchoProtocol.AI.Stalker.StalkerState"), stateName));
+            SetPrivateField(controller, "_spatialPatrolGraph", graph);
+            SetPrivateField(controller, "_regionGraph", regionGraph);
+            SetPrivateField(controller, "searchCandidateNodeId", -1);
+            return new TopologyControllerFixture(gameObject, controller);
+        }
+
+        private readonly struct TopologyControllerFixture
+        {
+            public TopologyControllerFixture(GameObject gameObject, object controller)
+            {
+                GameObject = gameObject;
+                Controller = controller;
+            }
+
+            public GameObject GameObject { get; }
+            public object Controller { get; }
+        }
+
         private static Type ResolveType(string fullTypeName)
         {
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
@@ -210,11 +518,14 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static Type RegionEdgeType => ResolveType("EchoProtocol.AI.Stalker.Spatial.RegionEdge");
         private static Type CompatibilityIdentityType => ResolveType("EchoProtocol.AI.Stalker.Spatial.SpatialGraphCompatibilityIdentity");
         private static Type CoverageMemoryType => ResolveType("EchoProtocol.AI.Stalker.Spatial.CoverageMemory");
+        private static Type SearchContextType => ResolveType("EchoProtocol.AI.Stalker.StalkerSearchContext");
+        private static Type SearchEpisodeIdType => ResolveType("EchoProtocol.AI.Stalker.SearchEpisodeId");
         private static Type GlobalPatrolPlannerType => ResolveType("EchoProtocol.AI.Stalker.Spatial.GlobalPatrolPlanner");
         private static Type GlobalPatrolObjectiveType => ResolveType("EchoProtocol.AI.Stalker.Spatial.GlobalPatrolObjective");
         private static Type LocalPatrolSelectorType => ResolveType("EchoProtocol.AI.Stalker.Spatial.LocalPatrolSelector");
         private static Type LocalPatrolSelectionType => ResolveType("EchoProtocol.AI.Stalker.Spatial.LocalPatrolSelection");
         private static Type PatrolPathValidatorType => ResolveType("EchoProtocol.AI.Stalker.Spatial.PatrolPathValidator");
         private static Type[] TryGetObjectiveSignature => new[] { typeof(RegionId), typeof(RegionId), GlobalPatrolObjectiveType.MakeByRefType() };
+        private static Type[] TryGetObjectiveWithRejectedSignature => new[] { typeof(RegionId), typeof(RegionId), typeof(ISet<RegionId>), GlobalPatrolObjectiveType.MakeByRefType() };
     }
 }

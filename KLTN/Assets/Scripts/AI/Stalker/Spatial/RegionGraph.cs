@@ -129,6 +129,11 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 return false;
             }
 
+            if (_edgeOpen[edgeIndex] == open)
+            {
+                return false;
+            }
+
             _edgeOpen[edgeIndex] = open;
             return true;
         }

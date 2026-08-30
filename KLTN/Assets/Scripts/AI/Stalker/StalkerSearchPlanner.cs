@@ -132,9 +132,18 @@ namespace EchoProtocol.AI.Stalker
                 return SearchCandidateRejectReason.Duplicate;
             }
 
-            if (_regionGraph != null && !_regionGraph.TryGetRegionForNode(node.Id, out _))
+            if (_regionGraph != null)
             {
-                return SearchCandidateRejectReason.RegionInvalid;
+                if (!_regionGraph.TryGetRegionForNode(node.Id, out var candidateRegion))
+                {
+                    return SearchCandidateRejectReason.RegionInvalid;
+                }
+
+                if (_regionGraph.TryGetRegionForNode(currentNodeId, out var currentRegion)
+                    && !_regionGraph.TryGetRouteHopCost(currentRegion, candidateRegion, out _))
+                {
+                    return SearchCandidateRejectReason.DoorBlocked;
+                }
             }
 
             return SearchCandidateRejectReason.None;
