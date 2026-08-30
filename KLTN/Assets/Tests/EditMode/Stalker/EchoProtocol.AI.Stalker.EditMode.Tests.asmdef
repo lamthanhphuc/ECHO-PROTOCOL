@@ -2,7 +2,7 @@
     "name": "EchoProtocol.AI.Stalker.EditMode.Tests",
     "rootNamespace": "EchoProtocol.AI.Stalker.Tests",
     "references": [
-        "Assembly-CSharp",
+        "EchoProtocol.AI.Common",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

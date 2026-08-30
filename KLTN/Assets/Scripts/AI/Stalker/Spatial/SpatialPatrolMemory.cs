@@ -1,17 +1,20 @@
+using System;
 using UnityEngine;
 
 namespace EchoProtocol.AI.Stalker.Spatial
 {
     public sealed class SpatialPatrolMemory
     {
-        private readonly float[] _lastVisitedTimes;
-        private readonly bool[] _visited;
+        private readonly CoverageMemory _coverageMemory;
 
         public SpatialPatrolMemory(int nodeCount)
         {
-            var safeNodeCount = Mathf.Max(0, nodeCount);
-            _lastVisitedTimes = new float[safeNodeCount];
-            _visited = new bool[safeNodeCount];
+            _coverageMemory = new CoverageMemory(Mathf.Max(0, nodeCount));
+        }
+
+        public SpatialPatrolMemory(CoverageMemory coverageMemory)
+        {
+            _coverageMemory = coverageMemory ?? throw new ArgumentNullException(nameof(coverageMemory));
         }
 
         public void MarkVisited(int nodeId, float currentTime)
@@ -21,8 +24,7 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 return;
             }
 
-            _lastVisitedTimes[nodeId] = currentTime;
-            _visited[nodeId] = true;
+            _coverageMemory.RecordPhysicalNodeArrival(nodeId, currentTime);
         }
 
         public float GetNormalizedStaleness(int nodeId, float currentTime, float horizon)
@@ -32,18 +34,18 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 return 0f;
             }
 
-            if (!_visited[nodeId])
+            if (!_coverageMemory.WasNodeVisited(nodeId))
             {
                 return 1f;
             }
 
             var safeHorizon = Mathf.Max(0.0001f, horizon);
-            return Mathf.Clamp01((currentTime - _lastVisitedTimes[nodeId]) / safeHorizon);
+            return Mathf.Clamp01((currentTime - _coverageMemory.GetNodeLastVisitedTime(nodeId)) / safeHorizon);
         }
 
         private bool IsValidNodeId(int nodeId)
         {
-            return nodeId >= 0 && nodeId < _lastVisitedTimes.Length;
+            return nodeId >= 0 && nodeId < _coverageMemory.NodeCount;
         }
     }
 }

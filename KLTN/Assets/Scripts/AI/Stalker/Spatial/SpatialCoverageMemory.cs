@@ -9,11 +9,9 @@ namespace EchoProtocol.AI.Stalker.Spatial
 
         private readonly float[] _confidenceValues;
         private readonly float[] _confidenceUpdateTimes;
-        private readonly bool[] _everExactVisited;
         private readonly bool[] _cycleExactVisited;
-        private readonly int[] _exactVisitCounts;
-        private readonly float[] _lastExactVisitTimes;
         private readonly int[] _recentHistory = new int[RecentHistoryCapacity];
+        private readonly CoverageMemory _coverageMemory;
 
         private int _recentHistoryCount;
 
@@ -25,17 +23,24 @@ namespace EchoProtocol.AI.Stalker.Spatial
             }
 
             NodeCount = nodeCount;
+            _coverageMemory = new CoverageMemory(nodeCount);
             _confidenceValues = new float[nodeCount];
             _confidenceUpdateTimes = new float[nodeCount];
-            _everExactVisited = new bool[nodeCount];
             _cycleExactVisited = new bool[nodeCount];
-            _exactVisitCounts = new int[nodeCount];
-            _lastExactVisitTimes = new float[nodeCount];
 
-            for (var i = 0; i < _lastExactVisitTimes.Length; i++)
+            for (var i = 0; i < _recentHistory.Length; i++)
             {
-                _lastExactVisitTimes[i] = -1f;
+                _recentHistory[i] = -1;
             }
+        }
+
+        public SpatialCoverageMemory(CoverageMemory coverageMemory)
+        {
+            _coverageMemory = coverageMemory ?? throw new ArgumentNullException(nameof(coverageMemory));
+            NodeCount = coverageMemory.NodeCount;
+            _confidenceValues = new float[NodeCount];
+            _confidenceUpdateTimes = new float[NodeCount];
+            _cycleExactVisited = new bool[NodeCount];
 
             for (var i = 0; i < _recentHistory.Length; i++)
             {
@@ -76,12 +81,14 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 return SpatialCoverageVisitResult.Invalid(nodeId);
             }
 
-            var wasFirstLifetimeVisit = !_everExactVisited[nodeId];
-            if (wasFirstLifetimeVisit)
+            var wasFirstLifetimeVisit = !_coverageMemory.WasNodeVisited(nodeId);
+            var coverageVisit = _coverageMemory.RecordPhysicalNodeArrival(nodeId, currentTime);
+            if (!coverageVisit.IsValid)
             {
-                _everExactVisited[nodeId] = true;
-                LifetimeCoveredNodeCount++;
+                return SpatialCoverageVisitResult.Invalid(nodeId);
             }
+
+            LifetimeCoveredNodeCount = CountLifetimeVisitedNodes();
 
             var wasFirstCycleVisit = !_cycleExactVisited[nodeId];
             if (wasFirstCycleVisit)
@@ -90,8 +97,6 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 CycleCoveredNodeCount++;
             }
 
-            _exactVisitCounts[nodeId]++;
-            _lastExactVisitTimes[nodeId] = currentTime;
             PushRecentHistory(nodeId);
 
             return new SpatialCoverageVisitResult(
@@ -99,7 +104,7 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 nodeId,
                 wasFirstLifetimeVisit,
                 wasFirstCycleVisit,
-                _exactVisitCounts[nodeId]);
+                _coverageMemory.GetNodeVisitCount(nodeId));
         }
 
         public void InjectConfidence(int nodeId, float injection, float currentTime, float halfLife)
@@ -147,7 +152,7 @@ namespace EchoProtocol.AI.Stalker.Spatial
 
         public bool WasEverExactVisited(int nodeId)
         {
-            return IsValidNodeId(nodeId) && _everExactVisited[nodeId];
+            return _coverageMemory.WasNodeVisited(nodeId);
         }
 
         public bool WasExactVisitedThisCycle(int nodeId)
@@ -157,12 +162,12 @@ namespace EchoProtocol.AI.Stalker.Spatial
 
         public int GetExactVisitCount(int nodeId)
         {
-            return IsValidNodeId(nodeId) ? _exactVisitCounts[nodeId] : 0;
+            return _coverageMemory.GetNodeVisitCount(nodeId);
         }
 
         public float GetLastExactVisitTime(int nodeId)
         {
-            return IsValidNodeId(nodeId) ? _lastExactVisitTimes[nodeId] : -1f;
+            return _coverageMemory.GetNodeLastVisitedTime(nodeId);
         }
 
         public float GetRecentHistoryPenalty(int nodeId)
@@ -228,6 +233,20 @@ namespace EchoProtocol.AI.Stalker.Spatial
         private bool IsValidNodeId(int nodeId)
         {
             return nodeId >= 0 && nodeId < NodeCount;
+        }
+
+        private int CountLifetimeVisitedNodes()
+        {
+            var count = 0;
+            for (var nodeId = 0; nodeId < NodeCount; nodeId++)
+            {
+                if (_coverageMemory.WasNodeVisited(nodeId))
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
     }
 

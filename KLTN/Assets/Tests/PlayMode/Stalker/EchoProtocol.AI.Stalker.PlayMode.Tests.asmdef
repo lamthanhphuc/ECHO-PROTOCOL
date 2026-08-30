@@ -2,6 +2,7 @@
     "name": "EchoProtocol.AI.Stalker.PlayMode.Tests",
     "rootNamespace": "EchoProtocol.AI.Stalker.Tests",
     "references": [
+        "EchoProtocol.AI.Common",
         "UnityEngine.TestRunner"
     ],
     "includePlatforms": [],
