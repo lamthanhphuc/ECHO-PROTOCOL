@@ -105,6 +105,9 @@ namespace EchoProtocol.AI.Stalker
         public float LastPatrolScore => lastPatrolScore;
         public int PlannerRunCount => plannerRunCount;
         public int CandidateCount => candidateCount;
+        public PlayerId DetectionTargetId => _memory.DetectionTargetId;
+        public PlayerId CurrentTargetId => _memory.CurrentTargetId;
+        public bool SuppressLegacyUpdateSimulation { get; set; }
 
         private void Awake()
         {
@@ -123,6 +126,11 @@ namespace EchoProtocol.AI.Stalker
 
         private void Update()
         {
+            if (SuppressLegacyUpdateSimulation)
+            {
+                return;
+            }
+
             // Temporary migration facade for spike scenes until authoritative runtime drives Simulate.
             var legacyStep = new AiSimulationStep(
                 new AiSimulationTime(_legacySimulationTick, Time.time),
