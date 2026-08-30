@@ -129,6 +129,8 @@ GameObject:
   m_Component:
   - component: {fileID: 125111847}
   - component: {fileID: 125111846}
+  - component: {fileID: 125111848}
+  - component: {fileID: 125111849}
   m_Layer: 0
   m_Name: LobbyManager
   m_TagString: Untagged
@@ -146,9 +148,40 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 425a95eac48cb334287368e6ece9c372, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.LobbyManager
   _bootstrap: {fileID: 970048216}
+--- !u!114 &125111848
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 125111845}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 55fc1d4ae44c4c22ad214f995035bc59, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.PlayerSpawner
+  _bootstrap: {fileID: 970048216}
+  _playerPrefab: {fileID: 11400000, guid: ab21f3011e9440cca2e909502390da75, type: 3}
+  _doorPrefab: {fileID: 11400000, guid: 10b56fe0b82947259da1a4b1e07407b3, type: 3}
+  _pickupItemPrefab: {fileID: 11400000, guid: a2edc5247b3e46bda1c9588c2979a732, type: 3}
+--- !u!114 &125111849
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 125111845}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 92673d3f51034f00ab3cbe6067e67802, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.UI.Debugging.NetworkTestPanel
+  _bootstrap: {fileID: 970048216}
+  _sessionName: echo-test
+  _maxPlayers: 4
 --- !u!4 &125111847
 Transform:
   m_ObjectHideFlags: 0
