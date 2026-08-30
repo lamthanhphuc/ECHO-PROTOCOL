@@ -76,6 +76,7 @@ namespace EchoProtocol.AI.Stalker
         private const float TargetSelectionTieEpsilon = 0f;
 
         private readonly StalkerMemory _memory = new StalkerMemory();
+        private readonly StalkerAttackController _attackController = new StalkerAttackController();
         private readonly StalkerBlackboard _blackboard = new StalkerBlackboard();
         private StalkerNavigationController _navigation;
         private NavMeshSpatialGraph _spatialPatrolGraph;
@@ -99,10 +100,16 @@ namespace EchoProtocol.AI.Stalker
         private Vector3 _lastChaseRequestedDestination;
         private float _chaseDestinationRefreshElapsed;
         private bool _navigationRecoveryAttemptUsed;
+        private StalkerNavigationObjectiveKey _navigationObjectiveKey;
+        private readonly HashSet<int> _rejectedDynamicPatrolNodeIds = new HashSet<int>();
+        private readonly HashSet<int> _rejectedCanonicalLocalNodeIds = new HashSet<int>();
+        private readonly HashSet<RegionId> _rejectedCanonicalGlobalRegionIds = new HashSet<RegionId>();
         private int _fixedPatrolFallbackFailureCount;
         private bool _isSimulating;
         private float _currentSimulationDeltaSeconds;
         private double _currentSimulationSeconds;
+        private AiSimulationStep _currentSimulationStep;
+        private StalkerAttackTargetSnapshot? _currentAttackTargetSnapshot;
         private long _legacySimulationTick;
         private IReadOnlyList<StalkerTargetCandidate> _currentVisibleTargetCandidates;
         private IReadOnlyList<StalkerTargetStatus> _currentTargetStatuses;
@@ -128,7 +135,50 @@ namespace EchoProtocol.AI.Stalker
         public SearchEpisodeId ActiveSearchEpisodeId => _searchContext?.EpisodeId ?? SearchEpisodeId.Invalid;
         public PlayerId DetectionTargetId => _memory.DetectionTargetId;
         public PlayerId CurrentTargetId => _memory.CurrentTargetId;
+        public StalkerAttackEpisodeId ActiveAttackEpisodeId => _attackController.ActiveEpisodeId;
+        public PlayerId AttackTargetId => _attackController.AttackTargetId;
+        public bool HitMomentResolved => _attackController.HitMomentResolved;
+        public StalkerAttackOutcome AttackOutcome => _attackController.Outcome;
+        public StalkerAttackResolutionResult AttackResolutionResult => _attackController.LastResolutionResult;
+        public int AttackResolutionCount => _attackController.ResolutionCount;
+        public StalkerAttackEpisode ActiveAttackEpisode => _attackController.ActiveEpisode;
+        public NavigationFailureReason NavigationFailureReason => _navigation?.CurrentFailureReason ?? EchoProtocol.AI.Stalker.NavigationFailureReason.AgentUnavailable;
+        public NavigationRecoveryReason RecoveryReason => _navigation?.CurrentRecoveryReason ?? NavigationRecoveryReason.None;
+        public IPlayerAttackConsequenceSink AttackConsequenceSink { get; set; }
         public bool SuppressLegacyUpdateSimulation { get; set; }
+
+        public bool TrySetPatrolRegionEdgeOpen(int fromRegionId, int toRegionId, bool open)
+        {
+            if (fromRegionId <= 0 || toRegionId <= 0 || !EnsureCanonicalPatrolInitialized())
+            {
+                return false;
+            }
+
+            var changed = _regionGraph.TrySetEdgeOpen(new RegionId(fromRegionId), new RegionId(toRegionId), open);
+            if (!changed || open)
+            {
+                return changed;
+            }
+
+            HandleTopologyBlockedByDoor();
+            return true;
+        }
+
+        public void ConfigurePhase4AttackAcceptanceDiagnostics(
+            float detectionMeterFullValue,
+            float detectionFillRateValue,
+            float attackRangeValue,
+            float attackWindupValue,
+            float attackRecoveryValue,
+            IPlayerAttackConsequenceSink consequenceSink)
+        {
+            detectionMeterFull = Mathf.Max(0.0001f, detectionMeterFullValue);
+            detectionFillRate = Mathf.Max(0f, detectionFillRateValue);
+            attackRange = Mathf.Max(0f, attackRangeValue);
+            attackWindup = Mathf.Max(0f, attackWindupValue);
+            attackRecovery = Mathf.Max(0f, attackRecoveryValue);
+            AttackConsequenceSink = consequenceSink;
+        }
 
         private void Awake()
         {
@@ -138,11 +188,6 @@ namespace EchoProtocol.AI.Stalker
         private void OnEnable()
         {
             InitializeNavigation();
-
-            if (currentState == StalkerState.PATROL && patrolMode == StalkerPatrolMode.FixedWaypoint)
-            {
-                SetCurrentPatrolDestination();
-            }
         }
 
         private void Update()
@@ -173,8 +218,10 @@ namespace EchoProtocol.AI.Stalker
             _isSimulating = true;
             _currentSimulationDeltaSeconds = input.Step.DeltaSeconds;
             _currentSimulationSeconds = input.Step.Time.Seconds;
+            _currentSimulationStep = input.Step;
             _currentVisibleTargetCandidates = input.VisibleTargetCandidates;
             _currentTargetStatuses = input.TargetStatuses;
+            _currentAttackTargetSnapshot = input.CurrentAttackTargetSnapshot;
 
             try
             {
@@ -188,6 +235,8 @@ namespace EchoProtocol.AI.Stalker
             {
                 _currentVisibleTargetCandidates = null;
                 _currentTargetStatuses = null;
+                _currentAttackTargetSnapshot = null;
+                _currentSimulationStep = AiSimulationStep.Invalid;
                 _currentSimulationDeltaSeconds = 0f;
                 _currentSimulationSeconds = 0d;
                 _isSimulating = false;
@@ -662,11 +711,22 @@ namespace EchoProtocol.AI.Stalker
             currentState = StalkerState.ATTACK;
             attackElapsedTime = 0f;
             lastAttackResult = StalkerAttackResult.None;
+            if (HasTypedTargetFrame && _memory.CurrentTargetId.IsValid)
+            {
+                _attackController.BeginAttack(true, _memory.CurrentTargetId, _currentSimulationStep);
+            }
+
             StopAgentPath();
         }
 
         private void TickAttack()
         {
+            if (HasTypedTargetFrame || _attackController.HasActiveEpisode)
+            {
+                TickAttackTyped();
+                return;
+            }
+
             if (currentTarget == null)
             {
                 lastAttackResult = StalkerAttackResult.Miss;
@@ -684,6 +744,39 @@ namespace EchoProtocol.AI.Stalker
             EnterRecover();
         }
 
+        private void TickAttackTyped()
+        {
+            if (!_attackController.HasActiveEpisode)
+            {
+                if (!_memory.CurrentTargetId.IsValid)
+                {
+                    lastAttackResult = StalkerAttackResult.Miss;
+                    EnterRecover();
+                    return;
+                }
+
+                _attackController.BeginAttack(true, _memory.CurrentTargetId, _currentSimulationStep);
+            }
+
+            var targetId = _attackController.AttackTargetId;
+            if (targetId.IsValid
+                && TryGetUniqueTargetStatus(targetId, out var status)
+                && !status.Eligible)
+            {
+                _memory.ClearCurrentTarget();
+            }
+
+            _attackController.AdvanceWindup(CurrentSimulationDeltaSeconds);
+            attackElapsedTime = _attackController.ActiveEpisode.WindupElapsedSeconds;
+            if (attackElapsedTime < GetAttackWindup())
+            {
+                return;
+            }
+
+            ResolveAttackHitMomentTyped();
+            EnterRecover();
+        }
+
         private void ResolveAttackHitMoment()
         {
             if (currentTarget == null || !IsWithinAttackRange(currentTarget.position))
@@ -695,6 +788,24 @@ namespace EchoProtocol.AI.Stalker
             lastAttackResult = StalkerAttackResult.Hit;
         }
 
+        private void ResolveAttackHitMomentTyped()
+        {
+            var snapshot = _currentAttackTargetSnapshot
+                ?? StalkerAttackTargetSnapshot.Missing(_attackController.AttackTargetId);
+            var result = _attackController.ResolveHitMoment(
+                true,
+                _attackController.ActiveEpisodeId,
+                transform.position,
+                GetAttackRange(),
+                snapshot,
+                AttackConsequenceSink,
+                _currentSimulationStep);
+
+            lastAttackResult = result == StalkerAttackResolutionResult.ResolvedHit
+                ? StalkerAttackResult.Hit
+                : StalkerAttackResult.Miss;
+        }
+
         private void EnterRecover()
         {
             currentState = StalkerState.RECOVER;
@@ -704,6 +815,12 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickRecover()
         {
+            if (HasTypedTargetFrame || _memory.CurrentTargetId.IsValid || _attackController.HasActiveEpisode)
+            {
+                TickRecoverTyped();
+                return;
+            }
+
             recoverElapsedTime += CurrentSimulationDeltaSeconds;
             if (recoverElapsedTime < GetAttackRecovery())
             {
@@ -732,6 +849,60 @@ namespace EchoProtocol.AI.Stalker
             }
 
             EnterSearch();
+        }
+
+        private void TickRecoverTyped()
+        {
+            recoverElapsedTime += CurrentSimulationDeltaSeconds;
+
+            var currentTargetId = _memory.CurrentTargetId;
+            if (currentTargetId.IsValid
+                && (!TryGetUniqueTargetStatus(currentTargetId, out var inRecoveryStatus) || !inRecoveryStatus.Eligible))
+            {
+                _memory.ClearCurrentTarget();
+                currentTargetId = PlayerId.Invalid;
+            }
+
+            if (recoverElapsedTime < GetAttackRecovery())
+            {
+                return;
+            }
+
+            attackElapsedTime = 0f;
+            recoverElapsedTime = 0f;
+
+            if (currentTargetId.IsValid
+                && TryGetUniqueTargetStatus(currentTargetId, out var status)
+                && status.Eligible)
+            {
+                if (TryGetUniqueVisibleTargetCandidate(currentTargetId, out var candidate, out var hasDuplicate)
+                    && !hasDuplicate
+                    && candidate.Eligibility.Eligible
+                    && _memory.TryAcceptCurrentTargetObservation(candidate.Observation))
+                {
+                    lastKnownPosition = _memory.LastKnownPosition;
+                    ResetChaseDestinationTracking();
+                    ResetNavigationRecoveryBudget();
+                    currentState = StalkerState.CHASE;
+                    SetChaseDestination(candidate.Observation.ObservedPosition);
+                    return;
+                }
+
+                if (_memory.HasLastKnownPosition)
+                {
+                    EnterSearch();
+                    return;
+                }
+            }
+
+            ClearTargetContext();
+            if (TryAcquireTypedDetectionTargetFromVisibleFrame())
+            {
+                return;
+            }
+
+            currentState = StalkerState.PATROL;
+            SetCurrentPatrolDestination();
         }
 
         private void EnterSearch()
@@ -935,6 +1106,11 @@ namespace EchoProtocol.AI.Stalker
             _lastChaseRequestedDestination = observedPosition;
             _hasLastChaseRequestedDestination = true;
             _chaseDestinationRefreshElapsed = 0f;
+            SetNavigationObjective(new StalkerNavigationObjectiveKey(
+                StalkerNavigationObjectiveKind.ChaseTarget,
+                -1,
+                -1,
+                _memory.CurrentTargetId.IsValid ? _memory.CurrentTargetId.Value : -1));
         }
 
         private void SetSearchDestination()
@@ -1025,6 +1201,11 @@ namespace EchoProtocol.AI.Stalker
             _searchContext.RecordCandidateAttempt(selection.DestinationNode.Id);
             searchCandidateNodeId = selection.DestinationNode.Id;
             _blackboard.DestinationSpatialNodeId = selection.DestinationNode.Id;
+            SetNavigationObjective(new StalkerNavigationObjectiveKey(
+                StalkerNavigationObjectiveKind.SearchCandidate,
+                selection.DestinationNode.Id,
+                -1,
+                _memory.CurrentTargetId.IsValid ? _memory.CurrentTargetId.Value : -1));
             return true;
         }
 
@@ -1224,7 +1405,7 @@ namespace EchoProtocol.AI.Stalker
         private void StopAgentPath()
         {
             ResetChaseDestinationTracking();
-            ResetNavigationRecoveryBudget();
+            ClearNavigationObjective();
             ResetFixedPatrolFallbackState();
             _navigation?.Stop();
         }
@@ -1236,38 +1417,261 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            var pathStatus = _navigation.GetPathStatus();
             var executionStatus = _navigation.GetExecutionStatus();
-            if (executionStatus == NavigationExecutionStatus.Stuck)
-            {
-                TryIssueNavigationRecoveryRepath();
-                return;
-            }
-
-            if (executionStatus != NavigationExecutionStatus.Failed)
+            if (executionStatus != NavigationExecutionStatus.Failed
+                && executionStatus != NavigationExecutionStatus.NoProgress
+                && executionStatus != NavigationExecutionStatus.Stuck)
             {
                 return;
             }
 
-            if (_navigation.GetPathStatus() == NavigationPathStatus.Stale)
+            var failureReason = _navigation.CurrentFailureReason;
+            if (failureReason == NavigationFailureReason.None)
             {
-                TryIssueNavigationRecoveryRepath();
+                failureReason = ResolveNavigationFailureReason(pathStatus, executionStatus);
+            }
+
+            if (currentState == StalkerState.SEARCH)
+            {
+                HandleSearchNavigationFailure(failureReason);
+                return;
+            }
+
+            if (currentState == StalkerState.CHASE)
+            {
+                HandleChaseNavigationFailure(failureReason);
+                return;
+            }
+
+            if (currentState == StalkerState.PATROL)
+            {
+                HandlePatrolNavigationFailure(failureReason);
             }
         }
 
-        private void TryIssueNavigationRecoveryRepath()
+        private bool TryIssueNavigationRecoveryRepath(NavigationRecoveryReason recoveryReason)
         {
             if (_navigationRecoveryAttemptUsed)
             {
-                return;
+                return false;
             }
 
             if (!TryGetCurrentNavigationRecoveryDestination(out var destination))
             {
-                return;
+                return false;
             }
 
             _navigationRecoveryAttemptUsed = true;
-            _navigation.RequestDestination(destination, NavigationRequestIntent.RecoveryRepath);
+            _navigation.RecordRecoveryReason(recoveryReason);
+            return _navigation.RequestDestination(destination, NavigationRequestIntent.RecoveryRepath).IsAccepted;
+        }
+
+        private void HandlePatrolNavigationFailure(NavigationFailureReason failureReason)
+        {
+            if (patrolMode == StalkerPatrolMode.DynamicSpatial && !_dynamicPatrolFallbackActive)
+            {
+                HandleDynamicSpatialNavigationFailure(failureReason);
+                return;
+            }
+
+            if (patrolMode == StalkerPatrolMode.ConfidenceSpatial && !_canonicalPatrolFallbackActive)
+            {
+                HandleConfidenceSpatialNavigationFailure(failureReason);
+                return;
+            }
+
+            if (IsNavigationExecutionRetryableFailure(failureReason)
+                && HasRecoveryBudgetForCurrentObjective()
+                && TryIssueNavigationRecoveryRepath(NavigationRecoveryReason.RetryLogicalObjective))
+            {
+                return;
+            }
+        }
+
+        private void HandleDynamicSpatialNavigationFailure(NavigationFailureReason failureReason)
+        {
+            if (IsNavigationAgentUnavailableFailure(failureReason))
+            {
+                return;
+            }
+
+            if (IsNavigationExecutionRetryableFailure(failureReason)
+                && HasRecoveryBudgetForCurrentObjective()
+                && TryIssueNavigationRecoveryRepath(NavigationRecoveryReason.RetryLogicalObjective))
+            {
+                return;
+            }
+
+            if (_blackboard.DestinationSpatialNodeId >= 0)
+            {
+                _rejectedDynamicPatrolNodeIds.Add(_blackboard.DestinationSpatialNodeId);
+            }
+
+            _navigation?.Stop();
+            _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
+            ClearDynamicPatrolDestination();
+            if (SetDynamicSpatialPatrolDestination())
+            {
+                _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
+                return;
+            }
+
+            ActivateDynamicPatrolFallback();
+        }
+
+        private void HandleConfidenceSpatialNavigationFailure(NavigationFailureReason failureReason)
+        {
+            if (IsNavigationAgentUnavailableFailure(failureReason))
+            {
+                return;
+            }
+
+            if (IsNavigationExecutionRetryableFailure(failureReason)
+                && HasRecoveryBudgetForCurrentObjective()
+                && TryIssueNavigationRecoveryRepath(NavigationRecoveryReason.RetryLogicalObjective))
+            {
+                return;
+            }
+
+            if (_blackboard.DestinationSpatialNodeId >= 0)
+            {
+                _rejectedCanonicalLocalNodeIds.Add(_blackboard.DestinationSpatialNodeId);
+            }
+
+            _navigation?.Stop();
+            _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
+            ClearDynamicPatrolDestination();
+            if (SetCanonicalPatrolDestination())
+            {
+                _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
+                return;
+            }
+
+            var objective = _globalPatrolPlanner?.CurrentObjective ?? GlobalPatrolObjective.Invalid;
+            if (objective.TargetRegionId.IsValid)
+            {
+                _rejectedCanonicalGlobalRegionIds.Add(objective.TargetRegionId);
+                _globalPatrolPlanner?.Invalidate(ToGlobalInvalidationReason(failureReason));
+            }
+
+            _rejectedCanonicalLocalNodeIds.Clear();
+            _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateGlobalObjective);
+            if (SetCanonicalPatrolDestination())
+            {
+                _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateGlobalObjective);
+                return;
+            }
+
+            ActivateCanonicalPatrolFallback();
+        }
+
+        private void HandleSearchNavigationFailure(NavigationFailureReason failureReason)
+        {
+            if (IsSearchRetryableFailure(failureReason)
+                && HasRecoveryBudgetForCurrentObjective()
+                && TryIssueNavigationRecoveryRepath(NavigationRecoveryReason.RetryLogicalObjective))
+            {
+                return;
+            }
+
+            if (searchCandidateNodeId >= 0 && _searchContext != null)
+            {
+                _searchContext.RecordCandidateAttempt(searchCandidateNodeId);
+            }
+
+            searchCandidateNodeId = -1;
+            _blackboard.DestinationSpatialNodeId = -1;
+            _navigation?.Stop();
+            _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
+            _navigationObjectiveKey = StalkerNavigationObjectiveKey.None;
+            ResetNavigationRecoveryBudget();
+            if (!TryPlanNextSearchCandidate())
+            {
+                _navigation?.Stop();
+                _navigation?.RecordRecoveryReason(NavigationRecoveryReason.None);
+                return;
+            }
+
+            _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
+        }
+
+        private void HandleChaseNavigationFailure(NavigationFailureReason failureReason)
+        {
+            if (IsNavigationExecutionRetryableFailure(failureReason)
+                && HasRecoveryBudgetForCurrentObjective())
+            {
+                TryIssueNavigationRecoveryRepath(NavigationRecoveryReason.RetryLogicalObjective);
+            }
+        }
+
+        private void HandleTopologyBlockedByDoor()
+        {
+            _navigation?.RecordRecoveryReason(NavigationRecoveryReason.TopologyChangedRepath);
+            switch (currentState)
+            {
+                case StalkerState.PATROL:
+                    HandlePatrolNavigationFailure(NavigationFailureReason.DoorBlocked);
+                    break;
+                case StalkerState.SEARCH:
+                    HandleSearchNavigationFailure(NavigationFailureReason.DoorBlocked);
+                    break;
+                case StalkerState.CHASE:
+                    HandleChaseNavigationFailure(NavigationFailureReason.DoorBlocked);
+                    break;
+            }
+        }
+
+        private static bool IsSearchRetryableFailure(NavigationFailureReason failureReason)
+        {
+            return IsNavigationExecutionRetryableFailure(failureReason);
+        }
+
+        private static bool IsNavigationAgentUnavailableFailure(NavigationFailureReason failureReason)
+        {
+            return failureReason == NavigationFailureReason.AgentUnavailable
+                || failureReason == NavigationFailureReason.AgentNotOnNavMesh;
+        }
+
+        private static bool IsNavigationExecutionRetryableFailure(NavigationFailureReason failureReason)
+        {
+            return failureReason == NavigationFailureReason.PathStale
+                || failureReason == NavigationFailureReason.NoProgress
+                || failureReason == NavigationFailureReason.Stuck
+                || failureReason == NavigationFailureReason.PathPendingTimeout;
+        }
+
+        private static NavigationFailureReason ResolveNavigationFailureReason(
+            NavigationPathStatus pathStatus,
+            NavigationExecutionStatus executionStatus)
+        {
+            switch (pathStatus)
+            {
+                case NavigationPathStatus.AgentUnavailable:
+                    return NavigationFailureReason.AgentUnavailable;
+                case NavigationPathStatus.AgentNotOnNavMesh:
+                    return NavigationFailureReason.AgentNotOnNavMesh;
+                case NavigationPathStatus.Partial:
+                    return NavigationFailureReason.PathPartial;
+                case NavigationPathStatus.Invalid:
+                    return NavigationFailureReason.PathInvalid;
+                case NavigationPathStatus.Stale:
+                    return NavigationFailureReason.PathStale;
+                case NavigationPathStatus.Pending:
+                    return NavigationFailureReason.PathPendingTimeout;
+            }
+
+            return executionStatus == NavigationExecutionStatus.Stuck
+                ? NavigationFailureReason.Stuck
+                : NavigationFailureReason.NoProgress;
+        }
+
+        private static GlobalPatrolObjectiveInvalidationReason ToGlobalInvalidationReason(NavigationFailureReason failureReason)
+        {
+            return failureReason == NavigationFailureReason.DoorBlocked
+                || failureReason == NavigationFailureReason.PathStale
+                    ? GlobalPatrolObjectiveInvalidationReason.TopologyChanged
+                    : GlobalPatrolObjectiveInvalidationReason.NavigationRecoveryFailed;
         }
 
         private void TickNavigationFallback()
@@ -1386,6 +1790,27 @@ namespace EchoProtocol.AI.Stalker
             _navigationRecoveryAttemptUsed = false;
         }
 
+        private void SetNavigationObjective(StalkerNavigationObjectiveKey objectiveKey)
+        {
+            if (!_navigationObjectiveKey.Equals(objectiveKey))
+            {
+                _navigationObjectiveKey = objectiveKey;
+                ResetNavigationRecoveryBudget();
+            }
+        }
+
+        private void ClearNavigationObjective()
+        {
+            _navigationObjectiveKey = StalkerNavigationObjectiveKey.None;
+            ResetNavigationRecoveryBudget();
+            _navigation?.RecordRecoveryReason(NavigationRecoveryReason.None);
+        }
+
+        private bool HasRecoveryBudgetForCurrentObjective()
+        {
+            return !_navigationRecoveryAttemptUsed;
+        }
+
         private void ResetFixedPatrolFallbackState()
         {
             _fixedPatrolFallbackFailureCount = 0;
@@ -1497,7 +1922,11 @@ namespace EchoProtocol.AI.Stalker
 
             if (_navigation.TrySetDestination(destination))
             {
-                ResetNavigationRecoveryBudget();
+                SetNavigationObjective(new StalkerNavigationObjectiveKey(
+                    StalkerNavigationObjectiveKind.FixedWaypoint,
+                    pointIndex,
+                    -1,
+                    -1));
             }
         }
 
@@ -1613,6 +2042,7 @@ namespace EchoProtocol.AI.Stalker
                 }
 
                 _blackboard.CurrentSpatialNodeId = currentNodeId;
+                _rejectedDynamicPatrolNodeIds.Clear();
             }
 
             plannerRunCount++;
@@ -1620,6 +2050,7 @@ namespace EchoProtocol.AI.Stalker
                 currentNodeId,
                 _blackboard.PreviousSpatialNodeId,
                 CurrentSimulationTimeSeconds,
+                _rejectedDynamicPatrolNodeIds,
                 out var plan))
             {
                 ClearDynamicPatrolDestination();
@@ -1632,7 +2063,11 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            ResetNavigationRecoveryBudget();
+            SetNavigationObjective(new StalkerNavigationObjectiveKey(
+                StalkerNavigationObjectiveKind.DynamicSpatialNode,
+                plan.DestinationNode.Id,
+                -1,
+                -1));
             _blackboard.DestinationSpatialNodeId = plan.DestinationNode.Id;
             lastPatrolScore = plan.Score;
             candidateCount = plan.CandidateCount;
@@ -1661,6 +2096,7 @@ namespace EchoProtocol.AI.Stalker
             if (!_globalPatrolPlanner.TryGetOrCreateObjective(
                     currentRegionId,
                     _previousRegionId,
+                    _rejectedCanonicalGlobalRegionIds,
                     out var objective))
             {
                 regionGraphFallbackReason = RegionGraphFallbackReason.NoReachableRegionObjective;
@@ -1671,6 +2107,7 @@ namespace EchoProtocol.AI.Stalker
                     currentNodeId,
                     _blackboard.PreviousSpatialNodeId,
                     objective.NextRegionId,
+                    _rejectedCanonicalLocalNodeIds,
                     out var selection))
             {
                 regionGraphFallbackReason = RegionGraphFallbackReason.NoCompleteLocalPath;
@@ -1684,7 +2121,11 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            ResetNavigationRecoveryBudget();
+            SetNavigationObjective(new StalkerNavigationObjectiveKey(
+                StalkerNavigationObjectiveKind.ConfidenceSpatialNode,
+                selection.DestinationNode.Id,
+                objective.TargetRegionId.Value,
+                -1));
             _blackboard.DestinationSpatialNodeId = selection.DestinationNode.Id;
             lastPatrolScore = selection.Score;
             candidateCount = selection.CandidateCount;
@@ -1708,6 +2149,9 @@ namespace EchoProtocol.AI.Stalker
             _blackboard.CurrentSpatialNodeId = destinationNodeId;
             _blackboard.DestinationSpatialNodeId = -1;
             _coverageMemory?.RecordPhysicalNodeArrival(destinationNodeId, CurrentSimulationTimeSeconds);
+            _rejectedCanonicalLocalNodeIds.Clear();
+            _rejectedCanonicalGlobalRegionIds.Clear();
+            ClearNavigationObjective();
             if (_regionGraph != null && _regionGraph.TryGetRegionForNode(destinationNodeId, out var regionId))
             {
                 UpdateCurrentRegion(regionId);
@@ -1728,6 +2172,8 @@ namespace EchoProtocol.AI.Stalker
             _blackboard.CurrentSpatialNodeId = destinationNodeId;
             _blackboard.DestinationSpatialNodeId = -1;
             _spatialPatrolMemory?.MarkVisited(destinationNodeId, CurrentSimulationTimeSeconds);
+            _rejectedDynamicPatrolNodeIds.Clear();
+            ClearNavigationObjective();
             SyncDynamicPatrolDebugFields();
         }
 
@@ -1744,6 +2190,7 @@ namespace EchoProtocol.AI.Stalker
             _dynamicPatrolFallbackActive = true;
             ClearDynamicPatrolDestination();
             TickFixedWaypointPatrol();
+            _navigation?.RecordRecoveryReason(NavigationRecoveryReason.FixedPatrolFallback);
         }
 
         private void ActivateCanonicalPatrolFallback()
@@ -1755,8 +2202,12 @@ namespace EchoProtocol.AI.Stalker
 
             _canonicalPatrolFallbackActive = true;
             _globalPatrolPlanner?.Invalidate(GlobalPatrolObjectiveInvalidationReason.NavigationRecoveryFailed);
+            var recoveryReason = regionGraphFallbackReason == RegionGraphFallbackReason.SpatialGraphCompatibilityMismatch
+                ? NavigationRecoveryReason.RegionGraphCompatibilityFallback
+                : NavigationRecoveryReason.FixedPatrolFallback;
             ClearDynamicPatrolDestination();
             TickFixedWaypointPatrol();
+            _navigation?.RecordRecoveryReason(recoveryReason);
         }
 
         private bool TryResolveNearestSpatialNode(Vector3 worldPosition, out int nodeId)

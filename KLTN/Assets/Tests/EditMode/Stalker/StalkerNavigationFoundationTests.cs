@@ -14,6 +14,10 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string NavigationPlanStatusTypeName = "EchoProtocol.AI.Stalker.NavigationPlanStatus";
         private const string NavigationExecutionStatusTypeName = "EchoProtocol.AI.Stalker.NavigationExecutionStatus";
         private const string NavigationPathStatusTypeName = "EchoProtocol.AI.Stalker.NavigationPathStatus";
+        private const string NavigationFailureReasonTypeName = "EchoProtocol.AI.Stalker.NavigationFailureReason";
+        private const string NavigationRecoveryReasonTypeName = "EchoProtocol.AI.Stalker.NavigationRecoveryReason";
+        private const string NavigationObjectiveKeyTypeName = "EchoProtocol.AI.Stalker.StalkerNavigationObjectiveKey";
+        private const string NavigationObjectiveKindTypeName = "EchoProtocol.AI.Stalker.StalkerNavigationObjectiveKind";
 
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
 
@@ -149,6 +153,65 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             AssertNavigationPlanResult(result, "AgentUnavailable", destination, false);
             Assert.That(GetBoolProperty(controller, "HasActiveDestination"), Is.False);
+        }
+
+        [Test]
+        public void NAV_3_NavigationFailureReason_ContainsCanonicalClassifications()
+        {
+            AssertExactEnumNames(
+                NavigationFailureReasonTypeName,
+                new[]
+                {
+                    "None",
+                    "AgentUnavailable",
+                    "AgentNotOnNavMesh",
+                    "DestinationInvalid",
+                    "PathPendingTimeout",
+                    "PathPartial",
+                    "PathInvalid",
+                    "PathStale",
+                    "DoorBlocked",
+                    "NoProgress",
+                    "Stuck"
+                });
+        }
+
+        [Test]
+        public void NAV_3_NavigationRecoveryReason_ContainsCanonicalRecoverySemantics()
+        {
+            AssertExactEnumNames(
+                NavigationRecoveryReasonTypeName,
+                new[]
+                {
+                    "None",
+                    "PathStaleRepath",
+                    "TopologyChangedRepath",
+                    "RetryLogicalObjective",
+                    "AlternateLocalCandidate",
+                    "AlternateGlobalObjective",
+                    "RegionGraphCompatibilityFallback",
+                    "FixedPatrolFallback",
+                    "EmergencyNavMeshRecovery"
+                });
+        }
+
+        [Test]
+        public void NAV_4_ObjectiveKey_DistinguishesSameObjectiveFromNewLocalOrGlobalObjective()
+        {
+            var keyType = ResolveType(NavigationObjectiveKeyTypeName);
+            var kindType = ResolveType(NavigationObjectiveKindTypeName);
+            var dynamicKind = Enum.Parse(kindType, "DynamicSpatialNode");
+            var confidenceKind = Enum.Parse(kindType, "ConfidenceSpatialNode");
+
+            var sameA = Activator.CreateInstance(keyType, dynamicKind, 3, -1, -1);
+            var sameB = Activator.CreateInstance(keyType, dynamicKind, 3, -1, -1);
+            var alternateLocal = Activator.CreateInstance(keyType, dynamicKind, 4, -1, -1);
+            var alternateGlobal = Activator.CreateInstance(keyType, confidenceKind, 3, 2, -1);
+
+            Assert.That((bool)InvokeMethod(sameA, "Equals", new[] { keyType }, new[] { sameB }), Is.True);
+            Assert.That((bool)InvokeMethod(sameA, "Equals", new[] { keyType }, new[] { alternateLocal }), Is.False);
+            Assert.That((bool)InvokeMethod(sameA, "Equals", new[] { keyType }, new[] { alternateGlobal }), Is.False);
+            Assert.That(GetBoolProperty(sameA, "IsValid"), Is.True);
         }
 
         private NavMeshAgent CreateInactiveAgent(string name)

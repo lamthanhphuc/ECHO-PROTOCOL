@@ -21,6 +21,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string AiSimulationTimeTypeName = "EchoProtocol.AI.Common.AiSimulationTime";
         private const string AiSimulationStepTypeName = "EchoProtocol.AI.Common.AiSimulationStep";
         private const string VisionObservationTypeName = "EchoProtocol.AI.Stalker.VisionObservation";
+        private const string DiagnosticAttackSinkTypeName = "EchoProtocol.AI.Stalker.StalkerDiagnosticAttackConsequenceSink";
         private const float VectorTolerance = 0.001f;
 
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
@@ -277,6 +278,56 @@ namespace EchoProtocol.AI.Stalker.Tests
             yield return null;
         }
 
+        [UnityTest]
+        public IEnumerator RUNTIME_ATTACK_16_HostPipeline_ResolvesTypedAttackExactlyOnce()
+        {
+            var fixture = CreateRuntimeFixture();
+            var lifecycle = CreateLifecycle();
+            var sink = Activator.CreateInstance(ResolveType(DiagnosticAttackSinkTypeName));
+            InjectLifecycle(fixture.Runtime, lifecycle);
+            RegisterActivePlayer(lifecycle, 1, 1, new Vector3(0f, 0f, 1f));
+            SetPublicProperty(fixture.Controller, "AttackConsequenceSink", sink);
+            SetCurrentTarget(fixture.Controller, 1, new Vector3(0f, 0f, 1f));
+            SetPrivateField(fixture.Controller, "attackRange", 2f);
+            SetPrivateField(fixture.Controller, "attackWindup", 0.1f);
+            SetPrivateField(fixture.Controller, "currentTarget", null);
+
+            Assert.That(RunPipeline(fixture.Runtime, 10L, 1d, 0.1f), Is.True);
+            AssertState(fixture.Controller, "ATTACK");
+            Assert.That(GetBoolProperty(fixture.Controller, "HitMomentResolved"), Is.False);
+
+            Assert.That(RunPipeline(fixture.Runtime, 11L, 1.1d, 0.1f), Is.True);
+
+            AssertState(fixture.Controller, "RECOVER");
+            Assert.That(GetBoolProperty(fixture.Controller, "HitMomentResolved"), Is.True);
+            Assert.That(GetIntProperty(fixture.Controller, "AttackResolutionCount"), Is.EqualTo(1));
+            Assert.That(GetIntProperty(sink, "CallCount"), Is.EqualTo(1));
+
+            Assert.That(RunPipeline(fixture.Runtime, 12L, 1.2d, 0.1f), Is.True);
+
+            Assert.That(GetIntProperty(fixture.Controller, "AttackResolutionCount"), Is.EqualTo(1));
+            Assert.That(GetIntProperty(sink, "CallCount"), Is.EqualTo(1));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RUNTIME_ATTACK_17_ClientProxyFixedUpdate_CannotCreateOrResolveAttack()
+        {
+            var fixture = CreateRuntimeFixture();
+            var sink = Activator.CreateInstance(ResolveType(DiagnosticAttackSinkTypeName));
+            SetPublicProperty(fixture.Controller, "AttackConsequenceSink", sink);
+            SetCurrentTarget(fixture.Controller, 1, new Vector3(0f, 0f, 1f));
+            SetPrivateField(fixture.Controller, "currentTarget", null);
+
+            InvokeInstanceMethod(fixture.Runtime, "FixedUpdateNetwork", Type.EmptyTypes, Array.Empty<object>());
+
+            Assert.That(GetIntProperty(fixture.Runtime, "AuthoritativeSimulationCount"), Is.EqualTo(0));
+            Assert.That(GetBoolProperty(GetProperty(fixture.Controller, "ActiveAttackEpisodeId"), "IsValid"), Is.False);
+            Assert.That(GetIntProperty(fixture.Controller, "AttackResolutionCount"), Is.EqualTo(0));
+            Assert.That(GetIntProperty(sink, "CallCount"), Is.EqualTo(0));
+            yield return null;
+        }
+
         private RuntimeFixture CreateRuntimeFixture()
         {
             var root = new GameObject("RUNTIME_Stalker");
@@ -469,6 +520,13 @@ namespace EchoProtocol.AI.Stalker.Tests
             var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, $"Missing private field '{fieldName}' on '{target.GetType().FullName}'.");
             field.SetValue(target, value);
+        }
+
+        private static void SetPublicProperty(object target, string propertyName, object value)
+        {
+            var property = target.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(property, Is.Not.Null, $"Missing public property '{propertyName}' on '{target.GetType().FullName}'.");
+            property.SetValue(target, value);
         }
 
         private static object GetProperty(object target, string propertyName)

@@ -256,6 +256,56 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("RuntimeBelongsToRunner(found[i], runner)", source);
         }
 
+        [Test]
+        public void HARNESS_16_PhaseFourAttackAcceptanceUsesExistingLifecycleAndSafeTeleport()
+        {
+            Assert.That(File.Exists(ProbeScriptPath), Is.True);
+            var source = File.ReadAllText(ProbeScriptPath);
+
+            StringAssert.Contains("--stk4-attack-autostart=", source);
+            StringAssert.Contains("StartPhase4AttackScenario", source);
+            StringAssert.Contains("TryResolveFirstRemoteHostPlayerIdentity", source);
+            StringAssert.Contains("TryResolveHostLocalPlayerIdentity", source);
+            StringAssert.Contains("lifecycle.IdentityRegistry.TryGetPlayerId(player", source);
+            StringAssert.Contains("lifecycle.EntityRegistry.TryGetEntity(candidateId", source);
+            StringAssert.Contains("player == runner.LocalPlayer", source);
+            StringAssert.Contains("TryTeleportTarget(localIdentity, localAwayPosition", source);
+            StringAssert.Contains("TryTeleportTarget(identity, attackPosition", source);
+            StringAssert.Contains("networkTransform.Teleport(position);", source);
+            StringAssert.Contains("networkObject.HasStateAuthority", source);
+            StringAssert.DoesNotContain("new FusionPlayerLifecycle", source);
+            StringAssert.DoesNotContain("identity.EntityRoot.position = attackPosition", source);
+        }
+
+        [Test]
+        public void HARNESS_17_PhaseFourAttackAcceptanceReportsHostClientAndExactlyOnceEvidence()
+        {
+            Assert.That(File.Exists(ProbeScriptPath), Is.True);
+            var source = File.ReadAllText(ProbeScriptPath);
+
+            StringAssert.Contains("StalkerDiagnosticAttackConsequenceSink", source);
+            StringAssert.Contains("ConfigurePhase4AttackAcceptanceDiagnostics", source);
+            StringAssert.Contains("BaselineCaptured", source);
+            StringAssert.Contains("STK4|ATTACK|role=Host|stage=EpisodeStarted", source);
+            StringAssert.Contains("STK4|ATTACK|role=Host|stage=Resolved", source);
+            StringAssert.Contains("STK4|ATTACK|role=Host|stage=ExactlyOnceVerified", source);
+            StringAssert.Contains("STK4|ATTACK|role=Client|stage=ProxyObserved", source);
+            StringAssert.Contains("AttackStabilitySimulationDelta", source);
+            StringAssert.Contains("ExpectedTargetEpisodeWaitSimulationDelta", source);
+            StringAssert.Contains("IsExpectedAttackEpisode", source);
+            StringAssert.Contains("episode.EpisodeId != _attackBaselineEpisodeId", source);
+            StringAssert.Contains("episode.TargetIdAtEntry == _attackTargetId", source);
+            StringAssert.Contains("LogUnexpectedAttackEpisodeOnce", source);
+            StringAssert.Contains("ExpectedTargetEpisodeNotObserved", source);
+            StringAssert.Contains("resolutionDelta == 1", source);
+            StringAssert.Contains("consequenceDelta == 1", source);
+            StringAssert.Contains("resolutionDelta=", source);
+            StringAssert.Contains("consequenceDelta=", source);
+            StringAssert.Contains("AuthoritativeSimulationCount", source);
+            StringAssert.Contains("stateAuth=", source);
+            StringAssert.Contains("server=", source);
+        }
+
         private static Scene OpenScene(string path)
         {
             Assert.That(AssetDatabase.LoadAssetAtPath<SceneAsset>(path), Is.Not.Null);

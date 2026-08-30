@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using EchoProtocol.AI.Common.Spatial;
 
 namespace EchoProtocol.AI.Stalker.Spatial
@@ -46,6 +47,15 @@ namespace EchoProtocol.AI.Stalker.Spatial
             RegionId previousRegionId,
             out GlobalPatrolObjective objective)
         {
+            return TryGetOrCreateObjective(currentRegionId, previousRegionId, null, out objective);
+        }
+
+        public bool TryGetOrCreateObjective(
+            RegionId currentRegionId,
+            RegionId previousRegionId,
+            ISet<RegionId> rejectedRegionIds,
+            out GlobalPatrolObjective objective)
+        {
             objective = GlobalPatrolObjective.Invalid;
             if (_regionGraph == null || _coverageMemory == null || !currentRegionId.IsValid)
             {
@@ -54,7 +64,9 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 return false;
             }
 
-            if (CurrentObjective.IsValid && IsObjectiveStillValid(currentRegionId, out var nextRegionId))
+            if (CurrentObjective.IsValid
+                && (rejectedRegionIds == null || !rejectedRegionIds.Contains(CurrentObjective.TargetRegionId))
+                && IsObjectiveStillValid(currentRegionId, out var nextRegionId))
             {
                 objective = new GlobalPatrolObjective(CurrentObjective.TargetRegionId, nextRegionId);
                 CurrentObjective = objective;
@@ -67,7 +79,7 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 LastInvalidationReason = GetInvalidationReason(currentRegionId);
             }
 
-            if (!TrySelectTargetRegion(currentRegionId, previousRegionId, out var targetRegionId))
+            if (!TrySelectTargetRegion(currentRegionId, previousRegionId, rejectedRegionIds, out var targetRegionId))
             {
                 CurrentObjective = GlobalPatrolObjective.Invalid;
                 return false;
@@ -116,7 +128,11 @@ namespace EchoProtocol.AI.Stalker.Spatial
             return GlobalPatrolObjectiveInvalidationReason.TargetRegionUnreachable;
         }
 
-        private bool TrySelectTargetRegion(RegionId currentRegionId, RegionId previousRegionId, out RegionId targetRegionId)
+        private bool TrySelectTargetRegion(
+            RegionId currentRegionId,
+            RegionId previousRegionId,
+            ISet<RegionId> rejectedRegionIds,
+            out RegionId targetRegionId)
         {
             targetRegionId = RegionId.Invalid;
             var bestVisitCount = int.MaxValue;
@@ -130,6 +146,7 @@ namespace EchoProtocol.AI.Stalker.Spatial
             {
                 var candidate = regions[i].Id;
                 if (candidate == currentRegionId
+                    || (rejectedRegionIds != null && rejectedRegionIds.Contains(candidate))
                     || !_regionGraph.IsRegionEnabled(candidate)
                     || !_regionGraph.TryGetRouteHopCost(currentRegionId, candidate, out var hopCost))
                 {

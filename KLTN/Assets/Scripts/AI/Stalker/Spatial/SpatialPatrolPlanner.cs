@@ -77,6 +77,16 @@ namespace EchoProtocol.AI.Stalker.Spatial
             float currentTime,
             out SpatialPatrolPlan plan)
         {
+            return TrySelectDestination(currentNodeId, previousNodeId, currentTime, null, out plan);
+        }
+
+        public bool TrySelectDestination(
+            int currentNodeId,
+            int previousNodeId,
+            float currentTime,
+            ISet<int> rejectedNodeIds,
+            out SpatialPatrolPlan plan)
+        {
             plan = default;
 
             if (!CanPlan || !_graph.TryGetNode(currentNodeId, out _))
@@ -101,6 +111,11 @@ namespace EchoProtocol.AI.Stalker.Spatial
             for (var i = 0; i < candidates.Count; i++)
             {
                 var candidateNodeId = candidates[i];
+                if (rejectedNodeIds != null && rejectedNodeIds.Contains(candidateNodeId))
+                {
+                    continue;
+                }
+
                 if (!_graph.TryGetNode(candidateNodeId, out var candidateNode))
                 {
                     continue;

@@ -22,6 +22,8 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string StalkerTargetStatusTypeName = "EchoProtocol.AI.Stalker.StalkerTargetStatus";
         private const string EligibilityResultTypeName = "EchoProtocol.AI.Stalker.StalkerTargetEligibilityResult";
         private const string EligibilityReasonTypeName = "EchoProtocol.AI.Stalker.StalkerTargetEligibilityReason";
+        private const string AttackTargetSnapshotTypeName = "EchoProtocol.AI.Stalker.StalkerAttackTargetSnapshot";
+        private const string DiagnosticAttackSinkTypeName = "EchoProtocol.AI.Stalker.StalkerDiagnosticAttackConsequenceSink";
         private const float FloatTolerance = 0.0001f;
         private const float VectorTolerance = 0.001f;
 
@@ -546,6 +548,56 @@ namespace EchoProtocol.AI.Stalker.Tests
             yield return null;
         }
 
+        [UnityTest]
+        public IEnumerator STK_AUTH_ATTACK_TypedCurrentTargetWithNullLegacyTransform_ResolvesHitExactlyOnce()
+        {
+            var fixture = CreateFixture();
+            var sink = Activator.CreateInstance(ResolveType(DiagnosticAttackSinkTypeName));
+            var targetPosition = new Vector3(0f, 0f, 1f);
+            SetCurrentTarget(fixture.Controller, 1, new Vector3(0f, 0f, 3f));
+            SetPrivateField(fixture.Controller, "currentTarget", null);
+            SetPrivateField(fixture.Controller, "attackRange", 2f);
+            SetPrivateField(fixture.Controller, "attackWindup", 0.2f);
+            SetProperty(fixture.Controller, "AttackConsequenceSink", sink);
+
+            Assert.That(Simulate(
+                fixture.Controller,
+                0.1f,
+                CreateCandidateList(CreateCandidate(1, targetPosition, 1f, true)),
+                CreateStatusList(CreateStatus(1, true))),
+                Is.True);
+
+            AssertState(fixture.Controller, "ATTACK");
+            Assert.That(GetProperty(fixture.Controller, "CurrentTarget"), Is.Null);
+            AssertPlayerIdValue(GetProperty(fixture.Controller, "AttackTargetId"), 1);
+
+            Assert.That(Simulate(
+                fixture.Controller,
+                0.2f,
+                CreateCandidateList(CreateCandidate(1, targetPosition, 1f, true)),
+                CreateStatusList(CreateStatus(1, true)),
+                CreateAttackTargetSnapshot(1, true, targetPosition, true)),
+                Is.True);
+
+            AssertState(fixture.Controller, "RECOVER");
+            Assert.That(GetProperty(fixture.Controller, "LastAttackResult").ToString(), Is.EqualTo("Hit"));
+            Assert.That(GetBoolProperty(fixture.Controller, "HitMomentResolved"), Is.True);
+            Assert.That(GetIntProperty(fixture.Controller, "AttackResolutionCount"), Is.EqualTo(1));
+            Assert.That(GetIntProperty(sink, "CallCount"), Is.EqualTo(1));
+
+            Assert.That(Simulate(
+                fixture.Controller,
+                0.1f,
+                CreateCandidateList(CreateCandidate(1, targetPosition, 1f, true)),
+                CreateStatusList(CreateStatus(1, true)),
+                CreateAttackTargetSnapshot(1, true, targetPosition, true)),
+                Is.True);
+
+            Assert.That(GetIntProperty(fixture.Controller, "AttackResolutionCount"), Is.EqualTo(1));
+            Assert.That(GetIntProperty(sink, "CallCount"), Is.EqualTo(1));
+            yield return null;
+        }
+
         private StalkerFixture CreateFixture()
         {
             var controllerType = ResolveType(StalkerControllerTypeName);
@@ -614,6 +666,38 @@ namespace EchoProtocol.AI.Stalker.Tests
             var result = InvokeMethod(controller, "Simulate", new[] { ResolveType(StalkerSimulationInputTypeName) }, new[] { input });
             Assert.That(result, Is.TypeOf<bool>());
             return (bool)result;
+        }
+
+        private static bool Simulate(Component controller, float deltaSeconds, object candidates, object statuses, object attackTargetSnapshot)
+        {
+            var snapshotType = ResolveType(AttackTargetSnapshotTypeName);
+            var input = Activator.CreateInstance(
+                ResolveType(StalkerSimulationInputTypeName),
+                Activator.CreateInstance(
+                    ResolveType(AiSimulationStepTypeName),
+                    Activator.CreateInstance(ResolveType(AiSimulationTimeTypeName), 10L, 1d),
+                    deltaSeconds),
+                candidates,
+                statuses,
+                attackTargetSnapshot);
+            var result = InvokeMethod(
+                controller,
+                "Simulate",
+                new[] { ResolveType(StalkerSimulationInputTypeName) },
+                new[] { input });
+            Assert.That(result, Is.TypeOf<bool>());
+            Assert.That(snapshotType, Is.Not.Null);
+            return (bool)result;
+        }
+
+        private static object CreateAttackTargetSnapshot(int playerId, bool gameplayValid, Vector3 position, bool hasConsequenceReceiver)
+        {
+            return Activator.CreateInstance(
+                ResolveType(AttackTargetSnapshotTypeName),
+                CreatePlayerId(playerId),
+                gameplayValid,
+                position,
+                hasConsequenceReceiver);
         }
 
         private static object CreateCandidate(int playerId, Vector3 position, float distance, bool eligible)
@@ -728,6 +812,20 @@ namespace EchoProtocol.AI.Stalker.Tests
             return (float)value;
         }
 
+        private static bool GetBoolProperty(object target, string propertyName)
+        {
+            var value = GetProperty(target, propertyName);
+            Assert.That(value, Is.TypeOf<bool>());
+            return (bool)value;
+        }
+
+        private static int GetIntProperty(object target, string propertyName)
+        {
+            var value = GetProperty(target, propertyName);
+            Assert.That(value, Is.TypeOf<int>());
+            return (int)value;
+        }
+
         private static Vector3 GetVector3Property(object target, string propertyName)
         {
             var value = GetProperty(target, propertyName);
@@ -740,6 +838,13 @@ namespace EchoProtocol.AI.Stalker.Tests
             var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, $"Missing private field '{fieldName}' on '{target.GetType().FullName}'.");
             field.SetValue(target, value);
+        }
+
+        private static void SetProperty(object target, string propertyName, object value)
+        {
+            var property = target.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(property, Is.Not.Null, $"Missing public property '{propertyName}' on '{target.GetType().FullName}'.");
+            property.SetValue(target, value);
         }
 
         private static void AssertState(Component controller, string expected)

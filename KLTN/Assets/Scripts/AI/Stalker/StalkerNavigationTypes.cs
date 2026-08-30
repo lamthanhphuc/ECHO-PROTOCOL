@@ -18,6 +18,79 @@ namespace EchoProtocol.AI.Stalker
         RecoveryRepath
     }
 
+    public enum NavigationFailureReason
+    {
+        None,
+        AgentUnavailable,
+        AgentNotOnNavMesh,
+        DestinationInvalid,
+        PathPendingTimeout,
+        PathPartial,
+        PathInvalid,
+        PathStale,
+        DoorBlocked,
+        NoProgress,
+        Stuck
+    }
+
+    public enum NavigationRecoveryReason
+    {
+        None,
+        PathStaleRepath,
+        TopologyChangedRepath,
+        RetryLogicalObjective,
+        AlternateLocalCandidate,
+        AlternateGlobalObjective,
+        RegionGraphCompatibilityFallback,
+        FixedPatrolFallback,
+        EmergencyNavMeshRecovery
+    }
+
+    public enum StalkerNavigationObjectiveKind
+    {
+        None,
+        FixedWaypoint,
+        DynamicSpatialNode,
+        ConfidenceSpatialNode,
+        SearchCandidate,
+        ChaseTarget
+    }
+
+    public readonly struct StalkerNavigationObjectiveKey
+    {
+        public StalkerNavigationObjectiveKey(
+            StalkerNavigationObjectiveKind kind,
+            int localNodeId,
+            int globalRegionId,
+            int targetPlayerId)
+        {
+            Kind = kind;
+            LocalNodeId = localNodeId;
+            GlobalRegionId = globalRegionId;
+            TargetPlayerId = targetPlayerId;
+        }
+
+        public static StalkerNavigationObjectiveKey None => default;
+
+        public StalkerNavigationObjectiveKind Kind { get; }
+
+        public int LocalNodeId { get; }
+
+        public int GlobalRegionId { get; }
+
+        public int TargetPlayerId { get; }
+
+        public bool IsValid => Kind != StalkerNavigationObjectiveKind.None;
+
+        public bool Equals(StalkerNavigationObjectiveKey other)
+        {
+            return Kind == other.Kind
+                && LocalNodeId == other.LocalNodeId
+                && GlobalRegionId == other.GlobalRegionId
+                && TargetPlayerId == other.TargetPlayerId;
+        }
+    }
+
     public readonly struct NavigationPlanResult
     {
         public NavigationPlanResult(NavigationPlanStatus status, Vector3 requestedDestination)

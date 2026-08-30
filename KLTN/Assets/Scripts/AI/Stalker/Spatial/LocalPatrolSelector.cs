@@ -36,6 +36,16 @@ namespace EchoProtocol.AI.Stalker.Spatial
             RegionId desiredRegionId,
             out LocalPatrolSelection selection)
         {
+            return TrySelect(currentNodeId, previousNodeId, desiredRegionId, null, out selection);
+        }
+
+        public bool TrySelect(
+            int currentNodeId,
+            int previousNodeId,
+            RegionId desiredRegionId,
+            ISet<int> rejectedNodeIds,
+            out LocalPatrolSelection selection)
+        {
             selection = default;
             if (_spatialGraph == null
                 || _regionGraph == null
@@ -52,6 +62,11 @@ namespace EchoProtocol.AI.Stalker.Spatial
             for (var i = 0; i < candidates.Count; i++)
             {
                 var candidateNodeId = candidates[i];
+                if (rejectedNodeIds != null && rejectedNodeIds.Contains(candidateNodeId))
+                {
+                    continue;
+                }
+
                 if (!_spatialGraph.TryGetNode(candidateNodeId, out var node))
                 {
                     continue;

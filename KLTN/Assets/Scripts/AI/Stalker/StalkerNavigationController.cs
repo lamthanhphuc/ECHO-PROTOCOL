@@ -8,7 +8,12 @@ namespace EchoProtocol.AI.Stalker
         private readonly NavMeshAgent _agent;
         private readonly NavigationProgressMonitor _progressMonitor;
         private readonly NavMeshPath _evaluationPath = new NavMeshPath();
+        private readonly float _pathPendingTimeoutSeconds;
         private Vector3? _activeDestination;
+        private float _pathPendingElapsedSeconds;
+        private bool _pathPendingTimedOut;
+        private NavigationFailureReason _currentFailureReason;
+        private NavigationRecoveryReason _currentRecoveryReason;
 
         public StalkerNavigationController(NavMeshAgent agent)
             : this(agent, NavigationProgressSettings.Default)
@@ -16,9 +21,18 @@ namespace EchoProtocol.AI.Stalker
         }
 
         public StalkerNavigationController(NavMeshAgent agent, NavigationProgressSettings progressSettings)
+            : this(agent, progressSettings, 1f)
+        {
+        }
+
+        public StalkerNavigationController(
+            NavMeshAgent agent,
+            NavigationProgressSettings progressSettings,
+            float pathPendingTimeoutSeconds)
         {
             _agent = agent;
             _progressMonitor = new NavigationProgressMonitor(progressSettings);
+            _pathPendingTimeoutSeconds = Mathf.Max(0.01f, pathPendingTimeoutSeconds);
         }
 
         public bool IsUsable => _agent != null
@@ -27,6 +41,15 @@ namespace EchoProtocol.AI.Stalker
 
         // This is the controller's accepted destination cache, not proof of a complete Unity path.
         public bool HasActiveDestination => _activeDestination.HasValue;
+
+        public NavigationFailureReason CurrentFailureReason => _currentFailureReason;
+
+        public NavigationRecoveryReason CurrentRecoveryReason => _currentRecoveryReason;
+
+        public void RecordRecoveryReason(NavigationRecoveryReason reason)
+        {
+            _currentRecoveryReason = reason;
+        }
 
         public bool HasArrived()
         {
@@ -38,16 +61,19 @@ namespace EchoProtocol.AI.Stalker
         {
             if (_agent == null || !_agent.enabled)
             {
+                _currentFailureReason = NavigationFailureReason.AgentUnavailable;
                 return new NavigationEvaluationResult(NavigationEvaluationStatus.AgentUnavailable, destination);
             }
 
             if (!_agent.isOnNavMesh)
             {
+                _currentFailureReason = NavigationFailureReason.AgentNotOnNavMesh;
                 return new NavigationEvaluationResult(NavigationEvaluationStatus.AgentNotOnNavMesh, destination);
             }
 
             if (!IsFinite(destination))
             {
+                _currentFailureReason = NavigationFailureReason.DestinationInvalid;
                 return new NavigationEvaluationResult(NavigationEvaluationStatus.DestinationInvalid, destination);
             }
 
@@ -59,12 +85,16 @@ namespace EchoProtocol.AI.Stalker
             switch (_evaluationPath.status)
             {
                 case NavMeshPathStatus.PathComplete:
+                    _currentFailureReason = NavigationFailureReason.None;
                     return new NavigationEvaluationResult(NavigationEvaluationStatus.Complete, destination);
                 case NavMeshPathStatus.PathPartial:
+                    _currentFailureReason = NavigationFailureReason.PathPartial;
                     return new NavigationEvaluationResult(NavigationEvaluationStatus.Partial, destination);
                 case NavMeshPathStatus.PathInvalid:
+                    _currentFailureReason = NavigationFailureReason.PathInvalid;
                     return new NavigationEvaluationResult(NavigationEvaluationStatus.Invalid, destination);
                 default:
+                    _currentFailureReason = NavigationFailureReason.PathInvalid;
                     return new NavigationEvaluationResult(NavigationEvaluationStatus.Invalid, destination);
             }
         }
@@ -72,6 +102,10 @@ namespace EchoProtocol.AI.Stalker
         public void ClearDestinationCache()
         {
             _activeDestination = null;
+            _pathPendingElapsedSeconds = 0f;
+            _pathPendingTimedOut = false;
+            _currentFailureReason = NavigationFailureReason.None;
+            _currentRecoveryReason = NavigationRecoveryReason.None;
             _progressMonitor.Reset();
         }
 
@@ -104,12 +138,14 @@ namespace EchoProtocol.AI.Stalker
             if (_agent == null || !_agent.enabled)
             {
                 ClearDestinationCache();
+                _currentFailureReason = NavigationFailureReason.AgentUnavailable;
                 return new NavigationPlanResult(NavigationPlanStatus.AgentUnavailable, destination);
             }
 
             if (!_agent.isOnNavMesh)
             {
                 ClearDestinationCache();
+                _currentFailureReason = NavigationFailureReason.AgentNotOnNavMesh;
                 return new NavigationPlanResult(NavigationPlanStatus.AgentNotOnNavMesh, destination);
             }
 
@@ -125,10 +161,17 @@ namespace EchoProtocol.AI.Stalker
             if (!_agent.SetDestination(destination))
             {
                 ClearDestinationCache();
+                _currentFailureReason = NavigationFailureReason.DestinationInvalid;
                 return new NavigationPlanResult(NavigationPlanStatus.DestinationRequestFailed, destination);
             }
 
             _activeDestination = destination;
+            _pathPendingElapsedSeconds = 0f;
+            _pathPendingTimedOut = false;
+            _currentFailureReason = NavigationFailureReason.None;
+            _currentRecoveryReason = intent == NavigationRequestIntent.RecoveryRepath
+                ? NavigationRecoveryReason.RetryLogicalObjective
+                : NavigationRecoveryReason.None;
             if (intent == NavigationRequestIntent.NewGoal
                 || intent == NavigationRequestIntent.RecoveryRepath)
             {
@@ -148,17 +191,31 @@ namespace EchoProtocol.AI.Stalker
             var pathStatus = GetPathStatus();
             if (pathStatus == NavigationPathStatus.Pending)
             {
+                if (deltaTime > 0f)
+                {
+                    _pathPendingElapsedSeconds += deltaTime;
+                    if (_pathPendingElapsedSeconds >= _pathPendingTimeoutSeconds)
+                    {
+                        _pathPendingTimedOut = true;
+                        _currentFailureReason = NavigationFailureReason.PathPendingTimeout;
+                    }
+                }
+
                 return;
             }
 
             if (pathStatus != NavigationPathStatus.Complete)
             {
+                _currentFailureReason = MapPathFailureReason(pathStatus);
                 _progressMonitor.Reset();
                 return;
             }
 
+            _pathPendingElapsedSeconds = 0f;
+            _pathPendingTimedOut = false;
             if (HasArrived())
             {
+                _currentFailureReason = NavigationFailureReason.None;
                 _progressMonitor.Reset();
                 return;
             }
@@ -167,6 +224,7 @@ namespace EchoProtocol.AI.Stalker
                 _agent.transform.position,
                 _agent.remainingDistance,
                 deltaTime);
+            _currentFailureReason = MapProgressFailureReason(_progressMonitor.State);
         }
 
         public NavigationExecutionStatus GetExecutionStatus()
@@ -182,6 +240,11 @@ namespace EchoProtocol.AI.Stalker
                 case NavigationPathStatus.NoDestination:
                     return NavigationExecutionStatus.Idle;
                 case NavigationPathStatus.Pending:
+                    if (_pathPendingTimedOut)
+                    {
+                        return NavigationExecutionStatus.Failed;
+                    }
+
                     return NavigationExecutionStatus.RepathPending;
                 case NavigationPathStatus.Complete:
                     if (HasArrived())
@@ -256,6 +319,38 @@ namespace EchoProtocol.AI.Stalker
         private static bool IsFinite(float value)
         {
             return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private static NavigationFailureReason MapPathFailureReason(NavigationPathStatus status)
+        {
+            switch (status)
+            {
+                case NavigationPathStatus.AgentUnavailable:
+                    return NavigationFailureReason.AgentUnavailable;
+                case NavigationPathStatus.AgentNotOnNavMesh:
+                    return NavigationFailureReason.AgentNotOnNavMesh;
+                case NavigationPathStatus.Partial:
+                    return NavigationFailureReason.PathPartial;
+                case NavigationPathStatus.Invalid:
+                    return NavigationFailureReason.PathInvalid;
+                case NavigationPathStatus.Stale:
+                    return NavigationFailureReason.PathStale;
+                default:
+                    return NavigationFailureReason.None;
+            }
+        }
+
+        private static NavigationFailureReason MapProgressFailureReason(NavigationProgressState state)
+        {
+            switch (state)
+            {
+                case NavigationProgressState.NoProgress:
+                    return NavigationFailureReason.NoProgress;
+                case NavigationProgressState.Stuck:
+                    return NavigationFailureReason.Stuck;
+                default:
+                    return NavigationFailureReason.None;
+            }
         }
     }
 }

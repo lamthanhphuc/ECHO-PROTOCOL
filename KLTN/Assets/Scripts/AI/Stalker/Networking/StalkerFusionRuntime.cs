@@ -131,7 +131,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             var input = new StalkerSimulationInput(
                 step,
                 _visibleCandidates,
-                _targetStatuses);
+                _targetStatuses,
+                BuildCurrentAttackTargetSnapshot(controller.CurrentTargetId));
 
             if (!controller.Simulate(input))
             {
@@ -188,6 +189,45 @@ namespace EchoProtocol.AI.Stalker.Networking
             _perceptionSnapshots.Clear();
             _targetStatuses.Clear();
             _visibleCandidates.Clear();
+        }
+
+        private StalkerAttackTargetSnapshot? BuildCurrentAttackTargetSnapshot(PlayerId currentTargetId)
+        {
+            if (!currentTargetId.IsValid)
+            {
+                return null;
+            }
+
+            for (var i = 0; i < _targetStatuses.Count; i++)
+            {
+                var status = _targetStatuses[i];
+                if (status.PlayerId != currentTargetId)
+                {
+                    continue;
+                }
+
+                if (!status.Eligibility.Eligible)
+                {
+                    return StalkerAttackTargetSnapshot.Missing(currentTargetId);
+                }
+
+                for (var j = 0; j < _perceptionSnapshots.Count; j++)
+                {
+                    var snapshot = _perceptionSnapshots[j];
+                    if (snapshot.PlayerId == currentTargetId && snapshot.TargetHierarchyRoot != null)
+                    {
+                        return new StalkerAttackTargetSnapshot(
+                            currentTargetId,
+                            true,
+                            snapshot.TargetHierarchyRoot.position,
+                            controller.AttackConsequenceSink != null);
+                    }
+                }
+
+                return StalkerAttackTargetSnapshot.Missing(currentTargetId);
+            }
+
+            return StalkerAttackTargetSnapshot.Missing(currentTargetId);
         }
     }
 }

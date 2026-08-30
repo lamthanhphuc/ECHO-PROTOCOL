@@ -15,10 +15,14 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
     public sealed class StalkerFusionC2CHarnessProbe : MonoBehaviour
     {
         private const string NoCheatArg = "--stk2-no-cheat-autostart=";
+        private const string Phase4AttackArg = "--stk4-attack-autostart=";
         private const float RuntimeResolveIntervalSeconds = 0.25f;
         private const float NavMeshSpawnSampleRadius = 0.10f;
         private const float NoCheatPositionTolerance = 0.05f;
         private const int RequiredHiddenVerificationSimulationDelta = 3;
+        private const int AttackStabilitySimulationDelta = 8;
+        private const int ExpectedTargetEpisodeWaitSimulationDelta = 180;
+        private const float AttackWaitLogIntervalSeconds = 2f;
         private static readonly List<PlayerId> s_sharedPlayerIds = new List<PlayerId>();
 
         [SerializeField] private FusionC2CHarnessController controller;
@@ -30,6 +34,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
         [SerializeField] private GameObject noCheatOccluder;
         [SerializeField] private float logIntervalSeconds = 1f;
         [SerializeField] private bool noCheatAutostart;
+        [SerializeField] private bool phase4AttackAutostart;
 
         private readonly List<PlayerId> _activePlayerIds = new List<PlayerId>();
         private readonly StringBuilder _playerIdBuilder = new StringBuilder();
@@ -51,6 +56,24 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
         private Vector3 _navMeshSpawnPosition;
         private int _baselineSimulationCount;
         private int _baselineRunnerTick;
+        private Stk4AttackStage _attackStage;
+        private StalkerDiagnosticAttackConsequenceSink _hostAttackSink;
+        private StalkerDiagnosticAttackConsequenceSink _clientAttackSink;
+        private PlayerId _attackTargetId;
+        private StalkerAttackEpisodeId _attackEpisodeId;
+        private StalkerAttackEpisodeId _attackBaselineEpisodeId;
+        private PlayerId _attackBaselineTargetId;
+        private StalkerState _attackBaselineState;
+        private int _attackResolutionBaseline;
+        private int _attackConsequenceBaseline;
+        private int _attackBaselineSimulationCount;
+        private int _attackBaselineRunnerTick;
+        private int _attackPositionedSimulationCount;
+        private int _attackPositionedRunnerTick;
+        private int _attackResolvedSimulationCount;
+        private bool _clientAttackProxyLogged;
+        private string _lastAttackWaitLogKey = string.Empty;
+        private float _nextAttackWaitLogTime;
 
         private void Awake()
         {
@@ -60,6 +83,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             }
 
             noCheatAutostart = noCheatAutostart || ResolveBooleanArg(NoCheatArg);
+            phase4AttackAutostart = phase4AttackAutostart || ResolveBooleanArg(Phase4AttackArg);
         }
 
         private void OnDisable()
@@ -71,6 +95,15 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             _noCheatStage = NoCheatStage.None;
             _noCheatPositionedPlayerId = PlayerId.Invalid;
             _noCheatTargetId = PlayerId.Invalid;
+            _attackStage = Stk4AttackStage.None;
+            _hostAttackSink = null;
+            _clientAttackSink = null;
+            _attackTargetId = PlayerId.Invalid;
+            _attackEpisodeId = StalkerAttackEpisodeId.Invalid;
+            _attackBaselineEpisodeId = StalkerAttackEpisodeId.Invalid;
+            _attackBaselineTargetId = PlayerId.Invalid;
+            _clientAttackProxyLogged = false;
+            _lastAttackWaitLogKey = string.Empty;
         }
 
         private void Update()
@@ -91,6 +124,11 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
 
                 EnsureHostStalkerSpawned(runner);
                 TickNoCheatScenario(runner);
+                TickPhase4AttackScenario(runner);
+            }
+            else
+            {
+                TickPhase4ClientObservation(runner);
             }
 
             CaptureAndLogIfChangedOrDue(runner);
@@ -112,6 +150,27 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             _hiddenTargetPosition = default;
             _baselineSimulationCount = 0;
             _baselineRunnerTick = 0;
+        }
+
+        [ContextMenu("STK4 Attack/Start Live 2P Acceptance")]
+        public void StartPhase4AttackScenario()
+        {
+            _attackStage = Stk4AttackStage.WaitForClientPlayer;
+            _attackTargetId = PlayerId.Invalid;
+            _attackEpisodeId = StalkerAttackEpisodeId.Invalid;
+            _attackBaselineEpisodeId = StalkerAttackEpisodeId.Invalid;
+            _attackBaselineTargetId = PlayerId.Invalid;
+            _attackResolutionBaseline = 0;
+            _attackConsequenceBaseline = 0;
+            _attackBaselineSimulationCount = 0;
+            _attackBaselineRunnerTick = 0;
+            _attackPositionedSimulationCount = 0;
+            _attackPositionedRunnerTick = 0;
+            _attackResolvedSimulationCount = 0;
+            _lastAttackWaitLogKey = string.Empty;
+            _nextAttackWaitLogTime = 0f;
+            _hostAttackSink = new StalkerDiagnosticAttackConsequenceSink();
+            Debug.Log("STK4|ATTACK|role=Host|stage=StartRequested");
         }
 
         [ContextMenu("STK2 No-Cheat/Occlude And Move Current Target")]
@@ -360,6 +419,316 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             }
         }
 
+        private void TickPhase4AttackScenario(NetworkRunner runner)
+        {
+            if ((!phase4AttackAutostart && _attackStage == Stk4AttackStage.None)
+                || _attackStage == Stk4AttackStage.Complete
+                || _attackStage == Stk4AttackStage.Failed)
+            {
+                return;
+            }
+
+            if (_attackStage == Stk4AttackStage.None)
+            {
+                StartPhase4AttackScenario();
+            }
+
+            if (!TryGetPrimaryStalkerRuntime(runner, out var runtime))
+            {
+                LogAttackHostWaiting("MissingStalkerRuntime");
+                return;
+            }
+
+            var controllerComponent = runtime.GetComponent<StalkerController>();
+            if (controllerComponent == null)
+            {
+                LogAttackHostFailure("MissingStalkerController");
+                return;
+            }
+
+            if (_hostAttackSink == null)
+            {
+                _hostAttackSink = new StalkerDiagnosticAttackConsequenceSink();
+            }
+
+            controllerComponent.ConfigurePhase4AttackAcceptanceDiagnostics(
+                0.05f,
+                100f,
+                2f,
+                0.10f,
+                1.00f,
+                _hostAttackSink);
+
+            if (_attackStage == Stk4AttackStage.WaitForClientPlayer)
+            {
+                if (!TryResolveFirstRemoteHostPlayerIdentity(runner, out var playerId, out var identity))
+                {
+                    LogAttackHostWaiting("NoRemotePlayerObject");
+                    return;
+                }
+
+                if (!TryResolveHostLocalPlayerIdentity(runner, out var localPlayerId, out var localIdentity))
+                {
+                    LogAttackHostFailure("NoLocalPlayerObject");
+                    return;
+                }
+
+                if (!TryComputeAttackTargetPosition(runtime, out var attackPosition))
+                {
+                    LogAttackHostFailure("NoAttackPositionOnNavMesh");
+                    return;
+                }
+
+                if (!TryComputeHostAwayPosition(runtime, out var localAwayPosition))
+                {
+                    LogAttackHostFailure("NoLocalAwayPositionOnNavMesh");
+                    return;
+                }
+
+                _attackTargetId = playerId;
+                LogAttackTargetCompetition(runtime, localPlayerId, localIdentity, playerId, identity, "BeforePositioning");
+                if (!TryTeleportTarget(localIdentity, localAwayPosition, out var localReason))
+                {
+                    LogAttackHostFailure($"LocalAwayTeleportFailed:{localReason}");
+                    return;
+                }
+
+                Physics.SyncTransforms();
+                LogAttackTargetCompetition(runtime, localPlayerId, localIdentity, playerId, identity, "AfterLocalAway");
+
+                if (controllerComponent.ActiveAttackEpisodeId.IsValid && !controllerComponent.HitMomentResolved)
+                {
+                    LogAttackHostWaiting($"WaitingForPreExistingEpisodeToResolve:episode={controllerComponent.ActiveAttackEpisodeId.Value}:target={controllerComponent.AttackTargetId}");
+                    _attackStage = Stk4AttackStage.WaitForBaselineSettled;
+                    return;
+                }
+
+                CaptureAttackBaseline(runner, runtime, controllerComponent);
+                if (!PositionExpectedAttackTarget(runner, runtime, controllerComponent, identity))
+                {
+                    return;
+                }
+
+                return;
+            }
+
+            if (_attackStage == Stk4AttackStage.WaitForBaselineSettled)
+            {
+                if (controllerComponent.ActiveAttackEpisodeId.IsValid && !controllerComponent.HitMomentResolved)
+                {
+                    LogAttackHostWaiting($"WaitingForPreExistingEpisodeToResolve:episode={controllerComponent.ActiveAttackEpisodeId.Value}:target={controllerComponent.AttackTargetId}");
+                    return;
+                }
+
+                if (!TryResolveHostTargetIdentity(runner, _attackTargetId, out var identity))
+                {
+                    LogAttackHostFailure("RemoteTargetLostBeforePositioning");
+                    return;
+                }
+
+                CaptureAttackBaseline(runner, runtime, controllerComponent);
+                if (!PositionExpectedAttackTarget(runner, runtime, controllerComponent, identity))
+                {
+                    return;
+                }
+
+                return;
+            }
+
+            if (_attackStage == Stk4AttackStage.WaitForEpisode)
+            {
+                var episode = controllerComponent.ActiveAttackEpisode;
+                if (!episode.EpisodeId.IsValid)
+                {
+                    CheckExpectedEpisodeTimeout(runtime, runner, controllerComponent);
+                    return;
+                }
+
+                if (!IsExpectedAttackEpisode(episode))
+                {
+                    LogUnexpectedAttackEpisodeOnce(episode, controllerComponent);
+                    CheckExpectedEpisodeTimeout(runtime, runner, controllerComponent);
+                    return;
+                }
+
+                _attackEpisodeId = episode.EpisodeId;
+                Debug.Log($"STK4|ATTACK|role=Host|stage=EpisodeStarted|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|episode={_attackEpisodeId.Value}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|target={episode.TargetIdAtEntry}|expectedTarget={_attackTargetId}|targetMatches={episode.TargetIdAtEntry == _attackTargetId}|startedTick={episode.StartedTick}|baselineRunnerTick={_attackBaselineRunnerTick}|positionedRunnerTick={_attackPositionedRunnerTick}|state={controllerComponent.CurrentState}|hitResolved={controllerComponent.HitMomentResolved}|outcome={controllerComponent.AttackOutcome}|resolutionDelta={controllerComponent.AttackResolutionCount - _attackResolutionBaseline}|consequenceDelta={_hostAttackSink.CallCount - _attackConsequenceBaseline}|simCount={runtime.AuthoritativeSimulationCount}|runnerTick={runner.Tick.Raw}");
+                _attackStage = Stk4AttackStage.WaitForResolution;
+                return;
+            }
+
+            if (_attackStage == Stk4AttackStage.WaitForResolution)
+            {
+                if (!controllerComponent.HitMomentResolved)
+                {
+                    return;
+                }
+
+                if (controllerComponent.ActiveAttackEpisodeId != _attackEpisodeId
+                    || controllerComponent.AttackTargetId != _attackTargetId)
+                {
+                    LogAttackHostFailure($"ResolvedUnexpectedEpisode:episode={FormatEpisode(controllerComponent.ActiveAttackEpisodeId)}:target={controllerComponent.AttackTargetId}");
+                    return;
+                }
+
+                var resolutionDelta = controllerComponent.AttackResolutionCount - _attackResolutionBaseline;
+                var consequenceDelta = _hostAttackSink.CallCount - _attackConsequenceBaseline;
+                Debug.Log($"STK4|ATTACK|role=Host|stage=Resolved|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|episode={_attackEpisodeId.Value}|target={controllerComponent.AttackTargetId}|hitResolved={controllerComponent.HitMomentResolved}|outcome={controllerComponent.AttackOutcome}|resolutionDelta={resolutionDelta}|consequenceDelta={consequenceDelta}|state={controllerComponent.CurrentState}|lastResult={controllerComponent.AttackResolutionResult}|simCount={runtime.AuthoritativeSimulationCount}|runnerTick={runner.Tick.Raw}");
+                _attackResolvedSimulationCount = runtime.AuthoritativeSimulationCount;
+                _attackStage = Stk4AttackStage.StabilityWindow;
+                return;
+            }
+
+            if (_attackStage == Stk4AttackStage.StabilityWindow)
+            {
+                var simDelta = runtime.AuthoritativeSimulationCount - _attackResolvedSimulationCount;
+                if (simDelta < AttackStabilitySimulationDelta)
+                {
+                    return;
+                }
+
+                var resolutionDelta = controllerComponent.AttackResolutionCount - _attackResolutionBaseline;
+                var consequenceDelta = _hostAttackSink.CallCount - _attackConsequenceBaseline;
+                var passed = controllerComponent.HitMomentResolved
+                    && controllerComponent.AttackOutcome == StalkerAttackOutcome.Hit
+                    && controllerComponent.CurrentState == StalkerState.RECOVER
+                    && controllerComponent.ActiveAttackEpisodeId == _attackEpisodeId
+                    && resolutionDelta == 1
+                    && consequenceDelta == 1
+                    && controllerComponent.AttackTargetId == _attackTargetId;
+
+                Debug.Log($"STK4|ATTACK|role=Host|stage=ExactlyOnceVerified|result={(passed ? "Passed" : "Failed")}|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|episode={_attackEpisodeId.Value}|target={controllerComponent.AttackTargetId}|outcome={controllerComponent.AttackOutcome}|resolutionDelta={resolutionDelta}|consequenceDelta={consequenceDelta}|state={controllerComponent.CurrentState}|simDelta={simDelta}|simCount={runtime.AuthoritativeSimulationCount}|runnerTick={runner.Tick.Raw}");
+                _attackStage = passed ? Stk4AttackStage.Complete : Stk4AttackStage.Failed;
+            }
+        }
+
+        private void TickPhase4ClientObservation(NetworkRunner runner)
+        {
+            if (!phase4AttackAutostart || _clientAttackProxyLogged)
+            {
+                return;
+            }
+
+            if (!TryGetPrimaryStalkerRuntime(runner, out var runtime))
+            {
+                return;
+            }
+
+            var controllerComponent = runtime.GetComponent<StalkerController>();
+            if (controllerComponent == null)
+            {
+                return;
+            }
+
+            if (_clientAttackSink == null)
+            {
+                _clientAttackSink = new StalkerDiagnosticAttackConsequenceSink();
+                controllerComponent.ConfigurePhase4AttackAcceptanceDiagnostics(
+                    0.05f,
+                    100f,
+                    2f,
+                    0.10f,
+                    1.00f,
+                    _clientAttackSink);
+            }
+
+            Debug.Log($"STK4|ATTACK|role=Client|stage=ProxyObserved|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|objectId={(runtime.Object != null ? runtime.Object.Id.ToString() : "none")}|simCount={runtime.AuthoritativeSimulationCount}|episodeValid={controllerComponent.ActiveAttackEpisodeId.IsValid}|resolutionCount={controllerComponent.AttackResolutionCount}|consequenceCount={_clientAttackSink.CallCount}|state={controllerComponent.CurrentState}|runnerTick={runner.Tick.Raw}");
+            _clientAttackProxyLogged = true;
+        }
+
+        private void CaptureAttackBaseline(
+            NetworkRunner runner,
+            StalkerFusionRuntime runtime,
+            StalkerController controllerComponent)
+        {
+            _attackBaselineEpisodeId = controllerComponent.ActiveAttackEpisodeId;
+            _attackBaselineTargetId = controllerComponent.AttackTargetId;
+            _attackBaselineState = controllerComponent.CurrentState;
+            _attackResolutionBaseline = controllerComponent.AttackResolutionCount;
+            _attackConsequenceBaseline = _hostAttackSink != null ? _hostAttackSink.CallCount : 0;
+            _attackBaselineSimulationCount = runtime.AuthoritativeSimulationCount;
+            _attackBaselineRunnerTick = runner.Tick.Raw;
+            Debug.Log($"STK4|ATTACK|role=Host|stage=BaselineCaptured|episode={FormatEpisode(_attackBaselineEpisodeId)}|target={_attackBaselineTargetId}|state={_attackBaselineState}|resolutionCount={_attackResolutionBaseline}|consequenceCount={_attackConsequenceBaseline}|simCount={_attackBaselineSimulationCount}|runnerTick={_attackBaselineRunnerTick}");
+        }
+
+        private bool PositionExpectedAttackTarget(
+            NetworkRunner runner,
+            StalkerFusionRuntime runtime,
+            StalkerController controllerComponent,
+            PlayerRuntimeIdentity identity)
+        {
+            if (!TryComputeAttackTargetPosition(runtime, out var attackPosition))
+            {
+                LogAttackHostFailure("NoAttackPositionOnNavMesh");
+                return false;
+            }
+
+            if (!TryTeleportTarget(identity, attackPosition, out var reason))
+            {
+                LogAttackHostFailure($"AttackTeleportFailed:{reason}");
+                return false;
+            }
+
+            _attackPositionedSimulationCount = runtime.AuthoritativeSimulationCount;
+            _attackPositionedRunnerTick = runner.Tick.Raw;
+            Physics.SyncTransforms();
+            Debug.Log($"STK4|ATTACK|role=Host|stage=PlayerPositioned|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|expectedTarget={_attackTargetId}|playerId={_attackTargetId}|playerObject={identity.EntityRoot.name}|networkTransform=True|position={FormatVector(GetTargetSamplePosition(identity))}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|baselineTarget={_attackBaselineTargetId}|baselineState={_attackBaselineState}|baselineResolutionCount={_attackResolutionBaseline}|baselineConsequenceCount={_attackConsequenceBaseline}|simCount={_attackPositionedSimulationCount}|runnerTick={_attackPositionedRunnerTick}");
+            _attackStage = Stk4AttackStage.WaitForEpisode;
+            return true;
+        }
+
+        private bool IsExpectedAttackEpisode(StalkerAttackEpisode episode)
+        {
+            return episode.EpisodeId.IsValid
+                && episode.EpisodeId != _attackBaselineEpisodeId
+                && episode.TargetIdAtEntry == _attackTargetId
+                && episode.StartedTick > _attackBaselineRunnerTick
+                && episode.StartedTick >= _attackPositionedRunnerTick;
+        }
+
+        private void LogUnexpectedAttackEpisodeOnce(
+            StalkerAttackEpisode episode,
+            StalkerController controllerComponent)
+        {
+            var key = $"{episode.EpisodeId.Value}:{episode.TargetIdAtEntry}:{episode.HitMomentResolved}:{controllerComponent.CurrentState}";
+            if (string.Equals(key, _lastAttackWaitLogKey, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _lastAttackWaitLogKey = key;
+            Debug.Log($"STK4|ATTACK|role=Host|stage=EpisodeWait|result=Rejected|reason=UnexpectedEpisode|episode={FormatEpisode(episode.EpisodeId)}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|target={episode.TargetIdAtEntry}|expectedTarget={_attackTargetId}|targetMatches={episode.TargetIdAtEntry == _attackTargetId}|startedTick={episode.StartedTick}|baselineRunnerTick={_attackBaselineRunnerTick}|positionedRunnerTick={_attackPositionedRunnerTick}|hitResolved={episode.HitMomentResolved}|state={controllerComponent.CurrentState}");
+        }
+
+        private void CheckExpectedEpisodeTimeout(
+            StalkerFusionRuntime runtime,
+            NetworkRunner runner,
+            StalkerController controllerComponent)
+        {
+            var simDelta = runtime.AuthoritativeSimulationCount - _attackPositionedSimulationCount;
+            if (simDelta < ExpectedTargetEpisodeWaitSimulationDelta)
+            {
+                return;
+            }
+
+            Debug.LogWarning($"STK4|ATTACK|role=Host|stage=EpisodeWait|result=Failed|reason=ExpectedTargetEpisodeNotObserved|expectedTarget={_attackTargetId}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|activeEpisode={FormatEpisode(controllerComponent.ActiveAttackEpisodeId)}|activeTarget={controllerComponent.AttackTargetId}|state={controllerComponent.CurrentState}|simDelta={simDelta}|simCount={runtime.AuthoritativeSimulationCount}|runnerTick={runner.Tick.Raw}");
+            _attackStage = Stk4AttackStage.Failed;
+        }
+
+        private void LogAttackTargetCompetition(
+            StalkerFusionRuntime runtime,
+            PlayerId localPlayerId,
+            PlayerRuntimeIdentity localIdentity,
+            PlayerId remotePlayerId,
+            PlayerRuntimeIdentity remoteIdentity,
+            string stage)
+        {
+            var stalkerPosition = runtime.transform.position;
+            var localPosition = GetTargetSamplePosition(localIdentity);
+            var remotePosition = GetTargetSamplePosition(remoteIdentity);
+            Debug.Log($"STK4|ATTACK|role=Host|stage=TargetCompetition|sample={stage}|localPlayer={localPlayerId}|localPosition={FormatVector(localPosition)}|localDistance={Vector3.Distance(stalkerPosition, localPosition):0.###}|remotePlayer={remotePlayerId}|remotePosition={FormatVector(remotePosition)}|remoteDistance={Vector3.Distance(stalkerPosition, remotePosition):0.###}|tieBreakLowerPlayerIdWins=True");
+        }
+
         private void CaptureAndLogIfChangedOrDue(NetworkRunner runner)
         {
             var stalkerSignature = CreateStalkerSignature(runner);
@@ -393,8 +762,20 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             var controllerComponent = runtime.GetComponent<StalkerController>();
             var hasStep = runtime.HasLastAuthoritativeStep;
             var step = runtime.LastAuthoritativeStep;
+            var consequenceCount = 0;
+            if (controllerComponent != null)
+            {
+                if (runner.IsServer && _hostAttackSink != null)
+                {
+                    consequenceCount = _hostAttackSink.CallCount;
+                }
+                else if (!runner.IsServer && _clientAttackSink != null)
+                {
+                    consequenceCount = _clientAttackSink.CallCount;
+                }
+            }
 
-            return $"STK2|STALKER|role={role}|exists=True|objectId={(obj != null ? obj.Id.ToString() : "none")}|stateAuth={(obj != null && obj.HasStateAuthority)}|server={runner.IsServer}|simCount={runtime.AuthoritativeSimulationCount}|legacySuppressed={(controllerComponent != null && controllerComponent.SuppressLegacyUpdateSimulation)}|hasStep={hasStep}|runnerTick={runner.Tick.Raw}|runnerTime={runner.SimulationTime}|runnerDelta={runner.DeltaTime}|stepTick={(hasStep ? step.Time.Tick.ToString() : "none")}|stepTime={(hasStep ? step.Time.Seconds.ToString() : "none")}|stepDelta={(hasStep ? step.DeltaSeconds.ToString() : "none")}|state={(controllerComponent != null ? controllerComponent.CurrentState.ToString() : "none")}|detection={(controllerComponent != null ? controllerComponent.DetectionTargetId.ToString() : "none")}|current={(controllerComponent != null ? controllerComponent.CurrentTargetId.ToString() : "none")}";
+            return $"STK2|STALKER|role={role}|exists=True|objectId={(obj != null ? obj.Id.ToString() : "none")}|stateAuth={(obj != null && obj.HasStateAuthority)}|server={runner.IsServer}|simCount={runtime.AuthoritativeSimulationCount}|legacySuppressed={(controllerComponent != null && controllerComponent.SuppressLegacyUpdateSimulation)}|hasStep={hasStep}|runnerTick={runner.Tick.Raw}|runnerTime={runner.SimulationTime}|runnerDelta={runner.DeltaTime}|stepTick={(hasStep ? step.Time.Tick.ToString() : "none")}|stepTime={(hasStep ? step.Time.Seconds.ToString() : "none")}|stepDelta={(hasStep ? step.DeltaSeconds.ToString() : "none")}|state={(controllerComponent != null ? controllerComponent.CurrentState.ToString() : "none")}|detection={(controllerComponent != null ? controllerComponent.DetectionTargetId.ToString() : "none")}|current={(controllerComponent != null ? controllerComponent.CurrentTargetId.ToString() : "none")}|attackEpisode={(controllerComponent != null && controllerComponent.ActiveAttackEpisodeId.IsValid ? controllerComponent.ActiveAttackEpisodeId.Value.ToString() : "none")}|attackTarget={(controllerComponent != null ? controllerComponent.AttackTargetId.ToString() : "none")}|hitResolved={(controllerComponent != null && controllerComponent.HitMomentResolved)}|attackOutcome={(controllerComponent != null ? controllerComponent.AttackOutcome.ToString() : "none")}|attackResolutionCount={(controllerComponent != null ? controllerComponent.AttackResolutionCount.ToString() : "none")}|attackConsequenceCount={consequenceCount}";
         }
 
         private string CreateTopologySignature(NetworkRunner runner)
@@ -602,6 +983,124 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             return false;
         }
 
+        private static bool TryResolveFirstRemoteHostPlayerIdentity(NetworkRunner runner, out PlayerId playerId, out PlayerRuntimeIdentity identity)
+        {
+            playerId = PlayerId.Invalid;
+            identity = null;
+
+            if (runner == null)
+            {
+                return false;
+            }
+
+            var lifecycle = runner.GetComponent<FusionPlayerLifecycle>();
+            if (lifecycle == null)
+            {
+                return false;
+            }
+
+            foreach (var player in runner.ActivePlayers)
+            {
+                if (!player.IsRealPlayer || player == runner.LocalPlayer)
+                {
+                    continue;
+                }
+
+                if (!lifecycle.IdentityRegistry.TryGetPlayerId(player, out var candidateId)
+                    || !candidateId.IsValid
+                    || !lifecycle.EntityRegistry.TryGetEntity(candidateId, out var candidateIdentity)
+                    || candidateIdentity == null
+                    || candidateIdentity.EntityRoot == null)
+                {
+                    continue;
+                }
+
+                playerId = candidateId;
+                identity = candidateIdentity;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryResolveHostLocalPlayerIdentity(NetworkRunner runner, out PlayerId playerId, out PlayerRuntimeIdentity identity)
+        {
+            playerId = PlayerId.Invalid;
+            identity = null;
+
+            if (runner == null || !runner.LocalPlayer.IsRealPlayer)
+            {
+                return false;
+            }
+
+            var lifecycle = runner.GetComponent<FusionPlayerLifecycle>();
+            if (lifecycle == null
+                || !lifecycle.IdentityRegistry.TryGetPlayerId(runner.LocalPlayer, out playerId)
+                || !playerId.IsValid)
+            {
+                playerId = PlayerId.Invalid;
+                return false;
+            }
+
+            return lifecycle.EntityRegistry.TryGetEntity(playerId, out identity)
+                && identity != null
+                && identity.EntityRoot != null;
+        }
+
+        private static bool TryComputeAttackTargetPosition(StalkerFusionRuntime runtime, out Vector3 position)
+        {
+            position = default;
+            if (runtime == null)
+            {
+                return false;
+            }
+
+            var origin = runtime.transform.position;
+            var forward = runtime.transform.forward;
+            if (forward.sqrMagnitude <= 0.0001f)
+            {
+                forward = Vector3.forward;
+            }
+
+            var desired = origin + forward.normalized * 1.2f;
+            desired.y = origin.y;
+            if (NavMesh.SamplePosition(desired, out var hit, 0.75f, NavMesh.AllAreas))
+            {
+                position = hit.position;
+                return true;
+            }
+
+            position = desired;
+            return true;
+        }
+
+        private static bool TryComputeHostAwayPosition(StalkerFusionRuntime runtime, out Vector3 position)
+        {
+            position = default;
+            if (runtime == null)
+            {
+                return false;
+            }
+
+            var origin = runtime.transform.position;
+            var forward = runtime.transform.forward;
+            if (forward.sqrMagnitude <= 0.0001f)
+            {
+                forward = Vector3.forward;
+            }
+
+            var desired = origin - forward.normalized * 5f;
+            desired.y = origin.y;
+            if (NavMesh.SamplePosition(desired, out var hit, 1.5f, NavMesh.AllAreas))
+            {
+                position = hit.position;
+                return true;
+            }
+
+            position = desired;
+            return true;
+        }
+
         private static bool TryResolveHostTargetIdentity(
             NetworkRunner runner,
             PlayerId targetId,
@@ -680,6 +1179,29 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             return $"{value.x:0.###},{value.y:0.###},{value.z:0.###}";
         }
 
+        private static string FormatEpisode(StalkerAttackEpisodeId episodeId)
+        {
+            return episodeId.IsValid ? episodeId.Value.ToString() : "none";
+        }
+
+        private void LogAttackHostWaiting(string reason)
+        {
+            var key = $"{_attackStage}:{reason}";
+            if (!string.Equals(key, _lastAttackWaitLogKey, StringComparison.Ordinal)
+                || Time.realtimeSinceStartup >= _nextAttackWaitLogTime)
+            {
+                _lastAttackWaitLogKey = key;
+                _nextAttackWaitLogTime = Time.realtimeSinceStartup + AttackWaitLogIntervalSeconds;
+                Debug.Log($"STK4|ATTACK|role=Host|stage={_attackStage}|result=Waiting|reason={Sanitize(reason)}");
+            }
+        }
+
+        private void LogAttackHostFailure(string reason)
+        {
+            Debug.LogWarning($"STK4|ATTACK|role=Host|stage={_attackStage}|result=Failed|reason={Sanitize(reason)}|target={_attackTargetId}");
+            _attackStage = Stk4AttackStage.Failed;
+        }
+
         private enum NoCheatStage
         {
             None,
@@ -688,6 +1210,18 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             OccludeAndMove,
             WaitForHiddenVerification,
             Complete
+        }
+
+        private enum Stk4AttackStage
+        {
+            None,
+            WaitForClientPlayer,
+            WaitForBaselineSettled,
+            WaitForEpisode,
+            WaitForResolution,
+            StabilityWindow,
+            Complete,
+            Failed
         }
     }
 }
