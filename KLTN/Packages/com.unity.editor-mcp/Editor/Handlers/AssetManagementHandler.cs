@@ -161,7 +161,7 @@ namespace UnityEditorMCP.Handlers
                 // Apply to instances if requested
                 if (applyToInstances)
                 {
-                    GameObject[] allObjects = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
+                    GameObject[] allObjects = UnityEngine.Object.FindObjectsByType<GameObject>();
                     foreach (var obj in allObjects)
                     {
                         if (PrefabUtility.GetCorrespondingObjectFromSource(obj) == prefabAsset ||

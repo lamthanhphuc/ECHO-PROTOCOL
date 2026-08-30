@@ -423,7 +423,7 @@ namespace UnityEditorMCP.Handlers
                 }
                 else
                 {
-                    allObjects = GameObject.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                    allObjects = GameObject.FindObjectsByType<GameObject>(FindObjectsInactive.Include);
                 }
                 
                 foreach (var obj in allObjects)
