@@ -518,7 +518,7 @@ namespace UnityEditorMCP.Handlers
                     ? Resources.FindObjectsOfTypeAll<GameObject>()
                         .Where(go => go.scene == scene)
                         .ToArray()
-                    : GameObject.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
+                    : GameObject.FindObjectsByType<GameObject>();
 
                 // Basic statistics
                 var statistics = new Dictionary<string, object>();
@@ -1141,7 +1141,7 @@ namespace UnityEditorMCP.Handlers
                         ? Resources.FindObjectsOfTypeAll<GameObject>()
                             .Where(go => go.scene.IsValid() && go.scene == UnityEngine.SceneManagement.SceneManager.GetActiveScene())
                             .ToArray()
-                        : GameObject.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
+                        : GameObject.FindObjectsByType<GameObject>();
 
                     foreach (var go in sceneObjects)
                     {
