@@ -1,0 +1,12 @@
+**/bin
+**/obj
+.git
+.vs
+.idea
+*.user
+*.suo
+*.userprefs
+*.pdb
+*.mdb
+Dockerfile
+docker-compose*.yml

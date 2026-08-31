@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16
     container_name: echo_protocol_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-echo_protocol}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -15,6 +16,28 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  backend:
+    build:
+      context: ../EchoProtocol.Backend
+      dockerfile: Dockerfile
+    container_name: echo_protocol_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:5042
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-echo_protocol};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env or the shell environment}
+      JwtSettings__SecretKey: ${JwtSettings__SecretKey:?Set JwtSettings__SecretKey in .env or the shell environment}
+      AdminSeed__Email: ${AdminSeed__Email:-}
+      AdminSeed__Username: ${AdminSeed__Username:-}
+      AdminSeed__Password: ${AdminSeed__Password:-}
+      AdminSeed__DisplayName: ${AdminSeed__DisplayName:-}
+      AdminSeed__InitialWalletBalance: ${AdminSeed__InitialWalletBalance:-0}
+    ports:
+      - "5042:5042"
 
 volumes:
   echo_protocol_pgdata:
