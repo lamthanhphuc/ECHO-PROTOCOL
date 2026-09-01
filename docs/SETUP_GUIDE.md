@@ -6,7 +6,7 @@
 |---|---|
 | Unity Hub | Unity **6000.5.8f1** |
 | .NET SDK | 8.x |
-| Docker Desktop | For local PostgreSQL |
+| Docker Desktop | For local PostgreSQL and MongoDB |
 | Git | Optional but recommended |
 | Cursor | With `unity-editor` MCP configured |
 
@@ -36,24 +36,31 @@ Create foundation scenes in Unity (when Editor is open):
 
 Or via MCP `execute_menu_item` when `unity-editor` is connected.
 
-## PostgreSQL (local Docker)
+## PostgreSQL + MongoDB (local Docker)
 
 ```powershell
 cd d:\Bin\KLTN
 Copy-Item .env.example .env
 # Replace all placeholders in .env locally before continuing.
-rtk docker compose -f docker/docker-compose.yml up -d
+rtk docker compose --env-file .env -f docker/docker-compose.yml up -d
 ```
 
 The development connection string is supplied through
-`ConnectionStrings__DefaultConnection`; it is not committed in an appsettings file.
+`ConnectionStrings__DefaultConnection` and `ConnectionStrings__MongoDb`; secrets are not
+committed in an appsettings file.
 Load `.env` values into the current PowerShell process before running `dotnet`, or use
 .NET user-secrets. Production must use environment variables or a secret manager.
+
+Telemetry limits use the `MongoDb__MaxBatchSize`, `MongoDb__SupportedSchemaVersion`,
+`MongoDb__MaxValueJsonBytes`, `MongoDb__MaxFutureSkewMinutes`, and
+`MongoDb__MaxEventAgeDays` environment keys. Defaults are documented in `docs/API_SPEC.md`.
+MongoDB downtime makes the database-aware health route return 503, while PostgreSQL-backed Auth
+remains available and telemetry ingestion returns `TELEMETRY_UNAVAILABLE`.
 
 Stop:
 
 ```powershell
-rtk docker compose -f docker/docker-compose.yml down
+rtk docker compose --env-file .env -f docker/docker-compose.yml down
 ```
 
 ## Backend API
@@ -89,7 +96,7 @@ rtk dotnet ef migrations add <NewMigrationName> --project EchoProtocol.Backend/s
 rtk dotnet ef database update --project EchoProtocol.Backend/src/EchoProtocol.Api --startup-project EchoProtocol.Backend/src/EchoProtocol.Api
 ```
 
-Production secrets (`ConnectionStrings__DefaultConnection`, `JwtSettings__SecretKey`, admin seed) must use environment variables, user-secrets, or a cloud secret manager — never commit real production values.
+Production secrets (`ConnectionStrings__DefaultConnection`, `ConnectionStrings__MongoDb`, `JwtSettings__SecretKey`, admin seed) must use environment variables, user-secrets, or a cloud secret manager — never commit real production values.
 
 In **Development**, the API also runs `MigrateAsync()` and admin seed on startup.
 
@@ -108,6 +115,7 @@ rtk dotnet run --project EchoProtocol.Backend/src/EchoProtocol.Api
 | Setting | Local dev | Production |
 |---|---|---|
 | Connection string | `ConnectionStrings__DefaultConnection` env / user-secrets | Environment variable / secret manager |
+| MongoDB connection | `ConnectionStrings__MongoDb` env / user-secrets | Environment variable / secret manager |
 | JWT `SecretKey` | `JwtSettings__SecretKey` env / user-secrets (≥ 32 UTF-8 bytes) | Environment variable / secret manager |
 | Admin seed | Optional `AdminSeed__*` environment variables | Configure securely; no auto-seed in Production |
 

@@ -7,6 +7,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{C4466DF0-704
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EchoProtocol.Api", "src\EchoProtocol.Api\EchoProtocol.Api.csproj", "{B9B79DCD-B078-4C86-911D-9553732333B2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EchoProtocol.Api.Tests", "tests\EchoProtocol.Api.Tests\EchoProtocol.Api.Tests.csproj", "{EF72AFD5-49F0-46B4-BB40-C752CFDE1220}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,6 +22,10 @@ Global
 		{B9B79DCD-B078-4C86-911D-9553732333B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B9B79DCD-B078-4C86-911D-9553732333B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B9B79DCD-B078-4C86-911D-9553732333B2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EF72AFD5-49F0-46B4-BB40-C752CFDE1220}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EF72AFD5-49F0-46B4-BB40-C752CFDE1220}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EF72AFD5-49F0-46B4-BB40-C752CFDE1220}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EF72AFD5-49F0-46B4-BB40-C752CFDE1220}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{B9B79DCD-B078-4C86-911D-9553732333B2} = {C4466DF0-7040-44F0-9E55-D5005806D569}

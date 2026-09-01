@@ -1,0 +1,14 @@
+{
+    "name": "EchoProtocol.Telemetry",
+    "rootNamespace": "EchoProtocol.Telemetry",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}

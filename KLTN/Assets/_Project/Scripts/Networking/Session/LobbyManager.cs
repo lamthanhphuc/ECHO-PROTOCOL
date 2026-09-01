@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Fusion;
+using EchoProtocol.Networking.Authority;
 using UnityEngine;
 
 namespace EchoProtocol.Networking
@@ -135,8 +136,24 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            Debug.Log($"[LobbyManager] Host validated {state.CurrentPlayers} ready players. Loading '{GameSceneName}'.");
-            _ = runner.LoadScene(GameSceneName, UnityEngine.SceneManagement.LoadSceneMode.Single);
+            Debug.Log($"[LobbyManager] Host validated {state.CurrentPlayers} ready players. Confirming backend authority.");
+            MatchAuthorityRuntime.EnsureExists(_bootstrap).StartMatch((accepted, error) =>
+            {
+                if (!accepted)
+                {
+                    ReportError($"Backend rejected match start: {error}");
+                    return;
+                }
+
+                if (!_bootstrap.CloseRoomForMatchStart())
+                {
+                    ReportError("Could not close the Fusion room before match start.");
+                    return;
+                }
+
+                Debug.Log($"[LobbyManager] Backend confirmed match. Loading '{GameSceneName}'.");
+                _ = runner.LoadScene(GameSceneName, UnityEngine.SceneManagement.LoadSceneMode.Single);
+            });
             return true;
         }
 

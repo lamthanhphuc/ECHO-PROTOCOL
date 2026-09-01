@@ -17,6 +17,24 @@ services:
       timeout: 5s
       retries: 5
 
+  mongodb:
+    image: mongo:8.0
+    container_name: echo_protocol_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-echo_root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD in .env or the shell environment}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-echo_protocol_telemetry}
+    ports:
+      - "127.0.0.1:${MONGO_PORT:-27018}:27017"
+    volumes:
+      - echo_protocol_mongodata:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --username \"$${MONGO_INITDB_ROOT_USERNAME}\" --password \"$${MONGO_INITDB_ROOT_PASSWORD}\" --authenticationDatabase admin --eval \"quit(db.adminCommand('ping').ok ? 0 : 1)\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build:
       context: ../EchoProtocol.Backend
@@ -26,11 +44,25 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mongodb:
+        condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:5042
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-echo_protocol};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env or the shell environment}
+      ConnectionStrings__MongoDb: mongodb://${MONGO_ROOT_USERNAME:-echo_root}:${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD in .env or the shell environment}@mongodb:27017/?authSource=admin
       JwtSettings__SecretKey: ${JwtSettings__SecretKey:?Set JwtSettings__SecretKey in .env or the shell environment}
+      MatchAuthority__ProofSigningKey: ${MatchAuthority__ProofSigningKey:?Set MatchAuthority__ProofSigningKey in .env or the shell environment}
+      MatchAuthority__JoinProofLifetimeSeconds: ${MatchAuthority__JoinProofLifetimeSeconds:-120}
+      MatchAuthority__LeaseLifetimeSeconds: ${MatchAuthority__LeaseLifetimeSeconds:-45}
+      MatchAuthority__TelemetryDelegationRetentionHours: ${MatchAuthority__TelemetryDelegationRetentionHours:-24}
+      MongoDb__DatabaseName: ${MONGO_DATABASE:-echo_protocol_telemetry}
+      MongoDb__TelemetryCollectionName: ${MongoDb__TelemetryCollectionName:-telemetry_events}
+      MongoDb__MaxBatchSize: ${MongoDb__MaxBatchSize:-500}
+      MongoDb__SupportedSchemaVersion: ${MongoDb__SupportedSchemaVersion:-1.1}
+      MongoDb__MaxValueJsonBytes: ${MongoDb__MaxValueJsonBytes:-32768}
+      MongoDb__MaxFutureSkewMinutes: ${MongoDb__MaxFutureSkewMinutes:-5}
+      MongoDb__MaxEventAgeDays: ${MongoDb__MaxEventAgeDays:-7}
       AdminSeed__Email: ${AdminSeed__Email:-}
       AdminSeed__Username: ${AdminSeed__Username:-}
       AdminSeed__Password: ${AdminSeed__Password:-}
@@ -41,3 +73,4 @@ services:
 
 volumes:
   echo_protocol_pgdata:
+  echo_protocol_mongodata:

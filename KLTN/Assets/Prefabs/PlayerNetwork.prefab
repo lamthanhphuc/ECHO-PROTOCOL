@@ -49,6 +49,7 @@ GameObject:
   - component: {fileID: 640100000000000003}
   - component: {fileID: 640100000000000004}
   - component: {fileID: 1555193095892173610}
+  - component: {fileID: 8542491288236138449}
   m_Layer: 0
   m_Name: PlayerNetwork
   m_TagString: Player
@@ -176,6 +177,7 @@ MonoBehaviour:
   - {fileID: 640100000000000001}
   - {fileID: 640100000000000003}
   - {fileID: 640100000000000004}
+  - {fileID: 8542491288236138449}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &640100000000000001
 MonoBehaviour:
@@ -206,6 +208,12 @@ MonoBehaviour:
   _ToolId: 0
   _IsGameplayPlayer:
     RawValue: 0
+  _BackendUserId:
+    _length: 0
+    _data:
+      Data: 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+  _CarriedCoreId:
+    Raw: 0
 --- !u!114 &640100000000000002
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -269,3 +277,20 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Player.PlayerRuntimeIdentity
   visionTargetPoint: {fileID: 3058952993857339837}
+--- !u!114 &8542491288236138449
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6628407516427798355}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 14e10a09870a0ff45a87092c8ba7dac6, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkPlayerLifeState
+  _maximumRevives: 1
+  _Status: 0
+  _DownCount: 0
+  _ReviveCount: 0
+  _TransitionOrdinal: 0

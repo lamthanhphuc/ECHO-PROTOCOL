@@ -2,6 +2,7 @@ using System;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using EchoProtocol.Networking.Authority;
 
 namespace EchoProtocol.Networking
 {
@@ -16,34 +17,105 @@ namespace EchoProtocol.Networking
         [SerializeField] private LayerMask _interactionLayers = ~0;
 
         [Networked] private uint LastProcessedSequence { get; set; }
+        [Networked] private TickTimer TeamToolCooldown { get; set; }
+        [Networked] private TickTimer HelpPingCooldown { get; set; }
+        [Networked] private uint TeamToolOrdinal { get; set; }
+        [Networked] private uint HelpPingOrdinal { get; set; }
 
         private InputAction _interactAction;
+        private InputAction _dropCoreAction;
+        private InputAction _teamToolAction;
+        private InputAction _helpPingAction;
         private uint _nextSequence;
 
         private void Awake()
         {
             _interactAction = _inputActions?.FindActionMap("Player", false)?.FindAction("Interact", false);
+            _dropCoreAction = new InputAction("DropCore", InputActionType.Button, "<Keyboard>/g");
+            _teamToolAction = new InputAction("UseTeamTool", InputActionType.Button, "<Keyboard>/t");
+            _helpPingAction = new InputAction("HelpPing", InputActionType.Button, "<Keyboard>/h");
         }
 
         public override void Spawned()
         {
-            if (Object.HasInputAuthority) _interactAction?.Enable();
+            if (!Object.HasInputAuthority) return;
+            _interactAction?.Enable();
+            _dropCoreAction?.Enable();
+            _teamToolAction?.Enable();
+            _helpPingAction?.Enable();
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             _interactAction?.Disable();
+            _dropCoreAction?.Disable();
+            _teamToolAction?.Disable();
+            _helpPingAction?.Disable();
+        }
+
+        private void OnDestroy()
+        {
+            _dropCoreAction?.Dispose();
+            _teamToolAction?.Dispose();
+            _helpPingAction?.Dispose();
         }
 
         private void Update()
         {
-            if (Object == null || !Object.HasInputAuthority || _interactAction?.WasPerformedThisFrame() != true) return;
+            if (Object == null || !Object.HasInputAuthority) return;
             if (!GetComponent<LobbyPlayerState>().IsGameplayPlayer) return;
+
+            if (_dropCoreAction?.WasPerformedThisFrame() == true)
+            {
+                RequestDropCarriedCore();
+            }
+            if (_teamToolAction?.WasPerformedThisFrame() == true) RequestUseTeamTool();
+            if (_helpPingAction?.WasPerformedThisFrame() == true) RequestHelpPing();
+
+            if (_interactAction?.WasPerformedThisFrame() != true) return;
 
             if (TryDetectCandidate(out var candidate))
             {
                 RequestInteraction(candidate);
+                return;
             }
+
+            if (TryDetectReviveCandidate(out var lifeState))
+            {
+                RequestRevive(lifeState);
+            }
+        }
+
+        public bool RequestRevive(NetworkPlayerLifeState target)
+        {
+            if (!Object.HasInputAuthority || target == null || target.Object == null)
+            {
+                return false;
+            }
+
+            RpcRequestRevive(target.Object.Id, NextSequence());
+            return true;
+        }
+
+        public bool RequestDropCarriedCore()
+        {
+            if (!Object.HasInputAuthority) return false;
+            RpcRequestDropCarriedCore(NextSequence());
+            return true;
+        }
+
+        public bool RequestUseTeamTool()
+        {
+            if (!Object.HasInputAuthority) return false;
+            RpcRequestUseTeamTool(NextSequence());
+            return true;
+        }
+
+        public bool RequestHelpPing()
+        {
+            if (!Object.HasInputAuthority) return false;
+            RpcRequestHelpPing(NextSequence());
+            return true;
         }
 
         public bool RequestInteraction(NetworkInteractable target)
@@ -85,6 +157,134 @@ namespace EchoProtocol.Networking
             return false;
         }
 
+        private bool TryDetectReviveCandidate(out NetworkPlayerLifeState lifeState)
+        {
+            var origin = _rayOrigin != null ? _rayOrigin : transform;
+            if (Physics.Raycast(
+                    origin.position,
+                    origin.forward,
+                    out var hit,
+                    _localDetectionDistance,
+                    _interactionLayers,
+                    QueryTriggerInteraction.Collide))
+            {
+                lifeState = hit.collider.GetComponentInParent<NetworkPlayerLifeState>();
+                return lifeState != null && lifeState.Object != Object;
+            }
+
+            lifeState = null;
+            return false;
+        }
+
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        private void RpcRequestRevive(NetworkId targetId, uint sequence, RpcInfo info = default)
+        {
+            if (!TryResolveRequester(info.Source, out var requester)
+                || ValidateRequester(requester, sequence) != InteractionValidationResult.Accepted)
+            {
+                return;
+            }
+
+            if (Runner.TryFindObject(targetId, out var targetObject)
+                && targetObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState)
+                && Vector3.SqrMagnitude(transform.position - lifeState.transform.position)
+                    <= _localDetectionDistance * _localDetectionDistance)
+            {
+                lifeState.TryRevive(requester);
+            }
+
+            if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+        }
+
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        private void RpcRequestDropCarriedCore(uint sequence, RpcInfo info = default)
+        {
+            if (!TryResolveRequester(info.Source, out var requester)
+                || ValidateRequester(requester, sequence) != InteractionValidationResult.Accepted)
+            {
+                return;
+            }
+
+            var playerState = GetComponent<LobbyPlayerState>();
+            if (playerState.CarriedCoreId.IsValid
+                && Runner.TryFindObject(playerState.CarriedCoreId, out var coreObject)
+                && coreObject.TryGetComponent<NetworkPickupItem>(out var core))
+            {
+                var dropPosition = transform.position + transform.forward * 1.25f;
+                core.TryDrop(requester, dropPosition);
+            }
+
+            if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+        }
+
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        private void RpcRequestUseTeamTool(uint sequence, RpcInfo info = default)
+        {
+            if (!TryResolveRequester(info.Source, out var requester)
+                || ValidateRequester(requester, sequence) != InteractionValidationResult.Accepted)
+            {
+                return;
+            }
+
+            var state = GetComponent<LobbyPlayerState>();
+            if (state.ToolId > 0 && TeamToolCooldown.ExpiredOrNotRunning(Runner))
+            {
+                var toolType = ToolTypeFor(state.ToolId);
+                if (toolType != null)
+                {
+                    TeamToolOrdinal++;
+                    MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
+                        requester,
+                        $"player:{Object.Id}:tool:{TeamToolOrdinal}",
+                        toolType);
+                    TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 5f);
+                    if (toolType == "NOISE_MAKER")
+                    {
+                        HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
+                            .TryAccept(requester, "NOISE_MAKER", 1, transform.position, 20);
+                    }
+                }
+            }
+
+            if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+        }
+
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        private void RpcRequestHelpPing(uint sequence, RpcInfo info = default)
+        {
+            if (!TryResolveRequester(info.Source, out var requester)
+                || ValidateRequester(requester, sequence) != InteractionValidationResult.Accepted)
+            {
+                return;
+            }
+
+            var lifeState = GetComponent<NetworkPlayerLifeState>();
+            if (lifeState != null && lifeState.Status == NetworkPlayerLifeStatus.Downed
+                && HelpPingCooldown.ExpiredOrNotRunning(Runner))
+            {
+                HelpPingOrdinal++;
+                MatchAuthorityRuntime.Instance?.RecordHelpPingUsed(
+                    requester,
+                    $"player:{Object.Id}:help-ping:{HelpPingOrdinal}",
+                    transform.position);
+                HelpPingCooldown = TickTimer.CreateFromSeconds(Runner, 3f);
+            }
+
+            if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+        }
+
+        private static string ToolTypeFor(int toolId)
+        {
+            switch (toolId)
+            {
+                case 1: return "FIELD_SCANNER";
+                case 2: return "NOISE_MAKER";
+                case 3: return "FIRST_AID_KIT";
+                case 4: return "DOOR_JAMMER";
+                default: return null;
+            }
+        }
+
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestInteraction(NetworkId targetId, uint sequence, RpcInfo info = default)
         {
@@ -112,6 +312,8 @@ namespace EchoProtocol.Networking
                 if (result == InteractionValidationResult.Accepted)
                 {
                     target.ExecuteAuthoritative(context);
+                    HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
+                        .TryAccept(requester, "INTERACTION", 0.35, target.transform.position, 6);
                 }
             }
 

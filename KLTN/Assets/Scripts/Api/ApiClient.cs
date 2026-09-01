@@ -13,6 +13,7 @@ namespace EchoProtocol.Api
     public const string AuthRegister = "/api/auth/register";
     public const string AuthLogin = "/api/auth/login";
     public const string AuthMe = "/api/auth/me";
+    public const string TelemetryBatch = "/api/telemetry/batch";
   }
 
   /// <summary>
@@ -51,6 +52,20 @@ namespace EchoProtocol.Api
         UnityWebRequest.kHttpVerbPOST,
         endpoint,
         json,
+        attachBearer,
+        callback));
+    }
+
+    public void PostRawJson<TResponse>(
+      string endpoint,
+      string jsonBody,
+      bool attachBearer,
+      Action<ApiResult<TResponse>> callback)
+    {
+      StartCoroutine(SendJsonCoroutine(
+        UnityWebRequest.kHttpVerbPOST,
+        endpoint,
+        jsonBody,
         attachBearer,
         callback));
     }

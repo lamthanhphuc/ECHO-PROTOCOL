@@ -28,8 +28,8 @@ Error responses set `success: false` and include `errorCode`.
 
 Compatibility route: `GET /api/health`
 
-The endpoint uses ASP.NET Core Health Checks and verifies PostgreSQL connectivity.
-It returns HTTP 200 only when the API can connect to the database, otherwise HTTP 503.
+The endpoint uses ASP.NET Core Health Checks and verifies PostgreSQL and MongoDB connectivity.
+It returns HTTP 200 only when the API can connect to both databases, otherwise HTTP 503.
 
 **Healthy response:**
 
@@ -38,7 +38,8 @@ It returns HTTP 200 only when the API can connect to the database, otherwise HTT
   "status": "Healthy",
   "service": "EchoProtocol.Api",
   "checks": {
-    "postgresql": "Healthy"
+    "postgresql": "Healthy",
+    "mongodb": "Healthy"
   }
 }
 ```
@@ -169,6 +170,97 @@ It returns HTTP 200 only when the API can connect to the database, otherwise HTT
 
 ---
 
+## Telemetry
+
+### `POST /api/telemetry/batch`
+
+**Auth:** Bearer JWT
+**Status:** Implemented and verified for canonical wire schema `"1.1"`
+
+Maximum batch size is configured by `MongoDb:MaxBatchSize` (default 500). Raw events are
+stored in MongoDB; business state and aggregate profiles remain in PostgreSQL.
+For the M2 client-auth flow, a non-null event `userId` must match the authenticated JWT user.
+Team/system events may omit `userId`; trusted-host delegation is deferred until the multiplayer
+authority contract provides a verifiable host identity.
+
+```json
+{
+  "events": [
+    {
+      "id": "uuid",
+      "matchId": "uuid",
+      "userId": null,
+      "eventType": "MATCH_STARTED",
+      "ts": "2026-08-27T10:15:30Z",
+      "valueJson": {
+        "context": {
+          "eventSequence": 1,
+          "authorityTick": null,
+          "scenarioConfigVersion": "SCENARIO-1",
+          "policyVersion": "M1-015-v0",
+          "configSource": "FIXED",
+          "teamSize": 4,
+          "buildVersion": "BUILD-1",
+          "mapContentVersion": "RF-1",
+          "contentWhitelistVersion": "WL-1",
+          "researchCaptureEnabled": false
+        },
+        "data": { "mapId": "RESEARCH_FACILITY" }
+      },
+      "reasonCode": "MATCH_READY",
+      "schemaVersion": "1.1"
+    }
+  ]
+}
+```
+
+The endpoint returns a semantic acknowledgement for every submitted event. Valid events in a
+mixed batch may be accepted while invalid events are permanently rejected. Transport/storage
+failures are transient so the Unity buffer retries the same immutable event.
+
+```json
+{
+  "success": true,
+  "message": "Telemetry batch processed",
+  "data": {
+    "items": [
+      { "id": "uuid", "status": "ACCEPTED", "rejectReason": null },
+      { "id": "uuid", "status": "DUPLICATE_ALREADY_ACCEPTED", "rejectReason": null },
+      { "id": "uuid", "status": "PERMANENTLY_REJECTED", "rejectReason": "TELEMETRY_SCHEMA_UNSUPPORTED" }
+    ]
+  },
+  "errorCode": null
+}
+```
+
+Allowed item statuses are `ACCEPTED`, `DUPLICATE_ALREADY_ACCEPTED`,
+`PERMANENTLY_REJECTED`, and `TRANSIENT_FAILURE`. Successful retries do not create duplicate
+documents. MongoDB enforces unique logical event ID and unique `(matchId,eventSequence)`.
+
+Configuration defaults:
+
+| Key | Default |
+|---|---:|
+| `MongoDb:MaxBatchSize` | 500 events |
+| `MongoDb:SupportedSchemaVersion` | `"1.1"` |
+| `MongoDb:MaxValueJsonBytes` | 32768 bytes/event |
+| `MongoDb:MaxFutureSkewMinutes` | 5 minutes |
+| `MongoDb:MaxEventAgeDays` | 7 days |
+
+| HTTP | Error code | Meaning |
+|---:|---|---|
+| 400 | `VALIDATION_ERROR` | Empty batch, oversized batch, or malformed request envelope |
+| 401 | `UNAUTHORIZED` / `TOKEN_INVALID` | Missing, invalid, or expired JWT |
+| 503 | `TELEMETRY_UNAVAILABLE` | MongoDB is temporarily unavailable |
+
+Schema, payload, timestamp, identity, sequence, and user-attribution errors are normally returned
+as per-item `PERMANENTLY_REJECTED` acknowledgements rather than failing the whole batch.
+
+MongoDB unavailability does not stop the API process or PostgreSQL-backed Auth endpoints. The
+database-aware health endpoint reports HTTP 503 until MongoDB recovers.
+
+---
+
 ## Player
 
 ### `GET /api/player/me`
@@ -284,6 +376,27 @@ It returns HTTP 200 only when the API can connect to the database, otherwise HTT
 
 ---
 
+## Match authority binding (M2 implemented)
+
+All endpoints require the normal Bearer JWT. The backend user ID always comes from the token.
+
+| Method | Path | Caller | Purpose |
+|---|---|---|---|
+| POST | `/api/matches/authority` | Fusion Host | Create a 2–4 player binding and initial lease |
+| POST | `/api/matches/{matchId}/join-proofs` | Each player | Issue a short-lived signed proof for its Fusion actor |
+| POST | `/api/matches/{matchId}/players/bind` | Bound Host | Verify the proof and persist actor-to-user identity |
+| POST | `/api/matches/{matchId}/players/{actor}/disconnect` | Bound Host | Mark a player disconnected |
+| POST | `/api/matches/{matchId}/lease` | Bound Host | Renew the Host lease |
+| POST | `/api/matches/{matchId}/start` | Bound Host | Start after at least two verified players |
+| POST | `/api/matches/{matchId}/end` | Bound Host | End the authority binding idempotently |
+
+Join proofs are HMAC-signed, expire after 120 seconds by default, and bind `matchId`, backend
+`userId`, Fusion session name, and actor number. The proof secret is separate from the JWT secret.
+After binding, the Host may submit telemetry whose `userId` belongs to that match; unrelated users
+still receive `TELEMETRY_USER_MISMATCH`.
+
+---
+
 ## Admin
 
 **Auth:** Bearer JWT, role `ADMIN`  
@@ -327,6 +440,6 @@ Update shop item, including enabled and archived status. Items are never hard-de
 
 ## Error codes
 
-`VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_SERVER_ERROR`, `USERNAME_ALREADY_EXISTS`, `INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `PASSWORD_CONFIRMATION_MISMATCH`, `PASSWORD_TOO_LONG`, `TOKEN_INVALID`
+`VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_SERVER_ERROR`, `USERNAME_ALREADY_EXISTS`, `INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `PASSWORD_CONFIRMATION_MISMATCH`, `PASSWORD_TOO_LONG`, `TOKEN_INVALID`, `MATCH_NOT_FOUND`, `MATCH_AUTHORITY_FORBIDDEN`, `MATCH_LEASE_EXPIRED`, `MATCH_ALREADY_ENDED`, `MATCH_SESSION_CONFLICT`, `MATCH_CAPACITY_REACHED`, `JOIN_PROOF_INVALID`, `MATCH_PLAYER_BINDING_CONFLICT`
 
 See backend `ErrorCodes.cs` for the canonical list.

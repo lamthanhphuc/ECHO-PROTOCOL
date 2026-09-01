@@ -9,7 +9,7 @@ Online cooperative first-person horror game — capstone project (4 months, team
 | Game client | Unity 6.5 (`6000.5.8f1`, `KLTN/`) |
 | Multiplayer | Photon Fusion Host Mode (manual setup required) |
 | Backend | ASP.NET Core Web API (`EchoProtocol.Backend/`) |
-| Database | PostgreSQL (local Docker → Neon/Supabase later) |
+| Database | PostgreSQL for transactional data + MongoDB for telemetry |
 | Auth | JWT + BCrypt |
 
 ## Repository layout
@@ -19,7 +19,7 @@ d:\Bin\KLTN\
 ├── KLTN\                    # Unity client (EchoProtocol.Client)
 ├── EchoProtocol.Backend\    # ASP.NET Core solution
 ├── docs\                    # SRS, API, DB schema, setup guides
-├── docker\                  # Local PostgreSQL
+├── docker\                  # Local PostgreSQL + MongoDB
 ├── .gitignore
 └── README.md
 ```
@@ -30,12 +30,12 @@ Canonical SRS: [`docs/SRS.md`](docs/SRS.md)
 
 ## Local setup
 
-### 1. PostgreSQL (Docker)
+### 1. Databases (Docker)
 
 ```powershell
 Copy-Item .env.example .env
 # Replace all placeholders in .env locally before continuing.
-docker compose -f docker/docker-compose.yml up -d
+docker compose --env-file .env -f docker/docker-compose.yml up -d
 ```
 
 Local credentials and the backend connection string come from untracked environment variables;
@@ -64,14 +64,14 @@ See [`docs/SETUP_GUIDE.md`](docs/SETUP_GUIDE.md) for full instructions.
 
 - [ ] Photon Fusion package imported (Unity 6000.5 compatible)
 - [ ] Photon Fusion App ID from [Photon Dashboard](https://dashboard.photonengine.com)
-- [ ] Docker Desktop running for local PostgreSQL
+- [ ] Docker Desktop running for local PostgreSQL and MongoDB
 - [ ] Production secrets via env / user-secrets (never commit)
 
 ## Foundation status checklist
 
 - [x] Git + `.gitignore`
 - [x] Docs (`docs/`)
-- [x] Docker PostgreSQL compose
+- [x] Docker PostgreSQL + MongoDB compose
 - [x] Backend skeleton + health endpoint
 - [x] Unity folder/scene/script foundation
 - [ ] Photon Fusion wired (manual)

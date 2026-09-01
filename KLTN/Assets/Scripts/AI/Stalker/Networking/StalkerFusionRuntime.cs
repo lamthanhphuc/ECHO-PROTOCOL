@@ -24,6 +24,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             new List<StalkerTargetCandidate>();
         private bool _networkSimulationOwned;
         private AiSimulationStep _lastAuthoritativeStep;
+        private StalkerNetworkLifeStateConsequenceSink _productionConsequenceSink;
 
         public int AuthoritativeSimulationCount { get; private set; }
         public bool HasLastAuthoritativeStep => _lastAuthoritativeStep.IsValid;
@@ -50,6 +51,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             _networkSimulationOwned = true;
             ResolveLocalDependencies();
             ResolveLifecycle();
+            BindProductionConsequenceSink();
             SetLegacySimulationSuppressed(true);
         }
 
@@ -57,6 +59,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         {
             _networkSimulationOwned = false;
             lifecycle = null;
+            _productionConsequenceSink = null;
             _lastAuthoritativeStep = AiSimulationStep.Invalid;
             SetLegacySimulationSuppressed(false);
         }
@@ -98,6 +101,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             if (lifecycle != runnerLifecycle)
             {
                 lifecycle = runnerLifecycle;
+                BindProductionConsequenceSink();
             }
 
             return lifecycle != null;
@@ -166,6 +170,26 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             lifecycle = runner.GetComponent<FusionPlayerLifecycle>();
+            BindProductionConsequenceSink();
+        }
+
+        private void BindProductionConsequenceSink()
+        {
+            if (controller == null || lifecycle == null || Runner == null || !Runner.IsServer)
+            {
+                return;
+            }
+
+            _productionConsequenceSink ??=
+                new StalkerNetworkLifeStateConsequenceSink(
+                    Runner,
+                    lifecycle.IdentityRegistry,
+                    Object.Id.ToString());
+            if (controller.AttackConsequenceSink == null
+                || controller.AttackConsequenceSink is StalkerDiagnosticAttackConsequenceSink)
+            {
+                controller.AttackConsequenceSink = _productionConsequenceSink;
+            }
         }
 
         private void SetLegacySimulationSuppressed(bool suppressed)

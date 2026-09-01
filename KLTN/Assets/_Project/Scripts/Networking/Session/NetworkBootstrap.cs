@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Fusion;
 using Fusion.Sockets;
+using EchoProtocol.Networking.Authority;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 namespace EchoProtocol.Networking
 {
-    public enum NetworkSessionState { Disconnected, Connecting, InLobby, ShuttingDown, Failed }
+    public enum NetworkSessionState { Disconnected, Connecting, InLobby, InMatch, ShuttingDown, Failed }
 
     /// <summary>Single owner of the Photon Fusion runner and session lifecycle.</summary>
     public sealed class NetworkBootstrap : MonoBehaviour, INetworkRunnerCallbacks
@@ -26,6 +27,7 @@ namespace EchoProtocol.Networking
         private bool _callbacksRegistered;
         private NetworkObject _localInputOwner;
         private Func<NetworkPlayerInput> _localInputProvider;
+        private MatchAuthorityRuntime _matchAuthority;
 
         public event Action<NetworkSessionState, string> SessionStateChanged;
         public event Action<PlayerRef> PlayerJoined;
@@ -51,6 +53,7 @@ namespace EchoProtocol.Networking
 
             _instance = this;
             DontDestroyOnLoad(gameObject);
+            _matchAuthority = MatchAuthorityRuntime.EnsureExists(this);
         }
 
         private void OnDestroy()
@@ -65,8 +68,8 @@ namespace EchoProtocol.Networking
 
         public Task<bool> CreateRoomAsync(string sessionName, int maxPlayers = 4)
         {
-            return maxPlayers < 2
-                ? FailWithoutStarting("A room must allow at least 2 players.")
+            return maxPlayers is < 2 or > 4
+                ? FailWithoutStarting("A room must allow between 2 and 4 players.")
                 : StartSessionAsync(GameMode.Host, sessionName, maxPlayers);
         }
 
@@ -75,6 +78,7 @@ namespace EchoProtocol.Networking
         public async Task Shutdown()
         {
             ClearLocalInputProvider();
+            if (_matchAuthority != null) await _matchAuthority.EndAsync("HOST_SHUTDOWN");
             if (Runner == null)
             {
                 CurrentSessionName = string.Empty;
@@ -172,6 +176,14 @@ namespace EchoProtocol.Networking
             SetState(NetworkSessionState.Connecting,
                 gameMode == GameMode.Host ? $"Creating room '{normalizedName}'..." : $"Joining room '{normalizedName}'...");
 
+            _matchAuthority ??= MatchAuthorityRuntime.EnsureExists(this);
+            if (gameMode == GameMode.Host
+                && !await _matchAuthority.PrepareHostAsync(normalizedName, playerCount ?? 4))
+            {
+                _sessionOperationInProgress = false;
+                return await FailWithoutStarting("Backend rejected the Host authority binding.");
+            }
+
             var runner = EnsureRunner();
             try
             {
@@ -184,6 +196,10 @@ namespace EchoProtocol.Networking
                     ObjectProvider = runner.GetComponent<INetworkObjectProvider>(),
                 };
                 if (playerCount.HasValue) args.PlayerCount = playerCount.Value;
+                if (gameMode == GameMode.Host)
+                {
+                    args.SessionProperties = _matchAuthority.BuildHostSessionProperties();
+                }
 
                 Debug.Log($"[NetworkSession] Starting {gameMode} for room '{normalizedName}'.");
                 var result = await runner.StartGame(args);
@@ -196,6 +212,11 @@ namespace EchoProtocol.Networking
                 }
 
                 CurrentSessionName = normalizedName;
+                if (!_matchAuthority.AttachJoinedSession(runner))
+                {
+                    await HandleStartFailureAsync("Fusion room has no valid backend match binding.");
+                    return false;
+                }
                 SetState(NetworkSessionState.InLobby,
                     $"{(gameMode == GameMode.Host ? "Created" : "Joined")} room '{normalizedName}'.");
                 Debug.Log($"[NetworkSession] Connected. Mode={gameMode}, Room='{normalizedName}', LocalPlayer={runner.LocalPlayer}.");
@@ -223,6 +244,7 @@ namespace EchoProtocol.Networking
         private async Task HandleStartFailureAsync(string message)
         {
             ClearLocalInputProvider();
+            if (_matchAuthority != null) await _matchAuthority.EndAsync("FUSION_START_FAILED");
             LastError = message;
             Debug.LogError($"[NetworkSession] {message}");
             var failedRunner = Runner;
@@ -261,6 +283,19 @@ namespace EchoProtocol.Networking
             SessionStateChanged?.Invoke(state, message);
         }
 
+        public bool CloseRoomForMatchStart()
+        {
+            if (Runner == null || !Runner.IsRunning || !Runner.IsServer || !Runner.SessionInfo.IsValid)
+            {
+                return false;
+            }
+
+            Runner.SessionInfo.IsOpen = false;
+            Runner.SessionInfo.IsVisible = false;
+            SetState(NetworkSessionState.InMatch, "Match started; room closed to late joins.");
+            return true;
+        }
+
         private void RegisterCallbacks()
         {
             if (Runner == null || _callbacksRegistered) return;
@@ -295,11 +330,14 @@ namespace EchoProtocol.Networking
         {
             Debug.Log($"[NetworkSession] Player joined: {player}. Players={CountPlayers(runner)}.");
             PlayerJoined?.Invoke(player);
+            if (player == runner.LocalPlayer) _matchAuthority?.TrySubmitLocalIdentity();
         }
 
         void INetworkRunnerCallbacks.OnPlayerLeft(NetworkRunner runner, PlayerRef player)
         {
             Debug.Log($"[NetworkSession] Player left: {player}. Players={CountPlayers(runner)}.");
+            var actorNumber = runner.GetPlayerActorId(player) ?? player.PlayerId;
+            if (runner.IsServer) _matchAuthority?.MarkPlayerDisconnected(actorNumber);
             PlayerLeft?.Invoke(player);
         }
 
@@ -338,6 +376,10 @@ namespace EchoProtocol.Networking
         private void CleanupUnexpectedTermination(NetworkRunner runner, string message)
         {
             ClearLocalInputProvider();
+            if (_matchAuthority != null)
+            {
+                _ = _matchAuthority.EndAsync("UNEXPECTED_FUSION_SHUTDOWN");
+            }
             Runner = null;
             _callbacksRegistered = false;
             _sessionOperationInProgress = false;

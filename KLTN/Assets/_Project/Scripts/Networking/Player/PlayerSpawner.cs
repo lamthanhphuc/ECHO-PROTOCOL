@@ -15,11 +15,13 @@ namespace EchoProtocol.Networking
         [Header("M2-024 World State Demo")]
         [SerializeField] private NetworkObject _doorPrefab;
         [SerializeField] private NetworkObject _pickupItemPrefab;
+        [SerializeField] private NetworkObject _sectorBoxPrefab;
 
         private readonly Dictionary<PlayerRef, int> _spawnSlots = new Dictionary<PlayerRef, int>();
         private FusionPlayerLifecycle _subscribedLifecycle;
         private NetworkObject _doorInstance;
         private NetworkObject _pickupItemInstance;
+        private NetworkObject _sectorBoxInstance;
 
         private void Awake()
         {
@@ -89,6 +91,10 @@ namespace EchoProtocol.Networking
 
         private void EnsureWorldStateExamples(NetworkRunner runner)
         {
+            if (_sectorBoxPrefab == null)
+            {
+                _sectorBoxPrefab = Resources.Load<NetworkObject>("Network/NetworkSectorBox");
+            }
             if (_doorInstance == null && _doorPrefab != null)
             {
                 _doorInstance = runner.Spawn(_doorPrefab, new Vector3(0f, 1f, 2.5f), Quaternion.identity);
@@ -98,6 +104,14 @@ namespace EchoProtocol.Networking
             {
                 _pickupItemInstance = runner.Spawn(_pickupItemPrefab, new Vector3(2f, 0.5f, 2.5f), Quaternion.identity);
                 Debug.Log($"[PlayerSpawner] Spawned authoritative pickup {_pickupItemInstance.Id}.");
+            }
+            if (_sectorBoxInstance == null && _sectorBoxPrefab != null)
+            {
+                _sectorBoxInstance = runner.Spawn(
+                    _sectorBoxPrefab,
+                    new Vector3(-2f, 0.75f, 2.5f),
+                    Quaternion.identity);
+                Debug.Log($"[PlayerSpawner] Spawned authoritative Sector Box {_sectorBoxInstance.Id}.");
             }
         }
 
@@ -237,6 +251,7 @@ namespace EchoProtocol.Networking
                 _spawnSlots.Clear();
                 _doorInstance = null;
                 _pickupItemInstance = null;
+                _sectorBoxInstance = null;
             }
         }
 

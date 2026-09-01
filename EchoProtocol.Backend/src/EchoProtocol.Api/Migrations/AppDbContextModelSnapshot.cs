@@ -22,6 +22,92 @@ namespace EchoProtocol.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchAuthorityBinding", b =>
+                {
+                    b.Property<Guid>("MatchId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FusionSessionName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("HostUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("LeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MaxPlayers")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("MatchId");
+
+                    b.HasIndex("HostUserId");
+
+                    b.HasIndex("FusionSessionName", "Status");
+
+                    b.ToTable("MatchAuthorityBindings", (string)null);
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchPlayerBinding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("BoundAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DisconnectedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FusionActorNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("JoinProofId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("LastSeenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JoinProofId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("MatchId", "FusionActorNumber")
+                        .IsUnique();
+
+                    b.HasIndex("MatchId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("MatchPlayerBindings", (string)null);
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerProfile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -147,6 +233,36 @@ namespace EchoProtocol.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchAuthorityBinding", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.User", "HostUser")
+                        .WithMany()
+                        .HasForeignKey("HostUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("HostUser");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchPlayerBinding", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.MatchAuthorityBinding", "Match")
+                        .WithMany("Players")
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Match");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerProfile", b =>
                 {
                     b.HasOne("EchoProtocol.Api.Entities.User", "User")
@@ -167,6 +283,11 @@ namespace EchoProtocol.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchAuthorityBinding", b =>
+                {
+                    b.Navigation("Players");
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.User", b =>

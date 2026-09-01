@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Fusion;
+using EchoProtocol.Networking.Authority;
 using UnityEngine;
 
 namespace EchoProtocol.Networking
@@ -100,6 +101,14 @@ namespace EchoProtocol.Networking
         [Networked]
         public NetworkBool IsGameplayPlayer { get; private set; }
 
+        [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
+        public NetworkString<_64> BackendUserId { get; private set; }
+
+        [Networked]
+        public NetworkId CarriedCoreId { get; private set; }
+
+        public bool HasVerifiedBackendIdentity => BackendUserId.Length > 0;
+
         public int TeamCount => _teamCount;
         public IReadOnlyList<LobbyToolDefinition> ToolDefinitions => _toolDefinitions;
 
@@ -109,11 +118,40 @@ namespace EchoProtocol.Networking
             ToolId = toolId;
             IsReady = false;
             IsGameplayPlayer = isGameplayPlayer;
+            if (!isGameplayPlayer) CarriedCoreId = default;
+        }
+
+        public bool TryBeginCarryingCore(NetworkId coreId)
+        {
+            if (!Object.HasStateAuthority || !IsGameplayPlayer || !coreId.IsValid
+                || CarriedCoreId.IsValid)
+            {
+                return false;
+            }
+
+            CarriedCoreId = coreId;
+            return true;
+        }
+
+        public bool TryClearCarriedCore(NetworkId expectedCoreId)
+        {
+            if (!Object.HasStateAuthority || !CarriedCoreId.IsValid
+                || CarriedCoreId != expectedCoreId)
+            {
+                return false;
+            }
+
+            CarriedCoreId = default;
+            return true;
         }
 
         public override void Spawned()
         {
             AnyStateChanged?.Invoke();
+            if (Object.HasInputAuthority)
+            {
+                MatchAuthorityRuntime.EnsureExists(NetworkBootstrap.Instance).TrySubmitLocalIdentity(this);
+            }
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -131,6 +169,34 @@ namespace EchoProtocol.Networking
 
             RpcRequestReady(isReady);
             return true;
+        }
+
+        public void SubmitJoinProof(string proof, int actorNumber)
+        {
+            if (!Object.HasInputAuthority || string.IsNullOrWhiteSpace(proof)) return;
+            RpcSubmitJoinProof(proof, actorNumber);
+        }
+
+        public void ApplyVerifiedBackendIdentity(string userId)
+        {
+            if (!Object.HasStateAuthority || !Guid.TryParse(userId, out _)) return;
+            BackendUserId = userId;
+            AnyStateChanged?.Invoke();
+        }
+
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        private void RpcSubmitJoinProof(string proof, int actorNumber, RpcInfo info = default)
+        {
+            if (!TryResolveOwnedRequester(info.Source, out var requester)) return;
+            var actualActor = Runner.GetPlayerActorId(requester) ?? requester.PlayerId;
+            if (actualActor != actorNumber)
+            {
+                Debug.LogWarning($"[LobbyPlayerState] Join proof actor mismatch for {requester}.");
+                return;
+            }
+
+            MatchAuthorityRuntime.EnsureExists(NetworkBootstrap.Instance)
+                .BindPlayerFromProof(this, actorNumber, proof);
         }
 
         public bool RequestTeam(int teamId)
@@ -163,6 +229,12 @@ namespace EchoProtocol.Networking
             {
                 Debug.LogWarning(
                     $"[LobbyPlayerState] Rejected ready request from {info.Source}; owner is {Object.InputAuthority}.");
+                return;
+            }
+
+            if (!HasVerifiedBackendIdentity)
+            {
+                Debug.LogWarning($"[LobbyPlayerState] Rejected ready request from unbound player {requester}.");
                 return;
             }
 

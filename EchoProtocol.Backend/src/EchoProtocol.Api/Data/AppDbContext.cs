@@ -13,6 +13,8 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<PlayerProfile> PlayerProfiles => Set<PlayerProfile>();
     public DbSet<Wallet> Wallets => Set<Wallet>();
+    public DbSet<MatchAuthorityBinding> MatchAuthorityBindings => Set<MatchAuthorityBinding>();
+    public DbSet<MatchPlayerBinding> MatchPlayerBindings => Set<MatchPlayerBinding>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -110,6 +112,37 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.UserId)
                 .IsUnique()
                 .HasDatabaseName("IX_Wallets_UserId");
+        });
+
+        modelBuilder.Entity<MatchAuthorityBinding>(entity =>
+        {
+            entity.ToTable("MatchAuthorityBindings");
+            entity.HasKey(e => e.MatchId);
+            entity.Property(e => e.FusionSessionName).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
+            entity.HasIndex(e => new { e.FusionSessionName, e.Status });
+            entity.HasIndex(e => e.HostUserId);
+            entity.HasOne(e => e.HostUser)
+                .WithMany()
+                .HasForeignKey(e => e.HostUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MatchPlayerBinding>(entity =>
+        {
+            entity.ToTable("MatchPlayerBindings");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.MatchId, e.UserId }).IsUnique();
+            entity.HasIndex(e => new { e.MatchId, e.FusionActorNumber }).IsUnique();
+            entity.HasIndex(e => e.JoinProofId).IsUnique();
+            entity.HasOne(e => e.Match)
+                .WithMany(e => e.Players)
+                .HasForeignKey(e => e.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
