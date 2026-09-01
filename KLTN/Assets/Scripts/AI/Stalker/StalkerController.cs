@@ -1699,7 +1699,16 @@ namespace EchoProtocol.AI.Stalker
             if (IsChaseSameObjectiveRetryableFailure(failureReason)
                 && HasRecoveryBudgetForCurrentObjective())
             {
-                TryIssueNavigationRecoveryRepath(ToSameObjectiveRecoveryReason(failureReason));
+                if (TryIssueNavigationRecoveryRepath(ToSameObjectiveRecoveryReason(failureReason)))
+                {
+                    return;
+                }
+            }
+
+            if (IsChaseSameObjectiveRetryableFailure(failureReason)
+                && !HasRecoveryBudgetForCurrentObjective())
+            {
+                EnterSearch();
             }
         }
 
@@ -1891,9 +1900,15 @@ namespace EchoProtocol.AI.Stalker
 
         private static NavigationRecoveryReason ToSameObjectiveRecoveryReason(NavigationFailureReason failureReason)
         {
-            return failureReason == NavigationFailureReason.DoorBlocked
-                ? NavigationRecoveryReason.TopologyChangedRepath
-                : NavigationRecoveryReason.RetryLogicalObjective;
+            switch (failureReason)
+            {
+                case NavigationFailureReason.DoorBlocked:
+                    return NavigationRecoveryReason.TopologyChangedRepath;
+                case NavigationFailureReason.PathStale:
+                    return NavigationRecoveryReason.PathStaleRepath;
+                default:
+                    return NavigationRecoveryReason.RetryLogicalObjective;
+            }
         }
 
         private static bool IsSearchRetryableFailure(NavigationFailureReason failureReason)

@@ -24,6 +24,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string StalkerControllerTypeName = "EchoProtocol.AI.Stalker.StalkerController";
         private const string StalkerSearchContextTypeName = "EchoProtocol.AI.Stalker.StalkerSearchContext";
         private const string SearchEpisodeIdTypeName = "EchoProtocol.AI.Stalker.SearchEpisodeId";
+        private const string VisionObservationTypeName = "EchoProtocol.AI.Stalker.VisionObservation";
         private const string StalkerSearchPlannerTypeName = "EchoProtocol.AI.Stalker.StalkerSearchPlanner";
         private const string SearchPathEvaluatorTypeName = "EchoProtocol.AI.Stalker.SearchPathEvaluator";
         private const string NavMeshSpatialGraphTypeName = "EchoProtocol.AI.Stalker.Spatial.NavMeshSpatialGraph";
@@ -508,6 +509,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             InvokeTickNavigationRecovery(fixture.StalkerController);
 
             Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Navigation, "CurrentRecoveryReason"), Is.EqualTo("PathStaleRepath"));
             yield return WaitUntilComplete(fixture.Agent, fixture.Navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
 
             Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Moving"));
@@ -599,23 +601,47 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
-        public IEnumerator NAV_REC_ChasePathPartialBudgetExhausted_DoesNotIssueSecondRepath()
+        public IEnumerator NAV_REC_ChasePathPartialThenInvalidAfterBudgetExhausted_EntersSearch()
         {
             var fixture = CreateRecoveryPolicyFixture();
             yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
             PrepareChaseRecoveryPolicy(fixture, 44);
+            AcceptCurrentTargetObservation(fixture.StalkerController, 44, fixture.Destination);
 
             InvokeHandleChaseNavigationFailure(fixture.StalkerController, "PathPartial");
             Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
-            AssertVectorApproximately(GetActiveNavigationDestination(fixture.Navigation), fixture.Destination);
-
-            var alternateDestination = SampleChaseDestinationPointOnNavMesh(NewGoalDestination);
-            SetPrivateField(fixture.StalkerController, "_lastChaseRequestedDestination", alternateDestination);
-            InvokeHandleChaseNavigationFailure(fixture.StalkerController, "PathInvalid");
-
-            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
             Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("CHASE"));
             Assert.That(GetPlayerIdValue(GetProperty(fixture.StalkerController, "CurrentTargetId")), Is.EqualTo(44));
+            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.True);
+            AssertVectorApproximately(GetActiveNavigationDestination(fixture.Navigation), fixture.Destination);
+
+            InvokeHandleChaseNavigationFailure(fixture.StalkerController, "PathInvalid");
+
+            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("SEARCH"));
+            Assert.That(GetPlayerIdValue(GetProperty(fixture.StalkerController, "CurrentTargetId")), Is.EqualTo(44));
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.True);
+            AssertVectorApproximately(GetActiveNavigationDestination(fixture.Navigation), fixture.Destination);
+        }
+
+        [UnityTest]
+        public IEnumerator NAV_REC_ChasePathInvalidAfterBudgetExhausted_EntersSearchFromLastKnownPosition()
+        {
+            var fixture = CreateRecoveryPolicyFixture();
+            yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
+            PrepareChaseRecoveryPolicy(fixture, 45);
+            AcceptCurrentTargetObservation(fixture.StalkerController, 45, fixture.Destination);
+
+            InvokeHandleChaseNavigationFailure(fixture.StalkerController, "PathInvalid");
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("CHASE"));
+
+            InvokeHandleChaseNavigationFailure(fixture.StalkerController, "PathInvalid");
+
+            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("SEARCH"));
+            Assert.That(GetPlayerIdValue(GetProperty(fixture.StalkerController, "CurrentTargetId")), Is.EqualTo(45));
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.True);
             AssertVectorApproximately(GetActiveNavigationDestination(fixture.Navigation), fixture.Destination);
         }
 
@@ -1410,6 +1436,18 @@ namespace EchoProtocol.AI.Stalker.Tests
             AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), fixture.Destination);
         }
 
+        private static void AcceptCurrentTargetObservation(object stalkerController, int playerIdValue, Vector3 observedPosition)
+        {
+            var memory = GetPrivateField<object>(stalkerController, "_memory");
+            var accepted = InvokeMethod(
+                memory,
+                "TryAcceptCurrentTargetObservation",
+                new[] { ResolveType(VisionObservationTypeName) },
+                new[] { CreateVisionObservation(playerIdValue, observedPosition) });
+            Assert.That(accepted, Is.EqualTo(true), "CHASE exhaustion test must seed a valid last-known position.");
+            SetPrivateField(stalkerController, "lastKnownPosition", observedPosition);
+        }
+
         private static bool InvokeTryPlanNextSearchCandidate(object stalkerController)
         {
             return (bool)InvokePrivateMethod(
@@ -1464,6 +1502,17 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static object CreatePlayerId(int value)
         {
             return Activator.CreateInstance(ResolveType(PlayerIdTypeName), value);
+        }
+
+        private static object CreateVisionObservation(int playerIdValue, Vector3 observedPosition)
+        {
+            return Activator.CreateInstance(
+                ResolveType(VisionObservationTypeName),
+                CreatePlayerId(playerIdValue),
+                observedPosition,
+                Vector3.forward,
+                Activator.CreateInstance(ResolveType(AiSimulationTimeTypeName), 1L, 0d),
+                Vector3.Distance(AgentStart, observedPosition));
         }
 
         private static object CreateSearchContext(long episodeId, Vector3 lkp, Vector3 direction)
