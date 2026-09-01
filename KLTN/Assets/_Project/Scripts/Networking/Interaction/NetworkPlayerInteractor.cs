@@ -88,7 +88,14 @@ namespace EchoProtocol.Networking
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestInteraction(NetworkId targetId, uint sequence, RpcInfo info = default)
         {
-            var result = ValidateRequester(info.Source, sequence);
+            if (!TryResolveRequester(info.Source, out var requester))
+            {
+                Debug.LogWarning(
+                    $"[Interaction] Rejected request from {info.Source}; owner is {Object.InputAuthority}.");
+                return;
+            }
+
+            var result = ValidateRequester(requester, sequence);
             NetworkInteractable target = null;
 
             if (result == InteractionValidationResult.Accepted &&
@@ -100,7 +107,7 @@ namespace EchoProtocol.Networking
 
             if (result == InteractionValidationResult.Accepted)
             {
-                var context = new InteractionContext(this, target, info.Source);
+                var context = new InteractionContext(this, target, requester);
                 result = target.ValidateInteraction(context);
                 if (result == InteractionValidationResult.Accepted)
                 {
@@ -112,8 +119,18 @@ namespace EchoProtocol.Networking
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
 
             Debug.Log(
-                $"[Interaction] Requester={info.Source}, target={targetId}, sequence={sequence}, result={result}.");
-            RpcInteractionResult(info.Source, targetId, sequence, (int)result);
+                $"[Interaction] Requester={requester}, target={targetId}, sequence={sequence}, result={result}.");
+            RpcInteractionResult(requester, targetId, sequence, (int)result);
+        }
+
+        private bool TryResolveRequester(PlayerRef source, out PlayerRef requester)
+        {
+            return RpcRequesterResolver.TryResolveEffectiveRequester(
+                source,
+                Object.InputAuthority,
+                Object.HasStateAuthority,
+                Object.HasInputAuthority,
+                out requester);
         }
 
         private InteractionValidationResult ValidateRequester(PlayerRef source, uint sequence)

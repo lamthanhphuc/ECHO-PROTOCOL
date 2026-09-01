@@ -5,6 +5,38 @@ using UnityEngine;
 
 namespace EchoProtocol.Networking
 {
+    public static class RpcRequesterResolver
+    {
+        public static bool TryResolveEffectiveRequester(
+            PlayerRef rpcSource,
+            PlayerRef inputAuthority,
+            bool hasStateAuthority,
+            bool hasInputAuthority,
+            out PlayerRef effectiveRequester)
+        {
+            if (rpcSource.IsRealPlayer)
+            {
+                effectiveRequester = rpcSource;
+                return true;
+            }
+
+            // Fusion Host Mode may execute a locally-owned InputAuthority -> StateAuthority
+            // RPC with RpcInfo.Source == PlayerRef.None.
+            // Only that exact "None" case is eligible for the Host-local fallback.
+            if (rpcSource.IsNone &&
+                hasStateAuthority &&
+                hasInputAuthority &&
+                inputAuthority.IsRealPlayer)
+            {
+                effectiveRequester = inputAuthority;
+                return true;
+            }
+
+            effectiveRequester = PlayerRef.None;
+            return false;
+        }
+    }
+
     public enum LobbySelectionKind { Team = 1, Tool = 2 }
 
     public enum LobbySelectionError
@@ -127,28 +159,35 @@ namespace EchoProtocol.Networking
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestReady(NetworkBool isReady, RpcInfo info = default)
         {
-            if (!Object.HasStateAuthority || info.Source != Object.InputAuthority)
+            if (!TryResolveOwnedRequester(info.Source, out var requester))
             {
                 Debug.LogWarning(
                     $"[LobbyPlayerState] Rejected ready request from {info.Source}; owner is {Object.InputAuthority}.");
                 return;
             }
 
-            if (!Runner.TryGetPlayerObject(info.Source, out var ownedObject) || ownedObject != Object)
+            if (!Runner.TryGetPlayerObject(requester, out var ownedObject) || ownedObject != Object)
             {
-                Debug.LogWarning($"[LobbyPlayerState] Rejected ready request: {info.Source} does not own this player object.");
+                Debug.LogWarning($"[LobbyPlayerState] Rejected ready request: {requester} does not own this player object.");
                 return;
             }
 
             IsReady = isReady;
-            Debug.Log($"[LobbyPlayerState] {info.Source} ready={isReady}.");
+            Debug.Log($"[LobbyPlayerState] {requester} ready={isReady}.");
             AnyStateChanged?.Invoke();
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestTeam(int teamId, RpcInfo info = default)
         {
-            var error = ValidateOwnedRequest(info.Source);
+            if (!TryResolveRequester(info.Source, out var requester))
+            {
+                Debug.LogWarning(
+                    $"[LobbyPlayerState] Rejected team request from {info.Source}; owner is {Object.InputAuthority}.");
+                return;
+            }
+
+            var error = ValidateOwnedRequest(requester);
             if (error == LobbySelectionError.None && IsReady)
             {
                 error = LobbySelectionError.SelectionLockedWhileReady;
@@ -164,13 +203,20 @@ namespace EchoProtocol.Networking
                 AnyStateChanged?.Invoke();
             }
 
-            SendSelectionResult(info.Source, LobbySelectionKind.Team, teamId, error);
+            SendSelectionResult(requester, LobbySelectionKind.Team, teamId, error);
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestTool(int toolId, RpcInfo info = default)
         {
-            var error = ValidateOwnedRequest(info.Source);
+            if (!TryResolveRequester(info.Source, out var requester))
+            {
+                Debug.LogWarning(
+                    $"[LobbyPlayerState] Rejected tool request from {info.Source}; owner is {Object.InputAuthority}.");
+                return;
+            }
+
+            var error = ValidateOwnedRequest(requester);
             if (error == LobbySelectionError.None && IsReady)
             {
                 error = LobbySelectionError.SelectionLockedWhileReady;
@@ -192,7 +238,32 @@ namespace EchoProtocol.Networking
                 AnyStateChanged?.Invoke();
             }
 
-            SendSelectionResult(info.Source, LobbySelectionKind.Tool, toolId, error);
+            SendSelectionResult(requester, LobbySelectionKind.Tool, toolId, error);
+        }
+
+        private bool TryResolveRequester(PlayerRef source, out PlayerRef requester)
+        {
+            return RpcRequesterResolver.TryResolveEffectiveRequester(
+                source,
+                Object.InputAuthority,
+                Object.HasStateAuthority,
+                Object.HasInputAuthority,
+                out requester);
+        }
+
+        private bool TryResolveOwnedRequester(PlayerRef source, out PlayerRef requester)
+        {
+            if (!RpcRequesterResolver.TryResolveEffectiveRequester(
+                    source,
+                    Object.InputAuthority,
+                    Object.HasStateAuthority,
+                    Object.HasInputAuthority,
+                    out requester))
+            {
+                return false;
+            }
+
+            return Object.HasStateAuthority && requester == Object.InputAuthority;
         }
 
         private LobbySelectionError ValidateOwnedRequest(PlayerRef source)

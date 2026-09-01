@@ -8,6 +8,20 @@ using UnityEngine;
 
 namespace EchoProtocol.Networking
 {
+    public readonly struct FusionPlayerObjectCommit
+    {
+        public FusionPlayerObjectCommit(PlayerRef player, NetworkObject playerObject, PlayerId playerId)
+        {
+            Player = player;
+            PlayerObject = playerObject;
+            PlayerId = playerId;
+        }
+
+        public PlayerRef Player { get; }
+        public NetworkObject PlayerObject { get; }
+        public PlayerId PlayerId { get; }
+    }
+
     [RequireComponent(typeof(NetworkRunner))]
     public sealed class FusionPlayerLifecycle : MonoBehaviour, INetworkRunnerCallbacks
     {
@@ -24,6 +38,8 @@ namespace EchoProtocol.Networking
         public FusionPlayerIdentityRegistry IdentityRegistry => _identityRegistry;
 
         public PlayerRuntimeEntityRegistry EntityRegistry => _entityRegistry;
+
+        public event Action<FusionPlayerObjectCommit> PlayerObjectCommitted;
 
         private void Awake()
         {
@@ -94,7 +110,9 @@ namespace EchoProtocol.Networking
                     playerPrefab,
                     CreateSpawnPosition(playerId),
                     Quaternion.identity,
-                    player);
+                    player,
+                    null,
+                    NetworkSpawnFlags.DontDestroyOnLoad);
 
                 if (spawnedObject == null)
                 {
@@ -125,15 +143,18 @@ namespace EchoProtocol.Networking
                 {
                     throw new InvalidOperationException("Runner.SetPlayerObject did not commit the spawned object.");
                 }
-
-                Debug.Log($"FPL|JOIN_COMMIT|player={player}|playerId={playerId.Value}");
             }
             catch (Exception ex)
             {
                 RollbackJoin(runner, player, playerId, identity, spawnedObject, entityRegistered, playerObjectCommitted);
                 Debug.Log($"FPL|JOIN_REJECT|player={player}|reason=TransactionFailed|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                 Debug.LogError($"[FusionPlayerLifecycle] Failed to spawn/register player {player}: {ex.Message}");
+                return;
             }
+
+            var commit = new FusionPlayerObjectCommit(player, spawnedObject, playerId);
+            Debug.Log($"FPL|JOIN_COMMIT|player={player}|playerId={playerId.Value}");
+            NotifyPlayerObjectCommitted(commit);
         }
 
         public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
@@ -249,6 +270,33 @@ namespace EchoProtocol.Networking
         private Vector3 CreateSpawnPosition(PlayerId playerId)
         {
             return spawnOrigin + new Vector3((playerId.Value - 1) * spawnSpacing, 0f, 0f);
+        }
+
+        private void NotifyPlayerObjectCommitted(FusionPlayerObjectCommit commit)
+        {
+            var handlers = PlayerObjectCommitted;
+            if (handlers == null)
+            {
+                return;
+            }
+
+            var invocationList = handlers.GetInvocationList();
+            for (var i = 0; i < invocationList.Length; i++)
+            {
+                var handler = (Action<FusionPlayerObjectCommit>)invocationList[i];
+                try
+                {
+                    handler(commit);
+                }
+                catch (Exception ex)
+                {
+                    var observer = handler.Method != null
+                        ? $"{handler.Method.DeclaringType?.FullName}.{handler.Method.Name}"
+                        : "unknown";
+                    Debug.LogError(
+                        $"FPL|COMMIT_OBSERVER_ERROR|player={commit.Player}|playerId={commit.PlayerId}|observer={observer}|error={ex.GetType().Name}:{ex.Message}");
+                }
+            }
         }
 
         private void RollbackJoin(

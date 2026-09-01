@@ -11,7 +11,9 @@ namespace EchoProtocol.UI.MainMenu
     [SerializeField] private Text welcomeText;
     [SerializeField] private Text roleText;
     [SerializeField] private Text walletText;
+    [SerializeField] private Button playButton;
     [SerializeField] private Button logoutButton;
+    [SerializeField] private string lobbySceneName = GameConstants.SceneLobby;
     [SerializeField] private string loginSceneName = GameConstants.SceneLogin;
 
     private void Start()
@@ -29,6 +31,11 @@ namespace EchoProtocol.UI.MainMenu
 
     private void OnEnable()
     {
+      if (playButton != null)
+      {
+        playButton.onClick.AddListener(OnPlayClicked);
+      }
+
       if (logoutButton != null)
       {
         logoutButton.onClick.AddListener(OnLogoutClicked);
@@ -37,6 +44,11 @@ namespace EchoProtocol.UI.MainMenu
 
     private void OnDisable()
     {
+      if (playButton != null)
+      {
+        playButton.onClick.RemoveListener(OnPlayClicked);
+      }
+
       if (logoutButton != null)
       {
         logoutButton.onClick.RemoveListener(OnLogoutClicked);
@@ -52,6 +64,17 @@ namespace EchoProtocol.UI.MainMenu
       if (welcomeText != null) welcomeText.text = $"Welcome, {display}";
       if (roleText != null) roleText.text = $"Role: {AuthSession.Role}";
       if (walletText != null) walletText.text = $"Wallet: {AuthSession.WalletBalance}";
+    }
+
+    private void OnPlayClicked()
+    {
+      if (!AuthSession.IsAuthenticated)
+      {
+        SceneManager.LoadScene(loginSceneName);
+        return;
+      }
+
+      SceneManager.LoadScene(lobbySceneName);
     }
 
     private void OnLogoutClicked()

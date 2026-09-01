@@ -204,8 +204,11 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("RequiredHiddenVerificationSimulationDelta", source);
             StringAssert.Contains("stage=HiddenVerified", source);
             StringAssert.Contains("result=", source);
+            StringAssert.Contains("NetworkCharacterController", source);
+            StringAssert.Contains("characterController.Teleport(position);", source);
             StringAssert.Contains("NetworkTransform", source);
             StringAssert.Contains("networkTransform.Teleport(position);", source);
+            StringAssert.Contains("MissingReplicatedMovementComponent", source);
             StringAssert.Contains("networkObject.HasStateAuthority", source);
             StringAssert.DoesNotContain("identity.EntityRoot.position = visiblePlayerMarker.position", source);
             StringAssert.DoesNotContain("identity.EntityRoot.position = hiddenPlayerMarker.position", source);
@@ -271,6 +274,8 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("player == runner.LocalPlayer", source);
             StringAssert.Contains("TryTeleportTarget(localIdentity, localAwayPosition", source);
             StringAssert.Contains("TryTeleportTarget(identity, attackPosition", source);
+            StringAssert.Contains("NetworkCharacterController", source);
+            StringAssert.Contains("characterController.Teleport(position);", source);
             StringAssert.Contains("networkTransform.Teleport(position);", source);
             StringAssert.Contains("networkObject.HasStateAuthority", source);
             StringAssert.DoesNotContain("new FusionPlayerLifecycle", source);

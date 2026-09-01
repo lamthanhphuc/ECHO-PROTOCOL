@@ -8,9 +8,14 @@ namespace EchoProtocol.Player.Tests
     public sealed class PlayerNetworkPrefabContractTests
     {
         private const string PrefabPath = "Assets/Prefabs/PlayerNetwork.prefab";
+        private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
         private const string RootName = "PlayerNetwork";
         private const string NetworkObjectTypeName = "Fusion.NetworkObject";
         private const string NetworkTransformTypeName = "Fusion.NetworkTransform";
+        private const string NetworkCharacterControllerTypeName = "Fusion.NetworkCharacterController";
+        private const string LobbyPlayerStateTypeName = "EchoProtocol.Networking.LobbyPlayerState";
+        private const string NetworkPlayerMovementTypeName = "EchoProtocol.Networking.NetworkPlayerMovement";
+        private const string NetworkPlayerInteractorTypeName = "EchoProtocol.Networking.NetworkPlayerInteractor";
         private const string RuntimeIdentityTypeName = "EchoProtocol.Player.PlayerRuntimeIdentity";
         private const string PlayerMovementTypeName = "PlayerMovement";
         private const string PlayerCameraTypeName = "PlayerCamera";
@@ -23,9 +28,53 @@ namespace EchoProtocol.Player.Tests
 
             Assert.That(prefab.name, Is.EqualTo(RootName));
             Assert.That(GetComponentByTypeName(prefab, NetworkObjectTypeName), Is.Not.Null);
-            Assert.That(GetComponentByTypeName(prefab, NetworkTransformTypeName), Is.Not.Null);
+            Assert.That(GetComponentByTypeName(prefab, NetworkCharacterControllerTypeName), Is.Not.Null);
             Assert.That(GetComponentByTypeName(prefab, RuntimeIdentityTypeName), Is.Not.Null);
+            Assert.That(GetComponentByTypeName(prefab, LobbyPlayerStateTypeName), Is.Not.Null);
+            Assert.That(GetComponentByTypeName(prefab, NetworkPlayerMovementTypeName), Is.Not.Null);
+            Assert.That(GetComponentByTypeName(prefab, NetworkPlayerInteractorTypeName), Is.Not.Null);
             Assert.That(prefab.GetComponent<CharacterController>(), Is.Not.Null);
+        }
+
+        [Test]
+        public void FND_PLAYER_NET_PREFAB_NetworkCharacterControllerIsSoleReplicatedTransformProvider()
+        {
+            var prefab = LoadPrefab();
+
+            Assert.That(GetComponentByTypeName(prefab, NetworkCharacterControllerTypeName), Is.Not.Null);
+            Assert.That(GetComponentByTypeName(prefab, NetworkTransformTypeName), Is.Null);
+        }
+
+        [Test]
+        public void FND_PLAYER_NET_PREFAB_NetworkedBehavioursIncludeGameplayComponents()
+        {
+            var prefab = LoadPrefab();
+            var networkObject = GetComponentByTypeName(prefab, NetworkObjectTypeName);
+            Assert.That(networkObject, Is.Not.Null);
+
+            var serializedObject = new SerializedObject(networkObject);
+            var behaviours = serializedObject.FindProperty("NetworkedBehaviours");
+            Assert.That(behaviours, Is.Not.Null);
+
+            Assert.That(SerializedReferenceArrayContains(behaviours, GetComponentByTypeName(prefab, LobbyPlayerStateTypeName)), Is.True);
+            Assert.That(SerializedReferenceArrayContains(behaviours, GetComponentByTypeName(prefab, NetworkCharacterControllerTypeName)), Is.True);
+            Assert.That(SerializedReferenceArrayContains(behaviours, GetComponentByTypeName(prefab, NetworkPlayerMovementTypeName)), Is.True);
+            Assert.That(SerializedReferenceArrayContains(behaviours, GetComponentByTypeName(prefab, NetworkPlayerInteractorTypeName)), Is.True);
+        }
+
+        [Test]
+        public void FND_PLAYER_NET_PREFAB_GameplayComponentsUseCanonicalInputActions()
+        {
+            var prefab = LoadPrefab();
+            var inputActions = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(InputActionsPath);
+            Assert.That(inputActions, Is.Not.Null);
+
+            Assert.That(GetSerializedObjectReference(
+                GetComponentByTypeName(prefab, NetworkPlayerMovementTypeName),
+                "_inputActions"), Is.SameAs(inputActions));
+            Assert.That(GetSerializedObjectReference(
+                GetComponentByTypeName(prefab, NetworkPlayerInteractorTypeName),
+                "_inputActions"), Is.SameAs(inputActions));
         }
 
         [Test]
@@ -83,6 +132,29 @@ namespace EchoProtocol.Player.Tests
             }
 
             return null;
+        }
+
+        private static bool SerializedReferenceArrayContains(SerializedProperty array, UnityEngine.Object expected)
+        {
+            Assert.That(expected, Is.Not.Null);
+            for (var i = 0; i < array.arraySize; i++)
+            {
+                if (array.GetArrayElementAtIndex(i).objectReferenceValue == expected)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static UnityEngine.Object GetSerializedObjectReference(Component component, string propertyName)
+        {
+            Assert.That(component, Is.Not.Null);
+            var serializedObject = new SerializedObject(component);
+            var property = serializedObject.FindProperty(propertyName);
+            Assert.That(property, Is.Not.Null);
+            return property.objectReferenceValue;
         }
 
         private static bool GetBoolProperty(object target, string propertyName)

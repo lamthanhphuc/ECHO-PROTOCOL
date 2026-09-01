@@ -5,19 +5,19 @@ using UnityEngine.SceneManagement;
 
 namespace EchoProtocol.Networking
 {
-    /// <summary>Host-authoritative player spawn registry for lobby and gameplay scenes.</summary>
+    /// <summary>Host-authoritative gameplay placement coordinator for lifecycle-owned player objects.</summary>
     public sealed class PlayerSpawner : MonoBehaviour
     {
         private const int SupportedPlayerCount = 4;
         private const float FallbackSpacing = 2.5f;
 
         [SerializeField] private NetworkBootstrap _bootstrap;
-        [SerializeField] private NetworkObject _playerPrefab;
         [Header("M2-024 World State Demo")]
         [SerializeField] private NetworkObject _doorPrefab;
         [SerializeField] private NetworkObject _pickupItemPrefab;
 
         private readonly Dictionary<PlayerRef, int> _spawnSlots = new Dictionary<PlayerRef, int>();
+        private FusionPlayerLifecycle _subscribedLifecycle;
         private NetworkObject _doorInstance;
         private NetworkObject _pickupItemInstance;
 
@@ -35,10 +35,12 @@ namespace EchoProtocol.Networking
             _bootstrap.PlayerLeft += HandlePlayerLeft;
             _bootstrap.NetworkSceneLoadDone += HandleNetworkSceneLoadDone;
             _bootstrap.SessionStateChanged += HandleSessionStateChanged;
+            TryAttachLifecycle(_bootstrap.Runner);
         }
 
         private void OnDisable()
         {
+            DetachLifecycle();
             if (_bootstrap == null) return;
             _bootstrap.PlayerJoined -= HandlePlayerJoined;
             _bootstrap.PlayerLeft -= HandlePlayerLeft;
@@ -52,19 +54,16 @@ namespace EchoProtocol.Networking
             if (runner == null || !runner.IsServer) return;
 
             var gameplay = SceneManager.GetActiveScene().name == LobbyManager.GameSceneName;
-            EnsurePlayerObject(runner, player, gameplay, replaceLobbyObject: false);
+            TryAttachLifecycle(runner);
+            GetOrAssignSlot(player);
+            if (runner.TryGetPlayerObject(player, out var playerObject) && playerObject != null)
+            {
+                ConfigureExistingPlayerObject(player, playerObject, gameplay);
+            }
         }
 
         private void HandlePlayerLeft(PlayerRef player)
         {
-            var runner = _bootstrap?.Runner;
-            if (runner != null && runner.IsServer && runner.TryGetPlayerObject(player, out var playerObject))
-            {
-                runner.SetPlayerObject(player, null);
-                runner.Despawn(playerObject);
-                Debug.Log($"[PlayerSpawner] Despawned player object for {player}.");
-            }
-
             _spawnSlots.Remove(player);
         }
 
@@ -72,10 +71,17 @@ namespace EchoProtocol.Networking
         {
             if (!runner.IsServer || SceneManager.GetActiveScene().name != LobbyManager.GameSceneName) return;
 
-            Debug.Log("[PlayerSpawner] Gameplay scene ready. Ensuring one gameplay object per active player.");
+            TryAttachLifecycle(runner);
+            Debug.Log("[PlayerSpawner] Gameplay scene ready. Placing lifecycle-owned player objects.");
             foreach (var player in runner.ActivePlayers)
             {
-                EnsurePlayerObject(runner, player, gameplay: true, replaceLobbyObject: true);
+                if (!runner.TryGetPlayerObject(player, out var playerObject) || playerObject == null)
+                {
+                    Debug.LogWarning($"[PlayerSpawner] No lifecycle-owned player object available yet for {player}.");
+                    continue;
+                }
+
+                ConfigureExistingPlayerObject(player, playerObject, gameplay: true);
             }
 
             EnsureWorldStateExamples(runner);
@@ -95,68 +101,92 @@ namespace EchoProtocol.Networking
             }
         }
 
-        private void EnsurePlayerObject(
-            NetworkRunner runner,
-            PlayerRef player,
-            bool gameplay,
-            bool replaceLobbyObject)
+        private void HandleLifecyclePlayerObjectCommitted(FusionPlayerObjectCommit commit)
         {
-            if (!player.IsValid)
+            var runner = _bootstrap?.Runner;
+            if (runner == null || !runner.IsServer || commit.PlayerObject == null)
             {
-                Debug.LogError("[PlayerSpawner] Cannot spawn for an invalid PlayerRef.");
-                return;
-            }
-            if (_playerPrefab == null)
-            {
-                Debug.LogError("[PlayerSpawner] Player prefab is not assigned.");
                 return;
             }
 
-            var teamId = 0;
-            var toolId = 0;
-            if (runner.TryGetPlayerObject(player, out var existingObject))
+            var gameplay = SceneManager.GetActiveScene().name == LobbyManager.GameSceneName;
+            ConfigureExistingPlayerObject(commit.Player, commit.PlayerObject, gameplay);
+        }
+
+        private void ConfigureExistingPlayerObject(PlayerRef player, NetworkObject playerObject, bool gameplay)
+        {
+            if (!player.IsValid || playerObject == null)
             {
-                var existingState = existingObject.GetComponent<LobbyPlayerState>();
-                if (!replaceLobbyObject || (existingState != null && existingState.IsGameplayPlayer))
-                {
-                    Debug.Log($"[PlayerSpawner] Duplicate spawn prevented for {player}; object={existingObject.Id}.");
-                    return;
-                }
-
-                if (existingState != null)
-                {
-                    teamId = existingState.TeamId;
-                    toolId = existingState.ToolId;
-                }
-
-                runner.SetPlayerObject(player, null);
-                runner.Despawn(existingObject);
+                Debug.LogError("[PlayerSpawner] Cannot place an invalid lifecycle-owned player object.");
+                return;
             }
 
             var slot = GetOrAssignSlot(player);
             var pose = gameplay ? GetGameplaySpawnPose(slot) : GetFallbackPose(slot);
-            var playerObject = runner.Spawn(
-                _playerPrefab,
-                pose.Position,
-                pose.Rotation,
-                player,
-                (_, spawnedObject) =>
-                {
-                    var state = spawnedObject.GetComponent<LobbyPlayerState>();
-                    state?.InitializeAuthoritativeSelection(teamId, toolId, gameplay);
-                },
-                NetworkSpawnFlags.DontDestroyOnLoad);
-
-            if (playerObject == null)
+            if (playerObject.TryGetComponent<LobbyPlayerState>(out var state))
             {
-                Debug.LogError($"[PlayerSpawner] Runner.Spawn failed for {player} at slot {slot}.");
+                state.InitializeAuthoritativeSelection(state.TeamId, state.ToolId, gameplay);
+            }
+
+            if (!TryTeleportExistingPlayer(playerObject, pose))
+            {
+                Debug.LogWarning($"[PlayerSpawner] Could not teleport lifecycle-owned player object for {player}; object={playerObject.Id}.");
+            }
+
+            Debug.Log(
+                $"[PlayerSpawner] Placed {player} object={playerObject.Id}, slot={slot}, " +
+                $"inputAuthority={playerObject.InputAuthority}, stateAuthority=Host, gameplay={gameplay}.");
+        }
+
+        private bool TryTeleportExistingPlayer(NetworkObject playerObject, SpawnPose pose)
+        {
+            if (!playerObject.HasStateAuthority)
+            {
+                return false;
+            }
+
+            if (playerObject.TryGetComponent<NetworkCharacterController>(out var characterController))
+            {
+                characterController.Teleport(pose.Position, pose.Rotation);
+                return true;
+            }
+
+            if (playerObject.TryGetComponent<NetworkTransform>(out var networkTransform))
+            {
+                networkTransform.Teleport(pose.Position);
+                return true;
+            }
+
+            return false;
+        }
+
+        private void TryAttachLifecycle(NetworkRunner runner)
+        {
+            if (runner == null)
+            {
                 return;
             }
 
-            runner.SetPlayerObject(player, playerObject);
-            Debug.Log(
-                $"[PlayerSpawner] Spawned {player} object={playerObject.Id}, slot={slot}, " +
-                $"inputAuthority={playerObject.InputAuthority}, stateAuthority=Host, gameplay={gameplay}.");
+            var lifecycle = runner.GetComponent<FusionPlayerLifecycle>();
+            if (lifecycle == null || lifecycle == _subscribedLifecycle)
+            {
+                return;
+            }
+
+            DetachLifecycle();
+            _subscribedLifecycle = lifecycle;
+            _subscribedLifecycle.PlayerObjectCommitted += HandleLifecyclePlayerObjectCommitted;
+        }
+
+        private void DetachLifecycle()
+        {
+            if (_subscribedLifecycle == null)
+            {
+                return;
+            }
+
+            _subscribedLifecycle.PlayerObjectCommitted -= HandleLifecyclePlayerObjectCommitted;
+            _subscribedLifecycle = null;
         }
 
         private int GetOrAssignSlot(PlayerRef player)

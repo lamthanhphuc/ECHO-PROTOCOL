@@ -672,7 +672,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             _attackPositionedSimulationCount = runtime.AuthoritativeSimulationCount;
             _attackPositionedRunnerTick = runner.Tick.Raw;
             Physics.SyncTransforms();
-            Debug.Log($"STK4|ATTACK|role=Host|stage=PlayerPositioned|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|expectedTarget={_attackTargetId}|playerId={_attackTargetId}|playerObject={identity.EntityRoot.name}|networkTransform=True|position={FormatVector(GetTargetSamplePosition(identity))}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|baselineTarget={_attackBaselineTargetId}|baselineState={_attackBaselineState}|baselineResolutionCount={_attackResolutionBaseline}|baselineConsequenceCount={_attackConsequenceBaseline}|simCount={_attackPositionedSimulationCount}|runnerTick={_attackPositionedRunnerTick}");
+            Debug.Log($"STK4|ATTACK|role=Host|stage=PlayerPositioned|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|expectedTarget={_attackTargetId}|playerId={_attackTargetId}|playerObject={identity.EntityRoot.name}|replicatedTeleport=True|position={FormatVector(GetTargetSamplePosition(identity))}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|baselineTarget={_attackBaselineTargetId}|baselineState={_attackBaselineState}|baselineResolutionCount={_attackResolutionBaseline}|baselineConsequenceCount={_attackConsequenceBaseline}|simCount={_attackPositionedSimulationCount}|runnerTick={_attackPositionedRunnerTick}");
             _attackStage = Stk4AttackStage.WaitForEpisode;
             return true;
         }
@@ -1126,13 +1126,6 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
                 return false;
             }
 
-            var networkTransform = identity.EntityRoot.GetComponent<NetworkTransform>();
-            if (networkTransform == null)
-            {
-                reason = "MissingNetworkTransform";
-                return false;
-            }
-
             var networkObject = identity.EntityRoot.GetComponent<NetworkObject>();
             if (networkObject == null)
             {
@@ -1146,10 +1139,24 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
                 return false;
             }
 
-            networkTransform.Teleport(position);
-            Physics.SyncTransforms();
-            reason = string.Empty;
-            return true;
+            if (identity.EntityRoot.TryGetComponent<NetworkCharacterController>(out var characterController))
+            {
+                characterController.Teleport(position);
+                Physics.SyncTransforms();
+                reason = string.Empty;
+                return true;
+            }
+
+            if (identity.EntityRoot.TryGetComponent<NetworkTransform>(out var networkTransform))
+            {
+                networkTransform.Teleport(position);
+                Physics.SyncTransforms();
+                reason = string.Empty;
+                return true;
+            }
+
+            reason = "MissingReplicatedMovementComponent";
+            return false;
         }
 
         private static Vector3 GetTargetSamplePosition(PlayerRuntimeIdentity identity)

@@ -1,6 +1,7 @@
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 namespace EchoProtocol.Networking
 {
@@ -19,6 +20,7 @@ namespace EchoProtocol.Networking
         private InputAction _moveAction;
         private InputAction _jumpAction;
         private NetworkBootstrap _bootstrap;
+        private bool _isSceneLoadDoneSubscribed;
 
         private void Awake()
         {
@@ -33,6 +35,14 @@ namespace EchoProtocol.Networking
             if (!Object.HasInputAuthority) return;
 
             _bootstrap = NetworkBootstrap.Instance;
+            if (_bootstrap != null && !_isSceneLoadDoneSubscribed)
+            {
+                _bootstrap.NetworkSceneLoadDone += HandleNetworkSceneLoadDone;
+                _isSceneLoadDoneSubscribed = true;
+            }
+
+            BindLocalPlayerCameraIfNeeded();
+
             _moveAction?.Enable();
             _jumpAction?.Enable();
             _bootstrap?.RegisterLocalInputProvider(Object, ReadLocalInput);
@@ -41,6 +51,12 @@ namespace EchoProtocol.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            if (_bootstrap != null && _isSceneLoadDoneSubscribed)
+            {
+                _bootstrap.NetworkSceneLoadDone -= HandleNetworkSceneLoadDone;
+                _isSceneLoadDoneSubscribed = false;
+            }
+
             _bootstrap?.UnregisterLocalInputProvider(Object);
             _moveAction?.Disable();
             _jumpAction?.Disable();
@@ -59,6 +75,26 @@ namespace EchoProtocol.Networking
             {
                 _controller.Jump();
             }
+        }
+
+        private void HandleNetworkSceneLoadDone(NetworkRunner runner)
+        {
+            BindLocalPlayerCameraIfNeeded();
+        }
+
+        private void BindLocalPlayerCameraIfNeeded()
+        {
+            if (!Object.HasInputAuthority) return;
+            if (SceneManager.GetActiveScene().name != LobbyManager.GameSceneName) return;
+
+            var mainCamera = Camera.main;
+            if (mainCamera == null) return;
+
+            var playerCamera = mainCamera.GetComponent<PlayerCamera>();
+            if (playerCamera == null) return;
+
+            playerCamera.SetTarget(transform);
+            Debug.Log($"[NetworkMovement] Bound local PlayerCamera to [Player:{Object.InputAuthority.PlayerId}].");
         }
 
         private NetworkPlayerInput ReadLocalInput()
