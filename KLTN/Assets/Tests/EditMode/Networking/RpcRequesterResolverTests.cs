@@ -162,8 +162,12 @@ namespace EchoProtocol.Networking.Tests
 
         private static void AssertGuardPrecedes(string source, string methodName, string laterStatement)
         {
-            var methodIndex = source.IndexOf(methodName, System.StringComparison.Ordinal);
-            Assert.That(methodIndex, Is.GreaterThanOrEqualTo(0), $"Missing method marker '{methodName}'.");
+            var methodMarker = $"private void {methodName}(";
+            var methodIndex = source.IndexOf(methodMarker, System.StringComparison.Ordinal);
+            Assert.That(
+                methodIndex,
+                Is.GreaterThanOrEqualTo(0),
+                $"Missing method declaration '{methodMarker}'.");
 
             var guardIndex = source.IndexOf("if (!TryResolveRequester(info.Source, out var requester))", methodIndex, System.StringComparison.Ordinal);
             var returnIndex = source.IndexOf("return;", guardIndex, System.StringComparison.Ordinal);
