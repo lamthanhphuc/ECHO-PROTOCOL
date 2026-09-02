@@ -10,6 +10,12 @@ public class InteractionPromptOnGUI : MonoBehaviour
 
     private void Awake()
     {
+        if (FindFirstObjectByType<EchoProtocol.UI.HUD.HUDInteractionPrompt>() != null)
+        {
+            enabled = false;
+            return;
+        }
+
         if (interaction == null)
         {
             interaction = GetComponent<PlayerInteraction>();
@@ -18,6 +24,11 @@ public class InteractionPromptOnGUI : MonoBehaviour
 
     private void OnGUI()
     {
+        if (FindFirstObjectByType<EchoProtocol.UI.HUD.HUDInteractionPrompt>() != null)
+        {
+            return;
+        }
+
         if (interaction == null || string.IsNullOrWhiteSpace(interaction.CurrentPrompt))
         {
             return;
