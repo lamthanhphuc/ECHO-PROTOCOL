@@ -277,6 +277,7 @@ namespace EchoProtocol.Networking.Authority
             _telemetryMatchActive = false;
             _matchEndEmitted = false;
             _currentTelemetryPhase = "CORE_COLLECTION";
+            _runtimeNoise?.ResetForMatch();
         }
 
         public bool TryGetMatchId(out Guid matchId)
@@ -293,7 +294,9 @@ namespace EchoProtocol.Networking.Authority
 
         private void HandleSessionStateChanged(NetworkSessionState state, string message)
         {
-            if (state != NetworkSessionState.InMatch || !HasStateAuthority || _telemetry == null) return;
+            if (state != NetworkSessionState.InMatch || !HasStateAuthority) return;
+            _runtimeNoise?.BeginMatch(MatchId);
+            if (_telemetry == null) return;
             if (!_telemetry.TryBeginAuthoritativeMatch()) return;
 
             var occurredAtUtc = DateTime.UtcNow;
@@ -651,6 +654,7 @@ namespace EchoProtocol.Networking.Authority
         public bool RecordRuntimeNoise(
             PlayerRef player,
             string noiseEventId,
+            DateTime emittedAtUtc,
             string noiseType,
             double loudness,
             Vector3 position,
@@ -663,7 +667,7 @@ namespace EchoProtocol.Networking.Authority
 
             return _telemetry.NoiseAdapter.EmitAcceptedRuntimeNoise(
                 noiseEventId,
-                DateTime.UtcNow,
+                emittedAtUtc,
                 userId,
                 _currentTelemetryPhase,
                 noiseType,

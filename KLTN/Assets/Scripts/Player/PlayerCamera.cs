@@ -16,18 +16,31 @@ public class PlayerCamera : MonoBehaviour
     private InputAction _lookAction;
     private PlayerMovement _playerMovement;
     private float _pitch;
+    private float _yaw;
     private float _currentEyeHeight;
+
+    public float Yaw => _yaw;
 
     public void SetTarget(Transform newTarget)
     {
         target = newTarget;
         _playerMovement = target != null ? target.GetComponent<PlayerMovement>() : null;
+
+        if (target != null)
+        {
+            _yaw = target.eulerAngles.y;
+        }
     }
 
     private void Awake()
     {
         _currentEyeHeight = eyeHeight;
         _playerMovement = target != null ? target.GetComponent<PlayerMovement>() : null;
+
+        if (target != null)
+        {
+            _yaw = target.eulerAngles.y;
+        }
 
         if (inputActions != null)
         {
@@ -72,18 +85,31 @@ public class PlayerCamera : MonoBehaviour
             return;
         }
 
-        Vector2 lookInput = _lookAction != null ? _lookAction.ReadValue<Vector2>() : Vector2.zero;
-        float yaw = lookInput.x * mouseSensitivity;
-        float pitch = lookInput.y * mouseSensitivity;
+        Vector2 lookInput = _lookAction != null
+            ? _lookAction.ReadValue<Vector2>()
+            : Vector2.zero;
 
-        target.Rotate(Vector3.up, yaw, Space.World);
-        _pitch = Mathf.Clamp(_pitch - pitch, minPitch, maxPitch);
+        float yawDelta = lookInput.x * mouseSensitivity;
+        float pitchDelta = lookInput.y * mouseSensitivity;
 
-        float targetEyeHeight = _playerMovement != null && _playerMovement.IsCrouching ? crouchEyeHeight : eyeHeight;
-        _currentEyeHeight = Mathf.Lerp(_currentEyeHeight, targetEyeHeight, eyeHeightTransitionSpeed * Time.deltaTime);
+        _yaw = Mathf.Repeat(_yaw + yawDelta, 360f);
+        _pitch = Mathf.Clamp(_pitch - pitchDelta, minPitch, maxPitch);
 
-        transform.position = target.position + Vector3.up * _currentEyeHeight;
-        transform.rotation = Quaternion.Euler(_pitch, target.eulerAngles.y, 0f);
+        float targetEyeHeight =
+            _playerMovement != null && _playerMovement.IsCrouching
+                ? crouchEyeHeight
+                : eyeHeight;
+
+        _currentEyeHeight = Mathf.Lerp(
+            _currentEyeHeight,
+            targetEyeHeight,
+            eyeHeightTransitionSpeed * Time.deltaTime);
+
+        transform.position =
+            target.position + Vector3.up * _currentEyeHeight;
+
+        transform.rotation =
+            Quaternion.Euler(_pitch, _yaw, 0f);
     }
 
     private static void LockCursor()
