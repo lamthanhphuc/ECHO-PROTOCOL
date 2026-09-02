@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using EchoProtocol.AI.Common;
+using EchoProtocol.AI.Stalker.Telemetry;
 using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
@@ -16,19 +17,40 @@ namespace EchoProtocol.AI.Stalker.Networking
         [SerializeField] private FusionPlayerLifecycle lifecycle;
 
         private readonly StalkerFusionTargetFrameBuilder _frameBuilder = new StalkerFusionTargetFrameBuilder();
+        private readonly StalkerTelemetryAdapter _telemetryAdapter = new StalkerTelemetryAdapter();
         private readonly List<StalkerPerceptionTargetSnapshot> _perceptionSnapshots =
             new List<StalkerPerceptionTargetSnapshot>();
         private readonly List<StalkerTargetStatus> _targetStatuses =
             new List<StalkerTargetStatus>();
         private readonly List<StalkerTargetCandidate> _visibleCandidates =
             new List<StalkerTargetCandidate>();
+        private readonly StalkerPresentationDriver _presentationDriver = new StalkerPresentationDriver();
         private bool _networkSimulationOwned;
         private AiSimulationStep _lastAuthoritativeStep;
         private StalkerNetworkLifeStateConsequenceSink _productionConsequenceSink;
+        private StalkerProductionTelemetryProducer _productionTelemetryProducer;
+        private StalkerNetworkPresentationState _lastAuthoritativePresentationState;
+
+        [Networked] public int ReplicatedSemanticState { get; private set; }
+        [Networked] public long ReplicatedAttackEpisodeId { get; private set; }
+        [Networked] public int ReplicatedAttackPhase { get; private set; }
+        [Networked] public float ReplicatedAttackProgressSeconds { get; private set; }
+        [Networked] public NetworkBool ReplicatedAttackHitMomentResolved { get; private set; }
+        [Networked] public int ReplicatedAttackOutcome { get; private set; }
+        [Networked] public long ReplicatedAttackStartedTick { get; private set; }
+        [Networked] public long ReplicatedAttackResolvedTick { get; private set; }
 
         public int AuthoritativeSimulationCount { get; private set; }
         public bool HasLastAuthoritativeStep => _lastAuthoritativeStep.IsValid;
         public AiSimulationStep LastAuthoritativeStep => _lastAuthoritativeStep;
+        public StalkerNetworkPresentationState LastAuthoritativePresentationState => _lastAuthoritativePresentationState;
+        public StalkerPresentationDriver PresentationDriver => _presentationDriver;
+        public bool HasStateAuthorityForDebug => Object != null && Object.HasStateAuthority;
+        public IStalkerTelemetryProducer TelemetryProducer { get; set; }
+        public StalkerTelemetryMonsterIdentity TelemetryMonsterIdentity { get; set; }
+        public int TelemetryTerminalOccurrenceCount => _telemetryAdapter.TerminalOccurrenceCount;
+        public StalkerTelemetryPublishResult LastAttackTelemetryPublishResult { get; private set; }
+        public StalkerTelemetryPublishResult LastSearchTelemetryPublishResult { get; private set; }
 
         private void Awake()
         {
@@ -52,6 +74,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             ResolveLocalDependencies();
             ResolveLifecycle();
             BindProductionConsequenceSink();
+            BindProductionTelemetryProducer();
+            _telemetryAdapter.ResetForOwnerLifecycle();
             SetLegacySimulationSuppressed(true);
         }
 
@@ -60,7 +84,18 @@ namespace EchoProtocol.AI.Stalker.Networking
             _networkSimulationOwned = false;
             lifecycle = null;
             _productionConsequenceSink = null;
+            if (ReferenceEquals(TelemetryProducer, _productionTelemetryProducer))
+            {
+                TelemetryProducer = null;
+            }
+
+            _productionTelemetryProducer = null;
+            TelemetryMonsterIdentity = default;
             _lastAuthoritativeStep = AiSimulationStep.Invalid;
+            _lastAuthoritativePresentationState = default;
+            _telemetryAdapter.ResetForOwnerLifecycle();
+            LastAttackTelemetryPublishResult = StalkerTelemetryPublishResult.RetryableFailure;
+            LastSearchTelemetryPublishResult = StalkerTelemetryPublishResult.RetryableFailure;
             SetLegacySimulationSuppressed(false);
         }
 
@@ -84,6 +119,14 @@ namespace EchoProtocol.AI.Stalker.Networking
             RunAuthoritativePipeline(step);
         }
 
+        public override void Render()
+        {
+            if (Object != null && !Object.HasStateAuthority)
+            {
+                ConsumeReplicatedPresentationState();
+            }
+        }
+
         private bool CanRunAuthoritativeSimulation()
         {
             if (Runner == null
@@ -102,6 +145,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             {
                 lifecycle = runnerLifecycle;
                 BindProductionConsequenceSink();
+                BindProductionTelemetryProducer();
             }
 
             return lifecycle != null;
@@ -144,7 +188,29 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             AuthoritativeSimulationCount++;
+            PublishReplicatedPresentationState();
+            PublishCommittedTelemetryFacts();
             return true;
+        }
+
+        public StalkerNetworkPresentationState GetReplicatedPresentationState()
+        {
+            return new StalkerNetworkPresentationState(
+                ToReplicatedSemanticState(ReplicatedSemanticState),
+                ReplicatedAttackEpisodeId > 0L
+                    ? new StalkerAttackEpisodeId(ReplicatedAttackEpisodeId)
+                    : StalkerAttackEpisodeId.Invalid,
+                ToReplicatedAttackPhase(ReplicatedAttackPhase),
+                ReplicatedAttackProgressSeconds,
+                ReplicatedAttackHitMomentResolved,
+                ToReplicatedAttackOutcome(ReplicatedAttackOutcome),
+                ReplicatedAttackStartedTick,
+                ReplicatedAttackResolvedTick);
+        }
+
+        public StalkerPresentationConsumeResult ConsumeReplicatedPresentationState()
+        {
+            return _presentationDriver.Consume(GetReplicatedPresentationState());
         }
 
         private void ResolveLocalDependencies()
@@ -171,11 +237,17 @@ namespace EchoProtocol.AI.Stalker.Networking
 
             lifecycle = runner.GetComponent<FusionPlayerLifecycle>();
             BindProductionConsequenceSink();
+            BindProductionTelemetryProducer();
         }
 
         private void BindProductionConsequenceSink()
         {
-            if (controller == null || lifecycle == null || Runner == null || !Runner.IsServer)
+            if (controller == null
+                || lifecycle == null
+                || Runner == null
+                || !Runner.IsServer
+                || Object == null
+                || !Object.HasStateAuthority)
             {
                 return;
             }
@@ -183,13 +255,45 @@ namespace EchoProtocol.AI.Stalker.Networking
             _productionConsequenceSink ??=
                 new StalkerNetworkLifeStateConsequenceSink(
                     Runner,
-                    lifecycle.IdentityRegistry,
-                    Object.Id.ToString());
+                    lifecycle.IdentityRegistry);
             if (controller.AttackConsequenceSink == null
                 || controller.AttackConsequenceSink is StalkerDiagnosticAttackConsequenceSink)
             {
                 controller.AttackConsequenceSink = _productionConsequenceSink;
             }
+        }
+
+        private void BindProductionTelemetryProducer()
+        {
+            if (Runner == null
+                || !Runner.IsServer
+                || Object == null
+                || !Object.HasStateAuthority)
+            {
+                return;
+            }
+
+            var monsterIdentity = ResolveTelemetryMonsterIdentity();
+            if (!monsterIdentity.IsValid)
+            {
+                return;
+            }
+
+            TelemetryMonsterIdentity = monsterIdentity;
+            if (TelemetryProducer != null && !ReferenceEquals(TelemetryProducer, _productionTelemetryProducer))
+            {
+                return;
+            }
+
+            _productionTelemetryProducer ??= new StalkerProductionTelemetryProducer();
+            TelemetryProducer = _productionTelemetryProducer;
+        }
+
+        private StalkerTelemetryMonsterIdentity ResolveTelemetryMonsterIdentity()
+        {
+            return Object == null
+                ? default
+                : new StalkerTelemetryMonsterIdentity(Object.Id.ToString());
         }
 
         private void SetLegacySimulationSuppressed(bool suppressed)
@@ -213,6 +317,152 @@ namespace EchoProtocol.AI.Stalker.Networking
             _perceptionSnapshots.Clear();
             _targetStatuses.Clear();
             _visibleCandidates.Clear();
+        }
+
+        private void PublishReplicatedPresentationState()
+        {
+            if (controller == null)
+            {
+                return;
+            }
+
+            _lastAuthoritativePresentationState = BuildCurrentPresentationState();
+
+            if (Object == null || !Object.HasStateAuthority)
+            {
+                return;
+            }
+
+            ReplicatedSemanticState = (int)_lastAuthoritativePresentationState.SemanticState;
+            ReplicatedAttackEpisodeId = _lastAuthoritativePresentationState.AttackEpisodeId.IsValid
+                ? _lastAuthoritativePresentationState.AttackEpisodeId.Value
+                : 0L;
+            ReplicatedAttackPhase = (int)_lastAuthoritativePresentationState.AttackPhase;
+            ReplicatedAttackProgressSeconds = _lastAuthoritativePresentationState.AttackProgressSeconds;
+            ReplicatedAttackHitMomentResolved = _lastAuthoritativePresentationState.AttackHitMomentResolved;
+            ReplicatedAttackOutcome = (int)_lastAuthoritativePresentationState.AttackOutcome;
+            ReplicatedAttackStartedTick = _lastAuthoritativePresentationState.AttackStartedTick;
+            ReplicatedAttackResolvedTick = _lastAuthoritativePresentationState.AttackResolvedTick;
+        }
+
+        private void PublishCommittedTelemetryFacts()
+        {
+            if (controller == null
+                || Runner == null
+                || !Runner.IsServer
+                || Object == null
+                || !Object.HasStateAuthority
+                || !TelemetryMonsterIdentity.IsValid
+                || TelemetryProducer == null)
+            {
+                return;
+            }
+
+            if (controller.HasCommittedAttackResolutionFact)
+            {
+                LastAttackTelemetryPublishResult = _telemetryAdapter.TryPublishAttackResolved(
+                    TelemetryMonsterIdentity,
+                    controller.LastCommittedAttackResolutionFact,
+                    TelemetryProducer);
+            }
+
+            if (controller.HasCommittedSearchEndedFact)
+            {
+                LastSearchTelemetryPublishResult = _telemetryAdapter.TryPublishSearchEnded(
+                    TelemetryMonsterIdentity,
+                    controller.LastCommittedSearchEndedFact,
+                    TelemetryProducer);
+            }
+        }
+
+        private StalkerNetworkPresentationState BuildCurrentPresentationState()
+        {
+            var activeEpisode = controller.ActiveAttackEpisode;
+            var currentAttackActive = activeEpisode.EpisodeId.IsValid
+                && (controller.CurrentState == StalkerState.ATTACK || controller.CurrentState == StalkerState.RECOVER);
+
+            if (!currentAttackActive)
+            {
+                return new StalkerNetworkPresentationState(
+                    controller.CurrentState,
+                    StalkerAttackEpisodeId.Invalid,
+                    StalkerNetworkAttackPhase.None,
+                    0f,
+                    false,
+                    StalkerAttackOutcome.None,
+                    -1L,
+                    -1L);
+            }
+
+            return new StalkerNetworkPresentationState(
+                controller.CurrentState,
+                activeEpisode.EpisodeId,
+                ResolveAttackPhase(controller.CurrentState, activeEpisode),
+                ResolveAttackProgressSeconds(controller.CurrentState, activeEpisode),
+                activeEpisode.HitMomentResolved,
+                activeEpisode.Outcome,
+                activeEpisode.StartedAt.IsValid ? activeEpisode.StartedAt.Tick : -1L,
+                activeEpisode.ResolutionTime.IsValid ? activeEpisode.ResolutionTime.Tick : -1L);
+        }
+
+        private static StalkerNetworkAttackPhase ResolveAttackPhase(
+            StalkerState state,
+            StalkerAttackEpisode episode)
+        {
+            if (!episode.EpisodeId.IsValid)
+            {
+                return StalkerNetworkAttackPhase.None;
+            }
+
+            if (state == StalkerState.RECOVER)
+            {
+                return StalkerNetworkAttackPhase.Recover;
+            }
+
+            if (state != StalkerState.ATTACK)
+            {
+                return StalkerNetworkAttackPhase.None;
+            }
+
+            if (episode.HitMomentResolved)
+            {
+                return StalkerNetworkAttackPhase.Resolved;
+            }
+
+            return StalkerNetworkAttackPhase.Windup;
+        }
+
+        private float ResolveAttackProgressSeconds(
+            StalkerState state,
+            StalkerAttackEpisode episode)
+        {
+            if (state == StalkerState.RECOVER)
+            {
+                return controller.RecoverElapsedTime;
+            }
+
+            return episode.WindupElapsedSeconds;
+        }
+
+        private static StalkerState ToReplicatedSemanticState(int value)
+        {
+            return System.Enum.IsDefined(typeof(StalkerState), value)
+                ? (StalkerState)value
+                : StalkerState.PATROL;
+        }
+
+        private static StalkerNetworkAttackPhase ToReplicatedAttackPhase(int value)
+        {
+            return System.Enum.IsDefined(typeof(StalkerNetworkAttackPhase), value)
+                ? (StalkerNetworkAttackPhase)value
+                : StalkerNetworkAttackPhase.None;
+        }
+
+        private static StalkerAttackOutcome ToReplicatedAttackOutcome(int value)
+        {
+            return System.Enum.IsDefined(typeof(StalkerAttackOutcome), value)
+                ? (StalkerAttackOutcome)value
+                : StalkerAttackOutcome.None;
         }
 
         private StalkerAttackTargetSnapshot? BuildCurrentAttackTargetSnapshot(PlayerId currentTargetId)

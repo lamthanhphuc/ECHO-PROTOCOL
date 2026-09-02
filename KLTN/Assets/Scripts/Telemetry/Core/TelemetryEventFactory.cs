@@ -222,16 +222,22 @@ namespace EchoProtocol.Telemetry
             telemetryEvent = _factory.CreateOrGet(request, out var created);
             if (!created)
             {
-                if (_failedEnqueueIds.Contains(telemetryEvent.Id))
+                if (!_failedEnqueueIds.Contains(telemetryEvent.Id))
                 {
-                    failureReason = TelemetryBufferFailureReason.BufferCapacityExceeded;
-                    return false;
+                    failureReason = TelemetryBufferFailureReason.None;
+                    return true;
                 }
 
-                failureReason = TelemetryBufferFailureReason.None;
-                return true;
+                return TryEnqueueCreatedEvent(telemetryEvent, out failureReason);
             }
 
+            return TryEnqueueCreatedEvent(telemetryEvent, out failureReason);
+        }
+
+        private bool TryEnqueueCreatedEvent(
+            TelemetryEvent telemetryEvent,
+            out TelemetryBufferFailureReason failureReason)
+        {
             var serialized = TelemetryWireSerializer.SerializeEvent(telemetryEvent);
             if (!_buffer.TryEnqueue(telemetryEvent, serialized, DateTime.UtcNow, out failureReason))
             {
@@ -243,6 +249,7 @@ namespace EchoProtocol.Telemetry
                 return false;
             }
 
+            _failedEnqueueIds.Remove(telemetryEvent.Id);
             _localLog.Append("EVENT_CREATED", telemetryEvent.Id, serialized);
             return true;
         }

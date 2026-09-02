@@ -170,7 +170,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             _lastAttackWaitLogKey = string.Empty;
             _nextAttackWaitLogTime = 0f;
             _hostAttackSink = new StalkerDiagnosticAttackConsequenceSink();
-            Debug.Log("STK4|ATTACK|role=Host|stage=StartRequested");
+            UnityEngine.Debug.Log("STK4|ATTACK|role=Host|stage=StartRequested");
         }
 
         [ContextMenu("STK2 No-Cheat/Occlude And Move Current Target")]
@@ -179,14 +179,14 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             var runner = controller != null ? controller.Runner : null;
             if (runner == null || !runner.IsRunning || !runner.IsServer)
             {
-                Debug.LogWarning("STK2|NO_CHEAT|action=OccludeAndMoveCurrentTarget|result=Skipped|reason=HostRunnerRequired");
+                UnityEngine.Debug.LogWarning("STK2|NO_CHEAT|action=OccludeAndMoveCurrentTarget|result=Skipped|reason=HostRunnerRequired");
                 return;
             }
 
             if (!TryGetPrimaryStalkerRuntime(runner, out var runtime)
                 || !TryCaptureNoCheatBaseline(runner, runtime))
             {
-                Debug.LogWarning("STK2|NO_CHEAT|stage=OccludeAndMove|result=Skipped|reason=MissingLockedTarget");
+                UnityEngine.Debug.LogWarning("STK2|NO_CHEAT|stage=OccludeAndMove|result=Skipped|reason=MissingLockedTarget");
                 return;
             }
 
@@ -244,7 +244,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
 
                 _navMeshSpawnPosition = hit.position;
                 _navMeshReady = true;
-                Debug.Log($"STK2|NAVMESH|role=Host|result=Ready|spawn={FormatVector(_navMeshSpawnPosition)}|sampleRadius={NavMeshSpawnSampleRadius:0.###}");
+                UnityEngine.Debug.Log($"STK2|NAVMESH|role=Host|result=Ready|spawn={FormatVector(_navMeshSpawnPosition)}|sampleRadius={NavMeshSpawnSampleRadius:0.###}");
                 return true;
             }
             catch (Exception ex)
@@ -274,7 +274,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
                             ? FormatVector(hit100.position)
                             : "none";
 
-            Debug.Log($"STK2|NAVMESH_DIAG|vertices={vertexCount}|indices={indexCount}|spawn={FormatVector(spawn)}|r005={r005}|r025={r025}|r050={r050}|r100={r100}|nearest={nearest}");
+            UnityEngine.Debug.Log($"STK2|NAVMESH_DIAG|vertices={vertexCount}|indices={indexCount}|spawn={FormatVector(spawn)}|r005={r005}|r025={r025}|r050={r050}|r100={r100}|nearest={nearest}");
         }
 
         private void LogNavMeshFailedOnce(string reason)
@@ -285,7 +285,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             }
 
             _navMeshFailureLogged = true;
-            Debug.LogError($"STK2|NAVMESH|role=Host|result=Failed|reason={reason}");
+            UnityEngine.Debug.LogError($"STK2|NAVMESH|role=Host|result=Failed|reason={reason}");
         }
 
         private static string Sanitize(string value)
@@ -341,7 +341,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
 
             if (stalkerPrefab == null)
             {
-                Debug.LogError("STK2|SPAWN_FAIL|reason=MissingStalkerPrefab");
+                UnityEngine.Debug.LogError("STK2|SPAWN_FAIL|reason=MissingStalkerPrefab");
                 return;
             }
 
@@ -351,12 +351,12 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
 
             if (_spawnedStalker == null)
             {
-                Debug.LogError("STK2|SPAWN_FAIL|reason=RunnerSpawnReturnedNull");
+                UnityEngine.Debug.LogError("STK2|SPAWN_FAIL|reason=RunnerSpawnReturnedNull");
                 return;
             }
 
             _cachedRuntime = _spawnedStalker.GetComponent<StalkerFusionRuntime>();
-            Debug.Log($"STK2|SPAWN|role=Host|objectId={_spawnedStalker.Id}|stateAuth={_spawnedStalker.HasStateAuthority}|server={runner.IsServer}");
+            UnityEngine.Debug.Log($"STK2|SPAWN|role=Host|objectId={_spawnedStalker.Id}|stateAuth={_spawnedStalker.HasStateAuthority}|server={runner.IsServer}");
         }
 
         private void TickNoCheatScenario(NetworkRunner runner)
@@ -552,7 +552,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
                 }
 
                 _attackEpisodeId = episode.EpisodeId;
-                Debug.Log($"STK4|ATTACK|role=Host|stage=EpisodeStarted|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|episode={_attackEpisodeId.Value}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|target={episode.TargetIdAtEntry}|expectedTarget={_attackTargetId}|targetMatches={episode.TargetIdAtEntry == _attackTargetId}|startedTick={episode.StartedTick}|baselineRunnerTick={_attackBaselineRunnerTick}|positionedRunnerTick={_attackPositionedRunnerTick}|state={controllerComponent.CurrentState}|hitResolved={controllerComponent.HitMomentResolved}|outcome={controllerComponent.AttackOutcome}|resolutionDelta={controllerComponent.AttackResolutionCount - _attackResolutionBaseline}|consequenceDelta={_hostAttackSink.CallCount - _attackConsequenceBaseline}|simCount={runtime.AuthoritativeSimulationCount}|runnerTick={runner.Tick.Raw}");
+                UnityEngine.Debug.Log($"STK4|ATTACK|role=Host|stage=EpisodeStarted|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|episode={_attackEpisodeId.Value}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|target={episode.TargetIdAtEntry}|expectedTarget={_attackTargetId}|targetMatches={episode.TargetIdAtEntry == _attackTargetId}|startedTick={episode.StartedTick}|baselineRunnerTick={_attackBaselineRunnerTick}|positionedRunnerTick={_attackPositionedRunnerTick}|state={controllerComponent.CurrentState}|hitResolved={controllerComponent.HitMomentResolved}|outcome={controllerComponent.AttackOutcome}|resolutionDelta={controllerComponent.AttackResolutionCount - _attackResolutionBaseline}|consequenceDelta={_hostAttackSink.CallCount - _attackConsequenceBaseline}|simCount={runtime.AuthoritativeSimulationCount}|runnerTick={runner.Tick.Raw}");
                 _attackStage = Stk4AttackStage.WaitForResolution;
                 return;
             }
@@ -573,7 +573,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
 
                 var resolutionDelta = controllerComponent.AttackResolutionCount - _attackResolutionBaseline;
                 var consequenceDelta = _hostAttackSink.CallCount - _attackConsequenceBaseline;
-                Debug.Log($"STK4|ATTACK|role=Host|stage=Resolved|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|episode={_attackEpisodeId.Value}|target={controllerComponent.AttackTargetId}|hitResolved={controllerComponent.HitMomentResolved}|outcome={controllerComponent.AttackOutcome}|resolutionDelta={resolutionDelta}|consequenceDelta={consequenceDelta}|state={controllerComponent.CurrentState}|lastResult={controllerComponent.AttackResolutionResult}|simCount={runtime.AuthoritativeSimulationCount}|runnerTick={runner.Tick.Raw}");
+                UnityEngine.Debug.Log($"STK4|ATTACK|role=Host|stage=Resolved|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|episode={_attackEpisodeId.Value}|target={controllerComponent.AttackTargetId}|hitResolved={controllerComponent.HitMomentResolved}|outcome={controllerComponent.AttackOutcome}|resolutionDelta={resolutionDelta}|consequenceDelta={consequenceDelta}|state={controllerComponent.CurrentState}|lastResult={controllerComponent.AttackResolutionResult}|simCount={runtime.AuthoritativeSimulationCount}|runnerTick={runner.Tick.Raw}");
                 _attackResolvedSimulationCount = runtime.AuthoritativeSimulationCount;
                 _attackStage = Stk4AttackStage.StabilityWindow;
                 return;
@@ -597,7 +597,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
                     && consequenceDelta == 1
                     && controllerComponent.AttackTargetId == _attackTargetId;
 
-                Debug.Log($"STK4|ATTACK|role=Host|stage=ExactlyOnceVerified|result={(passed ? "Passed" : "Failed")}|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|episode={_attackEpisodeId.Value}|target={controllerComponent.AttackTargetId}|outcome={controllerComponent.AttackOutcome}|resolutionDelta={resolutionDelta}|consequenceDelta={consequenceDelta}|state={controllerComponent.CurrentState}|simDelta={simDelta}|simCount={runtime.AuthoritativeSimulationCount}|runnerTick={runner.Tick.Raw}");
+                UnityEngine.Debug.Log($"STK4|ATTACK|role=Host|stage=ExactlyOnceVerified|result={(passed ? "Passed" : "Failed")}|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|episode={_attackEpisodeId.Value}|target={controllerComponent.AttackTargetId}|outcome={controllerComponent.AttackOutcome}|resolutionDelta={resolutionDelta}|consequenceDelta={consequenceDelta}|state={controllerComponent.CurrentState}|simDelta={simDelta}|simCount={runtime.AuthoritativeSimulationCount}|runnerTick={runner.Tick.Raw}");
                 _attackStage = passed ? Stk4AttackStage.Complete : Stk4AttackStage.Failed;
             }
         }
@@ -632,7 +632,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
                     _clientAttackSink);
             }
 
-            Debug.Log($"STK4|ATTACK|role=Client|stage=ProxyObserved|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|objectId={(runtime.Object != null ? runtime.Object.Id.ToString() : "none")}|simCount={runtime.AuthoritativeSimulationCount}|episodeValid={controllerComponent.ActiveAttackEpisodeId.IsValid}|resolutionCount={controllerComponent.AttackResolutionCount}|consequenceCount={_clientAttackSink.CallCount}|state={controllerComponent.CurrentState}|runnerTick={runner.Tick.Raw}");
+            UnityEngine.Debug.Log($"STK4|ATTACK|role=Client|stage=ProxyObserved|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|objectId={(runtime.Object != null ? runtime.Object.Id.ToString() : "none")}|simCount={runtime.AuthoritativeSimulationCount}|episodeValid={controllerComponent.ActiveAttackEpisodeId.IsValid}|resolutionCount={controllerComponent.AttackResolutionCount}|consequenceCount={_clientAttackSink.CallCount}|state={controllerComponent.CurrentState}|runnerTick={runner.Tick.Raw}");
             _clientAttackProxyLogged = true;
         }
 
@@ -648,7 +648,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             _attackConsequenceBaseline = _hostAttackSink != null ? _hostAttackSink.CallCount : 0;
             _attackBaselineSimulationCount = runtime.AuthoritativeSimulationCount;
             _attackBaselineRunnerTick = runner.Tick.Raw;
-            Debug.Log($"STK4|ATTACK|role=Host|stage=BaselineCaptured|episode={FormatEpisode(_attackBaselineEpisodeId)}|target={_attackBaselineTargetId}|state={_attackBaselineState}|resolutionCount={_attackResolutionBaseline}|consequenceCount={_attackConsequenceBaseline}|simCount={_attackBaselineSimulationCount}|runnerTick={_attackBaselineRunnerTick}");
+            UnityEngine.Debug.Log($"STK4|ATTACK|role=Host|stage=BaselineCaptured|episode={FormatEpisode(_attackBaselineEpisodeId)}|target={_attackBaselineTargetId}|state={_attackBaselineState}|resolutionCount={_attackResolutionBaseline}|consequenceCount={_attackConsequenceBaseline}|simCount={_attackBaselineSimulationCount}|runnerTick={_attackBaselineRunnerTick}");
         }
 
         private bool PositionExpectedAttackTarget(
@@ -672,7 +672,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             _attackPositionedSimulationCount = runtime.AuthoritativeSimulationCount;
             _attackPositionedRunnerTick = runner.Tick.Raw;
             Physics.SyncTransforms();
-            Debug.Log($"STK4|ATTACK|role=Host|stage=PlayerPositioned|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|expectedTarget={_attackTargetId}|playerId={_attackTargetId}|playerObject={identity.EntityRoot.name}|replicatedTeleport=True|position={FormatVector(GetTargetSamplePosition(identity))}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|baselineTarget={_attackBaselineTargetId}|baselineState={_attackBaselineState}|baselineResolutionCount={_attackResolutionBaseline}|baselineConsequenceCount={_attackConsequenceBaseline}|simCount={_attackPositionedSimulationCount}|runnerTick={_attackPositionedRunnerTick}");
+            UnityEngine.Debug.Log($"STK4|ATTACK|role=Host|stage=PlayerPositioned|server={runner.IsServer}|stateAuth={(runtime.Object != null && runtime.Object.HasStateAuthority)}|expectedTarget={_attackTargetId}|playerId={_attackTargetId}|playerObject={identity.EntityRoot.name}|replicatedTeleport=True|position={FormatVector(GetTargetSamplePosition(identity))}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|baselineTarget={_attackBaselineTargetId}|baselineState={_attackBaselineState}|baselineResolutionCount={_attackResolutionBaseline}|baselineConsequenceCount={_attackConsequenceBaseline}|simCount={_attackPositionedSimulationCount}|runnerTick={_attackPositionedRunnerTick}");
             _attackStage = Stk4AttackStage.WaitForEpisode;
             return true;
         }
@@ -697,7 +697,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             }
 
             _lastAttackWaitLogKey = key;
-            Debug.Log($"STK4|ATTACK|role=Host|stage=EpisodeWait|result=Rejected|reason=UnexpectedEpisode|episode={FormatEpisode(episode.EpisodeId)}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|target={episode.TargetIdAtEntry}|expectedTarget={_attackTargetId}|targetMatches={episode.TargetIdAtEntry == _attackTargetId}|startedTick={episode.StartedTick}|baselineRunnerTick={_attackBaselineRunnerTick}|positionedRunnerTick={_attackPositionedRunnerTick}|hitResolved={episode.HitMomentResolved}|state={controllerComponent.CurrentState}");
+            UnityEngine.Debug.Log($"STK4|ATTACK|role=Host|stage=EpisodeWait|result=Rejected|reason=UnexpectedEpisode|episode={FormatEpisode(episode.EpisodeId)}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|target={episode.TargetIdAtEntry}|expectedTarget={_attackTargetId}|targetMatches={episode.TargetIdAtEntry == _attackTargetId}|startedTick={episode.StartedTick}|baselineRunnerTick={_attackBaselineRunnerTick}|positionedRunnerTick={_attackPositionedRunnerTick}|hitResolved={episode.HitMomentResolved}|state={controllerComponent.CurrentState}");
         }
 
         private void CheckExpectedEpisodeTimeout(
@@ -711,7 +711,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
                 return;
             }
 
-            Debug.LogWarning($"STK4|ATTACK|role=Host|stage=EpisodeWait|result=Failed|reason=ExpectedTargetEpisodeNotObserved|expectedTarget={_attackTargetId}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|activeEpisode={FormatEpisode(controllerComponent.ActiveAttackEpisodeId)}|activeTarget={controllerComponent.AttackTargetId}|state={controllerComponent.CurrentState}|simDelta={simDelta}|simCount={runtime.AuthoritativeSimulationCount}|runnerTick={runner.Tick.Raw}");
+            UnityEngine.Debug.LogWarning($"STK4|ATTACK|role=Host|stage=EpisodeWait|result=Failed|reason=ExpectedTargetEpisodeNotObserved|expectedTarget={_attackTargetId}|baselineEpisode={FormatEpisode(_attackBaselineEpisodeId)}|activeEpisode={FormatEpisode(controllerComponent.ActiveAttackEpisodeId)}|activeTarget={controllerComponent.AttackTargetId}|state={controllerComponent.CurrentState}|simDelta={simDelta}|simCount={runtime.AuthoritativeSimulationCount}|runnerTick={runner.Tick.Raw}");
             _attackStage = Stk4AttackStage.Failed;
         }
 
@@ -726,7 +726,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             var stalkerPosition = runtime.transform.position;
             var localPosition = GetTargetSamplePosition(localIdentity);
             var remotePosition = GetTargetSamplePosition(remoteIdentity);
-            Debug.Log($"STK4|ATTACK|role=Host|stage=TargetCompetition|sample={stage}|localPlayer={localPlayerId}|localPosition={FormatVector(localPosition)}|localDistance={Vector3.Distance(stalkerPosition, localPosition):0.###}|remotePlayer={remotePlayerId}|remotePosition={FormatVector(remotePosition)}|remoteDistance={Vector3.Distance(stalkerPosition, remotePosition):0.###}|tieBreakLowerPlayerIdWins=True");
+            UnityEngine.Debug.Log($"STK4|ATTACK|role=Host|stage=TargetCompetition|sample={stage}|localPlayer={localPlayerId}|localPosition={FormatVector(localPosition)}|localDistance={Vector3.Distance(stalkerPosition, localPosition):0.###}|remotePlayer={remotePlayerId}|remotePosition={FormatVector(remotePosition)}|remoteDistance={Vector3.Distance(stalkerPosition, remotePosition):0.###}|tieBreakLowerPlayerIdWins=True");
         }
 
         private void CaptureAndLogIfChangedOrDue(NetworkRunner runner)
@@ -746,8 +746,8 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             _lastTopologySignature = topologySignature;
             _nextLogTime = Time.realtimeSinceStartup + Mathf.Max(0.25f, logIntervalSeconds);
 
-            Debug.Log(stalkerSignature);
-            Debug.Log(topologySignature);
+            UnityEngine.Debug.Log(stalkerSignature);
+            UnityEngine.Debug.Log(topologySignature);
         }
 
         private string CreateStalkerSignature(NetworkRunner runner)
@@ -760,6 +760,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
 
             var obj = runtime.Object;
             var controllerComponent = runtime.GetComponent<StalkerController>();
+            var presentation = runtime.GetReplicatedPresentationState();
             var hasStep = runtime.HasLastAuthoritativeStep;
             var step = runtime.LastAuthoritativeStep;
             var consequenceCount = 0;
@@ -775,7 +776,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
                 }
             }
 
-            return $"STK2|STALKER|role={role}|exists=True|objectId={(obj != null ? obj.Id.ToString() : "none")}|stateAuth={(obj != null && obj.HasStateAuthority)}|server={runner.IsServer}|simCount={runtime.AuthoritativeSimulationCount}|legacySuppressed={(controllerComponent != null && controllerComponent.SuppressLegacyUpdateSimulation)}|hasStep={hasStep}|runnerTick={runner.Tick.Raw}|runnerTime={runner.SimulationTime}|runnerDelta={runner.DeltaTime}|stepTick={(hasStep ? step.Time.Tick.ToString() : "none")}|stepTime={(hasStep ? step.Time.Seconds.ToString() : "none")}|stepDelta={(hasStep ? step.DeltaSeconds.ToString() : "none")}|state={(controllerComponent != null ? controllerComponent.CurrentState.ToString() : "none")}|detection={(controllerComponent != null ? controllerComponent.DetectionTargetId.ToString() : "none")}|current={(controllerComponent != null ? controllerComponent.CurrentTargetId.ToString() : "none")}|attackEpisode={(controllerComponent != null && controllerComponent.ActiveAttackEpisodeId.IsValid ? controllerComponent.ActiveAttackEpisodeId.Value.ToString() : "none")}|attackTarget={(controllerComponent != null ? controllerComponent.AttackTargetId.ToString() : "none")}|hitResolved={(controllerComponent != null && controllerComponent.HitMomentResolved)}|attackOutcome={(controllerComponent != null ? controllerComponent.AttackOutcome.ToString() : "none")}|attackResolutionCount={(controllerComponent != null ? controllerComponent.AttackResolutionCount.ToString() : "none")}|attackConsequenceCount={consequenceCount}";
+            return $"STK2|STALKER|role={role}|exists=True|objectId={(obj != null ? obj.Id.ToString() : "none")}|stateAuth={(obj != null && obj.HasStateAuthority)}|server={runner.IsServer}|simCount={runtime.AuthoritativeSimulationCount}|legacySuppressed={(controllerComponent != null && controllerComponent.SuppressLegacyUpdateSimulation)}|hasStep={hasStep}|runnerTick={runner.Tick.Raw}|runnerTime={runner.SimulationTime}|runnerDelta={runner.DeltaTime}|stepTick={(hasStep ? step.Time.Tick.ToString() : "none")}|stepTime={(hasStep ? step.Time.Seconds.ToString() : "none")}|stepDelta={(hasStep ? step.DeltaSeconds.ToString() : "none")}|state={(controllerComponent != null ? controllerComponent.CurrentState.ToString() : "none")}|presentationState={presentation.SemanticState}|presentationEpisode={(presentation.AttackEpisodeId.IsValid ? presentation.AttackEpisodeId.Value.ToString() : "none")}|presentationPhase={presentation.AttackPhase}|presentationProgress={presentation.AttackProgressSeconds}|presentationResolved={presentation.AttackHitMomentResolved}|presentationOutcome={presentation.AttackOutcome}|presentationDriverChanges={runtime.PresentationDriver.ChangeCount}|telemetryTerminalCount={runtime.TelemetryTerminalOccurrenceCount}|attackTelemetryResult={runtime.LastAttackTelemetryPublishResult}|searchTelemetryResult={runtime.LastSearchTelemetryPublishResult}|detection={(controllerComponent != null ? controllerComponent.DetectionTargetId.ToString() : "none")}|current={(controllerComponent != null ? controllerComponent.CurrentTargetId.ToString() : "none")}|attackEpisode={(controllerComponent != null && controllerComponent.ActiveAttackEpisodeId.IsValid ? controllerComponent.ActiveAttackEpisodeId.Value.ToString() : "none")}|attackTarget={(controllerComponent != null ? controllerComponent.AttackTargetId.ToString() : "none")}|hitResolved={(controllerComponent != null && controllerComponent.HitMomentResolved)}|attackOutcome={(controllerComponent != null ? controllerComponent.AttackOutcome.ToString() : "none")}|attackResolutionCount={(controllerComponent != null ? controllerComponent.AttackResolutionCount.ToString() : "none")}|attackConsequenceCount={consequenceCount}";
         }
 
         private string CreateTopologySignature(NetworkRunner runner)
@@ -808,14 +809,14 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
         {
             if (!TryGetPrimaryStalkerRuntime(runner, out var runtime))
             {
-                Debug.Log($"STK2|NO_CHEAT|stage={stage}|reason=MissingStalker");
+                UnityEngine.Debug.Log($"STK2|NO_CHEAT|stage={stage}|reason=MissingStalker");
                 return;
             }
 
             var controllerComponent = runtime.GetComponent<StalkerController>();
             if (controllerComponent == null)
             {
-                Debug.Log($"STK2|NO_CHEAT|stage={stage}|reason=MissingStalkerController");
+                UnityEngine.Debug.Log($"STK2|NO_CHEAT|stage={stage}|reason=MissingStalkerController");
                 return;
             }
 
@@ -825,7 +826,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
                 targetPosition = FormatVector(GetTargetSamplePosition(identity));
             }
 
-            Debug.Log($"STK2|NO_CHEAT|stage={stage}|current={controllerComponent.CurrentTargetId}|targetPosition={targetPosition}|lastKnown={FormatVector(controllerComponent.LastKnownPosition)}|state={controllerComponent.CurrentState}");
+            UnityEngine.Debug.Log($"STK2|NO_CHEAT|stage={stage}|current={controllerComponent.CurrentTargetId}|targetPosition={targetPosition}|lastKnown={FormatVector(controllerComponent.LastKnownPosition)}|state={controllerComponent.CurrentState}");
         }
 
         private void VerifyHiddenNoCheatAfterDelay(NetworkRunner runner)
@@ -871,13 +872,13 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
                 && simDelta >= RequiredHiddenVerificationSimulationDelta
                 && controllerComponent.CurrentTargetId == _noCheatTargetId;
 
-            Debug.Log($"STK2|NO_CHEAT|stage=HiddenVerified|result={(passed ? "Passed" : "Failed")}|target={_noCheatTargetId}|baselineTargetPosition={FormatVector(_baselineTargetPosition)}|targetPosition={FormatVector(targetPosition)}|hiddenTargetPosition={FormatVector(_hiddenTargetPosition)}|baselineLastKnown={FormatVector(_baselineLastKnownPosition)}|lastKnown={FormatVector(lastKnown)}|moved={movedFromBaseline}|reachedHidden={reachedHiddenMarker}|frozen={frozen}|simDelta={simDelta}|state={controllerComponent.CurrentState}|baselineRunnerTick={_baselineRunnerTick}|runnerTick={runner.Tick.Raw}");
+            UnityEngine.Debug.Log($"STK2|NO_CHEAT|stage=HiddenVerified|result={(passed ? "Passed" : "Failed")}|target={_noCheatTargetId}|baselineTargetPosition={FormatVector(_baselineTargetPosition)}|targetPosition={FormatVector(targetPosition)}|hiddenTargetPosition={FormatVector(_hiddenTargetPosition)}|baselineLastKnown={FormatVector(_baselineLastKnownPosition)}|lastKnown={FormatVector(lastKnown)}|moved={movedFromBaseline}|reachedHidden={reachedHiddenMarker}|frozen={frozen}|simDelta={simDelta}|state={controllerComponent.CurrentState}|baselineRunnerTick={_baselineRunnerTick}|runnerTick={runner.Tick.Raw}");
             _noCheatStage = NoCheatStage.Complete;
         }
 
         private void LogNoCheatFailure(string reason)
         {
-            Debug.LogWarning($"STK2|NO_CHEAT|stage={_noCheatStage}|result=Failed|reason={reason}|target={_noCheatTargetId}");
+            UnityEngine.Debug.LogWarning($"STK2|NO_CHEAT|stage={_noCheatStage}|result=Failed|reason={reason}|target={_noCheatTargetId}");
             _noCheatStage = NoCheatStage.Complete;
         }
 
@@ -1199,13 +1200,13 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             {
                 _lastAttackWaitLogKey = key;
                 _nextAttackWaitLogTime = Time.realtimeSinceStartup + AttackWaitLogIntervalSeconds;
-                Debug.Log($"STK4|ATTACK|role=Host|stage={_attackStage}|result=Waiting|reason={Sanitize(reason)}");
+                UnityEngine.Debug.Log($"STK4|ATTACK|role=Host|stage={_attackStage}|result=Waiting|reason={Sanitize(reason)}");
             }
         }
 
         private void LogAttackHostFailure(string reason)
         {
-            Debug.LogWarning($"STK4|ATTACK|role=Host|stage={_attackStage}|result=Failed|reason={Sanitize(reason)}|target={_attackTargetId}");
+            UnityEngine.Debug.LogWarning($"STK4|ATTACK|role=Host|stage={_attackStage}|result=Failed|reason={Sanitize(reason)}|target={_attackTargetId}");
             _attackStage = Stk4AttackStage.Failed;
         }
 

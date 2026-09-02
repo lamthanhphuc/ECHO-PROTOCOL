@@ -1,5 +1,6 @@
 using System;
 using EchoProtocol.AI.Common;
+using EchoProtocol.AI.Stalker.Telemetry;
 using UnityEngine;
 
 namespace EchoProtocol.AI.Stalker
@@ -10,6 +11,7 @@ namespace EchoProtocol.AI.Stalker
         private StalkerAttackEpisode _activeEpisode;
         private int _resolutionCount;
         private StalkerAttackResolutionResult _lastResolutionResult = StalkerAttackResolutionResult.NoActiveEpisode;
+        private StalkerAttackResolvedFact _lastCommittedResolutionFact;
 
         public StalkerAttackEpisode ActiveEpisode => _activeEpisode;
 
@@ -26,6 +28,10 @@ namespace EchoProtocol.AI.Stalker
         public StalkerAttackResolutionResult LastResolutionResult => _lastResolutionResult;
 
         public int ResolutionCount => _resolutionCount;
+
+        public bool HasCommittedResolutionFact => _lastCommittedResolutionFact.IsValid;
+
+        public StalkerAttackResolvedFact LastCommittedResolutionFact => _lastCommittedResolutionFact;
 
         public StalkerAttackEpisode BeginAttack(bool hasStateAuthority, PlayerId targetId, AiSimulationStep step)
         {
@@ -116,6 +122,10 @@ namespace EchoProtocol.AI.Stalker
                 outcome,
                 step.IsValid ? step.Time : AiSimulationTime.Invalid);
             _resolutionCount++;
+            _lastCommittedResolutionFact = new StalkerAttackResolvedFact(
+                _activeEpisode.EpisodeId,
+                outcome,
+                _activeEpisode.ResolutionTime);
 
             if (isHit && consequenceSink != null)
             {

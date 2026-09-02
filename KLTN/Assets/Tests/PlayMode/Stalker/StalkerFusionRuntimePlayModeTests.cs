@@ -22,6 +22,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string AiSimulationStepTypeName = "EchoProtocol.AI.Common.AiSimulationStep";
         private const string VisionObservationTypeName = "EchoProtocol.AI.Stalker.VisionObservation";
         private const string DiagnosticAttackSinkTypeName = "EchoProtocol.AI.Stalker.StalkerDiagnosticAttackConsequenceSink";
+        private const string SearchOutcomeTypeName = "EchoProtocol.AI.Stalker.Telemetry.StalkerSearchTerminalOutcome";
         private const float VectorTolerance = 0.001f;
 
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
@@ -302,6 +303,10 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetBoolProperty(fixture.Controller, "HitMomentResolved"), Is.True);
             Assert.That(GetIntProperty(fixture.Controller, "AttackResolutionCount"), Is.EqualTo(1));
             Assert.That(GetIntProperty(sink, "CallCount"), Is.EqualTo(1));
+            var presentationState = GetProperty(fixture.Runtime, "LastAuthoritativePresentationState");
+            Assert.That(GetProperty(presentationState, "AttackHitMomentResolved"), Is.EqualTo(true));
+            Assert.That(GetProperty(presentationState, "AttackPhase").ToString(), Is.EqualTo("Recover"));
+            Assert.That(GetProperty(presentationState, "AttackOutcome").ToString(), Is.EqualTo("Hit"));
 
             Assert.That(RunPipeline(fixture.Runtime, 12L, 1.2d, 0.1f), Is.True);
 
@@ -325,6 +330,163 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetBoolProperty(GetProperty(fixture.Controller, "ActiveAttackEpisodeId"), "IsValid"), Is.False);
             Assert.That(GetIntProperty(fixture.Controller, "AttackResolutionCount"), Is.EqualTo(0));
             Assert.That(GetIntProperty(sink, "CallCount"), Is.EqualTo(0));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RUNTIME_ATTACK_18_RecoverPresentationUsesRecoveryProgress()
+        {
+            var fixture = CreateRuntimeFixture();
+            var lifecycle = CreateLifecycle();
+            var sink = Activator.CreateInstance(ResolveType(DiagnosticAttackSinkTypeName));
+            InjectLifecycle(fixture.Runtime, lifecycle);
+            RegisterActivePlayer(lifecycle, 1, 1, new Vector3(0f, 0f, 1f));
+            SetPublicProperty(fixture.Controller, "AttackConsequenceSink", sink);
+            SetCurrentTarget(fixture.Controller, 1, new Vector3(0f, 0f, 1f));
+            SetPrivateField(fixture.Controller, "attackRange", 2f);
+            SetPrivateField(fixture.Controller, "attackWindup", 0.1f);
+            SetPrivateField(fixture.Controller, "attackRecovery", 1f);
+            SetPrivateField(fixture.Controller, "currentTarget", null);
+
+            Assert.That(RunPipeline(fixture.Runtime, 20L, 2d, 0.1f), Is.True);
+            Assert.That(RunPipeline(fixture.Runtime, 21L, 2.1d, 0.1f), Is.True);
+            AssertState(fixture.Controller, "RECOVER");
+            Assert.That(RunPipeline(fixture.Runtime, 22L, 2.2d, 0.25f), Is.True);
+
+            var presentationState = GetProperty(fixture.Runtime, "LastAuthoritativePresentationState");
+            Assert.That(GetProperty(presentationState, "AttackPhase").ToString(), Is.EqualTo("Recover"));
+            Assert.That((float)GetProperty(presentationState, "AttackProgressSeconds"), Is.EqualTo(0.25f).Within(VectorTolerance));
+            Assert.That((float)GetProperty(presentationState, "AttackProgressSeconds"), Is.Not.EqualTo(0.1f).Within(VectorTolerance));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RUNTIME_ATTACK_19_ResolvedEpisodeIsNotCurrentPresentationAfterRecoverExit()
+        {
+            var fixture = CreateRuntimeFixture();
+            var lifecycle = CreateLifecycle();
+            var sink = Activator.CreateInstance(ResolveType(DiagnosticAttackSinkTypeName));
+            InjectLifecycle(fixture.Runtime, lifecycle);
+            RegisterActivePlayer(lifecycle, 1, 1, new Vector3(0f, 0f, 1f));
+            SetPublicProperty(fixture.Controller, "AttackConsequenceSink", sink);
+            SetCurrentTarget(fixture.Controller, 1, new Vector3(0f, 0f, 1f));
+            SetPrivateField(fixture.Controller, "attackRange", 2f);
+            SetPrivateField(fixture.Controller, "attackWindup", 0.1f);
+            SetPrivateField(fixture.Controller, "attackRecovery", 0.1f);
+            SetPrivateField(fixture.Controller, "currentTarget", null);
+
+            Assert.That(RunPipeline(fixture.Runtime, 30L, 3d, 0.1f), Is.True);
+            Assert.That(RunPipeline(fixture.Runtime, 31L, 3.1d, 0.1f), Is.True);
+            Assert.That(GetBoolProperty(fixture.Controller, "HasCommittedAttackResolutionFact"), Is.True);
+            var committedFact = GetProperty(fixture.Controller, "LastCommittedAttackResolutionFact");
+
+            Assert.That(RunPipeline(fixture.Runtime, 32L, 3.2d, 0.1f), Is.True);
+
+            var presentationState = GetProperty(fixture.Runtime, "LastAuthoritativePresentationState");
+            Assert.That(GetBoolProperty(GetProperty(presentationState, "AttackEpisodeId"), "IsValid"), Is.False);
+            Assert.That(GetProperty(presentationState, "AttackPhase").ToString(), Is.EqualTo("None"));
+            Assert.That(GetBoolProperty(fixture.Controller, "HasCommittedAttackResolutionFact"), Is.True);
+            Assert.That(GetProperty(fixture.Controller, "LastCommittedAttackResolutionFact"), Is.EqualTo(committedFact));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RUNTIME_SEARCH_20_SameTargetReacquiredCommitsOneTerminalFact()
+        {
+            var fixture = CreateRuntimeFixture();
+            var lifecycle = CreateLifecycle();
+            InjectLifecycle(fixture.Runtime, lifecycle);
+            RegisterActivePlayer(lifecycle, 1, 1, new Vector3(0f, 1f, 4f));
+            BeginSearch(fixture.Controller, 1, new Vector3(0f, 1f, 4f), 10f);
+
+            Assert.That(RunPipeline(fixture.Runtime, 40L, 4d, 0.1f), Is.True);
+
+            AssertSearchFact(fixture.Controller, 1L, "SAME_TARGET_REACQUIRED");
+            AssertSearchExitedAndCleared(fixture.Controller, "CHASE");
+            Assert.That(RunPipeline(fixture.Runtime, 41L, 4.1d, 0.1f), Is.True);
+            AssertSearchFact(fixture.Controller, 1L, "SAME_TARGET_REACQUIRED");
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RUNTIME_SEARCH_21_NewEligibleTargetObservedCommitsFromReplacementTransition()
+        {
+            var fixture = CreateRuntimeFixture();
+            var lifecycle = CreateLifecycle();
+            InjectLifecycle(fixture.Runtime, lifecycle);
+            RegisterLogicalPlayer(lifecycle, 1);
+            UnregisterPlayer(lifecycle, 1);
+            RegisterActivePlayer(lifecycle, 2, 2, new Vector3(0f, 1f, 4f));
+            BeginSearch(fixture.Controller, 1, new Vector3(0f, 1f, 8f), 10f);
+
+            Assert.That(RunPipeline(fixture.Runtime, 50L, 5d, 0.1f), Is.True);
+
+            AssertSearchFact(fixture.Controller, 1L, "NEW_ELIGIBLE_TARGET_OBSERVED");
+            AssertSearchExitedAndCleared(fixture.Controller, "DETECT");
+            AssertState(fixture.Controller, "DETECT");
+            AssertPlayerIdValue(GetProperty(fixture.Controller, "DetectionTargetId"), 2);
+            Assert.That(RunPipeline(fixture.Runtime, 51L, 5.1d, 0.1f), Is.True);
+            AssertSearchFact(fixture.Controller, 1L, "NEW_ELIGIBLE_TARGET_OBSERVED");
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RUNTIME_SEARCH_22_TimeoutCommitsOneTerminalFact()
+        {
+            var fixture = CreateRuntimeFixture();
+            var lifecycle = CreateLifecycle();
+            InjectLifecycle(fixture.Runtime, lifecycle);
+            RegisterActivePlayer(lifecycle, 1, 1, new Vector3(100f, 1f, 100f));
+            BeginSearch(fixture.Controller, 1, new Vector3(0f, 1f, 4f), 0f);
+
+            Assert.That(RunPipeline(fixture.Runtime, 60L, 6d, 0.1f), Is.True);
+
+            AssertSearchFact(fixture.Controller, 1L, "TIMEOUT");
+            AssertSearchExitedAndCleared(fixture.Controller, "PATROL");
+            Assert.That(RunPipeline(fixture.Runtime, 61L, 6.1d, 0.1f), Is.True);
+            AssertSearchFact(fixture.Controller, 1L, "TIMEOUT");
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RUNTIME_SEARCH_23_CurrentTargetInvalidNoReplacementCommitsOneTerminalFact()
+        {
+            var fixture = CreateRuntimeFixture();
+            var lifecycle = CreateLifecycle();
+            InjectLifecycle(fixture.Runtime, lifecycle);
+            RegisterLogicalPlayer(lifecycle, 1);
+            UnregisterPlayer(lifecycle, 1);
+            BeginSearch(fixture.Controller, 1, new Vector3(0f, 1f, 4f), 10f);
+
+            Assert.That(RunPipeline(fixture.Runtime, 70L, 7d, 0.1f), Is.True);
+
+            AssertSearchFact(fixture.Controller, 1L, "CURRENT_TARGET_INVALID_NO_REPLACEMENT");
+            AssertSearchExitedAndCleared(fixture.Controller, "PATROL");
+            Assert.That(RunPipeline(fixture.Runtime, 71L, 7.1d, 0.1f), Is.True);
+            AssertSearchFact(fixture.Controller, 1L, "CURRENT_TARGET_INVALID_NO_REPLACEMENT");
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RUNTIME_SEARCH_24_SearchEpisodeCannotCommitSecondTerminalResult()
+        {
+            var fixture = CreateRuntimeFixture();
+            InjectLifecycle(fixture.Runtime, CreateLifecycle());
+            BeginSearch(fixture.Controller, 1, new Vector3(0f, 1f, 4f), 10f);
+            SetPrivateField(fixture.Controller, "_currentSimulationStep", CreateSimulationStep(80L, 8d, 0.1f));
+
+            InvokeInstanceMethod(
+                fixture.Controller,
+                "CommitSearchEnded",
+                new[] { ResolveType(SearchOutcomeTypeName) },
+                new[] { Enum.Parse(ResolveType(SearchOutcomeTypeName), "TIMEOUT") });
+            InvokeInstanceMethod(
+                fixture.Controller,
+                "CommitSearchEnded",
+                new[] { ResolveType(SearchOutcomeTypeName) },
+                new[] { Enum.Parse(ResolveType(SearchOutcomeTypeName), "CURRENT_TARGET_INVALID_NO_REPLACEMENT") });
+
+            AssertSearchFact(fixture.Controller, 1L, "TIMEOUT");
             yield return null;
         }
 
@@ -439,6 +601,11 @@ namespace EchoProtocol.AI.Stalker.Tests
             return Activator.CreateInstance(ResolveType(AiSimulationTimeTypeName), tick, seconds);
         }
 
+        private static object CreateSimulationStep(long tick, double seconds, float deltaSeconds)
+        {
+            return Activator.CreateInstance(ResolveType(AiSimulationStepTypeName), CreateSimulationTime(tick, seconds), deltaSeconds);
+        }
+
         private static void InjectLifecycle(Component runtime, Component lifecycle)
         {
             SetPrivateField(runtime, "lifecycle", lifecycle);
@@ -457,6 +624,13 @@ namespace EchoProtocol.AI.Stalker.Tests
             var memory = GetMemory(controller);
             InvokeInstanceMethod(memory, "SetCurrentTarget", new[] { ResolveType(PlayerIdTypeName) }, new[] { CreatePlayerId(playerId) });
             InvokeInstanceMethod(memory, "TryAcceptCurrentTargetObservation", new[] { ResolveType(VisionObservationTypeName) }, new[] { CreateObservation(playerId, lastKnownPosition) });
+        }
+
+        private static void BeginSearch(Component controller, int playerId, Vector3 lastKnownPosition, float searchDuration)
+        {
+            SetCurrentTarget(controller, playerId, lastKnownPosition);
+            SetPrivateField(controller, "searchDuration", searchDuration);
+            InvokeInstanceMethod(controller, "EnterSearch", Type.EmptyTypes, Array.Empty<object>());
         }
 
         private static object CreateObservation(int playerId, Vector3 position)
@@ -560,6 +734,29 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static void AssertInvalidPlayerId(object playerId)
         {
             Assert.That(GetBoolProperty(playerId, "IsValid"), Is.False);
+        }
+
+        private static void AssertSearchFact(Component controller, long expectedEpisodeId, string expectedOutcome)
+        {
+            Assert.That(GetBoolProperty(controller, "HasCommittedSearchEndedFact"), Is.True);
+            var fact = GetProperty(controller, "LastCommittedSearchEndedFact");
+            var episodeId = GetProperty(fact, "EpisodeId");
+            var endedAt = GetProperty(fact, "EndedAt");
+            Assert.That(GetProperty(episodeId, "Value"), Is.EqualTo(expectedEpisodeId));
+            Assert.That(GetProperty(fact, "Outcome").ToString(), Is.EqualTo(expectedOutcome));
+            Assert.That(GetBoolProperty(endedAt, "IsValid"), Is.True);
+        }
+
+        private static void AssertSearchExitedAndCleared(Component controller, string expectedState)
+        {
+            AssertState(controller, expectedState);
+            Assert.That(GetProperty(controller, "ActiveSearchContext"), Is.Null);
+            AssertInvalidSearchEpisodeId(GetProperty(controller, "ActiveSearchEpisodeId"));
+        }
+
+        private static void AssertInvalidSearchEpisodeId(object episodeId)
+        {
+            Assert.That(GetBoolProperty(episodeId, "IsValid"), Is.False);
         }
 
         private static Type ResolveType(string fullTypeName)

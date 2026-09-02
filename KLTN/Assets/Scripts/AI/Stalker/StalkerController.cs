@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Common.Spatial;
 using EchoProtocol.AI.Stalker.Spatial;
+using EchoProtocol.AI.Stalker.Telemetry;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -113,6 +114,8 @@ namespace EchoProtocol.AI.Stalker
         private double _currentSimulationSeconds;
         private AiSimulationStep _currentSimulationStep;
         private StalkerAttackTargetSnapshot? _currentAttackTargetSnapshot;
+        private StalkerSearchEndedFact _lastCommittedSearchEndedFact;
+        private SearchEpisodeId _lastCommittedSearchEpisodeId;
         private long _legacySimulationTick;
         private IReadOnlyList<StalkerTargetCandidate> _currentVisibleTargetCandidates;
         private IReadOnlyList<StalkerTargetStatus> _currentTargetStatuses;
@@ -145,10 +148,37 @@ namespace EchoProtocol.AI.Stalker
         public StalkerAttackResolutionResult AttackResolutionResult => _attackController.LastResolutionResult;
         public int AttackResolutionCount => _attackController.ResolutionCount;
         public StalkerAttackEpisode ActiveAttackEpisode => _attackController.ActiveEpisode;
+        public bool HasCommittedAttackResolutionFact => _attackController.HasCommittedResolutionFact;
+        public StalkerAttackResolvedFact LastCommittedAttackResolutionFact => _attackController.LastCommittedResolutionFact;
+        public bool HasCommittedSearchEndedFact => _lastCommittedSearchEndedFact.IsValid;
+        public StalkerSearchEndedFact LastCommittedSearchEndedFact => _lastCommittedSearchEndedFact;
+        public StalkerSearchContext ActiveSearchContext => _searchContext;
+        public bool HasLastKnownPosition => _memory.HasLastKnownPosition;
+        public bool HasLastSeenDirection => _memory.HasLastSeenDirection;
+        public Vector3 LastSeenDirection => _memory.LastSeenDirection;
+        public bool HasTargetLastSeenTime => _memory.HasTargetLastSeenTime;
+        public AiSimulationTime TargetLastSeenTime => _memory.TargetLastSeenTime;
+        public int CurrentRegionIdValue => _currentRegionId.IsValid ? _currentRegionId.Value : canonicalCurrentRegionId;
+        public int GlobalObjectiveRegionIdValue => canonicalObjectiveRegionId;
+        public int SearchCandidateNodeId => searchCandidateNodeId;
+        public bool FixedFallbackActive => _dynamicPatrolFallbackActive || _canonicalPatrolFallbackActive;
         public NavigationFailureReason NavigationFailureReason => _navigation?.CurrentFailureReason ?? EchoProtocol.AI.Stalker.NavigationFailureReason.AgentUnavailable;
         public NavigationRecoveryReason RecoveryReason => _navigation?.CurrentRecoveryReason ?? NavigationRecoveryReason.None;
+        public NavigationPathStatus NavigationPathStatus => _navigation?.GetPathStatus() ?? NavigationPathStatus.AgentUnavailable;
+        public NavigationExecutionStatus NavigationExecutionStatus => _navigation?.GetExecutionStatus() ?? NavigationExecutionStatus.Failed;
         public IPlayerAttackConsequenceSink AttackConsequenceSink { get; set; }
         public bool SuppressLegacyUpdateSimulation { get; set; }
+
+        public bool TryGetNavigationDestination(out Vector3 destination)
+        {
+            if (_navigation != null)
+            {
+                return _navigation.TryGetActiveDestination(out destination);
+            }
+
+            destination = default;
+            return false;
+        }
 
         public bool TrySetPatrolRegionEdgeOpen(int fromRegionId, int toRegionId, bool open)
         {
@@ -844,6 +874,7 @@ namespace EchoProtocol.AI.Stalker
 
             attackElapsedTime = 0f;
             recoverElapsedTime = 0f;
+            _attackController.ClearActiveEpisode();
 
             if (currentTarget == null)
             {
@@ -885,6 +916,7 @@ namespace EchoProtocol.AI.Stalker
 
             attackElapsedTime = 0f;
             recoverElapsedTime = 0f;
+            _attackController.ClearActiveEpisode();
 
             if (currentTargetId.IsValid
                 && TryGetUniqueTargetStatus(currentTargetId, out var status)
@@ -959,6 +991,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (currentTarget == null)
             {
+                CommitSearchEnded(StalkerSearchTerminalOutcome.CURRENT_TARGET_INVALID_NO_REPLACEMENT);
                 ClearSearchContext();
                 currentState = StalkerState.PATROL;
                 StopAgentPath();
@@ -969,6 +1002,7 @@ namespace EchoProtocol.AI.Stalker
             if (TryGetVisibleCurrentTargetObservation(out var observedPosition))
             {
                 lastKnownPosition = observedPosition;
+                CommitSearchEnded(StalkerSearchTerminalOutcome.SAME_TARGET_REACQUIRED);
                 ClearSearchRuntimeContext();
                 ResetChaseDestinationTracking();
                 ResetNavigationRecoveryBudget();
@@ -993,6 +1027,7 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            CommitSearchEnded(StalkerSearchTerminalOutcome.TIMEOUT);
             ClearSearchContext();
             currentState = StalkerState.PATROL;
             StopAgentPath();
@@ -1004,14 +1039,20 @@ namespace EchoProtocol.AI.Stalker
             var currentTargetId = _memory.CurrentTargetId;
             if (!currentTargetId.IsValid)
             {
-                InvalidateCurrentTarget();
+                CommitSearchTerminalAndInvalidateCurrentTarget(StalkerSearchTerminalOutcome.CURRENT_TARGET_INVALID_NO_REPLACEMENT);
                 return;
             }
 
             if (!TryGetUniqueTargetStatus(currentTargetId, out var status) || !status.Eligible)
             {
+                if (TryAcquireDifferentVisibleTargetDuringSearch(currentTargetId))
+                {
+                    return;
+                }
+
+                CommitSearchEnded(StalkerSearchTerminalOutcome.CURRENT_TARGET_INVALID_NO_REPLACEMENT);
                 ClearSearchContext();
-                if (!TryAcquireDifferentVisibleTargetDuringSearch(currentTargetId))
+                if (currentState == StalkerState.SEARCH)
                 {
                     currentState = StalkerState.PATROL;
                     SetCurrentPatrolDestination();
@@ -1024,18 +1065,19 @@ namespace EchoProtocol.AI.Stalker
             {
                 if (!candidate.Eligibility.Eligible)
                 {
-                    InvalidateCurrentTarget();
+                    CommitSearchTerminalAndInvalidateCurrentTarget(StalkerSearchTerminalOutcome.CURRENT_TARGET_INVALID_NO_REPLACEMENT);
                     return;
                 }
 
                 var observation = candidate.Observation;
                 if (!_memory.TryAcceptCurrentTargetObservation(observation))
                 {
-                    InvalidateCurrentTarget();
+                    CommitSearchTerminalAndInvalidateCurrentTarget(StalkerSearchTerminalOutcome.CURRENT_TARGET_INVALID_NO_REPLACEMENT);
                     return;
                 }
 
                 lastKnownPosition = _memory.LastKnownPosition;
+                CommitSearchEnded(StalkerSearchTerminalOutcome.SAME_TARGET_REACQUIRED);
                 ClearSearchRuntimeContext();
                 ResetChaseDestinationTracking();
                 ResetNavigationRecoveryBudget();
@@ -1046,7 +1088,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (hasDuplicate || !_memory.HasLastKnownPosition)
             {
-                InvalidateCurrentTarget();
+                CommitSearchTerminalAndInvalidateCurrentTarget(StalkerSearchTerminalOutcome.CURRENT_TARGET_INVALID_NO_REPLACEMENT);
                 return;
             }
 
@@ -1071,6 +1113,7 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            CommitSearchEnded(StalkerSearchTerminalOutcome.TIMEOUT);
             ClearSearchContext();
             currentState = StalkerState.PATROL;
             StopAgentPath();
@@ -1249,6 +1292,38 @@ namespace EchoProtocol.AI.Stalker
             return false;
         }
 
+        private void CommitSearchEnded(StalkerSearchTerminalOutcome outcome)
+        {
+            if (_searchContext == null
+                || !_searchContext.EpisodeId.IsValid
+                || _lastCommittedSearchEpisodeId == _searchContext.EpisodeId)
+            {
+                return;
+            }
+
+            _lastCommittedSearchEndedFact = new StalkerSearchEndedFact(
+                _searchContext.EpisodeId,
+                outcome,
+                _currentSimulationStep.Time.IsValid
+                    ? _currentSimulationStep.Time
+                    : new AiSimulationTime(_legacySimulationTick < 0 ? 0 : _legacySimulationTick, System.Math.Max(0d, _currentSimulationSeconds)));
+            _lastCommittedSearchEpisodeId = _searchContext.EpisodeId;
+        }
+
+        private void CommitSearchTerminalAndInvalidateCurrentTarget(StalkerSearchTerminalOutcome outcome)
+        {
+            CommitSearchEnded(outcome);
+            ClearSearchRuntimeContext();
+            InvalidateCurrentTarget();
+        }
+
+        private void CommitSearchTerminalAndInvalidateDetectionTarget(StalkerSearchTerminalOutcome outcome)
+        {
+            CommitSearchEnded(outcome);
+            ClearSearchRuntimeContext();
+            InvalidateDetectionTarget();
+        }
+
         private bool TryAcquireDifferentVisibleTargetDuringSearch(PlayerId currentTargetId)
         {
             if (_currentVisibleTargetCandidates == null)
@@ -1279,17 +1354,19 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            ClearSearchContext();
             _memory.SetDetectionTarget(bestCandidate.Observation.PlayerId);
             if (!_memory.TryAcceptDetectionTargetObservation(bestCandidate.Observation))
             {
-                InvalidateDetectionTarget();
+                CommitSearchTerminalAndInvalidateDetectionTarget(StalkerSearchTerminalOutcome.CURRENT_TARGET_INVALID_NO_REPLACEMENT);
                 return true;
             }
 
+            CommitSearchEnded(StalkerSearchTerminalOutcome.NEW_ELIGIBLE_TARGET_OBSERVED);
+            currentTarget = null;
+            _memory.ClearCurrentTarget();
+            ClearSearchRuntimeContext();
             detectionMeter = 0f;
             detectionTarget = null;
-            currentTarget = null;
             currentState = StalkerState.DETECT;
             StopAgentPath();
             return true;

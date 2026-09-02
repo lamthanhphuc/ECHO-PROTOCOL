@@ -9,6 +9,14 @@ using UnityEngine;
 
 namespace EchoProtocol.Networking.Authority
 {
+    public enum ProductionTelemetryPublishResult
+    {
+        RetryableFailure,
+        InvalidOccurrence,
+        Accepted,
+        Suppressed
+    }
+
     /// <summary>
     /// Bridges the authenticated backend identity to Fusion's Host authority.
     /// Proofs stay off replicated state; only the verified backend user id is replicated.
@@ -671,17 +679,8 @@ namespace EchoProtocol.Networking.Authority
             string attackEpisodeId,
             string outcome)
         {
-            if (!_researchCaptureEnabled || !CanEmitProductionTelemetry()) return false;
-            return _telemetry.MonsterAdapter.EmitAttackResolved(
-                $"monster:{monsterId}:attack:{attackEpisodeId}:resolved",
-                DateTime.UtcNow,
-                _currentTelemetryPhase,
-                "STALKER",
-                monsterId,
-                attackEpisodeId,
-                outcome,
-                out _,
-                out _);
+            return TryRecordStalkerAttackResolved(monsterId, attackEpisodeId, outcome)
+                == ProductionTelemetryPublishResult.Accepted;
         }
 
         public bool RecordStalkerSearchEnded(
@@ -689,16 +688,77 @@ namespace EchoProtocol.Networking.Authority
             string searchEpisodeId,
             string outcome)
         {
-            if (!_researchCaptureEnabled || !CanEmitProductionTelemetry()) return false;
-            return _telemetry.MonsterAdapter.EmitStalkerSearchEnded(
-                $"monster:{monsterId}:search:{searchEpisodeId}:ended",
-                DateTime.UtcNow,
-                _currentTelemetryPhase,
-                monsterId,
-                searchEpisodeId,
-                outcome,
-                out _,
-                out _);
+            return TryRecordStalkerSearchEnded(monsterId, searchEpisodeId, outcome)
+                == ProductionTelemetryPublishResult.Accepted;
+        }
+
+        public ProductionTelemetryPublishResult TryRecordStalkerAttackResolved(
+            string monsterId,
+            string attackEpisodeId,
+            string outcome)
+        {
+            if (!_researchCaptureEnabled) return ProductionTelemetryPublishResult.Suppressed;
+            if (!CanEmitProductionTelemetry()) return ProductionTelemetryPublishResult.RetryableFailure;
+
+            try
+            {
+                return _telemetry.MonsterAdapter.EmitAttackResolved(
+                    $"monster:{monsterId}:attack:{attackEpisodeId}:resolved",
+                    DateTime.UtcNow,
+                    _currentTelemetryPhase,
+                    "STALKER",
+                    monsterId,
+                    attackEpisodeId,
+                    outcome,
+                    out _,
+                    out _)
+                    ? ProductionTelemetryPublishResult.Accepted
+                    : ProductionTelemetryPublishResult.RetryableFailure;
+            }
+            catch (ArgumentException)
+            {
+                return ProductionTelemetryPublishResult.InvalidOccurrence;
+            }
+            catch (InvalidOperationException)
+            {
+                return _researchCaptureEnabled
+                    ? ProductionTelemetryPublishResult.RetryableFailure
+                    : ProductionTelemetryPublishResult.Suppressed;
+            }
+        }
+
+        public ProductionTelemetryPublishResult TryRecordStalkerSearchEnded(
+            string monsterId,
+            string searchEpisodeId,
+            string outcome)
+        {
+            if (!_researchCaptureEnabled) return ProductionTelemetryPublishResult.Suppressed;
+            if (!CanEmitProductionTelemetry()) return ProductionTelemetryPublishResult.RetryableFailure;
+
+            try
+            {
+                return _telemetry.MonsterAdapter.EmitStalkerSearchEnded(
+                    $"monster:{monsterId}:search:{searchEpisodeId}:ended",
+                    DateTime.UtcNow,
+                    _currentTelemetryPhase,
+                    monsterId,
+                    searchEpisodeId,
+                    outcome,
+                    out _,
+                    out _)
+                    ? ProductionTelemetryPublishResult.Accepted
+                    : ProductionTelemetryPublishResult.RetryableFailure;
+            }
+            catch (ArgumentException)
+            {
+                return ProductionTelemetryPublishResult.InvalidOccurrence;
+            }
+            catch (InvalidOperationException)
+            {
+                return _researchCaptureEnabled
+                    ? ProductionTelemetryPublishResult.RetryableFailure
+                    : ProductionTelemetryPublishResult.Suppressed;
+            }
         }
 
         private bool CanEmitProductionTelemetry()

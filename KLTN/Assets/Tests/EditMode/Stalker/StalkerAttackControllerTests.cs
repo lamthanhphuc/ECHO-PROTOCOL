@@ -74,6 +74,11 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetBoolProperty(controller, "HitMomentResolved"), Is.True);
             Assert.That(GetEnumPropertyName(controller, "Outcome", AttackOutcomeTypeName), Is.EqualTo("Hit"));
             Assert.That(GetIntProperty(controller, "ResolutionCount"), Is.EqualTo(1));
+            Assert.That(GetBoolProperty(controller, "HasCommittedResolutionFact"), Is.True);
+            var fact = GetProperty(controller, "LastCommittedResolutionFact");
+            Assert.That(GetProperty(fact, "EpisodeId"), Is.EqualTo(episodeId));
+            Assert.That(GetProperty(fact, "ResolvedAt"), Is.EqualTo(GetProperty(GetProperty(controller, "ActiveEpisode"), "ResolutionTime")));
+            Assert.That(GetEnumPropertyName(fact, "Outcome", AttackOutcomeTypeName), Is.EqualTo("Hit"));
         }
 
         [Test]

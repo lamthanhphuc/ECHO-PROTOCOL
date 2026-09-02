@@ -109,7 +109,7 @@ namespace EchoProtocol.Telemetry.Tests
 
             var second = fixture.Emitter.TryEmit(
                 fixture.Request(TelemetryEventTypes.PhaseStarted, "phase"),
-                out _,
+                out var failedEvent,
                 out var failure);
 
             Assert.That(second, Is.False);
@@ -120,11 +120,72 @@ namespace EchoProtocol.Telemetry.Tests
 
             var repeated = fixture.Emitter.TryEmit(
                 fixture.Request(TelemetryEventTypes.PhaseStarted, "phase"),
-                out _,
+                out var repeatedEvent,
                 out var repeatedFailure);
             Assert.That(repeated, Is.False);
             Assert.That(repeatedFailure, Is.EqualTo(TelemetryBufferFailureReason.BufferCapacityExceeded));
+            Assert.That(repeatedEvent.Id, Is.EqualTo(failedEvent.Id));
+            Assert.That(repeatedEvent, Is.SameAs(failedEvent));
             Assert.That(fixture.Allocator.LastAllocatedSequence, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void Emitter_RetriesFailedEnqueueWithSameEventIdentityAfterCapacityFrees()
+        {
+            var fixture = new Fixture(bufferCapacity: 1);
+            fixture.Factory.BeginMatch();
+            Assert.That(fixture.Emitter.TryEmit(
+                fixture.Request(TelemetryEventTypes.MatchStarted, "start"),
+                out _,
+                out var startFailure), Is.True);
+            Assert.That(startFailure, Is.EqualTo(TelemetryBufferFailureReason.None));
+
+            Assert.That(fixture.Emitter.TryEmit(
+                fixture.Request(TelemetryEventTypes.PhaseStarted, "phase"),
+                out var failedEvent,
+                out var failedReason), Is.False);
+            Assert.That(failedReason, Is.EqualTo(TelemetryBufferFailureReason.BufferCapacityExceeded));
+            Assert.That(fixture.Allocator.LastAllocatedSequence, Is.EqualTo(2));
+            StringAssert.Contains("\"eventSequence\":2", failedEvent.ContextJson);
+
+            var submitted = fixture.Buffer.GetReadyBatch(10, DateTime.UtcNow);
+            fixture.Buffer.ApplyAcknowledgements(
+                submitted,
+                new[] { new TelemetryAckItem(submitted[0].Event.Id, TelemetryAckStatus.Accepted) },
+                DateTime.UtcNow);
+            Assert.That(fixture.Buffer.PendingCount, Is.EqualTo(0));
+
+            Assert.That(fixture.Emitter.TryEmit(
+                fixture.Request(TelemetryEventTypes.PhaseStarted, "phase"),
+                out var retriedEvent,
+                out var retryReason), Is.True);
+            Assert.That(retryReason, Is.EqualTo(TelemetryBufferFailureReason.None));
+            Assert.That(retriedEvent, Is.SameAs(failedEvent));
+            Assert.That(retriedEvent.Id, Is.EqualTo(failedEvent.Id));
+            Assert.That(retriedEvent.ContextJson, Is.EqualTo(failedEvent.ContextJson));
+            StringAssert.Contains("\"eventSequence\":2", retriedEvent.ContextJson);
+            Assert.That(fixture.Allocator.LastAllocatedSequence, Is.EqualTo(2));
+            Assert.That(fixture.Buffer.PendingCount, Is.EqualTo(1));
+            Assert.That(fixture.Buffer.GetReadyBatch(10, DateTime.UtcNow)[0].Event.Id, Is.EqualTo(failedEvent.Id));
+        }
+
+        [Test]
+        public void Emitter_DuplicatePendingOccurrenceRemainsIdempotentSuccess()
+        {
+            var fixture = new Fixture();
+            fixture.Factory.BeginMatch();
+            var request = fixture.Request(TelemetryEventTypes.MatchStarted, "start");
+
+            Assert.That(fixture.Emitter.TryEmit(request, out var first, out var firstFailure), Is.True);
+            Assert.That(firstFailure, Is.EqualTo(TelemetryBufferFailureReason.None));
+            Assert.That(fixture.Emitter.TryEmit(request, out var duplicate, out var duplicateFailure), Is.True);
+
+            Assert.That(duplicateFailure, Is.EqualTo(TelemetryBufferFailureReason.None));
+            Assert.That(duplicate, Is.SameAs(first));
+            Assert.That(duplicate.Id, Is.EqualTo(first.Id));
+            Assert.That(duplicate.ContextJson, Is.EqualTo(first.ContextJson));
+            Assert.That(fixture.Allocator.LastAllocatedSequence, Is.EqualTo(1));
+            Assert.That(fixture.Buffer.PendingCount, Is.EqualTo(1));
         }
 
         [Test]

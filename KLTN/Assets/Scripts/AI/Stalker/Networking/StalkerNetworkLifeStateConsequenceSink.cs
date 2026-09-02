@@ -2,7 +2,6 @@ using EchoProtocol.AI.Common;
 using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
-using EchoProtocol.Networking.Authority;
 
 namespace EchoProtocol.AI.Stalker.Networking
 {
@@ -11,16 +10,13 @@ namespace EchoProtocol.AI.Stalker.Networking
     {
         private readonly NetworkRunner _runner;
         private readonly FusionPlayerIdentityRegistry _identityRegistry;
-        private readonly string _monsterId;
 
         public StalkerNetworkLifeStateConsequenceSink(
             NetworkRunner runner,
-            FusionPlayerIdentityRegistry identityRegistry,
-            string monsterId)
+            FusionPlayerIdentityRegistry identityRegistry)
         {
             _runner = runner;
             _identityRegistry = identityRegistry;
-            _monsterId = monsterId;
         }
 
         public bool TryApplyStalkerHit(
@@ -38,14 +34,9 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return false;
             }
 
-            var consequenceApplied = lifeState.Status == NetworkPlayerLifeStatus.Downed
+            return lifeState.Status == NetworkPlayerLifeStatus.Downed
                 ? lifeState.TryEliminateForReviveLimit()
                 : lifeState.TryApplyMonsterDown("STALKER", authoritativeHitPosition);
-            MatchAuthorityRuntime.Instance?.RecordStalkerAttackResolved(
-                _monsterId,
-                episodeId.Value.ToString(),
-                "HIT");
-            return consequenceApplied;
         }
     }
 }
