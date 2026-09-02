@@ -1,0 +1,17 @@
+newmtl HelmetBackpackBase
+Kd 0.78 0.80 0.82
+map_Kd ../textures/atlas-helmet-backpack_tm_PBR_Diffuse_2.jpeg
+map_Bump ../textures/atlas-helmet-backpack_tm_PBR_Normal_1.jpeg
+
+newmtl HelmetVisor
+Kd 0.85 0.90 0.95
+map_Kd ../textures/helmet-visor_BaseColor_5.jpeg
+map_Bump ../textures/helmet-visor_Normal_4.jpeg
+
+newmtl HelmetAccent
+Kd 0.25 0.80 1.00
+map_Kd ../textures/atlas-helmet-backpack_tm_PBR_Diffuse_2.jpeg
+
+newmtl BackpackAccent
+Kd 0.25 0.80 1.00
+map_Kd ../textures/atlas-helmet-backpack_tm_PBR_Diffuse_2.jpeg
