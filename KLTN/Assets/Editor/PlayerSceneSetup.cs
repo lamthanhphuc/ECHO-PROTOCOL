@@ -166,10 +166,53 @@ public static class PlayerSceneSetup
         hidingSo.FindProperty("interaction").objectReferenceValue = interaction;
         hidingSo.ApplyModifiedPropertiesWithoutUndo();
 
+        PlayerDownState downState = player.GetComponent<PlayerDownState>();
+        if (downState == null)
+        {
+            downState = player.AddComponent<PlayerDownState>();
+        }
+
+        SerializedObject downStateSo = new SerializedObject(downState);
+        downStateSo.FindProperty("movement").objectReferenceValue = movement;
+        downStateSo.FindProperty("interaction").objectReferenceValue = interaction;
+        downStateSo.FindProperty("hidingController").objectReferenceValue = hidingController;
+        downStateSo.FindProperty("playerCamera").objectReferenceValue = playerCamera;
+        downStateSo.FindProperty("maxHealth").floatValue = 100f;
+        downStateSo.FindProperty("bleedoutSeconds").floatValue = 45f;
+        downStateSo.FindProperty("crawlSpeedMultiplier").floatValue = 0.32f;
+        downStateSo.FindProperty("downedCameraEyeHeight").floatValue = 0.55f;
+        downStateSo.FindProperty("revivedHealth").floatValue = 35f;
+        downStateSo.FindProperty("reviveProtectionSeconds").floatValue = 3f;
+        downStateSo.ApplyModifiedPropertiesWithoutUndo();
+
+        PlayerReviveInteractable reviveInteractable = player.GetComponent<PlayerReviveInteractable>();
+        if (reviveInteractable == null)
+        {
+            reviveInteractable = player.AddComponent<PlayerReviveInteractable>();
+        }
+
+        SerializedObject reviveSo = new SerializedObject(reviveInteractable);
+        reviveSo.FindProperty("downState").objectReferenceValue = downState;
+        reviveSo.FindProperty("reviveDurationSeconds").floatValue = 2.5f;
+        reviveSo.FindProperty("revivePrompt").stringValue = "Revive teammate";
+        reviveSo.ApplyModifiedPropertiesWithoutUndo();
+
+        PlayerSpectateController spectateController = player.GetComponent<PlayerSpectateController>();
+        if (spectateController == null)
+        {
+            spectateController = player.AddComponent<PlayerSpectateController>();
+        }
+
+        SerializedObject spectateSo = new SerializedObject(spectateController);
+        spectateSo.FindProperty("downState").objectReferenceValue = downState;
+        spectateSo.FindProperty("playerCamera").objectReferenceValue = mainCamera;
+        spectateSo.FindProperty("autoSpectateWhenEliminated").boolValue = true;
+        spectateSo.ApplyModifiedPropertiesWithoutUndo();
+
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         Selection.activeGameObject = player;
 
-        Debug.Log("[KLTN] FPS Player setup complete. WASD move, mouse look, Shift sprint, C crouch, hold E interact, 1/2 select slot, G drop, T drop tool. Hiding controller is ready for HidingSpot lockers.");
+        Debug.Log("[KLTN] FPS Player setup complete. WASD move, mouse look, Shift sprint, C crouch, hold E interact, 1/2 select slot, G drop, T drop tool. Hiding, Down/Revive, and Spectate controllers are ready.");
     }
 
     private static void EnsurePlayerTag()
