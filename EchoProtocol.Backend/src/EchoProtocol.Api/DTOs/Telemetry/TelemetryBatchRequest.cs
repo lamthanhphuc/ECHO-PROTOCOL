@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace EchoProtocol.Api.DTOs.Telemetry;
 
@@ -8,6 +9,9 @@ public sealed class TelemetryBatchRequest
     [Required]
     [MinLength(1)]
     public List<TelemetryEventRequest> Events { get; set; } = [];
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public sealed class TelemetryEventRequest
@@ -18,11 +22,14 @@ public sealed class TelemetryEventRequest
 
     public string EventType { get; set; } = string.Empty;
 
-    public DateTime Ts { get; set; }
+    public JsonElement Ts { get; set; }
 
     public JsonElement ValueJson { get; set; }
 
     public string? ReasonCode { get; set; }
 
     public string SchemaVersion { get; set; } = string.Empty;
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
