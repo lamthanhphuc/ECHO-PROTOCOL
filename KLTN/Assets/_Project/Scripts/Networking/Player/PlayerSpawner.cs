@@ -16,12 +16,14 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _doorPrefab;
         [SerializeField] private NetworkObject _pickupItemPrefab;
         [SerializeField] private NetworkObject _sectorBoxPrefab;
+        [SerializeField] private NetworkObject _monsterPrefab;
 
         private readonly Dictionary<PlayerRef, int> _spawnSlots = new Dictionary<PlayerRef, int>();
         private FusionPlayerLifecycle _subscribedLifecycle;
         private NetworkObject _doorInstance;
         private NetworkObject _pickupItemInstance;
         private NetworkObject _sectorBoxInstance;
+        private NetworkObject _monsterInstance;
 
         private void Awake()
         {
@@ -112,6 +114,11 @@ namespace EchoProtocol.Networking
                     new Vector3(-2f, 0.75f, 2.5f),
                     Quaternion.identity);
                 Debug.Log($"[PlayerSpawner] Spawned authoritative Sector Box {_sectorBoxInstance.Id}.");
+            }
+            if (_monsterInstance == null && _monsterPrefab != null)
+            {
+                _monsterInstance = runner.Spawn(_monsterPrefab, new Vector3(0f, 0f, 8f), Quaternion.identity);
+                Debug.Log($"[PlayerSpawner] Spawned host-authoritative monster {_monsterInstance.Id}.");
             }
         }
 
@@ -252,6 +259,7 @@ namespace EchoProtocol.Networking
                 _doorInstance = null;
                 _pickupItemInstance = null;
                 _sectorBoxInstance = null;
+                _monsterInstance = null;
             }
         }
 
