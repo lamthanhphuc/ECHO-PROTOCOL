@@ -17,14 +17,22 @@ public class PlayerCamera : MonoBehaviour
     private PlayerMovement _playerMovement;
     private CharacterController _characterController;
     private float _pitch;
+    private float _yaw;
     private float _currentEyeHeight;
     private float? _forcedEyeHeight;
+
+    public float Yaw => _yaw;
 
     public void SetTarget(Transform newTarget)
     {
         target = newTarget;
         _playerMovement = target != null ? target.GetComponent<PlayerMovement>() : null;
         _characterController = target != null ? target.GetComponent<CharacterController>() : null;
+
+        if (target != null)
+        {
+            _yaw = target.eulerAngles.y;
+        }
     }
 
     private void Awake()
@@ -32,6 +40,11 @@ public class PlayerCamera : MonoBehaviour
         _currentEyeHeight = eyeHeight;
         _playerMovement = target != null ? target.GetComponent<PlayerMovement>() : null;
         _characterController = target != null ? target.GetComponent<CharacterController>() : null;
+
+        if (target != null)
+        {
+            _yaw = target.eulerAngles.y;
+        }
 
         if (inputActions != null)
         {
@@ -76,34 +89,56 @@ public class PlayerCamera : MonoBehaviour
             return;
         }
 
-        Vector2 lookInput = _lookAction != null ? _lookAction.ReadValue<Vector2>() : Vector2.zero;
-        float yaw = lookInput.x * mouseSensitivity;
-        float pitch = lookInput.y * mouseSensitivity;
+        Vector2 lookInput = _lookAction != null
+            ? _lookAction.ReadValue<Vector2>()
+            : Vector2.zero;
 
-        target.Rotate(Vector3.up, yaw, Space.World);
-        _pitch = Mathf.Clamp(_pitch - pitch, minPitch, maxPitch);
+        float yawDelta = lookInput.x * mouseSensitivity;
+        float pitchDelta = lookInput.y * mouseSensitivity;
 
-        float targetEyeHeight = _forcedEyeHeight ?? (_playerMovement != null && _playerMovement.IsCrouching ? crouchEyeHeight : eyeHeight);
-        _currentEyeHeight = Mathf.Lerp(_currentEyeHeight, targetEyeHeight, eyeHeightTransitionSpeed * Time.deltaTime);
+        _yaw = Mathf.Repeat(_yaw + yawDelta, 360f);
+        _pitch = Mathf.Clamp(_pitch - pitchDelta, minPitch, maxPitch);
 
-        // CharacterController capsule center is at (0, 0, 0) relative to target pivot (waist level).
-        // Feet is at center.y - height * 0.5f (normally -1.0f).
-        // Eye heights are measured upwards from feet.
+        float targetEyeHeight =
+            _forcedEyeHeight ??
+            (_playerMovement != null && _playerMovement.IsCrouching
+                ? crouchEyeHeight
+                : eyeHeight);
+
+        _currentEyeHeight = Mathf.Lerp(
+            _currentEyeHeight,
+            targetEyeHeight,
+            eyeHeightTransitionSpeed * Time.deltaTime);
+
+        // CharacterController capsule center is relative to the target pivot.
+        // Eye heights are measured upwards from the capsule feet.
         float feetYOffset = 0f;
+
         if (_characterController != null)
         {
-            feetYOffset = _characterController.center.y - (_characterController.height * 0.5f);
+            feetYOffset =
+                _characterController.center.y -
+                (_characterController.height * 0.5f);
         }
-        else if (target != null)
+        else
         {
             _characterController = target.GetComponent<CharacterController>();
-            feetYOffset = _characterController != null 
-                ? (_characterController.center.y - (_characterController.height * 0.5f)) 
+
+            feetYOffset = _characterController != null
+                ? _characterController.center.y -
+                  (_characterController.height * 0.5f)
                 : -1.0f;
         }
 
-        transform.position = target.position + Vector3.up * (feetYOffset + _currentEyeHeight);
-        transform.rotation = Quaternion.Euler(_pitch, target.eulerAngles.y, 0f);
+        transform.position =
+            target.position +
+            Vector3.up * (feetYOffset + _currentEyeHeight);
+
+        // Camera owns look yaw locally. NetworkPlayerMovement sends this yaw
+        // through Fusion input and applies it authoritatively to the player.
+        // Do not rotate the target toward movement direction here.
+        transform.rotation =
+            Quaternion.Euler(_pitch, _yaw, 0f);
     }
 
     private static void LockCursor()

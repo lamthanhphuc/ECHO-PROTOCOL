@@ -1,3 +1,4 @@
+using EchoProtocol.AI.Listener.Noise;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -9,6 +10,7 @@ namespace EchoProtocol.Networking
     public struct NetworkPlayerInput : INetworkInput
     {
         public Vector2 Move;
+        public float LookYaw;
         public NetworkBool JumpPressed;
         public NetworkBool SprintHeld;
     }
@@ -17,11 +19,14 @@ namespace EchoProtocol.Networking
     public sealed class NetworkPlayerMovement : NetworkBehaviour
     {
         [SerializeField] private InputActionAsset _inputActions;
+        [SerializeField, Min(0f)] private float _walkSpeed = 5f;
+        [SerializeField, Min(0f)] private float _sprintSpeed = 7f;
 
         private NetworkCharacterController _controller;
         private InputAction _moveAction;
         private InputAction _jumpAction;
         private InputAction _sprintAction;
+        private PlayerCamera _playerCamera;
         private NetworkBootstrap _bootstrap;
         private bool _isSceneLoadDoneSubscribed;
         private TickTimer _nextMovementNoise;
@@ -74,17 +79,46 @@ namespace EchoProtocol.Networking
             if (!GetComponent<LobbyPlayerState>().IsGameplayPlayer) return;
             if (!GetInput(out NetworkPlayerInput input)) return;
 
-            var direction = new Vector3(input.Move.x, 0f, input.Move.y);
-            if (direction.sqrMagnitude > 1f) direction.Normalize();
+            var localDirection = new Vector3(input.Move.x, 0f, input.Move.y);
+            if (localDirection.sqrMagnitude > 1f)
+            {
+                localDirection.Normalize();
+            }
+
+            var lookRotation = Quaternion.Euler(0f, input.LookYaw, 0f);
+            var direction = lookRotation * localDirection;
+
+            var isSprintMoving =
+                input.SprintHeld &&
+                direction.sqrMagnitude > 0.01f;
+
+            _controller.maxSpeed = isSprintMoving
+                ? _sprintSpeed
+                : _walkSpeed;
 
             _controller.Move(direction);
-            if (Object.HasStateAuthority && input.SprintHeld && direction.sqrMagnitude > 0.01f
+
+            // Fusion's stock NetworkCharacterController faces movement direction.
+            // Production player facing instead follows authoritative look yaw so
+            // backward movement and strafing do not rotate the camera/player.
+            transform.rotation = lookRotation;
+            if (Object.HasStateAuthority && isSprintMoving
                 && _nextMovementNoise.ExpiredOrNotRunning(Runner))
             {
                 var state = GetComponent<LobbyPlayerState>();
-                var type = state.CarriedCoreId.IsValid ? "CORE_CARRY" : "SPRINT";
+                var type = state.CarriedCoreId.IsValid
+                    ? RuntimeNoiseType.CORE_CARRY
+                    : RuntimeNoiseType.SPRINT;
                 HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
-                    .TryAccept(Object.InputAuthority, type, 0.7, transform.position, 12);
+                    .TryAccept(
+                        Object.InputAuthority,
+                        type,
+                        RuntimeNoiseSourceOccurrenceKey.ForMovement(
+                            Object.Id.ToString(),
+                            type,
+                            Runner.Tick.Raw),
+                        transform.position,
+                        out _);
                 _nextMovementNoise = TickTimer.CreateFromSeconds(Runner, 1.5f);
             }
             if (input.JumpPressed && _controller.Grounded)
@@ -108,6 +142,7 @@ namespace EchoProtocol.Networking
 
             var playerCamera = mainCamera.GetComponent<PlayerCamera>();
             if (playerCamera == null) return;
+            _playerCamera = playerCamera;
 
             playerCamera.SetTarget(transform);
             Debug.Log($"[NetworkMovement] Bound local PlayerCamera to [Player:{Object.InputAuthority.PlayerId}].");
@@ -119,6 +154,9 @@ namespace EchoProtocol.Networking
             return new NetworkPlayerInput
             {
                 Move = _moveAction?.ReadValue<Vector2>() ?? Vector2.zero,
+                LookYaw = _playerCamera != null
+                    ? _playerCamera.Yaw
+                    : transform.eulerAngles.y,
                 JumpPressed = _jumpAction?.WasPressedThisFrame() ?? false,
                 SprintHeld = _sprintAction?.IsPressed() ?? false,
             };

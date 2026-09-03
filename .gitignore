@@ -45,3 +45,6 @@ Thumbs.db
 
 .codegraph/
 KLTN/.git.backup/
+
+# Local test artifacts
+/TestResults/

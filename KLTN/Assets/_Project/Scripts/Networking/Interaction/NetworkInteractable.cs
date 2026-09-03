@@ -10,11 +10,18 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(0)] private int _requiredToolId;
         [SerializeField, Min(0f)] private float _cooldownSeconds = 0.25f;
         [SerializeField] private Transform _interactionOrigin;
+        [SerializeField] private bool _emitsRuntimeInteractionNoise;
+        [SerializeField] private Transform _runtimeInteractionNoiseOrigin;
 
         [Networked] private TickTimer Cooldown { get; set; }
 
         public float InteractionDistance => _interactionDistance;
         public Transform InteractionOrigin => _interactionOrigin != null ? _interactionOrigin : transform;
+        public virtual bool EmitsRuntimeInteractionNoise => _emitsRuntimeInteractionNoise;
+        public Vector3 RuntimeInteractionNoiseOrigin =>
+            _runtimeInteractionNoiseOrigin != null
+                ? _runtimeInteractionNoiseOrigin.position
+                : InteractionOrigin.position;
 
         public InteractionValidationResult ValidateInteraction(in InteractionContext context)
         {

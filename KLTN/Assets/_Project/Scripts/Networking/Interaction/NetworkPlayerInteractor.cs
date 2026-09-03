@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.AI.Listener.Noise;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -241,7 +242,15 @@ namespace EchoProtocol.Networking
                     if (toolType == "NOISE_MAKER")
                     {
                         HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
-                            .TryAccept(requester, "NOISE_MAKER", 1, transform.position, 20);
+                            .TryAccept(
+                                requester,
+                                RuntimeNoiseType.NOISE_MAKER,
+                                RuntimeNoiseSourceOccurrenceKey.ForTeamTool(
+                                    Object.Id.ToString(),
+                                    toolType,
+                                    sequence),
+                                transform.position,
+                                out _);
                     }
                 }
             }
@@ -312,8 +321,18 @@ namespace EchoProtocol.Networking
                 if (result == InteractionValidationResult.Accepted)
                 {
                     target.ExecuteAuthoritative(context);
-                    HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
-                        .TryAccept(requester, "INTERACTION", 0.35, target.transform.position, 6);
+                    if (target.EmitsRuntimeInteractionNoise)
+                    {
+                        HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
+                            .TryAccept(
+                                requester,
+                                RuntimeNoiseType.INTERACTION,
+                                RuntimeNoiseSourceOccurrenceKey.ForInteraction(
+                                    Object.Id.ToString(),
+                                    sequence),
+                                target.RuntimeInteractionNoiseOrigin,
+                                out _);
+                    }
                 }
             }
 

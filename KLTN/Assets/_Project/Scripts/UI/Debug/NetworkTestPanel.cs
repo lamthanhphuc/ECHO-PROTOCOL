@@ -2,6 +2,7 @@ using System;
 using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace EchoProtocol.UI.Debugging
 {
@@ -86,7 +87,16 @@ namespace EchoProtocol.UI.Debugging
 
         private void OnGUI()
         {
-            _windowRect = GUI.Window(WindowId, _windowRect, DrawWindow, "Fusion Network Test");
+            if (SceneManager.GetActiveScene().name != NetworkBootstrap.LobbySceneName)
+            {
+                return;
+            }
+
+            _windowRect = GUI.Window(
+                WindowId,
+                _windowRect,
+                DrawWindow,
+                "Fusion Network Test");
         }
 
         private void DrawWindow(int windowId)

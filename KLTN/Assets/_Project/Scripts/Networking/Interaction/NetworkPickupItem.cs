@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.AI.Listener.Noise;
 using Fusion;
 using UnityEngine;
 using EchoProtocol.Networking.Authority;
@@ -110,7 +111,12 @@ namespace EchoProtocol.Networking
             ApplyReplicatedState();
             PublishTransition(actor);
             HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
-                .TryAccept(actor, "CORE_DROP", 0.9, position, 15);
+                .TryAccept(
+                    actor,
+                    RuntimeNoiseType.CORE_DROP,
+                    RuntimeNoiseSourceOccurrenceKey.ForCoreDrop(Object.Id.ToString(), TransitionOrdinal),
+                    position,
+                    out _);
             Debug.Log($"[NetworkItem] {actor} dropped item {Object.Id}.");
             return true;
         }
