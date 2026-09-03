@@ -48,6 +48,7 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float attackRange = 1.5f;
         [SerializeField] private float attackWindup = 0.75f;
         [SerializeField] private float attackRecovery = 1f;
+        [SerializeField] private float attackDamage = 100f;
 
         [Header("Debug Runtime")]
         [SerializeField] private StalkerState currentState = StalkerState.PATROL;
@@ -831,6 +832,11 @@ namespace EchoProtocol.AI.Stalker
             }
 
             lastAttackResult = StalkerAttackResult.Hit;
+            PlayerDownState downState = currentTarget.GetComponentInParent<PlayerDownState>();
+            if (downState != null)
+            {
+                downState.ApplyDamage(GetAttackDamage());
+            }
         }
 
         private void ResolveAttackHitMomentTyped()
@@ -1561,6 +1567,11 @@ namespace EchoProtocol.AI.Stalker
         private float GetAttackRecovery()
         {
             return Mathf.Max(0f, attackRecovery);
+        }
+
+        private float GetAttackDamage()
+        {
+            return Mathf.Max(0f, attackDamage);
         }
 
         private float CurrentSimulationDeltaSeconds => _currentSimulationDeltaSeconds;

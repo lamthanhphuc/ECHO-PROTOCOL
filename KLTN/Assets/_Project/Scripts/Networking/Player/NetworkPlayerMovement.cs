@@ -19,6 +19,8 @@ namespace EchoProtocol.Networking
     public sealed class NetworkPlayerMovement : NetworkBehaviour
     {
         [SerializeField] private InputActionAsset _inputActions;
+        [SerializeField, Min(0f)] private float _walkSpeed = 5f;
+        [SerializeField, Min(0f)] private float _sprintSpeed = 7f;
 
         private NetworkCharacterController _controller;
         private InputAction _moveAction;
@@ -86,13 +88,21 @@ namespace EchoProtocol.Networking
             var lookRotation = Quaternion.Euler(0f, input.LookYaw, 0f);
             var direction = lookRotation * localDirection;
 
+            var isSprintMoving =
+                input.SprintHeld &&
+                direction.sqrMagnitude > 0.01f;
+
+            _controller.maxSpeed = isSprintMoving
+                ? _sprintSpeed
+                : _walkSpeed;
+
             _controller.Move(direction);
 
             // Fusion's stock NetworkCharacterController faces movement direction.
             // Production player facing instead follows authoritative look yaw so
             // backward movement and strafing do not rotate the camera/player.
             transform.rotation = lookRotation;
-            if (Object.HasStateAuthority && input.SprintHeld && direction.sqrMagnitude > 0.01f
+            if (Object.HasStateAuthority && isSprintMoving
                 && _nextMovementNoise.ExpiredOrNotRunning(Runner))
             {
                 var state = GetComponent<LobbyPlayerState>();

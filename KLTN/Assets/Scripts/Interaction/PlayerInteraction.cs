@@ -15,12 +15,14 @@ public class PlayerInteraction : MonoBehaviour
 
     private InputAction _interactAction;
     private IInteractable _currentInteractable;
+    private IHoldInteractable _heldInteractable;
     private string _currentPrompt = string.Empty;
 
     public event Action<string> PromptChanged;
 
     public IInteractable CurrentInteractable => _currentInteractable;
     public string CurrentPrompt => _currentPrompt;
+    public bool IsInteractHeld => _heldInteractable != null;
 
     private void Awake()
     {
@@ -41,7 +43,9 @@ public class PlayerInteraction : MonoBehaviour
 
         if (_interactAction != null)
         {
+            _interactAction.started += OnInteractStarted;
             _interactAction.performed += OnInteractPerformed;
+            _interactAction.canceled += OnInteractCanceled;
             _interactAction.Enable();
         }
     }
@@ -50,16 +54,20 @@ public class PlayerInteraction : MonoBehaviour
     {
         if (_interactAction != null)
         {
+            _interactAction.started -= OnInteractStarted;
             _interactAction.performed -= OnInteractPerformed;
+            _interactAction.canceled -= OnInteractCanceled;
             _interactAction.Disable();
         }
 
+        CancelHeldInteractable();
         SetCurrentInteractable(null);
     }
 
     private void Update()
     {
         UpdateCurrentInteractable();
+        ValidateHeldInteractable();
     }
 
     private void BindInput()
@@ -120,8 +128,60 @@ public class PlayerInteraction : MonoBehaviour
     {
         if (_currentInteractable != null && _currentInteractable.CanInteract(gameObject))
         {
+            if (_currentInteractable is IHoldInteractable holdInteractable && holdInteractable.RequiresHold)
+            {
+                return;
+            }
+
             _currentInteractable.Interact(gameObject);
             UpdateCurrentInteractable();
         }
+    }
+
+    private void OnInteractStarted(InputAction.CallbackContext context)
+    {
+        IHoldInteractable holdInteractable = _currentInteractable as IHoldInteractable;
+        if (holdInteractable == null || !holdInteractable.RequiresHold)
+        {
+            return;
+        }
+
+        if (!holdInteractable.CanInteract(gameObject))
+        {
+            return;
+        }
+
+        _heldInteractable = holdInteractable;
+        _heldInteractable.BeginHoldInteract(gameObject);
+    }
+
+    private void OnInteractCanceled(InputAction.CallbackContext context)
+    {
+        CancelHeldInteractable();
+    }
+
+    private void ValidateHeldInteractable()
+    {
+        if (_heldInteractable == null)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(_currentInteractable, _heldInteractable) || !_heldInteractable.CanInteract(gameObject))
+        {
+            CancelHeldInteractable();
+        }
+    }
+
+    private void CancelHeldInteractable()
+    {
+        if (_heldInteractable == null)
+        {
+            return;
+        }
+
+        IHoldInteractable held = _heldInteractable;
+        _heldInteractable = null;
+        held.EndHoldInteract(gameObject);
     }
 }

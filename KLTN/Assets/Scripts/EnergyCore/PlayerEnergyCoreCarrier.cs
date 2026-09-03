@@ -15,7 +15,7 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
 
     [Header("Carry Penalty")]
     [SerializeField] private float carrySpeedMultiplier = 0.72f;
-    [SerializeField] private bool blockSprintWhileCarrying = true;
+    [SerializeField] private bool blockSprintWhileCarrying = false;
     [SerializeField] private bool lockTeamToolWhileCarrying = true;
 
     [Header("Drop")]
@@ -189,7 +189,6 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
         if (movement != null)
         {
             movement.SetExternalSpeedMultiplier(carrying ? carrySpeedMultiplier : 1f);
-            movement.SetSprintBlocked(carrying && blockSprintWhileCarrying);
         }
 
         if (inventory != null && lockTeamToolWhileCarrying)

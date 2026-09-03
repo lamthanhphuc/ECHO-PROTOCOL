@@ -12,6 +12,8 @@ public class PlayerMovement : MonoBehaviour
     [SerializeField] private float sprintSpeed = 7f;
     [SerializeField] private float crouchSpeed = 2f;
     [SerializeField] private float gravity = -9.81f;
+    [SerializeField] private float sprintForwardInputThreshold = 0.75f;
+    [SerializeField] private float sprintSideInputTolerance = 0.2f;
 
     [Header("Crouch")]
     [SerializeField] private float standingHeight = 2f;
@@ -34,12 +36,16 @@ public class PlayerMovement : MonoBehaviour
     private bool _isSprinting;
     private bool _isCrouching;
     private bool _isSprintBlocked;
+    private Vector2 _moveInput;
 
     public float CurrentStamina => _currentStamina;
     public float MaxStamina => maxStamina;
     public bool IsSprinting => _isSprinting;
     public bool IsCrouching => _isCrouching;
     public bool IsSprintBlocked => _isSprintBlocked;
+    public Vector2 MoveInput => _moveInput;
+    public bool HasForwardSprintInput =>
+        _moveInput.y >= sprintForwardInputThreshold && Mathf.Abs(_moveInput.x) <= sprintSideInputTolerance;
 
     private void Awake()
     {
@@ -72,7 +78,9 @@ public class PlayerMovement : MonoBehaviour
     private void Update()
     {
         Vector2 input = _moveAction != null ? _moveAction.ReadValue<Vector2>() : Vector2.zero;
-        Vector3 move = transform.right * input.x + transform.forward * input.y;
+        _moveInput = input.sqrMagnitude > 1f ? input.normalized : input;
+
+        Vector3 move = transform.right * _moveInput.x + transform.forward * _moveInput.y;
 
         if (move.sqrMagnitude > 1f)
         {
@@ -100,7 +108,7 @@ public class PlayerMovement : MonoBehaviour
 
     private bool CanSprint(bool wantsSprint, Vector3 move)
     {
-        if (_isSprintBlocked || !wantsSprint || _isCrouching || move.sqrMagnitude <= 0.01f)
+        if (_isSprintBlocked || !wantsSprint || _isCrouching || move.sqrMagnitude <= 0.01f || !HasForwardSprintInput)
         {
             return false;
         }

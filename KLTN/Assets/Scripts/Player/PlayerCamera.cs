@@ -15,9 +15,11 @@ public class PlayerCamera : MonoBehaviour
 
     private InputAction _lookAction;
     private PlayerMovement _playerMovement;
+    private CharacterController _characterController;
     private float _pitch;
     private float _yaw;
     private float _currentEyeHeight;
+    private float? _forcedEyeHeight;
 
     public float Yaw => _yaw;
 
@@ -25,6 +27,7 @@ public class PlayerCamera : MonoBehaviour
     {
         target = newTarget;
         _playerMovement = target != null ? target.GetComponent<PlayerMovement>() : null;
+        _characterController = target != null ? target.GetComponent<CharacterController>() : null;
 
         if (target != null)
         {
@@ -36,6 +39,7 @@ public class PlayerCamera : MonoBehaviour
     {
         _currentEyeHeight = eyeHeight;
         _playerMovement = target != null ? target.GetComponent<PlayerMovement>() : null;
+        _characterController = target != null ? target.GetComponent<CharacterController>() : null;
 
         if (target != null)
         {
@@ -96,18 +100,43 @@ public class PlayerCamera : MonoBehaviour
         _pitch = Mathf.Clamp(_pitch - pitchDelta, minPitch, maxPitch);
 
         float targetEyeHeight =
-            _playerMovement != null && _playerMovement.IsCrouching
+            _forcedEyeHeight ??
+            (_playerMovement != null && _playerMovement.IsCrouching
                 ? crouchEyeHeight
-                : eyeHeight;
+                : eyeHeight);
 
         _currentEyeHeight = Mathf.Lerp(
             _currentEyeHeight,
             targetEyeHeight,
             eyeHeightTransitionSpeed * Time.deltaTime);
 
-        transform.position =
-            target.position + Vector3.up * _currentEyeHeight;
+        // CharacterController capsule center is relative to the target pivot.
+        // Eye heights are measured upwards from the capsule feet.
+        float feetYOffset = 0f;
 
+        if (_characterController != null)
+        {
+            feetYOffset =
+                _characterController.center.y -
+                (_characterController.height * 0.5f);
+        }
+        else
+        {
+            _characterController = target.GetComponent<CharacterController>();
+
+            feetYOffset = _characterController != null
+                ? _characterController.center.y -
+                  (_characterController.height * 0.5f)
+                : -1.0f;
+        }
+
+        transform.position =
+            target.position +
+            Vector3.up * (feetYOffset + _currentEyeHeight);
+
+        // Camera owns look yaw locally. NetworkPlayerMovement sends this yaw
+        // through Fusion input and applies it authoritatively to the player.
+        // Do not rotate the target toward movement direction here.
         transform.rotation =
             Quaternion.Euler(_pitch, _yaw, 0f);
     }
@@ -122,5 +151,15 @@ public class PlayerCamera : MonoBehaviour
     {
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+    }
+
+    public void SetForcedEyeHeight(float height)
+    {
+        _forcedEyeHeight = Mathf.Max(0.05f, height);
+    }
+
+    public void ClearForcedEyeHeight()
+    {
+        _forcedEyeHeight = null;
     }
 }
