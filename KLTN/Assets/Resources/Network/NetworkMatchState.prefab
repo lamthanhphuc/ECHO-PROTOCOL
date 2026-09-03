@@ -45,7 +45,7 @@ MonoBehaviour:
   m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
-  SortKey: 1274947316
+  SortKey: 2627082564
   SendPriority: 1
   EnableInterpolation: 1
   Flags: 262146
@@ -75,12 +75,6 @@ MonoBehaviour:
     Raw: 0
   _EscapeDoorId:
     Raw: 0
-  _LastActor:
-    RawEncoded: 0
   _FinalSurvivorCount: 0
   _PhaseOrdinal: 0
   _EndOrdinal: 0
-  _EscapeTimer:
-    _target: 0
-  _MatchTimer:
-    _target: 0
