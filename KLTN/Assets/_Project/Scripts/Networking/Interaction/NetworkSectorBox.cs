@@ -81,6 +81,7 @@ namespace EchoProtocol.Networking
             }
 
             return Phase == NetworkMatchPhase.Completed
+                || Phase == NetworkMatchPhase.PowerPuzzle
                 ? InteractionValidationResult.InvalidTargetState
                 : InteractionValidationResult.Accepted;
         }
@@ -91,9 +92,6 @@ namespace EchoProtocol.Networking
             {
                 case NetworkMatchPhase.CoreCollection:
                     PlaceCarriedCore(context);
-                    break;
-                case NetworkMatchPhase.PowerPuzzle:
-                    CompletePowerPuzzle();
                     break;
                 case NetworkMatchPhase.SecurityHold:
                     AdvanceSecurityHold();
@@ -125,11 +123,24 @@ namespace EchoProtocol.Networking
             }
         }
 
-        private void CompletePowerPuzzle()
+        public bool TryCommitPowerPuzzleCompletion(NetworkId puzzleId)
         {
+            if (!Object.HasStateAuthority
+                || Phase != NetworkMatchPhase.PowerPuzzle
+                || !puzzleId.IsValid
+                || !Runner.TryFindObject(puzzleId, out var puzzleObject)
+                || puzzleObject == null
+                || !puzzleObject.TryGetComponent<NetworkPowerPuzzle>(out var puzzle)
+                || puzzle.State != NetworkPowerPuzzleState.Completed)
+            {
+                return false;
+            }
+
             AdvanceOrdinal();
             MatchAuthorityRuntime.Instance?.RecordPuzzleCompleted(BuildKey("puzzle-completed"));
             CompletePhaseAndStartNext("POWER_PUZZLE", NetworkMatchPhase.SecurityHold, "SECURITY_HOLD");
+            HandleObjectiveStateChanged();
+            return true;
         }
 
         private void AdvanceSecurityHold()

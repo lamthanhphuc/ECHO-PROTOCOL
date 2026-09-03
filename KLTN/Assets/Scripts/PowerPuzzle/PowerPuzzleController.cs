@@ -33,6 +33,9 @@ public class PowerPuzzleController : MonoBehaviour
     private bool _isComplete;
     private bool _instructionReadForStep;
     private float _lockoutUntil;
+    private int _authoritativeStepCount = -1;
+    private bool _authoritativeLockout;
+    private bool _networkAuthorityPresentationOnly;
 
     public event Action<PowerPuzzleController> PuzzleActivated;
     public event Action<PowerPuzzleController> StepAdvanced;
@@ -42,10 +45,12 @@ public class PowerPuzzleController : MonoBehaviour
     public bool IsActive => _isActive;
     public bool IsComplete => _isComplete;
     public int StepIndex => _stepIndex;
-    public int StepCount => sequence != null ? sequence.Length : 0;
+    public int StepCount => _authoritativeStepCount >= 0
+        ? _authoritativeStepCount
+        : sequence != null ? sequence.Length : 0;
     public int FailureCount => _failureCount;
     public bool IsSoloFallbackActive => enableSoloFallback && activePlayerCount <= 1;
-    public bool IsLockedOut => Time.time < _lockoutUntil;
+    public bool IsLockedOut => _authoritativeLockout || Time.time < _lockoutUntil;
     public bool HasInstructionForCurrentStep => _instructionReadForStep;
     public float LockoutRemaining => Mathf.Max(0f, _lockoutUntil - Time.time);
 
@@ -53,6 +58,11 @@ public class PowerPuzzleController : MonoBehaviour
     {
         get
         {
+            if (_networkAuthorityPresentationOnly)
+            {
+                return string.Empty;
+            }
+
             if (sequence == null || sequence.Length == 0 || _stepIndex >= sequence.Length)
             {
                 return string.Empty;
@@ -120,7 +130,7 @@ public class PowerPuzzleController : MonoBehaviour
 
     public bool CanUseStation(PowerPuzzleStationType stationType)
     {
-        if (!_isActive || _isComplete || IsLockedOut)
+        if (_networkAuthorityPresentationOnly || !_isActive || _isComplete || IsLockedOut)
         {
             return false;
         }
@@ -171,6 +181,8 @@ public class PowerPuzzleController : MonoBehaviour
 
     public void ActivatePuzzle()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         if (_isActive || _isComplete)
         {
             return;
@@ -189,12 +201,43 @@ public class PowerPuzzleController : MonoBehaviour
 
     public void ResetPuzzle()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         _stepIndex = 0;
         _failureCount = 0;
         _isComplete = false;
         _instructionReadForStep = false;
         _lockoutUntil = 0f;
         _isActive = startsActive || (coreProgress != null && coreProgress.IsComplete && activateWhenCoresComplete);
+        _authoritativeStepCount = -1;
+        _authoritativeLockout = false;
+    }
+
+    /// <summary>
+    /// Presentation-only bridge for multiplayer. It deliberately does not invoke legacy gameplay events;
+    /// the Fusion State Authority owns phase transitions and completion side effects.
+    /// </summary>
+    public void ApplyAuthoritativeSnapshot(
+        bool isActive,
+        bool isComplete,
+        int stepIndex,
+        int stepCount,
+        int failureCount,
+        bool isLockedOut)
+    {
+        _isActive = isActive;
+        _isComplete = isComplete;
+        _stepIndex = Mathf.Clamp(stepIndex, 0, Mathf.Max(0, stepCount));
+        _failureCount = Mathf.Max(0, failureCount);
+        _instructionReadForStep = false;
+        _lockoutUntil = 0f;
+        _authoritativeStepCount = Mathf.Max(0, stepCount);
+        _authoritativeLockout = isLockedOut;
+    }
+
+    public void SetNetworkAuthorityPresentationOnly(bool enabled)
+    {
+        _networkAuthorityPresentationOnly = enabled;
     }
 
     private void ReadCurrentInstruction()
@@ -205,6 +248,8 @@ public class PowerPuzzleController : MonoBehaviour
 
     public void ForceFailForPenaltyTest()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         if (_isActive && !_isComplete)
         {
             FailPuzzle();

@@ -19,6 +19,8 @@ namespace EchoProtocol.Networking
         [SerializeField] private Vector3 _energyCoreSpawnOrigin = new Vector3(2f, 0.5f, 2.5f);
         [SerializeField, Min(0.5f)] private float _energyCoreSpawnSpacing = 1.25f;
         [SerializeField] private NetworkObject _sectorBoxPrefab;
+        [SerializeField] private NetworkObject _powerPuzzlePrefab;
+        [SerializeField] private NetworkObject _powerPuzzleStationPrefab;
         [SerializeField] private NetworkObject _monsterPrefab;
 
         private readonly Dictionary<PlayerRef, int> _spawnSlots = new Dictionary<PlayerRef, int>();
@@ -26,6 +28,8 @@ namespace EchoProtocol.Networking
         private NetworkObject _doorInstance;
         private readonly List<NetworkObject> _energyCoreInstances = new List<NetworkObject>();
         private NetworkObject _sectorBoxInstance;
+        private NetworkObject _powerPuzzleInstance;
+        private readonly List<NetworkObject> _powerPuzzleStationInstances = new List<NetworkObject>();
         private NetworkObject _monsterInstance;
 
         private void Awake()
@@ -103,6 +107,14 @@ namespace EchoProtocol.Networking
             {
                 _sectorBoxPrefab = Resources.Load<NetworkObject>("Network/NetworkSectorBox");
             }
+            if (_powerPuzzlePrefab == null)
+            {
+                _powerPuzzlePrefab = Resources.Load<NetworkObject>("Network/NetworkPowerPuzzle");
+            }
+            if (_powerPuzzleStationPrefab == null)
+            {
+                _powerPuzzleStationPrefab = Resources.Load<NetworkObject>("Network/NetworkPowerPuzzleStation");
+            }
             if (_doorInstance == null && _doorPrefab != null)
             {
                 _doorInstance = runner.Spawn(_doorPrefab, new Vector3(0f, 1f, 2.5f), Quaternion.identity);
@@ -125,11 +137,72 @@ namespace EchoProtocol.Networking
                     sectorPose.Rotation);
                 Debug.Log($"[PlayerSpawner] Spawned authoritative Sector Box {_sectorBoxInstance.Id}.");
             }
+            EnsurePowerPuzzle(runner);
             if (_monsterInstance == null && _monsterPrefab != null)
             {
                 _monsterInstance = runner.Spawn(_monsterPrefab, new Vector3(0f, 0f, 8f), Quaternion.identity);
                 Debug.Log($"[PlayerSpawner] Spawned host-authoritative monster {_monsterInstance.Id}.");
             }
+        }
+
+        private void EnsurePowerPuzzle(NetworkRunner runner)
+        {
+            if (_sectorBoxInstance == null || _powerPuzzlePrefab == null) return;
+
+            if (_powerPuzzleInstance == null)
+            {
+                _powerPuzzleInstance = runner.Spawn(_powerPuzzlePrefab, Vector3.zero, Quaternion.identity);
+                if (_powerPuzzleInstance.TryGetComponent<NetworkPowerPuzzle>(out var puzzle))
+                {
+                    puzzle.InitializeAuthoritative(_sectorBoxInstance.Id);
+                }
+                Debug.Log($"[PlayerSpawner] Spawned authoritative Power Puzzle {_powerPuzzleInstance.Id}.");
+            }
+
+            if (_powerPuzzleStationPrefab == null) return;
+            var stationCount = _powerPuzzleInstance.TryGetComponent<NetworkPowerPuzzle>(out var state)
+                ? state.StationCount
+                : 2;
+            while (_powerPuzzleStationInstances.Count < stationCount)
+            {
+                var inputId = _powerPuzzleStationInstances.Count;
+                var pose = GetPowerPuzzleStationPose(inputId);
+                var stationObject = runner.Spawn(_powerPuzzleStationPrefab, pose.Position, pose.Rotation);
+                if (stationObject.TryGetComponent<NetworkPowerPuzzleStation>(out var station))
+                {
+                    station.InitializeAuthoritative(_powerPuzzleInstance.Id, inputId, pose.UseFallbackVisual);
+                }
+                _powerPuzzleStationInstances.Add(stationObject);
+            }
+        }
+
+        private SpawnPose GetPowerPuzzleStationPose(int inputId)
+        {
+            var stations = FindObjectsByType<PowerPuzzleStation>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None);
+            System.Array.Sort(stations, (left, right) =>
+            {
+                var typeOrder = left.StationType.CompareTo(right.StationType);
+                return typeOrder != 0
+                    ? typeOrder
+                    : string.CompareOrdinal(left.name, right.name);
+            });
+            if (inputId >= 0 && inputId < stations.Length && stations[inputId] != null)
+            {
+                return new SpawnPose(
+                    stations[inputId].transform.position,
+                    stations[inputId].transform.rotation,
+                    useFallbackVisual: false);
+            }
+
+            var sectorPosition = _sectorBoxInstance != null
+                ? _sectorBoxInstance.transform.position
+                : Vector3.zero;
+            return new SpawnPose(
+                sectorPosition + new Vector3((inputId - 0.5f) * 1.5f, 0f, 2f),
+                Quaternion.identity,
+                useFallbackVisual: true);
         }
 
         private Vector3 GetEnergyCoreSpawnPosition(int index)
@@ -175,6 +248,26 @@ namespace EchoProtocol.Networking
                          FindObjectsSortMode.None))
             {
                 legacyProgress.enabled = false;
+            }
+
+            foreach (var legacyPuzzle in FindObjectsByType<PowerPuzzleController>(
+                         FindObjectsInactive.Include,
+                         FindObjectsSortMode.None))
+            {
+                legacyPuzzle.SetNetworkAuthorityPresentationOnly(true);
+                legacyPuzzle.enabled = false;
+            }
+
+            foreach (var legacyStation in FindObjectsByType<PowerPuzzleStation>(
+                         FindObjectsInactive.Include,
+                         FindObjectsSortMode.None))
+            {
+                legacyStation.SetNetworkAuthorityPresentationOnly(true);
+                foreach (var stationCollider in legacyStation.GetComponentsInChildren<Collider>())
+                {
+                    stationCollider.enabled = false;
+                }
+                legacyStation.enabled = false;
             }
         }
 
@@ -315,20 +408,24 @@ namespace EchoProtocol.Networking
                 _doorInstance = null;
                 _energyCoreInstances.Clear();
                 _sectorBoxInstance = null;
+                _powerPuzzleInstance = null;
+                _powerPuzzleStationInstances.Clear();
                 _monsterInstance = null;
             }
         }
 
         private readonly struct SpawnPose
         {
-            public SpawnPose(Vector3 position, Quaternion rotation)
+            public SpawnPose(Vector3 position, Quaternion rotation, bool useFallbackVisual = false)
             {
                 Position = position;
                 Rotation = rotation;
+                UseFallbackVisual = useFallbackVisual;
             }
 
             public Vector3 Position { get; }
             public Quaternion Rotation { get; }
+            public bool UseFallbackVisual { get; }
         }
     }
 }
