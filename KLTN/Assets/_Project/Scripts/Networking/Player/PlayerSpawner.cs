@@ -12,16 +12,19 @@ namespace EchoProtocol.Networking
         private const float FallbackSpacing = 2.5f;
 
         [SerializeField] private NetworkBootstrap _bootstrap;
-        [Header("M2-024 World State Demo")]
+        [Header("Authoritative Gameplay World")]
         [SerializeField] private NetworkObject _doorPrefab;
         [SerializeField] private NetworkObject _pickupItemPrefab;
+        [SerializeField, Range(1, 4)] private int _energyCoreCount = 3;
+        [SerializeField] private Vector3 _energyCoreSpawnOrigin = new Vector3(2f, 0.5f, 2.5f);
+        [SerializeField, Min(0.5f)] private float _energyCoreSpawnSpacing = 1.25f;
         [SerializeField] private NetworkObject _sectorBoxPrefab;
         [SerializeField] private NetworkObject _monsterPrefab;
 
         private readonly Dictionary<PlayerRef, int> _spawnSlots = new Dictionary<PlayerRef, int>();
         private FusionPlayerLifecycle _subscribedLifecycle;
         private NetworkObject _doorInstance;
-        private NetworkObject _pickupItemInstance;
+        private readonly List<NetworkObject> _energyCoreInstances = new List<NetworkObject>();
         private NetworkObject _sectorBoxInstance;
         private NetworkObject _monsterInstance;
 
@@ -73,7 +76,10 @@ namespace EchoProtocol.Networking
 
         private void HandleNetworkSceneLoadDone(NetworkRunner runner)
         {
-            if (!runner.IsServer || SceneManager.GetActiveScene().name != LobbyManager.GameSceneName) return;
+            if (SceneManager.GetActiveScene().name != LobbyManager.GameSceneName) return;
+
+            DisableLegacyObjectiveMutators();
+            if (!runner.IsServer) return;
 
             TryAttachLifecycle(runner);
             Debug.Log("[PlayerSpawner] Gameplay scene ready. Placing lifecycle-owned player objects.");
@@ -102,23 +108,73 @@ namespace EchoProtocol.Networking
                 _doorInstance = runner.Spawn(_doorPrefab, new Vector3(0f, 1f, 2.5f), Quaternion.identity);
                 Debug.Log($"[PlayerSpawner] Spawned authoritative door {_doorInstance.Id}.");
             }
-            if (_pickupItemInstance == null && _pickupItemPrefab != null)
+            while (_energyCoreInstances.Count < _energyCoreCount && _pickupItemPrefab != null)
             {
-                _pickupItemInstance = runner.Spawn(_pickupItemPrefab, new Vector3(2f, 0.5f, 2.5f), Quaternion.identity);
-                Debug.Log($"[PlayerSpawner] Spawned authoritative pickup {_pickupItemInstance.Id}.");
+                var index = _energyCoreInstances.Count;
+                var position = GetEnergyCoreSpawnPosition(index);
+                var core = runner.Spawn(_pickupItemPrefab, position, Quaternion.identity);
+                _energyCoreInstances.Add(core);
+                Debug.Log($"[PlayerSpawner] Spawned authoritative Energy Core {index + 1}/{_energyCoreCount}: {core.Id}.");
             }
             if (_sectorBoxInstance == null && _sectorBoxPrefab != null)
             {
+                var sectorPose = GetSectorBoxPose();
                 _sectorBoxInstance = runner.Spawn(
                     _sectorBoxPrefab,
-                    new Vector3(-2f, 0.75f, 2.5f),
-                    Quaternion.identity);
+                    sectorPose.Position,
+                    sectorPose.Rotation);
                 Debug.Log($"[PlayerSpawner] Spawned authoritative Sector Box {_sectorBoxInstance.Id}.");
             }
             if (_monsterInstance == null && _monsterPrefab != null)
             {
                 _monsterInstance = runner.Spawn(_monsterPrefab, new Vector3(0f, 0f, 8f), Quaternion.identity);
                 Debug.Log($"[PlayerSpawner] Spawned host-authoritative monster {_monsterInstance.Id}.");
+            }
+        }
+
+        private Vector3 GetEnergyCoreSpawnPosition(int index)
+        {
+            var container = GameObject.Find("EnergyCoreSpawnCandidates");
+            if (container != null && index >= 0 && index < container.transform.childCount)
+            {
+                return container.transform.GetChild(index).position;
+            }
+
+            return _energyCoreSpawnOrigin + Vector3.right * (_energyCoreSpawnSpacing * index);
+        }
+
+        private static SpawnPose GetSectorBoxPose()
+        {
+            var sectorBoxes = FindObjectsByType<SectorBox>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (sectorBoxes.Length > 0 && sectorBoxes[0] != null)
+            {
+                return new SpawnPose(sectorBoxes[0].transform.position, sectorBoxes[0].transform.rotation);
+            }
+
+            return new SpawnPose(new Vector3(-2f, 0.75f, 2.5f), Quaternion.identity);
+        }
+
+        private static void DisableLegacyObjectiveMutators()
+        {
+            foreach (var legacyCore in FindObjectsByType<EnergyCorePickup>(
+                         FindObjectsInactive.Include,
+                         FindObjectsSortMode.None))
+            {
+                legacyCore.enabled = false;
+            }
+
+            foreach (var legacySector in FindObjectsByType<SectorBox>(
+                         FindObjectsInactive.Include,
+                         FindObjectsSortMode.None))
+            {
+                legacySector.enabled = false;
+            }
+
+            foreach (var legacyProgress in FindObjectsByType<EnergyCoreObjectiveProgress>(
+                         FindObjectsInactive.Include,
+                         FindObjectsSortMode.None))
+            {
+                legacyProgress.enabled = false;
             }
         }
 
@@ -257,7 +313,7 @@ namespace EchoProtocol.Networking
             {
                 _spawnSlots.Clear();
                 _doorInstance = null;
-                _pickupItemInstance = null;
+                _energyCoreInstances.Clear();
                 _sectorBoxInstance = null;
                 _monsterInstance = null;
             }

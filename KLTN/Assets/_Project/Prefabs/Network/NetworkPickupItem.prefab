@@ -152,5 +152,10 @@ MonoBehaviour:
   _interactionOrigin: {fileID: 0}
   _availableVisual: {fileID: 2300000}
   _pickupCollider: {fileID: 6500000}
+  _holderLocalPosition: {x: 0.35, y: 0.9, z: 0.45}
+  _holderLocalEulerAngles: {x: 0, y: 0, z: 0}
   _State: 0
   _TransitionOrdinal: 0
+  _PlacementSlot: -1
+  _WorldPosition: {x: 0, y: 0, z: 0}
+  _WorldRotation: {x: 0, y: 0, z: 0, w: 1}

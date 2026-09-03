@@ -150,7 +150,10 @@ MonoBehaviour:
   _requiredToolId: 0
   _cooldownSeconds: 0.25
   _interactionOrigin: {fileID: 0}
-  _requiredCoreCount: 1
+  _requiredCoreCount: 3
+  _corePlacementPoints: []
+  _fallbackSlotSpacing: 0.65
+  _embeddedFallbackRenderer: {fileID: 5200852491618098358}
   _PlacedCoreCount: 0
   _Phase: 0
   _SecurityHoldWasInterrupted:

@@ -167,6 +167,9 @@ MonoBehaviour:
   _playerPrefab: {fileID: 11400000, guid: ab21f3011e9440cca2e909502390da75, type: 3}
   _doorPrefab: {fileID: 11400000, guid: 10b56fe0b82947259da1a4b1e07407b3, type: 3}
   _pickupItemPrefab: {fileID: 11400000, guid: a2edc5247b3e46bda1c9588c2979a732, type: 3}
+  _energyCoreCount: 3
+  _energyCoreSpawnOrigin: {x: 2, y: 0.5, z: 2.5}
+  _energyCoreSpawnSpacing: 1.25
   _monsterPrefab: {fileID: 100002, guid: 3348269a897243f98149bb4f35656540, type: 3}
 --- !u!114 &125111849
 MonoBehaviour:
