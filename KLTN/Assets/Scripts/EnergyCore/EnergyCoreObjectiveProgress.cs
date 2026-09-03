@@ -37,6 +37,17 @@ public class EnergyCoreObjectiveProgress : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Presentation bridge for Fusion sessions. This mirrors an authoritative snapshot for existing HUD code;
+    /// it never decides or increments objective progress.
+    /// </summary>
+    public void ApplyAuthoritativeSnapshot(int placedCoreCount, int authoritativeRequiredCoreCount)
+    {
+        requiredCoreCount = Mathf.Max(1, authoritativeRequiredCoreCount);
+        _placedCoreCount = Mathf.Clamp(placedCoreCount, 0, requiredCoreCount);
+        ProgressChanged?.Invoke(_placedCoreCount, requiredCoreCount);
+    }
+
     public void ResetProgress()
     {
         _placedCoreCount = 0;

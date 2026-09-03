@@ -50,6 +50,7 @@ GameObject:
   - component: {fileID: 640100000000000004}
   - component: {fileID: 1555193095892173610}
   - component: {fileID: 8542491288236138449}
+  - component: {fileID: 559300001}
   m_Layer: 0
   m_Name: PlayerNetwork
   m_TagString: Player
@@ -178,6 +179,7 @@ MonoBehaviour:
   - {fileID: 640100000000000003}
   - {fileID: 640100000000000004}
   - {fileID: 8542491288236138449}
+  - {fileID: 559300001}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &640100000000000001
 MonoBehaviour:
@@ -294,3 +296,16 @@ MonoBehaviour:
   _DownCount: 0
   _ReviveCount: 0
   _TransitionOrdinal: 0
+--- !u!114 &559300001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6628407516427798355}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5593dfb3401a40f5bbf27d2c88157242, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkPlayerHealth
+  maxHealth: 100

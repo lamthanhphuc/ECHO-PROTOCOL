@@ -4,9 +4,11 @@ using EchoProtocol.AI.Stalker.Telemetry;
 using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace EchoProtocol.AI.Stalker.Networking
 {
+    [DefaultExecutionOrder(-1000)]
     [DisallowMultipleComponent]
     [RequireComponent(typeof(StalkerController))]
     [RequireComponent(typeof(StalkerVisionSensor))]
@@ -15,6 +17,23 @@ namespace EchoProtocol.AI.Stalker.Networking
         [SerializeField] private StalkerController controller;
         [SerializeField] private StalkerVisionSensor visionSensor;
         [SerializeField] private FusionPlayerLifecycle lifecycle;
+
+        [Header("Authoritative Combat")]
+        [SerializeField, Min(1)] private int attackDamage = 25;
+        [SerializeField, Min(0.1f)] private float maximumDamageDistance = 2f;
+
+        [Header("Replicated Presentation")]
+        [SerializeField] private Animator animator;
+        [SerializeField] private string animatorStateParameter = "MonsterState";
+
+        [Networked, OnChangedRender(nameof(ApplyReplicatedPresentation))]
+        public StalkerState ReplicatedState { get; private set; }
+
+        [Networked, OnChangedRender(nameof(ApplyReplicatedPresentation))]
+        public PlayerRef TargetPlayer { get; private set; }
+
+        [Networked, OnChangedRender(nameof(ApplyReplicatedPresentation))]
+        public uint AttackSequence { get; private set; }
 
         private readonly StalkerFusionTargetFrameBuilder _frameBuilder = new StalkerFusionTargetFrameBuilder();
         private readonly StalkerTelemetryAdapter _telemetryAdapter = new StalkerTelemetryAdapter();
@@ -39,6 +58,10 @@ namespace EchoProtocol.AI.Stalker.Networking
         [Networked] public int ReplicatedAttackOutcome { get; private set; }
         [Networked] public long ReplicatedAttackStartedTick { get; private set; }
         [Networked] public long ReplicatedAttackResolvedTick { get; private set; }
+        private NavMeshAgent _navigationAgent;
+        private StalkerAttackResult _previousAttackResult;
+        private int _animatorStateParameterHash;
+        private bool _networkPrefabGuard;
 
         public int AuthoritativeSimulationCount { get; private set; }
         public bool HasLastAuthoritativeStep => _lastAuthoritativeStep.IsValid;
@@ -55,6 +78,13 @@ namespace EchoProtocol.AI.Stalker.Networking
         private void Awake()
         {
             ResolveLocalDependencies();
+            _animatorStateParameterHash = Animator.StringToHash(animatorStateParameter);
+            _networkPrefabGuard = GetComponent<NetworkObject>() != null;
+            if (_networkPrefabGuard)
+            {
+                SetLegacySimulationSuppressed(true);
+                SetDecisionComponentsEnabled(false);
+            }
         }
 
         private void OnEnable()
@@ -65,7 +95,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private void OnDisable()
         {
-            SetLegacySimulationSuppressed(_networkSimulationOwned);
+            SetLegacySimulationSuppressed(_networkSimulationOwned || _networkPrefabGuard);
         }
 
         public override void Spawned()
@@ -77,6 +107,15 @@ namespace EchoProtocol.AI.Stalker.Networking
             BindProductionTelemetryProducer();
             _telemetryAdapter.ResetForOwnerLifecycle();
             SetLegacySimulationSuppressed(true);
+            ConfigureAuthorityOnlyComponents();
+
+            if (Object != null && Object.HasStateAuthority)
+            {
+                ReplicatedState = controller != null ? controller.CurrentState : StalkerState.PATROL;
+                TargetPlayer = PlayerRef.None;
+            }
+
+            if (Object != null) ApplyReplicatedPresentation();
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -96,6 +135,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             _telemetryAdapter.ResetForOwnerLifecycle();
             LastAttackTelemetryPublishResult = StalkerTelemetryPublishResult.RetryableFailure;
             LastSearchTelemetryPublishResult = StalkerTelemetryPublishResult.RetryableFailure;
+            _previousAttackResult = StalkerAttackResult.None;
             SetLegacySimulationSuppressed(false);
         }
 
@@ -116,7 +156,13 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             _lastAuthoritativeStep = step;
-            RunAuthoritativePipeline(step);
+            if (!RunAuthoritativePipeline(step))
+            {
+                return;
+            }
+
+            PublishAuthoritativeState();
+            ResolveAuthoritativeAttack();
         }
 
         public override void Render()
@@ -153,18 +199,21 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private bool RunAuthoritativePipeline(AiSimulationStep step)
         {
-            if (!step.IsValid || controller == null || visionSensor == null || lifecycle == null)
+            if (!step.IsValid || controller == null || visionSensor == null)
             {
                 ClearFrameBuffers();
                 return false;
             }
 
-            if (!_frameBuilder.TryBuild(
-                lifecycle,
-                controller.DetectionTargetId,
-                controller.CurrentTargetId,
-                _perceptionSnapshots,
-                _targetStatuses))
+            var frameBuilt = lifecycle != null
+                ? _frameBuilder.TryBuild(
+                    lifecycle,
+                    controller.DetectionTargetId,
+                    controller.CurrentTargetId,
+                    _perceptionSnapshots,
+                    _targetStatuses)
+                : TryBuildRunnerPlayerFrame();
+            if (!frameBuilt)
             {
                 ClearFrameBuffers();
                 return false;
@@ -213,6 +262,115 @@ namespace EchoProtocol.AI.Stalker.Networking
             return _presentationDriver.Consume(GetReplicatedPresentationState());
         }
 
+        private void PublishAuthoritativeState()
+        {
+            ReplicatedState = controller.CurrentState;
+            TargetPlayer = ResolveReplicatedTarget();
+        }
+
+        private PlayerRef ResolveReplicatedTarget()
+        {
+            var playerId = controller.CurrentTargetId.IsValid
+                ? controller.CurrentTargetId
+                : controller.DetectionTargetId;
+            if (!playerId.IsValid) return PlayerRef.None;
+            if (lifecycle != null && lifecycle.IdentityRegistry.TryGetPlayerRef(playerId, out var lifecyclePlayer))
+            {
+                return lifecyclePlayer;
+            }
+
+            foreach (var player in Runner.ActivePlayers)
+            {
+                if (CreateRunnerPlayerId(player) == playerId) return player;
+            }
+            return PlayerRef.None;
+        }
+
+        private bool TryBuildRunnerPlayerFrame()
+        {
+            _perceptionSnapshots.Clear();
+            _targetStatuses.Clear();
+
+            foreach (var player in Runner.ActivePlayers)
+            {
+                if (!Runner.TryGetPlayerObject(player, out var playerObject) || playerObject == null) continue;
+
+                var playerId = CreateRunnerPlayerId(player);
+                if (!playerId.IsValid) continue;
+                var isGameplayPlayer = !playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyState)
+                    || lobbyState.IsGameplayPlayer;
+                var isDowned = playerObject.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned;
+                var eligibilitySnapshot = new StalkerTargetEligibilitySnapshot(
+                    isGameplayPlayer,
+                    true,
+                    isDowned,
+                    false,
+                    false);
+                _targetStatuses.Add(new StalkerTargetStatus(
+                    playerId,
+                    StalkerTargetEligibility.Evaluate(eligibilitySnapshot)));
+                _perceptionSnapshots.Add(new StalkerPerceptionTargetSnapshot(
+                    playerId,
+                    playerObject.transform,
+                    playerObject.transform,
+                    eligibilitySnapshot));
+            }
+
+            return true;
+        }
+
+        private PlayerId CreateRunnerPlayerId(PlayerRef player)
+        {
+            var actorId = Runner.GetPlayerActorId(player) ?? player.PlayerId;
+            return actorId >= 0 ? new PlayerId(actorId + 1) : PlayerId.Invalid;
+        }
+
+        private void ResolveAuthoritativeAttack()
+        {
+            var attackResult = controller.LastAttackResult;
+            if (attackResult == StalkerAttackResult.Hit
+                && _previousAttackResult != StalkerAttackResult.Hit)
+            {
+                TryApplyAuthoritativeAttackDamage();
+            }
+
+            _previousAttackResult = attackResult;
+        }
+
+        private bool TryApplyAuthoritativeAttackDamage()
+        {
+            if (!Object.HasStateAuthority
+                || !TargetPlayer.IsRealPlayer
+                || !Runner.TryGetPlayerObject(TargetPlayer, out var playerObject)
+                || playerObject.InputAuthority != TargetPlayer)
+            {
+                Debug.LogWarning("[StalkerFusion] Rejected attack damage: authoritative target is unavailable.");
+                return false;
+            }
+
+            var delta = playerObject.transform.position - transform.position;
+            if (delta.sqrMagnitude > maximumDamageDistance * maximumDamageDistance)
+            {
+                Debug.LogWarning(
+                    $"[StalkerFusion] Rejected attack damage against {TargetPlayer}: target left range.");
+                return false;
+            }
+
+            if (!playerObject.TryGetComponent<NetworkPlayerHealth>(out var health)
+                || !health.TryApplyAuthoritativeDamage(Object, attackDamage))
+            {
+                Debug.LogWarning(
+                    $"[StalkerFusion] Rejected attack damage against {TargetPlayer}: health state unavailable.");
+                return false;
+            }
+
+            AttackSequence++;
+            Debug.Log(
+                $"[StalkerFusion] Attack committed target={TargetPlayer}, sequence={AttackSequence}, " +
+                $"damage={attackDamage}.");
+            return true;
+        }
+
         private void ResolveLocalDependencies()
         {
             if (controller == null)
@@ -223,6 +381,16 @@ namespace EchoProtocol.AI.Stalker.Networking
             if (visionSensor == null)
             {
                 visionSensor = GetComponent<StalkerVisionSensor>();
+            }
+
+            if (_navigationAgent == null)
+            {
+                _navigationAgent = GetComponent<NavMeshAgent>();
+            }
+
+            if (animator == null)
+            {
+                animator = GetComponentInChildren<Animator>();
             }
         }
 
@@ -306,7 +474,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private void ApplyOwnedLegacySuppression()
         {
-            if (_networkSimulationOwned)
+            if (_networkSimulationOwned || _networkPrefabGuard)
             {
                 SetLegacySimulationSuppressed(true);
             }
@@ -502,6 +670,29 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             return StalkerAttackTargetSnapshot.Missing(currentTargetId);
+        }
+
+        private void ConfigureAuthorityOnlyComponents()
+        {
+            var isAuthority = Object != null && Object.HasStateAuthority;
+            SetDecisionComponentsEnabled(isAuthority);
+            Debug.Log(
+                $"[StalkerFusion] Spawned authority={isAuthority}; " +
+                $"NavMesh/vision decision systems enabled={isAuthority}.");
+        }
+
+        private void SetDecisionComponentsEnabled(bool enabled)
+        {
+            if (_navigationAgent != null) _navigationAgent.enabled = enabled;
+            if (visionSensor != null) visionSensor.enabled = enabled;
+        }
+
+        private void ApplyReplicatedPresentation()
+        {
+            if (animator != null && _animatorStateParameterHash != 0)
+            {
+                animator.SetInteger(_animatorStateParameterHash, (int)ReplicatedState);
+            }
         }
     }
 }

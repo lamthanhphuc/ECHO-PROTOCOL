@@ -56,7 +56,11 @@ namespace EchoProtocol.AI.Stalker.Networking
                     return false;
                 }
 
-                var eligibilitySnapshot = StalkerFusionTargetEligibilityAdapter.CreateActive(playerId);
+                var isDowned = identity.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned;
+                var eligibilitySnapshot = StalkerFusionTargetEligibilityAdapter.CreateActive(
+                    playerId,
+                    isDowned,
+                    false);
                 var eligibility = StalkerTargetEligibility.Evaluate(eligibilitySnapshot);
                 InsertStatusSortedUnique(targetStatuses, new StalkerTargetStatus(playerId, eligibility));
 
