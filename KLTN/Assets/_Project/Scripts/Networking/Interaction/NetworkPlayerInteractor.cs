@@ -66,12 +66,16 @@ namespace EchoProtocol.Networking
             if (Object == null || !Object.HasInputAuthority) return;
             if (!GetComponent<LobbyPlayerState>().IsGameplayPlayer) return;
 
+            if (_helpPingAction?.WasPerformedThisFrame() == true) RequestHelpPing();
+
+            var lifeState = GetComponent<NetworkPlayerLifeState>();
+            if (lifeState != null && !lifeState.CanInitiateAction) return;
+
             if (_dropCoreAction?.WasPerformedThisFrame() == true)
             {
                 RequestDropCarriedCore();
             }
             if (_teamToolAction?.WasPerformedThisFrame() == true) RequestUseTeamTool();
-            if (_helpPingAction?.WasPerformedThisFrame() == true) RequestHelpPing();
 
             if (_interactAction?.WasPerformedThisFrame() != true) return;
 
@@ -81,9 +85,9 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            if (TryDetectReviveCandidate(out var lifeState))
+            if (TryDetectReviveCandidate(out var targetLifeState))
             {
-                RequestRevive(lifeState);
+                RequestRevive(targetLifeState);
             }
         }
 
@@ -180,21 +184,34 @@ namespace EchoProtocol.Networking
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestRevive(NetworkId targetId, uint sequence, RpcInfo info = default)
         {
-            if (!TryResolveRequester(info.Source, out var requester)
-                || ValidateRequester(requester, sequence) != InteractionValidationResult.Accepted)
+            if (!TryResolveRequester(info.Source, out var requester))
             {
                 return;
             }
 
-            if (Runner.TryFindObject(targetId, out var targetObject)
-                && targetObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState)
-                && Vector3.SqrMagnitude(transform.position - lifeState.transform.position)
-                    <= _localDetectionDistance * _localDetectionDistance)
+            var result = ValidateRequester(requester, sequence);
+            if (result == InteractionValidationResult.Accepted)
             {
-                lifeState.TryRevive(requester);
+                if (!Runner.TryFindObject(targetId, out var targetObject)
+                    || targetObject == null
+                    || !targetObject.TryGetComponent<NetworkPlayerLifeState>(out var targetLifeState))
+                {
+                    result = InteractionValidationResult.InvalidTarget;
+                }
+                else if (!targetLifeState.TryStartRevive(requester))
+                {
+                    result = Vector3.SqrMagnitude(transform.position - targetLifeState.transform.position)
+                             > _localDetectionDistance * _localDetectionDistance
+                        ? InteractionValidationResult.OutOfRange
+                        : InteractionValidationResult.InvalidTargetState;
+                }
             }
 
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+            Debug.Log(
+                $"[LifeState] Revive request reviver={requester}, target={targetId}, " +
+                $"sequence={sequence}, result={result}.");
+            RpcInteractionResult(requester, targetId, sequence, (int)result);
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
@@ -268,7 +285,7 @@ namespace EchoProtocol.Networking
             }
 
             var lifeState = GetComponent<NetworkPlayerLifeState>();
-            if (lifeState != null && lifeState.Status == NetworkPlayerLifeStatus.Downed
+            if (lifeState != null && lifeState.IsDowned
                 && HelpPingCooldown.ExpiredOrNotRunning(Runner))
             {
                 HelpPingOrdinal++;

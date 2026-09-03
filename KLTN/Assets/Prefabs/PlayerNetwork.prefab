@@ -289,8 +289,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 14e10a09870a0ff45a87092c8ba7dac6, type: 3}
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkPlayerLifeState
+  _maximumHealth: 100
+  _bleedoutSeconds: 45
+  _crawlSpeedMultiplier: 0.32
   _maximumRevives: 1
+  _reviveDurationSeconds: 2.5
+  _reviveDistance: 3
+  _revivedHealth: 35
+  _reviveProtectionSeconds: 3
   _Status: 0
+  _Health: 0
+  _Reviver:
+    RawEncoded: 0
+  _IsCrawling:
+    RawValue: 0
   _DownCount: 0
   _ReviveCount: 0
   _TransitionOrdinal: 0
+  _LastTransitionCause: 0
+  _BleedoutTimer:
+    _target: 0
+  _ReviveTimer:
+    _target: 0
+  _ProtectionTimer:
+    _target: 0

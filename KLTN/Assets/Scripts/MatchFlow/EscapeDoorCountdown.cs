@@ -17,6 +17,7 @@ public class EscapeDoorCountdown : MonoBehaviour, IInteractable
     private float _remainingSeconds;
     private bool _isCountingDown;
     private bool _isComplete;
+    private bool _networkAuthorityPresentationOnly;
 
     public event Action<EscapeDoorCountdown> CountdownStarted;
     public event Action<EscapeDoorCountdown> CountdownCompleted;
@@ -56,6 +57,8 @@ public class EscapeDoorCountdown : MonoBehaviour, IInteractable
 
     private void Update()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         if (!_isCountingDown)
         {
             return;
@@ -72,16 +75,20 @@ public class EscapeDoorCountdown : MonoBehaviour, IInteractable
 
     public bool CanInteract(GameObject interactor)
     {
+        if (_networkAuthorityPresentationOnly) return false;
         return !_isComplete && !_isCountingDown;
     }
 
     public void Interact(GameObject interactor)
     {
+        if (_networkAuthorityPresentationOnly) return;
         StartCountdown();
     }
 
     public bool StartCountdown()
     {
+        if (_networkAuthorityPresentationOnly) return false;
+
         if (_isComplete || _isCountingDown || !CanStartCountdown())
         {
             return false;
@@ -96,13 +103,45 @@ public class EscapeDoorCountdown : MonoBehaviour, IInteractable
 
     public void ResetCountdown()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         _remainingSeconds = countdownSeconds;
         _isCountingDown = false;
         _isComplete = false;
     }
 
+    public void SetNetworkAuthorityPresentationOnly(bool enabled)
+    {
+        _networkAuthorityPresentationOnly = enabled;
+    }
+
+    public void ApplyAuthoritativeSnapshot(
+        bool escapeEnabled,
+        bool isCountingDown,
+        bool isComplete,
+        float remainingSeconds)
+    {
+        var wasCountingDown = _isCountingDown;
+        var wasComplete = _isComplete;
+        _isCountingDown = escapeEnabled && isCountingDown;
+        _isComplete = isComplete;
+        _remainingSeconds = Mathf.Max(0f, remainingSeconds);
+        CountdownChanged?.Invoke(this, _remainingSeconds);
+        if (!wasCountingDown && _isCountingDown)
+        {
+            countdownStarted?.Invoke();
+            CountdownStarted?.Invoke(this);
+        }
+        if (!wasComplete && _isComplete)
+        {
+            countdownCompleted?.Invoke();
+            CountdownCompleted?.Invoke(this);
+        }
+    }
+
     private bool CanStartCountdown()
     {
+        if (_networkAuthorityPresentationOnly) return false;
         return matchFlow == null || matchFlow.Phase == MatchPhase.FinalHunt || matchFlow.Phase == MatchPhase.ExitCountdown;
     }
 

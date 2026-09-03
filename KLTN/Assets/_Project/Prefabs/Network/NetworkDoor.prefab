@@ -139,3 +139,6 @@ MonoBehaviour:
   _closedEulerAngles: {x: 0, y: 0, z: 0}
   _openEulerAngles: {x: 0, y: 90, z: 0}
   _startsLocked: 0
+  _MatchStateId:
+    Raw: 0
+  _State: 0

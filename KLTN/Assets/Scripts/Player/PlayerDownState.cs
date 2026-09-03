@@ -34,6 +34,9 @@ public class PlayerDownState : MonoBehaviour
     private float _protectionUntil;
     private Quaternion _initialVisualRotation;
     private PlayerLifeState _state = PlayerLifeState.Active;
+    private bool _networkAuthorityPresentationOnly;
+    private bool _authoritativeReviveProtection;
+    private float _authoritativeProtectionRemaining;
 
     public event Action<PlayerDownState, PlayerLifeState> StateChanged;
     public event Action<PlayerDownState, float> BleedoutChanged;
@@ -44,8 +47,12 @@ public class PlayerDownState : MonoBehaviour
     public bool IsDown => IsDowned;
     public bool IsEliminated => _state == PlayerLifeState.Eliminated || _state == PlayerLifeState.Spectating;
     public bool IsSpectating => _state == PlayerLifeState.Spectating;
-    public bool HasReviveProtection => Time.time < _protectionUntil;
-    public float ReviveProtectionRemaining => Mathf.Max(0f, _protectionUntil - Time.time);
+    public bool HasReviveProtection => _networkAuthorityPresentationOnly
+        ? _authoritativeReviveProtection
+        : Time.time < _protectionUntil;
+    public float ReviveProtectionRemaining => _networkAuthorityPresentationOnly
+        ? _authoritativeProtectionRemaining
+        : Mathf.Max(0f, _protectionUntil - Time.time);
     public float Health => _health;
     public float BleedoutRemaining => _bleedoutRemaining;
     public float Bleedout01 => bleedoutSeconds <= 0f ? 0f : Mathf.Clamp01(_bleedoutRemaining / bleedoutSeconds);
@@ -83,6 +90,8 @@ public class PlayerDownState : MonoBehaviour
 
     private void Update()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         if (!IsDowned)
         {
             return;
@@ -99,6 +108,8 @@ public class PlayerDownState : MonoBehaviour
 
     public bool ApplyDamage(float damage)
     {
+        if (_networkAuthorityPresentationOnly) return false;
+
         if (damage <= 0f || !IsActive || HasReviveProtection)
         {
             return false;
@@ -115,6 +126,8 @@ public class PlayerDownState : MonoBehaviour
 
     public void Down()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         if (!IsActive)
         {
             return;
@@ -135,6 +148,8 @@ public class PlayerDownState : MonoBehaviour
 
     public bool Revive()
     {
+        if (_networkAuthorityPresentationOnly) return false;
+
         if (!IsDowned)
         {
             return false;
@@ -151,6 +166,8 @@ public class PlayerDownState : MonoBehaviour
 
     public void Eliminate()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         if (IsEliminated)
         {
             return;
@@ -165,6 +182,13 @@ public class PlayerDownState : MonoBehaviour
 
     public void StartSpectating()
     {
+        if (_networkAuthorityPresentationOnly)
+        {
+            SetState(PlayerLifeState.Spectating);
+            ApplyEliminatedControls();
+            return;
+        }
+
         if (!IsEliminated)
         {
             Eliminate();
@@ -176,11 +200,52 @@ public class PlayerDownState : MonoBehaviour
 
     public void ResetToActive()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         _health = maxHealth;
         _bleedoutRemaining = bleedoutSeconds;
         _protectionUntil = 0f;
         SetState(PlayerLifeState.Active);
         ApplyActiveControls();
+    }
+
+    public void SetNetworkAuthorityPresentationOnly(bool enabled)
+    {
+        _networkAuthorityPresentationOnly = enabled;
+    }
+
+    /// <summary>Applies replicated semantic state without running local damage or timers.</summary>
+    public void ApplyAuthoritativeSnapshot(
+        PlayerLifeState state,
+        float health,
+        float bleedoutRemaining,
+        float protectionRemaining,
+        bool applyLocalControls)
+    {
+        var previousState = _state;
+        _health = Mathf.Clamp(health, 0f, maxHealth);
+        _bleedoutRemaining = Mathf.Max(0f, bleedoutRemaining);
+        _authoritativeProtectionRemaining = Mathf.Max(0f, protectionRemaining);
+        _authoritativeReviveProtection = _authoritativeProtectionRemaining > 0f;
+        SetState(state);
+        BleedoutChanged?.Invoke(this, _bleedoutRemaining);
+
+        if (applyLocalControls)
+        {
+            if (state == PlayerLifeState.Downed) ApplyDownedControls();
+            else if (state == PlayerLifeState.Active) ApplyActiveControls();
+            else ApplyEliminatedControls();
+        }
+
+        if (previousState == state) return;
+        if (state == PlayerLifeState.Downed) downed?.Invoke();
+        else if (state == PlayerLifeState.Active && previousState == PlayerLifeState.Downed) revived?.Invoke();
+        else if (state == PlayerLifeState.Eliminated) eliminated?.Invoke();
+        else if (state == PlayerLifeState.Spectating)
+        {
+            eliminated?.Invoke();
+            spectateStarted?.Invoke();
+        }
     }
 
     private void ApplyDownedControls()

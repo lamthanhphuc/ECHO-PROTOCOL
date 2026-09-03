@@ -77,6 +77,8 @@ namespace EchoProtocol.Networking
         public override void FixedUpdateNetwork()
         {
             if (!GetComponent<LobbyPlayerState>().IsGameplayPlayer) return;
+            var lifeState = GetComponent<NetworkPlayerLifeState>();
+            if (lifeState != null && !lifeState.CanMove) return;
             if (!GetInput(out NetworkPlayerInput input)) return;
 
             var localDirection = new Vector3(input.Move.x, 0f, input.Move.y);
@@ -89,12 +91,14 @@ namespace EchoProtocol.Networking
             var direction = lookRotation * localDirection;
 
             var isSprintMoving =
+                (lifeState == null || lifeState.CanInitiateAction) &&
                 input.SprintHeld &&
                 direction.sqrMagnitude > 0.01f;
 
-            _controller.maxSpeed = isSprintMoving
+            var baseSpeed = isSprintMoving
                 ? _sprintSpeed
                 : _walkSpeed;
+            _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f);
 
             _controller.Move(direction);
 
@@ -121,7 +125,9 @@ namespace EchoProtocol.Networking
                         out _);
                 _nextMovementNoise = TickTimer.CreateFromSeconds(Runner, 1.5f);
             }
-            if (input.JumpPressed && _controller.Grounded)
+            if ((lifeState == null || lifeState.CanInitiateAction)
+                && input.JumpPressed
+                && _controller.Grounded)
             {
                 _controller.Jump();
             }

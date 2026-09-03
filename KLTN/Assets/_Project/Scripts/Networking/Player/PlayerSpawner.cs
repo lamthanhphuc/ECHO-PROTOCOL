@@ -16,12 +16,14 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _doorPrefab;
         [SerializeField] private NetworkObject _pickupItemPrefab;
         [SerializeField] private NetworkObject _sectorBoxPrefab;
+        [SerializeField] private NetworkObject _matchStatePrefab;
 
         private readonly Dictionary<PlayerRef, int> _spawnSlots = new Dictionary<PlayerRef, int>();
         private FusionPlayerLifecycle _subscribedLifecycle;
         private NetworkObject _doorInstance;
         private NetworkObject _pickupItemInstance;
         private NetworkObject _sectorBoxInstance;
+        private NetworkObject _matchStateInstance;
 
         private void Awake()
         {
@@ -91,9 +93,18 @@ namespace EchoProtocol.Networking
 
         private void EnsureWorldStateExamples(NetworkRunner runner)
         {
+            if (_matchStatePrefab == null)
+            {
+                _matchStatePrefab = Resources.Load<NetworkObject>("Network/NetworkMatchState");
+            }
             if (_sectorBoxPrefab == null)
             {
                 _sectorBoxPrefab = Resources.Load<NetworkObject>("Network/NetworkSectorBox");
+            }
+            if (_matchStateInstance == null && _matchStatePrefab != null)
+            {
+                _matchStateInstance = runner.Spawn(_matchStatePrefab, Vector3.zero, Quaternion.identity);
+                Debug.Log($"[PlayerSpawner] Spawned authoritative Match State {_matchStateInstance.Id}.");
             }
             if (_doorInstance == null && _doorPrefab != null)
             {
@@ -112,6 +123,28 @@ namespace EchoProtocol.Networking
                     new Vector3(-2f, 0.75f, 2.5f),
                     Quaternion.identity);
                 Debug.Log($"[PlayerSpawner] Spawned authoritative Sector Box {_sectorBoxInstance.Id}.");
+            }
+            BindAuthoritativeWorldState();
+        }
+
+        private void BindAuthoritativeWorldState()
+        {
+            if (_matchStateInstance == null || _doorInstance == null || _sectorBoxInstance == null)
+            {
+                return;
+            }
+
+            if (_matchStateInstance.TryGetComponent<NetworkMatchState>(out var matchState))
+            {
+                matchState.InitializeAuthoritative(_sectorBoxInstance.Id, _doorInstance.Id);
+            }
+            if (_doorInstance.TryGetComponent<NetworkDoor>(out var door))
+            {
+                door.InitializeAuthoritative(_matchStateInstance.Id);
+            }
+            if (_sectorBoxInstance.TryGetComponent<NetworkSectorBox>(out var sectorBox))
+            {
+                sectorBox.InitializeAuthoritative(_matchStateInstance.Id);
             }
         }
 
@@ -252,6 +285,7 @@ namespace EchoProtocol.Networking
                 _doorInstance = null;
                 _pickupItemInstance = null;
                 _sectorBoxInstance = null;
+                _matchStateInstance = null;
             }
         }
 

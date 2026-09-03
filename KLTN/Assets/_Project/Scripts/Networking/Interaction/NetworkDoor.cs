@@ -25,6 +25,8 @@ namespace EchoProtocol.Networking
         [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
         public NetworkDoorState State { get; private set; }
 
+        [Networked] public NetworkId MatchStateId { get; private set; }
+
         public override void Spawned()
         {
             if (Object.HasStateAuthority)
@@ -34,9 +36,18 @@ namespace EchoProtocol.Networking
             ApplyReplicatedState();
         }
 
+        public void InitializeAuthoritative(NetworkId matchStateId)
+        {
+            if (!Object.HasStateAuthority || !matchStateId.IsValid) return;
+            MatchStateId = matchStateId;
+            State = NetworkDoorState.Locked;
+            ApplyReplicatedState();
+        }
+
         public bool SetLockedAuthoritative(bool locked)
         {
             if (!Object.HasStateAuthority) return false;
+            if (TryGetMatchState(out var matchState) && matchState.IsEnded) return false;
             State = locked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
             ApplyReplicatedState();
             return true;
@@ -44,6 +55,13 @@ namespace EchoProtocol.Networking
 
         protected override InteractionValidationResult ValidateCurrentState(in InteractionContext context)
         {
+            if (TryGetMatchState(out var matchState))
+            {
+                return !matchState.IsEnded && matchState.CurrentPhase == NetworkMatchPhase.FinalHunt
+                    ? InteractionValidationResult.Accepted
+                    : InteractionValidationResult.InvalidTargetState;
+            }
+
             return State == NetworkDoorState.Locked
                 ? InteractionValidationResult.InvalidTargetState
                 : InteractionValidationResult.Accepted;
@@ -51,6 +69,17 @@ namespace EchoProtocol.Networking
 
         protected override void ExecuteInteraction(in InteractionContext context)
         {
+            if (TryGetMatchState(out var matchState))
+            {
+                if (matchState.TryEnterEscape(Object.Id, context.Player))
+                {
+                    State = NetworkDoorState.Open;
+                    ApplyReplicatedState();
+                    Debug.Log($"[NetworkDoor] {context.Player} opened escape door {Object.Id}.");
+                }
+                return;
+            }
+
             State = State == NetworkDoorState.Open
                 ? NetworkDoorState.Closed
                 : NetworkDoorState.Open;
@@ -58,12 +87,22 @@ namespace EchoProtocol.Networking
             Debug.Log($"[NetworkDoor] {context.Player} changed door {Object.Id} to {State}.");
         }
 
+        private bool TryGetMatchState(out NetworkMatchState matchState)
+        {
+            matchState = null;
+            return MatchStateId.IsValid
+                && Runner.TryFindObject(MatchStateId, out var matchObject)
+                && matchObject != null
+                && matchObject.TryGetComponent(out matchState);
+        }
+
         private void ApplyReplicatedState()
         {
             var visual = _doorVisual != null ? _doorVisual : transform;
             visual.localRotation = Quaternion.Euler(
                 State == NetworkDoorState.Open ? _openEulerAngles : _closedEulerAngles);
-            if (_blockingCollider != null) _blockingCollider.enabled = State != NetworkDoorState.Open;
+            var blockingCollider = _blockingCollider != null ? _blockingCollider : GetComponent<Collider>();
+            if (blockingCollider != null) blockingCollider.enabled = State != NetworkDoorState.Open;
             StateChanged?.Invoke(this, State);
         }
     }

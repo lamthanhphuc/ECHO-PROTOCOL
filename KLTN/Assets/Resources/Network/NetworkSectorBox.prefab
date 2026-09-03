@@ -152,7 +152,8 @@ MonoBehaviour:
   _interactionOrigin: {fileID: 0}
   _requiredCoreCount: 1
   _PlacedCoreCount: 0
-  _Phase: 0
   _SecurityHoldWasInterrupted:
     RawValue: 0
   _ObjectiveOrdinal: 0
+  _MatchStateId:
+    Raw: 0
