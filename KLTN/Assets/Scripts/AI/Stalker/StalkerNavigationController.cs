@@ -77,8 +77,20 @@ namespace EchoProtocol.AI.Stalker
 
         public bool HasArrived()
         {
-            return GetPathStatus() == NavigationPathStatus.Complete
-                && _agent.remainingDistance <= _agent.stoppingDistance;
+            if (GetPathStatus() != NavigationPathStatus.Complete
+                || !_activeDestination.HasValue)
+            {
+                return false;
+            }
+
+            if (!DoesPathReachRequestedDestination(
+                    _agent.path,
+                    _activeDestination.Value))
+            {
+                return false;
+            }
+
+            return _agent.remainingDistance <= _agent.stoppingDistance;
         }
 
         public NavigationEvaluationResult EvaluateDestination(Vector3 destination)
@@ -110,6 +122,16 @@ namespace EchoProtocol.AI.Stalker
             switch (_evaluationPath.status)
             {
                 case NavMeshPathStatus.PathComplete:
+                    if (!DoesPathReachRequestedDestination(
+                            _evaluationPath,
+                            destination))
+                    {
+                        _currentFailureReason = NavigationFailureReason.PathPartial;
+                        return new NavigationEvaluationResult(
+                            NavigationEvaluationStatus.Partial,
+                            destination);
+                    }
+
                     _currentFailureReason = NavigationFailureReason.None;
                     return new NavigationEvaluationResult(NavigationEvaluationStatus.Complete, destination);
                 case NavMeshPathStatus.PathPartial:
@@ -333,6 +355,34 @@ namespace EchoProtocol.AI.Stalker
                 default:
                     return NavigationPathStatus.Invalid;
             }
+        }
+
+        private bool DoesPathReachRequestedDestination(
+            NavMeshPath path,
+            Vector3 requestedDestination)
+        {
+            if (path == null)
+            {
+                return false;
+            }
+
+            var corners = path.corners;
+            if (corners == null || corners.Length == 0)
+            {
+                return false;
+            }
+
+            var endpoint = corners[corners.Length - 1];
+
+            // A "complete" Unity path may terminate at a NavMesh projection
+            // instead of the requested world-space point. Do not treat a
+            // different floor/level as the requested logical destination.
+            var endpointTolerance = Mathf.Max(
+                0.01f,
+                Mathf.Max(_agent.radius, _agent.stoppingDistance));
+
+            return Vector3.Distance(endpoint, requestedDestination)
+                <= endpointTolerance;
         }
 
         private static bool IsFinite(Vector3 value)

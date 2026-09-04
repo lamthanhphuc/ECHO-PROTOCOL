@@ -437,6 +437,52 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            var agent = GetComponent<NavMeshAgent>();
+
+            var nearestNodeId = -1;
+            TryResolveNearestSpatialNode(transform.position, out nearestNodeId);
+
+            var nearestRegionId = RegionId.Invalid;
+            var destinationRegionId = RegionId.Invalid;
+
+            if (_regionGraph != null)
+            {
+                _regionGraph.TryGetRegionForNode(nearestNodeId, out nearestRegionId);
+                _regionGraph.TryGetRegionForNode(
+                    _blackboard.DestinationSpatialNodeId,
+                    out destinationRegionId);
+            }
+
+            var activeDestination = default(Vector3);
+            _navigation.TryGetActiveDestination(out activeDestination);
+
+            var corners = agent.path != null ? agent.path.corners : null;
+            var pathEnd = corners != null && corners.Length > 0
+                ? corners[corners.Length - 1]
+                : transform.position;
+
+            var pathEndToRequested =
+                Vector3.Distance(pathEnd, activeDestination);
+
+            UnityEngine.Debug.LogWarning(
+                $"[STK ARRIVAL DIAG] " +
+                $"currentRegion={(_currentRegionId.IsValid ? _currentRegionId.Value : -1)} " +
+                $"previousRegion={(_previousRegionId.IsValid ? _previousRegionId.Value : -1)} " +
+                $"objectiveRegion={canonicalObjectiveRegionId} " +
+                $"nextRegion={canonicalNextRegionId} " +
+                $"currentNode={_blackboard.CurrentSpatialNodeId} " +
+                $"destinationNode={_blackboard.DestinationSpatialNodeId} " +
+                $"nearestNode={nearestNodeId} " +
+                $"nearestRegion={(nearestRegionId.IsValid ? nearestRegionId.Value : -1)} " +
+                $"destinationRegion={(destinationRegionId.IsValid ? destinationRegionId.Value : -1)} " +
+                $"remaining={agent.remainingDistance:0.000} " +
+                $"stopping={agent.stoppingDistance:0.000} " +
+                $"pathEnd={pathEnd} " +
+                $"pathEndToRequested={pathEndToRequested:0.000} " +
+                $"worldDistance={Vector3.Distance(transform.position, activeDestination):0.000} " +
+                $"position={transform.position} " +
+                $"destination={activeDestination}");
+
             MarkCanonicalDestinationReached();
             if (!SetCanonicalPatrolDestinationWithGlobalAlternates())
             {
@@ -1627,6 +1673,13 @@ namespace EchoProtocol.AI.Stalker
                 failureReason = ResolveNavigationFailureReason(pathStatus, executionStatus);
             }
 
+            UnityEngine.Debug.LogWarning(
+                $"[STK NAV DIAG] state={currentState} " +
+                $"path={pathStatus} execution={executionStatus} failure={failureReason} " +
+                $"currentNode={_blackboard.CurrentSpatialNodeId} " +
+                $"destinationNode={_blackboard.DestinationSpatialNodeId} " +
+                $"position={transform.position}");
+
             if (currentState == StalkerState.SEARCH)
             {
                 HandleSearchNavigationFailure(failureReason);
@@ -2507,6 +2560,7 @@ namespace EchoProtocol.AI.Stalker
                     _rejectedCanonicalLocalNodeIds,
                     out var selection))
             {
+                LogCanonicalLocalSelectionFailure(currentNodeId, objective);
                 regionGraphFallbackReason = RegionGraphFallbackReason.NoCompleteLocalPath;
                 return false;
             }
@@ -2532,6 +2586,104 @@ namespace EchoProtocol.AI.Stalker
             regionGraphFallbackReason = RegionGraphFallbackReason.None;
             SyncDynamicPatrolDebugFields();
             return true;
+        }
+
+        private void LogCanonicalLocalSelectionFailure(
+            int currentNodeId,
+            GlobalPatrolObjective objective)
+        {
+            var currentRegion = RegionId.Invalid;
+            var previousRegion = RegionId.Invalid;
+            var previousNodeId = _blackboard.PreviousSpatialNodeId;
+            if (_regionGraph != null)
+            {
+                _regionGraph.TryGetRegionForNode(currentNodeId, out currentRegion);
+                if (previousNodeId >= 0)
+                {
+                    _regionGraph.TryGetRegionForNode(previousNodeId, out previousRegion);
+                }
+            }
+
+            var totalNextRegionNodes = 0;
+            var minHopToNextRegion = -1;
+            var withinDepth = 0;
+            var unrejectedWithinDepth = 0;
+            var graph = _spatialPatrolGraph;
+            if (graph != null && _regionGraph != null && currentNodeId >= 0 && currentNodeId < graph.NodeCount)
+            {
+                var distances = new int[graph.NodeCount];
+                for (var i = 0; i < distances.Length; i++)
+                {
+                    distances[i] = -1;
+                }
+
+                var queue = new Queue<int>();
+                distances[currentNodeId] = 0;
+                queue.Enqueue(currentNodeId);
+                while (queue.Count > 0)
+                {
+                    var nodeId = queue.Dequeue();
+                    if (!graph.TryGetNode(nodeId, out var node))
+                    {
+                        continue;
+                    }
+
+                    for (var neighborIndex = 0; neighborIndex < node.NeighborIds.Count; neighborIndex++)
+                    {
+                        var neighborId = node.NeighborIds[neighborIndex];
+                        if (neighborId < 0 || neighborId >= distances.Length || distances[neighborId] >= 0)
+                        {
+                            continue;
+                        }
+
+                        distances[neighborId] = distances[nodeId] + 1;
+                        queue.Enqueue(neighborId);
+                    }
+                }
+
+                for (var i = 0; i < graph.Nodes.Count; i++)
+                {
+                    var node = graph.Nodes[i];
+                    if (!_regionGraph.TryGetRegionForNode(node.Id, out var nodeRegion)
+                        || nodeRegion != objective.NextRegionId)
+                    {
+                        continue;
+                    }
+
+                    totalNextRegionNodes++;
+                    var distance = node.Id >= 0 && node.Id < distances.Length ? distances[node.Id] : -1;
+                    if (distance < 0)
+                    {
+                        continue;
+                    }
+
+                    if (minHopToNextRegion < 0 || distance < minHopToNextRegion)
+                    {
+                        minHopToNextRegion = distance;
+                    }
+
+                    if (distance <= candidateBfsDepth)
+                    {
+                        withinDepth++;
+                        if (!_rejectedCanonicalLocalNodeIds.Contains(node.Id))
+                        {
+                            unrejectedWithinDepth++;
+                        }
+                    }
+                }
+            }
+
+            var inferredPathRejectedWithinDepth = unrejectedWithinDepth;
+            UnityEngine.Debug.LogWarning(
+                "[STK LOCAL SELECT DIAG] "
+                + $"currentRegion={currentRegion.Value} previousRegion={previousRegion.Value} "
+                + $"targetRegion={objective.TargetRegionId.Value} nextRegion={objective.NextRegionId.Value} "
+                + $"currentNode={currentNodeId} previousNode={previousNodeId} "
+                + $"bfsDepth={candidateBfsDepth} totalNextRegionNodes={totalNextRegionNodes} "
+                + $"minHopToNextRegion={minHopToNextRegion} withinDepth={withinDepth} "
+                + $"unrejectedWithinDepth={unrejectedWithinDepth} "
+                + $"inferredPathRejectedWithinDepth={inferredPathRejectedWithinDepth} "
+                + $"rejectedLocal={_rejectedCanonicalLocalNodeIds.Count}");
         }
 
         private bool SetCanonicalPatrolDestinationWithGlobalAlternates()
@@ -2603,7 +2755,6 @@ namespace EchoProtocol.AI.Stalker
             _coverageMemory?.RecordPhysicalNodeArrival(destinationNodeId, CurrentSimulationTimeSeconds);
             _rejectedCanonicalLocalNodeIds.Clear();
             _rejectedCanonicalGlobalRegionIds.Clear();
-            ClearNavigationObjective();
             if (_regionGraph != null && _regionGraph.TryGetRegionForNode(destinationNodeId, out var regionId))
             {
                 UpdateCurrentRegion(regionId);
