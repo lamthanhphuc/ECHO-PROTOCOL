@@ -1,0 +1,16 @@
+{
+    "name": "EchoProtocol.Networking.Rules",
+    "rootNamespace": "EchoProtocol.Networking",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Fusion.Runtime.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}

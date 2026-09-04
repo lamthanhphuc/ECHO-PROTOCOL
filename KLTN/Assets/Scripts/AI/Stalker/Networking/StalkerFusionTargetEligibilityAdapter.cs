@@ -6,6 +6,14 @@ namespace EchoProtocol.AI.Stalker.Networking
     {
         public static StalkerTargetEligibilitySnapshot CreateActive(PlayerId playerId)
         {
+            return CreateActive(playerId, false, false);
+        }
+
+        public static StalkerTargetEligibilitySnapshot CreateActive(
+            PlayerId playerId,
+            bool isDowned,
+            bool isEliminated)
+        {
             if (!playerId.IsValid)
             {
                 return default;
@@ -14,8 +22,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             return new StalkerTargetEligibilitySnapshot(
                 true,
                 true,
-                false,
-                false,
+                isDowned,
+                isEliminated,
                 false);
         }
 

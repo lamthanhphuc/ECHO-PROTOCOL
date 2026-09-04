@@ -151,6 +151,41 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.LobbyManager
   _bootstrap: {fileID: 970048216}
+--- !u!114 &125111848
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 125111845}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 55fc1d4ae44c4c22ad214f995035bc59, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.PlayerSpawner
+  _bootstrap: {fileID: 970048216}
+  _playerPrefab: {fileID: 11400000, guid: ab21f3011e9440cca2e909502390da75, type: 3}
+  _doorPrefab: {fileID: 11400000, guid: 10b56fe0b82947259da1a4b1e07407b3, type: 3}
+  _pickupItemPrefab: {fileID: 11400000, guid: a2edc5247b3e46bda1c9588c2979a732, type: 3}
+  _energyCoreCount: 3
+  _energyCoreSpawnOrigin: {x: 2, y: 0.5, z: 2.5}
+  _energyCoreSpawnSpacing: 1.25
+  _monsterPrefab: {fileID: 100002, guid: 3348269a897243f98149bb4f35656540, type: 3}
+--- !u!114 &125111849
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 125111845}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 92673d3f51034f00ab3cbe6067e67802, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.UI.Debugging.NetworkTestPanel
+  _bootstrap: {fileID: 970048216}
+  _sessionName: echo-test
+  _maxPlayers: 4
 --- !u!4 &125111847
 Transform:
   m_ObjectHideFlags: 0

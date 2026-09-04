@@ -2,7 +2,7 @@
     "name": "EchoProtocol.Networking.EditMode.Tests",
     "rootNamespace": "EchoProtocol.Networking.Tests",
     "references": [
-        "Assembly-CSharp",
+        "EchoProtocol.Networking.Rules",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

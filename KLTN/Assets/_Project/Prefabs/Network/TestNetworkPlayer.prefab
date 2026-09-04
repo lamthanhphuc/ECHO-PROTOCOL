@@ -19,6 +19,7 @@ GameObject:
   - component: {fileID: 11400003}
   - component: {fileID: 11400004}
   - component: {fileID: 8434648393924393315}
+  - component: {fileID: 11400005}
   m_Layer: 0
   m_Name: TestNetworkPlayer
   m_TagString: Untagged
@@ -169,6 +170,7 @@ MonoBehaviour:
   - {fileID: 11400003}
   - {fileID: 11400004}
   - {fileID: 8434648393924393315}
+  - {fileID: 11400005}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &11400001
 MonoBehaviour:
@@ -267,8 +269,40 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 14e10a09870a0ff45a87092c8ba7dac6, type: 3}
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkPlayerLifeState
+  _maximumHealth: 100
+  _bleedoutSeconds: 45
+  _crawlSpeedMultiplier: 0.32
   _maximumRevives: 1
+  _reviveDurationSeconds: 2.5
+  _reviveDistance: 3
+  _revivedHealth: 35
+  _reviveProtectionSeconds: 3
   _Status: 0
+  _Health: 0
+  _Reviver:
+    RawEncoded: 0
+  _IsCrawling:
+    RawValue: 0
   _DownCount: 0
   _ReviveCount: 0
   _TransitionOrdinal: 0
+  _LastTransitionCause: 0
+  _BleedoutTimer:
+    _target: 0
+  _ReviveTimer:
+    _target: 0
+  _ProtectionTimer:
+    _target: 0
+--- !u!114 &11400005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5593dfb3401a40f5bbf27d2c88157242, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkPlayerHealth
+  maxHealth: 100

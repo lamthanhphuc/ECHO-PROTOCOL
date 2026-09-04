@@ -13,9 +13,14 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
 
     private GameObject _reviver;
     private float _reviveTimer;
+    private bool _networkAuthorityPresentationOnly;
+    private bool _authoritativeIsReviving;
+    private float _authoritativeProgress01;
 
-    public bool IsReviving => _reviver != null;
-    public float ReviveProgress01 => reviveDurationSeconds <= 0f ? 1f : Mathf.Clamp01(_reviveTimer / reviveDurationSeconds);
+    public bool IsReviving => _networkAuthorityPresentationOnly ? _authoritativeIsReviving : _reviver != null;
+    public float ReviveProgress01 => _networkAuthorityPresentationOnly
+        ? _authoritativeProgress01
+        : reviveDurationSeconds <= 0f ? 1f : Mathf.Clamp01(_reviveTimer / reviveDurationSeconds);
     public GameObject Reviver => _reviver;
     public string InteractionPrompt => revivePrompt + " (" + Mathf.CeilToInt(reviveDurationSeconds) + "s)";
 
@@ -29,6 +34,8 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
 
     private void Update()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         if (_reviver == null)
         {
             return;
@@ -49,6 +56,8 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
 
     public bool CanInteract(GameObject interactor)
     {
+        if (_networkAuthorityPresentationOnly) return false;
+
         if (downState == null || !downState.IsDowned || interactor == null || interactor == gameObject)
         {
             return false;
@@ -60,6 +69,8 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
 
     public void Interact(GameObject interactor)
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         if (!CanInteract(interactor))
         {
             return;
@@ -75,6 +86,8 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
 
     public void InterruptRevive()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         if (_reviver == null)
         {
             return;
@@ -83,6 +96,30 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
         _reviver = null;
         _reviveTimer = 0f;
         reviveInterrupted?.Invoke();
+    }
+
+    public void SetNetworkAuthorityPresentationOnly(bool enabled)
+    {
+        _networkAuthorityPresentationOnly = enabled;
+    }
+
+    public void ApplyAuthoritativeSnapshot(
+        bool isReviving,
+        GameObject reviver,
+        float progress01,
+        bool completed)
+    {
+        var wasReviving = _authoritativeIsReviving;
+        _authoritativeIsReviving = isReviving;
+        _authoritativeProgress01 = Mathf.Clamp01(progress01);
+        _reviver = reviver;
+
+        if (!wasReviving && isReviving) reviveStarted?.Invoke();
+        else if (wasReviving && !isReviving)
+        {
+            if (completed) reviveCompleted?.Invoke();
+            else reviveInterrupted?.Invoke();
+        }
     }
 
     private void CompleteRevive()

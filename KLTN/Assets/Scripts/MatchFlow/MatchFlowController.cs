@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Networking;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -21,6 +22,7 @@ public class MatchFlowController : MonoBehaviour
 
     private PlayerDownState[] _players;
     private MatchPhase _phase = MatchPhase.ExploreCore;
+    private bool _networkAuthorityPresentationOnly;
 
     public event Action<MatchPhase> PhaseChanged;
     public event Action MatchWon;
@@ -37,6 +39,7 @@ public class MatchFlowController : MonoBehaviour
 
     private void OnEnable()
     {
+        if (_networkAuthorityPresentationOnly) return;
         SubscribeObjectives();
         SubscribePlayers();
     }
@@ -49,6 +52,8 @@ public class MatchFlowController : MonoBehaviour
 
     public void RefreshPlayers()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         UnsubscribePlayers();
         _players = FindObjectsByType<PlayerDownState>(FindObjectsInactive.Include);
         SubscribePlayers();
@@ -56,27 +61,33 @@ public class MatchFlowController : MonoBehaviour
 
     public void NotifyCoreObjectiveComplete()
     {
+        if (_networkAuthorityPresentationOnly) return;
         SetPhase(MatchPhase.PowerPuzzle);
     }
 
     public void NotifyPowerPuzzleComplete()
     {
+        if (_networkAuthorityPresentationOnly) return;
         SetPhase(MatchPhase.SecurityHold);
     }
 
     public void NotifySecurityHoldComplete()
     {
+        if (_networkAuthorityPresentationOnly) return;
         SetPhase(MatchPhase.FinalHunt);
         finalHuntStarted?.Invoke();
     }
 
     public void StartExitCountdown()
     {
+        if (_networkAuthorityPresentationOnly) return;
         SetPhase(MatchPhase.ExitCountdown);
     }
 
     public void WinMatch()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         if (IsMatchEnded)
         {
             return;
@@ -89,6 +100,8 @@ public class MatchFlowController : MonoBehaviour
 
     public void LoseMatch()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         if (IsMatchEnded)
         {
             return;
@@ -258,5 +271,50 @@ public class MatchFlowController : MonoBehaviour
         }
 
         return true;
+    }
+
+    public void SetNetworkAuthorityPresentationOnly(bool enabled)
+    {
+        if (_networkAuthorityPresentationOnly == enabled) return;
+        _networkAuthorityPresentationOnly = enabled;
+        if (enabled)
+        {
+            UnsubscribeObjectives();
+            UnsubscribePlayers();
+        }
+    }
+
+    public void ApplyAuthoritativeSnapshot(
+        NetworkMatchPhase networkPhase,
+        NetworkMatchStatus networkStatus,
+        NetworkMatchResult networkResult)
+    {
+        var nextPhase = networkStatus == NetworkMatchStatus.Ended
+            ? networkResult == NetworkMatchResult.Win ? MatchPhase.Win : MatchPhase.Lose
+            : networkPhase switch
+            {
+                NetworkMatchPhase.CoreObjective => MatchPhase.ExploreCore,
+                NetworkMatchPhase.Puzzle => MatchPhase.PowerPuzzle,
+                NetworkMatchPhase.SecurityHold => MatchPhase.SecurityHold,
+                NetworkMatchPhase.FinalHunt => MatchPhase.FinalHunt,
+                NetworkMatchPhase.Escape => MatchPhase.ExitCountdown,
+                _ => _phase,
+            };
+
+        if (_phase == nextPhase) return;
+        _phase = nextPhase;
+        phaseChanged?.Invoke();
+        PhaseChanged?.Invoke(_phase);
+        if (_phase == MatchPhase.FinalHunt) finalHuntStarted?.Invoke();
+        if (_phase == MatchPhase.Win)
+        {
+            matchWon?.Invoke();
+            MatchWon?.Invoke();
+        }
+        else if (_phase == MatchPhase.Lose)
+        {
+            matchLost?.Invoke();
+            MatchLost?.Invoke();
+        }
     }
 }

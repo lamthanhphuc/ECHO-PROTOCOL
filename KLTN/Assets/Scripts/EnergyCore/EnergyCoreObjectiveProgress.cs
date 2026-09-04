@@ -9,6 +9,7 @@ public class EnergyCoreObjectiveProgress : MonoBehaviour
     [SerializeField] private UnityEvent objectiveCompleted;
 
     private int _placedCoreCount;
+    private bool _networkAuthorityPresentationOnly;
 
     public event Action<int, int> ProgressChanged;
     public event Action ObjectiveCompleted;
@@ -19,6 +20,8 @@ public class EnergyCoreObjectiveProgress : MonoBehaviour
 
     public bool RegisterCorePlaced()
     {
+        if (_networkAuthorityPresentationOnly) return false;
+
         if (IsComplete)
         {
             return false;
@@ -39,8 +42,33 @@ public class EnergyCoreObjectiveProgress : MonoBehaviour
 
     public void ResetProgress()
     {
+        if (_networkAuthorityPresentationOnly) return;
+
         _placedCoreCount = 0;
         progressChanged?.Invoke();
         ProgressChanged?.Invoke(_placedCoreCount, requiredCoreCount);
+    }
+
+    public void SetNetworkAuthorityPresentationOnly(bool enabled)
+    {
+        _networkAuthorityPresentationOnly = enabled;
+    }
+
+    /// <summary>
+    /// Presentation bridge for Fusion sessions. This mirrors an authoritative snapshot for existing HUD code;
+    /// it never decides or increments objective progress.
+    /// </summary>
+    public void ApplyAuthoritativeSnapshot(int placedCoreCount, int authoritativeRequiredCount)
+    {
+        var wasComplete = IsComplete;
+        requiredCoreCount = Mathf.Max(1, authoritativeRequiredCount);
+        _placedCoreCount = Mathf.Clamp(placedCoreCount, 0, requiredCoreCount);
+        progressChanged?.Invoke();
+        ProgressChanged?.Invoke(_placedCoreCount, requiredCoreCount);
+        if (!wasComplete && IsComplete)
+        {
+            objectiveCompleted?.Invoke();
+            ObjectiveCompleted?.Invoke();
+        }
     }
 }

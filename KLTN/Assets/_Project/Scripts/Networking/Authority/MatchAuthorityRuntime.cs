@@ -353,7 +353,7 @@ namespace EchoProtocol.Networking.Authority
             string transitionName;
             switch (transition.State)
             {
-                case NetworkItemState.PickedUp:
+                case NetworkItemState.Carried:
                     eventType = TelemetryEventTypes.CorePickedUp;
                     transitionName = "pickup";
                     break;

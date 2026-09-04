@@ -201,6 +201,10 @@ MonoBehaviour:
   controller: {fileID: 100006}
   visionSensor: {fileID: 100005}
   lifecycle: {fileID: 0}
+  attackDamage: 25
+  maximumDamageDistance: 2
+  animator: {fileID: 0}
+  animatorStateParameter: MonsterState
 --- !u!1 &100010
 GameObject:
   m_ObjectHideFlags: 0

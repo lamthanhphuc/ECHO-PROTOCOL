@@ -1,42 +1,51 @@
+using System;
 using EchoProtocol.Networking.Authority;
 using Fusion;
 using UnityEngine;
 
 namespace EchoProtocol.Networking
 {
-    public enum NetworkMatchPhase
-    {
-        CoreCollection = 0,
-        PowerPuzzle = 1,
-        SecurityHold = 2,
-        FinalHunt = 3,
-        Completed = 4,
-    }
-
-    /// <summary>Host-owned M2 objective console for Core, phase, puzzle, hold and exit mutations.</summary>
+    /// <summary>Authoritative objective source; match phase and final result live in NetworkMatchState.</summary>
     [DisallowMultipleComponent]
     public sealed class NetworkSectorBox : NetworkInteractable
     {
-        [SerializeField, Min(1)] private int _requiredCoreCount = 1;
+        public static event Action<NetworkSectorBox> ObjectiveStateChanged;
 
-        [Networked] public int PlacedCoreCount { get; private set; }
-        [Networked] public NetworkMatchPhase Phase { get; private set; }
+        [SerializeField, Min(1)] private int _requiredCoreCount = 3;
+        [SerializeField] private Transform[] _corePlacementPoints = Array.Empty<Transform>();
+        [SerializeField, Min(0.1f)] private float _fallbackSlotSpacing = 0.65f;
+        [SerializeField] private Renderer _embeddedFallbackRenderer;
+
+        [Networked, OnChangedRender(nameof(HandleObjectiveChanged))]
+        public int PlacedCoreCount { get; private set; }
         [Networked] public NetworkBool SecurityHoldWasInterrupted { get; private set; }
         [Networked] public uint ObjectiveOrdinal { get; private set; }
+        [Networked] public NetworkId MatchStateId { get; private set; }
+
+        public int RequiredCoreCount => _requiredCoreCount;
+        public bool IsCoreObjectiveComplete => PlacedCoreCount >= _requiredCoreCount;
+        public NetworkMatchPhase Phase => TryGetMatchState(out var matchState)
+            ? matchState.CurrentPhase
+            : NetworkMatchPhase.CoreObjective;
 
         public override void Spawned()
         {
-            NetworkPlayerLifeState.StateChanged += HandlePlayerLifeStateChanged;
-            if (!Object.HasStateAuthority) return;
-            PlacedCoreCount = 0;
-            Phase = NetworkMatchPhase.CoreCollection;
-            SecurityHoldWasInterrupted = false;
-            ObjectiveOrdinal = 0;
+            ConfigurePresentation();
+            if (Object.HasStateAuthority)
+            {
+                PlacedCoreCount = 0;
+                SecurityHoldWasInterrupted = false;
+                ObjectiveOrdinal = 0;
+                MatchStateId = default;
+            }
+            HandleObjectiveChanged();
         }
 
-        public override void Despawned(NetworkRunner runner, bool hasState)
+        public void InitializeAuthoritative(NetworkId matchStateId)
         {
-            NetworkPlayerLifeState.StateChanged -= HandlePlayerLifeStateChanged;
+            if (!Object.HasStateAuthority || !matchStateId.IsValid) return;
+            MatchStateId = matchStateId;
+            Debug.Log($"[Objective] Sector Box {Object.Id} bound to Match State {matchStateId}.");
         }
 
         protected override InteractionValidationResult ValidateCurrentState(in InteractionContext context)
@@ -46,65 +55,112 @@ namespace EchoProtocol.Networking
                 return InteractionValidationResult.InvalidRequester;
             }
 
-            if (Phase == NetworkMatchPhase.CoreCollection)
+            if (!TryGetMatchState(out var matchState) || matchState.IsEnded)
             {
-                return context.PlayerState.CarriedCoreId.IsValid
-                    ? InteractionValidationResult.Accepted
-                    : InteractionValidationResult.InvalidTargetState;
+                return InteractionValidationResult.InvalidTargetState;
             }
 
-            return Phase == NetworkMatchPhase.Completed
-                ? InteractionValidationResult.InvalidTargetState
-                : InteractionValidationResult.Accepted;
+            switch (matchState.CurrentPhase)
+            {
+                case NetworkMatchPhase.CoreObjective:
+                    return EnergyCoreObjectiveRules.CanRegisterPlacement(PlacedCoreCount, _requiredCoreCount)
+                           && context.PlayerState.CarriedCoreId.IsValid
+                           && Runner.TryFindObject(context.PlayerState.CarriedCoreId, out var coreObject)
+                           && coreObject != null
+                           && coreObject.TryGetComponent<NetworkPickupItem>(out var core)
+                           && core.CanBePlacedBy(context.Player)
+                        ? InteractionValidationResult.Accepted
+                        : InteractionValidationResult.InvalidTargetState;
+                case NetworkMatchPhase.SecurityHold:
+                case NetworkMatchPhase.Escape:
+                    return InteractionValidationResult.Accepted;
+                default:
+                    return InteractionValidationResult.InvalidTargetState;
+            }
         }
 
         protected override void ExecuteInteraction(in InteractionContext context)
         {
-            switch (Phase)
+            if (!TryGetMatchState(out var matchState) || matchState.IsEnded) return;
+
+            switch (matchState.CurrentPhase)
             {
-                case NetworkMatchPhase.CoreCollection:
-                    PlaceCarriedCore(context);
-                    break;
-                case NetworkMatchPhase.PowerPuzzle:
-                    CompletePowerPuzzle();
+                case NetworkMatchPhase.CoreObjective:
+                    PlaceCarriedCore(context, matchState);
                     break;
                 case NetworkMatchPhase.SecurityHold:
-                    AdvanceSecurityHold();
+                    AdvanceSecurityHold(matchState);
                     break;
-                case NetworkMatchPhase.FinalHunt:
-                    EscapePlayer(context.Player);
+                case NetworkMatchPhase.Escape:
+                    matchState.TryCommitPlayerEscaped(context.Player);
                     break;
             }
         }
 
-        private void PlaceCarriedCore(in InteractionContext context)
+        private void PlaceCarriedCore(in InteractionContext context, NetworkMatchState matchState)
         {
-            var coreId = context.PlayerState.CarriedCoreId;
-            if (!Runner.TryFindObject(coreId, out var coreObject)
-                || !coreObject.TryGetComponent<NetworkPickupItem>(out var core)
-                || !core.TryPlace(context.Player, transform.position + Vector3.up * 0.75f))
+            if (!NetworkMatchStateRules.IsObjectiveMutationAllowed(
+                    matchState.Status,
+                    matchState.CurrentPhase,
+                    NetworkMatchPhase.CoreObjective)
+                || !EnergyCoreObjectiveRules.CanRegisterPlacement(PlacedCoreCount, _requiredCoreCount))
             {
                 return;
             }
 
-            PlacedCoreCount++;
-            AdvanceOrdinal();
-            if (PlacedCoreCount >= _requiredCoreCount)
+            var coreId = context.PlayerState.CarriedCoreId;
+            var slotIndex = PlacedCoreCount;
+            GetPlacementPose(slotIndex, out var position, out var rotation);
+            if (!Runner.TryFindObject(coreId, out var coreObject)
+                || coreObject == null
+                || !coreObject.TryGetComponent<NetworkPickupItem>(out var core)
+                || !core.TryPlace(context.Player, Object.Id, slotIndex, position, rotation))
             {
-                CompletePhaseAndStartNext("CORE_COLLECTION", NetworkMatchPhase.PowerPuzzle, "POWER_PUZZLE");
+                return;
+            }
+
+            PlacedCoreCount = Mathf.Min(PlacedCoreCount + 1, _requiredCoreCount);
+            AdvanceObjectiveOrdinal();
+            HandleObjectiveChanged();
+            if (IsCoreObjectiveComplete)
+            {
+                matchState.TryCompleteCoreObjective(this);
             }
         }
 
-        private void CompletePowerPuzzle()
+        public bool TryCommitPowerPuzzleCompletion(NetworkId puzzleId)
         {
-            AdvanceOrdinal();
+            if (!Object.HasStateAuthority
+                || !puzzleId.IsValid
+                || !TryGetMatchState(out var matchState)
+                || !NetworkMatchStateRules.IsObjectiveMutationAllowed(
+                    matchState.Status,
+                    matchState.CurrentPhase,
+                    NetworkMatchPhase.Puzzle)
+                || !Runner.TryFindObject(puzzleId, out var puzzleObject)
+                || puzzleObject == null
+                || !puzzleObject.TryGetComponent<NetworkPowerPuzzle>(out var puzzle)
+                || puzzle.State != NetworkPowerPuzzleState.Completed)
+            {
+                return false;
+            }
+
+            AdvanceObjectiveOrdinal();
             MatchAuthorityRuntime.Instance?.RecordPuzzleCompleted(BuildKey("puzzle-completed"));
-            CompletePhaseAndStartNext("POWER_PUZZLE", NetworkMatchPhase.SecurityHold, "SECURITY_HOLD");
+            return matchState.TryCompletePuzzle(Object.Id);
         }
 
-        private void AdvanceSecurityHold()
+        private void AdvanceSecurityHold(NetworkMatchState matchState)
         {
-            AdvanceOrdinal();
+            if (!NetworkMatchStateRules.IsObjectiveMutationAllowed(
+                    matchState.Status,
+                    matchState.CurrentPhase,
+                    NetworkMatchPhase.SecurityHold))
+            {
+                return;
+            }
+
+            AdvanceObjectiveOrdinal();
             if (!SecurityHoldWasInterrupted)
             {
                 SecurityHoldWasInterrupted = true;
@@ -113,80 +169,19 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            CompletePhaseAndStartNext("SECURITY_HOLD", NetworkMatchPhase.FinalHunt, "FINAL_HUNT");
+            matchState.TryCompleteSecurityHold(Object.Id);
         }
 
-        private void EscapePlayer(PlayerRef player)
+        private bool TryGetMatchState(out NetworkMatchState matchState)
         {
-            if (!Runner.TryGetPlayerObject(player, out var playerObject)
-                || !playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState)
-                || !lifeState.TryEscape())
-            {
-                return;
-            }
+            matchState = null;
+            return MatchStateId.IsValid
+                && Runner.TryFindObject(MatchStateId, out var matchObject)
+                && matchObject != null
+                && matchObject.TryGetComponent(out matchState);
         }
 
-        private void HandlePlayerLifeStateChanged(NetworkPlayerLifeState _)
-        {
-            if (Object == null || !Object.HasStateAuthority || Phase != NetworkMatchPhase.FinalHunt)
-            {
-                return;
-            }
-
-            var trackedPlayers = 0;
-            var survivorCount = 0;
-            foreach (var player in Runner.ActivePlayers)
-            {
-                if (!Runner.TryGetPlayerObject(player, out var playerObject)
-                    || !playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState))
-                {
-                    continue;
-                }
-
-                trackedPlayers++;
-                if (lifeState.Status == NetworkPlayerLifeStatus.Alive
-                    || lifeState.Status == NetworkPlayerLifeStatus.Downed)
-                {
-                    return;
-                }
-
-                if (lifeState.Status == NetworkPlayerLifeStatus.Escaped) survivorCount++;
-            }
-
-            if (trackedPlayers == 0) return;
-
-            AdvanceOrdinal();
-            Phase = NetworkMatchPhase.Completed;
-            var runtime = MatchAuthorityRuntime.Instance;
-            runtime?.RecordPhaseCompleted(
-                BuildKey("phase-completed-final-hunt"),
-                "FINAL_HUNT",
-                "OBJECTIVE_COMPLETED");
-            runtime?.RecordMatchEnded(
-                BuildKey("match-ended"),
-                survivorCount > 0 ? "SUCCESS" : "FAILURE",
-                survivorCount,
-                survivorCount > 0 ? "TEAM_ESCAPED" : "TEAM_ELIMINATED");
-        }
-
-        private void CompletePhaseAndStartNext(
-            string completedPhase,
-            NetworkMatchPhase nextPhase,
-            string nextPhaseName)
-        {
-            var runtime = MatchAuthorityRuntime.Instance;
-            runtime?.RecordPhaseCompleted(
-                BuildKey("phase-completed-" + completedPhase.ToLowerInvariant()),
-                completedPhase,
-                "OBJECTIVE_COMPLETED");
-            Phase = nextPhase;
-            runtime?.RecordPhaseStarted(
-                BuildKey("phase-started-" + nextPhaseName.ToLowerInvariant()),
-                nextPhaseName,
-                "PREVIOUS_PHASE_COMPLETED");
-        }
-
-        private void AdvanceOrdinal()
+        private void AdvanceObjectiveOrdinal()
         {
             ObjectiveOrdinal++;
             if (ObjectiveOrdinal == 0) ObjectiveOrdinal = 1;
@@ -196,5 +191,43 @@ namespace EchoProtocol.Networking
         {
             return $"objective:{Object.Id}:{occurrence}:{ObjectiveOrdinal}";
         }
+
+        private void GetPlacementPose(int slotIndex, out Vector3 position, out Quaternion rotation)
+        {
+            if (slotIndex >= 0
+                && slotIndex < _corePlacementPoints.Length
+                && _corePlacementPoints[slotIndex] != null)
+            {
+                position = _corePlacementPoints[slotIndex].position;
+                rotation = _corePlacementPoints[slotIndex].rotation;
+                return;
+            }
+
+            var centeredIndex = slotIndex - (_requiredCoreCount - 1) * 0.5f;
+            position = transform.TransformPoint(new Vector3(centeredIndex * _fallbackSlotSpacing, 0.75f, 0f));
+            rotation = transform.rotation;
+        }
+
+        private void HandleObjectiveChanged()
+        {
+            foreach (var legacyProgress in FindObjectsByType<EnergyCoreObjectiveProgress>(
+                         FindObjectsInactive.Include,
+                         FindObjectsSortMode.None))
+            {
+                legacyProgress.SetNetworkAuthorityPresentationOnly(true);
+                legacyProgress.ApplyAuthoritativeSnapshot(PlacedCoreCount, _requiredCoreCount);
+            }
+
+            ObjectiveStateChanged?.Invoke(this);
+        }
+
+        private void ConfigurePresentation()
+        {
+            if (_embeddedFallbackRenderer == null) return;
+
+            var legacyBoxes = FindObjectsByType<SectorBox>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            _embeddedFallbackRenderer.enabled = legacyBoxes.Length == 0;
+        }
     }
+
 }

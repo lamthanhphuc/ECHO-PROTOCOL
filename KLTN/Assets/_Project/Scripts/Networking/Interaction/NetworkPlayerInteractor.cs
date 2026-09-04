@@ -66,12 +66,16 @@ namespace EchoProtocol.Networking
             if (Object == null || !Object.HasInputAuthority) return;
             if (!GetComponent<LobbyPlayerState>().IsGameplayPlayer) return;
 
+            if (_helpPingAction?.WasPerformedThisFrame() == true) RequestHelpPing();
+
+            var lifeState = GetComponent<NetworkPlayerLifeState>();
+            if (lifeState != null && !lifeState.CanInitiateAction) return;
+
             if (_dropCoreAction?.WasPerformedThisFrame() == true)
             {
                 RequestDropCarriedCore();
             }
             if (_teamToolAction?.WasPerformedThisFrame() == true) RequestUseTeamTool();
-            if (_helpPingAction?.WasPerformedThisFrame() == true) RequestHelpPing();
 
             if (_interactAction?.WasPerformedThisFrame() != true) return;
 
@@ -81,9 +85,9 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            if (TryDetectReviveCandidate(out var lifeState))
+            if (TryDetectReviveCandidate(out var targetLifeState))
             {
-                RequestRevive(lifeState);
+                RequestRevive(targetLifeState);
             }
         }
 
@@ -180,42 +184,80 @@ namespace EchoProtocol.Networking
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestRevive(NetworkId targetId, uint sequence, RpcInfo info = default)
         {
-            if (!TryResolveRequester(info.Source, out var requester)
-                || ValidateRequester(requester, sequence) != InteractionValidationResult.Accepted)
+            if (!TryResolveRequester(info.Source, out var requester))
             {
                 return;
             }
 
-            if (Runner.TryFindObject(targetId, out var targetObject)
-                && targetObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState)
-                && Vector3.SqrMagnitude(transform.position - lifeState.transform.position)
-                    <= _localDetectionDistance * _localDetectionDistance)
+            var result = ValidateRequester(requester, sequence);
+            if (result == InteractionValidationResult.Accepted)
             {
-                lifeState.TryRevive(requester);
+                if (!Runner.TryFindObject(targetId, out var targetObject)
+                    || targetObject == null
+                    || !targetObject.TryGetComponent<NetworkPlayerLifeState>(out var targetLifeState))
+                {
+                    result = InteractionValidationResult.InvalidTarget;
+                }
+                else if (!targetLifeState.TryStartRevive(requester))
+                {
+                    result = Vector3.SqrMagnitude(transform.position - targetLifeState.transform.position)
+                             > _localDetectionDistance * _localDetectionDistance
+                        ? InteractionValidationResult.OutOfRange
+                        : InteractionValidationResult.InvalidTargetState;
+                }
             }
 
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+            Debug.Log(
+                $"[LifeState] Revive request reviver={requester}, target={targetId}, " +
+                $"sequence={sequence}, result={result}.");
+            RpcInteractionResult(requester, targetId, sequence, (int)result);
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestDropCarriedCore(uint sequence, RpcInfo info = default)
         {
-            if (!TryResolveRequester(info.Source, out var requester)
-                || ValidateRequester(requester, sequence) != InteractionValidationResult.Accepted)
+            if (!TryResolveRequester(info.Source, out var requester))
             {
                 return;
             }
 
+            var result = ValidateRequester(requester, sequence);
             var playerState = GetComponent<LobbyPlayerState>();
-            if (playerState.CarriedCoreId.IsValid
-                && Runner.TryFindObject(playerState.CarriedCoreId, out var coreObject)
+            var coreId = playerState != null ? playerState.CarriedCoreId : default;
+            if (result == InteractionValidationResult.Accepted
+                && coreId.IsValid
+                && Runner.TryFindObject(coreId, out var coreObject)
                 && coreObject.TryGetComponent<NetworkPickupItem>(out var core))
             {
-                var dropPosition = transform.position + transform.forward * 1.25f;
-                core.TryDrop(requester, dropPosition);
+                GetAuthoritativeDropPose(out var dropPosition, out var dropRotation);
+                result = core.TryDrop(requester, dropPosition, dropRotation)
+                    ? InteractionValidationResult.Accepted
+                    : InteractionValidationResult.InvalidTargetState;
+            }
+            else if (result == InteractionValidationResult.Accepted)
+            {
+                result = InteractionValidationResult.InvalidTarget;
             }
 
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+            RpcInteractionResult(requester, coreId, sequence, (int)result);
+        }
+
+        private void GetAuthoritativeDropPose(out Vector3 position, out Quaternion rotation)
+        {
+            var candidate = transform.position + transform.forward * 1.25f;
+            var rayOrigin = candidate + Vector3.up * 1.5f;
+            position = Physics.Raycast(
+                rayOrigin,
+                Vector3.down,
+                out var hit,
+                3f,
+                ~0,
+                QueryTriggerInteraction.Ignore)
+                ? hit.point + Vector3.up * 0.25f
+                : candidate;
+            rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
@@ -268,7 +310,7 @@ namespace EchoProtocol.Networking
             }
 
             var lifeState = GetComponent<NetworkPlayerLifeState>();
-            if (lifeState != null && lifeState.Status == NetworkPlayerLifeStatus.Downed
+            if (lifeState != null && lifeState.IsDowned
                 && HelpPingCooldown.ExpiredOrNotRunning(Runner))
             {
                 HelpPingOrdinal++;
