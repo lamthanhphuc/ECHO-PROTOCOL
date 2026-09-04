@@ -54,6 +54,10 @@ public class EnergyCoreObjectiveProgress : MonoBehaviour
         _networkAuthorityPresentationOnly = enabled;
     }
 
+    /// <summary>
+    /// Presentation bridge for Fusion sessions. This mirrors an authoritative snapshot for existing HUD code;
+    /// it never decides or increments objective progress.
+    /// </summary>
     public void ApplyAuthoritativeSnapshot(int placedCoreCount, int authoritativeRequiredCount)
     {
         var wasComplete = IsComplete;

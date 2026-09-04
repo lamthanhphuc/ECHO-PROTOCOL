@@ -217,22 +217,47 @@ namespace EchoProtocol.Networking
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestDropCarriedCore(uint sequence, RpcInfo info = default)
         {
-            if (!TryResolveRequester(info.Source, out var requester)
-                || ValidateRequester(requester, sequence) != InteractionValidationResult.Accepted)
+            if (!TryResolveRequester(info.Source, out var requester))
             {
                 return;
             }
 
+            var result = ValidateRequester(requester, sequence);
             var playerState = GetComponent<LobbyPlayerState>();
-            if (playerState.CarriedCoreId.IsValid
-                && Runner.TryFindObject(playerState.CarriedCoreId, out var coreObject)
+            var coreId = playerState != null ? playerState.CarriedCoreId : default;
+            if (result == InteractionValidationResult.Accepted
+                && coreId.IsValid
+                && Runner.TryFindObject(coreId, out var coreObject)
                 && coreObject.TryGetComponent<NetworkPickupItem>(out var core))
             {
-                var dropPosition = transform.position + transform.forward * 1.25f;
-                core.TryDrop(requester, dropPosition);
+                GetAuthoritativeDropPose(out var dropPosition, out var dropRotation);
+                result = core.TryDrop(requester, dropPosition, dropRotation)
+                    ? InteractionValidationResult.Accepted
+                    : InteractionValidationResult.InvalidTargetState;
+            }
+            else if (result == InteractionValidationResult.Accepted)
+            {
+                result = InteractionValidationResult.InvalidTarget;
             }
 
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+            RpcInteractionResult(requester, coreId, sequence, (int)result);
+        }
+
+        private void GetAuthoritativeDropPose(out Vector3 position, out Quaternion rotation)
+        {
+            var candidate = transform.position + transform.forward * 1.25f;
+            var rayOrigin = candidate + Vector3.up * 1.5f;
+            position = Physics.Raycast(
+                rayOrigin,
+                Vector3.down,
+                out var hit,
+                3f,
+                ~0,
+                QueryTriggerInteraction.Ignore)
+                ? hit.point + Vector3.up * 0.25f
+                : candidate;
+            rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
