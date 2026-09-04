@@ -4,24 +4,6 @@ using UnityEngine;
 
 namespace EchoProtocol.Networking
 {
-    public enum NetworkPowerPuzzleState
-    {
-        Idle = 0,
-        InProgress = 1,
-        Completed = 2,
-        Failed = 3,
-        Resetting = 4,
-    }
-
-    public enum PowerPuzzleInputResult
-    {
-        AcceptedCorrect = 0,
-        AcceptedIncorrect = 1,
-        RejectedInvalidState = 2,
-        RejectedInvalidInput = 3,
-        AlreadyCompleted = 4,
-    }
-
     /// <summary>State-authority source of truth for the cooperative power-puzzle sequence.</summary>
     [DisallowMultipleComponent]
     public sealed class NetworkPowerPuzzle : NetworkBehaviour
@@ -251,35 +233,4 @@ namespace EchoProtocol.Networking
         }
     }
 
-    public static class PowerPuzzleAuthorityRules
-    {
-        public static PowerPuzzleInputResult EvaluateInput(
-            NetworkPowerPuzzleState state,
-            int inputId,
-            int stationCount,
-            int expectedInputId)
-        {
-            if (state == NetworkPowerPuzzleState.Completed)
-            {
-                return PowerPuzzleInputResult.AlreadyCompleted;
-            }
-
-            if (state != NetworkPowerPuzzleState.InProgress)
-            {
-                return PowerPuzzleInputResult.RejectedInvalidState;
-            }
-
-            if (inputId < 0
-                || inputId >= stationCount
-                || expectedInputId < 0
-                || expectedInputId >= stationCount)
-            {
-                return PowerPuzzleInputResult.RejectedInvalidInput;
-            }
-
-            return inputId == expectedInputId
-                ? PowerPuzzleInputResult.AcceptedCorrect
-                : PowerPuzzleInputResult.AcceptedIncorrect;
-        }
-    }
 }

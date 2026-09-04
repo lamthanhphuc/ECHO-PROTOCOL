@@ -45,7 +45,7 @@ MonoBehaviour:
   m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
-  SortKey: 210170811
+  SortKey: 1276762676
   SendPriority: 1
   EnableInterpolation: 1
   Flags: 262146
@@ -65,11 +65,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4db9ad64247047ef901a7fe08b132825, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkPowerPuzzle
-  _sequence:
-  - 0
-  - 1
-  - 0
-  - 1
+  _sequence: 00000000010000000000000001000000
   _stationCount: 2
   _maxFailuresBeforeProgressReset: 3
   _failureLockoutSeconds: 4
@@ -80,12 +76,6 @@ MonoBehaviour:
   _LastInputId: -1
   _LastInputWasCorrect:
     RawValue: 0
-  _LastInteractor:
-    RawEncoded: 0
   _SectorBoxId:
     Raw: 0
   _TransitionOrdinal: 0
-  _StateTimer:
-    _target: 0
-  _ResetProgressAfterFailure:
-    RawValue: 0

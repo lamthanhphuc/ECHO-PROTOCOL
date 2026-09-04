@@ -230,13 +230,4 @@ namespace EchoProtocol.Networking
         }
     }
 
-    public static class EnergyCoreObjectiveRules
-    {
-        public static bool CanRegisterPlacement(int placedCoreCount, int requiredCoreCount)
-        {
-            return requiredCoreCount > 0
-                && placedCoreCount >= 0
-                && placedCoreCount < requiredCoreCount;
-        }
-    }
 }

@@ -6,14 +6,6 @@ using EchoProtocol.Networking.Authority;
 
 namespace EchoProtocol.Networking
 {
-    public enum NetworkItemState
-    {
-        Available = 0,
-        Carried = 1,
-        Dropped = 2,
-        Placed = 3,
-    }
-
     public readonly struct NetworkItemTransition
     {
         public NetworkItemTransition(
@@ -291,30 +283,4 @@ namespace EchoProtocol.Networking
         }
     }
 
-    public static class EnergyCoreAuthorityRules
-    {
-        public static bool CanPickup(
-            NetworkItemState state,
-            PlayerRef holder,
-            bool playerExists,
-            bool playerAlreadyCarriesCore)
-        {
-            return playerExists
-                && !playerAlreadyCarriesCore
-                && !holder.IsValid
-                && (state == NetworkItemState.Available || state == NetworkItemState.Dropped);
-        }
-
-        public static bool CanDrop(NetworkItemState state, PlayerRef holder, PlayerRef requester)
-        {
-            return requester.IsRealPlayer
-                && state == NetworkItemState.Carried
-                && holder == requester;
-        }
-
-        public static bool CanPlace(NetworkItemState state, PlayerRef holder, PlayerRef requester)
-        {
-            return CanDrop(state, holder, requester);
-        }
-    }
 }
