@@ -14,10 +14,10 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
     [SerializeField] private bool detectDownedPlayerByReflection = true;
 
     [Header("Prompt")]
-    [SerializeField] private string startPrompt = "Download Access Code";
-    [SerializeField] private string resumePrompt = "Resume Access Code Download";
-    [SerializeField] private string downloadingPrompt = "Access Code downloading";
-    [SerializeField] private string completePrompt = "Access Code downloaded";
+    [SerializeField] private string startPrompt = "Giữ để Tải Dữ Liệu";
+    [SerializeField] private string resumePrompt = "Giữ để Tiếp tục Tải Dữ Liệu";
+    [SerializeField] private string downloadingPrompt = "Đang Tải Dữ Liệu";
+    [SerializeField] private string completePrompt = "Đã Tải Xong Dữ Liệu";
 
     [Header("Events")]
     [SerializeField] private UnityEvent downloadStarted;
@@ -58,7 +58,13 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
                 return downloadingPrompt + percent;
             }
 
-            return (IsPaused ? resumePrompt : startPrompt) + percent;
+            if (IsPaused && Progress01 > 0f)
+            {
+                return resumePrompt + percent;
+            }
+
+            string prompt = string.IsNullOrWhiteSpace(startPrompt) || startPrompt == "Download Access Code" ? "Giữ để Tải Dữ Liệu" : startPrompt;
+            return prompt;
         }
     }
 

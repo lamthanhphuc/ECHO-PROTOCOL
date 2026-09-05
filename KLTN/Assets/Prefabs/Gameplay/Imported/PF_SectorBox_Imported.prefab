@@ -125,8 +125,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SectorBox
   objectiveProgress: {fileID: 5486782838804918688}
-  placePrompt: Place Energy Core
-  completePrompt: Sector Box complete
+  placePrompt: "N\u1EA1p Energy Core v\u00E0o Sector Box"
+  completePrompt: "\u0110\u00E3 n\u1EA1p \u0111\u1EE7 Energy Core"
 --- !u!1001 &4638809083070108243
 PrefabInstance:
   m_ObjectHideFlags: 0

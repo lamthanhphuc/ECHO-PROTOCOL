@@ -189,6 +189,10 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
         if (movement != null)
         {
             movement.SetExternalSpeedMultiplier(carrying ? carrySpeedMultiplier : 1f);
+            if (blockSprintWhileCarrying)
+            {
+                movement.SetSprintBlocked(carrying);
+            }
         }
 
         if (inventory != null && lockTeamToolWhileCarrying)

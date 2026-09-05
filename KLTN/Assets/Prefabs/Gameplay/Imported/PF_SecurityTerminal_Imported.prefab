@@ -74,10 +74,10 @@ MonoBehaviour:
   pauseWhenInteractorLooksAway: 1
   requireHoldToDownload: 1
   detectDownedPlayerByReflection: 1
-  startPrompt: Download Access Code
-  resumePrompt: Resume Access Code Download
-  downloadingPrompt: Access Code downloading
-  completePrompt: Access Code downloaded
+  startPrompt: "Gi\u1EEF \u0111\u1EC3 T\u1EA3i D\u1EEF Li\u1EC7u"
+  resumePrompt: "Gi\u1EEF \u0111\u1EC3 Ti\u1EBFp t\u1EE5c T\u1EA3i D\u1EEF Li\u1EC7u"
+  downloadingPrompt: "\u0110ang T\u1EA3i D\u1EEF Li\u1EC7u"
+  completePrompt: "\u0110\u00E3 T\u1EA3i Xong D\u1EEF Li\u1EC7u"
   downloadStarted:
     m_PersistentCalls:
       m_Calls: []

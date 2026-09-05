@@ -96,10 +96,10 @@ namespace EchoProtocol.UI.HUD
             if (promptText != null)
             {
                 string keyColorHex = isHold ? "#FFB300" : "#00E5FF";
-                string keyLabel = isHold ? "[E GIỮ]" : "[E]";
+                string keyLabel = "[E]";
                 
-                // Clean existing [E] if present in source prompt
-                string cleanPrompt = prompt.Replace("[E]", "").Replace("[E ]", "").Trim();
+                // Clean existing [E] or [E GIỮ] if present in source prompt
+                string cleanPrompt = prompt.Replace("[E GIỮ]", "").Replace("[E]", "").Replace("[E ]", "").Trim();
                 promptText.text = $"<color={keyColorHex}><b>{keyLabel}</b></color>  {cleanPrompt}";
             }
 

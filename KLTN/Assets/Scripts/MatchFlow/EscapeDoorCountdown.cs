@@ -7,10 +7,10 @@ public class EscapeDoorCountdown : MonoBehaviour, IInteractable
 {
     [SerializeField] private MatchFlowController matchFlow;
     [SerializeField] private float countdownSeconds = 8f;
-    [SerializeField] private string lockedPrompt = "Escape locked";
-    [SerializeField] private string startPrompt = "Start escape countdown";
-    [SerializeField] private string countingPrompt = "Escape opening";
-    [SerializeField] private string completePrompt = "Escape ready";
+    [SerializeField] private string lockedPrompt = "Cửa thoát hiểm đang khóa";
+    [SerializeField] private string startPrompt = "Mở Cửa Thoát Hiểm";
+    [SerializeField] private string countingPrompt = "Đang mở cửa";
+    [SerializeField] private string completePrompt = "Cửa đã mở - Chạy thoát!";
     [SerializeField] private UnityEvent countdownStarted;
     [SerializeField] private UnityEvent countdownCompleted;
 
@@ -32,15 +32,21 @@ public class EscapeDoorCountdown : MonoBehaviour, IInteractable
         {
             if (_isComplete)
             {
-                return completePrompt;
+                return string.IsNullOrWhiteSpace(completePrompt) || completePrompt == "Escape ready" ? "Cửa đã mở - Chạy thoát!" : completePrompt;
             }
 
             if (_isCountingDown)
             {
-                return countingPrompt + " (" + Mathf.CeilToInt(_remainingSeconds) + "s)";
+                string cPrompt = string.IsNullOrWhiteSpace(countingPrompt) || countingPrompt == "Escape opening" ? "Đang mở cửa" : countingPrompt;
+                return cPrompt + " (" + Mathf.CeilToInt(_remainingSeconds) + "s)";
             }
 
-            return CanStartCountdown() ? startPrompt : lockedPrompt;
+            if (CanStartCountdown())
+            {
+                return string.IsNullOrWhiteSpace(startPrompt) || startPrompt == "Start escape countdown" ? "Mở Cửa Thoát Hiểm" : startPrompt;
+            }
+
+            return string.IsNullOrWhiteSpace(lockedPrompt) || lockedPrompt == "Escape locked" ? "Cửa thoát hiểm đang khóa" : lockedPrompt;
         }
     }
 

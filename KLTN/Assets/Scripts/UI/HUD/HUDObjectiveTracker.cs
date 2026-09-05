@@ -78,8 +78,8 @@ namespace EchoProtocol.UI.HUD
                     int placed = coreProgress != null ? coreProgress.PlacedCoreCount : 0;
                     int required = coreProgress != null ? coreProgress.RequiredCoreCount : 3;
                     SetObjective(
-                        "TÌM VÀ VẬN CHUYỂN ENERGY CORE",
-                        $"Tìm và mang 3 Energy Core về Sector Box [{placed}/{required}]",
+                        "TÌM VÀ NẠP ENERGY CORE",
+                        $"Tìm và nạp 3 Energy Core ({placed}/{required})",
                         required > 0 ? (float)placed / required : 0f,
                         new Color(0f, 0.85f, 1f, 1f));
                     break;
@@ -89,10 +89,10 @@ namespace EchoProtocol.UI.HUD
                     int step = powerPuzzle != null ? powerPuzzle.StepIndex : 0;
                     int totalSteps = powerPuzzle != null ? powerPuzzle.StepCount : 3;
                     string codeHint = (powerPuzzle != null && powerPuzzle.HasInstructionForCurrentStep)
-                        ? $" Mã: <color=#00FF99>{powerPuzzle.CurrentCode}</color>" : "";
+                        ? $" | Mã: <color=#00FF99>{powerPuzzle.CurrentCode}</color>" : "";
                     SetObjective(
-                        "KHÔI PHỤC TRẠM ĐIỆN",
-                        $"Phối hợp tại Power Control & Distribution Panel [{step}/{totalSteps}]{codeHint}",
+                        "KHÔI PHỤC NGUỒN ĐIỆN",
+                        $"Khôi phục nguồn điện (Power Puzzle) [{step}/{totalSteps}]{codeHint}",
                         totalSteps > 0 ? (float)step / totalSteps : 0.5f,
                         new Color(1f, 0.7f, 0.1f, 1f));
                     break;
@@ -102,8 +102,8 @@ namespace EchoProtocol.UI.HUD
                     float progress = securityTerminal != null ? securityTerminal.Progress01 : 0f;
                     int percent = Mathf.RoundToInt(progress * 100f);
                     SetObjective(
-                        "GIỮ VỊ TRÍ & TẢI MÃ AN NINH",
-                        $"Tải dữ liệu an ninh tại Security Terminal [{percent}%]",
+                        "TẢI MÃ AN NINH",
+                        $"Tải mã an ninh tại Phòng Security ({percent}%)",
                         progress,
                         new Color(1f, 0.3f, 0.1f, 1f));
                     break;
@@ -117,8 +117,8 @@ namespace EchoProtocol.UI.HUD
                     string timeFormatted = string.Format("{0:00}:{1:00}", mins, secs);
 
                     string statusMsg = (escapeDoor != null && escapeDoor.IsCountingDown)
-                        ? $"Cửa đang mở đếm ngược: [{timeFormatted}]"
-                        : "BÁO ĐỘNG ĐỎ! Chạy đến Cửa Thoát Hiểm trước khi cơ sở phong tỏa [00:45]";
+                        ? $"Chạy đến Cửa Thoát Hiểm và sống sót ({timeFormatted})"
+                        : "Chạy đến Cửa Thoát Hiểm và sống sót (00:45)";
 
                     SetObjective(
                         "THOÁT HIỂM KHẨN CẤP",
