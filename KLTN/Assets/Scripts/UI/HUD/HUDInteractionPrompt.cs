@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using EchoProtocol.Networking;
 
 namespace EchoProtocol.UI.HUD
 {
@@ -7,6 +8,7 @@ namespace EchoProtocol.UI.HUD
     {
         [Header("References")]
         [SerializeField] private PlayerInteraction playerInteraction;
+        [SerializeField] private NetworkPlayerInteractor networkPlayerInteractor;
         [SerializeField] private CanvasGroup promptCanvasGroup;
         [SerializeField] private Text promptText;
         [SerializeField] private GameObject holdProgressContainer;
@@ -46,6 +48,12 @@ namespace EchoProtocol.UI.HUD
 
         private void Update()
         {
+            if (TryGetNetworkPrompt(out var networkPrompt))
+            {
+                ShowPrompt(networkPrompt, false, 0f);
+                return;
+            }
+
             if (playerInteraction == null)
             {
                 playerInteraction = FindAnyObjectByType<PlayerInteraction>();
@@ -61,15 +69,8 @@ namespace EchoProtocol.UI.HUD
 
             if (interactable == null || string.IsNullOrWhiteSpace(prompt))
             {
-                _targetAlpha = 0f;
-                SetAlpha(Mathf.MoveTowards(promptCanvasGroup != null ? promptCanvasGroup.alpha : 0f, 0f, fadeSpeed * Time.deltaTime));
+                HidePrompt();
                 return;
-            }
-
-            _targetAlpha = 1f;
-            if (promptCanvasGroup != null)
-            {
-                promptCanvasGroup.alpha = Mathf.MoveTowards(promptCanvasGroup.alpha, _targetAlpha, fadeSpeed * Time.deltaTime);
             }
 
             // Check if hold interactable
@@ -92,7 +93,56 @@ namespace EchoProtocol.UI.HUD
                 progress01 = revive.ReviveProgress01;
             }
 
-            // Format Prompt Text with sci-fi key badge
+            ShowPrompt(prompt, isHold, progress01);
+        }
+
+        private bool TryGetNetworkPrompt(out string prompt)
+        {
+            prompt = null;
+            if (networkPlayerInteractor == null
+                || networkPlayerInteractor.Object == null
+                || !networkPlayerInteractor.Object.HasInputAuthority)
+            {
+                networkPlayerInteractor = FindOwnedNetworkInteractor();
+            }
+
+            var candidate = networkPlayerInteractor != null
+                ? networkPlayerInteractor.CurrentCandidate
+                : null;
+            if (candidate == null)
+            {
+                return false;
+            }
+
+            prompt = candidate.InteractionPrompt;
+            return !string.IsNullOrWhiteSpace(prompt);
+        }
+
+        private static NetworkPlayerInteractor FindOwnedNetworkInteractor()
+        {
+            foreach (var interactor in FindObjectsByType<NetworkPlayerInteractor>(
+                         FindObjectsInactive.Exclude))
+            {
+                if (interactor.Object != null && interactor.Object.HasInputAuthority)
+                {
+                    return interactor;
+                }
+            }
+
+            return null;
+        }
+
+        private void ShowPrompt(string prompt, bool isHold, float progress01)
+        {
+            _targetAlpha = 1f;
+            if (promptCanvasGroup != null)
+            {
+                promptCanvasGroup.alpha = Mathf.MoveTowards(
+                    promptCanvasGroup.alpha,
+                    _targetAlpha,
+                    fadeSpeed * Time.deltaTime);
+            }
+
             if (promptText != null)
             {
                 string keyColorHex = isHold ? "#FFB300" : "#00E5FF";
@@ -121,6 +171,20 @@ namespace EchoProtocol.UI.HUD
                         holdProgressText.text = $"{Mathf.RoundToInt(progress01 * 100f)}%";
                     }
                 }
+            }
+        }
+
+        private void HidePrompt()
+        {
+            _targetAlpha = 0f;
+            SetAlpha(Mathf.MoveTowards(
+                promptCanvasGroup != null ? promptCanvasGroup.alpha : 0f,
+                0f,
+                fadeSpeed * Time.deltaTime));
+
+            if (holdProgressContainer != null && holdProgressContainer.activeSelf)
+            {
+                holdProgressContainer.SetActive(false);
             }
         }
 

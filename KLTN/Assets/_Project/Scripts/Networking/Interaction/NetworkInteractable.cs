@@ -7,6 +7,7 @@ namespace EchoProtocol.Networking
     public abstract class NetworkInteractable : NetworkBehaviour, IAuthoritativeNetworkInteractable
     {
         [SerializeField, Min(0.1f)] private float _interactionDistance = 3f;
+        [SerializeField] private string _interactionPrompt = "Interact";
         [SerializeField, Min(0)] private int _requiredToolId;
         [SerializeField, Min(0f)] private float _cooldownSeconds = 0.25f;
         [SerializeField] private Transform _interactionOrigin;
@@ -16,6 +17,7 @@ namespace EchoProtocol.Networking
         [Networked] private TickTimer Cooldown { get; set; }
 
         public float InteractionDistance => _interactionDistance;
+        public virtual string InteractionPrompt => _interactionPrompt;
         public Transform InteractionOrigin => _interactionOrigin != null ? _interactionOrigin : transform;
         public virtual bool EmitsRuntimeInteractionNoise => _emitsRuntimeInteractionNoise;
         public Vector3 RuntimeInteractionNoiseOrigin =>

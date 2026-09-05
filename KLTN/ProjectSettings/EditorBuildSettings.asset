@@ -18,8 +18,8 @@ EditorBuildSettings:
     path: Assets/Scenes/Lobby.unity
     guid: 90dcd486883e27f4a888e312ea423705
   - enabled: 1
-    path: Assets/Scenes/Game.unity
-    guid: a71c889d899a0f94783a5607b8ee64d5
+    path: Assets/Scenes/SciFi.unity
+    guid: 7c97d2f558aac2244ab98314ff31ff5c
   - enabled: 1
     path: Assets/Scenes/Result.unity
     guid: 06f8d3b26e43c2346acbe738db839ae3

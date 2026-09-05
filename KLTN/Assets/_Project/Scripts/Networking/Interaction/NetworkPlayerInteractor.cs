@@ -29,6 +29,8 @@ namespace EchoProtocol.Networking
         private InputAction _helpPingAction;
         private uint _nextSequence;
 
+        public NetworkInteractable CurrentCandidate { get; private set; }
+
         private void Awake()
         {
             _interactAction = _inputActions?.FindActionMap("Player", false)?.FindAction("Interact", false);
@@ -48,6 +50,7 @@ namespace EchoProtocol.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            CurrentCandidate = null;
             _interactAction?.Disable();
             _dropCoreAction?.Disable();
             _teamToolAction?.Disable();
@@ -63,13 +66,27 @@ namespace EchoProtocol.Networking
 
         private void Update()
         {
-            if (Object == null || !Object.HasInputAuthority) return;
-            if (!GetComponent<LobbyPlayerState>().IsGameplayPlayer) return;
+            if (Object == null || !Object.HasInputAuthority)
+            {
+                CurrentCandidate = null;
+                return;
+            }
+            if (!GetComponent<LobbyPlayerState>().IsGameplayPlayer)
+            {
+                CurrentCandidate = null;
+                return;
+            }
 
             if (_helpPingAction?.WasPerformedThisFrame() == true) RequestHelpPing();
 
             var lifeState = GetComponent<NetworkPlayerLifeState>();
-            if (lifeState != null && !lifeState.CanInitiateAction) return;
+            if (lifeState != null && !lifeState.CanInitiateAction)
+            {
+                CurrentCandidate = null;
+                return;
+            }
+
+            CurrentCandidate = TryDetectCandidate(out var candidate) ? candidate : null;
 
             if (_dropCoreAction?.WasPerformedThisFrame() == true)
             {
@@ -77,11 +94,11 @@ namespace EchoProtocol.Networking
             }
             if (_teamToolAction?.WasPerformedThisFrame() == true) RequestUseTeamTool();
 
-            if (_interactAction?.WasPerformedThisFrame() != true) return;
+            if (_interactAction?.WasPressedThisFrame() != true) return;
 
-            if (TryDetectCandidate(out var candidate))
+            if (CurrentCandidate != null)
             {
-                RequestInteraction(candidate);
+                RequestInteraction(CurrentCandidate);
                 return;
             }
 
@@ -144,11 +161,10 @@ namespace EchoProtocol.Networking
 
         private bool TryDetectCandidate(out NetworkInteractable candidate)
         {
-            var origin = _rayOrigin != null ? _rayOrigin : transform;
+            var ray = GetLocalDetectionRay();
 
             if (Physics.Raycast(
-                    origin.position,
-                    origin.forward,
+                    ray,
                     out var hit,
                     _localDetectionDistance,
                     _interactionLayers,
@@ -164,10 +180,9 @@ namespace EchoProtocol.Networking
 
         private bool TryDetectReviveCandidate(out NetworkPlayerLifeState lifeState)
         {
-            var origin = _rayOrigin != null ? _rayOrigin : transform;
+            var ray = GetLocalDetectionRay();
             if (Physics.Raycast(
-                    origin.position,
-                    origin.forward,
+                    ray,
                     out var hit,
                     _localDetectionDistance,
                     _interactionLayers,
@@ -179,6 +194,19 @@ namespace EchoProtocol.Networking
 
             lifeState = null;
             return false;
+        }
+
+        private Ray GetLocalDetectionRay()
+        {
+            if (_rayOrigin != null)
+            {
+                return new Ray(_rayOrigin.position, _rayOrigin.forward);
+            }
+
+            var mainCamera = Camera.main;
+            return mainCamera != null
+                ? mainCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f))
+                : new Ray(transform.position, transform.forward);
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
