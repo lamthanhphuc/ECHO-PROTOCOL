@@ -69,7 +69,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnergyCorePickup
   coreItem: {fileID: 11400000, guid: 2bd2cff28dde40f4bbbba4a5fbf6e854, type: 2}
   coreId: EnergyCore
-  pickupPrompt: Pick up Energy Core
+  pickupPrompt: Nhặt Energy Core
 --- !u!1001 &6754800331780982088
 PrefabInstance:
   m_ObjectHideFlags: 0

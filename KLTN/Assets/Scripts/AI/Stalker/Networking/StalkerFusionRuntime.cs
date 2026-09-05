@@ -5,9 +5,10 @@ using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
 using UnityEngine.AI;
-
 namespace EchoProtocol.AI.Stalker.Networking
 {
+    using Debug = UnityEngine.Debug;
+
     [DefaultExecutionOrder(-1000)]
     [DisallowMultipleComponent]
     [RequireComponent(typeof(StalkerController))]

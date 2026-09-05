@@ -215,9 +215,7 @@ namespace EchoProtocol.Networking
 
         private void HandleStateChanged()
         {
-            foreach (var legacy in FindObjectsByType<PowerPuzzleController>(
-                         FindObjectsInactive.Include,
-                         FindObjectsSortMode.None))
+            foreach (var legacy in FindObjectsByType<PowerPuzzleController>(FindObjectsInactive.Include))
             {
                 legacy.ApplyAuthoritativeSnapshot(
                     State == NetworkPowerPuzzleState.InProgress,

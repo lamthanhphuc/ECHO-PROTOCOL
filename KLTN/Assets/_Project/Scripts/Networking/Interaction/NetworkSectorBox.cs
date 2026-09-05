@@ -210,9 +210,7 @@ namespace EchoProtocol.Networking
 
         private void HandleObjectiveChanged()
         {
-            foreach (var legacyProgress in FindObjectsByType<EnergyCoreObjectiveProgress>(
-                         FindObjectsInactive.Include,
-                         FindObjectsSortMode.None))
+            foreach (var legacyProgress in FindObjectsByType<EnergyCoreObjectiveProgress>(FindObjectsInactive.Include))
             {
                 legacyProgress.SetNetworkAuthorityPresentationOnly(true);
                 legacyProgress.ApplyAuthoritativeSnapshot(PlacedCoreCount, _requiredCoreCount);
@@ -225,7 +223,7 @@ namespace EchoProtocol.Networking
         {
             if (_embeddedFallbackRenderer == null) return;
 
-            var legacyBoxes = FindObjectsByType<SectorBox>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var legacyBoxes = FindObjectsByType<SectorBox>(FindObjectsInactive.Include);
             _embeddedFallbackRenderer.enabled = legacyBoxes.Length == 0;
         }
     }

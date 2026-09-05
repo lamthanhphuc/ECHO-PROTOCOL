@@ -134,11 +134,21 @@ public class PlayerCamera : MonoBehaviour
             target.position +
             Vector3.up * (feetYOffset + _currentEyeHeight);
 
-        // Camera owns look yaw locally. NetworkPlayerMovement sends this yaw
-        // through Fusion input and applies it authoritatively to the player.
-        // Do not rotate the target toward movement direction here.
+        // Camera owns look yaw locally.
         transform.rotation =
             Quaternion.Euler(_pitch, _yaw, 0f);
+
+        // For local player (standalone / prototype PlayerMovement), rotate the player transform to match look yaw
+        // so that forward/strafe movement and visuals/flashlight align with the camera view.
+        if (_playerMovement == null && target != null)
+        {
+            _playerMovement = target.GetComponent<PlayerMovement>();
+        }
+
+        if (_playerMovement != null)
+        {
+            target.rotation = Quaternion.Euler(0f, _yaw, 0f);
+        }
     }
 
     private static void LockCursor()

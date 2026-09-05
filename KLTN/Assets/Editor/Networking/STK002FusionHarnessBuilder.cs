@@ -169,7 +169,9 @@ namespace EchoProtocol.Editor.Networking
             floor.name = "STK002_HarnessFloor";
             floor.transform.position = new Vector3(0f, -0.05f, 0f);
             floor.transform.localScale = new Vector3(14f, 0.1f, 14f);
+#pragma warning disable CS0618
             GameObjectUtility.SetStaticEditorFlags(floor, StaticEditorFlags.NavigationStatic);
+#pragma warning restore CS0618
         }
 
         private static Transform CreateMarker(Scene scene, string name, Vector3 position)
