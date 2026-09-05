@@ -73,7 +73,7 @@ namespace EchoProtocol.UI.HUD
             _targetColors.Clear();
 
             // 1. Downed Teammates (Need Help)
-            PlayerDownState[] players = FindObjectsByType<PlayerDownState>(FindObjectsSortMode.None);
+            PlayerDownState[] players = FindObjectsByType<PlayerDownState>();
             for (int i = 0; i < players.Length; i++)
             {
                 PlayerDownState p = players[i];

@@ -5,8 +5,8 @@ using UnityEngine.Events;
 public class PlayerReviveInteractable : MonoBehaviour, IInteractable
 {
     [SerializeField] private PlayerDownState downState;
-    [SerializeField] private float reviveDurationSeconds = 2.5f;
-    [SerializeField] private string revivePrompt = "Revive teammate";
+    [SerializeField] private float reviveDurationSeconds = 6f;
+    [SerializeField] private string revivePrompt = "Giữ để Cứu Đồng Đội";
     [SerializeField] private UnityEvent reviveStarted;
     [SerializeField] private UnityEvent reviveCompleted;
     [SerializeField] private UnityEvent reviveInterrupted;
@@ -17,7 +17,7 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
     public bool IsReviving => _reviver != null;
     public float ReviveProgress01 => reviveDurationSeconds <= 0f ? 1f : Mathf.Clamp01(_reviveTimer / reviveDurationSeconds);
     public GameObject Reviver => _reviver;
-    public string InteractionPrompt => revivePrompt + " (" + Mathf.CeilToInt(reviveDurationSeconds) + "s)";
+    public string InteractionPrompt => string.IsNullOrWhiteSpace(revivePrompt) || revivePrompt == "Revive teammate" || revivePrompt == "Cứu đồng đội" ? "Giữ để Cứu Đồng Đội" : revivePrompt;
 
     private void Awake()
     {
