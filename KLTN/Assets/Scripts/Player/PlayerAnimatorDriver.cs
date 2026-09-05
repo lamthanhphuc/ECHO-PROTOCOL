@@ -58,7 +58,14 @@ public class PlayerAnimatorDriver : MonoBehaviour
         if (downState == null) downState = GetComponent<PlayerDownState>() ?? GetComponentInParent<PlayerDownState>();
 
         bool isCrouching = movement != null && movement.IsCrouching;
-        bool isSprinting = (movement != null && movement.IsSprinting) || (Keyboard.current != null && Keyboard.current.leftShiftKey.isPressed);
+        bool isSprinting = movement != null
+            ? movement.IsSprinting
+            : (Keyboard.current != null
+                && Keyboard.current.leftShiftKey.isPressed
+                && Keyboard.current.wKey.isPressed
+                && !Keyboard.current.aKey.isPressed
+                && !Keyboard.current.dKey.isPressed
+                && !Keyboard.current.sKey.isPressed);
         bool isCarrying = coreCarrier != null && coreCarrier.IsCarrying;
         bool isDowned = downState != null && downState.IsDowned;
         Vector2 moveDirection = GetMoveDirection(isSprinting, isCarrying, isDowned);

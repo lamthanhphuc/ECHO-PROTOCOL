@@ -45,7 +45,6 @@ namespace EchoProtocol.UI.HUD
         private MatchFlowController _matchFlow;
         private float _refreshTimer;
 
-        public event Action<PlayerDownState> TeammateDowned;
         public IReadOnlyList<PlayerDownState> DiscoveredPlayers => _discoveredPlayers;
 
         private void Awake()
@@ -93,7 +92,7 @@ namespace EchoProtocol.UI.HUD
         public void RefreshDiscoveredPlayers()
         {
             _discoveredPlayers.Clear();
-            PlayerDownState[] allDownStates = FindObjectsByType<PlayerDownState>(FindObjectsSortMode.None);
+            PlayerDownState[] allDownStates = FindObjectsByType<PlayerDownState>();
             if (allDownStates != null)
             {
                 for (int i = 0; i < allDownStates.Length; i++)

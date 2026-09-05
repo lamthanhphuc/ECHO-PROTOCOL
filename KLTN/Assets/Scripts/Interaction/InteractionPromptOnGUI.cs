@@ -10,7 +10,7 @@ public class InteractionPromptOnGUI : MonoBehaviour
 
     private void Awake()
     {
-        if (FindFirstObjectByType<EchoProtocol.UI.HUD.HUDInteractionPrompt>() != null)
+        if (FindAnyObjectByType<EchoProtocol.UI.HUD.HUDInteractionPrompt>() != null)
         {
             enabled = false;
             return;
@@ -24,7 +24,7 @@ public class InteractionPromptOnGUI : MonoBehaviour
 
     private void OnGUI()
     {
-        if (FindFirstObjectByType<EchoProtocol.UI.HUD.HUDInteractionPrompt>() != null)
+        if (FindAnyObjectByType<EchoProtocol.UI.HUD.HUDInteractionPrompt>() != null)
         {
             return;
         }

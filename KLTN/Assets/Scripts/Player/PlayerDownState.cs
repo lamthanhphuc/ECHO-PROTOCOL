@@ -13,7 +13,7 @@ public class PlayerDownState : MonoBehaviour
 
     [Header("Down")]
     [SerializeField] private float maxHealth = 100f;
-    [SerializeField] private float bleedoutSeconds = 45f;
+    [SerializeField] private float bleedoutSeconds = 90f;
     [SerializeField] private float crawlSpeedMultiplier = 0.32f;
     [SerializeField] private float downedCameraEyeHeight = 0.55f;
     [SerializeField] private Vector3 downedVisualEuler = new Vector3(70f, 0f, 0f);

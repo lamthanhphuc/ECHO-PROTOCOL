@@ -211,9 +211,7 @@ namespace EchoProtocol.Networking
 
         private SpawnPose GetPowerPuzzleStationPose(int inputId)
         {
-            var stations = FindObjectsByType<PowerPuzzleStation>(
-                FindObjectsInactive.Include,
-                FindObjectsSortMode.None);
+            var stations = FindObjectsByType<PowerPuzzleStation>(FindObjectsInactive.Include);
             System.Array.Sort(stations, (left, right) =>
             {
                 var typeOrder = left.StationType.CompareTo(right.StationType);
@@ -251,7 +249,7 @@ namespace EchoProtocol.Networking
 
         private static SpawnPose GetSectorBoxPose()
         {
-            var sectorBoxes = FindObjectsByType<SectorBox>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var sectorBoxes = FindObjectsByType<SectorBox>(FindObjectsInactive.Include);
             if (sectorBoxes.Length > 0 && sectorBoxes[0] != null)
             {
                 return new SpawnPose(sectorBoxes[0].transform.position, sectorBoxes[0].transform.rotation);
@@ -262,38 +260,28 @@ namespace EchoProtocol.Networking
 
         private static void DisableLegacyObjectiveMutators()
         {
-            foreach (var legacyCore in FindObjectsByType<EnergyCorePickup>(
-                         FindObjectsInactive.Include,
-                         FindObjectsSortMode.None))
+            foreach (var legacyCore in FindObjectsByType<EnergyCorePickup>(FindObjectsInactive.Include))
             {
                 legacyCore.enabled = false;
             }
 
-            foreach (var legacySector in FindObjectsByType<SectorBox>(
-                         FindObjectsInactive.Include,
-                         FindObjectsSortMode.None))
+            foreach (var legacySector in FindObjectsByType<SectorBox>(FindObjectsInactive.Include))
             {
                 legacySector.enabled = false;
             }
 
-            foreach (var legacyProgress in FindObjectsByType<EnergyCoreObjectiveProgress>(
-                         FindObjectsInactive.Include,
-                         FindObjectsSortMode.None))
+            foreach (var legacyProgress in FindObjectsByType<EnergyCoreObjectiveProgress>(FindObjectsInactive.Include))
             {
                 legacyProgress.enabled = false;
             }
 
-            foreach (var legacyPuzzle in FindObjectsByType<PowerPuzzleController>(
-                         FindObjectsInactive.Include,
-                         FindObjectsSortMode.None))
+            foreach (var legacyPuzzle in FindObjectsByType<PowerPuzzleController>(FindObjectsInactive.Include))
             {
                 legacyPuzzle.SetNetworkAuthorityPresentationOnly(true);
                 legacyPuzzle.enabled = false;
             }
 
-            foreach (var legacyStation in FindObjectsByType<PowerPuzzleStation>(
-                         FindObjectsInactive.Include,
-                         FindObjectsSortMode.None))
+            foreach (var legacyStation in FindObjectsByType<PowerPuzzleStation>(FindObjectsInactive.Include))
             {
                 legacyStation.SetNetworkAuthorityPresentationOnly(true);
                 foreach (var stationCollider in legacyStation.GetComponentsInChildren<Collider>())
