@@ -935,7 +935,7 @@ namespace EchoProtocol.AI.Stalker.Networking.Diagnostics
             }
 
             _nextRuntimeResolveTime = Time.realtimeSinceStartup + RuntimeResolveIntervalSeconds;
-            var found = FindObjectsByType<StalkerFusionRuntime>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var found = FindObjectsByType<StalkerFusionRuntime>(FindObjectsInactive.Include);
             for (var i = 0; i < found.Length; i++)
             {
                 if (found[i] == null
