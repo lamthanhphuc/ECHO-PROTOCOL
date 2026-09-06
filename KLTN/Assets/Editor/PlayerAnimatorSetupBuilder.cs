@@ -30,6 +30,7 @@ public static class PlayerAnimatorSetupBuilder
 
     private static readonly string[] PrefabPaths =
     {
+        "Assets/Prefabs/Player.prefab",
         "Assets/Prefabs/Player/Variants/PF_PlayerCharacter_P1_Default.prefab",
         "Assets/Prefabs/Player/Variants/PF_PlayerCharacter_P2_Orange.prefab",
         "Assets/Prefabs/Player/Variants/PF_PlayerCharacter_P3_Green.prefab",
@@ -69,7 +70,10 @@ public static class PlayerAnimatorSetupBuilder
         EnsureHumanoidAnimationImport(CrouchWalkLeftFbxPath, loop: true);
         EnsureHumanoidAnimationImport(CrouchWalkRightFbxPath, loop: true);
         EnsureHumanoidAnimationImport(CarryIdleFbxPath, loop: true);
-        EnsureHumanoidAnimationImport(CarryWalkFbxPath, loop: true);
+        if (AssetDatabase.LoadAssetAtPath<GameObject>(CarryWalkFbxPath) != null)
+        {
+            EnsureHumanoidAnimationImport(CarryWalkFbxPath, loop: true);
+        }
         EnsureHumanoidAnimationImport(CarryRunFbxPath, loop: true);
         EnsureHumanoidAnimationImport(CrawlIdleFbxPath, loop: true);
         EnsureHumanoidAnimationImport(CrawlForwardFbxPath, loop: true);
@@ -87,8 +91,8 @@ public static class PlayerAnimatorSetupBuilder
         AnimationClip crouchWalkLeft = LoadRequiredClip("Player_Crouch_Walk_Left", CrouchWalkLeftFbxPath, "Crouch Walk Left");
         AnimationClip crouchWalkRight = LoadRequiredClip("Player_Crouch_Walk_Right", CrouchWalkRightFbxPath, "Crouch Walk Right");
         AnimationClip carryIdle = LoadRequiredClip("Player_Carry_Idle", CarryIdleFbxPath);
-        AnimationClip carryWalk = LoadRequiredClip("Player_Carry_Walk", CarryWalkFbxPath);
         AnimationClip carryRun = LoadRequiredClip("Player_Carry_Run", CarryRunFbxPath);
+        AnimationClip carryWalk = LoadOptionalClip("Player_Carry_Walk", carryRun != null ? carryRun : carryIdle);
         AnimationClip downedIdle = LoadRequiredClip("Player_Downed_Idle", CrawlIdleFbxPath, "Player_Crawl");
         AnimationClip crawlForward = LoadRequiredClip("Player_Crawl_Forward", CrawlForwardFbxPath, "Crawl_Forward");
         AnimationClip revive = LoadRequiredClip("Player_Revive", ReviveFbxPath, "Reviving");
@@ -144,6 +148,13 @@ public static class PlayerAnimatorSetupBuilder
 
     private static void ConfigureController(AnimatorController controller, PlayerClips clips)
     {
+        AnimatorControllerLayer[] layers = controller.layers;
+        if (layers.Length > 0)
+        {
+            layers[0].iKPass = true;
+            controller.layers = layers;
+        }
+
         controller.AddParameter("Speed", AnimatorControllerParameterType.Float);
         controller.AddParameter("MoveX", AnimatorControllerParameterType.Float);
         controller.AddParameter("MoveY", AnimatorControllerParameterType.Float);
@@ -325,18 +336,20 @@ public static class PlayerAnimatorSetupBuilder
                 continue;
             }
 
-            Animator rootAnimator = prefabRoot.GetComponent<Animator>();
-            if (rootAnimator != null)
-            {
-                Object.DestroyImmediate(rootAnimator);
-            }
-
-            Transform body = prefabRoot.transform.Find("Body");
-            GameObject animatorTarget = body != null ? body.gameObject : prefabRoot;
-            Animator animator = animatorTarget.GetComponent<Animator>();
+            Animator animator = FindAnimatorOnModel(prefabRoot);
+            GameObject animatorTarget = animator != null ? animator.gameObject : prefabRoot;
             if (animator == null)
             {
                 animator = animatorTarget.AddComponent<Animator>();
+            }
+
+            if (animatorTarget != prefabRoot)
+            {
+                Animator unusedRootAnimator = prefabRoot.GetComponent<Animator>();
+                if (unusedRootAnimator != null)
+                {
+                    Object.DestroyImmediate(unusedRootAnimator);
+                }
             }
 
             animator.runtimeAnimatorController = controller;
@@ -350,13 +363,58 @@ public static class PlayerAnimatorSetupBuilder
                 driver = prefabRoot.AddComponent<PlayerAnimatorDriver>();
             }
 
+            PlayerHeldItemAnchor itemAnchor = prefabRoot.GetComponent<PlayerHeldItemAnchor>();
+            if (itemAnchor == null)
+            {
+                itemAnchor = prefabRoot.AddComponent<PlayerHeldItemAnchor>();
+            }
+
+            PlayerHeldItemView heldItemView = prefabRoot.GetComponent<PlayerHeldItemView>();
+            if (heldItemView == null)
+            {
+                heldItemView = prefabRoot.AddComponent<PlayerHeldItemView>();
+            }
+
+            RemoveRootUpperBodyAimIfAnimatorIsChild(prefabRoot, animatorTarget);
+
+            PlayerUpperBodyAim upperBodyAim = animatorTarget.GetComponent<PlayerUpperBodyAim>();
+            if (upperBodyAim == null)
+            {
+                upperBodyAim = animatorTarget.AddComponent<PlayerUpperBodyAim>();
+            }
+
             SerializedObject driverSo = new SerializedObject(driver);
             SetObject(driverSo, "animator", animator);
+            SetObject(driverSo, "inventory", prefabRoot.GetComponent<PlayerInventory>());
+            SetObject(driverSo, "coreCarrier", prefabRoot.GetComponent<PlayerEnergyCoreCarrier>());
             SetFloat(driverSo, "walkSpeedReference", 4f);
             SetFloat(driverSo, "runSpeedReference", 7f);
             SetFloat(driverSo, "speedDampTime", 0.16f);
             SetFloat(driverSo, "directionDampTime", 0.12f);
             driverSo.ApplyModifiedPropertiesWithoutUndo();
+
+            SerializedObject anchorSo = new SerializedObject(itemAnchor);
+            SetObject(anchorSo, "animator", animator);
+            SetVector3(anchorSo, "coreCarryLocalPosition", new Vector3(0f, 0.06f, 0.28f));
+            SetVector3(anchorSo, "coreCarryLocalEulerAngles", Vector3.zero);
+            anchorSo.ApplyModifiedPropertiesWithoutUndo();
+
+            SerializedObject viewSo = new SerializedObject(heldItemView);
+            SetObject(viewSo, "inventory", prefabRoot.GetComponent<PlayerInventory>());
+            SetObject(viewSo, "coreCarrier", prefabRoot.GetComponent<PlayerEnergyCoreCarrier>());
+            SetObject(viewSo, "heldItemAnchor", itemAnchor);
+            SetVector3(viewSo, "energyCoreLocalPosition", Vector3.zero);
+            SetVector3(viewSo, "energyCoreLocalEulerAngles", Vector3.zero);
+            SetVector3(viewSo, "energyCoreLocalScale", new Vector3(25f, 25f, 25f));
+            SetVector3(viewSo, "energyCoreChildLocalPosition", new Vector3(0.0012f, -0.2456f, -1.1109f));
+            SetVector3(viewSo, "energyCoreChildLocalEulerAngles", new Vector3(-89.116f, 77.236f, -92.522f));
+            SetVector3(viewSo, "energyCoreChildLocalScale", new Vector3(0.9f, 0.9f, 0.9f));
+            viewSo.ApplyModifiedPropertiesWithoutUndo();
+
+            SerializedObject aimSo = new SerializedObject(upperBodyAim);
+            SetObject(aimSo, "animator", animator);
+            SetObject(aimSo, "playerRoot", prefabRoot.transform);
+            aimSo.ApplyModifiedPropertiesWithoutUndo();
 
             PrefabUtility.SaveAsPrefabAsset(prefabRoot, prefabPath);
             PrefabUtility.UnloadPrefabContents(prefabRoot);
@@ -368,6 +426,46 @@ public static class PlayerAnimatorSetupBuilder
         Selection.activeObject = null;
         Selection.objects = new Object[0];
         UnityEditorInternal.InternalEditorUtility.RepaintAllViews();
+    }
+
+    private static Animator FindAnimatorOnModel(GameObject prefabRoot)
+    {
+        Animator existingWithController = prefabRoot
+            .GetComponentsInChildren<Animator>(true)
+            .FirstOrDefault(candidate => candidate != null
+                && candidate.gameObject != prefabRoot
+                && candidate.runtimeAnimatorController != null);
+        if (existingWithController != null)
+        {
+            return existingWithController;
+        }
+
+        Transform body = prefabRoot.transform.Find("Body")
+            ?? prefabRoot.GetComponentsInChildren<Transform>(true)
+                .FirstOrDefault(child => child.name == "Body");
+        if (body != null)
+        {
+            return body.GetComponent<Animator>() ?? body.gameObject.AddComponent<Animator>();
+        }
+
+        Animator childAnimator = prefabRoot
+            .GetComponentsInChildren<Animator>(true)
+            .FirstOrDefault(candidate => candidate != null && candidate.gameObject != prefabRoot);
+        return childAnimator != null ? childAnimator : prefabRoot.GetComponent<Animator>();
+    }
+
+    private static void RemoveRootUpperBodyAimIfAnimatorIsChild(GameObject prefabRoot, GameObject animatorTarget)
+    {
+        if (animatorTarget == prefabRoot)
+        {
+            return;
+        }
+
+        PlayerUpperBodyAim rootAim = prefabRoot.GetComponent<PlayerUpperBodyAim>();
+        if (rootAim != null)
+        {
+            Object.DestroyImmediate(rootAim);
+        }
     }
 
     private static void EnsureHumanoidBodyImport()
@@ -528,7 +626,7 @@ public static class PlayerAnimatorSetupBuilder
         AnimationClip clip = LoadClip(clipName);
         if (clip == null)
         {
-            Debug.LogWarning("[PlayerAnimatorSetupBuilder] Missing optional animation clip " + clipName + "; using " + fallback.name + " as FPS prototype fallback.");
+            Debug.Log("[PlayerAnimatorSetupBuilder] Missing optional animation clip " + clipName + "; using " + fallback.name + " as FPS prototype fallback.");
             return fallback;
         }
 
@@ -575,6 +673,15 @@ public static class PlayerAnimatorSetupBuilder
         }
     }
 
+    private static void SetVector3(SerializedObject serializedObject, string propertyName, Vector3 value)
+    {
+        SerializedProperty property = serializedObject.FindProperty(propertyName);
+        if (property != null)
+        {
+            property.vector3Value = value;
+        }
+    }
+
     private static string ToAbsolutePath(string assetPath)
     {
         string projectRoot = Directory.GetParent(Application.dataPath).FullName;
@@ -605,7 +712,7 @@ public static class PlayerAnimatorSetupBuilder
             Idle == null || WalkForward == null || WalkBackward == null || WalkLeft == null || WalkRight == null ||
             RunForward == null ||
             CrouchIdle == null || CrouchWalkForward == null || CrouchWalkBackward == null || CrouchWalkLeft == null || CrouchWalkRight == null ||
-            CarryIdle == null || CarryWalk == null || CarryRun == null ||
+            CarryIdle == null || CarryRun == null ||
             DownedIdle == null || CrawlForward == null || Revive == null;
     }
 }
