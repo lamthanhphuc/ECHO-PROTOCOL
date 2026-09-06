@@ -13,10 +13,7 @@ public class PlayerSpectateController : MonoBehaviour
 
     private void Awake()
     {
-        if (downState == null)
-        {
-            downState = GetComponent<PlayerDownState>();
-        }
+        EnsureDownState();
 
         if (playerCamera == null)
         {
@@ -26,10 +23,7 @@ public class PlayerSpectateController : MonoBehaviour
 
     private void OnEnable()
     {
-        if (downState != null)
-        {
-            downState.StateChanged += OnLifeStateChanged;
-        }
+        EnsureDownState();
     }
 
     private void OnDisable()
@@ -40,6 +34,19 @@ public class PlayerSpectateController : MonoBehaviour
         }
     }
 
+    private void EnsureDownState()
+    {
+        if (downState == null)
+        {
+            downState = GetComponent<PlayerDownState>();
+            if (downState != null)
+            {
+                downState.StateChanged -= OnLifeStateChanged;
+                downState.StateChanged += OnLifeStateChanged;
+            }
+        }
+    }
+
     public void SetSpectateTarget(Transform target)
     {
         _spectateTarget = target;
@@ -47,6 +54,7 @@ public class PlayerSpectateController : MonoBehaviour
 
     private void LateUpdate()
     {
+        EnsureDownState();
         if (!IsSpectating || _spectateTarget == null || playerCamera == null)
         {
             return;

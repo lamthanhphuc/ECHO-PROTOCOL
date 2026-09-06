@@ -24,6 +24,8 @@ GameObject:
   - component: {fileID: 2959782959538051123}
   - component: {fileID: 8400725215518522818}
   - component: {fileID: 6712278150136001238}
+  - component: {fileID: 810580752424859207}
+  - component: {fileID: 5671761272292103460}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -151,7 +153,13 @@ MonoBehaviour:
   sprintSideInputTolerance: 0.2
   standingHeight: 2
   crouchHeight: 1.2
+  standingRadius: 0.42
+  crouchRadius: 0.42
   crouchTransitionSpeed: 10
+  standUpObstructionMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  standUpTriggerInteraction: 1
   maxStamina: 100
   sprintStaminaDrainPerSecond: 25
   staminaRegenPerSecond: 18
@@ -315,7 +323,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerReviveInteractable
   downState: {fileID: 8098713353635554193}
-  firstAidKitDefinition: {fileID: 11400000, guid: 83e351ca0967dee42a5e5df09e905232, type: 2}
   reviveDurationSeconds: 6
   revivePrompt: "Gi\u1EEF \u0111\u1EC3 C\u1EE9u \u0110\u1ED3ng \u0110\u1ED9i"
   reviveStarted:
@@ -357,7 +364,9 @@ MonoBehaviour:
   animator: {fileID: 1535689403677083624}
   movement: {fileID: 8888631157936493611}
   characterController: {fileID: 8135825658329404212}
+  inventory: {fileID: 3095192988049785345}
   coreCarrier: {fileID: 3626915244988454067}
+  lobbyState: {fileID: 0}
   downState: {fileID: 8098713353635554193}
   walkSpeedReference: 4
   runSpeedReference: 7
@@ -379,6 +388,49 @@ MonoBehaviour:
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   startOn: 1
   toggleCooldown: 0.2
+--- !u!114 &810580752424859207
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 468300235454084763}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 577fe7ca2424db4438f4857e96dfc073, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHeldItemAnchor
+  animator: {fileID: 1535689403677083624}
+  rightHandAnchor: {fileID: 0}
+  coreCarryAnchor: {fileID: 0}
+  fallbackLocalPosition: {x: 0.33, y: 1.18, z: 0.42}
+  fallbackLocalEulerAngles: {x: 4, y: 8, z: 0}
+  coreCarryLocalPosition: {x: 0, y: 0.06, z: 0.28}
+  coreCarryLocalEulerAngles: {x: 0, y: 0, z: 0}
+--- !u!114 &5671761272292103460
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 468300235454084763}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d9e9e305bd153a24aa0de739e91fe1c7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHeldItemView
+  inventory: {fileID: 3095192988049785345}
+  coreCarrier: {fileID: 3626915244988454067}
+  heldItemAnchor: {fileID: 810580752424859207}
+  energyCoreLocalPosition: {x: 0, y: 0, z: 0}
+  energyCoreLocalEulerAngles: {x: 0, y: 0, z: 0}
+  energyCoreLocalScale: {x: 25, y: 25, z: 25}
+  energyCoreChildLocalPosition: {x: 0.0012, y: -0.2456, z: -1.1109}
+  energyCoreChildLocalEulerAngles: {x: -89.116, y: 77.236, z: -92.522}
+  energyCoreChildLocalScale: {x: 0.9, y: 0.9, z: 0.9}
+  teamToolLocalPosition: {x: 0.04, y: 0.01, z: 0.11}
+  teamToolLocalEulerAngles: {x: 12, y: 88, z: -18}
+  teamToolLocalScale: {x: 0.45, y: 0.45, z: 0.45}
 --- !u!1 &2288167123551940416
 GameObject:
   m_ObjectHideFlags: 0
@@ -389,6 +441,7 @@ GameObject:
   m_Component:
   - component: {fileID: 4696334079615901255}
   - component: {fileID: 349418019959635554}
+  - component: {fileID: 4617526691223456571}
   m_Layer: 0
   m_Name: Flashlight_Light
   m_TagString: Untagged
@@ -405,7 +458,7 @@ Transform:
   m_GameObject: {fileID: 2288167123551940416}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.55, z: 0.35}
+  m_LocalPosition: {x: 0.0645, y: 0.8569, z: 0.0815}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -476,6 +529,35 @@ Light:
   m_LightUnit: 1
   m_LuxAtDistance: 1
   m_EnableSpotReflector: 1
+--- !u!114 &4617526691223456571
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2288167123551940416}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
+  m_UsePipelineSettings: 1
+  m_AdditionalLightsShadowResolutionTier: 2
+  m_CustomShadowLayers: 0
+  m_LightCookieSize: {x: 1, y: 1}
+  m_LightCookieOffset: {x: 0, y: 0}
+  m_SoftShadowQuality: 0
+  m_RenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_ShadowRenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_Version: 4
+  m_LightLayerMask: 1
+  m_ShadowLayerMask: 1
+  m_RenderingLayers: 1
+  m_ShadowRenderingLayers: 1
 --- !u!1001 &2309122033543499222
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1240,13 +1322,43 @@ PrefabInstance:
     - {fileID: 457886595436079980, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 1126359557567308340, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 9211204647539671806}
   m_SourcePrefab: {fileID: 100100000, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
 --- !u!95 &1535689403677083624 stripped
 Animator:
   m_CorrespondingSourceObject: {fileID: 3838328164491348542, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
   m_PrefabInstance: {fileID: 2309122033543499222}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &3434562397238013922 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1126359557567308340, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+  m_PrefabInstance: {fileID: 2309122033543499222}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &9211204647539671806
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3434562397238013922}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bacb97b213241624a836b7a3ee109f4b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerUpperBodyAim
+  animator: {fileID: 1535689403677083624}
+  playerRoot: {fileID: 4442826840595284326}
+  playerCamera: {fileID: 0}
+  lookAtWeight: 0.82
+  bodyWeight: 0.24
+  headWeight: 0.74
+  eyesWeight: 0.45
+  clampWeight: 0.42
+  lookAtDistance: 12
+  driveRightHandWhenHolding: 1
 --- !u!4 &4690670608594508291 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 6994998768752351189, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}

@@ -454,6 +454,7 @@ GameObject:
   m_Component:
   - component: {fileID: 124719246069421409}
   - component: {fileID: 400039434526989088}
+  - component: {fileID: 1415903485965977315}
   m_Layer: 0
   m_Name: Body
   m_TagString: Untagged
@@ -505,6 +506,28 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &1415903485965977315
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 788349642972532699}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bacb97b213241624a836b7a3ee109f4b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerUpperBodyAim
+  animator: {fileID: 400039434526989088}
+  playerRoot: {fileID: 2680423496029587426}
+  playerCamera: {fileID: 0}
+  lookAtWeight: 0.82
+  bodyWeight: 0.24
+  headWeight: 0.74
+  eyesWeight: 0.45
+  clampWeight: 0.42
+  lookAtDistance: 12
+  driveRightHandWhenHolding: 1
 --- !u!1 &865569146004413565
 GameObject:
   m_ObjectHideFlags: 0
@@ -1409,6 +1432,8 @@ GameObject:
   m_Component:
   - component: {fileID: 2680423496029587426}
   - component: {fileID: 2883243105830598353}
+  - component: {fileID: 5936215144411687924}
+  - component: {fileID: 5685336281671184399}
   m_Layer: 0
   m_Name: PF_PlayerCharacter_P4_Purple
   m_TagString: Untagged
@@ -1447,12 +1472,57 @@ MonoBehaviour:
   animator: {fileID: 400039434526989088}
   movement: {fileID: 0}
   characterController: {fileID: 0}
+  inventory: {fileID: 0}
   coreCarrier: {fileID: 0}
+  lobbyState: {fileID: 0}
   downState: {fileID: 0}
   walkSpeedReference: 4
   runSpeedReference: 7
   speedDampTime: 0.16
   directionDampTime: 0.12
+--- !u!114 &5936215144411687924
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2067764978453533472}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 577fe7ca2424db4438f4857e96dfc073, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHeldItemAnchor
+  animator: {fileID: 400039434526989088}
+  rightHandAnchor: {fileID: 0}
+  coreCarryAnchor: {fileID: 0}
+  fallbackLocalPosition: {x: 0.33, y: 1.18, z: 0.42}
+  fallbackLocalEulerAngles: {x: 4, y: 8, z: 0}
+  coreCarryLocalPosition: {x: 0, y: 0.06, z: 0.28}
+  coreCarryLocalEulerAngles: {x: 0, y: 0, z: 0}
+--- !u!114 &5685336281671184399
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2067764978453533472}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d9e9e305bd153a24aa0de739e91fe1c7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHeldItemView
+  inventory: {fileID: 0}
+  coreCarrier: {fileID: 0}
+  heldItemAnchor: {fileID: 5936215144411687924}
+  energyCoreLocalPosition: {x: 0, y: 0, z: 0}
+  energyCoreLocalEulerAngles: {x: 0, y: 0, z: 0}
+  energyCoreLocalScale: {x: 25, y: 25, z: 25}
+  energyCoreChildLocalPosition: {x: 0.0012, y: -0.2456, z: -1.1109}
+  energyCoreChildLocalEulerAngles: {x: -89.116, y: 77.236, z: -92.522}
+  energyCoreChildLocalScale: {x: 0.9, y: 0.9, z: 0.9}
+  teamToolLocalPosition: {x: 0.04, y: 0.01, z: 0.11}
+  teamToolLocalEulerAngles: {x: 12, y: 88, z: -18}
+  teamToolLocalScale: {x: 0.45, y: 0.45, z: 0.45}
 --- !u!1 &2178374276691728416
 GameObject:
   m_ObjectHideFlags: 0

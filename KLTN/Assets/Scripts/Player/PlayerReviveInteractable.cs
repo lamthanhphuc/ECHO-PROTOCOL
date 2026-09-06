@@ -1,3 +1,4 @@
+using EchoProtocol.Networking;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -20,7 +21,7 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
     public bool IsReviving => _networkAuthorityPresentationOnly ? _authoritativeIsReviving : _reviver != null;
     public float ReviveProgress01 => _networkAuthorityPresentationOnly
         ? _authoritativeProgress01
-        : reviveDurationSeconds <= 0f ? 1f : Mathf.Clamp01(_reviveTimer / reviveDurationSeconds);
+        : reviveDurationSeconds <= 0f ? 1f : Mathf.Clamp01(_reviveTimer / GetEffectiveReviveDuration(_reviver));
     public GameObject Reviver => _reviver;
     public string InteractionPrompt => string.IsNullOrWhiteSpace(revivePrompt) || revivePrompt == "Revive teammate" || revivePrompt == "Cứu đồng đội" ? "Giữ để Cứu Đồng Đội" : revivePrompt;
 
@@ -47,11 +48,35 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
             return;
         }
 
+        // First Aid Kit bonus: nếu reviver đang cầm FAK (ToolId=3) → rút ngắn thời gian cứu 50%
+        float effectiveDuration = GetEffectiveReviveDuration(_reviver);
         _reviveTimer += Time.deltaTime;
-        if (_reviveTimer >= reviveDurationSeconds)
+        if (_reviveTimer >= effectiveDuration)
         {
             CompleteRevive();
         }
+    }
+
+    /// <summary>
+    /// Tính thời gian revive thực tế (có tính bonus First Aid Kit).
+    /// </summary>
+    private float GetEffectiveReviveDuration(GameObject reviver)
+    {
+        if (reviver == null) return reviveDurationSeconds;
+        var lobbyState = reviver.GetComponentInParent<LobbyPlayerState>();
+        if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.ToolId == 3)
+        {
+            // FAK bonus: giảm 50% thời gian (6s → 3s)
+            return reviveDurationSeconds * 0.5f;
+        }
+        var inventory = reviver.GetComponentInParent<PlayerInventory>();
+        InventoryItemDefinition teamTool = inventory != null ? inventory.TeamToolSlot : null;
+        if (teamTool != null && teamTool.ItemId.ToLowerInvariant().Contains("first_aid"))
+        {
+            return reviveDurationSeconds * 0.5f;
+        }
+
+        return reviveDurationSeconds;
     }
 
     public bool CanInteract(GameObject interactor)
