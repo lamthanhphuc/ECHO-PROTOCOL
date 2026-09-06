@@ -1,4 +1,5 @@
 using System;
+using Fusion;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
@@ -20,7 +21,6 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
 
     [Header("Drop")]
     [SerializeField] private float dropForwardDistance = 1.35f;
-    [SerializeField] private float dropHeightOffset = -0.35f;
 
     [Header("Noise")]
     [SerializeField] private float carryNoiseInterval = 2.5f;
@@ -86,6 +86,11 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
 
     private void Update()
     {
+        if (!HasLocalControl())
+        {
+            return;
+        }
+
         if (IsCarrying && _dropAction == null && Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame)
         {
             DropCore();
@@ -97,6 +102,11 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
 
     public bool CanPickupCore(EnergyCorePickup core)
     {
+        if (!HasLocalControl())
+        {
+            return false;
+        }
+
         if (core == null || IsCarrying || inventory == null || core.CoreItem == null)
         {
             return false;
@@ -241,18 +251,34 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
 
     private void OnDropPerformed(InputAction.CallbackContext context)
     {
+        if (!HasLocalControl())
+        {
+            return;
+        }
+
         DropCore();
     }
 
     private Vector3 GetDropPosition()
     {
-        Transform origin = dropOrigin != null ? dropOrigin : transform;
-        return origin.position + origin.forward * dropForwardDistance + Vector3.up * dropHeightOffset;
+        ItemDropPlacementUtility.GetFloorSnappedPose(
+            dropOrigin != null ? dropOrigin : transform,
+            dropForwardDistance,
+            0.1f,
+            out var pos,
+            out _);
+        return pos;
     }
 
     private Quaternion GetDropRotation()
     {
         Transform origin = dropOrigin != null ? dropOrigin : transform;
-        return Quaternion.LookRotation(origin.forward, Vector3.up);
+        return Quaternion.Euler(0f, origin.eulerAngles.y, 0f);
+    }
+
+    private bool HasLocalControl()
+    {
+        NetworkObject networkObject = GetComponentInParent<NetworkObject>();
+        return networkObject == null || !networkObject.IsValid || networkObject.HasInputAuthority;
     }
 }
