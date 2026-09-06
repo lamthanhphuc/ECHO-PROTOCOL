@@ -54,7 +54,9 @@ namespace EchoProtocol.AI.Stalker
         ConfidenceSpatialNode,
         SearchOriginLkp,
         SearchCandidate,
-        ChaseTarget
+        ChaseTarget,
+        RoomSweepTransit,
+        RoomSweepProbe
     }
 
     public readonly struct StalkerNavigationObjectiveKey

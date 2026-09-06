@@ -81,11 +81,6 @@ namespace EchoProtocol.AI.Stalker.Networking
             ResolveLocalDependencies();
             _animatorStateParameterHash = Animator.StringToHash(animatorStateParameter);
             _networkPrefabGuard = GetComponent<NetworkObject>() != null;
-            if (_networkPrefabGuard)
-            {
-                SetLegacySimulationSuppressed(true);
-                SetDecisionComponentsEnabled(false);
-            }
         }
 
         private void OnEnable()
@@ -96,7 +91,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private void OnDisable()
         {
-            SetLegacySimulationSuppressed(_networkSimulationOwned || _networkPrefabGuard);
+            SetLegacySimulationSuppressed(_networkSimulationOwned);
         }
 
         public override void Spawned()
@@ -475,7 +470,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private void ApplyOwnedLegacySuppression()
         {
-            if (_networkSimulationOwned || _networkPrefabGuard)
+            if (_networkSimulationOwned)
             {
                 SetLegacySimulationSuppressed(true);
             }

@@ -38,7 +38,7 @@ namespace EchoProtocol.Networking
         {
             return playerExists
                 && !playerAlreadyCarriesCore
-                && !holder.IsValid
+                && holder == PlayerRef.None
                 && (state == NetworkItemState.Available || state == NetworkItemState.Dropped);
         }
 

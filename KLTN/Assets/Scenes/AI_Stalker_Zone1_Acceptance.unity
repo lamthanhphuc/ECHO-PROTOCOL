@@ -117647,11 +117647,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 100001, guid: 3348269a897243f98149bb4f35656540, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -0.67
+      value: -1.01
       objectReference: {fileID: 0}
     - target: {fileID: 100001, guid: 3348269a897243f98149bb4f35656540, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -128.79
+      value: -78.73
       objectReference: {fileID: 0}
     - target: {fileID: 100001, guid: 3348269a897243f98149bb4f35656540, type: 3}
       propertyPath: m_LocalRotation.w
@@ -117695,7 +117695,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 100006, guid: 3348269a897243f98149bb4f35656540, type: 3}
       propertyPath: patrolMode
-      value: 2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 100006, guid: 3348269a897243f98149bb4f35656540, type: 3}
       propertyPath: patrolRoute

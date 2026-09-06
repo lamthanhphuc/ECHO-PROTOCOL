@@ -4,6 +4,7 @@ namespace EchoProtocol.AI.Stalker
     {
         FixedWaypoint = 0,
         DynamicSpatial = 1,
-        ConfidenceSpatial = 2
+        ConfidenceSpatial = 2,
+        RoomSweepSpatial = 3
     }
 }

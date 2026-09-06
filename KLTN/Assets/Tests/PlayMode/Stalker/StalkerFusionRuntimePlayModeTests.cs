@@ -14,6 +14,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string RuntimeTypeName = "EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime";
         private const string ControllerTypeName = "EchoProtocol.AI.Stalker.StalkerController";
         private const string SensorTypeName = "EchoProtocol.AI.Stalker.StalkerVisionSensor";
+        private const string NetworkObjectTypeName = "Fusion.NetworkObject";
         private const string LifecycleTypeName = "EchoProtocol.Networking.FusionPlayerLifecycle";
         private const string PlayerRuntimeIdentityTypeName = "EchoProtocol.Player.PlayerRuntimeIdentity";
         private const string PlayerIdTypeName = "EchoProtocol.AI.Common.PlayerId";
@@ -235,6 +236,25 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
+        public IEnumerator RUNTIME_12B_NonSpawnedNetworkObjectAwake_DoesNotSuppressOfflineLegacyUpdate()
+        {
+            var fixture = CreateRuntimeFixtureWithNetworkObject();
+
+            Assert.That(GetBoolProperty(fixture.Controller, "SuppressLegacyUpdateSimulation"), Is.False);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RUNTIME_12C_NonSpawnedNetworkObjectAwake_DoesNotDisableOfflineDecisionComponents()
+        {
+            var fixture = CreateRuntimeFixtureWithNetworkObject();
+
+            Assert.That(((Behaviour)fixture.Sensor).enabled, Is.True);
+            Assert.That(fixture.Agent.enabled, Is.True);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator RUNTIME_13_DisabledWhileNetworkOwned_KeepsLegacySuppressed()
         {
             var fixture = CreateRuntimeFixture();
@@ -254,6 +274,18 @@ namespace EchoProtocol.AI.Stalker.Tests
         public IEnumerator RUNTIME_14_NonSpawnedEnabledComponentDoesNotSuppressOfflineLegacyUpdate()
         {
             var fixture = CreateRuntimeFixture();
+            SetPrivateField(fixture.Controller, "<SuppressLegacyUpdateSimulation>k__BackingField", false);
+
+            InvokeInstanceMethod(fixture.Runtime, "OnEnable", Type.EmptyTypes, Array.Empty<object>());
+
+            Assert.That(GetBoolProperty(fixture.Controller, "SuppressLegacyUpdateSimulation"), Is.False);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RUNTIME_14B_NonSpawnedNetworkObjectEnabledComponentDoesNotSuppressOfflineLegacyUpdate()
+        {
+            var fixture = CreateRuntimeFixtureWithNetworkObject();
             SetPrivateField(fixture.Controller, "<SuppressLegacyUpdateSimulation>k__BackingField", false);
 
             InvokeInstanceMethod(fixture.Runtime, "OnEnable", Type.EmptyTypes, Array.Empty<object>());
@@ -514,6 +546,34 @@ namespace EchoProtocol.AI.Stalker.Tests
             SetPrivateField(runtime, "controller", controller);
             SetPrivateField(runtime, "visionSensor", sensor);
             return new RuntimeFixture(runtime, controller, sensor);
+        }
+
+        private RuntimeFixture CreateRuntimeFixtureWithNetworkObject()
+        {
+            var root = new GameObject("RUNTIME_Stalker_NetworkObject");
+            _createdObjects.Add(root);
+            var origin = new GameObject("RUNTIME_Origin");
+            origin.transform.SetParent(root.transform, false);
+            origin.transform.localPosition = new Vector3(0f, 1f, 0f);
+
+            root.AddComponent(ResolveType(NetworkObjectTypeName));
+            var controller = (Component)root.AddComponent(ResolveType(ControllerTypeName));
+            var sensor = (Component)root.AddComponent(ResolveType(SensorTypeName));
+            var agent = root.GetComponent<NavMeshAgent>();
+            Assert.That(agent, Is.Not.Null);
+            agent.enabled = true;
+            ((Behaviour)sensor).enabled = true;
+
+            var runtime = (Component)root.AddComponent(ResolveType(RuntimeTypeName));
+
+            SetPrivateField(controller, "visionSensor", sensor);
+            SetPrivateField(sensor, "visionOrigin", origin.transform);
+            SetPrivateField(sensor, "visionDistance", 20f);
+            SetPrivateField(sensor, "visionAngle", 120f);
+            SetPrivateField(sensor, "losBlockerMask", default(LayerMask));
+            SetPrivateField(runtime, "controller", controller);
+            SetPrivateField(runtime, "visionSensor", sensor);
+            return new RuntimeFixture(runtime, controller, sensor, agent);
         }
 
         private Component CreateLifecycle()
@@ -778,10 +838,16 @@ namespace EchoProtocol.AI.Stalker.Tests
         private readonly struct RuntimeFixture
         {
             public RuntimeFixture(Component runtime, Component controller, Component sensor)
+                : this(runtime, controller, sensor, null)
+            {
+            }
+
+            public RuntimeFixture(Component runtime, Component controller, Component sensor, NavMeshAgent agent)
             {
                 Runtime = runtime;
                 Controller = controller;
                 Sensor = sensor;
+                Agent = agent;
             }
 
             public Component Runtime { get; }
@@ -789,6 +855,8 @@ namespace EchoProtocol.AI.Stalker.Tests
             public Component Controller { get; }
 
             public Component Sensor { get; }
+
+            public NavMeshAgent Agent { get; }
         }
     }
 }

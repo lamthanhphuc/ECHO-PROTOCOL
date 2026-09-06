@@ -34,6 +34,7 @@ namespace EchoProtocol.AI.Stalker.Spatial
     {
         private readonly RegionNode[] _regions;
         private readonly RegionId[] _nodeToRegionMap;
+        private readonly Dictionary<RegionId, IReadOnlyList<int>> _nodeIdsByRegion;
         private readonly Dictionary<RegionId, int> _regionIndexById;
         private readonly bool[] _regionEnabled;
         private readonly bool[] _edgeOpen;
@@ -62,6 +63,7 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 _nodeToRegionMap[i] = nodeToRegionMap[i];
             }
 
+            _nodeIdsByRegion = BuildNodeIdsByRegion(_nodeToRegionMap);
             _regionEnabled = new bool[_regions.Length];
             for (var i = 0; i < _regionEnabled.Length; i++)
             {
@@ -98,6 +100,42 @@ namespace EchoProtocol.AI.Stalker.Spatial
             }
 
             regionId = RegionId.Invalid;
+            return false;
+        }
+
+        public bool TryGetSpatialNodeIdsForRegion(RegionId regionId, out IReadOnlyList<int> spatialNodeIds)
+        {
+            if (regionId.IsValid
+                && ContainsRegion(regionId)
+                && _nodeIdsByRegion.TryGetValue(regionId, out spatialNodeIds))
+            {
+                return true;
+            }
+
+            spatialNodeIds = Array.Empty<int>();
+            return false;
+        }
+
+        public bool TryGetRegionSemanticMetadata(RegionId regionId, out RegionSemanticMetadata metadata)
+        {
+            if (TryGetRegionIndex(regionId, out var index))
+            {
+                metadata = _regions[index].SemanticMetadata;
+                return metadata.HasMetadata;
+            }
+
+            metadata = RegionSemanticMetadata.None;
+            return false;
+        }
+
+        public bool TryGetNodeSemanticMetadata(int spatialNodeId, out RegionSemanticMetadata metadata)
+        {
+            if (TryGetRegionForNode(spatialNodeId, out var regionId))
+            {
+                return TryGetRegionSemanticMetadata(regionId, out metadata);
+            }
+
+            metadata = RegionSemanticMetadata.None;
             return false;
         }
 
@@ -241,6 +279,37 @@ namespace EchoProtocol.AI.Stalker.Spatial
             return nextRegionId.IsValid;
         }
 
+        private static Dictionary<RegionId, IReadOnlyList<int>> BuildNodeIdsByRegion(IReadOnlyList<RegionId> nodeToRegionMap)
+        {
+            var mutable = new Dictionary<RegionId, List<int>>();
+            for (var nodeId = 0; nodeId < (nodeToRegionMap?.Count ?? 0); nodeId++)
+            {
+                var regionId = nodeToRegionMap[nodeId];
+                if (!regionId.IsValid)
+                {
+                    continue;
+                }
+
+                if (!mutable.TryGetValue(regionId, out var nodeIds))
+                {
+                    nodeIds = new List<int>();
+                    mutable.Add(regionId, nodeIds);
+                }
+
+                nodeIds.Add(nodeId);
+            }
+
+            var result = new Dictionary<RegionId, IReadOnlyList<int>>(mutable.Count);
+            foreach (var pair in mutable)
+            {
+                var nodeIds = pair.Value;
+                nodeIds.Sort();
+                result.Add(pair.Key, Array.AsReadOnly(nodeIds.ToArray()));
+            }
+
+            return result;
+        }
+
         private bool TryGetRegionIndex(RegionId regionId, out int index)
         {
             return _regionIndexById.TryGetValue(regionId, out index);
@@ -345,8 +414,14 @@ namespace EchoProtocol.AI.Stalker.Spatial
         private readonly IReadOnlyList<RegionEdge> _readOnlyEdges;
 
         public RegionNode(RegionId id, IReadOnlyCollection<RegionEdge> edges)
+            : this(id, edges, RegionSemanticMetadata.None)
+        {
+        }
+
+        public RegionNode(RegionId id, IReadOnlyCollection<RegionEdge> edges, RegionSemanticMetadata semanticMetadata)
         {
             Id = id;
+            SemanticMetadata = semanticMetadata;
             _edges = new RegionEdge[edges?.Count ?? 0];
             if (edges != null)
             {
@@ -363,6 +438,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
         }
 
         public RegionId Id { get; }
+        public RegionSemanticMetadata SemanticMetadata { get; }
+        public bool HasSemanticMetadata => SemanticMetadata.HasMetadata;
         public IReadOnlyList<RegionEdge> Edges => _readOnlyEdges;
     }
 

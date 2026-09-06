@@ -74,23 +74,11 @@ namespace EchoProtocol.AI.Stalker
 
             var originPosition = visionOrigin.position;
             var candidatePosition = targetSample.position;
-            var toCandidate = candidatePosition - originPosition;
-            var sqrDistance = toCandidate.sqrMagnitude;
-            var maxSqrDistance = visionDistance * visionDistance;
-
-            if (sqrDistance > maxSqrDistance || sqrDistance <= Mathf.Epsilon)
+            if (!TryGetVisibleDirection(originPosition, candidatePosition, false, out var observedDirection, out var distance))
             {
                 return false;
             }
 
-            var angleToCandidate = Vector3.Angle(visionOrigin.forward, toCandidate);
-            if (angleToCandidate > visionAngle * 0.5f)
-            {
-                return false;
-            }
-
-            var distance = Mathf.Sqrt(sqrDistance);
-            var observedDirection = toCandidate.normalized;
             if (HasLineOfSightBlocker(targetHierarchyRoot, originPosition, observedDirection, distance))
             {
                 return false;
@@ -102,6 +90,33 @@ namespace EchoProtocol.AI.Stalker
                 observedDirection,
                 distance);
             return true;
+        }
+
+        public bool CanSeePoint(Vector3 worldPoint)
+        {
+            if (visionOrigin == null || visionDistance <= 0f || visionAngle <= 0f)
+            {
+                return false;
+            }
+
+            var originPosition = visionOrigin.position;
+            if (!TryGetVisibleDirection(originPosition, worldPoint, true, out var direction, out var distance))
+            {
+                return false;
+            }
+
+            return distance <= Mathf.Epsilon || !HasLineOfSightBlocker(null, originPosition, direction, distance);
+        }
+
+        public Vector3 GetObservationPointForGroundPoint(Vector3 groundPoint)
+        {
+            if (visionOrigin == null)
+            {
+                return groundPoint;
+            }
+
+            var eyeHeight = visionOrigin.position.y - transform.position.y;
+            return groundPoint + Vector3.up * eyeHeight;
         }
 
         public int CollectVisibleCandidates(
@@ -135,6 +150,41 @@ namespace EchoProtocol.AI.Stalker
             }
 
             return results.Count;
+        }
+
+        private bool TryGetVisibleDirection(
+            Vector3 originPosition,
+            Vector3 targetPosition,
+            bool allowOriginPoint,
+            out Vector3 direction,
+            out float distance)
+        {
+            direction = default;
+            distance = 0f;
+
+            var toTarget = targetPosition - originPosition;
+            var sqrDistance = toTarget.sqrMagnitude;
+            var maxSqrDistance = visionDistance * visionDistance;
+
+            if (sqrDistance > maxSqrDistance)
+            {
+                return false;
+            }
+
+            if (sqrDistance <= Mathf.Epsilon)
+            {
+                return allowOriginPoint;
+            }
+
+            var angleToTarget = Vector3.Angle(visionOrigin.forward, toTarget);
+            if (angleToTarget > visionAngle * 0.5f)
+            {
+                return false;
+            }
+
+            distance = Mathf.Sqrt(sqrDistance);
+            direction = toTarget.normalized;
+            return true;
         }
 
         private bool HasLineOfSightBlocker(
@@ -178,7 +228,8 @@ namespace EchoProtocol.AI.Stalker
                 return true;
             }
 
-            if (hitTransform == targetHierarchyRoot || hitTransform.IsChildOf(targetHierarchyRoot))
+            if (targetHierarchyRoot != null
+                && (hitTransform == targetHierarchyRoot || hitTransform.IsChildOf(targetHierarchyRoot)))
             {
                 return true;
             }

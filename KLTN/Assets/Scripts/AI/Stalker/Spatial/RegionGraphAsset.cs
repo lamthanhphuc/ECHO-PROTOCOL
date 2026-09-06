@@ -32,7 +32,20 @@ namespace EchoProtocol.AI.Stalker.Spatial
                         }
                     }
 
-                    regionNodes.Add(new RegionNode(ToRegionId(regions[i].RegionId), edges));
+                    var regionId = ToRegionId(regions[i].RegionId);
+                    if (regions[i].HasSemanticMetadata)
+                    {
+                        var metadata = new RegionSemanticMetadata(
+                            regions[i].SourceIndex,
+                            regions[i].SourcePath,
+                            regions[i].Zone,
+                            regions[i].Kind);
+                        regionNodes.Add(new RegionNode(regionId, edges, metadata));
+                    }
+                    else
+                    {
+                        regionNodes.Add(new RegionNode(regionId, edges));
+                    }
                 }
             }
 
@@ -94,6 +107,11 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 regions[i] = new RegionRecord
                 {
                     RegionId = region.Id.Value,
+                    HasSemanticMetadata = region.HasSemanticMetadata,
+                    SourceIndex = region.SemanticMetadata.SourceIndex,
+                    SourcePath = region.SemanticMetadata.SourcePath,
+                    Zone = region.SemanticMetadata.Zone,
+                    Kind = region.SemanticMetadata.Kind,
                     Edges = edgeRecords
                 };
             }
@@ -193,6 +211,11 @@ namespace EchoProtocol.AI.Stalker.Spatial
     public struct RegionRecord
     {
         public int RegionId;
+        public bool HasSemanticMetadata;
+        public int SourceIndex;
+        public string SourcePath;
+        public RegionSemanticZone Zone;
+        public RegionSemanticKind Kind;
         public RegionEdgeRecord[] Edges;
     }
 

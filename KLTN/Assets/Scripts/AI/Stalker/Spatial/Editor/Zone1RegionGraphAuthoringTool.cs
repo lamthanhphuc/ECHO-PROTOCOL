@@ -69,18 +69,21 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
         private const float FloorVerticalTolerance = 1.25f;
         private const float SeedGeometryComparisonEpsilon = 0.001f;
         private const int DefinitionVersion = 1;
+        private const string CentralJunctionDiagnosticSourcePath = "Zone01_ResearchStorage/03_Central_Junction";
+        private static readonly int[] CentralJunctionDiagnosticHighlightedNodeIds = { 2094, 2901, 2668, 2157, 2835 };
 
         private static readonly SemanticCatalogEntry[] Catalog =
         {
-            new SemanticCatalogEntry("Zone01_ResearchStorage", "01_Start_Area_EMPTY", SemanticZone.Zone01, SemanticKind.Room),
+            new SemanticCatalogEntry("Zone01_ResearchStorage", "01_Start_Area_EMPTY", SemanticZone.Zone01, SemanticKind.Route),
             new SemanticCatalogEntry("Zone01_ResearchStorage", "02_Initial_Storage_C1_EMPTY", SemanticZone.Zone01, SemanticKind.Room),
-            new SemanticCatalogEntry("Zone01_ResearchStorage", "03_Central_Junction", SemanticZone.Zone01, SemanticKind.Room),
+            new SemanticCatalogEntry("Zone01_ResearchStorage", "03_Central_Junction", SemanticZone.Zone01, SemanticKind.Route),
+            new SemanticCatalogEntry("Zone01_ResearchStorage/03_Central_Junction", "route", SemanticZone.Zone01, SemanticKind.Route),
             new SemanticCatalogEntry("Zone01_ResearchStorage", "04_Server_Room_C2_EMPTY", SemanticZone.Zone01, SemanticKind.Room),
             new SemanticCatalogEntry("Zone01_ResearchStorage", "05_Research_Lab_C3_EMPTY", SemanticZone.Zone01, SemanticKind.Room),
             new SemanticCatalogEntry("Zone01_ResearchStorage", "06_Archive_C4_EMPTY", SemanticZone.Zone01, SemanticKind.Room),
             new SemanticCatalogEntry("Zone01_ResearchStorage", "07_Maintenance_C5_EMPTY", SemanticZone.Zone01, SemanticKind.Room),
             new SemanticCatalogEntry("Zone01_ResearchStorage", "08_Warehouse_C6_EMPTY", SemanticZone.Zone01, SemanticKind.Room),
-            new SemanticCatalogEntry("Zone01_ResearchStorage", "09_Transition_To_Zone2_EMPTY", SemanticZone.Zone01, SemanticKind.Room),
+            new SemanticCatalogEntry("Zone01_ResearchStorage", "09_Transition_To_Zone2_EMPTY", SemanticZone.Zone01, SemanticKind.Route),
             new SemanticCatalogEntry("Zone02_PowerEngineering/Rooms", "02_Engineering_Junction_EMPTY", SemanticZone.Zone02, SemanticKind.Room),
             new SemanticCatalogEntry("Zone02_PowerEngineering/Rooms", "03_CoreReceiver_PowerHub_CR_EMPTY", SemanticZone.Zone02, SemanticKind.Room),
             new SemanticCatalogEntry("Zone02_PowerEngineering/Rooms", "04_Power_Control_PC_EMPTY", SemanticZone.Zone02, SemanticKind.Room),
@@ -105,6 +108,12 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
             }
 
             return BuildDryRunReport(context.SpatialGraph, context.Sources, BuildOptions.Default, context.AuthoringConflicts);
+        }
+
+        public static void LogCentralJunctionDryRunDiagnosticForActiveScene()
+        {
+            var report = DryRunActiveScene();
+            UnityEngine.Debug.Log(report.ToCentralJunctionEvidenceDiagnosticDisplayString());
         }
 
         public static DryRunReport ApplyAuthoringToActiveScene(DryRunReport previousReport)
@@ -227,6 +236,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                 ValidateGeometryBake(spatialGraph, report);
                 BuildRuntimeSemanticGraph(spatialGraph, attribution, sources, report);
                 ValidateRuntimeSemanticGraph(spatialGraph, report);
+                BuildCentralJunctionEvidenceDiagnostic(spatialGraph, attribution, sources, report);
             }
 
             return report;
@@ -1042,8 +1052,13 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
             var regionNodes = new List<RegionNode>(report.RuntimeRegions.Count);
             for (var i = 0; i < report.RuntimeRegions.Count; i++)
             {
-                var regionId = report.RuntimeRegions[i].RegionId;
-                regionNodes.Add(new RegionNode(regionId, edgeBuckets[regionId]));
+                var region = report.RuntimeRegions[i];
+                var metadata = new RegionSemanticMetadata(
+                    region.SourceIndex,
+                    region.SourcePath,
+                    ToRuntimeSemanticZone(region.Zone),
+                    ToRuntimeSemanticKind(region.Kind));
+                regionNodes.Add(new RegionNode(region.RegionId, edgeBuckets[region.RegionId], metadata));
             }
 
             return new RegionGraph(
@@ -1051,6 +1066,38 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                 report.RuntimeNodeToRegion,
                 graph.CompatibilityIdentity,
                 DefinitionVersion);
+        }
+
+        private static RegionSemanticZone ToRuntimeSemanticZone(SemanticZone zone)
+        {
+            switch (zone)
+            {
+                case SemanticZone.Zone01:
+                    return RegionSemanticZone.Zone01;
+                case SemanticZone.Zone02:
+                    return RegionSemanticZone.Zone02;
+                case SemanticZone.Zone03:
+                    return RegionSemanticZone.Zone03;
+                case SemanticZone.Isolated:
+                    return RegionSemanticZone.Isolated;
+                default:
+                    return RegionSemanticZone.Unknown;
+            }
+        }
+
+        private static RegionSemanticKind ToRuntimeSemanticKind(SemanticKind kind)
+        {
+            switch (kind)
+            {
+                case SemanticKind.Room:
+                    return RegionSemanticKind.Room;
+                case SemanticKind.Route:
+                    return RegionSemanticKind.Route;
+                case SemanticKind.IsolatedIsland:
+                    return RegionSemanticKind.IsolatedIsland;
+                default:
+                    return RegionSemanticKind.Unknown;
+            }
         }
 
         private static void ValidateRuntimeSemanticGraph(NavMeshSpatialGraph graph, DryRunReport report)
@@ -1160,6 +1207,178 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                     report.Errors.Add($"Runtime semantic RegionId {edge.FromRegionId.Value} has a self-transition edge.");
                 }
             }
+        }
+
+        private static void BuildCentralJunctionEvidenceDiagnostic(
+            NavMeshSpatialGraph graph,
+            AttributionResult attribution,
+            IReadOnlyList<SemanticSource> sources,
+            DryRunReport report)
+        {
+            if (graph == null || attribution == null || sources == null || report == null)
+            {
+                return;
+            }
+
+            var sourceByIndex = new Dictionary<int, SemanticSource>();
+            SemanticSource centralJunctionSource = null;
+            for (var i = 0; i < sources.Count; i++)
+            {
+                var source = sources[i];
+                sourceByIndex[source.SourceIndex] = source;
+                if (string.Equals(source.SourcePath, CentralJunctionDiagnosticSourcePath, StringComparison.Ordinal))
+                {
+                    centralJunctionSource = source;
+                }
+            }
+
+            if (centralJunctionSource == null)
+            {
+                report.CentralJunctionEvidenceDiagnostic.SourcePath = CentralJunctionDiagnosticSourcePath;
+                report.CentralJunctionEvidenceDiagnostic.SourceFound = false;
+                return;
+            }
+
+            var diagnostic = report.CentralJunctionEvidenceDiagnostic;
+            diagnostic.SourcePath = CentralJunctionDiagnosticSourcePath;
+            diagnostic.SourceFound = true;
+            diagnostic.SourceIndex = centralJunctionSource.SourceIndex;
+
+            var highlightedNodeIds = new HashSet<int>(CentralJunctionDiagnosticHighlightedNodeIds);
+            var groupByGeometryRegion = new Dictionary<RegionId, CentralJunctionEvidenceDiagnosticGroup>();
+            for (var nodeId = 0; nodeId < attribution.OwnerByNode.Length; nodeId++)
+            {
+                if (attribution.OwnerByNode[nodeId] != centralJunctionSource.SourceIndex)
+                {
+                    continue;
+                }
+
+                if (!graph.TryGetNode(nodeId, out var node))
+                {
+                    continue;
+                }
+
+                var geometryRegionId = nodeId < report.NodeToRegion.Length ? report.NodeToRegion[nodeId] : RegionId.Invalid;
+                if (!groupByGeometryRegion.TryGetValue(geometryRegionId, out var group))
+                {
+                    group = new CentralJunctionEvidenceDiagnosticGroup(geometryRegionId);
+                    groupByGeometryRegion.Add(geometryRegionId, group);
+                }
+
+                var runtimeRegionId = nodeId < report.RuntimeNodeToRegion.Length ? report.RuntimeNodeToRegion[nodeId] : RegionId.Invalid;
+                group.AddNode(BuildCentralJunctionEvidenceNodeDiagnostic(
+                    centralJunctionSource,
+                    nodeId,
+                    node.Position,
+                    runtimeRegionId,
+                    geometryRegionId,
+                    highlightedNodeIds.Contains(nodeId)));
+            }
+
+            var groups = new List<CentralJunctionEvidenceDiagnosticGroup>(groupByGeometryRegion.Values);
+            groups.Sort(CompareCentralJunctionEvidenceDiagnosticGroups);
+            for (var i = 0; i < groups.Count; i++)
+            {
+                groups[i].SetGroupIndex(i + 1);
+                diagnostic.Groups.Add(groups[i]);
+            }
+
+            for (var i = 0; i < CentralJunctionDiagnosticHighlightedNodeIds.Length; i++)
+            {
+                var nodeId = CentralJunctionDiagnosticHighlightedNodeIds[i];
+                var ownerSourceIndex = nodeId >= 0 && nodeId < attribution.OwnerByNode.Length
+                    ? attribution.OwnerByNode[nodeId]
+                    : -1;
+                var ownerPath = "none";
+                if (sourceByIndex.TryGetValue(ownerSourceIndex, out var ownerSource))
+                {
+                    ownerPath = ownerSource.SourcePath;
+                }
+
+                var runtimeRegionId = nodeId >= 0 && nodeId < report.RuntimeNodeToRegion.Length
+                    ? report.RuntimeNodeToRegion[nodeId]
+                    : RegionId.Invalid;
+                var geometryRegionId = nodeId >= 0 && nodeId < report.NodeToRegion.Length
+                    ? report.NodeToRegion[nodeId]
+                    : RegionId.Invalid;
+                diagnostic.HighlightedNodes.Add(new CentralJunctionHighlightedNodeDiagnostic(
+                    nodeId,
+                    ownerSourceIndex == centralJunctionSource.SourceIndex,
+                    ownerSourceIndex,
+                    ownerPath,
+                    runtimeRegionId,
+                    geometryRegionId));
+            }
+        }
+
+        private static CentralJunctionEvidenceNodeDiagnostic BuildCentralJunctionEvidenceNodeDiagnostic(
+            SemanticSource source,
+            int nodeId,
+            Vector3 position,
+            RegionId runtimeRegionId,
+            RegionId geometryRegionId,
+            bool isHighlighted)
+        {
+            var evidence = new List<CentralJunctionEvidenceBoundsDiagnostic>();
+            var evidenceBounds = source.GetEvidenceBoundsForNode(nodeId);
+            for (var i = 0; i < evidenceBounds.Count; i++)
+            {
+                evidence.Add(new CentralJunctionEvidenceBoundsDiagnostic(evidenceBounds[i]));
+            }
+
+            var evidenceObjectPaths = source.GetEvidenceObjectPathsForNode(nodeId);
+            for (var i = 0; i < evidenceObjectPaths.Count; i++)
+            {
+                var exists = false;
+                for (var evidenceIndex = 0; evidenceIndex < evidence.Count; evidenceIndex++)
+                {
+                    if (string.Equals(evidence[evidenceIndex].HierarchyPath, evidenceObjectPaths[i], StringComparison.Ordinal))
+                    {
+                        exists = true;
+                        break;
+                    }
+                }
+
+                if (!exists)
+                {
+                    evidence.Add(new CentralJunctionEvidenceBoundsDiagnostic(evidenceObjectPaths[i]));
+                }
+            }
+
+            evidence.Sort(CompareCentralJunctionEvidenceBoundsDiagnostics);
+            return new CentralJunctionEvidenceNodeDiagnostic(
+                nodeId,
+                position,
+                runtimeRegionId,
+                geometryRegionId,
+                isHighlighted,
+                evidence);
+        }
+
+        private static int CompareCentralJunctionEvidenceDiagnosticGroups(CentralJunctionEvidenceDiagnosticGroup a, CentralJunctionEvidenceDiagnosticGroup b)
+        {
+            var geometryRegion = a.GeometryRegionId.Value.CompareTo(b.GeometryRegionId.Value);
+            if (geometryRegion != 0) return geometryRegion;
+            var minY = a.MinY.CompareTo(b.MinY);
+            if (minY != 0) return minY;
+            return a.MinNodeId.CompareTo(b.MinNodeId);
+        }
+
+        private static int CompareCentralJunctionEvidenceBoundsDiagnostics(CentralJunctionEvidenceBoundsDiagnostic a, CentralJunctionEvidenceBoundsDiagnostic b)
+        {
+            var path = string.CompareOrdinal(a.HierarchyPath, b.HierarchyPath);
+            if (path != 0) return path;
+            var centerX = a.BoundsCenter.x.CompareTo(b.BoundsCenter.x);
+            if (centerX != 0) return centerX;
+            var centerY = a.BoundsCenter.y.CompareTo(b.BoundsCenter.y);
+            if (centerY != 0) return centerY;
+            var centerZ = a.BoundsCenter.z.CompareTo(b.BoundsCenter.z);
+            if (centerZ != 0) return centerZ;
+            var sizeX = a.BoundsSize.x.CompareTo(b.BoundsSize.x);
+            if (sizeX != 0) return sizeX;
+            var sizeY = a.BoundsSize.y.CompareTo(b.BoundsSize.y);
+            if (sizeY != 0) return sizeY;
+            return a.BoundsSize.z.CompareTo(b.BoundsSize.z);
         }
 
         private static List<RegionEdgeBakeData> BuildConnectivityEdges(NavMeshSpatialGraph graph, IReadOnlyList<RegionId> nodeToRegion)
@@ -1375,11 +1594,21 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
         private static List<SemanticSource> ResolveSceneSemanticSources(Scene scene, NavMeshSpatialGraph graph, DryRunReport report)
         {
             var sources = new List<SemanticSource>();
+            var resolvedRoots = new Transform[Catalog.Length];
+            var resolvedPaths = new string[Catalog.Length];
             for (var i = 0; i < Catalog.Length; i++)
             {
                 var entry = Catalog[i];
                 var path = $"{entry.ParentPath}/{entry.LeafName}";
-                var transform = FindTransformByPath(scene, path);
+                resolvedPaths[i] = path;
+                resolvedRoots[i] = FindTransformByPath(scene, path);
+            }
+
+            for (var i = 0; i < Catalog.Length; i++)
+            {
+                var entry = Catalog[i];
+                var path = resolvedPaths[i];
+                var transform = resolvedRoots[i];
                 if (transform == null)
                 {
                     report.Errors.Add($"Missing semantic source: {path}");
@@ -1387,7 +1616,8 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                     continue;
                 }
 
-                var evidenceNodeIds = FindFloorEvidenceNodeIds(graph, transform, out var evidenceObjectPathsByNode, out var evidenceBoundsByNode);
+                var excludedNestedRoots = FindNestedSemanticRoots(transform, resolvedRoots, i);
+                var evidenceNodeIds = FindFloorEvidenceNodeIds(graph, transform, excludedNestedRoots, out var evidenceObjectPathsByNode, out var evidenceBoundsByNode);
                 var evidenceKind = FloorEvidenceKind.FloorEvidence;
                 var anchor = Vector3.zero;
                 if (evidenceNodeIds.Count > 0)
@@ -1414,6 +1644,37 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
             return sources;
         }
 
+        private static List<Transform> FindNestedSemanticRoots(Transform sourceRoot, IReadOnlyList<Transform> resolvedRoots, int sourceIndex)
+        {
+            var nestedRoots = new List<Transform>();
+            if (sourceRoot == null || resolvedRoots == null)
+            {
+                return nestedRoots;
+            }
+
+            for (var i = 0; i < resolvedRoots.Count; i++)
+            {
+                if (i == sourceIndex)
+                {
+                    continue;
+                }
+
+                var candidate = resolvedRoots[i];
+                if (candidate != null && candidate != sourceRoot && candidate.IsChildOf(sourceRoot))
+                {
+                    nestedRoots.Add(candidate);
+                }
+            }
+
+            nestedRoots.Sort(CompareTransformsByHierarchyPath);
+            return nestedRoots;
+        }
+
+        private static int CompareTransformsByHierarchyPath(Transform a, Transform b)
+        {
+            return string.CompareOrdinal(GetHierarchyPath(a), GetHierarchyPath(b));
+        }
+
         private static List<int> FindFloorEvidenceNodeIds(NavMeshSpatialGraph graph, Transform root)
         {
             return FindFloorEvidenceNodeIds(graph, root, out _);
@@ -1430,8 +1691,18 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
             out Dictionary<int, List<string>> evidenceObjectPathsByNode,
             out Dictionary<int, List<FloorEvidenceBoundsDiagnostic>> evidenceBoundsByNode)
         {
+            return FindFloorEvidenceNodeIds(graph, root, null, out evidenceObjectPathsByNode, out evidenceBoundsByNode);
+        }
+
+        private static List<int> FindFloorEvidenceNodeIds(
+            NavMeshSpatialGraph graph,
+            Transform root,
+            IReadOnlyList<Transform> excludedSemanticRoots,
+            out Dictionary<int, List<string>> evidenceObjectPathsByNode,
+            out Dictionary<int, List<FloorEvidenceBoundsDiagnostic>> evidenceBoundsByNode)
+        {
             var bounds = new List<FloorEvidenceBoundsDiagnostic>();
-            CollectFloorEvidenceBounds(root, bounds);
+            CollectFloorEvidenceBounds(root, bounds, excludedSemanticRoots);
             evidenceObjectPathsByNode = new Dictionary<int, List<string>>();
             evidenceBoundsByNode = new Dictionary<int, List<FloorEvidenceBoundsDiagnostic>>();
             var nodeIds = new List<int>();
@@ -1486,10 +1757,16 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
 
         private static void CollectFloorEvidenceBounds(Transform root, List<FloorEvidenceBoundsDiagnostic> bounds)
         {
+            CollectFloorEvidenceBounds(root, bounds, null);
+        }
+
+        private static void CollectFloorEvidenceBounds(Transform root, List<FloorEvidenceBoundsDiagnostic> bounds, IReadOnlyList<Transform> excludedSemanticRoots)
+        {
             var renderers = root.GetComponentsInChildren<Renderer>(true);
             for (var i = 0; i < renderers.Length; i++)
             {
-                if (LooksLikeFloor(renderers[i].transform, renderers[i].bounds))
+                if (!IsInExcludedSemanticSubtree(renderers[i].transform, excludedSemanticRoots)
+                    && LooksLikeFloor(renderers[i].transform, renderers[i].bounds))
                 {
                     AddFloorEvidenceBounds(bounds, renderers[i].bounds, GetHierarchyPath(renderers[i].transform));
                 }
@@ -1498,13 +1775,33 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
             var colliders = root.GetComponentsInChildren<Collider>(true);
             for (var i = 0; i < colliders.Length; i++)
             {
-                if (LooksLikeFloor(colliders[i].transform, colliders[i].bounds))
+                if (!IsInExcludedSemanticSubtree(colliders[i].transform, excludedSemanticRoots)
+                    && LooksLikeFloor(colliders[i].transform, colliders[i].bounds))
                 {
                     AddFloorEvidenceBounds(bounds, colliders[i].bounds, GetHierarchyPath(colliders[i].transform));
                 }
             }
 
             bounds.Sort(CompareFloorEvidenceBoundsDiagnostic);
+        }
+
+        private static bool IsInExcludedSemanticSubtree(Transform candidate, IReadOnlyList<Transform> excludedSemanticRoots)
+        {
+            if (candidate == null || excludedSemanticRoots == null)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < excludedSemanticRoots.Count; i++)
+            {
+                var excludedRoot = excludedSemanticRoots[i];
+                if (excludedRoot != null && candidate.IsChildOf(excludedRoot))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static void AddFloorEvidenceBounds(List<FloorEvidenceBoundsDiagnostic> bounds, Bounds candidateBounds, string hierarchyPath)
@@ -2017,6 +2314,137 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
             public int MaxNodeId { get; }
         }
 
+        public sealed class CentralJunctionEvidenceDiagnostic
+        {
+            public string SourcePath { get; set; } = CentralJunctionDiagnosticSourcePath;
+            public bool SourceFound { get; set; }
+            public int SourceIndex { get; set; } = -1;
+            public List<CentralJunctionEvidenceDiagnosticGroup> Groups { get; } = new List<CentralJunctionEvidenceDiagnosticGroup>();
+            public List<CentralJunctionHighlightedNodeDiagnostic> HighlightedNodes { get; } = new List<CentralJunctionHighlightedNodeDiagnostic>();
+        }
+
+        public sealed class CentralJunctionEvidenceDiagnosticGroup
+        {
+            public CentralJunctionEvidenceDiagnosticGroup(RegionId geometryRegionId)
+            {
+                GeometryRegionId = geometryRegionId;
+            }
+
+            public int GroupIndex { get; private set; }
+            public RegionId GeometryRegionId { get; }
+            public List<CentralJunctionEvidenceNodeDiagnostic> Nodes { get; } = new List<CentralJunctionEvidenceNodeDiagnostic>();
+            public int NodeCount => Nodes.Count;
+            public int MinNodeId { get; private set; } = int.MaxValue;
+            public float MinY { get; private set; } = float.PositiveInfinity;
+            public float MaxY { get; private set; } = float.NegativeInfinity;
+
+            public void AddNode(CentralJunctionEvidenceNodeDiagnostic node)
+            {
+                Nodes.Add(node);
+                Nodes.Sort(CompareCentralJunctionEvidenceNodeDiagnostics);
+                if (node.NodeId < MinNodeId)
+                {
+                    MinNodeId = node.NodeId;
+                }
+
+                if (node.Position.y < MinY)
+                {
+                    MinY = node.Position.y;
+                }
+
+                if (node.Position.y > MaxY)
+                {
+                    MaxY = node.Position.y;
+                }
+            }
+
+            public void SetGroupIndex(int groupIndex)
+            {
+                GroupIndex = groupIndex;
+            }
+        }
+
+        public readonly struct CentralJunctionEvidenceNodeDiagnostic
+        {
+            public CentralJunctionEvidenceNodeDiagnostic(
+                int nodeId,
+                Vector3 position,
+                RegionId runtimeRegionId,
+                RegionId geometryRegionId,
+                bool isHighlighted,
+                IReadOnlyList<CentralJunctionEvidenceBoundsDiagnostic> evidence)
+            {
+                NodeId = nodeId;
+                Position = position;
+                RuntimeRegionId = runtimeRegionId;
+                GeometryRegionId = geometryRegionId;
+                IsHighlighted = isHighlighted;
+                Evidence = new List<CentralJunctionEvidenceBoundsDiagnostic>(evidence ?? Array.Empty<CentralJunctionEvidenceBoundsDiagnostic>());
+            }
+
+            public int NodeId { get; }
+            public Vector3 Position { get; }
+            public RegionId RuntimeRegionId { get; }
+            public RegionId GeometryRegionId { get; }
+            public bool IsHighlighted { get; }
+            public List<CentralJunctionEvidenceBoundsDiagnostic> Evidence { get; }
+        }
+
+        public readonly struct CentralJunctionEvidenceBoundsDiagnostic
+        {
+            public CentralJunctionEvidenceBoundsDiagnostic(FloorEvidenceBoundsDiagnostic evidence)
+            {
+                HierarchyPath = evidence.HierarchyPath;
+                BoundsCenter = evidence.Bounds.center;
+                BoundsSize = evidence.Bounds.size;
+                HasBounds = true;
+            }
+
+            public CentralJunctionEvidenceBoundsDiagnostic(string hierarchyPath)
+            {
+                HierarchyPath = hierarchyPath ?? string.Empty;
+                BoundsCenter = Vector3.zero;
+                BoundsSize = Vector3.zero;
+                HasBounds = false;
+            }
+
+            public string HierarchyPath { get; }
+            public Vector3 BoundsCenter { get; }
+            public Vector3 BoundsSize { get; }
+            public bool HasBounds { get; }
+        }
+
+        public readonly struct CentralJunctionHighlightedNodeDiagnostic
+        {
+            public CentralJunctionHighlightedNodeDiagnostic(
+                int nodeId,
+                bool belongsToCentralJunction,
+                int ownerSourceIndex,
+                string ownerSourcePath,
+                RegionId runtimeRegionId,
+                RegionId geometryRegionId)
+            {
+                NodeId = nodeId;
+                BelongsToCentralJunction = belongsToCentralJunction;
+                OwnerSourceIndex = ownerSourceIndex;
+                OwnerSourcePath = ownerSourcePath ?? string.Empty;
+                RuntimeRegionId = runtimeRegionId;
+                GeometryRegionId = geometryRegionId;
+            }
+
+            public int NodeId { get; }
+            public bool BelongsToCentralJunction { get; }
+            public int OwnerSourceIndex { get; }
+            public string OwnerSourcePath { get; }
+            public RegionId RuntimeRegionId { get; }
+            public RegionId GeometryRegionId { get; }
+        }
+
+        private static int CompareCentralJunctionEvidenceNodeDiagnostics(CentralJunctionEvidenceNodeDiagnostic a, CentralJunctionEvidenceNodeDiagnostic b)
+        {
+            return a.NodeId.CompareTo(b.NodeId);
+        }
+
         public sealed class DryRunReport
         {
             public NavMeshSpatialGraph SpatialGraph { get; set; }
@@ -2046,6 +2474,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
             public List<RegionId> RuntimeSelfTransitionRegionIds { get; } = new List<RegionId>();
             public List<int> RuntimeUnmappedNodeIds { get; } = new List<int>();
             public List<int> RuntimeDanglingNodeIds { get; } = new List<int>();
+            public CentralJunctionEvidenceDiagnostic CentralJunctionEvidenceDiagnostic { get; } = new CentralJunctionEvidenceDiagnostic();
             public List<int> ZeroMappedNodeIds { get; } = new List<int>();
             public List<int> MultiplyMappedNodeIds { get; } = new List<int>();
             public List<int> SeedOverlapNodeIds { get; } = new List<int>();
@@ -2118,6 +2547,8 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                     lines.Add($"- {source.SourcePath}: {source.EvidenceKind}, evidence nodes {source.EvidenceNodeCount}");
                 }
 
+                lines.AddRange(ToCentralJunctionEvidenceDiagnosticDisplayString().Split(new[] { Environment.NewLine }, StringSplitOptions.None));
+
                 lines.Add("Seed Evidence Overlap Details:");
                 if (SeedEvidenceOverlapDetails.Count == 0)
                 {
@@ -2168,6 +2599,8 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                     lines.Add($"  node count: {region.SpatialNodeCount}, min/max node ID: {region.MinNodeId}/{region.MaxNodeId}");
                 }
 
+                lines.AddRange(ToRoomSweepTargetEligibilityDiagnosticDisplayString().Split(new[] { Environment.NewLine }, StringSplitOptions.None));
+
                 lines.Add("Generated regions:");
                 for (var i = 0; i < Regions.Count; i++)
                 {
@@ -2194,6 +2627,111 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                 AppendSection(lines, "Warnings", Warnings);
                 AppendSection(lines, "Messages", Messages);
                 return string.Join(Environment.NewLine, lines);
+            }
+
+            public string ToCentralJunctionEvidenceDiagnosticDisplayString()
+            {
+                var lines = new List<string>();
+                AppendCentralJunctionEvidenceDiagnostic(lines, CentralJunctionEvidenceDiagnostic);
+                return string.Join(Environment.NewLine, lines);
+            }
+
+            public string ToRoomSweepTargetEligibilityDiagnosticDisplayString()
+            {
+                var lines = new List<string>
+                {
+                    "TEMP Room Sweep Target Eligibility Diagnostic:"
+                };
+
+                for (var regionId = 1; regionId <= 24; regionId++)
+                {
+                    RuntimeSemanticRegion region = null;
+                    for (var i = 0; i < RuntimeRegions.Count; i++)
+                    {
+                        if (RuntimeRegions[i].RegionId.Value == regionId)
+                        {
+                            region = RuntimeRegions[i];
+                            break;
+                        }
+                    }
+
+                    var sourcePath = region != null ? region.SourcePath : "<missing>";
+                    var semanticKind = region != null ? region.Kind.ToString() : "<missing>";
+                    var targetEligible = region != null && region.Kind == SemanticKind.Room;
+                    lines.Add($"RegionId={regionId} SourcePath={sourcePath} SemanticKind={semanticKind} RoomSweepTargetEligible={targetEligible}");
+                }
+
+                return string.Join(Environment.NewLine, lines);
+            }
+
+            private static void AppendCentralJunctionEvidenceDiagnostic(List<string> lines, CentralJunctionEvidenceDiagnostic diagnostic)
+            {
+                lines.Add("TEMP Central Junction Semantic Evidence Diagnostic:");
+                lines.Add($"source: {diagnostic.SourcePath}");
+                lines.Add($"source found: {diagnostic.SourceFound}");
+                lines.Add($"source index: {diagnostic.SourceIndex}");
+                lines.Add($"geometry cluster count: {diagnostic.Groups.Count}");
+
+                lines.Add("highlighted audit nodes:");
+                if (diagnostic.HighlightedNodes.Count == 0)
+                {
+                    lines.Add("- none");
+                }
+                else
+                {
+                    for (var i = 0; i < diagnostic.HighlightedNodes.Count; i++)
+                    {
+                        var node = diagnostic.HighlightedNodes[i];
+                        lines.Add($"- node {node.NodeId}: centralJunction={node.BelongsToCentralJunction}, ownerSourceIndex={node.OwnerSourceIndex}, ownerSourcePath={node.OwnerSourcePath}, runtimeRegionId={node.RuntimeRegionId.Value}, geometryRegionId={node.GeometryRegionId.Value}");
+                    }
+                }
+
+                if (!diagnostic.SourceFound || diagnostic.Groups.Count == 0)
+                {
+                    lines.Add("groups:");
+                    lines.Add("- none");
+                    return;
+                }
+
+                lines.Add("groups:");
+                for (var groupIndex = 0; groupIndex < diagnostic.Groups.Count; groupIndex++)
+                {
+                    var group = diagnostic.Groups[groupIndex];
+                    lines.Add($"- geometry piece/component {group.GroupIndex}: geometryRegionId={group.GeometryRegionId.Value}");
+                    lines.Add($"  node count: {group.NodeCount}");
+                    lines.Add($"  minY/maxY: {FormatFloat(group.MinY)}/{FormatFloat(group.MaxY)}");
+                    for (var nodeIndex = 0; nodeIndex < group.Nodes.Count; nodeIndex++)
+                    {
+                        var node = group.Nodes[nodeIndex];
+                        var marker = node.IsHighlighted ? " HIGHLIGHT" : string.Empty;
+                        lines.Add($"  - spatialNodeId {node.NodeId}{marker}");
+                        lines.Add($"    node worldPosition: {FormatVector(node.Position)}");
+                        lines.Add($"    runtime semantic RegionId expected: {node.RuntimeRegionId.Value}");
+                        lines.Add($"    geometry piece/component: {group.GroupIndex}, geometryRegionId={node.GeometryRegionId.Value}");
+                        if (node.Evidence.Count == 0)
+                        {
+                            lines.Add("    evidence object: none (not a direct floor-evidence seed for this source)");
+                            continue;
+                        }
+
+                        for (var evidenceIndex = 0; evidenceIndex < node.Evidence.Count; evidenceIndex++)
+                        {
+                            var evidence = node.Evidence[evidenceIndex];
+                            lines.Add($"    evidence object: {evidence.HierarchyPath}");
+                            lines.Add($"      hierarchy path: {evidence.HierarchyPath}");
+                            if (evidence.HasBounds)
+                            {
+                                lines.Add($"      evidence bounds center: {FormatVector(evidence.BoundsCenter)}");
+                                lines.Add($"      evidence bounds size: {FormatVector(evidence.BoundsSize)}");
+                            }
+                            else
+                            {
+                                lines.Add("      evidence bounds center: unavailable");
+                                lines.Add("      evidence bounds size: unavailable");
+                            }
+                        }
+                    }
+                }
             }
 
             private static void AppendSection(List<string> lines, string title, IReadOnlyList<string> values)

@@ -1,6 +1,8 @@
 #if UNITY_EDITOR
+using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Reflection;
 using EchoProtocol.AI.Common.Spatial;
 using EchoProtocol.AI.Stalker.Spatial;
 using EchoProtocol.AI.Stalker.Spatial.Editor;
@@ -201,6 +203,159 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
         }
 
         [Test]
+        public void STK_FullStation_CatalogContainsZone01CentralJunctionNestedRoute()
+        {
+            Assert.That(SemanticCatalogKeys(), Does.Contain("Zone01_ResearchStorage/03_Central_Junction|route|Zone01|Route"));
+        }
+
+        [Test]
+        public void STK_FullStation_StartAreaIsNotARoomSweepTarget()
+        {
+            var catalog = SemanticCatalogKeys();
+
+            Assert.That(catalog, Does.Contain("Zone01_ResearchStorage|01_Start_Area_EMPTY|Zone01|Route"));
+            Assert.That(catalog, Does.Not.Contain("Zone01_ResearchStorage|01_Start_Area_EMPTY|Zone01|Room"));
+        }
+
+        [Test]
+        public void STK_FullStation_Zone01TransitionToZone2IsNotARoomSweepTarget()
+        {
+            var catalog = SemanticCatalogKeys();
+
+            Assert.That(catalog, Does.Contain("Zone01_ResearchStorage|09_Transition_To_Zone2_EMPTY|Zone01|Route"));
+            Assert.That(catalog, Does.Not.Contain("Zone01_ResearchStorage|09_Transition_To_Zone2_EMPTY|Zone01|Room"));
+        }
+
+        [Test]
+        public void STK_FullStation_ParentRoomEvidenceExcludesNestedSemanticRouteSubtree()
+        {
+            var root = new GameObject("Zone01_ResearchStorage");
+            try
+            {
+                var room = CreateChild(root.transform, "03_Central_Junction");
+                var route = CreateChild(room.transform, "route");
+                CreateFloor(room.transform, "Central Floor", Vector3.zero, new Vector3(2f, 0.2f, 2f));
+                CreateFloor(route.transform, "Route Floor", new Vector3(10f, 0f, 0f), new Vector3(2f, 0.2f, 2f));
+                Physics.SyncTransforms();
+                var graph = Graph(Node(0, Vector3.zero), Node(1, new Vector3(10f, 0f, 0f)));
+
+                var roomEvidence = CollectFloorEvidenceForTest(graph, room.transform, route.transform);
+                var routeEvidence = CollectFloorEvidenceForTest(graph, route.transform);
+
+                Assert.That(roomEvidence.NodeIds, Is.EqualTo(new[] { 0 }));
+                Assert.That(routeEvidence.NodeIds, Is.EqualTo(new[] { 1 }));
+                Assert.That(EvidencePathKeys(roomEvidence), Is.EqualTo(new[] { "0|Zone01_ResearchStorage/03_Central_Junction/Central Floor" }));
+                Assert.That(EvidencePathKeys(routeEvidence), Is.EqualTo(new[] { "1|Zone01_ResearchStorage/03_Central_Junction/route/Route Floor" }));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void STK_FullStation_RouteOnlyNodeIsNotOwnedByParentRoomEvidence()
+        {
+            var root = new GameObject("Zone01_ResearchStorage");
+            try
+            {
+                var room = CreateChild(root.transform, "03_Central_Junction");
+                var route = CreateChild(room.transform, "route");
+                CreateFloor(room.transform, "Central Floor", Vector3.zero, new Vector3(2f, 0.2f, 2f));
+                CreateFloor(route.transform, "Route Floor", new Vector3(10f, 0f, 0f), new Vector3(2f, 0.2f, 2f));
+                Physics.SyncTransforms();
+                var graph = Graph(Node(0, Vector3.zero, 1), Node(1, new Vector3(10f, 0f, 0f), 0));
+                var roomEvidence = CollectFloorEvidenceForTest(graph, room.transform, route.transform);
+                var routeEvidence = CollectFloorEvidenceForTest(graph, route.transform);
+
+                var report = Build(
+                    graph,
+                    SourceWithEvidenceObjects(
+                        0,
+                        SemanticZone.Zone01,
+                        SemanticKind.Room,
+                        "Zone01_ResearchStorage/03_Central_Junction",
+                        roomEvidence.NodeIds.ToArray(),
+                        EvidenceObjectsFrom(roomEvidence)),
+                    SourceWithEvidenceObjects(
+                        1,
+                        SemanticZone.Zone01,
+                        SemanticKind.Route,
+                        "Zone01_ResearchStorage/03_Central_Junction/route",
+                        routeEvidence.NodeIds.ToArray(),
+                        EvidenceObjectsFrom(routeEvidence)));
+
+                AssertValid(report);
+                Assert.That(report.SeedOverlapNodeIds, Is.Empty);
+                Assert.That(report.RuntimeGraph.TryGetNodeSemanticMetadata(1, out var routeMetadata), Is.True);
+                Assert.That(routeMetadata.Kind, Is.EqualTo(RegionSemanticKind.Route));
+                Assert.That(routeMetadata.SourcePath, Is.EqualTo("Zone01_ResearchStorage/03_Central_Junction/route"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void STK_FullStation_NonNestedSemanticSourceEvidenceIsUnchangedByExclusionList()
+        {
+            var root = new GameObject("Root");
+            try
+            {
+                var roomA = CreateChild(root.transform, "RoomA");
+                var roomB = CreateChild(root.transform, "RoomB");
+                CreateFloor(roomA.transform, "RoomA Floor", Vector3.zero, new Vector3(2f, 0.2f, 2f));
+                CreateFloor(roomB.transform, "RoomB Floor", new Vector3(10f, 0f, 0f), new Vector3(2f, 0.2f, 2f));
+                Physics.SyncTransforms();
+                var graph = Graph(Node(0, Vector3.zero), Node(1, new Vector3(10f, 0f, 0f)));
+
+                var baseline = CollectFloorEvidenceForTest(graph, roomA.transform);
+                var withSiblingExclusion = CollectFloorEvidenceForTest(graph, roomA.transform, roomB.transform);
+
+                Assert.That(withSiblingExclusion.NodeIds, Is.EqualTo(baseline.NodeIds));
+                Assert.That(EvidencePathKeys(withSiblingExclusion), Is.EqualTo(EvidencePathKeys(baseline)));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void STK_FullStation_NestedSemanticSourceEvidenceCollectionIsDeterministic()
+        {
+            var root = new GameObject("Zone01_ResearchStorage");
+            try
+            {
+                var room = CreateChild(root.transform, "03_Central_Junction");
+                var route = CreateChild(room.transform, "route");
+                var nestedRoom = CreateChild(room.transform, "NestedRoom");
+                CreateFloor(room.transform, "Central Floor B", new Vector3(1f, 0f, 0f), new Vector3(2f, 0.2f, 2f));
+                CreateFloor(room.transform, "Central Floor A", new Vector3(-1f, 0f, 0f), new Vector3(2f, 0.2f, 2f));
+                CreateFloor(route.transform, "Route Floor", new Vector3(10f, 0f, 0f), new Vector3(2f, 0.2f, 2f));
+                CreateFloor(nestedRoom.transform, "Nested Floor", new Vector3(20f, 0f, 0f), new Vector3(2f, 0.2f, 2f));
+                Physics.SyncTransforms();
+                var graph = Graph(
+                    Node(0, new Vector3(-1f, 0f, 0f)),
+                    Node(1, new Vector3(1f, 0f, 0f)),
+                    Node(2, new Vector3(10f, 0f, 0f)),
+                    Node(3, new Vector3(20f, 0f, 0f)));
+
+                var first = CollectFloorEvidenceForTest(graph, room.transform, route.transform, nestedRoom.transform);
+                var second = CollectFloorEvidenceForTest(graph, room.transform, nestedRoom.transform, route.transform);
+
+                Assert.That(second.NodeIds, Is.EqualTo(first.NodeIds));
+                Assert.That(EvidencePathKeys(second), Is.EqualTo(EvidencePathKeys(first)));
+                Assert.That(first.NodeIds, Is.EqualTo(new[] { 0, 1 }));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
         public void STK_FullStation_EqualDistanceMiddleNodeReportsBoundaryTieOnly()
         {
             var graph = Graph(
@@ -396,6 +551,135 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
             Assert.That(RuntimeNodeToRegionIds(first), Is.EqualTo(RuntimeNodeToRegionIds(second)));
             Assert.That(RuntimeRegionKeys(first), Is.EqualTo(RuntimeRegionKeys(second)));
             Assert.That(RuntimeEdgeKeys(first), Is.EqualTo(RuntimeEdgeKeys(second)));
+        }
+
+        [Test]
+        public void STK_RegionNode_LegacyConstructorHasNoSemanticMetadata()
+        {
+            var region = new RegionNode(new RegionId(1), new RegionEdge[0]);
+
+            Assert.That(region.HasSemanticMetadata, Is.False);
+            Assert.That(region.SemanticMetadata.HasMetadata, Is.False);
+            Assert.That(region.SemanticMetadata.IsValid, Is.False);
+            Assert.That(region.SemanticMetadata.SourceIndex, Is.EqualTo(-1));
+            Assert.That(region.SemanticMetadata.Zone, Is.EqualTo(RegionSemanticZone.Unknown));
+            Assert.That(region.SemanticMetadata.Kind, Is.EqualTo(RegionSemanticKind.Unknown));
+        }
+
+        [Test]
+        public void STK_RegionGraph_ReturnsSemanticMetadataByRegionAndNode()
+        {
+            var spatialGraph = Graph(Node(0, V(0, 0)));
+            var metadata = new RegionSemanticMetadata(
+                0,
+                "Zone01/RoomA",
+                RegionSemanticZone.Zone01,
+                RegionSemanticKind.Room);
+            var graph = new RegionGraph(
+                new[] { new RegionNode(new RegionId(1), new RegionEdge[0], metadata) },
+                new[] { new RegionId(1) },
+                spatialGraph.CompatibilityIdentity,
+                1);
+
+            Assert.That(graph.TryGetRegionSemanticMetadata(new RegionId(1), out var regionMetadata), Is.True);
+            Assert.That(regionMetadata.HasMetadata, Is.True);
+            Assert.That(regionMetadata.IsValid, Is.True);
+            Assert.That(regionMetadata.SourceIndex, Is.EqualTo(0));
+            Assert.That(regionMetadata.SourcePath, Is.EqualTo("Zone01/RoomA"));
+            Assert.That(regionMetadata.Zone, Is.EqualTo(RegionSemanticZone.Zone01));
+            Assert.That(regionMetadata.Kind, Is.EqualTo(RegionSemanticKind.Room));
+
+            Assert.That(graph.TryGetNodeSemanticMetadata(0, out var nodeMetadata), Is.True);
+            Assert.That(nodeMetadata.SourceIndex, Is.EqualTo(0));
+            Assert.That(nodeMetadata.SourcePath, Is.EqualTo(regionMetadata.SourcePath));
+            Assert.That(nodeMetadata.Zone, Is.EqualTo(regionMetadata.Zone));
+            Assert.That(nodeMetadata.Kind, Is.EqualTo(regionMetadata.Kind));
+        }
+
+        [Test]
+        public void STK_RegionGraphAsset_RoundTripPreservesSemanticMetadata()
+        {
+            var spatialGraph = Graph(Node(0, V(0, 0)));
+            var metadata = new RegionSemanticMetadata(
+                0,
+                "Zone01/RoomA",
+                RegionSemanticZone.Zone01,
+                RegionSemanticKind.Room);
+            var graph = new RegionGraph(
+                new[] { new RegionNode(new RegionId(1), new RegionEdge[0], metadata) },
+                new[] { new RegionId(1) },
+                spatialGraph.CompatibilityIdentity,
+                3);
+            var asset = ScriptableObject.CreateInstance<RegionGraphAsset>();
+
+            asset.ConfigureFromRuntimeGraph(graph, spatialGraph.NodeCount);
+            var rebuilt = asset.BuildRuntimeGraph();
+
+            Assert.That(rebuilt.TryGetRegionSemanticMetadata(new RegionId(1), out var rebuiltMetadata), Is.True);
+            Assert.That(rebuiltMetadata.SourceIndex, Is.EqualTo(0));
+            Assert.That(rebuiltMetadata.SourcePath, Is.EqualTo("Zone01/RoomA"));
+            Assert.That(rebuiltMetadata.Zone, Is.EqualTo(RegionSemanticZone.Zone01));
+            Assert.That(rebuiltMetadata.Kind, Is.EqualTo(RegionSemanticKind.Room));
+            Assert.That(rebuilt.TryGetNodeSemanticMetadata(0, out var nodeMetadata), Is.True);
+            Assert.That(nodeMetadata.SourceIndex, Is.EqualTo(0));
+
+            UnityEngine.Object.DestroyImmediate(asset);
+        }
+
+        [Test]
+        public void STK_RegionGraphAsset_LegacyRecordHasNoSemanticMetadata()
+        {
+            var spatialGraph = Graph(Node(0, V(0, 0)));
+            var asset = ScriptableObject.CreateInstance<RegionGraphAsset>();
+            asset.ConfigureForTests(
+                1,
+                spatialGraph.CompatibilityIdentity,
+                new[]
+                {
+                    new RegionRecord
+                    {
+                        RegionId = 1,
+                        Edges = new RegionEdgeRecord[0]
+                    }
+                },
+                new[]
+                {
+                    new NodeRegionRecord
+                    {
+                        SpatialNodeId = 0,
+                        RegionId = 1
+                    }
+                });
+
+            var graph = asset.BuildRuntimeGraph();
+
+            Assert.That(RegionGraph.Validate(graph, spatialGraph), Is.EqualTo(RegionGraphValidationFailure.None));
+            Assert.That(graph.TryGetRegionSemanticMetadata(new RegionId(1), out var metadata), Is.False);
+            Assert.That(metadata.HasMetadata, Is.False);
+            Assert.That(metadata.Zone, Is.EqualTo(RegionSemanticZone.Unknown));
+            Assert.That(metadata.Kind, Is.EqualTo(RegionSemanticKind.Unknown));
+
+            UnityEngine.Object.DestroyImmediate(asset);
+        }
+
+        [Test]
+        public void STK_FullStation_RuntimeGraphPreservesSemanticIdentityForSameSourceComponents()
+        {
+            var graph = Graph(
+                Node(0, V(0, 0), 1),
+                Node(1, V(1, 0), 0),
+                Node(2, V(10, 0), 3),
+                Node(3, V(11, 0), 2));
+
+            var report = Build(graph, Source(2, SemanticZone.Zone01, SemanticKind.Room, "Zone01/RoomSplit", 0, 2));
+
+            AssertValid(report);
+            Assert.That(report.RuntimeSemanticRegionCount, Is.EqualTo(2));
+            Assert.That(RuntimeGraphRegionMetadataKeys(report), Is.EqualTo(new[]
+            {
+                "1|2|Zone01/RoomSplit|Zone01|Room",
+                "2|2|Zone01/RoomSplit|Zone01|Room"
+            }));
         }
 
         [Test]
@@ -631,6 +915,103 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
                 Node(2, V(2, 0), 1, 3),
                 Node(3, V(3, 0), 2));
             return Build(graph, Source(0, SemanticZone.Zone01, SemanticKind.Room, "A", 0), Source(1, SemanticZone.Zone02, SemanticKind.Route, "Route", 3));
+        }
+
+        private static string[] SemanticCatalogKeys()
+        {
+            var field = typeof(FullStationRegionGraphAuthoringCore).GetField("Catalog", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(field, Is.Not.Null);
+            var catalog = (Array)field.GetValue(null);
+            var keys = new string[catalog.Length];
+            for (var i = 0; i < catalog.Length; i++)
+            {
+                var entry = catalog.GetValue(i);
+                keys[i] = $"{GetProperty<string>(entry, "ParentPath")}|{GetProperty<string>(entry, "LeafName")}|{GetProperty<SemanticZone>(entry, "Zone")}|{GetProperty<SemanticKind>(entry, "Kind")}";
+            }
+
+            return keys;
+        }
+
+        private static FloorEvidenceCollection CollectFloorEvidenceForTest(
+            NavMeshSpatialGraph graph,
+            Transform root,
+            params Transform[] excludedSemanticRoots)
+        {
+            var method = typeof(FullStationRegionGraphAuthoringCore).GetMethod(
+                "FindFloorEvidenceNodeIds",
+                BindingFlags.NonPublic | BindingFlags.Static,
+                null,
+                new[]
+                {
+                    typeof(NavMeshSpatialGraph),
+                    typeof(Transform),
+                    typeof(IReadOnlyList<Transform>),
+                    typeof(Dictionary<int, List<string>>).MakeByRefType(),
+                    typeof(Dictionary<int, List<FullStationRegionGraphAuthoringCore.FloorEvidenceBoundsDiagnostic>>).MakeByRefType()
+                },
+                null);
+            Assert.That(method, Is.Not.Null);
+
+            var args = new object[]
+            {
+                graph,
+                root,
+                excludedSemanticRoots,
+                null,
+                null
+            };
+            var nodeIds = (List<int>)method.Invoke(null, args);
+            var evidenceObjectPathsByNode = (Dictionary<int, List<string>>)args[3];
+            return new FloorEvidenceCollection(nodeIds, evidenceObjectPathsByNode);
+        }
+
+        private static T GetProperty<T>(object target, string propertyName)
+        {
+            var property = target.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+            Assert.That(property, Is.Not.Null);
+            return (T)property.GetValue(target);
+        }
+
+        private static GameObject CreateChild(Transform parent, string name)
+        {
+            var child = new GameObject(name);
+            child.transform.SetParent(parent, false);
+            return child;
+        }
+
+        private static GameObject CreateFloor(Transform parent, string name, Vector3 position, Vector3 size)
+        {
+            var floor = CreateChild(parent, name);
+            floor.transform.position = position;
+            var collider = floor.AddComponent<BoxCollider>();
+            collider.size = size;
+            return floor;
+        }
+
+        private static KeyValuePair<int, List<string>>[] EvidenceObjectsFrom(FloorEvidenceCollection collection)
+        {
+            var evidenceObjects = new KeyValuePair<int, List<string>>[collection.EvidenceObjectPathsByNode.Count];
+            var index = 0;
+            foreach (var pair in collection.EvidenceObjectPathsByNode)
+            {
+                evidenceObjects[index] = new KeyValuePair<int, List<string>>(pair.Key, new List<string>(pair.Value));
+                index++;
+            }
+
+            Array.Sort(evidenceObjects, (a, b) => a.Key.CompareTo(b.Key));
+            return evidenceObjects;
+        }
+
+        private static string[] EvidencePathKeys(FloorEvidenceCollection collection)
+        {
+            var evidenceObjects = EvidenceObjectsFrom(collection);
+            var keys = new string[evidenceObjects.Length];
+            for (var i = 0; i < evidenceObjects.Length; i++)
+            {
+                keys[i] = $"{evidenceObjects[i].Key}|{string.Join(",", evidenceObjects[i].Value)}";
+            }
+
+            return keys;
         }
 
         private static FullStationRegionGraphAuthoringCore.DryRunReport Build(
@@ -904,6 +1285,19 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
             return keys;
         }
 
+        private static string[] RuntimeGraphRegionMetadataKeys(FullStationRegionGraphAuthoringCore.DryRunReport report)
+        {
+            var keys = new string[report.RuntimeGraph.Regions.Count];
+            for (var i = 0; i < keys.Length; i++)
+            {
+                var region = report.RuntimeGraph.Regions[i];
+                var metadata = region.SemanticMetadata;
+                keys[i] = $"{region.Id.Value}|{metadata.SourceIndex}|{metadata.SourcePath}|{metadata.Zone}|{metadata.Kind}";
+            }
+
+            return keys;
+        }
+
         private static string[] RuntimeEdgeKeys(FullStationRegionGraphAuthoringCore.DryRunReport report)
         {
             var keys = new string[report.RuntimeEdges.Count];
@@ -1036,6 +1430,18 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
         private static Vector3 V(float x, float z)
         {
             return new Vector3(x, 0f, z);
+        }
+
+        private readonly struct FloorEvidenceCollection
+        {
+            public FloorEvidenceCollection(List<int> nodeIds, Dictionary<int, List<string>> evidenceObjectPathsByNode)
+            {
+                NodeIds = nodeIds;
+                EvidenceObjectPathsByNode = evidenceObjectPathsByNode;
+            }
+
+            public List<int> NodeIds { get; }
+            public Dictionary<int, List<string>> EvidenceObjectPathsByNode { get; }
         }
     }
 }

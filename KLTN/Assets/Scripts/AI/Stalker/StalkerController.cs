@@ -15,6 +15,15 @@ namespace EchoProtocol.AI.Stalker
         Miss
     }
 
+    internal enum RoomSweepCurrentRoomResult
+    {
+        NotApplicable,
+        DestinationSet,
+        RoomCleared,
+        Exhausted,
+        Failed
+    }
+
     [RequireComponent(typeof(NavMeshAgent))]
     public sealed class StalkerController : MonoBehaviour
     {
@@ -91,12 +100,16 @@ namespace EchoProtocol.AI.Stalker
         private RegionGraph _regionGraph;
         private GlobalPatrolPlanner _globalPatrolPlanner;
         private LocalPatrolSelector _localPatrolSelector;
+        private RoomSweepCoverageMemory _roomSweepCoverageMemory;
+        private RoomSweepPlanner _roomSweepPlanner;
+        private RoomSweepGlobalPlanner _roomSweepGlobalPlanner;
         private StalkerSearchPlanner _searchPlanner;
         private StalkerSearchContext _searchContext;
         private int _currentPatrolIndex;
         private bool _spatialPatrolInitializationAttempted;
         private bool _dynamicPatrolFallbackActive;
         private bool _canonicalPatrolFallbackActive;
+        private bool _roomSweepPatrolFallbackActive;
         private RegionId _currentRegionId = RegionId.Invalid;
         private RegionId _previousRegionId = RegionId.Invalid;
         private long _searchEpisodeSequence;
@@ -108,6 +121,8 @@ namespace EchoProtocol.AI.Stalker
         private readonly HashSet<int> _rejectedDynamicPatrolNodeIds = new HashSet<int>();
         private readonly HashSet<int> _rejectedCanonicalLocalNodeIds = new HashSet<int>();
         private readonly HashSet<RegionId> _rejectedCanonicalGlobalRegionIds = new HashSet<RegionId>();
+        private readonly HashSet<int> _rejectedRoomSweepTransitNodeIds = new HashSet<int>();
+        private readonly HashSet<RegionId> _rejectedRoomSweepGlobalRegionIds = new HashSet<RegionId>();
         private int _fixedPatrolFallbackFailureCount;
         private bool _searchCandidatePlanningExhausted;
         private bool _isSimulating;
@@ -120,6 +135,16 @@ namespace EchoProtocol.AI.Stalker
         private long _legacySimulationTick;
         private IReadOnlyList<StalkerTargetCandidate> _currentVisibleTargetCandidates;
         private IReadOnlyList<StalkerTargetStatus> _currentTargetStatuses;
+        private bool _roomSweepSuppressLegacyGateLogged;
+        private bool _roomSweepNavigationGateUsableLogged;
+        private bool _roomSweepNavigationGateBlockedLogged;
+        private bool _roomSweepSelfProbeScanActive;
+        private int _roomSweepSelfProbeScanNodeId = -1;
+        private RegionId _roomSweepSelfProbeScanRegionId = RegionId.Invalid;
+        private float _roomSweepSelfProbeScanAccumulatedDegrees;
+        private bool _roomSweepSelfProbeScanHasAgentRotationOwnership;
+        private bool _roomSweepSelfProbeScanPreviousAgentUpdateRotation;
+        private readonly HashSet<int> _roomSweepResidualDiagLoggedRegionIds = new HashSet<int>();
 
         public StalkerPatrolMode PatrolMode => patrolMode;
         public StalkerState CurrentState => currentState;
@@ -162,7 +187,7 @@ namespace EchoProtocol.AI.Stalker
         public int CurrentRegionIdValue => _currentRegionId.IsValid ? _currentRegionId.Value : canonicalCurrentRegionId;
         public int GlobalObjectiveRegionIdValue => canonicalObjectiveRegionId;
         public int SearchCandidateNodeId => searchCandidateNodeId;
-        public bool FixedFallbackActive => _dynamicPatrolFallbackActive || _canonicalPatrolFallbackActive;
+        public bool FixedFallbackActive => _dynamicPatrolFallbackActive || _canonicalPatrolFallbackActive || _roomSweepPatrolFallbackActive;
         public NavigationFailureReason NavigationFailureReason => _navigation?.CurrentFailureReason ?? EchoProtocol.AI.Stalker.NavigationFailureReason.AgentUnavailable;
         public NavigationRecoveryReason RecoveryReason => _navigation?.CurrentRecoveryReason ?? NavigationRecoveryReason.None;
         public NavigationPathStatus NavigationPathStatus => _navigation?.GetPathStatus() ?? NavigationPathStatus.AgentUnavailable;
@@ -238,6 +263,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void Update()
         {
+            LogRoomSweepSuppressLegacyGateOnce();
             if (SuppressLegacyUpdateSimulation)
             {
                 return;
@@ -324,6 +350,12 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickPatrol()
         {
+            if (patrolMode == StalkerPatrolMode.RoomSweepSpatial)
+            {
+                TickRoomSweepSpatialPatrol();
+                return;
+            }
+
             if (patrolMode == StalkerPatrolMode.DynamicSpatial)
             {
                 TickDynamicSpatialPatrol();
@@ -487,6 +519,57 @@ namespace EchoProtocol.AI.Stalker
             if (!SetCanonicalPatrolDestinationWithGlobalAlternates())
             {
                 ActivateCanonicalPatrolFallback();
+            }
+        }
+
+        private void TickRoomSweepSpatialPatrol()
+        {
+            if (_roomSweepPatrolFallbackActive)
+            {
+                TickFixedWaypointPatrol();
+                return;
+            }
+
+            LogRoomSweepNavigationGateOnce();
+            if (!CanUseNavigation())
+            {
+                _navigation?.ClearDestinationCache();
+                return;
+            }
+
+            if (!EnsureRoomSweepPatrolInitialized())
+            {
+                ActivateRoomSweepPatrolFallback();
+                return;
+            }
+
+            if (_roomSweepSelfProbeScanActive)
+            {
+                TickRoomSweepSelfProbeScan();
+                return;
+            }
+
+            if (_navigation.HasActiveDestination)
+            {
+                if (!_navigation.HasArrived())
+                {
+                    if (TryCancelCompletedActiveRoomSweepProbe())
+                    {
+                        if (!SetRoomSweepPatrolDestination())
+                        {
+                            ActivateRoomSweepPatrolFallback();
+                        }
+                    }
+
+                    return;
+                }
+
+                MarkRoomSweepDestinationReached();
+            }
+
+            if (!SetRoomSweepPatrolDestination())
+            {
+                ActivateRoomSweepPatrolFallback();
             }
         }
 
@@ -1645,6 +1728,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void StopAgentPath()
         {
+            ClearRoomSweepSelfProbeScan();
             ResetChaseDestinationTracking();
             ClearNavigationObjective();
             ResetFixedPatrolFallbackState();
@@ -1694,6 +1778,14 @@ namespace EchoProtocol.AI.Stalker
 
             if (currentState == StalkerState.PATROL)
             {
+                if (patrolMode == StalkerPatrolMode.RoomSweepSpatial
+                    && _roomSweepPatrolFallbackActive
+                    && _blackboard.DestinationSpatialNodeId < 0
+                    && !_navigation.HasActiveDestination)
+                {
+                    return;
+                }
+
                 HandlePatrolNavigationFailure(failureReason);
             }
         }
@@ -1723,6 +1815,12 @@ namespace EchoProtocol.AI.Stalker
 
         private void HandlePatrolNavigationFailure(NavigationFailureReason failureReason)
         {
+            if (patrolMode == StalkerPatrolMode.RoomSweepSpatial && !_roomSweepPatrolFallbackActive)
+            {
+                HandleRoomSweepNavigationFailure(failureReason);
+                return;
+            }
+
             if (patrolMode == StalkerPatrolMode.DynamicSpatial && !_dynamicPatrolFallbackActive)
             {
                 HandleDynamicSpatialNavigationFailure(failureReason);
@@ -1807,6 +1905,78 @@ namespace EchoProtocol.AI.Stalker
             }
 
             ActivateCanonicalPatrolFallback();
+        }
+
+        private void HandleRoomSweepNavigationFailure(NavigationFailureReason failureReason)
+        {
+            if (IsNavigationAgentUnavailableFailure(failureReason))
+            {
+                return;
+            }
+
+            if (IsNavigationExecutionRetryableFailure(failureReason)
+                && HasRecoveryBudgetForCurrentObjective()
+                && TryIssueNavigationRecoveryRepath(ToSameObjectiveRecoveryReason(failureReason)))
+            {
+                return;
+            }
+
+            var objectiveKind = _navigationObjectiveKey.Kind;
+            var destinationNodeId = _blackboard.DestinationSpatialNodeId;
+            _navigation?.Stop();
+
+            if (objectiveKind == StalkerNavigationObjectiveKind.RoomSweepProbe)
+            {
+                if (destinationNodeId >= 0)
+                {
+                    RejectRoomSweepProbeWithDiagnostic(
+                        destinationNodeId,
+                        GetRoomSweepNavigationRejectionCategory(failureReason),
+                        failureReason);
+                }
+
+                _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
+                ClearRoomSweepDestination();
+                if (_roomSweepPlanner != null && _roomSweepPlanner.IsExhausted)
+                {
+                    ActivateRoomSweepPatrolFallback();
+                    return;
+                }
+
+                if (SetRoomSweepPatrolDestination())
+                {
+                    _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
+                    return;
+                }
+
+                ActivateRoomSweepPatrolFallback();
+                return;
+            }
+
+            if (objectiveKind == StalkerNavigationObjectiveKind.RoomSweepTransit)
+            {
+                if (destinationNodeId >= 0)
+                {
+                    _rejectedRoomSweepTransitNodeIds.Add(destinationNodeId);
+                }
+
+                _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
+                ClearRoomSweepDestination();
+                if (TrySetRoomSweepTransitDestinationWithGlobalAlternates(
+                        RoomSweepGlobalObjectiveInvalidationReason.NavigationRecoveryFailed,
+                        out var recoveryReason))
+                {
+                    _navigation?.RecordRecoveryReason(recoveryReason == NavigationRecoveryReason.None
+                        ? NavigationRecoveryReason.AlternateLocalCandidate
+                        : recoveryReason);
+                    return;
+                }
+
+                ActivateRoomSweepPatrolFallback();
+                return;
+            }
+
+            ActivateRoomSweepPatrolFallback();
         }
 
         private void HandleSearchNavigationFailure(NavigationFailureReason failureReason)
@@ -2191,7 +2361,9 @@ namespace EchoProtocol.AI.Stalker
         private bool TryGetCurrentPatrolRecoveryDestination(out Vector3 destination)
         {
             destination = default;
-            if ((patrolMode == StalkerPatrolMode.DynamicSpatial || patrolMode == StalkerPatrolMode.ConfidenceSpatial)
+            if ((patrolMode == StalkerPatrolMode.DynamicSpatial
+                    || patrolMode == StalkerPatrolMode.ConfidenceSpatial
+                    || patrolMode == StalkerPatrolMode.RoomSweepSpatial)
                 && _spatialPatrolGraph != null
                 && _spatialPatrolGraph.TryGetNode(_blackboard.DestinationSpatialNodeId, out var node))
             {
@@ -2299,6 +2471,20 @@ namespace EchoProtocol.AI.Stalker
 
         private void SetCurrentPatrolDestination()
         {
+            if (patrolMode == StalkerPatrolMode.RoomSweepSpatial)
+            {
+                ResetRoomSweepFallbackState();
+                _roomSweepPlanner?.ClearRejectedProbes();
+
+                if (SetRoomSweepPatrolDestination())
+                {
+                    return;
+                }
+
+                ActivateRoomSweepPatrolFallback();
+                return;
+            }
+
             if (patrolMode == StalkerPatrolMode.DynamicSpatial)
             {
                 _dynamicPatrolFallbackActive = false;
@@ -2460,6 +2646,31 @@ namespace EchoProtocol.AI.Stalker
             return true;
         }
 
+        private bool EnsureRoomSweepPatrolInitialized()
+        {
+            if (_roomSweepCoverageMemory != null
+                && _roomSweepPlanner != null
+                && _roomSweepGlobalPlanner != null)
+            {
+                return true;
+            }
+
+            if (!EnsureCanonicalPatrolInitialized())
+            {
+                return false;
+            }
+
+            _roomSweepCoverageMemory = new RoomSweepCoverageMemory();
+            _roomSweepPlanner = new RoomSweepPlanner(
+                _spatialPatrolGraph,
+                _regionGraph,
+                _roomSweepCoverageMemory);
+            _roomSweepGlobalPlanner = new RoomSweepGlobalPlanner(
+                _regionGraph,
+                _roomSweepCoverageMemory);
+            return true;
+        }
+
         private bool EnsureSpatialGraphBuilt()
         {
             if (_spatialPatrolGraph != null && !_spatialPatrolGraph.IsEmpty)
@@ -2586,6 +2797,712 @@ namespace EchoProtocol.AI.Stalker
             regionGraphFallbackReason = RegionGraphFallbackReason.None;
             SyncDynamicPatrolDebugFields();
             return true;
+        }
+
+        private bool SetRoomSweepPatrolDestination()
+        {
+            if (!EnsureRoomSweepPatrolInitialized())
+            {
+                return false;
+            }
+
+            if (!ResolveCurrentRoomSweepLocation(out var currentNodeId, out var currentRegionId))
+            {
+                regionGraphFallbackReason = RegionGraphFallbackReason.InvalidNodeToRegionMap;
+                ClearRoomSweepDestination();
+                return false;
+            }
+
+            LogRoomSweepPlanningLocation(currentNodeId, currentRegionId);
+            var currentRoomResult = TryBeginOrContinueCurrentRoomSweep(currentNodeId, currentRegionId);
+            LogRoomSweepCurrentRoomResult(currentNodeId, currentRegionId, currentRoomResult);
+            switch (currentRoomResult)
+            {
+                case RoomSweepCurrentRoomResult.DestinationSet:
+                    return true;
+                case RoomSweepCurrentRoomResult.NotApplicable:
+                    return TrySetRoomSweepTransitDestinationWithGlobalAlternates(out _);
+                case RoomSweepCurrentRoomResult.RoomCleared:
+                    CompleteRoomSweepCurrentRoomObjective(currentRegionId);
+                    return TrySetRoomSweepTransitDestinationWithGlobalAlternates(
+                        RoomSweepGlobalObjectiveInvalidationReason.TargetCleared,
+                        out _);
+                case RoomSweepCurrentRoomResult.Exhausted:
+                case RoomSweepCurrentRoomResult.Failed:
+                default:
+                    return false;
+            }
+        }
+
+        private void LogRoomSweepSuppressLegacyGateOnce()
+        {
+            if (_roomSweepSuppressLegacyGateLogged)
+            {
+                return;
+            }
+
+            _roomSweepSuppressLegacyGateLogged = true;
+            UnityEngine.Debug.LogWarning(
+                "[STK ROOM SWEEP GATE DIAG] update-suppress-legacy-gate "
+                + $"SuppressLegacyUpdateSimulation={SuppressLegacyUpdateSimulation} "
+                + $"enabled={enabled} "
+                + $"gameObject.activeInHierarchy={(gameObject != null && gameObject.activeInHierarchy)} "
+                + $"currentState={currentState} "
+                + $"patrolMode={patrolMode}");
+        }
+
+        private void LogRoomSweepNavigationGateOnce()
+        {
+            var navigationUsable = CanUseNavigation();
+            if (navigationUsable)
+            {
+                if (_roomSweepNavigationGateUsableLogged)
+                {
+                    return;
+                }
+
+                _roomSweepNavigationGateUsableLogged = true;
+            }
+            else
+            {
+                if (_roomSweepNavigationGateBlockedLogged)
+                {
+                    return;
+                }
+
+                _roomSweepNavigationGateBlockedLogged = true;
+            }
+
+            var agent = GetComponent<NavMeshAgent>();
+            var agentExists = agent != null;
+            UnityEngine.Debug.LogWarning(
+                "[STK ROOM SWEEP GATE DIAG] navigation-gate "
+                + $"navigationUsable={navigationUsable} "
+                + $"navigationNull={_navigation == null} "
+                + $"navMeshAgentComponentExists={agentExists} "
+                + $"agentEnabled={(agentExists && agent.enabled)} "
+                + $"agentIsOnNavMesh={(agentExists && agent.isOnNavMesh)} "
+                + $"agentIsActiveAndEnabled={(agentExists && agent.isActiveAndEnabled)} "
+                + $"transformPosition={transform.position} "
+                + $"currentState={currentState} "
+                + $"patrolMode={patrolMode}");
+        }
+
+        private bool TryCancelCompletedActiveRoomSweepProbe()
+        {
+            if (!TryProcessActiveRoomSweepProbeVisualCoverage(out var clearedRoomRegionId))
+            {
+                return false;
+            }
+
+            CompleteRoomSweepCurrentRoomObjective(clearedRoomRegionId);
+            _navigation?.Stop();
+            ClearRoomSweepDestination();
+            return true;
+        }
+
+        private bool TryProcessActiveRoomSweepProbeVisualCoverage(out RegionId clearedRoomRegionId)
+        {
+            clearedRoomRegionId = RegionId.Invalid;
+            if (_navigationObjectiveKey.Kind != StalkerNavigationObjectiveKind.RoomSweepProbe
+                || _roomSweepPlanner == null
+                || !_roomSweepPlanner.CurrentRegionId.IsValid
+                || !ResolveCurrentRoomSweepLocation(out var currentNodeId, out var currentRegionId)
+                || _roomSweepPlanner.CurrentRegionId != currentRegionId
+                || !IsRoomSweepRoomRegion(currentRegionId)
+                || _roomSweepCoverageMemory.IsRegionCleared(currentRegionId))
+            {
+                return false;
+            }
+
+            UpdateRoomSweepVisualCoverage(currentRegionId);
+            LogRoomSweepResidualProbesOnce(currentNodeId, currentRegionId);
+            if (!_roomSweepPlanner.IsFullyObserved)
+            {
+                return false;
+            }
+
+            _roomSweepCoverageMemory.MarkRegionCleared(currentRegionId);
+            _roomSweepPlanner.ClearRejectedProbes();
+            clearedRoomRegionId = currentRegionId;
+            return true;
+        }
+
+        private RoomSweepCurrentRoomResult TryBeginOrContinueCurrentRoomSweep(int currentNodeId, RegionId currentRegionId)
+        {
+            if (!IsRoomSweepRoomRegion(currentRegionId))
+            {
+                return RoomSweepCurrentRoomResult.NotApplicable;
+            }
+
+            if (_roomSweepCoverageMemory.IsRegionCleared(currentRegionId))
+            {
+                return RoomSweepCurrentRoomResult.NotApplicable;
+            }
+
+            if (_roomSweepPlanner.CurrentRegionId != currentRegionId
+                && !_roomSweepPlanner.TryBeginRegion(currentRegionId))
+            {
+                return RoomSweepCurrentRoomResult.Failed;
+            }
+
+            UpdateRoomSweepVisualCoverage(currentRegionId);
+            LogRoomSweepResidualProbesOnce(currentNodeId, currentRegionId);
+            if (_roomSweepPlanner.IsFullyObserved)
+            {
+                _roomSweepCoverageMemory.MarkRegionCleared(currentRegionId);
+                _roomSweepPlanner.ClearRejectedProbes();
+                return RoomSweepCurrentRoomResult.RoomCleared;
+            }
+
+            if (TrySetRoomSweepProbeDestination(currentNodeId, currentRegionId))
+            {
+                return RoomSweepCurrentRoomResult.DestinationSet;
+            }
+
+            if (_roomSweepPlanner.IsExhausted)
+            {
+                return RoomSweepCurrentRoomResult.Exhausted;
+            }
+
+            regionGraphFallbackReason = RegionGraphFallbackReason.NoCompleteLocalPath;
+            return RoomSweepCurrentRoomResult.Failed;
+        }
+
+        private void CompleteRoomSweepCurrentRoomObjective(RegionId currentRegionId)
+        {
+            if (_roomSweepGlobalPlanner == null)
+            {
+                return;
+            }
+
+            var objective = _roomSweepGlobalPlanner.CurrentObjective;
+            if (objective.IsValid
+                && (objective.TargetRoomRegionId == currentRegionId
+                    || _roomSweepCoverageMemory.IsRegionCleared(objective.TargetRoomRegionId)))
+            {
+                _roomSweepGlobalPlanner.Invalidate(RoomSweepGlobalObjectiveInvalidationReason.TargetCleared);
+            }
+
+            _rejectedRoomSweepTransitNodeIds.Clear();
+        }
+
+        private bool TrySetRoomSweepProbeDestination(int currentNodeId, RegionId currentRoomRegionId)
+        {
+            var maxAttempts = _spatialPatrolGraph?.NodeCount ?? 0;
+            for (var attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                if (!_roomSweepPlanner.TrySelectNextProbe(currentNodeId, out var probeNodeId)
+                    || !_spatialPatrolGraph.TryGetNode(probeNodeId, out var probeNode))
+                {
+                    return false;
+                }
+
+                if (probeNodeId == currentNodeId)
+                {
+                    // Previous immediate self-probe rejection kept as reference:
+                    // RejectRoomSweepProbeWithDiagnostic(
+                    //     probeNodeId,
+                    //     "SELF_PROBE",
+                    //     NavigationFailureReason.None);
+                    // continue;
+                    BeginRoomSweepSelfProbeScan(probeNodeId, currentRoomRegionId);
+                    return true;
+                }
+
+                LogRoomSweepProbeSelected(currentNodeId, probeNodeId, probeNode.Position);
+                var result = _navigation.RequestDestination(probeNode.Position);
+                if (!result.IsAccepted)
+                {
+                    LogRoomSweepRequestDestinationResult(result.IsAccepted);
+                    RejectRoomSweepProbeWithDiagnostic(
+                        probeNodeId,
+                        "REQUEST_DESTINATION_REJECTED",
+                        _navigation.CurrentFailureReason);
+                    regionGraphFallbackReason = RegionGraphFallbackReason.NoCompleteLocalPath;
+                    continue;
+                }
+
+                SetNavigationObjective(new StalkerNavigationObjectiveKey(
+                    StalkerNavigationObjectiveKind.RoomSweepProbe,
+                    probeNodeId,
+                    currentRoomRegionId.Value,
+                    -1));
+                _blackboard.DestinationSpatialNodeId = probeNodeId;
+                lastPatrolScore = 0f;
+                candidateCount = 1;
+                canonicalCurrentRegionId = currentRoomRegionId.Value;
+                canonicalObjectiveRegionId = currentRoomRegionId.Value;
+                canonicalNextRegionId = currentRoomRegionId.Value;
+                regionGraphFallbackReason = RegionGraphFallbackReason.None;
+                SyncDynamicPatrolDebugFields();
+                LogRoomSweepRequestDestinationResult(result.IsAccepted);
+                return true;
+            }
+
+            return false;
+        }
+
+        private void BeginRoomSweepSelfProbeScan(int probeNodeId, RegionId roomRegionId)
+        {
+            ClearRoomSweepSelfProbeScan();
+
+            _roomSweepSelfProbeScanActive = true;
+            _roomSweepSelfProbeScanNodeId = probeNodeId;
+            _roomSweepSelfProbeScanRegionId = roomRegionId;
+            _roomSweepSelfProbeScanAccumulatedDegrees = 0f;
+
+            var navAgent = GetComponent<NavMeshAgent>();
+            if (navAgent != null)
+            {
+                _roomSweepSelfProbeScanHasAgentRotationOwnership = true;
+                _roomSweepSelfProbeScanPreviousAgentUpdateRotation = navAgent.updateRotation;
+                navAgent.updateRotation = false;
+            }
+
+            ClearRoomSweepDestination();
+        }
+
+        private void TickRoomSweepSelfProbeScan()
+        {
+            if (!_roomSweepSelfProbeScanActive)
+            {
+                return;
+            }
+
+            if (!ResolveCurrentRoomSweepLocation(out var currentNodeId, out var currentRegionId)
+                || currentRegionId != _roomSweepSelfProbeScanRegionId
+                || _roomSweepPlanner == null
+                || !_roomSweepPlanner.HasActiveRegion
+                || _roomSweepPlanner.CurrentRegionId != currentRegionId
+                || !IsRoomSweepRoomRegion(currentRegionId)
+                || _roomSweepCoverageMemory == null)
+            {
+                ClearRoomSweepSelfProbeScan();
+                ClearRoomSweepDestination();
+                return;
+            }
+
+            var navAgent = GetComponent<NavMeshAgent>();
+            var deltaTime = Mathf.Max(0f, CurrentSimulationDeltaSeconds);
+            var deltaDegrees = navAgent != null
+                ? Mathf.Max(0f, navAgent.angularSpeed) * deltaTime
+                : 0f;
+
+            if (deltaDegrees > 0f)
+            {
+                var previousYaw = transform.eulerAngles.y;
+                transform.Rotate(0f, deltaDegrees, 0f, Space.World);
+                var currentYaw = transform.eulerAngles.y;
+                var actualYawDelta = Mathf.Abs(Mathf.DeltaAngle(previousYaw, currentYaw));
+                // Previous requested-angle accounting kept as reference:
+                // _roomSweepSelfProbeScanAccumulatedDegrees += deltaDegrees;
+                _roomSweepSelfProbeScanAccumulatedDegrees += actualYawDelta;
+            }
+
+            UpdateRoomSweepVisualCoverage(currentRegionId);
+            LogRoomSweepResidualProbesOnce(currentNodeId, currentRegionId);
+
+            if (_roomSweepCoverageMemory.IsObserved(currentRegionId, _roomSweepSelfProbeScanNodeId))
+            {
+                ClearRoomSweepSelfProbeScan();
+                ClearRoomSweepDestination();
+                return;
+            }
+
+            if (_roomSweepSelfProbeScanAccumulatedDegrees >= 360f)
+            {
+                var rejectedProbeNodeId = _roomSweepSelfProbeScanNodeId;
+                ClearRoomSweepSelfProbeScan();
+                ClearRoomSweepDestination();
+                RejectRoomSweepProbeWithDiagnostic(
+                    rejectedProbeNodeId,
+                    "SELF_PROBE_FULL_SCAN_UNSEEN",
+                    NavigationFailureReason.None);
+            }
+        }
+
+        private void ClearRoomSweepSelfProbeScan()
+        {
+            if (_roomSweepSelfProbeScanHasAgentRotationOwnership)
+            {
+                var navAgent = GetComponent<NavMeshAgent>();
+                if (navAgent != null)
+                {
+                    navAgent.updateRotation = _roomSweepSelfProbeScanPreviousAgentUpdateRotation;
+                }
+            }
+
+            _roomSweepSelfProbeScanActive = false;
+            _roomSweepSelfProbeScanNodeId = -1;
+            _roomSweepSelfProbeScanRegionId = RegionId.Invalid;
+            _roomSweepSelfProbeScanAccumulatedDegrees = 0f;
+            _roomSweepSelfProbeScanHasAgentRotationOwnership = false;
+            _roomSweepSelfProbeScanPreviousAgentUpdateRotation = false;
+        }
+
+        private bool TrySetRoomSweepTransitDestinationWithGlobalAlternates(out NavigationRecoveryReason recoveryReason)
+        {
+            return TrySetRoomSweepTransitDestinationWithGlobalAlternates(
+                RoomSweepGlobalObjectiveInvalidationReason.NavigationRecoveryFailed,
+                out recoveryReason);
+        }
+
+        private bool TrySetRoomSweepTransitDestinationWithGlobalAlternates(
+            RoomSweepGlobalObjectiveInvalidationReason invalidationReason,
+            out NavigationRecoveryReason recoveryReason)
+        {
+            recoveryReason = NavigationRecoveryReason.None;
+            if (SetRoomSweepTransitDestination())
+            {
+                return true;
+            }
+
+            if (regionGraphFallbackReason != RegionGraphFallbackReason.NoCompleteLocalPath)
+            {
+                return false;
+            }
+
+            var maxGlobalAttempts = _regionGraph?.Regions?.Count ?? 0;
+            for (var attempt = 0; attempt < maxGlobalAttempts; attempt++)
+            {
+                var objective = _roomSweepGlobalPlanner?.CurrentObjective ?? RoomSweepGlobalObjective.Invalid;
+                if (!objective.TargetRoomRegionId.IsValid)
+                {
+                    return false;
+                }
+
+                _rejectedRoomSweepGlobalRegionIds.Add(objective.TargetRoomRegionId);
+                _roomSweepGlobalPlanner?.Invalidate(invalidationReason);
+                _rejectedRoomSweepTransitNodeIds.Clear();
+                recoveryReason = NavigationRecoveryReason.AlternateGlobalObjective;
+
+                if (SetRoomSweepTransitDestination())
+                {
+                    return true;
+                }
+
+                if (regionGraphFallbackReason != RegionGraphFallbackReason.NoCompleteLocalPath)
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
+
+        private bool SetRoomSweepTransitDestination()
+        {
+            if (!ResolveCurrentRoomSweepLocation(out var currentNodeId, out var currentRegionId))
+            {
+                regionGraphFallbackReason = RegionGraphFallbackReason.InvalidNodeToRegionMap;
+                return false;
+            }
+
+            if (!_roomSweepGlobalPlanner.TryGetOrCreateObjective(
+                    currentRegionId,
+                    _rejectedRoomSweepGlobalRegionIds,
+                    out var objective))
+            {
+                var currentRoomResult = _roomSweepGlobalPlanner.LastInvalidationReason == RoomSweepGlobalObjectiveInvalidationReason.TargetReached
+                    ? TryBeginOrContinueCurrentRoomSweep(currentNodeId, currentRegionId)
+                    : RoomSweepCurrentRoomResult.NotApplicable;
+                if (currentRoomResult == RoomSweepCurrentRoomResult.DestinationSet
+                    || currentRoomResult == RoomSweepCurrentRoomResult.RoomCleared)
+                {
+                    return true;
+                }
+
+                regionGraphFallbackReason = RegionGraphFallbackReason.NoReachableRegionObjective;
+                return false;
+            }
+
+            var maxAttempts = _spatialPatrolGraph?.NodeCount ?? 0;
+            for (var attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                if (!_localPatrolSelector.TrySelect(
+                        currentNodeId,
+                        _blackboard.PreviousSpatialNodeId,
+                        objective.NextRegionId,
+                        _rejectedRoomSweepTransitNodeIds,
+                        out var selection))
+                {
+                    regionGraphFallbackReason = RegionGraphFallbackReason.NoCompleteLocalPath;
+                    return false;
+                }
+
+                var result = _navigation.RequestDestination(selection.DestinationNode.Position);
+                if (!result.IsAccepted)
+                {
+                    LogRoomSweepRequestDestinationResult(result.IsAccepted);
+                    _rejectedRoomSweepTransitNodeIds.Add(selection.DestinationNode.Id);
+                    regionGraphFallbackReason = RegionGraphFallbackReason.NoCompleteLocalPath;
+                    continue;
+                }
+
+                SetNavigationObjective(new StalkerNavigationObjectiveKey(
+                    StalkerNavigationObjectiveKind.RoomSweepTransit,
+                    selection.DestinationNode.Id,
+                    objective.TargetRoomRegionId.Value,
+                    -1));
+                _blackboard.DestinationSpatialNodeId = selection.DestinationNode.Id;
+                lastPatrolScore = selection.Score;
+                candidateCount = selection.CandidateCount;
+                canonicalCurrentRegionId = currentRegionId.Value;
+                canonicalObjectiveRegionId = objective.TargetRoomRegionId.Value;
+                canonicalNextRegionId = objective.NextRegionId.Value;
+                regionGraphFallbackReason = RegionGraphFallbackReason.None;
+                SyncDynamicPatrolDebugFields();
+                LogRoomSweepRequestDestinationResult(result.IsAccepted);
+                return true;
+            }
+
+            return false;
+        }
+
+        private void RejectRoomSweepProbeWithDiagnostic(
+            int probeNodeId,
+            string rejectionCategory,
+            NavigationFailureReason navigationFailureReason)
+        {
+            if (_roomSweepPlanner == null)
+            {
+                return;
+            }
+
+            var rejectedProbeCountBefore = _roomSweepPlanner.RejectedProbeCount;
+            var currentSpatialNodeId = -1;
+            var currentRegionId = RegionId.Invalid;
+            if (TryResolveNearestSpatialNode(transform.position, out currentSpatialNodeId)
+                && _regionGraph != null)
+            {
+                _regionGraph.TryGetRegionForNode(currentSpatialNodeId, out currentRegionId);
+            }
+
+            var plannerCurrentRegionId = _roomSweepPlanner.CurrentRegionId;
+            var probeAlreadyObserved = plannerCurrentRegionId.IsValid
+                && _roomSweepCoverageMemory != null
+                && _roomSweepCoverageMemory.IsObserved(plannerCurrentRegionId, probeNodeId);
+            var rejectedProbe = _roomSweepPlanner.RejectProbe(probeNodeId);
+            var rejectedProbeCountAfter = _roomSweepPlanner.RejectedProbeCount;
+
+            UnityEngine.Debug.LogWarning(
+                "[STK ROOM SWEEP REJECT DIAG] probe-rejected "
+                + $"probeNodeId={probeNodeId} "
+                + $"rejectionCategory={rejectionCategory} "
+                + $"currentSpatialNodeId={currentSpatialNodeId} "
+                + $"currentRegionId={(currentRegionId.IsValid ? currentRegionId.Value : -1)} "
+                + $"plannerCurrentRegionId={(plannerCurrentRegionId.IsValid ? plannerCurrentRegionId.Value : -1)} "
+                + $"probeEqualsCurrent={probeNodeId == currentSpatialNodeId} "
+                + $"probeAlreadyObserved={probeAlreadyObserved} "
+                + $"rejectedProbeCountBefore={rejectedProbeCountBefore} "
+                + $"rejectProbeResult={rejectedProbe} "
+                + $"rejectedProbeCountAfter={rejectedProbeCountAfter} "
+                + $"navigationFailureReason={navigationFailureReason} "
+                + $"navigationPathStatus={(_navigation != null ? _navigation.GetPathStatus().ToString() : NavigationPathStatus.AgentUnavailable.ToString())} "
+                + $"navigationExecutionStatus={(_navigation != null ? _navigation.GetExecutionStatus().ToString() : NavigationExecutionStatus.Failed.ToString())} "
+                + $"destinationSpatialNodeId={_blackboard.DestinationSpatialNodeId} "
+                + $"position={transform.position}");
+        }
+
+        private static string GetRoomSweepNavigationRejectionCategory(NavigationFailureReason failureReason)
+        {
+            switch (failureReason)
+            {
+                case NavigationFailureReason.NoProgress:
+                    return "NO_PROGRESS";
+                case NavigationFailureReason.PathPartial:
+                    return "PATH_PARTIAL";
+                case NavigationFailureReason.PathInvalid:
+                    return "PATH_INVALID";
+                default:
+                    return "OTHER_NAV_FAILURE";
+            }
+        }
+
+        private void LogRoomSweepPlanningLocation(int currentNodeId, RegionId currentRegionId)
+        {
+            var isRoom = IsRoomSweepRoomRegion(currentRegionId);
+            GetRoomSweepCoverageSnapshot(
+                currentRegionId,
+                out var coverageKnown,
+                out var isCleared,
+                out var observed,
+                out var total,
+                out var remaining);
+            UnityEngine.Debug.LogWarning(
+                "[STK ROOM SWEEP DIAG] planning-location "
+                + $"currentSpatialNodeId={currentNodeId} "
+                + $"currentRegionId={currentRegionId.Value} "
+                + $"worldPosition={transform.position} "
+                + $"isRoom={isRoom} "
+                + $"coverageKnown={coverageKnown} "
+                + $"roomCleared={isCleared} "
+                + $"observed={observed} total={total} remaining={remaining}");
+        }
+
+        private void LogRoomSweepCurrentRoomResult(
+            int currentNodeId,
+            RegionId currentRegionId,
+            RoomSweepCurrentRoomResult result)
+        {
+            GetRoomSweepCoverageSnapshot(
+                currentRegionId,
+                out _,
+                out _,
+                out var observed,
+                out var total,
+                out var remaining);
+            UnityEngine.Debug.LogWarning(
+                "[STK ROOM SWEEP DIAG] current-room-result "
+                + $"currentSpatialNodeId={currentNodeId} "
+                + $"currentRegionId={currentRegionId.Value} "
+                + $"result={result} "
+                + $"plannerCurrentRegionId={(_roomSweepPlanner != null ? _roomSweepPlanner.CurrentRegionId.Value : -1)} "
+                + $"plannerHasActiveRegion={(_roomSweepPlanner != null && _roomSweepPlanner.HasActiveRegion)} "
+                + $"plannerIsFullyObserved={(_roomSweepPlanner != null && _roomSweepPlanner.IsFullyObserved)} "
+                + $"plannerIsExhausted={(_roomSweepPlanner != null && _roomSweepPlanner.IsExhausted)} "
+                + $"rejectedProbeCount={(_roomSweepPlanner?.RejectedProbeCount ?? 0)} "
+                + $"observed={observed} total={total} remaining={remaining}");
+        }
+
+        private void LogRoomSweepResidualProbesOnce(int currentNodeId, RegionId currentRegionId)
+        {
+            if (_roomSweepPlanner == null
+                || _roomSweepCoverageMemory == null
+                || _spatialPatrolGraph == null
+                || visionSensor == null
+                || !_roomSweepPlanner.HasActiveRegion
+                || _roomSweepPlanner.CurrentRegionId != currentRegionId
+                || _roomSweepCoverageMemory.IsRegionCleared(currentRegionId))
+            {
+                return;
+            }
+
+            GetRoomSweepCoverageSnapshot(
+                currentRegionId,
+                out var coverageKnown,
+                out _,
+                out var observed,
+                out var total,
+                out var remaining);
+            if (!coverageKnown
+                || remaining <= 0
+                || remaining > 50
+                || _roomSweepResidualDiagLoggedRegionIds.Contains(currentRegionId.Value)
+                || !_roomSweepCoverageMemory.TryGetUnobservedProbeNodeIds(currentRegionId, out var nodeIds))
+            {
+                return;
+            }
+
+            _roomSweepResidualDiagLoggedRegionIds.Add(currentRegionId.Value);
+            var stalkerPosition = transform.position;
+            UnityEngine.Debug.LogWarning(
+                "[STK ROOM SWEEP RESIDUAL DIAG] summary "
+                + $"currentSpatialNodeId={currentNodeId} "
+                + $"regionId={currentRegionId.Value} "
+                + $"observed={observed} "
+                + $"total={total} "
+                + $"remaining={remaining} "
+                + $"residualNodeCount={nodeIds.Count}");
+
+            for (var i = 0; i < nodeIds.Count; i++)
+            {
+                var nodeId = nodeIds[i];
+                if (!_spatialPatrolGraph.TryGetNode(nodeId, out var node))
+                {
+                    continue;
+                }
+
+                var observationPoint = visionSensor.GetObservationPointForGroundPoint(node.Position);
+                var canSeePoint = visionSensor.CanSeePoint(observationPoint);
+                UnityEngine.Debug.LogWarning(
+                    "[STK ROOM SWEEP RESIDUAL DIAG] probe "
+                    + $"regionId={currentRegionId.Value} "
+                    + $"spatialNodeId={nodeId} "
+                    + $"worldPosition={node.Position} "
+                    + $"groundProbePosition={node.Position} "
+                    + $"observationPoint={observationPoint} "
+                    + $"stalkerWorldPosition={stalkerPosition} "
+                    + $"distanceFromStalker={Vector3.Distance(stalkerPosition, node.Position)} "
+                    + $"deltaY={node.Position.y - stalkerPosition.y} "
+                    + $"canSeePoint={canSeePoint}");
+            }
+        }
+
+        private void LogRoomSweepProbeSelected(int currentNodeId, int probeNodeId, Vector3 probePosition)
+        {
+            UnityEngine.Debug.LogWarning(
+                "[STK ROOM SWEEP DIAG] probe-selected "
+                + $"currentSpatialNodeId={currentNodeId} "
+                + $"selectedProbeNodeId={probeNodeId} "
+                + $"selectedEqualsCurrent={probeNodeId == currentNodeId} "
+                + $"selectedProbeWorldPosition={probePosition} "
+                + $"distanceFromStalker={Vector3.Distance(transform.position, probePosition)}");
+        }
+
+        private void LogRoomSweepRequestDestinationResult(bool accepted)
+        {
+            var hasActiveDestination = _navigation != null && _navigation.HasActiveDestination;
+            var hasArrived = hasActiveDestination && _navigation.HasArrived();
+            UnityEngine.Debug.LogWarning(
+                "[STK ROOM SWEEP DIAG] request-destination-result "
+                + $"accepted={accepted} "
+                + $"destinationSpatialNodeId={_blackboard.DestinationSpatialNodeId} "
+                + $"objectiveKind={_navigationObjectiveKey.Kind} "
+                + $"hasActiveDestination={hasActiveDestination} "
+                + $"hasArrived={hasArrived}");
+        }
+
+        private void LogRoomSweepDestinationReached(int destinationNodeId)
+        {
+            var resolvedCurrentNodeId = -1;
+            var currentRegionId = RegionId.Invalid;
+            if (TryResolveNearestSpatialNode(transform.position, out resolvedCurrentNodeId)
+                && _regionGraph != null)
+            {
+                _regionGraph.TryGetRegionForNode(resolvedCurrentNodeId, out currentRegionId);
+            }
+
+            UnityEngine.Debug.LogWarning(
+                "[STK ROOM SWEEP DIAG] destination-reached "
+                + $"objectiveKind={_navigationObjectiveKey.Kind} "
+                + $"destinationNodeId={destinationNodeId} "
+                + $"resolvedCurrentNodeId={resolvedCurrentNodeId} "
+                + $"currentRegionId={currentRegionId.Value}");
+        }
+
+        private void LogRoomSweepFallbackActivated()
+        {
+            var currentNodeId = -1;
+            var currentRegionId = RegionId.Invalid;
+            if (TryResolveNearestSpatialNode(transform.position, out currentNodeId)
+                && _regionGraph != null)
+            {
+                _regionGraph.TryGetRegionForNode(currentNodeId, out currentRegionId);
+            }
+
+            UnityEngine.Debug.LogWarning(
+                "[STK ROOM SWEEP DIAG] fallback-activated "
+                + $"currentNode={currentNodeId} "
+                + $"currentRegion={currentRegionId.Value} "
+                + $"objectiveKind={_navigationObjectiveKey.Kind} "
+                + $"destinationSpatialNodeId={_blackboard.DestinationSpatialNodeId}");
+        }
+
+        private void GetRoomSweepCoverageSnapshot(
+            RegionId regionId,
+            out bool coverageKnown,
+            out bool isCleared,
+            out int observed,
+            out int total,
+            out int remaining)
+        {
+            observed = _roomSweepCoverageMemory?.GetObservedCount(regionId) ?? 0;
+            total = _roomSweepCoverageMemory?.GetTotalProbeCount(regionId) ?? 0;
+            remaining = _roomSweepCoverageMemory?.GetRemainingProbeCount(regionId) ?? 0;
+            isCleared = _roomSweepCoverageMemory != null && _roomSweepCoverageMemory.IsRegionCleared(regionId);
+            coverageKnown = observed > 0 || total > 0 || remaining > 0 || isCleared;
         }
 
         private void LogCanonicalLocalSelectionFailure(
@@ -2763,6 +3680,28 @@ namespace EchoProtocol.AI.Stalker
             SyncDynamicPatrolDebugFields();
         }
 
+        private void MarkRoomSweepDestinationReached()
+        {
+            var destinationNodeId = _blackboard.DestinationSpatialNodeId;
+            if (destinationNodeId < 0)
+            {
+                return;
+            }
+
+            LogRoomSweepDestinationReached(destinationNodeId);
+            _blackboard.PreviousSpatialNodeId = _blackboard.CurrentSpatialNodeId;
+            _blackboard.CurrentSpatialNodeId = destinationNodeId;
+            _blackboard.DestinationSpatialNodeId = -1;
+            _coverageMemory?.RecordPhysicalNodeArrival(destinationNodeId, CurrentSimulationTimeSeconds);
+            if (_regionGraph != null && _regionGraph.TryGetRegionForNode(destinationNodeId, out var regionId))
+            {
+                UpdateCurrentRegion(regionId);
+            }
+
+            ClearNavigationObjective();
+            SyncDynamicPatrolDebugFields();
+        }
+
         private void MarkDynamicSpatialDestinationReached()
         {
             var destinationNodeId = _blackboard.DestinationSpatialNodeId;
@@ -2785,6 +3724,15 @@ namespace EchoProtocol.AI.Stalker
             _blackboard.DestinationSpatialNodeId = -1;
             lastPatrolScore = 0f;
             candidateCount = 0;
+            SyncDynamicPatrolDebugFields();
+        }
+
+        private void ClearRoomSweepDestination()
+        {
+            _blackboard.DestinationSpatialNodeId = -1;
+            lastPatrolScore = 0f;
+            candidateCount = 0;
+            ClearNavigationObjective();
             SyncDynamicPatrolDebugFields();
         }
 
@@ -2811,6 +3759,83 @@ namespace EchoProtocol.AI.Stalker
             ClearDynamicPatrolDestination();
             TickFixedWaypointPatrol();
             _navigation?.RecordRecoveryReason(recoveryReason);
+        }
+
+        private void ActivateRoomSweepPatrolFallback()
+        {
+            if (regionGraphFallbackReason == RegionGraphFallbackReason.None)
+            {
+                regionGraphFallbackReason = RegionGraphFallbackReason.MalformedRegionGraph;
+            }
+
+            LogRoomSweepFallbackActivated();
+            _roomSweepPatrolFallbackActive = true;
+            _roomSweepGlobalPlanner?.Invalidate(RoomSweepGlobalObjectiveInvalidationReason.NavigationRecoveryFailed);
+            _rejectedRoomSweepTransitNodeIds.Clear();
+            var recoveryReason = regionGraphFallbackReason == RegionGraphFallbackReason.SpatialGraphCompatibilityMismatch
+                ? NavigationRecoveryReason.RegionGraphCompatibilityFallback
+                : NavigationRecoveryReason.FixedPatrolFallback;
+            _navigation?.Stop();
+            ClearRoomSweepDestination();
+            TickFixedWaypointPatrol();
+            _navigation?.RecordRecoveryReason(recoveryReason);
+        }
+
+        private void ResetRoomSweepFallbackState()
+        {
+            _roomSweepPatrolFallbackActive = false;
+            regionGraphFallbackReason = RegionGraphFallbackReason.None;
+            _rejectedRoomSweepTransitNodeIds.Clear();
+            _rejectedRoomSweepGlobalRegionIds.Clear();
+        }
+
+        private bool ResolveCurrentRoomSweepLocation(out int currentNodeId, out RegionId currentRegionId)
+        {
+            currentNodeId = -1;
+            currentRegionId = RegionId.Invalid;
+            if (!TryResolveNearestSpatialNode(transform.position, out currentNodeId)
+                || _regionGraph == null
+                || !_regionGraph.TryGetRegionForNode(currentNodeId, out currentRegionId))
+            {
+                return false;
+            }
+
+            _blackboard.CurrentSpatialNodeId = currentNodeId;
+            UpdateCurrentRegion(currentRegionId);
+            return true;
+        }
+
+        private bool IsRoomSweepRoomRegion(RegionId regionId)
+        {
+            return _regionGraph != null
+                && _regionGraph.TryGetRegionSemanticMetadata(regionId, out var metadata)
+                && metadata.Kind == RegionSemanticKind.Room;
+        }
+
+        private void UpdateRoomSweepVisualCoverage(RegionId roomRegionId)
+        {
+            if (visionSensor == null
+                || _regionGraph == null
+                || _spatialPatrolGraph == null
+                || !_regionGraph.TryGetSpatialNodeIdsForRegion(roomRegionId, out var nodeIds))
+            {
+                return;
+            }
+
+            for (var i = 0; i < nodeIds.Count; i++)
+            {
+                var nodeId = nodeIds[i];
+                if (!_spatialPatrolGraph.TryGetNode(nodeId, out var node))
+                {
+                    continue;
+                }
+
+                var observationPoint = visionSensor.GetObservationPointForGroundPoint(node.Position);
+                if (visionSensor.CanSeePoint(observationPoint))
+                {
+                    _roomSweepCoverageMemory.MarkObserved(roomRegionId, nodeId);
+                }
+            }
         }
 
         private bool TryResolveNearestSpatialNode(Vector3 worldPosition, out int nodeId)
