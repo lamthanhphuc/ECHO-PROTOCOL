@@ -145,6 +145,31 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public void SetGameplayToolId(int toolId)
+        {
+            if (Object == null || !Object.IsValid)
+            {
+                return;
+            }
+
+            if (Object.HasStateAuthority)
+            {
+                ToolId = toolId;
+                AnyStateChanged?.Invoke();
+            }
+            else if (Object.HasInputAuthority)
+            {
+                RpcRequestSetGameplayTool(toolId);
+            }
+        }
+
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        private void RpcRequestSetGameplayTool(int toolId)
+        {
+            ToolId = toolId;
+            AnyStateChanged?.Invoke();
+        }
+
         public override void Spawned()
         {
             AnyStateChanged?.Invoke();

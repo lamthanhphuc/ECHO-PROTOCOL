@@ -15,7 +15,7 @@ namespace EchoProtocol.Networking
         [Header("Authoritative Gameplay World")]
         [SerializeField] private NetworkObject _doorPrefab;
         [SerializeField] private NetworkObject _pickupItemPrefab;
-        [SerializeField, Range(1, 4)] private int _energyCoreCount = 3;
+        [SerializeField, Range(1, 4)] private int _energyCoreCount = 4;
         [SerializeField] private Vector3 _energyCoreSpawnOrigin = new Vector3(2f, 0.5f, 2.5f);
         [SerializeField, Min(0.5f)] private float _energyCoreSpawnSpacing = 1.25f;
         [SerializeField] private NetworkObject _sectorBoxPrefab;
@@ -29,6 +29,7 @@ namespace EchoProtocol.Networking
         private NetworkObject _doorInstance;
         private readonly List<NetworkObject> _energyCoreInstances = new List<NetworkObject>();
         private NetworkObject _sectorBoxInstance;
+        private readonly List<NetworkObject> _sectorBoxInstances = new List<NetworkObject>();
         private NetworkObject _matchStateInstance;
         private NetworkObject _powerPuzzleInstance;
         private readonly List<NetworkObject> _powerPuzzleStationInstances = new List<NetworkObject>();
@@ -139,14 +140,34 @@ namespace EchoProtocol.Networking
                 _energyCoreInstances.Add(core);
                 Debug.Log($"[PlayerSpawner] Spawned authoritative Energy Core {index + 1}/{_energyCoreCount}: {core.Id}.");
             }
-            if (_sectorBoxInstance == null && _sectorBoxPrefab != null)
+            if (_sectorBoxPrefab != null && _sectorBoxInstances.Count == 0)
             {
-                var sectorPose = GetSectorBoxPose();
-                _sectorBoxInstance = runner.Spawn(
-                    _sectorBoxPrefab,
-                    sectorPose.Position,
-                    sectorPose.Rotation);
-                Debug.Log($"[PlayerSpawner] Spawned authoritative Sector Box {_sectorBoxInstance.Id}.");
+                var sceneBoxes = FindObjectsByType<SectorBox>(FindObjectsInactive.Include);
+                if (sceneBoxes.Length > 0)
+                {
+                    for (int i = 0; i < sceneBoxes.Length; i++)
+                    {
+                        var box = sceneBoxes[i];
+                        if (box == null) continue;
+                        var boxInstance = runner.Spawn(
+                            _sectorBoxPrefab,
+                            box.transform.position,
+                            box.transform.rotation);
+                        _sectorBoxInstances.Add(boxInstance);
+                        Debug.Log($"[PlayerSpawner] Spawned authoritative Sector Box {i + 1}/{sceneBoxes.Length}: {boxInstance.Id}.");
+                    }
+                    _sectorBoxInstance = _sectorBoxInstances[0];
+                }
+                else
+                {
+                    var sectorPose = GetSectorBoxPose();
+                    _sectorBoxInstance = runner.Spawn(
+                        _sectorBoxPrefab,
+                        sectorPose.Position,
+                        sectorPose.Rotation);
+                    _sectorBoxInstances.Add(_sectorBoxInstance);
+                    Debug.Log($"[PlayerSpawner] Spawned fallback authoritative Sector Box {_sectorBoxInstance.Id}.");
+                }
             }
             EnsurePowerPuzzle(runner);
             if (_monsterInstance == null && _monsterPrefab != null)
@@ -172,9 +193,12 @@ namespace EchoProtocol.Networking
             {
                 door.InitializeAuthoritative(_matchStateInstance.Id);
             }
-            if (_sectorBoxInstance.TryGetComponent<NetworkSectorBox>(out var sectorBox))
+            for (int i = 0; i < _sectorBoxInstances.Count; i++)
             {
-                sectorBox.InitializeAuthoritative(_matchStateInstance.Id);
+                if (_sectorBoxInstances[i] != null && _sectorBoxInstances[i].TryGetComponent<NetworkSectorBox>(out var sectorBox))
+                {
+                    sectorBox.InitializeAuthoritative(_matchStateInstance.Id);
+                }
             }
         }
 

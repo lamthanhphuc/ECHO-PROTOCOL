@@ -1,7 +1,7 @@
 {
     "Version": 1,
     "TypeId": "NetworkProjectConfig",
-    "HubMode": 0,
+    "HubMode": 1,
     "PeerMode": 0,
     "LagCompensation": {
         "Enabled": false,

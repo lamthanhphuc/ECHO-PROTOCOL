@@ -168,14 +168,37 @@ namespace EchoProtocol.Networking
             if (!TryResolveObjectiveSource(out var source)) return false;
             current = source.PlacedCoreCount;
             required = source.RequiredCoreCount;
+            var allBoxes = FindObjectsByType<NetworkSectorBox>(FindObjectsInactive.Exclude);
+            for (int i = 0; i < allBoxes.Length; i++)
+            {
+                var other = allBoxes[i];
+                if (other != null && other != source)
+                {
+                    current += other.PlacedCoreCount;
+                    required += other.RequiredCoreCount;
+                }
+            }
             return true;
         }
 
         public bool TryCompleteCoreObjective(NetworkSectorBox source)
         {
-            if (!ValidateObjectiveSource(source)
-                || !source.IsCoreObjectiveComplete
-                || !TryAdvancePhase(
+            if (!ValidateObjectiveSource(source))
+            {
+                return false;
+            }
+
+            var allBoxes = FindObjectsByType<NetworkSectorBox>(FindObjectsInactive.Exclude);
+            for (int i = 0; i < allBoxes.Length; i++)
+            {
+                var box = allBoxes[i];
+                if (box != null && !box.IsCoreObjectiveComplete)
+                {
+                    return false;
+                }
+            }
+
+            if (!TryAdvancePhase(
                     NetworkMatchPhase.CoreObjective,
                     NetworkMatchPhase.Puzzle,
                     "CORE_COLLECTION"))
@@ -354,7 +377,19 @@ namespace EchoProtocol.Networking
                 && source != null
                 && source.Object != null
                 && source.Object.Id == ObjectiveSourceId
+                && (source.Object.Id == ObjectiveSourceId || IsTrackedSectorBox(source))
                 && source.Object.HasStateAuthority;
+        }
+
+        private bool IsTrackedSectorBox(NetworkSectorBox source)
+        {
+            if (source == null || source.Object == null) return false;
+            var allBoxes = FindObjectsByType<NetworkSectorBox>(FindObjectsInactive.Exclude);
+            for (int i = 0; i < allBoxes.Length; i++)
+            {
+                if (allBoxes[i] == source) return true;
+            }
+            return false;
         }
 
         private bool ValidateObjectiveSource(NetworkId sourceId)
