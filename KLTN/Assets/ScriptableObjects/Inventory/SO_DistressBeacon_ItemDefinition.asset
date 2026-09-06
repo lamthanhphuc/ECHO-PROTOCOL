@@ -10,10 +10,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c41fe016921792843b555260e6d7541e, type: 3}
-  m_Name: SO_FirstAid_ItemDefinition
+  m_Name: SO_DistressBeacon_ItemDefinition
   m_EditorClassIdentifier: Assembly-CSharp::InventoryItemDefinition
-  itemId: first_aid
-  displayName: First Aid Kit
+  itemId: noise_maker
+  displayName: Distress Beacon
   itemType: 1
-  worldPrefab: {fileID: 5508043860142965960, guid: 7972be33729bd41458d3d7b5486243ef, type: 3}
+  worldPrefab: {fileID: 6336918889015265847, guid: 0c24821b2d6aef745a61febe92e91285, type: 3}
   icon: {fileID: 0}
+
