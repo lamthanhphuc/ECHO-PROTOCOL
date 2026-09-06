@@ -14,6 +14,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::InventoryItemDefinition
   itemId: first_aid
   displayName: First Aid Kit
-  itemType: 0
+  itemType: 1
   worldPrefab: {fileID: 5508043860142965960, guid: 7972be33729bd41458d3d7b5486243ef, type: 3}
   icon: {fileID: 0}

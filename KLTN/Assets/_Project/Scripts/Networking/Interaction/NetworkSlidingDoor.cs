@@ -9,7 +9,7 @@ namespace EchoProtocol.Networking
     /// every peer derives the smooth visual presentation locally.
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class NetworkSlidingDoor : NetworkInteractable, INetworkDoorStateProvider
+    public sealed class NetworkSlidingDoor : NetworkInteractable, INetworkDoorStateProvider, IInteractable
     {
         public static event Action<NetworkSlidingDoor, NetworkDoorState> StateChanged;
 
@@ -31,20 +31,116 @@ namespace EchoProtocol.Networking
         private float _visualOpenAmount;
         private float _targetOpenAmount;
         private bool _positionsCached;
+        private NetworkDoorState _offlineState = NetworkDoorState.Closed;
+
+        private bool IsOnline => Object != null && Object.IsValid && Runner != null && Runner.IsRunning;
+
+        public NetworkDoorState CurrentState => IsOnline ? State : _offlineState;
+
+        NetworkDoorState INetworkDoorStateProvider.State => CurrentState;
 
         [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
         public NetworkDoorState State { get; private set; }
 
-        public override string InteractionPrompt => State switch
+        public override string InteractionPrompt => CurrentState switch
         {
             NetworkDoorState.Locked => "Door locked",
             NetworkDoorState.Open => "Close door",
             _ => "Open door",
         };
 
+        string IInteractable.InteractionPrompt => InteractionPrompt;
+
+        public bool CanInteract(GameObject interactor)
+        {
+            if (CurrentState == NetworkDoorState.Locked) return false;
+            if (interactor == null) return true;
+
+            var origin = InteractionOrigin != null ? InteractionOrigin.position : transform.position;
+            var sqrDistance = (interactor.transform.position - origin).sqrMagnitude;
+            var maxDist = Mathf.Max(InteractionDistance, 3.5f);
+            return sqrDistance <= maxDist * maxDist;
+        }
+
+        public void Interact(GameObject interactor)
+        {
+            if (IsOnline)
+            {
+                var networkInteractor = interactor != null ? interactor.GetComponent<NetworkPlayerInteractor>() : null;
+                if (networkInteractor != null && networkInteractor.Object != null && networkInteractor.Object.HasInputAuthority)
+                {
+                    if (networkInteractor.CurrentCandidate != this)
+                    {
+                        networkInteractor.RequestInteraction(this);
+                    }
+                    return;
+                }
+
+                if (Object.HasStateAuthority)
+                {
+                    var context = new InteractionContext(networkInteractor, this, Runner.LocalPlayer);
+                    if (ValidateInteraction(context) == InteractionValidationResult.Accepted)
+                    {
+                        ExecuteAuthoritative(context);
+                    }
+                }
+                return;
+            }
+
+            ToggleOffline();
+        }
+
+        private void ToggleOffline()
+        {
+            if (_offlineState == NetworkDoorState.Locked) return;
+
+            _offlineState = _offlineState == NetworkDoorState.Open
+                ? NetworkDoorState.Closed
+                : NetworkDoorState.Open;
+
+            ApplyOfflineState();
+        }
+
+        private void ApplyOfflineState()
+        {
+            _targetOpenAmount = _offlineState == NetworkDoorState.Open ? 1f : 0f;
+
+            if (_blockingCollider != null)
+            {
+                _blockingCollider.enabled = _offlineState != NetworkDoorState.Open;
+            }
+
+            StateChanged?.Invoke(this, _offlineState);
+        }
+
         private void Awake()
         {
             CacheClosedPositions();
+            _offlineState = _startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
+            _targetOpenAmount = _offlineState == NetworkDoorState.Open ? 1f : 0f;
+            _visualOpenAmount = _targetOpenAmount;
+
+            if (_blockingCollider != null)
+            {
+                _blockingCollider.enabled = _offlineState != NetworkDoorState.Open;
+            }
+
+            ApplyVisuals(SmoothStep(_visualOpenAmount));
+        }
+
+        private void Update()
+        {
+            if (IsOnline) return;
+
+            if (!_positionsCached) return;
+
+            var duration = Mathf.Max(0.01f, _animationDuration);
+            _visualOpenAmount = Mathf.MoveTowards(
+                _visualOpenAmount,
+                _targetOpenAmount,
+                Time.deltaTime / duration);
+
+            ApplyVisuals(SmoothStep(_visualOpenAmount));
         }
 
         public override void Spawned()
@@ -56,6 +152,7 @@ namespace EchoProtocol.Networking
                 State = _startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
             }
 
+            _offlineState = State;
             ApplyReplicatedStateImmediate();
         }
 
@@ -77,6 +174,13 @@ namespace EchoProtocol.Networking
 
         public bool SetLockedAuthoritative(bool locked)
         {
+            if (!IsOnline)
+            {
+                _offlineState = locked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
+                ApplyOfflineState();
+                return true;
+            }
+
             if (!Object.HasStateAuthority)
             {
                 return false;
@@ -89,7 +193,7 @@ namespace EchoProtocol.Networking
 
         protected override InteractionValidationResult ValidateCurrentState(in InteractionContext context)
         {
-            return State == NetworkDoorState.Locked
+            return CurrentState == NetworkDoorState.Locked
                 ? InteractionValidationResult.InvalidTargetState
                 : InteractionValidationResult.Accepted;
         }
@@ -118,6 +222,7 @@ namespace EchoProtocol.Networking
 
         private void ApplyReplicatedState()
         {
+            _offlineState = State;
             _targetOpenAmount = State == NetworkDoorState.Open ? 1f : 0f;
 
             // Closing blocks immediately. Opening becomes traversable as soon as the

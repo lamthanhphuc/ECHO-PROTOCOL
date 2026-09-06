@@ -3242,6 +3242,8 @@ GameObject:
   m_Component:
   - component: {fileID: 7250099417279695051}
   - component: {fileID: 4410125909569361513}
+  - component: {fileID: 4932034121453938157}
+  - component: {fileID: 747627629626649755}
   m_Layer: 0
   m_Name: PF_PlayerCharacter_P3_Green
   m_TagString: Untagged
@@ -3280,12 +3282,57 @@ MonoBehaviour:
   animator: {fileID: 6458359041975658830}
   movement: {fileID: 0}
   characterController: {fileID: 0}
+  inventory: {fileID: 0}
   coreCarrier: {fileID: 0}
+  lobbyState: {fileID: 0}
   downState: {fileID: 0}
   walkSpeedReference: 4
   runSpeedReference: 7
   speedDampTime: 0.16
   directionDampTime: 0.12
+--- !u!114 &4932034121453938157
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3731188545047676384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 577fe7ca2424db4438f4857e96dfc073, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHeldItemAnchor
+  animator: {fileID: 6458359041975658830}
+  rightHandAnchor: {fileID: 0}
+  coreCarryAnchor: {fileID: 0}
+  fallbackLocalPosition: {x: 0.33, y: 1.18, z: 0.42}
+  fallbackLocalEulerAngles: {x: 4, y: 8, z: 0}
+  coreCarryLocalPosition: {x: 0, y: 0.06, z: 0.28}
+  coreCarryLocalEulerAngles: {x: 0, y: 0, z: 0}
+--- !u!114 &747627629626649755
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3731188545047676384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d9e9e305bd153a24aa0de739e91fe1c7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHeldItemView
+  inventory: {fileID: 0}
+  coreCarrier: {fileID: 0}
+  heldItemAnchor: {fileID: 4932034121453938157}
+  energyCoreLocalPosition: {x: 0, y: 0, z: 0}
+  energyCoreLocalEulerAngles: {x: 0, y: 0, z: 0}
+  energyCoreLocalScale: {x: 25, y: 25, z: 25}
+  energyCoreChildLocalPosition: {x: 0.0012, y: -0.2456, z: -1.1109}
+  energyCoreChildLocalEulerAngles: {x: -89.116, y: 77.236, z: -92.522}
+  energyCoreChildLocalScale: {x: 0.9, y: 0.9, z: 0.9}
+  teamToolLocalPosition: {x: 0.04, y: 0.01, z: 0.11}
+  teamToolLocalEulerAngles: {x: 12, y: 88, z: -18}
+  teamToolLocalScale: {x: 0.45, y: 0.45, z: 0.45}
 --- !u!1 &3742849642593228857
 GameObject:
   m_ObjectHideFlags: 0
@@ -4991,6 +5038,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6331899075716588022}
   - component: {fileID: 6458359041975658830}
+  - component: {fileID: 3663560053004369899}
   m_Layer: 0
   m_Name: Body
   m_TagString: Untagged
@@ -5042,6 +5090,28 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &3663560053004369899
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6671163680975387468}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bacb97b213241624a836b7a3ee109f4b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerUpperBodyAim
+  animator: {fileID: 6458359041975658830}
+  playerRoot: {fileID: 7250099417279695051}
+  playerCamera: {fileID: 0}
+  lookAtWeight: 0.82
+  bodyWeight: 0.24
+  headWeight: 0.74
+  eyesWeight: 0.45
+  clampWeight: 0.42
+  lookAtDistance: 12
+  driveRightHandWhenHolding: 1
 --- !u!1 &6683347210720194350
 GameObject:
   m_ObjectHideFlags: 0

@@ -1,10 +1,10 @@
+using EchoProtocol.Networking;
 using UnityEngine;
 using UnityEngine.InputSystem;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
 
-[DisallowMultipleComponent]
 public class PlayerAnimatorDriver : MonoBehaviour
 {
     private const string EditorAnimatorControllerPath = "Assets/Animations/Player/AC_PlayerCharacter.controller";
@@ -20,30 +20,43 @@ public class PlayerAnimatorDriver : MonoBehaviour
     private static readonly int IsRevivingHash = Animator.StringToHash("IsReviving");
     private static readonly int ReviveHash = Animator.StringToHash("Revive");
 
+    [Header("References")]
     [SerializeField] private Animator animator;
     [SerializeField] private PlayerMovement movement;
-    [SerializeField] private CharacterController characterController;
+    [SerializeField] private PlayerInventory inventory;
     [SerializeField] private PlayerEnergyCoreCarrier coreCarrier;
+    [SerializeField] private NetworkPlayerMovement networkMovement;
+    [SerializeField] private LobbyPlayerState lobbyState;
     [SerializeField] private PlayerDownState downState;
-    [SerializeField] private float walkSpeedReference = 4f;
-    [SerializeField] private float runSpeedReference = 7f;
-    [SerializeField] private float speedDampTime = 0.16f;
-    [SerializeField] private float directionDampTime = 0.12f;
+
+    [Header("Damping")]
+    [SerializeField] private float speedDampTime = 0.08f;
+    [SerializeField] private float directionDampTime = 0.08f;
+
+    [Header("Speed Reference")]
+    [SerializeField] private float walkSpeedReference = 3.6f;
+    [SerializeField] private float runSpeedReference = 6.2f;
 
     private float _smoothedSpeed;
 
     private void Awake()
     {
-        animator = ResolvePlayableAnimator();
-        movement = movement != null ? movement : GetComponentInParent<PlayerMovement>();
-        characterController = characterController != null ? characterController : GetComponentInParent<CharacterController>();
-        coreCarrier = coreCarrier != null ? coreCarrier : GetComponentInParent<PlayerEnergyCoreCarrier>();
-        downState = downState != null ? downState : GetComponentInParent<PlayerDownState>();
+        if (animator == null)
+        {
+            animator = ResolvePlayableAnimator();
+        }
+
+        if (movement == null) movement = GetComponent<PlayerMovement>() ?? GetComponentInParent<PlayerMovement>();
+        if (inventory == null) inventory = GetComponent<PlayerInventory>() ?? GetComponentInParent<PlayerInventory>();
+        if (coreCarrier == null) coreCarrier = GetComponent<PlayerEnergyCoreCarrier>() ?? GetComponentInParent<PlayerEnergyCoreCarrier>();
+        if (networkMovement == null) networkMovement = GetComponent<NetworkPlayerMovement>() ?? GetComponentInParent<NetworkPlayerMovement>();
+        if (lobbyState == null) lobbyState = GetComponent<LobbyPlayerState>() ?? GetComponentInParent<LobbyPlayerState>();
+        if (downState == null) downState = GetComponent<PlayerDownState>() ?? GetComponentInParent<PlayerDownState>();
     }
 
     private void Update()
     {
-        if (animator == null)
+        if (animator == null || animator.runtimeAnimatorController == null)
         {
             animator = ResolvePlayableAnimator();
         }
@@ -54,19 +67,25 @@ public class PlayerAnimatorDriver : MonoBehaviour
         }
 
         if (movement == null) movement = GetComponent<PlayerMovement>() ?? GetComponentInParent<PlayerMovement>();
+        if (inventory == null) inventory = GetComponent<PlayerInventory>() ?? GetComponentInParent<PlayerInventory>();
         if (coreCarrier == null) coreCarrier = GetComponent<PlayerEnergyCoreCarrier>() ?? GetComponentInParent<PlayerEnergyCoreCarrier>();
+        if (networkMovement == null) networkMovement = GetComponent<NetworkPlayerMovement>() ?? GetComponentInParent<NetworkPlayerMovement>();
+        if (lobbyState == null) lobbyState = GetComponent<LobbyPlayerState>() ?? GetComponentInParent<LobbyPlayerState>();
         if (downState == null) downState = GetComponent<PlayerDownState>() ?? GetComponentInParent<PlayerDownState>();
 
         bool isCrouching = movement != null && movement.IsCrouching;
         bool isSprinting = movement != null
             ? movement.IsSprinting
-            : (Keyboard.current != null
+            : networkMovement != null
+                ? networkMovement.IsAnimationSprinting
+                : (Keyboard.current != null
                 && Keyboard.current.leftShiftKey.isPressed
                 && Keyboard.current.wKey.isPressed
                 && !Keyboard.current.aKey.isPressed
                 && !Keyboard.current.dKey.isPressed
                 && !Keyboard.current.sKey.isPressed);
-        bool isCarrying = coreCarrier != null && coreCarrier.IsCarrying;
+        bool isCarrying = (coreCarrier != null && coreCarrier.IsCarrying)
+            || (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid);
         bool isDowned = downState != null && downState.IsDowned;
         Vector2 moveDirection = GetMoveDirection(isSprinting, isCarrying, isDowned);
         bool isMoving = moveDirection.sqrMagnitude > 0.01f;
@@ -105,21 +124,17 @@ public class PlayerAnimatorDriver : MonoBehaviour
 
     private Animator ResolvePlayableAnimator()
     {
-        if (animator != null && animator.runtimeAnimatorController != null)
-        {
-            return animator;
-        }
-
         Animator[] animators = GetComponentsInChildren<Animator>(true);
-        foreach (Animator candidate in animators)
+        for (int i = 0; i < animators.Length; i++)
         {
-            if (candidate.runtimeAnimatorController != null)
+            Animator candidate = animators[i];
+            if (candidate != null && candidate.runtimeAnimatorController != null)
             {
                 return candidate;
             }
         }
 
-        Animator fallback = animator != null ? animator : GetComponentInChildren<Animator>(true);
+        Animator fallback = GetComponentInChildren<Animator>(true);
 #if UNITY_EDITOR
         if (fallback != null && fallback.runtimeAnimatorController == null)
         {
@@ -150,7 +165,11 @@ public class PlayerAnimatorDriver : MonoBehaviour
 
     private Vector2 GetMoveDirection(bool isSprinting, bool isCarrying, bool isDowned)
     {
-        Vector2 input = movement != null ? movement.MoveInput : Vector2.zero;
+        Vector2 input = movement != null
+            ? movement.MoveInput
+            : networkMovement != null
+                ? networkMovement.AnimationMoveInput
+                : Vector2.zero;
 
         if (input.sqrMagnitude <= 0.01f && Keyboard.current != null)
         {
@@ -177,5 +196,4 @@ public class PlayerAnimatorDriver : MonoBehaviour
 
         return input;
     }
-
 }

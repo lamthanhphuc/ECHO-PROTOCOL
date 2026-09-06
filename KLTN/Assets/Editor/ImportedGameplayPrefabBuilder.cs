@@ -140,7 +140,7 @@ public static class ImportedGameplayPrefabBuilder
             ItemFolder + "/SO_FirstAid_ItemDefinition.asset",
             "first_aid",
             "First Aid Kit",
-            InventoryItemType.Normal,
+            InventoryItemType.TeamTool,
             null);
 
         GameObject energyCorePrefab = CreateModelPrefab(
@@ -240,7 +240,7 @@ public static class ImportedGameplayPrefabBuilder
         GameObject gameModePrefab = CreateGameModePrefab(SystemPrefabFolder + "/PF_GameMode_ResearchFacility.prefab");
 
         CreateItemDefinition(ItemFolder + "/SO_EnergyCore_ItemDefinition.asset", "energy_core", "Energy Core", InventoryItemType.EnergyCore, energyCorePrefab);
-        CreateItemDefinition(ItemFolder + "/SO_FirstAid_ItemDefinition.asset", "first_aid", "First Aid Kit", InventoryItemType.Normal, firstAidPrefab);
+        CreateItemDefinition(ItemFolder + "/SO_FirstAid_ItemDefinition.asset", "first_aid", "First Aid Kit", InventoryItemType.TeamTool, firstAidPrefab);
 
         Debug.Log("[ImportedGameplayPrefabBuilder] Built imported gameplay materials and prefabs. PowerControl="
             + (powerControlPrefab != null) + ", Terminal=" + (terminalPrefab != null) + ", Panel=" + (panelPrefab != null)

@@ -151,6 +151,7 @@ namespace EchoProtocol.UI.HUD
                 // Clean existing [E] or [E GIỮ] if present in source prompt
                 string cleanPrompt = prompt.Replace("[E GIỮ]", "").Replace("[E]", "").Replace("[E ]", "").Trim();
                 promptText.text = $"<color={keyColorHex}><b>{keyLabel}</b></color>  {cleanPrompt}";
+                promptText.text = isHold ? $"{cleanPrompt} <color=#FFB300>(Giữ)</color>" : cleanPrompt;
             }
 
             // Update Radial Progress

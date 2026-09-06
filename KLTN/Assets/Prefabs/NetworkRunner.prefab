@@ -45,7 +45,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: -1199893898, guid: e725a070cec140c4caffb81624c8c787, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkRunner
 --- !u!114 &8928447514881880283
 MonoBehaviour:
@@ -84,7 +84,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bb1dd5f7dda1458fa1fdd0df49cabb0b, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.FusionPlayerLifecycle
   playerPrefab: {fileID: 7895686353458454673, guid: 2cfcae9d0a2489d44a82b7f63ff08ffc, type: 3}
   spawnOrigin: {x: 0, y: 0, z: 0}

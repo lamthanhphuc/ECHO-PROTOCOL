@@ -3,6 +3,7 @@ using UnityEngine;
 public class InteractionPromptOnGUI : MonoBehaviour
 {
     [SerializeField] private PlayerInteraction interaction;
+    [SerializeField] private EchoProtocol.Networking.NetworkPlayerInteractor networkInteractor;
     [SerializeField] private Vector2 boxSize = new Vector2(360f, 44f);
     [SerializeField] private float bottomOffset = 96f;
 
@@ -20,6 +21,11 @@ public class InteractionPromptOnGUI : MonoBehaviour
         {
             interaction = GetComponent<PlayerInteraction>();
         }
+
+        if (networkInteractor == null)
+        {
+            networkInteractor = GetComponent<EchoProtocol.Networking.NetworkPlayerInteractor>();
+        }
     }
 
     private void OnGUI()
@@ -29,7 +35,17 @@ public class InteractionPromptOnGUI : MonoBehaviour
             return;
         }
 
-        if (interaction == null || string.IsNullOrWhiteSpace(interaction.CurrentPrompt))
+        string prompt = null;
+        if (interaction != null && !string.IsNullOrWhiteSpace(interaction.CurrentPrompt))
+        {
+            prompt = interaction.CurrentPrompt;
+        }
+        else if (networkInteractor != null && networkInteractor.CurrentCandidate != null)
+        {
+            prompt = networkInteractor.CurrentCandidate.InteractionPrompt;
+        }
+
+        if (string.IsNullOrWhiteSpace(prompt))
         {
             return;
         }
@@ -42,7 +58,7 @@ public class InteractionPromptOnGUI : MonoBehaviour
             boxSize.x,
             boxSize.y);
 
-        GUI.Box(rect, interaction.CurrentPrompt, _style);
+        GUI.Box(rect, prompt, _style);
     }
 
     private static GUIStyle CreateStyle()

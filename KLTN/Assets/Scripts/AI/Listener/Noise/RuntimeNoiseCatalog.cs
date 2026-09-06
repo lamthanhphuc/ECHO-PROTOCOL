@@ -31,7 +31,7 @@ namespace EchoProtocol.AI.Listener.Noise
                 },
                 {
                     RuntimeNoiseType.NOISE_MAKER,
-                    new RuntimeNoiseDefinition(RuntimeNoiseType.NOISE_MAKER, 1d, 20d, TimeSpan.FromSeconds(4d),
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.NOISE_MAKER, 1d, 22d, TimeSpan.FromSeconds(6d),
                         RuntimeNoiseEmissionMode.DiscreteAction)
                 }
             };

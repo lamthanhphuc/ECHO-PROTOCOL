@@ -232,6 +232,14 @@ namespace EchoProtocol.Networking
                 && playerObject != null
                 && playerObject.InputAuthority == Holder)
             {
+                Transform coreAnchor = PlayerHeldItemAnchor.ResolveCoreCarryAnchor(playerObject.gameObject);
+                if (coreAnchor != null)
+                {
+                    position = coreAnchor.position;
+                    rotation = coreAnchor.rotation * Quaternion.Euler(_holderLocalEulerAngles);
+                    return true;
+                }
+
                 position = playerObject.transform.TransformPoint(_holderLocalPosition);
                 rotation = playerObject.transform.rotation * Quaternion.Euler(_holderLocalEulerAngles);
                 return true;
