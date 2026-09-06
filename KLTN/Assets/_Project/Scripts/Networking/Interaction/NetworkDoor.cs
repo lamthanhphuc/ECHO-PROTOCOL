@@ -11,8 +11,13 @@ namespace EchoProtocol.Networking
         Locked = 2,
     }
 
+    public interface INetworkDoorStateProvider
+    {
+        NetworkDoorState State { get; }
+    }
+
     /// <summary>Replicates door semantics; rotation and collision are derived presentation.</summary>
-    public sealed class NetworkDoor : NetworkInteractable
+    public sealed class NetworkDoor : NetworkInteractable, INetworkDoorStateProvider
     {
         public static event Action<NetworkDoor, NetworkDoorState> StateChanged;
 

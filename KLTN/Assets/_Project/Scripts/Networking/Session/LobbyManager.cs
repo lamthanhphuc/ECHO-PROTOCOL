@@ -12,7 +12,7 @@ namespace EchoProtocol.Networking
     /// </summary>
     public sealed class LobbyManager : MonoBehaviour
     {
-        public const string GameSceneName = "Game";
+        public const string GameSceneName = "SciFi";
 
         [SerializeField] private NetworkBootstrap _bootstrap;
 

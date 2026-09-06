@@ -76,7 +76,7 @@ namespace EchoProtocol.AI.Listener.Perception
                     continue;
                 }
 
-                var door = collider.GetComponentInParent<NetworkDoor>();
+                var door = collider.GetComponentInParent<INetworkDoorStateProvider>();
                 var classified = door == null
                     ? ListenerOcclusionClass.SOLID_WALL
                     : ListenerOcclusionClassifier.ClassifyDoorState(door.State);
