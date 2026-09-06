@@ -18,7 +18,11 @@ public class PlayerMovement : MonoBehaviour
     [Header("Crouch")]
     [SerializeField] private float standingHeight = 2f;
     [SerializeField] private float crouchHeight = 1.2f;
+    [SerializeField] private float standingRadius = 0.42f;
+    [SerializeField] private float crouchRadius = 0.42f;
     [SerializeField] private float crouchTransitionSpeed = 10f;
+    [SerializeField] private LayerMask standUpObstructionMask = ~0;
+    [SerializeField] private QueryTriggerInteraction standUpTriggerInteraction = QueryTriggerInteraction.Ignore;
 
     [Header("Stamina")]
     [SerializeField] private float maxStamina = 100f;
@@ -88,7 +92,8 @@ public class PlayerMovement : MonoBehaviour
         }
 
         bool wantsSprint = _sprintAction != null && _sprintAction.IsPressed();
-        _isCrouching = _crouchAction != null && _crouchAction.IsPressed();
+        bool wantsCrouch = _crouchAction != null && _crouchAction.IsPressed();
+        _isCrouching = wantsCrouch || (_isCrouching && !CanStandUp());
         _isSprinting = CanSprint(wantsSprint, move);
 
         float speed = GetCurrentSpeed();
@@ -148,8 +153,30 @@ public class PlayerMovement : MonoBehaviour
     private void UpdateCrouchHeight()
     {
         float targetHeight = _isCrouching ? crouchHeight : standingHeight;
+        float targetRadius = _isCrouching ? crouchRadius : standingRadius;
         _controller.height = Mathf.Lerp(_controller.height, targetHeight, crouchTransitionSpeed * Time.deltaTime);
+        _controller.radius = Mathf.Lerp(_controller.radius, targetRadius, crouchTransitionSpeed * Time.deltaTime);
         _controller.center = Vector3.up * ((_controller.height - standingHeight) * 0.5f);
+    }
+
+    private bool CanStandUp()
+    {
+        if (_controller == null || _controller.height >= standingHeight - 0.02f)
+        {
+            return true;
+        }
+
+        float radius = Mathf.Max(0.05f, standingRadius * 0.95f);
+        Vector3 standingCenter = transform.position;
+        Vector3 bottom = standingCenter + Vector3.up * (-standingHeight * 0.5f + radius);
+        Vector3 top = standingCenter + Vector3.up * (standingHeight * 0.5f - radius);
+
+        return !Physics.CheckCapsule(
+            bottom,
+            top,
+            radius,
+            standUpObstructionMask,
+            standUpTriggerInteraction);
     }
 
     public void SetExternalSpeedMultiplier(float multiplier)

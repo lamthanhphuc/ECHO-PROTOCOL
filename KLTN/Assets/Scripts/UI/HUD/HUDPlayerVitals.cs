@@ -113,6 +113,14 @@ namespace EchoProtocol.UI.HUD
         private void UpdateStatus()
         {
             if (downState == null) return;
+            if (downState == null)
+            {
+                if (bleedoutContainer != null && bleedoutContainer.activeSelf)
+                {
+                    bleedoutContainer.SetActive(false);
+                }
+                return;
+            }
 
             PlayerLifeState life = downState.State;
             _flashTimer += Time.deltaTime * 5f;

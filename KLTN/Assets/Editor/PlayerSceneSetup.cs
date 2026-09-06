@@ -33,7 +33,7 @@ public static class PlayerSceneSetup
         }
 
         controller.height = 2f;
-        controller.radius = 0.5f;
+        controller.radius = 0.42f;
         controller.center = Vector3.zero;
 
         PlayerMovement movement = player.GetComponent<PlayerMovement>();
@@ -56,6 +56,8 @@ public static class PlayerSceneSetup
             movementSo.FindProperty("crouchSpeed").floatValue = 2f;
             movementSo.FindProperty("standingHeight").floatValue = 2f;
             movementSo.FindProperty("crouchHeight").floatValue = 1.2f;
+            movementSo.FindProperty("standingRadius").floatValue = 0.42f;
+            movementSo.FindProperty("crouchRadius").floatValue = 0.42f;
             movementSo.FindProperty("maxStamina").floatValue = 100f;
             movementSo.FindProperty("sprintStaminaDrainPerSecond").floatValue = 25f;
             movementSo.FindProperty("staminaRegenPerSecond").floatValue = 18f;
@@ -137,6 +139,24 @@ public static class PlayerSceneSetup
             energyCoreCarrier = player.AddComponent<PlayerEnergyCoreCarrier>();
         }
 
+        PlayerHeldItemAnchor heldItemAnchor = player.GetComponent<PlayerHeldItemAnchor>();
+        if (heldItemAnchor == null)
+        {
+            heldItemAnchor = player.AddComponent<PlayerHeldItemAnchor>();
+        }
+
+        PlayerHeldItemView heldItemView = player.GetComponent<PlayerHeldItemView>();
+        if (heldItemView == null)
+        {
+            heldItemView = player.AddComponent<PlayerHeldItemView>();
+        }
+
+        PlayerUpperBodyAim upperBodyAim = player.GetComponent<PlayerUpperBodyAim>();
+        if (upperBodyAim == null)
+        {
+            upperBodyAim = player.AddComponent<PlayerUpperBodyAim>();
+        }
+
         SerializedObject dropInputSo = new SerializedObject(dropInput);
         dropInputSo.FindProperty("inventory").objectReferenceValue = inventory;
         dropInputSo.FindProperty("dropOrigin").objectReferenceValue = mainCamera.transform;
@@ -152,6 +172,16 @@ public static class PlayerSceneSetup
         energyCoreCarrierSo.FindProperty("blockSprintWhileCarrying").boolValue = true;
         energyCoreCarrierSo.FindProperty("lockTeamToolWhileCarrying").boolValue = true;
         energyCoreCarrierSo.ApplyModifiedPropertiesWithoutUndo();
+
+        SerializedObject heldItemViewSo = new SerializedObject(heldItemView);
+        heldItemViewSo.FindProperty("inventory").objectReferenceValue = inventory;
+        heldItemViewSo.FindProperty("coreCarrier").objectReferenceValue = energyCoreCarrier;
+        heldItemViewSo.FindProperty("heldItemAnchor").objectReferenceValue = heldItemAnchor;
+        heldItemViewSo.ApplyModifiedPropertiesWithoutUndo();
+
+        SerializedObject upperBodyAimSo = new SerializedObject(upperBodyAim);
+        upperBodyAimSo.FindProperty("playerCamera").objectReferenceValue = playerCamera;
+        upperBodyAimSo.ApplyModifiedPropertiesWithoutUndo();
 
         PlayerHidingController hidingController = player.GetComponent<PlayerHidingController>();
         if (hidingController == null)

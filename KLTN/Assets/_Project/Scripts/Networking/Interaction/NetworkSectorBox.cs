@@ -11,7 +11,7 @@ namespace EchoProtocol.Networking
     {
         public static event Action<NetworkSectorBox> ObjectiveStateChanged;
 
-        [SerializeField, Min(1)] private int _requiredCoreCount = 3;
+        [SerializeField, Min(1)] private int _requiredCoreCount = 2;
         [SerializeField] private Transform[] _corePlacementPoints = Array.Empty<Transform>();
         [SerializeField, Min(0.1f)] private float _fallbackSlotSpacing = 0.65f;
         [SerializeField] private Renderer _embeddedFallbackRenderer;
@@ -192,8 +192,40 @@ namespace EchoProtocol.Networking
             return $"objective:{Object.Id}:{occurrence}:{ObjectiveOrdinal}";
         }
 
+        private SectorBox _boundSceneSectorBox;
+
+        private void ResolveSceneSectorBox()
+        {
+            if (_boundSceneSectorBox != null) return;
+            var boxes = FindObjectsByType<SectorBox>(FindObjectsInactive.Include);
+            SectorBox closest = null;
+            float closestDist = float.MaxValue;
+            for (int i = 0; i < boxes.Length; i++)
+            {
+                var box = boxes[i];
+                if (box == null) continue;
+                float dist = Vector3.Distance(transform.position, box.transform.position);
+                if (dist < closestDist)
+                {
+                    closestDist = dist;
+                    closest = box;
+                }
+            }
+
+            if (closest != null && closestDist < 3.0f)
+            {
+                _boundSceneSectorBox = closest;
+                if ((_corePlacementPoints == null || _corePlacementPoints.Length == 0)
+                    && closest.CoreSockets != null && closest.CoreSockets.Length > 0)
+                {
+                    _corePlacementPoints = closest.CoreSockets;
+                }
+            }
+        }
+
         private void GetPlacementPose(int slotIndex, out Vector3 position, out Quaternion rotation)
         {
+            ResolveSceneSectorBox();
             if (slotIndex >= 0
                 && slotIndex < _corePlacementPoints.Length
                 && _corePlacementPoints[slotIndex] != null)
@@ -210,10 +242,34 @@ namespace EchoProtocol.Networking
 
         private void HandleObjectiveChanged()
         {
+            ResolveSceneSectorBox();
+            if (_boundSceneSectorBox != null)
+            {
+                _boundSceneSectorBox.UpdateCoreVisuals(PlacedCoreCount);
+            }
+
+            int totalPlaced = 0;
+            int totalRequired = 0;
+            var allBoxes = FindObjectsByType<NetworkSectorBox>(FindObjectsInactive.Include);
+            for (int i = 0; i < allBoxes.Length; i++)
+            {
+                var box = allBoxes[i];
+                if (box == null) continue;
+                totalPlaced += box.PlacedCoreCount;
+                totalRequired += box.RequiredCoreCount;
+            }
+
+            if (totalRequired == 0)
+            {
+                totalPlaced = PlacedCoreCount;
+                totalRequired = _requiredCoreCount;
+            }
+
             foreach (var legacyProgress in FindObjectsByType<EnergyCoreObjectiveProgress>(FindObjectsInactive.Include))
             {
                 legacyProgress.SetNetworkAuthorityPresentationOnly(true);
                 legacyProgress.ApplyAuthoritativeSnapshot(PlacedCoreCount, _requiredCoreCount);
+                legacyProgress.ApplyAuthoritativeSnapshot(totalPlaced, totalRequired);
             }
 
             ObjectiveStateChanged?.Invoke(this);
@@ -221,6 +277,7 @@ namespace EchoProtocol.Networking
 
         private void ConfigurePresentation()
         {
+            ResolveSceneSectorBox();
             if (_embeddedFallbackRenderer == null) return;
 
             var legacyBoxes = FindObjectsByType<SectorBox>(FindObjectsInactive.Include);

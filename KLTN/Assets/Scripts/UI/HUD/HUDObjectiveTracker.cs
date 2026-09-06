@@ -39,6 +39,14 @@ namespace EchoProtocol.UI.HUD
         private void Start()
         {
             ResolveReferences();
+            if (matchFlow != null)
+            {
+                UpdateUI(matchFlow.Phase);
+            }
+            else
+            {
+                UpdateUI(MatchPhase.ExploreCore);
+            }
         }
 
         private void Update()
@@ -76,10 +84,11 @@ namespace EchoProtocol.UI.HUD
                 case MatchPhase.ExploreCore:
                     SetPhaseBadge("GIAI ĐOẠN 1 // THU THẬP NĂNG LƯỢNG", "#00E5FF");
                     int placed = coreProgress != null ? coreProgress.PlacedCoreCount : 0;
-                    int required = coreProgress != null ? coreProgress.RequiredCoreCount : 3;
+                    int required = coreProgress != null ? coreProgress.RequiredCoreCount : 4;
+                    if (required <= 0) required = 4;
                     SetObjective(
                         "TÌM VÀ NẠP ENERGY CORE",
-                        $"Tìm và nạp 3 Energy Core ({placed}/{required})",
+                        $"Tìm và nạp {required} Energy Core về Sector Box [{placed}/{required}]",
                         required > 0 ? (float)placed / required : 0f,
                         new Color(0f, 0.85f, 1f, 1f));
                     break;

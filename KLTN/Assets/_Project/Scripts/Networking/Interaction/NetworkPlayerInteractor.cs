@@ -16,6 +16,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private Transform _rayOrigin;
         [SerializeField, Min(0.1f)] private float _localDetectionDistance = 3f;
         [SerializeField] private LayerMask _interactionLayers = ~0;
+        [SerializeField] private GameObject _noiseMakerBeaconPrefab; // Gán DistressBeaconDeployed prefab trong Inspector
 
         [Networked] private uint LastProcessedSequence { get; set; }
         [Networked] private TickTimer TeamToolCooldown { get; set; }
@@ -35,7 +36,9 @@ namespace EchoProtocol.Networking
         {
             _interactAction = _inputActions?.FindActionMap("Player", false)?.FindAction("Interact", false);
             _dropCoreAction = new InputAction("DropCore", InputActionType.Button, "<Keyboard>/g");
-            _teamToolAction = new InputAction("UseTeamTool", InputActionType.Button, "<Keyboard>/t");
+            _teamToolAction = new InputAction("UseTeamTool", InputActionType.Button);
+            _teamToolAction.AddBinding("<Keyboard>/t");
+            _teamToolAction.AddBinding("<Mouse>/leftButton");
             _helpPingAction = new InputAction("HelpPing", InputActionType.Button, "<Keyboard>/h");
         }
 
@@ -129,6 +132,8 @@ namespace EchoProtocol.Networking
         public bool RequestUseTeamTool()
         {
             if (!Object.HasInputAuthority) return false;
+            var playerState = GetComponent<LobbyPlayerState>();
+            if (playerState != null && playerState.CarriedCoreId.IsValid) return false;
             RpcRequestUseTeamTool(NextSequence());
             return true;
         }
@@ -274,18 +279,21 @@ namespace EchoProtocol.Networking
 
         private void GetAuthoritativeDropPose(out Vector3 position, out Quaternion rotation)
         {
-            var candidate = transform.position + transform.forward * 1.25f;
+            Vector3 flatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
+            if (flatForward == Vector3.zero) flatForward = transform.forward;
+            var candidate = transform.position + flatForward * 1.25f;
             var rayOrigin = candidate + Vector3.up * 1.5f;
             position = Physics.Raycast(
                 rayOrigin,
                 Vector3.down,
                 out var hit,
-                3f,
+                4f,
                 ~0,
                 QueryTriggerInteraction.Ignore)
-                ? hit.point + Vector3.up * 0.25f
+                ? hit.point + Vector3.up * 0.05f
                 : candidate;
             rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
+            rotation = Quaternion.Euler(0f, transform.eulerAngles.y + 180f, 0f);
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
@@ -298,7 +306,12 @@ namespace EchoProtocol.Networking
             }
 
             var state = GetComponent<LobbyPlayerState>();
-            if (state.ToolId > 0 && TeamToolCooldown.ExpiredOrNotRunning(Runner))
+            if (state != null && state.CarriedCoreId.IsValid)
+            {
+                return;
+            }
+
+            if (state != null && state.ToolId > 0 && TeamToolCooldown.ExpiredOrNotRunning(Runner))
             {
                 var toolType = ToolTypeFor(state.ToolId);
                 if (toolType != null)
@@ -311,16 +324,58 @@ namespace EchoProtocol.Networking
                     TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 5f);
                     if (toolType == "NOISE_MAKER")
                     {
-                        HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
-                            .TryAccept(
-                                requester,
-                                RuntimeNoiseType.NOISE_MAKER,
-                                RuntimeNoiseSourceOccurrenceKey.ForTeamTool(
+                        // Spawn beacon tại sàn phía trước player (3m)
+                        GetAuthoritativeDropPose(out var beaconPos, out var beaconRot);
+                        // Điều chỉnh forward xa hơn một chút cho throw feel
+                        beaconPos = transform.position
+                            + Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized * 3f;
+                        // Floor-snap
+                        if (Physics.Raycast(beaconPos + Vector3.up * 1.5f, Vector3.down, out var bHit, 4f,
+                            ~0, QueryTriggerInteraction.Ignore))
+                        {
+                            beaconPos = bHit.point + Vector3.up * 0.05f;
+                        }
+
+                        var prefabToSpawn = _noiseMakerBeaconPrefab;
+                        if (prefabToSpawn == null)
+                        {
+                            prefabToSpawn = Resources.Load<GameObject>("DistressBeaconDeployed");
+                        }
+
+                        if (prefabToSpawn != null)
+                        {
+                            var beaconGo = Instantiate(prefabToSpawn, beaconPos, Quaternion.identity);
+                            var beacon = beaconGo.GetComponent<NoiseMakerBeacon>();
+                            if (beacon != null)
+                            {
+                                beacon.Initialize(
+                                    requester,
                                     Object.Id.ToString(),
-                                    toolType,
-                                    sequence),
-                                transform.position,
-                                out _);
+                                    (long)TeamToolOrdinal);
+                            }
+                        }
+                        else
+                        {
+                            // Fallback: phát 1 noise trực tiếp nếu chưa assign prefab
+                            HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
+                                .TryAccept(
+                                    requester,
+                                    RuntimeNoiseType.NOISE_MAKER,
+                                    RuntimeNoiseSourceOccurrenceKey.ForTeamTool(
+                                        Object.Id.ToString(),
+                                        toolType,
+                                        sequence),
+                                    transform.position,
+                                    out _);
+                        }
+
+                        // Consumes tool from player state & inventory
+                        state.SetGameplayToolId(0);
+                        var inv = GetComponent<PlayerInventory>();
+                        if (inv != null && inv.TeamToolSlot != null)
+                        {
+                            inv.TryRemove(inv.TeamToolSlot);
+                        }
                     }
                 }
             }

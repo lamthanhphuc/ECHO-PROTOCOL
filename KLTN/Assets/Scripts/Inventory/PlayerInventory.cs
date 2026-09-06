@@ -33,6 +33,14 @@ public class PlayerInventory : MonoBehaviour
         return IsNormalSlotIndexValid(index) ? normalSlots[index] : null;
     }
 
+    private void Start()
+    {
+        if (teamToolSlot != null)
+        {
+            UpdateLobbyStateTool(teamToolSlot);
+        }
+    }
+
     public bool CanAdd(InventoryItemDefinition item)
     {
         if (item == null)
@@ -64,6 +72,7 @@ public class PlayerInventory : MonoBehaviour
         {
             teamToolSlot = item;
             InventoryChanged?.Invoke();
+            UpdateLobbyStateTool(teamToolSlot);
             return true;
         }
 
@@ -110,6 +119,7 @@ public class PlayerInventory : MonoBehaviour
         {
             teamToolSlot = null;
             InventoryChanged?.Invoke();
+            UpdateLobbyStateTool(null);
             return true;
         }
 
@@ -179,6 +189,7 @@ public class PlayerInventory : MonoBehaviour
 
         teamToolSlot = null;
         InventoryChanged?.Invoke();
+        UpdateLobbyStateTool(null);
         return true;
     }
 
@@ -256,5 +267,27 @@ public class PlayerInventory : MonoBehaviour
 
         Instantiate(item.WorldPrefab, position, rotation);
         return true;
+    }
+
+    private void UpdateLobbyStateTool(InventoryItemDefinition toolItem)
+    {
+        var lobbyState = GetComponentInParent<EchoProtocol.Networking.LobbyPlayerState>();
+        if (lobbyState != null)
+        {
+            int toolId = ResolveToolId(toolItem);
+            lobbyState.SetGameplayToolId(toolId);
+        }
+    }
+
+    private static int ResolveToolId(InventoryItemDefinition item)
+    {
+        if (item == null) return 0;
+        string id = (item.ItemId ?? string.Empty).ToLowerInvariant();
+        string name = (item.DisplayName ?? string.Empty).ToLowerInvariant();
+        if (id.Contains("first") || name.Contains("first")) return 3;
+        if (id.Contains("noise") || id.Contains("beacon") || name.Contains("noise") || name.Contains("beacon")) return 2;
+        if (id.Contains("jammer") || name.Contains("jammer")) return 4;
+        if (id.Contains("hack") || name.Contains("hack")) return 1;
+        return 0;
     }
 }

@@ -1,0 +1,232 @@
+using EchoProtocol.Networking;
+using Fusion;
+using UnityEngine;
+
+[DisallowMultipleComponent]
+public sealed class NetworkTeamToolHeldView : MonoBehaviour
+{
+    [SerializeField] private LobbyPlayerState lobbyState;
+    [SerializeField] private PlayerHeldItemAnchor heldItemAnchor;
+
+    [Header("Tool Visuals (gán prefab trong Inspector)")]
+    [SerializeField] private GameObject toolVisual_1; // FIELD_SCANNER – giữ placeholder nếu chưa có prefab
+    [SerializeField] private GameObject toolVisual_2; // NOISE_MAKER – DistressBeaconClosed
+    [SerializeField] private GameObject toolVisual_3; // FIRST_AID_KIT – FirstAidKit_Red
+    [SerializeField] private GameObject toolVisual_4; // DOOR_JAMMER – giữ placeholder
+
+    [Header("Fallback Placeholder Size")]
+    [SerializeField] private Vector3 localPosition = new Vector3(0.04f, 0.02f, 0.12f);
+    [SerializeField] private Vector3 localEulerAngles = new Vector3(0f, 90f, -18f);
+    [SerializeField] private Vector3 localScale = new Vector3(0.12f, 0.22f, 0.34f);
+    [SerializeField] private Vector3 noiseMakerLocalPosition = new Vector3(0.018f, 0.132f, -0.065f);
+    [SerializeField] private Vector3 noiseMakerLocalEulerAngles = new Vector3(6.176f, 93.2f, 94.562f);
+    [SerializeField] private Vector3 noiseMakerLocalScale = new Vector3(0.7f, 0.7f, 0.7f);
+    [SerializeField] private Vector3 firstAidLocalPosition = new Vector3(0.035f, -0.015f, 0.155f);
+    [SerializeField] private Vector3 firstAidLocalEulerAngles = new Vector3(8f, 92f, 170f);
+    [SerializeField] private Vector3 firstAidLocalScale = new Vector3(0.15f, 0.15f, 0.3f);
+    [SerializeField] private Vector3 firstAidChildLocalPosition = new Vector3(-0.533528f, -3.405526f, -0.3114559f);
+    [SerializeField] private Vector3 firstAidChildLocalEulerAngles = new Vector3(0.12f, -0.416f, 5.923f);
+    [SerializeField] private Vector3 firstAidChildLocalScale = Vector3.one;
+
+    private GameObject _visual;
+    private int _shownToolId;
+    private NetworkObject _networkObject;
+    private PlayerInventory _localInventory;
+    private PlayerHeldItemView _localHeldItemView;
+
+    private void Awake()
+    {
+        if (lobbyState == null) lobbyState = GetComponentInParent<LobbyPlayerState>();
+        if (heldItemAnchor == null) heldItemAnchor = GetComponentInParent<PlayerHeldItemAnchor>();
+        if (heldItemAnchor == null) heldItemAnchor = gameObject.AddComponent<PlayerHeldItemAnchor>();
+        _networkObject = GetComponentInParent<NetworkObject>();
+        _localInventory = GetComponentInParent<PlayerInventory>();
+        _localHeldItemView = GetComponentInParent<PlayerHeldItemView>();
+    }
+
+    private void OnEnable()
+    {
+        LobbyPlayerState.AnyStateChanged += Refresh;
+        if (_localInventory != null) _localInventory.InventoryChanged += Refresh;
+        // Không gọi Refresh() ngay ở đây — chờ AnyStateChanged từ Spawned()
+        // để tránh truy cập [Networked] property trước khi Fusion khởi tạo
+    }
+
+    private void OnDisable()
+    {
+        LobbyPlayerState.AnyStateChanged -= Refresh;
+        if (_localInventory != null) _localInventory.InventoryChanged -= Refresh;
+        Clear();
+    }
+
+    private void Refresh()
+    {
+        if (lobbyState == null) lobbyState = GetComponentInParent<LobbyPlayerState>();
+        if (lobbyState == null)
+        {
+            Clear();
+            return;
+        }
+
+        // Guard: chỉ truy cập [Networked] property sau khi Fusion đã gọi Spawned()
+        if (lobbyState.Object == null || !lobbyState.Object.IsValid)
+        {
+            return;
+        }
+
+        int toolId = lobbyState.CarriedCoreId.IsValid ? 0 : lobbyState.ToolId;
+        if (ShouldSuppressLocalNetworkToolView(toolId))
+        {
+            toolId = 0;
+        }
+        if (toolId == _shownToolId)
+        {
+            return;
+        }
+
+        Clear();
+        _shownToolId = toolId;
+        if (_shownToolId == 0)
+        {
+            return;
+        }
+
+        Transform anchor = heldItemAnchor != null ? heldItemAnchor.RightHandAnchor : PlayerHeldItemAnchor.ResolveRightHandAnchor(gameObject);
+        if (anchor == null)
+        {
+            return;
+        }
+
+        GameObject sourcePrefab = ResolveToolPrefab(_shownToolId);
+        if (sourcePrefab != null)
+        {
+            // Instantiate prefab thực
+            _visual = Instantiate(sourcePrefab, anchor);
+            _visual.name = "Held_TeamTool_" + _shownToolId;
+            _visual.transform.localPosition = ResolveToolPosition(_shownToolId);
+            _visual.transform.localRotation = Quaternion.Euler(ResolveToolEulerAngles(_shownToolId));
+            _visual.transform.localScale = ResolveToolScale(_shownToolId);
+
+            // Tắt tất cả collider trên held visual để không ảnh hưởng gameplay
+            foreach (var col in _visual.GetComponentsInChildren<Collider>())
+                col.enabled = false;
+
+            if (_shownToolId == 3)
+            {
+                Transform childVisual = _visual.transform.Find("Visual");
+                if (childVisual == null && _visual.transform.childCount > 0)
+                {
+                    childVisual = _visual.transform.GetChild(0);
+                }
+                if (childVisual != null)
+                {
+                    childVisual.localPosition = firstAidChildLocalPosition;
+                    childVisual.localRotation = Quaternion.Euler(firstAidChildLocalEulerAngles);
+                    childVisual.localScale = firstAidChildLocalScale;
+                }
+            }
+        }
+        else
+        {
+            // Fallback: cube màu như cũ
+            _visual = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            _visual.name = "Held_TeamTool_" + _shownToolId;
+            _visual.transform.SetParent(anchor, false);
+            _visual.transform.localPosition = ResolveToolPosition(_shownToolId);
+            _visual.transform.localRotation = Quaternion.Euler(ResolveToolEulerAngles(_shownToolId));
+            _visual.transform.localScale = ResolveToolScale(_shownToolId);
+
+            Collider visualCollider = _visual.GetComponent<Collider>();
+            if (visualCollider != null) visualCollider.enabled = false;
+
+            Renderer renderer = _visual.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                renderer.material = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
+                renderer.material.color = ResolveToolColor(_shownToolId);
+            }
+        }
+    }
+
+    private GameObject ResolveToolPrefab(int toolId)
+    {
+        switch (toolId)
+        {
+            case 1: return toolVisual_1;
+            case 2: return toolVisual_2;
+            case 3: return toolVisual_3;
+            case 4: return toolVisual_4;
+            default: return null;
+        }
+    }
+
+    private Vector3 ResolveToolPosition(int toolId)
+    {
+        switch (toolId)
+        {
+            case 2: return noiseMakerLocalPosition;
+            case 3: return firstAidLocalPosition;
+            default: return localPosition;
+        }
+    }
+
+    private Vector3 ResolveToolEulerAngles(int toolId)
+    {
+        switch (toolId)
+        {
+            case 2: return noiseMakerLocalEulerAngles;
+            case 3: return firstAidLocalEulerAngles;
+            default: return localEulerAngles;
+        }
+    }
+
+    private Vector3 ResolveToolScale(int toolId)
+    {
+        switch (toolId)
+        {
+            case 2: return noiseMakerLocalScale;
+            case 3: return firstAidLocalScale;
+            default: return localScale;
+        }
+    }
+
+    private bool ShouldSuppressLocalNetworkToolView(int toolId)
+    {
+        if (toolId == 0)
+        {
+            return false;
+        }
+
+        if (_localHeldItemView != null && _localHeldItemView.IsShowingTeamTool)
+        {
+            return true;
+        }
+
+        return _networkObject != null
+            && _networkObject.IsValid
+            && _networkObject.HasInputAuthority;
+    }
+
+    private static Color ResolveToolColor(int toolId)
+    {
+        switch (toolId)
+        {
+            case 1: return new Color(0.35f, 0.85f, 1f);
+            case 2: return new Color(1f, 0.74f, 0.28f);
+            case 3: return new Color(0.45f, 1f, 0.55f);
+            case 4: return new Color(1f, 0.42f, 0.48f);
+            default: return Color.white;
+        }
+    }
+
+    private void Clear()
+    {
+        if (_visual != null)
+        {
+            Destroy(_visual);
+        }
+
+        _visual = null;
+        _shownToolId = 0;
+    }
+}

@@ -6,11 +6,13 @@ public class HidingSpot : MonoBehaviour, IInteractable
     [SerializeField] private Transform exitPoint;
     [SerializeField] private string enterPrompt = "Hide";
     [SerializeField] private string exitPrompt = "Exit hiding";
+    [SerializeField] private float yawLimitDegrees = 45f;
 
     private PlayerHidingController _occupant;
 
     public Transform HidePoint => hidePoint != null ? hidePoint : transform;
     public Transform ExitPoint => exitPoint;
+    public float YawLimitDegrees => yawLimitDegrees;
     public bool IsOccupied => _occupant != null;
     public string InteractionPrompt => IsOccupied ? exitPrompt : enterPrompt;
 

@@ -251,6 +251,20 @@ namespace EchoProtocol.AI.Stalker
             AttackConsequenceSink = consequenceSink;
         }
 
+        /// <summary>
+        /// Gọi từ NoiseMakerBeacon khi beacon phát xung trong tầm nghe của Stalker.
+        /// Chuyển Stalker sang SEARCH tại vị trí nguồn âm thanh.
+        /// </summary>
+        public void AlertToNoise(Vector3 noisePosition)
+        {
+            // Chỉ alert khi đang PATROL hoặc SEARCH (không cướp CHASE/ATTACK)
+            if (currentState == StalkerState.PATROL || currentState == StalkerState.SEARCH)
+            {
+                lastKnownPosition = noisePosition;
+                EnterSearch();
+            }
+        }
+
         private void Awake()
         {
             InitializeNavigation();

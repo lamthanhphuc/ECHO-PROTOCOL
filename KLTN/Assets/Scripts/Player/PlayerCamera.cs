@@ -11,6 +11,8 @@ public class PlayerCamera : MonoBehaviour
     [SerializeField] private float eyeHeightTransitionSpeed = 10f;
     [SerializeField] private float minPitch = -85f;
     [SerializeField] private float maxPitch = 85f;
+    [SerializeField] private float cameraForwardOffset = 0.18f;
+    [SerializeField] private float nearClipPlane = 0.03f;
     [SerializeField] private bool lockCursorOnEnable = true;
 
     private InputAction _lookAction;
@@ -20,8 +22,13 @@ public class PlayerCamera : MonoBehaviour
     private float _yaw;
     private float _currentEyeHeight;
     private float? _forcedEyeHeight;
+    private float? _clampedYawCenter;
+    private float _clampedYawRange;
+    private float? _lockedPitch;
 
     public float Yaw => _yaw;
+    public float Pitch => _pitch;
+    public Transform Target => target;
 
     public void SetTarget(Transform newTarget)
     {
@@ -33,28 +40,84 @@ public class PlayerCamera : MonoBehaviour
         {
             _yaw = target.eulerAngles.y;
         }
+
+        Camera cameraComponent = GetComponent<Camera>();
+        if (cameraComponent != null)
+        {
+            cameraComponent.nearClipPlane = Mathf.Max(0.01f, nearClipPlane);
+        }
+    }
+
+    public bool AutoFindTarget()
+    {
+        // 1. Uu tien tim NetworkPlayerMovement
+        var netMovements = Object.FindObjectsByType<EchoProtocol.Networking.NetworkPlayerMovement>(FindObjectsInactive.Exclude);
+        foreach (var nm in netMovements)
+        {
+            if (nm != null && nm.gameObject.activeInHierarchy)
+            {
+                if (nm.Object == null || !nm.Object.IsValid || nm.Object.HasInputAuthority)
+                {
+                    SetTarget(nm.transform);
+                    return true;
+                }
+            }
+        }
+
+        // 2. Tim GameObject co Tag Player
+        var players = GameObject.FindGameObjectsWithTag("Player");
+        foreach (var p in players)
+        {
+            if (p != null && p.activeInHierarchy)
+            {
+                SetTarget(p.transform);
+                return true;
+            }
+        }
+
+        // 3. Tim PlayerMovement
+        var pm = Object.FindAnyObjectByType<PlayerMovement>();
+        if (pm != null && pm.gameObject.activeInHierarchy)
+        {
+            SetTarget(pm.transform);
+            return true;
+        }
+
+        return false;
     }
 
     private void Awake()
     {
         _currentEyeHeight = eyeHeight;
-        _playerMovement = target != null ? target.GetComponent<PlayerMovement>() : null;
-        _characterController = target != null ? target.GetComponent<CharacterController>() : null;
-
-        if (target != null)
-        {
-            _yaw = target.eulerAngles.y;
-        }
 
         if (inputActions != null)
         {
             InputActionMap playerMap = inputActions.FindActionMap("Player", false);
             _lookAction = playerMap?.FindAction("Look", false);
         }
+
+        if (_lookAction == null)
+        {
+            _lookAction = new InputAction("Look", InputActionType.Value, "<Mouse>/delta");
+        }
+
+        if (target == null || !target.gameObject.activeInHierarchy)
+        {
+            AutoFindTarget();
+        }
+        else
+        {
+            SetTarget(target);
+        }
     }
 
     private void OnEnable()
     {
+        if (target == null || !target.gameObject.activeInHierarchy)
+        {
+            AutoFindTarget();
+        }
+
         _lookAction?.Enable();
 
         if (lockCursorOnEnable)
@@ -84,9 +147,13 @@ public class PlayerCamera : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (target == null)
+        if (target == null || !target.gameObject.activeInHierarchy)
         {
-            return;
+            AutoFindTarget();
+            if (target == null)
+            {
+                return;
+            }
         }
 
         Vector2 lookInput = _lookAction != null
@@ -96,8 +163,26 @@ public class PlayerCamera : MonoBehaviour
         float yawDelta = lookInput.x * mouseSensitivity;
         float pitchDelta = lookInput.y * mouseSensitivity;
 
-        _yaw = Mathf.Repeat(_yaw + yawDelta, 360f);
-        _pitch = Mathf.Clamp(_pitch - pitchDelta, minPitch, maxPitch);
+        if (_clampedYawCenter.HasValue)
+        {
+            float targetYaw = _yaw + yawDelta;
+            float offset = Mathf.DeltaAngle(_clampedYawCenter.Value, targetYaw);
+            offset = Mathf.Clamp(offset, -_clampedYawRange, _clampedYawRange);
+            _yaw = Mathf.Repeat(_clampedYawCenter.Value + offset, 360f);
+        }
+        else
+        {
+            _yaw = Mathf.Repeat(_yaw + yawDelta, 360f);
+        }
+
+        if (_lockedPitch.HasValue)
+        {
+            _pitch = _lockedPitch.Value;
+        }
+        else
+        {
+            _pitch = Mathf.Clamp(_pitch - pitchDelta, minPitch, maxPitch);
+        }
 
         float targetEyeHeight =
             _forcedEyeHeight ??
@@ -110,8 +195,6 @@ public class PlayerCamera : MonoBehaviour
             targetEyeHeight,
             eyeHeightTransitionSpeed * Time.deltaTime);
 
-        // CharacterController capsule center is relative to the target pivot.
-        // Eye heights are measured upwards from the capsule feet.
         float feetYOffset = 0f;
 
         if (_characterController != null)
@@ -132,20 +215,13 @@ public class PlayerCamera : MonoBehaviour
 
         transform.position =
             target.position +
-            Vector3.up * (feetYOffset + _currentEyeHeight);
+            Vector3.up * (feetYOffset + _currentEyeHeight) +
+            Quaternion.Euler(0f, _yaw, 0f) * Vector3.forward * Mathf.Max(0f, cameraForwardOffset);
 
-        // Camera owns look yaw locally.
         transform.rotation =
             Quaternion.Euler(_pitch, _yaw, 0f);
 
-        // For local player (standalone / prototype PlayerMovement), rotate the player transform to match look yaw
-        // so that forward/strafe movement and visuals/flashlight align with the camera view.
-        if (_playerMovement == null && target != null)
-        {
-            _playerMovement = target.GetComponent<PlayerMovement>();
-        }
-
-        if (_playerMovement != null)
+        if (target != null)
         {
             target.rotation = Quaternion.Euler(0f, _yaw, 0f);
         }
@@ -171,5 +247,61 @@ public class PlayerCamera : MonoBehaviour
     public void ClearForcedEyeHeight()
     {
         _forcedEyeHeight = null;
+    }
+
+    public void SetRotation(float yaw, float pitch = 0f)
+    {
+        _yaw = Mathf.Repeat(yaw, 360f);
+        if (_clampedYawCenter.HasValue)
+        {
+            float offset = Mathf.DeltaAngle(_clampedYawCenter.Value, _yaw);
+            offset = Mathf.Clamp(offset, -_clampedYawRange, _clampedYawRange);
+            _yaw = Mathf.Repeat(_clampedYawCenter.Value + offset, 360f);
+        }
+
+        if (_lockedPitch.HasValue)
+        {
+            _pitch = _lockedPitch.Value;
+        }
+        else
+        {
+            _pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
+        }
+
+        if (target != null)
+        {
+            target.rotation = Quaternion.Euler(0f, _yaw, 0f);
+        }
+    }
+
+    public void LockPitch(float pitch = 0f)
+    {
+        _lockedPitch = Mathf.Clamp(pitch, minPitch, maxPitch);
+        _pitch = _lockedPitch.Value;
+    }
+
+    public void UnlockPitch()
+    {
+        _lockedPitch = null;
+    }
+
+    public void SetYawLimit(float centerYaw, float maxOffsetDegrees)
+    {
+        _clampedYawCenter = Mathf.Repeat(centerYaw, 360f);
+        _clampedYawRange = Mathf.Max(1f, Mathf.Abs(maxOffsetDegrees));
+
+        float offset = Mathf.DeltaAngle(_clampedYawCenter.Value, _yaw);
+        offset = Mathf.Clamp(offset, -_clampedYawRange, _clampedYawRange);
+        _yaw = Mathf.Repeat(_clampedYawCenter.Value + offset, 360f);
+
+        if (target != null)
+        {
+            target.rotation = Quaternion.Euler(0f, _yaw, 0f);
+        }
+    }
+
+    public void ClearYawLimit()
+    {
+        _clampedYawCenter = null;
     }
 }

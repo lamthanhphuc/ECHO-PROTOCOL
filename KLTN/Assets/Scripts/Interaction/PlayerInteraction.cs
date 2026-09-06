@@ -1,4 +1,5 @@
 using System;
+using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -66,6 +67,12 @@ public class PlayerInteraction : MonoBehaviour
 
     private void Update()
     {
+        if (!HasLocalControl())
+        {
+            SetCurrentInteractable(null);
+            return;
+        }
+
         UpdateCurrentInteractable();
         ValidateHeldInteractable();
     }
@@ -126,6 +133,11 @@ public class PlayerInteraction : MonoBehaviour
 
     private void OnInteractPerformed(InputAction.CallbackContext context)
     {
+        if (!HasLocalControl())
+        {
+            return;
+        }
+
         if (_currentInteractable != null && _currentInteractable.CanInteract(gameObject))
         {
             if (_currentInteractable is IHoldInteractable holdInteractable && holdInteractable.RequiresHold)
@@ -140,6 +152,11 @@ public class PlayerInteraction : MonoBehaviour
 
     private void OnInteractStarted(InputAction.CallbackContext context)
     {
+        if (!HasLocalControl())
+        {
+            return;
+        }
+
         IHoldInteractable holdInteractable = _currentInteractable as IHoldInteractable;
         if (holdInteractable == null || !holdInteractable.RequiresHold)
         {
@@ -183,5 +200,11 @@ public class PlayerInteraction : MonoBehaviour
         IHoldInteractable held = _heldInteractable;
         _heldInteractable = null;
         held.EndHoldInteract(gameObject);
+    }
+
+    private bool HasLocalControl()
+    {
+        NetworkObject networkObject = GetComponentInParent<NetworkObject>();
+        return networkObject == null || !networkObject.IsValid || networkObject.HasInputAuthority;
     }
 }
