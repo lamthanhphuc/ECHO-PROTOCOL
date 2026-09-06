@@ -16,8 +16,13 @@ namespace EchoProtocol.Networking
         NetworkDoorState State { get; }
     }
 
+    public interface INetworkTraversalBlocker
+    {
+        bool BlocksTraversal { get; }
+    }
+
     /// <summary>Replicates door semantics; rotation and collision are derived presentation.</summary>
-    public sealed class NetworkDoor : NetworkInteractable, INetworkDoorStateProvider
+    public sealed class NetworkDoor : NetworkInteractable, INetworkDoorStateProvider, INetworkTraversalBlocker
     {
         public static event Action<NetworkDoor, NetworkDoorState> StateChanged;
 
@@ -30,13 +35,21 @@ namespace EchoProtocol.Networking
         [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
         public NetworkDoorState State { get; private set; }
 
+        [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
+        private NetworkBool Broken { get; set; }
+
         [Networked] public NetworkId MatchStateId { get; private set; }
+
+        public bool IsBroken => Broken;
+        public bool BlocksTraversal => !IsBroken && State != NetworkDoorState.Open;
+        public bool CanMonsterOpen => !IsBroken && State != NetworkDoorState.Locked;
 
         public override void Spawned()
         {
             if (Object.HasStateAuthority)
             {
                 State = _startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
+                Broken = false;
             }
             ApplyReplicatedState();
         }
@@ -51,6 +64,7 @@ namespace EchoProtocol.Networking
 
         public bool SetLockedAuthoritative(bool locked)
         {
+            if (IsBroken) return false;
             if (!Object.HasStateAuthority) return false;
             if (TryGetMatchState(out var matchState) && matchState.IsEnded) return false;
             State = locked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
@@ -58,8 +72,29 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public bool TryOpenForMonsterAuthoritative()
+        {
+            if (!Object.HasStateAuthority || !CanMonsterOpen) return false;
+            if (State == NetworkDoorState.Open) return true;
+            State = NetworkDoorState.Open;
+            ApplyReplicatedState();
+            return true;
+        }
+
+        public bool TryBreakAuthoritative()
+        {
+            if (!Object.HasStateAuthority) return false;
+            if (IsBroken) return true;
+            Broken = true;
+            State = NetworkDoorState.Open;
+            ApplyReplicatedState();
+            return true;
+        }
+
         protected override InteractionValidationResult ValidateCurrentState(in InteractionContext context)
         {
+            if (IsBroken) return InteractionValidationResult.InvalidTargetState;
+
             if (TryGetMatchState(out var matchState))
             {
                 return !matchState.IsEnded && matchState.CurrentPhase == NetworkMatchPhase.FinalHunt
@@ -107,7 +142,7 @@ namespace EchoProtocol.Networking
             visual.localRotation = Quaternion.Euler(
                 State == NetworkDoorState.Open ? _openEulerAngles : _closedEulerAngles);
             var blockingCollider = _blockingCollider != null ? _blockingCollider : GetComponent<Collider>();
-            if (blockingCollider != null) blockingCollider.enabled = State != NetworkDoorState.Open;
+            if (blockingCollider != null) blockingCollider.enabled = BlocksTraversal;
             StateChanged?.Invoke(this, State);
         }
     }
