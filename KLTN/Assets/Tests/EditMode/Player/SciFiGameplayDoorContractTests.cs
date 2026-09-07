@@ -169,9 +169,14 @@ namespace EchoProtocol.Player.Tests
         [Test]
         public void GAMEPLAY_DOOR_OfflineLockedDoorRejectsMonsterOpen()
         {
-            var door = CreateOfflineSlidingDoor(true, out var blocker);
+            var door = CreateOfflineSlidingDoor(false, out var blocker);
             try
             {
+                Assert.That(InvokeBool(door, "SetLockedAuthoritative", true), Is.True);
+                Assert.That(
+                    EnumValue(ResolveProductionType("EchoProtocol.Networking.NetworkDoorState"), "Locked"),
+                    Is.EqualTo(Convert.ToInt32(GetProperty(door, "CurrentState"))));
+
                 Assert.That(InvokeBool(door, "TryOpenForMonsterAuthoritative"), Is.False);
 
                 Assert.That(
@@ -518,6 +523,13 @@ namespace EchoProtocol.Player.Tests
             return (bool)target.GetType()
                 .GetMethod(methodName)
                 .Invoke(target, Array.Empty<object>());
+        }
+
+        private static bool InvokeBool(Component target, string methodName, bool value)
+        {
+            return (bool)target.GetType()
+                .GetMethod(methodName, new[] { typeof(bool) })
+                .Invoke(target, new object[] { value });
         }
 
         private static object GetProperty(Component target, string propertyName)

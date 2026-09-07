@@ -207,7 +207,7 @@ namespace EchoProtocol.AI.Stalker.Tests
                 "TryEvaluateCandidate",
                 BindingFlags.Instance | BindingFlags.Public,
                 null,
-                new[] { typeof(Transform), ResolveType("EchoProtocol.AI.Stalker.VisionObservation").MakeByRefType() },
+                new[] { typeof(Transform), ResolveType("EchoProtocol.AI.Stalker.StalkerPhysicalVisionObservation").MakeByRefType() },
                 null);
             Assert.That(method, Is.Not.Null, "Missing StalkerVisionSensor.TryEvaluateCandidate.");
             return (bool)method.Invoke(sensor, args);
