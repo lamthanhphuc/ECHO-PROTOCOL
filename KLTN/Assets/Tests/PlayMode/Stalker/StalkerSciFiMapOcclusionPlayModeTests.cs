@@ -73,7 +73,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         [UnityTest]
         public IEnumerator STK_SciFiVisionSensor_UnobstructedControl_IsVisible()
         {
-            var blocker = FindRealBlockingCollider("Shelf Variation");
+            var blocker = FindRealBlockingColliderWithClearControl("Shelf Variation");
             var setup = CalculateOcclusionSetup(blocker.Bounds);
             var sensor = CreateSensorObject(setup.SensorPosition, setup.Direction, out var origin);
             var target = CreateTarget(setup.ControlTargetPosition);
@@ -177,6 +177,71 @@ namespace EchoProtocol.AI.Stalker.Tests
             }
 
             Assert.Fail($"Could not find an active non-trigger collider under object name containing '{string.Join("' or '", ownerNameFragments)}'.");
+            return default;
+        }
+
+        private static BlockingCollider FindRealBlockingColliderWithClearControl(
+            params string[] ownerNameFragments)
+        {
+            var transforms = UnityEngine.Object.FindObjectsByType<Transform>(
+                FindObjectsInactive.Exclude,
+                FindObjectsSortMode.InstanceID);
+
+            for (var i = 0; i < transforms.Length; i++)
+            {
+                var owner = transforms[i];
+                if (!owner.gameObject.activeInHierarchy
+                    || !ContainsAny(owner.name, ownerNameFragments))
+                {
+                    continue;
+                }
+
+                var colliders = owner.GetComponentsInChildren<Collider>(true);
+                for (var colliderIndex = 0; colliderIndex < colliders.Length; colliderIndex++)
+                {
+                    var collider = colliders[colliderIndex];
+                    if (collider == null
+                        || !collider.enabled
+                        || collider.isTrigger
+                        || !collider.gameObject.activeInHierarchy
+                        || collider.bounds.size.sqrMagnitude <= Mathf.Epsilon)
+                    {
+                        continue;
+                    }
+
+                    var blocker = new BlockingCollider(
+                        owner.name,
+                        collider.name,
+                        collider.bounds);
+
+                    var setup = CalculateOcclusionSetup(blocker.Bounds);
+                    var delta = setup.ControlTargetPosition - setup.SensorPosition;
+                    var distance = delta.magnitude;
+
+                    if (distance <= Mathf.Epsilon)
+                    {
+                        continue;
+                    }
+
+                    var blocked = Physics.Raycast(
+                        setup.SensorPosition,
+                        delta / distance,
+                        distance,
+                        Physics.DefaultRaycastLayers,
+                        QueryTriggerInteraction.Ignore);
+
+                    if (!blocked)
+                    {
+                        return blocker;
+                    }
+                }
+            }
+
+            Assert.Fail(
+                $"Could not find a real collider matching " +
+                $"'{string.Join("' or '", ownerNameFragments)}' " +
+                "with a physically unobstructed control ray.");
+
             return default;
         }
 
