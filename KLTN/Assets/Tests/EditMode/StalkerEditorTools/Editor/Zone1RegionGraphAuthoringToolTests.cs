@@ -375,6 +375,23 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
         }
 
         [Test]
+        public void STK_FullStation_RuntimeSemanticDefectBlocksRuntimeAssetBake()
+        {
+            var graph = Graph(
+                Node(0, V(0, 0), 1),
+                Node(1, V(1, 0), 0, 2),
+                Node(2, V(2, 0), 1));
+
+            var report = Build(graph,
+                Source(0, SemanticZone.Zone01, SemanticKind.Room, "A", 0),
+                Source(1, SemanticZone.Zone01, SemanticKind.Room, "B", 2));
+
+            Assert.That(report.IsValid, Is.False);
+            Assert.That(report.CanApplyAuthoring, Is.False);
+            Assert.That(report.CanBakeRuntimeAsset, Is.False);
+        }
+
+        [Test]
         public void STK_FullStation_DiagnosticNodeListsAreSortedAndDeduplicated()
         {
             var graph = Graph(
@@ -821,6 +838,47 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
 
             Assert.That(report.IsValid, Is.False);
             Assert.That(report.DecompositionFailures, Is.Not.Empty);
+        }
+
+        [Test]
+        public void STK_FullStation_GeometryOnlyDecompositionFailureCanStillBakeRuntimeAsset()
+        {
+            var graph = Graph(
+                Node(0, V(0, 0), 1),
+                Node(1, V(0, 2), 0, 2),
+                Node(2, V(2, 2), 1, 3),
+                Node(3, V(2, 0), 2),
+                Node(4, V(1, 1)));
+            var options = new FullStationRegionGraphAuthoringCore.BuildOptions(0, UnclaimedComponentClassification.IsolatedNavigableIsland, null);
+
+            var report = FullStationRegionGraphAuthoringCore.BuildDryRunReport(
+                graph,
+                new[]
+                {
+                    Source(0, SemanticZone.Zone02, SemanticKind.Route, "Route", 0, 1, 2, 3),
+                    Source(1, SemanticZone.Zone02, SemanticKind.Room, "Room", 4)
+                },
+                options);
+
+            Assert.That(report.IsValid, Is.False);
+            Assert.That(report.CanApplyAuthoring, Is.False);
+            Assert.That(report.CanBakeRuntimeAsset, Is.True);
+            Assert.That(report.RuntimeGraph, Is.Not.Null);
+            Assert.That(report.BakeDiagnostic.IsSuccess, Is.True);
+            Assert.That(report.DecompositionFailures, Is.Not.Empty);
+            Assert.That(report.ToDisplayString(), Does.Contain("Can apply geometry authoring: False"));
+            Assert.That(report.ToDisplayString(), Does.Contain("Can bake runtime RegionGraph asset: True"));
+            Assert.That(report.ToDisplayString(), Does.Contain("Valid: False"));
+        }
+
+        [Test]
+        public void STK_FullStation_FullyValidReportCanApplyAuthoringAndBakeRuntimeAsset()
+        {
+            var report = BasicValidReport();
+
+            Assert.That(report.IsValid, Is.True, string.Join("\n", report.Errors));
+            Assert.That(report.CanApplyAuthoring, Is.True);
+            Assert.That(report.CanBakeRuntimeAsset, Is.True);
         }
 
         [Test]
