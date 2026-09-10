@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 100005}
   - component: {fileID: 100006}
   - component: {fileID: 100007}
+  - component: {fileID: 2724922159459071681}
   m_Layer: 0
   m_Name: StalkerNetwork
   m_TagString: Untagged
@@ -48,7 +49,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
   SortKey: 2068086745
   SendPriority: 1
@@ -69,7 +70,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 158639473, guid: e725a070cec140c4caffb81624c8c787, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkTransform
   _stateAuthorityChangeErrorCorrectionDelta: 0
   SyncScale: 0
@@ -131,7 +132,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 884933d8a6fcc1649a17f7fa4e3afc36, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.StalkerVisionSensor
   visionOrigin: {fileID: 100011}
   candidate: {fileID: 0}
@@ -152,7 +153,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3fa86950ad57d2943aa0196e0f69b142, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.StalkerController
   patrolRoute: {fileID: 0}
   visionSensor: {fileID: 100005}
@@ -166,11 +167,13 @@ MonoBehaviour:
   detectionFillRate: 0.5
   detectionDecayRate: 0.5
   searchDuration: 5
+  searchRadius: 8
   chaseDestinationRefreshDistance: 0.5
   chaseDestinationRefreshInterval: 0.5
   attackRange: 1.5
   attackWindup: 0.75
   attackRecovery: 1
+  attackDamage: 100
   currentState: 0
   detectionMeter: 0
   detectionTarget: {fileID: 0}
@@ -186,6 +189,13 @@ MonoBehaviour:
   lastPatrolScore: 0
   plannerRunCount: 0
   candidateCount: 0
+  regionGraphFallbackReason: 0
+  canonicalCurrentRegionId: 0
+  canonicalObjectiveRegionId: 0
+  canonicalNextRegionId: 0
+  searchEpisodeId: 0
+  searchCandidateNodeId: -1
+  regionGraphAsset: {fileID: 0}
 --- !u!114 &100007
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -196,7 +206,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a139b43846854589874a3ccf31ef3089, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime
   controller: {fileID: 100006}
   visionSensor: {fileID: 100005}
@@ -205,6 +215,30 @@ MonoBehaviour:
   maximumDamageDistance: 2
   animator: {fileID: 0}
   animatorStateParameter: MonsterState
+  _ReplicatedState: 0
+  _AttackSequence: 0
+  _ReplicatedSemanticState: 0
+  _ReplicatedAttackEpisodeId: 0
+  _ReplicatedAttackPhase: 0
+  _ReplicatedAttackProgressSeconds: 0
+  _ReplicatedAttackHitMomentResolved:
+    RawValue: 0
+  _ReplicatedAttackOutcome: 0
+  _ReplicatedAttackStartedTick: 0
+  _ReplicatedAttackResolvedTick: 0
+--- !u!114 &2724922159459071681
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 50db78c7abe757d4aa30e74a7d084c8a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Tools.Scanner.MotionScannableTarget
+  manualSpeedThreshold: 0.2
 --- !u!1 &100010
 GameObject:
   m_ObjectHideFlags: 0

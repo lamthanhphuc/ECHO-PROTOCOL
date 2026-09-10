@@ -26,6 +26,7 @@ GameObject:
   - component: {fileID: 6712278150136001238}
   - component: {fileID: 810580752424859207}
   - component: {fileID: 5671761272292103460}
+  - component: {fileID: 4947418910250719404}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -196,6 +197,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::InteractionPromptOnGUI
   interaction: {fileID: 436314893375736787}
+  networkInteractor: {fileID: 0}
   boxSize: {x: 360, y: 44}
   bottomOffset: 96
 --- !u!114 &3095192988049785345
@@ -228,9 +230,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInventoryDropInput
   inventory: {fileID: 3095192988049785345}
+  coreCarrier: {fileID: 0}
   dropOrigin: {fileID: 0}
   dropForwardDistance: 1.25
+  throwForwardDistance: 3
   selectedNormalSlot: 0
+  noiseMakerDeployedPrefab: {fileID: 0}
 --- !u!114 &3626915244988454067
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -251,7 +256,6 @@ MonoBehaviour:
   blockSprintWhileCarrying: 0
   lockTeamToolWhileCarrying: 1
   dropForwardDistance: 1.35
-  dropHeightOffset: -0.35
   carryNoiseInterval: 2.5
   carryNoiseMoveThreshold: 0.05
   carryNoiseEmitted:
@@ -272,7 +276,10 @@ MonoBehaviour:
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   playerCamera: {fileID: 0}
   movement: {fileID: 8888631157936493611}
+  networkMovement: {fileID: 0}
   interaction: {fileID: 436314893375736787}
+  networkInteractor: {fileID: 0}
+  hidingYawLimitDegrees: 45
 --- !u!114 &8098713353635554193
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -363,15 +370,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerAnimatorDriver
   animator: {fileID: 1535689403677083624}
   movement: {fileID: 8888631157936493611}
-  characterController: {fileID: 8135825658329404212}
   inventory: {fileID: 3095192988049785345}
   coreCarrier: {fileID: 3626915244988454067}
+  networkMovement: {fileID: 0}
   lobbyState: {fileID: 0}
   downState: {fileID: 8098713353635554193}
-  walkSpeedReference: 4
-  runSpeedReference: 7
   speedDampTime: 0.16
   directionDampTime: 0.12
+  walkSpeedReference: 4
+  runSpeedReference: 7
 --- !u!114 &6712278150136001238
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -431,6 +438,53 @@ MonoBehaviour:
   teamToolLocalPosition: {x: 0.04, y: 0.01, z: 0.11}
   teamToolLocalEulerAngles: {x: 12, y: 88, z: -18}
   teamToolLocalScale: {x: 0.45, y: 0.45, z: 0.45}
+  fieldScannerLocalPosition: {x: -0.003, y: 0.291, z: 0.118}
+  fieldScannerLocalEulerAngles: {x: 184.192, y: 99.672, z: -5.550995}
+  fieldScannerLocalScale: {x: 3, y: 3, z: 3}
+  fieldScannerChildLocalPosition: {x: 0, y: 0.04, z: 0}
+  fieldScannerChildLocalEulerAngles: {x: 0, y: 0, z: 0}
+  fieldScannerChildLocalScale: {x: 1, y: 1, z: 1}
+  fieldScannerHeldPrefab: {fileID: 6917847998477345115, guid: 42eed1ef7003d124d93c210c5b5cff43, type: 3}
+  firstAidLocalPosition: {x: 0.035, y: -0.015, z: 0.155}
+  firstAidLocalEulerAngles: {x: 8, y: 92, z: 170}
+  firstAidLocalScale: {x: 0.15, y: 0.15, z: 0.3}
+  firstAidChildLocalPosition: {x: -0.533528, y: -3.405526, z: -0.3114559}
+  firstAidChildLocalEulerAngles: {x: 0.12, y: -0.416, z: 5.923}
+  firstAidChildLocalScale: {x: 1, y: 1, z: 1}
+  noiseMakerLocalPosition: {x: 0.018, y: 0.132, z: -0.065}
+  noiseMakerLocalEulerAngles: {x: 6.176, y: 93.2, z: 94.562}
+  noiseMakerLocalScale: {x: 0.7, y: 0.7, z: 0.7}
+--- !u!114 &4947418910250719404
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 468300235454084763}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a7646ffb4ea84248965ff892dcccada, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Tools.Scanner.NetworkFieldScanner
+  _tuning:
+    CoreRange: 50
+    MotionRange: 35
+    ActiveDuration: 10
+    ScanCooldown: 60
+    ResultLifetime: 10
+    MovingSpeedThreshold: 0.15
+    OccludedSignalMultiplier: 0.6
+    MaxMotionTargets: 3
+    CoreBand4MaxDistance: 8
+    CoreBand3MaxDistance: 18
+    CoreBand2MaxDistance: 32
+    CoreBand1MaxDistance: 50
+    MotionCriticalMaxDistance: 6
+    MotionStrongMaxDistance: 15
+    MotionMediumMaxDistance: 25
+    MotionWeakMaxDistance: 35
+  _CurrentMode: 0
+  _ScanPulseOrdinal: 0
 --- !u!1 &2288167123551940416
 GameObject:
   m_ObjectHideFlags: 0
@@ -1359,6 +1413,10 @@ MonoBehaviour:
   clampWeight: 0.42
   lookAtDistance: 12
   driveRightHandWhenHolding: 1
+  handForwardOffset: {x: 0.22, y: -0.22, z: 0.46}
+  handEulerOffset: {x: 0, y: 0, z: -75}
+  rightHandPosWeight: 0.88
+  rightHandRotWeight: 0.85
 --- !u!4 &4690670608594508291 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 6994998768752351189, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
