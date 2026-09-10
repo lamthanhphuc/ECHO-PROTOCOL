@@ -9,7 +9,7 @@ namespace EchoProtocol.Networking
     /// every peer derives the smooth visual presentation locally.
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class NetworkSlidingDoor : NetworkInteractable, INetworkDoorStateProvider, IInteractable
+    public sealed class NetworkSlidingDoor : NetworkInteractable, INetworkDoorStateProvider, INetworkTraversalBlocker, IInteractable
     {
         public static event Action<NetworkSlidingDoor, NetworkDoorState> StateChanged;
 
@@ -23,6 +23,10 @@ namespace EchoProtocol.Networking
         [Header("Collision")]
         [SerializeField] private Collider _blockingCollider;
 
+        [Header("Door Jammer")]
+        [SerializeField] private Transform _jammerMount;
+        [SerializeField] private NetworkObject _doorJammerPrefab;
+
         [Header("Initial state")]
         [SerializeField] private bool _startsLocked;
 
@@ -32,6 +36,7 @@ namespace EchoProtocol.Networking
         private float _targetOpenAmount;
         private bool _positionsCached;
         private NetworkDoorState _offlineState = NetworkDoorState.Closed;
+        private bool _offlineBroken;
 
         private bool IsOnline => Object != null && Object.IsValid && Runner != null && Runner.IsRunning;
 
@@ -39,11 +44,24 @@ namespace EchoProtocol.Networking
 
         NetworkDoorState INetworkDoorStateProvider.State => CurrentState;
 
+        public bool IsBroken => IsOnline ? Broken : _offlineBroken;
+        public bool HasActiveJammer => TryGetActiveJammer(out _);
+        public bool BlocksTraversal => DoorBlocksTraversal || HasActiveJammer;
+        public bool DoorBlocksTraversal => !IsBroken && CurrentState != NetworkDoorState.Open;
+        public bool CanMonsterOpen => !IsBroken && CurrentState != NetworkDoorState.Locked;
+        public NetworkObject DoorJammerPrefab => _doorJammerPrefab;
+
         [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
         public NetworkDoorState State { get; private set; }
 
+        [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
+        private NetworkBool Broken { get; set; }
+
+        [Networked] public NetworkId ActiveJammerId { get; private set; }
+
         public override string InteractionPrompt => CurrentState switch
         {
+            _ when IsBroken => "Door broken",
             NetworkDoorState.Locked => "Door locked",
             NetworkDoorState.Open => "Close door",
             _ => "Open door",
@@ -53,6 +71,7 @@ namespace EchoProtocol.Networking
 
         public bool CanInteract(GameObject interactor)
         {
+            if (IsBroken) return false;
             if (CurrentState == NetworkDoorState.Locked) return false;
             if (interactor == null) return true;
 
@@ -107,7 +126,7 @@ namespace EchoProtocol.Networking
 
             if (_blockingCollider != null)
             {
-                _blockingCollider.enabled = _offlineState != NetworkDoorState.Open;
+                _blockingCollider.enabled = DoorBlocksTraversal;
             }
 
             StateChanged?.Invoke(this, _offlineState);
@@ -117,12 +136,13 @@ namespace EchoProtocol.Networking
         {
             CacheClosedPositions();
             _offlineState = _startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
+            _offlineBroken = false;
             _targetOpenAmount = _offlineState == NetworkDoorState.Open ? 1f : 0f;
             _visualOpenAmount = _targetOpenAmount;
 
             if (_blockingCollider != null)
             {
-                _blockingCollider.enabled = _offlineState != NetworkDoorState.Open;
+                _blockingCollider.enabled = DoorBlocksTraversal;
             }
 
             ApplyVisuals(SmoothStep(_visualOpenAmount));
@@ -150,9 +170,12 @@ namespace EchoProtocol.Networking
             if (Object.HasStateAuthority)
             {
                 State = _startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
+                Broken = false;
+                ActiveJammerId = default;
             }
 
             _offlineState = State;
+            _offlineBroken = Broken;
             ApplyReplicatedStateImmediate();
         }
 
@@ -174,6 +197,11 @@ namespace EchoProtocol.Networking
 
         public bool SetLockedAuthoritative(bool locked)
         {
+            if (IsBroken)
+            {
+                return false;
+            }
+
             if (!IsOnline)
             {
                 _offlineState = locked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
@@ -191,8 +219,136 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public bool TryOpenForMonsterAuthoritative()
+        {
+            if (!CanMonsterOpen)
+            {
+                return false;
+            }
+
+            if (!IsOnline)
+            {
+                if (_offlineState == NetworkDoorState.Open)
+                {
+                    return true;
+                }
+
+                _offlineState = NetworkDoorState.Open;
+                ApplyOfflineState();
+                return true;
+            }
+
+            if (!Object.HasStateAuthority)
+            {
+                return false;
+            }
+
+            if (State == NetworkDoorState.Open)
+            {
+                return true;
+            }
+
+            State = NetworkDoorState.Open;
+            ApplyReplicatedState();
+            return true;
+        }
+
+        public bool TryBreakAuthoritative()
+        {
+            if (!IsOnline)
+            {
+                if (_offlineBroken)
+                {
+                    return true;
+                }
+
+                _offlineBroken = true;
+                _offlineState = NetworkDoorState.Open;
+                ApplyOfflineState();
+                return true;
+            }
+
+            if (!Object.HasStateAuthority)
+            {
+                return false;
+            }
+
+            if (IsBroken)
+            {
+                return true;
+            }
+
+            Broken = true;
+            State = NetworkDoorState.Open;
+            ApplyReplicatedState();
+            return true;
+        }
+
+        public bool CanAcceptJammer()
+        {
+            return IsBroken && !HasActiveJammer;
+        }
+
+        public bool TryGetJammerPlacement(out Vector3 position, out Quaternion rotation)
+        {
+            if (_jammerMount != null)
+            {
+                position = _jammerMount.position;
+                rotation = _jammerMount.rotation;
+                return true;
+            }
+
+            position = transform.position;
+            rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
+            return true;
+        }
+
+        public bool TryAttachJammerAuthoritative(NetworkDoorJammer jammer)
+        {
+            if (!IsOnline || !Object.HasStateAuthority || jammer == null || jammer.Object == null || !jammer.Object.Id.IsValid)
+            {
+                return false;
+            }
+
+            if (HasActiveJammer)
+            {
+                return ActiveJammerId == jammer.Object.Id;
+            }
+
+            if (!CanAcceptJammer() || !jammer.InitializeAuthoritative(Object.Id))
+            {
+                return false;
+            }
+
+            ActiveJammerId = jammer.Object.Id;
+            ApplyReplicatedState();
+            return true;
+        }
+
+        public bool TryClearJammerAuthoritative(NetworkDoorJammer jammer)
+        {
+            if (!IsOnline || !Object.HasStateAuthority || jammer == null || !ActiveJammerId.IsValid)
+            {
+                return false;
+            }
+
+            if (jammer.Object == null || ActiveJammerId != jammer.Object.Id)
+            {
+                return false;
+            }
+
+            ActiveJammerId = default;
+            ApplyReplicatedState();
+            return true;
+        }
+
         protected override InteractionValidationResult ValidateCurrentState(in InteractionContext context)
         {
+            if (IsBroken)
+            {
+                return InteractionValidationResult.InvalidTargetState;
+            }
+
             return CurrentState == NetworkDoorState.Locked
                 ? InteractionValidationResult.InvalidTargetState
                 : InteractionValidationResult.Accepted;
@@ -223,16 +379,33 @@ namespace EchoProtocol.Networking
         private void ApplyReplicatedState()
         {
             _offlineState = State;
+            _offlineBroken = Broken;
             _targetOpenAmount = State == NetworkDoorState.Open ? 1f : 0f;
 
             // Closing blocks immediately. Opening becomes traversable as soon as the
             // authoritative state changes; the panels then catch up visually.
             if (_blockingCollider != null)
             {
-                _blockingCollider.enabled = State != NetworkDoorState.Open;
+                _blockingCollider.enabled = DoorBlocksTraversal;
             }
 
             StateChanged?.Invoke(this, State);
+        }
+
+        private bool TryGetActiveJammer(out NetworkDoorJammer jammer)
+        {
+            jammer = null;
+            if (!IsOnline
+                || !ActiveJammerId.IsValid
+                || Runner == null
+                || !Runner.TryFindObject(ActiveJammerId, out var jammerObject)
+                || jammerObject == null
+                || !jammerObject.TryGetComponent(out jammer))
+            {
+                return false;
+            }
+
+            return jammer.IsActive;
         }
 
         private void ApplyReplicatedStateImmediate()

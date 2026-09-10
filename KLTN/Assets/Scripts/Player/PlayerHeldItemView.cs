@@ -74,6 +74,15 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             return;
         }
 
+        // Complete Team Tool prefabs own both their held visual and gameplay lifecycle.
+        // PlayerTeamToolController renders these so the generic held-item view must not
+        // instantiate the pickup prefab a second time.
+        if (_currentItem.ItemType == InventoryItemType.TeamTool
+            && _currentItem.TeamToolGameplayPrefab != null)
+        {
+            return;
+        }
+
         Transform anchor = ResolveAnchor(_currentItem.ItemType);
         if (anchor == null)
         {

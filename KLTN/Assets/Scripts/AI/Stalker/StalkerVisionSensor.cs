@@ -15,10 +15,28 @@ namespace EchoProtocol.AI.Stalker
         [Header("Debug Runtime")]
         [SerializeField] private bool isCandidateVisible;
         [SerializeField] private Vector3 lastObservedPosition;
+        private Transform temporaryCandidate;
+        private UnityEngine.Object temporaryCandidateOwner;
 
         public bool IsCandidateVisible => isCandidateVisible;
         public Vector3 LastObservedPosition => lastObservedPosition;
-        public Transform Candidate => candidate;
+        public Transform Candidate => temporaryCandidate != null ? temporaryCandidate : candidate;
+
+        public bool TrySetTemporaryCandidate(Transform target, UnityEngine.Object owner)
+        {
+            if (target == null || owner == null) return false;
+            if (temporaryCandidateOwner != null && temporaryCandidateOwner != owner) return false;
+            temporaryCandidate = target;
+            temporaryCandidateOwner = owner;
+            return true;
+        }
+
+        public void ClearTemporaryCandidate(UnityEngine.Object owner)
+        {
+            if (owner == null || temporaryCandidateOwner != owner) return;
+            temporaryCandidate = null;
+            temporaryCandidateOwner = null;
+        }
 
         private void Update()
         {
@@ -35,7 +53,7 @@ namespace EchoProtocol.AI.Stalker
         {
             observedPosition = default;
 
-            if (!TryEvaluateCandidate(candidate, out var observation))
+            if (!TryEvaluateCandidate(Candidate, out var observation))
             {
                 return false;
             }
@@ -257,13 +275,13 @@ namespace EchoProtocol.AI.Stalker
             Gizmos.DrawLine(origin.position, origin.position + leftDirection.normalized * visionDistance);
             Gizmos.DrawLine(origin.position, origin.position + rightDirection.normalized * visionDistance);
 
-            if (candidate == null)
+            if (Candidate == null)
             {
                 return;
             }
 
             Gizmos.color = visibleNow ? Color.green : Color.red;
-            Gizmos.DrawLine(origin.position, candidate.position);
+            Gizmos.DrawLine(origin.position, Candidate.position);
 
             if (visibleNow)
             {

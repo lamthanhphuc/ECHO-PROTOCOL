@@ -1,5 +1,6 @@
 using System;
 using Fusion;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
@@ -25,6 +26,8 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
     [Header("Noise")]
     [SerializeField] private float carryNoiseInterval = 2.5f;
     [SerializeField] private float carryNoiseMoveThreshold = 0.05f;
+    [SerializeField, Range(0.05f, 1f)] private float stabilizedNoiseMultiplier = 0.35f;
+    [SerializeField, Range(0.01f, 1f)] private float stabilizedCarrySpeedMultiplier = 0.9f;
     [SerializeField] private UnityEvent carryNoiseEmitted;
 
     private InputAction _dropAction;
@@ -32,6 +35,7 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
     private InventoryItemDefinition _carriedCoreItem;
     private Vector3 _lastPosition;
     private float _noiseTimer;
+    private readonly HashSet<UnityEngine.Object> _stabilizerSources = new HashSet<UnityEngine.Object>();
 
     public event Action<PlayerEnergyCoreCarrier> CarryStateChanged;
     public event Action<PlayerEnergyCoreCarrier> CarryNoiseEmitted;
@@ -39,6 +43,8 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
     public bool IsCarrying => _carriedCore != null;
     public EnergyCorePickup CarriedCore => _carriedCore;
     public InventoryItemDefinition CarriedCoreItem => _carriedCoreItem;
+    public bool IsCoreStabilized => _stabilizerSources.Count > 0;
+    public float CurrentCarryNoiseMultiplier => IsCoreStabilized ? stabilizedNoiseMultiplier : 1f;
 
     private void Awake()
     {
@@ -198,7 +204,8 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
     {
         if (movement != null)
         {
-            movement.SetExternalSpeedMultiplier(carrying ? carrySpeedMultiplier : 1f);
+            float multiplier = IsCoreStabilized ? stabilizedCarrySpeedMultiplier : carrySpeedMultiplier;
+            movement.SetExternalSpeedMultiplier(carrying ? multiplier : 1f);
             if (blockSprintWhileCarrying)
             {
                 movement.SetSprintBlocked(carrying);
@@ -233,9 +240,26 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
             return;
         }
 
-        _noiseTimer = carryNoiseInterval;
+        _noiseTimer = carryNoiseInterval / Mathf.Max(0.05f, CurrentCarryNoiseMultiplier);
         carryNoiseEmitted?.Invoke();
         CarryNoiseEmitted?.Invoke(this);
+    }
+
+    public void SetCoreStabilized(UnityEngine.Object source, bool stabilized)
+    {
+        if (source == null) return;
+
+        bool changed = stabilized
+            ? _stabilizerSources.Add(source)
+            : _stabilizerSources.Remove(source);
+        if (!changed) return;
+
+        if (IsCarrying)
+        {
+            ApplyCarryState(true);
+            _noiseTimer = Mathf.Min(_noiseTimer,
+                carryNoiseInterval / Mathf.Max(0.05f, CurrentCarryNoiseMultiplier));
+        }
     }
 
     private void BindInput()

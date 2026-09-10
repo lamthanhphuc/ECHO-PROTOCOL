@@ -1,6 +1,7 @@
 using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.DTOs.MatchAuthority;
+using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -37,6 +38,27 @@ public sealed class MatchAuthorityServiceTests
         Assert.True(delegated);
         Assert.True(await service.CanSubmitSystemTelemetryAsync(
             hostId, created.Data.MatchId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SingleBoundHost_CanStartMatch()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+        var created = await service.CreateAsync(hostId, new CreateMatchAuthorityRequest
+        {
+            FusionSessionName = "solo-room",
+            MaxPlayers = 4
+        }, CancellationToken.None);
+        Assert.True(created.IsSuccess);
+
+        await BindAsync(service, hostId, hostId, created.Data!.MatchId, "solo-room", 1);
+
+        var started = await service.StartAsync(hostId, created.Data.MatchId, CancellationToken.None);
+
+        Assert.True(started.IsSuccess);
+        Assert.Equal(MatchAuthorityStatus.InMatch, started.Data!.Status);
     }
 
     [Fact]
