@@ -1,0 +1,917 @@
+[
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Authority/HostRuntimeNoiseService.cs",
+    "lines": 154,
+    "sha256": "747f13fd8b5f89c95f51a3d202ed5c1a5941b305097a12ed6d1d0e4440687132"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Authority/MatchAuthorityApiService.cs",
+    "lines": 73,
+    "sha256": "530850aa3110349ee6f00504a07756095ecc39913962bc3cc02a03f733a53241"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Authority/MatchAuthorityContracts.cs",
+    "lines": 60,
+    "sha256": "7d1338e01859bcbeb12ed90d785a3c7415104b9533bb46a5ebc2e598e5202c46"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Authority/MatchAuthorityRuntime.cs",
+    "lines": 808,
+    "sha256": "06de57f2bcb35ebea19070fdfdc2813b757f60bdcc36f28c64b5975749349103"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Interaction/NetworkDoor.cs",
+    "lines": 114,
+    "sha256": "ab12dd642b79a938ebcbad6b174c8e97b0fa506265eaa93f6da0ee3149dd40dd"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Interaction/NetworkInteractable.cs",
+    "lines": 72,
+    "sha256": "15e5dc73ce257d98910a17a75b1f9b0436ac24450219a2f69883485dc1a5a397"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Interaction/NetworkInteractionContracts.cs",
+    "lines": 66,
+    "sha256": "d8c56abae91098e81262e045ccaa6c5a60a20a4b8a423dde8d33bd47e1a6b386"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Interaction/NetworkPickupItem.cs",
+    "lines": 294,
+    "sha256": "e6856a2c835e6fea576f58dd7cae64002bfb5201d3ce26afa91595343822eb2d"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs",
+    "lines": 528,
+    "sha256": "13b3aa0866916c6eb15d98c5bbc278afe80d04829762bf28bab9a04b781ab47b"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Interaction/NetworkPowerPuzzle.cs",
+    "lines": 234,
+    "sha256": "ab4e6daa681f8ffdd8f76f1907cb77ebdd36e98f0b44ecefa4a63659065cd01d"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Interaction/NetworkPowerPuzzleStation.cs",
+    "lines": 69,
+    "sha256": "e70de9c76bc4a7e2f6bbe5db4dfa74576aae06be9f38fd0e9e1e55c59baaf293"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Interaction/NetworkSectorBox.cs",
+    "lines": 288,
+    "sha256": "c6eb9f1bbc0fa397508cc0fa2294cc076f9b26442cee3da04f5cd71f56e19120"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Interaction/NetworkSlidingDoor.cs",
+    "lines": 278,
+    "sha256": "55ea670f0893d878d5af546e595ad1dab2a69042727735c9cc62b024e4cb84ec"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Interaction/NetworkToggleInteractable.cs",
+    "lines": 35,
+    "sha256": "2d6efb1996dfb40f00f770dc895a7601189d36b3a26cc64a8460f65ed0611e32"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs",
+    "lines": 483,
+    "sha256": "2e4834f4c55da0f5c93255a3318a0b01f1c21f269b1bf756a897971727f2883c"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Player/LobbyPlayerState.cs",
+    "lines": 432,
+    "sha256": "9547bde921e0482a14f5be7da0f792cd88b7667260ea91bf70a7fbaef8ff5882"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Player/NetworkPlayerFlashlight.cs",
+    "lines": 278,
+    "sha256": "61d0b295d6b618bafa63d3a175949510bb1c07ccb32733e75676cc04c2844483"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Player/NetworkPlayerLifeState.cs",
+    "lines": 492,
+    "sha256": "208df5f0cd79e7a4b7851412e0b7ccdb6277461a81540109d89fa3bacb219cab"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Player/NetworkPlayerMovement.cs",
+    "lines": 343,
+    "sha256": "a233a8f1647a1fe3b7a2ccc4111ba2117f3d9317bedcf0bc2304d48e18d3cd90"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Player/NetworkPlayerSpawnPoint.cs",
+    "lines": 12,
+    "sha256": "09efa16ef058af806e7615818698f0232bebab6fea47d903e465a9c0ba5000a9"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Player/PlayerSpawner.cs",
+    "lines": 477,
+    "sha256": "674ebc7304aadac18702cedc00c12a74883454259ac7f9bb2495258bfea49751"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Rules/NetworkingAuthorityRules.cs",
+    "lines": 99,
+    "sha256": "1ca2fce3c3fd3c469a159b233f66296528b7a93bf281cb01d8e19e883e4f2c13"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Session/LobbyManager.cs",
+    "lines": 247,
+    "sha256": "8314e8411f63390e774c040ed1054e47e4267c859e03eaa194cef277b33f12cc"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Session/NetworkBootstrap.cs",
+    "lines": 428,
+    "sha256": "ac90e31777da499ff8e8cd4198a2eddd9198e41b6de07e79e9496b87ff416ca8"
+  },
+  {
+    "file": "KLTN/Assets/_Project/Scripts/Networking/Session/RoomInfoViewModel.cs",
+    "lines": 31,
+    "sha256": "bb7c2fec09ceaa977033690ff5e757b1fd6aaabe4cc4e2c5165aef9f6d07406d"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Common/AiSimulationStep.cs",
+    "lines": 35,
+    "sha256": "a9c14295bb3bf4e7c90b8ad49c04abac44a2e9ecf039901fd77f4e119b9b5ce1"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Common/AiSimulationTime.cs",
+    "lines": 88,
+    "sha256": "8bb73db56d5eee0ab7b0f23f30d13d64c899963852b6ca87ab6441f2ba909613"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Common/DeterministicTieBreak.cs",
+    "lines": 18,
+    "sha256": "8be99f602ba44f49f53a09d0923c636158ffb95ac586c104b688b3f99e459476"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Common/MonsterId.cs",
+    "lines": 60,
+    "sha256": "70b705b0b2076e92f36cbc181f3fb1bfe52f792f65a6a1badc398497347ac56e"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Common/PlayerId.cs",
+    "lines": 60,
+    "sha256": "56cf515510c26e8ebbfbf9773890cc033a16694e03efaf2a36d1fe11f1833b67"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Common/Spatial/StableSpatialIds.cs",
+    "lines": 82,
+    "sha256": "2de0028c1e3b47628cd73fd57ab3c10b88cace02a95310d3f10767da6289c8cb"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Listener/Memory/PendingHearingInbox.cs",
+    "lines": 161,
+    "sha256": "f0373860a246ed04e512dc2b6342c698663bc6121cddaaa5d0fa6750406a2ef2"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Listener/Noise/RuntimeNoiseCatalog.cs",
+    "lines": 49,
+    "sha256": "c95922a8398779923c583a3fc5abb47e2902ccd7bdcf5f91aa3d11dca337ca40"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Listener/Noise/RuntimeNoiseContracts.cs",
+    "lines": 255,
+    "sha256": "51e4e258255c68c3cf3e2cf29f08a69760c1334a421e99a3d103d41934ef1470"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Listener/Noise/RuntimeNoiseSystem.cs",
+    "lines": 200,
+    "sha256": "a68943f88b5b5eb5d0ce233dc98de6db02b722049c3c1c4a8584d5577d54013f"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Listener/Perception/ListenerHearingContracts.cs",
+    "lines": 209,
+    "sha256": "cfd55c980386f52307209d852ed9bf958896d48b5c49381a849e4fe869228bc5"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Listener/Perception/ListenerHearingSensor.cs",
+    "lines": 158,
+    "sha256": "223c4b3fe042d018ce5ecb2f97e202f446f07e0c1e333524d477851f20a1b781"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Listener/Perception/UnityListenerOcclusionResolver.cs",
+    "lines": 112,
+    "sha256": "7428118289736a4491f22687f1d6c4bc008210d299a05075da3811fbc5997fdf"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Debug/StalkerAIDebugSnapshot.cs",
+    "lines": 160,
+    "sha256": "f7a505bc26e352185281f73b94abd0e9f5834e4337ac69fd90317d6f0ba04248"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Debug/StalkerDebugProvider.cs",
+    "lines": 88,
+    "sha256": "fbf71aa5b2486c19a38a770d8d77f3ed2866b895a2f3eb5b8db14d58002eb454"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Debug/StalkerSpatialGraphDebug.cs",
+    "lines": 150,
+    "sha256": "e810948902246ee55d0260ba3bb9cb17791d60c7309220e6320ed3f9de761604"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Networking/Diagnostics/StalkerFusionC2CHarnessProbe.cs",
+    "lines": 1235,
+    "sha256": "9e1a3ca711a32eb7b86041dabb46662cb05106ab0c9382ecaa5bc810ac7ebc17"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Networking/StalkerFusionRuntime.cs",
+    "lines": 694,
+    "sha256": "abcc78a0ea99a5badacc67f593e78adf8d843598058d6d9f6869cafdca75875d"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Networking/StalkerFusionTargetEligibilityAdapter.cs",
+    "lines": 45,
+    "sha256": "0849420ff3ac384516fe5f1082d898eacb91d8dc5938b14df8329ea1eac5655b"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Networking/StalkerFusionTargetFrameBuilder.cs",
+    "lines": 139,
+    "sha256": "3a2a262c87229fd795bd022d2041196f011f663a5eeca4272a4be2b4990920e0"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Networking/StalkerNetworkLifeStateConsequenceSink.cs",
+    "lines": 42,
+    "sha256": "2b1c66cfc206c1c0a3e9dafb6faf816234300fa726c744994bb3a525cef010ad"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Networking/StalkerNetworkPresentationState.cs",
+    "lines": 46,
+    "sha256": "23b80f9c249dfaaf6cc269d32ca936b787b62d5204e8c27b32bc2f54b3c3eaba"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Networking/StalkerPresentationDriver.cs",
+    "lines": 94,
+    "sha256": "d184a9d9a2d381083f3da884d5889aefda7e7a7c682647280b4009c7520ac7fe"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/PatrolRoute.cs",
+    "lines": 100,
+    "sha256": "2fa146805ea60a8bf95c165ebdfd8b0d877ccaa38f3ebe31d1d24eb098d368c7"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/ConfidenceSpatialPatrolPlanner.cs",
+    "lines": 808,
+    "sha256": "1cf4ef9c9dcf1fbe91f10ca2ffe8a008e95c0704cf487bb0645b5d2d463fc1ce"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/CoverageMemory.cs",
+    "lines": 273,
+    "sha256": "2b6c9510e137ab397f6a4646b07cab379eecc3b331edf6e42aba589e4f3ee7fb"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/Editor/Phase3AcceptanceFixtureBuilder.cs",
+    "lines": 122,
+    "sha256": "ab54d17632ee221e473b22c36faff819f1ac5d3f3a0f242237f9f267e28eebaf"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/Editor/Zone1RegionGraphAuthoringTool.cs",
+    "lines": 3085,
+    "sha256": "b782fdc4fe22d022e73ab54a883263514f51af111026797973e4fbcda7da29be"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/GlobalPatrolPlanner.cs",
+    "lines": 225,
+    "sha256": "442ba11353adf1b1a63bc571ce2f36d80dc910bcdfd05819cf4e7ecbb99f2335"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/LocalPatrolSelector.cs",
+    "lines": 173,
+    "sha256": "e0a7bb5e93bb2292ebe61f32a6e7c96613b0880e00b48ea9d49501596e1fe3a7"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/NavMeshSpatialGraph.cs",
+    "lines": 92,
+    "sha256": "817f97e98b554ebb355b7206c2f046a2a409c24f2e6d27c7d7d1c4d43725f221"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/NavMeshSpatialGraphBuilder.cs",
+    "lines": 342,
+    "sha256": "17d026344c6101ab0883320a86093ae37b5fd4e0e295325cc42713a82a1a8370"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/RegionDefinition.cs",
+    "lines": 36,
+    "sha256": "ec93bab998e3fdb46a019034bc98719f02f767ca5e315d1bc86d4ccf7c0f514f"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/RegionGraph.cs",
+    "lines": 457,
+    "sha256": "7920a6aa7ca739e5af9699979f5b70e37194e4b66612f2a48bf3f5ac2996ba4c"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/RegionGraphAsset.cs",
+    "lines": 235,
+    "sha256": "7dcbdd3b4c33a314682763fd63cb946d2f791933d30afffdaa70b70495a7adab"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/RegionGraphBakeUtility.cs",
+    "lines": 253,
+    "sha256": "4b14ce93634b8225a84d976a5dbffc692f9cc97092542da084ebb184223768f9"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/RegionSemanticMetadata.cs",
+    "lines": 59,
+    "sha256": "148d0eb44f7b2d435baa23ce1a9a647e4d586ced76d199fcc90acabc3b435702"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/RoomSweepCoverageMemory.cs",
+    "lines": 225,
+    "sha256": "4bc7a43e2f6a631684feb64173fbb9bc88d83abf17d8ab688181c7058c9952ad"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/RoomSweepGlobalPlanner.cs",
+    "lines": 197,
+    "sha256": "4767145deeae5dca3611ef501a6f54a1e6981e7b2c03e0d66d97236b5b808821"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/RoomSweepPlanner.cs",
+    "lines": 246,
+    "sha256": "f11e1f9746d9ff0b3f4921eb1f55d03dbd4ea0ab0a0b00d757406b152a654212"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/SpatialCoverageMemory.cs",
+    "lines": 280,
+    "sha256": "38dad98fd57d7ce77e5541dc304da99c27a60f614af4ef2253b30abe24323c9f"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/SpatialGraphCompatibilityIdentity.cs",
+    "lines": 26,
+    "sha256": "cea333c5eab6ffed9ac4be29c69670bd4b0e604a258ab9e5adc8fbb8ab597ea9"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/SpatialNode.cs",
+    "lines": 54,
+    "sha256": "148d91def5dfa333ee9b08afd6c568cc8274995b89598ef4e6a5caeb996dfdf8"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/SpatialPatrolMemory.cs",
+    "lines": 51,
+    "sha256": "c3f326314798d162ba05a0b3be5a785a2d0b6ce10c8746cf0c75d40a10f85795"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/SpatialPatrolPlanner.cs",
+    "lines": 260,
+    "sha256": "6227aa44ebdc4c06476761f4b7f278a50e2547745b53a1222e256c4388ce6321"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerAttackController.cs",
+    "lines": 158,
+    "sha256": "26d8af35bb36d2356a7ca8fd86a19b281364261c1c09ae49997bfdde7eb64ce6"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerAttackTypes.cs",
+    "lines": 173,
+    "sha256": "e4feb3a53a2b84853cfaf326c4d86179c0e2bfa2cba747c57793934fff909ac9"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerBlackboard.cs",
+    "lines": 10,
+    "sha256": "2a8067aa091257affae03a778dcfe68849c5fb77431fc7922580c9bd9fb39299"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerController.cs",
+    "lines": 3928,
+    "sha256": "97de75881182d60520b462c9288c58cf3bb5c6a07c19b9a08c1f0a9688b36146"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerDiagnosticAttackConsequenceSink.cs",
+    "lines": 34,
+    "sha256": "709d596eeefb67ddd5db27021a40a3a094f513670a4f2031575576a8d02484ba"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerMemory.cs",
+    "lines": 162,
+    "sha256": "6a120d77e4b90110eb659de23195a80362e1654494f47e951e4f8a9c7b277788"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerNavigationController.cs",
+    "lines": 432,
+    "sha256": "ce7182d8a286381aa38bcc09e38e513f8f0a10ee754eb6e2c22f7bbfdba3080a"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerNavigationProgressMonitor.cs",
+    "lines": 171,
+    "sha256": "3532e397ec4acb80e01d285d9f8e8f0a29072f3ac09057e1e16560c202d96471"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerNavigationTypes.cs",
+    "lines": 160,
+    "sha256": "7597664968cca8b93f74b51bc6fa3867d67d30a08846e1dea5a7c1b0a8b808ff"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerPatrolMode.cs",
+    "lines": 10,
+    "sha256": "1e7b203dfc15b8773b588166fd6713dd2352a110de38c3403dac1b101b8566ce"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerPerceptionEvaluator.cs",
+    "lines": 73,
+    "sha256": "b017a7302707bfb102f1c45686672fe78458f4e659b6b09cba354ffde4b0d168"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerPerceptionTargetSnapshot.cs",
+    "lines": 28,
+    "sha256": "c46bbf0843af757709e9c66cc68cea84a5620da38f92fa1c0e2f0d286b6ff534"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerPhysicalVisionObservation.cs",
+    "lines": 101,
+    "sha256": "a1250329697d2da1a1c31a3ffc409961ff90931520135d3e938b6bacd19f295c"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerSearchContext.cs",
+    "lines": 130,
+    "sha256": "d85e9e9cb1ee017e5ab58f430da03717288414300bb50f0107399b4dafe1f815"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerSearchPlanner.cs",
+    "lines": 220,
+    "sha256": "82b4b66287293b5033225587108d2d5ed6bc5303f518dc91b551652f701d43c1"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerSimulationInput.cs",
+    "lines": 43,
+    "sha256": "94cdf6048f8526c3ac64062409ba2eb8e43b1425c588c54158c6c2f0c5ab2564"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerState.cs",
+    "lines": 12,
+    "sha256": "dfe3e0d585c7dbe0f1d93cb37ac0cfa79b735d320828d813d83b1f417cc548bc"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerTargetCandidateLookup.cs",
+    "lines": 45,
+    "sha256": "7e1d8111d535a2253c785a9e2e5ad69940dd105eea0ff222e9abae5d0619591f"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerTargetEligibility.cs",
+    "lines": 100,
+    "sha256": "8fb4386909a6fef85b7876690398b37eaa93f9f6dc0d968ae395f4419beac885"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerTargetSelector.cs",
+    "lines": 88,
+    "sha256": "2d9af6db735002343c953ed7fc3161194249a1aaea80300a82742630a6fbca7f"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerTargetStatus.cs",
+    "lines": 17,
+    "sha256": "34a18c382d3e9708f1cdd7cec1b751f11da0c1dc52975858a06c41ea8cff0691"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerTargetStatusLookup.cs",
+    "lines": 42,
+    "sha256": "6f2f392c078ac61e06290c48585a291efed58cb19e42a832a6387581368ae75a"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerVisionSensor.cs",
+    "lines": 274,
+    "sha256": "c8ca5db405c161e811063a6e38bd321d668b43dd9a6b160076873362116342f6"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Telemetry/StalkerCommittedFacts.cs",
+    "lines": 66,
+    "sha256": "a6e866024befdd1f178d303387b8125b7ba21edb09d0f576817b458e7bbcb139"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Telemetry/StalkerProductionTelemetryProducer.cs",
+    "lines": 62,
+    "sha256": "f9debe32bcf59304059e36d88019bb732a658d3103a9e755731648873e1c99d4"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/Telemetry/StalkerTelemetryAdapter.cs",
+    "lines": 251,
+    "sha256": "56997c65cdb7ce3b3c8a9c7b7785f68b74a3e803e5e5d02faf9b0b3a957b86dd"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/AI/Stalker/VisionObservation.cs",
+    "lines": 113,
+    "sha256": "badb8c8ddef695c60ebbd1541c4998e9f2f576dd36624357428122ed6054ca0e"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Api/ApiClient.cs",
+    "lines": 243,
+    "sha256": "0e6dbbde9bd8693cdd938266dee5b98c03f7ea5ddea6682981259071bd5bd33b"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Api/ApiConfig.cs",
+    "lines": 13,
+    "sha256": "a6b1be47af53b22d392a1e8bde66a45ed96166973de9a8aa9847674da58241eb"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Api/ApiConfiguration.cs",
+    "lines": 31,
+    "sha256": "63c0fee0f5f24b54ff66c14c3630e31e9c6c039b2a5ee9fd1bc79bb09a72347c"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Api/ApiResponse.cs",
+    "lines": 21,
+    "sha256": "0a8beac5cd195debd0c6b273ee49997fc67c0baf2d8eec5b67aa75b4f728bc7c"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Api/ApiResult.cs",
+    "lines": 26,
+    "sha256": "a77b6ff792e6ad00a3b0d0a0bdf66cb579641371aebeee0766fc5991c24c284b"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Auth/AuthApiService.cs",
+    "lines": 126,
+    "sha256": "4379a675dace8a4b88f7c8ca7f748a6384994c2fb299bf97f13ddc7987799891"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Auth/AuthDtos.cs",
+    "lines": 90,
+    "sha256": "1cfdc77e2f2c2959388f86a172b4d71480b79786dae266eb18d9c80cf636138b"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Auth/AuthErrorCodes.cs",
+    "lines": 10,
+    "sha256": "0327dc4150468854b09e2940a7b3d12c226f6d16d41fa25c69f30d1d9b46e186"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Auth/AuthErrorMapper.cs",
+    "lines": 53,
+    "sha256": "b913e3dda249c4786b6d55e346cfa55126e6158c1c26a65063c4d5631af64537"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Auth/AuthRuntime.cs",
+    "lines": 115,
+    "sha256": "74f671e808dbdbc7f60b2bbb16ab2ef82fa4e249857329ce0d50031cb06b1bee"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Auth/AuthSession.cs",
+    "lines": 35,
+    "sha256": "0e31579b4cb2c48216e3089d63f19f096568a2de1fdb07b1e64a01ba6c94bb95"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Auth/PasswordPolicy.cs",
+    "lines": 19,
+    "sha256": "a15a0f0ced61d143fdf377deff197201d344111277b7e037079cf288e7512d19"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Auth/TokenStorage.cs",
+    "lines": 93,
+    "sha256": "3408c69fa9c9a73db99080ab402a75c5afb00237d3d5137ae50518f5ac145944"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Core/BootstrapSceneFlowController.cs",
+    "lines": 62,
+    "sha256": "33899014be874512226fbb57a9ec796388ecf5cbfa747f77cf4ee5f65184c83e"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Core/GameConstants.cs",
+    "lines": 16,
+    "sha256": "16234ca36b8ccaea57570a9a75a1810defcc2ada79b50cac74a8d66ec3ef9a04"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Doors/DoorInteractable.cs",
+    "lines": 150,
+    "sha256": "9413d86b4223d323d4a5c65634fee9c9c525fcbad4bbe87ae880f4fb5b2421d7"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/EnergyCore/EnergyCoreObjectiveProgress.cs",
+    "lines": 74,
+    "sha256": "6306de3dae239b62fc05dc9b46cabe40e120ede57930225c9a5b16903ce1cf33"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/EnergyCore/EnergyCorePickup.cs",
+    "lines": 44,
+    "sha256": "e9f15707c4e501b0fb3a9a67991dc88f15ba307f2779439cb12e7596a8e6f9c0"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/EnergyCore/PlayerEnergyCoreCarrier.cs",
+    "lines": 284,
+    "sha256": "685c26f455a9edd12ac17c313287f0ec45541fddedb2270b80ff0261640e7f10"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/EnergyCore/SectorBox.cs",
+    "lines": 127,
+    "sha256": "c2d28d2bd9eb6b3fa44b5260bcb2ff184b7c5c65e821df934f0e0e4607690f6e"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Hiding/HidingSpot.cs",
+    "lines": 65,
+    "sha256": "8ebbd5ac5d320983f6e444f0b2af557df701dba04073b937522a3888252d47fc"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Hiding/PlayerHidingController.cs",
+    "lines": 264,
+    "sha256": "e87227c39863376b791b531c11dc871b12b9e71b076ca479c2cb3eb01aca93bc"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Interaction/IHoldInteractable.cs",
+    "lines": 8,
+    "sha256": "981670ae3e2e53f8c020572579c423fc3ee548810eb37fc6f8377807d962f910"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Interaction/IInteractable.cs",
+    "lines": 10,
+    "sha256": "3a19f550db8619b28ffd6af22d56343d3060e92e8cf14cd79919388ceeae849f"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Interaction/InteractionPromptOnGUI.cs",
+    "lines": 76,
+    "sha256": "cc60e4a522ee93724a1bbc4ae09e9f58caae457487c5052075993a5eb54505a4"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Interaction/MapInteractionPoint.cs",
+    "lines": 35,
+    "sha256": "8bad4fc32686d3bfd890c30433885498b28808fe4e1baa8f84d2401fc95bc207"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Interaction/PlayerInteraction.cs",
+    "lines": 210,
+    "sha256": "84beb8aa114a6f1c03ae7b6c56ee8a52ff10fa4e4f1da651c0b9600c767923ab"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Inventory/InventoryItemDefinition.cs",
+    "lines": 17,
+    "sha256": "f68e4a6355a8021303292a2201a27ac5e0e919137e048c40b4277c287b2c1e26"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Inventory/InventoryItemType.cs",
+    "lines": 6,
+    "sha256": "60e430e6e140afee79d831cd9b823ff0aa69479c84fdaeebead932159cb7b638"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Inventory/ItemDropPlacementUtility.cs",
+    "lines": 61,
+    "sha256": "c3090ad7d7cf9e5d6c2b7384e9b7ce9cbdce10a0866ea1ec15df9405eb44179f"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Inventory/NoiseMakerBeacon.cs",
+    "lines": 89,
+    "sha256": "ed6901f35b862e622ff81e28c29e7271a86b0ace946eb74539754c4269df6c90"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Inventory/PickupItem.cs",
+    "lines": 49,
+    "sha256": "91fff225959f42841211d2d3f5775283cb8d6fe382bbb6a5b549941ea7ff397b"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Inventory/PlayerInventory.cs",
+    "lines": 293,
+    "sha256": "1ed014b16e91256f332fba9a93138ac8b4ac2372330e54e105d8b1b69e029478"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Inventory/PlayerInventoryDropInput.cs",
+    "lines": 181,
+    "sha256": "0955514f9058d0cb7a9b877fda4defc66666f26f219136a6379f243d8114dda5"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/MatchFlow/EscapeDoorCountdown.cs",
+    "lines": 166,
+    "sha256": "b69171c7df0a9a5a52208dbd4810c03e446583ba63b78fa09fe531d771164d2e"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/MatchFlow/MatchFlowController.cs",
+    "lines": 320,
+    "sha256": "3615424092e67dd3b401fa0f235bc6f3b5292c193d7f8f02ae2980c2150a8379"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/MatchFlow/MatchPhase.cs",
+    "lines": 10,
+    "sha256": "9530a720bc7a9f57f1fe4a82a0dbc48a4e0f54433820895644eabf97aded374b"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Networking/Diagnostics/FusionC2CHarnessController.cs",
+    "lines": 807,
+    "sha256": "0964be747712acf8b10545de4a6d60641922a6c2ff715e0962bb17025afb89b9"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Networking/Diagnostics/FusionPlayerLifecycleProbe.cs",
+    "lines": 81,
+    "sha256": "200509575ec45836cc9e2ce33b684c9da7422ea406ca0c64770ed3f2114f9e37"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Networking/FusionAiSimulationStepAdapter.cs",
+    "lines": 44,
+    "sha256": "65c1d62e8bc4175090e0b9843803131393c1edf150ee362557ad4436cef5d627"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Networking/FusionPlayerIdentityRegistry.cs",
+    "lines": 129,
+    "sha256": "5dc9b8ecdbb65aa84527e81b41fbe33473fd291285ed0a4923879133e5be59f6"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Networking/FusionPlayerLifecycle.cs",
+    "lines": 393,
+    "sha256": "aa6f21f5947df5f972f9034600b5d6d38b6a9680e7dedb0db3b802a94b877595"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Networking/NetworkPlayerHealth.cs",
+    "lines": 59,
+    "sha256": "53dcb2047b42e5218b3211e20ccb56d4fc732fc56891c59dd1e318d274b57a92"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/NetworkTeamToolHeldView.cs",
+    "lines": 232,
+    "sha256": "f44ef9c9918ed81f1ff8aafe532ea35044251700be292e49616dc7b836e1c90c"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerAnimatorDriver.cs",
+    "lines": 199,
+    "sha256": "7652bcc46eb47be1baa5e5ac6d6f207d6554722771f64b15389a4925b66cc9e9"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerCamera.cs",
+    "lines": 307,
+    "sha256": "5953831555761e618ed8c5bc1f1a371b9c2e93709f1beb2c0e0d593f0ef9cdf4"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerDownState.cs",
+    "lines": 334,
+    "sha256": "67e1b803d92f6b2286537877b821cc303914696b0eeae5f9c19a4b2368f604eb"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerFirstPersonVisibility.cs",
+    "lines": 181,
+    "sha256": "f25074cc21192f19aeec5dbb8b9b234fb2db6187a712fb4468c068706847fd4c"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerFirstPersonWristCuffs.cs",
+    "lines": 122,
+    "sha256": "8bce9566e1aa3a4a7729a3ec71e9265e0e531371a8c3dc7fd7d785939bcf69dd"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerFlashlight.cs",
+    "lines": 146,
+    "sha256": "946339c0b010f1a7c969a1235530c19e8ad3ab96e85a5069e8a908a3bd5fd610"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerHeldItemAnchor.cs",
+    "lines": 186,
+    "sha256": "470dff585c624533f9fb43d25ba94b609df0e793701a8b55dcd0a61cbab8d6ae"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerHeldItemView.cs",
+    "lines": 225,
+    "sha256": "0cfbda8cbbcc564b57b79a6df937d177328e55f4426f63b8cfa5b901d249db18"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerLifeState.cs",
+    "lines": 7,
+    "sha256": "b75750125b1cbc8e630ae1363d58a07dbc2c7edef1d2873ef6a0e18e833cfd8d"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerMovement.cs",
+    "lines": 195,
+    "sha256": "1200ccb95cb4b66bf8a0be3f8a3f2b72c399cd3216d31634506171d7d206498a"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerReviveInteractable.cs",
+    "lines": 171,
+    "sha256": "49e0e4326aecbcc6a4008ece3bfdf0978d5018a60a67ebf7ea2339452f2626e5"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerRuntimeEntityRegistry.cs",
+    "lines": 209,
+    "sha256": "6937922c6b458b5efb2b43b124bf6c8438c852783f6c9dac121bd0b6a29357eb"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerRuntimeIdentity.cs",
+    "lines": 53,
+    "sha256": "a4ad92466129edf8051f38a8de5ef4139a58677964255a8b43bb336749181bf5"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerSpectateController.cs",
+    "lines": 74,
+    "sha256": "bacdb2896829695f4bdf5b39cd32b186d484993d10f55f4a83db76dd502e6e1d"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Player/PlayerUpperBodyAim.cs",
+    "lines": 202,
+    "sha256": "e8da333d3247bf932fc219f155b43367d292fa0f48950d6f2efa76f6f4b51bb6"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/PowerPuzzle/PowerPuzzleController.cs",
+    "lines": 306,
+    "sha256": "82feae976dbbfd79f7eea15156064290280c7b3559feaf798e0b99fbb4cb82c4"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/PowerPuzzle/PowerPuzzleStation.cs",
+    "lines": 64,
+    "sha256": "0e4bfdf70cae0b7d37e7169cfae67a0d7da76252f9d4df700d9ac6a7c457b013"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/PowerPuzzle/PowerPuzzleStationType.cs",
+    "lines": 5,
+    "sha256": "7c20f691d36492e4280db020d47f141f35341c3101cd76d0b38a59bab99aae9d"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Security/SecurityDownloadState.cs",
+    "lines": 7,
+    "sha256": "70883e16a15b2488e6b9859f644ce528216d8cd2717a6066e640d58bf373cc98"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Security/SecurityTerminalDownload.cs",
+    "lines": 285,
+    "sha256": "68986abab6ca9c3b97b8e84d5dce910defc8b77b8816b46e0cb5ae97b6d9ddca"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Telemetry/Core/TelemetryBatchSender.cs",
+    "lines": 114,
+    "sha256": "a0fb64265b36c1aa5e626154c7d15de58ff8bf3887e6e0e221bfe169353bf383"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Telemetry/Core/TelemetryBuffer.cs",
+    "lines": 295,
+    "sha256": "71cf5765bd9e1438407048c2526e3542dc66e87a293391614540a3a4e1264f18"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Telemetry/Core/TelemetryContracts.cs",
+    "lines": 218,
+    "sha256": "8caf0391f6bd2cb526d7e8bb377a3209d233f8957884657ff5a3ede04584b80f"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Telemetry/Core/TelemetryEventFactory.cs",
+    "lines": 257,
+    "sha256": "dec742a356ce6d301fcfdef18cc852e3fa33c31f910616edc4baeefb4ac1b0db"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Telemetry/Core/TelemetryFileLocalLog.cs",
+    "lines": 57,
+    "sha256": "49670552e2e944b5728c605688292546880789eeceecc44db978280e35ac841a"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Telemetry/Core/TelemetryJson.cs",
+    "lines": 229,
+    "sha256": "e536e19876dd999d944b21abfdd7b785c6ccc63b9866b32dc6006377e5a85519"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Telemetry/Core/TelemetryProductionAdapters.cs",
+    "lines": 600,
+    "sha256": "aff25862c855c7fbe203f7f7de3f2b713720e1040eee5c6d653e9cff572f6148"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Telemetry/Core/TelemetrySequenceAllocator.cs",
+    "lines": 61,
+    "sha256": "00f486cf94a60946d0225350dba9366303fc7b8b5a2009d32a0861561a8c9e9a"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Telemetry/Harness/TelemetryAcceptanceHarnessBehaviour.cs",
+    "lines": 183,
+    "sha256": "20a72c236acd0c3876b35e1261fb774f310d616c8ff8419fabebc306b72d9b63"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Telemetry/Unity/TelemetryApiTransport.cs",
+    "lines": 110,
+    "sha256": "e61e214c19fd81c9f78a7e64acc3b3eb2f2dc4ba9506eb8266b4b00cce7255f8"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/Telemetry/Unity/TelemetryRuntimeBehaviour.cs",
+    "lines": 195,
+    "sha256": "4b604ad0484a457130b0faf7acc2f917b8921a38fe5b9a2615b13fb82df63531"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/UI/Auth/AuthScreenController.cs",
+    "lines": 391,
+    "sha256": "7857ee662368598640fd4672117265bec762b090cfe6b83ece7ecfffa474979b"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/UI/Debug/GameplayDebugHUD.cs",
+    "lines": 163,
+    "sha256": "1792a6c7ae547539b5a972c227f6959bbae97c26fdbbccaf6ce19a8825ae8d75"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/UI/HUD/GameplayHUDManager.cs",
+    "lines": 94,
+    "sha256": "402e2017ad994c5fa1e479fcbde68527f3052d19aa81cde92fb22e3ffc51dc4a"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/UI/HUD/HUD3DWorldMarker.cs",
+    "lines": 223,
+    "sha256": "8ef46bafbaa5a5ea3e98c617c1c7616696a742b3be4b0d6897734c34e96a8039"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/UI/HUD/HUDHotbar.cs",
+    "lines": 212,
+    "sha256": "576adf7e8f54e6820d477876bddf63f891b2c4f3d11a9c6399432e793eba66c3"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/UI/HUD/HUDInteractionPrompt.cs",
+    "lines": 200,
+    "sha256": "2d968455c9cb62085fcf9c804ff657a412dbe2710f3b7d6bb57fcdb3ed67fa83"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/UI/HUD/HUDObjectiveTracker.cs",
+    "lines": 199,
+    "sha256": "8e1eef29622cc3034fd589312522d55771229aa9d33bebd56d4251450df34d6e"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/UI/HUD/HUDPlayerVitals.cs",
+    "lines": 229,
+    "sha256": "bfceeb071e7e6720cfa29d4e6740c6990875f2da8e2ab1b26c447413b47cb44d"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/UI/HUD/HUDTeammateStatus.cs",
+    "lines": 325,
+    "sha256": "22274c49c508f8c1e0e016ecba31b8cef53f3e292bb3a557db77716983514fe5"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/UI/HUD/HUDTextureUtility.cs",
+    "lines": 235,
+    "sha256": "850114473552c4e78ff31c08d954d39d2e03805b3e156c5d582f06f3fedd3bda"
+  },
+  {
+    "file": "KLTN/Assets/Scripts/UI/MainMenu/MainMenuProfileController.cs",
+    "lines": 88,
+    "sha256": "04313637c3fb7cb34ed6276507bc87c87199f8b8133a6c4071cabc5d4b87e0b5"
+  }
+]
