@@ -134,6 +134,19 @@ namespace EchoProtocol.Networking
             if (!Object.HasInputAuthority) return false;
             var playerState = GetComponent<LobbyPlayerState>();
             if (playerState != null && playerState.CarriedCoreId.IsValid) return false;
+            var scanner = GetComponent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>();
+            if (scanner != null && scanner.IsScannerEquipped())
+            {
+                return scanner.RequestScan();
+            }
+
+            if (playerState != null && playerState.ToolId == 1)
+            {
+                if (scanner != null)
+                {
+                    return scanner.RequestScan();
+                }
+            }
             RpcRequestUseTeamTool(NextSequence());
             return true;
         }

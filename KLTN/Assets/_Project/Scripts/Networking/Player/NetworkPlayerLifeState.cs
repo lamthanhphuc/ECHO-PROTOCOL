@@ -115,18 +115,20 @@ namespace EchoProtocol.Networking
         private PlayerDownState _legacyDownState;
         private PlayerReviveInteractable _legacyReviveInteractable;
 
-        public bool CanBeRevived => NetworkPlayerLifeStateRules.CanRevive(
+        public bool CanBeRevived => (Object != null && Object.IsValid) && NetworkPlayerLifeStateRules.CanRevive(
             Status,
             ReviveCount,
             _maximumRevives);
 
-        public bool CanMove => NetworkPlayerLifeStateRules.CanMove(Status);
-        public bool CanInitiateAction => NetworkPlayerLifeStateRules.CanInitiateAction(Status);
-        public bool IsDowned => Status == NetworkPlayerLifeStatus.Downed;
+        public bool CanMove => (Object == null || !Object.IsValid) || NetworkPlayerLifeStateRules.CanMove(Status);
+        public bool CanInitiateAction => (Object == null || !Object.IsValid) || NetworkPlayerLifeStateRules.CanInitiateAction(Status);
+        public bool IsDowned => (Object != null && Object.IsValid) && Status == NetworkPlayerLifeStatus.Downed;
         public bool IsReviveInProgress => IsDowned && Reviver.IsValid && ReviveTimer.IsRunning;
-        public bool HasReviveProtection => Status == NetworkPlayerLifeStatus.Alive
+        public bool HasReviveProtection => (Object != null && Object.IsValid)
+                                           && Status == NetworkPlayerLifeStatus.Alive
                                            && ReviveProtectionRemaining > 0f;
-        public bool IsMatchActive => Status == NetworkPlayerLifeStatus.Alive
+        public bool IsMatchActive => (Object == null || !Object.IsValid)
+                                     || Status == NetworkPlayerLifeStatus.Alive
                                      || IsDowned;
         public float MovementSpeedMultiplier => IsDowned ? _crawlSpeedMultiplier : 1f;
         public float BleedoutRemaining => Remaining(BleedoutTimer);

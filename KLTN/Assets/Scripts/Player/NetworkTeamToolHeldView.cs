@@ -18,6 +18,13 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
     [SerializeField] private Vector3 localPosition = new Vector3(0.04f, 0.02f, 0.12f);
     [SerializeField] private Vector3 localEulerAngles = new Vector3(0f, 90f, -18f);
     [SerializeField] private Vector3 localScale = new Vector3(0.12f, 0.22f, 0.34f);
+    [Header("Field Scanner Transform")]
+    [SerializeField] private Vector3 fieldScannerLocalPosition = new Vector3(-0.003f, 0.291f, 0.118f);
+    [SerializeField] private Vector3 fieldScannerLocalEulerAngles = new Vector3(184.192f, 99.672f, -5.550995f);
+    [SerializeField] private Vector3 fieldScannerLocalScale = new Vector3(3f, 3f, 3f);
+    [SerializeField] private Vector3 fieldScannerChildLocalPosition = new Vector3(0f, 0.04f, 0f);
+    [SerializeField] private Vector3 fieldScannerChildLocalEulerAngles = Vector3.zero;
+    [SerializeField] private Vector3 fieldScannerChildLocalScale = Vector3.one;
     [SerializeField] private Vector3 noiseMakerLocalPosition = new Vector3(0.018f, 0.132f, -0.065f);
     [SerializeField] private Vector3 noiseMakerLocalEulerAngles = new Vector3(6.176f, 93.2f, 94.562f);
     [SerializeField] private Vector3 noiseMakerLocalScale = new Vector3(0.7f, 0.7f, 0.7f);
@@ -111,7 +118,21 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             foreach (var col in _visual.GetComponentsInChildren<Collider>())
                 col.enabled = false;
 
-            if (_shownToolId == 3)
+            if (_shownToolId == 1)
+            {
+                Transform childVisual = _visual.transform.Find("Visual");
+                if (childVisual == null && _visual.transform.childCount > 0)
+                {
+                    childVisual = _visual.transform.GetChild(0);
+                }
+                if (childVisual != null)
+                {
+                    childVisual.localPosition = fieldScannerChildLocalPosition;
+                    childVisual.localRotation = Quaternion.Euler(fieldScannerChildLocalEulerAngles);
+                    childVisual.localScale = fieldScannerChildLocalScale;
+                }
+            }
+            else if (_shownToolId == 3)
             {
                 Transform childVisual = _visual.transform.Find("Visual");
                 if (childVisual == null && _visual.transform.childCount > 0)
@@ -164,6 +185,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
     {
         switch (toolId)
         {
+            case 1: return fieldScannerLocalPosition;
             case 2: return noiseMakerLocalPosition;
             case 3: return firstAidLocalPosition;
             default: return localPosition;
@@ -174,6 +196,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
     {
         switch (toolId)
         {
+            case 1: return fieldScannerLocalEulerAngles;
             case 2: return noiseMakerLocalEulerAngles;
             case 3: return firstAidLocalEulerAngles;
             default: return localEulerAngles;
@@ -184,6 +207,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
     {
         switch (toolId)
         {
+            case 1: return fieldScannerLocalScale;
             case 2: return noiseMakerLocalScale;
             case 3: return firstAidLocalScale;
             default: return localScale;

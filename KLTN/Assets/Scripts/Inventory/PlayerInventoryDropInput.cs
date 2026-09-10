@@ -163,6 +163,15 @@ public class PlayerInventoryDropInput : MonoBehaviour
             return true;
         }
 
+        if (toolId.Contains("scan") || toolName.Contains("scan"))
+        {
+            var scanner = GetComponentInParent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>();
+            if (scanner != null)
+            {
+                return scanner.RequestScan();
+            }
+        }
+
         return false;
     }
 

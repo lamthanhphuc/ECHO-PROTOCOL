@@ -287,7 +287,7 @@ public class PlayerInventory : MonoBehaviour
         if (id.Contains("first") || name.Contains("first")) return 3;
         if (id.Contains("noise") || id.Contains("beacon") || name.Contains("noise") || name.Contains("beacon")) return 2;
         if (id.Contains("jammer") || name.Contains("jammer")) return 4;
-        if (id.Contains("hack") || name.Contains("hack")) return 1;
+        if (id.Contains("scan") || name.Contains("scan") || id.Contains("hack") || name.Contains("hack")) return 1;
         return 0;
     }
 }
