@@ -290,7 +290,6 @@ namespace EchoProtocol.UI.Debugging
 
             var localMember = GetLocalMember();
             var selectedTeam = localMember?.TeamId ?? 0;
-            var selectedTool = localMember?.ToolId ?? 0;
 
             GUILayout.Space(8);
             GUILayout.Label("Team");
@@ -303,22 +302,6 @@ namespace EchoProtocol.UI.Debugging
                 if (GUILayout.Button(label)) _lobbyManager.RequestTeam(capturedId);
             }
             GUILayout.EndHorizontal();
-
-            GUILayout.Label("Tool");
-            if (GUILayout.Button(selectedTool == 0 ? "[None]" : "None")) _lobbyManager.RequestTool(0);
-            foreach (var tool in playerState.ToolDefinitions)
-            {
-                if (tool == null) continue;
-                var claimedByOther = tool.IsUnique && IsToolClaimedByOther(tool.Id);
-                var label = tool.DisplayName;
-                if (selectedTool == tool.Id) label = $"[{label}]";
-                else if (claimedByOther) label = $"{label} (Taken)";
-
-                using (new GUIEnabledScope(!claimedByOther))
-                {
-                    if (GUILayout.Button(label)) _lobbyManager.RequestTool(tool.Id);
-                }
-            }
         }
 
         private LobbyMemberViewModel GetLocalMember()

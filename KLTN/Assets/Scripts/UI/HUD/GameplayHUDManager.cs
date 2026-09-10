@@ -12,6 +12,7 @@ namespace EchoProtocol.UI.HUD
         [SerializeField] private HUDHotbar hotbar;
         [SerializeField] private HUDTeammateStatus teammateStatus;
         [SerializeField] private HUD3DWorldMarker worldMarker;
+        [SerializeField] private HUDFieldScanner fieldScannerHUD;
 
         [Header("Runtime Auto-Find")]
         [SerializeField] private bool autoFindLocalPlayerOnStart = true;
@@ -22,6 +23,7 @@ namespace EchoProtocol.UI.HUD
         public HUDHotbar Hotbar => hotbar;
         public HUDTeammateStatus TeammateStatus => teammateStatus;
         public HUD3DWorldMarker WorldMarker => worldMarker;
+        public HUDFieldScanner FieldScannerHUD => fieldScannerHUD;
 
         private void Awake()
         {
@@ -44,6 +46,7 @@ namespace EchoProtocol.UI.HUD
             if (hotbar == null) hotbar = GetComponentInChildren<HUDHotbar>(true);
             if (teammateStatus == null) teammateStatus = GetComponentInChildren<HUDTeammateStatus>(true);
             if (worldMarker == null) worldMarker = GetComponentInChildren<HUD3DWorldMarker>(true);
+            if (fieldScannerHUD == null) fieldScannerHUD = GetComponentInChildren<HUDFieldScanner>(true);
         }
 
         public void FindAndBindLocalPlayer()

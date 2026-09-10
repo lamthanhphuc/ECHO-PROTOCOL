@@ -113,6 +113,9 @@ namespace EchoProtocol.EditorTools
             // 6. 3D World Markers (Full Screen Overlay)
             HUD3DWorldMarker markers = Create3DWorldMarkers(canvasGo.transform);
 
+            // 7. Field Scanner Tactical HUD (Middle-Right)
+            HUDFieldScanner scannerHud = HUDFieldScanner.CreateDefaultScreenHUD(canvasGo.transform);
+
             // Wire up manager
             var managerSo = new SerializedObject(manager);
             managerSo.FindProperty("interactionPrompt").objectReferenceValue = prompt;
@@ -121,7 +124,12 @@ namespace EchoProtocol.EditorTools
             managerSo.FindProperty("hotbar").objectReferenceValue = hotbar;
             managerSo.FindProperty("teammateStatus").objectReferenceValue = teammates;
             managerSo.FindProperty("worldMarker").objectReferenceValue = markers;
+            managerSo.FindProperty("fieldScannerHUD").objectReferenceValue = scannerHud;
             managerSo.ApplyModifiedProperties();
+
+            // Save Resources copy of Field Scanner HUD for standalone scene fallback
+            if (!Directory.Exists("Assets/Resources")) Directory.CreateDirectory("Assets/Resources");
+            PrefabUtility.SaveAsPrefabAsset(scannerHud.gameObject, "Assets/Resources/PF_FieldScanner_HUD.prefab");
 
             // Save Prefab
             string prefabDir = "Assets/Prefabs/UI";
