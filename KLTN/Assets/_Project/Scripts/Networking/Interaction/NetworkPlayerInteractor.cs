@@ -147,7 +147,16 @@ namespace EchoProtocol.Networking
                     return scanner.RequestScan();
                 }
             }
-            RpcRequestUseTeamTool(NextSequence());
+
+            var targetId = default(NetworkId);
+            if (playerState != null
+                && playerState.ToolId == 4
+                && TryDetectLocalDoorJammerTargetIntent(out var doorTargetId))
+            {
+                targetId = doorTargetId;
+            }
+
+            RpcRequestUseTeamTool(NextSequence(), targetId);
             return true;
         }
 
@@ -212,6 +221,30 @@ namespace EchoProtocol.Networking
 
             lifeState = null;
             return false;
+        }
+
+        private bool TryDetectLocalDoorJammerTargetIntent(out NetworkId targetId)
+        {
+            targetId = default;
+            var ray = GetLocalDetectionRay();
+            if (!Physics.Raycast(
+                    ray,
+                    out var hit,
+                    _localDetectionDistance,
+                    _interactionLayers,
+                    QueryTriggerInteraction.Collide))
+            {
+                return false;
+            }
+
+            var door = hit.collider.GetComponentInParent<NetworkSlidingDoor>();
+            if (door == null || door.Object == null || !door.Object.Id.IsValid)
+            {
+                return false;
+            }
+
+            targetId = door.Object.Id;
+            return true;
         }
 
         private Ray GetLocalDetectionRay()
@@ -310,7 +343,7 @@ namespace EchoProtocol.Networking
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-        private void RpcRequestUseTeamTool(uint sequence, RpcInfo info = default)
+        private void RpcRequestUseTeamTool(uint sequence, NetworkId targetId, RpcInfo info = default)
         {
             if (!TryResolveRequester(info.Source, out var requester)
                 || ValidateRequester(requester, sequence) != InteractionValidationResult.Accepted)
@@ -329,6 +362,14 @@ namespace EchoProtocol.Networking
                 var toolType = ToolTypeFor(state.ToolId);
                 if (toolType != null)
                 {
+                    if (toolType == "DOOR_JAMMER")
+                    {
+                        var jammerResult = TryDeployDoorJammerAuthoritative(requester, state, targetId);
+                        if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+                        RpcInteractionResult(requester, targetId, sequence, (int)jammerResult);
+                        return;
+                    }
+
                     TeamToolOrdinal++;
                     MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
                         requester,
@@ -383,17 +424,183 @@ namespace EchoProtocol.Networking
                         }
 
                         // Consumes tool from player state & inventory
-                        state.SetGameplayToolId(0);
-                        var inv = GetComponent<PlayerInventory>();
-                        if (inv != null && inv.TeamToolSlot != null)
-                        {
-                            inv.TryRemove(inv.TeamToolSlot);
-                        }
+                        ConsumeGameplayTeamTool(state);
                     }
                 }
             }
 
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+        }
+
+        private InteractionValidationResult TryDeployDoorJammerAuthoritative(
+            PlayerRef requester,
+            LobbyPlayerState state,
+            NetworkId targetId)
+        {
+            if (!Object.HasStateAuthority || state == null || state.ToolId != 4)
+            {
+                return InteractionValidationResult.InvalidRequester;
+            }
+
+            var targetResult = TryResolveDoorJammerTargetAuthoritative(targetId, out var door);
+            if (targetResult != InteractionValidationResult.Accepted)
+            {
+                return targetResult;
+            }
+
+            if (!door.CanAcceptJammer())
+            {
+                return InteractionValidationResult.InvalidTargetState;
+            }
+
+            var prefab = door.DoorJammerPrefab != null
+                ? door.DoorJammerPrefab
+                : Resources.Load<NetworkObject>("Network/PF_DoorJammer");
+            if (prefab == null || Runner == null)
+            {
+                return InteractionValidationResult.InvalidTarget;
+            }
+
+            door.TryGetJammerPlacement(out var position, out var rotation);
+            var jammerObject = Runner.Spawn(prefab, position, rotation);
+            if (jammerObject == null || !jammerObject.TryGetComponent<NetworkDoorJammer>(out var jammer))
+            {
+                if (jammerObject != null)
+                {
+                    Runner.Despawn(jammerObject);
+                }
+
+                return InteractionValidationResult.InvalidTarget;
+            }
+
+            if (!door.TryAttachJammerAuthoritative(jammer))
+            {
+                Runner.Despawn(jammerObject);
+                return InteractionValidationResult.InvalidTargetState;
+            }
+
+            TeamToolOrdinal++;
+            MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
+                requester,
+                $"player:{Object.Id}:tool:{TeamToolOrdinal}",
+                "DOOR_JAMMER");
+            TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 5f);
+            ConsumeGameplayTeamTool(state);
+            return InteractionValidationResult.Accepted;
+        }
+
+        private InteractionValidationResult TryResolveDoorJammerTargetAuthoritative(
+            NetworkId targetId,
+            out NetworkSlidingDoor door)
+        {
+            door = null;
+            if (Runner == null
+                || !targetId.IsValid
+                || !Runner.TryFindObject(targetId, out var targetObject)
+                || targetObject == null
+                || !targetObject.TryGetComponent(out door))
+            {
+                return InteractionValidationResult.InvalidTarget;
+            }
+
+            if (!IsDoorJammerTargetInAuthoritativeRange(door))
+            {
+                return InteractionValidationResult.OutOfRange;
+            }
+
+            return HasUnobstructedDoorJammerInteraction(door)
+                ? InteractionValidationResult.Accepted
+                : InteractionValidationResult.InvalidTarget;
+        }
+
+        private bool IsDoorJammerTargetInAuthoritativeRange(NetworkSlidingDoor door)
+        {
+            var playerPosition = transform.position;
+            var targetPoint = GetClosestDoorInteractionPoint(door, playerPosition);
+            return Vector3.SqrMagnitude(targetPoint - playerPosition)
+                   <= _localDetectionDistance * _localDetectionDistance;
+        }
+
+        private bool HasUnobstructedDoorJammerInteraction(NetworkSlidingDoor door)
+        {
+            var origin = GetAuthoritativeInteractionOrigin();
+            var targetPoint = GetClosestDoorInteractionPoint(door, origin);
+            var direction = targetPoint - origin;
+            var distance = direction.magnitude;
+            if (distance <= Mathf.Epsilon)
+            {
+                return true;
+            }
+
+            var hits = Physics.RaycastAll(
+                origin,
+                direction / distance,
+                distance,
+                _interactionLayers,
+                QueryTriggerInteraction.Collide);
+            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+            for (var i = 0; i < hits.Length; i++)
+            {
+                var hitCollider = hits[i].collider;
+                if (hitCollider == null || IsSelfCollider(hitCollider))
+                {
+                    continue;
+                }
+
+                return hitCollider.GetComponentInParent<NetworkSlidingDoor>() == door;
+            }
+
+            return true;
+        }
+
+        private Vector3 GetAuthoritativeInteractionOrigin()
+        {
+            return _rayOrigin != null
+                ? _rayOrigin.position
+                : transform.position + Vector3.up * 1.5f;
+        }
+
+        private Vector3 GetClosestDoorInteractionPoint(NetworkSlidingDoor door, Vector3 origin)
+        {
+            var colliders = door.GetComponentsInChildren<Collider>(true);
+            var hasCollider = false;
+            var closestPoint = door.transform.position;
+            var closestDistance = float.PositiveInfinity;
+            for (var i = 0; i < colliders.Length; i++)
+            {
+                var collider = colliders[i];
+                if (collider == null || collider.isTrigger)
+                {
+                    continue;
+                }
+
+                var point = collider.ClosestPoint(origin);
+                var distance = Vector3.SqrMagnitude(point - origin);
+                if (!hasCollider || distance < closestDistance)
+                {
+                    hasCollider = true;
+                    closestDistance = distance;
+                    closestPoint = point;
+                }
+            }
+
+            return closestPoint;
+        }
+
+        private bool IsSelfCollider(Collider candidate)
+        {
+            return candidate.transform == transform || candidate.transform.IsChildOf(transform);
+        }
+
+        private void ConsumeGameplayTeamTool(LobbyPlayerState state)
+        {
+            state.SetGameplayToolId(0);
+            var inv = GetComponent<PlayerInventory>();
+            if (inv != null && inv.TeamToolSlot != null)
+            {
+                inv.TryRemove(inv.TeamToolSlot);
+            }
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]

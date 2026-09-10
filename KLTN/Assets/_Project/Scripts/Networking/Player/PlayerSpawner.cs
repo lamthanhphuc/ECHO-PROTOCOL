@@ -172,8 +172,22 @@ namespace EchoProtocol.Networking
             EnsurePowerPuzzle(runner);
             if (_monsterInstance == null && _monsterPrefab != null)
             {
-                _monsterInstance = runner.Spawn(_monsterPrefab, new Vector3(0f, 0f, 8f), Quaternion.identity);
-                Debug.Log($"[PlayerSpawner] Spawned host-authoritative monster {_monsterInstance.Id}.");
+                var stalkerSpawn = GameObject.Find("MonsterSpawn_Stalker_EMPTY");
+                var spawnPosition = stalkerSpawn != null
+                    ? stalkerSpawn.transform.position
+                    : new Vector3(0f, 0f, 8f);
+                var spawnRotation = stalkerSpawn != null
+                    ? stalkerSpawn.transform.rotation
+                    : Quaternion.identity;
+
+                _monsterInstance = runner.Spawn(
+                    _monsterPrefab,
+                    spawnPosition,
+                    spawnRotation);
+
+                Debug.Log(
+                    $"[PlayerSpawner] Spawned host-authoritative monster {_monsterInstance.Id} " +
+                    $"at {spawnPosition} markerFound={stalkerSpawn != null}.");
             }
             BindAuthoritativeWorldState();
         }

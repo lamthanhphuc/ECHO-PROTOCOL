@@ -3,6 +3,8 @@ using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Common.Spatial;
 using EchoProtocol.AI.Stalker.Spatial;
 using EchoProtocol.AI.Stalker.Telemetry;
+using EchoProtocol.Networking;
+using Fusion;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -59,6 +61,11 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float attackRecovery = 1f;
         [SerializeField] private float attackDamage = 100f;
 
+        [Header("World Interaction")]
+        [SerializeField, Min(0.1f)] private float worldInteractionDistance = 1.75f;
+        [SerializeField, Min(0.01f)] private float stalkerDoorBreakDurationSeconds = 3f;
+        [SerializeField, Min(0.01f)] private float worldInteractionProbeRadius = 0.35f;
+
         [Header("Debug Runtime")]
         [SerializeField] private StalkerState currentState = StalkerState.PATROL;
         [SerializeField] private float detectionMeter;
@@ -105,6 +112,7 @@ namespace EchoProtocol.AI.Stalker
         private RoomSweepGlobalPlanner _roomSweepGlobalPlanner;
         private StalkerSearchPlanner _searchPlanner;
         private StalkerSearchContext _searchContext;
+        private readonly StalkerWorldInteractionDriver _worldInteractionDriver = new StalkerWorldInteractionDriver();
         private int _currentPatrolIndex;
         private bool _spatialPatrolInitializationAttempted;
         private bool _dynamicPatrolFallbackActive;
@@ -192,6 +200,9 @@ namespace EchoProtocol.AI.Stalker
         public NavigationRecoveryReason RecoveryReason => _navigation?.CurrentRecoveryReason ?? NavigationRecoveryReason.None;
         public NavigationPathStatus NavigationPathStatus => _navigation?.GetPathStatus() ?? NavigationPathStatus.AgentUnavailable;
         public NavigationExecutionStatus NavigationExecutionStatus => _navigation?.GetExecutionStatus() ?? NavigationExecutionStatus.Failed;
+        public StalkerWorldInteractionKind CurrentWorldInteractionKind => _worldInteractionDriver.CurrentKind;
+        public float WorldInteractionProgress01 => _worldInteractionDriver.InteractionProgress01;
+        public Component CurrentWorldInteractionBlocker => _worldInteractionDriver.CurrentBlocker;
         public IPlayerAttackConsequenceSink AttackConsequenceSink { get; set; }
         public bool SuppressLegacyUpdateSimulation { get; set; }
 
@@ -331,6 +342,11 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickCurrentState()
         {
+            if (TickWorldInteraction())
+            {
+                return;
+            }
+
             switch (currentState)
             {
                 case StalkerState.PATROL:
@@ -1742,6 +1758,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void StopAgentPath()
         {
+            CancelWorldInteraction("stop-agent-path");
             ClearRoomSweepSelfProbeScan();
             ResetChaseDestinationTracking();
             ClearNavigationObjective();
@@ -1777,6 +1794,11 @@ namespace EchoProtocol.AI.Stalker
                 $"currentNode={_blackboard.CurrentSpatialNodeId} " +
                 $"destinationNode={_blackboard.DestinationSpatialNodeId} " +
                 $"position={transform.position}");
+
+            if (TryBeginWorldInteractionForCurrentNavigation(failureReason))
+            {
+                return;
+            }
 
             if (currentState == StalkerState.SEARCH)
             {
@@ -3923,6 +3945,210 @@ namespace EchoProtocol.AI.Stalker
         private bool CanUseNavigation()
         {
             return _navigation != null && _navigation.IsUsable;
+        }
+
+        private bool TryBeginWorldInteractionForCurrentNavigation(NavigationFailureReason failureReason)
+        {
+            if (_worldInteractionDriver.HasActiveInteraction
+                || !_navigationObjectiveKey.IsValid
+                || !IsLocomotionState()
+                || !CanRunWorldInteractionAuthority())
+            {
+                return false;
+            }
+
+            if (failureReason != NavigationFailureReason.DoorBlocked
+                && !IsNavigationExecutionRetryableFailure(failureReason))
+            {
+                return false;
+            }
+
+            if (!TryFindCurrentWorldInteractionBlocker(out var blocker))
+            {
+                return false;
+            }
+
+            var result = _worldInteractionDriver.TryBegin(
+                blocker,
+                _navigationObjectiveKey,
+                currentState,
+                true,
+                stalkerDoorBreakDurationSeconds);
+
+            if (result == StalkerWorldInteractionStartResult.NotHandled
+                || result == StalkerWorldInteractionStartResult.AuthorityRejected)
+            {
+                return false;
+            }
+
+            UnityEngine.Debug.Log(
+                $"[STK WORLD INTERACTION DIAG] blocker-detected result={result} " +
+                $"kind={_worldInteractionDriver.CurrentKind} " +
+                $"blocker={blocker.name} objectiveKind={_navigationObjectiveKey.Kind} " +
+                $"destinationNode={_blackboard.DestinationSpatialNodeId}");
+
+            _navigation?.Stop();
+            if (result == StalkerWorldInteractionStartResult.Completed)
+            {
+                ResumeCurrentNavigationObjectiveAfterWorldInteraction("immediate-complete");
+            }
+
+            return true;
+        }
+
+        private bool TickWorldInteraction()
+        {
+            if (!_worldInteractionDriver.HasActiveInteraction)
+            {
+                return false;
+            }
+
+            if (!IsLocomotionState()
+                || !_navigationObjectiveKey.Equals(_worldInteractionDriver.ObjectiveKey)
+                || currentState != _worldInteractionDriver.State)
+            {
+                CancelWorldInteraction("objective-or-state-changed");
+                return false;
+            }
+
+            if (!_worldInteractionDriver.Tick(
+                    CurrentSimulationDeltaSeconds,
+                    CanRunWorldInteractionAuthority(),
+                    out var completed))
+            {
+                UnityEngine.Debug.Log(
+                    $"[STK WORLD INTERACTION DIAG] cancelled kind={_worldInteractionDriver.CurrentKind} " +
+                    $"reason=driver-cancelled objectiveKind={_navigationObjectiveKey.Kind}");
+                return false;
+            }
+
+            if (!completed)
+            {
+                return true;
+            }
+
+            ResumeCurrentNavigationObjectiveAfterWorldInteraction("completed");
+            return true;
+        }
+
+        private void CancelWorldInteraction(string reason)
+        {
+            if (!_worldInteractionDriver.HasActiveInteraction)
+            {
+                return;
+            }
+
+            var kind = _worldInteractionDriver.CurrentKind;
+            _worldInteractionDriver.Cancel();
+            UnityEngine.Debug.Log(
+                $"[STK WORLD INTERACTION DIAG] cancelled kind={kind} reason={reason}");
+        }
+
+        private void ResumeCurrentNavigationObjectiveAfterWorldInteraction(string reason)
+        {
+            UnityEngine.Debug.Log(
+                $"[STK WORLD INTERACTION DIAG] resume-same-objective reason={reason} " +
+                $"objectiveKind={_navigationObjectiveKey.Kind} destinationNode={_blackboard.DestinationSpatialNodeId}");
+
+            if (!TryGetCurrentNavigationRecoveryDestination(out var destination))
+            {
+                return;
+            }
+
+            _navigation?.RequestDestination(destination, NavigationRequestIntent.NewGoal);
+        }
+
+        private bool TryFindCurrentWorldInteractionBlocker(out Component blocker)
+        {
+            blocker = null;
+            var origin = transform.position + Vector3.up * 0.8f;
+            if (!TryGetCurrentWorldInteractionDirection(origin, out var direction, out var maxDistance))
+            {
+                return false;
+            }
+
+            var hits = Physics.SphereCastAll(
+                origin,
+                Mathf.Max(0.01f, worldInteractionProbeRadius),
+                direction,
+                maxDistance,
+                ~0,
+                QueryTriggerInteraction.Collide);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+            for (var i = 0; i < hits.Length; i++)
+            {
+                var hitCollider = hits[i].collider;
+                if (hitCollider == null
+                    || hitCollider.isTrigger
+                    || hitCollider.transform == transform
+                    || hitCollider.transform.IsChildOf(transform))
+                {
+                    continue;
+                }
+
+                var jammer = hitCollider.GetComponentInParent<NetworkDoorJammer>();
+                if (jammer != null && jammer.IsActive)
+                {
+                    blocker = jammer;
+                    return true;
+                }
+
+                var door = hitCollider.GetComponentInParent<NetworkSlidingDoor>();
+                if (door != null && door.BlocksTraversal)
+                {
+                    blocker = door;
+                    return true;
+                }
+
+                return false;
+            }
+
+            return false;
+        }
+
+        private bool TryGetCurrentWorldInteractionDirection(
+            Vector3 origin,
+            out Vector3 direction,
+            out float maxDistance)
+        {
+            direction = default;
+            maxDistance = 0f;
+            if (_navigation != null
+                && _navigation.TryGetCurrentPathCorners(out var corners)
+                && corners != null
+                && corners.Length >= 2)
+            {
+                direction = corners[1] - origin;
+            }
+            else if (_navigation != null && _navigation.TryGetActiveDestination(out var destination))
+            {
+                direction = destination - origin;
+            }
+            else if (TryGetCurrentNavigationRecoveryDestination(out var recoveryDestination))
+            {
+                direction = recoveryDestination - origin;
+            }
+            else
+            {
+                return false;
+            }
+
+            var distance = direction.magnitude;
+            if (distance <= Mathf.Epsilon)
+            {
+                return false;
+            }
+
+            direction /= distance;
+            maxDistance = Mathf.Min(distance, Mathf.Max(0.1f, worldInteractionDistance));
+            return true;
+        }
+
+        private bool CanRunWorldInteractionAuthority()
+        {
+            var networkObject = GetComponent<NetworkObject>();
+            return networkObject == null || !networkObject.IsValid || networkObject.HasStateAuthority;
         }
     }
 }

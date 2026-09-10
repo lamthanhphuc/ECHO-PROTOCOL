@@ -37,13 +37,16 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                     _lastReport = FullStationRegionGraphAuthoringCore.DryRunActiveScene();
                 }
 
-                using (new EditorGUI.DisabledScope(_lastReport == null || !_lastReport.IsValid))
+                using (new EditorGUI.DisabledScope(_lastReport == null || !_lastReport.CanApplyAuthoring))
                 {
                     if (GUILayout.Button("Apply Authoring"))
                     {
                         _lastReport = FullStationRegionGraphAuthoringCore.ApplyAuthoringToActiveScene(_lastReport);
                     }
+                }
 
+                using (new EditorGUI.DisabledScope(_lastReport == null || !_lastReport.CanBakeRuntimeAsset))
+                {
                     if (GUILayout.Button("Bake Region Graph Asset"))
                     {
                         _lastReport = FullStationRegionGraphAuthoringCore.BakeAsset(AssetPath, _lastReport);
@@ -118,13 +121,13 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
 
         public static DryRunReport ApplyAuthoringToActiveScene(DryRunReport previousReport)
         {
-            if (previousReport == null || !previousReport.IsValid)
+            if (previousReport == null || !previousReport.CanApplyAuthoring)
             {
                 return previousReport;
             }
 
             var report = DryRunActiveScene();
-            if (!report.IsValid || !TryFindStalkerRegionsRoot(report, out var root))
+            if (!report.CanApplyAuthoring || !TryFindStalkerRegionsRoot(report, out var root))
             {
                 return report;
             }
@@ -151,7 +154,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
 
         public static DryRunReport BakeAsset(string assetPath, DryRunReport previousReport)
         {
-            if (previousReport == null || !previousReport.IsValid)
+            if (previousReport == null || !previousReport.CanBakeRuntimeAsset)
             {
                 return previousReport;
             }
@@ -165,7 +168,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
             }
 
             var report = DryRunActiveScene();
-            if (!report.IsValid)
+            if (!report.CanBakeRuntimeAsset)
             {
                 return report;
             }
@@ -2516,10 +2519,34 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                 && GeometryBakeDiagnostic.IsSuccess
                 && BakeDiagnostic.IsSuccess;
 
+            public bool CanApplyAuthoring => IsValid;
+
+            public bool CanBakeRuntimeAsset => SpatialGraph != null
+                && SpatialGraph.NodeCount > 0
+                && CompatibilityIdentity.IsValid
+                && RuntimeGraph != null
+                && RuntimeSemanticRegionCount > 0
+                && RuntimeNodeToRegion != null
+                && RuntimeNodeToRegion.Length == SpatialGraph.NodeCount
+                && RuntimeInvalidRegionIds.Count == 0
+                && RuntimeDuplicateRegionIds.Count == 0
+                && RuntimeDisconnectedRegionIds.Count == 0
+                && RuntimeSelfTransitionRegionIds.Count == 0
+                && RuntimeUnmappedNodeIds.Count == 0
+                && RuntimeDanglingNodeIds.Count == 0
+                && UnresolvedSources.Count == 0
+                && UnresolvedNodeIds.Count == 0
+                && UnresolvedComponents.Count == 0
+                && MultiplyMappedNodeIds.Count == 0
+                && BakeDiagnostic.IsSuccess;
+
             public string ToDisplayString()
             {
                 var lines = new List<string>
                 {
+                    $"Can apply geometry authoring: {CanApplyAuthoring}",
+                    $"Can bake runtime RegionGraph asset: {CanBakeRuntimeAsset}",
+                    $"Valid: {IsValid}",
                     $"Spatial graph node count: {SpatialNodeCount}",
                     $"Spatial graph compatibility identity: {CompatibilityIdentity}",
                     $"Connected component count: {ConnectedComponentCount}",
@@ -2622,7 +2649,6 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                 lines.Add($"runtime semantic adjacency edge count: {RuntimeEdges.Count}");
                 lines.Add($"Geometry bake diagnostic: {GeometryBakeDiagnostic.Failure}");
                 lines.Add($"Runtime semantic graph diagnostic: {BakeDiagnostic.Failure}");
-                lines.Add($"Valid: {IsValid}");
                 AppendSection(lines, "Errors", Errors);
                 AppendSection(lines, "Warnings", Warnings);
                 AppendSection(lines, "Messages", Messages);

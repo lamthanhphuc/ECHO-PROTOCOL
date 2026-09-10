@@ -186,10 +186,10 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             return Failure<MatchAuthorityResponse>(authorityFailure.Value.Message, authorityFailure.Value.Code);
         }
 
-        if (match!.Players.Count(item => item.DisconnectedAtUtc is null) < 2)
+        if (match!.Players.Count(item => item.DisconnectedAtUtc is null) < 1)
         {
             return Failure<MatchAuthorityResponse>(
-                "At least two bound players are required to start",
+                "At least one bound player is required to start",
                 ErrorCodes.ValidationError);
         }
 

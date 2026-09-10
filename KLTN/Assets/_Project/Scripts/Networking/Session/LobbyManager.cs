@@ -132,7 +132,7 @@ namespace EchoProtocol.Networking
             var state = BuildStateFromRunner();
             if (!state.CanStartMatch)
             {
-                ReportError("Start rejected: at least 2 players are required and every player must be ready.");
+                ReportError("Start rejected: at least 1 player is required and every player must be ready.");
                 return false;
             }
 
@@ -209,7 +209,7 @@ namespace EchoProtocol.Networking
                 CurrentPlayers = members.Count,
                 IsHost = runner.IsServer,
                 IsReady = localReady,
-                CanStartMatch = runner.IsServer && members.Count >= 2 && members.TrueForAll(member => member.IsReady),
+                CanStartMatch = runner.IsServer && members.Count >= 1 && members.TrueForAll(member => member.IsReady),
                 Members = members,
             };
         }

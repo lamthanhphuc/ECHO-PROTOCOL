@@ -37,6 +37,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 100011}
+  - {fileID: 8340000344485221110}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &100002
@@ -107,10 +108,10 @@ NavMeshAgent:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 100000}
-  m_Enabled: 1
+  m_Enabled: 0
   m_AgentTypeID: 0
   m_Radius: 0.5
-  m_Speed: 3
+  m_Speed: 7
   m_Acceleration: 8
   avoidancePriority: 50
   m_AngularSpeed: 360
@@ -157,8 +158,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.StalkerController
   patrolRoute: {fileID: 0}
   visionSensor: {fileID: 100005}
-  patrolMode: 0
-  candidateBfsDepth: 3
+  patrolMode: 3
+  candidateBfsDepth: 128
   stalenessHorizon: 15
   stalenessWeight: 1
   connectivityWeight: 0.15
@@ -174,6 +175,9 @@ MonoBehaviour:
   attackWindup: 0.75
   attackRecovery: 1
   attackDamage: 100
+  worldInteractionDistance: 1.75
+  stalkerDoorBreakDurationSeconds: 3
+  worldInteractionProbeRadius: 0.35
   currentState: 0
   detectionMeter: 0
   detectionTarget: {fileID: 0}
@@ -195,7 +199,7 @@ MonoBehaviour:
   canonicalNextRegionId: 0
   searchEpisodeId: 0
   searchCandidateNodeId: -1
-  regionGraphAsset: {fileID: 0}
+  regionGraphAsset: {fileID: 11400000, guid: 09bfa2fa79ecc554995513d832a11be4, type: 2}
 --- !u!114 &100007
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -213,7 +217,7 @@ MonoBehaviour:
   lifecycle: {fileID: 0}
   attackDamage: 25
   maximumDamageDistance: 2
-  animator: {fileID: 0}
+  animator: {fileID: 1739994530661112979}
   animatorStateParameter: MonsterState
   _ReplicatedState: 0
   _AttackSequence: 0
@@ -270,3 +274,107 @@ Transform:
   m_Children: []
   m_Father: {fileID: 100001}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &8374192119321998621
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 100001}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.02
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.02
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 0.02
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 1.95
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.88
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 180
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      propertyPath: m_Name
+      value: Visual_HumanDeer
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1739994530661112979}
+  m_SourcePrefab: {fileID: 100100000, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+--- !u!4 &8340000344485221110 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+  m_PrefabInstance: {fileID: 8374192119321998621}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &8716280078152829004 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 65b2da56af0989b4facb00d4a36d32d2, type: 3}
+  m_PrefabInstance: {fileID: 8374192119321998621}
+  m_PrefabAsset: {fileID: 0}
+--- !u!95 &1739994530661112979
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8716280078152829004}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 0ecd7456627cda84286dbea4b00c2b89, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
