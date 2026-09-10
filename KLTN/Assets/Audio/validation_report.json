@@ -1,0 +1,1059 @@
+{
+  "count": 130,
+  "format": "44100 Hz mono PCM16 WAV",
+  "checks": [
+    "catalog coverage",
+    "source paths exist",
+    "unique WAV content",
+    "non-silence",
+    "no clipping",
+    "per-clip peak targets",
+    "duration",
+    "door 0.85 s",
+    "attack windup 0.75 s",
+    "beacon four timed pulses"
+  ],
+  "limitations": "Procedural prototype assets. Not auditioned or integrated in Unity. No gameplay C# changes.",
+  "results": [
+    {
+      "file": "stalker/idle_breathing_growl_loop.wav",
+      "seconds": 8.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -33.36,
+      "loop_boundary_delta": 55,
+      "sha256": "69d5b81b9dd3f606b346bca4652b0c8ecbd81ddf57e0876632de202b5251a773"
+    },
+    {
+      "file": "stalker/footstep_cham.wav",
+      "seconds": 0.48,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -23.42,
+      "loop_boundary_delta": null,
+      "sha256": "701d334a6ec13af4eb82257e4d4f8b15a3bdc9b1bb2c8b8707be33d6d610c9f1"
+    },
+    {
+      "file": "stalker/footstep_chay_chase.wav",
+      "seconds": 0.32,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -21.09,
+      "loop_boundary_delta": null,
+      "sha256": "9d4ddfcce46dcefa0504e2878a83193a7a2ff0a73bad69254f6614187fc33c2d"
+    },
+    {
+      "file": "stalker/detect_cue.wav",
+      "seconds": 0.65,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -18.31,
+      "loop_boundary_delta": null,
+      "sha256": "f3c68c7f966d30580dbdc28165b5d84c5acfa01bf62b70deda3cc1e2de729912"
+    },
+    {
+      "file": "stalker/chase_start.wav",
+      "seconds": 1.1,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.74,
+      "loop_boundary_delta": null,
+      "sha256": "b14e9a1af948b07c0cc1cfbce0112a076b9303a6a27fc732e9aa4ce1afca97b4"
+    },
+    {
+      "file": "stalker/chase_loop_vocal_loop.wav",
+      "seconds": 6.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -33.22,
+      "loop_boundary_delta": 81,
+      "sha256": "d2d1576eb4a2387ccb0a1348abec098be85880af7f34de80137118d9b7dc8b62"
+    },
+    {
+      "file": "stalker/attack_swing.wav",
+      "seconds": 0.75,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -18.98,
+      "loop_boundary_delta": null,
+      "sha256": "d3c1deb2d12727a0ebc7a1ad9eea6760a174645035bcb5415dde6a243fca8328"
+    },
+    {
+      "file": "stalker/attack_hit.wav",
+      "seconds": 0.32,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -20.69,
+      "loop_boundary_delta": null,
+      "sha256": "1a9638ed2a4d01d0a2bb0eca023c1ba6a24239c0777e0d38da3032e101975b02"
+    },
+    {
+      "file": "stalker/miss_attack.wav",
+      "seconds": 0.38,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -19.11,
+      "loop_boundary_delta": null,
+      "sha256": "f85004e9731a383848424e17fbd947f24bd7b52a26304c5e9ff6070de4c45a64"
+    },
+    {
+      "file": "stalker/search_vocal.wav",
+      "seconds": 1.6,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.32,
+      "loop_boundary_delta": null,
+      "sha256": "159a7d78065785be85a1476c8e560f47e31b76389bacfc9ee2536d5b000408c0"
+    },
+    {
+      "file": "stalker/recover_stun.wav",
+      "seconds": 0.8,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.99,
+      "loop_boundary_delta": null,
+      "sha256": "8ff82f409e2f45837984ea1ec1d5ffffc3f669ce330e9243f91f3768cdfb597e"
+    },
+    {
+      "file": "stalker/door_hit.wav",
+      "seconds": 0.65,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -25.14,
+      "loop_boundary_delta": null,
+      "sha256": "a495f70a06f3779a3ee90fffa9b424ab21fe486f483c520ffcb0d4d67a44f185"
+    },
+    {
+      "file": "stalker/door_break.wav",
+      "seconds": 1.7,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -24.89,
+      "loop_boundary_delta": null,
+      "sha256": "629947b98d49c57acaaa5265ccdae5e2399bd3c12e0d6ddbab76b5bd2d42b220"
+    },
+    {
+      "file": "stalker/door_jammer_break.wav",
+      "seconds": 0.9,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -22.51,
+      "loop_boundary_delta": null,
+      "sha256": "b37bd3878ae0bd34e9bc3d28cc7913d2ba07e46fe82ce62df43150d9f5be0162"
+    },
+    {
+      "file": "player/metal_footsteps.wav",
+      "seconds": 0.28,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -20.55,
+      "loop_boundary_delta": null,
+      "sha256": "39f16aa22c23c31b6fa9cd956f43ef34137b6bea00de3f5043efeecfe08798e5"
+    },
+    {
+      "file": "player/concrete_footsteps.wav",
+      "seconds": 0.24,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -19.39,
+      "loop_boundary_delta": null,
+      "sha256": "59a31be9e743c541f88774d76bc5f6e11f5b7da02827b6fcd63de299b5f89e83"
+    },
+    {
+      "file": "player/sprint_footsteps.wav",
+      "seconds": 0.22,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -19.12,
+      "loop_boundary_delta": null,
+      "sha256": "35df8fd3ac19e7dd21ec530fa7e3f4d3dd93ef180a10c6b321d5b0be9a49dba9"
+    },
+    {
+      "file": "player/breathing_loop.wav",
+      "seconds": 8.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -34.78,
+      "loop_boundary_delta": 55,
+      "sha256": "26de3e87ad99a471340b0947eeb38785b25b32b1c5069b38c3235b3c3765a325"
+    },
+    {
+      "file": "player/low_stamina_breathing_loop.wav",
+      "seconds": 6.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -34.7,
+      "loop_boundary_delta": 88,
+      "sha256": "d4729eec3a8ce9eb334b5d7898feb3a557ee5ca312cd9a38e00f2cb657ab8957"
+    },
+    {
+      "file": "player/damage_grunt.wav",
+      "seconds": 0.45,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -19.16,
+      "loop_boundary_delta": null,
+      "sha256": "fe14831f7e31fde6f6589b6114bf81da85776f662430841a8d00cf46a1c4055b"
+    },
+    {
+      "file": "player/death_downed.wav",
+      "seconds": 1.4,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -20.1,
+      "loop_boundary_delta": null,
+      "sha256": "2c67b8e2295d0e6592a9ed8e7eeaafcbb6c9f2b12520573353e4bd5e063715f7"
+    },
+    {
+      "file": "door/sliding_open.wav",
+      "seconds": 0.85,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -18.66,
+      "loop_boundary_delta": null,
+      "sha256": "1d3b68a72d5d6d3277c9f5369dbd571dfd7ffa775926a1088ebd1b8ee6988a74"
+    },
+    {
+      "file": "door/sliding_close.wav",
+      "seconds": 0.85,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -18.89,
+      "loop_boundary_delta": null,
+      "sha256": "a275a2001923447c3793e93fd258cb1abc60c98340a307894a642fe51b48f747"
+    },
+    {
+      "file": "door/locked_attempt.wav",
+      "seconds": 0.25,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.52,
+      "loop_boundary_delta": null,
+      "sha256": "98c2214293edd1986dacf654d734ae9cb4f544a511400897683c6837449fee9d"
+    },
+    {
+      "file": "door/unlock.wav",
+      "seconds": 0.3,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.83,
+      "loop_boundary_delta": null,
+      "sha256": "4c4dda0307a2cfe4f64a83224fc81fb4786885377be770f0bd7c4be4292f6e68"
+    },
+    {
+      "file": "door/door_machinery_loop_loop.wav",
+      "seconds": 4.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -27.53,
+      "loop_boundary_delta": 210,
+      "sha256": "7ad01b8d736126dacf3e32f53cf1039df83ebafc3b23100982b5790ed9452643"
+    },
+    {
+      "file": "door/door_jammer_deploy.wav",
+      "seconds": 0.4,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -21.89,
+      "loop_boundary_delta": null,
+      "sha256": "3fde81c289e7a3011ff848be9632e2d4494fe42fb3370436adf64ad420ca6b5f"
+    },
+    {
+      "file": "door/jammer_armed.wav",
+      "seconds": 0.25,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.0,
+      "loop_boundary_delta": null,
+      "sha256": "1e3d394d09529c7bb7775cad1eac15c47bce94616cc1325167be44dfa4215822"
+    },
+    {
+      "file": "energy_core/ambient_hum_loop.wav",
+      "seconds": 8.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -28.59,
+      "loop_boundary_delta": 142,
+      "sha256": "9e61985b48af1fcbadf594cade15aab0a471745265a888f727e86c820d21d576"
+    },
+    {
+      "file": "energy_core/pickup.wav",
+      "seconds": 0.3,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.83,
+      "loop_boundary_delta": null,
+      "sha256": "b4e4410e12850499faf099b0f5f8ceda5f9728f01cfcd3e19ccdc13e138ad982"
+    },
+    {
+      "file": "energy_core/drop.wav",
+      "seconds": 0.5,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -23.23,
+      "loop_boundary_delta": null,
+      "sha256": "5f9f57f543741063e7f4692d6c513fb8cc39aec18cd96810b848c761bc05a10b"
+    },
+    {
+      "file": "energy_core/deposit_into_sector_box.wav",
+      "seconds": 0.55,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -24.35,
+      "loop_boundary_delta": null,
+      "sha256": "58b0e4e4fbb22b9b436156004da0190262bca9d9b982993ce66a42254e2f062a"
+    },
+    {
+      "file": "energy_core/core_accepted.wav",
+      "seconds": 0.55,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.72,
+      "loop_boundary_delta": null,
+      "sha256": "66c7f293740086d94b23f5786775763025e830a632b5d713f4418de2b7a0a179"
+    },
+    {
+      "file": "sector_box_power_hub/idle_machinery_loop.wav",
+      "seconds": 8.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -28.19,
+      "loop_boundary_delta": 150,
+      "sha256": "e3076b14a42717a7ea7ded33b6dd0ea0681d66b59fd85e77e2514e5a3cfac2a0"
+    },
+    {
+      "file": "sector_box_power_hub/core_1_3_2_3.wav",
+      "seconds": 0.65,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.79,
+      "loop_boundary_delta": null,
+      "sha256": "4c68052c5288bce9c1e654c83385fbe608ba8688db4cd0eb0f439c41f9ea55fa"
+    },
+    {
+      "file": "sector_box_power_hub/fully_powered.wav",
+      "seconds": 2.4,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -18.3,
+      "loop_boundary_delta": null,
+      "sha256": "17e46f97552b4e8c9837d35b5097b4c8737c450324937fa3714be6fcbf36d1fa"
+    },
+    {
+      "file": "power_puzzle/terminal_interaction.wav",
+      "seconds": 0.09,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -21.92,
+      "loop_boundary_delta": null,
+      "sha256": "42147799356b63e6989299fbf9fa08bcb5d3810c6107925ccb07c654cd626961"
+    },
+    {
+      "file": "power_puzzle/breaker_toggle.wav",
+      "seconds": 0.18,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -19.01,
+      "loop_boundary_delta": null,
+      "sha256": "e6c283a1bed7a6c3eb453d3d8c217b2f42cb5d6ddcf1c033a1796125bb9abc31"
+    },
+    {
+      "file": "power_puzzle/rotary_switch.wav",
+      "seconds": 0.12,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -18.32,
+      "loop_boundary_delta": null,
+      "sha256": "e8803eeb62a5332aba06e1ad24f1c0de8788d173151c3a12ac6fe3b5fa6778ee"
+    },
+    {
+      "file": "power_puzzle/correct_input.wav",
+      "seconds": 0.3,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.83,
+      "loop_boundary_delta": null,
+      "sha256": "525951f35bd07c4bbbcdeacfb3a747492e5b91299e1596a007968ec65f1f3db0"
+    },
+    {
+      "file": "power_puzzle/wrong_input.wav",
+      "seconds": 0.4,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -18.24,
+      "loop_boundary_delta": null,
+      "sha256": "9044ca16f5dd96c382572d0e1056afff33f8d63f146eecf1b87f3ba03d8bb3b7"
+    },
+    {
+      "file": "power_puzzle/puzzle_complete.wav",
+      "seconds": 1.4,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.93,
+      "loop_boundary_delta": null,
+      "sha256": "64a1709c1547d2a830eb78141de83f6d05b6ff62ee27134e4fee8cf98c29dc3f"
+    },
+    {
+      "file": "power_puzzle/electrical_sparks.wav",
+      "seconds": 0.6,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -26.3,
+      "loop_boundary_delta": null,
+      "sha256": "4afce0eb5fab3211fda472f4bbd619566803e3d51e8d0d070a2ecf4d5b7548eb"
+    },
+    {
+      "file": "security_terminal/terminal_boot.wav",
+      "seconds": 0.9,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -18.17,
+      "loop_boundary_delta": null,
+      "sha256": "6e6aa91fb400d9261a9ee72f6ed3586093e460dbf92beba3360f6dbc2912f4f8"
+    },
+    {
+      "file": "security_terminal/access_granted.wav",
+      "seconds": 0.5,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.52,
+      "loop_boundary_delta": null,
+      "sha256": "26210c0d25616bb4e6adbc837fd742a26b3836e49c5bf402b42c45707e1309f7"
+    },
+    {
+      "file": "security_terminal/access_denied.wav",
+      "seconds": 0.35,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -18.01,
+      "loop_boundary_delta": null,
+      "sha256": "54d8ba8796e9542d83ff07348b57b060e8d708333cf87940c44947aa854146ff"
+    },
+    {
+      "file": "locker_hiding/locker_open.wav",
+      "seconds": 0.6,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.17,
+      "loop_boundary_delta": null,
+      "sha256": "8a7ac22aee6e2480a8f4b1541aceef8f7fbd2fb62789dd6c930da4830b1e65e4"
+    },
+    {
+      "file": "locker_hiding/locker_close.wav",
+      "seconds": 0.45,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -23.47,
+      "loop_boundary_delta": null,
+      "sha256": "67bfda09ed0d1f11d6146d0933cba8492e964ff24520797187f405be5f1f653e"
+    },
+    {
+      "file": "locker_hiding/enter_hiding.wav",
+      "seconds": 0.55,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -18.21,
+      "loop_boundary_delta": null,
+      "sha256": "47002cc907291d1a0cbcb1afeddf0d0c917247b7ada0eda0738e2e77d8345f52"
+    },
+    {
+      "file": "locker_hiding/player_breathing_inside_loop.wav",
+      "seconds": 8.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -35.24,
+      "loop_boundary_delta": 67,
+      "sha256": "138c5f0ab3dcb5476ab7789b84d3127ec0a6d78be47d784a3ac8a7b227e3a377"
+    },
+    {
+      "file": "locker_hiding/monster_outside_locker.wav",
+      "seconds": 0.45,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -23.67,
+      "loop_boundary_delta": null,
+      "sha256": "6d38e966a88681c40f8a5e64c1831cadfb3a0361041faf0ce83afa6e067a0cb0"
+    },
+    {
+      "file": "locker_hiding/monster_hits_locker.wav",
+      "seconds": 0.65,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -24.72,
+      "loop_boundary_delta": null,
+      "sha256": "de04853680bb53e1a7b3f6ec4c84ffc4a9854e06a1e6393c2cee16b4b716c201"
+    },
+    {
+      "file": "noise_maker/activate.wav",
+      "seconds": 0.18,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -22.02,
+      "loop_boundary_delta": null,
+      "sha256": "d188e15b2c1d5de1e96d83fdc1c02eca236354830ca05d572e7d441fb93e94d4"
+    },
+    {
+      "file": "noise_maker/beacon_loop_loop.wav",
+      "seconds": 3.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -29.91,
+      "loop_boundary_delta": 25,
+      "sha256": "a3b70219cf790c43fad00acfb3ff20803d2e9052bef3050093a0f231c00c3647"
+    },
+    {
+      "file": "noise_maker/throw_drop.wav",
+      "seconds": 0.35,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -21.91,
+      "loop_boundary_delta": null,
+      "sha256": "2cdbbcfe7832eb5fda2e758b183d5a63f3918c66a6d71ea51a6dd6090e17981d"
+    },
+    {
+      "file": "noise_maker/end_deactivate.wav",
+      "seconds": 0.2,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -16.93,
+      "loop_boundary_delta": null,
+      "sha256": "c600450378e1083d0a4068f0f1ac08040f0cf16f031f9a214fb5ae279639d2d1"
+    },
+    {
+      "file": "first_aid/use_kit.wav",
+      "seconds": 0.8,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -20.08,
+      "loop_boundary_delta": null,
+      "sha256": "1f9c26c43e3028d4a7a0b71bf4bc27a713361569b1fbd985db4fcc97fbac3cc9"
+    },
+    {
+      "file": "first_aid/heal_confirm.wav",
+      "seconds": 0.5,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.52,
+      "loop_boundary_delta": null,
+      "sha256": "56291cc902e4ac041e98b31df18c16c47e97bc56233c62f49e8ff6bbd72016c8"
+    },
+    {
+      "file": "map_ambience/facility_room_tone_loop.wav",
+      "seconds": 12.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -31.22,
+      "loop_boundary_delta": 274,
+      "sha256": "e8326d42645c9bc254c29e7fc3bc046a03b8e4ccb8e74ebfaac2176cb6e00c36"
+    },
+    {
+      "file": "map_ambience/hvac_loop.wav",
+      "seconds": 12.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -31.88,
+      "loop_boundary_delta": 222,
+      "sha256": "fdac9c2b7c6a0d61815b30e217dea9484e99ea760f18daba43f44956889a3a01"
+    },
+    {
+      "file": "map_ambience/fluorescent_buzz_loop.wav",
+      "seconds": 8.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -28.01,
+      "loop_boundary_delta": 104,
+      "sha256": "325d09ab10c3da3d26c80f7814f23b195ecb13ea2a51a9695bd122527b062d14"
+    },
+    {
+      "file": "map_ambience/server_room_loop.wav",
+      "seconds": 12.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -30.66,
+      "loop_boundary_delta": 60,
+      "sha256": "3ec60d409061d42ef4d1eac0bdf7964888845238c008fd7d30ef46896407c6a6"
+    },
+    {
+      "file": "map_ambience/electrical_room_loop.wav",
+      "seconds": 8.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -27.82,
+      "loop_boundary_delta": 6,
+      "sha256": "a5bfb7323d964d16e19d8b8d7bee30ec2561882dcd88b4b7f14cb8d8d45d0d29"
+    },
+    {
+      "file": "map_ambience/generator_loop.wav",
+      "seconds": 8.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -28.71,
+      "loop_boundary_delta": 159,
+      "sha256": "741226371d0faf8d30d1d4f96f9e93995e38f5f3108e9c6dbd72434b7ddec8e5"
+    },
+    {
+      "file": "map_ambience/distant_metal_bang.wav",
+      "seconds": 1.6,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -28.61,
+      "loop_boundary_delta": null,
+      "sha256": "0306f47d8b4026696c4e070d02e16067adfd32a81e003884579a1a5a9a0e815a"
+    },
+    {
+      "file": "map_ambience/pipe_creak.wav",
+      "seconds": 1.5,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -19.62,
+      "loop_boundary_delta": null,
+      "sha256": "373e05a9f596026f714a1f8618e52523473eae91722e751473b9bf54a7ce8f53"
+    },
+    {
+      "file": "map_ambience/steam_hiss.wav",
+      "seconds": 1.8,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -19.8,
+      "loop_boundary_delta": null,
+      "sha256": "b911cd026924d0919b6d3d2a362c61c7f76a7ffd0ecb3689c63699f779b7e042"
+    },
+    {
+      "file": "map_ambience/electrical_flicker.wav",
+      "seconds": 0.4,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -26.0,
+      "loop_boundary_delta": null,
+      "sha256": "2cf994348a107087dcfdcd667c685c6f611af8fdf64ed189491a2df02263de66"
+    },
+    {
+      "file": "map_ambience/alarm_ambience_loop.wav",
+      "seconds": 4.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -30.09,
+      "loop_boundary_delta": 254,
+      "sha256": "2be724bf318b468bbeb57fb4bbdc33d0dd8b780eda52776ae8fb5ad1bcf085f8"
+    },
+    {
+      "file": "horror_ambience/distant_monster_sound.wav",
+      "seconds": 2.6,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -18.54,
+      "loop_boundary_delta": null,
+      "sha256": "c2adcad87375f11bfb5141ea85412b5832db491fc26a96982880801d98edbc91"
+    },
+    {
+      "file": "horror_ambience/random_impact.wav",
+      "seconds": 1.3,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -27.4,
+      "loop_boundary_delta": null,
+      "sha256": "51da0d57e5563812360b4fed4a884802875ae69a8078ebc09fb3de4e4bd6373f"
+    },
+    {
+      "file": "horror_ambience/tension_drone_loop.wav",
+      "seconds": 12.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -28.37,
+      "loop_boundary_delta": 117,
+      "sha256": "dbc25884ec543da842a8fc276fffa96ad42177271ac8a11853a109a9f25208bb"
+    },
+    {
+      "file": "horror_ambience/low_frequency_rumble_loop.wav",
+      "seconds": 12.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -29.28,
+      "loop_boundary_delta": 355,
+      "sha256": "91a949552376de631f7f5e250b73a88b3c664bc30ee83ca89905ea5fea2c2111"
+    },
+    {
+      "file": "escape_endgame/escape_unlocked.wav",
+      "seconds": 0.8,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.91,
+      "loop_boundary_delta": null,
+      "sha256": "81116e8be3af5220f3392577c853d42122eae31c2b8ab401a39861ed466d5636"
+    },
+    {
+      "file": "escape_endgame/countdown_start.wav",
+      "seconds": 0.7,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -16.72,
+      "loop_boundary_delta": null,
+      "sha256": "462192c9400992fbcfaa674ed24488c7d9d9c6c0d492440e4a049698f0b5a893"
+    },
+    {
+      "file": "escape_endgame/bay_door_opening.wav",
+      "seconds": 3.5,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -18.76,
+      "loop_boundary_delta": null,
+      "sha256": "d933b7c9257e0fb37920c70b07774b1d0bc3cc691040fecec8bcf3029bda8586"
+    },
+    {
+      "file": "escape_endgame/mission_success.wav",
+      "seconds": 2.2,
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -17.96,
+      "loop_boundary_delta": null,
+      "sha256": "7e591231648e25daba03b0cc6ef44f0517aebe84d1e86f2e1bdca91fc6070253"
+    },
+    {
+      "file": "ui/hover.wav",
+      "seconds": 0.045,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -24.66,
+      "loop_boundary_delta": null,
+      "sha256": "46c36178f1cfcd9235fe7500e80abb1d64659659dcb2d191ba279c2a2cae488b"
+    },
+    {
+      "file": "ui/click.wav",
+      "seconds": 0.065,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -23.95,
+      "loop_boundary_delta": null,
+      "sha256": "fa0d850a8ed6ffa9769398471fe192c19e2cc1105a71d96627f9aee18899bbd7"
+    },
+    {
+      "file": "ui/confirm.wav",
+      "seconds": 0.18,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -19.94,
+      "loop_boundary_delta": null,
+      "sha256": "c201d9017a792fe41b001397693f5f5b2a6e81c1aa6174ff78fa37c166f2a02b"
+    },
+    {
+      "file": "ui/error.wav",
+      "seconds": 0.22,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -20.57,
+      "loop_boundary_delta": null,
+      "sha256": "e6181e24f3666825a953ff5e45ec39471158c7f9094a37deb63e68afdeca0dee"
+    },
+    {
+      "file": "ui/inventory_pickup.wav",
+      "seconds": 0.16,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -25.45,
+      "loop_boundary_delta": null,
+      "sha256": "e2639e6ec54f31ef6c3d839febc58615ca5ebf4a3ee719adb5d69015b0d3040b"
+    },
+    {
+      "file": "ui/objective_update.wav",
+      "seconds": 0.55,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -20.72,
+      "loop_boundary_delta": null,
+      "sha256": "878d0fc3f54cdec9c1c55d190fcedaf634179374c262827788459bd2a3cd2328"
+    },
+    {
+      "file": "ui/lobby_ready.wav",
+      "seconds": 0.35,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -20.34,
+      "loop_boundary_delta": null,
+      "sha256": "26b656335042ded45962d32806dbb2d0f1c4bc9dcb93ced2ea6f8b8892138fc0"
+    },
+    {
+      "file": "ui/match_start.wav",
+      "seconds": 1.2,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -20.1,
+      "loop_boundary_delta": null,
+      "sha256": "5178372de738a6af30f644d992cab448ded6daf2f6fc52ea33994eb4c6715e61"
+    },
+    {
+      "file": "noise_maker/beacon_pulse.wav",
+      "seconds": 0.42,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -15.0,
+      "loop_boundary_delta": null,
+      "sha256": "3474ceee272e321052bf77ea4e041bca8f02de2ebcbcd016a9513ffd96757b31"
+    },
+    {
+      "file": "noise_maker/beacon_sequence_6s.wav",
+      "seconds": 6.0,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -20.46,
+      "loop_boundary_delta": null,
+      "sha256": "cbb79a7c42b876e194f079d3995a3c487df31e1cbe0e7ede10ec6b369a2111c5"
+    },
+    {
+      "file": "security_terminal/download_start.wav",
+      "seconds": 0.2,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -25.51,
+      "loop_boundary_delta": null,
+      "sha256": "9414ca9bc23e8ed319ed564d74e7d2673c700c4b3c1c0cc3d73854857403e558"
+    },
+    {
+      "file": "security_terminal/download_progress_loop.wav",
+      "seconds": 2.0,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -23.23,
+      "loop_boundary_delta": 67,
+      "sha256": "be43c99d129a01a24c3a2ac2e66b81792a0dd131990045e020fd7edb6c4743d1"
+    },
+    {
+      "file": "security_terminal/download_pause.wav",
+      "seconds": 0.22,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -19.79,
+      "loop_boundary_delta": null,
+      "sha256": "44a2908e48839d42319b0428651383e34a270d97918bdc796fe83bbc0a0c5dbc"
+    },
+    {
+      "file": "security_terminal/download_resume.wav",
+      "seconds": 0.22,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -19.93,
+      "loop_boundary_delta": null,
+      "sha256": "5721682993bb3975fd29f670d65cb6ded3c1e93b35ba2b5552b67d76cd77c288"
+    },
+    {
+      "file": "security_terminal/download_complete.wav",
+      "seconds": 0.75,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -21.05,
+      "loop_boundary_delta": null,
+      "sha256": "f8b9c44c3dddad819757bf53ddd3df9104c541586356989ac3d17ba99f0d38b5"
+    },
+    {
+      "file": "player/flashlight_on.wav",
+      "seconds": 0.1,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -21.9,
+      "loop_boundary_delta": null,
+      "sha256": "c469ec4229e36ed28f2c8c977ccff06367ea088bf27dbca12a18d1b2c88d0b55"
+    },
+    {
+      "file": "player/flashlight_off.wav",
+      "seconds": 0.08,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -20.9,
+      "loop_boundary_delta": null,
+      "sha256": "72ca50382d3afa1d08bdf565e9024ba1971abf0b97a1106a0b5cfb5a8f059df3"
+    },
+    {
+      "file": "player/downed_heartbeat_loop.wav",
+      "seconds": 2.0,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -36.39,
+      "loop_boundary_delta": 10,
+      "sha256": "dd2f2cf1202ae983778d056e81bdd6cd09bd7c0c10becd3c533d3ea9e6fefcd4"
+    },
+    {
+      "file": "player/eliminated.wav",
+      "seconds": 1.3,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -20.94,
+      "loop_boundary_delta": null,
+      "sha256": "a59206eb2524f7c806200ec8ea2fed0ca96df8bed74532db4d11608ebb53a861"
+    },
+    {
+      "file": "player/help_ping.wav",
+      "seconds": 0.35,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -20.35,
+      "loop_boundary_delta": null,
+      "sha256": "20852e51384d500d7783661a01aed95fab3033d455ac7756e698213e6d35d54c"
+    },
+    {
+      "file": "first_aid/revive_progress_loop.wav",
+      "seconds": 1.5,
+      "peak_dbfs": -18.0,
+      "rms_dbfs": -32.49,
+      "loop_boundary_delta": 238,
+      "sha256": "2e049c61a4c4c0a8d645940955bf19065a0df86b8bb4669620f4bff71b63cfc3"
+    },
+    {
+      "file": "first_aid/revive_cancel.wav",
+      "seconds": 0.22,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -19.84,
+      "loop_boundary_delta": null,
+      "sha256": "70f0cdbb99f9cec2b04f90b80590ae96ddd7a322c2a79b14eefb9298786b00fe"
+    },
+    {
+      "file": "first_aid/revive_complete.wav",
+      "seconds": 0.65,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -20.79,
+      "loop_boundary_delta": null,
+      "sha256": "a062fb428eab9700aeb1f80a6cd428a1442bbc183debc71f5ff70f86ec9a69d3"
+    },
+    {
+      "file": "stalker/recover_exhale.wav",
+      "seconds": 0.8,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -20.42,
+      "loop_boundary_delta": null,
+      "sha256": "0c05bf80d3f9ac5f7fe23827d9cc7b348fa0b491ca13f5ff68982dc9a7cd492e"
+    },
+    {
+      "file": "energy_core/carry_rattle.wav",
+      "seconds": 0.24,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -23.16,
+      "loop_boundary_delta": null,
+      "sha256": "b506c7d08f783549298c20a157ee327b902afcf6dd2ea66b6a17481ff1a6119c"
+    },
+    {
+      "file": "sector_box_power_hub/core_insert_partial.wav",
+      "seconds": 0.55,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -20.72,
+      "loop_boundary_delta": null,
+      "sha256": "2079ec74295c9d2d835cbc490cedd9847e3f45cfb0ca846a48f17b5455bf2c87"
+    },
+    {
+      "file": "escape_endgame/countdown_tick.wav",
+      "seconds": 0.09,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -24.02,
+      "loop_boundary_delta": null,
+      "sha256": "266f24d6aded46d80c74de4927777ffa217903a34dc14d3a6e3c865075008d25"
+    },
+    {
+      "file": "escape_endgame/mission_failure.wav",
+      "seconds": 2.0,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -21.02,
+      "loop_boundary_delta": null,
+      "sha256": "9dca0798ba67b97b27ccc6979729137a855cf43e8ddc7ba1192b7a8332a4616e"
+    },
+    {
+      "file": "escape_endgame/final_hunt_start.wav",
+      "seconds": 1.4,
+      "peak_dbfs": -9.0,
+      "rms_dbfs": -20.22,
+      "loop_boundary_delta": null,
+      "sha256": "20cf7b7cfa42a2e1895d90797670e1cc49d0fc163ad917e130511862e0215235"
+    },
+    {
+      "file": "player/metal_footstep_01.wav",
+      "seconds": 0.28,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -22.39,
+      "loop_boundary_delta": null,
+      "sha256": "3fa2214114d6072db64886307251ff0bf4cba43a046a70cc589f9530ed6bf023"
+    },
+    {
+      "file": "player/metal_footstep_02.wav",
+      "seconds": 0.28,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -22.17,
+      "loop_boundary_delta": null,
+      "sha256": "e1a26c85650687237423eca17ecd142027ba1370e36b3cfc372844c982a1ada8"
+    },
+    {
+      "file": "player/metal_footstep_03.wav",
+      "seconds": 0.28,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -21.98,
+      "loop_boundary_delta": null,
+      "sha256": "f004fc7a937fe4ed413cb1b8689e3c69d4ddd3d3415f1b40889d6dd7529e044c"
+    },
+    {
+      "file": "player/metal_footstep_04.wav",
+      "seconds": 0.28,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -21.74,
+      "loop_boundary_delta": null,
+      "sha256": "8723eb19c864c1e83875358ce7df001e60a155a167ad768c921a266ac41e9b2d"
+    },
+    {
+      "file": "player/concrete_footstep_01.wav",
+      "seconds": 0.24,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -20.9,
+      "loop_boundary_delta": null,
+      "sha256": "097da8ab65e6f8ef7c6cee622c84d9cbe2ec4c25c6af48b0c1c3222f9484ff18"
+    },
+    {
+      "file": "player/concrete_footstep_02.wav",
+      "seconds": 0.24,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -20.24,
+      "loop_boundary_delta": null,
+      "sha256": "c8036811a4e1c9c445cd2808a5e93d30f3e6c972ae4755dd085821f5d8c81efa"
+    },
+    {
+      "file": "player/concrete_footstep_03.wav",
+      "seconds": 0.24,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -19.97,
+      "loop_boundary_delta": null,
+      "sha256": "786dd7dae62c2511dad45ce3dad7f781210a97f76b16ffe17882f9861be8a99f"
+    },
+    {
+      "file": "player/concrete_footstep_04.wav",
+      "seconds": 0.24,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -20.5,
+      "loop_boundary_delta": null,
+      "sha256": "5538586a0e81467125bb9b1ea31916abc2c61d43cbc1ddb583f4dc5ae07f7571"
+    },
+    {
+      "file": "player/sprint_footstep_01.wav",
+      "seconds": 0.22,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -21.56,
+      "loop_boundary_delta": null,
+      "sha256": "2bfc5271499bc0243b0e91f69b7358eff10bf75ecdccb9e0b47fc62f47034997"
+    },
+    {
+      "file": "player/sprint_footstep_02.wav",
+      "seconds": 0.22,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -20.89,
+      "loop_boundary_delta": null,
+      "sha256": "3e541588859c24909b21196f7212d43601940478eb6ed53b351651ca236d2c90"
+    },
+    {
+      "file": "player/sprint_footstep_03.wav",
+      "seconds": 0.22,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -21.31,
+      "loop_boundary_delta": null,
+      "sha256": "39362381130bdced7ea0dd4ea9c3c36cd697762c708ad2d7cd7c235440bd4c22"
+    },
+    {
+      "file": "player/sprint_footstep_04.wav",
+      "seconds": 0.22,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -21.07,
+      "loop_boundary_delta": null,
+      "sha256": "45a5b7b346bedc7ae6f8420bd52a30e8d299764fd00898b005fb2a97c0756bbf"
+    },
+    {
+      "file": "player/crouch_footstep_01.wav",
+      "seconds": 0.24,
+      "peak_dbfs": -15.0,
+      "rms_dbfs": -28.91,
+      "loop_boundary_delta": null,
+      "sha256": "83c96aa668ab45465ee93242a950fcf6edb7ddf502fd70c539493298a559cff0"
+    },
+    {
+      "file": "player/crouch_footstep_02.wav",
+      "seconds": 0.24,
+      "peak_dbfs": -15.0,
+      "rms_dbfs": -29.48,
+      "loop_boundary_delta": null,
+      "sha256": "be463b8e781713a3eb826465718c63c5f08a80fd19ad2542f6481c451040e163"
+    },
+    {
+      "file": "player/crouch_footstep_03.wav",
+      "seconds": 0.24,
+      "peak_dbfs": -15.0,
+      "rms_dbfs": -29.52,
+      "loop_boundary_delta": null,
+      "sha256": "46bb0a2e5a706e4c20c8d22b490071b537bb888b0b17b5f754535c228574c65f"
+    },
+    {
+      "file": "player/crouch_footstep_04.wav",
+      "seconds": 0.24,
+      "peak_dbfs": -15.0,
+      "rms_dbfs": -29.36,
+      "loop_boundary_delta": null,
+      "sha256": "c9b6fca2d4cd2aa6955fe14a255ec52a8f97d471cbcdf3d4442a38997c2cdcce"
+    },
+    {
+      "file": "stalker/patrol_footstep_01.wav",
+      "seconds": 0.48,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -24.37,
+      "loop_boundary_delta": null,
+      "sha256": "bcd4ef52a4feeda63371e0c1f6521226617633cfb4f5d54f64c474405eb30019"
+    },
+    {
+      "file": "stalker/patrol_footstep_02.wav",
+      "seconds": 0.48,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -23.92,
+      "loop_boundary_delta": null,
+      "sha256": "1f6919da06b70ea36eb244795c6a54f253875d89dcf90e091f4f6438f5dc3d77"
+    },
+    {
+      "file": "stalker/patrol_footstep_03.wav",
+      "seconds": 0.48,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -24.54,
+      "loop_boundary_delta": null,
+      "sha256": "72280e622605c55c5a5db92acc18efbeaa609b9c4f69158c16482d7777967713"
+    },
+    {
+      "file": "stalker/patrol_footstep_04.wav",
+      "seconds": 0.48,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -24.91,
+      "loop_boundary_delta": null,
+      "sha256": "a702ba667a43151163e8febbedcdda3c3a1e48b42b97c57bd6709ae3bbc807e4"
+    },
+    {
+      "file": "stalker/chase_footstep_01.wav",
+      "seconds": 0.32,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -23.38,
+      "loop_boundary_delta": null,
+      "sha256": "06c507aa3921be545050d06bf6baddd5e22085322a4bb62df0cfebc229712605"
+    },
+    {
+      "file": "stalker/chase_footstep_02.wav",
+      "seconds": 0.32,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -22.51,
+      "loop_boundary_delta": null,
+      "sha256": "b39c71907c5ce5b6582c96ae0f0e8b2970de6fe8784e10919cc29dbd3b5fb798"
+    },
+    {
+      "file": "stalker/chase_footstep_03.wav",
+      "seconds": 0.32,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -22.85,
+      "loop_boundary_delta": null,
+      "sha256": "fbb91673ce1df6b1f960a9eccc6d6e6fd03bc150375a112badb55a12b96cb8b7"
+    },
+    {
+      "file": "stalker/chase_footstep_04.wav",
+      "seconds": 0.32,
+      "peak_dbfs": -7.0,
+      "rms_dbfs": -22.39,
+      "loop_boundary_delta": null,
+      "sha256": "256ff0c65bba73e97aa7cbafdf9a3efe5716d74385436ca4fd6a3443f252b62b"
+    }
+  ]
+}
