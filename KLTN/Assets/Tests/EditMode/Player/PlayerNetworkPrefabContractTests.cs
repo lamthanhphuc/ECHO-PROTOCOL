@@ -119,9 +119,9 @@ namespace EchoProtocol.Player.Tests
             var source = File.ReadAllText(
                 "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
 
-            StringAssert.Contains("_teamToolAction.AddBinding(\"<Mouse>/rightButton\")", source);
+            StringAssert.Contains("_teamToolAction.AddBinding(\"<Mouse>/leftButton\")", source);
             StringAssert.DoesNotContain("_teamToolAction.AddBinding(\"<Keyboard>/t\")", source);
-            StringAssert.DoesNotContain("_teamToolAction.AddBinding(\"<Mouse>/leftButton\")", source);
+            StringAssert.DoesNotContain("_teamToolAction.AddBinding(\"<Mouse>/rightButton\")", source);
             StringAssert.Contains("RequestDropCarriedItem();", source);
             StringAssert.Contains("state.CarriedCoreId.IsValid", source);
             StringAssert.Contains("RpcRequestDropTeamTool(NextSequence())", source);

@@ -231,10 +231,10 @@ namespace EchoProtocol.UI.HUD
 
             // Team Tool Slot
             InventoryItemDefinition toolItem = inventory.TeamToolSlot;
-            UpdateSlotView(toolItem, toolIcon, toolNameText, "Tool: Trống");
+            UpdateSlotView(toolItem, toolIcon, toolNameText, "Tool: Trống", isTeamTool: true);
         }
 
-        private void UpdateSlotView(InventoryItemDefinition item, Image icon, Text nameLabel, string emptyLabel)
+        private void UpdateSlotView(InventoryItemDefinition item, Image icon, Text nameLabel, string emptyLabel, bool isTeamTool = false)
         {
             if (item != null)
             {
@@ -257,7 +257,9 @@ namespace EchoProtocol.UI.HUD
 
                 if (nameLabel != null)
                 {
-                    nameLabel.text = item.DisplayName;
+                    nameLabel.text = isTeamTool
+                        ? $"<color=#00E5FF>[LMB]</color> {item.DisplayName}"
+                        : item.DisplayName;
                 }
             }
             else

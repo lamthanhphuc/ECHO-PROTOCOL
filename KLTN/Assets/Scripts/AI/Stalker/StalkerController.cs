@@ -63,7 +63,7 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float chaseDestinationRefreshInterval = 0.5f;
 
         [Header("Attack Spike Defaults")]
-        [SerializeField] private float attackRange = 1.5f;
+        [SerializeField] private float attackRange = 2.8f;
         [SerializeField] private float attackWindup = 0.75f;
         [SerializeField] private float attackRecovery = 1f;
         [SerializeField] private float attackDamage = 100f;

@@ -101,10 +101,6 @@ public class PlayerHidingController : MonoBehaviour
         {
             movement.enabled = false;
         }
-        if (networkMovement != null)
-        {
-            networkMovement.enabled = false;
-        }
 
         MoveToHidingPoint(spot.HidePoint);
 
@@ -145,10 +141,6 @@ public class PlayerHidingController : MonoBehaviour
         {
             movement.enabled = true;
         }
-        if (networkMovement != null)
-        {
-            networkMovement.enabled = true;
-        }
 
         if (_playerCameraController != null)
         {
@@ -178,6 +170,13 @@ public class PlayerHidingController : MonoBehaviour
         }
 
         Quaternion targetRot = Quaternion.Euler(0f, point.eulerAngles.y, 0f);
+
+        if (networkMovement != null)
+        {
+            networkMovement.TeleportAuthoritative(point.position, targetRot);
+            UpdateCameraPose(point);
+            return;
+        }
 
         bool canNetworkTeleport = _networkCharacterController != null
             && _networkCharacterController.Object != null

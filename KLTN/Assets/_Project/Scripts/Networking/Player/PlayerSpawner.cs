@@ -90,6 +90,7 @@ namespace EchoProtocol.Networking
             if (SceneManager.GetActiveScene().name != LobbyManager.GameSceneName) return;
 
             DisableLegacyObjectiveMutators();
+            EnsureGameplayHUD();
             if (!runner.IsServer) return;
 
             TryAttachLifecycle(runner);
@@ -305,6 +306,41 @@ namespace EchoProtocol.Networking
             foreach (var legacyCore in FindObjectsByType<EnergyCorePickup>(FindObjectsInactive.Include))
             {
                 legacyCore.enabled = false;
+                if (legacyCore.GetComponent<Fusion.NetworkObject>() == null)
+                {
+                    legacyCore.gameObject.SetActive(false);
+                }
+            }
+
+            var activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            if (activeScene.isLoaded)
+            {
+                foreach (var rootObj in activeScene.GetRootGameObjects())
+                {
+                    foreach (var t in rootObj.GetComponentsInChildren<Transform>(true))
+                    {
+                        if (t != null && t.name.StartsWith("PF_EnergyCore_Imported", System.StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (t.GetComponent<Fusion.NetworkObject>() == null)
+                            {
+                                t.gameObject.SetActive(false);
+                            }
+                        }
+                    }
+                }
+            }
+
+            foreach (var rb in FindObjectsByType<Rigidbody>(FindObjectsInactive.Include))
+            {
+                if (rb == null || rb.GetComponent<Fusion.NetworkObject>() != null) continue;
+                string n = rb.name;
+                if (n.Contains("Barrel") || n.Contains("SciFiBarrel") || n.Contains("Crate") || n.Contains("Pallet") || n.Contains("Bin"))
+                {
+                    rb.isKinematic = true;
+                    rb.useGravity = false;
+                    rb.linearVelocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
             }
 
             foreach (var legacySector in FindObjectsByType<SectorBox>(FindObjectsInactive.Include))
@@ -331,6 +367,24 @@ namespace EchoProtocol.Networking
                     stationCollider.enabled = false;
                 }
                 legacyStation.enabled = false;
+            }
+        }
+
+        private static void EnsureGameplayHUD()
+        {
+            if (FindAnyObjectByType<EchoProtocol.UI.HUD.GameplayHUDManager>() != null) return;
+
+            var hudPrefab = Resources.Load<GameObject>("PF_GameplayHUD_Canvas");
+            if (hudPrefab == null)
+            {
+                hudPrefab = Resources.Load<GameObject>("Prefabs/UI/PF_GameplayHUD_Canvas");
+            }
+
+            if (hudPrefab != null)
+            {
+                var hudInstance = Instantiate(hudPrefab);
+                hudInstance.name = "GameplayHUD_Canvas";
+                Debug.Log("[PlayerSpawner] Instantiated GameplayHUD_Canvas in gameplay scene.");
             }
         }
 

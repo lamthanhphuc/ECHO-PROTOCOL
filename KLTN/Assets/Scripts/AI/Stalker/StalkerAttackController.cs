@@ -152,7 +152,9 @@ namespace EchoProtocol.AI.Stalker
         {
             var clampedRange = Mathf.Max(0f, attackRange);
             var delta = targetPosition - stalkerPosition;
-            return delta.sqrMagnitude <= clampedRange * clampedRange;
+            var horizontalDeltaSqr = delta.x * delta.x + delta.z * delta.z;
+            var maxEffectiveRange = clampedRange + 0.6f;
+            return horizontalDeltaSqr <= maxEffectiveRange * maxEffectiveRange && Mathf.Abs(delta.y) <= 3.0f;
         }
     }
 }

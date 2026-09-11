@@ -47,7 +47,7 @@ namespace EchoProtocol.Networking
             _interactAction = _inputActions?.FindActionMap("Player", false)?.FindAction("Interact", false);
             _dropCoreAction = new InputAction("DropCore", InputActionType.Button, "<Keyboard>/g");
             _teamToolAction = new InputAction("UseTeamTool", InputActionType.Button);
-            _teamToolAction.AddBinding("<Mouse>/rightButton");
+            _teamToolAction.AddBinding("<Mouse>/leftButton");
             _helpPingAction = new InputAction("HelpPing", InputActionType.Button, "<Keyboard>/h");
         }
 
@@ -207,7 +207,6 @@ namespace EchoProtocol.Networking
 
             var playerState = GetComponent<LobbyPlayerState>();
             if (isOnline && playerState != null && playerState.CarriedCoreId.IsValid) return false;
-            if (playerState != null && playerState.ToolId == 3) return false;
             var scanner = GetComponent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>();
             if (scanner != null && scanner.IsScannerEquipped())
             {
@@ -238,6 +237,17 @@ namespace EchoProtocol.Networking
             {
                 targetId = doorTargetId;
             }
+            else if (playerState != null && playerState.ToolId == 3)
+            {
+                if (TryDetectReviveCandidate(out var allyLifeState) && allyLifeState != null && allyLifeState.Object != null)
+                {
+                    targetId = allyLifeState.Object.Id;
+                }
+                else
+                {
+                    targetId = Object.Id;
+                }
+            }
 
             RpcRequestUseTeamTool(NextSequence(), targetId);
             return true;
@@ -246,7 +256,21 @@ namespace EchoProtocol.Networking
         private bool ExecuteTeamToolOffline(int toolId, PlayerInventory inv, LobbyPlayerState playerState)
         {
             string toolType = ToolTypeFor(toolId);
-            if (toolType == "CORE_STABILIZER")
+            if (toolType == "FIRST_AID_KIT")
+            {
+                var downState = GetComponent<PlayerDownState>();
+                if (downState != null && downState.Health < 100f)
+                {
+                    downState.ApplyHeal(100f);
+                    if (inv != null && inv.TeamToolSlot != null)
+                    {
+                        inv.TryRemove(inv.TeamToolSlot);
+                    }
+                    return true;
+                }
+                return false;
+            }
+            else if (toolType == "CORE_STABILIZER")
             {
                 if (_coreStabilizerPulseClip != null)
                 {
@@ -559,7 +583,7 @@ namespace EchoProtocol.Networking
                 var toolType = ToolTypeFor(state.ToolId);
                 if (toolType != null)
                 {
-                    if (toolType == "FIELD_SCANNER" || toolType == "FIRST_AID_KIT")
+                    if (toolType == "FIELD_SCANNER")
                     {
                         if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
                         RpcInteractionResult(
@@ -567,6 +591,14 @@ namespace EchoProtocol.Networking
                             targetId,
                             sequence,
                             (int)InteractionValidationResult.InvalidTargetState);
+                        return;
+                    }
+
+                    if (toolType == "FIRST_AID_KIT")
+                    {
+                        var fakResult = TryUseFirstAidKitAuthoritative(requester, state, targetId);
+                        if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+                        RpcInteractionResult(requester, targetId, sequence, (int)fakResult);
                         return;
                     }
 
@@ -620,6 +652,87 @@ namespace EchoProtocol.Networking
             }
 
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+        }
+
+        private InteractionValidationResult TryUseFirstAidKitAuthoritative(
+            PlayerRef requester,
+            LobbyPlayerState state,
+            NetworkId targetId)
+        {
+            if (!Object.HasStateAuthority || state == null || state.ToolId != 3)
+            {
+                return InteractionValidationResult.InvalidRequester;
+            }
+
+            var selfLifeState = GetComponent<NetworkPlayerLifeState>();
+            if (selfLifeState == null || !NetworkPlayerLifeStateRules.CanInitiateAction(selfLifeState.Status))
+            {
+                return InteractionValidationResult.InvalidRequester;
+            }
+
+            NetworkPlayerLifeState targetLife = null;
+            if (targetId.IsValid && targetId != Object.Id && Runner != null && Runner.TryFindObject(targetId, out var targetObj) && targetObj != null)
+            {
+                targetLife = targetObj.GetComponent<NetworkPlayerLifeState>();
+            }
+
+            // Case 1: Target ally is Downed -> Revive ally with 50% time
+            if (targetLife != null && targetLife.Status == NetworkPlayerLifeStatus.Downed)
+            {
+                if (Vector3.Distance(transform.position, targetLife.transform.position) <= 4f)
+                {
+                    if (targetLife.TryStartRevive(requester))
+                    {
+                        TeamToolOrdinal++;
+                        MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
+                            requester,
+                            $"player:{Object.Id}:tool:{TeamToolOrdinal}",
+                            "FIRST_AID_KIT");
+                        TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 2f);
+                        ConsumeGameplayTeamTool(state);
+                        return InteractionValidationResult.Accepted;
+                    }
+                }
+                return InteractionValidationResult.OutOfRange;
+            }
+
+            // Case 2: Target ally is Alive and injured -> Heal ally to 100
+            if (targetLife != null && targetLife.Status == NetworkPlayerLifeStatus.Alive && targetLife.Health < 100f)
+            {
+                if (Vector3.Distance(transform.position, targetLife.transform.position) <= 4f)
+                {
+                    if (targetLife.TryHeal(100f))
+                    {
+                        TeamToolOrdinal++;
+                        MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
+                            requester,
+                            $"player:{Object.Id}:tool:{TeamToolOrdinal}",
+                            "FIRST_AID_KIT");
+                        TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 2f);
+                        ConsumeGameplayTeamTool(state);
+                        return InteractionValidationResult.Accepted;
+                    }
+                }
+                return InteractionValidationResult.OutOfRange;
+            }
+
+            // Case 3: Self-heal if injured
+            if (selfLifeState.Status == NetworkPlayerLifeStatus.Alive && selfLifeState.Health < 100f)
+            {
+                if (selfLifeState.TryHeal(100f))
+                {
+                    TeamToolOrdinal++;
+                    MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
+                        requester,
+                        $"player:{Object.Id}:tool:{TeamToolOrdinal}",
+                        "FIRST_AID_KIT");
+                    TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 2f);
+                    ConsumeGameplayTeamTool(state);
+                    return InteractionValidationResult.Accepted;
+                }
+            }
+
+            return InteractionValidationResult.InvalidTargetState;
         }
 
         private InteractionValidationResult TryUseNoiseMakerAuthoritative(

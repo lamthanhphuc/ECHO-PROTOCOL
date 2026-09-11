@@ -70,7 +70,7 @@ public class PlayerInventoryDropInput : MonoBehaviour
         }
 
         bool throwPressed = Mouse.current != null
-            && Mouse.current.rightButton.wasPressedThisFrame;
+            && Mouse.current.leftButton.wasPressedThisFrame;
 
         if (throwPressed)
         {
