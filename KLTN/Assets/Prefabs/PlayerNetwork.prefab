@@ -193,6 +193,7 @@ GameObject:
   - component: {fileID: 3191561994591773081}
   - component: {fileID: 7312325081617675025}
   - component: {fileID: 740100000000000001}
+  - component: {fileID: 8700373143392243168}
   m_Layer: 0
   m_Name: PlayerNetwork
   m_TagString: Player
@@ -406,6 +407,8 @@ MonoBehaviour:
   _walkSpeed: 5
   _sprintSpeed: 7
   _allowJump: 0
+  _IsHidden:
+    RawValue: 0
 --- !u!114 &640100000000000004
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -471,6 +474,9 @@ MonoBehaviour:
   _ReviveCount: 0
   _TransitionOrdinal: 0
   _LastTransitionCause: 0
+  _CaughtByGhostId:
+    Raw: 0
+  _CatchDuration: 0
 --- !u!114 &559300001
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -862,6 +868,25 @@ MonoBehaviour:
     helmetBackpackMaterial: {fileID: 2100000, guid: 3447bf75c91ab8b499abe55ed82c2be5, type: 2}
     visorMaterial: {fileID: 2100000, guid: 73765654b5804c248acc1fff72ae328b, type: 2}
   lobbyState: {fileID: 640100000000000001}
+--- !u!114 &8700373143392243168
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6628407516427798355}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 424211e0903852a49816101b4e50fe09, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerJumpscareController
+  _ghostJumpscarePrefab: {fileID: 8145755207363234366, guid: 3fab18e8a651d3446a4007c22dcfa8f2, type: 3}
+  _scream: {fileID: 8300000, guid: cd2d6fb1d7a3dea428864b5f27c45104, type: 3}
+  _gameplayHud: {fileID: 0}
+  _ghostOffset: {x: 0, y: 0, z: 1}
+  _ghostEuler: {x: 0, y: 180, z: 0}
+  _shakeDegrees: 3
+  _fovPunch: 10
 --- !u!1 &7403492165048496517
 GameObject:
   m_ObjectHideFlags: 0
