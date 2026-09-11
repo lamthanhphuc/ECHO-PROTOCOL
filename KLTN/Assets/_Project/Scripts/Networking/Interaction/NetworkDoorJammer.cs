@@ -16,15 +16,33 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(0.01f)] private float _breakDurationSeconds = 3f;
         [SerializeField] private Collider _blockingCollider;
         [SerializeField] private Transform _visualRoot;
+        [SerializeField] private AudioClip _breakClip;
 
         [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
         public NetworkDoorJammerState State { get; private set; }
 
         [Networked] public NetworkId DoorId { get; private set; }
 
-        public bool IsActive => State == NetworkDoorJammerState.Active;
+        private NetworkDoorJammerState _offlineState = NetworkDoorJammerState.NotDeployed;
+
+        public bool IsActive => Object != null && Object.IsValid ? State == NetworkDoorJammerState.Active : _offlineState == NetworkDoorJammerState.Active;
         public bool BlocksTraversal => IsActive;
         public float BreakDurationSeconds => _breakDurationSeconds;
+
+        public void InitializeOffline()
+        {
+            _offlineState = NetworkDoorJammerState.Active;
+            if (_blockingCollider != null)
+            {
+                _blockingCollider.enabled = true;
+                _blockingCollider.isTrigger = false;
+            }
+
+            if (_visualRoot != null)
+            {
+                _visualRoot.gameObject.SetActive(true);
+            }
+        }
 
         public override void Spawned()
         {
@@ -75,10 +93,20 @@ namespace EchoProtocol.Networking
             {
                 State = NetworkDoorJammerState.Destroyed;
                 ApplyReplicatedState();
+                RpcPlayBreakAudio();
             }
 
             TryReconcileDoorRelationAuthoritative();
             return true;
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void RpcPlayBreakAudio()
+        {
+            if (_breakClip != null)
+            {
+                AudioSource.PlayClipAtPoint(_breakClip, transform.position);
+            }
         }
 
         private void TryReconcileDoorRelationAuthoritative()

@@ -405,6 +405,7 @@ Transform:
   - {fileID: 7045578691575231522}
   - {fileID: 620832323548374011}
   - {fileID: 7342167194425223325}
+  - {fileID: 786996232551591546}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &448000000000000001
@@ -452,8 +453,15 @@ MonoBehaviour:
   _rightOpenOffset: {x: 0, y: 0, z: -1.2}
   _animationDuration: 0.85
   _blockingCollider: {fileID: 1406505390517423999}
+  _jammerMount: {fileID: 786996232551591546}
+  _doorJammerPrefab: {fileID: 1000000000000000003, guid: f774535e39a54c0d98fd3d28e2809860, type: 3}
+  _doorBreakClip: {fileID: 8300000, guid: 987c306eb8e3398478ccbc78171615a0, type: 3}
+  _jammerDeployClip: {fileID: 8300000, guid: df3ce9aa1b04a6b4ba76e9bd36ff97c9, type: 3}
   _startsLocked: 0
+  _startsBroken: 0
   _State: 0
+  _ActiveJammerId:
+    Raw: 0
 --- !u!1 &7247139889159810521
 GameObject:
   m_ObjectHideFlags: 0
@@ -687,3 +695,34 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!1 &8568441752962055123
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 786996232551591546}
+  m_Layer: 0
+  m_Name: JammerMount
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &786996232551591546
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8568441752962055123}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.045, y: -0.171, z: -0.906}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7183899307944682043}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
