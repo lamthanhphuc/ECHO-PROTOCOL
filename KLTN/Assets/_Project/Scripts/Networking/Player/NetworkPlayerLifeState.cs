@@ -223,6 +223,18 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public bool TryHeal(float amount)
+        {
+            if (!Object.HasStateAuthority || Status != NetworkPlayerLifeStatus.Alive || Health >= _maximumHealth)
+            {
+                return false;
+            }
+
+            Health = Mathf.Min(Health + amount, _maximumHealth);
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
         public bool TryApplyMonsterDown(string monsterType, Vector3 hitPosition)
         {
             if (!Object.HasStateAuthority

@@ -227,6 +227,16 @@ namespace EchoProtocol.Networking
 
             var lifeState = GetComponent<NetworkPlayerLifeState>();
             if (lifeState != null && !lifeState.CanMove) return;
+
+            var hidingController = GetComponent<PlayerHidingController>();
+            if (hidingController != null && hidingController.IsHidden)
+            {
+                AnimationMoveX = 0f;
+                AnimationMoveY = 0f;
+                AnimationSprintHeld = false;
+                return;
+            }
+
             if (!GetInput(out NetworkPlayerInput input)) return;
 
             var localDirection = new Vector3(input.Move.x, 0f, input.Move.y);
@@ -289,6 +299,71 @@ namespace EchoProtocol.Networking
                 && _controller.Grounded)
             {
                 _controller.Jump();
+            }
+        }
+
+        [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]
+        public void RpcRequestTeleport(Vector3 position, Quaternion rotation)
+        {
+            if (_controller != null)
+            {
+                _controller.Teleport(position, rotation);
+            }
+            else
+            {
+                transform.SetPositionAndRotation(position, rotation);
+            }
+            Physics.SyncTransforms();
+        }
+
+        public void TeleportAuthoritative(Vector3 position, Quaternion rotation)
+        {
+            if (Runner != null && Object != null && Object.IsValid)
+            {
+                if (Object.HasStateAuthority)
+                {
+                    if (_controller != null)
+                    {
+                        _controller.Teleport(position, rotation);
+                    }
+                    else
+                    {
+                        transform.SetPositionAndRotation(position, rotation);
+                    }
+                    Physics.SyncTransforms();
+                }
+                else
+                {
+                    RpcRequestTeleport(position, rotation);
+
+                    if (_unityCharacterController != null)
+                    {
+                        bool wasEnabled = _unityCharacterController.enabled;
+                        _unityCharacterController.enabled = false;
+                        transform.SetPositionAndRotation(position, rotation);
+                        _unityCharacterController.enabled = wasEnabled;
+                    }
+                    else
+                    {
+                        transform.SetPositionAndRotation(position, rotation);
+                    }
+                    Physics.SyncTransforms();
+                }
+            }
+            else
+            {
+                if (_unityCharacterController != null)
+                {
+                    bool wasEnabled = _unityCharacterController.enabled;
+                    _unityCharacterController.enabled = false;
+                    transform.SetPositionAndRotation(position, rotation);
+                    _unityCharacterController.enabled = wasEnabled;
+                }
+                else
+                {
+                    transform.SetPositionAndRotation(position, rotation);
+                }
+                Physics.SyncTransforms();
             }
         }
 

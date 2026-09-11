@@ -100,7 +100,11 @@ namespace Fusion {
 
       _controller.Move(moveVelocity * deltaTime);
 
-      CCData.Velocity = (transform.position - previousPos) * Runner.TickRate;
+      var newVel = (transform.position - previousPos) * Runner.TickRate;
+      if (_controller.isGrounded && newVel.y > 0) {
+        newVel.y = 0f;
+      }
+      CCData.Velocity = newVel;
       CCData.Grounded = _controller.isGrounded;
     }
     
