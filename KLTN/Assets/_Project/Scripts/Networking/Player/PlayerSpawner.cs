@@ -415,7 +415,8 @@ namespace EchoProtocol.Networking
                 // In gameplay, players always start unarmed (ToolId = 0) and must pick up tools in the map
                 var enteringGameplay = gameplay && !state.IsGameplayPlayer;
                 var toolId = enteringGameplay ? 0 : state.ToolId;
-                state.InitializeAuthoritativeSelection(state.TeamId, toolId, gameplay);
+                var teamId = state.TeamId > 0 ? state.TeamId : slot;
+                state.InitializeAuthoritativeSelection(teamId, toolId, gameplay);
             }
 
             if (!TryTeleportExistingPlayer(playerObject, pose))

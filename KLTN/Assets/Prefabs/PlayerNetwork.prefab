@@ -192,6 +192,7 @@ GameObject:
   - component: {fileID: 8472264287315882914}
   - component: {fileID: 3191561994591773081}
   - component: {fileID: 7312325081617675025}
+  - component: {fileID: 740100000000000001}
   m_Layer: 0
   m_Name: PlayerNetwork
   m_TagString: Player
@@ -831,6 +832,36 @@ MonoBehaviour:
     MotionStrongMaxDistance: 15
     MotionMediumMaxDistance: 25
     MotionWeakMaxDistance: 35
+--- !u!114 &740100000000000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6628407516427798355}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 01b8bbd93fe14ed1ab055caf2d387c5d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerColorPresenter
+  colorSets:
+  - name: PF_PlayerCharacter_P1_Default
+    suitMaterial: {fileID: 2100000, guid: f51159db4312ae245ab3b3da5eb86241, type: 2}
+    helmetBackpackMaterial: {fileID: 2100000, guid: b6a25470f198dba4880197970f092073, type: 2}
+    visorMaterial: {fileID: 2100000, guid: b474495c0469ef44a8eed413a9d862e6, type: 2}
+  - name: PF_PlayerCharacter_P2_Orange
+    suitMaterial: {fileID: 2100000, guid: 0f6f9c70e7fbe9a48b49dfc9320d9400, type: 2}
+    helmetBackpackMaterial: {fileID: 2100000, guid: c09efcae27cbf994abafb898067e4e8e, type: 2}
+    visorMaterial: {fileID: 2100000, guid: 4d15cbe850db3f14ea3733c36302ad1f, type: 2}
+  - name: PF_PlayerCharacter_P3_Green
+    suitMaterial: {fileID: 2100000, guid: 4856a6970c94eef4083a3183b17f1a2b, type: 2}
+    helmetBackpackMaterial: {fileID: 2100000, guid: 6cc70b523d99b17409f83f34b1cbe377, type: 2}
+    visorMaterial: {fileID: 2100000, guid: 2f638b9542c536247953dad9013fc7dc, type: 2}
+  - name: PF_PlayerCharacter_P4_Purple
+    suitMaterial: {fileID: 2100000, guid: 3d36e43f6e5666345be03f88c698933e, type: 2}
+    helmetBackpackMaterial: {fileID: 2100000, guid: 3447bf75c91ab8b499abe55ed82c2be5, type: 2}
+    visorMaterial: {fileID: 2100000, guid: 73765654b5804c248acc1fff72ae328b, type: 2}
+  lobbyState: {fileID: 640100000000000001}
 --- !u!1 &7403492165048496517
 GameObject:
   m_ObjectHideFlags: 0

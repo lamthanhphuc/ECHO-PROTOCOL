@@ -86,7 +86,7 @@ namespace EchoProtocol.Networking
         public static event Action AnyStateChanged;
         public static event Action<LobbySelectionResult> LocalSelectionRequestCompleted;
 
-        [SerializeField, Min(1)] private int _teamCount = 2;
+        [SerializeField, Min(1)] private int _teamCount = 4;
         [SerializeField] private LobbyToolDefinition[] _toolDefinitions = Array.Empty<LobbyToolDefinition>();
 
         [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
@@ -434,6 +434,12 @@ namespace EchoProtocol.Networking
                 requestedId,
                 accepted,
                 (LobbySelectionError)error));
+        }
+
+        public override void Spawned()
+        {
+            base.Spawned();
+            AnyStateChanged?.Invoke();
         }
 
         private void HandleSelectionChanged()
