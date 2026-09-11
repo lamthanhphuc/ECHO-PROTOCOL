@@ -166,25 +166,12 @@ namespace EchoProtocol.Networking
 
         public void SetGameplayToolId(int toolId)
         {
-            if (Object == null || !Object.IsValid)
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || toolId < 0 || toolId > 4)
             {
                 return;
             }
 
-            if (Object.HasStateAuthority)
-            {
-                ToolId = toolId;
-                AnyStateChanged?.Invoke();
-            }
-            else if (Object.HasInputAuthority)
-            {
-                RpcRequestSetGameplayTool(toolId);
-            }
-        }
-
-        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-        private void RpcRequestSetGameplayTool(int toolId)
-        {
             ToolId = toolId;
             AnyStateChanged?.Invoke();
         }
@@ -333,6 +320,10 @@ namespace EchoProtocol.Networking
             }
 
             var error = ValidateOwnedRequest(requester);
+            if (error == LobbySelectionError.None && toolId != 0)
+            {
+                error = LobbySelectionError.InvalidSelection;
+            }
             if (error == LobbySelectionError.None && IsReady)
             {
                 error = LobbySelectionError.SelectionLockedWhileReady;

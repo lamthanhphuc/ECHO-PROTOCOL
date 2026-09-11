@@ -46,6 +46,11 @@ public class PlayerInventoryDropInput : MonoBehaviour
             return;
         }
 
+        if (IsActiveFusionGameplay())
+        {
+            return;
+        }
+
         if (keyboard != null)
         {
             if (keyboard.digit1Key.wasPressedThisFrame)
@@ -64,8 +69,8 @@ public class PlayerInventoryDropInput : MonoBehaviour
             }
         }
 
-        bool throwPressed = (keyboard != null && (keyboard.tKey.wasPressedThisFrame || keyboard.qKey.wasPressedThisFrame))
-            || (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame);
+        bool throwPressed = Mouse.current != null
+            && Mouse.current.rightButton.wasPressedThisFrame;
 
         if (throwPressed)
         {
@@ -236,6 +241,18 @@ public class PlayerInventoryDropInput : MonoBehaviour
     {
         NetworkObject networkObject = GetComponentInParent<NetworkObject>();
         return networkObject == null || !networkObject.IsValid || networkObject.HasInputAuthority;
+    }
+
+    private bool IsActiveFusionGameplay()
+    {
+        var networkObject = GetComponentInParent<NetworkObject>();
+        var lobbyState = GetComponentInParent<EchoProtocol.Networking.LobbyPlayerState>();
+        return networkObject != null
+            && networkObject.IsValid
+            && networkObject.Runner != null
+            && networkObject.Runner.IsRunning
+            && lobbyState != null
+            && lobbyState.IsGameplayPlayer;
     }
 
 }

@@ -457,6 +457,7 @@ MonoBehaviour:
   _doorJammerPrefab: {fileID: 1000000000000000003, guid: f774535e39a54c0d98fd3d28e2809860, type: 3}
   _doorBreakClip: {fileID: 8300000, guid: 987c306eb8e3398478ccbc78171615a0, type: 3}
   _jammerDeployClip: {fileID: 8300000, guid: df3ce9aa1b04a6b4ba76e9bd36ff97c9, type: 3}
+  _traversalObstacle: {fileID: 1406505390517424000}
   _startsLocked: 0
   _startsBroken: 0
   _State: 0
@@ -472,6 +473,7 @@ GameObject:
   m_Component:
   - component: {fileID: 8887125895298532899}
   - component: {fileID: 1406505390517423999}
+  - component: {fileID: 1406505390517424000}
   m_Layer: 0
   m_Name: PassageBlocker
   m_TagString: Untagged
@@ -515,6 +517,22 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.17698146, y: 2.4607744, z: 2.8529904}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!208 &1406505390517424000
+NavMeshObstacle:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7247139889159810521}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Shape: 1
+  m_Extents: {x: 0.08849073, y: 1.2303872, z: 1.4264952}
+  m_MoveThreshold: 0.1
+  m_CarveOnlyStationary: 1
+  m_Center: {x: 0, y: 0, z: 0}
+  m_TimeToStationary: 0.5
+  m_Carving: 1
 --- !u!1 &7250846520944821048
 GameObject:
   m_ObjectHideFlags: 0

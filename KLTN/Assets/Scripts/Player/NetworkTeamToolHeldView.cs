@@ -135,6 +135,22 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             foreach (var netObj in _visual.GetComponentsInChildren<NetworkObject>(true))
                 Destroy(netObj);
 
+            foreach (var networkObject in _visual.GetComponentsInChildren<NetworkObject>(true))
+                networkObject.enabled = false;
+
+            foreach (var networkBehaviour in _visual.GetComponentsInChildren<NetworkBehaviour>(true))
+                networkBehaviour.enabled = false;
+
+            foreach (var pickup in _visual.GetComponentsInChildren<NetworkTeamToolPickup>(true))
+                pickup.enabled = false;
+
+            foreach (var body in _visual.GetComponentsInChildren<Rigidbody>(true))
+            {
+                body.detectCollisions = false;
+                body.useGravity = false;
+                body.isKinematic = true;
+            }
+
             if (_shownToolId == 1)
             {
                 Transform childVisual = _visual.transform.Find("Visual");

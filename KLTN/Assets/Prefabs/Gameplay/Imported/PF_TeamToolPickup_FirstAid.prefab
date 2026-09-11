@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &5536313895210414100
+--- !u!1 &2653296260812904525
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,49 +8,46 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 5160879480094534318}
-  - component: {fileID: 8084237439237629195}
-  - component: {fileID: 6328696946441376193}
-  - component: {fileID: 8788715468368874090}
-  - component: {fileID: 9223372036854775001}
+  - component: {fileID: 5188576118269976615}
+  - component: {fileID: 8420618549123024722}
+  - component: {fileID: 395546491462374496}
   m_Layer: 0
-  m_Name: DistressBeaconDeployed
+  m_Name: Visual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &5160879480094534318
+--- !u!4 &5188576118269976615
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5536313895210414100}
+  m_GameObject: {fileID: 2653296260812904525}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 2, y: 2, z: 2}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 765955989931959943}
-  m_Father: {fileID: 0}
+  m_Children: []
+  m_Father: {fileID: 1711796250430673788}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &8084237439237629195
+--- !u!33 &8420618549123024722
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5536313895210414100}
-  m_Mesh: {fileID: 5462260225824006123, guid: 410565116cb61c34c92f6c2a72c0202f, type: 3}
---- !u!23 &6328696946441376193
+  m_GameObject: {fileID: 2653296260812904525}
+  m_Mesh: {fileID: 7323452761639777922, guid: 4e3859e7d4623f64ca345e315aebd6e6, type: 3}
+--- !u!23 &395546491462374496
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5536313895210414100}
+  m_GameObject: {fileID: 2653296260812904525}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -69,8 +66,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 6c9a8a61c2dbba944a2b5de91f205f71, type: 2}
-  - {fileID: 2100000, guid: 657a83fb5a637c64c8d9ea13edf8dd45, type: 2}
+  - {fileID: 2100000, guid: cd1583540f13c9c478cd20a9d62a91c2, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -94,38 +90,7 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!114 &8788715468368874090
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5536313895210414100}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 93354aaf66e8c2141a5fa7722db2c156, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::NoiseMakerBeacon
---- !u!114 &9223372036854775001
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5536313895210414100}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
-  SortKey: 2105972564
-  SendPriority: 1
-  EnableInterpolation: 1
-  Flags: 262146
-  NestedObjects: []
-  NetworkedBehaviours: []
-  ForceRemoteRenderTimeframe: 0
---- !u!1 &9137758001664879966
+--- !u!1 &4591283509848841344
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -133,37 +98,60 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 765955989931959943}
-  - component: {fileID: 2703954639210984600}
+  - component: {fileID: 1711796250430673788}
+  - component: {fileID: 5282768087981583904}
+  - component: {fileID: 2999380405014645034}
+  - component: {fileID: 828315162562736993}
   m_Layer: 0
-  m_Name: Collider_Box
+  m_Name: PF_TeamToolPickup_FirstAid
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &765955989931959943
+--- !u!4 &1711796250430673788
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9137758001664879966}
+  m_GameObject: {fileID: 4591283509848841344}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.26370543, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 0.2, y: 0.2, z: 0.2}
   m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 5160879480094534318}
+  m_Children:
+  - {fileID: 5188576118269976615}
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!65 &2703954639210984600
+--- !u!114 &5282768087981583904
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4591283509848841344}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 3446490142
+  SendPriority: 1
+  EnableInterpolation: 1
+  Flags: 262146
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 828315162562736993}
+  ForceRemoteRenderTimeframe: 0
+--- !u!65 &2999380405014645034
 BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9137758001664879966}
+  m_GameObject: {fileID: 4591283509848841344}
   m_Material: {fileID: 0}
   m_IncludeLayers:
     serializedVersion: 2
@@ -176,5 +164,26 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.3764551, y: 0.52741086, z: 0.33967674}
+  m_Size: {x: 0.45, y: 0.25, z: 0.45}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &828315162562736993
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4591283509848841344}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 72a4144cc71f4f69b927731d65332c79, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkTeamToolPickup
+  _interactionDistance: 3
+  _interactionPrompt: Interact
+  _requiredToolId: 0
+  _cooldownSeconds: 0.25
+  _interactionOrigin: {fileID: 0}
+  _emitsRuntimeInteractionNoise: 0
+  _runtimeInteractionNoiseOrigin: {fileID: 0}
+  _toolId: 3
+  _toolDisplayName: First Aid Kit

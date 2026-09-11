@@ -39,6 +39,16 @@ namespace EchoProtocol.UI.Auth
     private bool _busy;
     private bool _startupRestoreRunning;
 
+    private void Awake()
+    {
+      ConfigureInputField(loginUsernameInput);
+      ConfigureInputField(loginPasswordInput);
+      ConfigureInputField(registerEmailInput);
+      ConfigureInputField(registerUsernameInput);
+      ConfigureInputField(registerPasswordInput);
+      ConfigureInputField(registerConfirmPasswordInput);
+    }
+
     private void Start()
     {
       _runtime = AuthDomain.AuthRuntime.EnsureExists();
@@ -47,6 +57,7 @@ namespace EchoProtocol.UI.Auth
 
     private void OnEnable()
     {
+      ResetInputFields();
       if (loginButton != null) loginButton.onClick.AddListener(OnLoginClicked);
       if (goToRegisterButton != null) goToRegisterButton.onClick.AddListener(ShowRegisterPanel);
       if (registerButton != null) registerButton.onClick.AddListener(OnRegisterClicked);
@@ -59,6 +70,16 @@ namespace EchoProtocol.UI.Auth
       if (goToRegisterButton != null) goToRegisterButton.onClick.RemoveListener(ShowRegisterPanel);
       if (registerButton != null) registerButton.onClick.RemoveListener(OnRegisterClicked);
       if (backToLoginButton != null) backToLoginButton.onClick.RemoveListener(ShowLoginPanel);
+    }
+
+    private void LateUpdate()
+    {
+      SanitizeInputSelection(loginUsernameInput);
+      SanitizeInputSelection(loginPasswordInput);
+      SanitizeInputSelection(registerEmailInput);
+      SanitizeInputSelection(registerUsernameInput);
+      SanitizeInputSelection(registerPasswordInput);
+      SanitizeInputSelection(registerConfirmPasswordInput);
     }
 
     private IEnumerator StartupFlow()
@@ -302,6 +323,78 @@ namespace EchoProtocol.UI.Auth
       if (loginPasswordInput != null) loginPasswordInput.text = string.Empty;
       if (registerPasswordInput != null) registerPasswordInput.text = string.Empty;
       if (registerConfirmPasswordInput != null) registerConfirmPasswordInput.text = string.Empty;
+    }
+
+    private static void ConfigureInputField(InputField input)
+    {
+      if (input == null)
+      {
+        return;
+      }
+
+      input.readOnly = false;
+      input.text = string.Empty;
+      input.caretPosition = 0;
+      input.selectionAnchorPosition = 0;
+      input.selectionFocusPosition = 0;
+
+      if (input.textComponent != null)
+      {
+        input.textComponent.raycastTarget = false;
+      }
+
+      if (input.placeholder is Graphic placeholderGraphic)
+      {
+        placeholderGraphic.raycastTarget = false;
+      }
+
+      input.ForceLabelUpdate();
+    }
+
+    private void ResetInputFields()
+    {
+      ResetInputField(loginUsernameInput);
+      ResetInputField(loginPasswordInput);
+      ResetInputField(registerEmailInput);
+      ResetInputField(registerUsernameInput);
+      ResetInputField(registerPasswordInput);
+      ResetInputField(registerConfirmPasswordInput);
+    }
+
+    private static void ResetInputField(InputField input)
+    {
+      if (input == null)
+      {
+        return;
+      }
+
+      input.DeactivateInputField();
+      input.text = string.Empty;
+      input.caretPosition = 0;
+      input.selectionAnchorPosition = 0;
+      input.selectionFocusPosition = 0;
+      input.ForceLabelUpdate();
+    }
+
+    private static void SanitizeInputSelection(InputField input)
+    {
+      if (input == null)
+      {
+        return;
+      }
+
+      var textLength = input.text?.Length ?? 0;
+      if (input.caretPosition <= textLength
+          && input.selectionAnchorPosition <= textLength
+          && input.selectionFocusPosition <= textLength)
+      {
+        return;
+      }
+
+      input.caretPosition = Mathf.Clamp(input.caretPosition, 0, textLength);
+      input.selectionAnchorPosition = Mathf.Clamp(input.selectionAnchorPosition, 0, textLength);
+      input.selectionFocusPosition = Mathf.Clamp(input.selectionFocusPosition, 0, textLength);
+      input.ForceLabelUpdate();
     }
 
     private void SetBusy(bool busy)

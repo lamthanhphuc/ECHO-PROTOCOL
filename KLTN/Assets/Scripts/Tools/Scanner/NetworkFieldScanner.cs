@@ -74,7 +74,6 @@ namespace EchoProtocol.Tools.Scanner
             }
         }
 
-        private InputAction _scanAction;
         private InputAction _switchModeAction;
         private uint _nextSequence;
         private uint _lastProcessedSequence;
@@ -160,13 +159,7 @@ namespace EchoProtocol.Tools.Scanner
         {
             EnsureTuningDefaults();
             _switchModeAction = new InputAction("ScannerSwitchMode", InputActionType.Button);
-            _switchModeAction.AddBinding("<Mouse>/rightButton");
             _switchModeAction.AddBinding("<Keyboard>/b");
-            _switchModeAction.AddBinding("<Keyboard>/t");
-
-            _scanAction = new InputAction("ScannerScan", InputActionType.Button);
-            _scanAction.AddBinding("<Mouse>/leftButton");
-            // NOTE: Key F is Flashlight toggle in ECHO PROTOCOL. Scanner only uses LMB (Scan) and RMB (Mode).
         }
 
         public bool IsLocalControllingPlayer()
@@ -183,14 +176,12 @@ namespace EchoProtocol.Tools.Scanner
             if (IsLocalControllingPlayer())
             {
                 _switchModeAction?.Enable();
-                _scanAction?.Enable();
             }
         }
 
         private void OnDisable()
         {
             _switchModeAction?.Disable();
-            _scanAction?.Disable();
 
             if (IsLocalControllingPlayer())
             {
@@ -209,19 +200,16 @@ namespace EchoProtocol.Tools.Scanner
             if (IsLocalControllingPlayer())
             {
                 _switchModeAction?.Enable();
-                _scanAction?.Enable();
             }
             else
             {
                 _switchModeAction?.Disable();
-                _scanAction?.Disable();
             }
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             _switchModeAction?.Disable();
-            _scanAction?.Disable();
             ClearLocalResult();
 
             if (IsLocalControllingPlayer())
@@ -233,7 +221,6 @@ namespace EchoProtocol.Tools.Scanner
         private void OnDestroy()
         {
             _switchModeAction?.Dispose();
-            _scanAction?.Dispose();
         }
 
         private void Update()
@@ -311,31 +298,9 @@ namespace EchoProtocol.Tools.Scanner
                 }
             }
 
-            bool lmbPressed = false;
-            bool rmbPressed = false;
-
-            if (UnityEngine.InputSystem.Mouse.current != null)
-            {
-                lmbPressed |= UnityEngine.InputSystem.Mouse.current.leftButton.wasPressedThisFrame;
-                rmbPressed |= UnityEngine.InputSystem.Mouse.current.rightButton.wasPressedThisFrame;
-            }
-            if (_scanAction != null && _scanAction.WasPerformedThisFrame())
-            {
-                lmbPressed = true;
-            }
             if (_switchModeAction != null && _switchModeAction.WasPerformedThisFrame())
             {
-                rmbPressed = true;
-            }
-
-            if (rmbPressed)
-            {
                 RequestToggleMode();
-            }
-
-            if (lmbPressed)
-            {
-                RequestScan();
             }
         }
 

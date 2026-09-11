@@ -28,6 +28,7 @@ namespace EchoProtocol.Tools.Scanner
         private NetworkBool _isPickedUp { get; set; }
 
         private bool _localPickedUp;
+        private bool _pendingDespawn;
 
         public InventoryItemDefinition ToolItemDefinition => _toolItemDefinition;
         public int ToolId => _toolId;
@@ -67,6 +68,7 @@ namespace EchoProtocol.Tools.Scanner
             {
                 _isPickedUp = false;
                 _localPickedUp = false;
+                _pendingDespawn = false;
             }
 
             OnReplicatedStateChanged();
@@ -155,6 +157,7 @@ namespace EchoProtocol.Tools.Scanner
             if (Runner != null && Object != null && Object.IsValid && Object.HasStateAuthority)
             {
                 RpcTargetGiveLocalInventory(context.Player);
+                _pendingDespawn = true;
             }
 
             // Also give directly to local inventory if Host is the requester
@@ -169,6 +172,21 @@ namespace EchoProtocol.Tools.Scanner
 
             ToolPickedUp?.Invoke(this, context.Player);
             Debug.Log($"[NetworkToolPickup] Player {context.Player} picked up tool '{_toolItemDefinition?.DisplayName ?? _toolId.ToString()}'.");
+        }
+
+        public override void FixedUpdateNetwork()
+        {
+            if (!_pendingDespawn
+                || Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || Runner == null)
+            {
+                return;
+            }
+
+            _pendingDespawn = false;
+            Runner.Despawn(Object);
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]

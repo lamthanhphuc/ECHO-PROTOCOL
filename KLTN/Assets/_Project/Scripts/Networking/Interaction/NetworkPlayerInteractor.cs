@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
+using EchoProtocol.Tools.Scanner;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -17,6 +18,10 @@ namespace EchoProtocol.Networking
         [SerializeField] private Transform _rayOrigin;
         [SerializeField, Min(0.1f)] private float _localDetectionDistance = 3f;
         [SerializeField] private LayerMask _interactionLayers = ~0;
+        [SerializeField] private NetworkObject _fieldScannerPickupPrefab;
+        [SerializeField] private NetworkObject _noiseMakerPickupPrefab;
+        [SerializeField] private NetworkObject _firstAidPickupPrefab;
+        [SerializeField] private NetworkObject _doorJammerPickupPrefab;
         [SerializeField] private GameObject _noiseMakerBeaconPrefab; // Gán DistressBeaconDeployed prefab trong Inspector
         [SerializeField] private AudioClip _coreStabilizerPulseClip;
 
@@ -42,9 +47,7 @@ namespace EchoProtocol.Networking
             _interactAction = _inputActions?.FindActionMap("Player", false)?.FindAction("Interact", false);
             _dropCoreAction = new InputAction("DropCore", InputActionType.Button, "<Keyboard>/g");
             _teamToolAction = new InputAction("UseTeamTool", InputActionType.Button);
-            _teamToolAction.AddBinding("<Keyboard>/t");
-            _teamToolAction.AddBinding("<Keyboard>/q");
-            _teamToolAction.AddBinding("<Mouse>/leftButton");
+            _teamToolAction.AddBinding("<Mouse>/rightButton");
             _helpPingAction = new InputAction("HelpPing", InputActionType.Button, "<Keyboard>/h");
         }
 
@@ -117,7 +120,7 @@ namespace EchoProtocol.Networking
 
             if (_dropCoreAction?.WasPerformedThisFrame() == true)
             {
-                RequestDropCarriedCore();
+                RequestDropCarriedItem();
             }
             if (_teamToolAction?.WasPerformedThisFrame() == true) RequestUseTeamTool();
 
@@ -162,6 +165,41 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public bool RequestDropCarriedItem()
+        {
+            if (!Object.HasInputAuthority) return false;
+
+            var playerState = GetComponent<LobbyPlayerState>();
+            if (playerState != null && playerState.CarriedCoreId.IsValid)
+            {
+                return RequestDropCarriedCore();
+            }
+
+            if (playerState != null && playerState.ToolId >= 1 && playerState.ToolId <= 4)
+            {
+                return RequestDropTeamTool();
+            }
+
+            return false;
+        }
+
+        public bool RequestDropTeamTool()
+        {
+            if (!Object.HasInputAuthority) return false;
+
+            var playerState = GetComponent<LobbyPlayerState>();
+            if (playerState == null
+                || playerState.CarriedCoreId.IsValid
+                || playerState.ToolId < 1
+                || playerState.ToolId > 4)
+            {
+                return false;
+            }
+
+            RpcRequestDropTeamTool(NextSequence());
+            return true;
+        }
+
         public bool RequestUseTeamTool()
         {
             bool isOnline = Runner != null && Runner.IsRunning && Object != null && Object.IsValid;
@@ -169,6 +207,7 @@ namespace EchoProtocol.Networking
 
             var playerState = GetComponent<LobbyPlayerState>();
             if (isOnline && playerState != null && playerState.CarriedCoreId.IsValid) return false;
+            if (playerState != null && playerState.ToolId == 3) return false;
             var scanner = GetComponent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>();
             if (scanner != null && scanner.IsScannerEquipped())
             {
@@ -179,10 +218,6 @@ namespace EchoProtocol.Networking
             var inv = GetComponent<PlayerInventory>();
             if (toolId == 0 && inv != null && inv.TeamToolSlot != null)
             {
-                if (scanner != null)
-                {
-                    return scanner.RequestScan();
-                }
                 toolId = PlayerInventory.ResolveToolId(inv.TeamToolSlot);
             }
 
@@ -404,6 +439,88 @@ namespace EchoProtocol.Networking
             RpcInteractionResult(requester, coreId, sequence, (int)result);
         }
 
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        private void RpcRequestDropTeamTool(uint sequence, RpcInfo info = default)
+        {
+            if (!TryResolveRequester(info.Source, out var requester))
+            {
+                return;
+            }
+
+            var result = ValidateRequester(requester, sequence);
+            var state = GetComponent<LobbyPlayerState>();
+            var targetId = default(NetworkId);
+            if (result == InteractionValidationResult.Accepted)
+            {
+                var lifeState = GetComponent<NetworkPlayerLifeState>();
+                if (lifeState != null && !lifeState.CanInitiateAction)
+                {
+                    result = InteractionValidationResult.InvalidRequester;
+                }
+                else if (state == null || state.CarriedCoreId.IsValid)
+                {
+                    result = InteractionValidationResult.InvalidTargetState;
+                }
+                else if (state.ToolId < 1 || state.ToolId > 4)
+                {
+                    result = InteractionValidationResult.InvalidTargetState;
+                }
+                else if (!TrySpawnDroppedTeamToolAuthoritative(state.ToolId, out targetId))
+                {
+                    result = InteractionValidationResult.InvalidTarget;
+                }
+                else
+                {
+                    state.SetGameplayToolId(0);
+                }
+            }
+
+            if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+            RpcInteractionResult(requester, targetId, sequence, (int)result);
+        }
+
+        private bool TrySpawnDroppedTeamToolAuthoritative(int toolId, out NetworkId pickupId)
+        {
+            pickupId = default;
+            var prefab = TeamToolPickupPrefabFor(toolId);
+            if (prefab == null || Runner == null)
+            {
+                return false;
+            }
+
+            GetAuthoritativeDropPose(out var dropPosition, out var dropRotation);
+            var pickupObject = Runner.Spawn(prefab, dropPosition, dropRotation);
+            var validPickup = pickupObject != null
+                && ((pickupObject.TryGetComponent<NetworkTeamToolPickup>(out var teamToolPickup)
+                        && teamToolPickup.ToolId == toolId)
+                    || (pickupObject.TryGetComponent<NetworkToolPickup>(out var scannerPickup)
+                        && scannerPickup.ToolId == toolId));
+            if (!validPickup)
+            {
+                if (pickupObject != null)
+                {
+                    Runner.Despawn(pickupObject);
+                }
+
+                return false;
+            }
+
+            pickupId = pickupObject.Id;
+            return true;
+        }
+
+        private NetworkObject TeamToolPickupPrefabFor(int toolId)
+        {
+            switch (toolId)
+            {
+                case 1: return _fieldScannerPickupPrefab;
+                case 2: return _noiseMakerPickupPrefab;
+                case 3: return _firstAidPickupPrefab;
+                case 4: return _doorJammerPickupPrefab;
+                default: return null;
+            }
+        }
+
         private void GetAuthoritativeDropPose(out Vector3 position, out Quaternion rotation)
         {
             Vector3 flatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
@@ -419,7 +536,6 @@ namespace EchoProtocol.Networking
                 QueryTriggerInteraction.Ignore)
                 ? hit.point + Vector3.up * 0.05f
                 : candidate;
-            rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
             rotation = Quaternion.Euler(0f, transform.eulerAngles.y + 180f, 0f);
         }
 
@@ -443,6 +559,25 @@ namespace EchoProtocol.Networking
                 var toolType = ToolTypeFor(state.ToolId);
                 if (toolType != null)
                 {
+                    if (toolType == "FIELD_SCANNER" || toolType == "FIRST_AID_KIT")
+                    {
+                        if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+                        RpcInteractionResult(
+                            requester,
+                            targetId,
+                            sequence,
+                            (int)InteractionValidationResult.InvalidTargetState);
+                        return;
+                    }
+
+                    if (toolType == "NOISE_MAKER")
+                    {
+                        var noiseMakerResult = TryUseNoiseMakerAuthoritative(requester, state);
+                        if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+                        RpcInteractionResult(requester, targetId, sequence, (int)noiseMakerResult);
+                        return;
+                    }
+
                     if (toolType == "DOOR_JAMMER")
                     {
                         var jammerResult = TryDeployDoorJammerAuthoritative(requester, state, targetId);
@@ -451,64 +586,14 @@ namespace EchoProtocol.Networking
                         return;
                     }
 
-                    TeamToolOrdinal++;
-                    MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
-                        requester,
-                        $"player:{Object.Id}:tool:{TeamToolOrdinal}",
-                        toolType);
-                    TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 5f);
-                    if (toolType == "NOISE_MAKER")
+                    if (toolType == "CORE_STABILIZER")
                     {
-                        // Spawn beacon tại sàn phía trước player (3m)
-                        GetAuthoritativeDropPose(out var beaconPos, out var beaconRot);
-                        // Điều chỉnh forward xa hơn một chút cho throw feel
-                        beaconPos = transform.position
-                            + Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized * 3f;
-                        // Floor-snap
-                        if (Physics.Raycast(beaconPos + Vector3.up * 1.5f, Vector3.down, out var bHit, 4f,
-                            ~0, QueryTriggerInteraction.Ignore))
-                        {
-                            beaconPos = bHit.point + Vector3.up * 0.05f;
-                        }
-
-                        var prefabToSpawn = _noiseMakerBeaconPrefab;
-                        if (prefabToSpawn == null)
-                        {
-                            prefabToSpawn = Resources.Load<GameObject>("DistressBeaconDeployed");
-                        }
-
-                        if (prefabToSpawn != null)
-                        {
-                            var beaconGo = Instantiate(prefabToSpawn, beaconPos, Quaternion.identity);
-                            var beacon = beaconGo.GetComponent<NoiseMakerBeacon>();
-                            if (beacon != null)
-                            {
-                                beacon.Initialize(
-                                    requester,
-                                    Object.Id.ToString(),
-                                    (long)TeamToolOrdinal);
-                            }
-                        }
-                        else
-                        {
-                            // Fallback: phát 1 noise trực tiếp nếu chưa assign prefab
-                            HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
-                                .TryAccept(
-                                    requester,
-                                    RuntimeNoiseType.NOISE_MAKER,
-                                    RuntimeNoiseSourceOccurrenceKey.ForTeamTool(
-                                        Object.Id.ToString(),
-                                        toolType,
-                                        sequence),
-                                    transform.position,
-                                    out _);
-                        }
-
-                        // Consumes tool from player state & inventory
-                        ConsumeGameplayTeamTool(state);
-                    }
-                    else if (toolType == "CORE_STABILIZER")
-                    {
+                        TeamToolOrdinal++;
+                        MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
+                            requester,
+                            $"player:{Object.Id}:tool:{TeamToolOrdinal}",
+                            toolType);
+                        TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 5f);
                         float radius = 2.5f;
                         var hits = Physics.OverlapSphere(transform.position, radius, ~0, QueryTriggerInteraction.Collide);
                         bool stabilizedAny = false;
@@ -535,6 +620,76 @@ namespace EchoProtocol.Networking
             }
 
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+        }
+
+        private InteractionValidationResult TryUseNoiseMakerAuthoritative(
+            PlayerRef requester,
+            LobbyPlayerState state)
+        {
+            if (!Object.HasStateAuthority || state == null || state.ToolId != 2)
+            {
+                return InteractionValidationResult.InvalidRequester;
+            }
+
+            if (Runner == null)
+            {
+                return InteractionValidationResult.InvalidTarget;
+            }
+
+            GetAuthoritativeDropPose(out var beaconPos, out _);
+            var flatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
+            if (flatForward == Vector3.zero)
+            {
+                flatForward = transform.forward;
+            }
+
+            beaconPos = transform.position + flatForward * 3f;
+            if (Physics.Raycast(
+                    beaconPos + Vector3.up * 1.5f,
+                    Vector3.down,
+                    out var bHit,
+                    4f,
+                    ~0,
+                    QueryTriggerInteraction.Ignore))
+            {
+                beaconPos = bHit.point + Vector3.up * 0.05f;
+            }
+
+            var networkPrefab = _noiseMakerBeaconPrefab != null
+                ? _noiseMakerBeaconPrefab.GetComponent<NetworkObject>()
+                : null;
+            if (networkPrefab == null)
+            {
+                return InteractionValidationResult.InvalidTarget;
+            }
+
+            var beaconObject = Runner.Spawn(
+                networkPrefab,
+                beaconPos,
+                Quaternion.identity);
+            if (beaconObject == null
+                || !beaconObject.TryGetComponent<NoiseMakerBeacon>(out var beacon))
+            {
+                if (beaconObject != null)
+                {
+                    Runner.Despawn(beaconObject);
+                }
+
+                return InteractionValidationResult.InvalidTarget;
+            }
+
+            TeamToolOrdinal++;
+            beacon.Initialize(
+                requester,
+                Object.Id.ToString(),
+                (long)TeamToolOrdinal);
+            MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
+                requester,
+                $"player:{Object.Id}:tool:{TeamToolOrdinal}",
+                "NOISE_MAKER");
+            TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 5f);
+            ConsumeGameplayTeamTool(state);
+            return InteractionValidationResult.Accepted;
         }
 
         private InteractionValidationResult TryDeployDoorJammerAuthoritative(

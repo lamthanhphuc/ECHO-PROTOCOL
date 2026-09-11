@@ -355,8 +355,9 @@ namespace EchoProtocol.Networking
             if (playerObject.TryGetComponent<LobbyPlayerState>(out var state))
             {
                 // In gameplay, players always start unarmed (ToolId = 0) and must pick up tools in the map
-                var initialToolId = gameplay ? 0 : state.ToolId;
-                state.InitializeAuthoritativeSelection(state.TeamId, initialToolId, gameplay);
+                var enteringGameplay = gameplay && !state.IsGameplayPlayer;
+                var toolId = enteringGameplay ? 0 : state.ToolId;
+                state.InitializeAuthoritativeSelection(state.TeamId, toolId, gameplay);
             }
 
             if (!TryTeleportExistingPlayer(playerObject, pose))

@@ -275,6 +275,10 @@ MonoBehaviour:
   _interactionLayers:
     serializedVersion: 2
     m_Bits: 4294967295
+  _fieldScannerPickupPrefab: {fileID: 7407995254980528878, guid: bd7126f397d671b47a7357b603e8363e, type: 3}
+  _noiseMakerPickupPrefab: {fileID: 4253842779654547843, guid: a4233f32c65a0f446b144f89b39f593c, type: 3}
+  _firstAidPickupPrefab: {fileID: 5282768087981583904, guid: d2075e2082d18b64390490d50b3f94fd, type: 3}
+  _doorJammerPickupPrefab: {fileID: 8987240969475041260, guid: 8b4fb1bdfb3948dba45c7a9df312a901, type: 3}
   _noiseMakerBeaconPrefab: {fileID: 5536313895210414100, guid: 4a8de518f84dfbe4a9620fbab3379f24, type: 3}
   _coreStabilizerPulseClip: {fileID: 0}
 --- !u!114 &8434648393924393315
@@ -357,7 +361,7 @@ MonoBehaviour:
   toolVisual_1: {fileID: 6917847998477345115, guid: 42eed1ef7003d124d93c210c5b5cff43, type: 3}
   toolVisual_2: {fileID: 6336918889015265847, guid: 0c24821b2d6aef745a61febe92e91285, type: 3}
   toolVisual_3: {fileID: 5508043860142965960, guid: 7972be33729bd41458d3d7b5486243ef, type: 3}
-  toolVisual_4: {fileID: 0}
+  toolVisual_4: {fileID: 4853906723471563101, guid: a42bf3fb170f43a38c34a9242c8ee77d, type: 3}
   toolVisual_6: {fileID: 0}
   localPosition: {x: 0.04, y: 0.02, z: 0.12}
   localEulerAngles: {x: 0, y: 90, z: -18}
@@ -454,6 +458,10 @@ MonoBehaviour:
   - {fileID: 0}
   teamToolSlot: {fileID: 0}
   teamToolLocked: 0
+  fieldScannerDefinition: {fileID: 11400000, guid: 6289cba7e34d8cc46bda359b351cfe9e, type: 2}
+  noiseMakerDefinition: {fileID: 11400000, guid: 9dd6b970862ee4641bc2e47c12c990ea, type: 2}
+  firstAidDefinition: {fileID: 11400000, guid: 1efcfdbffb1e61f41a81b954f0c40c2c, type: 2}
+  doorJammerDefinition: {fileID: 11400000, guid: e99a6c2d76d24a94bfe61a7b2e8da214, type: 2}
 --- !u!114 &4938803890600570795
 MonoBehaviour:
   m_ObjectHideFlags: 0

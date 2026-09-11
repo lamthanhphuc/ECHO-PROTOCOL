@@ -111,6 +111,8 @@ namespace EchoProtocol.Networking
         [Networked] private TickTimer BleedoutTimer { get; set; }
         [Networked] private TickTimer ReviveTimer { get; set; }
         [Networked] private TickTimer ProtectionTimer { get; set; }
+        [Networked] private float ActiveReviveDurationSeconds { get; set; }
+        [Networked] private NetworkBool ActiveReviveUsedFirstAidKit { get; set; }
 
         private PlayerDownState _legacyDownState;
         private PlayerReviveInteractable _legacyReviveInteractable;
@@ -135,7 +137,8 @@ namespace EchoProtocol.Networking
         public float ReviveProtectionRemaining => Remaining(ProtectionTimer);
         public float ReviveProgress01 => !IsReviveInProgress
             ? 0f
-            : 1f - Mathf.Clamp01(Remaining(ReviveTimer) / _reviveDurationSeconds);
+            : 1f - Mathf.Clamp01(Remaining(ReviveTimer) /
+                Mathf.Max(0.1f, ActiveReviveDurationSeconds));
 
         public override void Spawned()
         {
@@ -153,6 +156,7 @@ namespace EchoProtocol.Networking
                 BleedoutTimer = TickTimer.None;
                 ReviveTimer = TickTimer.None;
                 ProtectionTimer = TickTimer.None;
+                ClearReviveSnapshot();
             }
 
             ApplyPresentation();
@@ -251,7 +255,12 @@ namespace EchoProtocol.Networking
             }
 
             Reviver = reviver;
-            ReviveTimer = TickTimer.CreateFromSeconds(Runner, _reviveDurationSeconds);
+            var reviverState = reviverObject.GetComponent<LobbyPlayerState>();
+            ActiveReviveUsedFirstAidKit = reviverState != null && reviverState.ToolId == 3;
+            ActiveReviveDurationSeconds = ActiveReviveUsedFirstAidKit
+                ? _reviveDurationSeconds * 0.5f
+                : _reviveDurationSeconds;
+            ReviveTimer = TickTimer.CreateFromSeconds(Runner, ActiveReviveDurationSeconds);
             CommitStatus(NetworkPlayerLifeStatus.Downed, NetworkPlayerLifeTransitionCause.ReviveStarted);
             Debug.Log($"[LifeState] {reviver} started reviving {Object.InputAuthority}.");
             return true;
@@ -309,6 +318,7 @@ namespace EchoProtocol.Networking
         {
             Reviver = PlayerRef.None;
             ReviveTimer = TickTimer.None;
+            ClearReviveSnapshot();
             ProtectionTimer = TickTimer.None;
             BleedoutTimer = TickTimer.CreateFromSeconds(Runner, _bleedoutSeconds);
             IsCrawling = true;
@@ -338,6 +348,7 @@ namespace EchoProtocol.Networking
             var previousReviver = Reviver;
             Reviver = PlayerRef.None;
             ReviveTimer = TickTimer.None;
+            ClearReviveSnapshot();
             IsCrawling = true;
             CommitStatus(NetworkPlayerLifeStatus.Downed, NetworkPlayerLifeTransitionCause.ReviveCancelled);
             Debug.Log($"[LifeState] Revive cancelled target={Object.InputAuthority}, reviver={previousReviver}, reason={reason}.");
@@ -348,8 +359,10 @@ namespace EchoProtocol.Networking
             if (!IsReviveInProgress || !CanContinueRevive()) return;
 
             var completedReviver = Reviver;
+            var usedFirstAidKit = ActiveReviveUsedFirstAidKit;
             Reviver = PlayerRef.None;
             ReviveTimer = TickTimer.None;
+            ClearReviveSnapshot();
             BleedoutTimer = TickTimer.None;
             IsCrawling = false;
             Health = Mathf.Clamp(_revivedHealth, 1f, _maximumHealth);
@@ -363,7 +376,7 @@ namespace EchoProtocol.Networking
                 completedReviver,
                 BuildOccurrenceKey("revive"),
                 ReviveCount,
-                false);
+                usedFirstAidKit);
             Debug.Log($"[LifeState] {Object.InputAuthority} revived by {completedReviver}; protection={_reviveProtectionSeconds:0.##}s.");
         }
 
@@ -393,6 +406,13 @@ namespace EchoProtocol.Networking
             BleedoutTimer = TickTimer.None;
             ReviveTimer = TickTimer.None;
             ProtectionTimer = TickTimer.None;
+            ClearReviveSnapshot();
+        }
+
+        private void ClearReviveSnapshot()
+        {
+            ActiveReviveDurationSeconds = 0f;
+            ActiveReviveUsedFirstAidKit = false;
         }
 
         private bool TryResolvePlayerLifeState(

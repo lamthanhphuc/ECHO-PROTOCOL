@@ -1,4 +1,6 @@
 using System;
+using EchoProtocol.Networking;
+using Fusion;
 using UnityEngine;
 
 public class PlayerInventory : MonoBehaviour
@@ -9,10 +11,35 @@ public class PlayerInventory : MonoBehaviour
     [SerializeField] private InventoryItemDefinition teamToolSlot;
     [SerializeField] private bool teamToolLocked;
 
+    [Header("Replicated Team Tool Definitions")]
+    [SerializeField] private InventoryItemDefinition fieldScannerDefinition;
+    [SerializeField] private InventoryItemDefinition noiseMakerDefinition;
+    [SerializeField] private InventoryItemDefinition firstAidDefinition;
+    [SerializeField] private InventoryItemDefinition doorJammerDefinition;
+
+    private LobbyPlayerState _lobbyState;
+    private NetworkObject _networkObject;
+
     public event Action InventoryChanged;
 
     public InventoryItemDefinition TeamToolSlot => teamToolSlot;
     public bool IsTeamToolLocked => teamToolLocked;
+
+    private void Awake()
+    {
+        _lobbyState = GetComponentInParent<LobbyPlayerState>();
+        _networkObject = GetComponentInParent<NetworkObject>();
+    }
+
+    private void OnEnable()
+    {
+        LobbyPlayerState.AnyStateChanged += RefreshReplicatedTeamTool;
+    }
+
+    private void OnDisable()
+    {
+        LobbyPlayerState.AnyStateChanged -= RefreshReplicatedTeamTool;
+    }
 
     private void OnValidate()
     {
@@ -35,7 +62,7 @@ public class PlayerInventory : MonoBehaviour
 
     private void Start()
     {
-        if (teamToolSlot != null)
+        if (!IsActiveFusionSession() && teamToolSlot != null)
         {
             UpdateLobbyStateTool(teamToolSlot);
         }
@@ -70,6 +97,11 @@ public class PlayerInventory : MonoBehaviour
 
         if (item.ItemType == InventoryItemType.TeamTool)
         {
+            if (IsActiveFusionSession())
+            {
+                return false;
+            }
+
             teamToolSlot = item;
             InventoryChanged?.Invoke();
             UpdateLobbyStateTool(teamToolSlot);
@@ -117,6 +149,11 @@ public class PlayerInventory : MonoBehaviour
 
         if (teamToolSlot == item)
         {
+            if (IsActiveFusionSession())
+            {
+                return false;
+            }
+
             teamToolSlot = null;
             InventoryChanged?.Invoke();
             UpdateLobbyStateTool(null);
@@ -176,7 +213,7 @@ public class PlayerInventory : MonoBehaviour
 
     public bool TryDropTeamTool(Vector3 position, Quaternion rotation)
     {
-        if (teamToolLocked || teamToolSlot == null)
+        if (IsActiveFusionSession() || teamToolLocked || teamToolSlot == null)
         {
             return false;
         }
@@ -277,12 +314,73 @@ public class PlayerInventory : MonoBehaviour
 
     private void UpdateLobbyStateTool(InventoryItemDefinition toolItem)
     {
-        var lobbyState = GetComponentInParent<EchoProtocol.Networking.LobbyPlayerState>();
+        if (IsActiveFusionSession())
+        {
+            return;
+        }
+
+        var lobbyState = GetComponentInParent<LobbyPlayerState>();
         if (lobbyState != null)
         {
             int toolId = ResolveToolId(toolItem);
             lobbyState.SetGameplayToolId(toolId);
         }
+    }
+
+    public bool ApplyReplicatedTeamTool(InventoryItemDefinition item)
+    {
+        if (item != null && item.ItemType != InventoryItemType.TeamTool)
+        {
+            return false;
+        }
+
+        if (teamToolSlot == item)
+        {
+            return true;
+        }
+
+        teamToolSlot = item;
+        InventoryChanged?.Invoke();
+        return true;
+    }
+
+    private void RefreshReplicatedTeamTool()
+    {
+        if (_lobbyState == null) _lobbyState = GetComponentInParent<LobbyPlayerState>();
+        if (_networkObject == null) _networkObject = GetComponentInParent<NetworkObject>();
+
+        if (_lobbyState == null
+            || _networkObject == null
+            || !_networkObject.IsValid
+            || !_networkObject.HasInputAuthority
+            || _lobbyState.Object == null
+            || !_lobbyState.Object.IsValid)
+        {
+            return;
+        }
+
+        ApplyReplicatedTeamTool(ResolveReplicatedTeamTool(_lobbyState.ToolId));
+    }
+
+    private InventoryItemDefinition ResolveReplicatedTeamTool(int toolId)
+    {
+        switch (toolId)
+        {
+            case 1: return fieldScannerDefinition;
+            case 2: return noiseMakerDefinition;
+            case 3: return firstAidDefinition;
+            case 4: return doorJammerDefinition;
+            default: return null;
+        }
+    }
+
+    private bool IsActiveFusionSession()
+    {
+        if (_networkObject == null) _networkObject = GetComponentInParent<NetworkObject>();
+        return _networkObject != null
+            && _networkObject.IsValid
+            && _networkObject.Runner != null
+            && _networkObject.Runner.IsRunning;
     }
 
     public static int ResolveToolId(InventoryItemDefinition item)

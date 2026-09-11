@@ -30,22 +30,63 @@ namespace EchoProtocol.Editor.Networking
             "Assets/Prefabs/Gameplay/Imported/DistressBeaconClosed.prefab";
         private const string FirstAidPickupPrefabPath =
             "Assets/Prefabs/Gameplay/Imported/PF_FirstAidPickup_Imported.prefab";
+        private const string FieldScannerDefinitionPath =
+            "Assets/ScriptableObjects/Inventory/SO_FieldScanner_ItemDefinition.asset";
+        private const string NoiseMakerDefinitionPath =
+            "Assets/ScriptableObjects/Inventory/SO_NoiseMaker_ItemDefinition.asset";
+        private const string DoorJammerDefinitionPath =
+            "Assets/ScriptableObjects/Inventory/SO_DoorJammer_ItemDefinition.asset";
+        private const string FieldScannerPickupPrefabPath =
+            "Assets/Prefabs/Tools/PF_FieldScanner_Pickup.prefab";
+        private const string NoiseMakerPickupPrefabPath =
+            "Assets/Prefabs/Gameplay/Imported/PF_TeamToolPickup_NoiseMaker.prefab";
+        private const string FirstAidTeamToolPickupPrefabPath =
+            "Assets/Prefabs/Gameplay/Imported/PF_TeamToolPickup_FirstAid.prefab";
+        private const string DoorJammerPickupPrefabPath =
+            "Assets/Prefabs/Gameplay/Imported/PF_TeamToolPickup_DoorJammer.prefab";
+        private const string DoorJammerVisualSourcePath =
+            "Assets/Resources/Network/PF_DoorJammer.prefab";
+        private const string DoorJammerHeldVisualPath =
+            "Assets/Prefabs/Gameplay/Imported/Visuals/PF_DoorJammer_HeldVisual.prefab";
         private const string SectorBoxPrefabPath =
             "Assets/Resources/Network/NetworkSectorBox.prefab";
 
         static M2ProductionGameplayPrefabUpgrader()
         {
-            EditorApplication.delayCall += UpgradePlayerPrefabIfNeeded;
+            EditorApplication.delayCall += EnsureTeamToolDropAssetsAndUpgradePlayers;
             EditorApplication.delayCall += CreateSectorBoxPrefabIfNeeded;
         }
 
         [MenuItem("ECHO Protocol/M2/Upgrade Production Gameplay Prefabs")]
         private static void UpgradeAll()
         {
-            UpgradePlayerPrefabIfNeeded();
+            EnsureTeamToolDropAssetsAndUpgradePlayers();
             EnsureFirstAidDefinitionsAreTeamTools();
             EnsureNoiseMakerBeaconPrefab();
             CreateSectorBoxPrefabIfNeeded();
+        }
+
+        private static void EnsureTeamToolDropAssetsAndUpgradePlayers()
+        {
+            EnsureNoiseMakerBeaconPrefab();
+            EnsureTeamToolPickupPrefab(
+                NoiseMakerPickupPrefabPath,
+                2,
+                "Noise Maker",
+                NoiseMakerClosedPrefabPath);
+            EnsureTeamToolPickupPrefab(
+                FirstAidTeamToolPickupPrefabPath,
+                3,
+                "First Aid Kit",
+                FirstAidPickupPrefabPath);
+            EnsureTeamToolPickupPrefab(
+                DoorJammerPickupPrefabPath,
+                4,
+                "Door Jammer",
+                DoorJammerVisualSourcePath);
+            EnsureTeamToolDefinition(NoiseMakerDefinitionPath, "noise_maker", "Noise Maker", NoiseMakerPickupPrefabPath);
+            EnsureTeamToolDefinition(DoorJammerDefinitionPath, "door_jammer", "Door Jammer", DoorJammerPickupPrefabPath);
+            UpgradePlayerPrefabIfNeeded();
         }
 
         private static void UpgradePlayerPrefabIfNeeded()
@@ -152,6 +193,8 @@ namespace EchoProtocol.Editor.Networking
                 changed = true;
             }
 
+            NetworkPlayerInteractor networkInteractor = root.GetComponent<NetworkPlayerInteractor>();
+
             PlayerEnergyCoreCarrier coreCarrier = root.GetComponent<PlayerEnergyCoreCarrier>();
             if (coreCarrier == null)
             {
@@ -254,6 +297,23 @@ namespace EchoProtocol.Editor.Networking
             interactionSo.FindProperty("inputActions").objectReferenceValue = inputActions;
             interactionSo.ApplyModifiedPropertiesWithoutUndo();
 
+            if (networkInteractor != null)
+            {
+                var networkInteractorSo = new SerializedObject(networkInteractor);
+                SetObject(networkInteractorSo.FindProperty("_fieldScannerPickupPrefab"), GetNetworkPrefab(FieldScannerPickupPrefabPath));
+                SetObject(networkInteractorSo.FindProperty("_noiseMakerPickupPrefab"), GetNetworkPrefab(NoiseMakerPickupPrefabPath));
+                SetObject(networkInteractorSo.FindProperty("_firstAidPickupPrefab"), GetNetworkPrefab(FirstAidTeamToolPickupPrefabPath));
+                SetObject(networkInteractorSo.FindProperty("_doorJammerPickupPrefab"), GetNetworkPrefab(DoorJammerPickupPrefabPath));
+                networkInteractorSo.ApplyModifiedPropertiesWithoutUndo();
+            }
+
+            var inventorySo = new SerializedObject(inventory);
+            SetObject(inventorySo.FindProperty("fieldScannerDefinition"), AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(FieldScannerDefinitionPath));
+            SetObject(inventorySo.FindProperty("noiseMakerDefinition"), AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(NoiseMakerDefinitionPath));
+            SetObject(inventorySo.FindProperty("firstAidDefinition"), AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(FirstAidDefinitionPath));
+            SetObject(inventorySo.FindProperty("doorJammerDefinition"), AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(DoorJammerDefinitionPath));
+            inventorySo.ApplyModifiedPropertiesWithoutUndo();
+
             var carrierSo = new SerializedObject(coreCarrier);
             carrierSo.FindProperty("inputActions").objectReferenceValue = inputActions;
             carrierSo.FindProperty("inventory").objectReferenceValue = inventory;
@@ -291,6 +351,7 @@ namespace EchoProtocol.Editor.Networking
             toolViewSo.FindProperty("heldItemAnchor").objectReferenceValue = anchor;
             SetObject(toolViewSo.FindProperty("toolVisual_2"), AssetDatabase.LoadAssetAtPath<GameObject>(NoiseMakerClosedPrefabPath));
             SetObject(toolViewSo.FindProperty("toolVisual_3"), AssetDatabase.LoadAssetAtPath<GameObject>(FirstAidPickupPrefabPath));
+            SetObject(toolViewSo.FindProperty("toolVisual_4"), AssetDatabase.LoadAssetAtPath<GameObject>(DoorJammerHeldVisualPath));
             SetVector3(toolViewSo.FindProperty("noiseMakerLocalPosition"), new Vector3(0.018f, 0.132f, -0.065f));
             SetVector3(toolViewSo.FindProperty("noiseMakerLocalEulerAngles"), new Vector3(6.176f, 93.2f, 94.562f));
             SetVector3(toolViewSo.FindProperty("noiseMakerLocalScale"), new Vector3(0.7f, 0.7f, 0.7f));
@@ -628,11 +689,29 @@ namespace EchoProtocol.Editor.Networking
             using (var scope = new PrefabUtility.EditPrefabContentsScope(NoiseMakerDeployedPrefabPath))
             {
                 GameObject root = scope.prefabContentsRoot;
+                bool changed = false;
                 if (root.GetComponent<NoiseMakerBeacon>() == null)
                 {
                     root.AddComponent<NoiseMakerBeacon>();
+                    changed = true;
+                }
+                if (root.GetComponent<Fusion.NetworkObject>() == null)
+                {
+                    root.AddComponent<Fusion.NetworkObject>();
+                    changed = true;
+                }
+                if (changed)
+                {
                     EditorUtility.SetDirty(root);
                 }
+            }
+
+            prefab = AssetDatabase.LoadAssetAtPath<GameObject>(NoiseMakerDeployedPrefabPath);
+            var labels = AssetDatabase.GetLabels(prefab);
+            if (System.Array.IndexOf(labels, "FusionPrefab") < 0)
+            {
+                ArrayUtility.Add(ref labels, "FusionPrefab");
+                AssetDatabase.SetLabels(prefab, labels);
             }
         }
 
@@ -722,6 +801,95 @@ namespace EchoProtocol.Editor.Networking
             {
                 property.objectReferenceValue = value;
             }
+        }
+
+        private static Fusion.NetworkObject GetNetworkPrefab(string prefabPath)
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            return prefab != null ? prefab.GetComponent<Fusion.NetworkObject>() : null;
+        }
+
+        private static void EnsureTeamToolPickupPrefab(
+            string prefabPath,
+            int toolId,
+            string displayName,
+            string visualSourcePath)
+        {
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) != null)
+            {
+                return;
+            }
+
+            EnsureAssetFolder("Assets/Prefabs/Gameplay/Imported");
+            var root = new GameObject(System.IO.Path.GetFileNameWithoutExtension(prefabPath));
+            try
+            {
+                root.AddComponent<Fusion.NetworkObject>();
+                var collider = root.AddComponent<BoxCollider>();
+                collider.isTrigger = false;
+                collider.size = new Vector3(0.45f, 0.25f, 0.45f);
+
+                var pickup = root.AddComponent<NetworkTeamToolPickup>();
+                var pickupSo = new SerializedObject(pickup);
+                pickupSo.FindProperty("_toolId").intValue = toolId;
+                pickupSo.FindProperty("_toolDisplayName").stringValue = displayName;
+                pickupSo.ApplyModifiedPropertiesWithoutUndo();
+
+                var visualSource = AssetDatabase.LoadAssetAtPath<GameObject>(visualSourcePath);
+                var sourceRenderer = visualSource != null
+                    ? visualSource.GetComponentInChildren<MeshRenderer>(true)
+                    : null;
+                var sourceFilter = sourceRenderer != null
+                    ? sourceRenderer.GetComponent<MeshFilter>()
+                    : null;
+                if (sourceRenderer != null && sourceFilter != null && sourceFilter.sharedMesh != null)
+                {
+                    var visual = new GameObject("Visual");
+                    visual.transform.SetParent(root.transform, false);
+                    visual.AddComponent<MeshFilter>().sharedMesh = sourceFilter.sharedMesh;
+                    visual.AddComponent<MeshRenderer>().sharedMaterials = sourceRenderer.sharedMaterials;
+                }
+
+                PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (prefab != null)
+            {
+                var labels = AssetDatabase.GetLabels(prefab);
+                if (System.Array.IndexOf(labels, "FusionPrefab") < 0)
+                {
+                    ArrayUtility.Add(ref labels, "FusionPrefab");
+                    AssetDatabase.SetLabels(prefab, labels);
+                }
+            }
+        }
+
+        private static void EnsureTeamToolDefinition(
+            string assetPath,
+            string itemId,
+            string displayName,
+            string worldPrefabPath)
+        {
+            if (AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(assetPath) != null)
+            {
+                return;
+            }
+
+            var definition = ScriptableObject.CreateInstance<InventoryItemDefinition>();
+            var definitionSo = new SerializedObject(definition);
+            definitionSo.FindProperty("itemId").stringValue = itemId;
+            definitionSo.FindProperty("displayName").stringValue = displayName;
+            definitionSo.FindProperty("itemType").enumValueIndex = (int)InventoryItemType.TeamTool;
+            SetObject(
+                definitionSo.FindProperty("worldPrefab"),
+                AssetDatabase.LoadAssetAtPath<GameObject>(worldPrefabPath));
+            definitionSo.ApplyModifiedPropertiesWithoutUndo();
+            AssetDatabase.CreateAsset(definition, assetPath);
         }
 
         private static Object ResolveInputActions(GameObject root)

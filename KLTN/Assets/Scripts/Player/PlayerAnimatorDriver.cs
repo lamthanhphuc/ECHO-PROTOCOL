@@ -171,7 +171,10 @@ public class PlayerAnimatorDriver : MonoBehaviour
                 ? networkMovement.AnimationMoveInput
                 : Vector2.zero;
 
-        if (input.sqrMagnitude <= 0.01f && Keyboard.current != null)
+        if (input.sqrMagnitude <= 0.01f &&
+            movement == null &&
+            networkMovement == null &&
+            Keyboard.current != null)
         {
             float x = 0f;
             float y = 0f;

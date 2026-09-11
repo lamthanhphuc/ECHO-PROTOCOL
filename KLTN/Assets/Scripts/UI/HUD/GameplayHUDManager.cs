@@ -1,3 +1,6 @@
+using EchoProtocol.Networking;
+using EchoProtocol.Tools.Scanner;
+using Fusion;
 using UnityEngine;
 
 namespace EchoProtocol.UI.HUD
@@ -16,6 +19,8 @@ namespace EchoProtocol.UI.HUD
 
         [Header("Runtime Auto-Find")]
         [SerializeField] private bool autoFindLocalPlayerOnStart = true;
+
+        private LobbyPlayerState _boundNetworkPlayerState;
 
         public HUDInteractionPrompt InteractionPrompt => interactionPrompt;
         public HUDObjectiveTracker ObjectiveTracker => objectiveTracker;
@@ -38,6 +43,19 @@ namespace EchoProtocol.UI.HUD
             }
         }
 
+        private void Update()
+        {
+            if (!autoFindLocalPlayerOnStart)
+            {
+                return;
+            }
+
+            if (IsActiveFusionSession() && !IsValidLocalNetworkPlayer(_boundNetworkPlayerState))
+            {
+                FindAndBindLocalPlayer();
+            }
+        }
+
         public void EnsureSubModuleReferences()
         {
             if (interactionPrompt == null) interactionPrompt = GetComponentInChildren<HUDInteractionPrompt>(true);
@@ -51,6 +69,26 @@ namespace EchoProtocol.UI.HUD
 
         public void FindAndBindLocalPlayer()
         {
+            var playerStates = FindObjectsByType<LobbyPlayerState>(FindObjectsInactive.Exclude);
+            for (var i = 0; i < playerStates.Length; i++)
+            {
+                var state = playerStates[i];
+                if (IsValidLocalNetworkPlayer(state))
+                {
+                    _boundNetworkPlayerState = state;
+                    BindLocalPlayer(state.gameObject);
+                    return;
+                }
+            }
+
+            if (IsActiveFusionSession())
+            {
+                _boundNetworkPlayerState = null;
+                ClearPlayerBinding();
+                return;
+            }
+
+            _boundNetworkPlayerState = null;
             PlayerMovement movement = FindAnyObjectByType<PlayerMovement>();
             if (movement != null)
             {
@@ -58,15 +96,64 @@ namespace EchoProtocol.UI.HUD
             }
         }
 
+        private void ClearPlayerBinding()
+        {
+            if (playerVitals != null)
+            {
+                playerVitals.BindPlayer(null, null, null);
+            }
+
+            if (interactionPrompt != null)
+            {
+                interactionPrompt.BindInteraction(null);
+            }
+
+            if (hotbar != null)
+            {
+                hotbar.BindInventory(null, null);
+            }
+
+            if (fieldScannerHUD != null)
+            {
+                fieldScannerHUD.UnbindScanner();
+            }
+        }
+
+        private static bool IsValidLocalNetworkPlayer(LobbyPlayerState state)
+        {
+            return state != null
+                && state.Object != null
+                && state.Object.IsValid
+                && state.Runner != null
+                && state.Runner.IsRunning
+                && state.Object.HasInputAuthority
+                && state.IsGameplayPlayer;
+        }
+
+        private static bool IsActiveFusionSession()
+        {
+            var runners = FindObjectsByType<NetworkRunner>(FindObjectsInactive.Exclude);
+            for (var i = 0; i < runners.Length; i++)
+            {
+                if (runners[i] != null && runners[i].IsRunning)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public void BindLocalPlayer(GameObject playerRoot)
         {
             if (playerRoot == null) return;
 
-            var movement = playerRoot.GetComponent<PlayerMovement>();
-            var downState = playerRoot.GetComponent<PlayerDownState>();
-            var carrier = playerRoot.GetComponent<PlayerEnergyCoreCarrier>();
-            var interaction = playerRoot.GetComponent<PlayerInteraction>();
-            var inventory = playerRoot.GetComponent<PlayerInventory>();
+            var movement = playerRoot.GetComponentInChildren<PlayerMovement>(true);
+            var downState = playerRoot.GetComponentInChildren<PlayerDownState>(true);
+            var carrier = playerRoot.GetComponentInChildren<PlayerEnergyCoreCarrier>(true);
+            var interaction = playerRoot.GetComponentInChildren<PlayerInteraction>(true);
+            var inventory = playerRoot.GetComponentInChildren<PlayerInventory>(true);
+            var fieldScanner = playerRoot.GetComponent<NetworkFieldScanner>();
 
             if (playerVitals != null)
             {
@@ -81,6 +168,11 @@ namespace EchoProtocol.UI.HUD
             if (hotbar != null)
             {
                 hotbar.BindInventory(inventory, carrier);
+            }
+
+            if (fieldScannerHUD != null)
+            {
+                fieldScannerHUD.BindScanner(fieldScanner);
             }
 
             if (teammateStatus != null)

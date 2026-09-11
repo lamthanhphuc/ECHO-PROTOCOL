@@ -147,9 +147,10 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
             _networkObject = GetComponentInParent<NetworkObject>();
         }
 
-        if (_networkObject != null && _networkObject.IsValid)
+        if (_networkObject != null && _networkObject.IsValid
+            && !_networkObject.HasInputAuthority)
         {
-            return _networkObject.HasInputAuthority;
+            return false;
         }
 
         Transform root = transform.root;

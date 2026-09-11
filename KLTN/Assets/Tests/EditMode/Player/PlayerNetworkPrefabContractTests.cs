@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -110,6 +111,82 @@ namespace EchoProtocol.Player.Tests
                 Assert.That(type.Name, Is.Not.EqualTo(PlayerCameraTypeName));
                 Assert.That(type.Namespace == null || !type.Namespace.StartsWith(StalkerNamespacePrefix, StringComparison.Ordinal), Is.True);
             }
+        }
+
+        [Test]
+        public void TEAM_TOOL_InputAndDropUseCanonicalNetworkGateway()
+        {
+            var source = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
+
+            StringAssert.Contains("_teamToolAction.AddBinding(\"<Mouse>/rightButton\")", source);
+            StringAssert.DoesNotContain("_teamToolAction.AddBinding(\"<Keyboard>/t\")", source);
+            StringAssert.DoesNotContain("_teamToolAction.AddBinding(\"<Mouse>/leftButton\")", source);
+            StringAssert.Contains("RequestDropCarriedItem();", source);
+            StringAssert.Contains("state.CarriedCoreId.IsValid", source);
+            StringAssert.Contains("RpcRequestDropTeamTool(NextSequence())", source);
+        }
+
+        [Test]
+        public void TEAM_TOOL_DropIsAuthoritativeAtomicAndMapsAllToolIds()
+        {
+            var source = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
+
+            StringAssert.Contains("RpcSources.InputAuthority, RpcTargets.StateAuthority", source);
+            StringAssert.Contains("Runner.Spawn(prefab, dropPosition, dropRotation)", source);
+            StringAssert.Contains("case 1: return _fieldScannerPickupPrefab", source);
+            StringAssert.Contains("case 2: return _noiseMakerPickupPrefab", source);
+            StringAssert.Contains("case 3: return _firstAidPickupPrefab", source);
+            StringAssert.Contains("case 4: return _doorJammerPickupPrefab", source);
+            Assert.That(
+                source.IndexOf("TrySpawnDroppedTeamToolAuthoritative", StringComparison.Ordinal),
+                Is.LessThan(source.IndexOf("state.SetGameplayToolId(0)", StringComparison.Ordinal)));
+        }
+
+        [Test]
+        public void TEAM_TOOL_GameplayStateMutationIsStateAuthorityOnly()
+        {
+            var source = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Player/LobbyPlayerState.cs");
+
+            StringAssert.Contains("!Object.HasStateAuthority", source);
+            StringAssert.Contains("toolId < 0 || toolId > 4", source);
+            StringAssert.DoesNotContain("RpcRequestSetGameplayTool", source);
+            StringAssert.Contains("error == LobbySelectionError.None && toolId != 0", source);
+            StringAssert.DoesNotContain("IsGameplayPlayer && toolId != 0", source);
+        }
+
+        [Test]
+        public void TEAM_TOOL_MainScannerOwnsScanAndUsesBOnlyForModeSwitch()
+        {
+            var interactor = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
+            var scanner = File.ReadAllText("Assets/Scripts/Tools/Scanner/NetworkFieldScanner.cs");
+
+            StringAssert.Contains("scanner.RequestScan()", interactor);
+            StringAssert.Contains("_switchModeAction.AddBinding(\"<Keyboard>/b\")", scanner);
+            StringAssert.DoesNotContain("_switchModeAction.AddBinding(\"<Keyboard>/t\")", scanner);
+            StringAssert.DoesNotContain("_switchModeAction.AddBinding(\"<Mouse>/rightButton\")", scanner);
+            StringAssert.DoesNotContain("_scanAction.AddBinding(\"<Mouse>/leftButton\")", scanner);
+            Assert.That(File.Exists("Assets/Scripts/UI/HUD/HUDFieldScannerResult.cs"), Is.False);
+        }
+
+        [Test]
+        public void TEAM_TOOL_TransitionReviveHudAndAnimationContractsArePreserved()
+        {
+            var spawner = File.ReadAllText("Assets/_Project/Scripts/Networking/Player/PlayerSpawner.cs");
+            var life = File.ReadAllText("Assets/_Project/Scripts/Networking/Player/NetworkPlayerLifeState.cs");
+            var animator = File.ReadAllText("Assets/Scripts/Player/PlayerAnimatorDriver.cs");
+            var hud = File.ReadAllText("Assets/Scripts/UI/HUD/GameplayHUDManager.cs");
+
+            StringAssert.Contains("gameplay && !state.IsGameplayPlayer", spawner);
+            StringAssert.Contains("_reviveDurationSeconds * 0.5f", life);
+            StringAssert.Contains("ActiveReviveDurationSeconds", life);
+            StringAssert.Contains("movement == null &&", animator);
+            StringAssert.Contains("networkMovement == null &&", animator);
+            StringAssert.Contains("state.Object.HasInputAuthority", hud);
+            StringAssert.Contains("state.IsGameplayPlayer", hud);
         }
 
         private static GameObject LoadPrefab()

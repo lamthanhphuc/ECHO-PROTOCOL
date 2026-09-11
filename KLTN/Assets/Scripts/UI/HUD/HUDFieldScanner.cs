@@ -1,4 +1,5 @@
 using System.Text;
+using EchoProtocol.Networking;
 using EchoProtocol.Tools.Scanner;
 using UnityEngine;
 using UnityEngine.UI;
@@ -84,6 +85,11 @@ namespace EchoProtocol.UI.HUD
 
         private void Update()
         {
+            if (_boundScanner != null && !CanBindScanner(_boundScanner))
+            {
+                UnbindScanner();
+            }
+
             if (_boundScanner == null)
             {
                 FindAndBindLocalScanner();
@@ -127,6 +133,7 @@ namespace EchoProtocol.UI.HUD
 
         public void BindScanner(NetworkFieldScanner scanner)
         {
+            if (scanner != null && !CanBindScanner(scanner)) return;
             if (_boundScanner == scanner) return;
 
             UnbindScanner();
@@ -164,21 +171,35 @@ namespace EchoProtocol.UI.HUD
             for (int i = 0; i < scanners.Length; i++)
             {
                 var s = scanners[i];
-                if (s.Object != null && s.Object.IsValid)
+                if (CanBindScanner(s))
                 {
-                    if (s.Object.HasInputAuthority)
-                    {
-                        BindScanner(s);
-                        return;
-                    }
-                }
-                else
-                {
-                    // Local / offline play
                     BindScanner(s);
                     return;
                 }
             }
+        }
+
+        private static bool CanBindScanner(NetworkFieldScanner scanner)
+        {
+            if (scanner == null)
+            {
+                return false;
+            }
+
+            if (scanner.Object == null
+                || !scanner.Object.IsValid
+                || scanner.Runner == null
+                || !scanner.Runner.IsRunning)
+            {
+                return true;
+            }
+
+            var playerState = scanner.GetComponent<LobbyPlayerState>();
+            return playerState != null
+                && playerState.Object != null
+                && playerState.Object.IsValid
+                && playerState.Object.HasInputAuthority
+                && playerState.IsGameplayPlayer;
         }
 
         private void HandleCoreResult(CoreScanResult result)
@@ -301,7 +322,7 @@ namespace EchoProtocol.UI.HUD
                     }
                     if (signalDetailText != null)
                     {
-                        signalDetailText.text = "NHẤN [CHUỘT TRÁI] ĐỂ BẬT QUÉT 10s\nHỆ THỐNG SẴN SÀNG";
+                        signalDetailText.text = "[CHUỘT PHẢI] QUÉT / DÙNG  •  [B] ĐỔI CHẾ ĐỘ\nHỆ THỐNG SẴN SÀNG";
                         signalDetailText.color = (mode == FieldScannerMode.Core)
                             ? new Color(0.15f, 0.95f, 0.85f, 1f)
                             : new Color(1f, 0.5f, 0.2f, 1f);
@@ -327,7 +348,7 @@ namespace EchoProtocol.UI.HUD
                     if (signalDetailText != null)
                     {
                         string strength = GetSignalStrengthVietnamese(res.SignalBars);
-                        signalDetailText.text = $"TÍN HIỆU NÕI: {strength}\nHƯỚNG: {GetSectorVietnamese(res.Direction)} [{arrow}]";
+                        signalDetailText.text = $"TÍN HIỆU NÕI: {strength}  •  {res.RawDistance:F1} m\nHƯỚNG: {GetSectorVietnamese(res.Direction)} [{arrow}]";
                         signalDetailText.color = new Color(0f, 0.95f, 1f, 1f);
                     }
 

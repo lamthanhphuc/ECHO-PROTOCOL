@@ -1,6 +1,7 @@
 using System;
 using Fusion;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace EchoProtocol.Networking
 {
@@ -22,6 +23,7 @@ namespace EchoProtocol.Networking
 
         [Header("Collision")]
         [SerializeField] private Collider _blockingCollider;
+        [SerializeField] private NavMeshObstacle _traversalObstacle;
 
         [Header("Door Jammer")]
         [SerializeField] private Transform _jammerMount;
@@ -260,10 +262,7 @@ namespace EchoProtocol.Networking
         {
             _targetOpenAmount = _offlineState == NetworkDoorState.Open ? 1f : 0f;
 
-            if (_blockingCollider != null)
-            {
-                _blockingCollider.enabled = DoorBlocksTraversal;
-            }
+            SynchronizeTraversalBlocking();
 
             ApplyVisuals(SmoothStep(_targetOpenAmount));
 
@@ -280,10 +279,7 @@ namespace EchoProtocol.Networking
             _targetOpenAmount = _offlineState == NetworkDoorState.Open ? 1f : 0f;
             _visualOpenAmount = _targetOpenAmount;
 
-            if (_blockingCollider != null)
-            {
-                _blockingCollider.enabled = DoorBlocksTraversal;
-            }
+            SynchronizeTraversalBlocking();
 
             ApplyVisuals(SmoothStep(_visualOpenAmount));
         }
@@ -529,14 +525,26 @@ namespace EchoProtocol.Networking
 
             // Closing blocks immediately. Opening becomes traversable as soon as the
             // authoritative state changes; the panels then catch up visually.
-            if (_blockingCollider != null)
-            {
-                _blockingCollider.enabled = DoorBlocksTraversal;
-            }
+            SynchronizeTraversalBlocking();
 
             ApplyVisuals(SmoothStep(_targetOpenAmount));
 
             StateChanged?.Invoke(this, State);
+        }
+
+        private void SynchronizeTraversalBlocking()
+        {
+            var blocksTraversal = DoorBlocksTraversal;
+
+            if (_blockingCollider != null)
+            {
+                _blockingCollider.enabled = blocksTraversal;
+            }
+
+            if (_traversalObstacle != null)
+            {
+                _traversalObstacle.enabled = blocksTraversal;
+            }
         }
 
         private bool TryGetActiveJammer(out NetworkDoorJammer jammer)
