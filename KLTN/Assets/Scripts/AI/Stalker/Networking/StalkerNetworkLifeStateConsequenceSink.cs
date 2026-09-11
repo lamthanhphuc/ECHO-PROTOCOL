@@ -10,13 +10,16 @@ namespace EchoProtocol.AI.Stalker.Networking
     {
         private readonly NetworkRunner _runner;
         private readonly FusionPlayerIdentityRegistry _identityRegistry;
+        private readonly StalkerFusionRuntime _ghost;
 
         public StalkerNetworkLifeStateConsequenceSink(
             NetworkRunner runner,
-            FusionPlayerIdentityRegistry identityRegistry)
+            FusionPlayerIdentityRegistry identityRegistry,
+            StalkerFusionRuntime ghost)
         {
             _runner = runner;
             _identityRegistry = identityRegistry;
+            _ghost = ghost;
         }
 
         public bool TryApplyStalkerHit(
@@ -34,9 +37,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return false;
             }
 
-            return lifeState.Status == NetworkPlayerLifeStatus.Downed
-                ? lifeState.TryEliminateForReviveLimit()
-                : lifeState.TryApplyMonsterDown("STALKER", authoritativeHitPosition);
+            return _ghost != null && _ghost.TryCatchPlayer(lifeState);
         }
     }
 }
