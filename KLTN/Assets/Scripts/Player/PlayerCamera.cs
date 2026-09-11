@@ -167,6 +167,9 @@ public class PlayerCamera : MonoBehaviour
             ? _lookAction.ReadValue<Vector2>()
             : Vector2.zero;
 
+        if (_networkLifeState != null && (_networkLifeState.IsCaught || _networkLifeState.IsEliminated))
+            lookInput = Vector2.zero;
+
         float yawDelta = lookInput.x * mouseSensitivity;
         float pitchDelta = lookInput.y * mouseSensitivity;
 

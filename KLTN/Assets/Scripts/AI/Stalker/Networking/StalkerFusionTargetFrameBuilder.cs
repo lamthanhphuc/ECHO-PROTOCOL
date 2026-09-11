@@ -65,7 +65,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                     playerId,
                     isDowned,
                     isEliminated,
-                    isHidden);
+                    isHidden || (lifeState != null && lifeState.IsCaught));
                 var eligibility = StalkerTargetEligibility.Evaluate(eligibilitySnapshot);
                 InsertStatusSortedUnique(targetStatuses, new StalkerTargetStatus(playerId, eligibility));
 

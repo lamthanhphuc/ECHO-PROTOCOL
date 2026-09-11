@@ -270,7 +270,12 @@ namespace EchoProtocol.Networking
             }
 
             var lifeState = GetComponent<NetworkPlayerLifeState>();
-            if (lifeState != null && !lifeState.CanMove) return;
+            if (lifeState != null && !lifeState.CanMove)
+            {
+                AnimationMoveX = AnimationMoveY = 0f;
+                AnimationSprintHeld = false;
+                return;
+            }
 
             var hidingController = GetComponent<PlayerHidingController>();
             if (IsHidden || (hidingController != null && hidingController.IsHidden))
@@ -523,6 +528,8 @@ namespace EchoProtocol.Networking
         private NetworkPlayerInput ReadLocalInput()
         {
             if (!Object.HasInputAuthority) return default;
+            var life = GetComponent<NetworkPlayerLifeState>();
+            if (life != null && !life.CanMove) return default;
 
             var hiding = GetComponent<PlayerHidingController>();
             bool isHidden = IsHidden || (hiding != null && hiding.IsHidden);

@@ -159,6 +159,9 @@ MonoBehaviour:
   patrolRoute: {fileID: 0}
   visionSensor: {fileID: 100005}
   patrolMode: 3
+  patrolSpeed: 7
+  chaseSpeed: 9
+  enableDiagnostics: 0
   candidateBfsDepth: 128
   stalenessHorizon: 15
   stalenessWeight: 1
@@ -217,6 +220,9 @@ MonoBehaviour:
   lifecycle: {fileID: 0}
   attackDamage: 25
   maximumDamageDistance: 2
+  catchEndsInDeath: 0
+  jumpscareSeconds: 2
+  catchCooldownSeconds: 2
   animator: {fileID: 1739994530661112979}
   animatorStateParameter: MonsterState
   _ReplicatedState: 0

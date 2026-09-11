@@ -30,6 +30,7 @@ GameObject:
   - component: {fileID: 7436874127465632743}
   - component: {fileID: 1999568602562065522}
   - component: {fileID: 7528143514624059401}
+  - component: {fileID: 258597381534401126}
   m_Layer: 0
   m_Name: TestNetworkPlayer
   m_TagString: Untagged
@@ -317,6 +318,9 @@ MonoBehaviour:
   _ReviveCount: 0
   _TransitionOrdinal: 0
   _LastTransitionCause: 0
+  _CaughtByGhostId:
+    Raw: 0
+  _CatchDuration: 0
 --- !u!114 &11400005
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -614,6 +618,25 @@ MonoBehaviour:
     MotionStrongMaxDistance: 15
     MotionMediumMaxDistance: 25
     MotionWeakMaxDistance: 35
+--- !u!114 &258597381534401126
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 424211e0903852a49816101b4e50fe09, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerJumpscareController
+  _ghostJumpscarePrefab: {fileID: 8145755207363234366, guid: 3fab18e8a651d3446a4007c22dcfa8f2, type: 3}
+  _scream: {fileID: 8300000, guid: cd2d6fb1d7a3dea428864b5f27c45104, type: 3}
+  _gameplayHud: {fileID: 0}
+  _ghostOffset: {x: 0, y: 0, z: 1}
+  _ghostEuler: {x: 0, y: 180, z: 0}
+  _shakeDegrees: 3
+  _fovPunch: 10
 --- !u!1 &505368408651250972
 GameObject:
   m_ObjectHideFlags: 0
