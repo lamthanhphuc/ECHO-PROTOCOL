@@ -12,6 +12,7 @@ using UnityEngine.UI;
 
 namespace EchoProtocol.EditorTools
 {
+    [InitializeOnLoad]
     public static class FieldScannerSetupBuilder
     {
         private const string ScannerModelPrefabPath = "Assets/Prefabs/Gameplay/Imported/PF_Scanner_Imported.prefab";
@@ -23,6 +24,21 @@ namespace EchoProtocol.EditorTools
         private const string TestPlayerPrefabPath = "Assets/_Project/Prefabs/Network/TestNetworkPlayer.prefab";
         private const string StalkerPrefabPath = "Assets/Prefabs/StalkerNetwork.prefab";
 
+        static FieldScannerSetupBuilder()
+        {
+            EditorApplication.update += CheckAndRun;
+        }
+
+        private static void CheckAndRun()
+        {
+            string markerPath = Path.Combine(Application.dataPath, "Editor/.run_field_scanner_setup");
+            if (File.Exists(markerPath))
+            {
+                File.Delete(markerPath);
+                ExecuteSetup();
+            }
+        }
+
         [MenuItem("Tools/ECHO Protocol/Setup Field Scanner Prefab and Player", priority = 20)]
         [MenuItem("ECHO Protocol/Setup Field Scanner Prefab and Player", priority = 20)]
         public static void ExecuteSetup()
@@ -32,7 +48,7 @@ namespace EchoProtocol.EditorTools
             EnsureFolder("Assets/Prefabs/Tools");
             EnsureFolder("Assets/ScriptableObjects/Inventory");
 
-            // 1. Build PF_FieldScanner handheld visual prefab
+            // 1. Build PF_FieldScanner handheld visual prefab with live 3D ScreenCanvas
             GameObject scannerPrefab = BuildScannerPrefab();
 
             // 2. Load or create InventoryItemDefinition
@@ -43,13 +59,13 @@ namespace EchoProtocol.EditorTools
                 AssetDatabase.CreateAsset(itemDef, ItemDefinitionPath);
             }
 
-            // 3. Configure all pickup prefabs with NetworkObject + NetworkToolPickup
+            // 3. Configure pickup prefab with NetworkObject + NetworkToolPickup
+            GameObject pickupPrefab = BuildScannerPickupPrefab();
             ConfigureScannerPickupPrefab(ScannerModelPrefabPath, itemDef);
             ConfigureScannerPickupPrefab(ScannerModelAltPrefabPath, itemDef);
-            GameObject pickupPrefab = BuildScannerPickupPrefab();
 
-            GameObject primaryPickup = AssetDatabase.LoadAssetAtPath<GameObject>(ScannerModelPrefabPath) ?? pickupPrefab;
-            BuildItemDefinition(primaryPickup);
+            GameObject primaryPickup = pickupPrefab ?? AssetDatabase.LoadAssetAtPath<GameObject>(ScannerModelPrefabPath);
+            BuildItemDefinition(primaryPickup, scannerPrefab);
 
             // 4. Upgrade Player Prefabs
             UpgradePlayerPrefab(PlayerNetworkPrefabPath, scannerPrefab);
@@ -63,11 +79,8 @@ namespace EchoProtocol.EditorTools
             // 5. Upgrade Stalker Monster Prefab
             UpgradeMonsterPrefab(StalkerPrefabPath);
 
-            // 6. Clean any placed pickups from scene (player places them manually)
-            RemovePickupsFromScene();
-
-            // 7. Clean ScreenCanvas from all scanner prefabs
-            CleanAllScannerPrefabs();
+            // 6. Place Pickup in SciFi Scene and Upgrade Scene Players
+            PlaceScannerPickupInSciFiScene(pickupPrefab, scannerPrefab);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -100,7 +113,6 @@ namespace EchoProtocol.EditorTools
                 col.isTrigger = true;
                 col.enabled = false;
             }
-            StripScannerScreenComponents(root);
 
             Transform visualChild = root.transform.Find("Visual");
             if (visualChild != null)
@@ -110,12 +122,75 @@ namespace EchoProtocol.EditorTools
                 visualChild.localScale = Vector3.one;
             }
 
+            // Ensure AudioSource
+            var audioSource = root.GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = root.AddComponent<AudioSource>();
+                audioSource.playOnAwake = false;
+                audioSource.spatialBlend = 0.5f;
+            }
+            var scannerAudio = root.GetComponent<FieldScannerAudio>();
+            if (scannerAudio == null)
+            {
+                scannerAudio = root.AddComponent<FieldScannerAudio>();
+            }
+
+            // Build live 3D ScreenCanvas on the handheld device
+            BuildScreenCanvas(root, scannerAudio);
+
             GameObject savedPrefab = PrefabUtility.SaveAsPrefabAsset(root, FieldScannerPrefabPath);
             EnsureFolder("Assets/Resources");
             PrefabUtility.SaveAsPrefabAsset(root, "Assets/Resources/PF_FieldScanner.prefab");
             Object.DestroyImmediate(root);
-            Debug.Log($"[FieldScannerSetupBuilder] Saved PF_FieldScanner to {FieldScannerPrefabPath} and Assets/Resources/PF_FieldScanner.prefab");
+            Debug.Log($"[FieldScannerSetupBuilder] Saved PF_FieldScanner with 3D ScreenCanvas to {FieldScannerPrefabPath}");
             return savedPrefab;
+        }
+
+        public static void BuildScreenCanvas(GameObject root, FieldScannerAudio scannerAudio)
+        {
+            Transform existing = root.transform.Find("ScreenCanvas");
+            if (existing != null) Object.DestroyImmediate(existing.gameObject);
+
+            GameObject canvasGo = new GameObject("ScreenCanvas");
+            canvasGo.transform.SetParent(root.transform, false);
+            // Position on device screen face
+            canvasGo.transform.localPosition = new Vector3(0.019f, 0.032f, -0.012f);
+            canvasGo.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            canvasGo.transform.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
+
+            Canvas canvas = canvasGo.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            RectTransform canvasRt = canvasGo.GetComponent<RectTransform>();
+            canvasRt.sizeDelta = new Vector2(100f, 80f);
+
+            var screenView = root.GetComponent<FieldScannerScreenView>();
+            if (screenView == null) screenView = root.AddComponent<FieldScannerScreenView>();
+
+            var header = EnsureTextElement(canvasGo.transform, "Header", new Vector2(0f, 26f), new Vector2(96f, 18f), 8f, "FIELD SCANNER\n[ CORE MODE ]");
+            header.color = new Color(0.15f, 0.95f, 0.85f);
+
+            var radar = EnsureTextElement(canvasGo.transform, "Radar", new Vector2(0f, 4f), new Vector2(96f, 24f), 10f, "\n   ▲\n");
+            radar.color = new Color(0f, 1f, 0.7f);
+
+            var signal = EnsureTextElement(canvasGo.transform, "Signal", new Vector2(0f, -16f), new Vector2(96f, 14f), 7f, "SIGNAL  □ □ □ □");
+            signal.color = new Color(1f, 0.9f, 0.2f);
+
+            var status = EnsureTextElement(canvasGo.transform, "Status", new Vector2(0f, -28f), new Vector2(96f, 12f), 6.5f, "SCAN READY");
+            status.color = new Color(0.3f, 1f, 0.4f);
+
+            SerializedObject so = new SerializedObject(screenView);
+            var headerProp = so.FindProperty("tmpHeader");
+            if (headerProp != null) headerProp.objectReferenceValue = header;
+            var radarProp = so.FindProperty("tmpRadar");
+            if (radarProp != null) radarProp.objectReferenceValue = radar;
+            var signalProp = so.FindProperty("tmpSignal");
+            if (signalProp != null) signalProp.objectReferenceValue = signal;
+            var statusProp = so.FindProperty("tmpStatus");
+            if (statusProp != null) statusProp.objectReferenceValue = status;
+            var audioProp = so.FindProperty("scannerAudio");
+            if (audioProp != null) audioProp.objectReferenceValue = scannerAudio;
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static TextMeshProUGUI EnsureTextElement(Transform parent, string name, Vector2 anchoredPos, Vector2 size, float fontSize, string defaultText)
@@ -138,7 +213,7 @@ namespace EchoProtocol.EditorTools
             return tmp;
         }
 
-        private static InventoryItemDefinition BuildItemDefinition(GameObject scannerPrefab)
+        private static InventoryItemDefinition BuildItemDefinition(GameObject pickupPrefab, GameObject scannerHeldPrefab)
         {
             InventoryItemDefinition itemDef = AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(ItemDefinitionPath);
             if (itemDef == null)
@@ -151,11 +226,32 @@ namespace EchoProtocol.EditorTools
             so.FindProperty("itemId").stringValue = "FieldScanner";
             so.FindProperty("displayName").stringValue = "Field Scanner";
             so.FindProperty("itemType").enumValueIndex = (int)InventoryItemType.TeamTool;
-            so.FindProperty("worldPrefab").objectReferenceValue = scannerPrefab;
+            so.FindProperty("worldPrefab").objectReferenceValue = pickupPrefab;
+            var gameplayProp = so.FindProperty("teamToolGameplayPrefab");
+            if (gameplayProp != null) gameplayProp.objectReferenceValue = scannerHeldPrefab;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             EditorUtility.SetDirty(itemDef);
             Debug.Log($"[FieldScannerSetupBuilder] Saved SO_FieldScanner_ItemDefinition at {ItemDefinitionPath}");
+
+            string resPath = "Assets/Resources/SO_FieldScanner_ItemDefinition.asset";
+            if (File.Exists(resPath))
+            {
+                var resItem = AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(resPath);
+                if (resItem != null)
+                {
+                    SerializedObject resSo = new SerializedObject(resItem);
+                    resSo.FindProperty("itemId").stringValue = "FieldScanner";
+                    resSo.FindProperty("displayName").stringValue = "Field Scanner";
+                    resSo.FindProperty("itemType").enumValueIndex = (int)InventoryItemType.TeamTool;
+                    resSo.FindProperty("worldPrefab").objectReferenceValue = pickupPrefab;
+                    var resGp = resSo.FindProperty("teamToolGameplayPrefab");
+                    if (resGp != null) resGp.objectReferenceValue = scannerHeldPrefab;
+                    resSo.ApplyModifiedPropertiesWithoutUndo();
+                    EditorUtility.SetDirty(resItem);
+                }
+            }
+
             return itemDef;
         }
 
@@ -325,6 +421,7 @@ namespace EchoProtocol.EditorTools
 
             GameObject root = Object.Instantiate(baseSource);
             root.name = "PF_FieldScanner_Pickup";
+            root.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
 
             // Ensure BoxCollider is active and enabled
             var col = root.GetComponent<BoxCollider>();
@@ -485,6 +582,71 @@ namespace EchoProtocol.EditorTools
             }
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
+        }
+
+        public static void PlaceScannerPickupInSciFiScene(GameObject pickupPrefab, GameObject scannerHeldPrefab)
+        {
+            string scenePath = "Assets/Scenes/SciFi.unity";
+            if (!File.Exists(scenePath)) return;
+
+            var scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+            if (!scene.IsValid()) return;
+
+            bool modified = false;
+
+            // 1. Position on table where PF_Scanner_Imported was
+            Vector3 tablePos = new Vector3(-83.23782f, 1.06f, -23.951048f);
+            Quaternion tableRot = Quaternion.identity;
+
+            foreach (var go in Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (go != null && (go.name == "PF_Scanner_Imported" || go.name == "PF_FieldScanner_Pickup"))
+                {
+                    tablePos = go.transform.position;
+                    tableRot = go.transform.rotation;
+                    Object.DestroyImmediate(go);
+                    modified = true;
+                }
+            }
+
+            // 2. Instantiate PF_FieldScanner_Pickup
+            if (pickupPrefab != null)
+            {
+                var instance = (GameObject)PrefabUtility.InstantiatePrefab(pickupPrefab);
+                instance.name = "PF_FieldScanner_Pickup";
+                instance.transform.position = tablePos;
+                instance.transform.rotation = Quaternion.Euler(90f, tableRot.eulerAngles.y, 0f);
+                modified = true;
+                Debug.Log("[FieldScannerSetupBuilder] Placed PF_FieldScanner_Pickup in SciFi scene at " + tablePos);
+            }
+
+            // 3. Upgrade any Player instances in scene
+            foreach (var player in Object.FindObjectsByType<PlayerHeldItemView>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                var pRoot = player.gameObject;
+                var netScanner = pRoot.GetComponent<NetworkFieldScanner>();
+                if (netScanner == null)
+                {
+                    pRoot.AddComponent<NetworkFieldScanner>();
+                    modified = true;
+                }
+
+                SerializedObject heldSo = new SerializedObject(player);
+                var prefabProp = heldSo.FindProperty("fieldScannerHeldPrefab");
+                if (prefabProp != null && prefabProp.objectReferenceValue != scannerHeldPrefab)
+                {
+                    prefabProp.objectReferenceValue = scannerHeldPrefab;
+                    heldSo.ApplyModifiedPropertiesWithoutUndo();
+                    modified = true;
+                }
+            }
+
+            if (modified)
+            {
+                EditorSceneManager.MarkSceneDirty(scene);
+                EditorSceneManager.SaveScene(scene);
+                Debug.Log("[FieldScannerSetupBuilder] Saved SciFi scene with Field Scanner pickup and player upgrades.");
+            }
         }
 
         [MenuItem("Tools/ECHO Protocol/Clean Field Scanner Pickups From Scene", priority = 25)]

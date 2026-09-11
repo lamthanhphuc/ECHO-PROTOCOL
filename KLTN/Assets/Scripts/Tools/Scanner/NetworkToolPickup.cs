@@ -194,7 +194,7 @@ namespace EchoProtocol.Tools.Scanner
             if (carrier != null && carrier.IsCarrying) return false;
 
             var lobbyState = interactor.GetComponentInParent<LobbyPlayerState>();
-            if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid)
+            if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.Object.Id.IsValid && lobbyState.Runner != null && lobbyState.Runner.IsRunning)
             {
                 if (lobbyState.CarriedCoreId.IsValid) return false;
                 if (lobbyState.ToolId > 0) return false;

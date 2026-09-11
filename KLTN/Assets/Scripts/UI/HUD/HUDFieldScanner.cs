@@ -90,9 +90,21 @@ namespace EchoProtocol.UI.HUD
             }
 
             // Scanner is equipped when tool slot has FieldScanner and player is not carrying an Energy Core
-            bool isEquipped = _boundScanner != null 
-                && _boundScanner.IsScannerEquipped() 
-                && !_boundScanner.IsCarryingCore();
+            bool isEquipped = false;
+            if (_boundScanner != null)
+            {
+                isEquipped = _boundScanner.IsScannerEquipped() && !_boundScanner.IsCarryingCore();
+            }
+            else
+            {
+                var inv = FindAnyObjectByType<PlayerInventory>();
+                if (inv != null && inv.TeamToolSlot != null)
+                {
+                    string id = (inv.TeamToolSlot.ItemId ?? string.Empty).ToLowerInvariant();
+                    string name = (inv.TeamToolSlot.DisplayName ?? string.Empty).ToLowerInvariant();
+                    isEquipped = id.Contains("scan") || name.Contains("scan");
+                }
+            }
 
             _targetAlpha = isEquipped ? 1f : 0f;
 

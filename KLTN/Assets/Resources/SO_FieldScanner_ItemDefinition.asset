@@ -15,5 +15,6 @@ MonoBehaviour:
   itemId: FieldScanner
   displayName: Field Scanner
   itemType: 1
-  worldPrefab: {fileID: 415804078536996598, guid: cf70d4dc256113f4e83b859504717a6d, type: 3}
+  worldPrefab: {fileID: 2588609610789739567, guid: bd7126f397d671b47a7357b603e8363e, type: 3}
+  teamToolGameplayPrefab: {fileID: 6917847998477345115, guid: 42eed1ef7003d124d93c210c5b5cff43, type: 3}
   icon: {fileID: 0}
