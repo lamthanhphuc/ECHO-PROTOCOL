@@ -16,10 +16,10 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     [SerializeField] private bool driveRightHandWhenHolding = true;
 
     [Header("Held Tool Right Hand Pose")]
-    [SerializeField] private Vector3 handForwardOffset = new Vector3(0.18f, -0.08f, 0.32f);
+    [SerializeField] private Vector3 handForwardOffset = new Vector3(0.20f, 0.12f, 0.36f);
     [SerializeField] private Vector3 handEulerOffset = new Vector3(0f, 0f, -75f);
-    [SerializeField, Range(0f, 1f)] private float rightHandPosWeight = 0.72f;
-    [SerializeField, Range(0f, 1f)] private float rightHandRotWeight = 0.75f;
+    [SerializeField, Range(0f, 1f)] private float rightHandPosWeight = 0.82f;
+    [SerializeField, Range(0f, 1f)] private float rightHandRotWeight = 0.80f;
 
     private PlayerInventory _inventory;
     private PlayerEnergyCoreCarrier _coreCarrier;
@@ -60,42 +60,80 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         animator.SetLookAtWeight(lookAtWeight, bodyWeight, headWeight, eyesWeight, clampWeight);
         animator.SetLookAtPosition(lookAt);
 
-        if (!driveRightHandWhenHolding || !IsHoldingTeamTool())
+        if (!driveRightHandWhenHolding)
         {
             return;
         }
 
-        Transform handAnchor = _heldItemAnchor != null
-            ? _heldItemAnchor.RightHandAnchor
-            : PlayerHeldItemAnchor.ResolveRightHandAnchor(playerRoot != null ? playerRoot.gameObject : gameObject);
-        if (handAnchor == null)
-        {
-            return;
-        }
-
+        Vector3 chestOrigin = transform.position + Vector3.up * 1.28f;
         Vector3 aimRight = Vector3.Cross(aimUp, aimForward).normalized;
         if (aimRight.sqrMagnitude <= 0.001f)
         {
             aimRight = transform.right;
         }
 
-        Vector3 chestOrigin = transform.position + Vector3.up * 1.05f;
-        Vector3 handTarget = chestOrigin
-            + aimForward * handForwardOffset.z
-            + aimRight * handForwardOffset.x
-            + aimUp * handForwardOffset.y;
+        if (IsCarryingCore())
+        {
+            Vector3 rightHandPos = chestOrigin + aimForward * 0.28f + aimRight * 0.16f - aimUp * 0.04f;
+            Vector3 leftHandPos = chestOrigin + aimForward * 0.28f - aimRight * 0.16f - aimUp * 0.04f;
 
-        float maxHandY = transform.position.y + 1.25f;
-        float minHandY = transform.position.y + 0.75f;
-        handTarget.y = Mathf.Clamp(handTarget.y, minHandY, maxHandY);
+            float minCarryY = transform.position.y + 1.10f;
+            float maxCarryY = transform.position.y + 1.50f;
+            rightHandPos.y = Mathf.Clamp(rightHandPos.y, minCarryY, maxCarryY);
+            leftHandPos.y = Mathf.Clamp(leftHandPos.y, minCarryY, maxCarryY);
 
-        Quaternion baseRotation = Quaternion.LookRotation(aimForward, aimUp);
-        Quaternion handRotation = baseRotation * Quaternion.Euler(handEulerOffset);
+            Quaternion baseRotation = Quaternion.LookRotation(aimForward, aimUp);
+            Quaternion rightHandRot = baseRotation * Quaternion.Euler(0f, -25f, -70f);
+            Quaternion leftHandRot = baseRotation * Quaternion.Euler(0f, 25f, 70f);
 
-        animator.SetIKPositionWeight(AvatarIKGoal.RightHand, rightHandPosWeight);
-        animator.SetIKRotationWeight(AvatarIKGoal.RightHand, rightHandRotWeight);
-        animator.SetIKPosition(AvatarIKGoal.RightHand, handTarget);
-        animator.SetIKRotation(AvatarIKGoal.RightHand, handRotation);
+            animator.SetIKPositionWeight(AvatarIKGoal.RightHand, 0.85f);
+            animator.SetIKRotationWeight(AvatarIKGoal.RightHand, 0.80f);
+            animator.SetIKPosition(AvatarIKGoal.RightHand, rightHandPos);
+            animator.SetIKRotation(AvatarIKGoal.RightHand, rightHandRot);
+
+            animator.SetIKPositionWeight(AvatarIKGoal.LeftHand, 0.85f);
+            animator.SetIKRotationWeight(AvatarIKGoal.LeftHand, 0.80f);
+            animator.SetIKPosition(AvatarIKGoal.LeftHand, leftHandPos);
+            animator.SetIKRotation(AvatarIKGoal.LeftHand, leftHandRot);
+            return;
+        }
+
+        if (IsHoldingTeamTool())
+        {
+            Transform handAnchor = _heldItemAnchor != null
+                ? _heldItemAnchor.RightHandAnchor
+                : PlayerHeldItemAnchor.ResolveRightHandAnchor(playerRoot != null ? playerRoot.gameObject : gameObject);
+            if (handAnchor == null)
+            {
+                return;
+            }
+
+            Vector3 handTarget = chestOrigin
+                + aimForward * handForwardOffset.z
+                + aimRight * handForwardOffset.x
+                + aimUp * handForwardOffset.y;
+
+            float maxHandY = transform.position.y + 1.68f;
+            float minHandY = transform.position.y + 1.05f;
+            handTarget.y = Mathf.Clamp(handTarget.y, minHandY, maxHandY);
+
+            Quaternion baseRotation = Quaternion.LookRotation(aimForward, aimUp);
+            Quaternion handRotation = baseRotation * Quaternion.Euler(handEulerOffset);
+
+            animator.SetIKPositionWeight(AvatarIKGoal.RightHand, rightHandPosWeight);
+            animator.SetIKRotationWeight(AvatarIKGoal.RightHand, rightHandRotWeight);
+            animator.SetIKPosition(AvatarIKGoal.RightHand, handTarget);
+            animator.SetIKRotation(AvatarIKGoal.RightHand, handRotation);
+
+            animator.SetIKPositionWeight(AvatarIKGoal.LeftHand, 0f);
+            animator.SetIKRotationWeight(AvatarIKGoal.LeftHand, 0f);
+            return;
+        }
+
+        animator.SetIKPositionWeight(AvatarIKGoal.RightHand, 0f);
+        animator.SetIKRotationWeight(AvatarIKGoal.RightHand, 0f);
+        animator.SetIKPositionWeight(AvatarIKGoal.LeftHand, 0f);
+        animator.SetIKRotationWeight(AvatarIKGoal.LeftHand, 0f);
     }
 
     public void SetExternalAim(Vector3 origin, Vector3 forward)
@@ -142,15 +180,19 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
     private bool IsHoldingTeamTool()
     {
-        bool carryingCore = (_coreCarrier != null && _coreCarrier.IsCarrying)
-            || (_lobbyState != null && _lobbyState.Object != null && _lobbyState.Object.IsValid && _lobbyState.CarriedCoreId.IsValid);
-        if (carryingCore)
+        if (IsCarryingCore())
         {
             return false;
         }
 
         return (_inventory != null && _inventory.TeamToolSlot != null)
             || (_lobbyState != null && _lobbyState.Object != null && _lobbyState.Object.IsValid && _lobbyState.ToolId != 0);
+    }
+
+    private bool IsCarryingCore()
+    {
+        return (_coreCarrier != null && _coreCarrier.IsCarrying)
+            || (_lobbyState != null && _lobbyState.Object != null && _lobbyState.Object.IsValid && _lobbyState.CarriedCoreId.IsValid);
     }
 
     private PlayerCamera FindBoundCamera()

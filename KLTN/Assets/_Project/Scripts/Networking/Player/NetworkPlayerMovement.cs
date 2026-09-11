@@ -14,6 +14,7 @@ namespace EchoProtocol.Networking
         public float LookPitch;
         public NetworkBool JumpPressed;
         public NetworkBool SprintHeld;
+        public NetworkBool CrouchHeld;
     }
 
     [RequireComponent(typeof(NetworkCharacterController))]
@@ -29,6 +30,7 @@ namespace EchoProtocol.Networking
         private InputAction _moveAction;
         private InputAction _jumpAction;
         private InputAction _sprintAction;
+        private InputAction _crouchAction;
         private PlayerCamera _playerCamera;
         private PlayerUpperBodyAim _upperBodyAim;
         private NetworkBootstrap _bootstrap;
@@ -37,12 +39,18 @@ namespace EchoProtocol.Networking
         private Vector3 _offlineVelocity;
         private Vector2 _offlineAnimationMoveInput;
         private bool _offlineAnimationSprinting;
+        private bool _offlineAnimationCrouching;
+
+        [SerializeField, Min(0f)] private float _standingHeight = 2f;
+        [SerializeField, Min(0f)] private float _crouchHeight = 1.2f;
+        [SerializeField, Min(0f)] private float _crouchTransitionSpeed = 10f;
 
         [Networked] private float LookPitch { get; set; }
         [Networked] private float AnimationMoveX { get; set; }
         [Networked] private float AnimationMoveY { get; set; }
         [Networked] private NetworkBool AnimationSprintHeld { get; set; }
         [Networked] public NetworkBool IsHidden { get; set; }
+        [Networked] public NetworkBool IsCrouching { get; set; }
 
         public float CurrentPitch => LookPitch;
 
@@ -72,6 +80,19 @@ namespace EchoProtocol.Networking
             }
         }
 
+        public bool IsAnimationCrouching
+        {
+            get
+            {
+                if (Runner == null || Object == null || !Object.IsValid)
+                {
+                    return _offlineAnimationCrouching;
+                }
+
+                return IsCrouching;
+            }
+        }
+
         public bool CanSprintInDirection(Vector2 moveInput)
         {
             // Backward movement (pressing S, moveInput.y < -0.01f) does not allow sprint and stays at normal walk speed
@@ -82,6 +103,7 @@ namespace EchoProtocol.Networking
         {
             _controller = GetComponent<NetworkCharacterController>();
             _unityCharacterController = GetComponent<CharacterController>();
+            ApplyCharacterControllerDimensions(_standingHeight, immediate: true);
 
             if (_inputActions != null)
             {
@@ -89,6 +111,7 @@ namespace EchoProtocol.Networking
                 _moveAction = playerMap?.FindAction("Move", false);
                 _jumpAction = playerMap?.FindAction("Jump", false);
                 _sprintAction = playerMap?.FindAction("Sprint", false);
+                _crouchAction = playerMap?.FindAction("Crouch", false);
             }
 
             if (_moveAction == null)
@@ -108,6 +131,10 @@ namespace EchoProtocol.Networking
             {
                 _sprintAction = new InputAction("Sprint", InputActionType.Button, "<Keyboard>/leftShift");
             }
+            if (_crouchAction == null)
+            {
+                _crouchAction = new InputAction("Crouch", InputActionType.Button, "<Keyboard>/c");
+            }
         }
 
         private void Start()
@@ -117,6 +144,7 @@ namespace EchoProtocol.Networking
                 _moveAction?.Enable();
                 _jumpAction?.Enable();
                 _sprintAction?.Enable();
+                _crouchAction?.Enable();
                 BindLocalPlayerCameraIfNeeded();
             }
         }
@@ -145,6 +173,7 @@ namespace EchoProtocol.Networking
             Vector2 moveInput = _moveAction?.ReadValue<Vector2>() ?? Vector2.zero;
             bool sprintHeld = _sprintAction?.IsPressed() ?? false;
             bool jumpPressed = _jumpAction?.WasPressedThisFrame() ?? false;
+            _offlineAnimationCrouching = IsCrouchPressed();
 
             Vector3 localDirection = new Vector3(moveInput.x, 0f, moveInput.y);
             if (localDirection.sqrMagnitude > 1f)
@@ -152,11 +181,12 @@ namespace EchoProtocol.Networking
                 localDirection.Normalize();
             }
 
-            bool isSprintMoving = sprintHeld && CanSprintInDirection(moveInput) && localDirection.sqrMagnitude > 0.01f;
-            float speed = isSprintMoving ? _sprintSpeed : _walkSpeed;
+            bool isSprintMoving = !_offlineAnimationCrouching && sprintHeld && CanSprintInDirection(moveInput) && localDirection.sqrMagnitude > 0.01f;
+            float speed = _offlineAnimationCrouching ? _walkSpeed * 0.55f : isSprintMoving ? _sprintSpeed : _walkSpeed;
 
             _offlineAnimationMoveInput = new Vector2(localDirection.x, localDirection.z);
             _offlineAnimationSprinting = isSprintMoving;
+            ApplyCharacterControllerDimensions(_offlineAnimationCrouching ? _crouchHeight : _standingHeight, immediate: false);
 
             float yaw = _playerCamera != null ? _playerCamera.Yaw : transform.eulerAngles.y;
             Quaternion lookRotation = Quaternion.Euler(0f, yaw, 0f);
@@ -183,7 +213,18 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            if (Object.HasStateAuthority)
+            {
+                IsHidden = false;
+            }
+
             if (!Object.HasInputAuthority) return;
+
+            var hiding = GetComponent<PlayerHidingController>();
+            if (hiding != null && hiding.IsHidden)
+            {
+                hiding.ExitHiding();
+            }
 
             _bootstrap = NetworkBootstrap.Instance;
             if (_bootstrap != null && !_isSceneLoadDoneSubscribed)
@@ -197,6 +238,7 @@ namespace EchoProtocol.Networking
             _moveAction?.Enable();
             _jumpAction?.Enable();
             _sprintAction?.Enable();
+            _crouchAction?.Enable();
             _bootstrap?.RegisterLocalInputProvider(Object, ReadLocalInput);
             Debug.Log($"[NetworkMovement] Local input provider registered for {Object.InputAuthority}.");
         }
@@ -213,6 +255,7 @@ namespace EchoProtocol.Networking
             _moveAction?.Disable();
             _jumpAction?.Disable();
             _sprintAction?.Disable();
+            _crouchAction?.Disable();
         }
 
         public override void FixedUpdateNetwork()
@@ -251,14 +294,26 @@ namespace EchoProtocol.Networking
             var lookRotation = Quaternion.Euler(0f, input.LookYaw, 0f);
             var direction = lookRotation * localDirection;
 
+            bool canInitiateAction = lifeState == null || lifeState.CanInitiateAction;
+            bool wantsCrouch = input.CrouchHeld && canInitiateAction;
+            if (Object.HasStateAuthority)
+            {
+                IsCrouching = wantsCrouch;
+            }
+
+            bool effectiveCrouch = Object.HasStateAuthority ? wantsCrouch : IsCrouching;
+
             var isSprintMoving =
-                (lifeState == null || lifeState.CanInitiateAction) &&
+                canInitiateAction &&
+                !effectiveCrouch &&
                 input.SprintHeld &&
                 CanSprintInDirection(input.Move) &&
                 direction.sqrMagnitude > 0.01f;
             AnimationSprintHeld = isSprintMoving;
 
-            var baseSpeed = isSprintMoving
+            var baseSpeed = effectiveCrouch
+                ? _walkSpeed * 0.55f
+                : isSprintMoving
                 ? _sprintSpeed
                 : _walkSpeed;
             var lobbyPlayer = GetComponent<LobbyPlayerState>();
@@ -301,6 +356,8 @@ namespace EchoProtocol.Networking
             {
                 _controller.Jump();
             }
+
+            ApplyCharacterControllerDimensions(effectiveCrouch ? _crouchHeight : _standingHeight, immediate: false);
         }
 
         [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]
@@ -417,6 +474,14 @@ namespace EchoProtocol.Networking
         private void HandleNetworkSceneLoadDone(NetworkRunner runner)
         {
             BindLocalPlayerCameraIfNeeded();
+            if (Object != null && Object.IsValid && Object.HasInputAuthority)
+            {
+                _moveAction?.Enable();
+                _jumpAction?.Enable();
+                _sprintAction?.Enable();
+                _crouchAction?.Enable();
+                _bootstrap?.RegisterLocalInputProvider(Object, ReadLocalInput);
+            }
         }
 
         private void BindLocalPlayerCameraIfNeeded()
@@ -434,6 +499,27 @@ namespace EchoProtocol.Networking
             Debug.Log($"[NetworkMovement] Bound local PlayerCamera to player.");
         }
 
+        private void ApplyCharacterControllerDimensions(float targetHeight, bool immediate)
+        {
+            if (_unityCharacterController == null) return;
+
+            targetHeight = Mathf.Max(0.1f, targetHeight);
+            if (immediate)
+            {
+                _unityCharacterController.height = targetHeight;
+            }
+            else
+            {
+                float deltaTime = Runner != null ? Runner.DeltaTime : Time.deltaTime;
+                _unityCharacterController.height = Mathf.Lerp(
+                    _unityCharacterController.height,
+                    targetHeight,
+                    _crouchTransitionSpeed * deltaTime);
+            }
+
+            _unityCharacterController.center = Vector3.up * ((_unityCharacterController.height - _standingHeight) * 0.5f);
+        }
+
         private NetworkPlayerInput ReadLocalInput()
         {
             if (!Object.HasInputAuthority) return default;
@@ -449,6 +535,7 @@ namespace EchoProtocol.Networking
                     LookPitch = _playerCamera != null ? _playerCamera.Pitch : 0f,
                     JumpPressed = false,
                     SprintHeld = false,
+                    CrouchHeld = false,
                 };
             }
 
@@ -463,7 +550,22 @@ namespace EchoProtocol.Networking
                     : 0f,
                 JumpPressed = _allowJump && (_jumpAction?.WasPressedThisFrame() ?? false),
                 SprintHeld = _sprintAction?.IsPressed() ?? false,
+                CrouchHeld = IsCrouchPressed(),
             };
+        }
+
+        private bool IsCrouchPressed()
+        {
+            if (_crouchAction != null && _crouchAction.IsPressed())
+            {
+                return true;
+            }
+
+            var keyboard = Keyboard.current;
+            return keyboard != null
+                && (keyboard.cKey.isPressed
+                    || keyboard.leftCtrlKey.isPressed
+                    || keyboard.rightCtrlKey.isPressed);
         }
     }
 }

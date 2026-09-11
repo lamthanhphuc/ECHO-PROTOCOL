@@ -55,6 +55,7 @@ public class PlayerMovement : MonoBehaviour
     {
         _controller = GetComponent<CharacterController>();
         _currentStamina = maxStamina;
+        ApplyControllerDimensions(standingHeight, standingRadius, immediate: true);
 
         if (inputActions != null)
         {
@@ -92,7 +93,7 @@ public class PlayerMovement : MonoBehaviour
         }
 
         bool wantsSprint = _sprintAction != null && _sprintAction.IsPressed();
-        bool wantsCrouch = _crouchAction != null && _crouchAction.IsPressed();
+        bool wantsCrouch = IsCrouchPressed();
         _isCrouching = wantsCrouch || (_isCrouching && !CanStandUp());
         _isSprinting = CanSprint(wantsSprint, move);
 
@@ -154,9 +155,7 @@ public class PlayerMovement : MonoBehaviour
     {
         float targetHeight = _isCrouching ? crouchHeight : standingHeight;
         float targetRadius = _isCrouching ? crouchRadius : standingRadius;
-        _controller.height = Mathf.Lerp(_controller.height, targetHeight, crouchTransitionSpeed * Time.deltaTime);
-        _controller.radius = Mathf.Lerp(_controller.radius, targetRadius, crouchTransitionSpeed * Time.deltaTime);
-        _controller.center = Vector3.up * ((_controller.height - standingHeight) * 0.5f);
+        ApplyControllerDimensions(targetHeight, targetRadius, immediate: false);
     }
 
     private bool CanStandUp()
@@ -177,6 +176,39 @@ public class PlayerMovement : MonoBehaviour
             radius,
             standUpObstructionMask,
             standUpTriggerInteraction);
+    }
+
+    private void ApplyControllerDimensions(float targetHeight, float targetRadius, bool immediate)
+    {
+        if (_controller == null) return;
+
+        if (immediate)
+        {
+            _controller.height = targetHeight;
+            _controller.radius = targetRadius;
+        }
+        else
+        {
+            float t = crouchTransitionSpeed * Time.deltaTime;
+            _controller.height = Mathf.Lerp(_controller.height, targetHeight, t);
+            _controller.radius = Mathf.Lerp(_controller.radius, targetRadius, t);
+        }
+
+        _controller.center = Vector3.up * ((_controller.height - standingHeight) * 0.5f);
+    }
+
+    private bool IsCrouchPressed()
+    {
+        if (_crouchAction != null && _crouchAction.IsPressed())
+        {
+            return true;
+        }
+
+        var keyboard = Keyboard.current;
+        return keyboard != null
+            && (keyboard.cKey.isPressed
+                || keyboard.leftCtrlKey.isPressed
+                || keyboard.rightCtrlKey.isPressed);
     }
 
     public void SetExternalSpeedMultiplier(float multiplier)

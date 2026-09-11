@@ -73,7 +73,9 @@ public class PlayerAnimatorDriver : MonoBehaviour
         if (lobbyState == null) lobbyState = GetComponent<LobbyPlayerState>() ?? GetComponentInParent<LobbyPlayerState>();
         if (downState == null) downState = GetComponent<PlayerDownState>() ?? GetComponentInParent<PlayerDownState>();
 
-        bool isCrouching = movement != null && movement.IsCrouching;
+        bool isCrouching = movement != null
+            ? movement.IsCrouching
+            : networkMovement != null && networkMovement.IsAnimationCrouching;
         bool isSprinting = movement != null
             ? movement.IsSprinting
             : networkMovement != null
