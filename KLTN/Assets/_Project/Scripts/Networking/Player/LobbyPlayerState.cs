@@ -436,12 +436,6 @@ namespace EchoProtocol.Networking
                 (LobbySelectionError)error));
         }
 
-        public override void Spawned()
-        {
-            base.Spawned();
-            AnyStateChanged?.Invoke();
-        }
-
         private void HandleSelectionChanged()
         {
             AnyStateChanged?.Invoke();
