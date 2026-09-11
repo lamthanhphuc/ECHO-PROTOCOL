@@ -13,6 +13,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
     [SerializeField] private GameObject toolVisual_2; // NOISE_MAKER – DistressBeaconClosed
     [SerializeField] private GameObject toolVisual_3; // FIRST_AID_KIT – FirstAidKit_Red
     [SerializeField] private GameObject toolVisual_4; // DOOR_JAMMER – giữ placeholder
+    [SerializeField] private GameObject toolVisual_6; // CORE_STABILIZER – PF_CoreStabilizer_Device_Animated
 
     [Header("Fallback Placeholder Size")]
     [SerializeField] private Vector3 localPosition = new Vector3(0.04f, 0.02f, 0.12f);
@@ -34,6 +35,16 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
     [SerializeField] private Vector3 firstAidChildLocalPosition = new Vector3(-0.533528f, -3.405526f, -0.3114559f);
     [SerializeField] private Vector3 firstAidChildLocalEulerAngles = new Vector3(0.12f, -0.416f, 5.923f);
     [SerializeField] private Vector3 firstAidChildLocalScale = Vector3.one;
+    [SerializeField] private Vector3 plankLocalPosition = Vector3.zero;
+    [SerializeField] private Vector3 plankLocalEulerAngles = Vector3.zero;
+    [SerializeField] private Vector3 plankLocalScale = Vector3.one;
+    [SerializeField] private Vector3 plankChildLocalPosition = new Vector3(0.0151f, 0.0386f, -0.0076f);
+    [SerializeField] private Vector3 plankChildLocalEulerAngles = new Vector3(90f, 0f, 0f);
+    [SerializeField] private Vector3 plankChildLocalScale = new Vector3(22.23983f, 0.5456054f, 2.985957f);
+    [Header("Core Stabilizer Transform")]
+    [SerializeField] private Vector3 coreStabilizerLocalPosition = new Vector3(0.035f, 0.02f, 0.12f);
+    [SerializeField] private Vector3 coreStabilizerLocalEulerAngles = new Vector3(10f, 90f, -15f);
+    [SerializeField] private Vector3 coreStabilizerLocalScale = new Vector3(0.45f, 0.45f, 0.45f);
 
     private GameObject _visual;
     private int _shownToolId;
@@ -115,8 +126,14 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             _visual.transform.localScale = ResolveToolScale(_shownToolId);
 
             // Tắt tất cả collider trên held visual để không ảnh hưởng gameplay
-            foreach (var col in _visual.GetComponentsInChildren<Collider>())
-                col.enabled = false;
+            foreach (var c in _visual.GetComponentsInChildren<Collider>(true))
+                c.enabled = false;
+            foreach (var audio in _visual.GetComponentsInChildren<AudioSource>(true))
+                audio.enabled = false;
+            foreach (var pickup in _visual.GetComponentsInChildren<EchoProtocol.Tools.Scanner.NetworkToolPickup>(true))
+                pickup.enabled = false;
+            foreach (var netObj in _visual.GetComponentsInChildren<NetworkObject>(true))
+                Destroy(netObj);
 
             if (_shownToolId == 1)
             {
@@ -144,6 +161,20 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
                     childVisual.localPosition = firstAidChildLocalPosition;
                     childVisual.localRotation = Quaternion.Euler(firstAidChildLocalEulerAngles);
                     childVisual.localScale = firstAidChildLocalScale;
+                }
+            }
+            else if (_shownToolId == 4)
+            {
+                Transform childVisual = _visual.transform.Find("Visual");
+                if (childVisual == null && _visual.transform.childCount > 0)
+                {
+                    childVisual = _visual.transform.GetChild(0);
+                }
+                if (childVisual != null)
+                {
+                    childVisual.localPosition = plankChildLocalPosition;
+                    childVisual.localRotation = Quaternion.Euler(plankChildLocalEulerAngles);
+                    childVisual.localScale = plankChildLocalScale;
                 }
             }
         }
@@ -177,6 +208,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             case 2: return toolVisual_2;
             case 3: return toolVisual_3;
             case 4: return toolVisual_4;
+            case 6: return toolVisual_6;
             default: return null;
         }
     }
@@ -188,6 +220,8 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             case 1: return fieldScannerLocalPosition;
             case 2: return noiseMakerLocalPosition;
             case 3: return firstAidLocalPosition;
+            case 4: return plankLocalPosition;
+            case 6: return coreStabilizerLocalPosition;
             default: return localPosition;
         }
     }
@@ -199,6 +233,8 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             case 1: return fieldScannerLocalEulerAngles;
             case 2: return noiseMakerLocalEulerAngles;
             case 3: return firstAidLocalEulerAngles;
+            case 4: return plankLocalEulerAngles;
+            case 6: return coreStabilizerLocalEulerAngles;
             default: return localEulerAngles;
         }
     }
@@ -210,6 +246,8 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             case 1: return fieldScannerLocalScale;
             case 2: return noiseMakerLocalScale;
             case 3: return firstAidLocalScale;
+            case 4: return plankLocalScale;
+            case 6: return coreStabilizerLocalScale;
             default: return localScale;
         }
     }
@@ -239,6 +277,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             case 2: return new Color(1f, 0.74f, 0.28f);
             case 3: return new Color(0.45f, 1f, 0.55f);
             case 4: return new Color(1f, 0.42f, 0.48f);
+            case 6: return new Color(0.15f, 0.65f, 1f);
             default: return Color.white;
         }
     }

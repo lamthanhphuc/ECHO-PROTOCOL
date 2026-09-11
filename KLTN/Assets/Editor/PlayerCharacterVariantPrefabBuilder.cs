@@ -8,28 +8,37 @@ public static class PlayerCharacterVariantPrefabBuilder
     private const string MaterialFolder = "Assets/Materials/PlayerCharacter";
     private const string PrefabFolder = "Assets/Prefabs/Player/Variants";
     private const string BodyModelPath = "Assets/import/Character/source/astro-engineer-07d.fbx";
-    private const string HelmetBackpackModelPath = "Assets/import/Character/source/astro-engineer-helmet-backpack.obj";
+    private const string HelmetModelPath = "Assets/import/Character/source/astro-engineer-helmet.obj";
+    private const string BackpackModelPath = "Assets/import/Character/source/astro-engineer-backpack.obj";
     private static readonly Vector3 HelmetBackpackOffset = new Vector3(-0.015f, -0.315f, 0.003f);
     private static readonly Vector3 HelmetBackpackScale = new Vector3(1.18f, 1.18f, 1.18f);
+
+    static PlayerCharacterVariantPrefabBuilder()
+    {
+        EditorApplication.update += CheckAndRun;
+    }
 
     [InitializeOnLoadMethod]
     private static void RunRequestedBuild()
     {
-        EditorApplication.delayCall += () =>
-        {
-            if (!File.Exists(ToAbsolutePath(RunMarker)))
-            {
-                return;
-            }
+        EditorApplication.delayCall += CheckAndRun;
+    }
 
-            File.Delete(ToAbsolutePath(RunMarker));
+    private static void CheckAndRun()
+    {
+        string markerPath = ToAbsolutePath(RunMarker);
+        if (File.Exists(markerPath))
+        {
+            File.Delete(markerPath);
             BuildPlayerCharacterVariants();
-        };
+        }
     }
 
     [MenuItem("Tools/ECHO Protocol/Build Player Character Variants")]
     public static void BuildPlayerCharacterVariants()
     {
+        AssetDatabase.ImportAsset(HelmetModelPath, ImportAssetOptions.ForceUpdate);
+        AssetDatabase.ImportAsset(BackpackModelPath, ImportAssetOptions.ForceUpdate);
         EnsureFolder(MaterialFolder);
         EnsureFolder(PrefabFolder);
 
@@ -99,15 +108,25 @@ public static class PlayerCharacterVariantPrefabBuilder
             AssignMaterial(body, bodyMaterial);
         }
 
-        GameObject helmetBackpackVisual = InstantiateModel(HelmetBackpackModelPath, "Equipment_Source", root.transform);
-        if (helmetBackpackVisual != null)
+        GameObject helmetVisual = InstantiateModel(HelmetModelPath, "Helmet_Source", root.transform);
+        if (helmetVisual != null)
         {
-            AssignEquipmentMaterials(helmetBackpackVisual, equipmentBaseMaterial, visorMaterial);
-            helmetBackpackVisual.transform.localPosition = HelmetBackpackOffset;
-            helmetBackpackVisual.transform.localRotation = Quaternion.identity;
-            helmetBackpackVisual.transform.localScale = HelmetBackpackScale;
-            AttachEquipmentToBodyBones(root.transform, body, helmetBackpackVisual);
+            AssignEquipmentMaterials(helmetVisual, equipmentBaseMaterial, visorMaterial);
+            helmetVisual.transform.localPosition = HelmetBackpackOffset;
+            helmetVisual.transform.localRotation = Quaternion.identity;
+            helmetVisual.transform.localScale = HelmetBackpackScale;
         }
+
+        GameObject backpackVisual = InstantiateModel(BackpackModelPath, "Backpack_Source", root.transform);
+        if (backpackVisual != null)
+        {
+            AssignEquipmentMaterials(backpackVisual, equipmentBaseMaterial, visorMaterial);
+            backpackVisual.transform.localPosition = HelmetBackpackOffset;
+            backpackVisual.transform.localRotation = Quaternion.identity;
+            backpackVisual.transform.localScale = HelmetBackpackScale;
+        }
+
+        AttachEquipmentToBodyBones(root.transform, body, helmetVisual, backpackVisual);
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabFolder + "/" + prefabName + ".prefab");
         Object.DestroyImmediate(root);
@@ -148,9 +167,9 @@ public static class PlayerCharacterVariantPrefabBuilder
         return instance;
     }
 
-    private static void AttachEquipmentToBodyBones(Transform root, GameObject body, GameObject equipmentSource)
+    private static void AttachEquipmentToBodyBones(Transform root, GameObject body, GameObject helmetSource, GameObject backpackSource)
     {
-        if (body == null || equipmentSource == null)
+        if (body == null)
         {
             return;
         }
@@ -187,21 +206,27 @@ public static class PlayerCharacterVariantPrefabBuilder
         GameObject backpackAttachment = new GameObject("Backpack_Attachment");
         backpackAttachment.transform.SetParent(backpackBone, false);
 
-        Renderer[] renderers = equipmentSource.GetComponentsInChildren<Renderer>(true);
-        foreach (Renderer renderer in renderers)
+        if (helmetSource != null)
         {
-            Transform part = renderer.transform;
-            Transform targetParent = IsBackpackPart(part.name) ? backpackAttachment.transform : helmetAttachment.transform;
-            part.SetParent(targetParent, true);
+            Renderer[] helmetRenderers = helmetSource.GetComponentsInChildren<Renderer>(true);
+            foreach (Renderer renderer in helmetRenderers)
+            {
+                renderer.name = "Helmet_Mesh";
+                renderer.transform.SetParent(helmetAttachment.transform, true);
+            }
+            Object.DestroyImmediate(helmetSource);
         }
 
-        Object.DestroyImmediate(equipmentSource);
-    }
-
-    private static bool IsBackpackPart(string partName)
-    {
-        string lowerName = partName.ToLowerInvariant();
-        return lowerName.Contains("backpack") || lowerName.Contains("shoulder_strap") || lowerName == "tube_baked";
+        if (backpackSource != null)
+        {
+            Renderer[] backpackRenderers = backpackSource.GetComponentsInChildren<Renderer>(true);
+            foreach (Renderer renderer in backpackRenderers)
+            {
+                renderer.name = "Backpack_Mesh";
+                renderer.transform.SetParent(backpackAttachment.transform, true);
+            }
+            Object.DestroyImmediate(backpackSource);
+        }
     }
 
     private static Avatar FindBodyAvatar()
@@ -329,7 +354,7 @@ public static class PlayerCharacterVariantPrefabBuilder
             {
                 string materialName = materials[i] != null ? materials[i].name.ToLowerInvariant() : string.Empty;
                 string rendererName = renderer.name.ToLowerInvariant();
-                bool isVisor = materialName.Contains("visor") || rendererName.Contains("visor") || (materials.Length >= 4 && i == 3);
+                bool isVisor = materialName.Contains("visor") || rendererName.Contains("visor") || (materials.Length >= 4 && i == 3) || (materials.Length == 3 && i == 2);
                 materials[i] = isVisor ? visorMaterial : equipmentBaseMaterial;
             }
 

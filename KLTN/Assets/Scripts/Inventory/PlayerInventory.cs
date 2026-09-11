@@ -265,6 +265,12 @@ public class PlayerInventory : MonoBehaviour
             return false;
         }
 
+        int toolId = ResolveToolId(item);
+        if (toolId == 1) // Field Scanner
+        {
+            rotation = Quaternion.Euler(90f, rotation.eulerAngles.y, 0f);
+        }
+
         Instantiate(item.WorldPrefab, position, rotation);
         return true;
     }
@@ -279,15 +285,16 @@ public class PlayerInventory : MonoBehaviour
         }
     }
 
-    private static int ResolveToolId(InventoryItemDefinition item)
+    public static int ResolveToolId(InventoryItemDefinition item)
     {
         if (item == null) return 0;
         string id = (item.ItemId ?? string.Empty).ToLowerInvariant();
         string name = (item.DisplayName ?? string.Empty).ToLowerInvariant();
         if (id.Contains("first") || name.Contains("first")) return 3;
         if (id.Contains("noise") || id.Contains("beacon") || name.Contains("noise") || name.Contains("beacon")) return 2;
-        if (id.Contains("jammer") || name.Contains("jammer")) return 4;
+        if (id.Contains("jammer") || name.Contains("jammer") || id.Contains("plank") || name.Contains("plank")) return 4;
         if (id.Contains("scan") || name.Contains("scan") || id.Contains("hack") || name.Contains("hack")) return 1;
+        if (id.Contains("stabilizer") || name.Contains("stabilizer") || id.Contains("core") || name.Contains("core")) return 6;
         return 0;
     }
 }

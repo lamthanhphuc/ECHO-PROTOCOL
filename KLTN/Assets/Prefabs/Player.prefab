@@ -458,6 +458,12 @@ MonoBehaviour:
   noiseMakerLocalPosition: {x: 0.018, y: 0.132, z: -0.065}
   noiseMakerLocalEulerAngles: {x: 6.176, y: 93.2, z: 94.562}
   noiseMakerLocalScale: {x: 0.7, y: 0.7, z: 0.7}
+  plankLocalPosition: {x: 0, y: 0, z: 0}
+  plankLocalEulerAngles: {x: 0, y: 0, z: 0}
+  plankLocalScale: {x: 1, y: 1, z: 1}
+  plankChildLocalPosition: {x: 0.0151, y: 0.0386, z: -0.0076}
+  plankChildLocalEulerAngles: {x: 90, y: 0, z: 0}
+  plankChildLocalScale: {x: 22.23983, y: 0.5456054, z: 2.985957}
 --- !u!114 &4947418910250719404
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -487,8 +493,6 @@ MonoBehaviour:
     MotionStrongMaxDistance: 15
     MotionMediumMaxDistance: 25
     MotionWeakMaxDistance: 35
-  _CurrentMode: 0
-  _ScanPulseOrdinal: 0
 --- !u!114 &1320556629707358115
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -505,6 +509,8 @@ MonoBehaviour:
   handSocket: {fileID: 4893934557998957364}
   aimOrigin: {fileID: 0}
   fallbackUseKey: 31
+  heldLocalPosition: {x: 0.04, y: 0.01, z: 0.11}
+  heldLocalEulerAngles: {x: 12, y: 88, z: -18}
 --- !u!1 &2288167123551940416
 GameObject:
   m_ObjectHideFlags: 0
@@ -959,6 +965,14 @@ PrefabInstance:
       propertyPath: m_Controller
       value: 
       objectReference: {fileID: 9100000, guid: 48b5002f9b5380e47b9c1a079cbb6709, type: 2}
+    - target: {fileID: 3838328164491348542, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+      propertyPath: m_CullingMode
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3838328164491348542, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+      propertyPath: m_ApplyRootMotion
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 3902201194234590622, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
       propertyPath: m_Layer
       value: 8

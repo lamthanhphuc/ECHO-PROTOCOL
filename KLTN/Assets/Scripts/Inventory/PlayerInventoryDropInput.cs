@@ -64,7 +64,7 @@ public class PlayerInventoryDropInput : MonoBehaviour
             }
         }
 
-        bool throwPressed = (keyboard != null && keyboard.tKey.wasPressedThisFrame)
+        bool throwPressed = (keyboard != null && (keyboard.tKey.wasPressedThisFrame || keyboard.qKey.wasPressedThisFrame))
             || (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame);
 
         if (throwPressed)
@@ -97,6 +97,14 @@ public class PlayerInventoryDropInput : MonoBehaviour
     public bool DropTeamTool()
     {
         GetDropPose(out var pos, out var rot);
+        if (inventory != null && inventory.TeamToolSlot != null)
+        {
+            int toolId = PlayerInventory.ResolveToolId(inventory.TeamToolSlot);
+            if (toolId == 1) // Field Scanner
+            {
+                rot = Quaternion.Euler(90f, rot.eulerAngles.y, 0f);
+            }
+        }
         return inventory != null && inventory.TryDropTeamTool(pos, rot);
     }
 
@@ -170,6 +178,49 @@ public class PlayerInventoryDropInput : MonoBehaviour
             {
                 return scanner.RequestScan();
             }
+        }
+
+        if (toolId.Contains("plank") || toolName.Contains("plank") || toolId.Contains("jammer") || toolName.Contains("jammer"))
+        {
+            var cam = Camera.main;
+            Ray ray = cam != null
+                ? cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f))
+                : new Ray(transform.position + Vector3.up * 1.5f, transform.forward);
+
+            if (Physics.Raycast(ray, out var hit, 4.0f, ~0, QueryTriggerInteraction.Collide))
+            {
+                var door = hit.collider.GetComponentInParent<EchoProtocol.Networking.NetworkSlidingDoor>();
+                if (door != null && door.CanAcceptJammer())
+                {
+                    return door.DeployJammerOffline(gameObject);
+                }
+            }
+
+            var colliders = Physics.OverlapSphere(transform.position + transform.forward * 1.5f, 2.5f, ~0, QueryTriggerInteraction.Collide);
+            foreach (var col in colliders)
+            {
+                var door = col.GetComponentInParent<EchoProtocol.Networking.NetworkSlidingDoor>();
+                if (door != null && door.CanAcceptJammer())
+                {
+                    return door.DeployJammerOffline(gameObject);
+                }
+            }
+        }
+
+        if (toolId.Contains("stabilizer") || toolName.Contains("stabilizer") || toolId.Contains("core") || toolName.Contains("core"))
+        {
+            AudioClip pulseClip = Resources.Load<AudioClip>("Audio/energy_core/pickup");
+#if UNITY_EDITOR
+            if (pulseClip == null)
+            {
+                pulseClip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/energy_core/pickup.wav");
+            }
+#endif
+            if (pulseClip != null)
+            {
+                AudioSource.PlayClipAtPoint(pulseClip, transform.position);
+            }
+            return true;
         }
 
         return false;

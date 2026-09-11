@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
 using Fusion;
 using UnityEngine;
@@ -17,12 +18,16 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(0.1f)] private float _localDetectionDistance = 3f;
         [SerializeField] private LayerMask _interactionLayers = ~0;
         [SerializeField] private GameObject _noiseMakerBeaconPrefab; // Gán DistressBeaconDeployed prefab trong Inspector
+        [SerializeField] private AudioClip _coreStabilizerPulseClip;
 
         [Networked] private uint LastProcessedSequence { get; set; }
         [Networked] private TickTimer TeamToolCooldown { get; set; }
         [Networked] private TickTimer HelpPingCooldown { get; set; }
         [Networked] private uint TeamToolOrdinal { get; set; }
         [Networked] private uint HelpPingOrdinal { get; set; }
+
+        private TickTimer _stabilizerScanTimer;
+        private readonly List<LobbyPlayerState> _stabilizedAllies = new List<LobbyPlayerState>();
 
         private InputAction _interactAction;
         private InputAction _dropCoreAction;
@@ -38,8 +43,20 @@ namespace EchoProtocol.Networking
             _dropCoreAction = new InputAction("DropCore", InputActionType.Button, "<Keyboard>/g");
             _teamToolAction = new InputAction("UseTeamTool", InputActionType.Button);
             _teamToolAction.AddBinding("<Keyboard>/t");
+            _teamToolAction.AddBinding("<Keyboard>/q");
             _teamToolAction.AddBinding("<Mouse>/leftButton");
             _helpPingAction = new InputAction("HelpPing", InputActionType.Button, "<Keyboard>/h");
+        }
+
+        private void Start()
+        {
+            if (Object == null || !Object.IsValid)
+            {
+                _interactAction?.Enable();
+                _dropCoreAction?.Enable();
+                _teamToolAction?.Enable();
+                _helpPingAction?.Enable();
+            }
         }
 
         public override void Spawned()
@@ -58,6 +75,7 @@ namespace EchoProtocol.Networking
             _dropCoreAction?.Disable();
             _teamToolAction?.Disable();
             _helpPingAction?.Disable();
+            ClearStabilizedAllies();
         }
 
         private void OnDestroy()
@@ -65,16 +83,22 @@ namespace EchoProtocol.Networking
             _dropCoreAction?.Dispose();
             _teamToolAction?.Dispose();
             _helpPingAction?.Dispose();
+            ClearStabilizedAllies();
+        }
+
+        public override void FixedUpdateNetwork()
+        {
+            if (Object != null && Object.HasStateAuthority)
+            {
+                UpdateCoreStabilizerAuthoritative();
+            }
         }
 
         private void Update()
         {
-            if (Object == null || !Object.HasInputAuthority)
-            {
-                CurrentCandidate = null;
-                return;
-            }
-            if (!GetComponent<LobbyPlayerState>().IsGameplayPlayer)
+            bool isOnline = Runner != null && Runner.IsRunning && Object != null && Object.IsValid;
+            var playerState = GetComponent<LobbyPlayerState>();
+            if (isOnline && (!Object.HasInputAuthority || (playerState != null && playerState.Object != null && playerState.Object.IsValid && !playerState.IsGameplayPlayer)))
             {
                 CurrentCandidate = null;
                 return;
@@ -101,6 +125,15 @@ namespace EchoProtocol.Networking
 
             if (CurrentCandidate != null)
             {
+                if (CurrentCandidate is NetworkSlidingDoor brokenDoor && brokenDoor.CanAcceptJammer())
+                {
+                    if (playerState != null && playerState.Object != null && playerState.Object.IsValid && playerState.Object.Id.IsValid && playerState.Runner != null && playerState.Runner.IsRunning && playerState.ToolId == 4)
+                    {
+                        RequestUseTeamTool();
+                        return;
+                    }
+                }
+
                 RequestInteraction(CurrentCandidate);
                 return;
             }
@@ -113,7 +146,7 @@ namespace EchoProtocol.Networking
 
         public bool RequestRevive(NetworkPlayerLifeState target)
         {
-            if (!Object.HasInputAuthority || target == null || target.Object == null)
+            if (Object == null || !Object.HasInputAuthority || target == null || target.Object == null)
             {
                 return false;
             }
@@ -124,28 +157,43 @@ namespace EchoProtocol.Networking
 
         public bool RequestDropCarriedCore()
         {
-            if (!Object.HasInputAuthority) return false;
+            if (Object == null || !Object.HasInputAuthority) return false;
             RpcRequestDropCarriedCore(NextSequence());
             return true;
         }
 
         public bool RequestUseTeamTool()
         {
-            if (!Object.HasInputAuthority) return false;
+            bool isOnline = Runner != null && Runner.IsRunning && Object != null && Object.IsValid;
+            if (isOnline && !Object.HasInputAuthority) return false;
+
             var playerState = GetComponent<LobbyPlayerState>();
-            if (playerState != null && playerState.CarriedCoreId.IsValid) return false;
+            if (isOnline && playerState != null && playerState.CarriedCoreId.IsValid) return false;
             var scanner = GetComponent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>();
             if (scanner != null && scanner.IsScannerEquipped())
             {
                 return scanner.RequestScan();
             }
 
-            if (playerState != null && playerState.ToolId == 1)
+            int toolId = (isOnline && playerState != null && playerState.ToolId > 0) ? playerState.ToolId : 0;
+            var inv = GetComponent<PlayerInventory>();
+            if (toolId == 0 && inv != null && inv.TeamToolSlot != null)
             {
                 if (scanner != null)
                 {
                     return scanner.RequestScan();
                 }
+                toolId = PlayerInventory.ResolveToolId(inv.TeamToolSlot);
+            }
+
+            if (toolId == 1 && scanner != null)
+            {
+                return scanner.RequestScan();
+            }
+
+            if (!isOnline)
+            {
+                return ExecuteTeamToolOffline(toolId, inv, playerState);
             }
 
             var targetId = default(NetworkId);
@@ -158,6 +206,30 @@ namespace EchoProtocol.Networking
 
             RpcRequestUseTeamTool(NextSequence(), targetId);
             return true;
+        }
+
+        private bool ExecuteTeamToolOffline(int toolId, PlayerInventory inv, LobbyPlayerState playerState)
+        {
+            string toolType = ToolTypeFor(toolId);
+            if (toolType == "CORE_STABILIZER")
+            {
+                if (_coreStabilizerPulseClip != null)
+                {
+                    AudioSource.PlayClipAtPoint(_coreStabilizerPulseClip, transform.position);
+                }
+                return true;
+            }
+            else if (toolType == "DOOR_JAMMER")
+            {
+                if (CurrentCandidate is NetworkSlidingDoor door && door.CanAcceptJammer())
+                {
+                    door.DeployJammerOffline(gameObject);
+                    if (playerState != null) playerState.SetGameplayToolId(0);
+                    if (inv != null && inv.TeamToolSlot != null) inv.TryRemove(inv.TeamToolSlot);
+                    return true;
+                }
+            }
+            return false;
         }
 
         public bool RequestHelpPing()
@@ -227,24 +299,33 @@ namespace EchoProtocol.Networking
         {
             targetId = default;
             var ray = GetLocalDetectionRay();
-            if (!Physics.Raycast(
+            if (Physics.Raycast(
                     ray,
                     out var hit,
                     _localDetectionDistance,
                     _interactionLayers,
                     QueryTriggerInteraction.Collide))
             {
-                return false;
+                var door = hit.collider.GetComponentInParent<NetworkSlidingDoor>();
+                if (door != null && door.Object != null && door.Object.Id.IsValid)
+                {
+                    targetId = door.Object.Id;
+                    return true;
+                }
             }
 
-            var door = hit.collider.GetComponentInParent<NetworkSlidingDoor>();
-            if (door == null || door.Object == null || !door.Object.Id.IsValid)
+            var hits = Physics.SphereCastAll(ray, 0.5f, _localDetectionDistance, _interactionLayers, QueryTriggerInteraction.Collide);
+            for (int i = 0; i < hits.Length; i++)
             {
-                return false;
+                var door = hits[i].collider.GetComponentInParent<NetworkSlidingDoor>();
+                if (door != null && door.Object != null && door.Object.Id.IsValid && door.CanAcceptJammer())
+                {
+                    targetId = door.Object.Id;
+                    return true;
+                }
             }
 
-            targetId = door.Object.Id;
-            return true;
+            return false;
         }
 
         private Ray GetLocalDetectionRay()
@@ -426,6 +507,30 @@ namespace EchoProtocol.Networking
                         // Consumes tool from player state & inventory
                         ConsumeGameplayTeamTool(state);
                     }
+                    else if (toolType == "CORE_STABILIZER")
+                    {
+                        float radius = 2.5f;
+                        var hits = Physics.OverlapSphere(transform.position, radius, ~0, QueryTriggerInteraction.Collide);
+                        bool stabilizedAny = false;
+                        for (int i = 0; i < hits.Length; i++)
+                        {
+                            var h = hits[i];
+                            if (h == null || h.transform == transform || h.transform.IsChildOf(transform)) continue;
+                            var carrierState = h.GetComponentInParent<LobbyPlayerState>();
+                            if (carrierState != null && carrierState.Object != null && carrierState.Object.IsValid && carrierState.CarriedCoreId.IsValid)
+                            {
+                                carrierState.SetCoreStabilizedAuthoritative(true);
+                                stabilizedAny = true;
+                            }
+                        }
+
+                        if (_coreStabilizerPulseClip != null)
+                        {
+                            AudioSource.PlayClipAtPoint(_coreStabilizerPulseClip, transform.position);
+                        }
+
+                        RpcPlayCoreStabilizerFeedback(transform.position, stabilizedAny);
+                    }
                 }
             }
 
@@ -570,7 +675,7 @@ namespace EchoProtocol.Networking
             for (var i = 0; i < colliders.Length; i++)
             {
                 var collider = colliders[i];
-                if (collider == null || collider.isTrigger)
+                if (collider == null || (collider.isTrigger && !collider.gameObject.name.Contains("Interaction")))
                 {
                     continue;
                 }
@@ -635,8 +740,83 @@ namespace EchoProtocol.Networking
                 case 2: return "NOISE_MAKER";
                 case 3: return "FIRST_AID_KIT";
                 case 4: return "DOOR_JAMMER";
+                case 6: return "CORE_STABILIZER";
                 default: return null;
             }
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void RpcPlayCoreStabilizerFeedback(Vector3 position, NetworkBool stabilizedAny)
+        {
+            if (_coreStabilizerPulseClip != null)
+            {
+                AudioSource.PlayClipAtPoint(_coreStabilizerPulseClip, position);
+            }
+        }
+
+        private void UpdateCoreStabilizerAuthoritative()
+        {
+            var state = GetComponent<LobbyPlayerState>();
+            bool hasStabilizer = state != null && state.IsGameplayPlayer && state.ToolId == 6;
+
+            if (!hasStabilizer)
+            {
+                ClearStabilizedAllies();
+                return;
+            }
+
+            if (!_stabilizerScanTimer.ExpiredOrNotRunning(Runner)) return;
+            _stabilizerScanTimer = TickTimer.CreateFromSeconds(Runner, 0.25f);
+
+            float radius = 2.5f;
+            var hits = Physics.OverlapSphere(transform.position, radius, ~0, QueryTriggerInteraction.Collide);
+            var currentAllies = new HashSet<LobbyPlayerState>();
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var h = hits[i];
+                if (h == null || h.transform == transform || h.transform.IsChildOf(transform)) continue;
+                var carrierState = h.GetComponentInParent<LobbyPlayerState>();
+                if (carrierState != null && carrierState.Object != null && carrierState.Object.IsValid && carrierState.CarriedCoreId.IsValid)
+                {
+                    currentAllies.Add(carrierState);
+                    carrierState.SetCoreStabilizedAuthoritative(true);
+                }
+            }
+
+            for (int i = _stabilizedAllies.Count - 1; i >= 0; i--)
+            {
+                var ally = _stabilizedAllies[i];
+                if (ally == null || !currentAllies.Contains(ally))
+                {
+                    if (ally != null && ally.Object != null && ally.Object.IsValid)
+                    {
+                        ally.SetCoreStabilizedAuthoritative(false);
+                    }
+                    _stabilizedAllies.RemoveAt(i);
+                }
+            }
+
+            foreach (var ally in currentAllies)
+            {
+                if (!_stabilizedAllies.Contains(ally))
+                {
+                    _stabilizedAllies.Add(ally);
+                }
+            }
+        }
+
+        private void ClearStabilizedAllies()
+        {
+            if (_stabilizedAllies == null || _stabilizedAllies.Count == 0) return;
+            for (int i = 0; i < _stabilizedAllies.Count; i++)
+            {
+                if (_stabilizedAllies[i] != null && _stabilizedAllies[i].Object != null && _stabilizedAllies[i].Object.IsValid)
+                {
+                    _stabilizedAllies[i].SetCoreStabilizedAuthoritative(false);
+                }
+            }
+            _stabilizedAllies.Clear();
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]

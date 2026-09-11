@@ -250,7 +250,13 @@ namespace EchoProtocol.Networking
             var baseSpeed = isSprintMoving
                 ? _sprintSpeed
                 : _walkSpeed;
-            _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f);
+            var lobbyPlayer = GetComponent<LobbyPlayerState>();
+            var coreCarryMultiplier = 1f;
+            if (lobbyPlayer != null && lobbyPlayer.Object != null && lobbyPlayer.Object.IsValid && lobbyPlayer.CarriedCoreId.IsValid)
+            {
+                coreCarryMultiplier = lobbyPlayer.IsCoreStabilized ? 0.9f : 0.72f;
+            }
+            _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f) * coreCarryMultiplier;
 
             _controller.Move(direction);
 
@@ -259,8 +265,9 @@ namespace EchoProtocol.Networking
             if (Object.HasStateAuthority && isSprintMoving
                 && _nextMovementNoise.ExpiredOrNotRunning(Runner))
             {
-                var state = GetComponent<LobbyPlayerState>();
-                var type = state != null && state.Object != null && state.Object.IsValid && state.CarriedCoreId.IsValid
+                var state = lobbyPlayer;
+                var isCarryingCore = state != null && state.Object != null && state.Object.IsValid && state.CarriedCoreId.IsValid;
+                var type = isCarryingCore
                     ? RuntimeNoiseType.CORE_CARRY
                     : RuntimeNoiseType.SPRINT;
                 HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
@@ -273,7 +280,8 @@ namespace EchoProtocol.Networking
                             Runner.Tick.Raw),
                         transform.position,
                         out _);
-                _nextMovementNoise = TickTimer.CreateFromSeconds(Runner, 1.5f);
+                float noiseInterval = (isCarryingCore && state.IsCoreStabilized) ? 4.0f : 1.5f;
+                _nextMovementNoise = TickTimer.CreateFromSeconds(Runner, noiseInterval);
             }
             if (_allowJump
                 && (lifeState == null || lifeState.CanInitiateAction)

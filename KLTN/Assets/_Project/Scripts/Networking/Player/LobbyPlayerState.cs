@@ -101,11 +101,20 @@ namespace EchoProtocol.Networking
         [Networked]
         public NetworkBool IsGameplayPlayer { get; private set; }
 
-        [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
+        public const int FieldScannerToolId = 1;
+        public const int NoiseMakerToolId = 2;
+        public const int FirstAidKitToolId = 3;
+        public const int DoorJammerToolId = 4;
+        public const int CoreStabilizerToolId = 6;
+
+        [Networked]
         public NetworkString<_64> BackendUserId { get; private set; }
 
         [Networked]
         public NetworkId CarriedCoreId { get; private set; }
+
+        [Networked]
+        public NetworkBool IsCoreStabilized { get; private set; }
 
         public bool HasVerifiedBackendIdentity => BackendUserId.Length > 0;
 
@@ -118,7 +127,16 @@ namespace EchoProtocol.Networking
             ToolId = toolId;
             IsReady = false;
             IsGameplayPlayer = isGameplayPlayer;
+            IsCoreStabilized = false;
             if (!isGameplayPlayer) CarriedCoreId = default;
+        }
+
+        public void SetCoreStabilizedAuthoritative(bool stabilized)
+        {
+            if (Object != null && Object.IsValid && Object.HasStateAuthority)
+            {
+                IsCoreStabilized = stabilized;
+            }
         }
 
         public bool TryBeginCarryingCore(NetworkId coreId)
@@ -142,6 +160,7 @@ namespace EchoProtocol.Networking
             }
 
             CarriedCoreId = default;
+            IsCoreStabilized = false;
             return true;
         }
 

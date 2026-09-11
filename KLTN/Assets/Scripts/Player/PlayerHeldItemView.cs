@@ -31,6 +31,12 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     [SerializeField] private Vector3 noiseMakerLocalPosition = new Vector3(0.018f, 0.132f, -0.065f);
     [SerializeField] private Vector3 noiseMakerLocalEulerAngles = new Vector3(6.176f, 93.2f, 94.562f);
     [SerializeField] private Vector3 noiseMakerLocalScale = new Vector3(0.7f, 0.7f, 0.7f);
+    [SerializeField] private Vector3 plankLocalPosition = Vector3.zero;
+    [SerializeField] private Vector3 plankLocalEulerAngles = Vector3.zero;
+    [SerializeField] private Vector3 plankLocalScale = Vector3.one;
+    [SerializeField] private Vector3 plankChildLocalPosition = new Vector3(0.0151f, 0.0386f, -0.0076f);
+    [SerializeField] private Vector3 plankChildLocalEulerAngles = new Vector3(90f, 0f, 0f);
+    [SerializeField] private Vector3 plankChildLocalScale = new Vector3(22.23983f, 0.5456054f, 2.985957f);
 
     private GameObject _currentVisual;
     private InventoryItemDefinition _currentItem;
@@ -84,8 +90,10 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         // Complete Team Tool prefabs own both their held visual and gameplay lifecycle.
         // PlayerTeamToolController renders these so the generic held-item view must not
         // instantiate the pickup prefab a second time.
+        // If PlayerTeamToolController is present, it renders them; otherwise PlayerHeldItemView renders them.
         if (_currentItem.ItemType == InventoryItemType.TeamTool
-            && _currentItem.TeamToolGameplayPrefab != null)
+            && _currentItem.TeamToolGameplayPrefab != null
+            && GetComponentInParent<PlayerTeamToolController>() != null)
         {
             return;
         }
@@ -97,6 +105,11 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         }
 
         GameObject prefabToSpawn = _currentItem.WorldPrefab;
+        if (_currentItem.TeamToolGameplayPrefab != null)
+        {
+            prefabToSpawn = _currentItem.TeamToolGameplayPrefab;
+        }
+
         if (IsItem(_currentItem, "scan", "fieldscanner", "scanner"))
         {
             if (fieldScannerHeldPrefab != null)
@@ -212,6 +225,34 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             return;
         }
 
+        if (IsItem(item, "plank", "jammer"))
+        {
+            visual.localPosition = plankLocalPosition;
+            visual.localRotation = Quaternion.Euler(plankLocalEulerAngles);
+            visual.localScale = plankLocalScale;
+
+            Transform childVisual = visual.Find("Visual");
+            if (childVisual == null && visual.childCount > 0)
+            {
+                childVisual = visual.GetChild(0);
+            }
+            if (childVisual != null)
+            {
+                childVisual.localPosition = plankChildLocalPosition;
+                childVisual.localRotation = Quaternion.Euler(plankChildLocalEulerAngles);
+                childVisual.localScale = plankChildLocalScale;
+            }
+            return;
+        }
+
+        if (IsItem(item, "stabilizer", "core"))
+        {
+            visual.localPosition = new Vector3(0.04f, 0.01f, 0.11f);
+            visual.localRotation = Quaternion.Euler(12f, 88f, -18f);
+            visual.localScale = Vector3.one;
+            return;
+        }
+
         visual.localPosition = teamToolLocalPosition;
         visual.localRotation = Quaternion.Euler(teamToolLocalEulerAngles);
         visual.localScale = baseScale;
@@ -286,15 +327,6 @@ public sealed class PlayerHeldItemView : MonoBehaviour
                 behaviour.GetType().Name.Contains("Interactable"))
             {
                 behaviour.enabled = false;
-            }
-        }
-
-        // Hide any 3D ScreenCanvas attached to the held model so it doesn't obstruct or duplicate HUD
-        foreach (Transform t in visualRoot.GetComponentsInChildren<Transform>(true))
-        {
-            if (t.name == "ScreenCanvas")
-            {
-                t.gameObject.SetActive(false);
             }
         }
     }
