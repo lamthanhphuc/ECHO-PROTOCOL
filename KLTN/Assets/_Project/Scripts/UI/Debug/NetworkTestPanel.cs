@@ -123,8 +123,6 @@ namespace EchoProtocol.UI.Debugging
 
             using (new GUIEnabledScope(!_isBusy && _bootstrap != null && _bootstrap.Runner != null))
             {
-                DrawSelectionControls();
-
                 if (GUILayout.Button(_lobbyState.IsReady ? "Set Not Ready" : "Set Ready", GUILayout.Height(30)))
                 {
                     _lobbyManager?.SetReady(!_lobbyState.IsReady);
@@ -284,38 +282,6 @@ namespace EchoProtocol.UI.Debugging
                 : $"{result.Kind} {result.RequestedId} rejected: {result.Error}";
         }
 
-        private void DrawSelectionControls()
-        {
-            if (_lobbyManager == null || !_lobbyManager.TryGetLocalPlayerState(out var playerState, false)) return;
-
-            var localMember = GetLocalMember();
-            var selectedTeam = localMember?.TeamId ?? 0;
-
-            GUILayout.Space(8);
-            GUILayout.Label("Team");
-            GUILayout.BeginHorizontal();
-            for (var teamId = 0; teamId <= playerState.TeamCount; teamId++)
-            {
-                var capturedId = teamId;
-                var label = teamId == 0 ? "None" : $"Team {teamId}";
-                if (selectedTeam == teamId) label = $"[{label}]";
-                if (GUILayout.Button(label)) _lobbyManager.RequestTeam(capturedId);
-            }
-            GUILayout.EndHorizontal();
-        }
-
-        private LobbyMemberViewModel GetLocalMember()
-        {
-            if (_lobbyState.Members == null) return null;
-            return _lobbyState.Members.Find(member => member.IsLocal);
-        }
-
-        private bool IsToolClaimedByOther(int toolId)
-        {
-            return _lobbyState.Members != null
-                && _lobbyState.Members.Exists(member => !member.IsLocal && member.ToolId == toolId);
-        }
-
         private void DrawMemberList()
         {
             GUILayout.Space(10);
@@ -333,7 +299,7 @@ namespace EchoProtocol.UI.Debugging
                 var readyLabel = member.IsReady ? "READY" : "NOT READY";
                 GUILayout.Label(
                     $"- {member.DisplayName} [PlayerRef {member.PlayerRef.RawEncoded}] " +
-                    $"T:{member.TeamId} Tool:{member.ToolId} {readyLabel}{localMarker}");
+                    $"Tool:{member.ToolId} {readyLabel}{localMarker}");
             }
         }
 
