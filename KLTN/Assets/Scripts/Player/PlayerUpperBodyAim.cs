@@ -16,10 +16,10 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     [SerializeField] private bool driveRightHandWhenHolding = true;
 
     [Header("Held Tool Right Hand Pose")]
-    [SerializeField] private Vector3 handForwardOffset = new Vector3(0.22f, -0.22f, 0.46f);
+    [SerializeField] private Vector3 handForwardOffset = new Vector3(0.18f, -0.08f, 0.32f);
     [SerializeField] private Vector3 handEulerOffset = new Vector3(0f, 0f, -75f);
-    [SerializeField, Range(0f, 1f)] private float rightHandPosWeight = 0.88f;
-    [SerializeField, Range(0f, 1f)] private float rightHandRotWeight = 0.85f;
+    [SerializeField, Range(0f, 1f)] private float rightHandPosWeight = 0.72f;
+    [SerializeField, Range(0f, 1f)] private float rightHandRotWeight = 0.75f;
 
     private PlayerInventory _inventory;
     private PlayerEnergyCoreCarrier _coreCarrier;
@@ -79,10 +79,15 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             aimRight = transform.right;
         }
 
-        Vector3 handTarget = aimOrigin
+        Vector3 chestOrigin = transform.position + Vector3.up * 1.05f;
+        Vector3 handTarget = chestOrigin
             + aimForward * handForwardOffset.z
             + aimRight * handForwardOffset.x
             + aimUp * handForwardOffset.y;
+
+        float maxHandY = transform.position.y + 1.25f;
+        float minHandY = transform.position.y + 0.75f;
+        handTarget.y = Mathf.Clamp(handTarget.y, minHandY, maxHandY);
 
         Quaternion baseRotation = Quaternion.LookRotation(aimForward, aimUp);
         Quaternion handRotation = baseRotation * Quaternion.Euler(handEulerOffset);

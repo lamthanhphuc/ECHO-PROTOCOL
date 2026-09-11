@@ -145,6 +145,10 @@ namespace EchoProtocol.Tools.Scanner
         protected override void ExecuteInteraction(in InteractionContext context)
         {
             IsPickedUp = true;
+            foreach (var c in GetComponentsInChildren<Collider>(true))
+            {
+                c.enabled = false;
+            }
             OnReplicatedStateChanged();
 
             // Set authoritative tool ID on player
@@ -176,6 +180,14 @@ namespace EchoProtocol.Tools.Scanner
 
         public override void FixedUpdateNetwork()
         {
+            if (IsPickedUp)
+            {
+                foreach (var c in GetComponentsInChildren<Collider>(true))
+                {
+                    if (c.enabled) c.enabled = false;
+                }
+            }
+
             if (!_pendingDespawn
                 || Object == null
                 || !Object.IsValid

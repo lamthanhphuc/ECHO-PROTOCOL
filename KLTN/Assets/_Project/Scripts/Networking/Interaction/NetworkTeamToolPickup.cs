@@ -57,12 +57,24 @@ namespace EchoProtocol.Networking
             }
 
             IsConsumed = true;
+            foreach (var c in GetComponentsInChildren<Collider>(true))
+            {
+                c.enabled = false;
+            }
             playerState.SetGameplayToolId(_toolId);
             _pendingDespawn = true;
         }
 
         public override void FixedUpdateNetwork()
         {
+            if (IsConsumed)
+            {
+                foreach (var c in GetComponentsInChildren<Collider>(true))
+                {
+                    if (c.enabled) c.enabled = false;
+                }
+            }
+
             if (!_pendingDespawn
                 || Object == null
                 || !Object.IsValid

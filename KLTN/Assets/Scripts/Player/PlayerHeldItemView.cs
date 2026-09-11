@@ -298,15 +298,33 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
     private void StripWorldGameplayComponents(GameObject visualRoot)
     {
+        var playerCC = GetComponentInParent<CharacterController>();
+
         foreach (Collider collider in visualRoot.GetComponentsInChildren<Collider>(true))
         {
+            if (playerCC != null)
+            {
+                Physics.IgnoreCollision(playerCC, collider, true);
+            }
             collider.enabled = false;
+            Destroy(collider);
         }
 
         foreach (Rigidbody body in visualRoot.GetComponentsInChildren<Rigidbody>(true))
         {
             body.isKinematic = true;
             body.detectCollisions = false;
+            Destroy(body);
+        }
+
+        foreach (var netObj in visualRoot.GetComponentsInChildren<Fusion.NetworkObject>(true))
+        {
+            Destroy(netObj);
+        }
+
+        foreach (var netBehaviour in visualRoot.GetComponentsInChildren<Fusion.NetworkBehaviour>(true))
+        {
+            Destroy(netBehaviour);
         }
 
         foreach (MonoBehaviour behaviour in visualRoot.GetComponentsInChildren<MonoBehaviour>(true))
@@ -322,11 +340,11 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             }
 
             if (behaviour is EchoProtocol.Tools.Scanner.NetworkToolPickup ||
-                behaviour is Fusion.NetworkBehaviour ||
                 behaviour.GetType().Name.Contains("Pickup") ||
                 behaviour.GetType().Name.Contains("Interactable"))
             {
                 behaviour.enabled = false;
+                Destroy(behaviour);
             }
         }
     }

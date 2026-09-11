@@ -295,13 +295,17 @@ namespace EchoProtocol.AI.Stalker.Networking
                 if (!playerId.IsValid) continue;
                 var isGameplayPlayer = !playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyState)
                     || lobbyState.IsGameplayPlayer;
-                var isDowned = playerObject.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned;
+                var isDowned = (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && lifeState.IsDowned)
+                    || (playerObject.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned);
+                var isEliminated = lifeState != null && lifeState.IsEliminated;
+                var isHidden = (playerObject.TryGetComponent<PlayerHidingController>(out var hiding) && hiding.IsHidden)
+                    || (playerObject.TryGetComponent<NetworkPlayerMovement>(out var netMove) && netMove.IsHidden);
                 var eligibilitySnapshot = new StalkerTargetEligibilitySnapshot(
                     isGameplayPlayer,
                     true,
                     isDowned,
-                    false,
-                    false);
+                    isEliminated,
+                    isHidden);
                 _targetStatuses.Add(new StalkerTargetStatus(
                     playerId,
                     StalkerTargetEligibility.Evaluate(eligibilitySnapshot)));
@@ -352,11 +356,21 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return false;
             }
 
-            if (!playerObject.TryGetComponent<NetworkPlayerHealth>(out var health)
-                || !health.TryApplyAuthoritativeDamage(Object, attackDamage))
+            bool applied = false;
+            if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState))
+            {
+                applied |= lifeState.TryApplyAuthoritativeDamage(attackDamage, "STALKER", playerObject.transform.position);
+            }
+
+            if (playerObject.TryGetComponent<NetworkPlayerHealth>(out var health))
+            {
+                applied |= health.TryApplyAuthoritativeDamage(Object, attackDamage);
+            }
+
+            if (!applied)
             {
                 UnityEngine.Debug.LogWarning(
-                    $"[StalkerFusion] Rejected attack damage against {TargetPlayer}: health state unavailable.");
+                    $"[StalkerFusion] Rejected attack damage against {TargetPlayer}: health/life state unavailable.");
                 return false;
             }
 

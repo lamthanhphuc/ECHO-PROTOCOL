@@ -125,31 +125,22 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             _visual.transform.localRotation = Quaternion.Euler(ResolveToolEulerAngles(_shownToolId));
             _visual.transform.localScale = ResolveToolScale(_shownToolId);
 
-            // Tắt tất cả collider trên held visual để không ảnh hưởng gameplay
+            // Tắt và hủy tất cả collider trên held visual để không ảnh hưởng gameplay
+            var playerCC = GetComponentInParent<CharacterController>();
             foreach (var c in _visual.GetComponentsInChildren<Collider>(true))
+            {
+                if (playerCC != null) Physics.IgnoreCollision(playerCC, c, true);
                 c.enabled = false;
+                Destroy(c);
+            }
             foreach (var audio in _visual.GetComponentsInChildren<AudioSource>(true))
                 audio.enabled = false;
-            foreach (var pickup in _visual.GetComponentsInChildren<EchoProtocol.Tools.Scanner.NetworkToolPickup>(true))
-                pickup.enabled = false;
             foreach (var netObj in _visual.GetComponentsInChildren<NetworkObject>(true))
                 Destroy(netObj);
-
-            foreach (var networkObject in _visual.GetComponentsInChildren<NetworkObject>(true))
-                networkObject.enabled = false;
-
             foreach (var networkBehaviour in _visual.GetComponentsInChildren<NetworkBehaviour>(true))
-                networkBehaviour.enabled = false;
-
-            foreach (var pickup in _visual.GetComponentsInChildren<NetworkTeamToolPickup>(true))
-                pickup.enabled = false;
-
+                Destroy(networkBehaviour);
             foreach (var body in _visual.GetComponentsInChildren<Rigidbody>(true))
-            {
-                body.detectCollisions = false;
-                body.useGravity = false;
-                body.isKinematic = true;
-            }
+                Destroy(body);
 
             if (_shownToolId == 1)
             {

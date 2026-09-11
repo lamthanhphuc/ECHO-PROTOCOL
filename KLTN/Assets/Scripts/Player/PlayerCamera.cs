@@ -8,6 +8,7 @@ public class PlayerCamera : MonoBehaviour
     [SerializeField] private float mouseSensitivity = 0.12f;
     [SerializeField] private float eyeHeight = 1.65f;
     [SerializeField] private float crouchEyeHeight = 1.05f;
+    [SerializeField] private float downedEyeHeight = 0.4f;
     [SerializeField] private float eyeHeightTransitionSpeed = 10f;
     [SerializeField] private float minPitch = -85f;
     [SerializeField] private float maxPitch = 85f;
@@ -18,6 +19,8 @@ public class PlayerCamera : MonoBehaviour
     private InputAction _lookAction;
     private PlayerMovement _playerMovement;
     private CharacterController _characterController;
+    private EchoProtocol.Networking.NetworkPlayerLifeState _networkLifeState;
+    private PlayerDownState _playerDownState;
     private float _pitch;
     private float _yaw;
     private float _currentEyeHeight;
@@ -35,6 +38,8 @@ public class PlayerCamera : MonoBehaviour
         target = newTarget;
         _playerMovement = target != null ? target.GetComponent<PlayerMovement>() : null;
         _characterController = target != null ? target.GetComponent<CharacterController>() : null;
+        _networkLifeState = target != null ? target.GetComponent<EchoProtocol.Networking.NetworkPlayerLifeState>() : null;
+        _playerDownState = target != null ? target.GetComponent<PlayerDownState>() : null;
 
         if (target != null)
         {
@@ -184,11 +189,25 @@ public class PlayerCamera : MonoBehaviour
             _pitch = Mathf.Clamp(_pitch - pitchDelta, minPitch, maxPitch);
         }
 
+        if (_networkLifeState == null && target != null)
+        {
+            _networkLifeState = target.GetComponent<EchoProtocol.Networking.NetworkPlayerLifeState>();
+        }
+        if (_playerDownState == null && target != null)
+        {
+            _playerDownState = target.GetComponent<PlayerDownState>();
+        }
+
+        bool isDowned = (_networkLifeState != null && _networkLifeState.IsDowned)
+            || (_playerDownState != null && _playerDownState.IsDowned);
+
         float targetEyeHeight =
             _forcedEyeHeight ??
-            (_playerMovement != null && _playerMovement.IsCrouching
-                ? crouchEyeHeight
-                : eyeHeight);
+            (isDowned
+                ? downedEyeHeight
+                : (_playerMovement != null && _playerMovement.IsCrouching
+                    ? crouchEyeHeight
+                    : eyeHeight));
 
         _currentEyeHeight = Mathf.Lerp(
             _currentEyeHeight,

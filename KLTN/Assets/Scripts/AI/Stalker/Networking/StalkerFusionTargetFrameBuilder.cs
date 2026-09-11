@@ -56,11 +56,16 @@ namespace EchoProtocol.AI.Stalker.Networking
                     return false;
                 }
 
-                var isDowned = identity.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned;
+                var isDowned = (identity.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && lifeState.IsDowned)
+                    || (identity.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned);
+                var isEliminated = lifeState != null && lifeState.IsEliminated;
+                var isHidden = (identity.TryGetComponent<PlayerHidingController>(out var hiding) && hiding.IsHidden)
+                    || (identity.TryGetComponent<NetworkPlayerMovement>(out var netMove) && netMove.IsHidden);
                 var eligibilitySnapshot = StalkerFusionTargetEligibilityAdapter.CreateActive(
                     playerId,
                     isDowned,
-                    false);
+                    isEliminated,
+                    isHidden);
                 var eligibility = StalkerTargetEligibility.Evaluate(eligibilitySnapshot);
                 InsertStatusSortedUnique(targetStatuses, new StalkerTargetStatus(playerId, eligibility));
 

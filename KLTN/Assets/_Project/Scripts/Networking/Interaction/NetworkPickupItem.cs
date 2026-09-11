@@ -75,6 +75,14 @@ namespace EchoProtocol.Networking
 
         public override void FixedUpdateNetwork()
         {
+            if (State == NetworkItemState.Carried)
+            {
+                if (_pickupCollider != null && _pickupCollider.enabled)
+                {
+                    _pickupCollider.enabled = false;
+                }
+            }
+
             if (!Object.HasStateAuthority || State != NetworkItemState.Carried) return;
 
             if (TryGetHolderPose(out var carriedPosition, out var carriedRotation))

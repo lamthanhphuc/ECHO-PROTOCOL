@@ -42,6 +42,7 @@ namespace EchoProtocol.Networking
         [Networked] private float AnimationMoveX { get; set; }
         [Networked] private float AnimationMoveY { get; set; }
         [Networked] private NetworkBool AnimationSprintHeld { get; set; }
+        [Networked] public NetworkBool IsHidden { get; set; }
 
         public float CurrentPitch => LookPitch;
 
@@ -229,7 +230,7 @@ namespace EchoProtocol.Networking
             if (lifeState != null && !lifeState.CanMove) return;
 
             var hidingController = GetComponent<PlayerHidingController>();
-            if (hidingController != null && hidingController.IsHidden)
+            if (IsHidden || (hidingController != null && hidingController.IsHidden))
             {
                 AnimationMoveX = 0f;
                 AnimationMoveY = 0f;
@@ -305,6 +306,21 @@ namespace EchoProtocol.Networking
         [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]
         public void RpcRequestTeleport(Vector3 position, Quaternion rotation)
         {
+            if (_controller != null)
+            {
+                _controller.Teleport(position, rotation);
+            }
+            else
+            {
+                transform.SetPositionAndRotation(position, rotation);
+            }
+            Physics.SyncTransforms();
+        }
+
+        [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]
+        public void RpcRequestSetHiding(NetworkBool isHidden, Vector3 position, Quaternion rotation)
+        {
+            IsHidden = isHidden;
             if (_controller != null)
             {
                 _controller.Teleport(position, rotation);
@@ -421,6 +437,21 @@ namespace EchoProtocol.Networking
         private NetworkPlayerInput ReadLocalInput()
         {
             if (!Object.HasInputAuthority) return default;
+
+            var hiding = GetComponent<PlayerHidingController>();
+            bool isHidden = IsHidden || (hiding != null && hiding.IsHidden);
+            if (isHidden)
+            {
+                return new NetworkPlayerInput
+                {
+                    Move = Vector2.zero,
+                    LookYaw = _playerCamera != null ? _playerCamera.Yaw : transform.eulerAngles.y,
+                    LookPitch = _playerCamera != null ? _playerCamera.Pitch : 0f,
+                    JumpPressed = false,
+                    SprintHeld = false,
+                };
+            }
+
             return new NetworkPlayerInput
             {
                 Move = _moveAction?.ReadValue<Vector2>() ?? Vector2.zero,

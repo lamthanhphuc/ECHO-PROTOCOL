@@ -102,6 +102,17 @@ public class PlayerHidingController : MonoBehaviour
             movement.enabled = false;
         }
 
+        if (networkMovement == null)
+        {
+            networkMovement = GetComponent<EchoProtocol.Networking.NetworkPlayerMovement>();
+        }
+
+        if (networkMovement != null)
+        {
+            Quaternion targetRot = Quaternion.Euler(0f, spot.HidePoint.eulerAngles.y, 0f);
+            networkMovement.RpcRequestSetHiding(true, spot.HidePoint.position, targetRot);
+        }
+
         MoveToHidingPoint(spot.HidePoint);
 
         if (_playerCameraController != null)
@@ -130,6 +141,17 @@ public class PlayerHidingController : MonoBehaviour
         {
             _playerCameraController.ClearYawLimit();
             _playerCameraController.UnlockPitch();
+        }
+
+        if (networkMovement == null)
+        {
+            networkMovement = GetComponent<EchoProtocol.Networking.NetworkPlayerMovement>();
+        }
+
+        if (networkMovement != null && exitPoint != null)
+        {
+            Quaternion exitRot = Quaternion.Euler(0f, exitPoint.eulerAngles.y, 0f);
+            networkMovement.RpcRequestSetHiding(false, exitPoint.position, exitRot);
         }
 
         if (exitPoint != null)
