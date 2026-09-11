@@ -143,7 +143,10 @@ namespace EchoProtocol.Networking
 
             if (TryDetectReviveCandidate(out var targetLifeState))
             {
-                RequestRevive(targetLifeState);
+                // Only FAK-equipped players can revive teammates.
+                var ps = GetComponent<LobbyPlayerState>();
+                if (ps != null && ps.ToolId == 3)
+                    RequestRevive(targetLifeState);
             }
         }
 
@@ -245,7 +248,8 @@ namespace EchoProtocol.Networking
                 }
                 else
                 {
-                    targetId = Object.Id;
+                    // No downed ally in range — FAK cannot be used on self or alive allies.
+                    return false;
                 }
             }
 
@@ -411,7 +415,13 @@ namespace EchoProtocol.Networking
             var result = ValidateRequester(requester, sequence);
             if (result == InteractionValidationResult.Accepted)
             {
-                if (!Runner.TryFindObject(targetId, out var targetObject)
+                // Server-side guard: only FAK holders may revive.
+                var requesterState = GetComponent<LobbyPlayerState>();
+                if (requesterState == null || requesterState.ToolId != 3)
+                {
+                    result = InteractionValidationResult.InvalidRequester;
+                }
+                else if (!Runner.TryFindObject(targetId, out var targetObject)
                     || targetObject == null
                     || !targetObject.TryGetComponent<NetworkPlayerLifeState>(out var targetLifeState))
                 {
@@ -676,7 +686,7 @@ namespace EchoProtocol.Networking
                 targetLife = targetObj.GetComponent<NetworkPlayerLifeState>();
             }
 
-            // Case 1: Target ally is Downed -> Revive ally with 50% time
+            // Case 1: Target ally is Downed → Revive ally (FAK is the only way to revive)
             if (targetLife != null && targetLife.Status == NetworkPlayerLifeStatus.Downed)
             {
                 if (Vector3.Distance(transform.position, targetLife.transform.position) <= 4f)
@@ -696,42 +706,7 @@ namespace EchoProtocol.Networking
                 return InteractionValidationResult.OutOfRange;
             }
 
-            // Case 2: Target ally is Alive and injured -> Heal ally to 100
-            if (targetLife != null && targetLife.Status == NetworkPlayerLifeStatus.Alive && targetLife.Health < 100f)
-            {
-                if (Vector3.Distance(transform.position, targetLife.transform.position) <= 4f)
-                {
-                    if (targetLife.TryHeal(100f))
-                    {
-                        TeamToolOrdinal++;
-                        MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
-                            requester,
-                            $"player:{Object.Id}:tool:{TeamToolOrdinal}",
-                            "FIRST_AID_KIT");
-                        TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 2f);
-                        ConsumeGameplayTeamTool(state);
-                        return InteractionValidationResult.Accepted;
-                    }
-                }
-                return InteractionValidationResult.OutOfRange;
-            }
-
-            // Case 3: Self-heal if injured
-            if (selfLifeState.Status == NetworkPlayerLifeStatus.Alive && selfLifeState.Health < 100f)
-            {
-                if (selfLifeState.TryHeal(100f))
-                {
-                    TeamToolOrdinal++;
-                    MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
-                        requester,
-                        $"player:{Object.Id}:tool:{TeamToolOrdinal}",
-                        "FIRST_AID_KIT");
-                    TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 2f);
-                    ConsumeGameplayTeamTool(state);
-                    return InteractionValidationResult.Accepted;
-                }
-            }
-
+            // FAK can only revive Downed allies — no heal on alive targets or self.
             return InteractionValidationResult.InvalidTargetState;
         }
 

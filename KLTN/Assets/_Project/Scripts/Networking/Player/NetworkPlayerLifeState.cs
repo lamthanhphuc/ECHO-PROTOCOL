@@ -267,11 +267,9 @@ namespace EchoProtocol.Networking
             }
 
             Reviver = reviver;
-            var reviverState = reviverObject.GetComponent<LobbyPlayerState>();
-            ActiveReviveUsedFirstAidKit = reviverState != null && reviverState.ToolId == 3;
-            ActiveReviveDurationSeconds = ActiveReviveUsedFirstAidKit
-                ? _reviveDurationSeconds * 0.5f
-                : _reviveDurationSeconds;
+            // FAK is the only way to revive — always use full duration (no speed bonus).
+            ActiveReviveUsedFirstAidKit = true;
+            ActiveReviveDurationSeconds = _reviveDurationSeconds;
             ReviveTimer = TickTimer.CreateFromSeconds(Runner, ActiveReviveDurationSeconds);
             CommitStatus(NetworkPlayerLifeStatus.Downed, NetworkPlayerLifeTransitionCause.ReviveStarted);
             Debug.Log($"[LifeState] {reviver} started reviving {Object.InputAuthority}.");
