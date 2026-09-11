@@ -472,6 +472,8 @@ MonoBehaviour:
   dropForwardDistance: 1.35
   carryNoiseInterval: 2.5
   carryNoiseMoveThreshold: 0.05
+  stabilizedNoiseMultiplier: 0.35
+  stabilizedCarrySpeedMultiplier: 0.9
   carryNoiseEmitted:
     m_PersistentCalls:
       m_Calls: []
