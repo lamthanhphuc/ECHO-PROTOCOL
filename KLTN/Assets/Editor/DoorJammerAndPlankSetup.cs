@@ -15,7 +15,7 @@ namespace EchoProtocol.Editor
         private const string DoorPrefabPath = "Assets/Prefabs/Environment/Door/PF_SciFiSlidingDoor.prefab";
         private const string JammerPrefabPath = "Assets/Resources/Network/PF_DoorJammer.prefab";
         private const string PlankItemPath = "Assets/ScriptableObjects/Inventory/TeamTools/SO_Plank_ItemDefinition.asset";
-        private const string PlankPickupPath = "Assets/Prefabs/Tools/PF_Plank_Pickup.prefab";
+        private const string PlankPickupPath = "Assets/Prefabs/Gameplay/Imported/PF_Plank_Imported.prefab";
         private const string PlankImportedPrefabPath = "Assets/Prefabs/Gameplay/Imported/PF_Plank_Imported.prefab";
         private const string PlankImportAltPrefabPath = "Assets/import/plank/PF_Plank.prefab";
         private const string PlankFbxPath = "Assets/import/plank/source/Plank4.fbx";
@@ -616,12 +616,12 @@ namespace EchoProtocol.Editor
                         var childRotProp = toolSo.FindProperty("plankChildLocalEulerAngles");
                         var childScaleProp = toolSo.FindProperty("plankChildLocalScale");
 
-                        if (posProp != null) posProp.vector3Value = Vector3.zero;
-                        if (rotProp != null) rotProp.vector3Value = Vector3.zero;
-                        if (scaleProp != null) scaleProp.vector3Value = Vector3.one;
-                        if (childPosProp != null) childPosProp.vector3Value = new Vector3(0.0151f, 0.0386f, -0.0076f);
-                        if (childRotProp != null) childRotProp.vector3Value = new Vector3(90f, 0f, 0f);
-                        if (childScaleProp != null) childScaleProp.vector3Value = new Vector3(22.23983f, 0.5456054f, 2.985957f);
+                        if (posProp != null) posProp.vector3Value = new Vector3(0.04f, 0.02f, 0.12f);
+                        if (rotProp != null) rotProp.vector3Value = new Vector3(15f, 90f, -20f);
+                        if (scaleProp != null) scaleProp.vector3Value = new Vector3(15f, 15f, 15f);
+                        if (childPosProp != null) childPosProp.vector3Value = Vector3.zero;
+                        if (childRotProp != null) childRotProp.vector3Value = Vector3.zero;
+                        if (childScaleProp != null) childScaleProp.vector3Value = Vector3.one;
 
                         toolSo.ApplyModifiedPropertiesWithoutUndo();
                         changed = true;
@@ -639,12 +639,12 @@ namespace EchoProtocol.Editor
                         var childRotProp = heldSo.FindProperty("plankChildLocalEulerAngles");
                         var childScaleProp = heldSo.FindProperty("plankChildLocalScale");
 
-                        if (posProp != null) posProp.vector3Value = Vector3.zero;
-                        if (rotProp != null) rotProp.vector3Value = Vector3.zero;
-                        if (scaleProp != null) scaleProp.vector3Value = Vector3.one;
-                        if (childPosProp != null) childPosProp.vector3Value = new Vector3(0.0151f, 0.0386f, -0.0076f);
-                        if (childRotProp != null) childRotProp.vector3Value = new Vector3(90f, 0f, 0f);
-                        if (childScaleProp != null) childScaleProp.vector3Value = new Vector3(22.23983f, 0.5456054f, 2.985957f);
+                        if (posProp != null) posProp.vector3Value = new Vector3(0.04f, 0.02f, 0.12f);
+                        if (rotProp != null) rotProp.vector3Value = new Vector3(15f, 90f, -20f);
+                        if (scaleProp != null) scaleProp.vector3Value = new Vector3(15f, 15f, 15f);
+                        if (childPosProp != null) childPosProp.vector3Value = Vector3.zero;
+                        if (childRotProp != null) childRotProp.vector3Value = Vector3.zero;
+                        if (childScaleProp != null) childScaleProp.vector3Value = Vector3.one;
 
                         heldSo.ApplyModifiedPropertiesWithoutUndo();
                         changed = true;

@@ -16,6 +16,7 @@ public class PlayerInventory : MonoBehaviour
     [SerializeField] private InventoryItemDefinition noiseMakerDefinition;
     [SerializeField] private InventoryItemDefinition firstAidDefinition;
     [SerializeField] private InventoryItemDefinition doorJammerDefinition;
+    [SerializeField] private InventoryItemDefinition coreStabilizerDefinition;
 
     private LobbyPlayerState _lobbyState;
     private NetworkObject _networkObject;
@@ -24,6 +25,7 @@ public class PlayerInventory : MonoBehaviour
 
     public InventoryItemDefinition TeamToolSlot => teamToolSlot;
     public bool IsTeamToolLocked => teamToolLocked;
+    public InventoryItemDefinition DoorJammerDefinition => doorJammerDefinition;
 
     private void Awake()
     {
@@ -366,11 +368,44 @@ public class PlayerInventory : MonoBehaviour
     {
         switch (toolId)
         {
-            case 1: return fieldScannerDefinition;
-            case 2: return noiseMakerDefinition;
-            case 3: return firstAidDefinition;
-            case 4: return doorJammerDefinition;
-            default: return null;
+            case 1:
+                if (fieldScannerDefinition != null) return fieldScannerDefinition;
+                fieldScannerDefinition = Resources.Load<InventoryItemDefinition>("SO_FieldScanner_ItemDefinition");
+#if UNITY_EDITOR
+                if (fieldScannerDefinition == null)
+                    fieldScannerDefinition = UnityEditor.AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>("Assets/ScriptableObjects/Inventory/SO_FieldScanner_ItemDefinition.asset");
+#endif
+                return fieldScannerDefinition;
+            case 2:
+                if (noiseMakerDefinition != null) return noiseMakerDefinition;
+#if UNITY_EDITOR
+                if (noiseMakerDefinition == null)
+                    noiseMakerDefinition = UnityEditor.AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>("Assets/ScriptableObjects/Inventory/SO_NoiseMaker_ItemDefinition.asset");
+#endif
+                return noiseMakerDefinition;
+            case 3:
+                if (firstAidDefinition != null) return firstAidDefinition;
+#if UNITY_EDITOR
+                if (firstAidDefinition == null)
+                    firstAidDefinition = UnityEditor.AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>("Assets/ScriptableObjects/Inventory/SO_FirstAid_ItemDefinition.asset");
+#endif
+                return firstAidDefinition;
+            case 4:
+                if (doorJammerDefinition != null) return doorJammerDefinition;
+                doorJammerDefinition = Resources.Load<InventoryItemDefinition>("SO_Plank_ItemDefinition")
+                    ?? Resources.Load<InventoryItemDefinition>("SO_DoorJammer_ItemDefinition");
+#if UNITY_EDITOR
+                if (doorJammerDefinition == null)
+                {
+                    doorJammerDefinition = UnityEditor.AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>("Assets/ScriptableObjects/Inventory/TeamTools/SO_Plank_ItemDefinition.asset")
+                        ?? UnityEditor.AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>("Assets/ScriptableObjects/Inventory/SO_DoorJammer_ItemDefinition.asset");
+                }
+#endif
+                return doorJammerDefinition;
+            case 6:
+                return coreStabilizerDefinition;
+            default:
+                return null;
         }
     }
 

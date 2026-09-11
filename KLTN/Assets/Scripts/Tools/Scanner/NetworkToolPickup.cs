@@ -27,6 +27,12 @@ namespace EchoProtocol.Tools.Scanner
         [Networked, OnChangedRender(nameof(OnReplicatedStateChanged))]
         private NetworkBool _isPickedUp { get; set; }
 
+        [Networked, OnChangedRender(nameof(ApplyReplicatedPose))]
+        public Vector3 WorldPosition { get; private set; }
+
+        [Networked, OnChangedRender(nameof(ApplyReplicatedPose))]
+        public Quaternion WorldRotation { get; private set; }
+
         private bool _localPickedUp;
         private bool _pendingDespawn;
 
@@ -69,9 +75,24 @@ namespace EchoProtocol.Tools.Scanner
                 _isPickedUp = false;
                 _localPickedUp = false;
                 _pendingDespawn = false;
+                WorldPosition = transform.position;
+                WorldRotation = transform.rotation;
+            }
+            else
+            {
+                _localPickedUp = _isPickedUp;
             }
 
+            ApplyReplicatedPose();
             OnReplicatedStateChanged();
+        }
+
+        private void ApplyReplicatedPose()
+        {
+            if (WorldPosition != Vector3.zero)
+            {
+                transform.SetPositionAndRotation(WorldPosition, WorldRotation);
+            }
         }
 
         private void OnReplicatedStateChanged()
@@ -144,6 +165,11 @@ namespace EchoProtocol.Tools.Scanner
 
         protected override void ExecuteInteraction(in InteractionContext context)
         {
+            if (IsPickedUp || !Object.HasStateAuthority)
+            {
+                return;
+            }
+
             IsPickedUp = true;
             foreach (var c in GetComponentsInChildren<Collider>(true))
             {
@@ -157,22 +183,7 @@ namespace EchoProtocol.Tools.Scanner
                 context.PlayerState.SetGameplayToolId(_toolId);
             }
 
-            // Give item to player's local inventory via Target RPC
-            if (Runner != null && Object != null && Object.IsValid && Object.HasStateAuthority)
-            {
-                RpcTargetGiveLocalInventory(context.Player);
-                _pendingDespawn = true;
-            }
-
-            // Also give directly to local inventory if Host is the requester
-            if (context.Requester != null)
-            {
-                var netObj = context.Requester.GetComponentInParent<NetworkObject>();
-                if (netObj != null && netObj.HasInputAuthority)
-                {
-                    GiveToPlayerLocal(context.Requester.gameObject);
-                }
-            }
+            _pendingDespawn = true;
 
             ToolPickedUp?.Invoke(this, context.Player);
             Debug.Log($"[NetworkToolPickup] Player {context.Player} picked up tool '{_toolItemDefinition?.DisplayName ?? _toolId.ToString()}'.");
@@ -199,16 +210,6 @@ namespace EchoProtocol.Tools.Scanner
 
             _pendingDespawn = false;
             Runner.Despawn(Object);
-        }
-
-        [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
-        private void RpcTargetGiveLocalInventory([RpcTarget] PlayerRef targetPlayer)
-        {
-            var localPlayer = FindLocalPlayer();
-            if (localPlayer != null)
-            {
-                GiveToPlayerLocal(localPlayer);
-            }
         }
 
         // ==========================================

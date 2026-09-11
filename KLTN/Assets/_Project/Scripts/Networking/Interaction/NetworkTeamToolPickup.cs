@@ -6,10 +6,12 @@ namespace EchoProtocol.Networking
     [DisallowMultipleComponent]
     public sealed class NetworkTeamToolPickup : NetworkInteractable
     {
-        [SerializeField, Range(1, 4)] private int _toolId = 2;
+        [SerializeField, Range(1, 6)] private int _toolId = 2;
         [SerializeField] private string _toolDisplayName = "Team Tool";
 
-        [Networked] private NetworkBool IsConsumed { get; set; }
+        [Networked, OnChangedRender(nameof(OnConsumedChanged))] private NetworkBool IsConsumed { get; set; }
+        [Networked, OnChangedRender(nameof(ApplyReplicatedPose))] public Vector3 WorldPosition { get; private set; }
+        [Networked, OnChangedRender(nameof(ApplyReplicatedPose))] public Quaternion WorldRotation { get; private set; }
 
         private bool _pendingDespawn;
 
@@ -20,10 +22,50 @@ namespace EchoProtocol.Networking
                 ? "Pick Up Team Tool"
                 : $"Pick Up {_toolDisplayName}";
 
+        public override void Spawned()
+        {
+            if (Object.HasStateAuthority)
+            {
+                IsConsumed = false;
+                _pendingDespawn = false;
+                WorldPosition = transform.position;
+                WorldRotation = transform.rotation;
+            }
+
+            ApplyReplicatedPose();
+            SetVisualsAndCollidersActive(!IsConsumed);
+        }
+
+        private void ApplyReplicatedPose()
+        {
+            if (WorldPosition != Vector3.zero)
+            {
+                transform.SetPositionAndRotation(WorldPosition, WorldRotation);
+            }
+        }
+
+        private void OnConsumedChanged()
+        {
+            SetVisualsAndCollidersActive(!IsConsumed);
+        }
+
+        private void SetVisualsAndCollidersActive(bool active)
+        {
+            foreach (var c in GetComponentsInChildren<Collider>(true))
+            {
+                c.enabled = active;
+            }
+
+            foreach (var r in GetComponentsInChildren<Renderer>(true))
+            {
+                r.enabled = active;
+            }
+        }
+
         protected override InteractionValidationResult ValidateCurrentState(
             in InteractionContext context)
         {
-            if (IsConsumed || _toolId < 1 || _toolId > 4)
+            if (IsConsumed || _toolId < 1 || _toolId > 6)
             {
                 return InteractionValidationResult.InvalidTargetState;
             }
@@ -51,16 +93,13 @@ namespace EchoProtocol.Networking
                 || !playerState.IsGameplayPlayer
                 || playerState.ToolId != 0
                 || _toolId < 1
-                || _toolId > 4)
+                || _toolId > 6)
             {
                 return;
             }
 
             IsConsumed = true;
-            foreach (var c in GetComponentsInChildren<Collider>(true))
-            {
-                c.enabled = false;
-            }
+            SetVisualsAndCollidersActive(false);
             playerState.SetGameplayToolId(_toolId);
             _pendingDespawn = true;
         }

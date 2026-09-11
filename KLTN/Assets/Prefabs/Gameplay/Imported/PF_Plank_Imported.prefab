@@ -55,8 +55,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.22239828, y: 0.025, z: 0.029859565}
-  m_Center: {x: 0, y: 0, z: 0}
+  m_Size: {x: 0.2253942, y: 0.0048383884, z: 0.030739808}
+  m_Center: {x: 0.0014977575, y: 0.0005157319, z: -0.0006950617}
 --- !u!82 &5085477122006853335
 AudioSource:
   m_ObjectHideFlags: 0
@@ -79,7 +79,7 @@ AudioSource:
   Priority: 128
   DopplerLevel: 1
   MinDistance: 1
-  MaxDistance: 500
+  MaxDistance: 47103.445
   Pan2D: 0
   rolloffMode: 0
   BypassEffects: 0
@@ -198,6 +198,8 @@ MonoBehaviour:
   _pickupPrompt: "Nh\u1EB7t Planks [E]"
   _pickupCollider: {fileID: 2394499193520523817}
   _visualRenderer: {fileID: 4882620373577368898}
+  _WorldPosition: {x: 0, y: 0, z: 0}
+  _WorldRotation: {x: 0, y: 0, z: 0, w: 0}
 --- !u!1001 &6053709801681623494
 PrefabInstance:
   m_ObjectHideFlags: 0
