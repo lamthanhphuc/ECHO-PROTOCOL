@@ -259917,8 +259917,9 @@ MonoBehaviour:
   target: {fileID: 0}
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   mouseSensitivity: 0.12
-  eyeHeight: 1.7
-  crouchEyeHeight: 1.4
+  eyeHeight: 1.65
+  crouchEyeHeight: 1.3
+  downedEyeHeight: 0.55
   eyeHeightTransitionSpeed: 10
   minPitch: -85
   maxPitch: 85
@@ -268421,10 +268422,10 @@ MonoBehaviour:
   _interactionLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  _fieldScannerPickupPrefab: {fileID: 0}
-  _noiseMakerPickupPrefab: {fileID: 0}
-  _firstAidPickupPrefab: {fileID: 0}
-  _doorJammerPickupPrefab: {fileID: 0}
+  _fieldScannerPickupPrefab: {fileID: 7407995254980528878, guid: bd7126f397d671b47a7357b603e8363e, type: 3}
+  _noiseMakerPickupPrefab: {fileID: 4253842779654547843, guid: a4233f32c65a0f446b144f89b39f593c, type: 3}
+  _firstAidPickupPrefab: {fileID: 5282768087981583904, guid: d2075e2082d18b64390490d50b3f94fd, type: 3}
+  _doorJammerPickupPrefab: {fileID: 4920552562951933515, guid: 01c3e5e273fc64041870daff62b4cbaa, type: 3}
   _noiseMakerBeaconPrefab: {fileID: 5536313895210414100, guid: 4a8de518f84dfbe4a9620fbab3379f24, type: 3}
   _coreStabilizerPulseClip: {fileID: 0}
 --- !u!4 &689356800360617986
@@ -269080,11 +269081,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NetworkTeamToolHeldView
   lobbyState: {fileID: 640100002005832152}
   heldItemAnchor: {fileID: 5130164145203918743}
-  toolVisual_1: {fileID: 0}
+  toolVisual_1: {fileID: 6917847998477345115, guid: 42eed1ef7003d124d93c210c5b5cff43, type: 3}
   toolVisual_2: {fileID: 6336918889015265847, guid: 0c24821b2d6aef745a61febe92e91285, type: 3}
   toolVisual_3: {fileID: 5508043860142965960, guid: 7972be33729bd41458d3d7b5486243ef, type: 3}
-  toolVisual_4: {fileID: 0}
-  toolVisual_6: {fileID: 0}
+  toolVisual_4: {fileID: 1032971532598727059, guid: 01c3e5e273fc64041870daff62b4cbaa, type: 3}
+  toolVisual_6: {fileID: 5079926724729202342, guid: 6015a547e18400c42aae8c415323205b, type: 3}
   localPosition: {x: 0.04, y: 0.02, z: 0.12}
   localEulerAngles: {x: 0, y: 90, z: -18}
   localScale: {x: 0.12, y: 0.22, z: 0.34}
@@ -269103,12 +269104,12 @@ MonoBehaviour:
   firstAidChildLocalPosition: {x: -0.533528, y: -3.405526, z: -0.3114559}
   firstAidChildLocalEulerAngles: {x: 0.12, y: -0.416, z: 5.923}
   firstAidChildLocalScale: {x: 1, y: 1, z: 1}
-  plankLocalPosition: {x: 0.04, y: 0.02, z: 0.12}
-  plankLocalEulerAngles: {x: 15, y: 90, z: -20}
+  plankLocalPosition: {x: 0.028, y: 0.189, z: -0.037}
+  plankLocalEulerAngles: {x: 90, y: 0, z: -90}
   plankLocalScale: {x: 5, y: 5, z: 5}
-  plankChildLocalPosition: {x: 0.0151, y: 0.0386, z: -0.0076}
-  plankChildLocalEulerAngles: {x: 90, y: 0, z: 0}
-  plankChildLocalScale: {x: 22.23983, y: 0.5456054, z: 2.985957}
+  plankChildLocalPosition: {x: 0, y: 0, z: 0}
+  plankChildLocalEulerAngles: {x: 0, y: 0, z: 0}
+  plankChildLocalScale: {x: 1, y: 1, z: 1}
   coreStabilizerLocalPosition: {x: 0.035, y: 0.02, z: 0.12}
   coreStabilizerLocalEulerAngles: {x: 10, y: 90, z: -15}
   coreStabilizerLocalScale: {x: 0.45, y: 0.45, z: 0.45}
@@ -270896,12 +270897,12 @@ MonoBehaviour:
   noiseMakerLocalPosition: {x: 0.018, y: 0.132, z: -0.065}
   noiseMakerLocalEulerAngles: {x: 6.176, y: 93.2, z: 94.562}
   noiseMakerLocalScale: {x: 0.7, y: 0.7, z: 0.7}
-  plankLocalPosition: {x: 0.04, y: 0.02, z: 0.12}
-  plankLocalEulerAngles: {x: 15, y: 90, z: -20}
+  plankLocalPosition: {x: 0.028, y: 0.189, z: -0.037}
+  plankLocalEulerAngles: {x: 90, y: 0, z: -90}
   plankLocalScale: {x: 5, y: 5, z: 5}
-  plankChildLocalPosition: {x: 0.0151, y: 0.0386, z: -0.0076}
-  plankChildLocalEulerAngles: {x: 90, y: 0, z: 0}
-  plankChildLocalScale: {x: 22.23983, y: 0.5456054, z: 2.985957}
+  plankChildLocalPosition: {x: 0, y: 0, z: 0}
+  plankChildLocalEulerAngles: {x: 0, y: 0, z: 0}
+  plankChildLocalScale: {x: 1, y: 1, z: 1}
 --- !u!1 &3215151750316734892
 GameObject:
   m_ObjectHideFlags: 0
@@ -273213,10 +273214,11 @@ MonoBehaviour:
   - {fileID: 0}
   teamToolSlot: {fileID: 0}
   teamToolLocked: 0
-  fieldScannerDefinition: {fileID: 0}
-  noiseMakerDefinition: {fileID: 0}
-  firstAidDefinition: {fileID: 0}
-  doorJammerDefinition: {fileID: 0}
+  fieldScannerDefinition: {fileID: 11400000, guid: 6289cba7e34d8cc46bda359b351cfe9e, type: 2}
+  noiseMakerDefinition: {fileID: 11400000, guid: 9dd6b970862ee4641bc2e47c12c990ea, type: 2}
+  firstAidDefinition: {fileID: 11400000, guid: 1efcfdbffb1e61f41a81b954f0c40c2c, type: 2}
+  doorJammerDefinition: {fileID: 11400000, guid: 2a4a8096bb97c684485528a7476175b9, type: 2}
+  coreStabilizerDefinition: {fileID: 0}
 --- !u!4 &5964041071535669077
 Transform:
   m_ObjectHideFlags: 0

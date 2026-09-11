@@ -167,7 +167,7 @@ namespace EchoProtocol.Networking
         public void SetGameplayToolId(int toolId)
         {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority
-                || toolId < 0 || toolId > 4)
+                || toolId < 0 || toolId > 6)
             {
                 return;
             }

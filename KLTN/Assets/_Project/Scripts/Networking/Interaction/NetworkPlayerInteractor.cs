@@ -22,6 +22,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _noiseMakerPickupPrefab;
         [SerializeField] private NetworkObject _firstAidPickupPrefab;
         [SerializeField] private NetworkObject _doorJammerPickupPrefab;
+        [SerializeField] private NetworkObject _coreStabilizerPickupPrefab;
         [SerializeField] private GameObject _noiseMakerBeaconPrefab; // Gán DistressBeaconDeployed prefab trong Inspector
         [SerializeField] private AudioClip _coreStabilizerPulseClip;
 
@@ -39,6 +40,8 @@ namespace EchoProtocol.Networking
         private InputAction _teamToolAction;
         private InputAction _helpPingAction;
         private uint _nextSequence;
+        private NetworkId _lastRequestedTargetId;
+        private float _lastInteractionRequestTime;
 
         public NetworkInteractable CurrentCandidate { get; private set; }
 
@@ -178,7 +181,7 @@ namespace EchoProtocol.Networking
                 return RequestDropCarriedCore();
             }
 
-            if (playerState != null && playerState.ToolId >= 1 && playerState.ToolId <= 4)
+            if (playerState != null && playerState.ToolId >= 1 && playerState.ToolId <= 6)
             {
                 return RequestDropTeamTool();
             }
@@ -194,7 +197,7 @@ namespace EchoProtocol.Networking
             if (playerState == null
                 || playerState.CarriedCoreId.IsValid
                 || playerState.ToolId < 1
-                || playerState.ToolId > 4)
+                || playerState.ToolId > 6)
             {
                 return false;
             }
@@ -309,11 +312,19 @@ namespace EchoProtocol.Networking
                 CompleteLocally(default, 0, InteractionValidationResult.NotInputAuthority);
                 return false;
             }
-            if (target == null || target.Object == null)
+            if (target == null || target.Object == null || !target.Object.IsValid)
             {
                 CompleteLocally(default, 0, InteractionValidationResult.InvalidTarget);
                 return false;
             }
+
+            if (target.Object.Id == _lastRequestedTargetId && Time.time - _lastInteractionRequestTime < 0.25f)
+            {
+                return false;
+            }
+
+            _lastRequestedTargetId = target.Object.Id;
+            _lastInteractionRequestTime = Time.time;
 
             var command = new InteractionCommand(target.Object.Id, NextSequence());
             RpcRequestInteraction(command.TargetId, command.Sequence);
@@ -495,7 +506,7 @@ namespace EchoProtocol.Networking
                 {
                     result = InteractionValidationResult.InvalidTargetState;
                 }
-                else if (state.ToolId < 1 || state.ToolId > 4)
+                else if (state.ToolId < 1 || state.ToolId > 6)
                 {
                     result = InteractionValidationResult.InvalidTargetState;
                 }
@@ -522,7 +533,7 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            GetAuthoritativeDropPose(out var dropPosition, out var dropRotation);
+            GetAuthoritativeDropPose(toolId, out var dropPosition, out var dropRotation);
             var pickupObject = Runner.Spawn(prefab, dropPosition, dropRotation);
             var validPickup = pickupObject != null
                 && ((pickupObject.TryGetComponent<NetworkTeamToolPickup>(out var teamToolPickup)
@@ -551,26 +562,35 @@ namespace EchoProtocol.Networking
                 case 2: return _noiseMakerPickupPrefab;
                 case 3: return _firstAidPickupPrefab;
                 case 4: return _doorJammerPickupPrefab;
+                case 6: return _coreStabilizerPickupPrefab;
                 default: return null;
             }
         }
 
         private void GetAuthoritativeDropPose(out Vector3 position, out Quaternion rotation)
         {
+            GetAuthoritativeDropPose(0, out position, out rotation);
+        }
+
+        private void GetAuthoritativeDropPose(int toolId, out Vector3 position, out Quaternion rotation)
+        {
             Vector3 flatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
             if (flatForward == Vector3.zero) flatForward = transform.forward;
             var candidate = transform.position + flatForward * 1.25f;
             var rayOrigin = candidate + Vector3.up * 1.5f;
+            var layerMask = ~(1 << LayerMask.NameToLayer("Ignore Raycast"));
             position = Physics.Raycast(
                 rayOrigin,
                 Vector3.down,
                 out var hit,
                 4f,
-                ~0,
+                layerMask,
                 QueryTriggerInteraction.Ignore)
                 ? hit.point + Vector3.up * 0.05f
                 : candidate;
-            rotation = Quaternion.Euler(0f, transform.eulerAngles.y + 180f, 0f);
+            rotation = toolId == 1
+                ? Quaternion.Euler(90f, transform.eulerAngles.y + 180f, 0f)
+                : Quaternion.Euler(0f, transform.eulerAngles.y + 180f, 0f);
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]

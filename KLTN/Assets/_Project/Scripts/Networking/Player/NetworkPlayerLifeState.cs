@@ -125,6 +125,7 @@ namespace EchoProtocol.Networking
         public bool CanMove => (Object == null || !Object.IsValid) || NetworkPlayerLifeStateRules.CanMove(Status);
         public bool CanInitiateAction => (Object == null || !Object.IsValid) || NetworkPlayerLifeStateRules.CanInitiateAction(Status);
         public bool IsDowned => (Object != null && Object.IsValid) && Status == NetworkPlayerLifeStatus.Downed;
+        public bool IsEliminated => (Object != null && Object.IsValid) && Status == NetworkPlayerLifeStatus.Eliminated;
         public bool IsReviveInProgress => IsDowned && Reviver.IsValid && ReviveTimer.IsRunning;
         public bool HasReviveProtection => (Object != null && Object.IsValid)
                                            && Status == NetworkPlayerLifeStatus.Alive
@@ -199,6 +200,25 @@ namespace EchoProtocol.Networking
         public override void Render()
         {
             ApplyPresentation();
+        }
+
+        public void ResetForMatchAuthoritative()
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
+            Status = NetworkPlayerLifeStatus.Alive;
+            Health = _maximumHealth;
+            Reviver = PlayerRef.None;
+            IsCrawling = false;
+            DownCount = 0;
+            ReviveCount = 0;
+            TransitionOrdinal = 0;
+            LastTransitionCause = NetworkPlayerLifeTransitionCause.None;
+            BleedoutTimer = TickTimer.None;
+            ReviveTimer = TickTimer.None;
+            ProtectionTimer = TickTimer.None;
+            ClearReviveSnapshot();
+            ApplyPresentation();
+            StateChanged?.Invoke(this);
         }
 
         public bool TryApplyAuthoritativeDamage(float damage, string sourceType, Vector3 hitPosition)

@@ -11,6 +11,8 @@ GameObject:
   - component: {fileID: 8057068189938446881}
   - component: {fileID: 1851490497181898694}
   - component: {fileID: 4689215295209398798}
+  - component: {fileID: 4530120262622144617}
+  - component: {fileID: 8483034867424645094}
   m_Layer: 0
   m_Name: PF_EnergyCore_Imported
   m_TagString: Untagged
@@ -49,7 +51,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -62,7 +64,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2059464164376164516}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 870a9bc42cd1ebb44b183b97cf3ed762, type: 3}
   m_Name: 
@@ -70,6 +72,56 @@ MonoBehaviour:
   coreItem: {fileID: 11400000, guid: 2bd2cff28dde40f4bbbba4a5fbf6e854, type: 2}
   coreId: EnergyCore
   pickupPrompt: "Nh\u1EB7t Energy Core"
+--- !u!114 &4530120262622144617
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2059464164376164516}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 3145260564
+  SendPriority: 1
+  EnableInterpolation: 1
+  Flags: 262146
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 8483034867424645094}
+  ForceRemoteRenderTimeframe: 0
+--- !u!114 &8483034867424645094
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2059464164376164516}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 41910579be4c4b3eb3ef9715d3a2b614, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkPickupItem
+  _interactionDistance: 3
+  _interactionPrompt: "Nh\u1EB7t Energy Core"
+  _requiredToolId: 0
+  _cooldownSeconds: 0.25
+  _interactionOrigin: {fileID: 0}
+  _emitsRuntimeInteractionNoise: 0
+  _runtimeInteractionNoiseOrigin: {fileID: 0}
+  _availableVisual: {fileID: 5367247030770833868}
+  _pickupCollider: {fileID: 1851490497181898694}
+  _holderLocalPosition: {x: 0, y: 1.25, z: 0.35}
+  _holderLocalEulerAngles: {x: 0, y: 0, z: 0}
+  _State: 0
+  _TransitionOrdinal: 0
+  _PlacedSectorId:
+    Raw: 0
+  _PlacementSlot: -1
+  _WorldPosition: {x: 0, y: 0, z: 0}
+  _WorldRotation: {x: 0, y: 0, z: 0, w: 1}
 --- !u!1001 &6754800331780982088
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -143,6 +195,11 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: b1982a0a6a6d817408d42f0bb15f2f2c, type: 3}
+--- !u!23 &5367247030770833868 stripped
+MeshRenderer:
+  m_CorrespondingSourceObject: {fileID: -7511558181221131132, guid: b1982a0a6a6d817408d42f0bb15f2f2c, type: 3}
+  m_PrefabInstance: {fileID: 6754800331780982088}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &6500777151762162339 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: b1982a0a6a6d817408d42f0bb15f2f2c, type: 3}

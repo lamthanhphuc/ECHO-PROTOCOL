@@ -179,10 +179,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.PlayerSpawner
   _bootstrap: {fileID: 970048216}
   _doorPrefab: {fileID: 11400000, guid: 10b56fe0b82947259da1a4b1e07407b3, type: 3}
-  _pickupItemPrefab: {fileID: 11400000, guid: a2edc5247b3e46bda1c9588c2979a732, type: 3}
-  _energyCoreCount: 3
+  _pickupItemPrefab: {fileID: 4530120262622144617, guid: fbf86023a47ddf44dbcb7a0f384ba21d, type: 3}
+  _energyCoreCount: 4
   _energyCoreSpawnOrigin: {x: 2, y: 0.5, z: 2.5}
   _energyCoreSpawnSpacing: 1.25
+  _energyCoreSpawnSurfaceOffset: 0.35
   _sectorBoxPrefab: {fileID: 0}
   _matchStatePrefab: {fileID: 0}
   _powerPuzzlePrefab: {fileID: 0}
