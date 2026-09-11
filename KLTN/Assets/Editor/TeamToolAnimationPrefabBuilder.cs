@@ -8,18 +8,14 @@ public static class TeamToolAnimationPrefabBuilder
     private const string RunMarker = "Assets/Editor/.run_team_tool_animation_prefab_builder";
     private const string AnimationRoot = "Assets/Animations/TeamTools";
     private const string CoreAnimationFolder = AnimationRoot + "/CoreStabilizer";
-    private const string DecoyAnimationFolder = AnimationRoot + "/MotionDecoy";
     private const string AnimatedPrefabFolder = "Assets/Prefabs/Environment/Teamtoools/Animated";
 
     private const string CoreVisualPath = "Assets/Prefabs/Environment/Teamtoools/PF_CoreStabilizer_Device_Visual.prefab";
-    private const string DecoyVisualPath = "Assets/Prefabs/Environment/Teamtoools/PF_MotionDecoy_Device_Visua.prefab";
     private const string CorePrefabPath = AnimatedPrefabFolder + "/PF_CoreStabilizer_Device_Animated.prefab";
-    private const string DecoyPrefabPath = AnimatedPrefabFolder + "/PF_MotionDecoy_Device_Animated.prefab";
     private const string ParticleMaterialPath = "Assets/Materials/TeamTools/M_CoreStabilizer_Particles.mat";
     private const string FieldMaterialPath = "Assets/Materials/TeamTools/M_CoreStabilizer_Field_URP.mat";
 
     private const string CoreControllerPath = CoreAnimationFolder + "/AC_CoreStabilizer_Device.controller";
-    private const string DecoyControllerPath = DecoyAnimationFolder + "/AC_MotionDecoy_Device.controller";
 
     [InitializeOnLoadMethod]
     private static void RunRequestedBuild()
@@ -49,7 +45,6 @@ public static class TeamToolAnimationPrefabBuilder
         }
 
         EnsureFolder(CoreAnimationFolder);
-        EnsureFolder(DecoyAnimationFolder);
         EnsureFolder(AnimatedPrefabFolder);
         PreserveAndMoveExistingCoreClips();
         Material fieldMaterial = CreateFieldMaterial();
@@ -64,19 +59,9 @@ public static class TeamToolAnimationPrefabBuilder
         BuildCoreWrapper(coreController, fieldMaterial);
         ValidateAnimationBindings(CorePrefabPath, coreController, coreIdle, coreActivate, coreActive, coreDeactivate);
 
-        AnimationClip decoyIdle = ConfigureDecoyIdle(GetOrCreateClip(DecoyAnimationFolder + "/AN_MotionDecoy_Idle.anim"));
-        AnimationClip decoyDeploy = ConfigureDecoyDeploy(GetOrCreateClip(DecoyAnimationFolder + "/AN_MotionDecoy_Deploy.anim"));
-        AnimationClip decoyActive = ConfigureDecoyActive(GetOrCreateClip(DecoyAnimationFolder + "/AN_MotionDecoy_Active.anim"));
-        AnimationClip decoyShutdown = ConfigureDecoyShutdown(GetOrCreateClip(DecoyAnimationFolder + "/AN_MotionDecoy_Shutdown.anim"));
-        AnimatorController decoyController = GetOrCreateController(DecoyControllerPath);
-        ConfigureBoolController(decoyController, "IsDeployed", decoyIdle, decoyDeploy, decoyActive, decoyShutdown,
-            "Idle", "Deploy", "Active", "Shutdown");
-        BuildDecoyWrapper(decoyController);
-        ValidateAnimationBindings(DecoyPrefabPath, decoyController, decoyIdle, decoyDeploy, decoyActive, decoyShutdown);
-
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        Debug.Log("[TeamToolAnimationBuilder] Built Core Stabilizer and Motion Decoy device animation prefabs.");
+        Debug.Log("[TeamToolAnimationBuilder] Built Core Stabilizer device animation prefab.");
     }
 
     private static AnimationClip ConfigureCoreIdle(AnimationClip clip)
@@ -141,69 +126,6 @@ public static class TeamToolAnimationPrefabBuilder
             Key(0f, 1.5f), Key(0.2f, 0.2f), Key(0.4f, 0.4f));
         SetUniformScale(clip, "SupportFieldVFX",
             Key(0f, 1f), Key(0.2f, 0.65f), Key(0.4f, 0.01f));
-        FinishClip(clip);
-        return clip;
-    }
-
-    private static AnimationClip ConfigureDecoyIdle(AnimationClip clip)
-    {
-        ResetClip(clip, true);
-        SetScale(clip, "Visual/GripPivot/DeviceModel", new[]
-        {
-            Key(0f, 0.1f), Key(1f, 0.102f), Key(2f, 0.1f),
-        });
-        SetCurve(clip, "Visual/GripPivot/DeviceModel", typeof(Transform), "localEulerAnglesRaw.y",
-            SmoothCurve(Key(0f, -1f), Key(1f, 1f), Key(2f, -1f)));
-        SetLightIntensity(clip, "Visual/ProjectionOrigin/ProjectionVFX/ProjectionLight",
-            Key(0f, 0.2f), Key(1f, 0.5f), Key(2f, 0.2f));
-        SetUniformScale(clip, "Visual/ProjectionOrigin/ProjectionVFX", Key(0f, 0.35f), Key(1f, 0.5f), Key(2f, 0.35f));
-        FinishClip(clip);
-        return clip;
-    }
-
-    private static AnimationClip ConfigureDecoyDeploy(AnimationClip clip)
-    {
-        ResetClip(clip, false);
-        SetScale(clip, "Visual/GripPivot/DeviceModel", new[]
-        {
-            Key(0f, 0.1f), Key(0.15f, 0.092f), Key(0.4f, 0.108f), Key(0.6f, 0.1f),
-        });
-        SetCurve(clip, "Visual/GripPivot/DeviceModel", typeof(Transform), "localEulerAnglesRaw.z",
-            LinearCurve(Key(0f, 0f), Key(0.2f, -3f), Key(0.3f, 3f), Key(0.45f, -1f), Key(0.6f, 0f)));
-        SetLightIntensity(clip, "Visual/ProjectionOrigin/ProjectionVFX/ProjectionLight",
-            Key(0f, 0.3f), Key(0.25f, 1f), Key(0.45f, 3f), Key(0.6f, 1.5f));
-        SetUniformScale(clip, "Visual/ProjectionOrigin/ProjectionVFX",
-            Key(0f, 0.25f), Key(0.25f, 0.65f), Key(0.45f, 1.25f), Key(0.6f, 1f));
-        FinishClip(clip);
-        return clip;
-    }
-
-    private static AnimationClip ConfigureDecoyActive(AnimationClip clip)
-    {
-        ResetClip(clip, true);
-        SetScale(clip, "Visual/GripPivot/DeviceModel", new[]
-        {
-            Key(0f, 0.1f), Key(0.5f, 0.102f), Key(1f, 0.1f),
-        });
-        SetLightIntensity(clip, "Visual/ProjectionOrigin/ProjectionVFX/ProjectionLight",
-            Key(0f, 1.2f), Key(0.5f, 2.2f), Key(1f, 1.2f));
-        SetUniformScale(clip, "Visual/ProjectionOrigin/ProjectionVFX",
-            Key(0f, 0.85f), Key(0.5f, 1.1f), Key(1f, 0.85f));
-        FinishClip(clip);
-        return clip;
-    }
-
-    private static AnimationClip ConfigureDecoyShutdown(AnimationClip clip)
-    {
-        ResetClip(clip, false);
-        SetScale(clip, "Visual/GripPivot/DeviceModel", new[]
-        {
-            Key(0f, 0.1f), Key(0.2f, 0.085f), Key(0.35f, 0.1f),
-        });
-        SetLightIntensity(clip, "Visual/ProjectionOrigin/ProjectionVFX/ProjectionLight",
-            Key(0f, 1.2f), Key(0.2f, 0f), Key(0.35f, 0.2f));
-        SetUniformScale(clip, "Visual/ProjectionOrigin/ProjectionVFX",
-            Key(0f, 1f), Key(0.2f, 0.05f), Key(0.35f, 0.35f));
         FinishClip(clip);
         return clip;
     }
@@ -301,24 +223,6 @@ public static class TeamToolAnimationPrefabBuilder
         renderer.receiveShadows = false;
     }
 
-    private static void BuildDecoyWrapper(RuntimeAnimatorController controller)
-    {
-        GameObject visualPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(DecoyVisualPath);
-        if (visualPrefab == null) throw new FileNotFoundException("Missing Motion Decoy visual prefab", DecoyVisualPath);
-
-        GameObject root = CreateAnimatedRoot("PF_MotionDecoy_Device_Animated", controller);
-        GameObject visual = InstantiateVisual(visualPrefab, root.transform);
-        Transform projectionOrigin = FindDeepChild(visual.transform, "ProjectionOrigin");
-        if (projectionOrigin == null)
-        {
-            Object.DestroyImmediate(root);
-            throw new MissingReferenceException("Motion Decoy visual prefab has no ProjectionOrigin.");
-        }
-
-        CreateProjectionVfx(projectionOrigin);
-        SaveWrapper(root, DecoyPrefabPath);
-    }
-
     private static GameObject CreateAnimatedRoot(string name, RuntimeAnimatorController controller)
     {
         var root = new GameObject(name);
@@ -339,45 +243,6 @@ public static class TeamToolAnimationPrefabBuilder
         visual.transform.localRotation = Quaternion.identity;
         visual.transform.localScale = Vector3.one;
         return visual;
-    }
-
-    private static void CreateProjectionVfx(Transform projectionOrigin)
-    {
-        var vfx = new GameObject("ProjectionVFX");
-        vfx.transform.SetParent(projectionOrigin, false);
-
-        var lightObject = new GameObject("ProjectionLight");
-        lightObject.transform.SetParent(vfx.transform, false);
-        Light light = lightObject.AddComponent<Light>();
-        light.type = LightType.Point;
-        light.color = new Color(0.1f, 0.85f, 1f);
-        light.intensity = 0.2f;
-        light.range = 1f;
-        light.shadows = LightShadows.None;
-
-        var particlesObject = new GameObject("ProjectionParticles");
-        particlesObject.transform.SetParent(vfx.transform, false);
-        particlesObject.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
-        ParticleSystem particles = particlesObject.AddComponent<ParticleSystem>();
-        var main = particles.main;
-        main.duration = 1f;
-        main.loop = true;
-        main.startLifetime = 0.5f;
-        main.startSpeed = 0.2f;
-        main.startSize = 0.02f;
-        main.startColor = new Color(0.1f, 0.85f, 1f, 0.75f);
-        main.maxParticles = 40;
-        main.simulationSpace = ParticleSystemSimulationSpace.Local;
-        var emission = particles.emission;
-        emission.rateOverTime = 8f;
-        var shape = particles.shape;
-        shape.shapeType = ParticleSystemShapeType.Cone;
-        shape.angle = 8f;
-        shape.radius = 0.03f;
-        ParticleSystemRenderer renderer = particles.GetComponent<ParticleSystemRenderer>();
-        renderer.sharedMaterial = AssetDatabase.LoadAssetAtPath<Material>(ParticleMaterialPath);
-        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        renderer.receiveShadows = false;
     }
 
     private static void SaveWrapper(GameObject root, string path)

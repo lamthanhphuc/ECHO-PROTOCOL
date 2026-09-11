@@ -26,7 +26,8 @@ namespace EchoProtocol.AI.Listener.Tests
                     "INTERACTION",
                     "CORE_CARRY",
                     "CORE_DROP",
-                    "NOISE_MAKER"
+                    "NOISE_MAKER",
+                    "FIELD_SCANNER"
                 }));
         }
 
