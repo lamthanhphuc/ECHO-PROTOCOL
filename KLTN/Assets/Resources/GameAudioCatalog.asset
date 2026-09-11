@@ -1,0 +1,277 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9ce7c1b595f0d9b48a9abf59787dc225, type: 3}
+  m_Name: GameAudioCatalog
+  m_EditorClassIdentifier: 
+  effectsVolume: 0.65
+  ambienceVolume: 0.18
+  clips:
+  - key: door/door_jammer_deploy
+    clip: {fileID: 8300000, guid: df3ce9aa1b04a6b4ba76e9bd36ff97c9, type: 3}
+  - key: door/door_machinery_loop_loop
+    clip: {fileID: 8300000, guid: e2c1d8c74a884fc4b900d7a5cf4f2e8e, type: 3}
+  - key: door/jammer_armed
+    clip: {fileID: 8300000, guid: ed17b6bb1cacc354ea7a3051e1bea032, type: 3}
+  - key: door/locked_attempt
+    clip: {fileID: 8300000, guid: cb52ae00c8c2ae64ba05191fe6560d55, type: 3}
+  - key: door/sliding_close
+    clip: {fileID: 8300000, guid: 61c5e007bd09b6b4f99fdab70d2c2ac3, type: 3}
+  - key: door/sliding_open
+    clip: {fileID: 8300000, guid: 43c40bef20c33034d88e74c03bb57a0d, type: 3}
+  - key: door/unlock
+    clip: {fileID: 8300000, guid: b2da18fc8a6a1bd4692e680b07c7b646, type: 3}
+  - key: energy_core/ambient_hum_loop
+    clip: {fileID: 8300000, guid: f8b6965a39bda4249934ee5b9fb5fc35, type: 3}
+  - key: energy_core/carry_rattle
+    clip: {fileID: 8300000, guid: 916911c73cb03f143bd41f15471023ba, type: 3}
+  - key: energy_core/core_accepted
+    clip: {fileID: 8300000, guid: 94a0ec56bc602fd42b94563f611beac7, type: 3}
+  - key: energy_core/deposit_into_sector_box
+    clip: {fileID: 8300000, guid: ab9187abaf7ba93438ebb95df8c6e77c, type: 3}
+  - key: energy_core/drop
+    clip: {fileID: 8300000, guid: 90f774ca2a685c348aa1632d4f919479, type: 3}
+  - key: energy_core/pickup
+    clip: {fileID: 8300000, guid: beb47eddae77bfb4cbfee2ac089245a3, type: 3}
+  - key: escape_endgame/bay_door_opening
+    clip: {fileID: 8300000, guid: 3760a728a50edf74fb9a5cb2c94515c0, type: 3}
+  - key: escape_endgame/countdown_start
+    clip: {fileID: 8300000, guid: 15d71fb94f261bc4ab66cdd894ce6fe8, type: 3}
+  - key: escape_endgame/countdown_tick
+    clip: {fileID: 8300000, guid: 36a3390e87e559b418363d1be6b9a888, type: 3}
+  - key: escape_endgame/escape_unlocked
+    clip: {fileID: 8300000, guid: f589c3b0112a1c84bad36fee099b5974, type: 3}
+  - key: escape_endgame/final_hunt_start
+    clip: {fileID: 8300000, guid: 3ac8de97d026f4b478d8b7cd84765c93, type: 3}
+  - key: escape_endgame/mission_failure
+    clip: {fileID: 8300000, guid: 706fccfe582520c449a8c62ba7585dbb, type: 3}
+  - key: escape_endgame/mission_success
+    clip: {fileID: 8300000, guid: f7c772cf8e34b934b8ae286ed5862f5c, type: 3}
+  - key: first_aid/heal_confirm
+    clip: {fileID: 8300000, guid: cf12ca60c1767e14a98fe088a9d23179, type: 3}
+  - key: first_aid/revive_cancel
+    clip: {fileID: 8300000, guid: 7bcc01401f02ded44b18065669ffd862, type: 3}
+  - key: first_aid/revive_complete
+    clip: {fileID: 8300000, guid: 722b94a8ea0521c48b7b144d5ad950e8, type: 3}
+  - key: first_aid/revive_progress_loop
+    clip: {fileID: 8300000, guid: 87f464cd905a64249a1a9e435874351f, type: 3}
+  - key: first_aid/use_kit
+    clip: {fileID: 8300000, guid: 1cb536b105ddc66428b66ec8d07005a5, type: 3}
+  - key: horror_ambience/distant_monster_sound
+    clip: {fileID: 8300000, guid: e848a5e4818cb9c40bfa195a063599d4, type: 3}
+  - key: horror_ambience/low_frequency_rumble_loop
+    clip: {fileID: 8300000, guid: db51ad94f7e415342bc16467d3f8c41e, type: 3}
+  - key: horror_ambience/random_impact
+    clip: {fileID: 8300000, guid: 1475756a7d2546942967ec85e3345f92, type: 3}
+  - key: horror_ambience/tension_drone_loop
+    clip: {fileID: 8300000, guid: 7694765fa079c6644ab345d17a7fd8bf, type: 3}
+  - key: locker_hiding/enter_hiding
+    clip: {fileID: 8300000, guid: 66379ea791e6df645b1878392986458e, type: 3}
+  - key: locker_hiding/locker_close
+    clip: {fileID: 8300000, guid: aa1348438b744b743be2f544d9d9e007, type: 3}
+  - key: locker_hiding/locker_open
+    clip: {fileID: 8300000, guid: c4be23b879b111041bb367eb562ad747, type: 3}
+  - key: locker_hiding/monster_hits_locker
+    clip: {fileID: 8300000, guid: 50dc04671be53394eb16b635574963fb, type: 3}
+  - key: locker_hiding/monster_outside_locker
+    clip: {fileID: 8300000, guid: 2d90f31eeee6b1e48896efe92e0201f8, type: 3}
+  - key: locker_hiding/player_breathing_inside_loop
+    clip: {fileID: 8300000, guid: 4629a86cab4d2b94fa69958beee5d68e, type: 3}
+  - key: map_ambience/alarm_ambience_loop
+    clip: {fileID: 8300000, guid: d0194c7cb3009964aa25777a2616e135, type: 3}
+  - key: map_ambience/distant_metal_bang
+    clip: {fileID: 8300000, guid: 749d1842b855af947a45a8db06a0ea4a, type: 3}
+  - key: map_ambience/electrical_flicker
+    clip: {fileID: 8300000, guid: 0b9759ef23adf0044a2df25466f61919, type: 3}
+  - key: map_ambience/electrical_room_loop
+    clip: {fileID: 8300000, guid: 15a227bd2afd2bd46887a2a839a6d9fe, type: 3}
+  - key: map_ambience/facility_room_tone_loop
+    clip: {fileID: 8300000, guid: cb6431cf2771e3d4f8ad5ae8b83c1957, type: 3}
+  - key: map_ambience/fluorescent_buzz_loop
+    clip: {fileID: 8300000, guid: 23b561e44558b17448eaa657b1623094, type: 3}
+  - key: map_ambience/generator_loop
+    clip: {fileID: 8300000, guid: e3616c090ce122444926639b74696911, type: 3}
+  - key: map_ambience/hvac_loop
+    clip: {fileID: 8300000, guid: e65bf79a39cb6604ba1f59f801cca0d1, type: 3}
+  - key: map_ambience/pipe_creak
+    clip: {fileID: 8300000, guid: 12106d8f330800a46bfd284b4bab6ec5, type: 3}
+  - key: map_ambience/server_room_loop
+    clip: {fileID: 8300000, guid: 0cd4ef3b38f71a448b3ee8ac111f664a, type: 3}
+  - key: map_ambience/steam_hiss
+    clip: {fileID: 8300000, guid: f489d8692b4bd7b40bad1593088014ae, type: 3}
+  - key: noise_maker/activate
+    clip: {fileID: 8300000, guid: 6e40db7a5e02eea43baa067884279ba6, type: 3}
+  - key: noise_maker/beacon_loop_loop
+    clip: {fileID: 8300000, guid: d71faf4cf2ff02341981a4dfeb8ce63d, type: 3}
+  - key: noise_maker/beacon_pulse
+    clip: {fileID: 8300000, guid: 6b74dbe3e3df4cd4bb6de4440eb84f7e, type: 3}
+  - key: noise_maker/beacon_sequence_6s
+    clip: {fileID: 8300000, guid: fb8c05980750bb1468ac79938271194a, type: 3}
+  - key: noise_maker/end_deactivate
+    clip: {fileID: 8300000, guid: 1edb32b4af65f254c9e93de60dca4dbf, type: 3}
+  - key: noise_maker/throw_drop
+    clip: {fileID: 8300000, guid: dd09ce0111bb3664cab25910e5968738, type: 3}
+  - key: player/breathing_loop
+    clip: {fileID: 8300000, guid: 7b82069ff7402524696c31399bc8f0c5, type: 3}
+  - key: player/concrete_footstep_01
+    clip: {fileID: 8300000, guid: 1c37f2b7c8069b74eb416f67ee3fca18, type: 3}
+  - key: player/concrete_footstep_02
+    clip: {fileID: 8300000, guid: 5991aafd9f4f538438f9e6bad390738d, type: 3}
+  - key: player/concrete_footstep_03
+    clip: {fileID: 8300000, guid: ea8e2889ba082ab43a2390ead69e3064, type: 3}
+  - key: player/concrete_footstep_04
+    clip: {fileID: 8300000, guid: 5deb357127c3f2c45ba2863f2e27e7ad, type: 3}
+  - key: player/concrete_footsteps
+    clip: {fileID: 8300000, guid: 93c8cc0ff7c8dc24bb2775d3ff71f031, type: 3}
+  - key: player/crouch_footstep_01
+    clip: {fileID: 8300000, guid: 1708983ba230972488a9c70e45b35af0, type: 3}
+  - key: player/crouch_footstep_02
+    clip: {fileID: 8300000, guid: d52dc0aa7df92794fab8832e28a0018e, type: 3}
+  - key: player/crouch_footstep_03
+    clip: {fileID: 8300000, guid: 1701f981f33502344bd315b311291fc7, type: 3}
+  - key: player/crouch_footstep_04
+    clip: {fileID: 8300000, guid: be1ca0cb010b8e345a6674560fa835bb, type: 3}
+  - key: player/damage_grunt
+    clip: {fileID: 8300000, guid: 7d85119f5b31dd8419eb5cb2ebfeb620, type: 3}
+  - key: player/death_downed
+    clip: {fileID: 8300000, guid: af7d1d6f07418e940a0109045a1f8a3a, type: 3}
+  - key: player/downed_heartbeat_loop
+    clip: {fileID: 8300000, guid: 49e9f9a1aeb76f6429c55fa3891d99f2, type: 3}
+  - key: player/eliminated
+    clip: {fileID: 8300000, guid: aa02dc34cf0c14d4c94ce1d5ecb04532, type: 3}
+  - key: player/flashlight_off
+    clip: {fileID: 8300000, guid: 1c7c80bc1a32cf44795756e8a58ed9d9, type: 3}
+  - key: player/flashlight_on
+    clip: {fileID: 8300000, guid: 0cd510df5843ff04b9c8df030403a683, type: 3}
+  - key: player/help_ping
+    clip: {fileID: 8300000, guid: 608556b5642de9d4793b34f3ab654a3a, type: 3}
+  - key: player/low_stamina_breathing_loop
+    clip: {fileID: 8300000, guid: 98d34ddc91f3e56498ecd5933d6c8a14, type: 3}
+  - key: player/metal_footstep_01
+    clip: {fileID: 8300000, guid: 4e6a11d97005b0e4191e76023cb1c316, type: 3}
+  - key: player/metal_footstep_02
+    clip: {fileID: 8300000, guid: c89c749fe6cbdde46a172ddcb4d0cc7b, type: 3}
+  - key: player/metal_footstep_03
+    clip: {fileID: 8300000, guid: 5a3407ea1c2d56c4dada58774f654502, type: 3}
+  - key: player/metal_footstep_04
+    clip: {fileID: 8300000, guid: 3922d378e7ca7a64ba81050132910c4d, type: 3}
+  - key: player/metal_footsteps
+    clip: {fileID: 8300000, guid: a66235249863c18428ba6a3595cd9712, type: 3}
+  - key: player/sprint_footstep_01
+    clip: {fileID: 8300000, guid: 0359d9ed18d304d42b32a79d51aa9bcb, type: 3}
+  - key: player/sprint_footstep_02
+    clip: {fileID: 8300000, guid: 0331ddc81d8d32745b908ebc49e7006c, type: 3}
+  - key: player/sprint_footstep_03
+    clip: {fileID: 8300000, guid: 91a622577c5357743ba12e397a4d7eaa, type: 3}
+  - key: player/sprint_footstep_04
+    clip: {fileID: 8300000, guid: 4b5453617303aab409af3af981754fba, type: 3}
+  - key: player/sprint_footsteps
+    clip: {fileID: 8300000, guid: de333d587318d7d4bb3fdc595955a369, type: 3}
+  - key: power_puzzle/breaker_toggle
+    clip: {fileID: 8300000, guid: cd6a0fc6cc84b2049902f839188bbb4e, type: 3}
+  - key: power_puzzle/correct_input
+    clip: {fileID: 8300000, guid: a6155249c5162554aa29079d7849bc93, type: 3}
+  - key: power_puzzle/electrical_sparks
+    clip: {fileID: 8300000, guid: e6695febed592cd4baf197ee23140f18, type: 3}
+  - key: power_puzzle/puzzle_complete
+    clip: {fileID: 8300000, guid: 3cb4694ddb3141f488fbf88e9d69bbe8, type: 3}
+  - key: power_puzzle/rotary_switch
+    clip: {fileID: 8300000, guid: 88268400a3dd1b24ca65011da550ab07, type: 3}
+  - key: power_puzzle/terminal_interaction
+    clip: {fileID: 8300000, guid: 703b5e6eb740ddd4494c98446afcdbcb, type: 3}
+  - key: power_puzzle/wrong_input
+    clip: {fileID: 8300000, guid: 471cc4c13a6bd1f46b26920a85336a8f, type: 3}
+  - key: sector_box_power_hub/core_1_3_2_3
+    clip: {fileID: 8300000, guid: 1a5f8b1305476304fb8f587d413f4541, type: 3}
+  - key: sector_box_power_hub/core_insert_partial
+    clip: {fileID: 8300000, guid: 7eeb136ea9c83ae499b05be3e1550a2d, type: 3}
+  - key: sector_box_power_hub/fully_powered
+    clip: {fileID: 8300000, guid: d4e5a327469072a4bacfc2aa1ef3e127, type: 3}
+  - key: sector_box_power_hub/idle_machinery_loop
+    clip: {fileID: 8300000, guid: dd8bad07c36192d4285be930c54306a7, type: 3}
+  - key: security_terminal/access_denied
+    clip: {fileID: 8300000, guid: cba5908226bfc5747814c184188130c6, type: 3}
+  - key: security_terminal/access_granted
+    clip: {fileID: 8300000, guid: e1a10aec04358ee4486849ff163be0a2, type: 3}
+  - key: security_terminal/download_complete
+    clip: {fileID: 8300000, guid: c548b640a5d453c4c8d96afd1cc8826a, type: 3}
+  - key: security_terminal/download_pause
+    clip: {fileID: 8300000, guid: 5987bf875d1bc6b4da6fc13f854f82e7, type: 3}
+  - key: security_terminal/download_progress_loop
+    clip: {fileID: 8300000, guid: c4067156de6ca2f45b609f194ce3f2c7, type: 3}
+  - key: security_terminal/download_resume
+    clip: {fileID: 8300000, guid: 1331540cfeba8d24d8c17dedea5e9f4f, type: 3}
+  - key: security_terminal/download_start
+    clip: {fileID: 8300000, guid: 319d8127c7c0512478ace45a668291e2, type: 3}
+  - key: security_terminal/terminal_boot
+    clip: {fileID: 8300000, guid: 3bc7814eb1325cd448c5da7632813dda, type: 3}
+  - key: stalker/attack_hit
+    clip: {fileID: 8300000, guid: 788e6769a3c39b44f8fbc4c1a2eeb6df, type: 3}
+  - key: stalker/attack_swing
+    clip: {fileID: 8300000, guid: 6c4ce23ce296cb5498a75f56f23f3c4d, type: 3}
+  - key: stalker/chase_footstep_01
+    clip: {fileID: 8300000, guid: 62eed7c6a16807a47a3e65f0fc714bfb, type: 3}
+  - key: stalker/chase_footstep_02
+    clip: {fileID: 8300000, guid: 6ff58c6eec0b48d49ac18cfddff6599d, type: 3}
+  - key: stalker/chase_footstep_03
+    clip: {fileID: 8300000, guid: ae95586299d51e645a71508699357607, type: 3}
+  - key: stalker/chase_footstep_04
+    clip: {fileID: 8300000, guid: 5119b50c95d982f4a8a1754d9699e22a, type: 3}
+  - key: stalker/chase_loop_vocal_loop
+    clip: {fileID: 8300000, guid: 700271dea8f67a04e978af099d8355fc, type: 3}
+  - key: stalker/chase_start
+    clip: {fileID: 8300000, guid: cd2d6fb1d7a3dea428864b5f27c45104, type: 3}
+  - key: stalker/detect_cue
+    clip: {fileID: 8300000, guid: 5e70ccbcd4a790e4ab86e8e6d50b1e78, type: 3}
+  - key: stalker/door_break
+    clip: {fileID: 8300000, guid: 987c306eb8e3398478ccbc78171615a0, type: 3}
+  - key: stalker/door_hit
+    clip: {fileID: 8300000, guid: 70162f5385e88194fbf3c662dd3ac96b, type: 3}
+  - key: stalker/door_jammer_break
+    clip: {fileID: 8300000, guid: b53fc737fe63f254e826cb9a5fe8610a, type: 3}
+  - key: stalker/footstep_cham
+    clip: {fileID: 8300000, guid: 2938e02c27650834ab12a1b8112944fc, type: 3}
+  - key: stalker/footstep_chay_chase
+    clip: {fileID: 8300000, guid: 90ff4ef06b7c2f74aafe9958612fcd31, type: 3}
+  - key: stalker/idle_breathing_growl_loop
+    clip: {fileID: 8300000, guid: 23a49aae44fb6cf449bf7a9f316b5854, type: 3}
+  - key: stalker/miss_attack
+    clip: {fileID: 8300000, guid: 9134bdebf7c88c247a7f1e4414c6e2f9, type: 3}
+  - key: stalker/patrol_footstep_01
+    clip: {fileID: 8300000, guid: b3667ad549ef34c4a9e2670976d630d2, type: 3}
+  - key: stalker/patrol_footstep_02
+    clip: {fileID: 8300000, guid: 0a733fccfa5252f4785f783a39c1d7a5, type: 3}
+  - key: stalker/patrol_footstep_03
+    clip: {fileID: 8300000, guid: f794414fea3378248acd5673fc4059f3, type: 3}
+  - key: stalker/patrol_footstep_04
+    clip: {fileID: 8300000, guid: 1354801cb4bbbae44842875578fa2e0a, type: 3}
+  - key: stalker/recover_exhale
+    clip: {fileID: 8300000, guid: 34e31f843e6f7cb408ed19bad7c065f8, type: 3}
+  - key: stalker/recover_stun
+    clip: {fileID: 8300000, guid: 9b018f25d6fc1134dad9644b04e8ec11, type: 3}
+  - key: stalker/search_vocal
+    clip: {fileID: 8300000, guid: d2c318b6f24636e48a19f5fd2702212f, type: 3}
+  - key: ui/click
+    clip: {fileID: 8300000, guid: 35cfa3ff77ba91b459f082e80185c5ef, type: 3}
+  - key: ui/confirm
+    clip: {fileID: 8300000, guid: 08b7b2aedc872bc4b957053a5f289429, type: 3}
+  - key: ui/error
+    clip: {fileID: 8300000, guid: 43e454f334e0b224bb04f027a25e5bcc, type: 3}
+  - key: ui/hover
+    clip: {fileID: 8300000, guid: d87fd03404344694f93a736d620d1943, type: 3}
+  - key: ui/inventory_pickup
+    clip: {fileID: 8300000, guid: bda73292e912f6d4094ebe74c1cab76a, type: 3}
+  - key: ui/lobby_ready
+    clip: {fileID: 8300000, guid: 93cfba022dd62374186db329492312b1, type: 3}
+  - key: ui/match_start
+    clip: {fileID: 8300000, guid: 9377bfb2bffef2e41bccbdaf0e76cca2, type: 3}
+  - key: ui/objective_update
+    clip: {fileID: 8300000, guid: 61cbe4927fc7b3c4f89d09d299e145e4, type: 3}

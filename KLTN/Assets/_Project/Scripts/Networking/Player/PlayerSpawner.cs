@@ -12,6 +12,10 @@ namespace EchoProtocol.Networking
         private const float FallbackSpacing = 2.5f;
 
         [SerializeField] private NetworkBootstrap _bootstrap;
+        [Header("Lobby Lineup")]
+        [Tooltip("First player's position for the Lobby camera at (0, 1, -10). Leaves the left side for the lobby panel.")]
+        [SerializeField] private Vector3 _lobbySpawnOrigin = new Vector3(0.15f, 1f, -5.5f);
+        [SerializeField, Min(1f)] private float _lobbySpawnSpacing = 1.1f;
         [Header("Authoritative Gameplay World")]
         [SerializeField] private NetworkObject _doorPrefab;
         [SerializeField] private NetworkObject _pickupItemPrefab;
@@ -351,7 +355,7 @@ namespace EchoProtocol.Networking
             }
 
             var slot = GetOrAssignSlot(player);
-            var pose = gameplay ? GetGameplaySpawnPose(slot) : GetFallbackPose(slot);
+            var pose = gameplay ? GetGameplaySpawnPose(slot) : GetLobbySpawnPose(slot);
             if (playerObject.TryGetComponent<LobbyPlayerState>(out var state))
             {
                 // In gameplay, players always start unarmed (ToolId = 0) and must pick up tools in the map
@@ -385,7 +389,7 @@ namespace EchoProtocol.Networking
 
             if (playerObject.TryGetComponent<NetworkTransform>(out var networkTransform))
             {
-                networkTransform.Teleport(pose.Position);
+                networkTransform.Teleport(pose.Position, pose.Rotation);
                 return true;
             }
 
@@ -451,6 +455,14 @@ namespace EchoProtocol.Networking
 
             Debug.LogWarning($"[PlayerSpawner] Gameplay SpawnPoint {slot} missing; using deterministic fallback.");
             return GetFallbackPose(slot);
+        }
+
+        private SpawnPose GetLobbySpawnPose(int slot)
+        {
+            // Keep all four players in one row, close to the Lobby camera and
+            // to the right of the network panel. The host assigns stable slots.
+            var position = _lobbySpawnOrigin + Vector3.right * (slot * _lobbySpawnSpacing);
+            return new SpawnPose(position, Quaternion.Euler(0f, 180f, 0f));
         }
 
         private static SpawnPose GetFallbackPose(int slot)

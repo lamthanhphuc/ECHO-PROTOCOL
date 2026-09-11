@@ -130,7 +130,6 @@ GameObject:
   - component: {fileID: 125111847}
   - component: {fileID: 125111846}
   - component: {fileID: 125111848}
-  - component: {fileID: 125111849}
   m_Layer: 0
   m_Name: LobbyManager
   m_TagString: Untagged
@@ -148,9 +147,24 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 425a95eac48cb334287368e6ece9c372, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.LobbyManager
   _bootstrap: {fileID: 970048216}
+--- !u!4 &125111847
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 125111845}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 970048217}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &125111848
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -161,48 +175,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 55fc1d4ae44c4c22ad214f995035bc59, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.PlayerSpawner
   _bootstrap: {fileID: 970048216}
-  _playerPrefab: {fileID: 11400000, guid: ab21f3011e9440cca2e909502390da75, type: 3}
   _doorPrefab: {fileID: 11400000, guid: 10b56fe0b82947259da1a4b1e07407b3, type: 3}
   _pickupItemPrefab: {fileID: 11400000, guid: a2edc5247b3e46bda1c9588c2979a732, type: 3}
   _energyCoreCount: 3
-  _energyCoreCount: 4
   _energyCoreSpawnOrigin: {x: 2, y: 0.5, z: 2.5}
   _energyCoreSpawnSpacing: 1.25
+  _sectorBoxPrefab: {fileID: 0}
+  _matchStatePrefab: {fileID: 0}
+  _powerPuzzlePrefab: {fileID: 0}
+  _powerPuzzleStationPrefab: {fileID: 0}
   _monsterPrefab: {fileID: 100002, guid: 3348269a897243f98149bb4f35656540, type: 3}
---- !u!114 &125111849
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 125111845}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 92673d3f51034f00ab3cbe6067e67802, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.UI.Debugging.NetworkTestPanel
-  _bootstrap: {fileID: 970048216}
-  _lobbyManager: {fileID: 125111846}
-  _sessionName: echo-test
-  _maxPlayers: 4
---- !u!4 &125111847
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 125111845}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &143094129
 GameObject:
   m_ObjectHideFlags: 0
@@ -232,7 +217,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 960ada113a9e52040907064ea364ade3, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Auth.AuthApiService
 --- !u!114 &143094131
 MonoBehaviour:
@@ -244,7 +229,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ddbc464ab06487241af5f63367a6ad53, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Api.ApiClient
 --- !u!114 &143094132
 MonoBehaviour:
@@ -256,7 +241,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 297941c3fa79f1d4e891207f2a39ca68, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Auth.AuthRuntime
   configuration: {fileID: 11400000, guid: 9b776fc014a207f4bae3190054e6a4df, type: 2}
 --- !u!4 &143094133
@@ -377,7 +362,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
   m_RenderShadows: 1
   m_RequiresDepthTextureOption: 2
@@ -438,7 +423,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2b2b207aa355df846b86515f0f2fc4c8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkBootstrap
   _runnerPrefab: {fileID: 9010087636424723565, guid: a371be35f3dc75546be6a877006fc8d0, type: 3}
   _hostSessionName: EchoProtocol
@@ -455,7 +440,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 125111847}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1793391879
@@ -486,7 +472,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -612,7 +598,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ab011df0edcb1ec4a85c76a1ce9d72bb, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Auth.BootstrapSceneFlowController
 --- !u!4 &1807948880
 Transform:
@@ -636,6 +622,5 @@ SceneRoots:
   - {fileID: 258799131}
   - {fileID: 1793391882}
   - {fileID: 970048217}
-  - {fileID: 125111847}
   - {fileID: 1807948880}
   - {fileID: 143094133}

@@ -7,8 +7,9 @@ using UnityEngine.SceneManagement;
 namespace EchoProtocol.UI.Debugging
 {
     /// <summary>
-    /// Runtime-only controls for manually verifying Host Mode sessions.
+    /// Host Mode test controls with a read-only preview in the Lobby Game view.
     /// </summary>
+    [ExecuteAlways]
     public sealed class NetworkTestPanel : MonoBehaviour
     {
         private const int WindowWidth = 360;
@@ -26,8 +27,12 @@ namespace EchoProtocol.UI.Debugging
         private RoomInfoViewModel _lobbyState = new RoomInfoViewModel();
         private Rect _windowRect = new Rect(20, 20, WindowWidth, WindowHeight);
 
-        private void Awake()
+        private void OnEnable()
         {
+            // Edit mode only draws the preview; never initialize networking or
+            // change object lifetime (including when editing a prefab).
+            if (!Application.IsPlaying(gameObject)) return;
+
             if (_instance != null && _instance != this)
             {
                 Destroy(gameObject);
@@ -35,7 +40,12 @@ namespace EchoProtocol.UI.Debugging
             }
 
             _instance = this;
-            DontDestroyOnLoad(gameObject);
+            // Keep legacy Bootstrap scenes working until the editor migration is run.
+            // A panel authored in Lobby belongs to that scene and is unloaded with it.
+            if (gameObject.scene.name != NetworkBootstrap.LobbySceneName)
+            {
+                DontDestroyOnLoad(gameObject);
+            }
 
             if (_bootstrap == null)
             {
@@ -44,7 +54,7 @@ namespace EchoProtocol.UI.Debugging
 
             if (_lobbyManager == null)
             {
-                _lobbyManager = GetComponent<LobbyManager>();
+                _lobbyManager = FindAnyObjectByType<LobbyManager>();
             }
 
             if (_bootstrap != null)
@@ -63,7 +73,7 @@ namespace EchoProtocol.UI.Debugging
             }
         }
 
-        private void OnDestroy()
+        private void OnDisable()
         {
             if (_bootstrap != null)
             {
@@ -103,25 +113,26 @@ namespace EchoProtocol.UI.Debugging
         {
             GUILayout.Space(6);
             GUILayout.Label("Session name");
-            _sessionName = GUILayout.TextField(_sessionName, 32);
+            var sessionName = GUILayout.TextField(_sessionName, 32);
+            if (Application.IsPlaying(gameObject)) _sessionName = sessionName;
 
             GUILayout.Space(8);
             using (new GUIEnabledScope(!_isBusy && !IsConnected))
             {
                 GUILayout.BeginHorizontal();
-                if (GUILayout.Button("Create Room", GUILayout.Height(34)))
+                if (GUILayout.Button("Create Room", GUILayout.Height(34)) && Application.IsPlaying(gameObject))
                 {
                     StartHost();
                 }
 
-                if (GUILayout.Button("Join Room", GUILayout.Height(34)))
+                if (GUILayout.Button("Join Room", GUILayout.Height(34)) && Application.IsPlaying(gameObject))
                 {
                     JoinSession();
                 }
                 GUILayout.EndHorizontal();
             }
 
-            using (new GUIEnabledScope(!_isBusy && _bootstrap != null && _bootstrap.Runner != null))
+            using (new GUIEnabledScope(Application.IsPlaying(gameObject) && !_isBusy && _bootstrap != null && _bootstrap.Runner != null))
             {
                 if (GUILayout.Button(_lobbyState.IsReady ? "Set Not Ready" : "Set Ready", GUILayout.Height(30)))
                 {
@@ -155,6 +166,7 @@ namespace EchoProtocol.UI.Debugging
 
         private async void StartHost()
         {
+            EchoProtocol.Audio.GameAudioRuntime.UI("ui/click");
             if (!ValidateSessionName())
             {
                 return;
@@ -167,6 +179,7 @@ namespace EchoProtocol.UI.Debugging
             {
                 var started = await _bootstrap.CreateRoomAsync(_sessionName.Trim(), _maxPlayers);
                 if (!started) _status = _bootstrap.LastError;
+                EchoProtocol.Audio.GameAudioRuntime.UI(started ? "ui/confirm" : "ui/error");
             }
             catch (Exception exception)
             {
@@ -181,6 +194,7 @@ namespace EchoProtocol.UI.Debugging
 
         private async void JoinSession()
         {
+            EchoProtocol.Audio.GameAudioRuntime.UI("ui/click");
             if (!ValidateSessionName())
             {
                 return;
@@ -193,6 +207,7 @@ namespace EchoProtocol.UI.Debugging
             {
                 var joined = await _bootstrap.JoinRoomAsync(_sessionName.Trim());
                 if (!joined) _status = _bootstrap.LastError;
+                EchoProtocol.Audio.GameAudioRuntime.UI(joined ? "ui/confirm" : "ui/error");
             }
             catch (Exception exception)
             {
@@ -272,6 +287,7 @@ namespace EchoProtocol.UI.Debugging
 
         private void OnLobbyError(string message)
         {
+            EchoProtocol.Audio.GameAudioRuntime.UI("ui/error");
             _status = message;
         }
 
@@ -321,7 +337,7 @@ namespace EchoProtocol.UI.Debugging
             public GUIEnabledScope(bool enabled)
             {
                 _wasEnabled = GUI.enabled;
-                GUI.enabled = enabled;
+                GUI.enabled = _wasEnabled && enabled;
             }
 
             public void Dispose()

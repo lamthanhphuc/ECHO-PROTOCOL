@@ -645,6 +645,7 @@ namespace EchoProtocol.Networking
             {
                 AudioSource.PlayClipAtPoint(_doorBreakClip, transform.position);
             }
+            else EchoProtocol.Audio.GameAudioRuntime.AtPoint("stalker/door_break", transform.position);
         }
 
         private void PlayJammerDeployAudio()
@@ -653,6 +654,7 @@ namespace EchoProtocol.Networking
             {
                 AudioSource.PlayClipAtPoint(_jammerDeployClip, transform.position);
             }
+            else EchoProtocol.Audio.GameAudioRuntime.AtPoint("door/door_jammer_deploy", transform.position);
         }
 
         private static float SmoothStep(float value)
