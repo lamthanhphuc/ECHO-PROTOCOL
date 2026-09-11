@@ -15,6 +15,13 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     [SerializeField] private Vector3 teamToolLocalPosition = new Vector3(0.04f, 0.01f, 0.11f);
     [SerializeField] private Vector3 teamToolLocalEulerAngles = new Vector3(12f, 88f, -18f);
     [SerializeField] private Vector3 teamToolLocalScale = new Vector3(0.45f, 0.45f, 0.45f);
+    [SerializeField] private Vector3 fieldScannerLocalPosition = new Vector3(-0.003f, 0.291f, 0.118f);
+    [SerializeField] private Vector3 fieldScannerLocalEulerAngles = new Vector3(184.192f, 99.672f, -5.550995f);
+    [SerializeField] private Vector3 fieldScannerLocalScale = new Vector3(3f, 3f, 3f);
+    [SerializeField] private Vector3 fieldScannerChildLocalPosition = new Vector3(0f, 0.04f, 0f);
+    [SerializeField] private Vector3 fieldScannerChildLocalEulerAngles = Vector3.zero;
+    [SerializeField] private Vector3 fieldScannerChildLocalScale = Vector3.one;
+    [SerializeField] private GameObject fieldScannerHeldPrefab;
     [SerializeField] private Vector3 firstAidLocalPosition = new Vector3(0.035f, -0.015f, 0.155f);
     [SerializeField] private Vector3 firstAidLocalEulerAngles = new Vector3(8f, 92f, 170f);
     [SerializeField] private Vector3 firstAidLocalScale = new Vector3(0.15f, 0.15f, 0.3f);
@@ -24,6 +31,12 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     [SerializeField] private Vector3 noiseMakerLocalPosition = new Vector3(0.018f, 0.132f, -0.065f);
     [SerializeField] private Vector3 noiseMakerLocalEulerAngles = new Vector3(6.176f, 93.2f, 94.562f);
     [SerializeField] private Vector3 noiseMakerLocalScale = new Vector3(0.7f, 0.7f, 0.7f);
+    [SerializeField] private Vector3 plankLocalPosition = Vector3.zero;
+    [SerializeField] private Vector3 plankLocalEulerAngles = Vector3.zero;
+    [SerializeField] private Vector3 plankLocalScale = Vector3.one;
+    [SerializeField] private Vector3 plankChildLocalPosition = new Vector3(0.0151f, 0.0386f, -0.0076f);
+    [SerializeField] private Vector3 plankChildLocalEulerAngles = new Vector3(90f, 0f, 0f);
+    [SerializeField] private Vector3 plankChildLocalScale = new Vector3(22.23983f, 0.5456054f, 2.985957f);
 
     private GameObject _currentVisual;
     private InventoryItemDefinition _currentItem;
@@ -77,8 +90,10 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         // Complete Team Tool prefabs own both their held visual and gameplay lifecycle.
         // PlayerTeamToolController renders these so the generic held-item view must not
         // instantiate the pickup prefab a second time.
+        // If PlayerTeamToolController is present, it renders them; otherwise PlayerHeldItemView renders them.
         if (_currentItem.ItemType == InventoryItemType.TeamTool
-            && _currentItem.TeamToolGameplayPrefab != null)
+            && _currentItem.TeamToolGameplayPrefab != null
+            && GetComponentInParent<PlayerTeamToolController>() != null)
         {
             return;
         }
@@ -89,10 +104,41 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             return;
         }
 
-        _currentVisual = Instantiate(_currentItem.WorldPrefab, anchor);
+        GameObject prefabToSpawn = _currentItem.WorldPrefab;
+        if (_currentItem.TeamToolGameplayPrefab != null)
+        {
+            prefabToSpawn = _currentItem.TeamToolGameplayPrefab;
+        }
+
+        if (IsItem(_currentItem, "scan", "fieldscanner", "scanner"))
+        {
+            if (fieldScannerHeldPrefab != null)
+            {
+                prefabToSpawn = fieldScannerHeldPrefab;
+            }
+            else
+            {
+                var loaded = Resources.Load<GameObject>("PF_FieldScanner")
+                    ?? Resources.Load<GameObject>("Prefabs/Tools/PF_FieldScanner");
+                if (loaded != null)
+                {
+                    prefabToSpawn = loaded;
+                }
+            }
+        }
+
+        if (prefabToSpawn == null)
+        {
+            return;
+        }
+
+        _currentVisual = Instantiate(prefabToSpawn, anchor);
         _currentVisual.name = "Held_" + _currentItem.ItemId;
         ApplyLocalPose(_currentVisual.transform, _currentItem);
         StripWorldGameplayComponents(_currentVisual);
+
+        bool isHoldingScanner = IsItem(_currentItem, "scan", "fieldscanner", "scanner");
+        EchoProtocol.UI.HUD.HUDFieldScanner.EnsureInstance()?.SetVisible(isHoldingScanner);
     }
 
     private InventoryItemDefinition ResolveDesiredHeldItem()
@@ -151,11 +197,59 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             return;
         }
 
+        if (IsItem(item, "scan", "fieldscanner", "scanner"))
+        {
+            visual.localPosition = fieldScannerLocalPosition;
+            visual.localRotation = Quaternion.Euler(fieldScannerLocalEulerAngles);
+            visual.localScale = fieldScannerLocalScale;
+
+            Transform childVisual = visual.Find("Visual");
+            if (childVisual == null && visual.childCount > 0)
+            {
+                childVisual = visual.GetChild(0);
+            }
+            if (childVisual != null)
+            {
+                childVisual.localPosition = fieldScannerChildLocalPosition;
+                childVisual.localRotation = Quaternion.Euler(fieldScannerChildLocalEulerAngles);
+                childVisual.localScale = fieldScannerChildLocalScale;
+            }
+            return;
+        }
+
         if (IsItem(item, "noise", "beacon"))
         {
             visual.localPosition = noiseMakerLocalPosition;
             visual.localRotation = Quaternion.Euler(noiseMakerLocalEulerAngles);
             visual.localScale = noiseMakerLocalScale;
+            return;
+        }
+
+        if (IsItem(item, "plank", "jammer"))
+        {
+            visual.localPosition = plankLocalPosition;
+            visual.localRotation = Quaternion.Euler(plankLocalEulerAngles);
+            visual.localScale = plankLocalScale;
+
+            Transform childVisual = visual.Find("Visual");
+            if (childVisual == null && visual.childCount > 0)
+            {
+                childVisual = visual.GetChild(0);
+            }
+            if (childVisual != null)
+            {
+                childVisual.localPosition = plankChildLocalPosition;
+                childVisual.localRotation = Quaternion.Euler(plankChildLocalEulerAngles);
+                childVisual.localScale = plankChildLocalScale;
+            }
+            return;
+        }
+
+        if (IsItem(item, "stabilizer", "core"))
+        {
+            visual.localPosition = new Vector3(0.04f, 0.01f, 0.11f);
+            visual.localRotation = Quaternion.Euler(12f, 88f, -18f);
+            visual.localScale = Vector3.one;
             return;
         }
 
@@ -217,7 +311,23 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
         foreach (MonoBehaviour behaviour in visualRoot.GetComponentsInChildren<MonoBehaviour>(true))
         {
-            behaviour.enabled = false;
+            if (behaviour is EchoProtocol.Tools.Scanner.FieldScannerScreenView ||
+                behaviour is EchoProtocol.Tools.Scanner.FieldScannerAudio ||
+                behaviour is TMPro.TMP_Text ||
+                behaviour is UnityEngine.UI.Graphic ||
+                behaviour is UnityEngine.UI.CanvasScaler)
+            {
+                behaviour.enabled = true;
+                continue;
+            }
+
+            if (behaviour is EchoProtocol.Tools.Scanner.NetworkToolPickup ||
+                behaviour is Fusion.NetworkBehaviour ||
+                behaviour.GetType().Name.Contains("Pickup") ||
+                behaviour.GetType().Name.Contains("Interactable"))
+            {
+                behaviour.enabled = false;
+            }
         }
     }
 
@@ -230,5 +340,6 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
         _currentVisual = null;
         _currentItem = null;
+        EchoProtocol.UI.HUD.HUDFieldScanner.Instance?.SetVisible(false);
     }
 }

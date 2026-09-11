@@ -191,6 +191,7 @@ GameObject:
   - component: {fileID: 5286019399313537006}
   - component: {fileID: 8472264287315882914}
   - component: {fileID: 3191561994591773081}
+  - component: {fileID: 7312325081617675025}
   m_Layer: 0
   m_Name: PlayerNetwork
   m_TagString: Player
@@ -323,6 +324,8 @@ MonoBehaviour:
   - {fileID: 8542491288236138449}
   - {fileID: 559300001}
   - {fileID: 2990993374567826271}
+  - {fileID: 7312325081617675025}
+  - {fileID: 7160392989894792156}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &640100000000000001
 MonoBehaviour:
@@ -339,13 +342,19 @@ MonoBehaviour:
   _teamCount: 2
   _toolDefinitions:
   - _id: 1
-    _displayName: Flashlight
+    _displayName: Field Scanner
     _isUnique: 1
   - _id: 2
     _displayName: EMF Reader
     _isUnique: 1
   - _id: 3
     _displayName: Medkit
+    _isUnique: 1
+  - _id: 4
+    _displayName: Wooden Planks
+    _isUnique: 0
+  - _id: 6
+    _displayName: Core Stabilizer
     _isUnique: 1
   _IsReady:
     RawValue: 0
@@ -359,6 +368,8 @@ MonoBehaviour:
       Data: 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
   _CarriedCoreId:
     Raw: 0
+  _IsCoreStabilized:
+    RawValue: 0
 --- !u!114 &640100000000000002
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -393,6 +404,7 @@ MonoBehaviour:
   _inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   _walkSpeed: 5
   _sprintSpeed: 7
+  _allowJump: 0
 --- !u!114 &640100000000000004
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -411,7 +423,12 @@ MonoBehaviour:
   _interactionLayers:
     serializedVersion: 2
     m_Bits: 4294967295
+  _fieldScannerPickupPrefab: {fileID: 7407995254980528878, guid: bd7126f397d671b47a7357b603e8363e, type: 3}
+  _noiseMakerPickupPrefab: {fileID: 4253842779654547843, guid: a4233f32c65a0f446b144f89b39f593c, type: 3}
+  _firstAidPickupPrefab: {fileID: 5282768087981583904, guid: d2075e2082d18b64390490d50b3f94fd, type: 3}
+  _doorJammerPickupPrefab: {fileID: 8987240969475041260, guid: 8b4fb1bdfb3948dba45c7a9df312a901, type: 3}
   _noiseMakerBeaconPrefab: {fileID: 5536313895210414100, guid: 4a8de518f84dfbe4a9620fbab3379f24, type: 3}
+  _coreStabilizerPulseClip: {fileID: 8300000, guid: beb47eddae77bfb4cbfee2ac089245a3, type: 3}
 --- !u!114 &1555193095892173610
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -502,13 +519,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NetworkTeamToolHeldView
   lobbyState: {fileID: 640100000000000001}
   heldItemAnchor: {fileID: 5130164143195792974}
-  toolVisual_1: {fileID: 0}
+  toolVisual_1: {fileID: 6917847998477345115, guid: 42eed1ef7003d124d93c210c5b5cff43, type: 3}
   toolVisual_2: {fileID: 6336918889015265847, guid: 0c24821b2d6aef745a61febe92e91285, type: 3}
   toolVisual_3: {fileID: 5508043860142965960, guid: 7972be33729bd41458d3d7b5486243ef, type: 3}
-  toolVisual_4: {fileID: 0}
+  toolVisual_4: {fileID: 4853906723471563101, guid: a42bf3fb170f43a38c34a9242c8ee77d, type: 3}
+  toolVisual_6: {fileID: 5079926724729202342, guid: 6015a547e18400c42aae8c415323205b, type: 3}
   localPosition: {x: 0.04, y: 0.02, z: 0.12}
   localEulerAngles: {x: 0, y: 90, z: -18}
   localScale: {x: 0.12, y: 0.22, z: 0.34}
+  fieldScannerLocalPosition: {x: -0.003, y: 0.291, z: 0.118}
+  fieldScannerLocalEulerAngles: {x: 184.192, y: 99.672, z: -5.550995}
+  fieldScannerLocalScale: {x: 3, y: 3, z: 3}
+  fieldScannerChildLocalPosition: {x: 0, y: 0.04, z: 0}
+  fieldScannerChildLocalEulerAngles: {x: 0, y: 0, z: 0}
+  fieldScannerChildLocalScale: {x: 1, y: 1, z: 1}
   noiseMakerLocalPosition: {x: 0.018, y: 0.132, z: -0.065}
   noiseMakerLocalEulerAngles: {x: 6.176, y: 93.2, z: 94.562}
   noiseMakerLocalScale: {x: 0.7, y: 0.7, z: 0.7}
@@ -518,6 +542,15 @@ MonoBehaviour:
   firstAidChildLocalPosition: {x: -0.533528, y: -3.405526, z: -0.3114559}
   firstAidChildLocalEulerAngles: {x: 0.12, y: -0.416, z: 5.923}
   firstAidChildLocalScale: {x: 1, y: 1, z: 1}
+  plankLocalPosition: {x: 0, y: 0, z: 0}
+  plankLocalEulerAngles: {x: 0, y: 0, z: 0}
+  plankLocalScale: {x: 1, y: 1, z: 1}
+  plankChildLocalPosition: {x: 0.0151, y: 0.0386, z: -0.0076}
+  plankChildLocalEulerAngles: {x: 90, y: 0, z: 0}
+  plankChildLocalScale: {x: 22.23983, y: 0.5456054, z: 2.985957}
+  coreStabilizerLocalPosition: {x: 0.035, y: 0.02, z: 0.12}
+  coreStabilizerLocalEulerAngles: {x: 10, y: 90, z: -15}
+  coreStabilizerLocalScale: {x: 0.45, y: 0.45, z: 0.45}
 --- !u!114 &3015891846550289329
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -654,6 +687,10 @@ MonoBehaviour:
   - {fileID: 0}
   teamToolSlot: {fileID: 0}
   teamToolLocked: 0
+  fieldScannerDefinition: {fileID: 11400000, guid: 6289cba7e34d8cc46bda359b351cfe9e, type: 2}
+  noiseMakerDefinition: {fileID: 11400000, guid: 9dd6b970862ee4641bc2e47c12c990ea, type: 2}
+  firstAidDefinition: {fileID: 11400000, guid: 1efcfdbffb1e61f41a81b954f0c40c2c, type: 2}
+  doorJammerDefinition: {fileID: 11400000, guid: e99a6c2d76d24a94bfe61a7b2e8da214, type: 2}
 --- !u!114 &8368627977529457903
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -743,6 +780,13 @@ MonoBehaviour:
   teamToolLocalPosition: {x: 0.04, y: 0.01, z: 0.11}
   teamToolLocalEulerAngles: {x: 12, y: 88, z: -18}
   teamToolLocalScale: {x: 0.45, y: 0.45, z: 0.45}
+  fieldScannerLocalPosition: {x: -0.003, y: 0.291, z: 0.118}
+  fieldScannerLocalEulerAngles: {x: 184.192, y: 99.672, z: -5.550995}
+  fieldScannerLocalScale: {x: 3, y: 3, z: 3}
+  fieldScannerChildLocalPosition: {x: 0, y: 0.04, z: 0}
+  fieldScannerChildLocalEulerAngles: {x: 0, y: 0, z: 0}
+  fieldScannerChildLocalScale: {x: 1, y: 1, z: 1}
+  fieldScannerHeldPrefab: {fileID: 6917847998477345115, guid: 42eed1ef7003d124d93c210c5b5cff43, type: 3}
   firstAidLocalPosition: {x: 0.035, y: -0.015, z: 0.155}
   firstAidLocalEulerAngles: {x: 8, y: 92, z: 170}
   firstAidLocalScale: {x: 0.15, y: 0.15, z: 0.3}
@@ -752,6 +796,41 @@ MonoBehaviour:
   noiseMakerLocalPosition: {x: 0.018, y: 0.132, z: -0.065}
   noiseMakerLocalEulerAngles: {x: 6.176, y: 93.2, z: 94.562}
   noiseMakerLocalScale: {x: 0.7, y: 0.7, z: 0.7}
+  plankLocalPosition: {x: 0, y: 0, z: 0}
+  plankLocalEulerAngles: {x: 0, y: 0, z: 0}
+  plankLocalScale: {x: 1, y: 1, z: 1}
+  plankChildLocalPosition: {x: 0.0151, y: 0.0386, z: -0.0076}
+  plankChildLocalEulerAngles: {x: 90, y: 0, z: 0}
+  plankChildLocalScale: {x: 22.23983, y: 0.5456054, z: 2.985957}
+--- !u!114 &7312325081617675025
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6628407516427798355}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a7646ffb4ea84248965ff892dcccada, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Tools.Scanner.NetworkFieldScanner
+  _tuning:
+    CoreRange: 50
+    MotionRange: 35
+    ActiveDuration: 10
+    ScanCooldown: 60
+    ResultLifetime: 10
+    MovingSpeedThreshold: 0.15
+    OccludedSignalMultiplier: 0.6
+    MaxMotionTargets: 3
+    CoreBand4MaxDistance: 8
+    CoreBand3MaxDistance: 18
+    CoreBand2MaxDistance: 32
+    CoreBand1MaxDistance: 50
+    MotionCriticalMaxDistance: 6
+    MotionStrongMaxDistance: 15
+    MotionMediumMaxDistance: 25
+    MotionWeakMaxDistance: 35
 --- !u!1 &7403492165048496517
 GameObject:
   m_ObjectHideFlags: 0
@@ -957,6 +1036,14 @@ PrefabInstance:
       propertyPath: m_Name
       value: CharacterVisual
       objectReference: {fileID: 0}
+    - target: {fileID: 478196479434229163, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+      propertyPath: playerRoot
+      value: 
+      objectReference: {fileID: 1770560598436581956}
+    - target: {fileID: 2829071216932153180, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+      propertyPath: playerRoot
+      value: 
+      objectReference: {fileID: 1770560598436581956}
     - target: {fileID: 6994998768752351189, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -1005,6 +1092,12 @@ PrefabInstance:
     - {fileID: 9016985607520877695, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
     - {fileID: 1839169652060731366, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
     - {fileID: 457886595436079980, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+    - {fileID: 4119523399881516551, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+    - {fileID: 505441527634226159, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+    - {fileID: 5024090942922037996, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+    - {fileID: 6072667132663953446, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+    - {fileID: 3171485417002021005, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+    - {fileID: 8906635475374834695, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects:
     - targetCorrespondingSourceObject: {fileID: 354221553775949966, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
@@ -1417,6 +1510,17 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 2509715124861951039, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
   m_PrefabInstance: {fileID: 4834070106920576804}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &7160392989894792156 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 2326322902841275640, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+  m_PrefabInstance: {fileID: 4834070106920576804}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a7646ffb4ea84248965ff892dcccada, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Tools.Scanner.NetworkFieldScanner
 --- !u!4 &7374077509492896360 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 2685250707439785292, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}

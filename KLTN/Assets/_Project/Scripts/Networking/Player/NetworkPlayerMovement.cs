@@ -22,6 +22,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private InputActionAsset _inputActions;
         [SerializeField, Min(0f)] private float _walkSpeed = 4f;
         [SerializeField, Min(0f)] private float _sprintSpeed = 7f;
+        [SerializeField] private bool _allowJump = false;
 
         private NetworkCharacterController _controller;
         private CharacterController _unityCharacterController;
@@ -68,6 +69,12 @@ namespace EchoProtocol.Networking
 
                 return AnimationSprintHeld;
             }
+        }
+
+        public bool CanSprintInDirection(Vector2 moveInput)
+        {
+            // Backward movement (pressing S, moveInput.y < -0.01f) does not allow sprint and stays at normal walk speed
+            return moveInput.y >= -0.01f;
         }
 
         private void Awake()
@@ -138,14 +145,17 @@ namespace EchoProtocol.Networking
             bool sprintHeld = _sprintAction?.IsPressed() ?? false;
             bool jumpPressed = _jumpAction?.WasPressedThisFrame() ?? false;
 
-            float speed = sprintHeld ? _sprintSpeed : _walkSpeed;
             Vector3 localDirection = new Vector3(moveInput.x, 0f, moveInput.y);
             if (localDirection.sqrMagnitude > 1f)
             {
                 localDirection.Normalize();
             }
+
+            bool isSprintMoving = sprintHeld && CanSprintInDirection(moveInput) && localDirection.sqrMagnitude > 0.01f;
+            float speed = isSprintMoving ? _sprintSpeed : _walkSpeed;
+
             _offlineAnimationMoveInput = new Vector2(localDirection.x, localDirection.z);
-            _offlineAnimationSprinting = sprintHeld && _offlineAnimationMoveInput.sqrMagnitude > 0.01f;
+            _offlineAnimationSprinting = isSprintMoving;
 
             float yaw = _playerCamera != null ? _playerCamera.Yaw : transform.eulerAngles.y;
             Quaternion lookRotation = Quaternion.Euler(0f, yaw, 0f);
@@ -156,7 +166,7 @@ namespace EchoProtocol.Networking
             if (_unityCharacterController.isGrounded)
             {
                 _offlineVelocity.y = -2f;
-                if (jumpPressed)
+                if (_allowJump && jumpPressed)
                 {
                     _offlineVelocity.y = 5f;
                 }
@@ -233,13 +243,20 @@ namespace EchoProtocol.Networking
             var isSprintMoving =
                 (lifeState == null || lifeState.CanInitiateAction) &&
                 input.SprintHeld &&
+                CanSprintInDirection(input.Move) &&
                 direction.sqrMagnitude > 0.01f;
             AnimationSprintHeld = isSprintMoving;
 
             var baseSpeed = isSprintMoving
                 ? _sprintSpeed
                 : _walkSpeed;
-            _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f);
+            var lobbyPlayer = GetComponent<LobbyPlayerState>();
+            var coreCarryMultiplier = 1f;
+            if (lobbyPlayer != null && lobbyPlayer.Object != null && lobbyPlayer.Object.IsValid && lobbyPlayer.CarriedCoreId.IsValid)
+            {
+                coreCarryMultiplier = lobbyPlayer.IsCoreStabilized ? 0.9f : 0.72f;
+            }
+            _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f) * coreCarryMultiplier;
 
             _controller.Move(direction);
 
@@ -248,8 +265,9 @@ namespace EchoProtocol.Networking
             if (Object.HasStateAuthority && isSprintMoving
                 && _nextMovementNoise.ExpiredOrNotRunning(Runner))
             {
-                var state = GetComponent<LobbyPlayerState>();
-                var type = state != null && state.Object != null && state.Object.IsValid && state.CarriedCoreId.IsValid
+                var state = lobbyPlayer;
+                var isCarryingCore = state != null && state.Object != null && state.Object.IsValid && state.CarriedCoreId.IsValid;
+                var type = isCarryingCore
                     ? RuntimeNoiseType.CORE_CARRY
                     : RuntimeNoiseType.SPRINT;
                 HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
@@ -262,9 +280,11 @@ namespace EchoProtocol.Networking
                             Runner.Tick.Raw),
                         transform.position,
                         out _);
-                _nextMovementNoise = TickTimer.CreateFromSeconds(Runner, 1.5f);
+                float noiseInterval = (isCarryingCore && state.IsCoreStabilized) ? 4.0f : 1.5f;
+                _nextMovementNoise = TickTimer.CreateFromSeconds(Runner, noiseInterval);
             }
-            if ((lifeState == null || lifeState.CanInitiateAction)
+            if (_allowJump
+                && (lifeState == null || lifeState.CanInitiateAction)
                 && input.JumpPressed
                 && _controller.Grounded)
             {
@@ -335,7 +355,7 @@ namespace EchoProtocol.Networking
                 LookPitch = _playerCamera != null
                     ? _playerCamera.Pitch
                     : 0f,
-                JumpPressed = _jumpAction?.WasPressedThisFrame() ?? false,
+                JumpPressed = _allowJump && (_jumpAction?.WasPressedThisFrame() ?? false),
                 SprintHeld = _sprintAction?.IsPressed() ?? false,
             };
         }

@@ -354,7 +354,10 @@ namespace EchoProtocol.Networking
             var pose = gameplay ? GetGameplaySpawnPose(slot) : GetFallbackPose(slot);
             if (playerObject.TryGetComponent<LobbyPlayerState>(out var state))
             {
-                state.InitializeAuthoritativeSelection(state.TeamId, state.ToolId, gameplay);
+                // In gameplay, players always start unarmed (ToolId = 0) and must pick up tools in the map
+                var enteringGameplay = gameplay && !state.IsGameplayPlayer;
+                var toolId = enteringGameplay ? 0 : state.ToolId;
+                state.InitializeAuthoritativeSelection(state.TeamId, toolId, gameplay);
             }
 
             if (!TryTeleportExistingPlayer(playerObject, pose))

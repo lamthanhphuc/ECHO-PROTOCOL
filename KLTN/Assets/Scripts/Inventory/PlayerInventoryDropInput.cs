@@ -46,6 +46,11 @@ public class PlayerInventoryDropInput : MonoBehaviour
             return;
         }
 
+        if (IsActiveFusionGameplay())
+        {
+            return;
+        }
+
         if (keyboard != null)
         {
             if (keyboard.digit1Key.wasPressedThisFrame)
@@ -64,8 +69,8 @@ public class PlayerInventoryDropInput : MonoBehaviour
             }
         }
 
-        bool throwPressed = (keyboard != null && keyboard.tKey.wasPressedThisFrame)
-            || (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame);
+        bool throwPressed = Mouse.current != null
+            && Mouse.current.rightButton.wasPressedThisFrame;
 
         if (throwPressed)
         {
@@ -97,6 +102,14 @@ public class PlayerInventoryDropInput : MonoBehaviour
     public bool DropTeamTool()
     {
         GetDropPose(out var pos, out var rot);
+        if (inventory != null && inventory.TeamToolSlot != null)
+        {
+            int toolId = PlayerInventory.ResolveToolId(inventory.TeamToolSlot);
+            if (toolId == 1) // Field Scanner
+            {
+                rot = Quaternion.Euler(90f, rot.eulerAngles.y, 0f);
+            }
+        }
         return inventory != null && inventory.TryDropTeamTool(pos, rot);
     }
 
@@ -163,6 +176,58 @@ public class PlayerInventoryDropInput : MonoBehaviour
             return true;
         }
 
+        if (toolId.Contains("scan") || toolName.Contains("scan"))
+        {
+            var scanner = GetComponentInParent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>();
+            if (scanner != null)
+            {
+                return scanner.RequestScan();
+            }
+        }
+
+        if (toolId.Contains("plank") || toolName.Contains("plank") || toolId.Contains("jammer") || toolName.Contains("jammer"))
+        {
+            var cam = Camera.main;
+            Ray ray = cam != null
+                ? cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f))
+                : new Ray(transform.position + Vector3.up * 1.5f, transform.forward);
+
+            if (Physics.Raycast(ray, out var hit, 4.0f, ~0, QueryTriggerInteraction.Collide))
+            {
+                var door = hit.collider.GetComponentInParent<EchoProtocol.Networking.NetworkSlidingDoor>();
+                if (door != null && door.CanAcceptJammer())
+                {
+                    return door.DeployJammerOffline(gameObject);
+                }
+            }
+
+            var colliders = Physics.OverlapSphere(transform.position + transform.forward * 1.5f, 2.5f, ~0, QueryTriggerInteraction.Collide);
+            foreach (var col in colliders)
+            {
+                var door = col.GetComponentInParent<EchoProtocol.Networking.NetworkSlidingDoor>();
+                if (door != null && door.CanAcceptJammer())
+                {
+                    return door.DeployJammerOffline(gameObject);
+                }
+            }
+        }
+
+        if (toolId.Contains("stabilizer") || toolName.Contains("stabilizer") || toolId.Contains("core") || toolName.Contains("core"))
+        {
+            AudioClip pulseClip = Resources.Load<AudioClip>("Audio/energy_core/pickup");
+#if UNITY_EDITOR
+            if (pulseClip == null)
+            {
+                pulseClip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/energy_core/pickup.wav");
+            }
+#endif
+            if (pulseClip != null)
+            {
+                AudioSource.PlayClipAtPoint(pulseClip, transform.position);
+            }
+            return true;
+        }
+
         return false;
     }
 
@@ -176,6 +241,18 @@ public class PlayerInventoryDropInput : MonoBehaviour
     {
         NetworkObject networkObject = GetComponentInParent<NetworkObject>();
         return networkObject == null || !networkObject.IsValid || networkObject.HasInputAuthority;
+    }
+
+    private bool IsActiveFusionGameplay()
+    {
+        var networkObject = GetComponentInParent<NetworkObject>();
+        var lobbyState = GetComponentInParent<EchoProtocol.Networking.LobbyPlayerState>();
+        return networkObject != null
+            && networkObject.IsValid
+            && networkObject.Runner != null
+            && networkObject.Runner.IsRunning
+            && lobbyState != null
+            && lobbyState.IsGameplayPlayer;
     }
 
 }

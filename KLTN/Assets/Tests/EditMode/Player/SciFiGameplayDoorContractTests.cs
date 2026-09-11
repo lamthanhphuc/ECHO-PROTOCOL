@@ -405,6 +405,86 @@ namespace EchoProtocol.Player.Tests
         }
 
         [Test]
+        public void GAMEPLAY_DOOR_BreakingDoorDeactivatesLeftAndRightPanels()
+        {
+            var door = CreateOfflineSlidingDoor(startsLocked: false, out var blocker);
+            var leftField = door.GetType().GetField("_leftDoor", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var rightField = door.GetType().GetField("_rightDoor", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var leftDoor = ((Transform)leftField.GetValue(door)).gameObject;
+            var rightDoor = ((Transform)rightField.GetValue(door)).gameObject;
+
+            try
+            {
+                Assert.That(leftDoor.activeSelf, Is.True);
+                Assert.That(rightDoor.activeSelf, Is.True);
+                Assert.That(blocker.enabled, Is.True);
+
+                InvokeBool(door, "TryBreakAuthoritative");
+
+                Assert.That(GetBoolProperty(door, "IsBroken"), Is.True);
+                Assert.That(leftDoor.activeSelf, Is.False);
+                Assert.That(rightDoor.activeSelf, Is.False);
+                Assert.That(blocker.enabled, Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(door.gameObject);
+            }
+        }
+
+        [Test]
+        public void GAMEPLAY_DOOR_PrefabHasAudioAndJammerMountConfigured()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(DoorPrefabPath);
+            Assert.That(prefab, Is.Not.Null);
+
+            var slidingDoor = GetComponentByTypeName(prefab, "EchoProtocol.Networking.NetworkSlidingDoor");
+            Assert.That(slidingDoor, Is.Not.Null);
+
+            var serializedDoor = new SerializedObject(slidingDoor);
+            Assert.That(serializedDoor.FindProperty("_jammerMount")?.objectReferenceValue, Is.Not.Null);
+            Assert.That(serializedDoor.FindProperty("_doorJammerPrefab")?.objectReferenceValue, Is.Not.Null);
+            Assert.That(serializedDoor.FindProperty("_doorBreakClip")?.objectReferenceValue, Is.Not.Null);
+            Assert.That(serializedDoor.FindProperty("_jammerDeployClip")?.objectReferenceValue, Is.Not.Null);
+        }
+
+        [Test]
+        public void GAMEPLAY_DOOR_JammerPrefabHasPlankVisualsAndBreakClip()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(DoorJammerPrefabPath);
+            Assert.That(prefab, Is.Not.Null);
+
+            var jammer = GetComponentByTypeName(prefab, "EchoProtocol.Networking.NetworkDoorJammer");
+            Assert.That(jammer, Is.Not.Null);
+
+            var serializedJammer = new SerializedObject(jammer);
+            Assert.That(serializedJammer.FindProperty("_breakClip")?.objectReferenceValue, Is.Not.Null);
+
+            var visualRoot = serializedJammer.FindProperty("_visualRoot")?.objectReferenceValue as Transform;
+            Assert.That(visualRoot, Is.Not.Null);
+            Assert.That(visualRoot.childCount, Is.GreaterThanOrEqualTo(3), "VisualRoot must contain at least 3 planks");
+        }
+
+        [Test]
+        public void GAMEPLAY_DOOR_PlankItemDefinitionAndPickupAreConfigured()
+        {
+            var itemDef = AssetDatabase.LoadAssetAtPath<ScriptableObject>("Assets/ScriptableObjects/Inventory/TeamTools/SO_Plank_ItemDefinition.asset");
+            Assert.That(itemDef, Is.Not.Null);
+            var so = new SerializedObject(itemDef);
+            Assert.That(so.FindProperty("itemId")?.stringValue, Is.EqualTo("plank"));
+            Assert.That(so.FindProperty("itemType")?.intValue, Is.EqualTo(1));
+
+            var pickupPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tools/PF_Plank_Pickup.prefab");
+            Assert.That(pickupPrefab, Is.Not.Null);
+            var pickup = GetComponentByTypeName(pickupPrefab, "EchoProtocol.Tools.Scanner.NetworkToolPickup");
+            Assert.That(pickup, Is.Not.Null);
+
+            var serializedPickup = new SerializedObject(pickup);
+            Assert.That(serializedPickup.FindProperty("_toolId")?.intValue, Is.EqualTo(4));
+            Assert.That(serializedPickup.FindProperty("_toolItemDefinition")?.objectReferenceValue, Is.SameAs(itemDef));
+        }
+
+        [Test]
         public void GAMEPLAY_INPUT_InteractIsImmediateEPress()
         {
             var inputJson = File.ReadAllText(InputActionsPath);

@@ -48,3 +48,4 @@ KLTN/.git.backup/
 
 # Local test artifacts
 /TestResults/
+*test_results.txt

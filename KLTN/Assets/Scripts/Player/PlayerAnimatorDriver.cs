@@ -80,10 +80,10 @@ public class PlayerAnimatorDriver : MonoBehaviour
                 ? networkMovement.IsAnimationSprinting
                 : (Keyboard.current != null
                 && Keyboard.current.leftShiftKey.isPressed
-                && Keyboard.current.wKey.isPressed
-                && !Keyboard.current.aKey.isPressed
-                && !Keyboard.current.dKey.isPressed
-                && !Keyboard.current.sKey.isPressed);
+                && !Keyboard.current.sKey.isPressed
+                && (Keyboard.current.wKey.isPressed
+                    || Keyboard.current.aKey.isPressed
+                    || Keyboard.current.dKey.isPressed));
         bool isCarrying = (coreCarrier != null && coreCarrier.IsCarrying)
             || (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid);
         bool isDowned = downState != null && downState.IsDowned;
@@ -171,7 +171,10 @@ public class PlayerAnimatorDriver : MonoBehaviour
                 ? networkMovement.AnimationMoveInput
                 : Vector2.zero;
 
-        if (input.sqrMagnitude <= 0.01f && Keyboard.current != null)
+        if (input.sqrMagnitude <= 0.01f &&
+            movement == null &&
+            networkMovement == null &&
+            Keyboard.current != null)
         {
             float x = 0f;
             float y = 0f;

@@ -1,6 +1,7 @@
 using System;
 using Fusion;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace EchoProtocol.Networking
 {
@@ -22,13 +23,21 @@ namespace EchoProtocol.Networking
 
         [Header("Collision")]
         [SerializeField] private Collider _blockingCollider;
+        [SerializeField] private NavMeshObstacle _traversalObstacle;
 
         [Header("Door Jammer")]
         [SerializeField] private Transform _jammerMount;
         [SerializeField] private NetworkObject _doorJammerPrefab;
 
+        [Header("Audio")]
+        [SerializeField] private AudioClip _doorBreakClip;
+        [SerializeField] private AudioClip _jammerDeployClip;
+
         [Header("Initial state")]
         [SerializeField] private bool _startsLocked;
+        [SerializeField] private bool _startsBroken;
+
+        public bool StartsBroken => _startsBroken;
 
         private Vector3 _leftClosedPosition;
         private Vector3 _rightClosedPosition;
@@ -59,20 +68,95 @@ namespace EchoProtocol.Networking
 
         [Networked] public NetworkId ActiveJammerId { get; private set; }
 
-        public override string InteractionPrompt => CurrentState switch
+        private NetworkDoorJammer _offlineJammer;
+
+        private bool HasDoorJammerTool(GameObject interactor)
         {
-            _ when IsBroken => "Door broken",
-            NetworkDoorState.Locked => "Door locked",
-            NetworkDoorState.Open => "Close door",
-            _ => "Open door",
-        };
+            if (interactor != null)
+            {
+                var lobbyState = interactor.GetComponentInParent<LobbyPlayerState>();
+                if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.Object.Id.IsValid && lobbyState.Runner != null && lobbyState.Runner.IsRunning)
+                {
+                    if (lobbyState.ToolId == 4) return true;
+                }
+
+                var inventory = interactor.GetComponentInParent<PlayerInventory>();
+                if (inventory != null && inventory.TeamToolSlot != null)
+                {
+                    string id = (inventory.TeamToolSlot.ItemId ?? string.Empty).ToLowerInvariant();
+                    string name = (inventory.TeamToolSlot.DisplayName ?? string.Empty).ToLowerInvariant();
+                    if (id.Contains("plank") || id.Contains("jammer") || name.Contains("plank") || name.Contains("jammer"))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            foreach (var interactorComp in FindObjectsByType<NetworkPlayerInteractor>(FindObjectsInactive.Exclude))
+            {
+                if (interactorComp.Object != null && interactorComp.Object.IsValid && interactorComp.Object.Id.IsValid && interactorComp.Runner != null && interactorComp.Runner.IsRunning && interactorComp.Object.HasInputAuthority)
+                {
+                    var state = interactorComp.GetComponent<LobbyPlayerState>();
+                    if (state != null && state.Object != null && state.Object.IsValid && state.Object.Id.IsValid && state.Runner != null && state.Runner.IsRunning && state.ToolId == 4) return true;
+                }
+            }
+
+            foreach (var localInv in FindObjectsByType<PlayerInventory>(FindObjectsInactive.Exclude))
+            {
+                if (localInv.TeamToolSlot != null)
+                {
+                    string id = (localInv.TeamToolSlot.ItemId ?? string.Empty).ToLowerInvariant();
+                    string name = (localInv.TeamToolSlot.DisplayName ?? string.Empty).ToLowerInvariant();
+                    if (id.Contains("plank") || id.Contains("jammer") || name.Contains("plank") || name.Contains("jammer"))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        public override string InteractionPrompt
+        {
+            get
+            {
+                if (IsBroken)
+                {
+                    if (CanAcceptJammer())
+                    {
+                        return HasDoorJammerTool(null)
+                            ? "Chắn ván cửa [E] / [Chuột trái]"
+                            : "Cửa hỏng (Cần Ván gỗ)";
+                    }
+                    return "Door broken";
+                }
+
+                return CurrentState switch
+                {
+                    NetworkDoorState.Locked => "Door locked",
+                    NetworkDoorState.Open => "Close door",
+                    _ => "Open door",
+                };
+            }
+        }
 
         string IInteractable.InteractionPrompt => InteractionPrompt;
 
         public bool CanInteract(GameObject interactor)
         {
-            if (IsBroken) return false;
-            if (CurrentState == NetworkDoorState.Locked) return false;
+            if (IsBroken)
+            {
+                if (!CanAcceptJammer() || !HasDoorJammerTool(interactor))
+                {
+                    return false;
+                }
+            }
+            else if (CurrentState == NetworkDoorState.Locked)
+            {
+                return false;
+            }
+
             if (interactor == null) return true;
 
             var origin = InteractionOrigin != null ? InteractionOrigin.position : transform.position;
@@ -83,6 +167,22 @@ namespace EchoProtocol.Networking
 
         public void Interact(GameObject interactor)
         {
+            if (IsBroken && CanAcceptJammer() && HasDoorJammerTool(interactor))
+            {
+                if (IsOnline)
+                {
+                    var networkInteractor = interactor != null ? interactor.GetComponentInParent<NetworkPlayerInteractor>() : null;
+                    if (networkInteractor != null && networkInteractor.Object != null && networkInteractor.Object.HasInputAuthority)
+                    {
+                        networkInteractor.RequestUseTeamTool();
+                        return;
+                    }
+                }
+
+                DeployJammerOffline(interactor);
+                return;
+            }
+
             if (IsOnline)
             {
                 var networkInteractor = interactor != null ? interactor.GetComponent<NetworkPlayerInteractor>() : null;
@@ -109,6 +209,44 @@ namespace EchoProtocol.Networking
             ToggleOffline();
         }
 
+        public bool DeployJammerOffline(GameObject interactor)
+        {
+            if (!CanAcceptJammer()) return false;
+
+            TryGetJammerPlacement(out var position, out var rotation);
+            var prefab = _doorJammerPrefab != null
+                ? _doorJammerPrefab.gameObject
+                : Resources.Load<GameObject>("Network/PF_DoorJammer");
+
+            if (prefab == null) return false;
+
+            var jammerGo = Instantiate(prefab, position, rotation);
+            var jammer = jammerGo.GetComponent<NetworkDoorJammer>();
+            if (jammer != null)
+            {
+                jammer.InitializeOffline();
+                _offlineJammer = jammer;
+            }
+
+            if (interactor != null)
+            {
+                var inv = interactor.GetComponentInParent<PlayerInventory>();
+                if (inv != null && inv.TeamToolSlot != null)
+                {
+                    inv.TryRemove(inv.TeamToolSlot);
+                }
+
+                var state = interactor.GetComponentInParent<LobbyPlayerState>();
+                if (state != null && state.Object != null && state.Object.IsValid && state.Object.Id.IsValid && state.Runner != null && state.Runner.IsRunning)
+                {
+                    state.SetGameplayToolId(0);
+                }
+            }
+
+            PlayJammerDeployAudio();
+            return true;
+        }
+
         private void ToggleOffline()
         {
             if (_offlineState == NetworkDoorState.Locked) return;
@@ -124,10 +262,9 @@ namespace EchoProtocol.Networking
         {
             _targetOpenAmount = _offlineState == NetworkDoorState.Open ? 1f : 0f;
 
-            if (_blockingCollider != null)
-            {
-                _blockingCollider.enabled = DoorBlocksTraversal;
-            }
+            SynchronizeTraversalBlocking();
+
+            ApplyVisuals(SmoothStep(_targetOpenAmount));
 
             StateChanged?.Invoke(this, _offlineState);
         }
@@ -135,15 +272,14 @@ namespace EchoProtocol.Networking
         private void Awake()
         {
             CacheClosedPositions();
-            _offlineState = _startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
-            _offlineBroken = false;
+            _offlineState = _startsBroken
+                ? NetworkDoorState.Open
+                : (_startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed);
+            _offlineBroken = _startsBroken;
             _targetOpenAmount = _offlineState == NetworkDoorState.Open ? 1f : 0f;
             _visualOpenAmount = _targetOpenAmount;
 
-            if (_blockingCollider != null)
-            {
-                _blockingCollider.enabled = DoorBlocksTraversal;
-            }
+            SynchronizeTraversalBlocking();
 
             ApplyVisuals(SmoothStep(_visualOpenAmount));
         }
@@ -169,8 +305,10 @@ namespace EchoProtocol.Networking
 
             if (Object.HasStateAuthority)
             {
-                State = _startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
-                Broken = false;
+                State = _startsBroken
+                    ? NetworkDoorState.Open
+                    : (_startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed);
+                Broken = _startsBroken;
                 ActiveJammerId = default;
             }
 
@@ -265,6 +403,7 @@ namespace EchoProtocol.Networking
                 _offlineBroken = true;
                 _offlineState = NetworkDoorState.Open;
                 ApplyOfflineState();
+                PlayBreakAudio();
                 return true;
             }
 
@@ -281,6 +420,7 @@ namespace EchoProtocol.Networking
             Broken = true;
             State = NetworkDoorState.Open;
             ApplyReplicatedState();
+            RpcPlayBreakAudio();
             return true;
         }
 
@@ -322,6 +462,7 @@ namespace EchoProtocol.Networking
 
             ActiveJammerId = jammer.Object.Id;
             ApplyReplicatedState();
+            RpcPlayJammerDeployAudio();
             return true;
         }
 
@@ -384,16 +525,36 @@ namespace EchoProtocol.Networking
 
             // Closing blocks immediately. Opening becomes traversable as soon as the
             // authoritative state changes; the panels then catch up visually.
-            if (_blockingCollider != null)
-            {
-                _blockingCollider.enabled = DoorBlocksTraversal;
-            }
+            SynchronizeTraversalBlocking();
+
+            ApplyVisuals(SmoothStep(_targetOpenAmount));
 
             StateChanged?.Invoke(this, State);
         }
 
+        private void SynchronizeTraversalBlocking()
+        {
+            var blocksTraversal = DoorBlocksTraversal;
+
+            if (_blockingCollider != null)
+            {
+                _blockingCollider.enabled = blocksTraversal;
+            }
+
+            if (_traversalObstacle != null)
+            {
+                _traversalObstacle.enabled = blocksTraversal;
+            }
+        }
+
         private bool TryGetActiveJammer(out NetworkDoorJammer jammer)
         {
+            if (_offlineJammer != null)
+            {
+                jammer = _offlineJammer;
+                return jammer.IsActive;
+            }
+
             jammer = null;
             if (!IsOnline
                 || !ActiveJammerId.IsValid
@@ -417,19 +578,81 @@ namespace EchoProtocol.Networking
 
         private void ApplyVisuals(float openAmount)
         {
+            if (IsBroken)
+            {
+                if (_leftDoor != null && _leftDoor.gameObject.activeSelf)
+                {
+                    _leftDoor.gameObject.SetActive(false);
+                }
+
+                if (_rightDoor != null && _rightDoor.gameObject.activeSelf)
+                {
+                    _rightDoor.gameObject.SetActive(false);
+                }
+
+                return;
+            }
+
+            CacheClosedPositions();
+
             if (!_positionsCached)
             {
                 return;
             }
 
-            _leftDoor.localPosition = Vector3.LerpUnclamped(
-                _leftClosedPosition,
-                _leftClosedPosition + _leftOpenOffset,
-                openAmount);
-            _rightDoor.localPosition = Vector3.LerpUnclamped(
-                _rightClosedPosition,
-                _rightClosedPosition + _rightOpenOffset,
-                openAmount);
+            if (_leftDoor != null && !_leftDoor.gameObject.activeSelf)
+            {
+                _leftDoor.gameObject.SetActive(true);
+            }
+
+            if (_rightDoor != null && !_rightDoor.gameObject.activeSelf)
+            {
+                _rightDoor.gameObject.SetActive(true);
+            }
+
+            if (_leftDoor != null)
+            {
+                _leftDoor.localPosition = Vector3.LerpUnclamped(
+                    _leftClosedPosition,
+                    _leftClosedPosition + _leftOpenOffset,
+                    openAmount);
+            }
+
+            if (_rightDoor != null)
+            {
+                _rightDoor.localPosition = Vector3.LerpUnclamped(
+                    _rightClosedPosition,
+                    _rightClosedPosition + _rightOpenOffset,
+                    openAmount);
+            }
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void RpcPlayBreakAudio()
+        {
+            PlayBreakAudio();
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void RpcPlayJammerDeployAudio()
+        {
+            PlayJammerDeployAudio();
+        }
+
+        private void PlayBreakAudio()
+        {
+            if (_doorBreakClip != null)
+            {
+                AudioSource.PlayClipAtPoint(_doorBreakClip, transform.position);
+            }
+        }
+
+        private void PlayJammerDeployAudio()
+        {
+            if (_jammerDeployClip != null)
+            {
+                AudioSource.PlayClipAtPoint(_jammerDeployClip, transform.position);
+            }
         }
 
         private static float SmoothStep(float value)

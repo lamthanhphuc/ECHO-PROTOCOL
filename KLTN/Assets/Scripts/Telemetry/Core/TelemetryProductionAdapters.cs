@@ -456,7 +456,8 @@ namespace EchoProtocol.Telemetry
                 { "INTERACTION", "OBJECT_INTERACTION" },
                 { "CORE_CARRY", "CORE_CARRY_MOVEMENT" },
                 { "CORE_DROP", "CORE_DROP" },
-                { "NOISE_MAKER", "NOISE_MAKER_USED" }
+                { "NOISE_MAKER", "NOISE_MAKER_USED" },
+                { "FIELD_SCANNER", "FIELD_SCANNER_USED" }
             };
 
         private readonly TelemetryEmitter _emitter;

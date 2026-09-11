@@ -88,9 +88,32 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
             if (IsFirstPersonOnlyRenderer(renderer))
             {
                 shouldShow = isLocalView;
-                if (shouldShow && renderer is SkinnedMeshRenderer smr && !smr.updateWhenOffscreen)
+                if (shouldShow)
                 {
-                    smr.updateWhenOffscreen = true;
+                    if (renderer is SkinnedMeshRenderer smr && !smr.updateWhenOffscreen)
+                    {
+                        smr.updateWhenOffscreen = true;
+                    }
+
+                    if (renderer.name.Contains("FirstPersonArms"))
+                    {
+                        if (renderer.sharedMaterial == null || renderer.sharedMaterial.shader == null || renderer.sharedMaterial.shader.name == "Hidden/InternalErrorShader")
+                        {
+                            var suit = FindSuitRenderer();
+                            if (suit != null && suit.sharedMaterial != null)
+                            {
+                                renderer.sharedMaterial = suit.sharedMaterial;
+                            }
+#if UNITY_EDITOR
+                            else
+                            {
+                                var fallback = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(
+                                    "Assets/Materials/PlayerCharacter/M_PF_PlayerCharacter_P1_Default_Suit.mat");
+                                if (fallback != null) renderer.sharedMaterial = fallback;
+                            }
+#endif
+                        }
+                    }
                 }
             }
             else if (isLocalView && hideBodyForLocalCamera && !IsAlwaysVisible(renderer))
@@ -124,9 +147,10 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
             _networkObject = GetComponentInParent<NetworkObject>();
         }
 
-        if (_networkObject != null && _networkObject.IsValid)
+        if (_networkObject != null && _networkObject.IsValid
+            && !_networkObject.HasInputAuthority)
         {
-            return _networkObject.HasInputAuthority;
+            return false;
         }
 
         Transform root = transform.root;
@@ -149,6 +173,19 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
     private bool IsFirstPersonOnlyRenderer(Renderer renderer)
     {
         return NameContainsToken(renderer.transform, firstPersonOnlyRendererNameTokens);
+    }
+
+    private Renderer FindSuitRenderer()
+    {
+        Transform root = transform.root;
+        foreach (Renderer r in root.GetComponentsInChildren<Renderer>(true))
+        {
+            if (r != null && r.name.Equals("suit", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return r;
+            }
+        }
+        return null;
     }
 
     private bool IsFirstPersonRenderer(Renderer renderer)

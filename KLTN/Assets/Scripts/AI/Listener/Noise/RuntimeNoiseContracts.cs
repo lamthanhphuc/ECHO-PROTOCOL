@@ -9,7 +9,8 @@ namespace EchoProtocol.AI.Listener.Noise
         INTERACTION,
         CORE_CARRY,
         CORE_DROP,
-        NOISE_MAKER
+        NOISE_MAKER,
+        FIELD_SCANNER
     }
 
     public enum RuntimeNoiseEmissionMode

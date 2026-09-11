@@ -1,3 +1,5 @@
+using EchoProtocol.Networking;
+using Fusion;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -33,6 +35,7 @@ namespace EchoProtocol.UI.HUD
 
         private float _cooldownDuration;
         private float _cooldownTimer;
+        private LobbyPlayerState _boundNetworkPlayerState;
 
         public void BindInventory(PlayerInventory playerInv, PlayerEnergyCoreCarrier coreCarrier)
         {
@@ -43,6 +46,11 @@ namespace EchoProtocol.UI.HUD
 
             inventory = playerInv;
             carrier = coreCarrier;
+            _boundNetworkPlayerState = playerInv != null
+                ? playerInv.GetComponentInParent<LobbyPlayerState>()
+                : coreCarrier != null
+                    ? coreCarrier.GetComponentInParent<LobbyPlayerState>()
+                    : null;
 
             if (inventory != null)
             {
@@ -68,7 +76,9 @@ namespace EchoProtocol.UI.HUD
 
         private void Update()
         {
-            if (inventory == null || carrier == null)
+            if (inventory == null
+                || carrier == null
+                || (IsActiveFusionSession() && !IsValidLocalNetworkPlayer(_boundNetworkPlayerState)))
             {
                 ResolveReferences();
             }
@@ -79,6 +89,29 @@ namespace EchoProtocol.UI.HUD
 
         private void ResolveReferences()
         {
+            var playerStates = FindObjectsByType<LobbyPlayerState>(FindObjectsInactive.Exclude);
+            for (var i = 0; i < playerStates.Length; i++)
+            {
+                var state = playerStates[i];
+                if (IsValidLocalNetworkPlayer(state))
+                {
+                    BindInventory(
+                        state.GetComponentInChildren<PlayerInventory>(true),
+                        state.GetComponentInChildren<PlayerEnergyCoreCarrier>(true));
+                    return;
+                }
+            }
+
+            if (IsActiveFusionSession())
+            {
+                if (inventory != null || carrier != null || _boundNetworkPlayerState != null)
+                {
+                    BindInventory(null, null);
+                }
+                return;
+            }
+
+            _boundNetworkPlayerState = null;
             if (inventory == null)
             {
                 inventory = FindAnyObjectByType<PlayerInventory>();
@@ -92,6 +125,31 @@ namespace EchoProtocol.UI.HUD
             {
                 carrier = FindAnyObjectByType<PlayerEnergyCoreCarrier>();
             }
+        }
+
+        private static bool IsValidLocalNetworkPlayer(LobbyPlayerState state)
+        {
+            return state != null
+                && state.Object != null
+                && state.Object.IsValid
+                && state.Runner != null
+                && state.Runner.IsRunning
+                && state.Object.HasInputAuthority
+                && state.IsGameplayPlayer;
+        }
+
+        private static bool IsActiveFusionSession()
+        {
+            var runners = FindObjectsByType<NetworkRunner>(FindObjectsInactive.Exclude);
+            for (var i = 0; i < runners.Length; i++)
+            {
+                if (runners[i] != null && runners[i].IsRunning)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public void TriggerToolCooldown(float durationSeconds)

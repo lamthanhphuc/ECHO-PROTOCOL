@@ -8,18 +8,11 @@ public static class TeamToolGameplayPrefabBuilder
     private const string RootFolder = "Assets/Prefabs/Environment/Teamtoools/Gameplay";
     private const string ItemFolder = "Assets/ScriptableObjects/Inventory/TeamTools";
     private const string CoreAnimated = "Assets/Prefabs/Environment/Teamtoools/Animated/PF_CoreStabilizer_Device_Animated.prefab";
-    private const string DecoyAnimated = "Assets/Prefabs/Environment/Teamtoools/Animated/PF_MotionDecoy_Device_Animated.prefab";
-    private const string HologramVisual = "Assets/Prefabs/Environment/Teamtoools/Animated/PF_MotionDecoy_Hologram_Visual.prefab";
     private const string PlayerPrefab = "Assets/Prefabs/Player.prefab";
 
     private const string CoreGameplay = RootFolder + "/PF_CoreStabilizer_TeamTool.prefab";
-    private const string DecoyGameplay = RootFolder + "/PF_MotionDecoy_TeamTool.prefab";
-    private const string DecoyProjectile = RootFolder + "/PF_MotionDecoy_Projectile.prefab";
-    private const string DecoyHologram = RootFolder + "/PF_MotionDecoy_Hologram.prefab";
     private const string CorePickup = RootFolder + "/PF_CoreStabilizer_Pickup.prefab";
-    private const string DecoyPickup = RootFolder + "/PF_MotionDecoy_Pickup.prefab";
     private const string CoreItem = ItemFolder + "/SO_CoreStabilizer_TeamTool.asset";
-    private const string DecoyItem = ItemFolder + "/SO_MotionDecoy_TeamTool.asset";
 
     [InitializeOnLoadMethod]
     private static void RunRequestedBuild()
@@ -44,29 +37,20 @@ public static class TeamToolGameplayPrefabBuilder
         EnsureFolder(RootFolder);
         EnsureFolder(ItemFolder);
         RequirePrefab(CoreAnimated);
-        RequirePrefab(DecoyAnimated);
-        RequirePrefab(HologramVisual);
 
-        GameObject hologram = BuildHologram();
-        GameObject projectile = BuildProjectile(hologram);
         GameObject coreGameplay = BuildCoreGameplay();
-        GameObject decoyGameplay = BuildDecoyGameplay(projectile);
 
         InventoryItemDefinition coreItem = GetOrCreateItem(CoreItem);
-        InventoryItemDefinition decoyItem = GetOrCreateItem(DecoyItem);
         GameObject corePickup = BuildPickup(CorePickup, "PF_CoreStabilizer_Pickup", CoreAnimated, coreItem,
             "Pick up Core Stabilizer", new Vector3(0.32f, 0.22f, 0.32f));
-        GameObject decoyPickup = BuildPickup(DecoyPickup, "PF_MotionDecoy_Pickup", DecoyAnimated, decoyItem,
-            "Pick up Motion Decoy", new Vector3(0.28f, 0.35f, 0.28f));
         ConfigureItem(coreItem, "core_stabilizer", "Core Stabilizer", corePickup, coreGameplay);
-        ConfigureItem(decoyItem, "motion_decoy", "Motion Decoy Projector", decoyPickup, decoyGameplay);
         AddControllerToPlayerPrefab();
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        Selection.activeObject = decoyGameplay;
-        EditorGUIUtility.PingObject(decoyGameplay);
-        Debug.Log("[TeamToolGameplayBuilder] COMPLETE: final gameplay prefabs, pickups, item definitions and Player controller are ready.");
+        Selection.activeObject = coreGameplay;
+        EditorGUIUtility.PingObject(coreGameplay);
+        Debug.Log("[TeamToolGameplayBuilder] COMPLETE: Core Stabilizer gameplay prefab, pickup, item definition and Player controller are ready.");
     }
 
     [MenuItem("Tools/ECHO Protocol/Place Team Tool Local Test Pickups")]
@@ -90,45 +74,8 @@ public static class TeamToolGameplayPrefabBuilder
         Vector3 forward = Vector3.ProjectOnPlane(player.transform.forward, Vector3.up).normalized;
         Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
         PlacePrefab(CorePickup, player.transform.position + forward * 2.2f - right * 0.8f, root.transform);
-        PlacePrefab(DecoyPickup, player.transform.position + forward * 2.2f + right * 0.8f, root.transform);
         Selection.activeGameObject = root;
-        Debug.Log("[TeamToolGameplayBuilder] Test pickups placed in the open scene (scene intentionally not saved). Enter Play Mode, pick one up, press Q to use, T to drop it.");
-    }
-
-    private static GameObject BuildHologram()
-    {
-        GameObject root = InstantiatePrefab(HologramVisual);
-        root.name = "PF_MotionDecoy_Hologram";
-        MotionDecoyHologram runtime = root.GetComponent<MotionDecoyHologram>() ?? root.AddComponent<MotionDecoyHologram>();
-        Animator[] animators = root.GetComponentsInChildren<Animator>(true);
-        Animator vfx = root.GetComponent<Animator>();
-        Animator body = null;
-        foreach (Animator candidate in animators) if (candidate != vfx) { body = candidate; break; }
-        SetObject(runtime, "vfxAnimator", vfx);
-        SetObject(runtime, "bodyAnimator", body);
-        return SaveAndDestroy(root, DecoyHologram);
-    }
-
-    private static GameObject BuildProjectile(GameObject hologram)
-    {
-        var root = new GameObject("PF_MotionDecoy_Projectile");
-        GameObject visual = InstantiatePrefab(DecoyAnimated);
-        visual.name = "AnimatedVisual";
-        visual.transform.SetParent(root.transform, false);
-        var body = root.AddComponent<Rigidbody>();
-        body.mass = 0.8f;
-        body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-        body.interpolation = RigidbodyInterpolation.Interpolate;
-        var collider = root.AddComponent<SphereCollider>();
-        collider.radius = 0.18f;
-        collider.center = new Vector3(0f, 0.18f, 0f);
-        MotionDecoyProjectile runtime = root.AddComponent<MotionDecoyProjectile>();
-        SetObject(runtime, "body", body);
-        SetObject(runtime, "bodyCollider", collider);
-        SetObject(runtime, "animator", visual.GetComponent<Animator>());
-        SetObject(runtime, "projectionOrigin", FindDeepChild(visual.transform, "ProjectionOrigin"));
-        SetObject(runtime, "hologramPrefab", hologram);
-        return SaveAndDestroy(root, DecoyProjectile);
+        Debug.Log("[TeamToolGameplayBuilder] Test pickup placed in the open scene (scene intentionally not saved). Enter Play Mode, pick it up.");
     }
 
     private static GameObject BuildCoreGameplay()
@@ -143,20 +90,6 @@ public static class TeamToolGameplayPrefabBuilder
         SetObject(runtime, "animator", visual.GetComponent<Animator>());
         SetObject(runtime, "supportFieldVfx", FindDeepChild(visual.transform, "SupportFieldVFX"));
         return SaveAndDestroy(root, CoreGameplay);
-    }
-
-    private static GameObject BuildDecoyGameplay(GameObject projectile)
-    {
-        var root = new GameObject("PF_MotionDecoy_TeamTool");
-        root.transform.localPosition = new Vector3(0.34f, 1.16f, 0.5f);
-        root.transform.localRotation = Quaternion.Euler(8f, -18f, 4f);
-        GameObject visual = InstantiatePrefab(DecoyAnimated);
-        visual.name = "AnimatedVisual";
-        visual.transform.SetParent(root.transform, false);
-        MotionDecoyTeamTool runtime = root.AddComponent<MotionDecoyTeamTool>();
-        SetObject(runtime, "animator", visual.GetComponent<Animator>());
-        SetObject(runtime, "projectilePrefab", projectile);
-        return SaveAndDestroy(root, DecoyGameplay);
     }
 
     private static GameObject BuildPickup(string path, string name, string visualPath,

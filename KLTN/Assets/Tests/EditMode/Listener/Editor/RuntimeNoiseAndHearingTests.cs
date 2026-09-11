@@ -26,7 +26,8 @@ namespace EchoProtocol.AI.Listener.Tests
                     "INTERACTION",
                     "CORE_CARRY",
                     "CORE_DROP",
-                    "NOISE_MAKER"
+                    "NOISE_MAKER",
+                    "FIELD_SCANNER"
                 }));
         }
 
@@ -769,6 +770,7 @@ namespace EchoProtocol.AI.Listener.Tests
             var hostSource = File.ReadAllText("Assets/_Project/Scripts/Networking/Authority/HostRuntimeNoiseService.cs");
             var movementSource = File.ReadAllText("Assets/_Project/Scripts/Networking/Player/NetworkPlayerMovement.cs");
             var interactionSource = File.ReadAllText("Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
+            var noiseMakerSource = File.ReadAllText("Assets/Scripts/Inventory/NoiseMakerBeacon.cs");
             var pickupSource = File.ReadAllText("Assets/_Project/Scripts/Networking/Interaction/NetworkPickupItem.cs");
             var matchAuthoritySource = File.ReadAllText("Assets/_Project/Scripts/Networking/Authority/MatchAuthorityRuntime.cs");
             var interactableSource = File.ReadAllText("Assets/_Project/Scripts/Networking/Interaction/NetworkInteractable.cs");
@@ -788,7 +790,10 @@ namespace EchoProtocol.AI.Listener.Tests
             StringAssert.DoesNotContain("double loudness", hostSource);
             StringAssert.Contains("RuntimeNoiseSourceOccurrenceKey.ForMovement", movementSource);
             StringAssert.Contains("RuntimeNoiseSourceOccurrenceKey.ForInteraction", interactionSource);
-            StringAssert.Contains("RuntimeNoiseSourceOccurrenceKey.ForTeamTool", interactionSource);
+            StringAssert.Contains("beacon.Initialize", interactionSource);
+            StringAssert.Contains("RuntimeNoiseSourceOccurrenceKey.ForTeamTool", noiseMakerSource);
+            StringAssert.Contains("RuntimeNoiseType.NOISE_MAKER", noiseMakerSource);
+            StringAssert.Contains("TryAccept", noiseMakerSource);
             StringAssert.Contains("target.EmitsRuntimeInteractionNoise", interactionSource);
             StringAssert.Contains("_emitsRuntimeInteractionNoise", interactableSource);
             StringAssert.DoesNotContain("public override bool EmitsRuntimeInteractionNoise => true", doorSource);

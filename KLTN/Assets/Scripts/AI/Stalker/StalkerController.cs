@@ -35,6 +35,13 @@ namespace EchoProtocol.AI.Stalker
         [Header("Patrol Mode")]
         [SerializeField] private StalkerPatrolMode patrolMode = StalkerPatrolMode.FixedWaypoint;
 
+        [Header("Movement Speed")]
+        [SerializeField, Min(0f)] private float patrolSpeed = 7f;
+        [SerializeField, Min(0f)] private float chaseSpeed = 9f;
+
+        [Header("Diagnostics")]
+        [SerializeField] private bool enableDiagnostics;
+
         [Header("Dynamic Patrol Spike Defaults")]
         [SerializeField] private int candidateBfsDepth = 3;
         [SerializeField] private float stalenessHorizon = 15f;
@@ -322,6 +329,7 @@ namespace EchoProtocol.AI.Stalker
 
             try
             {
+                ApplyMovementSpeedForCurrentState();
                 TickCurrentState();
                 _navigation?.TickProgress(CurrentSimulationDeltaSeconds);
                 TickNavigationRecovery();
@@ -526,7 +534,7 @@ namespace EchoProtocol.AI.Stalker
             var pathEndToRequested =
                 Vector3.Distance(pathEnd, activeDestination);
 
-            UnityEngine.Debug.LogWarning(
+            LogDiagnosticWarning(
                 $"[STK ARRIVAL DIAG] " +
                 $"currentRegion={(_currentRegionId.IsValid ? _currentRegionId.Value : -1)} " +
                 $"previousRegion={(_previousRegionId.IsValid ? _previousRegionId.Value : -1)} " +
@@ -1788,7 +1796,7 @@ namespace EchoProtocol.AI.Stalker
                 failureReason = ResolveNavigationFailureReason(pathStatus, executionStatus);
             }
 
-            UnityEngine.Debug.LogWarning(
+            LogDiagnosticWarning(
                 $"[STK NAV DIAG] state={currentState} " +
                 $"path={pathStatus} execution={executionStatus} failure={failureReason} " +
                 $"currentNode={_blackboard.CurrentSpatialNodeId} " +
@@ -2878,7 +2886,7 @@ namespace EchoProtocol.AI.Stalker
             }
 
             _roomSweepSuppressLegacyGateLogged = true;
-            UnityEngine.Debug.LogWarning(
+            LogDiagnosticWarning(
                 "[STK ROOM SWEEP GATE DIAG] update-suppress-legacy-gate "
                 + $"SuppressLegacyUpdateSimulation={SuppressLegacyUpdateSimulation} "
                 + $"enabled={enabled} "
@@ -2911,7 +2919,7 @@ namespace EchoProtocol.AI.Stalker
 
             var agent = GetComponent<NavMeshAgent>();
             var agentExists = agent != null;
-            UnityEngine.Debug.LogWarning(
+            LogDiagnosticWarning(
                 "[STK ROOM SWEEP GATE DIAG] navigation-gate "
                 + $"navigationUsable={navigationUsable} "
                 + $"navigationNull={_navigation == null} "
@@ -3322,7 +3330,7 @@ namespace EchoProtocol.AI.Stalker
             var rejectedProbe = _roomSweepPlanner.RejectProbe(probeNodeId);
             var rejectedProbeCountAfter = _roomSweepPlanner.RejectedProbeCount;
 
-            UnityEngine.Debug.LogWarning(
+            LogDiagnosticWarning(
                 "[STK ROOM SWEEP REJECT DIAG] probe-rejected "
                 + $"probeNodeId={probeNodeId} "
                 + $"rejectionCategory={rejectionCategory} "
@@ -3366,7 +3374,7 @@ namespace EchoProtocol.AI.Stalker
                 out var observed,
                 out var total,
                 out var remaining);
-            UnityEngine.Debug.LogWarning(
+            LogDiagnosticWarning(
                 "[STK ROOM SWEEP DIAG] planning-location "
                 + $"currentSpatialNodeId={currentNodeId} "
                 + $"currentRegionId={currentRegionId.Value} "
@@ -3389,7 +3397,7 @@ namespace EchoProtocol.AI.Stalker
                 out var observed,
                 out var total,
                 out var remaining);
-            UnityEngine.Debug.LogWarning(
+            LogDiagnosticWarning(
                 "[STK ROOM SWEEP DIAG] current-room-result "
                 + $"currentSpatialNodeId={currentNodeId} "
                 + $"currentRegionId={currentRegionId.Value} "
@@ -3433,7 +3441,7 @@ namespace EchoProtocol.AI.Stalker
 
             _roomSweepResidualDiagLoggedRegionIds.Add(currentRegionId.Value);
             var stalkerPosition = transform.position;
-            UnityEngine.Debug.LogWarning(
+            LogDiagnosticWarning(
                 "[STK ROOM SWEEP RESIDUAL DIAG] summary "
                 + $"currentSpatialNodeId={currentNodeId} "
                 + $"regionId={currentRegionId.Value} "
@@ -3452,7 +3460,7 @@ namespace EchoProtocol.AI.Stalker
 
                 var observationPoint = visionSensor.GetObservationPointForGroundPoint(node.Position);
                 var canSeePoint = visionSensor.CanSeePoint(observationPoint);
-                UnityEngine.Debug.LogWarning(
+                LogDiagnosticWarning(
                     "[STK ROOM SWEEP RESIDUAL DIAG] probe "
                     + $"regionId={currentRegionId.Value} "
                     + $"spatialNodeId={nodeId} "
@@ -3468,7 +3476,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void LogRoomSweepProbeSelected(int currentNodeId, int probeNodeId, Vector3 probePosition)
         {
-            UnityEngine.Debug.LogWarning(
+            LogDiagnosticWarning(
                 "[STK ROOM SWEEP DIAG] probe-selected "
                 + $"currentSpatialNodeId={currentNodeId} "
                 + $"selectedProbeNodeId={probeNodeId} "
@@ -3481,7 +3489,7 @@ namespace EchoProtocol.AI.Stalker
         {
             var hasActiveDestination = _navigation != null && _navigation.HasActiveDestination;
             var hasArrived = hasActiveDestination && _navigation.HasArrived();
-            UnityEngine.Debug.LogWarning(
+            LogDiagnosticWarning(
                 "[STK ROOM SWEEP DIAG] request-destination-result "
                 + $"accepted={accepted} "
                 + $"destinationSpatialNodeId={_blackboard.DestinationSpatialNodeId} "
@@ -3500,7 +3508,7 @@ namespace EchoProtocol.AI.Stalker
                 _regionGraph.TryGetRegionForNode(resolvedCurrentNodeId, out currentRegionId);
             }
 
-            UnityEngine.Debug.LogWarning(
+            LogDiagnosticWarning(
                 "[STK ROOM SWEEP DIAG] destination-reached "
                 + $"objectiveKind={_navigationObjectiveKey.Kind} "
                 + $"destinationNodeId={destinationNodeId} "
@@ -3518,7 +3526,7 @@ namespace EchoProtocol.AI.Stalker
                 _regionGraph.TryGetRegionForNode(currentNodeId, out currentRegionId);
             }
 
-            UnityEngine.Debug.LogWarning(
+            LogDiagnosticWarning(
                 "[STK ROOM SWEEP DIAG] fallback-activated "
                 + $"currentNode={currentNodeId} "
                 + $"currentRegion={currentRegionId.Value} "
@@ -3627,7 +3635,7 @@ namespace EchoProtocol.AI.Stalker
             }
 
             var inferredPathRejectedWithinDepth = unrejectedWithinDepth;
-            UnityEngine.Debug.LogWarning(
+            LogDiagnosticWarning(
                 "[STK LOCAL SELECT DIAG] "
                 + $"currentRegion={currentRegion.Value} previousRegion={previousRegion.Value} "
                 + $"targetRegion={objective.TargetRegionId.Value} nextRegion={objective.NextRegionId.Value} "
@@ -3942,6 +3950,35 @@ namespace EchoProtocol.AI.Stalker
             }
         }
 
+        private void ApplyMovementSpeedForCurrentState()
+        {
+            var agent = GetComponent<NavMeshAgent>();
+            if (agent == null)
+            {
+                return;
+            }
+
+            agent.speed = currentState == StalkerState.CHASE
+                ? Mathf.Max(0f, chaseSpeed)
+                : Mathf.Max(0f, patrolSpeed);
+        }
+
+        private void LogDiagnosticWarning(string message)
+        {
+            if (enableDiagnostics)
+            {
+                UnityEngine.Debug.LogWarning(message);
+            }
+        }
+
+        private void LogDiagnostic(string message)
+        {
+            if (enableDiagnostics)
+            {
+                UnityEngine.Debug.Log(message);
+            }
+        }
+
         private bool CanUseNavigation()
         {
             return _navigation != null && _navigation.IsUsable;
@@ -3981,7 +4018,7 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            UnityEngine.Debug.Log(
+            LogDiagnostic(
                 $"[STK WORLD INTERACTION DIAG] blocker-detected result={result} " +
                 $"kind={_worldInteractionDriver.CurrentKind} " +
                 $"blocker={blocker.name} objectiveKind={_navigationObjectiveKey.Kind} " +
@@ -4016,7 +4053,7 @@ namespace EchoProtocol.AI.Stalker
                     CanRunWorldInteractionAuthority(),
                     out var completed))
             {
-                UnityEngine.Debug.Log(
+                LogDiagnostic(
                     $"[STK WORLD INTERACTION DIAG] cancelled kind={_worldInteractionDriver.CurrentKind} " +
                     $"reason=driver-cancelled objectiveKind={_navigationObjectiveKey.Kind}");
                 return false;
@@ -4040,13 +4077,13 @@ namespace EchoProtocol.AI.Stalker
 
             var kind = _worldInteractionDriver.CurrentKind;
             _worldInteractionDriver.Cancel();
-            UnityEngine.Debug.Log(
+            LogDiagnostic(
                 $"[STK WORLD INTERACTION DIAG] cancelled kind={kind} reason={reason}");
         }
 
         private void ResumeCurrentNavigationObjectiveAfterWorldInteraction(string reason)
         {
-            UnityEngine.Debug.Log(
+            LogDiagnostic(
                 $"[STK WORLD INTERACTION DIAG] resume-same-objective reason={reason} " +
                 $"objectiveKind={_navigationObjectiveKey.Kind} destinationNode={_blackboard.DestinationSpatialNodeId}");
 
