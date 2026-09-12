@@ -67,7 +67,7 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField, Min(0f)] private float chasePredictionMaxDistance = 1.5f;
 
         [Header("Attack Spike Defaults")]
-        [SerializeField] private float attackRange = 1.5f;
+        [SerializeField] private float attackRange = 2.8f;
         [SerializeField] private float attackWindup = 0.75f;
         [SerializeField] private float attackRecovery = 1f;
         [SerializeField] private float attackDamage = 100f;
@@ -3878,23 +3878,26 @@ namespace EchoProtocol.AI.Stalker
             var rejectedProbe = _roomSweepPlanner.RejectProbe(probeNodeId);
             var rejectedProbeCountAfter = _roomSweepPlanner.RejectedProbeCount;
 
-            LogDiagnosticWarning(
-                "[STK ROOM SWEEP REJECT DIAG] probe-rejected "
-                + $"probeNodeId={probeNodeId} "
-                + $"rejectionCategory={rejectionCategory} "
-                + $"currentSpatialNodeId={currentSpatialNodeId} "
-                + $"currentRegionId={(currentRegionId.IsValid ? currentRegionId.Value : -1)} "
-                + $"plannerCurrentRegionId={(plannerCurrentRegionId.IsValid ? plannerCurrentRegionId.Value : -1)} "
-                + $"probeEqualsCurrent={probeNodeId == currentSpatialNodeId} "
-                + $"probeAlreadyObserved={probeAlreadyObserved} "
-                + $"rejectedProbeCountBefore={rejectedProbeCountBefore} "
-                + $"rejectProbeResult={rejectedProbe} "
-                + $"rejectedProbeCountAfter={rejectedProbeCountAfter} "
-                + $"navigationFailureReason={navigationFailureReason} "
-                + $"navigationPathStatus={(_navigation != null ? _navigation.GetPathStatus().ToString() : NavigationPathStatus.AgentUnavailable.ToString())} "
-                + $"navigationExecutionStatus={(_navigation != null ? _navigation.GetExecutionStatus().ToString() : NavigationExecutionStatus.Failed.ToString())} "
-                + $"destinationSpatialNodeId={_blackboard.DestinationSpatialNodeId} "
-                + $"position={transform.position}");
+            if (enableDiagnostics || rejectionCategory == "SELF_PROBE_FULL_SCAN_UNSEEN")
+            {
+                UnityEngine.Debug.LogWarning(
+                    "[STK ROOM SWEEP REJECT DIAG] probe-rejected "
+                    + $"probeNodeId={probeNodeId} "
+                    + $"rejectionCategory={rejectionCategory} "
+                    + $"currentSpatialNodeId={currentSpatialNodeId} "
+                    + $"currentRegionId={(currentRegionId.IsValid ? currentRegionId.Value : -1)} "
+                    + $"plannerCurrentRegionId={(plannerCurrentRegionId.IsValid ? plannerCurrentRegionId.Value : -1)} "
+                    + $"probeEqualsCurrent={probeNodeId == currentSpatialNodeId} "
+                    + $"probeAlreadyObserved={probeAlreadyObserved} "
+                    + $"rejectedProbeCountBefore={rejectedProbeCountBefore} "
+                    + $"rejectProbeResult={rejectedProbe} "
+                    + $"rejectedProbeCountAfter={rejectedProbeCountAfter} "
+                    + $"navigationFailureReason={navigationFailureReason} "
+                    + $"navigationPathStatus={(_navigation != null ? _navigation.GetPathStatus().ToString() : NavigationPathStatus.AgentUnavailable.ToString())} "
+                    + $"navigationExecutionStatus={(_navigation != null ? _navigation.GetExecutionStatus().ToString() : NavigationExecutionStatus.Failed.ToString())} "
+                    + $"destinationSpatialNodeId={_blackboard.DestinationSpatialNodeId} "
+                    + $"position={transform.position}");
+            }
         }
 
         private static string GetRoomSweepNavigationRejectionCategory(NavigationFailureReason failureReason)

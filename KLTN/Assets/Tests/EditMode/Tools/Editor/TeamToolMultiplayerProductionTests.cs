@@ -164,5 +164,42 @@ namespace EchoProtocol.Player.Tests
 
             Assert.That(pulseClip, Is.Not.Null, "_coreStabilizerPulseClip must be assigned.");
         }
+
+        [Test]
+        public void PLAYER_NETWORK_Prefab_HeldVisuals_DoNotContainNetworkObjects()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerNetworkPath);
+            Assert.That(prefab, Is.Not.Null);
+
+            var heldView = prefab.GetComponentInChildren<NetworkTeamToolHeldView>(true);
+            Assert.That(heldView, Is.Not.Null);
+
+            var so = new SerializedObject(heldView);
+            string[] visualProps = new[] { "toolVisual_1", "toolVisual_2", "toolVisual_3", "toolVisual_4", "toolVisual_6" };
+
+            foreach (var propName in visualProps)
+            {
+                var prop = so.FindProperty(propName);
+                if (prop != null && prop.objectReferenceValue is GameObject visualObj)
+                {
+                    var netObj = visualObj.GetComponentInChildren<NetworkObject>(true);
+                    Assert.That(netObj, Is.Null,
+                        $"{propName} ('{visualObj.name}') must NOT contain a NetworkObject component, as instantiating it locally causes native crashes (0xC0000005) in multiplayer.");
+                }
+            }
+        }
+
+        [Test]
+        public void PLANK_HeldVisualPrefab_ExistsAndHasNoNetworkObject()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Gameplay/Imported/PF_Plank_HeldVisual.prefab");
+            Assert.That(prefab, Is.Not.Null, "PF_Plank_HeldVisual.prefab must exist.");
+
+            var netObj = prefab.GetComponentInChildren<NetworkObject>(true);
+            Assert.That(netObj, Is.Null, "PF_Plank_HeldVisual must NOT contain a NetworkObject.");
+
+            var col = prefab.GetComponentInChildren<Collider>(true);
+            Assert.That(col, Is.Null, "PF_Plank_HeldVisual must NOT contain colliders.");
+        }
     }
 }

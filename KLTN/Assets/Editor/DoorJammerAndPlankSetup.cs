@@ -15,7 +15,8 @@ namespace EchoProtocol.Editor
         private const string DoorPrefabPath = "Assets/Prefabs/Environment/Door/PF_SciFiSlidingDoor.prefab";
         private const string JammerPrefabPath = "Assets/Resources/Network/PF_DoorJammer.prefab";
         private const string PlankItemPath = "Assets/ScriptableObjects/Inventory/TeamTools/SO_Plank_ItemDefinition.asset";
-        private const string PlankPickupPath = "Assets/Prefabs/Tools/PF_Plank_Pickup.prefab";
+        private const string PlankPickupPath = "Assets/Prefabs/Gameplay/Imported/PF_Plank_Imported.prefab";
+        private const string PlankHeldVisualPath = "Assets/Prefabs/Gameplay/Imported/PF_Plank_HeldVisual.prefab";
         private const string PlankImportedPrefabPath = "Assets/Prefabs/Gameplay/Imported/PF_Plank_Imported.prefab";
         private const string PlankImportAltPrefabPath = "Assets/import/plank/PF_Plank.prefab";
         private const string PlankFbxPath = "Assets/import/plank/source/Plank4.fbx";
@@ -144,6 +145,11 @@ namespace EchoProtocol.Editor
         [MenuItem("Tools/ECHO Protocol/Run Door And Stalker Tests")]
         public static void RunDoorAndStalkerTests()
         {
+            UpgradePlayerPrefabs();
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            AssetDatabase.ImportAsset("Assets/Prefabs/PlayerNetwork.prefab", ImportAssetOptions.ForceUpdate);
+
             var api = ScriptableObject.CreateInstance<TestRunnerApi>();
             var callbacks = new DoorTestCallbacks(api);
             api.RegisterCallbacks(callbacks);
@@ -410,13 +416,15 @@ namespace EchoProtocol.Editor
             ConfigurePlankPickupPrefab(PlankImportedPrefabPath, itemDef);
             ConfigurePlankPickupPrefab(PlankImportAltPrefabPath, itemDef);
 
+            GameObject heldVisualPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlankHeldVisualPath);
+
             SerializedObject itemSo = new SerializedObject(itemDef);
             itemSo.FindProperty("itemId").stringValue = "plank";
             itemSo.FindProperty("displayName").stringValue = "Wooden Planks";
             itemSo.FindProperty("itemType").intValue = (int)InventoryItemType.TeamTool;
             itemSo.FindProperty("worldPrefab").objectReferenceValue = pickupPrefab;
             var gameplayProp = itemSo.FindProperty("teamToolGameplayPrefab");
-            if (gameplayProp != null) gameplayProp.objectReferenceValue = pickupPrefab;
+            if (gameplayProp != null) gameplayProp.objectReferenceValue = heldVisualPrefab != null ? heldVisualPrefab : pickupPrefab;
             itemSo.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(itemDef);
         }
@@ -574,12 +582,22 @@ namespace EchoProtocol.Editor
 
         public static void UpgradePlayerPrefabs()
         {
-            GameObject plankPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlankPickupPath)
-                ?? AssetDatabase.LoadAssetAtPath<GameObject>(PlankImportedPrefabPath);
+            GameObject plankHeldVisualPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlankHeldVisualPath);
+            if (plankHeldVisualPrefab == null)
+            {
+                AssetDatabase.Refresh();
+                plankHeldVisualPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlankHeldVisualPath);
+            }
+            if (plankHeldVisualPrefab == null)
+            {
+                Debug.LogError($"[DoorJammerAndPlankSetup] Cannot find held visual prefab at {PlankHeldVisualPath}. Skipping toolVisual_4 assignment to avoid crash.");
+                return;
+            }
 
             string[] playerPrefabPaths = new[]
             {
                 "Assets/Prefabs/PlayerNetwork.prefab",
+                "Assets/_Project/Prefabs/Network/TestNetworkPlayer.prefab",
                 "Assets/Prefabs/TestNetworkPlayer.prefab",
                 "Assets/Prefabs/Player.prefab",
                 "Assets/Prefabs/Player/Variants/PF_PlayerCharacter_P1_Default.prefab",
@@ -603,9 +621,9 @@ namespace EchoProtocol.Editor
                     {
                         SerializedObject toolSo = new SerializedObject(toolView);
                         var visualProp = toolSo.FindProperty("toolVisual_4");
-                        if (visualProp != null && visualProp.objectReferenceValue != plankPrefab)
+                        if (visualProp != null && visualProp.objectReferenceValue != plankHeldVisualPrefab)
                         {
-                            visualProp.objectReferenceValue = plankPrefab;
+                            visualProp.objectReferenceValue = plankHeldVisualPrefab;
                             changed = true;
                         }
 
@@ -616,12 +634,12 @@ namespace EchoProtocol.Editor
                         var childRotProp = toolSo.FindProperty("plankChildLocalEulerAngles");
                         var childScaleProp = toolSo.FindProperty("plankChildLocalScale");
 
-                        if (posProp != null) posProp.vector3Value = Vector3.zero;
-                        if (rotProp != null) rotProp.vector3Value = Vector3.zero;
-                        if (scaleProp != null) scaleProp.vector3Value = Vector3.one;
-                        if (childPosProp != null) childPosProp.vector3Value = new Vector3(0.0151f, 0.0386f, -0.0076f);
-                        if (childRotProp != null) childRotProp.vector3Value = new Vector3(90f, 0f, 0f);
-                        if (childScaleProp != null) childScaleProp.vector3Value = new Vector3(22.23983f, 0.5456054f, 2.985957f);
+                        if (posProp != null) posProp.vector3Value = new Vector3(0.022f, 0.172f, 0.034f);
+                        if (rotProp != null) rotProp.vector3Value = new Vector3(90f, 0f, 90f);
+                        if (scaleProp != null) scaleProp.vector3Value = new Vector3(5f, 5f, 5f);
+                        if (childPosProp != null) childPosProp.vector3Value = Vector3.zero;
+                        if (childRotProp != null) childRotProp.vector3Value = Vector3.zero;
+                        if (childScaleProp != null) childScaleProp.vector3Value = Vector3.one;
 
                         toolSo.ApplyModifiedPropertiesWithoutUndo();
                         changed = true;
@@ -639,12 +657,12 @@ namespace EchoProtocol.Editor
                         var childRotProp = heldSo.FindProperty("plankChildLocalEulerAngles");
                         var childScaleProp = heldSo.FindProperty("plankChildLocalScale");
 
-                        if (posProp != null) posProp.vector3Value = Vector3.zero;
-                        if (rotProp != null) rotProp.vector3Value = Vector3.zero;
-                        if (scaleProp != null) scaleProp.vector3Value = Vector3.one;
-                        if (childPosProp != null) childPosProp.vector3Value = new Vector3(0.0151f, 0.0386f, -0.0076f);
-                        if (childRotProp != null) childRotProp.vector3Value = new Vector3(90f, 0f, 0f);
-                        if (childScaleProp != null) childScaleProp.vector3Value = new Vector3(22.23983f, 0.5456054f, 2.985957f);
+                        if (posProp != null) posProp.vector3Value = new Vector3(0.022f, 0.172f, 0.034f);
+                        if (rotProp != null) rotProp.vector3Value = new Vector3(90f, 0f, 90f);
+                        if (scaleProp != null) scaleProp.vector3Value = new Vector3(5f, 5f, 5f);
+                        if (childPosProp != null) childPosProp.vector3Value = Vector3.zero;
+                        if (childRotProp != null) childRotProp.vector3Value = Vector3.zero;
+                        if (childScaleProp != null) childScaleProp.vector3Value = Vector3.one;
 
                         heldSo.ApplyModifiedPropertiesWithoutUndo();
                         changed = true;

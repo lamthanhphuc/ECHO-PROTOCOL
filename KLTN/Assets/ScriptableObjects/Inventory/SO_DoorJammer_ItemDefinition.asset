@@ -15,6 +15,6 @@ MonoBehaviour:
   itemId: door_jammer
   displayName: Door Jammer
   itemType: 1
-  worldPrefab: {fileID: 2833743039103195240, guid: 8b4fb1bdfb3948dba45c7a9df312a901, type: 3}
-  teamToolGameplayPrefab: {fileID: 0}
+  worldPrefab: {fileID: 1032971532598727059, guid: 01c3e5e273fc64041870daff62b4cbaa, type: 3}
+  teamToolGameplayPrefab: {fileID: 1032971532598727059, guid: 01c3e5e273fc64041870daff62b4cbaa, type: 3}
   icon: {fileID: 0}

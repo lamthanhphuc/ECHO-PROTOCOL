@@ -70,7 +70,7 @@ public class PlayerInventoryDropInput : MonoBehaviour
         }
 
         bool throwPressed = Mouse.current != null
-            && Mouse.current.rightButton.wasPressedThisFrame;
+            && Mouse.current.leftButton.wasPressedThisFrame;
 
         if (throwPressed)
         {
@@ -214,17 +214,7 @@ public class PlayerInventoryDropInput : MonoBehaviour
 
         if (toolId.Contains("stabilizer") || toolName.Contains("stabilizer") || toolId.Contains("core") || toolName.Contains("core"))
         {
-            AudioClip pulseClip = Resources.Load<AudioClip>("Audio/energy_core/pickup");
-#if UNITY_EDITOR
-            if (pulseClip == null)
-            {
-                pulseClip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/energy_core/pickup.wav");
-            }
-#endif
-            if (pulseClip != null)
-            {
-                AudioSource.PlayClipAtPoint(pulseClip, transform.position);
-            }
+            EchoProtocol.Audio.GameAudioRuntime.AtPoint("energy_core/pickup", transform.position);
             return true;
         }
 

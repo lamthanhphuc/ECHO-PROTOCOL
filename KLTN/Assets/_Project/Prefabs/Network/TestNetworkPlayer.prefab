@@ -30,6 +30,7 @@ GameObject:
   - component: {fileID: 7436874127465632743}
   - component: {fileID: 1999568602562065522}
   - component: {fileID: 7528143514624059401}
+  - component: {fileID: 258597381534401126}
   m_Layer: 0
   m_Name: TestNetworkPlayer
   m_TagString: Untagged
@@ -257,6 +258,13 @@ MonoBehaviour:
   _walkSpeed: 5
   _sprintSpeed: 7
   _allowJump: 0
+  _standingHeight: 2
+  _crouchHeight: 1.2
+  _crouchTransitionSpeed: 10
+  _IsHidden:
+    RawValue: 0
+  _IsCrouching:
+    RawValue: 0
 --- !u!114 &11400004
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -278,7 +286,8 @@ MonoBehaviour:
   _fieldScannerPickupPrefab: {fileID: 7407995254980528878, guid: bd7126f397d671b47a7357b603e8363e, type: 3}
   _noiseMakerPickupPrefab: {fileID: 4253842779654547843, guid: a4233f32c65a0f446b144f89b39f593c, type: 3}
   _firstAidPickupPrefab: {fileID: 5282768087981583904, guid: d2075e2082d18b64390490d50b3f94fd, type: 3}
-  _doorJammerPickupPrefab: {fileID: 8987240969475041260, guid: 8b4fb1bdfb3948dba45c7a9df312a901, type: 3}
+  _doorJammerPickupPrefab: {fileID: 4920552562951933515, guid: 01c3e5e273fc64041870daff62b4cbaa, type: 3}
+  _coreStabilizerPickupPrefab: {fileID: 8956166517133272461, guid: 4bc59d90b02c44647a16c758ef482e2c, type: 3}
   _noiseMakerBeaconPrefab: {fileID: 5536313895210414100, guid: 4a8de518f84dfbe4a9620fbab3379f24, type: 3}
   _coreStabilizerPulseClip: {fileID: 0}
 --- !u!114 &8434648393924393315
@@ -309,6 +318,9 @@ MonoBehaviour:
   _ReviveCount: 0
   _TransitionOrdinal: 0
   _LastTransitionCause: 0
+  _CaughtByGhostId:
+    Raw: 0
+  _CatchDuration: 0
 --- !u!114 &11400005
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -361,7 +373,7 @@ MonoBehaviour:
   toolVisual_1: {fileID: 6917847998477345115, guid: 42eed1ef7003d124d93c210c5b5cff43, type: 3}
   toolVisual_2: {fileID: 6336918889015265847, guid: 0c24821b2d6aef745a61febe92e91285, type: 3}
   toolVisual_3: {fileID: 5508043860142965960, guid: 7972be33729bd41458d3d7b5486243ef, type: 3}
-  toolVisual_4: {fileID: 4853906723471563101, guid: a42bf3fb170f43a38c34a9242c8ee77d, type: 3}
+  toolVisual_4: {fileID: 1032971532598727059, guid: d4a8b792e31649f1a07bb5c92e104a37, type: 3}
   toolVisual_6: {fileID: 0}
   localPosition: {x: 0.04, y: 0.02, z: 0.12}
   localEulerAngles: {x: 0, y: 90, z: -18}
@@ -381,12 +393,12 @@ MonoBehaviour:
   firstAidChildLocalPosition: {x: -0.533528, y: -3.405526, z: -0.3114559}
   firstAidChildLocalEulerAngles: {x: 0.12, y: -0.416, z: 5.923}
   firstAidChildLocalScale: {x: 1, y: 1, z: 1}
-  plankLocalPosition: {x: 0.04, y: 0.02, z: 0.12}
-  plankLocalEulerAngles: {x: 15, y: 90, z: -20}
+  plankLocalPosition: {x: 0.022, y: 0.172, z: 0.034}
+  plankLocalEulerAngles: {x: 90, y: 0, z: 90}
   plankLocalScale: {x: 5, y: 5, z: 5}
-  plankChildLocalPosition: {x: 0.0151, y: 0.0386, z: -0.0076}
-  plankChildLocalEulerAngles: {x: 90, y: 0, z: 0}
-  plankChildLocalScale: {x: 22.23983, y: 0.5456054, z: 2.985957}
+  plankChildLocalPosition: {x: 0, y: 0, z: 0}
+  plankChildLocalEulerAngles: {x: 0, y: 0, z: 0}
+  plankChildLocalScale: {x: 1, y: 1, z: 1}
   coreStabilizerLocalPosition: {x: 0.035, y: 0.02, z: 0.12}
   coreStabilizerLocalEulerAngles: {x: 10, y: 90, z: -15}
   coreStabilizerLocalScale: {x: 0.45, y: 0.45, z: 0.45}
@@ -461,7 +473,8 @@ MonoBehaviour:
   fieldScannerDefinition: {fileID: 11400000, guid: 6289cba7e34d8cc46bda359b351cfe9e, type: 2}
   noiseMakerDefinition: {fileID: 11400000, guid: 9dd6b970862ee4641bc2e47c12c990ea, type: 2}
   firstAidDefinition: {fileID: 11400000, guid: 1efcfdbffb1e61f41a81b954f0c40c2c, type: 2}
-  doorJammerDefinition: {fileID: 11400000, guid: e99a6c2d76d24a94bfe61a7b2e8da214, type: 2}
+  doorJammerDefinition: {fileID: 11400000, guid: 2a4a8096bb97c684485528a7476175b9, type: 2}
+  coreStabilizerDefinition: {fileID: 0}
 --- !u!114 &4938803890600570795
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -567,12 +580,15 @@ MonoBehaviour:
   noiseMakerLocalPosition: {x: 0.018, y: 0.132, z: -0.065}
   noiseMakerLocalEulerAngles: {x: 6.176, y: 93.2, z: 94.562}
   noiseMakerLocalScale: {x: 0.7, y: 0.7, z: 0.7}
-  plankLocalPosition: {x: 0.04, y: 0.02, z: 0.12}
-  plankLocalEulerAngles: {x: 15, y: 90, z: -20}
+  plankLocalPosition: {x: 0.022, y: 0.172, z: 0.034}
+  plankLocalEulerAngles: {x: 90, y: 0, z: 90}
   plankLocalScale: {x: 5, y: 5, z: 5}
-  plankChildLocalPosition: {x: 0.0151, y: 0.0386, z: -0.0076}
-  plankChildLocalEulerAngles: {x: 90, y: 0, z: 0}
-  plankChildLocalScale: {x: 22.23983, y: 0.5456054, z: 2.985957}
+  plankChildLocalPosition: {x: 0, y: 0, z: 0}
+  plankChildLocalEulerAngles: {x: 0, y: 0, z: 0}
+  plankChildLocalScale: {x: 1, y: 1, z: 1}
+  coreStabilizerLocalPosition: {x: 0.035, y: 0.18, z: 0.12}
+  coreStabilizerLocalEulerAngles: {x: 10, y: 90, z: -15}
+  coreStabilizerLocalScale: {x: 0.45, y: 0.45, z: 0.45}
 --- !u!114 &7528143514624059401
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -602,6 +618,25 @@ MonoBehaviour:
     MotionStrongMaxDistance: 15
     MotionMediumMaxDistance: 25
     MotionWeakMaxDistance: 35
+--- !u!114 &258597381534401126
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 424211e0903852a49816101b4e50fe09, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerJumpscareController
+  _ghostJumpscarePrefab: {fileID: 8145755207363234366, guid: 3fab18e8a651d3446a4007c22dcfa8f2, type: 3}
+  _scream: {fileID: 8300000, guid: cd2d6fb1d7a3dea428864b5f27c45104, type: 3}
+  _gameplayHud: {fileID: 0}
+  _ghostOffset: {x: 0, y: 0, z: 1}
+  _ghostEuler: {x: 0, y: 180, z: 0}
+  _shakeDegrees: 3
+  _fovPunch: 10
 --- !u!1 &505368408651250972
 GameObject:
   m_ObjectHideFlags: 0

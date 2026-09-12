@@ -9,15 +9,21 @@ namespace EchoProtocol.Networking
     public sealed class PlayerSpawner : MonoBehaviour
     {
         private const int SupportedPlayerCount = 4;
+        private const int TargetSectorBoxCount = 2;
         private const float FallbackSpacing = 2.5f;
 
         [SerializeField] private NetworkBootstrap _bootstrap;
+        [Header("Lobby Lineup")]
+        [Tooltip("First player's position for the Lobby camera at (0, 1, -10). Leaves the left side for the lobby panel.")]
+        [SerializeField] private Vector3 _lobbySpawnOrigin = new Vector3(0.15f, 1f, -5.5f);
+        [SerializeField, Min(1f)] private float _lobbySpawnSpacing = 1.1f;
         [Header("Authoritative Gameplay World")]
         [SerializeField] private NetworkObject _doorPrefab;
         [SerializeField] private NetworkObject _pickupItemPrefab;
         [SerializeField, Range(1, 4)] private int _energyCoreCount = 4;
         [SerializeField] private Vector3 _energyCoreSpawnOrigin = new Vector3(2f, 0.5f, 2.5f);
         [SerializeField, Min(0.5f)] private float _energyCoreSpawnSpacing = 1.25f;
+        [SerializeField, Min(0f)] private float _energyCoreSpawnSurfaceOffset = 0.35f;
         [SerializeField] private NetworkObject _sectorBoxPrefab;
         [SerializeField] private NetworkObject _matchStatePrefab;
         [SerializeField] private NetworkObject _powerPuzzlePrefab;
@@ -28,6 +34,7 @@ namespace EchoProtocol.Networking
         private FusionPlayerLifecycle _subscribedLifecycle;
         private NetworkObject _doorInstance;
         private readonly List<NetworkObject> _energyCoreInstances = new List<NetworkObject>();
+        private readonly List<SpawnPose> _selectedEnergyCoreSpawnPoses = new List<SpawnPose>();
         private NetworkObject _sectorBoxInstance;
         private readonly List<NetworkObject> _sectorBoxInstances = new List<NetworkObject>();
         private NetworkObject _matchStateInstance;
@@ -86,6 +93,7 @@ namespace EchoProtocol.Networking
             if (SceneManager.GetActiveScene().name != LobbyManager.GameSceneName) return;
 
             DisableLegacyObjectiveMutators();
+            EnsureGameplayHUD();
             if (!runner.IsServer) return;
 
             TryAttachLifecycle(runner);
@@ -135,27 +143,48 @@ namespace EchoProtocol.Networking
             while (_energyCoreInstances.Count < _energyCoreCount && _pickupItemPrefab != null)
             {
                 var index = _energyCoreInstances.Count;
-                var position = GetEnergyCoreSpawnPosition(index);
-                var core = runner.Spawn(_pickupItemPrefab, position, Quaternion.identity);
+                var pose = GetEnergyCoreSpawnPose(index);
+                var core = runner.Spawn(
+                    _pickupItemPrefab,
+                    pose.Position,
+                    pose.Rotation,
+                    PlayerRef.None,
+                    (_, spawnedObject) =>
+                    {
+                        if (spawnedObject != null
+                            && spawnedObject.TryGetComponent<NetworkPickupItem>(out var pickup))
+                        {
+                            pickup.InitializeAuthoritativePose(pose.Position, pose.Rotation);
+                        }
+                    });
+                if (core != null)
+                {
+                    core.name = $"EnergyCore_Network_{index + 1:00}";
+                    if (core.TryGetComponent<NetworkPickupItem>(out var pickup))
+                    {
+                        pickup.InitializeAuthoritativePose(pose.Position, pose.Rotation);
+                    }
+                }
                 _energyCoreInstances.Add(core);
-                Debug.Log($"[PlayerSpawner] Spawned authoritative Energy Core {index + 1}/{_energyCoreCount}: {core.Id}.");
+                Debug.Log($"[PlayerSpawner] Spawned authoritative Energy Core {index + 1}/{_energyCoreCount}: {(core != null ? core.Id.ToString() : "null")} at {pose.Position}.");
             }
             if (_sectorBoxPrefab != null && _sectorBoxInstances.Count == 0)
             {
-                var sceneBoxes = FindObjectsByType<SectorBox>(FindObjectsInactive.Include);
-                if (sceneBoxes.Length > 0)
+                var sceneBoxes = GetOrderedSceneSectorBoxes();
+                if (sceneBoxes.Count > 0)
                 {
-                    for (int i = 0; i < sceneBoxes.Length; i++)
+                    var count = Mathf.Min(TargetSectorBoxCount, sceneBoxes.Count);
+                    for (int i = 0; i < count; i++)
                     {
                         var box = sceneBoxes[i];
-                        if (box == null) continue;
                         var boxInstance = runner.Spawn(
                             _sectorBoxPrefab,
                             box.transform.position,
                             box.transform.rotation);
                         _sectorBoxInstances.Add(boxInstance);
-                        Debug.Log($"[PlayerSpawner] Spawned authoritative Sector Box {i + 1}/{sceneBoxes.Length}: {boxInstance.Id}.");
+                        Debug.Log($"[PlayerSpawner] Spawned authoritative Sector Box {i + 1}/{count} from scene marker '{box.name}': {boxInstance.Id}.");
                     }
+
                     _sectorBoxInstance = _sectorBoxInstances[0];
                 }
                 else
@@ -274,21 +303,92 @@ namespace EchoProtocol.Networking
                 useFallbackVisual: true);
         }
 
-        private Vector3 GetEnergyCoreSpawnPosition(int index)
+        private SpawnPose GetEnergyCoreSpawnPose(int index)
         {
-            var container = GameObject.Find("EnergyCoreSpawnCandidates");
-            if (container != null && index >= 0 && index < container.transform.childCount)
+            if (_selectedEnergyCoreSpawnPoses.Count == 0)
             {
-                return container.transform.GetChild(index).position;
+                SelectEnergyCoreSpawnPoses();
             }
 
-            return _energyCoreSpawnOrigin + Vector3.right * (_energyCoreSpawnSpacing * index);
+            if (index >= 0 && index < _selectedEnergyCoreSpawnPoses.Count)
+            {
+                return _selectedEnergyCoreSpawnPoses[index];
+            }
+
+            return new SpawnPose(ProjectToGround(
+                _energyCoreSpawnOrigin + Vector3.right * (_energyCoreSpawnSpacing * index),
+                _energyCoreSpawnSurfaceOffset),
+                Quaternion.identity,
+                useFallbackVisual: true);
+        }
+
+        private void SelectEnergyCoreSpawnPoses()
+        {
+            _selectedEnergyCoreSpawnPoses.Clear();
+
+            var candidates = GetOrderedEnergyCoreSpawnCandidates();
+            if (candidates.Count == 0)
+            {
+                Debug.LogWarning("[PlayerSpawner] No EnergyCore_C* spawn candidates found; using fallback Energy Core line spawn.");
+                return;
+            }
+
+            for (int i = candidates.Count - 1; i > 0; i--)
+            {
+                int swapIndex = Random.Range(0, i + 1);
+                (candidates[i], candidates[swapIndex]) = (candidates[swapIndex], candidates[i]);
+            }
+
+            var selectedCount = Mathf.Min(_energyCoreCount, candidates.Count);
+            for (int i = 0; i < selectedCount; i++)
+            {
+                var candidate = candidates[i];
+                _selectedEnergyCoreSpawnPoses.Add(new SpawnPose(candidate.position, candidate.rotation));
+                Debug.Log($"[PlayerSpawner] Selected Energy Core spawn candidate '{candidate.name}' at {candidate.position}.");
+            }
+
+            Debug.Log($"[PlayerSpawner] Selected {_selectedEnergyCoreSpawnPoses.Count}/{candidates.Count} Energy Core spawn candidates.");
+        }
+
+        private static List<Transform> GetOrderedEnergyCoreSpawnCandidates()
+        {
+            var candidates = new List<Transform>();
+            for (int sceneIndex = 0; sceneIndex < SceneManager.sceneCount; sceneIndex++)
+            {
+                var scene = SceneManager.GetSceneAt(sceneIndex);
+                if (!scene.isLoaded)
+                {
+                    continue;
+                }
+
+                var roots = scene.GetRootGameObjects();
+                for (int rootIndex = 0; rootIndex < roots.Length; rootIndex++)
+                {
+                    foreach (var candidate in roots[rootIndex].GetComponentsInChildren<Transform>(true))
+                    {
+                        if (IsEnergyCoreSpawnCandidate(candidate))
+                        {
+                            candidates.Add(candidate);
+                        }
+                    }
+                }
+            }
+
+            candidates.Sort((left, right) => string.CompareOrdinal(left.name, right.name));
+            return candidates;
+        }
+
+        private static bool IsEnergyCoreSpawnCandidate(Transform candidate)
+        {
+            return candidate != null
+                && candidate.name.StartsWith("EnergyCore_C", System.StringComparison.OrdinalIgnoreCase)
+                && !candidate.name.StartsWith("EnergyCore_Network", System.StringComparison.OrdinalIgnoreCase);
         }
 
         private static SpawnPose GetSectorBoxPose()
         {
-            var sectorBoxes = FindObjectsByType<SectorBox>(FindObjectsInactive.Include);
-            if (sectorBoxes.Length > 0 && sectorBoxes[0] != null)
+            var sectorBoxes = GetOrderedSceneSectorBoxes();
+            if (sectorBoxes.Count > 0)
             {
                 return new SpawnPose(sectorBoxes[0].transform.position, sectorBoxes[0].transform.rotation);
             }
@@ -296,11 +396,75 @@ namespace EchoProtocol.Networking
             return new SpawnPose(new Vector3(-2f, 0.75f, 2.5f), Quaternion.identity);
         }
 
+        private static List<SectorBox> GetOrderedSceneSectorBoxes()
+        {
+            var sectorBoxes = FindObjectsByType<SectorBox>(FindObjectsInactive.Include);
+            System.Array.Sort(sectorBoxes, (left, right) => string.CompareOrdinal(left.name, right.name));
+            var ordered = new List<SectorBox>(sectorBoxes.Length);
+            for (int i = 0; i < sectorBoxes.Length; i++)
+            {
+                if (sectorBoxes[i] != null)
+                {
+                    ordered.Add(sectorBoxes[i]);
+                }
+            }
+
+            return ordered;
+        }
+
         private static void DisableLegacyObjectiveMutators()
         {
             foreach (var legacyCore in FindObjectsByType<EnergyCorePickup>(FindObjectsInactive.Include))
             {
+                // CRITICAL MULTIPLAYER FIX: Tuyệt đối không disable đối tượng mạng (NetworkObject)
+                if (legacyCore.GetComponentInParent<Fusion.NetworkObject>() != null)
+                {
+                    continue;
+                }
+
                 legacyCore.enabled = false;
+                if (!legacyCore.name.StartsWith("EnergyCore_Network", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    legacyCore.gameObject.SetActive(false);
+                }
+            }
+
+            foreach (var rootObj in GetLoadedSceneRoots())
+            {
+                foreach (var t in rootObj.GetComponentsInChildren<Transform>(true))
+                {
+                    if (t != null
+                        && (t.name.StartsWith("PF_EnergyCore_Imported", System.StringComparison.OrdinalIgnoreCase)
+                            || t.name.StartsWith("EnergyCore_C", System.StringComparison.OrdinalIgnoreCase)))
+                    {
+                        // CRITICAL MULTIPLAYER FIX: Tuyệt đối không disable đối tượng mạng runtime đã spawn
+                        if (t.GetComponentInParent<Fusion.NetworkObject>() != null)
+                        {
+                            continue;
+                        }
+
+                        if (!t.name.StartsWith("EnergyCore_Network", System.StringComparison.OrdinalIgnoreCase))
+                        {
+                            t.gameObject.SetActive(false);
+                        }
+                    }
+                }
+            }
+
+            foreach (var rb in FindObjectsByType<Rigidbody>(FindObjectsInactive.Include))
+            {
+                if (rb == null || rb.GetComponent<Fusion.NetworkObject>() != null) continue;
+                string n = rb.name;
+                if (n.Contains("Barrel") || n.Contains("SciFiBarrel") || n.Contains("Crate") || n.Contains("Pallet") || n.Contains("Bin"))
+                {
+                    if (!rb.isKinematic)
+                    {
+                        rb.linearVelocity = Vector3.zero;
+                        rb.angularVelocity = Vector3.zero;
+                        rb.isKinematic = true;
+                    }
+                    rb.useGravity = false;
+                }
             }
 
             foreach (var legacySector in FindObjectsByType<SectorBox>(FindObjectsInactive.Include))
@@ -330,6 +494,40 @@ namespace EchoProtocol.Networking
             }
         }
 
+        private static IEnumerable<GameObject> GetLoadedSceneRoots()
+        {
+            for (int sceneIndex = 0; sceneIndex < SceneManager.sceneCount; sceneIndex++)
+            {
+                var scene = SceneManager.GetSceneAt(sceneIndex);
+                if (!scene.isLoaded)
+                {
+                    continue;
+                }
+
+                var roots = scene.GetRootGameObjects();
+                for (int rootIndex = 0; rootIndex < roots.Length; rootIndex++)
+                {
+                    yield return roots[rootIndex];
+                }
+            }
+        }
+
+        private static void EnsureGameplayHUD()
+        {
+            if (FindAnyObjectByType<EchoProtocol.UI.HUD.GameplayHUDManager>() != null) return;
+
+            var hudPrefab = Resources.Load<GameObject>("PF_GameplayHUD_Canvas");
+            if (hudPrefab == null)
+            {
+                hudPrefab = Resources.Load<GameObject>("Prefabs/UI/PF_GameplayHUD_Canvas");
+            }
+
+            if (hudPrefab != null)
+            {
+                Instantiate(hudPrefab);
+            }
+        }
+
         private void HandleLifecyclePlayerObjectCommitted(FusionPlayerObjectCommit commit)
         {
             var runner = _bootstrap?.Runner;
@@ -351,16 +549,32 @@ namespace EchoProtocol.Networking
             }
 
             var slot = GetOrAssignSlot(player);
-            var pose = gameplay ? GetGameplaySpawnPose(slot) : GetFallbackPose(slot);
+            var pose = gameplay ? GetGameplaySpawnPose(slot) : GetLobbySpawnPose(slot);
             if (playerObject.TryGetComponent<LobbyPlayerState>(out var state))
             {
                 // In gameplay, players always start unarmed (ToolId = 0) and must pick up tools in the map
                 var enteringGameplay = gameplay && !state.IsGameplayPlayer;
                 var toolId = enteringGameplay ? 0 : state.ToolId;
-                state.InitializeAuthoritativeSelection(state.TeamId, toolId, gameplay);
+                var teamId = state.TeamId > 0 ? state.TeamId : slot;
+                state.InitializeAuthoritativeSelection(teamId, toolId, gameplay);
             }
 
-            if (!TryTeleportExistingPlayer(playerObject, pose))
+            if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && playerObject.HasStateAuthority && gameplay)
+            {
+                lifeState.ResetForMatchAuthoritative();
+            }
+
+            if (playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement) && playerObject.HasStateAuthority)
+            {
+                movement.IsHidden = false;
+            }
+
+            if (playerObject.TryGetComponent<PlayerHidingController>(out var hiding) && hiding.IsHidden)
+            {
+                hiding.ExitHiding();
+            }
+
+            if (!TryTeleportExistingPlayer(playerObject, pose, gameplay))
             {
                 Debug.LogWarning($"[PlayerSpawner] Could not teleport lifecycle-owned player object for {player}; object={playerObject.Id}.");
             }
@@ -370,26 +584,63 @@ namespace EchoProtocol.Networking
                 $"inputAuthority={playerObject.InputAuthority}, stateAuthority=Host, gameplay={gameplay}.");
         }
 
-        private bool TryTeleportExistingPlayer(NetworkObject playerObject, SpawnPose pose)
+        private bool TryTeleportExistingPlayer(NetworkObject playerObject, SpawnPose pose, bool projectToGround)
         {
             if (!playerObject.HasStateAuthority)
             {
                 return false;
             }
 
+            var position = projectToGround
+                ? GetGroundedPlayerSpawnPosition(playerObject, pose.Position)
+                : pose.Position;
+
             if (playerObject.TryGetComponent<NetworkCharacterController>(out var characterController))
             {
-                characterController.Teleport(pose.Position, pose.Rotation);
+                characterController.Teleport(position, pose.Rotation);
+                Physics.SyncTransforms();
                 return true;
             }
 
             if (playerObject.TryGetComponent<NetworkTransform>(out var networkTransform))
             {
-                networkTransform.Teleport(pose.Position);
+                networkTransform.Teleport(position, pose.Rotation);
+                Physics.SyncTransforms();
                 return true;
             }
 
             return false;
+        }
+
+        private static Vector3 GetGroundedPlayerSpawnPosition(NetworkObject playerObject, Vector3 sourcePosition)
+        {
+            var characterController = playerObject != null
+                ? playerObject.GetComponent<CharacterController>()
+                : null;
+            float bottomToRootOffset = 0f;
+            if (characterController != null)
+            {
+                bottomToRootOffset = characterController.height * 0.5f - characterController.center.y;
+            }
+
+            return ProjectToGround(sourcePosition, Mathf.Max(0f, bottomToRootOffset) + 0.03f);
+        }
+
+        private static Vector3 ProjectToGround(Vector3 sourcePosition, float surfaceOffset)
+        {
+            var rayStart = sourcePosition + Vector3.up * 2f;
+            if (Physics.Raycast(rayStart, Vector3.down, out var hit, 8f, ~0, QueryTriggerInteraction.Ignore))
+            {
+                sourcePosition.y = hit.point.y + surfaceOffset;
+                return sourcePosition;
+            }
+
+            if (sourcePosition.y < surfaceOffset)
+            {
+                sourcePosition.y = surfaceOffset;
+            }
+
+            return sourcePosition;
         }
 
         private void TryAttachLifecycle(NetworkRunner runner)
@@ -453,6 +704,14 @@ namespace EchoProtocol.Networking
             return GetFallbackPose(slot);
         }
 
+        private SpawnPose GetLobbySpawnPose(int slot)
+        {
+            // Keep all four players in one row, close to the Lobby camera and
+            // to the right of the network panel. The host assigns stable slots.
+            var position = _lobbySpawnOrigin + Vector3.right * (slot * _lobbySpawnSpacing);
+            return new SpawnPose(position, Quaternion.Euler(0f, 180f, 0f));
+        }
+
         private static SpawnPose GetFallbackPose(int slot)
         {
             var row = slot / 2;
@@ -469,7 +728,9 @@ namespace EchoProtocol.Networking
                 _spawnSlots.Clear();
                 _doorInstance = null;
                 _energyCoreInstances.Clear();
+                _selectedEnergyCoreSpawnPoses.Clear();
                 _sectorBoxInstance = null;
+                _sectorBoxInstances.Clear();
                 _matchStateInstance = null;
                 _powerPuzzleInstance = null;
                 _powerPuzzleStationInstances.Clear();

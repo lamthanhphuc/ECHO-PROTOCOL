@@ -4,7 +4,7 @@ using UnityEngine.Events;
 
 public class EnergyCoreObjectiveProgress : MonoBehaviour
 {
-    [SerializeField] private int requiredCoreCount = 3;
+    [SerializeField] private int requiredCoreCount = 2;
     [SerializeField] private UnityEvent progressChanged;
     [SerializeField] private UnityEvent objectiveCompleted;
 

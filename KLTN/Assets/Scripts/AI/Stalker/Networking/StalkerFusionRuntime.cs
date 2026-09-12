@@ -34,6 +34,23 @@ namespace EchoProtocol.AI.Stalker.Networking
         [Header("Authoritative Combat")]
         [SerializeField, Min(1)] private int attackDamage = 25;
         [SerializeField, Min(0.1f)] private float maximumDamageDistance = 2f;
+        [SerializeField] private bool catchEndsInDeath;
+        [SerializeField, Min(0.2f)] private float jumpscareSeconds = 2f;
+        [SerializeField, Min(0f)] private float catchCooldownSeconds = 2f;
+        [Networked] private TickTimer CatchCooldown { get; set; }
+
+        public bool TryCatchPlayer(NetworkPlayerLifeState player)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || controller == null || controller.CurrentState != StalkerState.ATTACK
+                || !CatchCooldown.ExpiredOrNotRunning(Runner) || player == null)
+                return false;
+            if (!player.TryCatchAuthoritative(Object, maximumDamageDistance, jumpscareSeconds, catchEndsInDeath))
+                return false;
+            CatchCooldown = TickTimer.CreateFromSeconds(Runner, Mathf.Max(jumpscareSeconds, catchCooldownSeconds));
+            AttackSequence++;
+            return true;
+        }
 
         [Header("Replicated Presentation")]
         [SerializeField] private Animator animator;
@@ -129,6 +146,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             {
                 ReplicatedState = controller != null ? controller.CurrentState : StalkerState.PATROL;
                 TargetPlayer = PlayerRef.None;
+                CatchCooldown = TickTimer.None;
             }
 
             if (Object != null) ApplyReplicatedPresentation();
@@ -379,13 +397,17 @@ namespace EchoProtocol.AI.Stalker.Networking
                 if (!playerId.IsValid) continue;
                 var isGameplayPlayer = !playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyState)
                     || lobbyState.IsGameplayPlayer;
-                var isDowned = playerObject.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned;
+                var isDowned = (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && lifeState.IsDowned)
+                    || (playerObject.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned);
+                var isEliminated = lifeState != null && lifeState.IsEliminated;
+                var isHidden = (playerObject.TryGetComponent<PlayerHidingController>(out var hiding) && hiding.IsHidden)
+                    || (playerObject.TryGetComponent<NetworkPlayerMovement>(out var netMove) && netMove.IsHidden);
                 var eligibilitySnapshot = new StalkerTargetEligibilitySnapshot(
                     isGameplayPlayer,
                     true,
                     isDowned,
-                    false,
-                    false);
+                    isEliminated,
+                    isHidden || (lifeState != null && lifeState.IsCaught));
                 _targetStatuses.Add(new StalkerTargetStatus(
                     playerId,
                     StalkerTargetEligibility.Evaluate(eligibilitySnapshot)));
@@ -523,6 +545,9 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private void ResolveAuthoritativeAttack()
         {
+            // The production sink already commits the hit at the validated attack moment.
+            if (controller.AttackConsequenceSink == _productionConsequenceSink && _productionConsequenceSink != null)
+                return;
             var attackResult = controller.LastAttackResult;
             if (attackResult == StalkerAttackResult.Hit
                 && _previousAttackResult != StalkerAttackResult.Hit)
@@ -552,11 +577,21 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return false;
             }
 
-            if (!playerObject.TryGetComponent<NetworkPlayerHealth>(out var health)
-                || !health.TryApplyAuthoritativeDamage(Object, attackDamage))
+            bool applied = false;
+            if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState))
+            {
+                return TryCatchPlayer(lifeState);
+            }
+
+            if (playerObject.TryGetComponent<NetworkPlayerHealth>(out var health))
+            {
+                applied |= health.TryApplyAuthoritativeDamage(Object, attackDamage);
+            }
+
+            if (!applied)
             {
                 UnityEngine.Debug.LogWarning(
-                    $"[StalkerFusion] Rejected attack damage against {TargetPlayer}: health state unavailable.");
+                    $"[StalkerFusion] Rejected attack damage against {TargetPlayer}: health/life state unavailable.");
                 return false;
             }
 
@@ -632,7 +667,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             _productionConsequenceSink ??=
                 new StalkerNetworkLifeStateConsequenceSink(
                     Runner,
-                    lifecycle.IdentityRegistry);
+                    lifecycle.IdentityRegistry,
+                    this);
             if (controller.AttackConsequenceSink == null
                 || controller.AttackConsequenceSink is StalkerDiagnosticAttackConsequenceSink)
             {

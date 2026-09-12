@@ -368,10 +368,10 @@ MonoBehaviour:
   clampWeight: 0.42
   lookAtDistance: 12
   driveRightHandWhenHolding: 1
-  handForwardOffset: {x: 0.22, y: -0.22, z: 0.46}
+  handForwardOffset: {x: 0.2, y: 0.12, z: 0.36}
   handEulerOffset: {x: 0, y: 0, z: -75}
-  rightHandPosWeight: 0.88
-  rightHandRotWeight: 0.85
+  rightHandPosWeight: 0.82
+  rightHandRotWeight: 0.8
 --- !u!1 &645378561966312544
 GameObject:
   m_ObjectHideFlags: 0
@@ -5870,12 +5870,15 @@ MonoBehaviour:
   noiseMakerLocalPosition: {x: 0.018, y: 0.132, z: -0.065}
   noiseMakerLocalEulerAngles: {x: 6.176, y: 93.2, z: 94.562}
   noiseMakerLocalScale: {x: 0.7, y: 0.7, z: 0.7}
-  plankLocalPosition: {x: 0, y: 0, z: 0}
-  plankLocalEulerAngles: {x: 0, y: 0, z: 0}
-  plankLocalScale: {x: 1, y: 1, z: 1}
-  plankChildLocalPosition: {x: 0.0151, y: 0.0386, z: -0.0076}
-  plankChildLocalEulerAngles: {x: 90, y: 0, z: 0}
-  plankChildLocalScale: {x: 22.23983, y: 0.5456054, z: 2.985957}
+  plankLocalPosition: {x: 0.022, y: 0.172, z: 0.034}
+  plankLocalEulerAngles: {x: 90, y: 0, z: 90}
+  plankLocalScale: {x: 5, y: 5, z: 5}
+  plankChildLocalPosition: {x: 0, y: 0, z: 0}
+  plankChildLocalEulerAngles: {x: 0, y: 0, z: 0}
+  plankChildLocalScale: {x: 1, y: 1, z: 1}
+  coreStabilizerLocalPosition: {x: 0.035, y: 0.18, z: 0.12}
+  coreStabilizerLocalEulerAngles: {x: 10, y: 90, z: -15}
+  coreStabilizerLocalScale: {x: 0.45, y: 0.45, z: 0.45}
 --- !u!114 &7655898158897841420
 MonoBehaviour:
   m_ObjectHideFlags: 0

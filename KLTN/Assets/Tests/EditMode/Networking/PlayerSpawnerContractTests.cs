@@ -47,7 +47,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("foreach (var player in runner.ActivePlayers)", source);
             StringAssert.Contains("runner.TryGetPlayerObject(player, out var playerObject)", source);
             StringAssert.Contains("ConfigureExistingPlayerObject(player, playerObject, gameplay: true)", source);
-            StringAssert.Contains("InitializeAuthoritativeSelection(state.TeamId, state.ToolId, gameplay)", source);
+            StringAssert.Contains("InitializeAuthoritativeSelection(teamId, toolId, gameplay)", source);
         }
 
         [Test]
@@ -56,7 +56,7 @@ namespace EchoProtocol.Networking.Tests
             var spawnerSource = LoadSpawnerSource();
             var lobbyStateSource = LoadLobbyPlayerStateSource();
 
-            StringAssert.Contains("state.InitializeAuthoritativeSelection(state.TeamId, state.ToolId, gameplay)", spawnerSource);
+            StringAssert.Contains("state.InitializeAuthoritativeSelection(teamId, toolId, gameplay)", spawnerSource);
             StringAssert.Contains("public void InitializeAuthoritativeSelection(int teamId, int toolId, bool isGameplayPlayer)", lobbyStateSource);
             StringAssert.Contains("TeamId = teamId;", lobbyStateSource);
             StringAssert.Contains("ToolId = toolId;", lobbyStateSource);

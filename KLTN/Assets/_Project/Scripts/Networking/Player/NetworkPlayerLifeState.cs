@@ -11,6 +11,7 @@ namespace EchoProtocol.Networking
         Downed = 1,
         Eliminated = 2,
         Escaped = 3,
+        Caught = 4,
     }
 
     public enum NetworkPlayerLifeTransitionCause
@@ -24,6 +25,7 @@ namespace EchoProtocol.Networking
         ReviveLimit = 6,
         Escaped = 7,
         ProtectionExpired = 8,
+        GhostCatch = 9,
     }
 
     public static class NetworkPlayerLifeStateRules
@@ -115,6 +117,15 @@ namespace EchoProtocol.Networking
         [Networked] private NetworkBool ActiveReviveUsedFirstAidKit { get; set; }
 
         private PlayerDownState _legacyDownState;
+        [Networked] public NetworkId CaughtByGhostId { get; private set; }
+        [Networked] public float CatchDuration { get; private set; }
+        [Networked] private TickTimer CatchTimer { get; set; }
+        [Networked] private NetworkBool CatchEndsInDeath { get; set; }
+
+        public bool IsCaught => Object != null && Object.IsValid && Status == NetworkPlayerLifeStatus.Caught;
+        public bool IsEliminated => Object != null && Object.IsValid &&
+            (Status == NetworkPlayerLifeStatus.Eliminated || Status == NetworkPlayerLifeStatus.Escaped);
+        public float CatchRemaining => Remaining(CatchTimer);
         private PlayerReviveInteractable _legacyReviveInteractable;
 
         public bool CanBeRevived => (Object != null && Object.IsValid) && NetworkPlayerLifeStateRules.CanRevive(
@@ -131,6 +142,7 @@ namespace EchoProtocol.Networking
                                            && ReviveProtectionRemaining > 0f;
         public bool IsMatchActive => (Object == null || !Object.IsValid)
                                      || Status == NetworkPlayerLifeStatus.Alive
+                                     || IsCaught
                                      || IsDowned;
         public float MovementSpeedMultiplier => IsDowned ? _crawlSpeedMultiplier : 1f;
         public float BleedoutRemaining => Remaining(BleedoutTimer);
@@ -156,6 +168,10 @@ namespace EchoProtocol.Networking
                 BleedoutTimer = TickTimer.None;
                 ReviveTimer = TickTimer.None;
                 ProtectionTimer = TickTimer.None;
+                CatchTimer = TickTimer.None;
+                CaughtByGhostId = default;
+                CatchDuration = 0f;
+                CatchEndsInDeath = false;
                 ClearReviveSnapshot();
             }
 
@@ -166,6 +182,19 @@ namespace EchoProtocol.Networking
         public override void FixedUpdateNetwork()
         {
             if (!Object.HasStateAuthority) return;
+
+            if (IsCaught)
+            {
+                if (CatchTimer.Expired(Runner))
+                {
+                    CatchTimer = TickTimer.None;
+                    if (CatchEndsInDeath)
+                        CommitEliminated(NetworkPlayerLifeTransitionCause.GhostCatch, "GHOST_CATCH");
+                    else
+                        CommitDown("GHOST_CATCH", transform.position);
+                }
+                return;
+            }
 
             // Bleedout wins a same-tick race against revive completion.
             if (NetworkPlayerLifeStateRules.CanBleedOut(Status) && BleedoutTimer.Expired(Runner))
@@ -201,6 +230,34 @@ namespace EchoProtocol.Networking
             ApplyPresentation();
         }
 
+        public void ResetForMatchAuthoritative()
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
+            Status = NetworkPlayerLifeStatus.Alive;
+            Health = _maximumHealth;
+            Reviver = PlayerRef.None;
+            IsCrawling = false;
+            DownCount = 0;
+            ReviveCount = 0;
+            TransitionOrdinal = 0;
+            LastTransitionCause = NetworkPlayerLifeTransitionCause.None;
+            BleedoutTimer = TickTimer.None;
+            ReviveTimer = TickTimer.None;
+            ProtectionTimer = TickTimer.None;
+            CatchTimer = TickTimer.None;
+            CaughtByGhostId = default;
+            CatchDuration = 0f;
+            CatchEndsInDeath = false;
+            ClearReviveSnapshot();
+            ApplyPresentation();
+            StateChanged?.Invoke(this);
+        }
+
+        public override void Despawned(NetworkRunner runner, bool hasState)
+        {
+            GetComponent<PlayerJumpscareController>()?.StopJumpscare();
+        }
+
         public bool TryApplyAuthoritativeDamage(float damage, string sourceType, Vector3 hitPosition)
         {
             if (!Object.HasStateAuthority
@@ -223,6 +280,18 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public bool TryHeal(float amount)
+        {
+            if (!Object.HasStateAuthority || Status != NetworkPlayerLifeStatus.Alive || Health >= _maximumHealth)
+            {
+                return false;
+            }
+
+            Health = Mathf.Min(Health + amount, _maximumHealth);
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
         public bool TryApplyMonsterDown(string monsterType, Vector3 hitPosition)
         {
             if (!Object.HasStateAuthority
@@ -234,6 +303,26 @@ namespace EchoProtocol.Networking
 
             Health = 0f;
             CommitDown(monsterType, hitPosition);
+            return true;
+        }
+
+        // Called only by an authoritative ghost's validated hit; no client RPC.
+        public bool TryCatchAuthoritative(NetworkObject ghost, float range, float duration, bool endsInDeath)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || ghost == null || !ghost.IsValid || !ghost.HasStateAuthority || ghost.Runner != Runner
+                || !NetworkPlayerLifeStateRules.CanReceiveDamage(Status, HasReviveProtection)
+                || !float.IsFinite(range) || range <= 0f || !float.IsFinite(duration) || duration < 0.2f
+                || (ghost.transform.position - transform.position).sqrMagnitude > range * range)
+                return false;
+
+            ClearSurvivalTimers();
+            CaughtByGhostId = ghost.Id;
+            CatchDuration = duration;
+            CatchEndsInDeath = endsInDeath;
+            CatchTimer = TickTimer.CreateFromSeconds(Runner, duration);
+            IsCrawling = false;
+            CommitStatus(NetworkPlayerLifeStatus.Caught, NetworkPlayerLifeTransitionCause.GhostCatch);
             return true;
         }
 
@@ -455,6 +544,10 @@ namespace EchoProtocol.Networking
 
         private void EnsureLegacyPresentationComponents()
         {
+            if (GetComponent<PlayerJumpscareController>() == null)
+                gameObject.AddComponent<PlayerJumpscareController>();
+            if (GetComponent<PlayerSpectateController>() == null)
+                gameObject.AddComponent<PlayerSpectateController>();
             _legacyDownState = GetComponent<PlayerDownState>();
             if (_legacyDownState == null)
             {
@@ -479,6 +572,7 @@ namespace EchoProtocol.Networking
 
             var presentationState = Status switch
             {
+                NetworkPlayerLifeStatus.Caught => PlayerLifeState.Caught,
                 NetworkPlayerLifeStatus.Downed => PlayerLifeState.Downed,
                 NetworkPlayerLifeStatus.Eliminated when Object.HasInputAuthority => PlayerLifeState.Spectating,
                 NetworkPlayerLifeStatus.Eliminated => PlayerLifeState.Eliminated,

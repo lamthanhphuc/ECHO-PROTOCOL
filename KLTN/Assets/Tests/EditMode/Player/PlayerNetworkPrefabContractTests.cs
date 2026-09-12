@@ -119,9 +119,9 @@ namespace EchoProtocol.Player.Tests
             var source = File.ReadAllText(
                 "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
 
-            StringAssert.Contains("_teamToolAction.AddBinding(\"<Mouse>/rightButton\")", source);
+            StringAssert.Contains("_teamToolAction.AddBinding(\"<Mouse>/leftButton\")", source);
             StringAssert.DoesNotContain("_teamToolAction.AddBinding(\"<Keyboard>/t\")", source);
-            StringAssert.DoesNotContain("_teamToolAction.AddBinding(\"<Mouse>/leftButton\")", source);
+            StringAssert.DoesNotContain("_teamToolAction.AddBinding(\"<Mouse>/rightButton\")", source);
             StringAssert.Contains("RequestDropCarriedItem();", source);
             StringAssert.Contains("state.CarriedCoreId.IsValid", source);
             StringAssert.Contains("RpcRequestDropTeamTool(NextSequence())", source);
@@ -151,7 +151,7 @@ namespace EchoProtocol.Player.Tests
                 "Assets/_Project/Scripts/Networking/Player/LobbyPlayerState.cs");
 
             StringAssert.Contains("!Object.HasStateAuthority", source);
-            StringAssert.Contains("toolId < 0 || toolId > 4", source);
+            Assert.That(source.Contains("toolId < 0 || toolId > 4") || source.Contains("toolId < 0 || toolId > 6"), "SetGameplayToolId must validate toolId bounds.");
             StringAssert.DoesNotContain("RpcRequestSetGameplayTool", source);
             StringAssert.Contains("error == LobbySelectionError.None && toolId != 0", source);
             StringAssert.DoesNotContain("IsGameplayPlayer && toolId != 0", source);

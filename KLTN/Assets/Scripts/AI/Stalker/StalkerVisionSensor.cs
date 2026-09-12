@@ -8,8 +8,8 @@ namespace EchoProtocol.AI.Stalker
     {
         [SerializeField] private Transform visionOrigin;
         [SerializeField] private Transform candidate;
-        [SerializeField] private float visionDistance = 15f;
-        [SerializeField] private float visionAngle = 90f;
+        [SerializeField] private float visionDistance = 30f;
+        [SerializeField] private float visionAngle = 140f;
         [SerializeField] private LayerMask losBlockerMask = Physics.DefaultRaycastLayers;
 
         [Header("Debug Runtime")]
@@ -92,14 +92,20 @@ namespace EchoProtocol.AI.Stalker
 
             var originPosition = visionOrigin.position;
             var candidatePosition = targetSample.position;
-            if (!TryGetVisibleDirection(originPosition, candidatePosition, false, out var observedDirection, out var distance))
-            {
-                return false;
-            }
 
-            if (HasLineOfSightBlocker(targetHierarchyRoot, originPosition, observedDirection, distance))
+            // Test torso/chest height first to avoid low obstacles (pipes, curbs, props) blocking LOS
+            var chestPosition = candidatePosition + Vector3.up * 1.0f;
+            bool chestVisible = TryGetVisibleDirection(originPosition, chestPosition, false, out var observedDirection, out var distance)
+                && !HasLineOfSightBlocker(targetHierarchyRoot, originPosition, observedDirection, distance);
+
+            if (!chestVisible)
             {
-                return false;
+                // Fallback to testing base position
+                if (!TryGetVisibleDirection(originPosition, candidatePosition, false, out observedDirection, out distance)
+                    || HasLineOfSightBlocker(targetHierarchyRoot, originPosition, observedDirection, distance))
+                {
+                    return false;
+                }
             }
 
             observation = new StalkerPhysicalVisionObservation(

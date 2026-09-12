@@ -9,10 +9,10 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     [SerializeField] private Vector3 energyCoreLocalPosition = Vector3.zero;
     [SerializeField] private Vector3 energyCoreLocalEulerAngles = Vector3.zero;
     [SerializeField] private Vector3 energyCoreLocalScale = new Vector3(25f, 25f, 25f);
-    [SerializeField] private Vector3 energyCoreChildLocalPosition = new Vector3(0.0012f, -0.2456f, -1.1109f);
+    [SerializeField] private Vector3 energyCoreChildLocalPosition = new Vector3(0.0012f, 0.02f, -0.05f);
     [SerializeField] private Vector3 energyCoreChildLocalEulerAngles = new Vector3(-89.116f, 77.236f, -92.522f);
     [SerializeField] private Vector3 energyCoreChildLocalScale = new Vector3(0.9f, 0.9f, 0.9f);
-    [SerializeField] private Vector3 teamToolLocalPosition = new Vector3(0.04f, 0.01f, 0.11f);
+    [SerializeField] private Vector3 teamToolLocalPosition = new Vector3(0.04f, 0.18f, 0.11f);
     [SerializeField] private Vector3 teamToolLocalEulerAngles = new Vector3(12f, 88f, -18f);
     [SerializeField] private Vector3 teamToolLocalScale = new Vector3(0.45f, 0.45f, 0.45f);
     [SerializeField] private Vector3 fieldScannerLocalPosition = new Vector3(-0.003f, 0.291f, 0.118f);
@@ -22,21 +22,25 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     [SerializeField] private Vector3 fieldScannerChildLocalEulerAngles = Vector3.zero;
     [SerializeField] private Vector3 fieldScannerChildLocalScale = Vector3.one;
     [SerializeField] private GameObject fieldScannerHeldPrefab;
-    [SerializeField] private Vector3 firstAidLocalPosition = new Vector3(0.035f, -0.015f, 0.155f);
+    [SerializeField] private Vector3 firstAidLocalPosition = new Vector3(0.035f, 0.16f, 0.14f);
     [SerializeField] private Vector3 firstAidLocalEulerAngles = new Vector3(8f, 92f, 170f);
     [SerializeField] private Vector3 firstAidLocalScale = new Vector3(0.15f, 0.15f, 0.3f);
-    [SerializeField] private Vector3 firstAidChildLocalPosition = new Vector3(-0.533528f, -3.405526f, -0.3114559f);
-    [SerializeField] private Vector3 firstAidChildLocalEulerAngles = new Vector3(0.12f, -0.416f, 5.923f);
+    [SerializeField] private Vector3 firstAidChildLocalPosition = Vector3.zero;
+    [SerializeField] private Vector3 firstAidChildLocalEulerAngles = Vector3.zero;
     [SerializeField] private Vector3 firstAidChildLocalScale = Vector3.one;
-    [SerializeField] private Vector3 noiseMakerLocalPosition = new Vector3(0.018f, 0.132f, -0.065f);
+    [SerializeField] private Vector3 noiseMakerLocalPosition = new Vector3(0.018f, 0.16f, 0.02f);
     [SerializeField] private Vector3 noiseMakerLocalEulerAngles = new Vector3(6.176f, 93.2f, 94.562f);
     [SerializeField] private Vector3 noiseMakerLocalScale = new Vector3(0.7f, 0.7f, 0.7f);
-    [SerializeField] private Vector3 plankLocalPosition = Vector3.zero;
-    [SerializeField] private Vector3 plankLocalEulerAngles = Vector3.zero;
-    [SerializeField] private Vector3 plankLocalScale = Vector3.one;
-    [SerializeField] private Vector3 plankChildLocalPosition = new Vector3(0.0151f, 0.0386f, -0.0076f);
-    [SerializeField] private Vector3 plankChildLocalEulerAngles = new Vector3(90f, 0f, 0f);
-    [SerializeField] private Vector3 plankChildLocalScale = new Vector3(22.23983f, 0.5456054f, 2.985957f);
+    [SerializeField] private Vector3 plankLocalPosition = new Vector3(0.022f, 0.172f, 0.034f);
+    [SerializeField] private Vector3 plankLocalEulerAngles = new Vector3(90f, 0f, 90f);
+    [SerializeField] private Vector3 plankLocalScale = new Vector3(5f, 5f, 5f);
+    [SerializeField] private Vector3 plankChildLocalPosition = Vector3.zero;
+    [SerializeField] private Vector3 plankChildLocalEulerAngles = Vector3.zero;
+    [SerializeField] private Vector3 plankChildLocalScale = Vector3.one;
+    [Header("Core Stabilizer Transform")]
+    [SerializeField] private Vector3 coreStabilizerLocalPosition = new Vector3(0.035f, 0.18f, 0.12f);
+    [SerializeField] private Vector3 coreStabilizerLocalEulerAngles = new Vector3(10f, 90f, -15f);
+    [SerializeField] private Vector3 coreStabilizerLocalScale = new Vector3(0.45f, 0.45f, 0.45f);
 
     private GameObject _currentVisual;
     private InventoryItemDefinition _currentItem;
@@ -44,6 +48,8 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     public bool IsShowingTeamTool => _currentVisual != null
         && _currentItem != null
         && _currentItem.ItemType == InventoryItemType.TeamTool;
+
+    public GameObject FieldScannerHeldPrefab => fieldScannerHeldPrefab;
 
     private void Awake()
     {
@@ -83,6 +89,14 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         _currentItem = desiredItem;
 
         if (_currentItem == null || _currentItem.WorldPrefab == null)
+        {
+            return;
+        }
+
+        // Trong phiên multiplayer Fusion, Energy Core là NetworkObject (NetworkPickupItem)
+        // tự bám vào PlayerHeldItemAnchor.ResolveCoreCarryAnchor trên thế giới.
+        // Tuyệt đối không instantiate thêm một bản visual có NetworkObject cục bộ (sẽ gây crash 0xC0000005 trên Client).
+        if (_currentItem.ItemType == InventoryItemType.EnergyCore && IsActiveFusionSession())
         {
             return;
         }
@@ -127,12 +141,27 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             }
         }
 
+        if (IsItem(_currentItem, "plank", "jammer"))
+        {
+#if UNITY_EDITOR
+            var visualPlank = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Gameplay/Imported/PF_Plank_HeldVisual.prefab");
+            if (visualPlank != null) prefabToSpawn = visualPlank;
+#endif
+            if (prefabToSpawn == null || prefabToSpawn.GetComponentInChildren<Fusion.NetworkObject>(true) != null)
+            {
+                prefabToSpawn = Resources.Load<GameObject>("PF_Plank_HeldVisual")
+                    ?? Resources.Load<GameObject>("Prefabs/Gameplay/Imported/PF_Plank_HeldVisual")
+                    ?? _currentItem.TeamToolGameplayPrefab;
+            }
+        }
+
         if (prefabToSpawn == null)
         {
             return;
         }
 
-        _currentVisual = Instantiate(prefabToSpawn, anchor);
+        _currentVisual = NetworkTeamToolHeldView.InstantiateHeldVisualSafely(prefabToSpawn, anchor);
+        if (_currentVisual == null) return;
         _currentVisual.name = "Held_" + _currentItem.ItemId;
         ApplyLocalPose(_currentVisual.transform, _currentItem);
         StripWorldGameplayComponents(_currentVisual);
@@ -230,26 +259,14 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             visual.localPosition = plankLocalPosition;
             visual.localRotation = Quaternion.Euler(plankLocalEulerAngles);
             visual.localScale = plankLocalScale;
-
-            Transform childVisual = visual.Find("Visual");
-            if (childVisual == null && visual.childCount > 0)
-            {
-                childVisual = visual.GetChild(0);
-            }
-            if (childVisual != null)
-            {
-                childVisual.localPosition = plankChildLocalPosition;
-                childVisual.localRotation = Quaternion.Euler(plankChildLocalEulerAngles);
-                childVisual.localScale = plankChildLocalScale;
-            }
             return;
         }
 
-        if (IsItem(item, "stabilizer", "core"))
+        if (IsItem(item, "stabilizer", "core_stabilizer"))
         {
-            visual.localPosition = new Vector3(0.04f, 0.01f, 0.11f);
-            visual.localRotation = Quaternion.Euler(12f, 88f, -18f);
-            visual.localScale = Vector3.one;
+            visual.localPosition = coreStabilizerLocalPosition;
+            visual.localRotation = Quaternion.Euler(coreStabilizerLocalEulerAngles);
+            visual.localScale = coreStabilizerLocalScale;
             return;
         }
 
@@ -298,6 +315,8 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
     private void StripWorldGameplayComponents(GameObject visualRoot)
     {
+        if (visualRoot == null) return;
+
         foreach (Collider collider in visualRoot.GetComponentsInChildren<Collider>(true))
         {
             collider.enabled = false;
@@ -305,8 +324,18 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
         foreach (Rigidbody body in visualRoot.GetComponentsInChildren<Rigidbody>(true))
         {
-            body.isKinematic = true;
             body.detectCollisions = false;
+            body.isKinematic = true;
+        }
+
+        foreach (var netObj in visualRoot.GetComponentsInChildren<Fusion.NetworkObject>(true))
+        {
+            netObj.enabled = false;
+        }
+
+        foreach (var netBehaviour in visualRoot.GetComponentsInChildren<Fusion.NetworkBehaviour>(true))
+        {
+            netBehaviour.enabled = false;
         }
 
         foreach (MonoBehaviour behaviour in visualRoot.GetComponentsInChildren<MonoBehaviour>(true))
@@ -322,7 +351,6 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             }
 
             if (behaviour is EchoProtocol.Tools.Scanner.NetworkToolPickup ||
-                behaviour is Fusion.NetworkBehaviour ||
                 behaviour.GetType().Name.Contains("Pickup") ||
                 behaviour.GetType().Name.Contains("Interactable"))
             {
@@ -341,5 +369,14 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         _currentVisual = null;
         _currentItem = null;
         EchoProtocol.UI.HUD.HUDFieldScanner.Instance?.SetVisible(false);
+    }
+
+    private bool IsActiveFusionSession()
+    {
+        var netObj = GetComponentInParent<Fusion.NetworkObject>();
+        return netObj != null
+            && netObj.IsValid
+            && netObj.Runner != null
+            && netObj.Runner.IsRunning;
     }
 }

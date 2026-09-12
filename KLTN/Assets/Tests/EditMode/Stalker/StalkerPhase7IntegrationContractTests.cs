@@ -294,8 +294,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         {
             var source = File.ReadAllText(LifeStateConsequenceSinkPath);
 
-            StringAssert.Contains("TryApplyMonsterDown", source);
-            StringAssert.Contains("TryEliminateForReviveLimit", source);
+            StringAssert.Contains("_ghost.TryCatchPlayer(lifeState)", source);
             StringAssert.DoesNotContain("MatchAuthorityRuntime", source);
             StringAssert.DoesNotContain("RecordStalkerAttackResolved", source);
             StringAssert.DoesNotContain("MONSTER_ATTACK_RESOLVED", source);

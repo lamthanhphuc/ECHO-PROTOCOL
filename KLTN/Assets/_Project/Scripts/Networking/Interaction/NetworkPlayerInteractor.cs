@@ -22,6 +22,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _noiseMakerPickupPrefab;
         [SerializeField] private NetworkObject _firstAidPickupPrefab;
         [SerializeField] private NetworkObject _doorJammerPickupPrefab;
+        [SerializeField] private NetworkObject _coreStabilizerPickupPrefab;
         [SerializeField] private GameObject _noiseMakerBeaconPrefab; // Gán DistressBeaconDeployed prefab trong Inspector
         [SerializeField] private AudioClip _coreStabilizerPulseClip;
 
@@ -39,6 +40,8 @@ namespace EchoProtocol.Networking
         private InputAction _teamToolAction;
         private InputAction _helpPingAction;
         private uint _nextSequence;
+        private NetworkId _lastRequestedTargetId;
+        private float _lastInteractionRequestTime;
 
         public NetworkInteractable CurrentCandidate { get; private set; }
 
@@ -47,7 +50,7 @@ namespace EchoProtocol.Networking
             _interactAction = _inputActions?.FindActionMap("Player", false)?.FindAction("Interact", false);
             _dropCoreAction = new InputAction("DropCore", InputActionType.Button, "<Keyboard>/g");
             _teamToolAction = new InputAction("UseTeamTool", InputActionType.Button);
-            _teamToolAction.AddBinding("<Mouse>/rightButton");
+            _teamToolAction.AddBinding("<Mouse>/leftButton");
             _helpPingAction = new InputAction("HelpPing", InputActionType.Button, "<Keyboard>/h");
         }
 
@@ -143,7 +146,10 @@ namespace EchoProtocol.Networking
 
             if (TryDetectReviveCandidate(out var targetLifeState))
             {
-                RequestRevive(targetLifeState);
+                // Only FAK-equipped players can revive teammates.
+                var ps = GetComponent<LobbyPlayerState>();
+                if (ps != null && ps.ToolId == 3)
+                    RequestRevive(targetLifeState);
             }
         }
 
@@ -175,7 +181,7 @@ namespace EchoProtocol.Networking
                 return RequestDropCarriedCore();
             }
 
-            if (playerState != null && playerState.ToolId >= 1 && playerState.ToolId <= 4)
+            if (playerState != null && playerState.ToolId >= 1 && playerState.ToolId <= 6)
             {
                 return RequestDropTeamTool();
             }
@@ -191,7 +197,7 @@ namespace EchoProtocol.Networking
             if (playerState == null
                 || playerState.CarriedCoreId.IsValid
                 || playerState.ToolId < 1
-                || playerState.ToolId > 4)
+                || playerState.ToolId > 6)
             {
                 return false;
             }
@@ -207,7 +213,6 @@ namespace EchoProtocol.Networking
 
             var playerState = GetComponent<LobbyPlayerState>();
             if (isOnline && playerState != null && playerState.CarriedCoreId.IsValid) return false;
-            if (playerState != null && playerState.ToolId == 3) return false;
             var scanner = GetComponent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>();
             if (scanner != null && scanner.IsScannerEquipped())
             {
@@ -238,6 +243,18 @@ namespace EchoProtocol.Networking
             {
                 targetId = doorTargetId;
             }
+            else if (playerState != null && playerState.ToolId == 3)
+            {
+                if (TryDetectReviveCandidate(out var allyLifeState) && allyLifeState != null && allyLifeState.Object != null)
+                {
+                    targetId = allyLifeState.Object.Id;
+                }
+                else
+                {
+                    // No downed ally in range — FAK cannot be used on self or alive allies.
+                    return false;
+                }
+            }
 
             RpcRequestUseTeamTool(NextSequence(), targetId);
             return true;
@@ -246,7 +263,21 @@ namespace EchoProtocol.Networking
         private bool ExecuteTeamToolOffline(int toolId, PlayerInventory inv, LobbyPlayerState playerState)
         {
             string toolType = ToolTypeFor(toolId);
-            if (toolType == "CORE_STABILIZER")
+            if (toolType == "FIRST_AID_KIT")
+            {
+                var downState = GetComponent<PlayerDownState>();
+                if (downState != null && downState.Health < 100f)
+                {
+                    downState.ApplyHeal(100f);
+                    if (inv != null && inv.TeamToolSlot != null)
+                    {
+                        inv.TryRemove(inv.TeamToolSlot);
+                    }
+                    return true;
+                }
+                return false;
+            }
+            else if (toolType == "CORE_STABILIZER")
             {
                 if (_coreStabilizerPulseClip != null)
                 {
@@ -281,11 +312,19 @@ namespace EchoProtocol.Networking
                 CompleteLocally(default, 0, InteractionValidationResult.NotInputAuthority);
                 return false;
             }
-            if (target == null || target.Object == null)
+            if (target == null || target.Object == null || !target.Object.IsValid)
             {
                 CompleteLocally(default, 0, InteractionValidationResult.InvalidTarget);
                 return false;
             }
+
+            if (target.Object.Id == _lastRequestedTargetId && Time.time - _lastInteractionRequestTime < 0.25f)
+            {
+                return false;
+            }
+
+            _lastRequestedTargetId = target.Object.Id;
+            _lastInteractionRequestTime = Time.time;
 
             var command = new InteractionCommand(target.Object.Id, NextSequence());
             RpcRequestInteraction(command.TargetId, command.Sequence);
@@ -387,7 +426,13 @@ namespace EchoProtocol.Networking
             var result = ValidateRequester(requester, sequence);
             if (result == InteractionValidationResult.Accepted)
             {
-                if (!Runner.TryFindObject(targetId, out var targetObject)
+                // Server-side guard: only FAK holders may revive.
+                var requesterState = GetComponent<LobbyPlayerState>();
+                if (requesterState == null || requesterState.ToolId != 3)
+                {
+                    result = InteractionValidationResult.InvalidRequester;
+                }
+                else if (!Runner.TryFindObject(targetId, out var targetObject)
                     || targetObject == null
                     || !targetObject.TryGetComponent<NetworkPlayerLifeState>(out var targetLifeState))
                 {
@@ -461,7 +506,7 @@ namespace EchoProtocol.Networking
                 {
                     result = InteractionValidationResult.InvalidTargetState;
                 }
-                else if (state.ToolId < 1 || state.ToolId > 4)
+                else if (state.ToolId < 1 || state.ToolId > 6)
                 {
                     result = InteractionValidationResult.InvalidTargetState;
                 }
@@ -488,7 +533,7 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            GetAuthoritativeDropPose(out var dropPosition, out var dropRotation);
+            GetAuthoritativeDropPose(toolId, out var dropPosition, out var dropRotation);
             var pickupObject = Runner.Spawn(prefab, dropPosition, dropRotation);
             var validPickup = pickupObject != null
                 && ((pickupObject.TryGetComponent<NetworkTeamToolPickup>(out var teamToolPickup)
@@ -517,26 +562,35 @@ namespace EchoProtocol.Networking
                 case 2: return _noiseMakerPickupPrefab;
                 case 3: return _firstAidPickupPrefab;
                 case 4: return _doorJammerPickupPrefab;
+                case 6: return _coreStabilizerPickupPrefab;
                 default: return null;
             }
         }
 
         private void GetAuthoritativeDropPose(out Vector3 position, out Quaternion rotation)
         {
+            GetAuthoritativeDropPose(0, out position, out rotation);
+        }
+
+        private void GetAuthoritativeDropPose(int toolId, out Vector3 position, out Quaternion rotation)
+        {
             Vector3 flatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
             if (flatForward == Vector3.zero) flatForward = transform.forward;
             var candidate = transform.position + flatForward * 1.25f;
             var rayOrigin = candidate + Vector3.up * 1.5f;
+            var layerMask = ~(1 << LayerMask.NameToLayer("Ignore Raycast"));
             position = Physics.Raycast(
                 rayOrigin,
                 Vector3.down,
                 out var hit,
                 4f,
-                ~0,
+                layerMask,
                 QueryTriggerInteraction.Ignore)
                 ? hit.point + Vector3.up * 0.05f
                 : candidate;
-            rotation = Quaternion.Euler(0f, transform.eulerAngles.y + 180f, 0f);
+            rotation = toolId == 1
+                ? Quaternion.Euler(90f, transform.eulerAngles.y + 180f, 0f)
+                : Quaternion.Euler(0f, transform.eulerAngles.y + 180f, 0f);
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
@@ -559,7 +613,7 @@ namespace EchoProtocol.Networking
                 var toolType = ToolTypeFor(state.ToolId);
                 if (toolType != null)
                 {
-                    if (toolType == "FIELD_SCANNER" || toolType == "FIRST_AID_KIT")
+                    if (toolType == "FIELD_SCANNER")
                     {
                         if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
                         RpcInteractionResult(
@@ -567,6 +621,14 @@ namespace EchoProtocol.Networking
                             targetId,
                             sequence,
                             (int)InteractionValidationResult.InvalidTargetState);
+                        return;
+                    }
+
+                    if (toolType == "FIRST_AID_KIT")
+                    {
+                        var fakResult = TryUseFirstAidKitAuthoritative(requester, state, targetId);
+                        if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+                        RpcInteractionResult(requester, targetId, sequence, (int)fakResult);
                         return;
                     }
 
@@ -620,6 +682,52 @@ namespace EchoProtocol.Networking
             }
 
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+        }
+
+        private InteractionValidationResult TryUseFirstAidKitAuthoritative(
+            PlayerRef requester,
+            LobbyPlayerState state,
+            NetworkId targetId)
+        {
+            if (!Object.HasStateAuthority || state == null || state.ToolId != 3)
+            {
+                return InteractionValidationResult.InvalidRequester;
+            }
+
+            var selfLifeState = GetComponent<NetworkPlayerLifeState>();
+            if (selfLifeState == null || !NetworkPlayerLifeStateRules.CanInitiateAction(selfLifeState.Status))
+            {
+                return InteractionValidationResult.InvalidRequester;
+            }
+
+            NetworkPlayerLifeState targetLife = null;
+            if (targetId.IsValid && targetId != Object.Id && Runner != null && Runner.TryFindObject(targetId, out var targetObj) && targetObj != null)
+            {
+                targetLife = targetObj.GetComponent<NetworkPlayerLifeState>();
+            }
+
+            // Case 1: Target ally is Downed → Revive ally (FAK is the only way to revive)
+            if (targetLife != null && targetLife.Status == NetworkPlayerLifeStatus.Downed)
+            {
+                if (Vector3.Distance(transform.position, targetLife.transform.position) <= 4f)
+                {
+                    if (targetLife.TryStartRevive(requester))
+                    {
+                        TeamToolOrdinal++;
+                        MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
+                            requester,
+                            $"player:{Object.Id}:tool:{TeamToolOrdinal}",
+                            "FIRST_AID_KIT");
+                        TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 2f);
+                        ConsumeGameplayTeamTool(state);
+                        return InteractionValidationResult.Accepted;
+                    }
+                }
+                return InteractionValidationResult.OutOfRange;
+            }
+
+            // FAK can only revive Downed allies — no heal on alive targets or self.
+            return InteractionValidationResult.InvalidTargetState;
         }
 
         private InteractionValidationResult TryUseNoiseMakerAuthoritative(

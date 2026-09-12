@@ -81,6 +81,13 @@ namespace EchoProtocol.AI.Stalker
                 return StalkerWorldInteractionStartResult.Completed;
             }
 
+            if (!door.IsBroken && door.CanMonsterOpen)
+            {
+                return door.TryOpenForMonsterAuthoritative()
+                    ? StalkerWorldInteractionStartResult.Completed
+                    : StalkerWorldInteractionStartResult.AuthorityRejected;
+            }
+
             if (!door.IsBroken)
             {
                 Begin(

@@ -86,7 +86,7 @@ namespace EchoProtocol.Networking
         public static event Action AnyStateChanged;
         public static event Action<LobbySelectionResult> LocalSelectionRequestCompleted;
 
-        [SerializeField, Min(1)] private int _teamCount = 2;
+        [SerializeField, Min(1)] private int _teamCount = 4;
         [SerializeField] private LobbyToolDefinition[] _toolDefinitions = Array.Empty<LobbyToolDefinition>();
 
         [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
@@ -167,7 +167,7 @@ namespace EchoProtocol.Networking
         public void SetGameplayToolId(int toolId)
         {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority
-                || toolId < 0 || toolId > 4)
+                || toolId < 0 || toolId > 6)
             {
                 return;
             }

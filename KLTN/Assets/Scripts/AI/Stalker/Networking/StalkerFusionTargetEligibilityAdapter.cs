@@ -12,7 +12,8 @@ namespace EchoProtocol.AI.Stalker.Networking
         public static StalkerTargetEligibilitySnapshot CreateActive(
             PlayerId playerId,
             bool isDowned,
-            bool isEliminated)
+            bool isEliminated,
+            bool hasOtherInvalidGameplayState = false)
         {
             if (!playerId.IsValid)
             {
@@ -24,7 +25,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 true,
                 isDowned,
                 isEliminated,
-                false);
+                hasOtherInvalidGameplayState);
         }
 
         public static StalkerTargetEligibilitySnapshot CreateDisconnected(PlayerId playerId)

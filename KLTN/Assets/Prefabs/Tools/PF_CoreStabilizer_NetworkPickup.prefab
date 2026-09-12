@@ -1,5 +1,39 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &327938582805330148
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8108514128092195619}
+  m_Layer: 0
+  m_Name: Visual
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8108514128092195619
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 327938582805330148}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 3000983581981555691}
+  - {fileID: 3842023836582363908}
+  - {fileID: 4695044531102474684}
+  m_Father: {fileID: 7245973814149835692}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &891125086226135971
 GameObject:
   m_ObjectHideFlags: 0
@@ -198,6 +232,8 @@ MonoBehaviour:
   _pickupPrompt: "Nh\u1EB7t Core Stabilizer [E]"
   _pickupCollider: {fileID: 5961755333606043316}
   _visualRenderer: {fileID: 3108371027692716188}
+  _WorldPosition: {x: 0, y: 0, z: 0}
+  _WorldRotation: {x: 0, y: 0, z: 0, w: 0}
 --- !u!1 &1149101410480643284
 GameObject:
   m_ObjectHideFlags: 0
@@ -5463,7 +5499,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 156814958344366226}
-  m_Father: {fileID: 5969839397156011889}
+  m_Father: {fileID: 8108514128092195619}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &4610583637820341916
 GameObject:
@@ -10552,7 +10588,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 5969839397156011889}
+  - {fileID: 8108514128092195619}
   - {fileID: 6888859226523300502}
   m_Father: {fileID: 604742588797210336}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -10641,41 +10677,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 4217834025287925380}
-  m_Father: {fileID: 5969839397156011889}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &6646898032006356324
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 5969839397156011889}
-  m_Layer: 0
-  m_Name: Visual
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &5969839397156011889
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6646898032006356324}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 3000983581981555691}
-  - {fileID: 3842023836582363908}
-  - {fileID: 4695044531102474684}
-  m_Father: {fileID: 7245973814149835692}
+  m_Father: {fileID: 8108514128092195619}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &6755680787429869888
 GameObject:
@@ -10708,7 +10710,7 @@ Transform:
   m_Children:
   - {fileID: 9154315082277698124}
   - {fileID: 4847940711590445858}
-  m_Father: {fileID: 5969839397156011889}
+  m_Father: {fileID: 8108514128092195619}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &8315110088663861748
 GameObject:

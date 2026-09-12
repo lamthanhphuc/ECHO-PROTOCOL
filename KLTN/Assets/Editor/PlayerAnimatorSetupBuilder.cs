@@ -553,9 +553,9 @@ public static class PlayerAnimatorSetupBuilder
                 clipChanged = true;
             }
 
-            if (!clip.lockRootPositionXZ)
+            if (clip.lockRootPositionXZ)
             {
-                clip.lockRootPositionXZ = true;
+                clip.lockRootPositionXZ = false;
                 clipChanged = true;
             }
 

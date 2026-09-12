@@ -137,8 +137,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.StalkerVisionSensor
   visionOrigin: {fileID: 100011}
   candidate: {fileID: 0}
-  visionDistance: 20
-  visionAngle: 120
+  visionDistance: 30
+  visionAngle: 140
   losBlockerMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -176,7 +176,7 @@ MonoBehaviour:
   chaseDestinationRefreshInterval: 0.5
   chasePredictionLeadSeconds: 0.2
   chasePredictionMaxDistance: 1.5
-  attackRange: 1.5
+  attackRange: 2.8
   attackWindup: 0.75
   attackRecovery: 1
   attackDamage: 100
@@ -230,6 +230,9 @@ MonoBehaviour:
   wallMultiplier: 0.25
   attackDamage: 25
   maximumDamageDistance: 2
+  catchEndsInDeath: 0
+  jumpscareSeconds: 2
+  catchCooldownSeconds: 2
   animator: {fileID: 1739994530661112979}
   animatorStateParameter: MonsterState
   _ReplicatedState: 0

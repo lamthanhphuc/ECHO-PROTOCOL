@@ -42,12 +42,14 @@ namespace EchoProtocol.Editor.Networking
             "Assets/Prefabs/Gameplay/Imported/PF_TeamToolPickup_NoiseMaker.prefab";
         private const string FirstAidTeamToolPickupPrefabPath =
             "Assets/Prefabs/Gameplay/Imported/PF_TeamToolPickup_FirstAid.prefab";
+        private const string PlankPickupPrefabPath =
+            "Assets/Prefabs/Gameplay/Imported/PF_Plank_Imported.prefab";
+        private const string PlankDefinitionPath =
+            "Assets/ScriptableObjects/Inventory/TeamTools/SO_Plank_ItemDefinition.asset";
         private const string DoorJammerPickupPrefabPath =
             "Assets/Prefabs/Gameplay/Imported/PF_TeamToolPickup_DoorJammer.prefab";
         private const string DoorJammerVisualSourcePath =
             "Assets/Resources/Network/PF_DoorJammer.prefab";
-        private const string DoorJammerHeldVisualPath =
-            "Assets/Prefabs/Gameplay/Imported/Visuals/PF_DoorJammer_HeldVisual.prefab";
         private const string SectorBoxPrefabPath =
             "Assets/Resources/Network/NetworkSectorBox.prefab";
 
@@ -303,7 +305,7 @@ namespace EchoProtocol.Editor.Networking
                 SetObject(networkInteractorSo.FindProperty("_fieldScannerPickupPrefab"), GetNetworkPrefab(FieldScannerPickupPrefabPath));
                 SetObject(networkInteractorSo.FindProperty("_noiseMakerPickupPrefab"), GetNetworkPrefab(NoiseMakerPickupPrefabPath));
                 SetObject(networkInteractorSo.FindProperty("_firstAidPickupPrefab"), GetNetworkPrefab(FirstAidTeamToolPickupPrefabPath));
-                SetObject(networkInteractorSo.FindProperty("_doorJammerPickupPrefab"), GetNetworkPrefab(DoorJammerPickupPrefabPath));
+                SetObject(networkInteractorSo.FindProperty("_doorJammerPickupPrefab"), GetNetworkPrefab(PlankPickupPrefabPath));
                 networkInteractorSo.ApplyModifiedPropertiesWithoutUndo();
             }
 
@@ -311,7 +313,7 @@ namespace EchoProtocol.Editor.Networking
             SetObject(inventorySo.FindProperty("fieldScannerDefinition"), AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(FieldScannerDefinitionPath));
             SetObject(inventorySo.FindProperty("noiseMakerDefinition"), AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(NoiseMakerDefinitionPath));
             SetObject(inventorySo.FindProperty("firstAidDefinition"), AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(FirstAidDefinitionPath));
-            SetObject(inventorySo.FindProperty("doorJammerDefinition"), AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(DoorJammerDefinitionPath));
+            SetObject(inventorySo.FindProperty("doorJammerDefinition"), AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(PlankDefinitionPath));
             inventorySo.ApplyModifiedPropertiesWithoutUndo();
 
             var carrierSo = new SerializedObject(coreCarrier);
@@ -351,7 +353,8 @@ namespace EchoProtocol.Editor.Networking
             toolViewSo.FindProperty("heldItemAnchor").objectReferenceValue = anchor;
             SetObject(toolViewSo.FindProperty("toolVisual_2"), AssetDatabase.LoadAssetAtPath<GameObject>(NoiseMakerClosedPrefabPath));
             SetObject(toolViewSo.FindProperty("toolVisual_3"), AssetDatabase.LoadAssetAtPath<GameObject>(FirstAidPickupPrefabPath));
-            SetObject(toolViewSo.FindProperty("toolVisual_4"), AssetDatabase.LoadAssetAtPath<GameObject>(DoorJammerHeldVisualPath));
+            GameObject plankHeldVisual = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Gameplay/Imported/PF_Plank_HeldVisual.prefab");
+            SetObject(toolViewSo.FindProperty("toolVisual_4"), plankHeldVisual != null ? plankHeldVisual : AssetDatabase.LoadAssetAtPath<GameObject>(PlankPickupPrefabPath));
             SetVector3(toolViewSo.FindProperty("noiseMakerLocalPosition"), new Vector3(0.018f, 0.132f, -0.065f));
             SetVector3(toolViewSo.FindProperty("noiseMakerLocalEulerAngles"), new Vector3(6.176f, 93.2f, 94.562f));
             SetVector3(toolViewSo.FindProperty("noiseMakerLocalScale"), new Vector3(0.7f, 0.7f, 0.7f));

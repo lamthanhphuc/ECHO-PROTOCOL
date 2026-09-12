@@ -63,7 +63,7 @@ namespace EchoProtocol.Editor
             bool modified = false;
 
             // 1. Destroy all Motion Decoy objects (visuals, pickups) and old static stabilizer visuals
-            foreach (var go in Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var go in Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include))
             {
                 if (go != null && (go.name.StartsWith("PF_MotionDecoy_") || go.name.StartsWith("PF_CoreStabilizer_Device_Visual")))
                 {
@@ -75,7 +75,7 @@ namespace EchoProtocol.Editor
             // 2. Ensure Core Stabilizer Network Pickup is in scene
             var stabilizerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(CoreStabilizerNetworkPickupPath);
             bool hasStabilizer = false;
-            foreach (var pickup in Object.FindObjectsByType<NetworkToolPickup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var pickup in Object.FindObjectsByType<NetworkToolPickup>(FindObjectsInactive.Include))
             {
                 if (pickup != null && pickup.name.Contains("CoreStabilizer"))
                 {
@@ -97,7 +97,7 @@ namespace EchoProtocol.Editor
             var suitMat = AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/PlayerCharacter/M_PF_PlayerCharacter_P1_Default_Suit.mat");
             if (suitMat != null)
             {
-                foreach (var smr in Object.FindObjectsByType<SkinnedMeshRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                foreach (var smr in Object.FindObjectsByType<SkinnedMeshRenderer>(FindObjectsInactive.Include))
                 {
                     if (smr != null && smr.name == "FirstPersonArms")
                     {

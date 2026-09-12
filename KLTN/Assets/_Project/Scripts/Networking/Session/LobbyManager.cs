@@ -15,6 +15,7 @@ namespace EchoProtocol.Networking
         public const string GameSceneName = "SciFi";
 
         [SerializeField] private NetworkBootstrap _bootstrap;
+        private bool _matchStartInProgress;
 
         public event Action<RoomInfoViewModel> OnRoomUpdated;
         public event Action<string> OnLobbyError;
@@ -122,6 +123,12 @@ namespace EchoProtocol.Networking
 
         public bool TryStartMatch()
         {
+            if (_matchStartInProgress)
+            {
+                Debug.LogWarning("[LobbyManager] Start match ignored: a match start is already in progress.");
+                return false;
+            }
+
             var runner = _bootstrap?.Runner;
             if (runner == null || !runner.IsRunning || !runner.IsServer || !runner.IsSceneAuthority)
             {
@@ -136,24 +143,39 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            _matchStartInProgress = true;
+
             Debug.Log($"[LobbyManager] Host validated {state.CurrentPlayers} ready players. Confirming backend authority.");
+
             MatchAuthorityRuntime.EnsureExists(_bootstrap).StartMatch((accepted, error) =>
             {
                 if (!accepted)
                 {
+                    _matchStartInProgress = false;
                     ReportError($"Backend rejected match start: {error}");
+                    return;
+                }
+
+                if (runner == null || !runner.IsRunning || !runner.IsServer || !runner.IsSceneAuthority)
+                {
+                    _matchStartInProgress = false;
+                    ReportError("Match start aborted: authoritative runner is no longer available.");
                     return;
                 }
 
                 if (!_bootstrap.CloseRoomForMatchStart())
                 {
+                    _matchStartInProgress = false;
                     ReportError("Could not close the Fusion room before match start.");
                     return;
                 }
 
                 Debug.Log($"[LobbyManager] Backend confirmed match. Loading '{GameSceneName}'.");
-                _ = runner.LoadScene(GameSceneName, UnityEngine.SceneManagement.LoadSceneMode.Single);
+                _ = runner.LoadScene(
+                    GameSceneName,
+                    UnityEngine.SceneManagement.LoadSceneMode.Single);
             });
+
             return true;
         }
 

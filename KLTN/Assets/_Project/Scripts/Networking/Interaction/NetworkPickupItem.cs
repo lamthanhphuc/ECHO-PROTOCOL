@@ -37,7 +37,7 @@ namespace EchoProtocol.Networking
 
         [SerializeField] private Renderer _availableVisual;
         [SerializeField] private Collider _pickupCollider;
-        [SerializeField] private Vector3 _holderLocalPosition = new Vector3(0.35f, 0.9f, 0.45f);
+        [SerializeField] private Vector3 _holderLocalPosition = new Vector3(0f, 1.25f, 0.35f);
         [SerializeField] private Vector3 _holderLocalEulerAngles;
 
         [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
@@ -62,19 +62,43 @@ namespace EchoProtocol.Networking
         {
             if (Object.HasStateAuthority)
             {
-                State = NetworkItemState.Available;
-                Holder = PlayerRef.None;
-                TransitionOrdinal = 0;
-                PlacedSectorId = default;
-                PlacementSlot = -1;
-                WorldPosition = transform.position;
-                WorldRotation = transform.rotation;
+                InitializeAuthoritativePose(transform.position, transform.rotation);
             }
+            if (gameObject.name.StartsWith("PF_EnergyCore_Imported", StringComparison.OrdinalIgnoreCase))
+            {
+                gameObject.name = $"EnergyCore_Network_{Object.Id}";
+            }
+            ApplyReplicatedState();
+        }
+
+        public void InitializeAuthoritativePose(Vector3 position, Quaternion rotation)
+        {
+            if (Object != null && Object.IsValid && !Object.HasStateAuthority)
+            {
+                return;
+            }
+
+            State = NetworkItemState.Available;
+            Holder = PlayerRef.None;
+            TransitionOrdinal = 0;
+            PlacedSectorId = default;
+            PlacementSlot = -1;
+            WorldPosition = position;
+            WorldRotation = rotation;
+            transform.SetPositionAndRotation(position, rotation);
             ApplyReplicatedState();
         }
 
         public override void FixedUpdateNetwork()
         {
+            if (State == NetworkItemState.Carried)
+            {
+                if (_pickupCollider != null && _pickupCollider.enabled)
+                {
+                    _pickupCollider.enabled = false;
+                }
+            }
+
             if (!Object.HasStateAuthority || State != NetworkItemState.Carried) return;
 
             if (TryGetHolderPose(out var carriedPosition, out var carriedRotation))
@@ -214,6 +238,14 @@ namespace EchoProtocol.Networking
 
         private void ApplyReplicatedPose()
         {
+            if (WorldRotation.x == 0f
+                && WorldRotation.y == 0f
+                && WorldRotation.z == 0f
+                && WorldRotation.w == 0f)
+            {
+                return;
+            }
+
             if (State == NetworkItemState.Carried && TryGetHolderPose(out var position, out var rotation))
             {
                 transform.SetPositionAndRotation(position, rotation);
@@ -229,8 +261,7 @@ namespace EchoProtocol.Networking
                 && Runner != null
                 && IsActivePlayer(Holder)
                 && Runner.TryGetPlayerObject(Holder, out var playerObject)
-                && playerObject != null
-                && playerObject.InputAuthority == Holder)
+                && playerObject != null)
             {
                 Transform coreAnchor = PlayerHeldItemAnchor.ResolveCoreCarryAnchor(playerObject.gameObject);
                 if (coreAnchor != null)

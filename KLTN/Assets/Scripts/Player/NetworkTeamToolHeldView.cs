@@ -26,23 +26,23 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
     [SerializeField] private Vector3 fieldScannerChildLocalPosition = new Vector3(0f, 0.04f, 0f);
     [SerializeField] private Vector3 fieldScannerChildLocalEulerAngles = Vector3.zero;
     [SerializeField] private Vector3 fieldScannerChildLocalScale = Vector3.one;
-    [SerializeField] private Vector3 noiseMakerLocalPosition = new Vector3(0.018f, 0.132f, -0.065f);
+    [SerializeField] private Vector3 noiseMakerLocalPosition = new Vector3(0.018f, 0.16f, 0.02f);
     [SerializeField] private Vector3 noiseMakerLocalEulerAngles = new Vector3(6.176f, 93.2f, 94.562f);
     [SerializeField] private Vector3 noiseMakerLocalScale = new Vector3(0.7f, 0.7f, 0.7f);
-    [SerializeField] private Vector3 firstAidLocalPosition = new Vector3(0.035f, -0.015f, 0.155f);
+    [SerializeField] private Vector3 firstAidLocalPosition = new Vector3(0.035f, 0.16f, 0.14f);
     [SerializeField] private Vector3 firstAidLocalEulerAngles = new Vector3(8f, 92f, 170f);
     [SerializeField] private Vector3 firstAidLocalScale = new Vector3(0.15f, 0.15f, 0.3f);
-    [SerializeField] private Vector3 firstAidChildLocalPosition = new Vector3(-0.533528f, -3.405526f, -0.3114559f);
-    [SerializeField] private Vector3 firstAidChildLocalEulerAngles = new Vector3(0.12f, -0.416f, 5.923f);
+    [SerializeField] private Vector3 firstAidChildLocalPosition = Vector3.zero;
+    [SerializeField] private Vector3 firstAidChildLocalEulerAngles = Vector3.zero;
     [SerializeField] private Vector3 firstAidChildLocalScale = Vector3.one;
-    [SerializeField] private Vector3 plankLocalPosition = Vector3.zero;
-    [SerializeField] private Vector3 plankLocalEulerAngles = Vector3.zero;
-    [SerializeField] private Vector3 plankLocalScale = Vector3.one;
-    [SerializeField] private Vector3 plankChildLocalPosition = new Vector3(0.0151f, 0.0386f, -0.0076f);
-    [SerializeField] private Vector3 plankChildLocalEulerAngles = new Vector3(90f, 0f, 0f);
-    [SerializeField] private Vector3 plankChildLocalScale = new Vector3(22.23983f, 0.5456054f, 2.985957f);
+    [SerializeField] private Vector3 plankLocalPosition = new Vector3(0.022f, 0.172f, 0.034f);
+    [SerializeField] private Vector3 plankLocalEulerAngles = new Vector3(90f, 0f, 90f);
+    [SerializeField] private Vector3 plankLocalScale = new Vector3(5f, 5f, 5f);
+    [SerializeField] private Vector3 plankChildLocalPosition = Vector3.zero;
+    [SerializeField] private Vector3 plankChildLocalEulerAngles = Vector3.zero;
+    [SerializeField] private Vector3 plankChildLocalScale = Vector3.one;
     [Header("Core Stabilizer Transform")]
-    [SerializeField] private Vector3 coreStabilizerLocalPosition = new Vector3(0.035f, 0.02f, 0.12f);
+    [SerializeField] private Vector3 coreStabilizerLocalPosition = new Vector3(0.035f, 0.18f, 0.12f);
     [SerializeField] private Vector3 coreStabilizerLocalEulerAngles = new Vector3(10f, 90f, -15f);
     [SerializeField] private Vector3 coreStabilizerLocalScale = new Vector3(0.45f, 0.45f, 0.45f);
 
@@ -118,37 +118,38 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         GameObject sourcePrefab = ResolveToolPrefab(_shownToolId);
         if (sourcePrefab != null)
         {
-            // Instantiate prefab thực
-            _visual = Instantiate(sourcePrefab, anchor);
+            // Instantiate visual an toàn (tuyệt đối không instantiate prefab có NetworkObject)
+            _visual = InstantiateHeldVisualSafely(sourcePrefab, anchor);
+            if (_visual == null) return;
             _visual.name = "Held_TeamTool_" + _shownToolId;
             _visual.transform.localPosition = ResolveToolPosition(_shownToolId);
             _visual.transform.localRotation = Quaternion.Euler(ResolveToolEulerAngles(_shownToolId));
             _visual.transform.localScale = ResolveToolScale(_shownToolId);
 
-            // Tắt tất cả collider trên held visual để không ảnh hưởng gameplay
+            // Tắt tất cả collider, audio, physics, networking trên held visual để không ảnh hưởng gameplay
             foreach (var c in _visual.GetComponentsInChildren<Collider>(true))
                 c.enabled = false;
             foreach (var audio in _visual.GetComponentsInChildren<AudioSource>(true))
                 audio.enabled = false;
-            foreach (var pickup in _visual.GetComponentsInChildren<EchoProtocol.Tools.Scanner.NetworkToolPickup>(true))
-                pickup.enabled = false;
-            foreach (var netObj in _visual.GetComponentsInChildren<NetworkObject>(true))
-                Destroy(netObj);
-
-            foreach (var networkObject in _visual.GetComponentsInChildren<NetworkObject>(true))
-                networkObject.enabled = false;
-
-            foreach (var networkBehaviour in _visual.GetComponentsInChildren<NetworkBehaviour>(true))
-                networkBehaviour.enabled = false;
-
-            foreach (var pickup in _visual.GetComponentsInChildren<NetworkTeamToolPickup>(true))
-                pickup.enabled = false;
-
             foreach (var body in _visual.GetComponentsInChildren<Rigidbody>(true))
             {
                 body.detectCollisions = false;
-                body.useGravity = false;
                 body.isKinematic = true;
+            }
+            foreach (var netObj in _visual.GetComponentsInChildren<NetworkObject>(true))
+                netObj.enabled = false;
+            foreach (var networkBehaviour in _visual.GetComponentsInChildren<NetworkBehaviour>(true))
+                networkBehaviour.enabled = false;
+            foreach (var mono in _visual.GetComponentsInChildren<MonoBehaviour>(true))
+            {
+                if (mono is not EchoProtocol.Tools.Scanner.FieldScannerScreenView &&
+                    mono is not EchoProtocol.Tools.Scanner.FieldScannerAudio &&
+                    mono is not TMPro.TMP_Text &&
+                    mono is not UnityEngine.UI.Graphic &&
+                    mono is not UnityEngine.UI.CanvasScaler)
+                {
+                    mono.enabled = false;
+                }
             }
 
             if (_shownToolId == 1)
@@ -181,38 +182,15 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             }
             else if (_shownToolId == 4)
             {
-                Transform childVisual = _visual.transform.Find("Visual");
-                if (childVisual == null && _visual.transform.childCount > 0)
-                {
-                    childVisual = _visual.transform.GetChild(0);
-                }
-                if (childVisual != null)
-                {
-                    childVisual.localPosition = plankChildLocalPosition;
-                    childVisual.localRotation = Quaternion.Euler(plankChildLocalEulerAngles);
-                    childVisual.localScale = plankChildLocalScale;
-                }
+                // Preserve native FBX imported plank aspect ratio and child transform.
+                // Do not override childVisual.localScale with uniform scale as Plank4.fbx
+                // requires its non-uniform node scaling (22.24, 0.55, 2.99) to be a plank instead of a cube.
             }
         }
         else
         {
-            // Fallback: cube màu như cũ
-            _visual = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            _visual.name = "Held_TeamTool_" + _shownToolId;
-            _visual.transform.SetParent(anchor, false);
-            _visual.transform.localPosition = ResolveToolPosition(_shownToolId);
-            _visual.transform.localRotation = Quaternion.Euler(ResolveToolEulerAngles(_shownToolId));
-            _visual.transform.localScale = ResolveToolScale(_shownToolId);
-
-            Collider visualCollider = _visual.GetComponent<Collider>();
-            if (visualCollider != null) visualCollider.enabled = false;
-
-            Renderer renderer = _visual.GetComponent<Renderer>();
-            if (renderer != null)
-            {
-                renderer.material = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
-                renderer.material.color = ResolveToolColor(_shownToolId);
-            }
+            // Do NOT create a primitive cube placeholder.
+            Debug.LogWarning($"[NetworkTeamToolHeldView] No visual prefab assigned or found for toolId={_shownToolId}. Skipping visual.");
         }
     }
 
@@ -220,12 +198,33 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
     {
         switch (toolId)
         {
-            case 1: return toolVisual_1;
-            case 2: return toolVisual_2;
-            case 3: return toolVisual_3;
-            case 4: return toolVisual_4;
-            case 6: return toolVisual_6;
-            default: return null;
+            case 1:
+                if (toolVisual_1 != null) return toolVisual_1;
+                if (_localHeldItemView != null && _localHeldItemView.FieldScannerHeldPrefab != null) return _localHeldItemView.FieldScannerHeldPrefab;
+                return Resources.Load<GameObject>("PF_FieldScanner");
+            case 2:
+                if (toolVisual_2 != null) return toolVisual_2;
+                return Resources.Load<GameObject>("DistressBeaconClosed");
+            case 3:
+                if (toolVisual_3 != null) return toolVisual_3;
+                return Resources.Load<GameObject>("PF_FirstAidPickup_Imported");
+            case 4:
+                if (toolVisual_4 != null) return toolVisual_4;
+                if (_localInventory != null && _localInventory.DoorJammerDefinition != null && _localInventory.DoorJammerDefinition.TeamToolGameplayPrefab != null)
+                {
+                    return _localInventory.DoorJammerDefinition.TeamToolGameplayPrefab;
+                }
+#if UNITY_EDITOR
+                var visualPlank = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Gameplay/Imported/PF_Plank_HeldVisual.prefab");
+                if (visualPlank != null) return visualPlank;
+#endif
+                return Resources.Load<GameObject>("PF_Plank_HeldVisual")
+                    ?? Resources.Load<GameObject>("Prefabs/Gameplay/Imported/PF_Plank_HeldVisual")
+                    ?? toolVisual_4;
+            case 6:
+                return toolVisual_6;
+            default:
+                return null;
         }
     }
 
@@ -307,5 +306,74 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
 
         _visual = null;
         _shownToolId = 0;
+    }
+
+    public static GameObject InstantiateHeldVisualSafely(GameObject sourcePrefab, Transform anchor)
+    {
+        if (sourcePrefab == null || anchor == null) return null;
+
+        var netObj = sourcePrefab.GetComponentInChildren<Fusion.NetworkObject>(true);
+        var netBeh = sourcePrefab.GetComponentInChildren<Fusion.NetworkBehaviour>(true);
+
+        if (netObj == null && netBeh == null)
+        {
+            return Instantiate(sourcePrefab, anchor);
+        }
+
+        Debug.LogWarning($"[NetworkTeamToolHeldView] Prefab '{sourcePrefab.name}' contains Fusion NetworkObject/NetworkBehaviour! Creating a sanitized visual-only clone to prevent native crash.");
+
+        GameObject visualContainer = new GameObject(sourcePrefab.name + "_VisualClone");
+        visualContainer.transform.SetParent(anchor, false);
+        visualContainer.transform.localPosition = Vector3.zero;
+        visualContainer.transform.localRotation = Quaternion.identity;
+        visualContainer.transform.localScale = sourcePrefab.transform.localScale;
+
+        CopyVisualHierarchySafely(sourcePrefab.transform, visualContainer.transform);
+        return visualContainer;
+    }
+
+    public static void CopyVisualHierarchySafely(Transform source, Transform target)
+    {
+        if (source.TryGetComponent<MeshFilter>(out var mf) && mf.sharedMesh != null)
+        {
+            var targetMf = target.gameObject.AddComponent<MeshFilter>();
+            targetMf.sharedMesh = mf.sharedMesh;
+        }
+
+        if (source.TryGetComponent<MeshRenderer>(out var mr))
+        {
+            var targetMr = target.gameObject.AddComponent<MeshRenderer>();
+            targetMr.sharedMaterials = mr.sharedMaterials;
+            targetMr.shadowCastingMode = mr.shadowCastingMode;
+            targetMr.receiveShadows = mr.receiveShadows;
+            targetMr.enabled = mr.enabled;
+        }
+
+        if (source.TryGetComponent<SkinnedMeshRenderer>(out var smr))
+        {
+            var targetSmr = target.gameObject.AddComponent<SkinnedMeshRenderer>();
+            targetSmr.sharedMesh = smr.sharedMesh;
+            targetSmr.sharedMaterials = smr.sharedMaterials;
+            targetSmr.shadowCastingMode = smr.shadowCastingMode;
+            targetSmr.receiveShadows = smr.receiveShadows;
+            targetSmr.enabled = smr.enabled;
+        }
+
+        for (int i = 0; i < source.childCount; i++)
+        {
+            Transform child = source.GetChild(i);
+            if (child.GetComponentsInChildren<Renderer>(true).Length == 0)
+            {
+                continue;
+            }
+
+            GameObject childObj = new GameObject(child.name);
+            childObj.transform.SetParent(target, false);
+            childObj.transform.localPosition = child.localPosition;
+            childObj.transform.localRotation = child.localRotation;
+            childObj.transform.localScale = child.localScale;
+
+            CopyVisualHierarchySafely(child, childObj.transform);
+        }
     }
 }

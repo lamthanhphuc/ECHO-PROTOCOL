@@ -101,9 +101,16 @@ public class PlayerHidingController : MonoBehaviour
         {
             movement.enabled = false;
         }
+
+        if (networkMovement == null)
+        {
+            networkMovement = GetComponent<EchoProtocol.Networking.NetworkPlayerMovement>();
+        }
+
         if (networkMovement != null)
         {
-            networkMovement.enabled = false;
+            Quaternion targetRot = Quaternion.Euler(0f, spot.HidePoint.eulerAngles.y, 0f);
+            networkMovement.RpcRequestSetHiding(true, spot.HidePoint.position, targetRot);
         }
 
         MoveToHidingPoint(spot.HidePoint);
@@ -136,6 +143,17 @@ public class PlayerHidingController : MonoBehaviour
             _playerCameraController.UnlockPitch();
         }
 
+        if (networkMovement == null)
+        {
+            networkMovement = GetComponent<EchoProtocol.Networking.NetworkPlayerMovement>();
+        }
+
+        if (networkMovement != null && exitPoint != null)
+        {
+            Quaternion exitRot = Quaternion.Euler(0f, exitPoint.eulerAngles.y, 0f);
+            networkMovement.RpcRequestSetHiding(false, exitPoint.position, exitRot);
+        }
+
         if (exitPoint != null)
         {
             MoveToHidingPoint(exitPoint);
@@ -144,10 +162,6 @@ public class PlayerHidingController : MonoBehaviour
         if (movement != null)
         {
             movement.enabled = true;
-        }
-        if (networkMovement != null)
-        {
-            networkMovement.enabled = true;
         }
 
         if (_playerCameraController != null)
@@ -178,6 +192,13 @@ public class PlayerHidingController : MonoBehaviour
         }
 
         Quaternion targetRot = Quaternion.Euler(0f, point.eulerAngles.y, 0f);
+
+        if (networkMovement != null)
+        {
+            networkMovement.TeleportAuthoritative(point.position, targetRot);
+            UpdateCameraPose(point);
+            return;
+        }
 
         bool canNetworkTeleport = _networkCharacterController != null
             && _networkCharacterController.Object != null

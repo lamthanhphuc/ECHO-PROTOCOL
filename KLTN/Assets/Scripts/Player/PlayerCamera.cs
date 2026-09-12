@@ -7,17 +7,21 @@ public class PlayerCamera : MonoBehaviour
     [SerializeField] private InputActionAsset inputActions;
     [SerializeField] private float mouseSensitivity = 0.12f;
     [SerializeField] private float eyeHeight = 1.65f;
-    [SerializeField] private float crouchEyeHeight = 1.05f;
+    [SerializeField] private float crouchEyeHeight = 1.45f;
+    [SerializeField] private float downedEyeHeight = 0.65f;
     [SerializeField] private float eyeHeightTransitionSpeed = 10f;
-    [SerializeField] private float minPitch = -85f;
-    [SerializeField] private float maxPitch = 85f;
-    [SerializeField] private float cameraForwardOffset = 0.18f;
+    [SerializeField] private float minPitch = -65f;
+    [SerializeField] private float maxPitch = 45f;
+    [SerializeField] private float cameraForwardOffset = 0.13f;
     [SerializeField] private float nearClipPlane = 0.03f;
     [SerializeField] private bool lockCursorOnEnable = true;
 
     private InputAction _lookAction;
     private PlayerMovement _playerMovement;
+    private EchoProtocol.Networking.NetworkPlayerMovement _networkMovement;
     private CharacterController _characterController;
+    private EchoProtocol.Networking.NetworkPlayerLifeState _networkLifeState;
+    private PlayerDownState _playerDownState;
     private float _pitch;
     private float _yaw;
     private float _currentEyeHeight;
@@ -34,7 +38,10 @@ public class PlayerCamera : MonoBehaviour
     {
         target = newTarget;
         _playerMovement = target != null ? target.GetComponent<PlayerMovement>() : null;
+        _networkMovement = target != null ? target.GetComponent<EchoProtocol.Networking.NetworkPlayerMovement>() : null;
         _characterController = target != null ? target.GetComponent<CharacterController>() : null;
+        _networkLifeState = target != null ? target.GetComponent<EchoProtocol.Networking.NetworkPlayerLifeState>() : null;
+        _playerDownState = target != null ? target.GetComponent<PlayerDownState>() : null;
 
         if (target != null)
         {
@@ -160,6 +167,9 @@ public class PlayerCamera : MonoBehaviour
             ? _lookAction.ReadValue<Vector2>()
             : Vector2.zero;
 
+        if (_networkLifeState != null && (_networkLifeState.IsCaught || _networkLifeState.IsEliminated))
+            lookInput = Vector2.zero;
+
         float yawDelta = lookInput.x * mouseSensitivity;
         float pitchDelta = lookInput.y * mouseSensitivity;
 
@@ -184,11 +194,34 @@ public class PlayerCamera : MonoBehaviour
             _pitch = Mathf.Clamp(_pitch - pitchDelta, minPitch, maxPitch);
         }
 
+        if (_networkLifeState == null && target != null)
+        {
+            _networkLifeState = target.GetComponent<EchoProtocol.Networking.NetworkPlayerLifeState>();
+        }
+        if (_networkMovement == null && target != null)
+        {
+            _networkMovement = target.GetComponent<EchoProtocol.Networking.NetworkPlayerMovement>();
+        }
+        if (_playerMovement == null && target != null)
+        {
+            _playerMovement = target.GetComponent<PlayerMovement>();
+        }
+        if (_playerDownState == null && target != null)
+        {
+            _playerDownState = target.GetComponent<PlayerDownState>();
+        }
+
+        bool isDowned = (_networkLifeState != null && _networkLifeState.IsDowned)
+            || (_playerDownState != null && _playerDownState.IsDowned);
+
         float targetEyeHeight =
             _forcedEyeHeight ??
-            (_playerMovement != null && _playerMovement.IsCrouching
-                ? crouchEyeHeight
-                : eyeHeight);
+            (isDowned
+                ? downedEyeHeight
+                : ((_playerMovement != null && _playerMovement.IsCrouching)
+                   || (_networkMovement != null && _networkMovement.IsAnimationCrouching)
+                    ? crouchEyeHeight
+                    : eyeHeight));
 
         _currentEyeHeight = Mathf.Lerp(
             _currentEyeHeight,

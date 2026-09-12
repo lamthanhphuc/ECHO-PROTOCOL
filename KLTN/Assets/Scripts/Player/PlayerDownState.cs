@@ -124,6 +124,18 @@ public class PlayerDownState : MonoBehaviour
         return true;
     }
 
+    public bool ApplyHeal(float amount)
+    {
+        if (_networkAuthorityPresentationOnly || !IsActive || _health >= maxHealth)
+        {
+            return false;
+        }
+
+        _health = Mathf.Min(maxHealth, _health + amount);
+        StateChanged?.Invoke(this, _state);
+        return true;
+    }
+
     public void Down()
     {
         if (_networkAuthorityPresentationOnly) return;
