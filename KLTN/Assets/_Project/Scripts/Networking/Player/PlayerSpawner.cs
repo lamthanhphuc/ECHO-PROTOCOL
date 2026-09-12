@@ -140,6 +140,7 @@ namespace EchoProtocol.Networking
                 _doorInstance = runner.Spawn(_doorPrefab, new Vector3(0f, 1f, 2.5f), Quaternion.identity);
                 Debug.Log($"[PlayerSpawner] Spawned authoritative door {_doorInstance.Id}.");
             }
+            RegisterExistingNetworkSectorBoxes();
             while (_energyCoreInstances.Count < _energyCoreCount && _pickupItemPrefab != null)
             {
                 var index = _energyCoreInstances.Count;
@@ -223,16 +224,18 @@ namespace EchoProtocol.Networking
 
         private void BindAuthoritativeWorldState()
         {
-            if (_matchStateInstance == null || _doorInstance == null || _sectorBoxInstance == null)
+            RegisterExistingNetworkSectorBoxes();
+            if (_matchStateInstance == null || _sectorBoxInstance == null)
             {
                 return;
             }
 
             if (_matchStateInstance.TryGetComponent<NetworkMatchState>(out var matchState))
             {
-                matchState.InitializeAuthoritative(_sectorBoxInstance.Id, _doorInstance.Id);
+                var doorId = _doorInstance != null ? _doorInstance.Id : default;
+                matchState.InitializeAuthoritative(_sectorBoxInstance.Id, doorId);
             }
-            if (_doorInstance.TryGetComponent<NetworkDoor>(out var door))
+            if (_doorInstance != null && _doorInstance.TryGetComponent<NetworkDoor>(out var door))
             {
                 door.InitializeAuthoritative(_matchStateInstance.Id);
             }
@@ -242,6 +245,31 @@ namespace EchoProtocol.Networking
                 {
                     sectorBox.InitializeAuthoritative(_matchStateInstance.Id);
                 }
+            }
+        }
+
+        private void RegisterExistingNetworkSectorBoxes()
+        {
+            var boxes = FindObjectsByType<NetworkSectorBox>(FindObjectsInactive.Include);
+            System.Array.Sort(boxes, (left, right) => string.CompareOrdinal(left.name, right.name));
+            for (int i = 0; i < boxes.Length; i++)
+            {
+                var box = boxes[i];
+                if (box == null || box.Object == null || !box.Object.IsValid)
+                {
+                    continue;
+                }
+
+                if (!_sectorBoxInstances.Contains(box.Object))
+                {
+                    _sectorBoxInstances.Add(box.Object);
+                    Debug.Log($"[PlayerSpawner] Registered existing Network Sector Box '{box.name}': {box.Object.Id}.");
+                }
+            }
+
+            if (_sectorBoxInstance == null && _sectorBoxInstances.Count > 0)
+            {
+                _sectorBoxInstance = _sectorBoxInstances[0];
             }
         }
 
@@ -469,6 +497,11 @@ namespace EchoProtocol.Networking
 
             foreach (var legacySector in FindObjectsByType<SectorBox>(FindObjectsInactive.Include))
             {
+                foreach (var sectorCollider in legacySector.GetComponentsInChildren<Collider>(true))
+                {
+                    sectorCollider.enabled = false;
+                }
+
                 legacySector.enabled = false;
             }
 

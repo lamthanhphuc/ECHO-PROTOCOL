@@ -152,7 +152,7 @@ namespace EchoProtocol.Networking
 
         public void InitializeAuthoritative(NetworkId objectiveSourceId, NetworkId escapeDoorId)
         {
-            if (!Object.HasStateAuthority || !objectiveSourceId.IsValid || !escapeDoorId.IsValid) return;
+            if (!Object.HasStateAuthority || !objectiveSourceId.IsValid) return;
 
             ObjectiveSourceId = objectiveSourceId;
             EscapeDoorId = escapeDoorId;
