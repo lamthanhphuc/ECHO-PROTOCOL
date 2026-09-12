@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
 using Fusion;
 using UnityEngine;
@@ -136,6 +137,26 @@ namespace EchoProtocol.Networking.Authority
         public void Expire(DateTime nowUtc)
         {
             _noiseSystem.Expire(nowUtc);
+        }
+
+        /// <summary>
+        /// Returns the currently active authoritative noise events.
+        ///
+        /// The returned collection is a snapshot owned by RuntimeNoiseSystem;
+        /// callers cannot mutate the authoritative noise store.
+        /// </summary>
+        public IReadOnlyList<RuntimeNoiseEvent> GetActiveEvents(
+            DateTime nowUtc)
+        {
+            if (nowUtc.Kind != DateTimeKind.Utc)
+            {
+                throw new ArgumentException(
+                    "Runtime noise snapshot time must be UTC.",
+                    nameof(nowUtc));
+            }
+
+            return _noiseSystem.GetActiveEvents(
+                nowUtc);
         }
 
         public void EndMatch()

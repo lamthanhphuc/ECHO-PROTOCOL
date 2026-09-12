@@ -75,6 +75,45 @@ namespace EchoProtocol.AI.Stalker
             _currentRecoveryReason = reason;
         }
 
+        public bool TryReattachToNearestNavMesh(float maxSampleDistance)
+        {
+            if (_agent == null || !_agent.enabled)
+            {
+                _currentFailureReason = NavigationFailureReason.AgentUnavailable;
+                return false;
+            }
+
+            if (_agent.isOnNavMesh)
+            {
+                _currentFailureReason = NavigationFailureReason.None;
+                return true;
+            }
+
+            var sampleDistance = Mathf.Max(0.01f, maxSampleDistance);
+            if (!NavMesh.SamplePosition(
+                    _agent.transform.position,
+                    out var hit,
+                    sampleDistance,
+                    _agent.areaMask))
+            {
+                _currentFailureReason = NavigationFailureReason.AgentNotOnNavMesh;
+                return false;
+            }
+
+            if (!_agent.Warp(hit.position) || !_agent.isOnNavMesh)
+            {
+                _currentFailureReason = NavigationFailureReason.AgentNotOnNavMesh;
+                return false;
+            }
+
+            _pathPendingElapsedSeconds = 0f;
+            _pathPendingTimedOut = false;
+            _currentFailureReason = NavigationFailureReason.None;
+            _progressMonitor.Reset();
+
+            return true;
+        }
+
         public bool HasArrived()
         {
             if (GetPathStatus() != NavigationPathStatus.Complete

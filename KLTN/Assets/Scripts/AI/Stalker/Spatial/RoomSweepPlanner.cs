@@ -8,6 +8,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
         private readonly NavMeshSpatialGraph _spatialGraph;
         private readonly RegionGraph _regionGraph;
         private readonly RoomSweepCoverageMemory _coverageMemory;
+        private bool _useSeededVariation;
+        private int _variationSeed;
         private readonly List<int> _activeProbeNodeIds = new List<int>();
         private readonly HashSet<int> _activeProbeNodeSet = new HashSet<int>();
         private readonly HashSet<int> _rejectedProbeNodeIds = new HashSet<int>();
@@ -20,7 +22,29 @@ namespace EchoProtocol.AI.Stalker.Spatial
             _spatialGraph = spatialGraph;
             _regionGraph = regionGraph;
             _coverageMemory = coverageMemory;
+            _useSeededVariation = false;
+            _variationSeed = 0;
             CurrentRegionId = RegionId.Invalid;
+        }
+
+        public RoomSweepPlanner(
+            NavMeshSpatialGraph spatialGraph,
+            RegionGraph regionGraph,
+            RoomSweepCoverageMemory coverageMemory,
+            int variationSeed)
+        {
+            _spatialGraph = spatialGraph;
+            _regionGraph = regionGraph;
+            _coverageMemory = coverageMemory;
+            _useSeededVariation = true;
+            _variationSeed = variationSeed;
+            CurrentRegionId = RegionId.Invalid;
+        }
+
+        public void ConfigureVariation(int variationSeed)
+        {
+            _variationSeed = variationSeed;
+            _useSeededVariation = true;
         }
 
         public RegionId CurrentRegionId { get; private set; }
@@ -119,7 +143,9 @@ namespace EchoProtocol.AI.Stalker.Spatial
             candidates.Sort();
             if (_spatialGraph == null || !_spatialGraph.TryGetNode(currentSpatialNodeId, out _))
             {
-                targetSpatialNodeId = candidates[0];
+                targetSpatialNodeId = _useSeededVariation
+                    ? SelectSeededCandidate(candidates)
+                    : candidates[0];
                 return true;
             }
 
@@ -137,8 +163,61 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 }
             }
 
-            targetSpatialNodeId = bestNodeId;
+            if (!_useSeededVariation)
+            {
+                targetSpatialNodeId = bestNodeId;
+                return true;
+            }
+
+            var selectionPool = new List<int>();
+            if (bestDistance == int.MaxValue)
+            {
+                selectionPool.AddRange(candidates);
+            }
+            else
+            {
+                for (var i = 0; i < candidates.Count; i++)
+                {
+                    var nodeId = candidates[i];
+                    var distance = nodeId >= 0 && nodeId < distances.Length ? distances[nodeId] : -1;
+                    if (distance == bestDistance)
+                    {
+                        selectionPool.Add(nodeId);
+                    }
+                }
+            }
+
+            targetSpatialNodeId = SelectSeededCandidate(selectionPool);
             return true;
+        }
+
+        private int SelectSeededCandidate(List<int> candidates)
+        {
+            candidates.Sort();
+
+            unchecked
+            {
+                uint hash = Mix(
+                    unchecked((uint)_variationSeed)
+                    ^ Mix(unchecked((uint)CurrentRegionId.Value)));
+
+                for (var i = 0; i < candidates.Count; i++)
+                {
+                    hash = Mix(hash ^ unchecked((uint)candidates[i]));
+                }
+
+                return candidates[(int)(hash % (uint)candidates.Count)];
+            }
+        }
+
+        private static uint Mix(uint value)
+        {
+            value ^= value >> 16;
+            value *= 0x7feb352dU;
+            value ^= value >> 15;
+            value *= 0x846ca68bU;
+            value ^= value >> 16;
+            return value;
         }
 
         public bool RejectProbe(int spatialNodeId)

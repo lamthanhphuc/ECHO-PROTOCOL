@@ -1,6 +1,5 @@
 using System.Collections;
 using EchoProtocol.AI.Listener.Noise;
-using EchoProtocol.AI.Stalker;
 using EchoProtocol.Networking.Authority;
 using Fusion;
 using UnityEngine;
@@ -78,9 +77,6 @@ public sealed class NoiseMakerBeacon : MonoBehaviour
                     out _);
             }
 
-            // Alert tất cả Stalker trong tầm
-            AlertNearbyStalkers();
-
             if (i < TotalPulses - 1)
             {
                 yield return new WaitForSeconds(PulseInterval);
@@ -100,18 +96,4 @@ public sealed class NoiseMakerBeacon : MonoBehaviour
         Destroy(gameObject);
     }
 
-    private void AlertNearbyStalkers()
-    {
-        // Bán kính nghe của NOISE_MAKER là 22m (cập nhật trong RuntimeNoiseCatalog)
-        const float alertRadius = 22f;
-        var stalkers = FindObjectsByType<StalkerController>(FindObjectsInactive.Exclude);
-        foreach (var stalker in stalkers)
-        {
-            if (Vector3.SqrMagnitude(stalker.transform.position - transform.position)
-                <= alertRadius * alertRadius)
-            {
-                stalker.AlertToNoise(transform.position);
-            }
-        }
-    }
 }

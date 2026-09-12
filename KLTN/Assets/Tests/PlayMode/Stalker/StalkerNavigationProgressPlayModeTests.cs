@@ -177,6 +177,82 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
+        public IEnumerator NAV_4C2_ChasePredictionNearNavMeshEdge_RequestsReachableDestination()
+        {
+            var fixture = CreateChaseCadenceFixture(0f, 100f);
+            yield return fixture.ActivateInitializeAndDisable();
+
+            Assert.That(
+                NavMesh.SamplePosition(
+                    new Vector3(20f, 0f, 0f),
+                    out var edgeHit,
+                    100f,
+                    fixture.Agent.areaMask),
+                Is.True,
+                "Expected to locate the outer edge of the runtime NavMesh.");
+
+            var inward = AgentStart - edgeHit.position;
+            inward.y = 0f;
+            Assert.That(inward.sqrMagnitude, Is.GreaterThan(0.001f));
+            inward.Normalize();
+
+            var pointA = edgeHit.position + inward * 0.8f;
+            var pointB = edgeHit.position + inward * 0.1f;
+
+            AssertPointOnNavMesh(pointA);
+            AssertPointOnNavMesh(pointB);
+
+            var target = new GameObject("STK_Test_ChaseEdgePredictionTarget");
+            _createdObjects.Add(target);
+            target.transform.position = pointA;
+
+            var visionOrigin = new GameObject("STK_Test_ChaseEdgePredictionVisionOrigin");
+            _createdObjects.Add(visionOrigin);
+            visionOrigin.transform.position = AgentStart;
+            visionOrigin.transform.rotation = Quaternion.identity;
+
+            var visionSensor = fixture.Agent.gameObject.AddComponent(
+                ResolveType(StalkerVisionSensorTypeName));
+            SetVisionSensorFields(
+                visionSensor,
+                visionOrigin.transform,
+                target.transform,
+                100f,
+                360f,
+                0);
+            SetPrivateField(fixture.StalkerController, "visionSensor", visionSensor);
+            SetPrivateField(
+                fixture.StalkerController,
+                "currentState",
+                ResolveEnumValue("EchoProtocol.AI.Stalker.StalkerState", "CHASE"));
+            SetPrivateField(fixture.StalkerController, "currentTarget", target.transform);
+            SetPrivateFloatField(fixture.StalkerController, "attackRange", 0.01f);
+
+            Physics.SyncTransforms();
+
+            Assert.That(SimulateAtTime(fixture.StalkerController, 1L, 0d, 0f), Is.True);
+
+            target.transform.position = pointB;
+            Physics.SyncTransforms();
+
+            Assert.That(SimulateAtTime(fixture.StalkerController, 2L, 0.1d, 0.1f), Is.True);
+
+            var requestedDestination = GetLastChaseRequestedDestination(fixture.StalkerController);
+            Assert.That(
+                Vector3.Distance(requestedDestination, pointB),
+                Is.GreaterThan(0.001f),
+                "Test must actually exercise predictive CHASE lead.");
+
+            var evaluation = EvaluateDestination(
+                GetInternalNavigation(fixture.StalkerController),
+                requestedDestination);
+            Assert.That(
+                GetEnumPropertyName(evaluation, "Status"),
+                Is.EqualTo("Complete"),
+                $"CHASE must not commit an unreachable predicted destination. requested={requestedDestination}, edge={edgeHit.position}");
+        }
+
+        [UnityTest]
         public IEnumerator NAV_4B_CompleteStoppedAgent_BecomesNoProgress()
         {
             var fixture = CreateFixture();
@@ -407,6 +483,104 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(Simulate(fixture.StalkerController, ExplicitDelta), Is.True);
             Assert.That(GetHasLastChaseRequestedDestination(fixture.StalkerController), Is.True);
             AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), destinationB);
+        }
+
+        [UnityTest]
+        public IEnumerator NAV_4C2_ChaseSharpTurn_LeadsLatestVisibleMotionDirection()
+        {
+            var fixture = CreateChaseCadenceFixture(0f, 100f);
+            yield return fixture.ActivateInitializeAndDisable();
+
+            var pointA = SampleChaseDestinationPointOnNavMesh(new Vector3(-2f, 0f, 0f));
+            var pointB = SampleChaseDestinationPointOnNavMesh(new Vector3(-1.5f, 0f, 0f));
+            var pointC = SampleChaseDestinationPointOnNavMesh(new Vector3(-1.5f, 0f, 0.5f));
+
+            var target = new GameObject("STK_Test_ChaseSharpTurnTarget");
+            _createdObjects.Add(target);
+            target.transform.position = pointA;
+
+            var visionOrigin = new GameObject("STK_Test_ChaseSharpTurnVisionOrigin");
+            _createdObjects.Add(visionOrigin);
+            visionOrigin.transform.position = AgentStart;
+            visionOrigin.transform.rotation = Quaternion.identity;
+
+            var visionSensor = fixture.Agent.gameObject.AddComponent(ResolveType(StalkerVisionSensorTypeName));
+            SetVisionSensorFields(visionSensor, visionOrigin.transform, target.transform, 100f, 360f, 0);
+            SetPrivateField(fixture.StalkerController, "visionSensor", visionSensor);
+            SetPrivateField(fixture.StalkerController, "currentState", ResolveEnumValue("EchoProtocol.AI.Stalker.StalkerState", "CHASE"));
+            SetPrivateField(fixture.StalkerController, "currentTarget", target.transform);
+            SetPrivateFloatField(fixture.StalkerController, "attackRange", 0.01f);
+            Physics.SyncTransforms();
+
+            Assert.That(SimulateAtTime(fixture.StalkerController, 1L, 0d, 0f), Is.True);
+            AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), pointA);
+
+            target.transform.position = pointB;
+            Physics.SyncTransforms();
+            Assert.That(SimulateAtTime(fixture.StalkerController, 2L, 0.1d, 0.1f), Is.True);
+
+            target.transform.position = pointC;
+            Physics.SyncTransforms();
+            Assert.That(SimulateAtTime(fixture.StalkerController, 3L, 0.2d, 0.1f), Is.True);
+
+            var requestedDestination = GetLastChaseRequestedDestination(fixture.StalkerController);
+            Assert.That(requestedDestination.z, Is.GreaterThan(pointC.z));
+            Assert.That(
+                Vector3.Dot(requestedDestination - pointC, Vector3.forward),
+                Is.GreaterThan(0f));
+            Assert.That(Vector3.Distance(requestedDestination, pointC), Is.GreaterThan(0.001f));
+        }
+
+        [UnityTest]
+        public IEnumerator NAV_4C2_ChaseLosesVisibility_SearchUsesLastObservedPositionNotPredictedLead()
+        {
+            var fixture = CreateChaseCadenceFixture(0f, 100f);
+            yield return fixture.ActivateInitializeAndDisable();
+
+            var pointA = SampleChaseDestinationPointOnNavMesh(new Vector3(-2f, 0f, 0f));
+            var pointB = SampleChaseDestinationPointOnNavMesh(new Vector3(-1.5f, 0f, 0f));
+
+            var target = new GameObject("STK_Test_ChaseLossOfVisibilityTarget");
+            _createdObjects.Add(target);
+            target.transform.position = pointA;
+
+            var visionOrigin = new GameObject("STK_Test_ChaseLossOfVisibilityVisionOrigin");
+            _createdObjects.Add(visionOrigin);
+            visionOrigin.transform.position = AgentStart;
+            visionOrigin.transform.rotation = Quaternion.identity;
+
+            var visionSensor = fixture.Agent.gameObject.AddComponent(ResolveType(StalkerVisionSensorTypeName));
+            SetVisionSensorFields(visionSensor, visionOrigin.transform, target.transform, 100f, 360f, 0);
+            SetPrivateField(fixture.StalkerController, "visionSensor", visionSensor);
+            SetPrivateField(fixture.StalkerController, "currentState", ResolveEnumValue("EchoProtocol.AI.Stalker.StalkerState", "CHASE"));
+            SetPrivateField(fixture.StalkerController, "currentTarget", target.transform);
+            SetPrivateFloatField(fixture.StalkerController, "attackRange", 0.01f);
+            Physics.SyncTransforms();
+
+            Assert.That(SimulateAtTime(fixture.StalkerController, 1L, 0d, 0f), Is.True);
+            AssertVectorApproximately(GetLastChaseRequestedDestination(fixture.StalkerController), pointA);
+
+            target.transform.position = pointB;
+            Physics.SyncTransforms();
+            Assert.That(SimulateAtTime(fixture.StalkerController, 2L, 0.1d, 0.1f), Is.True);
+
+            var predictedDestination = GetLastChaseRequestedDestination(fixture.StalkerController);
+            Assert.That(predictedDestination.x, Is.GreaterThan(pointB.x));
+            Assert.That(Vector3.Distance(predictedDestination, pointB), Is.GreaterThan(0.001f));
+
+            SetPrivateField(visionSensor, "candidate", null);
+            Physics.SyncTransforms();
+
+            Assert.That(SimulateAtTime(fixture.StalkerController, 3L, 0.2d, 0.1f), Is.True);
+
+            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("SEARCH"));
+            AssertVectorApproximately(
+                GetPrivateField<Vector3>(fixture.StalkerController, "lastKnownPosition"),
+                pointB);
+
+            var searchDestination = GetActiveNavigationDestination(GetInternalNavigation(fixture.StalkerController));
+            AssertVectorApproximately(searchDestination, pointB);
+            Assert.That(Vector3.Distance(searchDestination, predictedDestination), Is.GreaterThan(0.001f));
         }
 
         [UnityTest]
@@ -1620,6 +1794,29 @@ namespace EchoProtocol.AI.Stalker.Tests
                 Activator.CreateInstance(
                     ResolveType(AiSimulationStepTypeName),
                     Activator.CreateInstance(ResolveType(AiSimulationTimeTypeName), 1L, 0d),
+                    deltaSeconds),
+                null);
+            var result = method.Invoke(stalkerController, new[] { input });
+            Assert.That(result, Is.TypeOf<bool>());
+            return (bool)result;
+        }
+
+        private static bool SimulateAtTime(
+            object stalkerController,
+            long tick,
+            double seconds,
+            float deltaSeconds)
+        {
+            var method = stalkerController.GetType().GetMethod(
+                "Simulate",
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(method, Is.Not.Null, "Missing StalkerController.Simulate.");
+
+            var input = Activator.CreateInstance(
+                ResolveType(StalkerSimulationInputTypeName),
+                Activator.CreateInstance(
+                    ResolveType(AiSimulationStepTypeName),
+                    Activator.CreateInstance(ResolveType(AiSimulationTimeTypeName), tick, seconds),
                     deltaSeconds),
                 null);
             var result = method.Invoke(stalkerController, new[] { input });

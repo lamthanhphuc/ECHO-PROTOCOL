@@ -159,6 +159,9 @@ MonoBehaviour:
   patrolRoute: {fileID: 0}
   visionSensor: {fileID: 100005}
   patrolMode: 3
+  patrolSpeed: 7
+  chaseSpeed: 9
+  enableDiagnostics: 0
   candidateBfsDepth: 128
   stalenessHorizon: 15
   stalenessWeight: 1
@@ -171,6 +174,8 @@ MonoBehaviour:
   searchRadius: 8
   chaseDestinationRefreshDistance: 0.5
   chaseDestinationRefreshInterval: 0.5
+  chasePredictionLeadSeconds: 0.2
+  chasePredictionMaxDistance: 1.5
   attackRange: 1.5
   attackWindup: 0.75
   attackRecovery: 1
@@ -215,6 +220,14 @@ MonoBehaviour:
   controller: {fileID: 100006}
   visionSensor: {fileID: 100005}
   lifecycle: {fileID: 0}
+  patrolNearOptimalHopSlack: 1
+  hearingOrigin: {fileID: 0}
+  acousticBlockerMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  hearingThreshold: 0.1
+  closedDoorMultiplier: 0.5
+  wallMultiplier: 0.25
   attackDamage: 25
   maximumDamageDistance: 2
   animator: {fileID: 1739994530661112979}

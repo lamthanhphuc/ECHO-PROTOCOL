@@ -45,29 +45,81 @@ namespace EchoProtocol.AI.Stalker
             Vector3 originDirection,
             AiSimulationTime searchStartTime,
             RegionId originRegionId)
+            : this(
+                episodeId,
+                StalkerSearchSource.VisualTargetLoss,
+                originLastKnownPosition,
+                originDirection,
+                searchStartTime,
+                originRegionId)
+        {
+        }
+
+        public StalkerSearchContext(
+            SearchEpisodeId episodeId,
+            StalkerSearchSource source,
+            Vector3 originPosition,
+            Vector3 originDirection,
+            AiSimulationTime searchStartTime,
+            RegionId originRegionId)
         {
             if (!episodeId.IsValid)
             {
-                throw new ArgumentException("Search context requires a valid episode id.", nameof(episodeId));
+                throw new ArgumentException(
+                    "Search context requires a valid episode id.",
+                    nameof(episodeId));
             }
 
             if (!searchStartTime.IsValid)
             {
-                throw new ArgumentException("Search context requires a valid start time.", nameof(searchStartTime));
+                throw new ArgumentException(
+                    "Search context requires a valid start time.",
+                    nameof(searchStartTime));
+            }
+
+            if (!Enum.IsDefined(typeof(StalkerSearchSource), source))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(source));
             }
 
             EpisodeId = episodeId;
-            SearchOriginLKP = originLastKnownPosition;
-            SearchOriginDirection = originDirection.sqrMagnitude > 0f ? originDirection.normalized : Vector3.forward;
+            Source = source;
+            SearchOriginPosition = originPosition;
+
+            SearchOriginDirection =
+                originDirection.sqrMagnitude > 0f
+                    ? originDirection.normalized
+                    : Vector3.forward;
+
             SearchStartTime = searchStartTime;
             SearchOriginRegionId = originRegionId;
             CurrentCandidateNodeId = -1;
         }
 
         public SearchEpisodeId EpisodeId { get; }
-        public Vector3 SearchOriginLKP { get; }
+
+        public StalkerSearchSource Source { get; }
+
+        /// <summary>
+        /// Generic world-space origin of this search episode.
+        ///
+        /// For VisualTargetLoss this is the visual last-known position.
+        /// For HeardNoise this is the heard noise hypothesis position.
+        /// </summary>
+        public Vector3 SearchOriginPosition { get; }
+
+        /// <summary>
+        /// Backward-compatible alias for existing visual-search code.
+        /// New code should use SearchOriginPosition.
+        /// </summary>
+        public Vector3 SearchOriginLKP =>
+            SearchOriginPosition;
+
         public Vector3 SearchOriginDirection { get; }
+
         public AiSimulationTime SearchStartTime { get; }
+
         public RegionId SearchOriginRegionId { get; }
         public int CurrentCandidateNodeId { get; private set; }
         public int CandidateAttemptCount { get; private set; }

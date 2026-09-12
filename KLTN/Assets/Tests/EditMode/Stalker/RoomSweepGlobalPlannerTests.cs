@@ -264,6 +264,105 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetObjectiveBool(objective, "IsValid"), Is.False);
         }
 
+        [Test]
+        public void STK_RoomSweepGlobalPlanner_SeededNearOptimalSelection_IsRepeatableAndVariesAcrossSeeds()
+        {
+            var current = new RegionId(1);
+            var nearRoom = new RegionId(2);
+            var transit = new RegionId(3);
+            var secondRoom = new RegionId(4);
+            var transit2 = new RegionId(5);
+            var farRoom = new RegionId(6);
+
+            var graph = CreateRegionGraph(
+                new[] { current, nearRoom, transit, secondRoom, transit2, farRoom },
+                RoomRegion(current, 1, "Zone01/Current", nearRoom, transit),
+                RoomRegion(nearRoom, 2, "Zone01/Near", current),
+                RouteRegion(transit, 3, "Zone01/Transit", current, secondRoom),
+                RoomRegion(secondRoom, 4, "Zone01/Second", transit, transit2),
+                RouteRegion(transit2, 5, "Zone01/Transit2", secondRoom, farRoom),
+                RoomRegion(farRoom, 6, "Zone01/Far", transit2));
+
+            var constructor =
+                RoomSweepGlobalPlannerType.GetConstructor(
+                    new[]
+                    {
+                        RegionGraphType,
+                        RoomSweepCoverageMemoryType,
+                        typeof(int),
+                        typeof(int)
+                    });
+
+            Assert.That(
+                constructor,
+                Is.Not.Null,
+                "Seeded RoomSweepGlobalPlanner constructor is missing.");
+
+            var firstPlanner = constructor.Invoke(new object[]
+            {
+                graph,
+                CreateMemory(),
+                7,
+                1
+            });
+
+            var secondPlanner = constructor.Invoke(new object[]
+            {
+                graph,
+                CreateMemory(),
+                7,
+                1
+            });
+
+            var firstResult = TryGetOrCreateObjective(
+                firstPlanner,
+                current,
+                out var firstObjective);
+            var secondResult = TryGetOrCreateObjective(
+                secondPlanner,
+                current,
+                out var secondObjective);
+
+            Assert.That(firstResult, Is.True);
+            Assert.That(secondResult, Is.True);
+            Assert.That(
+                GetObjectiveRegionId(firstObjective, "TargetRoomRegionId"),
+                Is.EqualTo(
+                    GetObjectiveRegionId(secondObjective, "TargetRoomRegionId")));
+
+            var selectedTargets = new HashSet<RegionId>();
+            for (var seed = 0; seed < 64; seed++)
+            {
+                var planner = constructor.Invoke(new object[]
+                {
+                    graph,
+                    CreateMemory(),
+                    seed,
+                    1
+                });
+
+                Assert.That(
+                    TryGetOrCreateObjective(
+                        planner,
+                        current,
+                        out var objective),
+                    Is.True);
+
+                var target = GetObjectiveRegionId(
+                    objective,
+                    "TargetRoomRegionId");
+
+                Assert.That(
+                    target == nearRoom || target == secondRoom,
+                    Is.True,
+                    "Seeded selection must stay within the near-optimal pool.");
+                Assert.That(target, Is.Not.EqualTo(farRoom));
+                selectedTargets.Add(target);
+            }
+
+            Assert.That(selectedTargets.Count, Is.GreaterThanOrEqualTo(2));
+        }
+
         private static object CreatePlanner(object regionGraph, object memory)
         {
             return Activator.CreateInstance(RoomSweepGlobalPlannerType, regionGraph, memory);
