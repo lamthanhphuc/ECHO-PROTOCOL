@@ -17,9 +17,11 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
     [Header("Held Tool Right Hand Pose")]
     [SerializeField] private Vector3 handForwardOffset = new Vector3(0.20f, 0.12f, 0.36f);
+#pragma warning disable CS0414
     [SerializeField] private Vector3 handEulerOffset = new Vector3(0f, 0f, -75f);
-    [SerializeField, Range(0f, 1f)] private float rightHandPosWeight = 0.82f;
     [SerializeField, Range(0f, 1f)] private float rightHandRotWeight = 0.80f;
+#pragma warning restore CS0414
+    [SerializeField, Range(0f, 1f)] private float rightHandPosWeight = 0.82f;
 
     private PlayerInventory _inventory;
     private PlayerEnergyCoreCarrier _coreCarrier;
@@ -46,6 +48,8 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         {
             playerCamera = FindBoundCamera();
         }
+
+        ApplyArmPosingInLateUpdate();
     }
 
     private void OnAnimatorIK(int layerIndex)
@@ -55,15 +59,42 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             return;
         }
 
+        // Native crash prevention:
+        // Unity's native Humanoid IK solver crashes with 0xC0000005 (access violation at 0xFFFFFFFF00000000)
+        // if SetLookAt or SetIKPosition are called when the avatar is not humanoid or has no valid bone mapping.
+        if (!animator.isHuman || animator.avatar == null || !animator.avatar.isValid)
+        {
+            return;
+        }
+
         Vector3 lookAt = aimOrigin + aimForward * lookAtDistance;
 
         animator.SetLookAtWeight(lookAtWeight, bodyWeight, headWeight, eyesWeight, clampWeight);
         animator.SetLookAtPosition(lookAt);
 
-        if (!driveRightHandWhenHolding)
+        // Note: We deliberately do NOT call animator.SetIKPosition or animator.SetIKRotation for AvatarIKGoal
+        // because Unity's native Humanoid limb IK solver crashes with Access Violation (0xC0000005)
+        // on this model's rig. Hand and arm posing is handled safely via Transform rotation in LateUpdate().
+    }
+
+    private void ApplyArmPosingInLateUpdate()
+    {
+        if (!driveRightHandWhenHolding || animator == null || !animator.isHuman)
         {
             return;
         }
+
+        if (!TryGetAim(out Vector3 aimOrigin, out Vector3 aimForward, out Vector3 aimUp))
+        {
+            return;
+        }
+
+        Transform rightHandBone = animator.GetBoneTransform(HumanBodyBones.RightHand);
+        Transform leftHandBone = animator.GetBoneTransform(HumanBodyBones.LeftHand);
+        Transform rightUpperArm = animator.GetBoneTransform(HumanBodyBones.RightUpperArm);
+        Transform rightForeArm = animator.GetBoneTransform(HumanBodyBones.RightLowerArm);
+        Transform leftUpperArm = animator.GetBoneTransform(HumanBodyBones.LeftUpperArm);
+        Transform leftForeArm = animator.GetBoneTransform(HumanBodyBones.LeftLowerArm);
 
         Vector3 chestOrigin = transform.position + Vector3.up * 1.28f;
         Vector3 aimRight = Vector3.Cross(aimUp, aimForward).normalized;
@@ -82,28 +113,17 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             rightHandPos.y = Mathf.Clamp(rightHandPos.y, minCarryY, maxCarryY);
             leftHandPos.y = Mathf.Clamp(leftHandPos.y, minCarryY, maxCarryY);
 
-            Quaternion baseRotation = Quaternion.LookRotation(aimForward, aimUp);
-            Quaternion rightHandRot = baseRotation * Quaternion.Euler(0f, -25f, -70f);
-            Quaternion leftHandRot = baseRotation * Quaternion.Euler(0f, 25f, 70f);
+            Vector3 rightElbowPole = (rightUpperArm != null ? rightUpperArm.position : chestOrigin) + aimRight * 0.35f - aimUp * 0.25f - aimForward * 0.10f;
+            Vector3 leftElbowPole = (leftUpperArm != null ? leftUpperArm.position : chestOrigin) - aimRight * 0.35f - aimUp * 0.25f - aimForward * 0.10f;
 
-            animator.SetIKPositionWeight(AvatarIKGoal.RightHand, 0.85f);
-            animator.SetIKRotationWeight(AvatarIKGoal.RightHand, 0.80f);
-            animator.SetIKPosition(AvatarIKGoal.RightHand, rightHandPos);
-            animator.SetIKRotation(AvatarIKGoal.RightHand, rightHandRot);
-
-            animator.SetIKPositionWeight(AvatarIKGoal.LeftHand, 0.85f);
-            animator.SetIKRotationWeight(AvatarIKGoal.LeftHand, 0.80f);
-            animator.SetIKPosition(AvatarIKGoal.LeftHand, leftHandPos);
-            animator.SetIKRotation(AvatarIKGoal.LeftHand, leftHandRot);
+            SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, rightHandPos, rightElbowPole, 0.85f);
+            SolveTwoBoneIK(leftUpperArm, leftForeArm, leftHandBone, leftHandPos, leftElbowPole, 0.85f);
             return;
         }
 
         if (IsHoldingTeamTool())
         {
-            Transform handAnchor = _heldItemAnchor != null
-                ? _heldItemAnchor.RightHandAnchor
-                : PlayerHeldItemAnchor.ResolveRightHandAnchor(playerRoot != null ? playerRoot.gameObject : gameObject);
-            if (handAnchor == null)
+            if (rightHandBone == null || rightUpperArm == null || rightForeArm == null)
             {
                 return;
             }
@@ -113,27 +133,101 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
                 + aimRight * handForwardOffset.x
                 + aimUp * handForwardOffset.y;
 
-            float maxHandY = transform.position.y + 1.68f;
+            float maxHandY = transform.position.y + 1.60f;
             float minHandY = transform.position.y + 1.05f;
             handTarget.y = Mathf.Clamp(handTarget.y, minHandY, maxHandY);
 
-            Quaternion baseRotation = Quaternion.LookRotation(aimForward, aimUp);
-            Quaternion handRotation = baseRotation * Quaternion.Euler(handEulerOffset);
+            Vector3 rightElbowPole = rightUpperArm.position + aimRight * 0.35f - aimUp * 0.25f - aimForward * 0.10f;
 
-            animator.SetIKPositionWeight(AvatarIKGoal.RightHand, rightHandPosWeight);
-            animator.SetIKRotationWeight(AvatarIKGoal.RightHand, rightHandRotWeight);
-            animator.SetIKPosition(AvatarIKGoal.RightHand, handTarget);
-            animator.SetIKRotation(AvatarIKGoal.RightHand, handRotation);
+            SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, handTarget, rightElbowPole, rightHandPosWeight);
+        }
+    }
 
-            animator.SetIKPositionWeight(AvatarIKGoal.LeftHand, 0f);
-            animator.SetIKRotationWeight(AvatarIKGoal.LeftHand, 0f);
+    private static void SolveTwoBoneIK(
+        Transform upperArm,
+        Transform foreArm,
+        Transform hand,
+        Vector3 targetPos,
+        Vector3 poleTarget,
+        float weight)
+    {
+        if (upperArm == null || foreArm == null || hand == null || weight <= 0.001f)
+        {
             return;
         }
 
-        animator.SetIKPositionWeight(AvatarIKGoal.RightHand, 0f);
-        animator.SetIKRotationWeight(AvatarIKGoal.RightHand, 0f);
-        animator.SetIKPositionWeight(AvatarIKGoal.LeftHand, 0f);
-        animator.SetIKRotationWeight(AvatarIKGoal.LeftHand, 0f);
+        Vector3 aPos = upperArm.position;
+        Vector3 bPos = foreArm.position;
+        Vector3 cPos = hand.position;
+
+        float lab = Vector3.Distance(aPos, bPos);
+        float lbc = Vector3.Distance(bPos, cPos);
+        if (lab < 0.01f || lbc < 0.01f)
+        {
+            return;
+        }
+
+        Vector3 toTarget = targetPos - aPos;
+        float lat = toTarget.magnitude;
+        if (lat < 0.001f)
+        {
+            return;
+        }
+
+        // Clamp reach to avoid impossible triangles or math domain errors
+        float maxReach = (lab + lbc) * 0.999f;
+        float minReach = Mathf.Max(0.01f, Mathf.Abs(lab - lbc) + 0.001f);
+        float latClamped = Mathf.Clamp(lat, minReach, maxReach);
+
+        // Law of cosines for angle at shoulder (upperArm)
+        float cosA = (lab * lab + latClamped * latClamped - lbc * lbc) / (2f * lab * latClamped);
+        cosA = Mathf.Clamp(cosA, -1f, 1f);
+        float angleA = Mathf.Acos(cosA);
+
+        // Direction to target and elbow pole vector
+        Vector3 vAt = toTarget / lat;
+        Vector3 vAp = poleTarget - aPos;
+
+        // Normal vector defining the bend plane
+        Vector3 planeNormal = Vector3.Cross(vAt, vAp);
+        if (planeNormal.sqrMagnitude < 0.0001f)
+        {
+            planeNormal = Vector3.up;
+        }
+        else
+        {
+            planeNormal.Normalize();
+        }
+
+        // Direction from shoulder to solved elbow position (Rodrigues' rotation formula)
+        float cosVal = Mathf.Cos(angleA);
+        float sinVal = Mathf.Sin(angleA);
+        Vector3 dirToElbow = vAt * cosVal + Vector3.Cross(planeNormal, vAt) * sinVal + planeNormal * Vector3.Dot(planeNormal, vAt) * (1f - cosVal);
+        dirToElbow.Normalize();
+
+        Vector3 solvedElbowPos = aPos + dirToElbow * lab;
+
+        // 1. Rotate upperArm so foreArm moves towards solvedElbowPos
+        Vector3 curUpperArmDir = foreArm.position - upperArm.position;
+        Vector3 targetUpperArmDir = solvedElbowPos - upperArm.position;
+        if (curUpperArmDir.sqrMagnitude > 0.0001f && targetUpperArmDir.sqrMagnitude > 0.0001f)
+        {
+            Quaternion deltaUpper = Quaternion.FromToRotation(curUpperArmDir.normalized, targetUpperArmDir.normalized);
+            upperArm.rotation = Quaternion.Slerp(upperArm.rotation, deltaUpper * upperArm.rotation, Mathf.Clamp01(weight));
+        }
+
+        // 2. Rotate foreArm so hand moves towards targetPos
+        Vector3 curForeArmDir = hand.position - foreArm.position;
+        Vector3 targetForeArmDir = targetPos - foreArm.position;
+        if (curForeArmDir.sqrMagnitude > 0.0001f && targetForeArmDir.sqrMagnitude > 0.0001f)
+        {
+            Quaternion deltaFore = Quaternion.FromToRotation(curForeArmDir.normalized, targetForeArmDir.normalized);
+            foreArm.rotation = Quaternion.Slerp(foreArm.rotation, deltaFore * foreArm.rotation, Mathf.Clamp01(weight));
+        }
+
+        // Note: We deliberately do NOT override hand.rotation.
+        // Hand is a child of foreArm, so it smoothly follows the forearm naturally.
+        // Overriding hand.rotation with world Euler offsets causes wrist twisting / dislocation.
     }
 
     public void SetExternalAim(Vector3 origin, Vector3 forward)
