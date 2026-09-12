@@ -474,7 +474,8 @@ namespace EchoProtocol.Player.Tests
             Assert.That(so.FindProperty("itemId")?.stringValue, Is.EqualTo("plank"));
             Assert.That(so.FindProperty("itemType")?.intValue, Is.EqualTo(1));
 
-            var pickupPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tools/PF_Plank_Pickup.prefab");
+            var pickupPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Gameplay/Imported/PF_Plank_Imported.prefab")
+                ?? AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tools/PF_Plank_Pickup.prefab");
             Assert.That(pickupPrefab, Is.Not.Null);
             var pickup = GetComponentByTypeName(pickupPrefab, "EchoProtocol.Tools.Scanner.NetworkToolPickup");
             Assert.That(pickup, Is.Not.Null);
