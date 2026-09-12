@@ -598,7 +598,7 @@ namespace EchoProtocol.EditorTools
             Vector3 tablePos = new Vector3(-83.23782f, 1.06f, -23.951048f);
             Quaternion tableRot = Quaternion.identity;
 
-            foreach (var go in Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var go in Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include))
             {
                 if (go != null && (go.name == "PF_Scanner_Imported" || go.name == "PF_FieldScanner_Pickup"))
                 {
@@ -621,7 +621,7 @@ namespace EchoProtocol.EditorTools
             }
 
             // 3. Upgrade any Player instances in scene
-            foreach (var player in Object.FindObjectsByType<PlayerHeldItemView>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var player in Object.FindObjectsByType<PlayerHeldItemView>(FindObjectsInactive.Include))
             {
                 var pRoot = player.gameObject;
                 var netScanner = pRoot.GetComponent<NetworkFieldScanner>();

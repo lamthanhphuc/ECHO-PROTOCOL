@@ -31,8 +31,8 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     [SerializeField] private Vector3 noiseMakerLocalPosition = new Vector3(0.018f, 0.16f, 0.02f);
     [SerializeField] private Vector3 noiseMakerLocalEulerAngles = new Vector3(6.176f, 93.2f, 94.562f);
     [SerializeField] private Vector3 noiseMakerLocalScale = new Vector3(0.7f, 0.7f, 0.7f);
-    [SerializeField] private Vector3 plankLocalPosition = new Vector3(0.028f, 0.189f, -0.037f);
-    [SerializeField] private Vector3 plankLocalEulerAngles = new Vector3(90f, 0f, -90f);
+    [SerializeField] private Vector3 plankLocalPosition = new Vector3(0.022f, 0.172f, 0.034f);
+    [SerializeField] private Vector3 plankLocalEulerAngles = new Vector3(90f, 0f, 90f);
     [SerializeField] private Vector3 plankLocalScale = new Vector3(5f, 5f, 5f);
     [SerializeField] private Vector3 plankChildLocalPosition = Vector3.zero;
     [SerializeField] private Vector3 plankChildLocalEulerAngles = Vector3.zero;

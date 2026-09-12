@@ -463,9 +463,9 @@ MonoBehaviour:
   noiseMakerLocalPosition: {x: 0.018, y: 0.132, z: -0.065}
   noiseMakerLocalEulerAngles: {x: 6.176, y: 93.2, z: 94.562}
   noiseMakerLocalScale: {x: 0.7, y: 0.7, z: 0.7}
-  plankLocalPosition: {x: 0.04, y: 0.02, z: 0.12}
-  plankLocalEulerAngles: {x: 15, y: 90, z: -20}
-  plankLocalScale: {x: 15, y: 15, z: 15}
+  plankLocalPosition: {x: 0.022, y: 0.172, z: 0.034}
+  plankLocalEulerAngles: {x: 90, y: 0, z: 90}
+  plankLocalScale: {x: 5, y: 5, z: 5}
   plankChildLocalPosition: {x: 0, y: 0, z: 0}
   plankChildLocalEulerAngles: {x: 0, y: 0, z: 0}
   plankChildLocalScale: {x: 1, y: 1, z: 1}

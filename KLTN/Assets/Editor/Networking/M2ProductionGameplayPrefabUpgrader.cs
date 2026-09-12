@@ -353,7 +353,8 @@ namespace EchoProtocol.Editor.Networking
             toolViewSo.FindProperty("heldItemAnchor").objectReferenceValue = anchor;
             SetObject(toolViewSo.FindProperty("toolVisual_2"), AssetDatabase.LoadAssetAtPath<GameObject>(NoiseMakerClosedPrefabPath));
             SetObject(toolViewSo.FindProperty("toolVisual_3"), AssetDatabase.LoadAssetAtPath<GameObject>(FirstAidPickupPrefabPath));
-            SetObject(toolViewSo.FindProperty("toolVisual_4"), AssetDatabase.LoadAssetAtPath<GameObject>(PlankPickupPrefabPath));
+            GameObject plankHeldVisual = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Gameplay/Imported/PF_Plank_HeldVisual.prefab");
+            SetObject(toolViewSo.FindProperty("toolVisual_4"), plankHeldVisual != null ? plankHeldVisual : AssetDatabase.LoadAssetAtPath<GameObject>(PlankPickupPrefabPath));
             SetVector3(toolViewSo.FindProperty("noiseMakerLocalPosition"), new Vector3(0.018f, 0.132f, -0.065f));
             SetVector3(toolViewSo.FindProperty("noiseMakerLocalEulerAngles"), new Vector3(6.176f, 93.2f, 94.562f));
             SetVector3(toolViewSo.FindProperty("noiseMakerLocalScale"), new Vector3(0.7f, 0.7f, 0.7f));
