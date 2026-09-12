@@ -538,7 +538,7 @@ namespace EchoProtocol.Networking
 
             if (_blockingCollider != null)
             {
-                _blockingCollider.enabled = blocksTraversal;
+                _blockingCollider.enabled = DoorBlocksTraversal;
             }
 
             if (_traversalObstacle != null)
