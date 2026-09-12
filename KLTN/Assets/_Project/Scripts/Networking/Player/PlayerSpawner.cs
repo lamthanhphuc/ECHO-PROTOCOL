@@ -416,6 +416,12 @@ namespace EchoProtocol.Networking
         {
             foreach (var legacyCore in FindObjectsByType<EnergyCorePickup>(FindObjectsInactive.Include))
             {
+                // CRITICAL MULTIPLAYER FIX: Tuyệt đối không disable đối tượng mạng (NetworkObject)
+                if (legacyCore.GetComponentInParent<Fusion.NetworkObject>() != null)
+                {
+                    continue;
+                }
+
                 legacyCore.enabled = false;
                 if (!legacyCore.name.StartsWith("EnergyCore_Network", System.StringComparison.OrdinalIgnoreCase))
                 {
@@ -431,6 +437,12 @@ namespace EchoProtocol.Networking
                         && (t.name.StartsWith("PF_EnergyCore_Imported", System.StringComparison.OrdinalIgnoreCase)
                             || t.name.StartsWith("EnergyCore_C", System.StringComparison.OrdinalIgnoreCase)))
                     {
+                        // CRITICAL MULTIPLAYER FIX: Tuyệt đối không disable đối tượng mạng runtime đã spawn
+                        if (t.GetComponentInParent<Fusion.NetworkObject>() != null)
+                        {
+                            continue;
+                        }
+
                         if (!t.name.StartsWith("EnergyCore_Network", System.StringComparison.OrdinalIgnoreCase))
                         {
                             t.gameObject.SetActive(false);

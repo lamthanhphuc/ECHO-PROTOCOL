@@ -64,6 +64,10 @@ namespace EchoProtocol.Networking
             {
                 InitializeAuthoritativePose(transform.position, transform.rotation);
             }
+            if (gameObject.name.StartsWith("PF_EnergyCore_Imported", StringComparison.OrdinalIgnoreCase))
+            {
+                gameObject.name = $"EnergyCore_Network_{Object.Id}";
+            }
             ApplyReplicatedState();
         }
 
