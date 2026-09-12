@@ -15,6 +15,18 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     [SerializeField] private float lookAtDistance = 12f;
     [SerializeField] private bool driveRightHandWhenHolding = true;
 
+    [Header("Carry (Two-Hand) Pose")]
+    [SerializeField] private float carryForwardOffset = 0.30f;
+    [SerializeField] private float carryLateralOffset = 0.30f;
+    [SerializeField] private float carryVerticalOffset = 0.08f;
+    [SerializeField] private float carryChestHeight = 1.38f;
+    [SerializeField] private float carryMinHandY = 1.18f;
+    [SerializeField] private float carryMaxHandY = 1.62f;
+    [SerializeField, Range(0f, 1f)] private float carryIKWeight = 0.88f;
+    [SerializeField] private Vector3 rightElbowPoleOffset = new Vector3(0.40f, -0.25f, -0.10f);
+    [SerializeField] private Vector3 leftElbowPoleOffset = new Vector3(-0.40f, -0.25f, -0.10f);
+    [SerializeField] private Vector3 coreHandOffset = new Vector3(0f, 0f, 0.2f);
+
     [Header("Held Tool Right Hand Pose")]
     [SerializeField] private Vector3 handForwardOffset = new Vector3(0.20f, 0.12f, 0.36f);
 #pragma warning disable CS0414
@@ -96,7 +108,8 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         Transform leftUpperArm = animator.GetBoneTransform(HumanBodyBones.LeftUpperArm);
         Transform leftForeArm = animator.GetBoneTransform(HumanBodyBones.LeftLowerArm);
 
-        Vector3 chestOrigin = transform.position + Vector3.up * 1.28f;
+        Transform chestBone = animator.GetBoneTransform(HumanBodyBones.Chest);
+        Vector3 chestOrigin = chestBone != null ? chestBone.position : (transform.position + Vector3.up * carryChestHeight);
         Vector3 aimRight = Vector3.Cross(aimUp, aimForward).normalized;
         if (aimRight.sqrMagnitude <= 0.001f)
         {
@@ -105,21 +118,26 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
         if (IsCarryingCore())
         {
-            Vector3 rightHandPos = chestOrigin + aimForward * 0.28f + aimRight * 0.16f - aimUp * 0.04f;
-            Vector3 leftHandPos = chestOrigin + aimForward * 0.28f - aimRight * 0.16f - aimUp * 0.04f;
+            Vector3 rightHandPos = chestOrigin + aimForward * carryForwardOffset + aimRight * carryLateralOffset + aimUp * carryVerticalOffset;
+            Vector3 leftHandPos  = chestOrigin + aimForward * carryForwardOffset - aimRight * carryLateralOffset + aimUp * carryVerticalOffset;
 
-            float minCarryY = transform.position.y + 1.10f;
-            float maxCarryY = transform.position.y + 1.50f;
+            float minCarryY = chestOrigin.y - 0.25f;
+            float maxCarryY = chestOrigin.y + 0.35f;
             rightHandPos.y = Mathf.Clamp(rightHandPos.y, minCarryY, maxCarryY);
-            leftHandPos.y = Mathf.Clamp(leftHandPos.y, minCarryY, maxCarryY);
+            leftHandPos.y  = Mathf.Clamp(leftHandPos.y,  minCarryY, maxCarryY);
 
-            Vector3 rightElbowPole = (rightUpperArm != null ? rightUpperArm.position : chestOrigin) + aimRight * 0.35f - aimUp * 0.25f - aimForward * 0.10f;
-            Vector3 leftElbowPole = (leftUpperArm != null ? leftUpperArm.position : chestOrigin) - aimRight * 0.35f - aimUp * 0.25f - aimForward * 0.10f;
+            Vector3 rightArmRoot = rightUpperArm != null ? rightUpperArm.position : chestOrigin;
+            Vector3 leftArmRoot  = leftUpperArm  != null ? leftUpperArm.position  : chestOrigin;
+            Vector3 rightElbowPole = rightArmRoot + aimRight * rightElbowPoleOffset.x + aimUp * rightElbowPoleOffset.y - aimForward * Mathf.Abs(rightElbowPoleOffset.z);
+            Vector3 leftElbowPole  = leftArmRoot  + aimRight * leftElbowPoleOffset.x  + aimUp * leftElbowPoleOffset.y  - aimForward * Mathf.Abs(leftElbowPoleOffset.z);
 
-            SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, rightHandPos, rightElbowPole, 0.85f);
-            SolveTwoBoneIK(leftUpperArm, leftForeArm, leftHandBone, leftHandPos, leftElbowPole, 0.85f);
+            SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, rightHandPos, rightElbowPole, carryIKWeight);
+            SolveTwoBoneIK(leftUpperArm,  leftForeArm,  leftHandBone,  leftHandPos,  leftElbowPole,  carryIKWeight);
+
+            UpdateCoreAnchorPose(aimForward, aimUp, aimRight, rightHandBone, leftHandBone, rightHandPos, leftHandPos);
             return;
         }
+
 
         if (IsHoldingTeamTool())
         {
@@ -339,5 +357,38 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         }
 
         return transform.root != null ? transform.root : transform;
+    }
+
+    private void UpdateCoreAnchorPose(
+        Vector3 aimForward,
+        Vector3 aimUp,
+        Vector3 aimRight,
+        Transform rightHandBone,
+        Transform leftHandBone,
+        Vector3 rightHandTarget,
+        Vector3 leftHandTarget)
+    {
+        if (_heldItemAnchor == null)
+        {
+            _heldItemAnchor = GetComponentInParent<PlayerHeldItemAnchor>()
+                ?? (playerRoot != null ? playerRoot.GetComponentInChildren<PlayerHeldItemAnchor>(true) : null);
+        }
+
+        if (_heldItemAnchor == null) return;
+
+        Transform coreAnchor = _heldItemAnchor.CoreCarryAnchor;
+        if (coreAnchor == null) return;
+
+        Vector3 rHand = rightHandBone != null ? rightHandBone.position : rightHandTarget;
+        Vector3 lHand = leftHandBone != null ? leftHandBone.position : leftHandTarget;
+        Vector3 handsMid = (rHand + lHand) * 0.5f;
+
+        Vector3 corePos = handsMid
+            + aimForward * coreHandOffset.z
+            + aimUp * coreHandOffset.y
+            + aimRight * coreHandOffset.x;
+
+        Quaternion coreRot = Quaternion.LookRotation(aimForward, aimUp);
+        coreAnchor.SetPositionAndRotation(corePos, coreRot);
     }
 }

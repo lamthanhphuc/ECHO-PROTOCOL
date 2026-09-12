@@ -441,9 +441,9 @@ MonoBehaviour:
   energyCoreLocalPosition: {x: 0, y: 0, z: 0}
   energyCoreLocalEulerAngles: {x: 0, y: 0, z: 0}
   energyCoreLocalScale: {x: 25, y: 25, z: 25}
-  energyCoreChildLocalPosition: {x: 0.0012, y: -0.2456, z: -1.1109}
+  energyCoreChildLocalPosition: {x: 0.0007, y: -0.2462, z: -1.1115}
   energyCoreChildLocalEulerAngles: {x: -89.116, y: 77.236, z: -92.522}
-  energyCoreChildLocalScale: {x: 0.9, y: 0.9, z: 0.9}
+  energyCoreChildLocalScale: {x: 1.15, y: 1.15, z: 1.15}
   teamToolLocalPosition: {x: 0.04, y: 0.01, z: 0.11}
   teamToolLocalEulerAngles: {x: 12, y: 88, z: -18}
   teamToolLocalScale: {x: 0.45, y: 0.45, z: 0.45}
@@ -453,7 +453,7 @@ MonoBehaviour:
   fieldScannerChildLocalPosition: {x: 0, y: 0.04, z: 0}
   fieldScannerChildLocalEulerAngles: {x: 0, y: 0, z: 0}
   fieldScannerChildLocalScale: {x: 1, y: 1, z: 1}
-  fieldScannerHeldPrefab: {fileID: 6917847998477345115, guid: 42eed1ef7003d124d93c210c5b5cff43, type: 3}
+  fieldScannerHeldPrefab: {fileID: 0}
   firstAidLocalPosition: {x: 0.035, y: -0.015, z: 0.155}
   firstAidLocalEulerAngles: {x: 8, y: 92, z: 170}
   firstAidLocalScale: {x: 0.15, y: 0.15, z: 0.3}
@@ -1486,10 +1486,20 @@ MonoBehaviour:
   clampWeight: 0.42
   lookAtDistance: 12
   driveRightHandWhenHolding: 1
+  carryForwardOffset: 0.3
+  carryLateralOffset: 0.3
+  carryVerticalOffset: 0.08
+  carryChestHeight: 1.38
+  carryMinHandY: 1.18
+  carryMaxHandY: 1.62
+  carryIKWeight: 0.88
+  rightElbowPoleOffset: {x: 0.4, y: -0.25, z: -0.1}
+  leftElbowPoleOffset: {x: -0.4, y: -0.25, z: -0.1}
+  coreHandOffset: {x: 0, y: 0, z: 0.2}
   handForwardOffset: {x: 0.2, y: 0.12, z: 0.36}
   handEulerOffset: {x: 0, y: 0, z: -75}
-  rightHandPosWeight: 0.82
   rightHandRotWeight: 0.8
+  rightHandPosWeight: 0.82
 --- !u!4 &4690670608594508291 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 6994998768752351189, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}

@@ -19,6 +19,7 @@ public class PlayerAnimatorDriver : MonoBehaviour
     private static readonly int IsDownedHash = Animator.StringToHash("IsDowned");
     private static readonly int IsRevivingHash = Animator.StringToHash("IsReviving");
     private static readonly int ReviveHash = Animator.StringToHash("Revive");
+    private static readonly int DownedCrawlStateHash = Animator.StringToHash("Downed Crawl");
 
     [Header("References")]
     [SerializeField] private Animator animator;
@@ -27,6 +28,7 @@ public class PlayerAnimatorDriver : MonoBehaviour
     [SerializeField] private PlayerEnergyCoreCarrier coreCarrier;
     [SerializeField] private NetworkPlayerMovement networkMovement;
     [SerializeField] private LobbyPlayerState lobbyState;
+    [SerializeField] private NetworkPlayerLifeState networkLifeState;
     [SerializeField] private PlayerDownState downState;
 
     [Header("Damping")]
@@ -51,6 +53,7 @@ public class PlayerAnimatorDriver : MonoBehaviour
         if (coreCarrier == null) coreCarrier = GetComponent<PlayerEnergyCoreCarrier>() ?? GetComponentInParent<PlayerEnergyCoreCarrier>();
         if (networkMovement == null) networkMovement = GetComponent<NetworkPlayerMovement>() ?? GetComponentInParent<NetworkPlayerMovement>();
         if (lobbyState == null) lobbyState = GetComponent<LobbyPlayerState>() ?? GetComponentInParent<LobbyPlayerState>();
+        if (networkLifeState == null) networkLifeState = GetComponent<NetworkPlayerLifeState>() ?? GetComponentInParent<NetworkPlayerLifeState>();
         if (downState == null) downState = GetComponent<PlayerDownState>() ?? GetComponentInParent<PlayerDownState>();
     }
 
@@ -71,11 +74,14 @@ public class PlayerAnimatorDriver : MonoBehaviour
         if (coreCarrier == null) coreCarrier = GetComponent<PlayerEnergyCoreCarrier>() ?? GetComponentInParent<PlayerEnergyCoreCarrier>();
         if (networkMovement == null) networkMovement = GetComponent<NetworkPlayerMovement>() ?? GetComponentInParent<NetworkPlayerMovement>();
         if (lobbyState == null) lobbyState = GetComponent<LobbyPlayerState>() ?? GetComponentInParent<LobbyPlayerState>();
+        if (networkLifeState == null) networkLifeState = GetComponent<NetworkPlayerLifeState>() ?? GetComponentInParent<NetworkPlayerLifeState>();
         if (downState == null) downState = GetComponent<PlayerDownState>() ?? GetComponentInParent<PlayerDownState>();
 
-        bool isCrouching = movement != null
+        bool isCarrying = (coreCarrier != null && coreCarrier.IsCarrying)
+            || (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid);
+        bool isCrouching = !isCarrying && (movement != null
             ? movement.IsCrouching
-            : networkMovement != null && networkMovement.IsAnimationCrouching;
+            : networkMovement != null && networkMovement.IsAnimationCrouching);
         bool isSprinting = movement != null
             ? movement.IsSprinting
             : networkMovement != null
@@ -86,22 +92,40 @@ public class PlayerAnimatorDriver : MonoBehaviour
                 && (Keyboard.current.wKey.isPressed
                     || Keyboard.current.aKey.isPressed
                     || Keyboard.current.dKey.isPressed));
-        bool isCarrying = (coreCarrier != null && coreCarrier.IsCarrying)
-            || (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid);
-        bool isDowned = downState != null && downState.IsDowned;
+        bool isDowned = (downState != null && downState.IsDowned)
+            || (networkLifeState != null && networkLifeState.Object != null && networkLifeState.Object.IsValid && networkLifeState.IsDowned);
         Vector2 moveDirection = GetMoveDirection(isSprinting, isCarrying, isDowned);
-        bool isMoving = moveDirection.sqrMagnitude > 0.01f;
+        float movingThreshold = isDowned ? 0.08f : 0.01f;
+        bool isMoving = moveDirection.sqrMagnitude > movingThreshold;
+        if (!isMoving)
+        {
+            moveDirection = Vector2.zero;
+        }
         float normalizedSpeed = isMoving ? GetNormalizedSpeed(isSprinting, isCrouching, isCarrying, isDowned) : 0f;
 
-        _smoothedSpeed = Mathf.Lerp(_smoothedSpeed, normalizedSpeed, 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(0.001f, speedDampTime)));
+        _smoothedSpeed = isMoving
+            ? Mathf.Lerp(_smoothedSpeed, normalizedSpeed, 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(0.001f, speedDampTime)))
+            : 0f;
         animator.SetFloat(SpeedHash, _smoothedSpeed);
-        animator.SetFloat(MoveXHash, moveDirection.x, directionDampTime, Time.deltaTime);
-        animator.SetFloat(MoveYHash, moveDirection.y, directionDampTime, Time.deltaTime);
+        if (isMoving)
+        {
+            animator.SetFloat(MoveXHash, moveDirection.x, directionDampTime, Time.deltaTime);
+            animator.SetFloat(MoveYHash, moveDirection.y, directionDampTime, Time.deltaTime);
+        }
+        else
+        {
+            animator.SetFloat(MoveXHash, 0f);
+            animator.SetFloat(MoveYHash, 0f);
+        }
         animator.SetBool(IsMovingHash, isMoving);
         animator.SetBool(IsSprintingHash, isSprinting);
         animator.SetBool(IsCrouchingHash, isCrouching);
         animator.SetBool(IsCarryingHash, isCarrying);
         animator.SetBool(IsDownedHash, isDowned);
+        if (isDowned && !isMoving)
+        {
+            animator.Play(DownedCrawlStateHash, 0, 0f);
+        }
     }
 
     public void TriggerRevive()

@@ -41,6 +41,7 @@ public class PlayerMovement : MonoBehaviour
     private bool _isCrouching;
     private bool _isSprintBlocked;
     private Vector2 _moveInput;
+    private PlayerEnergyCoreCarrier _coreCarrier;
 
     public float CurrentStamina => _currentStamina;
     public float MaxStamina => maxStamina;
@@ -54,6 +55,7 @@ public class PlayerMovement : MonoBehaviour
     private void Awake()
     {
         _controller = GetComponent<CharacterController>();
+        _coreCarrier = GetComponent<PlayerEnergyCoreCarrier>() ?? GetComponentInParent<PlayerEnergyCoreCarrier>();
         _currentStamina = maxStamina;
         ApplyControllerDimensions(standingHeight, standingRadius, immediate: true);
 
@@ -82,6 +84,11 @@ public class PlayerMovement : MonoBehaviour
 
     private void Update()
     {
+        if (_coreCarrier == null)
+        {
+            _coreCarrier = GetComponent<PlayerEnergyCoreCarrier>() ?? GetComponentInParent<PlayerEnergyCoreCarrier>();
+        }
+
         Vector2 input = _moveAction != null ? _moveAction.ReadValue<Vector2>() : Vector2.zero;
         _moveInput = input.sqrMagnitude > 1f ? input.normalized : input;
 
@@ -93,8 +100,13 @@ public class PlayerMovement : MonoBehaviour
         }
 
         bool wantsSprint = _sprintAction != null && _sprintAction.IsPressed();
-        bool wantsCrouch = IsCrouchPressed();
+        bool isCarryingCore = _coreCarrier != null && _coreCarrier.IsCarrying;
+        bool wantsCrouch = !isCarryingCore && IsCrouchPressed();
         _isCrouching = wantsCrouch || (_isCrouching && !CanStandUp());
+        if (isCarryingCore && CanStandUp())
+        {
+            _isCrouching = false;
+        }
         _isSprinting = CanSprint(wantsSprint, move);
 
         float speed = GetCurrentSpeed();

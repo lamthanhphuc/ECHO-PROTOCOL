@@ -8,7 +8,7 @@ public sealed class PlayerHeldItemAnchor : MonoBehaviour
     [SerializeField] private Transform coreCarryAnchor;
     [SerializeField] private Vector3 fallbackLocalPosition = new Vector3(0.33f, 1.18f, 0.42f);
     [SerializeField] private Vector3 fallbackLocalEulerAngles = new Vector3(4f, 8f, 0f);
-    [SerializeField] private Vector3 coreCarryLocalPosition = new Vector3(0f, 0.05f, 0.1f);
+    [SerializeField] private Vector3 coreCarryLocalPosition = new Vector3(0f, 0.04f, 0.28f);
     [SerializeField] private Vector3 coreCarryLocalEulerAngles = new Vector3(0f, 0f, 0f);
 
     private Transform _runtimeFallbackAnchor;
@@ -175,8 +175,10 @@ public sealed class PlayerHeldItemAnchor : MonoBehaviour
         ResolveAnimator();
         if (animator != null && animator.isHuman)
         {
-            return animator.GetBoneTransform(HumanBodyBones.RightHand)
-                ?? animator.GetBoneTransform(HumanBodyBones.RightLowerArm)
+            // Anchor to Chest so the core sits centered between both hands
+            return animator.GetBoneTransform(HumanBodyBones.Chest)
+                ?? animator.GetBoneTransform(HumanBodyBones.Spine)
+                ?? animator.GetBoneTransform(HumanBodyBones.Hips)
                 ?? transform;
         }
 

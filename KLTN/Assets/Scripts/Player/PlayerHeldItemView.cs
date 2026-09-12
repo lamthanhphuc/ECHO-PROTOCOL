@@ -9,9 +9,9 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     [SerializeField] private Vector3 energyCoreLocalPosition = Vector3.zero;
     [SerializeField] private Vector3 energyCoreLocalEulerAngles = Vector3.zero;
     [SerializeField] private Vector3 energyCoreLocalScale = new Vector3(25f, 25f, 25f);
-    [SerializeField] private Vector3 energyCoreChildLocalPosition = new Vector3(0.0012f, 0.02f, -0.05f);
-    [SerializeField] private Vector3 energyCoreChildLocalEulerAngles = new Vector3(-89.116f, 77.236f, -92.522f);
-    [SerializeField] private Vector3 energyCoreChildLocalScale = new Vector3(0.9f, 0.9f, 0.9f);
+    [SerializeField] private Vector3 energyCoreChildLocalPosition = new Vector3(-0.00031f, -0.00033f, 0.00399f);
+    [SerializeField] private Vector3 energyCoreChildLocalEulerAngles = new Vector3(91.715f, -50f, -61f);
+    [SerializeField] private Vector3 energyCoreChildLocalScale = new Vector3(1.15f, 1.15f, 1.15f);
     [SerializeField] private Vector3 teamToolLocalPosition = new Vector3(0.04f, 0.18f, 0.11f);
     [SerializeField] private Vector3 teamToolLocalEulerAngles = new Vector3(12f, 88f, -18f);
     [SerializeField] private Vector3 teamToolLocalScale = new Vector3(0.45f, 0.45f, 0.45f);

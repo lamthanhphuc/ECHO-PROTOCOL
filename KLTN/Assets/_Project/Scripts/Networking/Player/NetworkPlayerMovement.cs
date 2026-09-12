@@ -173,7 +173,8 @@ namespace EchoProtocol.Networking
             Vector2 moveInput = _moveAction?.ReadValue<Vector2>() ?? Vector2.zero;
             bool sprintHeld = _sprintAction?.IsPressed() ?? false;
             bool jumpPressed = _jumpAction?.WasPressedThisFrame() ?? false;
-            _offlineAnimationCrouching = IsCrouchPressed();
+            bool isCarryingCoreOffline = IsCarryingCore();
+            _offlineAnimationCrouching = !isCarryingCoreOffline && IsCrouchPressed();
 
             Vector3 localDirection = new Vector3(moveInput.x, 0f, moveInput.y);
             if (localDirection.sqrMagnitude > 1f)
@@ -181,7 +182,7 @@ namespace EchoProtocol.Networking
                 localDirection.Normalize();
             }
 
-            bool isSprintMoving = !_offlineAnimationCrouching && sprintHeld && CanSprintInDirection(moveInput) && localDirection.sqrMagnitude > 0.01f;
+            bool isSprintMoving = !isCarryingCoreOffline && !_offlineAnimationCrouching && sprintHeld && CanSprintInDirection(moveInput) && localDirection.sqrMagnitude > 0.01f;
             float speed = _offlineAnimationCrouching ? _walkSpeed * 0.55f : isSprintMoving ? _sprintSpeed : _walkSpeed;
 
             _offlineAnimationMoveInput = new Vector2(localDirection.x, localDirection.z);
@@ -299,8 +300,9 @@ namespace EchoProtocol.Networking
             var lookRotation = Quaternion.Euler(0f, input.LookYaw, 0f);
             var direction = lookRotation * localDirection;
 
+            bool isCarryingCore = lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid;
             bool canInitiateAction = lifeState == null || lifeState.CanInitiateAction;
-            bool wantsCrouch = input.CrouchHeld && canInitiateAction;
+            bool wantsCrouch = input.CrouchHeld && canInitiateAction && !isCarryingCore;
             if (Object.HasStateAuthority)
             {
                 IsCrouching = wantsCrouch;
@@ -311,6 +313,7 @@ namespace EchoProtocol.Networking
             var isSprintMoving =
                 canInitiateAction &&
                 !effectiveCrouch &&
+                !isCarryingCore &&
                 input.SprintHeld &&
                 CanSprintInDirection(input.Move) &&
                 direction.sqrMagnitude > 0.01f;
@@ -321,9 +324,9 @@ namespace EchoProtocol.Networking
                 : isSprintMoving
                 ? _sprintSpeed
                 : _walkSpeed;
-            var lobbyPlayer = GetComponent<LobbyPlayerState>();
+            var lobbyPlayer = lobbyState;
             var coreCarryMultiplier = 1f;
-            if (lobbyPlayer != null && lobbyPlayer.Object != null && lobbyPlayer.Object.IsValid && lobbyPlayer.CarriedCoreId.IsValid)
+            if (isCarryingCore)
             {
                 coreCarryMultiplier = lobbyPlayer.IsCoreStabilized ? 0.9f : 0.72f;
             }
@@ -337,7 +340,6 @@ namespace EchoProtocol.Networking
                 && _nextMovementNoise.ExpiredOrNotRunning(Runner))
             {
                 var state = lobbyPlayer;
-                var isCarryingCore = state != null && state.Object != null && state.Object.IsValid && state.CarriedCoreId.IsValid;
                 var type = isCarryingCore
                     ? RuntimeNoiseType.CORE_CARRY
                     : RuntimeNoiseType.SPRINT;
@@ -557,8 +559,20 @@ namespace EchoProtocol.Networking
                     : 0f,
                 JumpPressed = _allowJump && (_jumpAction?.WasPressedThisFrame() ?? false),
                 SprintHeld = _sprintAction?.IsPressed() ?? false,
-                CrouchHeld = IsCrouchPressed(),
+                CrouchHeld = !IsCarryingCore() && IsCrouchPressed(),
             };
+        }
+
+        private bool IsCarryingCore()
+        {
+            var lobbyState = GetComponent<LobbyPlayerState>();
+            if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid)
+            {
+                return lobbyState.CarriedCoreId.IsValid;
+            }
+
+            var legacyCarrier = GetComponent<PlayerEnergyCoreCarrier>() ?? GetComponentInParent<PlayerEnergyCoreCarrier>();
+            return legacyCarrier != null && legacyCarrier.IsCarrying;
         }
 
         private bool IsCrouchPressed()
