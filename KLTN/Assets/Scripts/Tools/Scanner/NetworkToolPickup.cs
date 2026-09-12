@@ -183,9 +183,17 @@ namespace EchoProtocol.Tools.Scanner
                 context.PlayerState.SetGameplayToolId(_toolId);
             }
 
-            _pendingDespawn = true;
+            _pendingDespawn = false;
 
-            ToolPickedUp?.Invoke(this, context.Player);
+            try
+            {
+                ToolPickedUp?.Invoke(this, context.Player);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[NetworkToolPickup] ToolPickedUp event exception: {ex.Message}");
+            }
+
             Debug.Log($"[NetworkToolPickup] Player {context.Player} picked up tool '{_toolItemDefinition?.DisplayName ?? _toolId.ToString()}'.");
         }
 
@@ -199,17 +207,10 @@ namespace EchoProtocol.Tools.Scanner
                 }
             }
 
-            if (!_pendingDespawn
-                || Object == null
-                || !Object.IsValid
-                || !Object.HasStateAuthority
-                || Runner == null)
-            {
-                return;
-            }
-
             _pendingDespawn = false;
-            Runner.Despawn(Object);
+            // DO NOT call Runner.Despawn(Object) on scene objects or during active render interpolation.
+            // OnReplicatedStateChanged already disables colliders, visual renderers, and child GameObjects across all clients.
+            // Calling Runner.Despawn on scene-placed network objects causes native AccessViolation (0xC0000005) in UnityPlayer.dll.
         }
 
         // ==========================================

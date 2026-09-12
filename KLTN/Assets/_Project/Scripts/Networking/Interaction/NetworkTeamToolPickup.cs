@@ -101,7 +101,7 @@ namespace EchoProtocol.Networking
             IsConsumed = true;
             SetVisualsAndCollidersActive(false);
             playerState.SetGameplayToolId(_toolId);
-            _pendingDespawn = true;
+            _pendingDespawn = false;
         }
 
         public override void FixedUpdateNetwork()
@@ -114,17 +114,9 @@ namespace EchoProtocol.Networking
                 }
             }
 
-            if (!_pendingDespawn
-                || Object == null
-                || !Object.IsValid
-                || !Object.HasStateAuthority
-                || Runner == null)
-            {
-                return;
-            }
-
             _pendingDespawn = false;
-            Runner.Despawn(Object);
+            // DO NOT call Runner.Despawn(Object) on scene-placed network objects.
+            // SetVisualsAndCollidersActive(false) already disables visuals and colliders across all clients.
         }
     }
 }

@@ -213,59 +213,74 @@ namespace EchoProtocol.UI.HUD
 
         public void RefreshSlots()
         {
-            if (inventory == null)
+            try
             {
-                UpdateSlotView(null, slot1Icon, slot1NameText, "1: Trống");
-                UpdateSlotView(null, slot2Icon, slot2NameText, "2: Trống");
-                UpdateSlotView(null, toolIcon, toolNameText, "Tool: Trống");
-                return;
+                if (inventory == null)
+                {
+                    UpdateSlotView(null, slot1Icon, slot1NameText, "1: Trống");
+                    UpdateSlotView(null, slot2Icon, slot2NameText, "2: Trống");
+                    UpdateSlotView(null, toolIcon, toolNameText, "Tool: Trống");
+                    return;
+                }
+
+                // Slot 1
+                InventoryItemDefinition item1 = inventory.GetNormalSlot(0);
+                UpdateSlotView(item1, slot1Icon, slot1NameText, "1: Trống");
+
+                // Slot 2
+                InventoryItemDefinition item2 = inventory.GetNormalSlot(1);
+                UpdateSlotView(item2, slot2Icon, slot2NameText, "2: Trống");
+
+                // Team Tool Slot
+                InventoryItemDefinition toolItem = inventory.TeamToolSlot;
+                UpdateSlotView(toolItem, toolIcon, toolNameText, "Tool: Trống", isTeamTool: true);
             }
-
-            // Slot 1
-            InventoryItemDefinition item1 = inventory.GetNormalSlot(0);
-            UpdateSlotView(item1, slot1Icon, slot1NameText, "1: Trống");
-
-            // Slot 2
-            InventoryItemDefinition item2 = inventory.GetNormalSlot(1);
-            UpdateSlotView(item2, slot2Icon, slot2NameText, "2: Trống");
-
-            // Team Tool Slot
-            InventoryItemDefinition toolItem = inventory.TeamToolSlot;
-            UpdateSlotView(toolItem, toolIcon, toolNameText, "Tool: Trống", isTeamTool: true);
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[HUDHotbar] RefreshSlots exception: {ex.Message}");
+            }
         }
 
         private void UpdateSlotView(InventoryItemDefinition item, Image icon, Text nameLabel, string emptyLabel, bool isTeamTool = false)
         {
-            if (item != null)
+            try
             {
-                if (icon != null)
+                if (item != null)
                 {
-                    icon.gameObject.SetActive(true);
-                    if (item.Icon != null)
+                    if (icon != null)
                     {
-                        icon.sprite = item.Icon;
-                        icon.color = Color.white;
+                        icon.gameObject.SetActive(true);
+                        if (item.Icon != null)
+                        {
+                            icon.sprite = item.Icon;
+                            icon.color = Color.white;
+                        }
+                        else
+                        {
+                            var circle = HUDTextureUtility.CircleFilled;
+                            if (circle != null) icon.sprite = circle;
+                            icon.color = item.ItemType == InventoryItemType.EnergyCore
+                                ? new Color(0f, 0.9f, 1f, 0.9f)
+                                : new Color(0.2f, 0.8f, 0.5f, 0.9f);
+                        }
                     }
-                    else
+
+                    if (nameLabel != null)
                     {
-                        icon.sprite = HUDTextureUtility.CircleFilled;
-                        icon.color = item.ItemType == InventoryItemType.EnergyCore
-                            ? new Color(0f, 0.9f, 1f, 0.9f)
-                            : new Color(0.2f, 0.8f, 0.5f, 0.9f);
+                        nameLabel.text = isTeamTool
+                            ? $"<color=#00E5FF>[LMB]</color> {item.DisplayName}"
+                            : item.DisplayName;
                     }
                 }
-
-                if (nameLabel != null)
+                else
                 {
-                    nameLabel.text = isTeamTool
-                        ? $"<color=#00E5FF>[LMB]</color> {item.DisplayName}"
-                        : item.DisplayName;
+                    if (icon != null) icon.gameObject.SetActive(false);
+                    if (nameLabel != null) nameLabel.text = $"<color=#78909C>{emptyLabel}</color>";
                 }
             }
-            else
+            catch (System.Exception ex)
             {
-                if (icon != null) icon.gameObject.SetActive(false);
-                if (nameLabel != null) nameLabel.text = $"<color=#78909C>{emptyLabel}</color>";
+                Debug.LogWarning($"[HUDHotbar] UpdateSlotView exception: {ex.Message}");
             }
         }
     }

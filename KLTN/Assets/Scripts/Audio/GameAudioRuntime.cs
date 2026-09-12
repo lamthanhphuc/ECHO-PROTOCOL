@@ -81,7 +81,17 @@ namespace EchoProtocol.Audio
 
         private void OnToolPickedUp(EchoProtocol.Tools.Scanner.NetworkToolPickup pickup, Fusion.PlayerRef player)
         {
-            if (pickup.Runner != null && pickup.Runner.LocalPlayer == player) UI("ui/inventory_pickup");
+            try
+            {
+                if (pickup != null && pickup.Runner != null && pickup.Runner.LocalPlayer == player)
+                {
+                    UI("ui/inventory_pickup");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[GameAudioRuntime] OnToolPickedUp error: {ex.Message}");
+            }
         }
 
         public static void Loop(AudioSource source, string key, float volume = 0.35f)
