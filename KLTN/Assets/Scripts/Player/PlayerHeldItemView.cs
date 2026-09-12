@@ -93,12 +93,17 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             return;
         }
 
-        // Trong phiên multiplayer Fusion, Energy Core là NetworkObject (NetworkPickupItem)
+        // Trong phiên multiplayer Fusion, với remote players: Energy Core là NetworkObject
         // tự bám vào PlayerHeldItemAnchor.ResolveCoreCarryAnchor trên thế giới.
-        // Tuyệt đối không instantiate thêm một bản visual có NetworkObject cục bộ (sẽ gây crash 0xC0000005 trên Client).
+        // Với local player (HasInputAuthority): cần spawn visual first-person riêng.
         if (_currentItem.ItemType == InventoryItemType.EnergyCore && IsActiveFusionSession())
         {
-            return;
+            var netObj = GetComponentInParent<Fusion.NetworkObject>();
+            bool isLocalPlayer = netObj != null && netObj.HasInputAuthority;
+            if (!isLocalPlayer)
+            {
+                return; // remote player — NetworkPickupItem handles world rendering
+            }
         }
 
         // Complete Team Tool prefabs own both their held visual and gameplay lifecycle.

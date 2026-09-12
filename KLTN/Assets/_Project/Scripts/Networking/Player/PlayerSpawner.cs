@@ -381,8 +381,8 @@ namespace EchoProtocol.Networking
         private static bool IsEnergyCoreSpawnCandidate(Transform candidate)
         {
             return candidate != null
-                && candidate.name.StartsWith("EnergyCore_C", System.StringComparison.OrdinalIgnoreCase)
-                && !candidate.name.StartsWith("EnergyCore_Network", System.StringComparison.OrdinalIgnoreCase);
+                && candidate.name.StartsWith("CoreSpawn_C", System.StringComparison.OrdinalIgnoreCase)
+                && candidate.name.EndsWith("_EMPTY", System.StringComparison.OrdinalIgnoreCase);
         }
 
         private static SpawnPose GetSectorBoxPose()
