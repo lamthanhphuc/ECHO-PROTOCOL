@@ -93,6 +93,14 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             return;
         }
 
+        // Trong phiên multiplayer Fusion, Energy Core là NetworkObject (NetworkPickupItem)
+        // tự bám vào PlayerHeldItemAnchor.ResolveCoreCarryAnchor trên thế giới.
+        // Tuyệt đối không instantiate thêm một bản visual có NetworkObject cục bộ (sẽ gây crash 0xC0000005 trên Client).
+        if (_currentItem.ItemType == InventoryItemType.EnergyCore && IsActiveFusionSession())
+        {
+            return;
+        }
+
         // Complete Team Tool prefabs own both their held visual and gameplay lifecycle.
         // PlayerTeamToolController renders these so the generic held-item view must not
         // instantiate the pickup prefab a second time.
@@ -135,16 +143,15 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
         if (IsItem(_currentItem, "plank", "jammer"))
         {
-            if (prefabToSpawn == null)
-            {
 #if UNITY_EDITOR
-                prefabToSpawn = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Gameplay/Imported/PF_Plank_Imported.prefab");
+            var visualPlank = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Gameplay/Imported/PF_Plank_HeldVisual.prefab");
+            if (visualPlank != null) prefabToSpawn = visualPlank;
 #endif
-                if (prefabToSpawn == null)
-                {
-                    prefabToSpawn = Resources.Load<GameObject>("PF_Plank_Imported")
-                        ?? Resources.Load<GameObject>("Prefabs/Gameplay/Imported/PF_Plank_Imported");
-                }
+            if (prefabToSpawn == null || prefabToSpawn.GetComponentInChildren<Fusion.NetworkObject>(true) != null)
+            {
+                prefabToSpawn = Resources.Load<GameObject>("PF_Plank_HeldVisual")
+                    ?? Resources.Load<GameObject>("Prefabs/Gameplay/Imported/PF_Plank_HeldVisual")
+                    ?? _currentItem.TeamToolGameplayPrefab;
             }
         }
 
@@ -153,7 +160,8 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             return;
         }
 
-        _currentVisual = Instantiate(prefabToSpawn, anchor);
+        _currentVisual = NetworkTeamToolHeldView.InstantiateHeldVisualSafely(prefabToSpawn, anchor);
+        if (_currentVisual == null) return;
         _currentVisual.name = "Held_" + _currentItem.ItemId;
         ApplyLocalPose(_currentVisual.transform, _currentItem);
         StripWorldGameplayComponents(_currentVisual);
@@ -361,5 +369,14 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         _currentVisual = null;
         _currentItem = null;
         EchoProtocol.UI.HUD.HUDFieldScanner.Instance?.SetVisible(false);
+    }
+
+    private bool IsActiveFusionSession()
+    {
+        var netObj = GetComponentInParent<Fusion.NetworkObject>();
+        return netObj != null
+            && netObj.IsValid
+            && netObj.Runner != null
+            && netObj.Runner.IsRunning;
     }
 }

@@ -16,6 +16,7 @@ namespace EchoProtocol.Editor
         private const string JammerPrefabPath = "Assets/Resources/Network/PF_DoorJammer.prefab";
         private const string PlankItemPath = "Assets/ScriptableObjects/Inventory/TeamTools/SO_Plank_ItemDefinition.asset";
         private const string PlankPickupPath = "Assets/Prefabs/Gameplay/Imported/PF_Plank_Imported.prefab";
+        private const string PlankHeldVisualPath = "Assets/Prefabs/Gameplay/Imported/PF_Plank_HeldVisual.prefab";
         private const string PlankImportedPrefabPath = "Assets/Prefabs/Gameplay/Imported/PF_Plank_Imported.prefab";
         private const string PlankImportAltPrefabPath = "Assets/import/plank/PF_Plank.prefab";
         private const string PlankFbxPath = "Assets/import/plank/source/Plank4.fbx";
@@ -410,13 +411,15 @@ namespace EchoProtocol.Editor
             ConfigurePlankPickupPrefab(PlankImportedPrefabPath, itemDef);
             ConfigurePlankPickupPrefab(PlankImportAltPrefabPath, itemDef);
 
+            GameObject heldVisualPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlankHeldVisualPath);
+
             SerializedObject itemSo = new SerializedObject(itemDef);
             itemSo.FindProperty("itemId").stringValue = "plank";
             itemSo.FindProperty("displayName").stringValue = "Wooden Planks";
             itemSo.FindProperty("itemType").intValue = (int)InventoryItemType.TeamTool;
             itemSo.FindProperty("worldPrefab").objectReferenceValue = pickupPrefab;
             var gameplayProp = itemSo.FindProperty("teamToolGameplayPrefab");
-            if (gameplayProp != null) gameplayProp.objectReferenceValue = pickupPrefab;
+            if (gameplayProp != null) gameplayProp.objectReferenceValue = heldVisualPrefab != null ? heldVisualPrefab : pickupPrefab;
             itemSo.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(itemDef);
         }
@@ -574,8 +577,17 @@ namespace EchoProtocol.Editor
 
         public static void UpgradePlayerPrefabs()
         {
-            GameObject plankPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlankPickupPath)
-                ?? AssetDatabase.LoadAssetAtPath<GameObject>(PlankImportedPrefabPath);
+            GameObject plankHeldVisualPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlankHeldVisualPath);
+            if (plankHeldVisualPrefab == null)
+            {
+                AssetDatabase.Refresh();
+                plankHeldVisualPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlankHeldVisualPath);
+            }
+            if (plankHeldVisualPrefab == null)
+            {
+                Debug.LogError($"[DoorJammerAndPlankSetup] Cannot find held visual prefab at {PlankHeldVisualPath}. Skipping toolVisual_4 assignment to avoid crash.");
+                return;
+            }
 
             string[] playerPrefabPaths = new[]
             {
@@ -603,9 +615,9 @@ namespace EchoProtocol.Editor
                     {
                         SerializedObject toolSo = new SerializedObject(toolView);
                         var visualProp = toolSo.FindProperty("toolVisual_4");
-                        if (visualProp != null && visualProp.objectReferenceValue != plankPrefab)
+                        if (visualProp != null && visualProp.objectReferenceValue != plankHeldVisualPrefab)
                         {
-                            visualProp.objectReferenceValue = plankPrefab;
+                            visualProp.objectReferenceValue = plankHeldVisualPrefab;
                             changed = true;
                         }
 

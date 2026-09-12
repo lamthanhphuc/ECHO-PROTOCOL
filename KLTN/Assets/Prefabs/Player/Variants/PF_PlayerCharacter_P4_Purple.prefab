@@ -1545,12 +1545,15 @@ MonoBehaviour:
   noiseMakerLocalPosition: {x: 0.018, y: 0.132, z: -0.065}
   noiseMakerLocalEulerAngles: {x: 6.176, y: 93.2, z: 94.562}
   noiseMakerLocalScale: {x: 0.7, y: 0.7, z: 0.7}
-  plankLocalPosition: {x: 0.028, y: 0.189, z: -0.037}
-  plankLocalEulerAngles: {x: 90, y: 0, z: -90}
-  plankLocalScale: {x: 5, y: 5, z: 5}
+  plankLocalPosition: {x: 0.04, y: 0.02, z: 0.12}
+  plankLocalEulerAngles: {x: 15, y: 90, z: -20}
+  plankLocalScale: {x: 15, y: 15, z: 15}
   plankChildLocalPosition: {x: 0, y: 0, z: 0}
   plankChildLocalEulerAngles: {x: 0, y: 0, z: 0}
   plankChildLocalScale: {x: 1, y: 1, z: 1}
+  coreStabilizerLocalPosition: {x: 0.035, y: 0.18, z: 0.12}
+  coreStabilizerLocalEulerAngles: {x: 10, y: 90, z: -15}
+  coreStabilizerLocalScale: {x: 0.45, y: 0.45, z: 0.45}
 --- !u!114 &8311583793157078398
 MonoBehaviour:
   m_ObjectHideFlags: 0

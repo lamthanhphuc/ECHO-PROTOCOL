@@ -535,7 +535,7 @@ MonoBehaviour:
   toolVisual_1: {fileID: 6917847998477345115, guid: 42eed1ef7003d124d93c210c5b5cff43, type: 3}
   toolVisual_2: {fileID: 6336918889015265847, guid: 0c24821b2d6aef745a61febe92e91285, type: 3}
   toolVisual_3: {fileID: 5508043860142965960, guid: 7972be33729bd41458d3d7b5486243ef, type: 3}
-  toolVisual_4: {fileID: 1032971532598727059, guid: 01c3e5e273fc64041870daff62b4cbaa, type: 3}
+  toolVisual_4: {fileID: 1032971532598727059, guid: d4a8b792e31649f1a07bb5c92e104a37, type: 3}
   toolVisual_6: {fileID: 5079926724729202342, guid: 6015a547e18400c42aae8c415323205b, type: 3}
   localPosition: {x: 0.04, y: 0.02, z: 0.12}
   localEulerAngles: {x: 0, y: 90, z: -18}
@@ -555,9 +555,9 @@ MonoBehaviour:
   firstAidChildLocalPosition: {x: -0.533528, y: -3.405526, z: -0.3114559}
   firstAidChildLocalEulerAngles: {x: 0.12, y: -0.416, z: 5.923}
   firstAidChildLocalScale: {x: 1, y: 1, z: 1}
-  plankLocalPosition: {x: 0.028, y: 0.189, z: -0.037}
-  plankLocalEulerAngles: {x: 90, y: 0, z: -90}
-  plankLocalScale: {x: 5, y: 5, z: 5}
+  plankLocalPosition: {x: 0.04, y: 0.02, z: 0.12}
+  plankLocalEulerAngles: {x: 15, y: 90, z: -20}
+  plankLocalScale: {x: 15, y: 15, z: 15}
   plankChildLocalPosition: {x: 0, y: 0, z: 0}
   plankChildLocalEulerAngles: {x: 0, y: 0, z: 0}
   plankChildLocalScale: {x: 1, y: 1, z: 1}
@@ -810,9 +810,9 @@ MonoBehaviour:
   noiseMakerLocalPosition: {x: 0.018, y: 0.132, z: -0.065}
   noiseMakerLocalEulerAngles: {x: 6.176, y: 93.2, z: 94.562}
   noiseMakerLocalScale: {x: 0.7, y: 0.7, z: 0.7}
-  plankLocalPosition: {x: 0.028, y: 0.189, z: -0.037}
-  plankLocalEulerAngles: {x: 90, y: 0, z: -90}
-  plankLocalScale: {x: 5, y: 5, z: 5}
+  plankLocalPosition: {x: 0.04, y: 0.02, z: 0.12}
+  plankLocalEulerAngles: {x: 15, y: 90, z: -20}
+  plankLocalScale: {x: 15, y: 15, z: 15}
   plankChildLocalPosition: {x: 0, y: 0, z: 0}
   plankChildLocalEulerAngles: {x: 0, y: 0, z: 0}
   plankChildLocalScale: {x: 1, y: 1, z: 1}

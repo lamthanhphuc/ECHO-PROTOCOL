@@ -7,8 +7,8 @@ public class PlayerCamera : MonoBehaviour
     [SerializeField] private InputActionAsset inputActions;
     [SerializeField] private float mouseSensitivity = 0.12f;
     [SerializeField] private float eyeHeight = 1.65f;
-    [SerializeField] private float crouchEyeHeight = 1.3f;
-    [SerializeField] private float downedEyeHeight = 0.55f;
+    [SerializeField] private float crouchEyeHeight = 1.4f;
+    [SerializeField] private float downedEyeHeight = 0.65f;
     [SerializeField] private float eyeHeightTransitionSpeed = 10f;
     [SerializeField] private float minPitch = -85f;
     [SerializeField] private float maxPitch = 85f;

@@ -16,5 +16,5 @@ MonoBehaviour:
   displayName: Wooden Planks
   itemType: 1
   worldPrefab: {fileID: 1032971532598727059, guid: 01c3e5e273fc64041870daff62b4cbaa, type: 3}
-  teamToolGameplayPrefab: {fileID: 1032971532598727059, guid: 01c3e5e273fc64041870daff62b4cbaa, type: 3}
+  teamToolGameplayPrefab: {fileID: 1032971532598727059, guid: d4a8b792e31649f1a07bb5c92e104a37, type: 3}
   icon: {fileID: 0}

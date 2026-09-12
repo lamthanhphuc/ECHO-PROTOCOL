@@ -118,8 +118,9 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         GameObject sourcePrefab = ResolveToolPrefab(_shownToolId);
         if (sourcePrefab != null)
         {
-            // Instantiate prefab thực
-            _visual = Instantiate(sourcePrefab, anchor);
+            // Instantiate visual an toàn (tuyệt đối không instantiate prefab có NetworkObject)
+            _visual = InstantiateHeldVisualSafely(sourcePrefab, anchor);
+            if (_visual == null) return;
             _visual.name = "Held_TeamTool_" + _shownToolId;
             _visual.transform.localPosition = ResolveToolPosition(_shownToolId);
             _visual.transform.localRotation = Quaternion.Euler(ResolveToolEulerAngles(_shownToolId));
@@ -209,16 +210,17 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
                 return Resources.Load<GameObject>("PF_FirstAidPickup_Imported");
             case 4:
                 if (toolVisual_4 != null) return toolVisual_4;
-                if (_localInventory != null && _localInventory.DoorJammerDefinition != null && _localInventory.DoorJammerDefinition.WorldPrefab != null)
+                if (_localInventory != null && _localInventory.DoorJammerDefinition != null && _localInventory.DoorJammerDefinition.TeamToolGameplayPrefab != null)
                 {
-                    return _localInventory.DoorJammerDefinition.WorldPrefab;
+                    return _localInventory.DoorJammerDefinition.TeamToolGameplayPrefab;
                 }
 #if UNITY_EDITOR
-                var importedPlank = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Gameplay/Imported/PF_Plank_Imported.prefab");
-                if (importedPlank != null) return importedPlank;
+                var visualPlank = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Gameplay/Imported/PF_Plank_HeldVisual.prefab");
+                if (visualPlank != null) return visualPlank;
 #endif
-                return Resources.Load<GameObject>("PF_Plank_Imported")
-                    ?? Resources.Load<GameObject>("Prefabs/Gameplay/Imported/PF_Plank_Imported");
+                return Resources.Load<GameObject>("PF_Plank_HeldVisual")
+                    ?? Resources.Load<GameObject>("Prefabs/Gameplay/Imported/PF_Plank_HeldVisual")
+                    ?? toolVisual_4;
             case 6:
                 return toolVisual_6;
             default:
@@ -304,5 +306,74 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
 
         _visual = null;
         _shownToolId = 0;
+    }
+
+    public static GameObject InstantiateHeldVisualSafely(GameObject sourcePrefab, Transform anchor)
+    {
+        if (sourcePrefab == null || anchor == null) return null;
+
+        var netObj = sourcePrefab.GetComponentInChildren<Fusion.NetworkObject>(true);
+        var netBeh = sourcePrefab.GetComponentInChildren<Fusion.NetworkBehaviour>(true);
+
+        if (netObj == null && netBeh == null)
+        {
+            return Instantiate(sourcePrefab, anchor);
+        }
+
+        Debug.LogWarning($"[NetworkTeamToolHeldView] Prefab '{sourcePrefab.name}' contains Fusion NetworkObject/NetworkBehaviour! Creating a sanitized visual-only clone to prevent native crash.");
+
+        GameObject visualContainer = new GameObject(sourcePrefab.name + "_VisualClone");
+        visualContainer.transform.SetParent(anchor, false);
+        visualContainer.transform.localPosition = Vector3.zero;
+        visualContainer.transform.localRotation = Quaternion.identity;
+        visualContainer.transform.localScale = sourcePrefab.transform.localScale;
+
+        CopyVisualHierarchySafely(sourcePrefab.transform, visualContainer.transform);
+        return visualContainer;
+    }
+
+    public static void CopyVisualHierarchySafely(Transform source, Transform target)
+    {
+        if (source.TryGetComponent<MeshFilter>(out var mf) && mf.sharedMesh != null)
+        {
+            var targetMf = target.gameObject.AddComponent<MeshFilter>();
+            targetMf.sharedMesh = mf.sharedMesh;
+        }
+
+        if (source.TryGetComponent<MeshRenderer>(out var mr))
+        {
+            var targetMr = target.gameObject.AddComponent<MeshRenderer>();
+            targetMr.sharedMaterials = mr.sharedMaterials;
+            targetMr.shadowCastingMode = mr.shadowCastingMode;
+            targetMr.receiveShadows = mr.receiveShadows;
+            targetMr.enabled = mr.enabled;
+        }
+
+        if (source.TryGetComponent<SkinnedMeshRenderer>(out var smr))
+        {
+            var targetSmr = target.gameObject.AddComponent<SkinnedMeshRenderer>();
+            targetSmr.sharedMesh = smr.sharedMesh;
+            targetSmr.sharedMaterials = smr.sharedMaterials;
+            targetSmr.shadowCastingMode = smr.shadowCastingMode;
+            targetSmr.receiveShadows = smr.receiveShadows;
+            targetSmr.enabled = smr.enabled;
+        }
+
+        for (int i = 0; i < source.childCount; i++)
+        {
+            Transform child = source.GetChild(i);
+            if (child.GetComponentsInChildren<Renderer>(true).Length == 0)
+            {
+                continue;
+            }
+
+            GameObject childObj = new GameObject(child.name);
+            childObj.transform.SetParent(target, false);
+            childObj.transform.localPosition = child.localPosition;
+            childObj.transform.localRotation = child.localRotation;
+            childObj.transform.localScale = child.localScale;
+
+            CopyVisualHierarchySafely(child, childObj.transform);
+        }
     }
 }
