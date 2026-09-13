@@ -582,6 +582,7 @@ MonoBehaviour:
   coreCarrier: {fileID: 5286019399313537006}
   networkMovement: {fileID: 0}
   lobbyState: {fileID: 640100000000000001}
+  networkLifeState: {fileID: 0}
   downState: {fileID: 0}
   speedDampTime: 0.16
   directionDampTime: 0.12
