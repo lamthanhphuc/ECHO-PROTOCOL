@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEditor;
+using UnityEditor.Animations;
 using UnityEditorMCP.Handlers;
 using Newtonsoft.Json.Linq;
 
@@ -9,15 +10,32 @@ namespace UnityEditorMCP.Tests
 {
     public class AnimatorStateHandlerTests
     {
+        private const string TestControllerPath =
+            "Assets/__UnityEditorMCP_AnimatorStateHandlerTests.controller";
+
         private GameObject testGameObject;
         private Animator testAnimator;
+        private AnimatorController testController;
+
+        private static JObject ToJObject(object result)
+        {
+            Assert.IsNotNull(result);
+            return JObject.FromObject(result);
+        }
         
         [SetUp]
         public void Setup()
         {
-            // Create test GameObject with Animator
+            AssetDatabase.DeleteAsset(TestControllerPath);
+
             testGameObject = new GameObject("TestAnimatorObject");
             testAnimator = testGameObject.AddComponent<Animator>();
+
+            testController =
+                AnimatorController.CreateAnimatorControllerAtPath(TestControllerPath);
+
+            Assert.IsNotNull(testController);
+            testAnimator.runtimeAnimatorController = testController;
         }
         
         [TearDown]
@@ -27,6 +45,11 @@ namespace UnityEditorMCP.Tests
             {
                 Object.DestroyImmediate(testGameObject);
             }
+
+            testAnimator = null;
+            testController = null;
+
+            AssetDatabase.DeleteAsset(TestControllerPath);
         }
         
         [Test]
@@ -44,12 +67,10 @@ namespace UnityEditorMCP.Tests
             var result = AnimatorStateHandler.GetAnimatorState(parameters);
             
             // Assert
-            Assert.IsNotNull(result);
-            Assert.IsInstanceOf<Dictionary<string, object>>(result);
-            var dict = (Dictionary<string, object>)result;
-            Assert.IsFalse(dict.ContainsKey("error"));
-            Assert.AreEqual(testGameObject.name, dict["gameObject"]);
-            Assert.AreEqual(testAnimator.enabled, dict["enabled"]);
+            var dict = ToJObject(result);
+            Assert.IsNull(dict["error"]);
+            Assert.AreEqual(testGameObject.name, dict["gameObject"].ToString());
+            Assert.AreEqual(testAnimator.enabled, dict["enabled"].Value<bool>());
         }
         
         [Test]
@@ -65,9 +86,8 @@ namespace UnityEditorMCP.Tests
             var result = AnimatorStateHandler.GetAnimatorState(parameters);
             
             // Assert
-            Assert.IsNotNull(result);
-            var dict = result as Dictionary<string, object> ?? (Dictionary<string, object>)result;
-            Assert.IsTrue(dict.ContainsKey("error"));
+            var dict = ToJObject(result);
+            Assert.IsNotNull(dict["error"]);
             Assert.IsTrue(dict["error"].ToString().Contains("GameObject not found"));
         }
         
@@ -81,9 +101,8 @@ namespace UnityEditorMCP.Tests
             var result = AnimatorStateHandler.GetAnimatorState(parameters);
             
             // Assert
-            Assert.IsNotNull(result);
-            var dict = result as Dictionary<string, object> ?? (Dictionary<string, object>)result;
-            Assert.IsTrue(dict.ContainsKey("error"));
+            var dict = ToJObject(result);
+            Assert.IsNotNull(dict["error"]);
             Assert.IsTrue(dict["error"].ToString().Contains("gameObjectName is required"));
         }
         
@@ -100,9 +119,8 @@ namespace UnityEditorMCP.Tests
             var result = AnimatorStateHandler.GetAnimatorRuntimeInfo(parameters);
             
             // Assert
-            Assert.IsNotNull(result);
-            var dict = result as Dictionary<string, object> ?? (Dictionary<string, object>)result;
-            Assert.IsTrue(dict.ContainsKey("error"));
+            var dict = ToJObject(result);
+            Assert.IsNotNull(dict["error"]);
             Assert.IsTrue(dict["error"].ToString().Contains("only available in Play mode"));
         }
         
@@ -120,9 +138,8 @@ namespace UnityEditorMCP.Tests
             var result = AnimatorStateHandler.GetAnimatorState(parameters);
             
             // Assert
-            Assert.IsNotNull(result);
-            var dict = result as Dictionary<string, object> ?? (Dictionary<string, object>)result;
-            Assert.IsTrue(dict.ContainsKey("error"));
+            var dict = ToJObject(result);
+            Assert.IsNotNull(dict["error"]);
             Assert.IsTrue(dict["error"].ToString().Contains("Animator component not found"));
         }
     }

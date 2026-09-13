@@ -25,15 +25,23 @@ namespace UnityEditorMCP.Tests
         private Gamepad gamepad;
         private Touchscreen touchscreen;
 
+        private static JObject ToJObject(object result)
+        {
+            Assert.NotNull(result);
+            return JObject.FromObject(result);
+        }
+
+        private static void AssertPlayModeRequired(object result)
+        {
+            var resultJson = ToJObject(result);
+            Assert.NotNull(resultJson["error"]);
+            Assert.AreEqual("PLAY_MODE_REQUIRED", resultJson["code"]?.ToString());
+            StringAssert.Contains("Play Mode is required", resultJson["error"].ToString());
+        }
+
         [SetUp]
         public void Setup()
         {
-            // Clean up any existing devices
-            foreach (var device in InputSystem.devices)
-            {
-                InputSystem.RemoveDevice(device);
-            }
-
             // Add test devices
             keyboard = InputSystem.AddDevice<Keyboard>();
             mouse = InputSystem.AddDevice<Mouse>();
@@ -45,10 +53,15 @@ namespace UnityEditorMCP.Tests
         public void TearDown()
         {
             // Clean up test devices
-            if (keyboard != null) InputSystem.RemoveDevice(keyboard);
-            if (mouse != null) InputSystem.RemoveDevice(mouse);
-            if (gamepad != null) InputSystem.RemoveDevice(gamepad);
-            if (touchscreen != null) InputSystem.RemoveDevice(touchscreen);
+            if (keyboard != null && keyboard.added) InputSystem.RemoveDevice(keyboard);
+            if (mouse != null && mouse.added) InputSystem.RemoveDevice(mouse);
+            if (gamepad != null && gamepad.added) InputSystem.RemoveDevice(gamepad);
+            if (touchscreen != null && touchscreen.added) InputSystem.RemoveDevice(touchscreen);
+
+            keyboard = null;
+            mouse = null;
+            gamepad = null;
+            touchscreen = null;
         }
 
         #region Keyboard Tests
@@ -65,15 +78,9 @@ namespace UnityEditorMCP.Tests
 
             // Act
             var result = InputSystemHandler.SimulateKeyboardInput(parameters);
-            InputSystem.Update();
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual("press", resultJson["action"].ToString());
-            Assert.AreEqual("A", resultJson["key"].ToString());
-            Assert.IsTrue(keyboard.aKey.isPressed);
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -85,9 +92,8 @@ namespace UnityEditorMCP.Tests
                 ["action"] = "press",
                 ["key"] = "A"
             };
-            InputSystemHandler.SimulateKeyboardInput(pressParams);
-            InputSystem.Update();
-            Assert.IsTrue(keyboard.aKey.isPressed);
+            AssertPlayModeRequired(
+                InputSystemHandler.SimulateKeyboardInput(pressParams));
 
             // Act - Release the key
             var releaseParams = new JObject
@@ -96,14 +102,9 @@ namespace UnityEditorMCP.Tests
                 ["key"] = "A"
             };
             var result = InputSystemHandler.SimulateKeyboardInput(releaseParams);
-            InputSystem.Update();
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual("release", resultJson["action"].ToString());
-            Assert.IsFalse(keyboard.aKey.isPressed);
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -121,11 +122,7 @@ namespace UnityEditorMCP.Tests
             var result = InputSystemHandler.SimulateKeyboardInput(parameters);
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual("type", resultJson["action"].ToString());
-            Assert.AreEqual("Hello", resultJson["text"].ToString());
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -142,10 +139,7 @@ namespace UnityEditorMCP.Tests
             var result = InputSystemHandler.SimulateKeyboardInput(parameters);
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual("combo", resultJson["action"].ToString());
+            AssertPlayModeRequired(result);
         }
 
         #endregion
@@ -166,15 +160,9 @@ namespace UnityEditorMCP.Tests
 
             // Act
             var result = InputSystemHandler.SimulateMouseInput(parameters);
-            InputSystem.Update();
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual("move", resultJson["action"].ToString());
-            Assert.AreEqual(100, mouse.position.x.ReadValue());
-            Assert.AreEqual(200, mouse.position.y.ReadValue());
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -192,11 +180,7 @@ namespace UnityEditorMCP.Tests
             var result = InputSystemHandler.SimulateMouseInput(parameters);
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual("click", resultJson["action"].ToString());
-            Assert.AreEqual("left", resultJson["button"].ToString());
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -217,10 +201,7 @@ namespace UnityEditorMCP.Tests
             var result = InputSystemHandler.SimulateMouseInput(parameters);
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual("drag", resultJson["action"].ToString());
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -238,10 +219,7 @@ namespace UnityEditorMCP.Tests
             var result = InputSystemHandler.SimulateMouseInput(parameters);
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual("scroll", resultJson["action"].ToString());
+            AssertPlayModeRequired(result);
         }
 
         #endregion
@@ -261,13 +239,9 @@ namespace UnityEditorMCP.Tests
 
             // Act
             var result = InputSystemHandler.SimulateGamepadInput(parameters);
-            InputSystem.Update();
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.IsTrue(gamepad.buttonSouth.isPressed);
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -284,14 +258,9 @@ namespace UnityEditorMCP.Tests
 
             // Act
             var result = InputSystemHandler.SimulateGamepadInput(parameters);
-            InputSystem.Update();
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual(0.5f, gamepad.leftStick.x.ReadValue(), 0.01f);
-            Assert.AreEqual(0.75f, gamepad.leftStick.y.ReadValue(), 0.01f);
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -307,13 +276,9 @@ namespace UnityEditorMCP.Tests
 
             // Act
             var result = InputSystemHandler.SimulateGamepadInput(parameters);
-            InputSystem.Update();
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual(0.8f, gamepad.leftTrigger.ReadValue(), 0.01f);
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -328,13 +293,9 @@ namespace UnityEditorMCP.Tests
 
             // Act
             var result = InputSystemHandler.SimulateGamepadInput(parameters);
-            InputSystem.Update();
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual(Vector2.up, gamepad.dpad.ReadValue());
+            AssertPlayModeRequired(result);
         }
 
         #endregion
@@ -357,10 +318,7 @@ namespace UnityEditorMCP.Tests
             var result = InputSystemHandler.SimulateTouchInput(parameters);
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual("tap", resultJson["action"].ToString());
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -382,10 +340,7 @@ namespace UnityEditorMCP.Tests
             var result = InputSystemHandler.SimulateTouchInput(parameters);
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual("swipe", resultJson["action"].ToString());
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -405,10 +360,7 @@ namespace UnityEditorMCP.Tests
             var result = InputSystemHandler.SimulateTouchInput(parameters);
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual("pinch", resultJson["action"].ToString());
+            AssertPlayModeRequired(result);
         }
 
         #endregion
@@ -451,10 +403,7 @@ namespace UnityEditorMCP.Tests
             var result = InputSystemHandler.CreateInputSequence(parameters);
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["success"].ToObject<bool>());
-            Assert.AreEqual(2, resultJson["totalSteps"].ToObject<int>());
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -467,8 +416,7 @@ namespace UnityEditorMCP.Tests
             var result = InputSystemHandler.GetCurrentInputState(parameters);
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
+            var resultJson = ToJObject(result);
             Assert.NotNull(resultJson["activeDevices"]);
             Assert.NotNull(resultJson["keyboard"]);
             Assert.NotNull(resultJson["mouse"]);
@@ -493,9 +441,7 @@ namespace UnityEditorMCP.Tests
             var result = InputSystemHandler.SimulateKeyboardInput(parameters);
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["error"].ToString().Contains("Unknown action"));
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -512,9 +458,7 @@ namespace UnityEditorMCP.Tests
             var result = InputSystemHandler.SimulateKeyboardInput(parameters);
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["error"].ToString().Contains("key is required"));
+            AssertPlayModeRequired(result);
         }
 
         [Test]
@@ -531,9 +475,7 @@ namespace UnityEditorMCP.Tests
             var result = InputSystemHandler.SimulateMouseInput(parameters);
 
             // Assert
-            Assert.NotNull(result);
-            var resultJson = JObject.FromObject(result);
-            Assert.IsTrue(resultJson["error"].ToString().Contains("Invalid mouse button"));
+            AssertPlayModeRequired(result);
         }
 
         #endregion

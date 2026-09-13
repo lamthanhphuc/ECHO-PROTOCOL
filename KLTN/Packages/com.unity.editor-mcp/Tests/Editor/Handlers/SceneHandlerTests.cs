@@ -15,9 +15,23 @@ namespace UnityEditorMCP.Tests
     {
         private string testSceneFolder = "Assets/TestScenes";
 
+        private const string MinimalSceneName =
+            "__UnityEditorMCP_MinimalSceneTest";
+
+        private const string MinimalScenePath =
+            "Assets/Scenes/__UnityEditorMCP_MinimalSceneTest.unity";
+
+        private static JObject ToJObject(object result)
+        {
+            Assert.IsNotNull(result);
+            return JObject.FromObject(result);
+        }
+
         [SetUp]
         public void Setup()
         {
+            AssetDatabase.DeleteAsset(MinimalScenePath);
+
             // Create test folder if it doesn't exist
             if (!AssetDatabase.IsValidFolder(testSceneFolder))
             {
@@ -33,7 +47,9 @@ namespace UnityEditorMCP.Tests
             {
                 AssetDatabase.DeleteAsset(testSceneFolder);
             }
-            
+
+            AssetDatabase.DeleteAsset(MinimalScenePath);
+
             // Remove any test scenes from build settings
             var buildScenes = EditorBuildSettings.scenes.ToList();
             buildScenes.RemoveAll(s => s.path.Contains("TestScene"));
@@ -45,22 +61,22 @@ namespace UnityEditorMCP.Tests
         {
             var parameters = new JObject
             {
-                ["sceneName"] = "TestScene"
+                ["sceneName"] = MinimalSceneName
             };
 
-            var result = SceneHandler.CreateScene(parameters) as dynamic;
+            var result = ToJObject(SceneHandler.CreateScene(parameters));
 
             Assert.IsNotNull(result);
-            Assert.IsNull(result.error);
-            Assert.AreEqual("TestScene", result.sceneName);
-            Assert.AreEqual("Assets/Scenes/TestScene.unity", result.path);
-            Assert.IsTrue(result.isLoaded);
+            Assert.IsNull(result["error"]);
+            Assert.AreEqual(MinimalSceneName, result["sceneName"].ToString());
+            Assert.AreEqual(MinimalScenePath, result["path"].ToString());
+            Assert.IsTrue(result["isLoaded"].Value<bool>());
             
             // Verify scene was created
-            Assert.IsTrue(File.Exists((string)result.path));
+            Assert.IsTrue(File.Exists(result["path"].ToString()));
             
             // Clean up
-            AssetDatabase.DeleteAsset((string)result.path);
+            AssetDatabase.DeleteAsset(result["path"].ToString());
         }
 
         [Test]
@@ -72,15 +88,15 @@ namespace UnityEditorMCP.Tests
                 ["path"] = testSceneFolder + "/"
             };
 
-            var result = SceneHandler.CreateScene(parameters) as dynamic;
+            var result = ToJObject(SceneHandler.CreateScene(parameters));
 
             Assert.IsNotNull(result);
-            Assert.IsNull(result.error);
-            Assert.AreEqual("CustomScene", result.sceneName);
-            Assert.AreEqual(testSceneFolder + "/CustomScene.unity", result.path);
+            Assert.IsNull(result["error"]);
+            Assert.AreEqual("CustomScene", result["sceneName"].ToString());
+            Assert.AreEqual(testSceneFolder + "/CustomScene.unity", result["path"].ToString());
             
             // Verify scene was created
-            Assert.IsTrue(File.Exists((string)result.path));
+            Assert.IsTrue(File.Exists(result["path"].ToString()));
         }
 
         [Test]
@@ -95,11 +111,11 @@ namespace UnityEditorMCP.Tests
                 ["loadScene"] = false
             };
 
-            var result = SceneHandler.CreateScene(parameters) as dynamic;
+            var result = ToJObject(SceneHandler.CreateScene(parameters));
 
             Assert.IsNotNull(result);
-            Assert.IsNull(result.error);
-            Assert.IsFalse(result.isLoaded);
+            Assert.IsNull(result["error"]);
+            Assert.IsFalse(result["isLoaded"].Value<bool>());
             
             // Verify current scene didn't change
             Assert.AreEqual(currentScenePath, SceneManager.GetActiveScene().path);
@@ -115,15 +131,15 @@ namespace UnityEditorMCP.Tests
                 ["addToBuildSettings"] = true
             };
 
-            var result = SceneHandler.CreateScene(parameters) as dynamic;
+            var result = ToJObject(SceneHandler.CreateScene(parameters));
 
             Assert.IsNotNull(result);
-            Assert.IsNull(result.error);
-            Assert.IsTrue(result.sceneIndex >= 0);
+            Assert.IsNull(result["error"]);
+            Assert.IsTrue(result["sceneIndex"].Value<int>() >= 0);
             
             // Verify scene is in build settings
             var buildScenes = EditorBuildSettings.scenes;
-            Assert.IsTrue(buildScenes.Any(s => s.path == (string)result.path));
+            Assert.IsTrue(buildScenes.Any(s => s.path == result["path"].ToString()));
         }
 
         [Test]
@@ -134,11 +150,11 @@ namespace UnityEditorMCP.Tests
                 ["sceneName"] = ""
             };
 
-            var result = SceneHandler.CreateScene(parameters) as dynamic;
+            var result = ToJObject(SceneHandler.CreateScene(parameters));
 
             Assert.IsNotNull(result);
-            Assert.IsNotNull(result.error);
-            Assert.IsTrue(((string)result.error).Contains("Scene name cannot be empty"));
+            Assert.IsNotNull(result["error"]);
+            Assert.IsTrue(result["error"].ToString().Contains("Scene name cannot be empty"));
         }
 
         [Test]
@@ -149,11 +165,11 @@ namespace UnityEditorMCP.Tests
                 ["sceneName"] = "Invalid/Scene/Name"
             };
 
-            var result = SceneHandler.CreateScene(parameters) as dynamic;
+            var result = ToJObject(SceneHandler.CreateScene(parameters));
 
             Assert.IsNotNull(result);
-            Assert.IsNotNull(result.error);
-            Assert.IsTrue(((string)result.error).Contains("invalid characters"));
+            Assert.IsNotNull(result["error"]);
+            Assert.IsTrue(result["error"].ToString().Contains("invalid characters"));
         }
 
         [Test]
@@ -170,11 +186,11 @@ namespace UnityEditorMCP.Tests
                 ["path"] = testSceneFolder + "/"
             };
 
-            var result = SceneHandler.CreateScene(parameters) as dynamic;
+            var result = ToJObject(SceneHandler.CreateScene(parameters));
 
             Assert.IsNotNull(result);
-            Assert.IsNotNull(result.error);
-            Assert.IsTrue(((string)result.error).Contains("already exists"));
+            Assert.IsNotNull(result["error"]);
+            Assert.IsTrue(result["error"].ToString().Contains("already exists"));
         }
 
         [Test]
@@ -186,11 +202,11 @@ namespace UnityEditorMCP.Tests
                 ["path"] = "../InvalidPath/"
             };
 
-            var result = SceneHandler.CreateScene(parameters) as dynamic;
+            var result = ToJObject(SceneHandler.CreateScene(parameters));
 
             Assert.IsNotNull(result);
-            Assert.IsNotNull(result.error);
-            Assert.IsTrue(((string)result.error).Contains("Invalid path"));
+            Assert.IsNotNull(result["error"]);
+            Assert.IsTrue(result["error"].ToString().Contains("Invalid path"));
         }
 
         [Test]
@@ -198,11 +214,11 @@ namespace UnityEditorMCP.Tests
         {
             var parameters = new JObject();
 
-            var result = SceneHandler.CreateScene(parameters) as dynamic;
+            var result = ToJObject(SceneHandler.CreateScene(parameters));
 
             Assert.IsNotNull(result);
-            Assert.IsNotNull(result.error);
-            Assert.IsTrue(((string)result.error).Contains("Scene name cannot be empty"));
+            Assert.IsNotNull(result["error"]);
+            Assert.IsTrue(result["error"].ToString().Contains("Scene name cannot be empty"));
         }
     }
 }

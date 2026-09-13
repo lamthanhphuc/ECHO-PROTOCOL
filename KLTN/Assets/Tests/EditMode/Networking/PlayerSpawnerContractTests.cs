@@ -74,8 +74,15 @@ namespace EchoProtocol.Networking.Tests
 
             Assert.That(characterControllerIndex, Is.GreaterThanOrEqualTo(0));
             Assert.That(networkTransformIndex, Is.GreaterThan(characterControllerIndex));
-            StringAssert.Contains("characterController.Teleport(pose.Position, pose.Rotation)", source);
-            StringAssert.Contains("networkTransform.Teleport(pose.Position)", source);
+            StringAssert.Contains(
+                "GetGroundedPlayerSpawnPosition(playerObject, pose.Position)",
+                source);
+            StringAssert.Contains(
+                "characterController.Teleport(position, pose.Rotation)",
+                source);
+            StringAssert.Contains(
+                "networkTransform.Teleport(position, pose.Rotation)",
+                source);
         }
 
         [Test]

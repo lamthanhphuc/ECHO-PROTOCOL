@@ -368,10 +368,14 @@ namespace UnityEditorMCP.Handlers
             // Search all loaded assemblies
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                type = assembly.GetTypes().FirstOrDefault(t => 
-                    t.Name == typeName && 
+                type = assembly.GetType(typeName, false);
+                if (type != null && typeof(Component).IsAssignableFrom(type))
+                    return type;
+
+                type = assembly.GetTypes().FirstOrDefault(t =>
+                    t.Name == typeName &&
                     typeof(Component).IsAssignableFrom(t));
-                
+
                 if (type != null)
                     return type;
             }
