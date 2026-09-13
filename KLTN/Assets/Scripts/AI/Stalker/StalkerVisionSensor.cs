@@ -93,19 +93,41 @@ namespace EchoProtocol.AI.Stalker
             var originPosition = visionOrigin.position;
             var candidatePosition = targetSample.position;
 
-            // Test torso/chest height first to avoid low obstacles (pipes, curbs, props) blocking LOS
-            var chestPosition = candidatePosition + Vector3.up * 1.0f;
-            bool chestVisible = TryGetVisibleDirection(originPosition, chestPosition, false, out var observedDirection, out var distance)
-                && !HasLineOfSightBlocker(targetHierarchyRoot, originPosition, observedDirection, distance);
-
-            if (!chestVisible)
+            // Observation geometry must always describe the actual candidate sample.
+            if (!TryGetVisibleDirection(
+                    originPosition,
+                    candidatePosition,
+                    false,
+                    out var observedDirection,
+                    out var distance))
             {
-                // Fallback to testing base position
-                if (!TryGetVisibleDirection(originPosition, candidatePosition, false, out observedDirection, out distance)
-                    || HasLineOfSightBlocker(targetHierarchyRoot, originPosition, observedDirection, distance))
-                {
-                    return false;
-                }
+                return false;
+            }
+
+            // Probe torso/chest first so low obstacles do not incorrectly block LOS.
+            // Chest geometry is used only for LOS, never for the reported observation.
+            var chestPosition = candidatePosition + Vector3.up * 1.0f;
+            var chestVisible =
+                TryGetVisibleDirection(
+                    originPosition,
+                    chestPosition,
+                    false,
+                    out var chestDirection,
+                    out var chestDistance)
+                && !HasLineOfSightBlocker(
+                    targetHierarchyRoot,
+                    originPosition,
+                    chestDirection,
+                    chestDistance);
+
+            if (!chestVisible
+                && HasLineOfSightBlocker(
+                    targetHierarchyRoot,
+                    originPosition,
+                    observedDirection,
+                    distance))
+            {
+                return false;
             }
 
             observation = new StalkerPhysicalVisionObservation(
