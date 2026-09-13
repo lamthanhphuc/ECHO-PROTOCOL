@@ -7,12 +7,15 @@ public class PlayerCamera : MonoBehaviour
     [SerializeField] private InputActionAsset inputActions;
     [SerializeField] private float mouseSensitivity = 0.12f;
     [SerializeField] private float eyeHeight = 1.65f;
-    [SerializeField] private float crouchEyeHeight = 1.45f;
-    [SerializeField] private float downedEyeHeight = 0.65f;
+    [SerializeField] private float crouchEyeHeight = 1.3f;
+    [SerializeField] private float downedEyeHeight = 0.75f;
     [SerializeField] private float eyeHeightTransitionSpeed = 10f;
-    [SerializeField] private float minPitch = -65f;
+    [SerializeField] private float minPitch = -45f;
     [SerializeField] private float maxPitch = 45f;
     [SerializeField] private float cameraForwardOffset = 0.13f;
+    [SerializeField] private float crouchCameraRightOffset = 0.2f;
+    [SerializeField] private float downedCameraRightOffset = 0.1f;
+    [SerializeField] private float downedCameraForwardOffset = 0.4f;
     [SerializeField] private float nearClipPlane = 0.03f;
     [SerializeField] private bool lockCursorOnEnable = true;
 
@@ -25,6 +28,7 @@ public class PlayerCamera : MonoBehaviour
     private float _pitch;
     private float _yaw;
     private float _currentEyeHeight;
+    private float _currentRightOffset;
     private float? _forcedEyeHeight;
     private float? _clampedYawCenter;
     private float _clampedYawRange;
@@ -96,6 +100,12 @@ public class PlayerCamera : MonoBehaviour
     private void Awake()
     {
         _currentEyeHeight = eyeHeight;
+
+        Camera cameraComponent = GetComponent<Camera>();
+        if (cameraComponent != null)
+        {
+            cameraComponent.nearClipPlane = Mathf.Max(0.01f, nearClipPlane);
+        }
 
         if (inputActions != null)
         {
@@ -213,19 +223,32 @@ public class PlayerCamera : MonoBehaviour
 
         bool isDowned = (_networkLifeState != null && _networkLifeState.IsDowned)
             || (_playerDownState != null && _playerDownState.IsDowned);
+        bool isCrouching = (_playerMovement != null && _playerMovement.IsCrouching)
+            || (_networkMovement != null && _networkMovement.IsAnimationCrouching);
 
         float targetEyeHeight =
             _forcedEyeHeight ??
             (isDowned
                 ? downedEyeHeight
-                : ((_playerMovement != null && _playerMovement.IsCrouching)
-                   || (_networkMovement != null && _networkMovement.IsAnimationCrouching)
+                : (isCrouching
                     ? crouchEyeHeight
                     : eyeHeight));
+        float targetRightOffset = isDowned
+            ? downedCameraRightOffset
+            : isCrouching
+                ? crouchCameraRightOffset
+                : 0f;
+        float targetForwardOffset = isDowned
+            ? downedCameraForwardOffset
+            : cameraForwardOffset;
 
         _currentEyeHeight = Mathf.Lerp(
             _currentEyeHeight,
             targetEyeHeight,
+            eyeHeightTransitionSpeed * Time.deltaTime);
+        _currentRightOffset = Mathf.Lerp(
+            _currentRightOffset,
+            targetRightOffset,
             eyeHeightTransitionSpeed * Time.deltaTime);
 
         float feetYOffset = 0f;
@@ -249,7 +272,9 @@ public class PlayerCamera : MonoBehaviour
         transform.position =
             target.position +
             Vector3.up * (feetYOffset + _currentEyeHeight) +
-            Quaternion.Euler(0f, _yaw, 0f) * Vector3.forward * Mathf.Max(0f, cameraForwardOffset);
+            Quaternion.Euler(0f, _yaw, 0f)
+            * (Vector3.forward * Mathf.Max(0f, targetForwardOffset)
+               + Vector3.right * _currentRightOffset);
 
         transform.rotation =
             Quaternion.Euler(_pitch, _yaw, 0f);
@@ -336,5 +361,14 @@ public class PlayerCamera : MonoBehaviour
     public void ClearYawLimit()
     {
         _clampedYawCenter = null;
+    }
+
+    private void OnValidate()
+    {
+        Camera cameraComponent = GetComponent<Camera>();
+        if (cameraComponent != null)
+        {
+            cameraComponent.nearClipPlane = Mathf.Max(0.01f, nearClipPlane);
+        }
     }
 }

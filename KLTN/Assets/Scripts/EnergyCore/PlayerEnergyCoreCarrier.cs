@@ -92,7 +92,7 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
 
     private void Update()
     {
-        if (!HasLocalControl())
+        if (!HasLocalControl() || IsActiveFusionGameplay())
         {
             return;
         }
@@ -108,7 +108,7 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
 
     public bool CanPickupCore(EnergyCorePickup core)
     {
-        if (!HasLocalControl())
+        if (!HasLocalControl() || IsActiveFusionGameplay())
         {
             return false;
         }
@@ -141,6 +141,11 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
 
     public bool DropCore()
     {
+        if (IsActiveFusionGameplay())
+        {
+            return false;
+        }
+
         if (!IsCarrying)
         {
             return false;
@@ -275,7 +280,7 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
 
     private void OnDropPerformed(InputAction.CallbackContext context)
     {
-        if (!HasLocalControl())
+        if (!HasLocalControl() || IsActiveFusionGameplay())
         {
             return;
         }
@@ -304,5 +309,17 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
     {
         NetworkObject networkObject = GetComponentInParent<NetworkObject>();
         return networkObject == null || !networkObject.IsValid || networkObject.HasInputAuthority;
+    }
+
+    private bool IsActiveFusionGameplay()
+    {
+        NetworkObject networkObject = GetComponentInParent<NetworkObject>();
+        var lobbyState = GetComponentInParent<EchoProtocol.Networking.LobbyPlayerState>();
+        return networkObject != null
+            && networkObject.IsValid
+            && networkObject.Runner != null
+            && networkObject.Runner.IsRunning
+            && lobbyState != null
+            && lobbyState.IsGameplayPlayer;
     }
 }

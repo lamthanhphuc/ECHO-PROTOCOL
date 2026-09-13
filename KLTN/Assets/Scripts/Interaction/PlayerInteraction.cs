@@ -67,7 +67,7 @@ public class PlayerInteraction : MonoBehaviour
 
     private void Update()
     {
-        if (!HasLocalControl())
+        if (!HasLocalControl() || IsActiveFusionGameplay())
         {
             SetCurrentInteractable(null);
             return;
@@ -133,7 +133,7 @@ public class PlayerInteraction : MonoBehaviour
 
     private void OnInteractPerformed(InputAction.CallbackContext context)
     {
-        if (!HasLocalControl())
+        if (!HasLocalControl() || IsActiveFusionGameplay())
         {
             return;
         }
@@ -152,7 +152,7 @@ public class PlayerInteraction : MonoBehaviour
 
     private void OnInteractStarted(InputAction.CallbackContext context)
     {
-        if (!HasLocalControl())
+        if (!HasLocalControl() || IsActiveFusionGameplay())
         {
             return;
         }
@@ -206,5 +206,17 @@ public class PlayerInteraction : MonoBehaviour
     {
         NetworkObject networkObject = GetComponentInParent<NetworkObject>();
         return networkObject == null || !networkObject.IsValid || networkObject.HasInputAuthority;
+    }
+
+    private bool IsActiveFusionGameplay()
+    {
+        var networkObject = GetComponentInParent<NetworkObject>();
+        var lobbyState = GetComponentInParent<EchoProtocol.Networking.LobbyPlayerState>();
+        return networkObject != null
+            && networkObject.IsValid
+            && networkObject.Runner != null
+            && networkObject.Runner.IsRunning
+            && lobbyState != null
+            && lobbyState.IsGameplayPlayer;
     }
 }

@@ -29,7 +29,9 @@ namespace EchoProtocol.Networking
         {
             if (!Object.HasStateAuthority) return InteractionValidationResult.InvalidTarget;
 
-            var sqrDistance = (context.Requester.transform.position - InteractionOrigin.position).sqrMagnitude;
+            var requesterPosition = context.Requester.transform.position;
+            var targetPosition = GetClosestInteractionPoint(requesterPosition);
+            var sqrDistance = (requesterPosition - targetPosition).sqrMagnitude;
             if (sqrDistance > _interactionDistance * _interactionDistance)
             {
                 return InteractionValidationResult.OutOfRange;
@@ -68,5 +70,33 @@ namespace EchoProtocol.Networking
         }
 
         protected abstract void ExecuteInteraction(in InteractionContext context);
+
+        private Vector3 GetClosestInteractionPoint(Vector3 requesterPosition)
+        {
+            var colliders = GetComponentsInChildren<Collider>(true);
+            var hasCollider = false;
+            var closestPoint = InteractionOrigin.position;
+            var closestDistance = float.PositiveInfinity;
+
+            for (var i = 0; i < colliders.Length; i++)
+            {
+                var candidate = colliders[i];
+                if (candidate == null || !candidate.enabled)
+                {
+                    continue;
+                }
+
+                var point = candidate.ClosestPoint(requesterPosition);
+                var distance = (requesterPosition - point).sqrMagnitude;
+                if (!hasCollider || distance < closestDistance)
+                {
+                    hasCollider = true;
+                    closestPoint = point;
+                    closestDistance = distance;
+                }
+            }
+
+            return closestPoint;
+        }
     }
 }

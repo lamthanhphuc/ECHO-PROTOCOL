@@ -471,7 +471,7 @@ namespace EchoProtocol.Networking
                 && coreObject.TryGetComponent<NetworkPickupItem>(out var core))
             {
                 GetAuthoritativeDropPose(out var dropPosition, out var dropRotation);
-                result = core.TryDrop(requester, dropPosition, dropRotation)
+                result = core.TryDrop(requester, dropPosition, dropRotation, playerState)
                     ? InteractionValidationResult.Accepted
                     : InteractionValidationResult.InvalidTargetState;
             }
@@ -579,15 +579,21 @@ namespace EchoProtocol.Networking
             var candidate = transform.position + flatForward * 1.25f;
             var rayOrigin = candidate + Vector3.up * 1.5f;
             var layerMask = ~(1 << LayerMask.NameToLayer("Ignore Raycast"));
-            position = Physics.Raycast(
-                rayOrigin,
-                Vector3.down,
-                out var hit,
-                4f,
-                layerMask,
-                QueryTriggerInteraction.Ignore)
-                ? hit.point + Vector3.up * 0.05f
-                : candidate;
+            if (Physics.Raycast(
+                    rayOrigin,
+                    Vector3.down,
+                    out var hit,
+                    4f,
+                    layerMask,
+                    QueryTriggerInteraction.Ignore)
+                && !IsSelfCollider(hit.collider))
+            {
+                position = hit.point + Vector3.up * 0.05f;
+            }
+            else
+            {
+                position = candidate;
+            }
             rotation = toolId == 1
                 ? Quaternion.Euler(90f, transform.eulerAngles.y + 180f, 0f)
                 : Quaternion.Euler(0f, transform.eulerAngles.y + 180f, 0f);

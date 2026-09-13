@@ -13,6 +13,7 @@ namespace EchoProtocol.Networking
 
         [SerializeField, Min(1)] private int _requiredCoreCount = 2;
         [SerializeField] private Transform[] _corePlacementPoints = Array.Empty<Transform>();
+        [SerializeField] private GameObject[] _coreVisuals = Array.Empty<GameObject>();
         [SerializeField, Min(0.1f)] private float _fallbackSlotSpacing = 0.65f;
         [SerializeField] private Renderer _embeddedFallbackRenderer;
 
@@ -52,25 +53,46 @@ namespace EchoProtocol.Networking
         {
             if (context.PlayerState == null || !context.PlayerState.IsGameplayPlayer)
             {
+                Debug.LogWarning($"[NetworkSectorBox] Reject interact: invalid requester. box={Object.Id}, player={context.Player}");
                 return InteractionValidationResult.InvalidRequester;
             }
 
             if (!TryGetMatchState(out var matchState) || matchState.IsEnded)
             {
+                Debug.LogWarning($"[NetworkSectorBox] Reject interact: missing/ended match state. box={Object.Id}, matchStateId={MatchStateId}");
                 return InteractionValidationResult.InvalidTargetState;
             }
 
             switch (matchState.CurrentPhase)
             {
                 case NetworkMatchPhase.CoreObjective:
-                    return EnergyCoreObjectiveRules.CanRegisterPlacement(PlacedCoreCount, _requiredCoreCount)
-                           && context.PlayerState.CarriedCoreId.IsValid
-                           && Runner.TryFindObject(context.PlayerState.CarriedCoreId, out var coreObject)
-                           && coreObject != null
-                           && coreObject.TryGetComponent<NetworkPickupItem>(out var core)
-                           && core.CanBePlacedBy(context.Player)
-                        ? InteractionValidationResult.Accepted
-                        : InteractionValidationResult.InvalidTargetState;
+                    if (!EnergyCoreObjectiveRules.CanRegisterPlacement(PlacedCoreCount, _requiredCoreCount))
+                    {
+                        Debug.LogWarning($"[NetworkSectorBox] Reject placement: capacity full/invalid. box={Object.Id}, placed={PlacedCoreCount}, required={_requiredCoreCount}");
+                        return InteractionValidationResult.InvalidTargetState;
+                    }
+
+                    if (!context.PlayerState.CarriedCoreId.IsValid)
+                    {
+                        Debug.LogWarning($"[NetworkSectorBox] Reject placement: player is not carrying a network core. box={Object.Id}, player={context.Player}");
+                        return InteractionValidationResult.InvalidTargetState;
+                    }
+
+                    if (!Runner.TryFindObject(context.PlayerState.CarriedCoreId, out var coreObject)
+                        || coreObject == null
+                        || !coreObject.TryGetComponent<NetworkPickupItem>(out var core))
+                    {
+                        Debug.LogWarning($"[NetworkSectorBox] Reject placement: carried core object not found. box={Object.Id}, player={context.Player}, core={context.PlayerState.CarriedCoreId}");
+                        return InteractionValidationResult.InvalidTargetState;
+                    }
+
+                    if (!core.CanBePlacedBy(context.Player, context.PlayerState))
+                    {
+                        Debug.LogWarning($"[NetworkSectorBox] Reject placement: carried core cannot be placed. box={Object.Id}, player={context.Player}, core={core.Object.Id}, state={core.State}, holder={core.Holder}");
+                        return InteractionValidationResult.InvalidTargetState;
+                    }
+
+                    return InteractionValidationResult.Accepted;
                 case NetworkMatchPhase.SecurityHold:
                 case NetworkMatchPhase.Escape:
                     return InteractionValidationResult.Accepted;
@@ -114,7 +136,7 @@ namespace EchoProtocol.Networking
             if (!Runner.TryFindObject(coreId, out var coreObject)
                 || coreObject == null
                 || !coreObject.TryGetComponent<NetworkPickupItem>(out var core)
-                || !core.TryPlace(context.Player, Object.Id, slotIndex, position, rotation))
+                || !core.TryPlace(context.Player, Object.Id, slotIndex, position, rotation, context.PlayerState))
             {
                 return;
             }
@@ -220,6 +242,12 @@ namespace EchoProtocol.Networking
                 {
                     _corePlacementPoints = closest.CoreSockets;
                 }
+
+                if ((_coreVisuals == null || _coreVisuals.Length == 0)
+                    && closest.CoreVisuals != null && closest.CoreVisuals.Length > 0)
+                {
+                    _coreVisuals = closest.CoreVisuals;
+                }
             }
         }
 
@@ -247,6 +275,7 @@ namespace EchoProtocol.Networking
             {
                 _boundSceneSectorBox.UpdateCoreVisuals(PlacedCoreCount);
             }
+            UpdateCoreVisuals(PlacedCoreCount);
 
             int totalPlaced = 0;
             int totalRequired = 0;
@@ -273,6 +302,27 @@ namespace EchoProtocol.Networking
             }
 
             ObjectiveStateChanged?.Invoke(this);
+        }
+
+        private void UpdateCoreVisuals(int placedCount)
+        {
+            int clampedPlaced = Mathf.Clamp(placedCount, 0, _requiredCoreCount);
+            if (_coreVisuals == null) return;
+
+            for (int i = 0; i < _coreVisuals.Length; i++)
+            {
+                var coreVisual = _coreVisuals[i];
+                if (coreVisual == null) continue;
+
+                bool active = i < clampedPlaced;
+                coreVisual.SetActive(active);
+                if (!active) continue;
+
+                foreach (Transform child in coreVisual.transform)
+                {
+                    child.gameObject.SetActive(true);
+                }
+            }
         }
 
         private void ConfigurePresentation()

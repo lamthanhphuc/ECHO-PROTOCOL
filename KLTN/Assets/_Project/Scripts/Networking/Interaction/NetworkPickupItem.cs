@@ -110,7 +110,9 @@ namespace EchoProtocol.Networking
             }
 
             var disconnectedHolder = Holder;
-            Debug.Log($"[NetworkItem] Holder {disconnectedHolder} left; dropping item {Object.Id} at its last authoritative pose.");
+            Debug.Log($"[NetworkItem] Holder {disconnectedHolder} left; dropping item {Object.Id} at its last authoritative pose {transform.position}.");
+            WorldPosition = transform.position;
+            WorldRotation = transform.rotation;
             State = NetworkItemState.Dropped;
             Holder = PlayerRef.None;
             PlacedSectorId = default;
@@ -123,6 +125,19 @@ namespace EchoProtocol.Networking
         public override void Render()
         {
             ApplyReplicatedPose();
+        }
+
+        private void LateUpdate()
+        {
+            if (Object == null || !Object.IsValid)
+            {
+                return;
+            }
+
+            if (State == NetworkItemState.Carried)
+            {
+                ApplyReplicatedPose();
+            }
         }
 
         protected override InteractionValidationResult ValidateCurrentState(in InteractionContext context)
@@ -149,18 +164,26 @@ namespace EchoProtocol.Networking
             Debug.Log($"[NetworkItem] {context.Player} picked up item {Object.Id}.");
         }
 
-        public bool CanBeDroppedBy(PlayerRef actor)
+        public bool CanBeDroppedBy(PlayerRef actor, LobbyPlayerState carrierState = null)
         {
-            return Object.HasStateAuthority
-                && EnergyCoreAuthorityRules.CanDrop(State, Holder, actor)
-                && TryGetCarrier(actor, out var playerState)
-                && playerState.CarriedCoreId == Object.Id;
+            if (!Object.HasStateAuthority || !EnergyCoreAuthorityRules.CanDrop(State, Holder, actor))
+            {
+                return false;
+            }
+
+            if (carrierState == null && !TryGetCarrier(actor, out carrierState))
+            {
+                return false;
+            }
+
+            return carrierState != null && carrierState.CarriedCoreId == Object.Id;
         }
 
-        public bool TryDrop(PlayerRef actor, Vector3 position, Quaternion rotation)
+        public bool TryDrop(PlayerRef actor, Vector3 position, Quaternion rotation, LobbyPlayerState carrierState = null)
         {
-            if (!CanBeDroppedBy(actor) || !TryClearCarrier(actor))
+            if (!CanBeDroppedBy(actor, carrierState) || !TryClearCarrier(actor, carrierState))
             {
+                Debug.LogWarning($"[NetworkPickupItem] Drop rejected for item {Object.Id} by {actor}. State={State}, Holder={Holder}, HasAuthority={Object.HasStateAuthority}");
                 return false;
             }
 
@@ -170,6 +193,7 @@ namespace EchoProtocol.Networking
             PlacementSlot = -1;
             WorldPosition = position;
             WorldRotation = rotation;
+            transform.SetPositionAndRotation(position, rotation);
             AdvanceTransition();
             ApplyReplicatedState();
             PublishTransition(actor);
@@ -180,16 +204,23 @@ namespace EchoProtocol.Networking
                     RuntimeNoiseSourceOccurrenceKey.ForCoreDrop(Object.Id.ToString(), TransitionOrdinal),
                     position,
                     out _);
-            Debug.Log($"[NetworkItem] {actor} dropped item {Object.Id}.");
+            Debug.Log($"[NetworkItem] {actor} dropped item {Object.Id} at {position}.");
             return true;
         }
 
-        public bool CanBePlacedBy(PlayerRef actor)
+        public bool CanBePlacedBy(PlayerRef actor, LobbyPlayerState carrierState = null)
         {
-            return Object.HasStateAuthority
-                && EnergyCoreAuthorityRules.CanPlace(State, Holder, actor)
-                && TryGetCarrier(actor, out var playerState)
-                && playerState.CarriedCoreId == Object.Id;
+            if (!Object.HasStateAuthority || !EnergyCoreAuthorityRules.CanPlace(State, Holder, actor))
+            {
+                return false;
+            }
+
+            if (carrierState == null && !TryGetCarrier(actor, out carrierState))
+            {
+                return false;
+            }
+
+            return carrierState != null && carrierState.CarriedCoreId == Object.Id;
         }
 
         public bool TryPlace(
@@ -197,16 +228,17 @@ namespace EchoProtocol.Networking
             NetworkId sectorId,
             int placementSlot,
             Vector3 position,
-            Quaternion rotation)
+            Quaternion rotation,
+            LobbyPlayerState carrierState = null)
         {
-            if (!CanBePlacedBy(actor)
+            if (!CanBePlacedBy(actor, carrierState)
                 || !sectorId.IsValid
                 || placementSlot < 0
                 || !Runner.TryFindObject(sectorId, out var sectorObject)
                 || sectorObject == null
                 || !sectorObject.HasStateAuthority
                 || !sectorObject.TryGetComponent<NetworkSectorBox>(out _)
-                || !TryClearCarrier(actor))
+                || !TryClearCarrier(actor, carrierState))
             {
                 return false;
             }
@@ -217,17 +249,18 @@ namespace EchoProtocol.Networking
             PlacementSlot = placementSlot;
             WorldPosition = position;
             WorldRotation = rotation;
+            transform.SetPositionAndRotation(position, rotation);
             AdvanceTransition();
             ApplyReplicatedState();
             PublishTransition(actor);
-            Debug.Log($"[NetworkItem] {actor} placed item {Object.Id}.");
+            Debug.Log($"[NetworkItem] {actor} placed item {Object.Id} at {position}.");
             return true;
         }
 
         private void ApplyReplicatedState()
         {
-            // Semantic state drives presentation. Carried and Placed cores remain visible.
-            if (_availableVisual != null) _availableVisual.enabled = true;
+            // Once placed, the SectorBox socket visual represents the inserted core.
+            if (_availableVisual != null) _availableVisual.enabled = State != NetworkItemState.Placed;
             if (_pickupCollider != null)
             {
                 _pickupCollider.enabled = State == NetworkItemState.Available || State == NetworkItemState.Dropped;
@@ -257,11 +290,8 @@ namespace EchoProtocol.Networking
 
         private bool TryGetHolderPose(out Vector3 position, out Quaternion rotation)
         {
-            if (Holder.IsRealPlayer
-                && Runner != null
-                && IsActivePlayer(Holder)
-                && Runner.TryGetPlayerObject(Holder, out var playerObject)
-                && playerObject != null)
+            if (Holder.IsRealPlayer && Runner != null && IsActivePlayer(Holder)
+                && Runner.TryGetPlayerObject(Holder, out var playerObject) && playerObject != null)
             {
                 Transform coreAnchor = PlayerHeldItemAnchor.ResolveCoreCarryAnchor(playerObject.gameObject);
                 if (coreAnchor != null)
@@ -270,12 +300,10 @@ namespace EchoProtocol.Networking
                     rotation = coreAnchor.rotation * Quaternion.Euler(_holderLocalEulerAngles);
                     return true;
                 }
-
                 position = playerObject.transform.TransformPoint(_holderLocalPosition);
                 rotation = playerObject.transform.rotation * Quaternion.Euler(_holderLocalEulerAngles);
                 return true;
             }
-
             position = WorldPosition;
             rotation = WorldRotation;
             return false;
@@ -284,14 +312,16 @@ namespace EchoProtocol.Networking
         private bool IsActivePlayer(PlayerRef player)
         {
             foreach (var activePlayer in Runner.ActivePlayers)
-            {
                 if (activePlayer == player) return true;
-            }
             return false;
         }
 
-        private bool TryClearCarrier(PlayerRef actor)
+        private bool TryClearCarrier(PlayerRef actor, LobbyPlayerState carrierState = null)
         {
+            if (carrierState != null)
+            {
+                return carrierState.TryClearCarriedCore(Object.Id);
+            }
             return TryGetCarrier(actor, out var playerState) && playerState.TryClearCarriedCore(Object.Id);
         }
 
@@ -299,9 +329,9 @@ namespace EchoProtocol.Networking
         {
             playerState = null;
             return actor.IsRealPlayer
+                && Runner != null
                 && Runner.TryGetPlayerObject(actor, out var playerObject)
                 && playerObject != null
-                && playerObject.InputAuthority == actor
                 && playerObject.TryGetComponent(out playerState);
         }
 
@@ -321,5 +351,4 @@ namespace EchoProtocol.Networking
                 transform.position));
         }
     }
-
 }

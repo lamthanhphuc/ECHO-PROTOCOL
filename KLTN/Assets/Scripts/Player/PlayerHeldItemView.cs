@@ -9,9 +9,9 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     [SerializeField] private Vector3 energyCoreLocalPosition = Vector3.zero;
     [SerializeField] private Vector3 energyCoreLocalEulerAngles = Vector3.zero;
     [SerializeField] private Vector3 energyCoreLocalScale = new Vector3(25f, 25f, 25f);
-    [SerializeField] private Vector3 energyCoreChildLocalPosition = new Vector3(0.0012f, 0.02f, -0.05f);
-    [SerializeField] private Vector3 energyCoreChildLocalEulerAngles = new Vector3(-89.116f, 77.236f, -92.522f);
-    [SerializeField] private Vector3 energyCoreChildLocalScale = new Vector3(0.9f, 0.9f, 0.9f);
+    [SerializeField] private Vector3 energyCoreChildLocalPosition = new Vector3(-0.00031f, -0.00033f, 0.00399f);
+    [SerializeField] private Vector3 energyCoreChildLocalEulerAngles = new Vector3(91.715f, -50f, -61f);
+    [SerializeField] private Vector3 energyCoreChildLocalScale = new Vector3(1.15f, 1.15f, 1.15f);
     [SerializeField] private Vector3 teamToolLocalPosition = new Vector3(0.04f, 0.18f, 0.11f);
     [SerializeField] private Vector3 teamToolLocalEulerAngles = new Vector3(12f, 88f, -18f);
     [SerializeField] private Vector3 teamToolLocalScale = new Vector3(0.45f, 0.45f, 0.45f);
@@ -93,12 +93,17 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             return;
         }
 
-        // Trong phiên multiplayer Fusion, Energy Core là NetworkObject (NetworkPickupItem)
+        // Trong phiên multiplayer Fusion, với remote players: Energy Core là NetworkObject
         // tự bám vào PlayerHeldItemAnchor.ResolveCoreCarryAnchor trên thế giới.
-        // Tuyệt đối không instantiate thêm một bản visual có NetworkObject cục bộ (sẽ gây crash 0xC0000005 trên Client).
+        // Với local player (HasInputAuthority): cần spawn visual first-person riêng.
         if (_currentItem.ItemType == InventoryItemType.EnergyCore && IsActiveFusionSession())
         {
-            return;
+            var netObj = GetComponentInParent<Fusion.NetworkObject>();
+            bool isLocalPlayer = netObj != null && netObj.HasInputAuthority;
+            if (!isLocalPlayer)
+            {
+                return; // remote player — NetworkPickupItem handles world rendering
+            }
         }
 
         // Complete Team Tool prefabs own both their held visual and gameplay lifecycle.
