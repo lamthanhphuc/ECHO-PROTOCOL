@@ -59,3 +59,7 @@ KLTN/.git.backup/
 # Unity Test Runner generated scene
 /KLTN/Assets/Scenes/TestScene.unity
 /KLTN/Assets/Scenes/TestScene.unity.meta
+
+# Unity recovery artifacts
+/KLTN/Assets/_Recovery/
+/KLTN/Assets/_Recovery.meta
