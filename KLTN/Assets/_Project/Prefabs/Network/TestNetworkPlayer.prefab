@@ -420,6 +420,7 @@ MonoBehaviour:
   coreCarrier: {fileID: 2083827430674749904}
   networkMovement: {fileID: 0}
   lobbyState: {fileID: 0}
+  networkLifeState: {fileID: 0}
   downState: {fileID: 0}
   speedDampTime: 0.16
   directionDampTime: 0.12

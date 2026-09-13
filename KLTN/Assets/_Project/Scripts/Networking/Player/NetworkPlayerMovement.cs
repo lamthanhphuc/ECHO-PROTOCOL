@@ -36,6 +36,9 @@ namespace EchoProtocol.Networking
         private NetworkBootstrap _bootstrap;
         private bool _isSceneLoadDoneSubscribed;
         private TickTimer _nextMovementNoise;
+        private RuntimeNoiseType _lastMovementNoiseType;
+        private bool _hasLastMovementNoiseType;
+        private bool _lastCoreCarryWasStabilized;
         private Vector3 _offlineVelocity;
         private Vector2 _offlineAnimationMoveInput;
         private bool _offlineAnimationSprinting;
@@ -336,25 +339,66 @@ namespace EchoProtocol.Networking
 
             transform.rotation = lookRotation;
             LookPitch = Mathf.Clamp(input.LookPitch, -85f, 85f);
-            if (Object.HasStateAuthority && isSprintMoving
-                && _nextMovementNoise.ExpiredOrNotRunning(Runner))
+
+            var isMoving =
+                canInitiateAction
+                && direction.sqrMagnitude > 0.01f;
+
+            if (Object.HasStateAuthority && !isMoving)
             {
-                var state = lobbyPlayer;
+                _hasLastMovementNoiseType = false;
+            }
+
+            if (Object.HasStateAuthority && isMoving)
+            {
                 var type = isCarryingCore
                     ? RuntimeNoiseType.CORE_CARRY
-                    : RuntimeNoiseType.SPRINT;
-                HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
-                    .TryAccept(
-                        Object.InputAuthority,
-                        type,
-                        RuntimeNoiseSourceOccurrenceKey.ForMovement(
-                            Object.Id.ToString(),
+                    : effectiveCrouch
+                        ? RuntimeNoiseType.CROUCH
+                        : isSprintMoving
+                            ? RuntimeNoiseType.SPRINT
+                            : RuntimeNoiseType.WALK;
+
+                var coreCarryIsStabilized =
+                    type == RuntimeNoiseType.CORE_CARRY
+                    && lobbyPlayer != null
+                    && lobbyPlayer.IsCoreStabilized;
+
+                var movementNoiseProfileChanged =
+                    !_hasLastMovementNoiseType
+                    || type != _lastMovementNoiseType
+                    || (type == RuntimeNoiseType.CORE_CARRY
+                        && coreCarryIsStabilized != _lastCoreCarryWasStabilized);
+
+                if (movementNoiseProfileChanged
+                    || _nextMovementNoise.ExpiredOrNotRunning(Runner))
+                {
+                    HostRuntimeNoiseService
+                        .EnsureExists(MatchAuthorityRuntime.Instance)
+                        .TryAccept(
+                            Object.InputAuthority,
                             type,
-                            Runner.Tick.Raw),
-                        transform.position,
-                        out _);
-                float noiseInterval = (isCarryingCore && state.IsCoreStabilized) ? 4.0f : 1.5f;
-                _nextMovementNoise = TickTimer.CreateFromSeconds(Runner, noiseInterval);
+                            RuntimeNoiseSourceOccurrenceKey.ForMovement(
+                                Object.Id.ToString(),
+                                type,
+                                Runner.Tick.Raw),
+                            transform.position,
+                            out _);
+
+                    var noiseInterval =
+                        coreCarryIsStabilized
+                            ? 4.0f
+                            : 1.5f;
+
+                    _nextMovementNoise =
+                        TickTimer.CreateFromSeconds(
+                            Runner,
+                            noiseInterval);
+
+                    _lastMovementNoiseType = type;
+                    _lastCoreCarryWasStabilized = coreCarryIsStabilized;
+                    _hasLastMovementNoiseType = true;
+                }
             }
             if (_allowJump
                 && (lifeState == null || lifeState.CanInitiateAction)

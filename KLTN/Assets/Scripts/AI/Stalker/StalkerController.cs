@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Common.Spatial;
+using EchoProtocol.AI.Listener.Perception;
+using EchoProtocol.AI.Stalker.Hearing;
 using EchoProtocol.AI.Stalker.Spatial;
 using EchoProtocol.AI.Stalker.Telemetry;
 using EchoProtocol.Networking;
@@ -61,6 +63,8 @@ namespace EchoProtocol.AI.Stalker
         [Header("Chase Navigation Defaults")]
         [SerializeField] private float chaseDestinationRefreshDistance = 0.5f;
         [SerializeField] private float chaseDestinationRefreshInterval = 0.5f;
+        [SerializeField, Min(0f)] private float chasePredictionLeadSeconds = 0.2f;
+        [SerializeField, Min(0f)] private float chasePredictionMaxDistance = 1.5f;
 
         [Header("Attack Spike Defaults")]
         [SerializeField] private float attackRange = 2.8f;
@@ -101,10 +105,22 @@ namespace EchoProtocol.AI.Stalker
         private const float TargetSelectionTieEpsilon = 0f;
         private const float TopologyPathSegmentSampleSpacing = 1f;
         private const int MaxTopologyPathSegmentSamples = 8;
+        private const float EmergencyNavMeshRecoverySampleDistance = 2f;
 
-        private readonly StalkerMemory _memory = new StalkerMemory();
-        private readonly StalkerAttackController _attackController = new StalkerAttackController();
-        private readonly StalkerBlackboard _blackboard = new StalkerBlackboard();
+        private readonly StalkerMemory _memory =
+            new StalkerMemory();
+
+        private readonly StalkerHearingMemory _hearingMemory =
+            new StalkerHearingMemory();
+
+        private readonly StalkerHearingSelector _hearingSelector =
+            new StalkerHearingSelector();
+
+        private readonly StalkerAttackController _attackController =
+            new StalkerAttackController();
+
+        private readonly StalkerBlackboard _blackboard =
+            new StalkerBlackboard();
         private StalkerNavigationController _navigation;
         private NavMeshSpatialGraph _spatialPatrolGraph;
         [SerializeField] private RegionGraphAsset regionGraphAsset;
@@ -117,6 +133,9 @@ namespace EchoProtocol.AI.Stalker
         private RoomSweepCoverageMemory _roomSweepCoverageMemory;
         private RoomSweepPlanner _roomSweepPlanner;
         private RoomSweepGlobalPlanner _roomSweepGlobalPlanner;
+        private bool _hasPatrolVariationSeed;
+        private int _patrolVariationSeed;
+        private int _patrolNearOptimalHopSlack;
         private StalkerSearchPlanner _searchPlanner;
         private StalkerSearchContext _searchContext;
         private readonly StalkerWorldInteractionDriver _worldInteractionDriver = new StalkerWorldInteractionDriver();
@@ -131,6 +150,9 @@ namespace EchoProtocol.AI.Stalker
         private bool _hasLastChaseRequestedDestination;
         private Vector3 _lastChaseRequestedDestination;
         private float _chaseDestinationRefreshElapsed;
+        private bool _hasPreviousChaseObservation;
+        private Vector3 _previousChaseObservedPosition;
+        private float _previousChaseObservationTimeSeconds;
         private bool _navigationRecoveryAttemptUsed;
         private StalkerNavigationObjectiveKey _navigationObjectiveKey;
         private readonly HashSet<int> _rejectedDynamicPatrolNodeIds = new HashSet<int>();
@@ -150,6 +172,10 @@ namespace EchoProtocol.AI.Stalker
         private long _legacySimulationTick;
         private IReadOnlyList<StalkerTargetCandidate> _currentVisibleTargetCandidates;
         private IReadOnlyList<StalkerTargetStatus> _currentTargetStatuses;
+        private IReadOnlyList<HearingObservation>
+            _currentHearingObservations;
+        private System.DateTime
+            _currentHearingEvaluationTimeUtc;
         private bool _roomSweepSuppressLegacyGateLogged;
         private bool _roomSweepNavigationGateUsableLogged;
         private bool _roomSweepNavigationGateBlockedLogged;
@@ -269,17 +295,39 @@ namespace EchoProtocol.AI.Stalker
             AttackConsequenceSink = consequenceSink;
         }
 
-        /// <summary>
-        /// Gọi từ NoiseMakerBeacon khi beacon phát xung trong tầm nghe của Stalker.
-        /// Chuyển Stalker sang SEARCH tại vị trí nguồn âm thanh.
-        /// </summary>
-        public void AlertToNoise(Vector3 noisePosition)
+        public void ConfigurePatrolVariation(
+            int variationSeed,
+            int nearOptimalHopSlack = 1)
         {
-            // Chỉ alert khi đang PATROL hoặc SEARCH (không cướp CHASE/ATTACK)
-            if (currentState == StalkerState.PATROL || currentState == StalkerState.SEARCH)
+            var clampedSlack =
+                System.Math.Max(0, nearOptimalHopSlack);
+
+            if (_hasPatrolVariationSeed
+                && _patrolVariationSeed == variationSeed
+                && _patrolNearOptimalHopSlack == clampedSlack)
             {
-                lastKnownPosition = noisePosition;
-                EnterSearch();
+                return;
+            }
+
+            _hasPatrolVariationSeed = true;
+            _patrolVariationSeed = variationSeed;
+            _patrolNearOptimalHopSlack = clampedSlack;
+
+            if (_roomSweepPlanner != null)
+            {
+                _roomSweepPlanner.ConfigureVariation(
+                    _patrolVariationSeed);
+            }
+
+            if (_roomSweepCoverageMemory != null
+                && _regionGraph != null)
+            {
+                _roomSweepGlobalPlanner =
+                    new RoomSweepGlobalPlanner(
+                        _regionGraph,
+                        _roomSweepCoverageMemory,
+                        _patrolVariationSeed,
+                        _patrolNearOptimalHopSlack);
             }
         }
 
@@ -291,6 +339,7 @@ namespace EchoProtocol.AI.Stalker
         private void OnEnable()
         {
             InitializeNavigation();
+            _hearingMemory.Reset();
         }
 
         private void Update()
@@ -323,14 +372,27 @@ namespace EchoProtocol.AI.Stalker
             _currentSimulationDeltaSeconds = input.Step.DeltaSeconds;
             _currentSimulationSeconds = input.Step.Time.Seconds;
             _currentSimulationStep = input.Step;
-            _currentVisibleTargetCandidates = input.VisibleTargetCandidates;
-            _currentTargetStatuses = input.TargetStatuses;
-            _currentAttackTargetSnapshot = input.CurrentAttackTargetSnapshot;
+            _currentVisibleTargetCandidates =
+                input.VisibleTargetCandidates;
+
+            _currentTargetStatuses =
+                input.TargetStatuses;
+
+            _currentAttackTargetSnapshot =
+                input.CurrentAttackTargetSnapshot;
+
+            _currentHearingObservations =
+                input.HearingObservations;
+
+            _currentHearingEvaluationTimeUtc =
+                input.HearingEvaluationTimeUtc;
 
             try
             {
                 ApplyMovementSpeedForCurrentState();
                 TickCurrentState();
+                TryBeginHeardNoiseSearchFromCurrentFrame();
+                TryUpdateHeardNoiseSearchFromCurrentFrame();
                 _navigation?.TickProgress(CurrentSimulationDeltaSeconds);
                 TickNavigationRecovery();
                 TickNavigationFallback();
@@ -341,6 +403,9 @@ namespace EchoProtocol.AI.Stalker
                 _currentVisibleTargetCandidates = null;
                 _currentTargetStatuses = null;
                 _currentAttackTargetSnapshot = null;
+                _currentHearingObservations = null;
+                _currentHearingEvaluationTimeUtc =
+                    default;
                 _currentSimulationStep = AiSimulationStep.Invalid;
                 _currentSimulationDeltaSeconds = 0f;
                 _currentSimulationSeconds = 0d;
@@ -1125,6 +1190,181 @@ namespace EchoProtocol.AI.Stalker
             SetCurrentPatrolDestination();
         }
 
+        private void TryBeginHeardNoiseSearchFromCurrentFrame()
+        {
+            //
+            // Hearing currently starts a new investigation only from PATROL.
+            // Visual DETECT/CHASE/ATTACK/RECOVER and visual SEARCH keep priority.
+            //
+            if (currentState != StalkerState.PATROL
+                || _worldInteractionDriver.HasActiveInteraction
+                || _currentHearingObservations == null
+                || _currentHearingObservations.Count == 0
+                || _currentHearingEvaluationTimeUtc == default
+                || _currentHearingEvaluationTimeUtc.Kind
+                    != System.DateTimeKind.Utc)
+            {
+                return;
+            }
+
+            if (!_hearingSelector.TrySelectInitial(
+                    _currentHearingObservations,
+                    _currentHearingEvaluationTimeUtc,
+                    out var selection)
+                || !selection.HasObservation)
+            {
+                return;
+            }
+
+            EnterHeardNoiseSearch(
+                selection.Observation);
+        }
+
+        private void TryUpdateHeardNoiseSearchFromCurrentFrame()
+        {
+            if (currentState != StalkerState.SEARCH
+                || _searchContext == null
+                || _searchContext.Source
+                    != StalkerSearchSource.HeardNoise
+                || !_hearingMemory.HasActiveNoiseInvestigation
+                || _currentHearingObservations == null
+                || _currentHearingObservations.Count == 0
+                || _currentHearingEvaluationTimeUtc == default
+                || _currentHearingEvaluationTimeUtc.Kind
+                    != System.DateTimeKind.Utc)
+            {
+                return;
+            }
+
+            if (!_hearingSelector.TrySelectInvestigationUpdate(
+                    _hearingMemory,
+                    _currentHearingObservations,
+                    _currentHearingEvaluationTimeUtc,
+                    out var selection)
+                || !selection.HasObservation)
+            {
+                return;
+            }
+
+            var previousPosition =
+                _hearingMemory.InvestigationPosition;
+
+            _hearingMemory.UpdateNoiseInvestigation(
+                selection.Observation);
+
+            UnityEngine.Debug.Log(
+                $"[STK_HEARING][UPDATE_SEARCH] " +
+                $"reason={selection.Reason} " +
+                $"event={selection.Observation.NoiseEventId} " +
+                $"position={selection.Observation.ObservedNoisePosition} " +
+                $"effectiveIntensity={selection.Observation.EffectiveIntensity:F3}");
+
+            var updatedPosition =
+                _hearingMemory.InvestigationPosition;
+
+            //
+            // Do not manufacture visual player knowledge.
+            // Only the hearing hypothesis and its navigation objective move.
+            //
+            if ((updatedPosition - previousPosition)
+                    .sqrMagnitude
+                <= 0.0001f)
+            {
+                return;
+            }
+
+            RestartHeardNoiseSearchAt(
+                updatedPosition);
+        }
+
+        private void RestartHeardNoiseSearchAt(
+            Vector3 noisePosition)
+        {
+            var direction =
+                noisePosition - transform.position;
+
+            if (direction.sqrMagnitude <= 0.0001f)
+            {
+                direction =
+                    transform.forward;
+            }
+
+            //
+            // New hearing evidence changes the hypothesis,
+            // therefore rebuild the SEARCH episode around
+            // the new authoritative position.
+            //
+            ClearSearchRuntimeContext();
+
+            searchElapsedTime = 0f;
+
+            EnsureSearchContext(
+                StalkerSearchSource.HeardNoise,
+                noisePosition,
+                direction);
+
+            if (!TrySetSearchOriginDestination(
+                    noisePosition))
+            {
+                TryPlanNextSearchCandidate();
+            }
+        }
+
+        private void EnterHeardNoiseSearch(
+            HearingObservation observation)
+        {
+            var noisePosition =
+                observation.ObservedNoisePosition;
+
+            var direction =
+                noisePosition - transform.position;
+
+            if (direction.sqrMagnitude <= 0.0001f)
+            {
+                direction =
+                    transform.forward;
+            }
+
+            ResetChaseDestinationTracking();
+            ResetNavigationRecoveryBudget();
+
+            //
+            // Hearing knowledge remains completely separate from
+            // StalkerMemory visual player knowledge.
+            //
+            _hearingMemory.BeginNoiseInvestigation(
+                observation);
+
+            UnityEngine.Debug.Log(
+                $"[STK_HEARING][ENTER_SEARCH] " +
+                $"event={observation.NoiseEventId} " +
+                $"type={observation.NoiseType} " +
+                $"position={observation.ObservedNoisePosition} " +
+                $"effectiveIntensity={observation.EffectiveIntensity:F3}");
+
+            //
+            // Start a fresh SEARCH episode without modifying
+            // lastKnownPosition or manufacturing a PlayerId.
+            //
+            ClearSearchRuntimeContext();
+
+            currentState =
+                StalkerState.SEARCH;
+
+            searchElapsedTime = 0f;
+
+            EnsureSearchContext(
+                StalkerSearchSource.HeardNoise,
+                noisePosition,
+                direction);
+
+            if (!TrySetSearchOriginDestination(
+                    noisePosition))
+            {
+                TryPlanNextSearchCandidate();
+            }
+        }
+
         private void EnterSearch()
         {
             ResetChaseDestinationTracking();
@@ -1156,6 +1396,13 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickSearch()
         {
+            if (_searchContext != null
+                && _searchContext.Source == StalkerSearchSource.HeardNoise)
+            {
+                TickHeardNoiseSearch();
+                return;
+            }
+
             if (HasTypedTargetFrame)
             {
                 TickSearchTyped();
@@ -1164,7 +1411,10 @@ namespace EchoProtocol.AI.Stalker
 
             if (currentTarget == null)
             {
-                CommitSearchEnded(StalkerSearchTerminalOutcome.CURRENT_TARGET_INVALID_NO_REPLACEMENT);
+                CommitSearchEnded(
+                    StalkerSearchTerminalOutcome
+                        .CURRENT_TARGET_INVALID_NO_REPLACEMENT);
+
                 ClearSearchContext();
                 currentState = StalkerState.PATROL;
                 StopAgentPath();
@@ -1172,37 +1422,114 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            if (TryGetVisibleCurrentTargetObservation(out var observedPosition))
+            if (TryGetVisibleCurrentTargetObservation(
+                    out var observedPosition))
             {
                 lastKnownPosition = observedPosition;
-                CommitSearchEnded(StalkerSearchTerminalOutcome.SAME_TARGET_REACQUIRED);
+
+                CommitSearchEnded(
+                    StalkerSearchTerminalOutcome
+                        .SAME_TARGET_REACQUIRED);
+
                 ClearSearchRuntimeContext();
                 ResetChaseDestinationTracking();
                 ResetNavigationRecoveryBudget();
+
                 currentState = StalkerState.CHASE;
                 SetChaseDestination(observedPosition);
                 return;
             }
 
-            if (_navigation != null && _navigation.HasActiveDestination && _navigation.HasArrived())
+            if (_navigation != null
+                && _navigation.HasActiveDestination
+                && _navigation.HasArrived())
             {
                 MarkSearchCandidateReached();
             }
 
-            if (_navigation == null || !_navigation.HasActiveDestination)
+            if (_navigation == null
+                || !_navigation.HasActiveDestination)
             {
                 TryPlanNextSearchCandidateIfNotHolding();
             }
 
-            searchElapsedTime += CurrentSimulationDeltaSeconds;
+            searchElapsedTime +=
+                CurrentSimulationDeltaSeconds;
+
             if (searchElapsedTime < GetSearchDuration())
             {
                 return;
             }
 
-            CommitSearchEnded(StalkerSearchTerminalOutcome.TIMEOUT);
+            CommitSearchEnded(
+                StalkerSearchTerminalOutcome.TIMEOUT);
+
             ClearSearchContext();
             currentState = StalkerState.PATROL;
+            StopAgentPath();
+            SetCurrentPatrolDestination();
+        }
+
+        private void TickHeardNoiseSearch()
+        {
+            //
+            // HeardNoise SEARCH deliberately has no CurrentTargetId.
+            // A player identity only becomes known through the visual
+            // perception pipeline.
+            //
+            if (!_hearingMemory.HasActiveNoiseInvestigation)
+            {
+                ClearSearchRuntimeContext();
+
+                currentState =
+                    StalkerState.PATROL;
+
+                StopAgentPath();
+                SetCurrentPatrolDestination();
+                return;
+            }
+
+            //
+            // A real visible player converts the positional hearing
+            // hypothesis into the normal visual DETECT pipeline.
+            //
+            if (TryAcquireDifferentVisibleTargetDuringSearch(
+                    PlayerId.Invalid))
+            {
+                _hearingMemory.ClearNoiseInvestigation();
+                return;
+            }
+
+            if (_navigation != null
+                && _navigation.HasActiveDestination
+                && _navigation.HasArrived())
+            {
+                MarkSearchCandidateReached();
+            }
+
+            if (_navigation == null
+                || !_navigation.HasActiveDestination)
+            {
+                TryPlanNextSearchCandidateIfNotHolding();
+            }
+
+            searchElapsedTime +=
+                CurrentSimulationDeltaSeconds;
+
+            if (searchElapsedTime < GetSearchDuration())
+            {
+                return;
+            }
+
+            CommitSearchEnded(
+                StalkerSearchTerminalOutcome.TIMEOUT);
+
+            _hearingMemory.ClearNoiseInvestigation();
+            ClearSearchContext();
+
+            currentState =
+                StalkerState.PATROL;
+
             StopAgentPath();
             SetCurrentPatrolDestination();
         }
@@ -1320,21 +1647,28 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            if (!TryResolveReachableChaseDestination(
+                    observedPosition,
+                    out var chaseDestination))
+            {
+                return;
+            }
+
             _chaseDestinationRefreshElapsed += CurrentSimulationDeltaSeconds;
-            if (!ShouldRefreshChaseDestination(observedPosition))
+            if (!ShouldRefreshChaseDestination(chaseDestination))
             {
                 return;
             }
 
             var result = _navigation.RequestDestination(
-                observedPosition,
+                chaseDestination,
                 NavigationRequestIntent.TrackMovingGoal);
             if (!result.IsAccepted)
             {
                 return;
             }
 
-            _lastChaseRequestedDestination = observedPosition;
+            _lastChaseRequestedDestination = chaseDestination;
             _hasLastChaseRequestedDestination = true;
             _chaseDestinationRefreshElapsed = 0f;
             SetNavigationObjective(new StalkerNavigationObjectiveKey(
@@ -1342,6 +1676,110 @@ namespace EchoProtocol.AI.Stalker
                 -1,
                 -1,
                 _memory.CurrentTargetId.IsValid ? _memory.CurrentTargetId.Value : -1));
+        }
+
+        private Vector3 GetPredictedChaseDestination(
+            Vector3 observedPosition)
+        {
+            var nowSeconds = CurrentSimulationTimeSeconds;
+
+            if (!_hasPreviousChaseObservation)
+            {
+                _hasPreviousChaseObservation = true;
+                _previousChaseObservedPosition = observedPosition;
+                _previousChaseObservationTimeSeconds = nowSeconds;
+                return observedPosition;
+            }
+
+            var deltaSeconds =
+                nowSeconds - _previousChaseObservationTimeSeconds;
+
+            var previousPosition =
+                _previousChaseObservedPosition;
+
+            _previousChaseObservedPosition = observedPosition;
+            _previousChaseObservationTimeSeconds = nowSeconds;
+
+            if (deltaSeconds <= 0.0001f)
+            {
+                return observedPosition;
+            }
+
+            var displacement =
+                observedPosition - previousPosition;
+
+            displacement.y = 0f;
+
+            var velocity =
+                displacement / deltaSeconds;
+
+            var leadOffset =
+                velocity * Mathf.Max(
+                    0f,
+                    chasePredictionLeadSeconds);
+
+            var maxLeadDistance =
+                Mathf.Max(
+                    0f,
+                    chasePredictionMaxDistance);
+
+            if (leadOffset.sqrMagnitude
+                > maxLeadDistance * maxLeadDistance)
+            {
+                leadOffset =
+                    leadOffset.normalized * maxLeadDistance;
+            }
+
+            return observedPosition + leadOffset;
+        }
+
+        private bool TryResolveReachableChaseDestination(
+            Vector3 observedPosition,
+            out Vector3 destination)
+        {
+            var predictedDestination =
+                GetPredictedChaseDestination(
+                    observedPosition);
+
+            if (_navigation.EvaluateDestination(
+                    predictedDestination).IsComplete)
+            {
+                destination = predictedDestination;
+                return true;
+            }
+
+            var agent = GetComponent<NavMeshAgent>();
+            if (agent != null
+                && agent.enabled
+                && agent.isOnNavMesh)
+            {
+                var projectionRadius =
+                    Mathf.Max(
+                        0.01f,
+                        chasePredictionMaxDistance);
+
+                if (NavMesh.SamplePosition(
+                        predictedDestination,
+                        out var hit,
+                        projectionRadius,
+                        agent.areaMask)
+                    && _navigation.EvaluateDestination(
+                        hit.position).IsComplete)
+                {
+                    destination = hit.position;
+                    return true;
+                }
+            }
+
+            if (_navigation.EvaluateDestination(
+                    observedPosition).IsComplete)
+            {
+                destination = observedPosition;
+                return true;
+            }
+
+            destination = observedPosition;
+            return false;
         }
 
         private void SetSearchDestination()
@@ -1356,28 +1794,72 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            var origin = _memory.HasLastKnownPosition ? _memory.LastKnownPosition : lastKnownPosition;
-            var direction = _memory.HasLastSeenDirection ? _memory.LastSeenDirection : transform.forward;
-            var originRegionId = RegionId.Invalid;
-            if (EnsureCanonicalPatrolInitialized()
-                && TryResolveNearestSpatialNode(origin, out var originNodeId)
-                && _regionGraph != null)
+            var origin =
+                _memory.HasLastKnownPosition
+                    ? _memory.LastKnownPosition
+                    : lastKnownPosition;
+
+            var direction =
+                _memory.HasLastSeenDirection
+                    ? _memory.LastSeenDirection
+                    : transform.forward;
+
+            EnsureSearchContext(
+                StalkerSearchSource.VisualTargetLoss,
+                origin,
+                direction);
+        }
+
+        private void EnsureSearchContext(
+            StalkerSearchSource source,
+            Vector3 origin,
+            Vector3 direction)
+        {
+            if (_searchContext != null)
             {
-                _regionGraph.TryGetRegionForNode(originNodeId, out originRegionId);
+                return;
             }
 
-            var startTime = new AiSimulationTime(
-                _legacySimulationTick < 0 ? 0 : _legacySimulationTick,
-                System.Math.Max(0d, _currentSimulationSeconds));
+            var originRegionId =
+                RegionId.Invalid;
+
+            if (EnsureCanonicalPatrolInitialized()
+                && TryResolveNearestSpatialNode(
+                    origin,
+                    out var originNodeId)
+                && _regionGraph != null)
+            {
+                _regionGraph.TryGetRegionForNode(
+                    originNodeId,
+                    out originRegionId);
+            }
+
+            var startTime =
+                new AiSimulationTime(
+                    _legacySimulationTick < 0
+                        ? 0
+                        : _legacySimulationTick,
+                    System.Math.Max(
+                        0d,
+                        _currentSimulationSeconds));
+
             _searchEpisodeSequence++;
-            _searchContext = new StalkerSearchContext(
-                new SearchEpisodeId(_searchEpisodeSequence),
-                origin,
-                direction,
-                startTime,
-                originRegionId);
-            searchEpisodeId = _searchContext.EpisodeId.Value;
-            _searchCandidatePlanningExhausted = false;
+
+            _searchContext =
+                new StalkerSearchContext(
+                    new SearchEpisodeId(
+                        _searchEpisodeSequence),
+                    source,
+                    origin,
+                    direction,
+                    startTime,
+                    originRegionId);
+
+            searchEpisodeId =
+                _searchContext.EpisodeId.Value;
+
+            _searchCandidatePlanningExhausted =
+                false;
         }
 
         private void MarkSearchCandidateReached()
@@ -1794,6 +2276,29 @@ namespace EchoProtocol.AI.Stalker
             if (failureReason == NavigationFailureReason.None)
             {
                 failureReason = ResolveNavigationFailureReason(pathStatus, executionStatus);
+            }
+
+            if (failureReason == NavigationFailureReason.AgentNotOnNavMesh)
+            {
+                if (_navigation.TryReattachToNearestNavMesh(
+                        EmergencyNavMeshRecoverySampleDistance))
+                {
+                    _navigation.RecordRecoveryReason(
+                        NavigationRecoveryReason.EmergencyNavMeshRecovery);
+
+                    if (TryGetCurrentNavigationRecoveryDestination(
+                            out var destination))
+                    {
+                        _navigation.RequestDestination(
+                            destination,
+                            NavigationRequestIntent.RecoveryRepath);
+
+                        _navigation.RecordRecoveryReason(
+                            NavigationRecoveryReason.EmergencyNavMeshRecovery);
+                    }
+                }
+
+                return;
             }
 
             LogDiagnosticWarning(
@@ -2449,6 +2954,9 @@ namespace EchoProtocol.AI.Stalker
             _hasLastChaseRequestedDestination = false;
             _lastChaseRequestedDestination = default;
             _chaseDestinationRefreshElapsed = 0f;
+            _hasPreviousChaseObservation = false;
+            _previousChaseObservedPosition = default;
+            _previousChaseObservationTimeSeconds = 0f;
         }
 
         private void ResetNavigationRecoveryBudget()
@@ -2705,13 +3213,25 @@ namespace EchoProtocol.AI.Stalker
             }
 
             _roomSweepCoverageMemory = new RoomSweepCoverageMemory();
-            _roomSweepPlanner = new RoomSweepPlanner(
-                _spatialPatrolGraph,
-                _regionGraph,
-                _roomSweepCoverageMemory);
-            _roomSweepGlobalPlanner = new RoomSweepGlobalPlanner(
-                _regionGraph,
-                _roomSweepCoverageMemory);
+            _roomSweepPlanner = _hasPatrolVariationSeed
+                ? new RoomSweepPlanner(
+                    _spatialPatrolGraph,
+                    _regionGraph,
+                    _roomSweepCoverageMemory,
+                    _patrolVariationSeed)
+                : new RoomSweepPlanner(
+                    _spatialPatrolGraph,
+                    _regionGraph,
+                    _roomSweepCoverageMemory);
+            _roomSweepGlobalPlanner = _hasPatrolVariationSeed
+                ? new RoomSweepGlobalPlanner(
+                    _regionGraph,
+                    _roomSweepCoverageMemory,
+                    _patrolVariationSeed,
+                    _patrolNearOptimalHopSlack)
+                : new RoomSweepGlobalPlanner(
+                    _regionGraph,
+                    _roomSweepCoverageMemory);
             return true;
         }
 
@@ -3051,10 +3571,14 @@ namespace EchoProtocol.AI.Stalker
                     //     NavigationFailureReason.None);
                     // continue;
                     BeginRoomSweepSelfProbeScan(probeNodeId, currentRoomRegionId);
+                    UnityEngine.Debug.Log(
+                        $"[STK_PATROL][LOCAL] " +
+                        $"region={currentRoomRegionId.Value} " +
+                        $"probeNode={probeNodeId} " +
+                        $"seed={GetPatrolVariationDiagnosticValue()}");
                     return true;
                 }
 
-                LogRoomSweepProbeSelected(currentNodeId, probeNodeId, probeNode.Position);
                 var result = _navigation.RequestDestination(probeNode.Position);
                 if (!result.IsAccepted)
                 {
@@ -3066,6 +3590,13 @@ namespace EchoProtocol.AI.Stalker
                     regionGraphFallbackReason = RegionGraphFallbackReason.NoCompleteLocalPath;
                     continue;
                 }
+
+                LogRoomSweepProbeSelected(currentNodeId, probeNodeId, probeNode.Position);
+                UnityEngine.Debug.Log(
+                    $"[STK_PATROL][LOCAL] " +
+                    $"region={currentRoomRegionId.Value} " +
+                    $"probeNode={probeNodeId} " +
+                    $"seed={GetPatrolVariationDiagnosticValue()}");
 
                 SetNavigationObjective(new StalkerNavigationObjectiveKey(
                     StalkerNavigationObjectiveKind.RoomSweepProbe,
@@ -3243,6 +3774,9 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
+            var previousObjective =
+                _roomSweepGlobalPlanner.CurrentObjective;
+
             if (!_roomSweepGlobalPlanner.TryGetOrCreateObjective(
                     currentRegionId,
                     _rejectedRoomSweepGlobalRegionIds,
@@ -3282,6 +3816,20 @@ namespace EchoProtocol.AI.Stalker
                     _rejectedRoomSweepTransitNodeIds.Add(selection.DestinationNode.Id);
                     regionGraphFallbackReason = RegionGraphFallbackReason.NoCompleteLocalPath;
                     continue;
+                }
+
+                if (!previousObjective.IsValid
+                    || previousObjective.TargetRoomRegionId
+                        != objective.TargetRoomRegionId
+                    || previousObjective.NextRegionId
+                        != objective.NextRegionId)
+                {
+                    UnityEngine.Debug.Log(
+                        $"[STK_PATROL][GLOBAL] " +
+                        $"currentRegion={currentRegionId.Value} " +
+                        $"targetRoom={objective.TargetRoomRegionId.Value} " +
+                        $"nextRegion={objective.NextRegionId.Value} " +
+                        $"seed={GetPatrolVariationDiagnosticValue()}");
                 }
 
                 SetNavigationObjective(new StalkerNavigationObjectiveKey(
@@ -3475,6 +4023,13 @@ namespace EchoProtocol.AI.Stalker
                     + $"deltaY={node.Position.y - stalkerPosition.y} "
                     + $"canSeePoint={canSeePoint}");
             }
+        }
+
+        private string GetPatrolVariationDiagnosticValue()
+        {
+            return _hasPatrolVariationSeed
+                ? _patrolVariationSeed.ToString()
+                : "LEGACY";
         }
 
         private void LogRoomSweepProbeSelected(int currentNodeId, int probeNodeId, Vector3 probePosition)

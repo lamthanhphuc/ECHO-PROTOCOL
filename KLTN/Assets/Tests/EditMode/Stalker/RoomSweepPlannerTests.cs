@@ -238,6 +238,123 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetMemoryInt(memory, "GetObservedCount", regionOne), Is.EqualTo(1));
         }
 
+        [Test]
+        public void STK_RoomSweepPlanner_SeededProbeSelection_IsRepeatableAndVariesAcrossSeeds()
+        {
+            var spatialGraph = CreateSpatialGraph(
+                Node(0, 1, 2, 3),
+                Node(1, 0),
+                Node(2, 0),
+                Node(3, 0));
+            var room = new RegionId(1);
+            var regionGraph = CreateRegionGraph(
+                spatialGraph,
+                new[] { RegionId.Invalid, room, room, room },
+                RoomRegion(room, 1, "Zone01/Room"));
+
+            var constructor =
+                RoomSweepPlannerType.GetConstructor(
+                    new[]
+                    {
+                        GraphType,
+                        RegionGraphType,
+                        RoomSweepCoverageMemoryType,
+                        typeof(int)
+                    });
+
+            Assert.That(
+                constructor,
+                Is.Not.Null,
+                "Seeded RoomSweepPlanner constructor is missing.");
+
+            var firstPlanner = constructor.Invoke(new object[]
+            {
+                spatialGraph,
+                regionGraph,
+                CreateMemory(),
+                7
+            });
+            var secondPlanner = constructor.Invoke(new object[]
+            {
+                spatialGraph,
+                regionGraph,
+                CreateMemory(),
+                7
+            });
+
+            Assert.That(TryBeginRegion(firstPlanner, room), Is.True);
+            Assert.That(TryBeginRegion(secondPlanner, room), Is.True);
+            Assert.That(TrySelectNextProbe(firstPlanner, 0, out var firstTarget), Is.True);
+            Assert.That(TrySelectNextProbe(secondPlanner, 0, out var secondTarget), Is.True);
+            Assert.That(secondTarget, Is.EqualTo(firstTarget));
+
+            var validProbeIds = new HashSet<int> { 1, 2, 3 };
+            var selectedProbeIds = new HashSet<int>();
+            for (var seed = 0; seed < 64; seed++)
+            {
+                var planner = constructor.Invoke(new object[]
+                {
+                    spatialGraph,
+                    regionGraph,
+                    CreateMemory(),
+                    seed
+                });
+
+                Assert.That(TryBeginRegion(planner, room), Is.True);
+                Assert.That(TrySelectNextProbe(planner, 0, out var target), Is.True);
+                Assert.That(validProbeIds.Contains(target), Is.True);
+                selectedProbeIds.Add(target);
+            }
+
+            Assert.That(selectedProbeIds.Count, Is.GreaterThanOrEqualTo(2));
+        }
+
+        [Test]
+        public void STK_RoomSweepPlanner_ConfigureVariation_PreservesActiveRoomAndRejectedProbeState()
+        {
+            var spatialGraph = CreateSpatialGraph(
+                Node(0, 1, 2, 3),
+                Node(1, 0),
+                Node(2, 0),
+                Node(3, 0));
+            var room = new RegionId(1);
+            var regionGraph = CreateRegionGraph(
+                spatialGraph,
+                new[] { RegionId.Invalid, room, room, room },
+                RoomRegion(room, 1, "Zone01/Room"));
+            var planner = CreatePlanner(
+                spatialGraph,
+                regionGraph,
+                CreateMemory());
+
+            Assert.That(TryBeginRegion(planner, room), Is.True);
+            Assert.That(RejectProbe(planner, 1), Is.True);
+
+            var configureMethod =
+                RoomSweepPlannerType.GetMethod(
+                    "ConfigureVariation",
+                    BindingFlags.Instance | BindingFlags.Public,
+                    null,
+                    new[] { typeof(int) },
+                    null);
+
+            Assert.That(
+                configureMethod,
+                Is.Not.Null,
+                "RoomSweepPlanner.ConfigureVariation(int) is missing.");
+
+            configureMethod.Invoke(
+                planner,
+                new object[] { 123 });
+
+            Assert.That(GetRegionIdProperty(planner, "CurrentRegionId"), Is.EqualTo(room));
+            Assert.That(GetBoolProperty(planner, "HasActiveRegion"), Is.True);
+            Assert.That(GetIntProperty(planner, "RejectedProbeCount"), Is.EqualTo(1));
+            Assert.That(TrySelectNextProbe(planner, 0, out var target), Is.True);
+            Assert.That(target, Is.Not.EqualTo(1));
+            Assert.That(target == 2 || target == 3, Is.True);
+        }
+
         private static object CreatePlanner(object spatialGraph, object regionGraph, object memory)
         {
             return Activator.CreateInstance(RoomSweepPlannerType, spatialGraph, regionGraph, memory);

@@ -27,8 +27,177 @@ namespace EchoProtocol.AI.Listener.Tests
                     "CORE_CARRY",
                     "CORE_DROP",
                     "NOISE_MAKER",
-                    "FIELD_SCANNER"
+                    "FIELD_SCANNER",
+                    "CROUCH",
+                    "WALK",
+                    "DOOR",
+                    "CORE_INSERT"
                 }));
+        }
+
+        [Test]
+        public void LIS001_MovementNoiseCatalog_HasRequiredStealthHierarchy()
+        {
+            var catalog = RuntimeNoiseCatalog.CreateDefault();
+
+            AssertDefinition(catalog, RuntimeNoiseType.CROUCH, 0.3d, 5d, 2d,
+                RuntimeNoiseEmissionMode.RecurringMovement);
+            AssertDefinition(catalog, RuntimeNoiseType.WALK, 0.45d, 8d, 2d,
+                RuntimeNoiseEmissionMode.RecurringMovement);
+            AssertDefinition(catalog, RuntimeNoiseType.SPRINT, 0.8d, 16d, 2d,
+                RuntimeNoiseEmissionMode.RecurringMovement);
+            AssertDefinition(catalog, RuntimeNoiseType.CORE_CARRY, 0.95d, 20d, 2d,
+                RuntimeNoiseEmissionMode.RecurringMovement);
+
+            catalog.TryGetDefinition(RuntimeNoiseType.CROUCH, out var crouch);
+            catalog.TryGetDefinition(RuntimeNoiseType.WALK, out var walk);
+            catalog.TryGetDefinition(RuntimeNoiseType.SPRINT, out var sprint);
+            catalog.TryGetDefinition(RuntimeNoiseType.CORE_CARRY, out var carry);
+            Assert.That(crouch.HearingRadius, Is.LessThan(walk.HearingRadius));
+            Assert.That(walk.HearingRadius, Is.LessThan(sprint.HearingRadius));
+            Assert.That(sprint.HearingRadius, Is.LessThan(carry.HearingRadius));
+        }
+
+        [Test]
+        public void LIS001_ActionNoiseCatalog_HasDoorAndCoreInsertDefinitions()
+        {
+            var catalog = RuntimeNoiseCatalog.CreateDefault();
+
+            AssertDefinition(catalog, RuntimeNoiseType.DOOR, 0.55d, 10d, 2d,
+                RuntimeNoiseEmissionMode.DiscreteAction);
+            AssertDefinition(catalog, RuntimeNoiseType.CORE_INSERT, 0.8d, 14d, 3d,
+                RuntimeNoiseEmissionMode.DiscreteAction);
+            AssertDefinition(catalog, RuntimeNoiseType.INTERACTION, 0.35d, 6d, 2d,
+                RuntimeNoiseEmissionMode.DiscreteAction);
+            AssertDefinition(catalog, RuntimeNoiseType.CORE_DROP, 0.9d, 15d, 3d,
+                RuntimeNoiseEmissionMode.DiscreteAction);
+            AssertDefinition(catalog, RuntimeNoiseType.NOISE_MAKER, 1d, 22d, 6d,
+                RuntimeNoiseEmissionMode.DiscreteAction);
+            AssertDefinition(catalog, RuntimeNoiseType.FIELD_SCANNER, 0.45d, 8d, 2.5d,
+                RuntimeNoiseEmissionMode.DiscreteAction);
+
+            catalog.TryGetDefinition(RuntimeNoiseType.CROUCH, out var crouch);
+            catalog.TryGetDefinition(RuntimeNoiseType.WALK, out var walk);
+            catalog.TryGetDefinition(RuntimeNoiseType.DOOR, out var door);
+            catalog.TryGetDefinition(RuntimeNoiseType.CORE_INSERT, out var insert);
+            catalog.TryGetDefinition(RuntimeNoiseType.CORE_DROP, out var drop);
+            catalog.TryGetDefinition(RuntimeNoiseType.SPRINT, out var sprint);
+            catalog.TryGetDefinition(RuntimeNoiseType.CORE_CARRY, out var carry);
+            catalog.TryGetDefinition(RuntimeNoiseType.NOISE_MAKER, out var noiseMaker);
+            Assert.That(crouch.HearingRadius, Is.LessThan(walk.HearingRadius));
+            Assert.That(walk.HearingRadius, Is.LessThan(door.HearingRadius));
+            Assert.That(door.HearingRadius, Is.LessThan(insert.HearingRadius));
+            Assert.That(insert.HearingRadius, Is.LessThan(drop.HearingRadius));
+            Assert.That(drop.HearingRadius, Is.LessThan(sprint.HearingRadius));
+            Assert.That(sprint.HearingRadius, Is.LessThan(carry.HearingRadius));
+            Assert.That(carry.HearingRadius, Is.LessThan(noiseMaker.HearingRadius));
+        }
+
+        [Test]
+        public void LIS001_MovementProducer_MapsCrouchWalkSprintAndCoreCarry()
+        {
+            var source = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Player/NetworkPlayerMovement.cs");
+            var start = source.IndexOf("var isMoving =", StringComparison.Ordinal);
+            var end = source.IndexOf("if (_allowJump", start, StringComparison.Ordinal);
+
+            Assert.That(start, Is.GreaterThanOrEqualTo(0));
+            Assert.That(end, Is.GreaterThan(start));
+            var movementNoiseBlock = source.Substring(start, end - start);
+            StringAssert.Contains("direction.sqrMagnitude > 0.01f", movementNoiseBlock);
+            StringAssert.Contains("Object.HasStateAuthority", movementNoiseBlock);
+            StringAssert.Contains("&& isMoving", movementNoiseBlock);
+            StringAssert.Contains("RuntimeNoiseType.CROUCH", movementNoiseBlock);
+            StringAssert.Contains("RuntimeNoiseType.WALK", movementNoiseBlock);
+            StringAssert.Contains("RuntimeNoiseType.SPRINT", movementNoiseBlock);
+            StringAssert.Contains("RuntimeNoiseType.CORE_CARRY", movementNoiseBlock);
+            StringAssert.Contains("RuntimeNoiseSourceOccurrenceKey.ForMovement", movementNoiseBlock);
+            StringAssert.DoesNotContain("Object.HasStateAuthority && isSprintMoving", movementNoiseBlock);
+        }
+
+        [Test]
+        public void LIS001_MovementNoiseProfileChangesAndRestartBypassPreviousTimer()
+        {
+            var source = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Player/NetworkPlayerMovement.cs");
+
+            StringAssert.Contains(
+                "private RuntimeNoiseType _lastMovementNoiseType;",
+                source);
+            StringAssert.Contains(
+                "private bool _hasLastMovementNoiseType;",
+                source);
+            StringAssert.Contains(
+                "private bool _lastCoreCarryWasStabilized;",
+                source);
+
+            StringAssert.Contains(
+                "if (Object.HasStateAuthority && !isMoving)",
+                source);
+            StringAssert.Contains(
+                "_hasLastMovementNoiseType = false;",
+                source);
+
+            StringAssert.Contains(
+                "var movementNoiseProfileChanged =",
+                source);
+            StringAssert.Contains(
+                "!_hasLastMovementNoiseType",
+                source);
+            StringAssert.Contains(
+                "type != _lastMovementNoiseType",
+                source);
+            StringAssert.Contains(
+                "coreCarryIsStabilized != _lastCoreCarryWasStabilized",
+                source);
+
+            StringAssert.Contains(
+                "if (movementNoiseProfileChanged",
+                source);
+            StringAssert.Contains(
+                "|| _nextMovementNoise.ExpiredOrNotRunning(Runner))",
+                source);
+
+            StringAssert.Contains(
+                "_lastMovementNoiseType = type;",
+                source);
+            StringAssert.Contains(
+                "_lastCoreCarryWasStabilized = coreCarryIsStabilized;",
+                source);
+            StringAssert.Contains(
+                "_hasLastMovementNoiseType = true;",
+                source);
+
+            StringAssert.Contains(
+                "? 4.0f",
+                source);
+            StringAssert.Contains(
+                ": 1.5f;",
+                source);
+        }
+
+        [Test]
+        public void LIS001_InteractionProducer_UsesInteractableNoiseType()
+        {
+            var interactable = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Interaction/NetworkInteractable.cs");
+            var interactor = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
+
+            StringAssert.Contains("public virtual RuntimeNoiseType RuntimeInteractionNoiseType", interactable);
+            StringAssert.Contains("RuntimeNoiseType.INTERACTION", interactable);
+            StringAssert.Contains("target.EmitsRuntimeInteractionNoise", interactor);
+            StringAssert.Contains("target.RuntimeInteractionNoiseType", interactor);
+        }
+
+        [Test]
+        public void LIS001_CoreInsert_HasDedicatedOccurrenceKey()
+        {
+            var key = RuntimeNoiseSourceOccurrenceKey.ForCoreInsert("core-1", 7);
+
+            Assert.That(key.StreamKey, Is.EqualTo("core-insert:core-1"));
+            Assert.That(key.Sequence, Is.EqualTo(7));
+            Assert.That(key.IsValid, Is.True);
         }
 
         [Test]
@@ -789,7 +958,10 @@ namespace EchoProtocol.AI.Listener.Tests
             StringAssert.DoesNotContain("position.x", hostSource);
             StringAssert.DoesNotContain("double loudness", hostSource);
             StringAssert.Contains("RuntimeNoiseSourceOccurrenceKey.ForMovement", movementSource);
+            StringAssert.Contains("RuntimeNoiseType.CROUCH", movementSource);
+            StringAssert.Contains("RuntimeNoiseType.WALK", movementSource);
             StringAssert.Contains("RuntimeNoiseSourceOccurrenceKey.ForInteraction", interactionSource);
+            StringAssert.Contains("target.RuntimeInteractionNoiseType", interactionSource);
             StringAssert.Contains("beacon.Initialize", interactionSource);
             StringAssert.Contains("RuntimeNoiseSourceOccurrenceKey.ForTeamTool", noiseMakerSource);
             StringAssert.Contains("RuntimeNoiseType.NOISE_MAKER", noiseMakerSource);
@@ -799,6 +971,7 @@ namespace EchoProtocol.AI.Listener.Tests
             StringAssert.DoesNotContain("public override bool EmitsRuntimeInteractionNoise => true", doorSource);
             StringAssert.DoesNotContain("EmitsRuntimeInteractionNoise => true", toggleSource);
             StringAssert.Contains("RuntimeNoiseSourceOccurrenceKey.ForCoreDrop", pickupSource);
+            StringAssert.Contains("RuntimeNoiseSourceOccurrenceKey.ForCoreInsert", pickupSource);
             Assert.That(Directory.GetFiles(listenerRoot, "*.cs", SearchOption.AllDirectories)
                 .Select(File.ReadAllText)
                 .Any(source => source.Contains("TelemetryEvent")), Is.False);
@@ -821,6 +994,21 @@ namespace EchoProtocol.AI.Listener.Tests
                 position,
                 emittedAtUtc,
                 authoritativeTick);
+        }
+
+        private static void AssertDefinition(
+            RuntimeNoiseCatalog catalog,
+            RuntimeNoiseType type,
+            double loudness,
+            double radius,
+            double lifetimeSeconds,
+            RuntimeNoiseEmissionMode mode)
+        {
+            Assert.That(catalog.TryGetDefinition(type, out var definition), Is.True);
+            Assert.That(definition.BaseLoudness, Is.EqualTo(loudness));
+            Assert.That(definition.HearingRadius, Is.EqualTo(radius));
+            Assert.That(definition.Lifetime, Is.EqualTo(TimeSpan.FromSeconds(lifetimeSeconds)));
+            Assert.That(definition.EmissionMode, Is.EqualTo(mode));
         }
 
         private static RuntimeNoiseEvent CreateNoise(

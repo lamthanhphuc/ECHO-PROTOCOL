@@ -10,7 +10,11 @@ namespace EchoProtocol.AI.Listener.Noise
         CORE_CARRY,
         CORE_DROP,
         NOISE_MAKER,
-        FIELD_SCANNER
+        FIELD_SCANNER,
+        CROUCH,
+        WALK,
+        DOOR,
+        CORE_INSERT
     }
 
     public enum RuntimeNoiseEmissionMode
@@ -109,6 +113,15 @@ namespace EchoProtocol.AI.Listener.Noise
         {
             return new RuntimeNoiseSourceOccurrenceKey(
                 $"core-drop:{coreObjectId}",
+                transitionOrdinal);
+        }
+
+        public static RuntimeNoiseSourceOccurrenceKey ForCoreInsert(
+            string coreObjectId,
+            uint transitionOrdinal)
+        {
+            return new RuntimeNoiseSourceOccurrenceKey(
+                $"core-insert:{coreObjectId}",
                 transitionOrdinal);
         }
     }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Common.Spatial;
 
@@ -32,11 +33,52 @@ namespace EchoProtocol.AI.Stalker.Spatial
     {
         private readonly RegionGraph _regionGraph;
         private readonly RoomSweepCoverageMemory _coverageMemory;
+        private readonly int _variationSeed;
+        private readonly int _nearOptimalHopSlack;
+        private readonly bool _useSeededVariation;
+
+        private readonly List<SeededCandidate> _seededCandidates =
+            new List<SeededCandidate>();
+
+        private readonly struct SeededCandidate
+        {
+            public SeededCandidate(
+                RegionId target,
+                RegionId nextRegion,
+                int hopCost)
+            {
+                Target = target;
+                NextRegion = nextRegion;
+                HopCost = hopCost;
+            }
+
+            public RegionId Target { get; }
+            public RegionId NextRegion { get; }
+            public int HopCost { get; }
+        }
 
         public RoomSweepGlobalPlanner(RegionGraph regionGraph, RoomSweepCoverageMemory coverageMemory)
         {
             _regionGraph = regionGraph;
             _coverageMemory = coverageMemory;
+            _variationSeed = 0;
+            _nearOptimalHopSlack = 0;
+            _useSeededVariation = false;
+            CurrentObjective = RoomSweepGlobalObjective.Invalid;
+            LastInvalidationReason = RoomSweepGlobalObjectiveInvalidationReason.None;
+        }
+
+        public RoomSweepGlobalPlanner(
+            RegionGraph regionGraph,
+            RoomSweepCoverageMemory coverageMemory,
+            int variationSeed,
+            int nearOptimalHopSlack)
+        {
+            _regionGraph = regionGraph;
+            _coverageMemory = coverageMemory;
+            _variationSeed = variationSeed;
+            _nearOptimalHopSlack = Math.Max(0, nearOptimalHopSlack);
+            _useSeededVariation = true;
             CurrentObjective = RoomSweepGlobalObjective.Invalid;
             LastInvalidationReason = RoomSweepGlobalObjectiveInvalidationReason.None;
         }
@@ -130,6 +172,14 @@ namespace EchoProtocol.AI.Stalker.Spatial
             ISet<RegionId> rejectedRoomRegionIds,
             out RoomSweepGlobalObjective objective)
         {
+            if (_useSeededVariation)
+            {
+                return TrySelectSeededTarget(
+                    currentRegionId,
+                    rejectedRoomRegionIds,
+                    out objective);
+            }
+
             objective = RoomSweepGlobalObjective.Invalid;
             var bestTarget = RegionId.Invalid;
             var bestNextRegion = RegionId.Invalid;
@@ -165,6 +215,73 @@ namespace EchoProtocol.AI.Stalker.Spatial
 
             objective = new RoomSweepGlobalObjective(bestTarget, bestNextRegion);
             return true;
+        }
+
+        private bool TrySelectSeededTarget(
+            RegionId currentRegionId,
+            ISet<RegionId> rejectedRoomRegionIds,
+            out RoomSweepGlobalObjective objective)
+        {
+            objective = RoomSweepGlobalObjective.Invalid;
+            _seededCandidates.Clear();
+
+            var regions = _regionGraph.Regions;
+            var bestCost = int.MaxValue;
+            for (var i = 0; i < regions.Count; i++)
+            {
+                var candidate = regions[i].Id;
+                if (!IsEligibleTarget(currentRegionId, candidate, rejectedRoomRegionIds))
+                {
+                    continue;
+                }
+
+                if (!_regionGraph.TryGetRouteHopCost(currentRegionId, candidate, out var cost)
+                    || !_regionGraph.TryGetNextRegionOnRoute(currentRegionId, candidate, out var nextRegionId))
+                {
+                    continue;
+                }
+
+                if (cost < bestCost)
+                {
+                    bestCost = cost;
+                }
+
+                _seededCandidates.Add(new SeededCandidate(candidate, nextRegionId, cost));
+            }
+
+            if (bestCost == int.MaxValue)
+            {
+                return false;
+            }
+
+            var maximumCost = bestCost + _nearOptimalHopSlack;
+            for (var i = _seededCandidates.Count - 1; i >= 0; i--)
+            {
+                if (_seededCandidates[i].HopCost > maximumCost)
+                {
+                    _seededCandidates.RemoveAt(i);
+                }
+            }
+
+            _seededCandidates.Sort(
+                (left, right) => left.Target.CompareTo(right.Target));
+
+            var mixed = Mix(
+                unchecked((uint)_variationSeed)
+                ^ Mix(unchecked((uint)currentRegionId.Value)));
+            var selected = _seededCandidates[(int)(mixed % (uint)_seededCandidates.Count)];
+            objective = new RoomSweepGlobalObjective(selected.Target, selected.NextRegion);
+            return true;
+        }
+
+        private static uint Mix(uint value)
+        {
+            value ^= value >> 16;
+            value *= 0x7feb352dU;
+            value ^= value >> 15;
+            value *= 0x846ca68bU;
+            value ^= value >> 16;
+            return value;
         }
 
         private bool IsEligibleTarget(

@@ -1120,7 +1120,7 @@ namespace EchoProtocol.Networking
                         HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
                             .TryAccept(
                                 requester,
-                                RuntimeNoiseType.INTERACTION,
+                                target.RuntimeInteractionNoiseType,
                                 RuntimeNoiseSourceOccurrenceKey.ForInteraction(
                                     Object.Id.ToString(),
                                     sequence),

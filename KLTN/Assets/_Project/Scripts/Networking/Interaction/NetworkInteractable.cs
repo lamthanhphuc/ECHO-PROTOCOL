@@ -1,4 +1,5 @@
 using Fusion;
+using EchoProtocol.AI.Listener.Noise;
 using UnityEngine;
 
 namespace EchoProtocol.Networking
@@ -20,6 +21,8 @@ namespace EchoProtocol.Networking
         public virtual string InteractionPrompt => _interactionPrompt;
         public Transform InteractionOrigin => _interactionOrigin != null ? _interactionOrigin : transform;
         public virtual bool EmitsRuntimeInteractionNoise => _emitsRuntimeInteractionNoise;
+        public virtual RuntimeNoiseType RuntimeInteractionNoiseType =>
+            RuntimeNoiseType.INTERACTION;
         public Vector3 RuntimeInteractionNoiseOrigin =>
             _runtimeInteractionNoiseOrigin != null
                 ? _runtimeInteractionNoiseOrigin.position
