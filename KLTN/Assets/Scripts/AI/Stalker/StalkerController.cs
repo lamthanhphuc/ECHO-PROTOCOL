@@ -107,6 +107,10 @@ namespace EchoProtocol.AI.Stalker
         private const int MaxTopologyPathSegmentSamples = 8;
         private const float EmergencyNavMeshRecoverySampleDistance = 2f;
 
+        private IStalkerTargetPolicy _targetPolicy =
+            new NearestEligibleVisibleTargetPolicy(
+                TargetSelectionTieEpsilon);
+
         private readonly StalkerMemory _memory =
             new StalkerMemory();
 
@@ -696,9 +700,8 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            if (!StalkerTargetSelector.TrySelectNearestEligibleVisible(
+            if (!_targetPolicy.TrySelectTarget(
                     _currentVisibleTargetCandidates,
-                    TargetSelectionTieEpsilon,
                     out var selectedObservation))
             {
                 return false;

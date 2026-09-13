@@ -15,6 +15,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string EligibilityServiceTypeName = "EchoProtocol.AI.Stalker.StalkerTargetEligibility";
         private const string TargetCandidateTypeName = "EchoProtocol.AI.Stalker.StalkerTargetCandidate";
         private const string TargetSelectorTypeName = "EchoProtocol.AI.Stalker.StalkerTargetSelector";
+        private const string TargetPolicyTypeName = "EchoProtocol.AI.Stalker.NearestEligibleVisibleTargetPolicy";
 
         [Test]
         public void STK_ELIG_ActiveConnectedStandingPlayer_IsEligible()
@@ -88,6 +89,74 @@ namespace EchoProtocol.AI.Stalker.Tests
             AssertPlayerIdValue(GetProperty(Select(0.06f, playerTwenty, playerOne, playerThirty), "PlayerId"), 20);
         }
 
+        [Test]
+        public void STK_POLICY_NearestEligibleVisibleTarget_PreservesSelectorTieBehavior()
+        {
+            var playerFive = CreateEligibleCandidate(5, 2f);
+            var playerTwo = CreateEligibleCandidate(2, 2.05f);
+
+            AssertPlayerIdValue(
+                GetProperty(
+                    SelectWithPolicy(0.10f, playerFive, playerTwo),
+                    "PlayerId"),
+                2);
+
+            AssertPlayerIdValue(
+                GetProperty(
+                    SelectWithPolicy(0.10f, playerTwo, playerFive),
+                    "PlayerId"),
+                2);
+        }
+
+        [Test]
+        public void STK_POLICY_IneligibleNearestPlayer_DoesNotWin()
+        {
+            var selected = SelectWithPolicy(
+                0f,
+                CreateCandidate(
+                    1,
+                    1f,
+                    CreateSnapshot(true, true, true, false, false)),
+                CreateEligibleCandidate(2, 3f));
+
+            AssertPlayerIdValue(
+                GetProperty(selected, "PlayerId"),
+                2);
+        }
+
+        [Test]
+        public void STK_POLICY_NoEligibleCandidates_ReturnsFalseAndDefaultObservation()
+        {
+            Assert.That(
+                TrySelectWithPolicy(
+                    0f,
+                    out var selected,
+                    CreateCandidate(
+                        1,
+                        1f,
+                        CreateSnapshot(true, true, true, false, false)),
+                    CreateCandidate(
+                        2,
+                        3f,
+                        CreateSnapshot(true, false, false, false, false))),
+                Is.False);
+
+            Assert.That(selected, Is.Not.Null);
+            Assert.That(
+                GetBoolProperty(
+                    GetProperty(selected, "PlayerId"),
+                    "IsValid"),
+                Is.False);
+        }
+
+        [Test]
+        public void STK_POLICY_InvalidDistanceTieEpsilon_IsRejected()
+        {
+            AssertInvalidPolicyEpsilon(-0.01f);
+            AssertInvalidPolicyEpsilon(float.NaN);
+            AssertInvalidPolicyEpsilon(float.PositiveInfinity);
+        }
+
         private static object Select(float epsilon, params object[] candidates)
         {
             Assert.That(TrySelect(epsilon, out var selected, candidates), Is.True);
@@ -108,6 +177,63 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             selectedObservation = args[2];
             return (bool)result;
+        }
+
+        private static object SelectWithPolicy(
+            float epsilon,
+            params object[] candidates)
+        {
+            Assert.That(
+                TrySelectWithPolicy(
+                    epsilon,
+                    out var selected,
+                    candidates),
+                Is.True);
+
+            return selected;
+        }
+
+        private static bool TrySelectWithPolicy(
+            float epsilon,
+            out object selectedObservation,
+            params object[] candidates)
+        {
+            var policy = Activator.CreateInstance(
+                ResolveType(TargetPolicyTypeName),
+                epsilon);
+
+            var method = policy.GetType().GetMethod(
+                "TrySelectTarget",
+                BindingFlags.Instance | BindingFlags.Public);
+
+            Assert.That(
+                method,
+                Is.Not.Null,
+                "Missing NearestEligibleVisibleTargetPolicy.TrySelectTarget.");
+
+            var args = new object[]
+            {
+                CreateCandidateArray(candidates),
+                null
+            };
+
+            var result = method.Invoke(policy, args);
+            Assert.That(result, Is.TypeOf<bool>());
+
+            selectedObservation = args[1];
+            return (bool)result;
+        }
+
+        private static void AssertInvalidPolicyEpsilon(float epsilon)
+        {
+            var exception = Assert.Throws<TargetInvocationException>(
+                () => Activator.CreateInstance(
+                    ResolveType(TargetPolicyTypeName),
+                    epsilon));
+
+            Assert.That(
+                exception.InnerException,
+                Is.TypeOf<ArgumentOutOfRangeException>());
         }
 
         private static Array CreateCandidateArray(object[] candidates)
