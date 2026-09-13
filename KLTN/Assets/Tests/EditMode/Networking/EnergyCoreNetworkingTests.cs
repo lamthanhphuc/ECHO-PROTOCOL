@@ -68,6 +68,34 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.DoesNotContain("RPC_OpenCore", coreSource);
         }
 
+        [Test]
+        public void M2_CORE_Place_EmitsDedicatedCoreInsertNoiseOnlyAfterSuccessfulPlacement()
+        {
+            var source = File.ReadAllText(CoreSourcePath);
+            var placeStart = source.IndexOf("public bool TryPlace(", StringComparison.Ordinal);
+            var placeEnd = source.IndexOf("private void ApplyReplicatedState", placeStart, StringComparison.Ordinal);
+            var dropStart = source.IndexOf("public bool TryDrop(", StringComparison.Ordinal);
+            var dropEnd = source.IndexOf("public bool CanBePlacedBy", dropStart, StringComparison.Ordinal);
+
+            Assert.That(placeStart, Is.GreaterThanOrEqualTo(0));
+            Assert.That(placeEnd, Is.GreaterThan(placeStart));
+            Assert.That(dropStart, Is.GreaterThanOrEqualTo(0));
+            Assert.That(dropEnd, Is.GreaterThan(dropStart));
+
+            var placeBody = source.Substring(placeStart, placeEnd - placeStart);
+            var dropBody = source.Substring(dropStart, dropEnd - dropStart);
+            var publishIndex = placeBody.IndexOf("PublishTransition(actor);", StringComparison.Ordinal);
+            var insertIndex = placeBody.IndexOf("RuntimeNoiseType.CORE_INSERT", StringComparison.Ordinal);
+
+            Assert.That(insertIndex, Is.GreaterThan(publishIndex));
+            StringAssert.Contains("RuntimeNoiseSourceOccurrenceKey.ForCoreInsert(", placeBody);
+            StringAssert.Contains("TransitionOrdinal", placeBody);
+            StringAssert.Contains("position,", placeBody);
+            StringAssert.DoesNotContain("RuntimeNoiseType.INTERACTION", placeBody);
+            StringAssert.Contains("RuntimeNoiseType.CORE_DROP", dropBody);
+            StringAssert.Contains("RuntimeNoiseSourceOccurrenceKey.ForCoreDrop", dropBody);
+        }
+
         private static bool CanPickup(string stateName, PlayerRef holder, bool playerExists, bool playerAlreadyCarriesCore)
         {
             var rulesType = ResolveProductionType("EchoProtocol.Networking.EnergyCoreAuthorityRules");

@@ -245,6 +245,31 @@ namespace EchoProtocol.Player.Tests
         }
 
         [Test]
+        public void GAMEPLAY_DOOR_PlayerInteractionUsesDedicatedDoorRuntimeNoise()
+        {
+            var doorSource = File.ReadAllText(NetworkSlidingDoorScriptPath);
+            var interactorSource = File.ReadAllText(NetworkPlayerInteractorScriptPath);
+            var prefabSource = File.ReadAllText(DoorPrefabPath);
+            var monsterOpen = MethodBody(
+                doorSource,
+                "public bool TryOpenForMonsterAuthoritative");
+            var monsterBreak = MethodBody(
+                doorSource,
+                "public bool TryBreakAuthoritative");
+
+            StringAssert.Contains(
+                "public override RuntimeNoiseType RuntimeInteractionNoiseType",
+                doorSource);
+            StringAssert.Contains("RuntimeNoiseType.DOOR", doorSource);
+            StringAssert.Contains("target.RuntimeInteractionNoiseType", interactorSource);
+            StringAssert.Contains("_emitsRuntimeInteractionNoise: 1", prefabSource);
+            StringAssert.DoesNotContain("HostRuntimeNoiseService", monsterOpen);
+            StringAssert.DoesNotContain("RuntimeNoiseType.DOOR", monsterOpen);
+            StringAssert.DoesNotContain("HostRuntimeNoiseService", monsterBreak);
+            StringAssert.DoesNotContain("RuntimeNoiseType.DOOR", monsterBreak);
+        }
+
+        [Test]
         public void GAMEPLAY_DOOR_DoorJammerTeamToolMappingAndDeploymentPathArePresent()
         {
             var interactorSource = File.ReadAllText(NetworkPlayerInteractorScriptPath);

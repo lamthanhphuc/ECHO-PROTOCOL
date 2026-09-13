@@ -11,7 +11,7 @@ namespace EchoProtocol.AI.Listener.Noise
             {
                 {
                     RuntimeNoiseType.SPRINT,
-                    new RuntimeNoiseDefinition(RuntimeNoiseType.SPRINT, 0.7d, 12d, TimeSpan.FromSeconds(2d),
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.SPRINT, 0.8d, 16d, TimeSpan.FromSeconds(2d),
                         RuntimeNoiseEmissionMode.RecurringMovement)
                 },
                 {
@@ -21,7 +21,7 @@ namespace EchoProtocol.AI.Listener.Noise
                 },
                 {
                     RuntimeNoiseType.CORE_CARRY,
-                    new RuntimeNoiseDefinition(RuntimeNoiseType.CORE_CARRY, 0.7d, 12d, TimeSpan.FromSeconds(2d),
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.CORE_CARRY, 0.95d, 20d, TimeSpan.FromSeconds(2d),
                         RuntimeNoiseEmissionMode.RecurringMovement)
                 },
                 {
@@ -37,6 +37,26 @@ namespace EchoProtocol.AI.Listener.Noise
                 {
                     RuntimeNoiseType.FIELD_SCANNER,
                     new RuntimeNoiseDefinition(RuntimeNoiseType.FIELD_SCANNER, 0.45d, 8d, TimeSpan.FromSeconds(2.5d),
+                        RuntimeNoiseEmissionMode.DiscreteAction)
+                },
+                {
+                    RuntimeNoiseType.CROUCH,
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.CROUCH, 0.3d, 5d, TimeSpan.FromSeconds(2d),
+                        RuntimeNoiseEmissionMode.RecurringMovement)
+                },
+                {
+                    RuntimeNoiseType.WALK,
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.WALK, 0.45d, 8d, TimeSpan.FromSeconds(2d),
+                        RuntimeNoiseEmissionMode.RecurringMovement)
+                },
+                {
+                    RuntimeNoiseType.DOOR,
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.DOOR, 0.55d, 10d, TimeSpan.FromSeconds(2d),
+                        RuntimeNoiseEmissionMode.DiscreteAction)
+                },
+                {
+                    RuntimeNoiseType.CORE_INSERT,
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.CORE_INSERT, 0.8d, 14d, TimeSpan.FromSeconds(3d),
                         RuntimeNoiseEmissionMode.DiscreteAction)
                 }
             };

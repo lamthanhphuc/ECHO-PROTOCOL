@@ -253,6 +253,16 @@ namespace EchoProtocol.Networking
             AdvanceTransition();
             ApplyReplicatedState();
             PublishTransition(actor);
+            HostRuntimeNoiseService
+                .EnsureExists(MatchAuthorityRuntime.Instance)
+                .TryAccept(
+                    actor,
+                    RuntimeNoiseType.CORE_INSERT,
+                    RuntimeNoiseSourceOccurrenceKey.ForCoreInsert(
+                        Object.Id.ToString(),
+                        TransitionOrdinal),
+                    position,
+                    out _);
             Debug.Log($"[NetworkItem] {actor} placed item {Object.Id} at {position}.");
             return true;
         }

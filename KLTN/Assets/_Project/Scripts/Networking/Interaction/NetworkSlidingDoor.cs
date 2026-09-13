@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.AI.Listener.Noise;
 using Fusion;
 using UnityEngine;
 using UnityEngine.AI;
@@ -59,6 +60,8 @@ namespace EchoProtocol.Networking
         public bool DoorBlocksTraversal => !IsBroken && CurrentState != NetworkDoorState.Open;
         public bool CanMonsterOpen => !IsBroken && CurrentState != NetworkDoorState.Locked;
         public NetworkObject DoorJammerPrefab => _doorJammerPrefab;
+        public override RuntimeNoiseType RuntimeInteractionNoiseType =>
+            RuntimeNoiseType.DOOR;
 
         [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
         public NetworkDoorState State { get; private set; }

@@ -49,3 +49,13 @@ KLTN/.git.backup/
 # Local test artifacts
 /TestResults/
 *test_results.txt
+
+# Unity Performance Test generated artifacts
+/KLTN/Assets/Resources/PerformanceTestRunInfo.json
+/KLTN/Assets/Resources/PerformanceTestRunInfo.json.meta
+/KLTN/Assets/Resources/PerformanceTestRunSettings.json
+/KLTN/Assets/Resources/PerformanceTestRunSettings.json.meta
+
+# Unity Test Runner generated scene
+/KLTN/Assets/Scenes/TestScene.unity
+/KLTN/Assets/Scenes/TestScene.unity.meta
