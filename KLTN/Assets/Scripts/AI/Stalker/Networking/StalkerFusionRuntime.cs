@@ -52,10 +52,6 @@ namespace EchoProtocol.AI.Stalker.Networking
             return true;
         }
 
-        [Header("Replicated Presentation")]
-        [SerializeField] private Animator animator;
-        [SerializeField] private string animatorStateParameter = "StalkerState";
-
         [Networked, OnChangedRender(nameof(ApplyReplicatedPresentation))]
         public StalkerState ReplicatedState { get; private set; }
 
@@ -98,7 +94,6 @@ namespace EchoProtocol.AI.Stalker.Networking
         private Guid _boundPatrolMatchId;
         private NavMeshAgent _navigationAgent;
         private StalkerAttackResult _previousAttackResult;
-        private int _animatorStateParameterHash;
         private bool _networkPrefabGuard;
 
         public int AuthoritativeSimulationCount { get; private set; }
@@ -116,7 +111,6 @@ namespace EchoProtocol.AI.Stalker.Networking
         private void Awake()
         {
             ResolveLocalDependencies();
-            _animatorStateParameterHash = Animator.StringToHash(animatorStateParameter);
             _networkPrefabGuard = GetComponent<NetworkObject>() != null;
         }
 
@@ -631,11 +625,6 @@ namespace EchoProtocol.AI.Stalker.Networking
             {
                 _navigationAgent = GetComponent<NavMeshAgent>();
             }
-
-            if (animator == null)
-            {
-                animator = GetComponentInChildren<Animator>();
-            }
         }
 
         private void ResolveLifecycle()
@@ -936,13 +925,13 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private void ApplyReplicatedPresentation()
         {
-            if (animator != null
-                && animator.isInitialized
-                && animator.runtimeAnimatorController != null
-                && _animatorStateParameterHash != 0)
-            {
-                animator.SetInteger(_animatorStateParameterHash, (int)ReplicatedState);
-            }
+            //
+            // Replicated presentation data is consumed by
+            // StalkerAnimatorPresenter.
+            //
+            // Animator writes intentionally live in the presenter so there is
+            // exactly one presentation owner.
+            //
         }
     }
 }
