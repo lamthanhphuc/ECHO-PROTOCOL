@@ -263,6 +263,7 @@ MonoBehaviour:
   _crouchTransitionSpeed: 10
   _IsHidden:
     RawValue: 0
+  _CurrentHideSpotId: 0
   _IsCrouching:
     RawValue: 0
 --- !u!114 &11400004

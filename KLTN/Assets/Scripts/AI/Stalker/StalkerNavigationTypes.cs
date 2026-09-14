@@ -54,6 +54,7 @@ namespace EchoProtocol.AI.Stalker
         ConfidenceSpatialNode,
         SearchOriginLkp,
         SearchCandidate,
+        HideSpotInspection,
         ChaseTarget,
         RoomSweepTransit,
         RoomSweepProbe
@@ -66,11 +67,27 @@ namespace EchoProtocol.AI.Stalker
             int localNodeId,
             int globalRegionId,
             int targetPlayerId)
+            : this(
+                kind,
+                localNodeId,
+                globalRegionId,
+                targetPlayerId,
+                0UL)
+        {
+        }
+
+        public StalkerNavigationObjectiveKey(
+            StalkerNavigationObjectiveKind kind,
+            int localNodeId,
+            int globalRegionId,
+            int targetPlayerId,
+            ulong stableEntityId)
         {
             Kind = kind;
             LocalNodeId = localNodeId;
             GlobalRegionId = globalRegionId;
             TargetPlayerId = targetPlayerId;
+            StableEntityId = stableEntityId;
         }
 
         public static StalkerNavigationObjectiveKey None => default;
@@ -83,6 +100,8 @@ namespace EchoProtocol.AI.Stalker
 
         public int TargetPlayerId { get; }
 
+        public ulong StableEntityId { get; }
+
         public bool IsValid => Kind != StalkerNavigationObjectiveKind.None;
 
         public bool Equals(StalkerNavigationObjectiveKey other)
@@ -90,7 +109,8 @@ namespace EchoProtocol.AI.Stalker
             return Kind == other.Kind
                 && LocalNodeId == other.LocalNodeId
                 && GlobalRegionId == other.GlobalRegionId
-                && TargetPlayerId == other.TargetPlayerId;
+                && TargetPlayerId == other.TargetPlayerId
+                && StableEntityId == other.StableEntityId;
         }
     }
 
