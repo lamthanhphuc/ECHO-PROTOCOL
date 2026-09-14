@@ -110,7 +110,11 @@ public class PlayerHidingController : MonoBehaviour
         if (networkMovement != null)
         {
             Quaternion targetRot = Quaternion.Euler(0f, spot.HidePoint.eulerAngles.y, 0f);
-            networkMovement.RpcRequestSetHiding(true, spot.HidePoint.position, targetRot);
+            networkMovement.RpcRequestSetHiding(
+                true,
+                spot.StableId,
+                spot.HidePoint.position,
+                targetRot);
         }
 
         MoveToHidingPoint(spot.HidePoint);
@@ -151,7 +155,11 @@ public class PlayerHidingController : MonoBehaviour
         if (networkMovement != null && exitPoint != null)
         {
             Quaternion exitRot = Quaternion.Euler(0f, exitPoint.eulerAngles.y, 0f);
-            networkMovement.RpcRequestSetHiding(false, exitPoint.position, exitRot);
+            networkMovement.RpcRequestSetHiding(
+                false,
+                0UL,
+                exitPoint.position,
+                exitRot);
         }
 
         if (exitPoint != null)
