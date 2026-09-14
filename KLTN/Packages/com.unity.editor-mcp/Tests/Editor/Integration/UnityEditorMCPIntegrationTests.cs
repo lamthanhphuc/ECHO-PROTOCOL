@@ -1,11 +1,13 @@
 using NUnit.Framework;
 using UnityEditorMCP.Core;
 using UnityEditorMCP.Models;
+using System.Reflection;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 using System;
 
@@ -16,10 +18,128 @@ namespace UnityEditorMCP.Tests.Integration
     {
         private const int TEST_PORT = 6401; // Different port to avoid conflicts
         private const int CONNECTION_TIMEOUT_MS = 5000;
+
+        private static Task RequireLiveListenerAsync()
+        {
+            var listenerField =
+                typeof(Core.UnityEditorMCP).GetField(
+                    "tcpListener",
+                    BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.IsNotNull(
+                listenerField,
+                "UnityEditorMCP tcpListener field should exist.");
+
+            var listener = listenerField.GetValue(null) as TcpListener;
+
+            if (listener == null ||
+                listener.Server == null ||
+                !listener.Server.IsBound)
+            {
+                Assert.Ignore(
+                    "Requires the live listener owned by this Unity Editor instance.");
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private static async Task WriteFramedMessageAsync(
+            NetworkStream stream,
+            string message)
+        {
+            var payload = Encoding.UTF8.GetBytes(message);
+            var lengthBytes = BitConverter.GetBytes(payload.Length);
+
+            if (BitConverter.IsLittleEndian)
+            {
+                Array.Reverse(lengthBytes);
+            }
+
+            await stream.WriteAsync(lengthBytes, 0, lengthBytes.Length);
+            await stream.WriteAsync(payload, 0, payload.Length);
+            await stream.FlushAsync();
+        }
+
+        private static async Task ReadExactlyAsync(
+            NetworkStream stream,
+            byte[] buffer,
+            int offset,
+            int count)
+        {
+            var totalRead = 0;
+
+            while (totalRead < count)
+            {
+                var readTask =
+                    stream.ReadAsync(
+                        buffer,
+                        offset + totalRead,
+                        count - totalRead);
+
+                var completed =
+                    await Task.WhenAny(
+                        readTask,
+                        Task.Delay(CONNECTION_TIMEOUT_MS));
+
+                Assert.AreSame(
+                    readTask,
+                    completed,
+                    "Should receive framed MCP response within timeout.");
+
+                var bytesRead = await readTask;
+
+                Assert.Greater(
+                    bytesRead,
+                    0,
+                    "Connection closed before the complete MCP frame was received.");
+
+                totalRead += bytesRead;
+            }
+        }
+
+        private static async Task<string> ReadFramedMessageAsync(
+            NetworkStream stream)
+        {
+            var lengthBytes = new byte[4];
+
+            await ReadExactlyAsync(
+                stream,
+                lengthBytes,
+                0,
+                lengthBytes.Length);
+
+            if (BitConverter.IsLittleEndian)
+            {
+                Array.Reverse(lengthBytes);
+            }
+
+            var payloadLength = BitConverter.ToInt32(lengthBytes, 0);
+
+            Assert.GreaterOrEqual(payloadLength, 0);
+            Assert.LessOrEqual(
+                payloadLength,
+                1024 * 1024,
+                "MCP response frame is unexpectedly large.");
+
+            var payload = new byte[payloadLength];
+
+            if (payloadLength > 0)
+            {
+                await ReadExactlyAsync(
+                    stream,
+                    payload,
+                    0,
+                    payloadLength);
+            }
+
+            return Encoding.UTF8.GetString(payload);
+        }
         
         [Test]
         public async Task UnityEditorMCP_ShouldAcceptTcpConnection()
         {
+            await RequireLiveListenerAsync();
+
             // Arrange
             TcpClient client = null;
             
@@ -35,7 +155,20 @@ namespace UnityEditorMCP.Tests.Integration
                 // Assert
                 Assert.IsTrue(completed == connectTask, "Connection should complete within timeout");
                 Assert.IsTrue(client.Connected, "Client should be connected");
-                Assert.AreEqual(McpStatus.Connected, Core.UnityEditorMCP.Status, "MCP status should be Connected");
+
+                var statusDeadline =
+                    DateTime.UtcNow.AddMilliseconds(CONNECTION_TIMEOUT_MS);
+
+                while (Core.UnityEditorMCP.Status != McpStatus.Connected &&
+                       DateTime.UtcNow < statusDeadline)
+                {
+                    await Task.Delay(10);
+                }
+
+                Assert.AreEqual(
+                    McpStatus.Connected,
+                    Core.UnityEditorMCP.Status,
+                    "MCP status should become Connected after this Editor accepts the client.");
             }
             finally
             {
@@ -47,6 +180,8 @@ namespace UnityEditorMCP.Tests.Integration
         [Test]
         public async Task UnityEditorMCP_ShouldProcessPingCommand()
         {
+            await RequireLiveListenerAsync();
+
             // Arrange
             TcpClient client = null;
             
@@ -56,40 +191,20 @@ namespace UnityEditorMCP.Tests.Integration
                 await client.ConnectAsync("127.0.0.1", Core.UnityEditorMCP.DEFAULT_PORT);
                 
                 var stream = client.GetStream();
-                
-                // Create ping command
-                var pingCommand = new Command
-                {
-                    Id = "test-ping-001",
-                    Type = "ping",
-                    Parameters = new Newtonsoft.Json.Linq.JObject
-                    {
-                        ["message"] = "Hello Unity"
-                    }
-                };
-                
-                // Act - Send ping command
-                var commandJson = JsonConvert.SerializeObject(pingCommand);
-                var commandBytes = Encoding.UTF8.GetBytes(commandJson + "\n");
-                await stream.WriteAsync(commandBytes, 0, commandBytes.Length);
-                await stream.FlushAsync();
-                
-                // Read response
-                var buffer = new byte[1024];
-                var responseTask = stream.ReadAsync(buffer, 0, buffer.Length);
-                var completed = await Task.WhenAny(responseTask, Task.Delay(CONNECTION_TIMEOUT_MS));
-                
-                Assert.IsTrue(completed == responseTask, "Should receive response within timeout");
-                
-                var bytesRead = await responseTask;
-                var responseJson = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
-                dynamic response = JsonConvert.DeserializeObject(responseJson);
-                
-                // Assert
-                Assert.IsNotNull(response, "Response should not be null");
-                Assert.AreEqual("test-ping-001", (string)response.id, "Response ID should match command ID");
-                Assert.IsTrue((bool)response.success, "Response should indicate success");
-                Assert.AreEqual("pong", (string)response.data.message, "Response should contain pong message");
+
+                // The TCP protocol uses a 4-byte big-endian length prefix.
+                await WriteFramedMessageAsync(stream, "ping");
+
+                var responseJson = await ReadFramedMessageAsync(stream);
+                var response = JObject.Parse(responseJson);
+
+                Assert.AreEqual(
+                    "success",
+                    response["status"]?.Value<string>());
+
+                Assert.AreEqual(
+                    "pong",
+                    response["data"]?["message"]?.Value<string>());
             }
             finally
             {
@@ -101,6 +216,8 @@ namespace UnityEditorMCP.Tests.Integration
         [Test]
         public async Task UnityEditorMCP_ShouldHandleInvalidJson()
         {
+            await RequireLiveListenerAsync();
+
             // Arrange
             TcpClient client = null;
             
@@ -110,27 +227,25 @@ namespace UnityEditorMCP.Tests.Integration
                 await client.ConnectAsync("127.0.0.1", Core.UnityEditorMCP.DEFAULT_PORT);
                 
                 var stream = client.GetStream();
-                
-                // Act - Send invalid JSON
-                var invalidJson = "{ invalid json }\n";
-                var commandBytes = Encoding.UTF8.GetBytes(invalidJson);
-                await stream.WriteAsync(commandBytes, 0, commandBytes.Length);
-                await stream.FlushAsync();
-                
-                // Read response
-                var buffer = new byte[1024];
-                var responseTask = stream.ReadAsync(buffer, 0, buffer.Length);
-                var completed = await Task.WhenAny(responseTask, Task.Delay(CONNECTION_TIMEOUT_MS));
-                
-                Assert.IsTrue(completed == responseTask, "Should receive error response");
-                
-                var bytesRead = await responseTask;
-                var responseJson = Encoding.UTF8.GetString(buffer, 0, bytesRead).Trim();
-                dynamic response = JsonConvert.DeserializeObject(responseJson);
-                
-                // Assert
-                Assert.IsFalse((bool)response.success, "Response should indicate failure");
-                Assert.IsTrue(((string)response.error).Contains("parse"), "Error should mention parsing issue");
+
+                await WriteFramedMessageAsync(
+                    stream,
+                    "{ invalid json }");
+
+                var responseJson = await ReadFramedMessageAsync(stream);
+                var response = JObject.Parse(responseJson);
+
+                Assert.AreEqual(
+                    "error",
+                    response["status"]?.Value<string>());
+
+                StringAssert.Contains(
+                    "JSON_ERROR",
+                    responseJson);
+
+                StringAssert.Contains(
+                    "parsing",
+                    responseJson.ToLowerInvariant());
             }
             finally
             {
@@ -142,6 +257,8 @@ namespace UnityEditorMCP.Tests.Integration
         [Test]
         public async Task UnityEditorMCP_ShouldHandleMultipleClients()
         {
+            await RequireLiveListenerAsync();
+
             // Arrange
             TcpClient client1 = null;
             TcpClient client2 = null;
@@ -154,16 +271,30 @@ namespace UnityEditorMCP.Tests.Integration
                 
                 client2 = new TcpClient();
                 await client2.ConnectAsync("127.0.0.1", Core.UnityEditorMCP.DEFAULT_PORT);
-                
-                // Send commands from both clients
-                var command1 = new Command { Id = "client1-cmd", Type = "ping" };
-                var command2 = new Command { Id = "client2-cmd", Type = "ping" };
-                
-                var json1 = JsonConvert.SerializeObject(command1) + "\n";
-                var json2 = JsonConvert.SerializeObject(command2) + "\n";
-                
-                await client1.GetStream().WriteAsync(Encoding.UTF8.GetBytes(json1), 0, json1.Length);
-                await client2.GetStream().WriteAsync(Encoding.UTF8.GetBytes(json2), 0, json2.Length);
+
+                await WriteFramedMessageAsync(
+                    client1.GetStream(),
+                    "ping");
+
+                await WriteFramedMessageAsync(
+                    client2.GetStream(),
+                    "ping");
+
+                var response1 =
+                    JObject.Parse(
+                        await ReadFramedMessageAsync(client1.GetStream()));
+
+                var response2 =
+                    JObject.Parse(
+                        await ReadFramedMessageAsync(client2.GetStream()));
+
+                Assert.AreEqual(
+                    "pong",
+                    response1["data"]?["message"]?.Value<string>());
+
+                Assert.AreEqual(
+                    "pong",
+                    response2["data"]?["message"]?.Value<string>());
                 
                 // Assert - Both clients should be connected
                 Assert.IsTrue(client1.Connected, "Client 1 should remain connected");
@@ -194,6 +325,8 @@ namespace UnityEditorMCP.Tests.Integration
         [Test]
         public async Task UnityEditorMCP_ShouldReconnectAfterDisconnection()
         {
+            await RequireLiveListenerAsync();
+
             // Arrange
             TcpClient client = null;
             

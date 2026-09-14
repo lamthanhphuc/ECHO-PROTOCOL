@@ -56,7 +56,10 @@ namespace UnityEditorMCP.Tests.Helpers
         public void Error_ShouldReturnCorrectJsonWithCode()
         {
             // Act
-            var result = Response.Error("Connection failed", "CONN_001", null);
+            var result = Response.Error(
+                message: "Connection failed",
+                code: "CONN_001",
+                details: null);
             var json = JObject.Parse(result);
             
             // Assert
@@ -72,7 +75,10 @@ namespace UnityEditorMCP.Tests.Helpers
             var details = new { port = 6400, attempts = 3 };
             
             // Act
-            var result = Response.Error("Connection failed", "CONN_001", details);
+            var result = Response.Error(
+                message: "Connection failed",
+                code: "CONN_001",
+                details: details);
             var json = JObject.Parse(result);
             
             // Assert
@@ -95,16 +101,35 @@ namespace UnityEditorMCP.Tests.Helpers
             Assert.AreEqual("pong", json["data"]["message"].Value<string>());
             Assert.IsNotNull(json["data"]["timestamp"]);
             
-            // Verify timestamp is valid ISO 8601
-            var timestamp = json["data"]["timestamp"].Value<string>();
-            Assert.DoesNotThrow(() => System.DateTime.Parse(timestamp));
+            // Newtonsoft may materialize an ISO-8601 string as a Date token.
+            var timestampToken = json["data"]["timestamp"];
+            Assert.IsNotNull(timestampToken);
+
+            if (timestampToken.Type == JTokenType.Date)
+            {
+                var timestamp = timestampToken.Value<System.DateTime>();
+                Assert.AreNotEqual(default(System.DateTime), timestamp);
+            }
+            else
+            {
+                var timestamp = timestampToken.Value<string>();
+
+                Assert.IsTrue(
+                    System.DateTimeOffset.TryParseExact(
+                        timestamp,
+                        "o",
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.RoundtripKind,
+                        out _),
+                    "Timestamp should use the round-trip ISO-8601 format.");
+            }
         }
         
         [Test]
         public void Response_ShouldHandleNullData()
         {
             // Act
-            var result = Response.Success(null);
+            var result = Response.Success((object)null);
             var json = JObject.Parse(result);
             
             // Assert
