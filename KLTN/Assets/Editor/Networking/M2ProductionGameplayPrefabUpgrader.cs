@@ -93,12 +93,18 @@ namespace EchoProtocol.Editor.Networking
 
         private static void UpgradePlayerPrefabIfNeeded()
         {
-            UpgradePlayerPrefabAtPath(PlayerPrefabPath);
             UpgradePlayerPrefabAtPath(RuntimePlayerPrefabPath);
         }
 
         private static void UpgradePlayerPrefabAtPath(string prefabPath)
         {
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) == null)
+            {
+                Debug.LogWarning(
+                    $"[M2 Prefab Upgrade] Skipping missing prefab: {prefabPath}");
+                return;
+            }
+
             var root = PrefabUtility.LoadPrefabContents(prefabPath);
             if (root == null)
             {
