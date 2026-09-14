@@ -54,7 +54,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         [Header("Replicated Presentation")]
         [SerializeField] private Animator animator;
-        [SerializeField] private string animatorStateParameter = "MonsterState";
+        [SerializeField] private string animatorStateParameter = "StalkerState";
 
         [Networked, OnChangedRender(nameof(ApplyReplicatedPresentation))]
         public StalkerState ReplicatedState { get; private set; }
@@ -936,7 +936,10 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private void ApplyReplicatedPresentation()
         {
-            if (animator != null && _animatorStateParameterHash != 0)
+            if (animator != null
+                && animator.isInitialized
+                && animator.runtimeAnimatorController != null
+                && _animatorStateParameterHash != 0)
             {
                 animator.SetInteger(_animatorStateParameterHash, (int)ReplicatedState);
             }

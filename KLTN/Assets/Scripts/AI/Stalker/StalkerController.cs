@@ -240,6 +240,8 @@ namespace EchoProtocol.AI.Stalker
         public StalkerAttackResolutionResult AttackResolutionResult => _attackController.LastResolutionResult;
         public int AttackResolutionCount => _attackController.ResolutionCount;
         public StalkerAttackEpisode ActiveAttackEpisode => _attackController.ActiveEpisode;
+        public float AttackWindupSeconds => GetAttackWindup();
+        public float AttackRecoverySeconds => GetAttackRecovery();
         public bool HasCommittedAttackResolutionFact => _attackController.HasCommittedResolutionFact;
         public StalkerAttackResolvedFact LastCommittedAttackResolutionFact => _attackController.LastCommittedResolutionFact;
         public bool HasCommittedSearchEndedFact => _lastCommittedSearchEndedFact.IsValid;
