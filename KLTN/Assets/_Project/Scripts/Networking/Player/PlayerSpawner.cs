@@ -600,6 +600,7 @@ namespace EchoProtocol.Networking
             if (playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement) && playerObject.HasStateAuthority)
             {
                 movement.IsHidden = false;
+                movement.CurrentHideSpotId = 0UL;
             }
 
             if (playerObject.TryGetComponent<PlayerHidingController>(out var hiding) && hiding.IsHidden)

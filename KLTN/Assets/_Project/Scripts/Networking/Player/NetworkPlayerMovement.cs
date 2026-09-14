@@ -53,6 +53,7 @@ namespace EchoProtocol.Networking
         [Networked] private float AnimationMoveY { get; set; }
         [Networked] private NetworkBool AnimationSprintHeld { get; set; }
         [Networked] public NetworkBool IsHidden { get; set; }
+        [Networked] public ulong CurrentHideSpotId { get; set; }
         [Networked] public NetworkBool IsCrouching { get; set; }
 
         public float CurrentPitch => LookPitch;
@@ -220,6 +221,7 @@ namespace EchoProtocol.Networking
             if (Object.HasStateAuthority)
             {
                 IsHidden = false;
+                CurrentHideSpotId = 0UL;
             }
 
             if (!Object.HasInputAuthority) return;
@@ -426,9 +428,17 @@ namespace EchoProtocol.Networking
         }
 
         [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]
-        public void RpcRequestSetHiding(NetworkBool isHidden, Vector3 position, Quaternion rotation)
+        public void RpcRequestSetHiding(
+            NetworkBool isHidden,
+            ulong hideSpotId,
+            Vector3 position,
+            Quaternion rotation)
         {
             IsHidden = isHidden;
+            CurrentHideSpotId = isHidden
+                ? hideSpotId
+                : 0UL;
+
             if (_controller != null)
             {
                 _controller.Teleport(position, rotation);
@@ -438,6 +448,51 @@ namespace EchoProtocol.Networking
                 transform.SetPositionAndRotation(position, rotation);
             }
             Physics.SyncTransforms();
+        }
+
+        public bool TryForceExitHidingAuthoritative(
+            Vector3 position,
+            Quaternion rotation)
+        {
+            if (Runner == null
+                || Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority)
+            {
+                return false;
+            }
+
+            IsHidden = false;
+            CurrentHideSpotId = 0UL;
+
+            if (_controller != null)
+            {
+                _controller.Teleport(position, rotation);
+            }
+            else
+            {
+                transform.SetPositionAndRotation(position, rotation);
+            }
+
+            Physics.SyncTransforms();
+
+            if (Object.InputAuthority.IsValid)
+            {
+                RpcForceExitHidingLocal(Object.InputAuthority);
+            }
+
+            return true;
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+        private void RpcForceExitHidingLocal(
+            [RpcTarget] PlayerRef targetPlayer)
+        {
+            var hiding = GetComponent<PlayerHidingController>();
+            if (hiding != null && hiding.IsHidden)
+            {
+                hiding.ExitHiding();
+            }
         }
 
         public void TeleportAuthoritative(Vector3 position, Quaternion rotation)

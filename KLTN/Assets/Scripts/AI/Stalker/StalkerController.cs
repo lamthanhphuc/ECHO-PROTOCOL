@@ -60,6 +60,14 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float searchDuration = 5f;
         [SerializeField] private float searchRadius = 8f;
 
+        [Header("Hide Spot Inspection")]
+        [SerializeField, Min(0f)] private float hideSpotSearchRadius = 6f;
+        [SerializeField, Min(0f)] private float hideSpotInspectDistance = 1.5f;
+        [SerializeField, Min(0f)] private float hideSpotInspectDuration = 0.75f;
+        [SerializeField, Min(0f)] private float hideSpotReinspectCooldown = 8f;
+        [SerializeField, Min(0f)] private float hideSpotConfirmedUseBias = 2f;
+        [SerializeField, Min(0f)] private float hideSpotEmptyInspectionPenalty = 1.5f;
+
         [Header("Chase Navigation Defaults")]
         [SerializeField] private float chaseDestinationRefreshDistance = 0.5f;
         [SerializeField] private float chaseDestinationRefreshInterval = 0.5f;
@@ -107,6 +115,10 @@ namespace EchoProtocol.AI.Stalker
         private const int MaxTopologyPathSegmentSamples = 8;
         private const float EmergencyNavMeshRecoverySampleDistance = 2f;
 
+        private IStalkerTargetPolicy _targetPolicy =
+            new NearestEligibleVisibleTargetPolicy(
+                TargetSelectionTieEpsilon);
+
         private readonly StalkerMemory _memory =
             new StalkerMemory();
 
@@ -115,6 +127,18 @@ namespace EchoProtocol.AI.Stalker
 
         private readonly StalkerHearingSelector _hearingSelector =
             new StalkerHearingSelector();
+
+        private readonly StalkerHideSpotMemory _hideSpotMemory =
+            new StalkerHideSpotMemory();
+
+        private readonly StalkerHideSpotSelector _hideSpotSelector =
+            new StalkerHideSpotSelector();
+
+        private readonly StalkerUnityHideSpotAdapter _hideSpotAdapter =
+            new StalkerUnityHideSpotAdapter();
+
+        private readonly List<StalkerHideSpotCandidate> _hideSpotCandidates =
+            new List<StalkerHideSpotCandidate>();
 
         private readonly StalkerAttackController _attackController =
             new StalkerAttackController();
@@ -138,6 +162,7 @@ namespace EchoProtocol.AI.Stalker
         private int _patrolNearOptimalHopSlack;
         private StalkerSearchPlanner _searchPlanner;
         private StalkerSearchContext _searchContext;
+        private StalkerHidingInvestigation _hidingInvestigation;
         private readonly StalkerWorldInteractionDriver _worldInteractionDriver = new StalkerWorldInteractionDriver();
         private int _currentPatrolIndex;
         private bool _spatialPatrolInitializationAttempted;
@@ -334,12 +359,15 @@ namespace EchoProtocol.AI.Stalker
         private void Awake()
         {
             InitializeNavigation();
+            InitializeHidingInvestigation();
         }
 
         private void OnEnable()
         {
             InitializeNavigation();
+            InitializeHidingInvestigation();
             _hearingMemory.Reset();
+            _hideSpotMemory.Reset();
         }
 
         private void Update()
@@ -696,9 +724,8 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            if (!StalkerTargetSelector.TrySelectNearestEligibleVisible(
+            if (!_targetPolicy.TrySelectTarget(
                     _currentVisibleTargetCandidates,
-                    TargetSelectionTieEpsilon,
                     out var selectedObservation))
             {
                 return false;
@@ -1440,6 +1467,11 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            if (TickHidingInvestigationIfActive())
+            {
+                return;
+            }
+
             if (_navigation != null
                 && _navigation.HasActiveDestination
                 && _navigation.HasArrived())
@@ -1450,6 +1482,11 @@ namespace EchoProtocol.AI.Stalker
             if (_navigation == null
                 || !_navigation.HasActiveDestination)
             {
+                if (TryBeginHideSpotInvestigationFromSearch())
+                {
+                    return;
+                }
+
                 TryPlanNextSearchCandidateIfNotHolding();
             }
 
@@ -1500,6 +1537,11 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            if (TickHidingInvestigationIfActive())
+            {
+                return;
+            }
+
             if (_navigation != null
                 && _navigation.HasActiveDestination
                 && _navigation.HasArrived())
@@ -1510,6 +1552,11 @@ namespace EchoProtocol.AI.Stalker
             if (_navigation == null
                 || !_navigation.HasActiveDestination)
             {
+                if (TryBeginHideSpotInvestigationFromSearch())
+                {
+                    return;
+                }
+
                 TryPlanNextSearchCandidateIfNotHolding();
             }
 
@@ -1597,6 +1644,11 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            if (TickHidingInvestigationIfActive())
+            {
+                return;
+            }
+
             if (_navigation != null && _navigation.HasActiveDestination && _navigation.HasArrived())
             {
                 MarkSearchCandidateReached();
@@ -1604,6 +1656,11 @@ namespace EchoProtocol.AI.Stalker
 
             if (_navigation == null || !_navigation.HasActiveDestination)
             {
+                if (TryBeginHideSpotInvestigationFromSearch())
+                {
+                    return;
+                }
+
                 TryPlanNextSearchCandidateIfNotHolding();
             }
 
@@ -1881,6 +1938,184 @@ namespace EchoProtocol.AI.Stalker
         private bool TryPlanNextSearchCandidateIfNotHolding()
         {
             return !_searchCandidatePlanningExhausted && TryPlanNextSearchCandidate();
+        }
+
+        private bool TryBeginHideSpotInvestigationFromSearch()
+        {
+            InitializeHidingInvestigation();
+            if (_hidingInvestigation == null
+                || _hidingInvestigation.HasActiveCandidate
+                || _searchContext == null)
+            {
+                return false;
+            }
+
+            if (_hideSpotAdapter.CollectCandidates(_hideSpotCandidates) <= 0)
+            {
+                return false;
+            }
+
+            var selectorConfig = GetHideSpotSelectorConfig();
+            if (!_hideSpotSelector.TrySelect(
+                    _searchContext.SearchOriginPosition,
+                    _hideSpotCandidates,
+                    _hideSpotMemory,
+                    CurrentSimulationTimeSeconds,
+                    selectorConfig,
+                    out var selection))
+            {
+                return false;
+            }
+
+            if (TryRequestSearchDestination(selection.Candidate.InspectPosition)
+                != NavigationEvaluationStatus.Complete)
+            {
+                return false;
+            }
+
+            _hidingInvestigation.Begin(selection.Candidate);
+            searchCandidateNodeId = -1;
+            _blackboard.DestinationSpatialNodeId = -1;
+            _searchCandidatePlanningExhausted = false;
+            SetNavigationObjective(new StalkerNavigationObjectiveKey(
+                StalkerNavigationObjectiveKind.HideSpotInspection,
+                -1,
+                _searchContext.SearchOriginRegionId.IsValid
+                    ? _searchContext.SearchOriginRegionId.Value
+                    : -1,
+                _memory.CurrentTargetId.IsValid
+                    ? _memory.CurrentTargetId.Value
+                    : -1,
+                selection.Candidate.StableId));
+            return true;
+        }
+
+        private bool TickHidingInvestigationIfActive()
+        {
+            if (_hidingInvestigation == null
+                || !_hidingInvestigation.HasActiveCandidate)
+            {
+                return false;
+            }
+
+            var activeCandidate = _hidingInvestigation.ActiveCandidate;
+            var inspectDistance = Mathf.Max(0f, hideSpotInspectDistance);
+            var deltaToInspectPoint =
+                transform.position - activeCandidate.InspectPosition;
+            var withinInspectRange =
+                deltaToInspectPoint.sqrMagnitude
+                <= inspectDistance * inspectDistance;
+
+            if (!withinInspectRange
+                && (_navigation == null
+                    || !_navigation.HasActiveDestination))
+            {
+                _hidingInvestigation.Reset();
+                ClearNavigationObjective();
+                _searchCandidatePlanningExhausted = false;
+                return false;
+            }
+
+            var result = _hidingInvestigation.Tick(
+                transform.position,
+                CurrentSimulationDeltaSeconds,
+                GetCurrentSimulationTime(),
+                GetHideSpotInspectionConfig());
+
+            switch (result.Status)
+            {
+                case StalkerHidingInvestigationTickStatus.MovingToSpot:
+                case StalkerHidingInvestigationTickStatus.Inspecting:
+                    return true;
+                case StalkerHidingInvestigationTickStatus.Empty:
+                    _navigation?.Stop();
+                    ClearNavigationObjective();
+                    _searchCandidatePlanningExhausted = false;
+                    return false;
+                case StalkerHidingInvestigationTickStatus.Occupied:
+                    HandleOccupiedHideSpotInspection(result);
+                    return true;
+                case StalkerHidingInvestigationTickStatus.Invalid:
+                    _navigation?.Stop();
+                    ClearNavigationObjective();
+                    _searchCandidatePlanningExhausted = false;
+                    return false;
+                default:
+                    return false;
+            }
+        }
+
+        private void HandleOccupiedHideSpotInspection(
+            StalkerHidingInvestigationTickResult result)
+        {
+            var inspection = result.InspectionResult;
+            if (!inspection.Occupied
+                || !inspection.ConfirmedPlayerId.IsValid)
+            {
+                return;
+            }
+
+            if (!inspection.ConfirmedEligibility.Eligible)
+            {
+                _navigation?.Stop();
+                ClearNavigationObjective();
+                _searchCandidatePlanningExhausted = false;
+                return;
+            }
+
+            var observedAt = GetCurrentSimulationTime();
+            var distance = Vector3.Distance(
+                transform.position,
+                inspection.ConfirmedPosition);
+
+            var observation = new VisionObservation(
+                inspection.ConfirmedPlayerId,
+                inspection.ConfirmedPosition,
+                inspection.ConfirmedDirection,
+                observedAt,
+                distance);
+
+            _memory.SetCurrentTarget(observation.PlayerId);
+            _memory.TryAcceptCurrentTargetObservation(observation);
+            _memory.ClearDetectionTarget();
+            currentTarget = null;
+            detectionTarget = null;
+            detectionMeter = 0f;
+            lastKnownPosition = observation.ObservedPosition;
+
+            CommitSearchEnded(
+                StalkerSearchTerminalOutcome.NEW_ELIGIBLE_TARGET_OBSERVED);
+            ClearSearchRuntimeContext();
+            ResetChaseDestinationTracking();
+            ResetNavigationRecoveryBudget();
+            currentState = StalkerState.CHASE;
+            SetChaseDestination(observation.ObservedPosition);
+        }
+
+        private StalkerHideSpotSelectorConfig GetHideSpotSelectorConfig()
+        {
+            return new StalkerHideSpotSelectorConfig(
+                hideSpotSearchRadius,
+                hideSpotConfirmedUseBias,
+                hideSpotEmptyInspectionPenalty,
+                hideSpotReinspectCooldown,
+                TargetSelectionTieEpsilon);
+        }
+
+        private StalkerHideSpotInspectionConfig GetHideSpotInspectionConfig()
+        {
+            return new StalkerHideSpotInspectionConfig(
+                hideSpotInspectDistance,
+                hideSpotInspectDuration);
+        }
+
+        private AiSimulationTime GetCurrentSimulationTime()
+        {
+            return _currentSimulationStep.Time.IsValid
+                ? _currentSimulationStep.Time
+                : new AiSimulationTime(
+                    _legacySimulationTick < 0 ? 0 : _legacySimulationTick,
+                    System.Math.Max(0d, _currentSimulationSeconds));
         }
 
         private bool TryPlanNextSearchCandidate()
@@ -2163,6 +2398,7 @@ namespace EchoProtocol.AI.Stalker
         {
             searchElapsedTime = 0f;
             _searchContext = null;
+            _hidingInvestigation?.Reset();
             searchEpisodeId = 0;
             searchCandidateNodeId = -1;
             _searchCandidatePlanningExhausted = false;
@@ -2250,6 +2486,7 @@ namespace EchoProtocol.AI.Stalker
         {
             CancelWorldInteraction("stop-agent-path");
             ClearRoomSweepSelfProbeScan();
+            _hidingInvestigation?.Reset();
             ResetChaseDestinationTracking();
             ClearNavigationObjective();
             ResetFixedPatrolFallbackState();
@@ -4505,6 +4742,17 @@ namespace EchoProtocol.AI.Stalker
             if (_navigation == null)
             {
                 _navigation = new StalkerNavigationController(GetComponent<NavMeshAgent>());
+            }
+        }
+
+        private void InitializeHidingInvestigation()
+        {
+            if (_hidingInvestigation == null)
+            {
+                _hidingInvestigation =
+                    new StalkerHidingInvestigation(
+                        _hideSpotMemory,
+                        _hideSpotAdapter);
             }
         }
 
