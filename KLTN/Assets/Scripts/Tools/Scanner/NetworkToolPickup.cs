@@ -34,8 +34,6 @@ namespace EchoProtocol.Tools.Scanner
         public Quaternion WorldRotation { get; private set; }
 
         private bool _localPickedUp;
-        private bool _pendingDespawn;
-
         public InventoryItemDefinition ToolItemDefinition => _toolItemDefinition;
         public int ToolId => _toolId;
 
@@ -74,7 +72,6 @@ namespace EchoProtocol.Tools.Scanner
             {
                 _isPickedUp = false;
                 _localPickedUp = false;
-                _pendingDespawn = false;
                 WorldPosition = transform.position;
                 WorldRotation = transform.rotation;
             }
@@ -183,8 +180,6 @@ namespace EchoProtocol.Tools.Scanner
                 context.PlayerState.SetGameplayToolId(_toolId);
             }
 
-            _pendingDespawn = false;
-
             try
             {
                 ToolPickedUp?.Invoke(this, context.Player);
@@ -207,7 +202,6 @@ namespace EchoProtocol.Tools.Scanner
                 }
             }
 
-            _pendingDespawn = false;
             // DO NOT call Runner.Despawn(Object) on scene objects or during active render interpolation.
             // OnReplicatedStateChanged already disables colliders, visual renderers, and child GameObjects across all clients.
             // Calling Runner.Despawn on scene-placed network objects causes native AccessViolation (0xC0000005) in UnityPlayer.dll.

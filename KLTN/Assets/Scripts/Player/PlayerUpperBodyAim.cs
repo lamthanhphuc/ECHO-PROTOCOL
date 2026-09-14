@@ -20,8 +20,10 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     [SerializeField] private float carryLateralOffset = 0.30f;
     [SerializeField] private float carryVerticalOffset = 0.08f;
     [SerializeField] private float carryChestHeight = 1.38f;
+#pragma warning disable CS0414
     [SerializeField] private float carryMinHandY = 1.18f;
     [SerializeField] private float carryMaxHandY = 1.62f;
+#pragma warning restore CS0414
     [SerializeField, Range(0f, 1f)] private float carryIKWeight = 0.88f;
     [SerializeField] private Vector3 rightElbowPoleOffset = new Vector3(0.40f, -0.25f, -0.10f);
     [SerializeField] private Vector3 leftElbowPoleOffset = new Vector3(-0.40f, -0.25f, -0.10f);

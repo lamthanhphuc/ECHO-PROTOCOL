@@ -13,8 +13,6 @@ namespace EchoProtocol.Networking
         [Networked, OnChangedRender(nameof(ApplyReplicatedPose))] public Vector3 WorldPosition { get; private set; }
         [Networked, OnChangedRender(nameof(ApplyReplicatedPose))] public Quaternion WorldRotation { get; private set; }
 
-        private bool _pendingDespawn;
-
         public int ToolId => _toolId;
 
         public override string InteractionPrompt =>
@@ -27,7 +25,6 @@ namespace EchoProtocol.Networking
             if (Object.HasStateAuthority)
             {
                 IsConsumed = false;
-                _pendingDespawn = false;
                 WorldPosition = transform.position;
                 WorldRotation = transform.rotation;
             }
@@ -101,7 +98,6 @@ namespace EchoProtocol.Networking
             IsConsumed = true;
             SetVisualsAndCollidersActive(false);
             playerState.SetGameplayToolId(_toolId);
-            _pendingDespawn = false;
         }
 
         public override void FixedUpdateNetwork()
@@ -114,7 +110,6 @@ namespace EchoProtocol.Networking
                 }
             }
 
-            _pendingDespawn = false;
             // DO NOT call Runner.Despawn(Object) on scene-placed network objects.
             // SetVisualsAndCollidersActive(false) already disables visuals and colliders across all clients.
         }
