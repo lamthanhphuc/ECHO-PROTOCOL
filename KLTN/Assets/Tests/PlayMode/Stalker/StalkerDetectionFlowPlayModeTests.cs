@@ -16,6 +16,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const int MaxDetectFrames = 5;
         private const int MaxChaseFrames = 30;
         private const int MaxSearchFrames = 5;
+        private const float MaxGraceExpirySeconds = 1f;
         private const int MaxVisibleLkpUpdateFrames = 3;
         private const float FloatTolerance = 0.0001f;
         private const float VectorTolerance = 0.001f;
@@ -84,7 +85,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             var lastVisibleLkp = GetVector3Property(fixture.Controller, "LastKnownPosition");
             fixture.PlayerDummy.transform.position = new Vector3(0f, 1f, 25f);
 
-            yield return WaitUntilState(fixture.Controller, "SEARCH", MaxSearchFrames);
+            yield return WaitUntilStateForSeconds(fixture.Controller, "SEARCH", MaxGraceExpirySeconds);
 
             AssertState(fixture.Controller, "SEARCH");
             Assert.That(GetTransformProperty(fixture.Controller, "CurrentTarget"), Is.SameAs(fixture.PlayerDummy.transform));
@@ -110,7 +111,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             yield return WaitUntilLastKnownPosition(fixture.Controller, visiblePosition, MaxVisibleLkpUpdateFrames);
 
             fixture.PlayerDummy.transform.position = new Vector3(2f, 1f, 25f);
-            yield return WaitUntilState(fixture.Controller, "SEARCH", MaxSearchFrames);
+            yield return WaitUntilStateForSeconds(fixture.Controller, "SEARCH", MaxGraceExpirySeconds);
 
             var frozenLkp = GetVector3Property(fixture.Controller, "LastKnownPosition");
             fixture.PlayerDummy.transform.position = new Vector3(-8f, 1f, 30f);
@@ -190,6 +191,29 @@ namespace EchoProtocol.AI.Stalker.Tests
             }
 
             Assert.Fail($"Expected Stalker CurrentState '{expectedStateName}' within {maxFrames} frames, but was '{GetEnumPropertyName(controller, "CurrentState")}'.");
+        }
+
+        private static IEnumerator WaitUntilStateForSeconds(
+            Component controller,
+            string expectedStateName,
+            float timeoutSeconds)
+        {
+            var startedAt = Time.time;
+
+            while (Time.time - startedAt < timeoutSeconds)
+            {
+                yield return null;
+
+                if (GetEnumPropertyName(controller, "CurrentState") == expectedStateName)
+                {
+                    yield break;
+                }
+            }
+
+            Assert.Fail(
+                $"Expected Stalker CurrentState '{expectedStateName}' " +
+                $"within {timeoutSeconds:F2}s, but was " +
+                $"'{GetEnumPropertyName(controller, "CurrentState")}'.");
         }
 
         private static IEnumerator WaitUntilLastKnownPosition(Component controller, Vector3 expectedPosition, int maxFrames)

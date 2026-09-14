@@ -73,6 +73,12 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float chaseDestinationRefreshInterval = 0.5f;
         [SerializeField, Min(0f)] private float chasePredictionLeadSeconds = 0.2f;
         [SerializeField, Min(0f)] private float chasePredictionMaxDistance = 1.5f;
+        [SerializeField, Min(0f)] private float chaseVisualLossGraceSeconds = 0.45f;
+
+        [Header("Chase Runtime Diagnostics")]
+        [SerializeField] private bool chaseRuntimeDiagnostics;
+        [SerializeField, Min(0.02f)]
+        private float chaseRuntimeDiagnosticInterval = 0.10f;
 
         [Header("Attack Spike Defaults")]
         [SerializeField] private float attackRange = 2.8f;
@@ -175,6 +181,10 @@ namespace EchoProtocol.AI.Stalker
         private bool _hasLastChaseRequestedDestination;
         private Vector3 _lastChaseRequestedDestination;
         private float _chaseDestinationRefreshElapsed;
+        private float _chaseVisualLossElapsed;
+        private double _nextChaseRuntimeDiagnosticTime;
+        private bool _hasChaseDiagnosticVisibilityState;
+        private bool _lastChaseDiagnosticVisible;
         private bool _hasPreviousChaseObservation;
         private Vector3 _previousChaseObservedPosition;
         private float _previousChaseObservationTimeSeconds;
@@ -937,10 +947,16 @@ namespace EchoProtocol.AI.Stalker
 
             if (!TryGetVisibleCurrentTargetObservation(out var observedPosition))
             {
+                if (ShouldHoldChaseDuringTransientVisionLoss())
+                {
+                    return;
+                }
+
                 EnterSearch();
                 return;
             }
 
+            _chaseVisualLossElapsed = 0f;
             lastKnownPosition = observedPosition;
             if (IsWithinAttackRange(observedPosition))
             {
@@ -993,20 +1009,55 @@ namespace EchoProtocol.AI.Stalker
                     return;
                 }
 
+                _chaseVisualLossElapsed = 0f;
+
                 lastKnownPosition = _memory.LastKnownPosition;
                 if (IsWithinAttackRange(observation.ObservedPosition))
                 {
+                    LogChaseRuntimeDiagnostic(
+                        "VISIBLE_ATTACK_RANGE",
+                        true,
+                        observation.ObservedPosition,
+                        true);
+
                     EnterAttack();
                     return;
                 }
 
                 SetChaseDestination(observation.ObservedPosition);
+
+                LogChaseRuntimeDiagnostic(
+                    "VISIBLE",
+                    true,
+                    observation.ObservedPosition);
+
                 return;
             }
 
             if (hasDuplicate)
             {
                 InvalidateCurrentTarget();
+                return;
+            }
+
+            var holdChase =
+                ShouldHoldChaseDuringTransientVisionLoss();
+
+            var rememberedPosition =
+                _memory.HasLastKnownPosition
+                    ? _memory.LastKnownPosition
+                    : lastKnownPosition;
+
+            LogChaseRuntimeDiagnostic(
+                holdChase
+                    ? "VISION_LOSS_GRACE"
+                    : "VISION_LOSS_EXPIRED",
+                false,
+                rememberedPosition,
+                !holdChase);
+
+            if (holdChase)
+            {
                 return;
             }
 
@@ -1022,8 +1073,6 @@ namespace EchoProtocol.AI.Stalker
             {
                 _attackController.BeginAttack(true, _memory.CurrentTargetId, _currentSimulationStep);
             }
-
-            StopAgentPath();
         }
 
         private void TickAttack()
@@ -1735,6 +1784,200 @@ namespace EchoProtocol.AI.Stalker
                 -1,
                 -1,
                 _memory.CurrentTargetId.IsValid ? _memory.CurrentTargetId.Value : -1));
+        }
+
+        private void LogChaseRuntimeDiagnostic(
+            string phase,
+            bool visible,
+            Vector3 targetSample,
+            bool force = false)
+        {
+            if (!chaseRuntimeDiagnostics)
+            {
+                return;
+            }
+
+            var visibilityChanged =
+                !_hasChaseDiagnosticVisibilityState
+                || _lastChaseDiagnosticVisible != visible;
+
+            _hasChaseDiagnosticVisibilityState = true;
+            _lastChaseDiagnosticVisible = visible;
+
+            var now = _currentSimulationSeconds;
+
+            if (!force
+                && !visibilityChanged
+                && now < _nextChaseRuntimeDiagnosticTime)
+            {
+                return;
+            }
+
+            _nextChaseRuntimeDiagnosticTime =
+                now + Mathf.Max(
+                    0.02f,
+                    chaseRuntimeDiagnosticInterval);
+
+            var agent = GetComponent<NavMeshAgent>();
+
+            var agentUsable =
+                agent != null
+                && agent.enabled
+                && agent.isOnNavMesh;
+
+            var velocity =
+                agent != null
+                    ? agent.velocity
+                    : Vector3.zero;
+
+            var agentNextPosition =
+                agentUsable
+                    ? agent.nextPosition
+                    : transform.position;
+
+            var agentTransformGap =
+                Vector3.Distance(
+                    agentNextPosition,
+                    transform.position);
+
+            var agentUpdatePosition =
+                agent != null
+                && agent.updatePosition;
+
+            var agentUpdateRotation =
+                agent != null
+                && agent.updateRotation;
+
+            var desiredVelocity =
+                agentUsable
+                    ? agent.desiredVelocity
+                    : Vector3.zero;
+
+            var steeringTarget =
+                agentUsable
+                    ? agent.steeringTarget
+                    : transform.position;
+
+            var hasPath =
+                agentUsable
+                && agent.hasPath;
+
+            var pathPending =
+                agentUsable
+                && agent.pathPending;
+
+            var remainingDistance =
+                hasPath
+                    ? agent.remainingDistance
+                    : -1f;
+
+            var pathStatus =
+                hasPath
+                    ? agent.pathStatus.ToString()
+                    : "None";
+
+            var navDestination = default(Vector3);
+
+            var hasNavigationDestination =
+                _navigation != null
+                && _navigation.TryGetActiveDestination(
+                    out navDestination);
+
+            var requestedDestination =
+                _hasLastChaseRequestedDestination
+                    ? _lastChaseRequestedDestination
+                    : default;
+
+            var toTarget =
+                targetSample - transform.position;
+
+            toTarget.y = 0f;
+
+            var forward = transform.forward;
+            forward.y = 0f;
+
+            var planarDesiredVelocity =
+                desiredVelocity;
+
+            planarDesiredVelocity.y = 0f;
+
+            var planarVelocity =
+                velocity;
+
+            planarVelocity.y = 0f;
+
+            var facingError =
+                toTarget.sqrMagnitude > 0.0001f
+                && forward.sqrMagnitude > 0.0001f
+                    ? Vector3.Angle(
+                        forward,
+                        toTarget)
+                    : 0f;
+
+            var desiredTurnAngle =
+                planarDesiredVelocity.sqrMagnitude > 0.0001f
+                && forward.sqrMagnitude > 0.0001f
+                    ? Vector3.Angle(
+                        forward,
+                        planarDesiredVelocity)
+                    : 0f;
+
+            var velocityDesiredAngle =
+                planarVelocity.sqrMagnitude > 0.0001f
+                && planarDesiredVelocity.sqrMagnitude > 0.0001f
+                    ? Vector3.Angle(
+                        planarVelocity,
+                        planarDesiredVelocity)
+                    : 0f;
+
+            UnityEngine.Debug.Log(
+                $"[STK_CHASE_DIAG] " +
+                $"phase={phase} " +
+                $"t={now:F3} " +
+                $"dt={_currentSimulationDeltaSeconds:F3} " +
+                $"state={currentState} " +
+                $"target={_memory.CurrentTargetId} " +
+                $"visible={visible} " +
+                $"grace={_chaseVisualLossElapsed:F3}/{chaseVisualLossGraceSeconds:F3} " +
+
+                $"stalker={transform.position} " +
+                $"nextPos={agentNextPosition} " +
+                $"nextPosGap={agentTransformGap:F3} " +
+                $"updatePosition={agentUpdatePosition} " +
+                $"updateRotation={agentUpdateRotation} " +
+                $"forward={transform.forward} " +
+                $"targetSample={targetSample} " +
+                $"lkp={lastKnownPosition} " +
+
+                $"hasReqDest={_hasLastChaseRequestedDestination} " +
+                $"reqDest={requestedDestination} " +
+                $"hasNavDest={hasNavigationDestination} " +
+                $"navDest={navDestination} " +
+                $"steering={steeringTarget} " +
+
+                $"velocity={velocity} " +
+                $"velocitySpeed={velocity.magnitude:F3} " +
+                $"desiredVelocity={desiredVelocity} " +
+                $"desiredSpeed={desiredVelocity.magnitude:F3} " +
+
+                $"facingError={facingError:F1} " +
+                $"desiredTurn={desiredTurnAngle:F1} " +
+                $"velocityDesiredAngle={velocityDesiredAngle:F1} " +
+
+                $"pathPending={pathPending} " +
+                $"hasPath={hasPath} " +
+                $"pathStatus={pathStatus} " +
+                $"remaining={remainingDistance:F3} " +
+
+                $"agentSpeed={(agent != null ? agent.speed : -1f):F2} " +
+                $"accel={(agent != null ? agent.acceleration : -1f):F2} " +
+                $"angular={(agent != null ? agent.angularSpeed : -1f):F1} " +
+
+                $"refreshElapsed={_chaseDestinationRefreshElapsed:F3} " +
+                $"refreshInterval={chaseDestinationRefreshInterval:F3} " +
+                $"refreshDistance={chaseDestinationRefreshDistance:F3} " +
+                $"predictionLead={chasePredictionLeadSeconds:F3} " +
+                $"predictionMax={chasePredictionMaxDistance:F3}");
         }
 
         private Vector3 GetPredictedChaseDestination(
@@ -3168,6 +3411,27 @@ namespace EchoProtocol.AI.Stalker
             return true;
         }
 
+        private bool ShouldHoldChaseDuringTransientVisionLoss()
+        {
+            if (HasTypedTargetFrame && !_memory.HasLastKnownPosition)
+            {
+                return false;
+            }
+
+            var graceSeconds =
+                Mathf.Max(0f, chaseVisualLossGraceSeconds);
+
+            if (graceSeconds <= 0f)
+            {
+                return false;
+            }
+
+            _chaseVisualLossElapsed +=
+                Mathf.Max(0f, CurrentSimulationDeltaSeconds);
+
+            return _chaseVisualLossElapsed < graceSeconds;
+        }
+
         private bool ShouldRefreshChaseDestination(Vector3 observedPosition)
         {
             if (!_navigation.HasActiveDestination)
@@ -3193,9 +3457,13 @@ namespace EchoProtocol.AI.Stalker
             _hasLastChaseRequestedDestination = false;
             _lastChaseRequestedDestination = default;
             _chaseDestinationRefreshElapsed = 0f;
+            _chaseVisualLossElapsed = 0f;
             _hasPreviousChaseObservation = false;
             _previousChaseObservedPosition = default;
             _previousChaseObservationTimeSeconds = 0f;
+            _nextChaseRuntimeDiagnosticTime = 0d;
+            _hasChaseDiagnosticVisibilityState = false;
+            _lastChaseDiagnosticVisible = false;
         }
 
         private void ResetNavigationRecoveryBudget()
@@ -4766,9 +5034,11 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            agent.speed = currentState == StalkerState.CHASE
-                ? Mathf.Max(0f, chaseSpeed)
-                : Mathf.Max(0f, patrolSpeed);
+            agent.speed =
+                currentState == StalkerState.CHASE
+                || currentState == StalkerState.ATTACK
+                    ? Mathf.Max(0f, chaseSpeed)
+                    : Mathf.Max(0f, patrolSpeed);
         }
 
         private void LogDiagnosticWarning(string message)

@@ -113,9 +113,9 @@ NavMeshAgent:
   m_AgentTypeID: 0
   m_Radius: 0.5
   m_Speed: 7
-  m_Acceleration: 8
+  m_Acceleration: 20
   avoidancePriority: 50
-  m_AngularSpeed: 360
+  m_AngularSpeed: 720
   m_StoppingDistance: 0.3
   m_AutoTraverseOffMeshLink: 1
   m_AutoBraking: 1
@@ -162,7 +162,7 @@ MonoBehaviour:
   patrolMode: 3
   patrolSpeed: 7
   chaseSpeed: 9
-  enableDiagnostics: 0
+  enableDiagnostics: 1
   candidateBfsDepth: 128
   stalenessHorizon: 15
   stalenessWeight: 1
@@ -173,13 +173,22 @@ MonoBehaviour:
   detectionDecayRate: 0.5
   searchDuration: 5
   searchRadius: 8
-  chaseDestinationRefreshDistance: 0.5
-  chaseDestinationRefreshInterval: 0.5
-  chasePredictionLeadSeconds: 0.2
+  hideSpotSearchRadius: 6
+  hideSpotInspectDistance: 1.5
+  hideSpotInspectDuration: 0.75
+  hideSpotReinspectCooldown: 8
+  hideSpotConfirmedUseBias: 2
+  hideSpotEmptyInspectionPenalty: 1.5
+  chaseDestinationRefreshDistance: 0.2
+  chaseDestinationRefreshInterval: 0.1
+  chasePredictionLeadSeconds: 0.08
   chasePredictionMaxDistance: 1.5
-  attackRange: 2.8
-  attackWindup: 0.75
-  attackRecovery: 1
+  chaseVisualLossGraceSeconds: 0.45
+  chaseRuntimeDiagnostics: 1
+  chaseRuntimeDiagnosticInterval: 0.1
+  attackRange: 3
+  attackWindup: 0.35
+  attackRecovery: 0.4
   attackDamage: 100
   worldInteractionDistance: 1.75
   stalkerDoorBreakDurationSeconds: 3

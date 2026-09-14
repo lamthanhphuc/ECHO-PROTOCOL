@@ -104,30 +104,55 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            // Probe torso/chest first so low obstacles do not incorrectly block LOS.
-            // Chest geometry is used only for LOS, never for the reported observation.
-            var chestPosition = candidatePosition + Vector3.up * 1.0f;
-            var chestVisible =
-                TryGetVisibleDirection(
-                    originPosition,
-                    chestPosition,
-                    false,
-                    out var chestDirection,
-                    out var chestDistance)
-                && !HasLineOfSightBlocker(
-                    targetHierarchyRoot,
-                    originPosition,
-                    chestDirection,
-                    chestDistance);
+            //
+            // Player targets use the current CharacterController bounds so LOS
+            // follows the real standing/crouching body volume.
+            //
+            // Generic targets keep the existing center/chest behaviour so the
+            // sensor contract for non-player candidates remains unchanged.
+            //
+            var characterController =
+                targetHierarchyRoot.GetComponent<CharacterController>();
 
-            if (!chestVisible
-                && HasLineOfSightBlocker(
-                    targetHierarchyRoot,
-                    originPosition,
-                    observedDirection,
-                    distance))
+            if (characterController != null
+                && characterController.enabled
+                && characterController.gameObject.activeInHierarchy)
             {
-                return false;
+                if (!HasVisibleCharacterControllerSample(
+                        targetHierarchyRoot,
+                        characterController,
+                        originPosition))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                var chestPosition =
+                    candidatePosition + Vector3.up * 1.0f;
+
+                var chestVisible =
+                    TryGetVisibleDirection(
+                        originPosition,
+                        chestPosition,
+                        false,
+                        out var chestDirection,
+                        out var chestDistance)
+                    && !HasLineOfSightBlocker(
+                        targetHierarchyRoot,
+                        originPosition,
+                        chestDirection,
+                        chestDistance);
+
+                if (!chestVisible
+                    && HasLineOfSightBlocker(
+                        targetHierarchyRoot,
+                        originPosition,
+                        observedDirection,
+                        distance))
+                {
+                    return false;
+                }
             }
 
             observation = new StalkerPhysicalVisionObservation(
@@ -231,6 +256,146 @@ namespace EchoProtocol.AI.Stalker
             distance = Mathf.Sqrt(sqrDistance);
             direction = toTarget.normalized;
             return true;
+        }
+
+        private bool HasVisibleCharacterControllerSample(
+            Transform targetHierarchyRoot,
+            CharacterController characterController,
+            Vector3 originPosition)
+        {
+            var bounds =
+                characterController.bounds;
+
+            if (bounds.size.sqrMagnitude <= Mathf.Epsilon)
+            {
+                return false;
+            }
+
+            var center =
+                bounds.center;
+
+            var verticalOffset =
+                bounds.extents.y * 0.72f;
+
+            var horizontalRadius =
+                Mathf.Max(
+                    0.05f,
+                    Mathf.Min(
+                        bounds.extents.x,
+                        bounds.extents.z) * 0.70f);
+
+            var horizontalToTarget =
+                center - originPosition;
+
+            horizontalToTarget.y = 0f;
+
+            Vector3 right;
+
+            if (horizontalToTarget.sqrMagnitude > Mathf.Epsilon)
+            {
+                right =
+                    Vector3.Cross(
+                        Vector3.up,
+                        horizontalToTarget.normalized)
+                    .normalized;
+            }
+            else
+            {
+                right =
+                    targetHierarchyRoot.right;
+            }
+
+            //
+            // Center / torso.
+            //
+            if (IsLineOfSightSampleVisible(
+                    targetHierarchyRoot,
+                    originPosition,
+                    center))
+            {
+                return true;
+            }
+
+            //
+            // Upper and lower body.
+            //
+            if (IsLineOfSightSampleVisible(
+                    targetHierarchyRoot,
+                    originPosition,
+                    center + Vector3.up * verticalOffset))
+            {
+                return true;
+            }
+
+            if (IsLineOfSightSampleVisible(
+                    targetHierarchyRoot,
+                    originPosition,
+                    center - Vector3.up * verticalOffset))
+            {
+                return true;
+            }
+
+            //
+            // Left / right side of the torso.
+            //
+            if (IsLineOfSightSampleVisible(
+                    targetHierarchyRoot,
+                    originPosition,
+                    center + right * horizontalRadius))
+            {
+                return true;
+            }
+
+            if (IsLineOfSightSampleVisible(
+                    targetHierarchyRoot,
+                    originPosition,
+                    center - right * horizontalRadius))
+            {
+                return true;
+            }
+
+            //
+            // Upper-left / upper-right body samples.
+            // These are important for racks/shelves where only a shoulder
+            // or upper torso is visible through a physical opening.
+            //
+            var upperBody =
+                center + Vector3.up * (verticalOffset * 0.55f);
+
+            if (IsLineOfSightSampleVisible(
+                    targetHierarchyRoot,
+                    originPosition,
+                    upperBody + right * horizontalRadius))
+            {
+                return true;
+            }
+
+            return IsLineOfSightSampleVisible(
+                targetHierarchyRoot,
+                originPosition,
+                upperBody - right * horizontalRadius);
+        }
+
+        private bool IsLineOfSightSampleVisible(
+            Transform targetHierarchyRoot,
+            Vector3 originPosition,
+            Vector3 samplePosition)
+        {
+            if (!TryGetVisibleDirection(
+                    originPosition,
+                    samplePosition,
+                    false,
+                    out var direction,
+                    out var distance))
+            {
+                return false;
+            }
+
+            return !HasLineOfSightBlocker(
+                targetHierarchyRoot,
+                originPosition,
+                direction,
+                distance);
         }
 
         private bool HasLineOfSightBlocker(

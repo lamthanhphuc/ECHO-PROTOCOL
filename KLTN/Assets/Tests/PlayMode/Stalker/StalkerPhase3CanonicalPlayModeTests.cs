@@ -251,9 +251,10 @@ namespace EchoProtocol.AI.Stalker.Tests
             var frozenLkp = (Vector3)GetProperty(fixture.Controller, "LastKnownPosition");
 
             Simulate(fixture.Controller, 0.1f, null, TargetStatusList(CreateStatus(1, true)));
-            Assert.That(GetProperty(fixture.Controller, "CurrentState").ToString(), Is.EqualTo("SEARCH"));
-            Simulate(fixture.Controller, 0.1f, null, TargetStatusList(CreateStatus(1, true)));
+            Assert.That(GetProperty(fixture.Controller, "CurrentState").ToString(), Is.EqualTo("CHASE"));
             Assert.That((Vector3)GetProperty(fixture.Controller, "LastKnownPosition"), Is.EqualTo(frozenLkp));
+            Simulate(fixture.Controller, 0.4f, null, TargetStatusList(CreateStatus(1, true)));
+            Assert.That(GetProperty(fixture.Controller, "CurrentState").ToString(), Is.EqualTo("SEARCH"));
             SetPrivateField(fixture.Controller, "searchDuration", 0.1f);
             Simulate(fixture.Controller, 0.2f, null, TargetStatusList(CreateStatus(1, true)));
             Assert.That(GetProperty(fixture.Controller, "CurrentState").ToString(), Is.EqualTo("PATROL"));

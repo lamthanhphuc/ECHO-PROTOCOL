@@ -314,12 +314,45 @@ namespace EchoProtocol.AI.Stalker.Tests
             var oldPosition = new Vector3(0f, 1f, 4f);
             SetCurrentTarget(fixture.Controller, 1, oldPosition);
 
-            Assert.That(Simulate(fixture.Controller, 0.1f, CreateCandidateList(), CreateStatusList(CreateStatus(1, true))), Is.True);
+            // Transient loss of visibility must keep CHASE alive.
+            Assert.That(
+                Simulate(
+                    fixture.Controller,
+                    0.1f,
+                    CreateCandidateList(),
+                    CreateStatusList(CreateStatus(1, true))),
+                Is.True);
+
+            AssertState(fixture.Controller, "CHASE");
+            AssertVectorNear(
+                GetVector3Property(fixture.Controller, "LastKnownPosition"),
+                oldPosition);
+            AssertVectorNear(
+                GetVector3Property(GetMemory(fixture.Controller), "LastKnownPosition"),
+                oldPosition);
+
+            // Continuous loss beyond the 0.45 s grace window must enter SEARCH.
+            Assert.That(
+                Simulate(
+                    fixture.Controller,
+                    0.4f,
+                    CreateCandidateList(),
+                    CreateStatusList(CreateStatus(1, true))),
+                Is.True);
 
             AssertState(fixture.Controller, "SEARCH");
-            Assert.That(GetFloatProperty(fixture.Controller, "SearchElapsedTime"), Is.EqualTo(0f).Within(FloatTolerance));
-            AssertVectorNear(GetVector3Property(fixture.Controller, "LastKnownPosition"), oldPosition);
-            AssertVectorNear(GetVector3Property(GetMemory(fixture.Controller), "LastKnownPosition"), oldPosition);
+            Assert.That(
+                GetFloatProperty(fixture.Controller, "SearchElapsedTime"),
+                Is.EqualTo(0f).Within(FloatTolerance));
+
+            AssertVectorNear(
+                GetVector3Property(fixture.Controller, "LastKnownPosition"),
+                oldPosition);
+
+            AssertVectorNear(
+                GetVector3Property(GetMemory(fixture.Controller), "LastKnownPosition"),
+                oldPosition);
+
             yield return null;
         }
 
@@ -328,17 +361,68 @@ namespace EchoProtocol.AI.Stalker.Tests
         {
             var fixture = CreateFixture();
             var oldPosition = new Vector3(0f, 1f, 4f);
-            var hiddenObject = new GameObject("STK_AUTH_HiddenLegacyTransform");
-            hiddenObject.transform.position = new Vector3(99f, 1f, 99f);
-            _createdObjects.Add(hiddenObject);
-            SetCurrentTarget(fixture.Controller, 1, oldPosition);
-            SetPrivateField(fixture.Controller, "currentTarget", hiddenObject.transform);
 
-            Assert.That(Simulate(fixture.Controller, 0.1f, CreateCandidateList(), CreateStatusList(CreateStatus(1, true))), Is.True);
+            var hiddenObject =
+                new GameObject("STK_AUTH_HiddenLegacyTransform");
+
+            hiddenObject.transform.position =
+                new Vector3(99f, 1f, 99f);
+
+            _createdObjects.Add(hiddenObject);
+
+            SetCurrentTarget(
+                fixture.Controller,
+                1,
+                oldPosition);
+
+            SetPrivateField(
+                fixture.Controller,
+                "currentTarget",
+                hiddenObject.transform);
+
+            // During visual-loss grace the Stalker remains in CHASE,
+            // but must not read the hidden Transform position.
+            Assert.That(
+                Simulate(
+                    fixture.Controller,
+                    0.1f,
+                    CreateCandidateList(),
+                    CreateStatusList(CreateStatus(1, true))),
+                Is.True);
+
+            AssertState(fixture.Controller, "CHASE");
+
+            Assert.That(
+                Vector3.Distance(
+                    GetVector3Property(
+                        fixture.Controller,
+                        "LastKnownPosition"),
+                    hiddenObject.transform.position),
+                Is.GreaterThan(1f));
+
+            AssertVectorNear(
+                GetVector3Property(
+                    fixture.Controller,
+                    "LastKnownPosition"),
+                oldPosition);
+
+            // Expire grace.
+            Assert.That(
+                Simulate(
+                    fixture.Controller,
+                    0.4f,
+                    CreateCandidateList(),
+                    CreateStatusList(CreateStatus(1, true))),
+                Is.True);
 
             AssertState(fixture.Controller, "SEARCH");
-            Assert.That(Vector3.Distance(GetVector3Property(fixture.Controller, "LastKnownPosition"), hiddenObject.transform.position), Is.GreaterThan(1f));
-            AssertVectorNear(GetVector3Property(fixture.Controller, "LastKnownPosition"), oldPosition);
+
+            AssertVectorNear(
+                GetVector3Property(
+                    fixture.Controller,
+                    "LastKnownPosition"),
+                oldPosition);
+
             yield return null;
         }
 
@@ -403,7 +487,14 @@ namespace EchoProtocol.AI.Stalker.Tests
             var oldPosition = new Vector3(0f, 1f, 4f);
             SetCurrentTarget(fixture.Controller, 1, oldPosition);
 
-            Assert.That(Simulate(fixture.Controller, 0.1f, CreateCandidateList(), CreateStatusList(CreateStatus(1, true))), Is.True);
+            Assert.That(
+                Simulate(
+                    fixture.Controller,
+                    0.5f,
+                    CreateCandidateList(),
+                    CreateStatusList(CreateStatus(1, true))),
+                Is.True);
+
             AssertState(fixture.Controller, "SEARCH");
 
             SetPrivateField(fixture.Controller, "searchDuration", 10f);

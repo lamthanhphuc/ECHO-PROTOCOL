@@ -571,9 +571,41 @@ namespace EchoProtocol.AI.Stalker.Tests
             SetPrivateField(visionSensor, "candidate", null);
             Physics.SyncTransforms();
 
-            Assert.That(SimulateAtTime(fixture.StalkerController, 3L, 0.2d, 0.1f), Is.True);
+            // Transient visual loss must keep CHASE alive.
+            Assert.That(
+                SimulateAtTime(
+                    fixture.StalkerController,
+                    3L,
+                    0.2d,
+                    0.1f),
+                Is.True);
 
-            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("SEARCH"));
+            Assert.That(
+                GetEnumPropertyName(
+                    fixture.StalkerController,
+                    "CurrentState"),
+                Is.EqualTo("CHASE"));
+
+            AssertVectorApproximately(
+                GetPrivateField<Vector3>(
+                    fixture.StalkerController,
+                    "lastKnownPosition"),
+                pointB);
+
+            // Continuous loss beyond the 0.45 s grace period enters SEARCH.
+            Assert.That(
+                SimulateAtTime(
+                    fixture.StalkerController,
+                    4L,
+                    0.6d,
+                    0.4f),
+                Is.True);
+
+            Assert.That(
+                GetEnumPropertyName(
+                    fixture.StalkerController,
+                    "CurrentState"),
+                Is.EqualTo("SEARCH"));
             AssertVectorApproximately(
                 GetPrivateField<Vector3>(fixture.StalkerController, "lastKnownPosition"),
                 pointB);

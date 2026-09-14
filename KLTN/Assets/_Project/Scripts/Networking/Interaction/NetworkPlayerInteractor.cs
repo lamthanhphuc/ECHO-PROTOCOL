@@ -144,6 +144,13 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            if (TryDetectHidingSpot(out var hidingSpot)
+                && hidingSpot.CanInteract(gameObject))
+            {
+                hidingSpot.Interact(gameObject);
+                return;
+            }
+
             if (TryDetectReviveCandidate(out var targetLifeState))
             {
                 // Only FAK-equipped players can revive teammates.
@@ -348,6 +355,25 @@ namespace EchoProtocol.Networking
             }
 
             candidate = null;
+            return false;
+        }
+
+        private bool TryDetectHidingSpot(out HidingSpot hidingSpot)
+        {
+            var ray = GetLocalDetectionRay();
+
+            if (Physics.Raycast(
+                    ray,
+                    out var hit,
+                    _localDetectionDistance,
+                    _interactionLayers,
+                    QueryTriggerInteraction.Collide))
+            {
+                hidingSpot = hit.collider.GetComponentInParent<HidingSpot>();
+                return hidingSpot != null;
+            }
+
+            hidingSpot = null;
             return false;
         }
 

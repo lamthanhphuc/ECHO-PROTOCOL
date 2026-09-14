@@ -67,9 +67,15 @@ public class PlayerInteraction : MonoBehaviour
 
     private void Update()
     {
-        if (!HasLocalControl() || IsActiveFusionGameplay())
+        if (!HasLocalControl())
         {
             SetCurrentInteractable(null);
+            return;
+        }
+
+        if (IsActiveFusionGameplay())
+        {
+            UpdateCurrentHidingSpotPrompt();
             return;
         }
 
@@ -116,6 +122,45 @@ public class PlayerInteraction : MonoBehaviour
         }
 
         SetCurrentInteractable(interactable);
+    }
+
+    private void UpdateCurrentHidingSpotPrompt()
+    {
+        if (raycastCamera == null)
+        {
+            raycastCamera = Camera.main;
+        }
+
+        if (raycastCamera == null)
+        {
+            SetCurrentInteractable(null);
+            return;
+        }
+
+        Ray ray = raycastCamera.ViewportPointToRay(
+            new Vector3(0.5f, 0.5f, 0f));
+
+        if (!Physics.Raycast(
+                ray,
+                out RaycastHit hit,
+                interactDistance,
+                interactableLayers,
+                triggerInteraction))
+        {
+            SetCurrentInteractable(null);
+            return;
+        }
+
+        HidingSpot hidingSpot =
+            hit.collider.GetComponentInParent<HidingSpot>();
+
+        if (hidingSpot == null || !hidingSpot.CanInteract(gameObject))
+        {
+            SetCurrentInteractable(null);
+            return;
+        }
+
+        SetCurrentInteractable(hidingSpot);
     }
 
     private void SetCurrentInteractable(IInteractable interactable)

@@ -169,10 +169,43 @@ namespace EchoProtocol.AI.Listener.Tests
                 source);
 
             StringAssert.Contains(
-                "? 4.0f",
+                "GetMovementNoiseInterval(",
                 source);
+
             StringAssert.Contains(
-                ": 1.5f;",
+                "case RuntimeNoiseType.SPRINT:",
+                source);
+
+            StringAssert.Contains(
+                "return 0.25f;",
+                source);
+
+            StringAssert.Contains(
+                "case RuntimeNoiseType.WALK:",
+                source);
+
+            StringAssert.Contains(
+                "return 0.45f;",
+                source);
+
+            StringAssert.Contains(
+                "case RuntimeNoiseType.CROUCH:",
+                source);
+
+            StringAssert.Contains(
+                "return 0.80f;",
+                source);
+
+            StringAssert.Contains(
+                "case RuntimeNoiseType.CORE_CARRY:",
+                source);
+
+            StringAssert.Contains(
+                "? 1.00f",
+                source);
+
+            StringAssert.Contains(
+                ": 0.40f;",
                 source);
         }
 

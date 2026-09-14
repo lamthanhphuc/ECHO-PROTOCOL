@@ -457,7 +457,11 @@ namespace EchoProtocol.Telemetry
                 { "CORE_CARRY", "CORE_CARRY_MOVEMENT" },
                 { "CORE_DROP", "CORE_DROP" },
                 { "NOISE_MAKER", "NOISE_MAKER_USED" },
-                { "FIELD_SCANNER", "FIELD_SCANNER_USED" }
+                { "FIELD_SCANNER", "FIELD_SCANNER_USED" },
+                { "CROUCH", "PLAYER_CROUCH" },
+                { "WALK", "PLAYER_WALK" },
+                { "DOOR", "DOOR_INTERACTION" },
+                { "CORE_INSERT", "CORE_INSERT" }
             };
 
         private readonly TelemetryEmitter _emitter;

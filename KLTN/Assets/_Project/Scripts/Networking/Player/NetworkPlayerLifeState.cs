@@ -191,7 +191,7 @@ namespace EchoProtocol.Networking
                     if (CatchEndsInDeath)
                         CommitEliminated(NetworkPlayerLifeTransitionCause.GhostCatch, "GHOST_CATCH");
                     else
-                        CommitDown("GHOST_CATCH", transform.position);
+                        CommitDown("STALKER", transform.position);
                 }
                 return;
             }

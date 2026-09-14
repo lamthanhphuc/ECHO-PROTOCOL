@@ -388,9 +388,9 @@ namespace EchoProtocol.Networking
                             out _);
 
                     var noiseInterval =
-                        coreCarryIsStabilized
-                            ? 4.0f
-                            : 1.5f;
+                        GetMovementNoiseInterval(
+                            type,
+                            coreCarryIsStabilized);
 
                     _nextMovementNoise =
                         TickTimer.CreateFromSeconds(
@@ -411,6 +411,31 @@ namespace EchoProtocol.Networking
             }
 
             ApplyCharacterControllerDimensions(effectiveCrouch ? _crouchHeight : _standingHeight, immediate: false);
+        }
+
+        private static float GetMovementNoiseInterval(
+            RuntimeNoiseType type,
+            bool coreCarryIsStabilized)
+        {
+            switch (type)
+            {
+                case RuntimeNoiseType.SPRINT:
+                    return 0.25f;
+
+                case RuntimeNoiseType.WALK:
+                    return 0.45f;
+
+                case RuntimeNoiseType.CROUCH:
+                    return 0.80f;
+
+                case RuntimeNoiseType.CORE_CARRY:
+                    return coreCarryIsStabilized
+                        ? 1.00f
+                        : 0.40f;
+
+                default:
+                    return 0.50f;
+            }
         }
 
         [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]
