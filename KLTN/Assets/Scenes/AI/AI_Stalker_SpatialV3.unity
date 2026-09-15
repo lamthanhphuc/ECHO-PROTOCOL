@@ -158,8 +158,8 @@ MonoBehaviour:
   connectivityWeight: 0.15
   immediateBacktrackPenalty: 0.75
   detectionMeterFull: 1
-  detectionFillRate: 0.5
-  detectionDecayRate: 0.5
+  detectionFillRate: 3.3333333
+  detectionDecayRate: 3.3333333
   searchDuration: 5
   searchRadius: 8
   chaseDestinationRefreshDistance: 0.5

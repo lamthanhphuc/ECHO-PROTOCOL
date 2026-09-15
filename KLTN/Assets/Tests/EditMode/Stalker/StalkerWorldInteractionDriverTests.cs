@@ -32,22 +32,21 @@ namespace EchoProtocol.AI.Stalker.Tests
             var kindType = ResolveProductionType("EchoProtocol.AI.Stalker.StalkerWorldInteractionKind");
 
             Assert.That(EnumValue(kindType, "None"), Is.EqualTo(0));
-            Assert.That(EnumValue(kindType, "OpeningDoor"), Is.EqualTo(1));
-            Assert.That(EnumValue(kindType, "BreakingDoor"), Is.EqualTo(2));
-            Assert.That(EnumValue(kindType, "BreakingJammer"), Is.EqualTo(3));
+            Assert.That(EnumValue(kindType, "BreakingDoor"), Is.EqualTo(1));
+            Assert.That(EnumValue(kindType, "BreakingJammer"), Is.EqualTo(2));
+            Assert.Throws<ArgumentException>(() => EnumValue(kindType, "OpeningDoor"));
         }
 
         [Test]
-        public void STK_WorldInteraction_UnlockedClosedDoorChoosesOpenNotBreak()
+        public void STK_WorldInteraction_ClosedDoorChoosesBreakNotMonsterOpen()
         {
             var source = File.ReadAllText(DriverPath);
             var begin = MethodBody(source, "public StalkerWorldInteractionStartResult TryBegin");
 
-            StringAssert.Contains("door.CanMonsterOpen", begin);
-            StringAssert.Contains("door.TryOpenForMonsterAuthoritative()", begin);
-            Assert.That(
-                begin.IndexOf("door.TryOpenForMonsterAuthoritative()", StringComparison.Ordinal),
-                Is.LessThan(begin.IndexOf("StalkerWorldInteractionKind.BreakingDoor", StringComparison.Ordinal)));
+            StringAssert.DoesNotContain("door.TryOpenForMonsterAuthoritative()", begin);
+            StringAssert.DoesNotContain("door.CanMonsterOpen", begin);
+            StringAssert.Contains("StalkerWorldInteractionKind.BreakingDoor", begin);
+            StringAssert.Contains("doorBreakDurationSeconds", begin);
         }
 
         [Test]

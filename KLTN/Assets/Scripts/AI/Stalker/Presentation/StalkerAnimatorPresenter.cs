@@ -574,7 +574,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
             if (targetHash == RunStateHash)
                 return 0.75f;
             if (targetHash == AlertStateHash)
-                return 0.75f;
+                return 0.3f;
             if (targetHash == SearchStateHash)
                 return 2.4f;
             if (targetHash == AttackStateHash)
@@ -584,7 +584,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             return state switch
             {
-                StalkerState.DETECT => 0.75f,
+                StalkerState.DETECT => 0.3f,
                 StalkerState.ATTACK => 1.15f,
                 StalkerState.RECOVER => 0.75f,
                 StalkerState.SEARCH => 2.4f,

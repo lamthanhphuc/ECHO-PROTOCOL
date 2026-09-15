@@ -53,8 +53,8 @@ namespace EchoProtocol.AI.Stalker
 
         [Header("Detection Spike Defaults")]
         [SerializeField] private float detectionMeterFull = 1f;
-        [SerializeField] private float detectionFillRate = 0.5f;
-        [SerializeField] private float detectionDecayRate = 0.5f;
+        [SerializeField] private float detectionFillRate = 3.3333333f;
+        [SerializeField] private float detectionDecayRate = 3.3333333f;
 
         [Header("Search Spike Defaults")]
         [SerializeField] private float searchDuration = 5f;
@@ -5212,6 +5212,12 @@ namespace EchoProtocol.AI.Stalker
                 var door = hitCollider.GetComponentInParent<NetworkSlidingDoor>();
                 if (door != null && door.BlocksTraversal)
                 {
+                    if (door.HasActiveJammer && door.TryGetActiveJammer(out var doorJammer))
+                    {
+                        blocker = doorJammer;
+                        return true;
+                    }
+
                     blocker = door;
                     return true;
                 }

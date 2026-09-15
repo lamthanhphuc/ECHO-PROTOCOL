@@ -6,9 +6,8 @@ namespace EchoProtocol.AI.Stalker
     public enum StalkerWorldInteractionKind
     {
         None = 0,
-        OpeningDoor = 1,
-        BreakingDoor = 2,
-        BreakingJammer = 3
+        BreakingDoor = 1,
+        BreakingJammer = 2
     }
 
     public enum StalkerWorldInteractionStartResult
@@ -79,13 +78,6 @@ namespace EchoProtocol.AI.Stalker
             if (!door.BlocksTraversal)
             {
                 return StalkerWorldInteractionStartResult.Completed;
-            }
-
-            if (!door.IsBroken && door.CanMonsterOpen)
-            {
-                return door.TryOpenForMonsterAuthoritative()
-                    ? StalkerWorldInteractionStartResult.Completed
-                    : StalkerWorldInteractionStartResult.AuthorityRejected;
             }
 
             if (!door.IsBroken)
