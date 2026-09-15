@@ -70,6 +70,7 @@ public static class SciFiPlayerCharacterSceneSetup
 
         PlayerDownState downState = ConfigureDownState(player, movement, interaction, hidingController, playerCamera, visualRoot);
         ConfigureAnimatorDriver(player, visualRoot, movement, characterController, player.GetComponent<PlayerEnergyCoreCarrier>(), downState);
+        ConfigureCrawlPoseCorrector(player, downState);
         ConfigureRevive(player, downState);
         ConfigureSpectate(player, downState, playerCamera);
 
@@ -383,9 +384,23 @@ public static class SciFiPlayerCharacterSceneSetup
         PlayerReviveInteractable revive = EnsureComponent<PlayerReviveInteractable>(player);
         SerializedObject reviveSo = new SerializedObject(revive);
         SetObject(reviveSo, "downState", downState);
-        SetFloat(reviveSo, "reviveDurationSeconds", 2.5f);
-        SetString(reviveSo, "revivePrompt", "Revive teammate");
+        SetFloat(reviveSo, "reviveDurationSeconds", 3f);
+        SetString(reviveSo, "revivePrompt", "Giữ để Cứu Đồng Đội");
         reviveSo.ApplyModifiedPropertiesWithoutUndo();
+    }
+
+    private static void ConfigureCrawlPoseCorrector(GameObject player, PlayerDownState downState)
+    {
+        PlayerCrawlPoseCorrector corrector = EnsureComponent<PlayerCrawlPoseCorrector>(player);
+        SerializedObject correctorSo = new SerializedObject(corrector);
+        SetObject(correctorSo, "animator", player.GetComponentInChildren<Animator>(true));
+        SetObject(correctorSo, "downState", downState);
+        SetObject(correctorSo, "networkLifeState", player.GetComponent<EchoProtocol.Networking.NetworkPlayerLifeState>());
+        SetFloat(correctorSo, "rearFootLiftOffset", 0.03f);
+        SetFloat(correctorSo, "rearLowerLegLiftOffset", 0.06f);
+        SetFloat(correctorSo, "maximumLift", 0.45f);
+        SetFloat(correctorSo, "blendSpeed", 14f);
+        correctorSo.ApplyModifiedPropertiesWithoutUndo();
     }
 
     private static void ConfigureSpectate(GameObject player, PlayerDownState downState, PlayerCamera playerCamera)

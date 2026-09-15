@@ -23,6 +23,7 @@ GameObject:
   - component: {fileID: 6693599646174086701}
   - component: {fileID: 2959782959538051123}
   - component: {fileID: 8400725215518522818}
+  - component: {fileID: 640200000000000001}
   - component: {fileID: 6712278150136001238}
   - component: {fileID: 810580752424859207}
   - component: {fileID: 5671761272292103460}
@@ -145,7 +146,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f4e5c97bedfb1814f9122481941d5997, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMovement
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   walkSpeed: 4
@@ -339,7 +340,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerReviveInteractable
   downState: {fileID: 8098713353635554193}
-  reviveDurationSeconds: 6
+  reviveDurationSeconds: 3
   revivePrompt: "Gi\u1EEF \u0111\u1EC3 C\u1EE9u \u0110\u1ED3ng \u0110\u1ED9i"
   reviveStarted:
     m_PersistentCalls:
@@ -388,6 +389,27 @@ MonoBehaviour:
   directionDampTime: 0.12
   walkSpeedReference: 4
   runSpeedReference: 7
+--- !u!114 &640200000000000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 468300235454084763}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2dd8ad9b5bd34f44aaf05df8da0f0f29, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCrawlPoseCorrector
+  animator: {fileID: 1535689403677083624}
+  downState: {fileID: 8098713353635554193}
+  networkLifeState: {fileID: 0}
+  correctWhileDowned: 1
+  handContactBias: 0
+  rearFootLiftOffset: 0.03
+  rearLowerLegLiftOffset: 0.06
+  maximumLift: 0.45
+  blendSpeed: 14
 --- !u!114 &6712278150136001238
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -404,6 +426,13 @@ MonoBehaviour:
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   startOn: 1
   toggleCooldown: 0.2
+  beamIntensity: 18
+  beamRange: 16
+  beamSpotAngle: 42
+  beamInnerSpotAngle: 24
+  visibleBeamLength: 15.5
+  visibleBeamAlpha: 0.16
+  visibleBeamColor: {r: 1, g: 0.92, b: 0.72, a: 1}
 --- !u!114 &810580752424859207
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -563,13 +592,13 @@ Light:
   serializedVersion: 13
   m_Type: 0
   m_Color: {r: 1, g: 0.96, b: 0.88, a: 1}
-  m_Intensity: 2.8
-  m_Range: 28
-  m_SpotAngle: 65
-  m_InnerSpotAngle: 45
+  m_Intensity: 18
+  m_Range: 16
+  m_SpotAngle: 42
+  m_InnerSpotAngle: 24
   m_CookieSize2D: {x: 0.5, y: 0.5}
   m_Shadows:
-    m_Type: 0
+    m_Type: 2
     m_Resolution: -1
     m_CustomResolution: -1
     m_Strength: 1
@@ -597,7 +626,7 @@ Light:
   m_Cookie: {fileID: 0}
   m_DrawHalo: 0
   m_Flare: {fileID: 0}
-  m_RenderMode: 0
+  m_RenderMode: 1
   m_CullingMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -605,7 +634,7 @@ Light:
   m_Lightmapping: 4
   m_LightShadowCasterMode: 0
   m_AreaSize: {x: 1, y: 1}
-  m_BounceIntensity: 1
+  m_BounceIntensity: 0.4
   m_ColorTemperature: 6570
   m_UseColorTemperature: 0
   m_BoundingSphereOverride: {x: 0, y: 0, z: 0, w: 0}

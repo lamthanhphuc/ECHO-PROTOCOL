@@ -149,6 +149,7 @@ namespace EchoProtocol.UI.HUD
             if (playerRoot == null) return;
 
             var movement = playerRoot.GetComponentInChildren<PlayerMovement>(true);
+            var networkMovement = playerRoot.GetComponentInChildren<NetworkPlayerMovement>(true);
             var downState = playerRoot.GetComponentInChildren<PlayerDownState>(true);
             var carrier = playerRoot.GetComponentInChildren<PlayerEnergyCoreCarrier>(true);
             var interaction = playerRoot.GetComponentInChildren<PlayerInteraction>(true);
@@ -157,7 +158,7 @@ namespace EchoProtocol.UI.HUD
 
             if (playerVitals != null)
             {
-                playerVitals.BindPlayer(movement, downState, carrier);
+                playerVitals.BindPlayer(movement, downState, carrier, networkMovement);
             }
 
             if (interactionPrompt != null && interaction != null)

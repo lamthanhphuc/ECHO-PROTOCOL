@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using EchoProtocol.Networking;
 
 namespace EchoProtocol.UI.HUD
 {
@@ -7,6 +8,7 @@ namespace EchoProtocol.UI.HUD
     {
         [Header("References")]
         [SerializeField] private PlayerMovement movement;
+        [SerializeField] private NetworkPlayerMovement networkMovement;
         [SerializeField] private PlayerDownState downState;
         [SerializeField] private PlayerEnergyCoreCarrier carrier;
 
@@ -32,9 +34,18 @@ namespace EchoProtocol.UI.HUD
         private float _noiseIntensity;
         private float _flashTimer;
 
-        public void BindPlayer(PlayerMovement move, PlayerDownState down, PlayerEnergyCoreCarrier coreCarrier)
+        public void BindPlayer(
+            PlayerMovement move,
+            PlayerDownState down,
+            PlayerEnergyCoreCarrier coreCarrier,
+            NetworkPlayerMovement netMove = null)
         {
             movement = move;
+            networkMovement = netMove != null
+                ? netMove
+                : move != null
+                    ? move.GetComponent<NetworkPlayerMovement>()
+                    : null;
             downState = down;
             carrier = coreCarrier;
 
@@ -67,7 +78,7 @@ namespace EchoProtocol.UI.HUD
 
         private void Update()
         {
-            if (movement == null || downState == null)
+            if ((movement == null && networkMovement == null) || downState == null)
             {
                 ResolveReferences();
             }
@@ -80,6 +91,7 @@ namespace EchoProtocol.UI.HUD
         private void ResolveReferences()
         {
             if (movement == null) movement = FindAnyObjectByType<PlayerMovement>();
+            if (networkMovement == null) networkMovement = FindAnyObjectByType<NetworkPlayerMovement>();
             if (downState == null) downState = FindAnyObjectByType<PlayerDownState>();
             if (carrier == null)
             {
@@ -93,9 +105,11 @@ namespace EchoProtocol.UI.HUD
 
         private void UpdateStamina()
         {
-            if (movement == null) return;
+            if (movement == null && networkMovement == null) return;
 
-            float target01 = movement.MaxStamina > 0f ? Mathf.Clamp01(movement.CurrentStamina / movement.MaxStamina) : 1f;
+            float current = networkMovement != null ? networkMovement.CurrentStamina : movement.CurrentStamina;
+            float max = networkMovement != null ? networkMovement.MaxStamina : movement.MaxStamina;
+            float target01 = max > 0f ? Mathf.Clamp01(current / max) : 1f;
             _displayStamina = Mathf.Lerp(_displayStamina, target01, Time.deltaTime * 14f);
 
             if (staminaBarFill != null)

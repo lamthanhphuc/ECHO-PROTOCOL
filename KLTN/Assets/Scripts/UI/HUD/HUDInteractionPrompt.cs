@@ -48,9 +48,9 @@ namespace EchoProtocol.UI.HUD
 
         private void Update()
         {
-            if (TryGetNetworkPrompt(out var networkPrompt))
+            if (TryGetNetworkPrompt(out var networkPrompt, out var networkIsHold, out var networkProgress01))
             {
-                ShowPrompt(networkPrompt, false, 0f);
+                ShowPrompt(networkPrompt, networkIsHold, networkProgress01);
                 return;
             }
 
@@ -96,9 +96,11 @@ namespace EchoProtocol.UI.HUD
             ShowPrompt(prompt, isHold, progress01);
         }
 
-        private bool TryGetNetworkPrompt(out string prompt)
+        private bool TryGetNetworkPrompt(out string prompt, out bool isHold, out float progress01)
         {
             prompt = null;
+            isHold = false;
+            progress01 = 0f;
             if (networkPlayerInteractor == null
                 || networkPlayerInteractor.Object == null
                 || !networkPlayerInteractor.Object.HasInputAuthority)
@@ -109,6 +111,17 @@ namespace EchoProtocol.UI.HUD
             var candidate = networkPlayerInteractor != null
                 ? networkPlayerInteractor.CurrentCandidate
                 : null;
+            var reviveTarget = networkPlayerInteractor != null
+                ? networkPlayerInteractor.CurrentReviveTarget
+                : null;
+            if (reviveTarget != null && reviveTarget.IsDowned)
+            {
+                prompt = "Giữ để Cứu Đồng Đội";
+                isHold = true;
+                progress01 = reviveTarget.ReviveProgress01;
+                return true;
+            }
+
             if (candidate == null)
             {
                 return false;

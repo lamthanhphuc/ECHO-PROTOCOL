@@ -223,9 +223,19 @@ public static class PlayerSceneSetup
 
         SerializedObject reviveSo = new SerializedObject(reviveInteractable);
         reviveSo.FindProperty("downState").objectReferenceValue = downState;
-        reviveSo.FindProperty("reviveDurationSeconds").floatValue = 2.5f;
-        reviveSo.FindProperty("revivePrompt").stringValue = "Revive teammate";
+        reviveSo.FindProperty("reviveDurationSeconds").floatValue = 3f;
+        reviveSo.FindProperty("revivePrompt").stringValue = "Giữ để Cứu Đồng Đội";
         reviveSo.ApplyModifiedPropertiesWithoutUndo();
+
+        PlayerCrawlPoseCorrector crawlPoseCorrector = player.GetComponent<PlayerCrawlPoseCorrector>();
+        if (crawlPoseCorrector == null)
+        {
+            crawlPoseCorrector = player.AddComponent<PlayerCrawlPoseCorrector>();
+        }
+
+        SerializedObject crawlPoseSo = new SerializedObject(crawlPoseCorrector);
+        crawlPoseSo.FindProperty("downState").objectReferenceValue = downState;
+        crawlPoseSo.ApplyModifiedPropertiesWithoutUndo();
 
         PlayerSpectateController spectateController = player.GetComponent<PlayerSpectateController>();
         if (spectateController == null)

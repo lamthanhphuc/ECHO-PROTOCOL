@@ -17,6 +17,11 @@ namespace EchoProtocol.Networking
         [SerializeField] private InputActionAsset _inputActions;
         [SerializeField] private Transform _rayOrigin;
         [SerializeField, Min(0.1f)] private float _localDetectionDistance = 3f;
+        public const int MaximumFirstAidRevivesPerMatch = 2;
+        [Networked] public int FirstAidRevivesUsedThisMatch { get; private set; }
+        private NetworkPlayerLifeState _currentReviveTarget;
+        public NetworkPlayerLifeState CurrentReviveTarget => _currentReviveTarget;
+
         [SerializeField] private LayerMask _interactionLayers = ~0;
         [SerializeField] private NetworkObject _fieldScannerPickupPrefab;
         [SerializeField] private NetworkObject _noiseMakerPickupPrefab;
@@ -67,11 +72,26 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            if (Object.HasStateAuthority)
+            {
+                FirstAidRevivesUsedThisMatch = 0;
+            }
+
             if (!Object.HasInputAuthority) return;
             _interactAction?.Enable();
             _dropCoreAction?.Enable();
             _teamToolAction?.Enable();
             _helpPingAction?.Enable();
+        }
+
+        public void ResetForMatchAuthoritative()
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority)
+            {
+                return;
+            }
+
+            FirstAidRevivesUsedThisMatch = 0;
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -111,6 +131,12 @@ namespace EchoProtocol.Networking
             }
 
             if (_helpPingAction?.WasPerformedThisFrame() == true) RequestHelpPing();
+            if ((_interactAction?.WasReleasedThisFrame() == true
+                    || _teamToolAction?.WasReleasedThisFrame() == true)
+                && _currentReviveTarget != null)
+            {
+                RequestCancelRevive(_currentReviveTarget);
+            }
 
             var lifeState = GetComponent<NetworkPlayerLifeState>();
             if (lifeState != null && !lifeState.CanInitiateAction)
@@ -120,6 +146,12 @@ namespace EchoProtocol.Networking
             }
 
             CurrentCandidate = TryDetectCandidate(out var candidate) ? candidate : null;
+            if (_currentReviveTarget == null || !_currentReviveTarget.IsReviveInProgress)
+            {
+                _currentReviveTarget = TryDetectReviveCandidate(out var reviveCandidate)
+                    ? reviveCandidate
+                    : null;
+            }
 
             if (_dropCoreAction?.WasPerformedThisFrame() == true)
             {
@@ -168,6 +200,19 @@ namespace EchoProtocol.Networking
             }
 
             RpcRequestRevive(target.Object.Id, NextSequence());
+            _currentReviveTarget = target;
+            return true;
+        }
+
+        public bool RequestCancelRevive(NetworkPlayerLifeState target)
+        {
+            if (Object == null || !Object.HasInputAuthority || target == null || target.Object == null)
+            {
+                return false;
+            }
+
+            RpcRequestCancelRevive(target.Object.Id, NextSequence());
+            _currentReviveTarget = null;
             return true;
         }
 
@@ -213,6 +258,65 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public bool DropHeldItemsAuthoritative(PlayerRef actor)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority || !actor.IsValid)
+            {
+                return false;
+            }
+
+            var state = GetComponent<LobbyPlayerState>();
+            if (state == null)
+            {
+                return false;
+            }
+
+            bool droppedAny = false;
+            if (state.CarriedCoreId.IsValid
+                && Runner != null
+                && Runner.TryFindObject(state.CarriedCoreId, out var coreObject)
+                && coreObject != null
+                && coreObject.TryGetComponent<NetworkPickupItem>(out var core))
+            {
+                GetAuthoritativeDropPose(out var dropPosition, out var dropRotation);
+                droppedAny |= core.TryDrop(actor, dropPosition, dropRotation, state);
+            }
+
+            if (state.ToolId >= 1 && state.ToolId <= 6)
+            {
+                int toolId = state.ToolId;
+                if (TrySpawnDroppedTeamToolAuthoritative(toolId, out _))
+                {
+                    state.SetGameplayToolId(0);
+                    droppedAny = true;
+                }
+            }
+
+            return droppedAny;
+        }
+
+        public bool CanStartFirstAidReviveAuthoritative(LobbyPlayerState state)
+        {
+            return Object != null
+                && Object.IsValid
+                && Object.HasStateAuthority
+                && state != null
+                && state.ToolId == LobbyPlayerState.FirstAidKitToolId
+                && FirstAidRevivesUsedThisMatch < MaximumFirstAidRevivesPerMatch;
+        }
+
+        public bool ConsumeFirstAidReviveAuthoritative(LobbyPlayerState state)
+        {
+            if (!CanStartFirstAidReviveAuthoritative(state))
+            {
+                return false;
+            }
+
+            FirstAidRevivesUsedThisMatch++;
+            ConsumeGameplayTeamTool(state);
+            return true;
+        }
+
         public bool RequestUseTeamTool()
         {
             bool isOnline = Runner != null && Runner.IsRunning && Object != null && Object.IsValid;
@@ -255,6 +359,7 @@ namespace EchoProtocol.Networking
                 if (TryDetectReviveCandidate(out var allyLifeState) && allyLifeState != null && allyLifeState.Object != null)
                 {
                     targetId = allyLifeState.Object.Id;
+                    _currentReviveTarget = allyLifeState;
                 }
                 else
                 {
@@ -397,6 +502,15 @@ namespace EchoProtocol.Networking
 
         private bool TryDetectLocalDoorJammerTargetIntent(out NetworkId targetId)
         {
+            if (CurrentCandidate is NetworkSlidingDoor candidateDoor
+                && candidateDoor.Object != null
+                && candidateDoor.Object.Id.IsValid
+                && candidateDoor.CanAcceptJammer())
+            {
+                targetId = candidateDoor.Object.Id;
+                return true;
+            }
+
             targetId = default;
             var ray = GetLocalDetectionRay();
             if (Physics.Raycast(
@@ -454,7 +568,7 @@ namespace EchoProtocol.Networking
             {
                 // Server-side guard: only FAK holders may revive.
                 var requesterState = GetComponent<LobbyPlayerState>();
-                if (requesterState == null || requesterState.ToolId != 3)
+                if (!CanStartFirstAidReviveAuthoritative(requesterState))
                 {
                     result = InteractionValidationResult.InvalidRequester;
                 }
@@ -477,6 +591,33 @@ namespace EchoProtocol.Networking
             Debug.Log(
                 $"[LifeState] Revive request reviver={requester}, target={targetId}, " +
                 $"sequence={sequence}, result={result}.");
+            RpcInteractionResult(requester, targetId, sequence, (int)result);
+        }
+
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        private void RpcRequestCancelRevive(NetworkId targetId, uint sequence, RpcInfo info = default)
+        {
+            if (!TryResolveRequester(info.Source, out var requester))
+            {
+                return;
+            }
+
+            var result = ValidateRequester(requester, sequence);
+            if (result == InteractionValidationResult.Accepted)
+            {
+                if (!Runner.TryFindObject(targetId, out var targetObject)
+                    || targetObject == null
+                    || !targetObject.TryGetComponent<NetworkPlayerLifeState>(out var targetLifeState))
+                {
+                    result = InteractionValidationResult.InvalidTarget;
+                }
+                else if (!targetLifeState.TryCancelRevive(requester))
+                {
+                    result = InteractionValidationResult.InvalidTargetState;
+                }
+            }
+
+            if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
             RpcInteractionResult(requester, targetId, sequence, (int)result);
         }
 
@@ -721,7 +862,7 @@ namespace EchoProtocol.Networking
             LobbyPlayerState state,
             NetworkId targetId)
         {
-            if (!Object.HasStateAuthority || state == null || state.ToolId != 3)
+            if (!CanStartFirstAidReviveAuthoritative(state))
             {
                 return InteractionValidationResult.InvalidRequester;
             }
@@ -751,7 +892,6 @@ namespace EchoProtocol.Networking
                             $"player:{Object.Id}:tool:{TeamToolOrdinal}",
                             "FIRST_AID_KIT");
                         TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 2f);
-                        ConsumeGameplayTeamTool(state);
                         return InteractionValidationResult.Accepted;
                     }
                 }

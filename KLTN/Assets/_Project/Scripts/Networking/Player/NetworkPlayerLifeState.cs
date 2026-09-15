@@ -88,8 +88,8 @@ namespace EchoProtocol.Networking
         [SerializeField, Range(0.05f, 1f)] private float _crawlSpeedMultiplier = 0.32f;
 
         [Header("Revive")]
-        [SerializeField, Min(0)] private int _maximumRevives = 1;
-        [SerializeField, Min(0.1f)] private float _reviveDurationSeconds = 2.5f;
+        [SerializeField, Min(0)] private int _maximumRevives = 2;
+        [SerializeField, Min(0.1f)] private float _reviveDurationSeconds = 3f;
         [SerializeField, Min(0.1f)] private float _reviveDistance = 3f;
         [SerializeField, Min(1f)] private float _revivedHealth = 35f;
         [SerializeField, Min(0f)] private float _reviveProtectionSeconds = 3f;
@@ -115,6 +115,7 @@ namespace EchoProtocol.Networking
         [Networked] private TickTimer ProtectionTimer { get; set; }
         [Networked] private float ActiveReviveDurationSeconds { get; set; }
         [Networked] private NetworkBool ActiveReviveUsedFirstAidKit { get; set; }
+        [Networked] private float PausedBleedoutRemainingSeconds { get; set; }
 
         private PlayerDownState _legacyDownState;
         [Networked] public NetworkId CaughtByGhostId { get; private set; }
@@ -127,6 +128,13 @@ namespace EchoProtocol.Networking
             (Status == NetworkPlayerLifeStatus.Eliminated || Status == NetworkPlayerLifeStatus.Escaped);
         public float CatchRemaining => Remaining(CatchTimer);
         private PlayerReviveInteractable _legacyReviveInteractable;
+        private Renderer[] _presentationRenderers;
+        private Collider[] _presentationColliders;
+        private bool[] _presentationRendererDefaults;
+        private bool[] _presentationColliderDefaults;
+        private int _presentationRendererCount;
+        private int _presentationColliderCount;
+        private bool _presentationHidden;
 
         public bool CanBeRevived => (Object != null && Object.IsValid) && NetworkPlayerLifeStateRules.CanRevive(
             Status,
@@ -145,7 +153,9 @@ namespace EchoProtocol.Networking
                                      || IsCaught
                                      || IsDowned;
         public float MovementSpeedMultiplier => IsDowned ? _crawlSpeedMultiplier : 1f;
-        public float BleedoutRemaining => Remaining(BleedoutTimer);
+        public float BleedoutRemaining => IsReviveInProgress
+            ? Mathf.Max(0f, PausedBleedoutRemainingSeconds)
+            : Remaining(BleedoutTimer);
         public float ReviveProtectionRemaining => Remaining(ProtectionTimer);
         public float ReviveProgress01 => !IsReviveInProgress
             ? 0f
@@ -168,6 +178,7 @@ namespace EchoProtocol.Networking
                 BleedoutTimer = TickTimer.None;
                 ReviveTimer = TickTimer.None;
                 ProtectionTimer = TickTimer.None;
+                PausedBleedoutRemainingSeconds = 0f;
                 CatchTimer = TickTimer.None;
                 CaughtByGhostId = default;
                 CatchDuration = 0f;
@@ -196,13 +207,6 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            // Bleedout wins a same-tick race against revive completion.
-            if (NetworkPlayerLifeStateRules.CanBleedOut(Status) && BleedoutTimer.Expired(Runner))
-            {
-                CommitEliminated(NetworkPlayerLifeTransitionCause.Bleedout, "BLEEDOUT");
-                return;
-            }
-
             if (IsReviveInProgress)
             {
                 if (!CanContinueRevive())
@@ -215,6 +219,12 @@ namespace EchoProtocol.Networking
                 {
                     CompleteReviveAuthoritative();
                 }
+                return;
+            }
+
+            if (NetworkPlayerLifeStateRules.CanBleedOut(Status) && BleedoutTimer.Expired(Runner))
+            {
+                CommitEliminated(NetworkPlayerLifeTransitionCause.Bleedout, "BLEEDOUT");
                 return;
             }
 
@@ -244,6 +254,7 @@ namespace EchoProtocol.Networking
             BleedoutTimer = TickTimer.None;
             ReviveTimer = TickTimer.None;
             ProtectionTimer = TickTimer.None;
+            PausedBleedoutRemainingSeconds = 0f;
             CatchTimer = TickTimer.None;
             CaughtByGhostId = default;
             CatchDuration = 0f;
@@ -345,10 +356,16 @@ namespace EchoProtocol.Networking
 
             Reviver = reviver;
             var reviverState = reviverObject.GetComponent<LobbyPlayerState>();
-            ActiveReviveUsedFirstAidKit = reviverState != null && reviverState.ToolId == 3;
-            ActiveReviveDurationSeconds = ActiveReviveUsedFirstAidKit
-                ? _reviveDurationSeconds * 0.5f
-                : _reviveDurationSeconds;
+            var reviverInteractor = reviverObject.GetComponent<NetworkPlayerInteractor>();
+            if (reviverInteractor == null || !reviverInteractor.CanStartFirstAidReviveAuthoritative(reviverState))
+            {
+                return false;
+            }
+
+            ActiveReviveUsedFirstAidKit = true;
+            ActiveReviveDurationSeconds = _reviveDurationSeconds;
+            PausedBleedoutRemainingSeconds = BleedoutRemaining;
+            BleedoutTimer = TickTimer.None;
             ReviveTimer = TickTimer.CreateFromSeconds(Runner, ActiveReviveDurationSeconds);
             CommitStatus(NetworkPlayerLifeStatus.Downed, NetworkPlayerLifeTransitionCause.ReviveStarted);
             Debug.Log($"[LifeState] {reviver} started reviving {Object.InputAuthority}.");
@@ -409,9 +426,11 @@ namespace EchoProtocol.Networking
             ReviveTimer = TickTimer.None;
             ClearReviveSnapshot();
             ProtectionTimer = TickTimer.None;
+            PausedBleedoutRemainingSeconds = 0f;
             BleedoutTimer = TickTimer.CreateFromSeconds(Runner, _bleedoutSeconds);
             IsCrawling = true;
             DownCount++;
+            GetComponent<NetworkPlayerInteractor>()?.DropHeldItemsAuthoritative(Object.InputAuthority);
             CommitStatus(NetworkPlayerLifeStatus.Downed, NetworkPlayerLifeTransitionCause.Damage);
             MatchAuthorityRuntime.Instance?.RecordPlayerDowned(
                 Object.InputAuthority,
@@ -428,8 +447,21 @@ namespace EchoProtocol.Networking
                 && Reviver.IsValid
                 && TryResolvePlayerLifeState(Reviver, out var reviverObject, out var reviverLifeState)
                 && NetworkPlayerLifeStateRules.CanInitiateAction(reviverLifeState.Status)
+                && ReviverStillHasUsableFirstAidKit(reviverObject)
                 && Vector3.SqrMagnitude(reviverObject.transform.position - transform.position)
                    <= _reviveDistance * _reviveDistance;
+        }
+
+        private static bool ReviverStillHasUsableFirstAidKit(NetworkObject reviverObject)
+        {
+            if (reviverObject == null
+                || !reviverObject.TryGetComponent<LobbyPlayerState>(out var reviverState)
+                || !reviverObject.TryGetComponent<NetworkPlayerInteractor>(out var reviverInteractor))
+            {
+                return false;
+            }
+
+            return reviverInteractor.CanStartFirstAidReviveAuthoritative(reviverState);
         }
 
         private void CancelReviveAuthoritative(string reason)
@@ -439,7 +471,20 @@ namespace EchoProtocol.Networking
             ReviveTimer = TickTimer.None;
             ClearReviveSnapshot();
             IsCrawling = true;
+            if (PausedBleedoutRemainingSeconds > 0f)
+            {
+                BleedoutTimer = TickTimer.CreateFromSeconds(Runner, PausedBleedoutRemainingSeconds);
+            }
+            else
+            {
+                BleedoutTimer = TickTimer.None;
+            }
+            PausedBleedoutRemainingSeconds = 0f;
             CommitStatus(NetworkPlayerLifeStatus.Downed, NetworkPlayerLifeTransitionCause.ReviveCancelled);
+            if (!BleedoutTimer.IsRunning)
+            {
+                CommitEliminated(NetworkPlayerLifeTransitionCause.Bleedout, "BLEEDOUT_AFTER_REVIVE_CANCEL");
+            }
             Debug.Log($"[LifeState] Revive cancelled target={Object.InputAuthority}, reviver={previousReviver}, reason={reason}.");
         }
 
@@ -449,10 +494,20 @@ namespace EchoProtocol.Networking
 
             var completedReviver = Reviver;
             var usedFirstAidKit = ActiveReviveUsedFirstAidKit;
+            if (!TryResolvePlayerLifeState(completedReviver, out var reviverObject, out _)
+                || !reviverObject.TryGetComponent<LobbyPlayerState>(out var reviverState)
+                || !reviverObject.TryGetComponent<NetworkPlayerInteractor>(out var reviverInteractor)
+                || !reviverInteractor.ConsumeFirstAidReviveAuthoritative(reviverState))
+            {
+                CancelReviveAuthoritative("first aid kit missing before completion");
+                return;
+            }
+
             Reviver = PlayerRef.None;
             ReviveTimer = TickTimer.None;
             ClearReviveSnapshot();
             BleedoutTimer = TickTimer.None;
+            PausedBleedoutRemainingSeconds = 0f;
             IsCrawling = false;
             Health = Mathf.Clamp(_revivedHealth, 1f, _maximumHealth);
             ReviveCount++;
@@ -495,6 +550,7 @@ namespace EchoProtocol.Networking
             BleedoutTimer = TickTimer.None;
             ReviveTimer = TickTimer.None;
             ProtectionTimer = TickTimer.None;
+            PausedBleedoutRemainingSeconds = 0f;
             ClearReviveSnapshot();
         }
 
@@ -597,6 +653,109 @@ namespace EchoProtocol.Networking
                 reviverObject,
                 ReviveProgress01,
                 LastTransitionCause == NetworkPlayerLifeTransitionCause.ReviveCompleted);
+
+            ApplyEliminatedPresentation(Status == NetworkPlayerLifeStatus.Eliminated
+                                        || Status == NetworkPlayerLifeStatus.Escaped);
+        }
+
+        private void ApplyEliminatedPresentation(bool hidden)
+        {
+            if (hidden)
+            {
+                HideCurrentPresentationComponents();
+                _presentationHidden = true;
+                return;
+            }
+
+            if (!_presentationHidden
+                && _presentationRenderers != null
+                && _presentationColliders != null)
+            {
+                return;
+            }
+
+            _presentationHidden = hidden;
+            EnsurePresentationVisibilityCache();
+
+            for (int i = 0; i < _presentationRenderers.Length; i++)
+            {
+                if (_presentationRenderers[i] != null)
+                {
+                    _presentationRenderers[i].enabled = hidden ? false : _presentationRendererDefaults[i];
+                }
+            }
+
+            for (int i = 0; i < _presentationColliders.Length; i++)
+            {
+                if (_presentationColliders[i] != null)
+                {
+                    _presentationColliders[i].enabled = hidden ? false : _presentationColliderDefaults[i];
+                }
+            }
+        }
+
+        private void HideCurrentPresentationComponents()
+        {
+            EnsurePresentationVisibilityCache();
+
+            var renderers = GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length != _presentationRendererCount)
+            {
+                _presentationRenderers = null;
+                EnsurePresentationVisibilityCache();
+                renderers = _presentationRenderers;
+            }
+
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i] != null && renderers[i].enabled)
+                {
+                    renderers[i].enabled = false;
+                }
+            }
+
+            var colliders = GetComponentsInChildren<Collider>(true);
+            if (colliders.Length != _presentationColliderCount)
+            {
+                _presentationColliders = null;
+                EnsurePresentationVisibilityCache();
+                colliders = _presentationColliders;
+            }
+
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                if (colliders[i] != null && colliders[i].enabled)
+                {
+                    colliders[i].enabled = false;
+                }
+            }
+        }
+
+        private void EnsurePresentationVisibilityCache()
+        {
+            if (_presentationRenderers == null)
+            {
+                _presentationRenderers = GetComponentsInChildren<Renderer>(true);
+                _presentationRendererCount = _presentationRenderers.Length;
+                _presentationRendererDefaults = new bool[_presentationRenderers.Length];
+                for (int i = 0; i < _presentationRenderers.Length; i++)
+                {
+                    _presentationRendererDefaults[i] = _presentationRenderers[i] != null
+                        && _presentationRenderers[i].enabled;
+                }
+            }
+
+            if (_presentationColliders == null)
+            {
+                _presentationColliders = GetComponentsInChildren<Collider>(true);
+                _presentationColliderCount = _presentationColliders.Length;
+                _presentationColliderDefaults = new bool[_presentationColliders.Length];
+                for (int i = 0; i < _presentationColliders.Length; i++)
+                {
+                    _presentationColliderDefaults[i] = _presentationColliders[i] != null
+                        && _presentationColliders[i].enabled;
+                }
+            }
         }
 
         private void HandleReplicatedStateChanged()

@@ -40,6 +40,7 @@ public class PlayerAnimatorDriver : MonoBehaviour
     [SerializeField] private float runSpeedReference = 6.2f;
 
     private float _smoothedSpeed;
+    private bool _wasDowned;
 
     private void Awake()
     {
@@ -122,10 +123,11 @@ public class PlayerAnimatorDriver : MonoBehaviour
         animator.SetBool(IsCrouchingHash, isCrouching);
         animator.SetBool(IsCarryingHash, isCarrying);
         animator.SetBool(IsDownedHash, isDowned);
-        if (isDowned && !isMoving)
+        if (isDowned && !isMoving && !_wasDowned)
         {
             animator.Play(DownedCrawlStateHash, 0, 0f);
         }
+        _wasDowned = isDowned;
     }
 
     public void TriggerRevive()

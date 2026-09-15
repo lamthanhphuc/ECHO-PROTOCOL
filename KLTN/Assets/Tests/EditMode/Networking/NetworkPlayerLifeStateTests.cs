@@ -64,8 +64,13 @@ namespace EchoProtocol.Networking.Tests
             var bleedoutCheck = lifeSource.IndexOf("BleedoutTimer.Expired(Runner)", System.StringComparison.Ordinal);
             var reviveCheck = lifeSource.IndexOf("ReviveTimer.Expired(Runner)", System.StringComparison.Ordinal);
             Assert.That(bleedoutCheck, Is.GreaterThanOrEqualTo(0));
-            Assert.That(reviveCheck, Is.GreaterThan(bleedoutCheck),
-                "Bleedout must win a same-tick race against revive completion.");
+            Assert.That(reviveCheck, Is.GreaterThanOrEqualTo(0));
+            Assert.That(reviveCheck, Is.LessThan(bleedoutCheck),
+                "Revive completion must win a same-tick race while revive pauses bleedout.");
+            StringAssert.Contains("PausedBleedoutRemainingSeconds = BleedoutRemaining", lifeSource);
+            StringAssert.Contains("BleedoutTimer = TickTimer.None", lifeSource);
+            StringAssert.Contains("CommitEliminated(NetworkPlayerLifeTransitionCause.Bleedout", lifeSource);
+            StringAssert.Contains("DropHeldItemsAuthoritative(Object.InputAuthority)", lifeSource);
         }
     }
 }

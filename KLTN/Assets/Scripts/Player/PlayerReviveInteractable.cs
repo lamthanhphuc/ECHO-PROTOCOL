@@ -6,7 +6,7 @@ using UnityEngine.Events;
 public class PlayerReviveInteractable : MonoBehaviour, IInteractable
 {
     [SerializeField] private PlayerDownState downState;
-    [SerializeField] private float reviveDurationSeconds = 6f;
+    [SerializeField] private float reviveDurationSeconds = 3f;
     [SerializeField] private string revivePrompt = "Giữ để Cứu Đồng Đội";
     [SerializeField] private UnityEvent reviveStarted;
     [SerializeField] private UnityEvent reviveCompleted;
@@ -21,9 +21,11 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
     public bool IsReviving => _networkAuthorityPresentationOnly ? _authoritativeIsReviving : _reviver != null;
     public float ReviveProgress01 => _networkAuthorityPresentationOnly
         ? _authoritativeProgress01
-        : reviveDurationSeconds <= 0f ? 1f : Mathf.Clamp01(_reviveTimer / GetEffectiveReviveDuration(_reviver));
+        : reviveDurationSeconds <= 0f ? 1f : Mathf.Clamp01(_reviveTimer / reviveDurationSeconds);
     public GameObject Reviver => _reviver;
-    public string InteractionPrompt => string.IsNullOrWhiteSpace(revivePrompt) || revivePrompt == "Revive teammate" || revivePrompt == "Cứu đồng đội" ? "Giữ để Cứu Đồng Đội" : revivePrompt;
+    public string InteractionPrompt => string.IsNullOrWhiteSpace(revivePrompt)
+        ? "Giữ để Cứu Đồng Đội"
+        : revivePrompt;
 
     private void Awake()
     {
@@ -35,9 +37,7 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
 
     private void Update()
     {
-        if (_networkAuthorityPresentationOnly) return;
-
-        if (_reviver == null)
+        if (_networkAuthorityPresentationOnly || _reviver == null)
         {
             return;
         }
@@ -48,35 +48,11 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
             return;
         }
 
-        // First Aid Kit bonus: nếu reviver đang cầm FAK (ToolId=3) → rút ngắn thời gian cứu 50%
-        float effectiveDuration = GetEffectiveReviveDuration(_reviver);
         _reviveTimer += Time.deltaTime;
-        if (_reviveTimer >= effectiveDuration)
+        if (_reviveTimer >= reviveDurationSeconds)
         {
             CompleteRevive();
         }
-    }
-
-    /// <summary>
-    /// Tính thời gian revive thực tế (có tính bonus First Aid Kit).
-    /// </summary>
-    private float GetEffectiveReviveDuration(GameObject reviver)
-    {
-        if (reviver == null) return reviveDurationSeconds;
-        var lobbyState = reviver.GetComponentInParent<LobbyPlayerState>();
-        if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.ToolId == 3)
-        {
-            // FAK bonus: giảm 50% thời gian (6s → 3s)
-            return reviveDurationSeconds * 0.5f;
-        }
-        var inventory = reviver.GetComponentInParent<PlayerInventory>();
-        InventoryItemDefinition teamTool = inventory != null ? inventory.TeamToolSlot : null;
-        if (teamTool != null && teamTool.ItemId.ToLowerInvariant().Contains("first_aid"))
-        {
-            return reviveDurationSeconds * 0.5f;
-        }
-
-        return reviveDurationSeconds;
     }
 
     public bool CanInteract(GameObject interactor)
@@ -94,9 +70,7 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
 
     public void Interact(GameObject interactor)
     {
-        if (_networkAuthorityPresentationOnly) return;
-
-        if (!CanInteract(interactor))
+        if (_networkAuthorityPresentationOnly || !CanInteract(interactor))
         {
             return;
         }
@@ -105,19 +79,19 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
         {
             _reviver = interactor;
             _reviveTimer = 0f;
+            SetReviverAnimation(_reviver, true);
             reviveStarted?.Invoke();
         }
     }
 
     public void InterruptRevive()
     {
-        if (_networkAuthorityPresentationOnly) return;
-
-        if (_reviver == null)
+        if (_networkAuthorityPresentationOnly || _reviver == null)
         {
             return;
         }
 
+        SetReviverAnimation(_reviver, false);
         _reviver = null;
         _reviveTimer = 0f;
         reviveInterrupted?.Invoke();
@@ -135,13 +109,19 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
         bool completed)
     {
         var wasReviving = _authoritativeIsReviving;
+        var previousReviver = _reviver;
         _authoritativeIsReviving = isReviving;
         _authoritativeProgress01 = Mathf.Clamp01(progress01);
         _reviver = reviver;
 
-        if (!wasReviving && isReviving) reviveStarted?.Invoke();
+        if (!wasReviving && isReviving)
+        {
+            SetReviverAnimation(_reviver, true);
+            reviveStarted?.Invoke();
+        }
         else if (wasReviving && !isReviving)
         {
+            SetReviverAnimation(previousReviver, false);
             if (completed) reviveCompleted?.Invoke();
             else reviveInterrupted?.Invoke();
         }
@@ -154,8 +134,20 @@ public class PlayerReviveInteractable : MonoBehaviour, IInteractable
             reviveCompleted?.Invoke();
         }
 
+        SetReviverAnimation(_reviver, false);
         _reviver = null;
         _reviveTimer = 0f;
+    }
+
+    private static void SetReviverAnimation(GameObject reviver, bool isReviving)
+    {
+        if (reviver == null) return;
+
+        var driver = reviver.GetComponentInParent<PlayerAnimatorDriver>();
+        if (driver != null)
+        {
+            driver.SetReviving(isReviving);
+        }
     }
 
     private static bool CanReviverContinue(GameObject reviver)

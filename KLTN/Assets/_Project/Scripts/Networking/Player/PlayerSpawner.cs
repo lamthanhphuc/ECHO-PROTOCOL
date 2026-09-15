@@ -90,7 +90,21 @@ namespace EchoProtocol.Networking
 
         private void HandleNetworkSceneLoadDone(NetworkRunner runner)
         {
-            if (SceneManager.GetActiveScene().name != LobbyManager.GameSceneName) return;
+            if (SceneManager.GetActiveScene().name != LobbyManager.GameSceneName)
+            {
+                if (runner.IsServer)
+                {
+                    TryAttachLifecycle(runner);
+                    foreach (var player in runner.ActivePlayers)
+                    {
+                        if (runner.TryGetPlayerObject(player, out var playerObject) && playerObject != null)
+                        {
+                            ConfigureExistingPlayerObject(player, playerObject, gameplay: false);
+                        }
+                    }
+                }
+                return;
+            }
 
             DisableLegacyObjectiveMutators();
             EnsureGameplayHUD();
@@ -595,6 +609,11 @@ namespace EchoProtocol.Networking
             if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && playerObject.HasStateAuthority && gameplay)
             {
                 lifeState.ResetForMatchAuthoritative();
+            }
+
+            if (playerObject.TryGetComponent<NetworkPlayerInteractor>(out var interactor) && playerObject.HasStateAuthority && gameplay)
+            {
+                interactor.ResetForMatchAuthoritative();
             }
 
             if (playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement) && playerObject.HasStateAuthority)

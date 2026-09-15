@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
 public class PlayerCamera : MonoBehaviour
 {
@@ -16,7 +17,13 @@ public class PlayerCamera : MonoBehaviour
     [SerializeField] private float crouchCameraRightOffset = 0.2f;
     [SerializeField] private float downedCameraRightOffset = 0.1f;
     [SerializeField] private float downedCameraForwardOffset = 0.4f;
+    [SerializeField] private float downedLockedPitch = 0f;
+    [SerializeField, Min(0.5f)] private float spectateThirdPersonDistance = 4.5f;
+    [SerializeField, Min(0.2f)] private float spectateThirdPersonHeight = 2.1f;
+    [SerializeField, Min(0.2f)] private float spectateLookAtHeight = 1.35f;
     [SerializeField] private float nearClipPlane = 0.03f;
+    [FormerlySerializedAs("useLimitedVisionEffect")]
+    [SerializeField] private bool useWorldDarkness = true;
     [SerializeField] private bool lockCursorOnEnable = true;
 
     private InputAction _lookAction;
@@ -33,14 +40,21 @@ public class PlayerCamera : MonoBehaviour
     private float? _clampedYawCenter;
     private float _clampedYawRange;
     private float? _lockedPitch;
+    private bool _driveTargetRotation = true;
+    private bool _spectateThirdPerson;
 
     public float Yaw => _yaw;
     public float Pitch => _pitch;
     public Transform Target => target;
-
     public void SetTarget(Transform newTarget)
     {
+        SetTarget(newTarget, true);
+    }
+
+    public void SetTarget(Transform newTarget, bool driveTargetRotation)
+    {
         target = newTarget;
+        _driveTargetRotation = driveTargetRotation;
         _playerMovement = target != null ? target.GetComponent<PlayerMovement>() : null;
         _networkMovement = target != null ? target.GetComponent<EchoProtocol.Networking.NetworkPlayerMovement>() : null;
         _characterController = target != null ? target.GetComponent<CharacterController>() : null;
@@ -57,6 +71,13 @@ public class PlayerCamera : MonoBehaviour
         {
             cameraComponent.nearClipPlane = Mathf.Max(0.01f, nearClipPlane);
         }
+
+        EnsureWorldDarkness();
+    }
+
+    public void SetSpectateThirdPerson(bool enabled)
+    {
+        _spectateThirdPerson = enabled;
     }
 
     public bool AutoFindTarget()
@@ -130,6 +151,8 @@ public class PlayerCamera : MonoBehaviour
 
     private void OnEnable()
     {
+        EnsureWorldDarkness();
+
         if (target == null || !target.gameObject.activeInHierarchy)
         {
             AutoFindTarget();
@@ -226,6 +249,11 @@ public class PlayerCamera : MonoBehaviour
         bool isCrouching = (_playerMovement != null && _playerMovement.IsCrouching)
             || (_networkMovement != null && _networkMovement.IsAnimationCrouching);
 
+        if (isDowned && !_spectateThirdPerson)
+        {
+            _pitch = Mathf.Clamp(downedLockedPitch, minPitch, maxPitch);
+        }
+
         float targetEyeHeight =
             _forcedEyeHeight ??
             (isDowned
@@ -269,17 +297,32 @@ public class PlayerCamera : MonoBehaviour
                 : -1.0f;
         }
 
-        transform.position =
-            target.position +
-            Vector3.up * (feetYOffset + _currentEyeHeight) +
-            Quaternion.Euler(0f, _yaw, 0f)
-            * (Vector3.forward * Mathf.Max(0f, targetForwardOffset)
-               + Vector3.right * _currentRightOffset);
+        if (_spectateThirdPerson && !_driveTargetRotation)
+        {
+            var yawRotation = Quaternion.Euler(0f, _yaw, 0f);
+            var lookAt = target.position + Vector3.up * spectateLookAtHeight;
+            transform.position =
+                target.position
+                + Vector3.up * spectateThirdPersonHeight
+                - yawRotation * Vector3.forward * spectateThirdPersonDistance;
+            transform.rotation = Quaternion.LookRotation(
+                (lookAt - transform.position).normalized,
+                Vector3.up);
+        }
+        else
+        {
+            transform.position =
+                target.position +
+                Vector3.up * (feetYOffset + _currentEyeHeight) +
+                Quaternion.Euler(0f, _yaw, 0f)
+                * (Vector3.forward * Mathf.Max(0f, targetForwardOffset)
+                   + Vector3.right * _currentRightOffset);
 
-        transform.rotation =
-            Quaternion.Euler(_pitch, _yaw, 0f);
+            transform.rotation =
+                Quaternion.Euler(_pitch, _yaw, 0f);
+        }
 
-        if (target != null)
+        if (target != null && _driveTargetRotation)
         {
             target.rotation = Quaternion.Euler(0f, _yaw, 0f);
         }
@@ -326,7 +369,7 @@ public class PlayerCamera : MonoBehaviour
             _pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
         }
 
-        if (target != null)
+        if (target != null && _driveTargetRotation)
         {
             target.rotation = Quaternion.Euler(0f, _yaw, 0f);
         }
@@ -352,7 +395,7 @@ public class PlayerCamera : MonoBehaviour
         offset = Mathf.Clamp(offset, -_clampedYawRange, _clampedYawRange);
         _yaw = Mathf.Repeat(_clampedYawCenter.Value + offset, 360f);
 
-        if (target != null)
+        if (target != null && _driveTargetRotation)
         {
             target.rotation = Quaternion.Euler(0f, _yaw, 0f);
         }
@@ -370,5 +413,15 @@ public class PlayerCamera : MonoBehaviour
         {
             cameraComponent.nearClipPlane = Mathf.Max(0.01f, nearClipPlane);
         }
+    }
+
+    private void EnsureWorldDarkness()
+    {
+        if (!useWorldDarkness || GetComponent<PlayerWorldDarknessController>() != null)
+        {
+            return;
+        }
+
+        gameObject.AddComponent<PlayerWorldDarknessController>();
     }
 }

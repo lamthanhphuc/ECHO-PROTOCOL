@@ -14,10 +14,18 @@ public class PlayerFlashlight : MonoBehaviour
     [Header("Settings")]
     [SerializeField] private bool startOn = true;
     [SerializeField] private float toggleCooldown = 0.2f;
+    [SerializeField, Min(0f)] private float beamIntensity = 33f;
+    [SerializeField, Min(1f)] private float beamRange = 44f;
+    [SerializeField, Range(1f, 179f)] private float beamSpotAngle = 42f;
+    [SerializeField, Range(1f, 179f)] private float beamInnerSpotAngle = 24f;
+    [SerializeField, Min(0.5f)] private float visibleBeamLength = 15.5f;
+    [SerializeField, Range(0f, 1f)] private float visibleBeamAlpha = 0.16f;
+    [SerializeField] private Color visibleBeamColor = new Color(1f, 0.92f, 0.72f, 1f);
 
     private InputAction _flashlightAction;
     private float _cooldownUntil;
     private PlayerCamera _playerCamera;
+    private FlashlightBeamVisual _beamVisual;
 
     private void Awake()
     {
@@ -73,6 +81,8 @@ public class PlayerFlashlight : MonoBehaviour
             if (flashlight != null)
             {
                 flashlight.enabled = !flashlight.enabled;
+                EnsureBeamVisual();
+                _beamVisual.SetVisible(flashlight.enabled);
             }
 
             _cooldownUntil = Time.time + toggleCooldown;
@@ -134,10 +144,51 @@ public class PlayerFlashlight : MonoBehaviour
             flashlight = lightObj.AddComponent<Light>();
             flashlight.type = LightType.Spot;
             flashlight.color = new Color(1f, 0.96f, 0.88f);
-            flashlight.intensity = 2.8f;
-            flashlight.range = 28f;
-            flashlight.spotAngle = 65f;
-            flashlight.innerSpotAngle = 45f;
+        }
+
+        ApplyBeamTuning();
+    }
+
+    private void ApplyBeamTuning()
+    {
+        if (flashlight == null)
+        {
+            return;
+        }
+
+        flashlight.type = LightType.Spot;
+        flashlight.color = new Color(1f, 0.96f, 0.88f);
+        flashlight.intensity = beamIntensity;
+        flashlight.range = beamRange;
+        flashlight.spotAngle = beamSpotAngle;
+        flashlight.innerSpotAngle = Mathf.Min(beamInnerSpotAngle, beamSpotAngle);
+        flashlight.renderMode = LightRenderMode.ForcePixel;
+        flashlight.bounceIntensity = 0.4f;
+        flashlight.shadows = LightShadows.Soft;
+
+        EnsureBeamVisual();
+        _beamVisual.Configure(
+            Mathf.Min(visibleBeamLength, beamRange),
+            beamSpotAngle,
+            visibleBeamColor,
+            visibleBeamAlpha);
+        _beamVisual.SetVisible(flashlight.enabled);
+    }
+
+    private void EnsureBeamVisual()
+    {
+        if (flashlight == null)
+        {
+            return;
+        }
+
+        if (_beamVisual == null)
+        {
+            _beamVisual = flashlight.GetComponent<FlashlightBeamVisual>();
+            if (_beamVisual == null)
+            {
+                _beamVisual = flashlight.gameObject.AddComponent<FlashlightBeamVisual>();
+            }
         }
     }
 

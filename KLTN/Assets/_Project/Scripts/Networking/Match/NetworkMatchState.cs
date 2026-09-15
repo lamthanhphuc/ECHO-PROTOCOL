@@ -68,6 +68,7 @@ namespace EchoProtocol.Networking
 
         [SerializeField, Min(1f)] private float _escapeDurationSeconds = 45f;
         [SerializeField, Min(1f)] private float _matchDurationSeconds = 900f;
+        [SerializeField, Min(0.1f)] private float _returnToLobbyDelaySeconds = 4f;
 
         [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
         public NetworkMatchPhase CurrentPhase { get; private set; }
@@ -89,6 +90,8 @@ namespace EchoProtocol.Networking
         [Networked] public uint EndOrdinal { get; private set; }
         [Networked] private TickTimer EscapeTimer { get; set; }
         [Networked] private TickTimer MatchTimer { get; set; }
+        [Networked] private TickTimer ReturnToLobbyTimer { get; set; }
+        [Networked] private NetworkBool ReturnToLobbyRequested { get; set; }
 
         private MatchFlowController _legacyMatchFlow;
         private EscapeDoorCountdown _legacyEscapeCountdown;
@@ -117,6 +120,8 @@ namespace EchoProtocol.Networking
                 EndOrdinal = 0;
                 EscapeTimer = TickTimer.None;
                 MatchTimer = TickTimer.CreateFromSeconds(Runner, _matchDurationSeconds);
+                ReturnToLobbyTimer = TickTimer.None;
+                ReturnToLobbyRequested = false;
             }
 
             ApplyPresentation(notifyListeners: true);
@@ -129,7 +134,26 @@ namespace EchoProtocol.Networking
 
         public override void FixedUpdateNetwork()
         {
-            if (!Object.HasStateAuthority || IsEnded) return;
+            if (!Object.HasStateAuthority) return;
+
+            if (IsEnded)
+            {
+                if (!ReturnToLobbyRequested && ReturnToLobbyTimer.Expired(Runner))
+                {
+                    ReturnToLobbyRequested = true;
+                    if (Runner != null && Runner.IsSceneAuthority)
+                    {
+                        if (Runner.SessionInfo.IsValid)
+                        {
+                            Runner.SessionInfo.IsOpen = true;
+                            Runner.SessionInfo.IsVisible = true;
+                        }
+
+                        _ = Runner.LoadScene(NetworkBootstrap.LobbySceneName, UnityEngine.SceneManagement.LoadSceneMode.Single);
+                    }
+                }
+                return;
+            }
 
             if (MatchTimer.Expired(Runner))
             {
@@ -305,6 +329,10 @@ namespace EchoProtocol.Networking
             FinalSurvivorCount = survivorCount;
             EscapeTimer = TickTimer.None;
             MatchTimer = TickTimer.None;
+            ReturnToLobbyTimer = TickTimer.CreateFromSeconds(
+                Runner,
+                Mathf.Max(0.1f, _returnToLobbyDelaySeconds));
+            ReturnToLobbyRequested = false;
             EndOrdinal++;
             if (EndOrdinal == 0) EndOrdinal = 1;
             AdvancePhaseOrdinal();

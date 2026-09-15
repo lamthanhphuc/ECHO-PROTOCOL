@@ -181,7 +181,8 @@ namespace EchoProtocol.Player.Tests
             var hud = File.ReadAllText("Assets/Scripts/UI/HUD/GameplayHUDManager.cs");
 
             StringAssert.Contains("gameplay && !state.IsGameplayPlayer", spawner);
-            StringAssert.Contains("_reviveDurationSeconds * 0.5f", life);
+            StringAssert.Contains("ActiveReviveDurationSeconds = _reviveDurationSeconds", life);
+            StringAssert.Contains("PausedBleedoutRemainingSeconds = BleedoutRemaining", life);
             StringAssert.Contains("ActiveReviveDurationSeconds", life);
             StringAssert.Contains("movement == null &&", animator);
             StringAssert.Contains("networkMovement == null &&", animator);

@@ -24,6 +24,10 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(0f)] private float _walkSpeed = 4f;
         [SerializeField, Min(0f)] private float _sprintSpeed = 7f;
         [SerializeField] private bool _allowJump = false;
+        [SerializeField, Min(1f)] private float _maxStamina = 100f;
+        [SerializeField, Min(0f)] private float _sprintStaminaDrainPerSecond = 25f;
+        [SerializeField, Min(0f)] private float _staminaRegenPerSecond = 18f;
+        [SerializeField, Min(0f)] private float _minStaminaToSprint = 5f;
 
         private NetworkCharacterController _controller;
         private CharacterController _unityCharacterController;
@@ -43,11 +47,14 @@ namespace EchoProtocol.Networking
         private Vector2 _offlineAnimationMoveInput;
         private bool _offlineAnimationSprinting;
         private bool _offlineAnimationCrouching;
+        private float _offlineCurrentStamina;
 
         [SerializeField, Min(0f)] private float _standingHeight = 2f;
         [SerializeField, Min(0f)] private float _crouchHeight = 1.2f;
+        [SerializeField, Min(0f)] private float _downedHeight = 0.75f;
         [SerializeField, Min(0f)] private float _crouchTransitionSpeed = 10f;
 
+        [Networked] private float NetworkCurrentStamina { get; set; }
         [Networked] private float LookPitch { get; set; }
         [Networked] private float AnimationMoveX { get; set; }
         [Networked] private float AnimationMoveY { get; set; }
@@ -57,6 +64,19 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkBool IsCrouching { get; set; }
 
         public float CurrentPitch => LookPitch;
+        public float MaxStamina => _maxStamina;
+        public float CurrentStamina
+        {
+            get
+            {
+                if (Runner == null || Object == null || !Object.IsValid)
+                {
+                    return _offlineCurrentStamina;
+                }
+
+                return NetworkCurrentStamina;
+            }
+        }
 
         public Vector2 AnimationMoveInput
         {
@@ -107,6 +127,7 @@ namespace EchoProtocol.Networking
         {
             _controller = GetComponent<NetworkCharacterController>();
             _unityCharacterController = GetComponent<CharacterController>();
+            _offlineCurrentStamina = _maxStamina;
             ApplyCharacterControllerDimensions(_standingHeight, immediate: true);
 
             if (_inputActions != null)
@@ -186,12 +207,22 @@ namespace EchoProtocol.Networking
                 localDirection.Normalize();
             }
 
-            bool isSprintMoving = !isCarryingCoreOffline && !_offlineAnimationCrouching && sprintHeld && CanSprintInDirection(moveInput) && localDirection.sqrMagnitude > 0.01f;
+            bool isSprintMoving = !isCarryingCoreOffline
+                && !_offlineAnimationCrouching
+                && sprintHeld
+                && _offlineCurrentStamina > _minStaminaToSprint
+                && CanSprintInDirection(moveInput)
+                && localDirection.sqrMagnitude > 0.01f;
             float speed = _offlineAnimationCrouching ? _walkSpeed * 0.55f : isSprintMoving ? _sprintSpeed : _walkSpeed;
 
             _offlineAnimationMoveInput = new Vector2(localDirection.x, localDirection.z);
             _offlineAnimationSprinting = isSprintMoving;
-            ApplyCharacterControllerDimensions(_offlineAnimationCrouching ? _crouchHeight : _standingHeight, immediate: false);
+
+            var offlineLifeState = GetComponent<NetworkPlayerLifeState>();
+            bool isOfflineDowned = offlineLifeState != null && offlineLifeState.IsDowned;
+            ApplyCharacterControllerDimensions(
+                isOfflineDowned ? _downedHeight : _offlineAnimationCrouching ? _crouchHeight : _standingHeight,
+                immediate: false);
 
             float yaw = _playerCamera != null ? _playerCamera.Yaw : transform.eulerAngles.y;
             Quaternion lookRotation = Quaternion.Euler(0f, yaw, 0f);
@@ -214,6 +245,8 @@ namespace EchoProtocol.Networking
 
             Vector3 finalMotion = (worldDirection + Vector3.up * _offlineVelocity.y) * Time.deltaTime;
             _unityCharacterController.Move(finalMotion);
+
+            UpdateStaminaOffline(isSprintMoving);
         }
 
         public override void Spawned()
@@ -222,6 +255,7 @@ namespace EchoProtocol.Networking
             {
                 IsHidden = false;
                 CurrentHideSpotId = 0UL;
+                NetworkCurrentStamina = _maxStamina;
             }
 
             if (!Object.HasInputAuthority) return;
@@ -280,6 +314,7 @@ namespace EchoProtocol.Networking
             {
                 AnimationMoveX = AnimationMoveY = 0f;
                 AnimationSprintHeld = false;
+                UpdateStaminaAuthoritative(false);
                 return;
             }
 
@@ -289,10 +324,15 @@ namespace EchoProtocol.Networking
                 AnimationMoveX = 0f;
                 AnimationMoveY = 0f;
                 AnimationSprintHeld = false;
+                UpdateStaminaAuthoritative(false);
                 return;
             }
 
-            if (!GetInput(out NetworkPlayerInput input)) return;
+            if (!GetInput(out NetworkPlayerInput input))
+            {
+                UpdateStaminaAuthoritative(false);
+                return;
+            }
 
             var localDirection = new Vector3(input.Move.x, 0f, input.Move.y);
             if (localDirection.sqrMagnitude > 1f)
@@ -320,9 +360,11 @@ namespace EchoProtocol.Networking
                 !effectiveCrouch &&
                 !isCarryingCore &&
                 input.SprintHeld &&
+                NetworkCurrentStamina > _minStaminaToSprint &&
                 CanSprintInDirection(input.Move) &&
                 direction.sqrMagnitude > 0.01f;
             AnimationSprintHeld = isSprintMoving;
+            UpdateStaminaAuthoritative(isSprintMoving);
 
             var baseSpeed = effectiveCrouch
                 ? _walkSpeed * 0.55f
@@ -410,7 +452,37 @@ namespace EchoProtocol.Networking
                 _controller.Jump();
             }
 
-            ApplyCharacterControllerDimensions(effectiveCrouch ? _crouchHeight : _standingHeight, immediate: false);
+            bool isDowned = lifeState != null && lifeState.IsDowned;
+            ApplyCharacterControllerDimensions(
+                isDowned ? _downedHeight : effectiveCrouch ? _crouchHeight : _standingHeight,
+                immediate: false);
+        }
+
+        private void UpdateStaminaAuthoritative(bool isSprinting)
+        {
+            if (!Object.HasStateAuthority) return;
+
+            float delta = Runner != null ? Runner.DeltaTime : Time.deltaTime;
+            float stamina = NetworkCurrentStamina <= 0f && !isSprinting
+                ? NetworkCurrentStamina
+                : Mathf.Clamp(NetworkCurrentStamina, 0f, _maxStamina);
+            stamina += (isSprinting ? -_sprintStaminaDrainPerSecond : _staminaRegenPerSecond) * delta;
+            NetworkCurrentStamina = Mathf.Clamp(stamina, 0f, _maxStamina);
+            if (NetworkCurrentStamina <= 0f)
+            {
+                AnimationSprintHeld = false;
+            }
+        }
+
+        private void UpdateStaminaOffline(bool isSprinting)
+        {
+            float delta = Time.deltaTime;
+            _offlineCurrentStamina += (isSprinting ? -_sprintStaminaDrainPerSecond : _staminaRegenPerSecond) * delta;
+            _offlineCurrentStamina = Mathf.Clamp(_offlineCurrentStamina, 0f, _maxStamina);
+            if (_offlineCurrentStamina <= 0f)
+            {
+                _offlineAnimationSprinting = false;
+            }
         }
 
         private static float GetMovementNoiseInterval(
