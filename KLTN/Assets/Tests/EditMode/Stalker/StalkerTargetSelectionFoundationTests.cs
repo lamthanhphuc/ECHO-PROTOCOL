@@ -14,6 +14,9 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string EligibilityResultTypeName = "EchoProtocol.AI.Stalker.StalkerTargetEligibilityResult";
         private const string EligibilityServiceTypeName = "EchoProtocol.AI.Stalker.StalkerTargetEligibility";
         private const string TargetCandidateTypeName = "EchoProtocol.AI.Stalker.StalkerTargetCandidate";
+        private const string PolicySignalsTypeName = "EchoProtocol.AI.Stalker.StalkerTargetPolicySignals";
+        private const string PolicyCandidateTypeName = "EchoProtocol.AI.Stalker.StalkerTargetPolicyCandidate";
+        private const string PolicyContextTypeName = "EchoProtocol.AI.Stalker.StalkerTargetPolicyContext";
         private const string TargetSelectorTypeName = "EchoProtocol.AI.Stalker.StalkerTargetSelector";
         private const string TargetPolicyTypeName = "EchoProtocol.AI.Stalker.NearestEligibleVisibleTargetPolicy";
 
@@ -211,16 +214,26 @@ namespace EchoProtocol.AI.Stalker.Tests
                 Is.Not.Null,
                 "Missing NearestEligibleVisibleTargetPolicy.TrySelectTarget.");
 
+            var context = Activator.CreateInstance(
+                ResolveType(PolicyContextTypeName),
+                CreateSimulationTime(10, 1d),
+                Activator.CreateInstance(
+                    ResolveType(PlayerIdTypeName)));
+
             var args = new object[]
             {
-                CreateCandidateArray(candidates),
+                CreatePolicyCandidateArray(candidates),
+                context,
                 null
             };
 
             var result = method.Invoke(policy, args);
-            Assert.That(result, Is.TypeOf<bool>());
 
-            selectedObservation = args[1];
+            Assert.That(
+                result,
+                Is.TypeOf<bool>());
+
+            selectedObservation = args[2];
             return (bool)result;
         }
 
@@ -234,6 +247,47 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(
                 exception.InnerException,
                 Is.TypeOf<ArgumentOutOfRangeException>());
+        }
+
+        private static Array CreatePolicyCandidateArray(
+            object[] candidates)
+        {
+            var signalsType =
+                ResolveType(PolicySignalsTypeName);
+
+            var noneProperty = signalsType.GetProperty(
+                "None",
+                BindingFlags.Static | BindingFlags.Public);
+
+            Assert.That(
+                noneProperty,
+                Is.Not.Null,
+                "Missing StalkerTargetPolicySignals.None.");
+
+            var noneSignals =
+                noneProperty.GetValue(null);
+
+            var policyCandidateType =
+                ResolveType(PolicyCandidateTypeName);
+
+            var result = Array.CreateInstance(
+                policyCandidateType,
+                candidates.Length);
+
+            for (var i = 0; i < candidates.Length; i++)
+            {
+                var policyCandidate =
+                    Activator.CreateInstance(
+                        policyCandidateType,
+                        candidates[i],
+                        noneSignals);
+
+                result.SetValue(
+                    policyCandidate,
+                    i);
+            }
+
+            return result;
         }
 
         private static Array CreateCandidateArray(object[] candidates)

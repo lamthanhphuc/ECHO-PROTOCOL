@@ -125,6 +125,10 @@ namespace EchoProtocol.AI.Stalker
             new NearestEligibleVisibleTargetPolicy(
                 TargetSelectionTieEpsilon);
 
+        private readonly List<StalkerTargetPolicyCandidate>
+            _targetPolicyCandidates =
+                new List<StalkerTargetPolicyCandidate>(4);
+
         private readonly StalkerMemory _memory =
             new StalkerMemory();
 
@@ -736,8 +740,26 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
+            _targetPolicyCandidates.Clear();
+
+            for (var i = 0;
+                 i < _currentVisibleTargetCandidates.Count;
+                 i++)
+            {
+                _targetPolicyCandidates.Add(
+                    new StalkerTargetPolicyCandidate(
+                        _currentVisibleTargetCandidates[i],
+                        StalkerTargetPolicySignals.None));
+            }
+
+            var policyContext =
+                new StalkerTargetPolicyContext(
+                    GetCurrentSimulationTime(),
+                    _memory.CurrentTargetId);
+
             if (!_targetPolicy.TrySelectTarget(
-                    _currentVisibleTargetCandidates,
+                    _targetPolicyCandidates,
+                    policyContext,
                     out var selectedObservation))
             {
                 return false;
