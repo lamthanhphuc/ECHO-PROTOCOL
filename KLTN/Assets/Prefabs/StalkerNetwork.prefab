@@ -243,8 +243,6 @@ MonoBehaviour:
   catchEndsInDeath: 0
   jumpscareSeconds: 2
   catchCooldownSeconds: 2
-  animator: {fileID: 1739994530661112979}
-  animatorStateParameter: StalkerState
   _ReplicatedState: 0
   _AttackSequence: 0
   _ReplicatedSemanticState: 0
