@@ -14,6 +14,7 @@ namespace EchoProtocol.Networking
     public sealed class NetworkSlidingDoor : NetworkInteractable, INetworkDoorStateProvider, INetworkTraversalBlocker, IInteractable
     {
         public static event Action<NetworkSlidingDoor, NetworkDoorState> StateChanged;
+        private const float JammerVisualReplicationGraceSeconds = 3f;
 
         [Header("Door panels")]
         [SerializeField] private Transform _leftDoor;
@@ -47,6 +48,16 @@ namespace EchoProtocol.Networking
         private bool _positionsCached;
         private NetworkDoorState _offlineState = NetworkDoorState.Closed;
         private bool _offlineBroken;
+        private GameObject _replicatedJammerVisualFallback;
+        private NetworkId _visualizedJammerId;
+        private NetworkId _pendingJammerVisualId;
+        private float _pendingJammerVisualUntil;
+        private Vector3 _pendingJammerVisualPosition;
+        private Quaternion _pendingJammerVisualRotation = Quaternion.identity;
+        private Transform _resolvedLeftDoor;
+        private Transform _resolvedRightDoor;
+        private Renderer[] _leftDoorRenderers = Array.Empty<Renderer>();
+        private Renderer[] _rightDoorRenderers = Array.Empty<Renderer>();
 
         private bool IsOnline => Object != null && Object.IsValid && Runner != null && Runner.IsRunning;
 
@@ -58,7 +69,6 @@ namespace EchoProtocol.Networking
         public bool HasActiveJammer => TryGetActiveJammer(out _);
         public bool BlocksTraversal => DoorBlocksTraversal || HasActiveJammer;
         public bool DoorBlocksTraversal => !IsBroken && CurrentState != NetworkDoorState.Open;
-        public bool CanMonsterOpen => !IsBroken && CurrentState != NetworkDoorState.Locked;
         public NetworkObject DoorJammerPrefab => _doorJammerPrefab;
         public override RuntimeNoiseType RuntimeInteractionNoiseType =>
             RuntimeNoiseType.DOOR;
@@ -69,7 +79,8 @@ namespace EchoProtocol.Networking
         [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
         private NetworkBool Broken { get; set; }
 
-        [Networked] public NetworkId ActiveJammerId { get; private set; }
+        [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
+        public NetworkId ActiveJammerId { get; private set; }
 
         private NetworkDoorJammer _offlineJammer;
 
@@ -175,11 +186,25 @@ namespace EchoProtocol.Networking
                 if (IsOnline)
                 {
                     var networkInteractor = interactor != null ? interactor.GetComponentInParent<NetworkPlayerInteractor>() : null;
+                    if (networkInteractor == null)
+                    {
+                        foreach (var ni in FindObjectsByType<NetworkPlayerInteractor>(FindObjectsInactive.Exclude))
+                        {
+                            if (ni.Object != null && ni.Object.IsValid && ni.Object.HasInputAuthority)
+                            {
+                                networkInteractor = ni;
+                                break;
+                            }
+                        }
+                    }
+
                     if (networkInteractor != null && networkInteractor.Object != null && networkInteractor.Object.HasInputAuthority)
                     {
                         networkInteractor.RequestUseTeamTool();
                         return;
                     }
+
+                    return;
                 }
 
                 DeployJammerOffline(interactor);
@@ -274,6 +299,7 @@ namespace EchoProtocol.Networking
 
         private void Awake()
         {
+            ResolveDoorVisualReferences();
             CacheClosedPositions();
             _offlineState = _startsBroken
                 ? NetworkDoorState.Open
@@ -304,6 +330,7 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            ResolveDoorVisualReferences();
             CacheClosedPositions();
 
             if (Object.HasStateAuthority)
@@ -320,8 +347,21 @@ namespace EchoProtocol.Networking
             ApplyReplicatedStateImmediate();
         }
 
+        public override void FixedUpdateNetwork()
+        {
+            SynchronizeTraversalBlocking();
+        }
+
         public override void Render()
         {
+            SynchronizeTraversalBlocking();
+            SynchronizeJammerVisualFallback();
+
+            if (TryGetActiveJammer(out var activeJammer))
+            {
+                activeJammer.EnsureVisualActive();
+            }
+
             if (!_positionsCached)
             {
                 return;
@@ -356,40 +396,6 @@ namespace EchoProtocol.Networking
             }
 
             State = locked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
-            ApplyReplicatedState();
-            return true;
-        }
-
-        public bool TryOpenForMonsterAuthoritative()
-        {
-            if (!CanMonsterOpen)
-            {
-                return false;
-            }
-
-            if (!IsOnline)
-            {
-                if (_offlineState == NetworkDoorState.Open)
-                {
-                    return true;
-                }
-
-                _offlineState = NetworkDoorState.Open;
-                ApplyOfflineState();
-                return true;
-            }
-
-            if (!Object.HasStateAuthority)
-            {
-                return false;
-            }
-
-            if (State == NetworkDoorState.Open)
-            {
-                return true;
-            }
-
-            State = NetworkDoorState.Open;
             ApplyReplicatedState();
             return true;
         }
@@ -465,6 +471,8 @@ namespace EchoProtocol.Networking
 
             ActiveJammerId = jammer.Object.Id;
             ApplyReplicatedState();
+            TryGetJammerPlacement(out var position, out var rotation);
+            RpcShowJammerDeployed(ActiveJammerId, position, rotation);
             RpcPlayJammerDeployAudio();
             return true;
         }
@@ -481,8 +489,10 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            var jammerId = ActiveJammerId;
             ActiveJammerId = default;
             ApplyReplicatedState();
+            RpcHideJammerVisual(jammerId);
             return true;
         }
 
@@ -510,13 +520,17 @@ namespace EchoProtocol.Networking
 
         private void CacheClosedPositions()
         {
-            if (_positionsCached || _leftDoor == null || _rightDoor == null)
+            ResolveDoorVisualReferences();
+            var leftDoor = LeftDoorVisual;
+            var rightDoor = RightDoorVisual;
+
+            if (_positionsCached || leftDoor == null || rightDoor == null)
             {
                 return;
             }
 
-            _leftClosedPosition = _leftDoor.localPosition;
-            _rightClosedPosition = _rightDoor.localPosition;
+            _leftClosedPosition = leftDoor.localPosition;
+            _rightClosedPosition = rightDoor.localPosition;
             _positionsCached = true;
         }
 
@@ -531,17 +545,18 @@ namespace EchoProtocol.Networking
             SynchronizeTraversalBlocking();
 
             ApplyVisuals(SmoothStep(_targetOpenAmount));
+            SynchronizeJammerVisualFallback();
 
             StateChanged?.Invoke(this, State);
         }
 
         private void SynchronizeTraversalBlocking()
         {
-            var blocksTraversal = DoorBlocksTraversal;
+            var blocksTraversal = BlocksTraversal;
 
             if (_blockingCollider != null)
             {
-                _blockingCollider.enabled = DoorBlocksTraversal;
+                _blockingCollider.enabled = blocksTraversal;
             }
 
             if (_traversalObstacle != null)
@@ -550,7 +565,7 @@ namespace EchoProtocol.Networking
             }
         }
 
-        private bool TryGetActiveJammer(out NetworkDoorJammer jammer)
+        public bool TryGetActiveJammer(out NetworkDoorJammer jammer)
         {
             if (_offlineJammer != null)
             {
@@ -583,16 +598,7 @@ namespace EchoProtocol.Networking
         {
             if (IsBroken)
             {
-                if (_leftDoor != null && _leftDoor.gameObject.activeSelf)
-                {
-                    _leftDoor.gameObject.SetActive(false);
-                }
-
-                if (_rightDoor != null && _rightDoor.gameObject.activeSelf)
-                {
-                    _rightDoor.gameObject.SetActive(false);
-                }
-
+                SetDoorPanelsVisible(false);
                 return;
             }
 
@@ -603,31 +609,278 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            if (_leftDoor != null && !_leftDoor.gameObject.activeSelf)
-            {
-                _leftDoor.gameObject.SetActive(true);
-            }
+            SetDoorPanelsVisible(true);
 
-            if (_rightDoor != null && !_rightDoor.gameObject.activeSelf)
-            {
-                _rightDoor.gameObject.SetActive(true);
-            }
+            var leftDoor = LeftDoorVisual;
+            var rightDoor = RightDoorVisual;
 
-            if (_leftDoor != null)
+            if (leftDoor != null)
             {
-                _leftDoor.localPosition = Vector3.LerpUnclamped(
+                leftDoor.localPosition = Vector3.LerpUnclamped(
                     _leftClosedPosition,
                     _leftClosedPosition + _leftOpenOffset,
                     openAmount);
             }
 
-            if (_rightDoor != null)
+            if (rightDoor != null)
             {
-                _rightDoor.localPosition = Vector3.LerpUnclamped(
+                rightDoor.localPosition = Vector3.LerpUnclamped(
                     _rightClosedPosition,
                     _rightClosedPosition + _rightOpenOffset,
                     openAmount);
             }
+        }
+
+        private void ResolveDoorVisualReferences()
+        {
+            if (_resolvedLeftDoor == null)
+            {
+                _resolvedLeftDoor = _leftDoor != null ? _leftDoor : FindChildTransformByName("Door_Left");
+                _leftDoorRenderers = _resolvedLeftDoor != null
+                    ? _resolvedLeftDoor.GetComponentsInChildren<Renderer>(true)
+                    : Array.Empty<Renderer>();
+            }
+
+            if (_resolvedRightDoor == null)
+            {
+                _resolvedRightDoor = _rightDoor != null ? _rightDoor : FindChildTransformByName("Door_Right");
+                _rightDoorRenderers = _resolvedRightDoor != null
+                    ? _resolvedRightDoor.GetComponentsInChildren<Renderer>(true)
+                    : Array.Empty<Renderer>();
+            }
+        }
+
+        private Transform FindChildTransformByName(string childName)
+        {
+            var children = GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (string.Equals(children[i].name, childName, StringComparison.Ordinal))
+                {
+                    return children[i];
+                }
+            }
+
+            return null;
+        }
+
+        private Transform LeftDoorVisual => _leftDoor != null ? _leftDoor : _resolvedLeftDoor;
+        private Transform RightDoorVisual => _rightDoor != null ? _rightDoor : _resolvedRightDoor;
+
+        private void SetDoorPanelsVisible(bool visible)
+        {
+            ResolveDoorVisualReferences();
+            SetDoorPanelVisible(LeftDoorVisual, _leftDoorRenderers, visible);
+            SetDoorPanelVisible(RightDoorVisual, _rightDoorRenderers, visible);
+        }
+
+        private static void SetDoorPanelVisible(Transform panel, Renderer[] renderers, bool visible)
+        {
+            if (panel != null && panel.gameObject.activeSelf != visible)
+            {
+                panel.gameObject.SetActive(visible);
+            }
+
+            if (renderers == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i] != null)
+                {
+                    renderers[i].enabled = visible;
+                }
+            }
+        }
+
+        private void SynchronizeJammerVisualFallback()
+        {
+            if (!IsOnline || !ActiveJammerId.IsValid)
+            {
+                if (KeepPendingJammerVisualAlive())
+                {
+                    return;
+                }
+
+                ClearReplicatedJammerVisualFallback();
+                return;
+            }
+
+            TryGetJammerPlacement(out var position, out var rotation);
+            ShowJammerVisual(ActiveJammerId, position, rotation);
+        }
+
+        private void ShowJammerVisual(NetworkId jammerId, Vector3 position, Quaternion rotation)
+        {
+            if (!jammerId.IsValid)
+            {
+                ClearReplicatedJammerVisualFallback();
+                return;
+            }
+
+            _pendingJammerVisualId = jammerId;
+            _pendingJammerVisualUntil = Time.unscaledTime + JammerVisualReplicationGraceSeconds;
+            _pendingJammerVisualPosition = position;
+            _pendingJammerVisualRotation = rotation;
+
+            if (Runner != null
+                && Runner.TryFindObject(jammerId, out var jammerObject)
+                && jammerObject != null
+                && jammerObject.TryGetComponent<NetworkDoorJammer>(out var jammer))
+            {
+                jammer.transform.SetPositionAndRotation(position, rotation);
+
+                if (jammer.IsActive)
+                {
+                    jammer.EnsureVisualActive();
+                }
+                else
+                {
+                    jammer.ForceActivePresentation();
+                }
+
+                ClearReplicatedJammerVisualFallback();
+                return;
+            }
+
+            if (_replicatedJammerVisualFallback != null && _visualizedJammerId == jammerId)
+            {
+                _replicatedJammerVisualFallback.transform.SetPositionAndRotation(position, rotation);
+                if (!_replicatedJammerVisualFallback.activeSelf)
+                {
+                    _replicatedJammerVisualFallback.SetActive(true);
+                }
+                return;
+            }
+
+            ClearReplicatedJammerVisualFallback();
+            if (_doorJammerPrefab == null)
+            {
+                return;
+            }
+
+            _replicatedJammerVisualFallback = new GameObject("DoorJammer_ReplicatedVisual");
+            _replicatedJammerVisualFallback.transform.SetPositionAndRotation(position, rotation);
+            CopyVisualHierarchy(_doorJammerPrefab.transform, _replicatedJammerVisualFallback.transform);
+            _visualizedJammerId = jammerId;
+        }
+
+        private bool KeepPendingJammerVisualAlive()
+        {
+            if (!_pendingJammerVisualId.IsValid || Time.unscaledTime > _pendingJammerVisualUntil)
+            {
+                _pendingJammerVisualId = default;
+                return false;
+            }
+
+            if (Runner != null
+                && Runner.TryFindObject(_pendingJammerVisualId, out var jammerObject)
+                && jammerObject != null
+                && jammerObject.TryGetComponent<NetworkDoorJammer>(out var jammer))
+            {
+                jammer.transform.SetPositionAndRotation(_pendingJammerVisualPosition, _pendingJammerVisualRotation);
+                jammer.ForceActivePresentation();
+                ClearReplicatedJammerVisualFallback();
+                return true;
+            }
+
+            if (_replicatedJammerVisualFallback != null && _visualizedJammerId == _pendingJammerVisualId)
+            {
+                if (!_replicatedJammerVisualFallback.activeSelf)
+                {
+                    _replicatedJammerVisualFallback.SetActive(true);
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        private void HideJammerVisual(NetworkId jammerId)
+        {
+            if (!jammerId.IsValid)
+            {
+                return;
+            }
+
+            if (_pendingJammerVisualId == jammerId)
+            {
+                _pendingJammerVisualId = default;
+                _pendingJammerVisualUntil = 0f;
+            }
+
+            if (_visualizedJammerId == jammerId)
+            {
+                ClearReplicatedJammerVisualFallback();
+            }
+
+            if (Runner != null
+                && Runner.TryFindObject(jammerId, out var jammerObject)
+                && jammerObject != null
+                && jammerObject.TryGetComponent<NetworkDoorJammer>(out var jammer))
+            {
+                jammer.ClearForcedPresentation();
+            }
+        }
+
+        private void ClearReplicatedJammerVisualFallback()
+        {
+            _visualizedJammerId = default;
+            if (_replicatedJammerVisualFallback != null)
+            {
+                Destroy(_replicatedJammerVisualFallback);
+                _replicatedJammerVisualFallback = null;
+            }
+        }
+
+        private static void CopyVisualHierarchy(Transform source, Transform target)
+        {
+            if (source.TryGetComponent<MeshFilter>(out var meshFilter) && meshFilter.sharedMesh != null)
+            {
+                var copy = target.gameObject.AddComponent<MeshFilter>();
+                copy.sharedMesh = meshFilter.sharedMesh;
+            }
+
+            if (source.TryGetComponent<MeshRenderer>(out var meshRenderer))
+            {
+                var copy = target.gameObject.AddComponent<MeshRenderer>();
+                copy.sharedMaterials = meshRenderer.sharedMaterials;
+                copy.shadowCastingMode = meshRenderer.shadowCastingMode;
+                copy.receiveShadows = meshRenderer.receiveShadows;
+                copy.enabled = meshRenderer.enabled;
+            }
+
+            for (int i = 0; i < source.childCount; i++)
+            {
+                var child = source.GetChild(i);
+                if (child.GetComponentsInChildren<Renderer>(true).Length == 0)
+                {
+                    continue;
+                }
+
+                var childObject = new GameObject(child.name);
+                childObject.transform.SetParent(target, false);
+                childObject.transform.localPosition = child.localPosition;
+                childObject.transform.localRotation = child.localRotation;
+                childObject.transform.localScale = child.localScale;
+                childObject.SetActive(true);
+                CopyVisualHierarchy(child, childObject.transform);
+            }
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void RpcShowJammerDeployed(NetworkId jammerId, Vector3 position, Quaternion rotation)
+        {
+            ShowJammerVisual(jammerId, position, rotation);
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void RpcHideJammerVisual(NetworkId jammerId)
+        {
+            HideJammerVisual(jammerId);
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]

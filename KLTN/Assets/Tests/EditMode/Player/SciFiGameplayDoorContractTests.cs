@@ -93,8 +93,8 @@ namespace EchoProtocol.Player.Tests
 
             StringAssert.Contains("public bool IsBroken", slidingDoorSource);
             StringAssert.Contains("public bool BlocksTraversal", slidingDoorSource);
-            StringAssert.Contains("public bool CanMonsterOpen", slidingDoorSource);
-            StringAssert.Contains("public bool TryOpenForMonsterAuthoritative()", slidingDoorSource);
+            StringAssert.DoesNotContain("CanMonsterOpen", slidingDoorSource);
+            StringAssert.DoesNotContain("TryOpenForMonsterAuthoritative", slidingDoorSource);
             StringAssert.Contains("public bool TryBreakAuthoritative()", slidingDoorSource);
             StringAssert.Contains("public bool CanAcceptJammer()", slidingDoorSource);
             StringAssert.Contains("public bool TryAttachJammerAuthoritative(NetworkDoorJammer jammer)", slidingDoorSource);
@@ -147,27 +147,19 @@ namespace EchoProtocol.Player.Tests
         }
 
         [Test]
-        public void GAMEPLAY_DOOR_OfflineClosedUnlockedDoorCanBeOpenedByMonsterApi()
+        public void GAMEPLAY_DOOR_MonsterOpenApiIsNotAvailable()
         {
-            var door = CreateOfflineSlidingDoor(false, out var blocker);
-            try
-            {
-                Assert.That(InvokeBool(door, "TryOpenForMonsterAuthoritative"), Is.True);
+            var slidingDoorSource = File.ReadAllText(NetworkSlidingDoorScriptPath);
+            var legacyDoorSource = File.ReadAllText(NetworkDoorScriptPath);
 
-                Assert.That(
-                    EnumValue(ResolveProductionType("EchoProtocol.Networking.NetworkDoorState"), "Open"),
-                    Is.EqualTo(Convert.ToInt32(GetProperty(door, "CurrentState"))));
-                Assert.That(GetBoolProperty(door, "DoorBlocksTraversal"), Is.False);
-                Assert.That(blocker.enabled, Is.False);
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(door.gameObject);
-            }
+            StringAssert.DoesNotContain("TryOpenForMonsterAuthoritative", slidingDoorSource);
+            StringAssert.DoesNotContain("CanMonsterOpen", slidingDoorSource);
+            StringAssert.DoesNotContain("TryOpenForMonsterAuthoritative", legacyDoorSource);
+            StringAssert.DoesNotContain("CanMonsterOpen", legacyDoorSource);
         }
 
         [Test]
-        public void GAMEPLAY_DOOR_OfflineLockedDoorRejectsMonsterOpen()
+        public void GAMEPLAY_DOOR_OfflineLockedDoorCanStillBeBrokenByMonsterApi()
         {
             var door = CreateOfflineSlidingDoor(false, out var blocker);
             try
@@ -177,13 +169,14 @@ namespace EchoProtocol.Player.Tests
                     EnumValue(ResolveProductionType("EchoProtocol.Networking.NetworkDoorState"), "Locked"),
                     Is.EqualTo(Convert.ToInt32(GetProperty(door, "CurrentState"))));
 
-                Assert.That(InvokeBool(door, "TryOpenForMonsterAuthoritative"), Is.False);
+                Assert.That(InvokeBool(door, "TryBreakAuthoritative"), Is.True);
 
                 Assert.That(
-                    EnumValue(ResolveProductionType("EchoProtocol.Networking.NetworkDoorState"), "Locked"),
+                    EnumValue(ResolveProductionType("EchoProtocol.Networking.NetworkDoorState"), "Open"),
                     Is.EqualTo(Convert.ToInt32(GetProperty(door, "CurrentState"))));
-                Assert.That(GetBoolProperty(door, "DoorBlocksTraversal"), Is.True);
-                Assert.That(blocker.enabled, Is.True);
+                Assert.That(GetBoolProperty(door, "IsBroken"), Is.True);
+                Assert.That(GetBoolProperty(door, "DoorBlocksTraversal"), Is.False);
+                Assert.That(blocker.enabled, Is.False);
             }
             finally
             {
@@ -235,11 +228,9 @@ namespace EchoProtocol.Player.Tests
         public void GAMEPLAY_DOOR_OnlineProxyAuthorityGuardRemainsProtected()
         {
             var source = File.ReadAllText(NetworkSlidingDoorScriptPath);
-            var openMethod = MethodBody(source, "public bool TryOpenForMonsterAuthoritative");
             var breakMethod = MethodBody(source, "public bool TryBreakAuthoritative");
 
-            StringAssert.Contains("if (!IsOnline)", openMethod);
-            StringAssert.Contains("if (!Object.HasStateAuthority)", openMethod);
+            StringAssert.DoesNotContain("TryOpenForMonsterAuthoritative", source);
             StringAssert.Contains("if (!IsOnline)", breakMethod);
             StringAssert.Contains("if (!Object.HasStateAuthority)", breakMethod);
         }
@@ -250,9 +241,6 @@ namespace EchoProtocol.Player.Tests
             var doorSource = File.ReadAllText(NetworkSlidingDoorScriptPath);
             var interactorSource = File.ReadAllText(NetworkPlayerInteractorScriptPath);
             var prefabSource = File.ReadAllText(DoorPrefabPath);
-            var monsterOpen = MethodBody(
-                doorSource,
-                "public bool TryOpenForMonsterAuthoritative");
             var monsterBreak = MethodBody(
                 doorSource,
                 "public bool TryBreakAuthoritative");
@@ -263,8 +251,7 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains("RuntimeNoiseType.DOOR", doorSource);
             StringAssert.Contains("target.RuntimeInteractionNoiseType", interactorSource);
             StringAssert.Contains("_emitsRuntimeInteractionNoise: 1", prefabSource);
-            StringAssert.DoesNotContain("HostRuntimeNoiseService", monsterOpen);
-            StringAssert.DoesNotContain("RuntimeNoiseType.DOOR", monsterOpen);
+            StringAssert.DoesNotContain("TryOpenForMonsterAuthoritative", doorSource);
             StringAssert.DoesNotContain("HostRuntimeNoiseService", monsterBreak);
             StringAssert.DoesNotContain("RuntimeNoiseType.DOOR", monsterBreak);
         }
@@ -396,7 +383,14 @@ namespace EchoProtocol.Player.Tests
 
             StringAssert.Contains("_blockingCollider.enabled = BlocksTraversal;", source);
             StringAssert.Contains("_blockingCollider.isTrigger = false;", source);
-            StringAssert.Contains("_visualRoot.gameObject.SetActive(State == NetworkDoorJammerState.Active);", source);
+            StringAssert.Contains("public void ForceActivePresentation()", source);
+            StringAssert.Contains("public void ClearForcedPresentation()", source);
+            StringAssert.Contains("SpawnVisualGraceSeconds", source);
+            StringAssert.Contains("_spawnVisualGraceUntil = Time.unscaledTime + SpawnVisualGraceSeconds;", source);
+            StringAssert.Contains("_forceActivePresentation = false;", source);
+            StringAssert.Contains("_visualRoot.gameObject.SetActive(IsVisuallyActive);", source);
+            StringAssert.Contains("State == NetworkDoorJammerState.Active", source);
+            StringAssert.Contains("|| _forceActivePresentation", source);
         }
 
         [Test]
@@ -458,6 +452,19 @@ namespace EchoProtocol.Player.Tests
         }
 
         [Test]
+        public void GAMEPLAY_DOOR_BrokenVisualsDoNotDependOnlyOnSerializedPanelReferences()
+        {
+            var source = File.ReadAllText(NetworkSlidingDoorScriptPath);
+
+            StringAssert.Contains("ResolveDoorVisualReferences()", source);
+            StringAssert.Contains("FindChildTransformByName(\"Door_Left\")", source);
+            StringAssert.Contains("FindChildTransformByName(\"Door_Right\")", source);
+            StringAssert.Contains("SetDoorPanelsVisible(false)", source);
+            StringAssert.Contains("GetComponentsInChildren<Renderer>(true)", source);
+            StringAssert.Contains("renderers[i].enabled = visible;", source);
+        }
+
+        [Test]
         public void GAMEPLAY_DOOR_PrefabHasAudioAndJammerMountConfigured()
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(DoorPrefabPath);
@@ -487,7 +494,28 @@ namespace EchoProtocol.Player.Tests
 
             var visualRoot = serializedJammer.FindProperty("_visualRoot")?.objectReferenceValue as Transform;
             Assert.That(visualRoot, Is.Not.Null);
-            Assert.That(visualRoot.childCount, Is.GreaterThanOrEqualTo(3), "VisualRoot must contain at least 3 planks");
+            Assert.That(visualRoot.gameObject.activeSelf, Is.True, "VisualRoot must start active so remote proxies show the planks immediately after spawn.");
+            Assert.That(visualRoot.childCount, Is.GreaterThanOrEqualTo(6), "VisualRoot must contain the deployed plank bundle.");
+        }
+
+        [Test]
+        public void GAMEPLAY_DOOR_JammerVisualHasClientFallbackWhenProxyIsLate()
+        {
+            var source = File.ReadAllText(NetworkSlidingDoorScriptPath);
+
+            StringAssert.Contains("SynchronizeJammerVisualFallback()", source);
+            StringAssert.Contains("DoorJammer_ReplicatedVisual", source);
+            StringAssert.Contains("CopyVisualHierarchy(_doorJammerPrefab.transform", source);
+            StringAssert.Contains("ActiveJammerId.IsValid", source);
+            StringAssert.Contains("RpcShowJammerDeployed(ActiveJammerId, position, rotation)", source);
+            StringAssert.Contains("ShowJammerVisual(jammerId, position, rotation)", source);
+            StringAssert.Contains("jammer.ForceActivePresentation()", source);
+            StringAssert.Contains("jammer.transform.SetPositionAndRotation(position, rotation)", source);
+            StringAssert.Contains("_pendingJammerVisualPosition = position;", source);
+            StringAssert.Contains("jammer.transform.SetPositionAndRotation(_pendingJammerVisualPosition, _pendingJammerVisualRotation)", source);
+            StringAssert.Contains("JammerVisualReplicationGraceSeconds", source);
+            StringAssert.Contains("KeepPendingJammerVisualAlive()", source);
+            StringAssert.Contains("RpcHideJammerVisual(jammerId)", source);
         }
 
         [Test]

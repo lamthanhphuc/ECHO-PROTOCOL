@@ -13,6 +13,8 @@ namespace EchoProtocol.Networking
     [DisallowMultipleComponent]
     public sealed class NetworkDoorJammer : NetworkBehaviour, INetworkTraversalBlocker
     {
+        private const float SpawnVisualGraceSeconds = 3f;
+
         [SerializeField, Min(0.01f)] private float _breakDurationSeconds = 3f;
         [SerializeField] private Collider _blockingCollider;
         [SerializeField] private Transform _visualRoot;
@@ -24,8 +26,12 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkId DoorId { get; private set; }
 
         private NetworkDoorJammerState _offlineState = NetworkDoorJammerState.NotDeployed;
+        private bool _forceActivePresentation;
+        private float _spawnVisualGraceUntil;
 
-        public bool IsActive => Object != null && Object.IsValid ? State == NetworkDoorJammerState.Active : _offlineState == NetworkDoorJammerState.Active;
+        public bool IsActive => Object != null && Object.IsValid
+            ? State == NetworkDoorJammerState.Active
+            : _offlineState == NetworkDoorJammerState.Active;
         public bool BlocksTraversal => IsActive;
         public float BreakDurationSeconds => _breakDurationSeconds;
 
@@ -46,12 +52,32 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            _spawnVisualGraceUntil = Time.unscaledTime + SpawnVisualGraceSeconds;
+
             if (Object.HasStateAuthority)
             {
                 State = NetworkDoorJammerState.NotDeployed;
                 DoorId = default;
             }
 
+            ApplyReplicatedState();
+        }
+
+        public void ForceActivePresentation()
+        {
+            if (State == NetworkDoorJammerState.Destroyed)
+            {
+                return;
+            }
+
+            _forceActivePresentation = true;
+            ApplyReplicatedState();
+        }
+
+        public void ClearForcedPresentation()
+        {
+            _forceActivePresentation = false;
+            _spawnVisualGraceUntil = 0f;
             ApplyReplicatedState();
         }
 
@@ -82,6 +108,27 @@ namespace EchoProtocol.Networking
             return TryDestroyAuthoritative();
         }
 
+        public void EnsureVisualActive()
+        {
+            if (_visualRoot != null && IsVisuallyActive)
+            {
+                if (!_visualRoot.gameObject.activeSelf)
+                {
+                    _visualRoot.gameObject.SetActive(true);
+                }
+            }
+        }
+
+        public override void FixedUpdateNetwork()
+        {
+            ApplyReplicatedState();
+        }
+
+        public override void Render()
+        {
+            ApplyReplicatedState();
+        }
+
         public bool TryDestroyAuthoritative()
         {
             if (!Object.HasStateAuthority)
@@ -91,6 +138,8 @@ namespace EchoProtocol.Networking
 
             if (State != NetworkDoorJammerState.Destroyed)
             {
+                _forceActivePresentation = false;
+                _spawnVisualGraceUntil = 0f;
                 State = NetworkDoorJammerState.Destroyed;
                 ApplyReplicatedState();
                 RpcPlayBreakAudio();
@@ -126,6 +175,16 @@ namespace EchoProtocol.Networking
 
         private void ApplyReplicatedState()
         {
+            if (State == NetworkDoorJammerState.Destroyed)
+            {
+                _forceActivePresentation = false;
+                _spawnVisualGraceUntil = 0f;
+            }
+            else if (State == NetworkDoorJammerState.Active)
+            {
+                _spawnVisualGraceUntil = 0f;
+            }
+
             if (_blockingCollider != null)
             {
                 _blockingCollider.enabled = BlocksTraversal;
@@ -134,9 +193,14 @@ namespace EchoProtocol.Networking
 
             if (_visualRoot != null)
             {
-                _visualRoot.gameObject.SetActive(State == NetworkDoorJammerState.Active);
+                _visualRoot.gameObject.SetActive(IsVisuallyActive);
             }
         }
+
+        private bool IsVisuallyActive =>
+            State == NetworkDoorJammerState.Active
+            || _forceActivePresentation
+            || (State == NetworkDoorJammerState.NotDeployed && Time.unscaledTime <= _spawnVisualGraceUntil);
 
         private void OnValidate()
         {

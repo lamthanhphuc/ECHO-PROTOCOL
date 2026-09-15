@@ -42,7 +42,6 @@ namespace EchoProtocol.Networking
 
         public bool IsBroken => Broken;
         public bool BlocksTraversal => !IsBroken && State != NetworkDoorState.Open;
-        public bool CanMonsterOpen => !IsBroken && State != NetworkDoorState.Locked;
 
         public override void Spawned()
         {
@@ -68,15 +67,6 @@ namespace EchoProtocol.Networking
             if (!Object.HasStateAuthority) return false;
             if (TryGetMatchState(out var matchState) && matchState.IsEnded) return false;
             State = locked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
-            ApplyReplicatedState();
-            return true;
-        }
-
-        public bool TryOpenForMonsterAuthoritative()
-        {
-            if (!Object.HasStateAuthority || !CanMonsterOpen) return false;
-            if (State == NetworkDoorState.Open) return true;
-            State = NetworkDoorState.Open;
             ApplyReplicatedState();
             return true;
         }
