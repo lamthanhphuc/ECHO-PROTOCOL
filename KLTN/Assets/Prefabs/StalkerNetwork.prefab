@@ -162,7 +162,7 @@ MonoBehaviour:
   patrolMode: 3
   patrolSpeed: 7
   chaseSpeed: 9
-  enableDiagnostics: 1
+  enableDiagnostics: 0
   candidateBfsDepth: 128
   stalenessHorizon: 15
   stalenessWeight: 1
@@ -184,7 +184,7 @@ MonoBehaviour:
   chasePredictionLeadSeconds: 0.08
   chasePredictionMaxDistance: 1.5
   chaseVisualLossGraceSeconds: 0.45
-  chaseRuntimeDiagnostics: 1
+  chaseRuntimeDiagnostics: 0
   chaseRuntimeDiagnosticInterval: 0.1
   attackRange: 3
   attackWindup: 0.35
@@ -243,8 +243,6 @@ MonoBehaviour:
   catchEndsInDeath: 0
   jumpscareSeconds: 2
   catchCooldownSeconds: 2
-  animator: {fileID: 1739994530661112979}
-  animatorStateParameter: StalkerState
   _ReplicatedState: 0
   _AttackSequence: 0
   _ReplicatedSemanticState: 0

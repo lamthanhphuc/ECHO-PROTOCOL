@@ -122,8 +122,23 @@ namespace EchoProtocol.AI.Stalker
         private const float EmergencyNavMeshRecoverySampleDistance = 2f;
 
         private IStalkerTargetPolicy _targetPolicy =
-            new NearestEligibleVisibleTargetPolicy(
-                TargetSelectionTieEpsilon);
+            new AdaptiveStalkerTargetPolicy();
+
+        private readonly StalkerTargetPolicySignalBuilder
+            _targetPolicySignalBuilder =
+                new StalkerTargetPolicySignalBuilder();
+
+        private readonly StalkerTargetHistoryMemory
+            _targetHistoryMemory =
+                new StalkerTargetHistoryMemory();
+
+        private readonly List<StalkerTargetPolicyCandidate>
+            _targetPolicyCandidates =
+                new List<StalkerTargetPolicyCandidate>(4);
+
+        private readonly List<StalkerTargetPolicyCandidate>
+            _searchTargetPolicyCandidates =
+                new List<StalkerTargetPolicyCandidate>(4);
 
         private readonly StalkerMemory _memory =
             new StalkerMemory();
@@ -206,6 +221,7 @@ namespace EchoProtocol.AI.Stalker
         private SearchEpisodeId _lastCommittedSearchEpisodeId;
         private long _legacySimulationTick;
         private IReadOnlyList<StalkerTargetCandidate> _currentVisibleTargetCandidates;
+        private IReadOnlyList<PlayerId> _currentVisibleObjectiveCarrierIds;
         private IReadOnlyList<StalkerTargetStatus> _currentTargetStatuses;
         private IReadOnlyList<HearingObservation>
             _currentHearingObservations;
@@ -380,6 +396,7 @@ namespace EchoProtocol.AI.Stalker
             InitializeHidingInvestigation();
             _hearingMemory.Reset();
             _hideSpotMemory.Reset();
+            _targetHistoryMemory.Reset();
         }
 
         private void Update()
@@ -414,6 +431,8 @@ namespace EchoProtocol.AI.Stalker
             _currentSimulationStep = input.Step;
             _currentVisibleTargetCandidates =
                 input.VisibleTargetCandidates;
+            _currentVisibleObjectiveCarrierIds =
+                input.VisibleObjectiveCarrierIds;
 
             _currentTargetStatuses =
                 input.TargetStatuses;
@@ -436,11 +455,23 @@ namespace EchoProtocol.AI.Stalker
                 _navigation?.TickProgress(CurrentSimulationDeltaSeconds);
                 TickNavigationRecovery();
                 TickNavigationFallback();
+
+                // Learn the current legal visual frame only after all target
+                // decisions for this simulation step have completed.
+                // This keeps recent-detection memory fresh without allowing
+                // the current frame to self-reinforce its own selection score.
+                if (_currentVisibleTargetCandidates != null)
+                {
+                    _targetHistoryMemory.RecordVisibleFrame(
+                        _currentVisibleTargetCandidates);
+                }
+
                 return true;
             }
             finally
             {
                 _currentVisibleTargetCandidates = null;
+                _currentVisibleObjectiveCarrierIds = null;
                 _currentTargetStatuses = null;
                 _currentAttackTargetSnapshot = null;
                 _currentHearingObservations = null;
@@ -736,21 +767,43 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
+            var policyContext =
+                new StalkerTargetPolicyContext(
+                    GetCurrentSimulationTime(),
+                    _memory.CurrentTargetId);
+
+            _targetPolicySignalBuilder.Build(
+                _currentVisibleTargetCandidates,
+                _currentVisibleObjectiveCarrierIds,
+                policyContext,
+                _targetHistoryMemory,
+                _targetPolicyCandidates);
+
             if (!_targetPolicy.TrySelectTarget(
-                    _currentVisibleTargetCandidates,
+                    _targetPolicyCandidates,
+                    policyContext,
                     out var selectedObservation))
             {
                 return false;
             }
 
-            _memory.SetDetectionTarget(selectedObservation.PlayerId);
-            if (!_memory.TryAcceptDetectionTargetObservation(selectedObservation))
+            _memory.SetDetectionTarget(
+                selectedObservation.PlayerId);
+
+            if (!_memory.TryAcceptDetectionTargetObservation(
+                    selectedObservation))
             {
                 ClearDetectionContext();
                 currentState = StalkerState.PATROL;
                 SetCurrentPatrolDestination();
                 return false;
             }
+
+            // Only a successfully accepted acquisition may influence
+            // adaptive target history.
+            _targetHistoryMemory.RecordTargetAcquired(
+                selectedObservation.PlayerId,
+                policyContext.SimulationTime);
 
             detectionTarget = null;
             currentTarget = null;
@@ -2459,72 +2512,88 @@ namespace EchoProtocol.AI.Stalker
             InvalidateDetectionTarget();
         }
 
-        private bool TryAcquireDifferentVisibleTargetDuringSearch(PlayerId currentTargetId)
+        private bool TryAcquireDifferentVisibleTargetDuringSearch(
+            PlayerId currentTargetId)
         {
             if (_currentVisibleTargetCandidates == null)
             {
                 return false;
             }
 
-            var bestCandidate = default(StalkerTargetCandidate);
-            var hasCandidate = false;
-            for (var i = 0; i < _currentVisibleTargetCandidates.Count; i++)
+            var policyContext =
+                new StalkerTargetPolicyContext(
+                    GetCurrentSimulationTime(),
+                    _memory.CurrentTargetId);
+
+            _targetPolicySignalBuilder.Build(
+                _currentVisibleTargetCandidates,
+                _currentVisibleObjectiveCarrierIds,
+                policyContext,
+                _targetHistoryMemory,
+                _targetPolicyCandidates);
+
+            _searchTargetPolicyCandidates.Clear();
+
+            for (var i = 0;
+                i < _targetPolicyCandidates.Count;
+                i++)
             {
-                var candidate = _currentVisibleTargetCandidates[i];
-                if (candidate.Observation.PlayerId == currentTargetId || !candidate.Eligibility.Eligible)
+                var candidate =
+                    _targetPolicyCandidates[i];
+
+                if (currentTargetId.IsValid
+                    && candidate.PlayerId == currentTargetId)
                 {
                     continue;
                 }
 
-                if (!hasCandidate
-                    || IsHigherPrioritySearchReplacement(candidate.Observation, bestCandidate.Observation))
-                {
-                    bestCandidate = candidate;
-                    hasCandidate = true;
-                }
+                _searchTargetPolicyCandidates.Add(
+                    candidate);
             }
 
-            if (!hasCandidate)
+            if (!_targetPolicy.TrySelectTarget(
+                    _searchTargetPolicyCandidates,
+                    policyContext,
+                    out var selectedObservation))
             {
                 return false;
             }
 
-            _memory.SetDetectionTarget(bestCandidate.Observation.PlayerId);
-            if (!_memory.TryAcceptDetectionTargetObservation(bestCandidate.Observation))
+            _memory.SetDetectionTarget(
+                selectedObservation.PlayerId);
+
+            if (!_memory.TryAcceptDetectionTargetObservation(
+                    selectedObservation))
             {
-                CommitSearchTerminalAndInvalidateDetectionTarget(StalkerSearchTerminalOutcome.CURRENT_TARGET_INVALID_NO_REPLACEMENT);
+                CommitSearchTerminalAndInvalidateDetectionTarget(
+                    StalkerSearchTerminalOutcome
+                        .CURRENT_TARGET_INVALID_NO_REPLACEMENT);
+
                 return true;
             }
 
-            CommitSearchEnded(StalkerSearchTerminalOutcome.NEW_ELIGIBLE_TARGET_OBSERVED);
+            // Only a successfully accepted replacement acquisition
+            // may influence adaptive target history.
+            _targetHistoryMemory.RecordTargetAcquired(
+                selectedObservation.PlayerId,
+                policyContext.SimulationTime);
+
+            CommitSearchEnded(
+                StalkerSearchTerminalOutcome
+                    .NEW_ELIGIBLE_TARGET_OBSERVED);
+
             currentTarget = null;
             _memory.ClearCurrentTarget();
+
             ClearSearchRuntimeContext();
+
             detectionMeter = 0f;
             detectionTarget = null;
+
             currentState = StalkerState.DETECT;
+
             StopAgentPath();
             return true;
-        }
-
-        private static bool IsHigherPrioritySearchReplacement(
-            VisionObservation candidate,
-            VisionObservation currentBest)
-        {
-            if (candidate.Distance < currentBest.Distance - TargetSelectionTieEpsilon)
-            {
-                return true;
-            }
-
-            if (candidate.Distance > currentBest.Distance + TargetSelectionTieEpsilon)
-            {
-                return false;
-            }
-
-            return DeterministicTieBreak.ComparePrimaryThenStableKey(
-                0,
-                candidate.PlayerId,
-                currentBest.PlayerId) < 0;
         }
 
         private bool TrySetSearchDestination(Vector3 rememberedPosition)

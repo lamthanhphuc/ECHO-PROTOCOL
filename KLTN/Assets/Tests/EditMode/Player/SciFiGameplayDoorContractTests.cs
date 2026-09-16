@@ -138,7 +138,26 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains("if (!Object.HasStateAuthority)", slidingDoorSource);
             StringAssert.Contains("if (IsBroken)", slidingDoorSource);
             StringAssert.Contains("State = NetworkDoorState.Open;", slidingDoorSource);
-            StringAssert.Contains("_blockingCollider.enabled = DoorBlocksTraversal;", slidingDoorSource);
+            StringAssert.Contains(
+                "public bool BlocksTraversal => DoorBlocksTraversal || HasActiveJammer;",
+                slidingDoorSource);
+
+            var synchronizeTraversalMethod =
+                MethodBody(
+                    slidingDoorSource,
+                    "private void SynchronizeTraversalBlocking");
+
+            StringAssert.Contains(
+                "var blocksTraversal = BlocksTraversal;",
+                synchronizeTraversalMethod);
+
+            StringAssert.Contains(
+                "_blockingCollider.enabled = blocksTraversal;",
+                synchronizeTraversalMethod);
+
+            StringAssert.Contains(
+                "_traversalObstacle.enabled = blocksTraversal;",
+                synchronizeTraversalMethod);
             StringAssert.Contains("if (!Object.HasStateAuthority)", jammerSource);
             StringAssert.Contains("if (State != NetworkDoorJammerState.Destroyed)", jammerSource);
             StringAssert.Contains("return true;", jammerSource);
