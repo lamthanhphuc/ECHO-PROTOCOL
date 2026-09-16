@@ -213,14 +213,39 @@ namespace EchoProtocol.AI.Stalker.Tests
         [Test]
         public void STK_TEL_003_SearchTerminalCommitIsEpisodeKeyedBeforeCleanup()
         {
-            var source = File.ReadAllText("Assets/Scripts/AI/Stalker/StalkerController.cs");
+            var source =
+                File.ReadAllText(
+                    "Assets/Scripts/AI/Stalker/StalkerController.cs");
 
-            StringAssert.Contains("_lastCommittedSearchEpisodeId == _searchContext.EpisodeId", source);
-            StringAssert.Contains("new StalkerSearchEndedFact", source);
-            StringAssert.Contains("CommitSearchEnded(StalkerSearchTerminalOutcome.TIMEOUT)", source);
-            StringAssert.Contains("CommitSearchEnded(StalkerSearchTerminalOutcome.SAME_TARGET_REACQUIRED)", source);
-            StringAssert.Contains("CommitSearchEnded(StalkerSearchTerminalOutcome.NEW_ELIGIBLE_TARGET_OBSERVED)", source);
-            StringAssert.Contains("CommitSearchEnded(StalkerSearchTerminalOutcome.CURRENT_TARGET_INVALID_NO_REPLACEMENT)", source);
+            Assert.That(
+                source,
+                Does.Contain(
+                    "_lastCommittedSearchEpisodeId == _searchContext.EpisodeId"));
+
+            Assert.That(
+                source,
+                Does.Contain(
+                    "new StalkerSearchEndedFact"));
+
+            AssertSearchTerminalCommitExists(
+                source,
+                "TIMEOUT");
+
+            AssertSearchTerminalCommitExists(
+                source,
+                "SAME_TARGET_REACQUIRED");
+
+            AssertSearchTerminalCommitExists(
+                source,
+                "NEW_ELIGIBLE_TARGET_OBSERVED");
+
+            AssertSearchTerminalCommitExists(
+                source,
+                "CURRENT_TARGET_INVALID_NO_REPLACEMENT");
+
+            AssertSearchTerminalCommitBeforeCleanup(
+                source,
+                "NEW_ELIGIBLE_TARGET_OBSERVED");
         }
 
         [Test]
@@ -492,6 +517,54 @@ namespace EchoProtocol.AI.Stalker.Tests
             var method = target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public, null, parameterTypes, null);
             Assert.That(method, Is.Not.Null, $"Missing method '{methodName}' on '{target.GetType().FullName}'.");
             return method.Invoke(target, args);
+        }
+
+        private static void AssertSearchTerminalCommitExists(
+            string source,
+            string outcomeName)
+        {
+            var pattern =
+                $@"CommitSearchEnded\s*\(\s*" +
+                $@"StalkerSearchTerminalOutcome\s*\.\s*" +
+                $@"{outcomeName}\s*\)";
+
+            Assert.That(
+                System.Text.RegularExpressions.Regex.IsMatch(
+                    source,
+                    pattern),
+                Is.True,
+                $"Missing CommitSearchEnded for {outcomeName}.");
+        }
+
+        private static void AssertSearchTerminalCommitBeforeCleanup(
+            string source,
+            string outcomeName)
+        {
+            var pattern =
+                $@"CommitSearchEnded\s*\(\s*" +
+                $@"StalkerSearchTerminalOutcome\s*\.\s*" +
+                $@"{outcomeName}\s*\)";
+
+            var match =
+                System.Text.RegularExpressions.Regex.Match(
+                    source,
+                    pattern);
+
+            Assert.That(
+                match.Success,
+                Is.True,
+                $"Missing CommitSearchEnded for {outcomeName}.");
+
+            var cleanupIndex =
+                source.IndexOf(
+                    "ClearSearchRuntimeContext()",
+                    match.Index + match.Length,
+                    StringComparison.Ordinal);
+
+            Assert.That(
+                cleanupIndex,
+                Is.GreaterThan(match.Index),
+                $"{outcomeName} must be committed before search runtime cleanup.");
         }
 
         private static object GetProperty(object target, string propertyName)

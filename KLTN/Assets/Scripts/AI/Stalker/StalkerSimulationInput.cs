@@ -62,7 +62,8 @@ namespace EchoProtocol.AI.Stalker
                 currentAttackTargetSnapshot,
                 hearingObservations,
                 ResolveHearingEvaluationTimeUtc(
-                    hearingObservations))
+                    hearingObservations),
+                null)
         {
         }
 
@@ -73,6 +74,25 @@ namespace EchoProtocol.AI.Stalker
             StalkerAttackTargetSnapshot? currentAttackTargetSnapshot,
             IReadOnlyList<HearingObservation> hearingObservations,
             DateTime hearingEvaluationTimeUtc)
+            : this(
+                step,
+                visibleTargetCandidates,
+                targetStatuses,
+                currentAttackTargetSnapshot,
+                hearingObservations,
+                hearingEvaluationTimeUtc,
+                null)
+        {
+        }
+
+        public StalkerSimulationInput(
+            AiSimulationStep step,
+            IReadOnlyList<StalkerTargetCandidate> visibleTargetCandidates,
+            IReadOnlyList<StalkerTargetStatus> targetStatuses,
+            StalkerAttackTargetSnapshot? currentAttackTargetSnapshot,
+            IReadOnlyList<HearingObservation> hearingObservations,
+            DateTime hearingEvaluationTimeUtc,
+            IReadOnlyList<PlayerId> visibleObjectiveCarrierIds)
         {
             if (hearingEvaluationTimeUtc != default
                 && hearingEvaluationTimeUtc.Kind
@@ -94,6 +114,8 @@ namespace EchoProtocol.AI.Stalker
                 hearingObservations;
             HearingEvaluationTimeUtc =
                 hearingEvaluationTimeUtc;
+            VisibleObjectiveCarrierIds =
+                visibleObjectiveCarrierIds;
         }
 
         public AiSimulationStep Step { get; }
@@ -124,6 +146,13 @@ namespace EchoProtocol.AI.Stalker
         /// wall-clock reads inside StalkerController.
         /// </summary>
         public DateTime HearingEvaluationTimeUtc { get; }
+
+        /// <summary>
+        /// Objective carriers confirmed by authoritative state and present
+        /// in the current visible target frame.
+        /// </summary>
+        public IReadOnlyList<PlayerId>
+            VisibleObjectiveCarrierIds { get; }
 
         public bool HasHearingEvaluationTimeUtc =>
             HearingEvaluationTimeUtc != default
