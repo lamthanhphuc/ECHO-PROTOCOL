@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Diagnostics;
 using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Networking.Authority;
@@ -274,7 +275,9 @@ namespace EchoProtocol.Networking
             ObjectiveSourceId = objectiveSourceId;
             EscapeDoorId = escapeDoorId;
             HandleReplicatedStateChanged();
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchState,
+
                 $"[MatchState] Initialized match={Object.Id}, objective={objectiveSourceId}, door={escapeDoorId}.");
         }
 
@@ -358,7 +361,9 @@ namespace EchoProtocol.Networking
             LastActor = actor;
             EscapeTimer = TickTimer.CreateFromSeconds(Runner, CurrentScenarioEscapeDoorTimerSeconds);
             HandleReplicatedStateChanged();
-            Debug.Log($"[MatchState] Escape started by {actor}; duration={CurrentScenarioEscapeDoorTimerSeconds:0.##}s.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchState,
+                $"[MatchState] Escape started by {actor}; duration={CurrentScenarioEscapeDoorTimerSeconds:0.##}s.");
             return true;
         }
 
@@ -426,7 +431,9 @@ namespace EchoProtocol.Networking
                 PhaseName(next),
                 "PREVIOUS_PHASE_COMPLETED");
             HandleReplicatedStateChanged();
-            Debug.Log($"[MatchState] Phase {expected} -> {next}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchState,
+                $"[MatchState] Phase {expected} -> {next}.");
             return true;
         }
 
@@ -463,7 +470,9 @@ namespace EchoProtocol.Networking
                 survivorCount,
                 ReasonCode(reason));
             HandleReplicatedStateChanged();
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchState,
+
                 $"[MatchState] Match ended result={result}, reason={reason}, survivors={survivorCount}.");
             return true;
         }

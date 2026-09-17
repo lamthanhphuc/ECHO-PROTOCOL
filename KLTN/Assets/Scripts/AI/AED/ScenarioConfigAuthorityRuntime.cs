@@ -1,6 +1,7 @@
 using System;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Common.Profile;
+using EchoProtocol.Diagnostics;
 using UnityEngine;
 
 namespace EchoProtocol.AI.AED
@@ -159,7 +160,8 @@ namespace EchoProtocol.AI.AED
             switch (result.CommitDisposition)
             {
                 case ScenarioResolutionCommitDisposition.NewDecision:
-                    Debug.Log(
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.Aed,
                         $"[AED] decision={record.DecisionId:D} " +
                         $"result={record.Result?.ToString() ?? "none"} " +
                         $"reason={record.ReasonCode} " +
@@ -168,7 +170,8 @@ namespace EchoProtocol.AI.AED
                     break;
 
                 case ScenarioResolutionCommitDisposition.DuplicateNoOp:
-                    Debug.Log(
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.Aed,
                         $"[AED] duplicate decision no-op " +
                         $"decision={record.DecisionId:D}");
                     break;

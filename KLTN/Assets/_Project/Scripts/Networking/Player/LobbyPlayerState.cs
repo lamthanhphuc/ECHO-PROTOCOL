@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using Fusion;
 using EchoProtocol.Networking.Authority;
@@ -278,7 +279,9 @@ namespace EchoProtocol.Networking
             }
 
             IsReady = isReady;
-            Debug.Log($"[LobbyPlayerState] {requester} ready={isReady}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.Lobby,
+                $"[LobbyPlayerState] {requester} ready={isReady}.");
             AnyStateChanged?.Invoke();
         }
 
@@ -417,7 +420,9 @@ namespace EchoProtocol.Networking
             LobbySelectionError error)
         {
             var accepted = error == LobbySelectionError.None;
-            Debug.Log($"[LobbyPlayerState] {target} {kind}={requestedId}, accepted={accepted}, error={error}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.Lobby,
+                $"[LobbyPlayerState] {target} {kind}={requestedId}, accepted={accepted}, error={error}.");
             RpcSelectionResult(target, (int)kind, requestedId, accepted, (int)error);
         }
 

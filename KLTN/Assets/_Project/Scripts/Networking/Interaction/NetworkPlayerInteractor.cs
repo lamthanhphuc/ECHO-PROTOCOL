@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
+using EchoProtocol.Diagnostics;
 using EchoProtocol.Tools.Scanner;
 using Fusion;
 using UnityEngine;
@@ -441,7 +442,7 @@ namespace EchoProtocol.Networking
 
             var command = new InteractionCommand(target.Object.Id, NextSequence());
             RpcRequestInteraction(command.TargetId, command.Sequence);
-            Debug.Log($"[Interaction] Sent target={command.TargetId}, sequence={command.Sequence}.");
+            RuntimeLog.Log(RuntimeLogCategory.Interaction, $"[Interaction] Sent target={command.TargetId}, sequence={command.Sequence}.");
             return true;
         }
 
@@ -589,7 +590,8 @@ namespace EchoProtocol.Networking
             }
 
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.Interaction,
                 $"[LifeState] Revive request reviver={requester}, target={targetId}, " +
                 $"sequence={sequence}, result={result}.");
             RpcInteractionResult(requester, targetId, sequence, (int)result);
@@ -1300,7 +1302,8 @@ namespace EchoProtocol.Networking
             // Consume every new sequence, including rejected commands, so it cannot be replayed later.
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
 
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.Interaction,
                 $"[Interaction] Requester={requester}, target={targetId}, sequence={sequence}, result={result}.");
             RpcInteractionResult(requester, targetId, sequence, (int)result);
         }

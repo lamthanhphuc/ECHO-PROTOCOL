@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using Fusion;
 using EchoProtocol.Networking.Authority;
@@ -145,7 +146,9 @@ namespace EchoProtocol.Networking
 
             _matchStartInProgress = true;
 
-            Debug.Log($"[LobbyManager] Host validated {state.CurrentPlayers} ready players. Confirming backend authority.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.Lobby,
+                $"[LobbyManager] Host validated {state.CurrentPlayers} ready players. Confirming backend authority.");
 
             MatchAuthorityRuntime.EnsureExists(_bootstrap).StartMatch((accepted, error) =>
             {
@@ -170,7 +173,9 @@ namespace EchoProtocol.Networking
                     return;
                 }
 
-                Debug.Log($"[LobbyManager] Backend confirmed match. Loading '{GameSceneName}'.");
+                RuntimeLog.Log(
+                RuntimeLogCategory.Lobby,
+                $"[LobbyManager] Backend confirmed match. Loading '{GameSceneName}'.");
                 _ = runner.LoadScene(
                     GameSceneName,
                     UnityEngine.SceneManagement.LoadSceneMode.Single);

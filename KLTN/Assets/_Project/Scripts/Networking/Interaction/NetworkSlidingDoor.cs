@@ -1,5 +1,6 @@
 using System;
 using EchoProtocol.AI.Listener.Noise;
+using EchoProtocol.Diagnostics;
 using Fusion;
 using UnityEngine;
 using UnityEngine.AI;
@@ -520,7 +521,7 @@ namespace EchoProtocol.Networking
                 : NetworkDoorState.Open;
 
             ApplyReplicatedState();
-            Debug.Log($"[NetworkSlidingDoor] {context.Player} changed door {Object.Id} to {State}.");
+            RuntimeLog.Log(RuntimeLogCategory.Door, $"[NetworkSlidingDoor] {context.Player} changed door {Object.Id} to {State}.");
         }
 
         private void CacheClosedPositions()

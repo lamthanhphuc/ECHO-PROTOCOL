@@ -6,6 +6,7 @@ using EchoProtocol.AI.Listener.Perception;
 using EchoProtocol.AI.Stalker.Hearing;
 using EchoProtocol.AI.Stalker.Spatial;
 using EchoProtocol.AI.Stalker.Telemetry;
+using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
@@ -1412,7 +1413,8 @@ namespace EchoProtocol.AI.Stalker
             _hearingMemory.UpdateNoiseInvestigation(
                 selection.Observation);
 
-            UnityEngine.Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerHearing,
                 $"[STK_HEARING][UPDATE_SEARCH] " +
                 $"reason={selection.Reason} " +
                 $"event={selection.Observation.NoiseEventId} " +
@@ -1495,7 +1497,8 @@ namespace EchoProtocol.AI.Stalker
             _hearingMemory.BeginNoiseInvestigation(
                 observation);
 
-            UnityEngine.Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerHearing,
                 $"[STK_HEARING][ENTER_SEARCH] " +
                 $"event={observation.NoiseEventId} " +
                 $"type={observation.NoiseType} " +
@@ -1874,7 +1877,9 @@ namespace EchoProtocol.AI.Stalker
             Vector3 targetSample,
             bool force = false)
         {
-            if (!chaseRuntimeDiagnostics)
+            if (!chaseRuntimeDiagnostics
+                || !RuntimeLog.IsEnabled(
+                    RuntimeLogCategory.StalkerChase))
             {
                 return;
             }
@@ -2012,7 +2017,8 @@ namespace EchoProtocol.AI.Stalker
                         planarDesiredVelocity)
                     : 0f;
 
-            UnityEngine.Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerChase,
                 $"[STK_CHASE_DIAG] " +
                 $"phase={phase} " +
                 $"t={now:F3} " +
@@ -4193,7 +4199,8 @@ namespace EchoProtocol.AI.Stalker
                     //     NavigationFailureReason.None);
                     // continue;
                     BeginRoomSweepSelfProbeScan(probeNodeId, currentRoomRegionId);
-                    UnityEngine.Debug.Log(
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.StalkerPatrol,
                         $"[STK_PATROL][LOCAL] " +
                         $"region={currentRoomRegionId.Value} " +
                         $"probeNode={probeNodeId} " +
@@ -4214,7 +4221,8 @@ namespace EchoProtocol.AI.Stalker
                 }
 
                 LogRoomSweepProbeSelected(currentNodeId, probeNodeId, probeNode.Position);
-                UnityEngine.Debug.Log(
+                RuntimeLog.Log(
+                    RuntimeLogCategory.StalkerPatrol,
                     $"[STK_PATROL][LOCAL] " +
                     $"region={currentRoomRegionId.Value} " +
                     $"probeNode={probeNodeId} " +
@@ -4446,7 +4454,8 @@ namespace EchoProtocol.AI.Stalker
                     || previousObjective.NextRegionId
                         != objective.NextRegionId)
                 {
-                    UnityEngine.Debug.Log(
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.StalkerPatrol,
                         $"[STK_PATROL][GLOBAL] " +
                         $"currentRegion={currentRegionId.Value} " +
                         $"targetRoom={objective.TargetRoomRegionId.Value} " +
@@ -5166,9 +5175,13 @@ namespace EchoProtocol.AI.Stalker
 
         private void LogDiagnostic(string message)
         {
-            if (enableDiagnostics)
+            if (enableDiagnostics
+                && RuntimeLog.IsEnabled(
+                    RuntimeLogCategory.StalkerDiagnostics))
             {
-                UnityEngine.Debug.Log(message);
+                RuntimeLog.Log(
+                    RuntimeLogCategory.StalkerDiagnostics,
+                    message);
             }
         }
 

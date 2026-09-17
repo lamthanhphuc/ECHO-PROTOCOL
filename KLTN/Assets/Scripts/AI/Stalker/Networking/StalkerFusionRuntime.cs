@@ -6,6 +6,7 @@ using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.AI.Listener.Perception;
 using EchoProtocol.AI.Stalker.Telemetry;
+using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
 using Fusion;
@@ -32,6 +33,10 @@ namespace EchoProtocol.AI.Stalker.Networking
         [SerializeField, Min(0f)] private double hearingThreshold = 0.1d;
         [SerializeField, Range(0.01f, 0.99f)] private float closedDoorMultiplier = 0.5f;
         [SerializeField, Range(0.01f, 0.99f)] private float wallMultiplier = 0.25f;
+
+        [Header("Runtime Diagnostics")]
+        [SerializeField, Min(0.1f)]
+        private float hearingDiagnosticIntervalSeconds = 0.5f;
 
         [Header("Authoritative Combat")]
         [SerializeField, Min(1)] private int attackDamage = 25;
@@ -83,6 +88,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         private StalkerNetworkLifeStateConsequenceSink _productionConsequenceSink;
         private StalkerProductionTelemetryProducer _productionTelemetryProducer;
         private StalkerNetworkPresentationState _lastAuthoritativePresentationState;
+        private float _nextHearingDiagnosticTime;
 
         [Networked] public int ReplicatedSemanticState { get; private set; }
         [Networked] public long ReplicatedAttackEpisodeId { get; private set; }
@@ -283,7 +289,8 @@ namespace EchoProtocol.AI.Stalker.Networking
                 seed,
                 patrolNearOptimalHopSlack);
 
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerPatrol,
                 $"[STK_PATROL][BIND] " +
                 $"match={matchId:D} " +
                 $"seed={seed} " +
@@ -344,7 +351,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             _boundScenarioConfigFingerprint =
                 fingerprint;
 
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerAed,
                 $"[STK_AED][BIND] " +
                 $"match={matchId:D} " +
                 $"config={config.ScenarioConfigVersion} " +
@@ -614,15 +622,47 @@ namespace EchoProtocol.AI.Stalker.Networking
                 }
             }
 
-            if (_activeNoiseEvents.Count > 0)
+            LogHearingFrameDiagnostic(
+                origin,
+                heardAtUtc);
+        }
+
+        private void LogHearingFrameDiagnostic(
+            Vector3 origin,
+            DateTime heardAtUtc)
+        {
+            if (_activeNoiseEvents.Count <= 0)
             {
-                Debug.Log(
-                    $"[STK_HEARING][FRAME] " +
-                    $"activeNoise={_activeNoiseEvents.Count} " +
-                    $"heard={_hearingObservations.Count} " +
-                    $"origin={origin} " +
-                    $"utc={heardAtUtc:O}");
+                _nextHearingDiagnosticTime = 0f;
+                return;
             }
+
+            if (!RuntimeLog.IsEnabled(
+                    RuntimeLogCategory.StalkerHearing))
+            {
+                return;
+            }
+
+            var now = Time.unscaledTime;
+
+            if (now < _nextHearingDiagnosticTime)
+            {
+                return;
+            }
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerHearing,
+                $"[STK_HEARING][FRAME] " +
+                $"activeNoise={_activeNoiseEvents.Count} " +
+                $"heard={_hearingObservations.Count} " +
+                $"origin={origin} " +
+                $"utc={heardAtUtc:O}");
+
+            _nextHearingDiagnosticTime =
+                now
+                + Mathf.Max(
+                    0.1f,
+                    hearingDiagnosticIntervalSeconds);
         }
 
         private PlayerId CreateRunnerPlayerId(PlayerRef player)
@@ -684,7 +724,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             AttackSequence++;
-            UnityEngine.Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerCombat,
                 $"[StalkerFusion] Attack committed target={TargetPlayer}, sequence={AttackSequence}, " +
                 $"damage={attackDamage}.");
             return true;
@@ -1029,7 +1070,8 @@ namespace EchoProtocol.AI.Stalker.Networking
         {
             var isAuthority = Object != null && Object.HasStateAuthority;
             SetDecisionComponentsEnabled(isAuthority);
-            UnityEngine.Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerLifecycle,
                 $"[StalkerFusion] Spawned authority={isAuthority}; " +
                 $"NavMesh/vision decision systems enabled={isAuthority}.");
         }

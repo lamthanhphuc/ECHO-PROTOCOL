@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using EchoProtocol.AI.AED;
@@ -161,7 +162,9 @@ namespace EchoProtocol.Networking.Authority
             MatchId = matchId;
             IsHostBinding = true;
             _nextLeaseRenewal = Time.unscaledTime + LeaseRenewIntervalSeconds;
-            Debug.Log($"[MatchAuthority] Host binding created. Match={MatchId:D}, Session='{sessionName}'.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+                $"[MatchAuthority] Host binding created. Match={MatchId:D}, Session='{sessionName}'.");
             return true;
         }
 
@@ -199,7 +202,9 @@ namespace EchoProtocol.Networking.Authority
             MatchId = matchId;
             IsHostBinding = runner.IsServer;
             requestedScenarioResolutionMode = ReadScenarioResolutionMode(runner);
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+
                 $"[MatchAuthority] Fusion session attached. Match={MatchId:D}, " +
                 $"Host={IsHostBinding}, Mode={requestedScenarioResolutionMode}, Session='{runner.SessionInfo.Name}'.");
             TrySubmitLocalIdentity();
@@ -283,7 +288,9 @@ namespace EchoProtocol.Networking.Authority
             }
 
             playerState.ApplyVerifiedBackendIdentity(result.Data.data.userId);
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+
                 $"[MatchAuthority] Player verified. Actor={actorNumber}, " +
                 $"User={result.Data.data.userId}, Match={MatchId:D}.");
         }
@@ -311,7 +318,9 @@ namespace EchoProtocol.Networking.Authority
             var success = IsSuccessful(result);
             if (success)
             {
-                Debug.Log($"[MatchAuthority] Backend confirmed match start. Match={MatchId:D}.");
+                RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+                $"[MatchAuthority] Backend confirmed match start. Match={MatchId:D}.");
                 completed?.Invoke(true, string.Empty);
             }
             else
@@ -734,7 +743,9 @@ namespace EchoProtocol.Networking.Authority
             }
 
             IsHostBinding = false;
-            Debug.Log($"[MatchAuthority] Backend confirmed match end. Match={MatchId:D}, Reason={reasonCode}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+                $"[MatchAuthority] Backend confirmed match end. Match={MatchId:D}, Reason={reasonCode}.");
         }
 
         public bool RecordPlayerDowned(

@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking.Authority;
 using Fusion;
 using UnityEngine;
@@ -46,7 +47,9 @@ namespace EchoProtocol.Networking
         {
             if (!Object.HasStateAuthority || !matchStateId.IsValid) return;
             MatchStateId = matchStateId;
-            Debug.Log($"[Objective] Sector Box {Object.Id} bound to Match State {matchStateId}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.Objective,
+                $"[Objective] Sector Box {Object.Id} bound to Match State {matchStateId}.");
         }
 
         protected override InteractionValidationResult ValidateCurrentState(in InteractionContext context)
