@@ -105,6 +105,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 93354aaf66e8c2141a5fa7722db2c156, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NoiseMakerBeacon
+  activationDelay: 1
+  totalPulses: 8
+  pulseInterval: 2
+  despawnDelayAfterLastPulse: 1
 --- !u!1 &9137758001664879966
 GameObject:
   m_ObjectHideFlags: 0
@@ -152,7 +156,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
