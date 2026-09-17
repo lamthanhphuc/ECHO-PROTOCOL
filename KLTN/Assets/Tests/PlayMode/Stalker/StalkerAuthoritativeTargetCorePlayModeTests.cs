@@ -61,6 +61,54 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
+        public IEnumerator STK_AUTH_PATROL_AdaptiveIsolationCanWinAcquisition()
+        {
+            var fixture = CreateFixture();
+            var candidates = CreateCandidateList(
+                CreateCandidate(1, new Vector3(0f, 1f, 2f), 2f, true),
+                CreateCandidate(3, new Vector3(0.1f, 1f, 2f), 2.1f, true),
+                CreateCandidate(2, new Vector3(8f, 1f, 4f), 4f, true));
+
+            Assert.That(
+                Simulate(fixture.Controller, 0.1f, candidates, null),
+                Is.True);
+
+            AssertState(fixture.Controller, "DETECT");
+            AssertPlayerIdValue(
+                GetProperty(
+                    GetMemory(fixture.Controller),
+                    "DetectionTargetId"),
+                2);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator STK_AUTH_PATROL_VisibleObjectiveCarrierCanWinAcquisition()
+        {
+            var fixture = CreateFixture();
+            var candidates = CreateCandidateList(
+                CreateCandidate(1, new Vector3(0f, 1f, 1f), 1f, true),
+                CreateCandidate(2, new Vector3(0f, 1f, 4f), 4f, true));
+
+            Assert.That(
+                SimulateWithObjectiveCarriers(
+                    fixture.Controller,
+                    0.1f,
+                    candidates,
+                    null,
+                    2),
+                Is.True);
+
+            AssertState(fixture.Controller, "DETECT");
+            AssertPlayerIdValue(
+                GetProperty(
+                    GetMemory(fixture.Controller),
+                    "DetectionTargetId"),
+                2);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator STK_AUTH_PATROL_DeterministicTieUsesStablePlayerId()
         {
             var fixture = CreateFixture();
@@ -115,6 +163,95 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             AssertState(fixture.Controller, "DETECT");
             Assert.That(GetFloatProperty(fixture.Controller, "DetectionMeter"), Is.EqualTo(0f).Within(FloatTolerance));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator STK_AUTH_PATROL_RejectedAcquisition_DoesNotRecordTargetHistory()
+        {
+            var fixture = CreateFixture();
+
+            var memory = GetMemory(fixture.Controller);
+
+            // Seed a newer accepted observation for the same detection target.
+            // The PATROL candidate below is older and must therefore be rejected.
+            InvokeMethod(
+                memory,
+                "SetDetectionTarget",
+                new[] { ResolveType(PlayerIdTypeName) },
+                new[] { CreatePlayerId(1) });
+
+            InvokeMethod(
+                memory,
+                "TryAcceptDetectionTargetObservation",
+                new[] { ResolveType(VisionObservationTypeName) },
+                new[]
+                {
+                    CreateObservation(
+                        1,
+                        new Vector3(0f, 1f, 4f),
+                        20L,
+                        2d,
+                        4f)
+                });
+
+            Assert.That(
+                Simulate(
+                    fixture.Controller,
+                    0.1f,
+                    CreateCandidateList(
+                        CreateCandidate(
+                            1,
+                            new Vector3(0f, 1f, 3f),
+                            3f,
+                            true)),
+                    CreateStatusList(
+                        CreateStatus(1, true))),
+                Is.True);
+
+            // Acquisition must fail because the candidate observation is older.
+            AssertState(
+                fixture.Controller,
+                "PATROL");
+
+            AssertInvalidPlayerId(
+                GetProperty(
+                    memory,
+                    "DetectionTargetId"));
+
+            var history =
+                GetTargetHistoryMemory(
+                    fixture.Controller);
+
+            var targetHistoryScore =
+                InvokeMethod(
+                    history,
+                    "GetTargetHistory01",
+                    new[]
+                    {
+                        ResolveType(PlayerIdTypeName),
+                        ResolveType(AiSimulationTimeTypeName),
+                        typeof(float)
+                    },
+                    new object[]
+                    {
+                        CreatePlayerId(1),
+                        Activator.CreateInstance(
+                            ResolveType(AiSimulationTimeTypeName),
+                            10L,
+                            1d),
+                        45f
+                    });
+
+            Assert.That(
+                targetHistoryScore,
+                Is.TypeOf<float>());
+
+            Assert.That(
+                (float)targetHistoryScore,
+                Is.EqualTo(0f).Within(FloatTolerance),
+                "Rejected acquisition must not create target-history preference.");
+
             yield return null;
         }
 
@@ -580,6 +717,78 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
+        public IEnumerator STK_AUTH_SEARCH_AdaptivePolicyCanPreferVisibleObjectiveCarrier()
+        {
+            var fixture = CreateFixture();
+
+            // Player 9 là target cũ đang bị SEARCH.
+            SetCurrentTarget(
+                fixture.Controller,
+                9,
+                new Vector3(0f, 1f, 4f));
+
+            SetState(
+                fixture.Controller,
+                "SEARCH");
+
+            // Player 1 gần hơn.
+            // Player 2 xa hơn nhưng đang mang objective.
+            //
+            // Với default adaptive weights:
+            //
+            // Player 1 distance contribution:
+            // 1 / (1 + 1) = 0.5
+            //
+            // Player 2 distance contribution:
+            // 1 / (1 + 4) = 0.2
+            //
+            // Player 2 objective bonus:
+            // +0.9
+            //
+            // Isolation của cả hai bằng nhau trong frame này,
+            // vì vậy Player 2 phải thắng.
+            Assert.That(
+                SimulateWithObjectiveCarriers(
+                    fixture.Controller,
+                    0.1f,
+                    CreateCandidateList(
+                        CreateCandidate(
+                            1,
+                            new Vector3(0f, 1f, 1f),
+                            1f,
+                            true),
+                        CreateCandidate(
+                            2,
+                            new Vector3(0f, 1f, 4f),
+                            4f,
+                            true)),
+                    CreateStatusList(
+                        CreateStatus(9, true),
+                        CreateStatus(1, true),
+                        CreateStatus(2, true)),
+                    2),
+                Is.True);
+
+            AssertState(
+                fixture.Controller,
+                "DETECT");
+
+            AssertPlayerIdValue(
+                GetProperty(
+                    GetMemory(fixture.Controller),
+                    "DetectionTargetId"),
+                2);
+
+            Assert.That(
+                GetFloatProperty(
+                    fixture.Controller,
+                    "DetectionMeter"),
+                Is.EqualTo(0f).Within(FloatTolerance));
+
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator STK_AUTH_SEARCH_DifferentVisibleTargetEqualDistanceUsesStablePlayerId()
         {
             var fixture = CreateFixture();
@@ -645,6 +854,94 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(Simulate(fixture.Controller, 0.1f, CreateCandidateList(), CreateStatusList(CreateStatus(1, true), CreateStatus(1, true))), Is.True);
             AssertState(fixture.Controller, "PATROL");
             AssertInvalidPlayerId(GetProperty(GetMemory(fixture.Controller), "CurrentTargetId"));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator STK_AUTH_CHASE_VisibleTargetRefreshesRecentDetectionHistory()
+        {
+            var fixture = CreateFixture();
+
+            SetCurrentTarget(
+                fixture.Controller,
+                1,
+                new Vector3(0f, 1f, 4f));
+
+            var history =
+                GetTargetHistoryMemory(
+                    fixture.Controller);
+
+            // Seed an old legal observation which would be completely
+            // expired by t=20 if the current visible frame were not
+            // recorded after simulation.
+            InvokeMethod(
+                history,
+                "RecordVisibleObservation",
+                new[]
+                {
+                    ResolveType(PlayerIdTypeName),
+                    ResolveType(AiSimulationTimeTypeName)
+                },
+                new object[]
+                {
+                    CreatePlayerId(1),
+                    Activator.CreateInstance(
+                        ResolveType(AiSimulationTimeTypeName),
+                        10L,
+                        1d)
+                });
+
+            Assert.That(
+                SimulateAtTime(
+                    fixture.Controller,
+                    tick: 200L,
+                    seconds: 20d,
+                    deltaSeconds: 0.1f,
+                    candidates: CreateCandidateList(
+                        CreateCandidateAtTime(
+                            1,
+                            new Vector3(0f, 1f, 4f),
+                            4f,
+                            true,
+                            200L,
+                            20d)),
+                    statuses: CreateStatusList(
+                        CreateStatus(1, true))),
+                Is.True);
+
+            AssertState(
+                fixture.Controller,
+                "CHASE");
+
+            var recentDetection =
+                InvokeMethod(
+                    history,
+                    "GetRecentDetection01",
+                    new[]
+                    {
+                        ResolveType(PlayerIdTypeName),
+                        ResolveType(AiSimulationTimeTypeName),
+                        typeof(float)
+                    },
+                    new object[]
+                    {
+                        CreatePlayerId(1),
+                        Activator.CreateInstance(
+                            ResolveType(AiSimulationTimeTypeName),
+                            200L,
+                            20d),
+                        10f
+                    });
+
+            Assert.That(
+                recentDetection,
+                Is.TypeOf<float>());
+
+            Assert.That(
+                (float)recentDetection,
+                Is.EqualTo(1f).Within(FloatTolerance),
+                "A currently visible CHASE target must refresh recent-detection history.");
+
             yield return null;
         }
 
@@ -803,6 +1100,47 @@ namespace EchoProtocol.AI.Stalker.Tests
             return (bool)result;
         }
 
+        private static bool SimulateWithObjectiveCarriers(
+            Component controller,
+            float deltaSeconds,
+            object candidates,
+            object statuses,
+            params int[] carrierPlayerIds)
+        {
+            var playerIdArray = Array.CreateInstance(
+                ResolveType(PlayerIdTypeName),
+                carrierPlayerIds.Length);
+            for (var i = 0; i < carrierPlayerIds.Length; i++)
+            {
+                playerIdArray.SetValue(
+                    CreatePlayerId(carrierPlayerIds[i]),
+                    i);
+            }
+
+            var input = Activator.CreateInstance(
+                ResolveType(StalkerSimulationInputTypeName),
+                Activator.CreateInstance(
+                    ResolveType(AiSimulationStepTypeName),
+                    Activator.CreateInstance(
+                        ResolveType(AiSimulationTimeTypeName),
+                        10L,
+                        1d),
+                    deltaSeconds),
+                candidates,
+                statuses,
+                null,
+                null,
+                default(DateTime),
+                playerIdArray);
+            var result = InvokeMethod(
+                controller,
+                "Simulate",
+                new[] { ResolveType(StalkerSimulationInputTypeName) },
+                new[] { input });
+            Assert.That(result, Is.TypeOf<bool>());
+            return (bool)result;
+        }
+
         private static bool Simulate(Component controller, float deltaSeconds, object candidates, object statuses, object attackTargetSnapshot)
         {
             var snapshotType = ResolveType(AttackTargetSnapshotTypeName);
@@ -825,6 +1163,45 @@ namespace EchoProtocol.AI.Stalker.Tests
             return (bool)result;
         }
 
+        private static bool SimulateAtTime(
+            Component controller,
+            long tick,
+            double seconds,
+            float deltaSeconds,
+            object candidates,
+            object statuses)
+        {
+            var input = Activator.CreateInstance(
+                ResolveType(StalkerSimulationInputTypeName),
+                Activator.CreateInstance(
+                    ResolveType(AiSimulationStepTypeName),
+                    Activator.CreateInstance(
+                        ResolveType(AiSimulationTimeTypeName),
+                        tick,
+                        seconds),
+                    deltaSeconds),
+                candidates,
+                statuses);
+
+            var result = InvokeMethod(
+                controller,
+                "Simulate",
+                new[]
+                {
+                    ResolveType(StalkerSimulationInputTypeName)
+                },
+                new[]
+                {
+                    input
+                });
+
+            Assert.That(
+                result,
+                Is.TypeOf<bool>());
+
+            return (bool)result;
+        }
+
         private static object CreateAttackTargetSnapshot(int playerId, bool gameplayValid, Vector3 position, bool hasConsequenceReceiver)
         {
             return Activator.CreateInstance(
@@ -841,6 +1218,27 @@ namespace EchoProtocol.AI.Stalker.Tests
                 ResolveType(StalkerTargetCandidateTypeName),
                 CreateObservation(playerId, position, 10L, 1d, distance),
                 eligible ? CreateEligibleResult() : CreateIneligibleResult("Downed"));
+        }
+
+        private static object CreateCandidateAtTime(
+            int playerId,
+            Vector3 position,
+            float distance,
+            bool eligible,
+            long tick,
+            double seconds)
+        {
+            return Activator.CreateInstance(
+                ResolveType(StalkerTargetCandidateTypeName),
+                CreateObservation(
+                    playerId,
+                    position,
+                    tick,
+                    seconds,
+                    distance),
+                eligible
+                    ? CreateEligibleResult()
+                    : CreateIneligibleResult("Downed"));
         }
 
         private static object CreateObservation(int playerId, Vector3 position, long tick, double seconds, float distance)
@@ -907,6 +1305,21 @@ namespace EchoProtocol.AI.Stalker.Tests
         {
             var field = controller.GetType().GetField("_memory", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, "Missing private StalkerController._memory field.");
+            return field.GetValue(controller);
+        }
+
+        private static object GetTargetHistoryMemory(
+            Component controller)
+        {
+            var field = controller.GetType().GetField(
+                "_targetHistoryMemory",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            Assert.That(
+                field,
+                Is.Not.Null,
+                "Missing private StalkerController._targetHistoryMemory field.");
+
             return field.GetValue(controller);
         }
 

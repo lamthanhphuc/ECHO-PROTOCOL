@@ -68,12 +68,17 @@ namespace EchoProtocol.AI.Stalker.Networking
                     isHidden || (lifeState != null && lifeState.IsCaught));
                 var eligibility = StalkerTargetEligibility.Evaluate(eligibilitySnapshot);
                 InsertStatusSortedUnique(targetStatuses, new StalkerTargetStatus(playerId, eligibility));
+                var isObjectiveCarrier =
+                    identity.TryGetComponent<LobbyPlayerState>(
+                        out var lobbyState)
+                    && lobbyState.CarriedCoreId.IsValid;
 
                 perceptionSnapshots.Add(new StalkerPerceptionTargetSnapshot(
                     playerId,
                     identity.VisionTargetPoint,
                     identity.EntityRoot,
-                    eligibilitySnapshot));
+                    eligibilitySnapshot,
+                    isObjectiveCarrier));
             }
 
             AddDisconnectedLockedTarget(detectionTargetId, targetStatuses);

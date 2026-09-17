@@ -69,6 +69,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             new List<StalkerTargetStatus>();
         private readonly List<StalkerTargetCandidate> _visibleCandidates =
             new List<StalkerTargetCandidate>();
+        private readonly List<PlayerId> _visibleObjectiveCarrierIds =
+            new List<PlayerId>();
         private readonly List<HearingObservation> _hearingObservations =
             new List<HearingObservation>();
         private readonly List<RuntimeNoiseEvent> _activeNoiseEvents =
@@ -307,6 +309,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 _perceptionSnapshots,
                 step.Time,
                 _visibleCandidates);
+            CollectVisibleObjectiveCarrierIds();
 
             var hearingEvaluationTimeUtc =
                 DateTime.UtcNow;
@@ -321,7 +324,8 @@ namespace EchoProtocol.AI.Stalker.Networking
                 BuildCurrentAttackTargetSnapshot(
                     controller.CurrentTargetId),
                 _hearingObservations,
-                hearingEvaluationTimeUtc);
+                hearingEvaluationTimeUtc,
+                _visibleObjectiveCarrierIds);
 
             if (!controller.Simulate(input))
             {
@@ -409,7 +413,9 @@ namespace EchoProtocol.AI.Stalker.Networking
                     playerId,
                     playerObject.transform,
                     playerObject.transform,
-                    eligibilitySnapshot));
+                    eligibilitySnapshot,
+                    lobbyState != null
+                        && lobbyState.CarriedCoreId.IsValid));
             }
 
             return true;
@@ -719,8 +725,31 @@ namespace EchoProtocol.AI.Stalker.Networking
             _perceptionSnapshots.Clear();
             _targetStatuses.Clear();
             _visibleCandidates.Clear();
+            _visibleObjectiveCarrierIds.Clear();
             _hearingObservations.Clear();
             _activeNoiseEvents.Clear();
+        }
+
+        private void CollectVisibleObjectiveCarrierIds()
+        {
+            _visibleObjectiveCarrierIds.Clear();
+
+            for (var i = 0; i < _visibleCandidates.Count; i++)
+            {
+                var playerId =
+                    _visibleCandidates[i].Observation.PlayerId;
+
+                for (var j = 0; j < _perceptionSnapshots.Count; j++)
+                {
+                    var snapshot = _perceptionSnapshots[j];
+                    if (snapshot.PlayerId == playerId
+                        && snapshot.IsObjectiveCarrier)
+                    {
+                        _visibleObjectiveCarrierIds.Add(playerId);
+                        break;
+                    }
+                }
+            }
         }
 
         private void PublishReplicatedPresentationState()

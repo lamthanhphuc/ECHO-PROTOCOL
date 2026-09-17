@@ -10,11 +10,27 @@ namespace EchoProtocol.AI.Stalker
             Transform targetSample,
             Transform targetHierarchyRoot,
             StalkerTargetEligibilitySnapshot eligibilitySnapshot)
+            : this(
+                playerId,
+                targetSample,
+                targetHierarchyRoot,
+                eligibilitySnapshot,
+                false)
+        {
+        }
+
+        public StalkerPerceptionTargetSnapshot(
+            PlayerId playerId,
+            Transform targetSample,
+            Transform targetHierarchyRoot,
+            StalkerTargetEligibilitySnapshot eligibilitySnapshot,
+            bool isObjectiveCarrier)
         {
             PlayerId = playerId;
             TargetSample = targetSample;
             TargetHierarchyRoot = targetHierarchyRoot;
             EligibilitySnapshot = eligibilitySnapshot;
+            IsObjectiveCarrier = isObjectiveCarrier;
         }
 
         public PlayerId PlayerId { get; }
@@ -24,5 +40,7 @@ namespace EchoProtocol.AI.Stalker
         public Transform TargetHierarchyRoot { get; }
 
         public StalkerTargetEligibilitySnapshot EligibilitySnapshot { get; }
+
+        public bool IsObjectiveCarrier { get; }
     }
 }
