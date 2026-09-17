@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.AI.Listener.Perception;
 using EchoProtocol.AI.Stalker.Telemetry;
@@ -94,6 +96,8 @@ namespace EchoProtocol.AI.Stalker.Networking
         private HostRuntimeNoiseService _runtimeNoiseService;
         private Guid _boundHearingMatchId;
         private Guid _boundPatrolMatchId;
+        private Guid _boundScenarioMatchId;
+        private string _boundScenarioConfigFingerprint;
         private NavMeshAgent _navigationAgent;
         private StalkerAttackResult _previousAttackResult;
         private bool _networkPrefabGuard;
@@ -170,6 +174,11 @@ namespace EchoProtocol.AI.Stalker.Networking
             _runtimeNoiseService = null;
             _boundHearingMatchId = Guid.Empty;
             _boundPatrolMatchId = Guid.Empty;
+            controller?.ClearScenarioMonsterParameters();
+            _boundScenarioMatchId =
+                Guid.Empty;
+            _boundScenarioConfigFingerprint =
+                null;
             _hearingObservations.Clear();
             SetLegacySimulationSuppressed(false);
         }
@@ -191,6 +200,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             BindPatrolVariationFromMatchAuthority();
+            BindScenarioConfigFromRegistry();
             _lastAuthoritativeStep = step;
             if (!RunAuthoritativePipeline(step))
             {
@@ -280,6 +290,84 @@ namespace EchoProtocol.AI.Stalker.Networking
                 $"slack={patrolNearOptimalHopSlack}");
 
             _boundPatrolMatchId = matchId;
+        }
+
+        private void BindScenarioConfigFromRegistry()
+        {
+            if (controller == null)
+            {
+                return;
+            }
+
+            var authority =
+                MatchAuthorityRuntime.Instance;
+
+            if (authority == null
+                || !authority.HasStateAuthority
+                || !authority.TryGetMatchId(
+                    out var matchId)
+                || matchId == Guid.Empty)
+            {
+                ClearScenarioConfigBinding();
+                return;
+            }
+
+            if (!ScenarioConfigRuntimeRegistry
+                    .TryGetAppliedConfig(
+                        matchId,
+                        out var config)
+                || config == null)
+            {
+                ClearScenarioConfigBinding();
+                return;
+            }
+
+            var fingerprint =
+                ScenarioConfigFingerprint.Compute(
+                    config);
+
+            if (_boundScenarioMatchId == matchId
+                && string.Equals(
+                    _boundScenarioConfigFingerprint,
+                    fingerprint,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            controller.ApplyScenarioMonsterParameters(
+                config.MonsterParameters);
+
+            _boundScenarioMatchId =
+                matchId;
+
+            _boundScenarioConfigFingerprint =
+                fingerprint;
+
+            Debug.Log(
+                $"[STK_AED][BIND] " +
+                $"match={matchId:D} " +
+                $"config={config.ScenarioConfigVersion} " +
+                $"source={config.ConfigSource} " +
+                $"chase={config.MonsterParameters.ChaseSpeed:0.###}");
+        }
+
+        private void ClearScenarioConfigBinding()
+        {
+            if (_boundScenarioMatchId == Guid.Empty
+                && string.IsNullOrEmpty(
+                    _boundScenarioConfigFingerprint))
+            {
+                return;
+            }
+
+            controller?.ClearScenarioMonsterParameters();
+
+            _boundScenarioMatchId =
+                Guid.Empty;
+
+            _boundScenarioConfigFingerprint =
+                null;
         }
 
         private bool RunAuthoritativePipeline(AiSimulationStep step)
