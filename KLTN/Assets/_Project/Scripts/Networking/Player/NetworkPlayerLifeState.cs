@@ -130,11 +130,17 @@ namespace EchoProtocol.Networking
         private PlayerReviveInteractable _legacyReviveInteractable;
         private Renderer[] _presentationRenderers;
         private Collider[] _presentationColliders;
+        private Light[] _presentationLights;
         private bool[] _presentationRendererDefaults;
         private bool[] _presentationColliderDefaults;
+        private bool[] _presentationLightDefaults;
         private int _presentationRendererCount;
         private int _presentationColliderCount;
+        private int _presentationLightCount;
         private bool _presentationHidden;
+        private Transform _characterVisualRoot;
+        private bool _characterVisualRootDefaultActive;
+        private bool _hasCharacterVisualRootDefault;
 
         public bool CanBeRevived => (Object != null && Object.IsValid) && NetworkPlayerLifeStateRules.CanRevive(
             Status,
@@ -402,6 +408,16 @@ namespace EchoProtocol.Networking
             return CommitEliminated(NetworkPlayerLifeTransitionCause.ReviveLimit, "REVIVE_LIMIT_REACHED");
         }
 
+        public bool ForceEliminateAuthoritative(NetworkPlayerLifeTransitionCause cause, string reason)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority)
+            {
+                return false;
+            }
+
+            return CommitEliminated(cause, reason);
+        }
+
         public bool TryEscape(bool rescuedTeammate = false)
         {
             if (!Object.HasStateAuthority || !NetworkPlayerLifeStateRules.CanEscape(Status))
@@ -422,6 +438,22 @@ namespace EchoProtocol.Networking
 
         private void CommitDown(string sourceType, Vector3 hitPosition)
         {
+            var nextDownCount = DownCount + 1;
+            if (nextDownCount >= 3)
+            {
+                Reviver = PlayerRef.None;
+                ReviveTimer = TickTimer.None;
+                ClearReviveSnapshot();
+                ProtectionTimer = TickTimer.None;
+                PausedBleedoutRemainingSeconds = 0f;
+                BleedoutTimer = TickTimer.None;
+                IsCrawling = false;
+                DownCount = nextDownCount;
+                GetComponent<NetworkPlayerInteractor>()?.DropHeldItemsAuthoritative(Object.InputAuthority);
+                CommitEliminated(NetworkPlayerLifeTransitionCause.ReviveLimit, "THIRD_DOWN");
+                return;
+            }
+
             Reviver = PlayerRef.None;
             ReviveTimer = TickTimer.None;
             ClearReviveSnapshot();
@@ -429,7 +461,7 @@ namespace EchoProtocol.Networking
             PausedBleedoutRemainingSeconds = 0f;
             BleedoutTimer = TickTimer.CreateFromSeconds(Runner, _bleedoutSeconds);
             IsCrawling = true;
-            DownCount++;
+            DownCount = nextDownCount;
             GetComponent<NetworkPlayerInteractor>()?.DropHeldItemsAuthoritative(Object.InputAuthority);
             CommitStatus(NetworkPlayerLifeStatus.Downed, NetworkPlayerLifeTransitionCause.Damage);
             MatchAuthorityRuntime.Instance?.RecordPlayerDowned(
@@ -692,11 +724,22 @@ namespace EchoProtocol.Networking
                     _presentationColliders[i].enabled = hidden ? false : _presentationColliderDefaults[i];
                 }
             }
+
+            for (int i = 0; i < _presentationLights.Length; i++)
+            {
+                if (_presentationLights[i] != null)
+                {
+                    _presentationLights[i].enabled = hidden ? false : _presentationLightDefaults[i];
+                }
+            }
+
+            ApplyCharacterVisualRootVisibility(!hidden);
         }
 
         private void HideCurrentPresentationComponents()
         {
             EnsurePresentationVisibilityCache();
+            ApplyCharacterVisualRootVisibility(false);
 
             var renderers = GetComponentsInChildren<Renderer>(true);
             if (renderers.Length != _presentationRendererCount)
@@ -729,6 +772,22 @@ namespace EchoProtocol.Networking
                     colliders[i].enabled = false;
                 }
             }
+
+            var lights = GetComponentsInChildren<Light>(true);
+            if (lights.Length != _presentationLightCount)
+            {
+                _presentationLights = null;
+                EnsurePresentationVisibilityCache();
+                lights = _presentationLights;
+            }
+
+            for (int i = 0; i < lights.Length; i++)
+            {
+                if (lights[i] != null && lights[i].enabled)
+                {
+                    lights[i].enabled = false;
+                }
+            }
         }
 
         private void EnsurePresentationVisibilityCache()
@@ -755,6 +814,48 @@ namespace EchoProtocol.Networking
                     _presentationColliderDefaults[i] = _presentationColliders[i] != null
                         && _presentationColliders[i].enabled;
                 }
+            }
+
+            if (_presentationLights == null)
+            {
+                _presentationLights = GetComponentsInChildren<Light>(true);
+                _presentationLightCount = _presentationLights.Length;
+                _presentationLightDefaults = new bool[_presentationLights.Length];
+                for (int i = 0; i < _presentationLights.Length; i++)
+                {
+                    _presentationLightDefaults[i] = _presentationLights[i] != null
+                        && _presentationLights[i].enabled;
+                }
+            }
+
+            if (!_hasCharacterVisualRootDefault)
+            {
+                _characterVisualRoot = transform.Find("CharacterVisual");
+                if (_characterVisualRoot != null)
+                {
+                    _characterVisualRootDefaultActive = _characterVisualRoot.gameObject.activeSelf;
+                }
+
+                _hasCharacterVisualRootDefault = true;
+            }
+        }
+
+        private void ApplyCharacterVisualRootVisibility(bool visible)
+        {
+            if (!_hasCharacterVisualRootDefault)
+            {
+                EnsurePresentationVisibilityCache();
+            }
+
+            if (_characterVisualRoot == null)
+            {
+                return;
+            }
+
+            bool targetActive = visible && _characterVisualRootDefaultActive;
+            if (_characterVisualRoot.gameObject.activeSelf != targetActive)
+            {
+                _characterVisualRoot.gameObject.SetActive(targetActive);
             }
         }
 
