@@ -71,7 +71,7 @@ namespace EchoProtocol.AI.Listener.Tests
                 RuntimeNoiseEmissionMode.DiscreteAction);
             AssertDefinition(catalog, RuntimeNoiseType.CORE_DROP, 0.9d, 15d, 3d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
-            AssertDefinition(catalog, RuntimeNoiseType.NOISE_MAKER, 1d, 22d, 6d,
+            AssertDefinition(catalog, RuntimeNoiseType.NOISE_MAKER, 1d, 40d, 6d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
             AssertDefinition(catalog, RuntimeNoiseType.FIELD_SCANNER, 0.45d, 8d, 2.5d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
@@ -600,7 +600,7 @@ namespace EchoProtocol.AI.Listener.Tests
                 out var clearObservation,
                 out var clearReject), Is.True);
             Assert.That(clearReject, Is.EqualTo(ListenerHearingRejectReason.None));
-            Assert.That(clearObservation.EffectiveIntensity, Is.EqualTo(0.5454545454545454d).Within(0.0001d));
+            Assert.That(clearObservation.EffectiveIntensity, Is.EqualTo(0.75d).Within(0.0001d));
 
             var wallSensor = new ListenerHearingSensor(
                 new StaticListenerOcclusionResolver(ListenerOcclusionClass.SOLID_WALL),
@@ -612,7 +612,7 @@ namespace EchoProtocol.AI.Listener.Tests
                 now,
                 out var wallObservation,
                 out _), Is.True);
-            Assert.That(wallObservation.EffectiveIntensity, Is.EqualTo(0.13636363636363635d).Within(0.0001d));
+            Assert.That(wallObservation.EffectiveIntensity, Is.EqualTo(0.1875d).Within(0.0001d));
 
             var closedDoorSensor = new ListenerHearingSensor(
                 new StaticListenerOcclusionResolver(ListenerOcclusionClass.CLOSED_DOOR),
@@ -642,7 +642,7 @@ namespace EchoProtocol.AI.Listener.Tests
             outOfRangeSensor.BeginMatch(Guid.NewGuid());
             Assert.That(outOfRangeSensor.TryEvaluate(
                 open,
-                new Vector3(0, 0, 23),
+                new Vector3(0, 0, 41),
                 now,
                 out _,
                 out var outOfRange), Is.False);
@@ -762,7 +762,7 @@ namespace EchoProtocol.AI.Listener.Tests
             var outside = CreateNoise(RuntimeNoiseType.NOISE_MAKER, "retro", 1, Vector3.zero, now, 12);
             Assert.That(retroactiveSensor.TryEvaluate(
                 outside,
-                new Vector3(0, 0, 23),
+                new Vector3(0, 0, 41),
                 now,
                 out _,
                 out var outsideReason), Is.False);

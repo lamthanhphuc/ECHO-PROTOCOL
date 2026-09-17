@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using EchoProtocol.AI.Common;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Common.Spatial;
 using EchoProtocol.AI.Listener.Perception;
 using EchoProtocol.AI.Stalker.Hearing;
@@ -220,6 +221,8 @@ namespace EchoProtocol.AI.Stalker
         private StalkerSearchEndedFact _lastCommittedSearchEndedFact;
         private SearchEpisodeId _lastCommittedSearchEpisodeId;
         private long _legacySimulationTick;
+        private ScenarioMonsterParameters _scenarioMonsterParameters;
+        private bool _hasScenarioMonsterParameters;
         private IReadOnlyList<StalkerTargetCandidate> _currentVisibleTargetCandidates;
         private IReadOnlyList<PlayerId> _currentVisibleObjectiveCarrierIds;
         private IReadOnlyList<StalkerTargetStatus> _currentTargetStatuses;
@@ -291,6 +294,11 @@ namespace EchoProtocol.AI.Stalker
         public Component CurrentWorldInteractionBlocker => _worldInteractionDriver.CurrentBlocker;
         public IPlayerAttackConsequenceSink AttackConsequenceSink { get; set; }
         public bool SuppressLegacyUpdateSimulation { get; set; }
+        public bool HasScenarioMonsterParameters => _hasScenarioMonsterParameters;
+        public double AppliedDetectionFillRate => GetDetectionFillRate();
+        public double AppliedDetectionDecayRate => GetDetectionDecayRate();
+        public double AppliedChaseSpeed => GetChaseSpeed();
+        public double AppliedSearchDuration => GetSearchDuration();
 
         public bool TryGetNavigationDestination(out Vector3 destination)
         {
@@ -382,6 +390,27 @@ namespace EchoProtocol.AI.Stalker
                         _patrolVariationSeed,
                         _patrolNearOptimalHopSlack);
             }
+        }
+
+        public void ApplyScenarioMonsterParameters(ScenarioMonsterParameters parameters)
+        {
+            _scenarioMonsterParameters = parameters ?? throw new System.ArgumentNullException(nameof(parameters));
+            _hasScenarioMonsterParameters = true;
+            ApplyMovementSpeedForCurrentState();
+        }
+
+        public void ClearScenarioMonsterParameters()
+        {
+            if (!_hasScenarioMonsterParameters
+                && _scenarioMonsterParameters == null)
+            {
+                return;
+            }
+
+            _scenarioMonsterParameters = null;
+            _hasScenarioMonsterParameters = false;
+
+            ApplyMovementSpeedForCurrentState();
         }
 
         private void Awake()
@@ -2730,17 +2759,34 @@ namespace EchoProtocol.AI.Stalker
 
         private float GetDetectionFillRate()
         {
-            return Mathf.Max(0f, detectionFillRate);
+            var value = _hasScenarioMonsterParameters
+                ? (float)_scenarioMonsterParameters.DetectionFillRate
+                : detectionFillRate;
+            return Mathf.Max(0f, value);
         }
 
         private float GetDetectionDecayRate()
         {
-            return Mathf.Max(0f, detectionDecayRate);
+            var value = _hasScenarioMonsterParameters
+                ? (float)_scenarioMonsterParameters.DetectionDecayRate
+                : detectionDecayRate;
+            return Mathf.Max(0f, value);
         }
 
         private float GetSearchDuration()
         {
-            return Mathf.Max(0f, searchDuration);
+            var value = _hasScenarioMonsterParameters
+                ? (float)_scenarioMonsterParameters.SearchDuration
+                : searchDuration;
+            return Mathf.Max(0f, value);
+        }
+
+        private float GetChaseSpeed()
+        {
+            var value = _hasScenarioMonsterParameters
+                ? (float)_scenarioMonsterParameters.ChaseSpeed
+                : chaseSpeed;
+            return Mathf.Max(0f, value);
         }
 
         private float GetChaseDestinationRefreshDistance()
@@ -5106,7 +5152,7 @@ namespace EchoProtocol.AI.Stalker
             agent.speed =
                 currentState == StalkerState.CHASE
                 || currentState == StalkerState.ATTACK
-                    ? Mathf.Max(0f, chaseSpeed)
+                    ? GetChaseSpeed()
                     : Mathf.Max(0f, patrolSpeed);
         }
 

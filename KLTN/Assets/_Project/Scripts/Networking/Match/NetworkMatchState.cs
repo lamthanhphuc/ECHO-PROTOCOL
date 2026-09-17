@@ -1,4 +1,6 @@
 using System;
+using EchoProtocol.AI.AED;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Networking.Authority;
 using Fusion;
 using UnityEngine;
@@ -92,9 +94,32 @@ namespace EchoProtocol.Networking
         [Networked] private TickTimer MatchTimer { get; set; }
         [Networked] private TickTimer ReturnToLobbyTimer { get; set; }
         [Networked] private NetworkBool ReturnToLobbyRequested { get; set; }
+        [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
+        public uint ScenarioConfigRevision { get; private set; }
+        [Networked] public NetworkBool HasAppliedScenarioConfig { get; private set; }
+        [Networked] public NetworkString<_64> AppliedScenarioConfigVersion { get; private set; }
+        [Networked] public NetworkString<_64> AppliedScenarioPolicyVersion { get; private set; }
+        [Networked] public NetworkString<_64> AppliedScenarioMapId { get; private set; }
+        [Networked] public NetworkString<_64> AppliedScenarioMonsterType { get; private set; }
+        [Networked] public NetworkString<_64> AppliedScenarioObjectiveSpawnSetId { get; private set; }
+        [Networked] public NetworkString<_64> AppliedScenarioRouteModifier { get; private set; }
+        [Networked] public NetworkString<_64> AppliedScenarioFallbackConfigId { get; private set; }
+        [Networked] public int ScenarioConfigSourceValue { get; private set; }
+        [Networked] public int ScenarioSupportItemBudget { get; private set; }
+        [Networked] public double ScenarioDetectionFillRate { get; private set; }
+        [Networked] public double ScenarioDetectionDecayRate { get; private set; }
+        [Networked] public double ScenarioChaseSpeed { get; private set; }
+        [Networked] public double ScenarioSearchDuration { get; private set; }
+        [Networked] public double ScenarioEscapeDoorTimerSeconds { get; private set; }
 
         private MatchFlowController _legacyMatchFlow;
         private EscapeDoorCountdown _legacyEscapeCountdown;
+        private bool _scenarioDecisionWindowOpen;
+        private ScenarioDecisionPoint _scenarioDecisionWindowPoint;
+        private string _scenarioDecisionWindowPhaseContext =
+            string.Empty;
+        private uint _lastPublishedScenarioConfigRevision;
+        private Guid _lastPublishedScenarioConfigMatchId;
         private bool _endingForTeamDowned;
 
         public bool IsEnded => Status == NetworkMatchStatus.Ended;
@@ -102,6 +127,30 @@ namespace EchoProtocol.Networking
                                             && EscapeTimer.IsRunning;
         public float EscapeRemainingSeconds => Remaining(EscapeTimer);
         public float MatchRemainingSeconds => Remaining(MatchTimer);
+        public float CurrentScenarioEscapeDoorTimerSeconds =>
+            Mathf.Max(
+                0.1f,
+                (float)(
+                    ScenarioEscapeDoorTimerSeconds > 0d
+                        ? ScenarioEscapeDoorTimerSeconds
+                        : _escapeDurationSeconds));
+        public ScenarioConfig CurrentAppliedScenarioConfig
+        {
+            get
+            {
+                return TryBuildReplicatedScenarioConfig(
+                    out var config)
+                    ? config
+                    : null;
+            }
+        }
+
+        public bool TryGetAppliedScenarioConfig(
+            out ScenarioConfig config)
+        {
+            return TryBuildReplicatedScenarioConfig(
+                out config);
+        }
 
         public override void Spawned()
         {
@@ -123,14 +172,50 @@ namespace EchoProtocol.Networking
                 MatchTimer = TickTimer.CreateFromSeconds(Runner, _matchDurationSeconds);
                 ReturnToLobbyTimer = TickTimer.None;
                 ReturnToLobbyRequested = false;
+                HasAppliedScenarioConfig = false;
+                ScenarioConfigRevision = 0;
+                ScenarioConfigSourceValue = 0;
+                AppliedScenarioConfigVersion = default;
+                AppliedScenarioPolicyVersion = default;
+                AppliedScenarioMapId = default;
+                AppliedScenarioMonsterType = default;
+                AppliedScenarioObjectiveSpawnSetId = default;
+                AppliedScenarioRouteModifier = default;
+                AppliedScenarioFallbackConfigId = default;
+                ScenarioSupportItemBudget = 0;
+                ScenarioDetectionFillRate = 0d;
+                ScenarioDetectionDecayRate = 0d;
+                ScenarioChaseSpeed = 0d;
+                ScenarioSearchDuration = 0d;
+                ScenarioEscapeDoorTimerSeconds = 0d;
+                OpenScenarioDecisionWindow(
+                    ScenarioDecisionPoint.PreMatch,
+                    "PRE_MATCH");
+
+                try
+                {
+                    ResolveScenarioConfigAuthoritative(
+                        ScenarioDecisionPoint.PreMatch,
+                        "PRE_MATCH");
+                }
+                finally
+                {
+                    CloseScenarioDecisionWindow();
+                }
             }
 
+            if (Object == null || !Object.HasStateAuthority)
+            {
+                TryPublishReplicatedScenarioConfigToRegistry();
+            }
             ApplyPresentation(notifyListeners: true);
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             NetworkPlayerLifeState.StateChanged -= HandlePlayerLifeStateChanged;
+            _lastPublishedScenarioConfigRevision = 0;
+            _lastPublishedScenarioConfigMatchId = Guid.Empty;
         }
 
         public override void FixedUpdateNetwork()
@@ -170,9 +255,16 @@ namespace EchoProtocol.Networking
 
         public override void Render()
         {
-            // Only the derived timer display changes every render frame. Replicated state
-            // listeners are notified by OnChangedRender, not spammed once per frame.
-            ApplyPresentation(notifyListeners: false);
+            if (Object != null
+                && !Object.HasStateAuthority
+                && HasAppliedScenarioConfig
+                && ScenarioConfigRevision != 0)
+            {
+                TryPublishReplicatedScenarioConfigToRegistry();
+            }
+
+            ApplyPresentation(
+                notifyListeners: false);
         }
 
         public void InitializeAuthoritative(NetworkId objectiveSourceId, NetworkId escapeDoorId)
@@ -264,9 +356,9 @@ namespace EchoProtocol.Networking
             }
 
             LastActor = actor;
-            EscapeTimer = TickTimer.CreateFromSeconds(Runner, _escapeDurationSeconds);
+            EscapeTimer = TickTimer.CreateFromSeconds(Runner, CurrentScenarioEscapeDoorTimerSeconds);
             HandleReplicatedStateChanged();
-            Debug.Log($"[MatchState] Escape started by {actor}; duration={_escapeDurationSeconds:0.##}s.");
+            Debug.Log($"[MatchState] Escape started by {actor}; duration={CurrentScenarioEscapeDoorTimerSeconds:0.##}s.");
             return true;
         }
 
@@ -302,6 +394,33 @@ namespace EchoProtocol.Networking
                 "OBJECTIVE_COMPLETED");
             CurrentPhase = next;
             AdvancePhaseOrdinal();
+
+            if (next != NetworkMatchPhase.Escape
+                && next != NetworkMatchPhase.MatchEnded)
+            {
+                var decisionPoint =
+                    next == NetworkMatchPhase.FinalHunt
+                        ? ScenarioDecisionPoint.FinalHuntSetup
+                        : ScenarioDecisionPoint.AllowedPhaseBoundary;
+
+                var phaseContext =
+                    PhaseName(next);
+
+                OpenScenarioDecisionWindow(
+                    decisionPoint,
+                    phaseContext);
+
+                try
+                {
+                    ResolveScenarioConfigAuthoritative(
+                        decisionPoint,
+                        phaseContext);
+                }
+                finally
+                {
+                    CloseScenarioDecisionWindow();
+                }
+            }
             runtime?.RecordPhaseStarted(
                 BuildKey("phase-started-" + next.ToString().ToLowerInvariant()),
                 PhaseName(next),
@@ -581,7 +700,541 @@ namespace EchoProtocol.Networking
 
         private void HandleReplicatedStateChanged()
         {
+            if (Object == null || !Object.HasStateAuthority)
+            {
+                TryPublishReplicatedScenarioConfigToRegistry();
+            }
             ApplyPresentation(notifyListeners: true);
+        }
+
+        private void OpenScenarioDecisionWindow(
+            ScenarioDecisionPoint decisionPoint,
+            string phaseContext)
+        {
+            _scenarioDecisionWindowOpen = true;
+            _scenarioDecisionWindowPoint = decisionPoint;
+            _scenarioDecisionWindowPhaseContext =
+                phaseContext ?? string.Empty;
+        }
+
+        private void CloseScenarioDecisionWindow()
+        {
+            _scenarioDecisionWindowOpen = false;
+            _scenarioDecisionWindowPhaseContext =
+                string.Empty;
+        }
+
+        private bool IsScenarioDecisionWindowOpen(
+            ScenarioDecisionPoint decisionPoint,
+            string phaseContext)
+        {
+            if (!_scenarioDecisionWindowOpen
+                || _scenarioDecisionWindowPoint != decisionPoint
+                || !string.Equals(
+                    _scenarioDecisionWindowPhaseContext,
+                    phaseContext ?? string.Empty,
+                    StringComparison.Ordinal)
+                || Status != NetworkMatchStatus.Running)
+            {
+                return false;
+            }
+
+            switch (decisionPoint)
+            {
+                case ScenarioDecisionPoint.PreMatch:
+                    return CurrentPhase == NetworkMatchPhase.CoreObjective
+                           && ScenarioConfigRevision == 0;
+
+                case ScenarioDecisionPoint.AllowedPhaseBoundary:
+                    return CurrentPhase == NetworkMatchPhase.Puzzle
+                           || CurrentPhase == NetworkMatchPhase.SecurityHold;
+
+                case ScenarioDecisionPoint.FinalHuntSetup:
+                    return CurrentPhase == NetworkMatchPhase.FinalHunt
+                           && !EscapeTimer.IsRunning;
+
+                default:
+                    return false;
+            }
+        }
+
+        private ScenarioResolutionEngineResult ValidateScenarioPrecommit(
+            ScenarioResolutionEngineResult result,
+            Guid matchId,
+            ScenarioResolutionMode mode,
+            ScenarioDecisionPoint decisionPoint,
+            string phaseContext,
+            string experimentCondition)
+        {
+            if (result == null)
+            {
+                throw new ArgumentNullException(nameof(result));
+            }
+
+            if (!result.ShouldApplyConfig)
+            {
+                return result;
+            }
+
+            if (!IsScenarioDecisionWindowOpen(
+                    decisionPoint,
+                    phaseContext))
+            {
+                return result.WithPrecommitRejection(
+                    AEDReasonCodes.DecisionWindowClosed);
+            }
+
+            var scenarioRuntime =
+                ScenarioConfigAuthorityRuntime.EnsureExists();
+
+            var currentBase =
+                decisionPoint == ScenarioDecisionPoint.PreMatch
+                    ? FixedDirector.CreateFixedBaseline()
+                    : scenarioRuntime.CurrentAppliedScenarioConfig;
+
+            if (currentBase == null
+                || !FixedDirector.MatchesBaseRef(
+                    result.CapturedBaseRef,
+                    currentBase,
+                    decisionPoint))
+            {
+                return result.WithPrecommitRejection(
+                    AEDReasonCodes.StaleBaseConfig);
+            }
+
+            var appliedConfig =
+                result.Decision.AppliedConfig;
+
+            var requiresAdaptiveInputRevalidation =
+                mode == ScenarioResolutionMode.Adaptive
+                && result.Decision.Result == AdaptiveDecisionResult.Applied
+                && appliedConfig != null
+                && appliedConfig.ConfigSource == ScenarioConfigSource.Adaptive;
+
+            if (requiresAdaptiveInputRevalidation)
+            {
+                var request =
+                    new ScenarioResolutionRequest(
+                        result.Decision.DecisionId,
+                        matchId,
+                        mode,
+                        decisionPoint,
+                        phaseContext ?? string.Empty,
+                        experimentCondition ?? string.Empty);
+
+                if (!AdaptiveInputSnapshotRuntime.IsStillCurrent(
+                        request,
+                        result.CapturedAdaptiveSnapshotId,
+                        result.CapturedAdaptiveSnapshotFingerprint,
+                        out _))
+                {
+                    return result.WithPrecommitRejection(
+                        AEDReasonCodes.StaleInput);
+                }
+            }
+
+            return result;
+        }
+
+        private ScenarioResolutionEngineResult
+            MaterializePreMatchResolvedBaseForNoChange(
+                ScenarioResolutionEngineResult result,
+                Guid matchId,
+                ScenarioDecisionPoint decisionPoint,
+                string phaseContext)
+        {
+            if (result == null)
+            {
+                throw new ArgumentNullException(
+                    nameof(result));
+            }
+
+            if (decisionPoint
+                    != ScenarioDecisionPoint.PreMatch
+                || result.CommitDisposition
+                    != ScenarioResolutionCommitDisposition.NewDecision
+                || result.AttemptedDecision.Result
+                    != AdaptiveDecisionResult.NoChange
+                || result.AttemptedDecision.FallbackAction
+                    != ScenarioFallbackAction.None
+                || HasAppliedScenarioConfig
+                || ScenarioConfigRevision != 0)
+            {
+                return result;
+            }
+
+            if (!IsScenarioDecisionWindowOpen(
+                    decisionPoint,
+                    phaseContext))
+            {
+                return result.WithPrecommitRejection(
+                    AEDReasonCodes.DecisionWindowClosed);
+            }
+
+            var currentResolvedBase =
+                FixedDirector.CreateFixedBaseline();
+
+            if (!FixedDirector.MatchesBaseRef(
+                    result.CapturedBaseRef,
+                    currentResolvedBase,
+                    ScenarioDecisionPoint.PreMatch))
+            {
+                return result.WithPrecommitRejection(
+                    AEDReasonCodes.StaleBaseConfig);
+            }
+
+            var capturedBase =
+                result.CapturedBaseConfig;
+
+            if (capturedBase == null)
+            {
+                return result.WithPrecommitRejection(
+                    AEDReasonCodes.FallbackConfigInvalid);
+            }
+
+            var validation =
+                ScenarioValidator.ValidateFixedBaseline(
+                    capturedBase);
+
+            if (!validation.IsValid)
+            {
+                return result.WithPrecommitRejection(
+                    AEDReasonCodes.FallbackConfigInvalid);
+            }
+
+            // This is NOT FixedDirector fallback.
+            // It establishes the exact zero-delta PRE_MATCH base
+            // as the first durable AppliedScenarioConfig.
+            ApplyScenarioConfigAuthoritative(
+                capturedBase,
+                matchId);
+
+            return result;
+        }
+
+        private bool TryApplyPreMatchFixedFallbackAuthoritative(
+            Guid matchId)
+        {
+            var fixedConfig =
+                FixedDirector.CreateFixedBaseline();
+
+            var validation =
+                ScenarioValidator.ValidateFixedBaseline(
+                    fixedConfig);
+
+            if (!validation.IsValid)
+            {
+                Debug.LogError(
+                    "[AED] Fixed baseline invalid during " +
+                    "PRE_MATCH fallback.");
+
+                return false;
+            }
+
+            ApplyScenarioConfigAuthoritative(
+                fixedConfig,
+                matchId);
+
+            return true;
+        }
+
+        private void ResolveScenarioConfigAuthoritative(
+            ScenarioDecisionPoint decisionPoint,
+            string phaseContext)
+        {
+            if (Object == null || !Object.HasStateAuthority)
+            {
+                return;
+            }
+
+            var authority = MatchAuthorityRuntime.Instance;
+            var matchId = authority != null && authority.TryGetMatchId(out var resolvedMatchId)
+                ? resolvedMatchId
+                : ScenarioConfigFingerprint.DeterministicGuid("network-match-state:" + Object.Id);
+            var mode = authority != null
+                ? authority.RequestedScenarioResolutionMode
+                : ScenarioResolutionMode.Fixed;
+            var scenarioRuntime =
+                ScenarioConfigAuthorityRuntime.EnsureExists();
+
+            var experimentCondition =
+                authority != null
+                    ? authority.ExperimentCondition
+                    : string.Empty;
+
+            var result = scenarioRuntime.Resolve(
+                matchId,
+                mode,
+                decisionPoint,
+                phaseContext,
+                PhaseOrdinal,
+                experimentCondition);
+            if (result.ShouldApplyConfig)
+            {
+                result =
+                    ValidateScenarioPrecommit(
+                        result,
+                        matchId,
+                        mode,
+                        decisionPoint,
+                        phaseContext,
+                        experimentCondition);
+
+                if (result.ShouldApplyConfig)
+                {
+                    ApplyScenarioConfigAuthoritative(
+                        result.Decision.AppliedConfig,
+                        matchId);
+                }
+                else if (result.IsPrecommitRejected
+                         && decisionPoint
+                            == ScenarioDecisionPoint.PreMatch)
+                {
+                    if (!TryApplyPreMatchFixedFallbackAuthoritative(
+                            matchId))
+                    {
+                        result =
+                            result.WithPrecommitRejection(
+                                AEDReasonCodes.FallbackConfigInvalid);
+                    }
+                }
+            }
+
+            if (!result.ShouldApplyConfig)
+            {
+                result =
+                    MaterializePreMatchResolvedBaseForNoChange(
+                        result,
+                        matchId,
+                        decisionPoint,
+                        phaseContext);
+            }
+
+            scenarioRuntime.FinalizeResolution(
+                matchId,
+                result,
+                Object != null
+                && Object.HasStateAuthority);
+
+            authority?.NotifyScenarioResolutionFinalized(
+                matchId,
+                scenarioRuntime.LastResolutionRecord);
+        }
+
+        private void ApplyScenarioConfigAuthoritative(ScenarioConfig config, Guid matchId)
+        {
+            if (config == null
+                || Object == null
+                || !Object.HasStateAuthority)
+            {
+                return;
+            }
+
+            var nextRevision =
+                ScenarioConfigRevision + 1;
+
+            if (nextRevision == 0)
+            {
+                nextRevision = 1;
+            }
+
+            // Exact durable identity/provenance.
+            AppliedScenarioConfigVersion =
+                config.ScenarioConfigVersion;
+
+            AppliedScenarioPolicyVersion =
+                config.PolicyVersion;
+
+            AppliedScenarioMapId =
+                config.MapId;
+
+            AppliedScenarioMonsterType =
+                config.MonsterType;
+
+            AppliedScenarioObjectiveSpawnSetId =
+                config.ObjectiveSpawnSetId;
+
+            AppliedScenarioRouteModifier =
+                config.RouteModifier;
+
+            AppliedScenarioFallbackConfigId =
+                config.FallbackConfigId;
+
+            ScenarioConfigSourceValue =
+                config.ConfigSource == ScenarioConfigSource.Adaptive
+                    ? 1
+                    : 0;
+
+            // Durable gameplay values.
+            ScenarioSupportItemBudget =
+                config.SupportItemBudget;
+
+            ScenarioDetectionFillRate =
+                config.MonsterParameters.DetectionFillRate;
+
+            ScenarioDetectionDecayRate =
+                config.MonsterParameters.DetectionDecayRate;
+
+            ScenarioChaseSpeed =
+                config.MonsterParameters.ChaseSpeed;
+
+            ScenarioSearchDuration =
+                config.MonsterParameters.SearchDuration;
+
+            ScenarioEscapeDoorTimerSeconds =
+                config.FinalHuntParameters.EscapeDoorTimerSeconds;
+
+            HasAppliedScenarioConfig = true;
+
+            // Commit marker MUST be last networked write.
+            ScenarioConfigRevision =
+                nextRevision;
+
+            // Publish exact authoritative object only AFTER durable commit.
+            ScenarioConfigAuthorityRuntime
+                .EnsureExists()
+                .Apply(
+                    matchId,
+                    config);
+        }
+
+        private bool TryBuildReplicatedScenarioConfig(
+            out ScenarioConfig config)
+        {
+            config = null;
+
+            if (ScenarioConfigSourceValue != 0
+                && ScenarioConfigSourceValue != 1)
+            {
+                return false;
+            }
+
+            if (!HasAppliedScenarioConfig
+                || ScenarioConfigRevision == 0)
+            {
+                return false;
+            }
+
+            var scenarioConfigVersion =
+                AppliedScenarioConfigVersion.ToString();
+
+            var policyVersion =
+                AppliedScenarioPolicyVersion.ToString();
+
+            var mapId =
+                AppliedScenarioMapId.ToString();
+
+            var monsterType =
+                AppliedScenarioMonsterType.ToString();
+
+            var objectiveSpawnSetId =
+                AppliedScenarioObjectiveSpawnSetId.ToString();
+
+            var routeModifier =
+                AppliedScenarioRouteModifier.ToString();
+
+            var fallbackConfigId =
+                AppliedScenarioFallbackConfigId.ToString();
+
+            if (string.IsNullOrWhiteSpace(scenarioConfigVersion)
+                || string.IsNullOrWhiteSpace(policyVersion)
+                || string.IsNullOrWhiteSpace(mapId)
+                || string.IsNullOrWhiteSpace(monsterType)
+                || string.IsNullOrWhiteSpace(objectiveSpawnSetId)
+                || string.IsNullOrWhiteSpace(routeModifier)
+                || string.IsNullOrWhiteSpace(fallbackConfigId))
+            {
+                return false;
+            }
+
+            if (ScenarioSupportItemBudget < 0
+                || !double.IsFinite(ScenarioDetectionFillRate)
+                || !double.IsFinite(ScenarioDetectionDecayRate)
+                || !double.IsFinite(ScenarioChaseSpeed)
+                || !double.IsFinite(ScenarioSearchDuration)
+                || !double.IsFinite(ScenarioEscapeDoorTimerSeconds))
+            {
+                return false;
+            }
+
+            if (ScenarioConfigSourceValue != 0
+                && ScenarioConfigSourceValue != 1)
+            {
+                return false;
+            }
+
+            var source =
+                ScenarioConfigSourceValue == 1
+                    ? ScenarioConfigSource.Adaptive
+                    : ScenarioConfigSource.Fixed;
+
+            config =
+                new ScenarioConfig(
+                    scenarioConfigVersion,
+                    policyVersion,
+                    source,
+                    mapId,
+                    monsterType,
+                    objectiveSpawnSetId,
+                    ScenarioSupportItemBudget,
+                    new ScenarioMonsterParameters(
+                        ScenarioDetectionFillRate,
+                        ScenarioDetectionDecayRate,
+                        ScenarioChaseSpeed,
+                        ScenarioSearchDuration),
+                    routeModifier,
+                    new ScenarioFinalHuntParameters(
+                        ScenarioEscapeDoorTimerSeconds),
+                    fallbackConfigId);
+
+            return true;
+        }
+
+        private bool TryPublishReplicatedScenarioConfigToRegistry()
+        {
+            if (!HasAppliedScenarioConfig
+                || ScenarioConfigRevision == 0)
+            {
+                return false;
+            }
+
+            var authority =
+                MatchAuthorityRuntime.Instance;
+
+            if (authority == null
+                || !authority.TryGetMatchId(
+                    out var matchId)
+                || matchId == Guid.Empty)
+            {
+                return false;
+            }
+
+            if (_lastPublishedScenarioConfigMatchId
+                    == matchId
+                && _lastPublishedScenarioConfigRevision
+                    == ScenarioConfigRevision)
+            {
+                return true;
+            }
+
+            if (!TryBuildReplicatedScenarioConfig(
+                    out var config)
+                || config == null)
+            {
+                return false;
+            }
+
+            ScenarioConfigRuntimeRegistry.Apply(
+                matchId,
+                config);
+
+            _lastPublishedScenarioConfigMatchId =
+                matchId;
+
+            _lastPublishedScenarioConfigRevision =
+                ScenarioConfigRevision;
+
+            return true;
         }
     }
 }
