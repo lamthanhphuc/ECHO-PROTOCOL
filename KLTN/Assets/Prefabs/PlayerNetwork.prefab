@@ -26,13 +26,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5404921375664490596}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.18436155, y: -0, z: -0, w: 0.9828585}
-  m_LocalPosition: {x: 0.0645, y: 0.862, z: 0.060000014}
+  m_LocalRotation: {x: 0.12498235, y: -0, z: -0, w: 0.992159}
+  m_LocalPosition: {x: 0.0645, y: 0.85800004, z: 0.09559998}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1770560598436581956}
-  m_LocalEulerAnglesHint: {x: 21.248, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 14.359, y: 0, z: 0}
 --- !u!108 &6225725814926081252
 Light:
   m_ObjectHideFlags: 0
@@ -108,7 +108,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -312,7 +312,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
   SortKey: 2128654579
   SendPriority: 1
@@ -340,7 +340,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7d7cf8852d104707ad6c74bb68d6b9e1, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.LobbyPlayerState
   _teamCount: 2
   _toolDefinitions:
@@ -383,7 +383,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 378411a89480da345945c2f888327a2d, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkCharacterController
   _stateAuthorityChangeErrorCorrectionDelta: 0
   gravity: -9.81
@@ -402,13 +402,13 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 20db47d5076547cf96d204faf6ddff65, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkPlayerMovement
   _inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   _walkSpeed: 5
   _sprintSpeed: 7
   _allowJump: 0
-  _maxStamina: 100
+  _maxStamina: 200
   _sprintStaminaDrainPerSecond: 25
   _staminaRegenPerSecond: 18
   _minStaminaToSprint: 5
@@ -431,7 +431,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 328579213b3c40db9288c76d063d6696, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkPlayerInteractor
   _inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   _rayOrigin: {fileID: 0}
@@ -446,6 +446,7 @@ MonoBehaviour:
   _doorJammerPickupPrefab: {fileID: 4920552562951933515, guid: 01c3e5e273fc64041870daff62b4cbaa, type: 3}
   _coreStabilizerPickupPrefab: {fileID: 8956166517133272461, guid: 4bc59d90b02c44647a16c758ef482e2c, type: 3}
   _noiseMakerBeaconPrefab: {fileID: 5536313895210414100, guid: 4a8de518f84dfbe4a9620fbab3379f24, type: 3}
+  _noiseMakerThrowForwardDistance: 15
   _coreStabilizerPulseClip: {fileID: 8300000, guid: beb47eddae77bfb4cbfee2ac089245a3, type: 3}
 --- !u!114 &1555193095892173610
 MonoBehaviour:
@@ -457,7 +458,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8ba05b48632b4f06b8237e3de39354b3, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Player.PlayerRuntimeIdentity
   visionTargetPoint: {fileID: 3058952993857339837}
 --- !u!114 &8542491288236138449
@@ -470,10 +471,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 14e10a09870a0ff45a87092c8ba7dac6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkPlayerLifeState
   _maximumHealth: 100
-  _bleedoutSeconds: 45
+  _bleedoutSeconds: 180
   _crawlSpeedMultiplier: 0.32
   _maximumRevives: 2
   _reviveDurationSeconds: 3
@@ -501,7 +502,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5593dfb3401a40f5bbf27d2c88157242, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkPlayerHealth
   maxHealth: 100
   _CurrentHealth: 0
@@ -517,7 +518,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 577fe7ca2424db4438f4857e96dfc073, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHeldItemAnchor
   animator: {fileID: 8525993624502512922}
   rightHandAnchor: {fileID: 0}
@@ -536,7 +537,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 42dd880ea4d153142a530c41cdfdc77f, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkTeamToolHeldView
   lobbyState: {fileID: 640100000000000001}
   heldItemAnchor: {fileID: 5130164143195792974}
@@ -582,7 +583,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: eb01c0e79c6eae04496785ff26316eab, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerAnimatorDriver
   animator: {fileID: 8525993624502512922}
   movement: {fileID: 0}
@@ -606,7 +607,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2dd8ad9b5bd34f44aaf05df8da0f0f29, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCrawlPoseCorrector
   animator: {fileID: 8525993624502512922}
   downState: {fileID: 0}
@@ -630,7 +631,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f1cdc9d0e4176a64894098fd64ff1837, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkPlayerFlashlight
   _flashlight: {fileID: 0}
   _inputActions: {fileID: 0}
@@ -640,9 +641,6 @@ MonoBehaviour:
   _beamRange: 50
   _beamSpotAngle: 66
   _beamInnerSpotAngle: 33
-  _visibleBeamLength: 15.5
-  _visibleBeamAlpha: 0.16
-  _visibleBeamColor: {r: 1, g: 0.92, b: 0.72, a: 1}
   _IsFlashlightOn:
     RawValue: 0
 --- !u!114 &4034885706722152808
@@ -655,7 +653,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 758d41be2b6289341a3c37a6d4825287, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHidingController
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   playerCamera: {fileID: 0}
@@ -674,7 +672,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a1470f523fbb735438c9dfbbb0b81c89, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerSpectateController
   downState: {fileID: 0}
   playerCamera: {fileID: 0}
@@ -689,7 +687,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b5a8797b8eeead34084a47cafa2a1406, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::InteractionPromptOnGUI
   interaction: {fileID: 0}
   networkInteractor: {fileID: 640100000000000004}
@@ -705,7 +703,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ab6a7e9288115154c8a5fb48a3b28f6d, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerFirstPersonVisibility
   hideBodyForLocalCamera: 1
   keepHandsIfSeparateRenderers: 1
@@ -733,7 +731,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8068004f8f6df564c8e994ea38c5e59f, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInventory
   normalSlots:
   - {fileID: 0}
@@ -755,7 +753,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3f078f1a01f85a34195a55ed42533eaf, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInteraction
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   raycastCamera: {fileID: 0}
@@ -774,7 +772,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 23a415112a245ec4b88df769c1d1f615, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerEnergyCoreCarrier
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   inventory: {fileID: 5945652346287358367}
@@ -801,13 +799,13 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 58fa41036b9ea954a8945cdd62d79b93, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInventoryDropInput
   inventory: {fileID: 5945652346287358367}
   coreCarrier: {fileID: 5286019399313537006}
   dropOrigin: {fileID: 0}
   dropForwardDistance: 1.25
-  throwForwardDistance: 3
+  throwForwardDistance: 15
   selectedNormalSlot: 0
   noiseMakerDeployedPrefab: {fileID: 5536313895210414100, guid: 4a8de518f84dfbe4a9620fbab3379f24, type: 3}
 --- !u!114 &3191561994591773081
@@ -820,7 +818,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d9e9e305bd153a24aa0de739e91fe1c7, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHeldItemView
   inventory: {fileID: 5945652346287358367}
   coreCarrier: {fileID: 5286019399313537006}
@@ -869,7 +867,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6a7646ffb4ea84248965ff892dcccada, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Tools.Scanner.NetworkFieldScanner
   _tuning:
     CoreRange: 50
@@ -898,7 +896,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 01b8bbd93fe14ed1ab055caf2d387c5d, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerColorPresenter
   colorSets:
   - name: PF_PlayerCharacter_P1_Default
@@ -928,7 +926,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 424211e0903852a49816101b4e50fe09, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerJumpscareController
   _ghostJumpscarePrefab: {fileID: 8145755207363234366, guid: 3fab18e8a651d3446a4007c22dcfa8f2, type: 3}
   _scream: {fileID: 8300000, guid: cd2d6fb1d7a3dea428864b5f27c45104, type: 3}
@@ -1625,7 +1623,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6a7646ffb4ea84248965ff892dcccada, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Tools.Scanner.NetworkFieldScanner
 --- !u!4 &7374077509492896360 stripped
 Transform:

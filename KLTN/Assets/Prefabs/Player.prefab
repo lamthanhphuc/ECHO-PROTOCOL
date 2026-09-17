@@ -164,7 +164,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   standUpTriggerInteraction: 1
-  maxStamina: 100
+  maxStamina: 200
   sprintStaminaDrainPerSecond: 25
   staminaRegenPerSecond: 18
   minStaminaToSprint: 5
@@ -241,7 +241,7 @@ MonoBehaviour:
   coreCarrier: {fileID: 0}
   dropOrigin: {fileID: 0}
   dropForwardDistance: 1.25
-  throwForwardDistance: 3
+  throwForwardDistance: 15
   selectedNormalSlot: 0
   noiseMakerDeployedPrefab: {fileID: 0}
 --- !u!114 &3626915244988454067
@@ -308,7 +308,7 @@ MonoBehaviour:
   playerCamera: {fileID: 0}
   visualRoot: {fileID: 4690670608594508291}
   maxHealth: 100
-  bleedoutSeconds: 90
+  bleedoutSeconds: 180
   crawlSpeedMultiplier: 0.32
   downedCameraEyeHeight: 0.55
   downedVisualEuler: {x: 70, y: 0, z: 0}
@@ -430,9 +430,6 @@ MonoBehaviour:
   beamRange: 16
   beamSpotAngle: 42
   beamInnerSpotAngle: 24
-  visibleBeamLength: 15.5
-  visibleBeamAlpha: 0.16
-  visibleBeamColor: {r: 1, g: 0.92, b: 0.72, a: 1}
 --- !u!114 &810580752424859207
 MonoBehaviour:
   m_ObjectHideFlags: 0

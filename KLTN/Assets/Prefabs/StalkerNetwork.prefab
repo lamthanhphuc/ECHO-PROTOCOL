@@ -160,8 +160,8 @@ MonoBehaviour:
   patrolRoute: {fileID: 0}
   visionSensor: {fileID: 100005}
   patrolMode: 3
-  patrolSpeed: 7
-  chaseSpeed: 9
+  patrolSpeed: 6
+  chaseSpeed: 8
   enableDiagnostics: 0
   candidateBfsDepth: 128
   stalenessHorizon: 15
@@ -169,7 +169,7 @@ MonoBehaviour:
   connectivityWeight: 0.15
   immediateBacktrackPenalty: 0.75
   detectionMeterFull: 1
-  detectionFillRate: 3.3333333
+  detectionFillRate: 1
   detectionDecayRate: 3.3333333
   searchDuration: 5
   searchRadius: 8

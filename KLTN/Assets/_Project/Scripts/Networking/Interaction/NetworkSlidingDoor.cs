@@ -36,6 +36,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private AudioClip _jammerDeployClip;
 
         [Header("Initial state")]
+        [SerializeField] private bool _startsOpen = true;
         [SerializeField] private bool _startsLocked;
         [SerializeField] private bool _startsBroken;
 
@@ -303,6 +304,8 @@ namespace EchoProtocol.Networking
             CacheClosedPositions();
             _offlineState = _startsBroken
                 ? NetworkDoorState.Open
+                : _startsOpen
+                    ? NetworkDoorState.Open
                 : (_startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed);
             _offlineBroken = _startsBroken;
             _targetOpenAmount = _offlineState == NetworkDoorState.Open ? 1f : 0f;
@@ -337,6 +340,8 @@ namespace EchoProtocol.Networking
             {
                 State = _startsBroken
                     ? NetworkDoorState.Open
+                    : _startsOpen
+                        ? NetworkDoorState.Open
                     : (_startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed);
                 Broken = _startsBroken;
                 ActiveJammerId = default;

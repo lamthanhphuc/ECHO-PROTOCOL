@@ -5,16 +5,14 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Gắn vào DistressBeaconDeployed prefab khi được spawn.
-/// Sau 1s delay: phát 4 xung noise (mỗi 1.5s), bán kính 22m.
-/// Sau khi hết thời gian: tự hủy.
+/// Spawned beacon that emits repeated runtime noise, then removes itself.
 /// </summary>
 public sealed class NoiseMakerBeacon : MonoBehaviour
 {
-    // Cấu hình beacon
-    private const float ActivationDelay = 1f;     // giây trước khi bắt đầu phát
-    private const int TotalPulses = 4;             // số lần phát noise
-    private const float PulseInterval = 1.5f;     // giây giữa các xung
+    [SerializeField, Min(0f)] private float activationDelay = 1f;
+    [SerializeField, Min(1)] private int totalPulses = 8;
+    [SerializeField, Min(0.1f)] private float pulseInterval = 2f;
+    [SerializeField, Min(0f)] private float despawnDelayAfterLastPulse = 1f;
 
     private PlayerRef _actor;
     private string _streamKey;
@@ -27,9 +25,6 @@ public sealed class NoiseMakerBeacon : MonoBehaviour
         _networkObject = GetComponent<NetworkObject>();
     }
 
-    /// <summary>
-    /// Gọi ngay sau khi Instantiate để inject context.
-    /// </summary>
     public void Initialize(PlayerRef actor, string streamKey, long baseSequence)
     {
         _actor = actor;
@@ -56,11 +51,11 @@ public sealed class NoiseMakerBeacon : MonoBehaviour
 
     private IEnumerator BeaconRoutine()
     {
-        yield return new WaitForSeconds(ActivationDelay);
+        yield return new WaitForSeconds(activationDelay);
 
         var noiseService = FindAnyObjectByType<HostRuntimeNoiseService>();
 
-        for (int i = 0; i < TotalPulses; i++)
+        for (int i = 0; i < totalPulses; i++)
         {
             if (noiseService != null)
             {
@@ -77,13 +72,13 @@ public sealed class NoiseMakerBeacon : MonoBehaviour
                     out _);
             }
 
-            if (i < TotalPulses - 1)
+            if (i < totalPulses - 1)
             {
-                yield return new WaitForSeconds(PulseInterval);
+                yield return new WaitForSeconds(pulseInterval);
             }
         }
 
-        yield return new WaitForSeconds(0.5f);
+        yield return new WaitForSeconds(despawnDelayAfterLastPulse);
         if (_networkObject != null
             && _networkObject.IsValid
             && _networkObject.HasStateAuthority
@@ -95,5 +90,4 @@ public sealed class NoiseMakerBeacon : MonoBehaviour
 
         Destroy(gameObject);
     }
-
 }

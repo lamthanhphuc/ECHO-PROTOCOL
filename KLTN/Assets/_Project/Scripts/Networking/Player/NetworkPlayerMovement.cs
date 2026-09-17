@@ -691,15 +691,23 @@ namespace EchoProtocol.Networking
         {
             if (Object != null && Object.IsValid && !Object.HasInputAuthority) return;
 
-            var mainCamera = Camera.main;
-            if (mainCamera == null) return;
-
-            var playerCamera = mainCamera.GetComponent<PlayerCamera>();
+            var playerCamera = FindLocalPlayerCamera();
             if (playerCamera == null) return;
             _playerCamera = playerCamera;
 
             playerCamera.SetTarget(transform);
             Debug.Log($"[NetworkMovement] Bound local PlayerCamera to player.");
+        }
+
+        private static PlayerCamera FindLocalPlayerCamera()
+        {
+            var mainCamera = Camera.main;
+            if (mainCamera != null && mainCamera.TryGetComponent(out PlayerCamera playerCamera))
+            {
+                return playerCamera;
+            }
+
+            return UnityEngine.Object.FindAnyObjectByType<PlayerCamera>(FindObjectsInactive.Exclude);
         }
 
         private void ApplyCharacterControllerDimensions(float targetHeight, bool immediate)

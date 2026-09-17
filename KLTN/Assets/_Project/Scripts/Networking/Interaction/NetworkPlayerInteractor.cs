@@ -29,6 +29,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _doorJammerPickupPrefab;
         [SerializeField] private NetworkObject _coreStabilizerPickupPrefab;
         [SerializeField] private GameObject _noiseMakerBeaconPrefab; // Gán DistressBeaconDeployed prefab trong Inspector
+        [SerializeField, Min(0.5f)] private float _noiseMakerThrowForwardDistance = 15f;
         [SerializeField] private AudioClip _coreStabilizerPulseClip;
 
         [Networked] private uint LastProcessedSequence { get; set; }
@@ -923,7 +924,7 @@ namespace EchoProtocol.Networking
                 flatForward = transform.forward;
             }
 
-            beaconPos = transform.position + flatForward * 3f;
+            beaconPos = transform.position + flatForward * _noiseMakerThrowForwardDistance;
             if (Physics.Raycast(
                     beaconPos + Vector3.up * 1.5f,
                     Vector3.down,

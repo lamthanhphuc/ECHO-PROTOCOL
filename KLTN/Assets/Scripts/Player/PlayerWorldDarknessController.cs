@@ -1,11 +1,12 @@
 using UnityEngine;
 
+[DefaultExecutionOrder(10000)]
 [DisallowMultipleComponent]
 public sealed class PlayerWorldDarknessController : MonoBehaviour
 {
     [SerializeField] private bool applyDarkness = true;
     [SerializeField] private Color fogColor = new Color(0.01f, 0.012f, 0.016f, 1f);
-    [SerializeField, Range(0.001f, 0.4f)] private float fogDensity = 0.05f;
+    [SerializeField, Range(0.001f, 0.4f)] private float fogDensity = 0.04f;
     [SerializeField, Range(-10f, 100f)] private float ambientIntensity = 0.015f;
     [SerializeField] private Color ambientLight = new Color(0.29803923f, 0.29803923f, 0.29803923f, 1f);
     [SerializeField] private bool useLocalPlayerVisionLight = true;
@@ -28,6 +29,11 @@ public sealed class PlayerWorldDarknessController : MonoBehaviour
     }
 
     private void LateUpdate()
+    {
+        ApplySettings();
+    }
+
+    private void OnPreCull()
     {
         ApplySettings();
     }

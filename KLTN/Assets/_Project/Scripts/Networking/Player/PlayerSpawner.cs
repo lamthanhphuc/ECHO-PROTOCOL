@@ -92,6 +92,8 @@ namespace EchoProtocol.Networking
         {
             if (SceneManager.GetActiveScene().name != LobbyManager.GameSceneName)
             {
+                ClearAuthoritativeWorldStateReferences();
+
                 if (runner.IsServer)
                 {
                     TryAttachLifecycle(runner);
@@ -106,6 +108,7 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            PruneInvalidAuthoritativeWorldStateReferences();
             DisableLegacyObjectiveMutators();
             EnsureGameplayHUD();
             if (!runner.IsServer) return;
@@ -128,6 +131,8 @@ namespace EchoProtocol.Networking
 
         private void EnsureWorldStateExamples(NetworkRunner runner)
         {
+            PruneInvalidAuthoritativeWorldStateReferences();
+
             if (_matchStatePrefab == null)
             {
                 _matchStatePrefab = Resources.Load<NetworkObject>("Network/NetworkMatchState");
@@ -779,16 +784,39 @@ namespace EchoProtocol.Networking
             if (state == NetworkSessionState.Disconnected || state == NetworkSessionState.Failed)
             {
                 _spawnSlots.Clear();
-                _doorInstance = null;
-                _energyCoreInstances.Clear();
-                _selectedEnergyCoreSpawnPoses.Clear();
-                _sectorBoxInstance = null;
-                _sectorBoxInstances.Clear();
-                _matchStateInstance = null;
-                _powerPuzzleInstance = null;
-                _powerPuzzleStationInstances.Clear();
-                _monsterInstance = null;
+                ClearAuthoritativeWorldStateReferences();
             }
+        }
+
+        private void ClearAuthoritativeWorldStateReferences()
+        {
+            _doorInstance = null;
+            _energyCoreInstances.Clear();
+            _selectedEnergyCoreSpawnPoses.Clear();
+            _sectorBoxInstance = null;
+            _sectorBoxInstances.Clear();
+            _matchStateInstance = null;
+            _powerPuzzleInstance = null;
+            _powerPuzzleStationInstances.Clear();
+            _monsterInstance = null;
+        }
+
+        private void PruneInvalidAuthoritativeWorldStateReferences()
+        {
+            if (!IsValidNetworkObject(_doorInstance)) _doorInstance = null;
+            if (!IsValidNetworkObject(_sectorBoxInstance)) _sectorBoxInstance = null;
+            if (!IsValidNetworkObject(_matchStateInstance)) _matchStateInstance = null;
+            if (!IsValidNetworkObject(_powerPuzzleInstance)) _powerPuzzleInstance = null;
+            if (!IsValidNetworkObject(_monsterInstance)) _monsterInstance = null;
+
+            _energyCoreInstances.RemoveAll(core => !IsValidNetworkObject(core));
+            _sectorBoxInstances.RemoveAll(box => !IsValidNetworkObject(box));
+            _powerPuzzleStationInstances.RemoveAll(station => !IsValidNetworkObject(station));
+        }
+
+        private static bool IsValidNetworkObject(NetworkObject obj)
+        {
+            return obj != null && obj.IsValid;
         }
 
         private readonly struct SpawnPose

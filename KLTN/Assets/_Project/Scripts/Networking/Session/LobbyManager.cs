@@ -183,6 +183,13 @@ namespace EchoProtocol.Networking
         public void RefreshFromRunner()
         {
             CurrentState = BuildStateFromRunner();
+            if (_matchStartInProgress
+                && _bootstrap != null
+                && _bootstrap.HasRunningRunner
+                && UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != GameSceneName)
+            {
+                _matchStartInProgress = false;
+            }
             OnRoomUpdated?.Invoke(CurrentState);
         }
 

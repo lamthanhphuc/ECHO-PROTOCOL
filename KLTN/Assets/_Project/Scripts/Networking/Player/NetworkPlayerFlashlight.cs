@@ -17,13 +17,10 @@ namespace EchoProtocol.Networking
         [Header("Settings")]
         [SerializeField] private bool _startOn = true;
         [SerializeField] private float _toggleCooldown = 0.2f;
-        [SerializeField, Min(0f)] private float _beamIntensity = 80f;
-        [SerializeField, Min(1f)] private float _beamRange = 50f;
+        [SerializeField, Min(0f)] private float _beamIntensity = 60f;
+        [SerializeField, Min(1f)] private float _beamRange = 40f;
         [SerializeField, Range(1f, 179f)] private float _beamSpotAngle = 66f;
         [SerializeField, Range(1f, 179f)] private float _beamInnerSpotAngle = 33f;
-        [SerializeField, Min(0.5f)] private float _visibleBeamLength = 15.5f;
-        [SerializeField, Range(0f, 1f)] private float _visibleBeamAlpha = 0.16f;
-        [SerializeField] private Color _visibleBeamColor = new Color(1f, 0.92f, 0.72f, 1f);
 
         [Networked] public NetworkBool IsFlashlightOn { get; set; }
 
@@ -32,7 +29,7 @@ namespace EchoProtocol.Networking
         private bool _offlineIsOn;
         private PlayerCamera _playerCamera;
         private NetworkPlayerMovement _networkMovement;
-        private FlashlightBeamVisual _beamVisual;
+        private NetworkPlayerLifeState _lifeState;
 
         public bool IsOn
         {
@@ -69,6 +66,7 @@ namespace EchoProtocol.Networking
         private void Awake()
         {
             ResolveLight();
+            ResolveLifeState();
 
             if (_inputActions != null)
             {
@@ -184,6 +182,12 @@ namespace EchoProtocol.Networking
         private void Update()
         {
             if (!HasLocalControl()) return;
+            if (!CanUseFlashlight())
+            {
+                ApplyVisuals();
+                return;
+            }
+
             if (Time.time < _cooldownUntil) return;
 
             bool pressed = false;
@@ -205,6 +209,12 @@ namespace EchoProtocol.Networking
 
         private void ToggleFlashlight()
         {
+            if (!CanUseFlashlight())
+            {
+                ApplyVisuals();
+                return;
+            }
+
             ResolveLight();
 
             if (Runner != null && Object != null && Object.IsValid)
@@ -264,6 +274,20 @@ namespace EchoProtocol.Networking
             ApplyBeamTuning();
         }
 
+        private void ResolveLifeState()
+        {
+            if (_lifeState == null)
+            {
+                _lifeState = GetComponent<NetworkPlayerLifeState>();
+            }
+        }
+
+        private bool CanUseFlashlight()
+        {
+            ResolveLifeState();
+            return _lifeState == null || !_lifeState.IsEliminated;
+        }
+
         private void ApplyBeamTuning()
         {
             if (_flashlight == null)
@@ -281,12 +305,7 @@ namespace EchoProtocol.Networking
             _flashlight.bounceIntensity = 0.4f;
             _flashlight.shadows = LightShadows.Soft;
 
-            EnsureBeamVisual();
-            _beamVisual.Configure(
-                Mathf.Min(_visibleBeamLength, _beamRange),
-                _beamSpotAngle,
-                _visibleBeamColor,
-                _visibleBeamAlpha);
+            RemoveBeamVisual();
         }
 
         private void ApplyVisuals()
@@ -297,33 +316,35 @@ namespace EchoProtocol.Networking
                 bool isOn;
                 if (Runner != null && Object != null && Object.IsValid)
                 {
-                    isOn = IsFlashlightOn;
+                    isOn = IsFlashlightOn && CanUseFlashlight();
                 }
                 else
                 {
-                    isOn = _offlineIsOn;
+                    isOn = _offlineIsOn && CanUseFlashlight();
                 }
 
                 _flashlight.enabled = isOn;
-                EnsureBeamVisual();
-                _beamVisual.SetVisible(isOn);
+                RemoveBeamVisual();
             }
         }
 
-        private void EnsureBeamVisual()
+        private void RemoveBeamVisual()
         {
             if (_flashlight == null)
             {
                 return;
             }
 
-            if (_beamVisual == null)
+            var beamVisual = _flashlight.GetComponent<FlashlightBeamVisual>();
+            if (beamVisual != null)
             {
-                _beamVisual = _flashlight.GetComponent<FlashlightBeamVisual>();
-                if (_beamVisual == null)
-                {
-                    _beamVisual = _flashlight.gameObject.AddComponent<FlashlightBeamVisual>();
-                }
+                Destroy(beamVisual);
+            }
+
+            Transform beam = _flashlight.transform.Find("Flashlight_Beam_Visual");
+            if (beam != null)
+            {
+                Destroy(beam.gameObject);
             }
         }
 

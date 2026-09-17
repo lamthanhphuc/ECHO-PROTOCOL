@@ -21,6 +21,9 @@ public class PlayerCamera : MonoBehaviour
     [SerializeField, Min(0.5f)] private float spectateThirdPersonDistance = 4.5f;
     [SerializeField, Min(0.2f)] private float spectateThirdPersonHeight = 2.1f;
     [SerializeField, Min(0.2f)] private float spectateLookAtHeight = 1.35f;
+    [SerializeField, Min(0.02f)] private float spectateCameraCollisionRadius = 0.25f;
+    [SerializeField, Min(0f)] private float spectateCameraCollisionPadding = 0.12f;
+    [SerializeField] private LayerMask spectateCameraCollisionMask = ~0;
     [SerializeField] private float nearClipPlane = 0.03f;
     [FormerlySerializedAs("useLimitedVisionEffect")]
     [SerializeField] private bool useWorldDarkness = true;
@@ -65,6 +68,8 @@ public class PlayerCamera : MonoBehaviour
         {
             _yaw = target.eulerAngles.y;
         }
+
+        EnsurePrimaryCamera();
 
         Camera cameraComponent = GetComponent<Camera>();
         if (cameraComponent != null)
@@ -122,6 +127,8 @@ public class PlayerCamera : MonoBehaviour
     {
         _currentEyeHeight = eyeHeight;
 
+        EnsurePrimaryCamera();
+
         Camera cameraComponent = GetComponent<Camera>();
         if (cameraComponent != null)
         {
@@ -151,6 +158,7 @@ public class PlayerCamera : MonoBehaviour
 
     private void OnEnable()
     {
+        EnsurePrimaryCamera();
         EnsureWorldDarkness();
 
         if (target == null || !target.gameObject.activeInHierarchy)
@@ -301,10 +309,11 @@ public class PlayerCamera : MonoBehaviour
         {
             var yawRotation = Quaternion.Euler(0f, _yaw, 0f);
             var lookAt = target.position + Vector3.up * spectateLookAtHeight;
-            transform.position =
+            Vector3 desiredPosition =
                 target.position
                 + Vector3.up * spectateThirdPersonHeight
                 - yawRotation * Vector3.forward * spectateThirdPersonDistance;
+            transform.position = ResolveSpectateCameraPosition(lookAt, desiredPosition);
             transform.rotation = Quaternion.LookRotation(
                 (lookAt - transform.position).normalized,
                 Vector3.up);
@@ -423,5 +432,71 @@ public class PlayerCamera : MonoBehaviour
         }
 
         gameObject.AddComponent<PlayerWorldDarknessController>();
+    }
+
+    private Vector3 ResolveSpectateCameraPosition(Vector3 lookAt, Vector3 desiredPosition)
+    {
+        Vector3 offset = desiredPosition - lookAt;
+        float distance = offset.magnitude;
+        if (distance <= 0.001f)
+        {
+            return desiredPosition;
+        }
+
+        Vector3 direction = offset / distance;
+        float radius = Mathf.Max(0.02f, spectateCameraCollisionRadius);
+        if (Physics.SphereCast(
+                lookAt,
+                radius,
+                direction,
+                out RaycastHit hit,
+                distance,
+                spectateCameraCollisionMask,
+                QueryTriggerInteraction.Ignore))
+        {
+            float safeDistance = Mathf.Max(0.05f, hit.distance - spectateCameraCollisionPadding);
+            return lookAt + direction * safeDistance;
+        }
+
+        return desiredPosition;
+    }
+
+    private void EnsurePrimaryCamera()
+    {
+        Camera cameraComponent = GetComponent<Camera>();
+        if (cameraComponent == null)
+        {
+            return;
+        }
+
+        if (!CompareTag("MainCamera"))
+        {
+            tag = "MainCamera";
+        }
+
+        cameraComponent.enabled = true;
+
+        AudioListener listener = GetComponent<AudioListener>();
+        if (listener != null)
+        {
+            listener.enabled = true;
+        }
+
+        var cameras = Object.FindObjectsByType<Camera>(FindObjectsInactive.Exclude);
+        foreach (Camera otherCamera in cameras)
+        {
+            if (otherCamera == null || otherCamera == cameraComponent || !otherCamera.CompareTag("MainCamera"))
+            {
+                continue;
+            }
+
+            otherCamera.enabled = false;
+
+            AudioListener otherListener = otherCamera.GetComponent<AudioListener>();
+            if (otherListener != null)
+            {
+                otherListener.enabled = false;
+            }
+        }
     }
 }

@@ -120,6 +120,7 @@ namespace EchoProtocol.Networking
             string.Empty;
         private uint _lastPublishedScenarioConfigRevision;
         private Guid _lastPublishedScenarioConfigMatchId;
+        private bool _endingForTeamDowned;
 
         public bool IsEnded => Status == NetworkMatchStatus.Ended;
         public bool IsEscapeTimerRunning => CurrentPhase == NetworkMatchPhase.Escape
@@ -469,9 +470,36 @@ namespace EchoProtocol.Networking
 
         private void HandlePlayerLifeStateChanged(NetworkPlayerLifeState _)
         {
-            if (Object == null || !Object.HasStateAuthority || IsEnded) return;
+            if (Object == null || !Object.HasStateAuthority || IsEnded || _endingForTeamDowned) return;
 
-            CountFinalPlayers(out var survivorCount, out var activeCount, out var trackedCount);
+            CountFinalPlayers(
+                out var survivorCount,
+                out var activeCount,
+                out var trackedCount,
+                out var downedCount,
+                out var nonDownedMatchActiveCount);
+
+            if (trackedCount > 0
+                && survivorCount == 0
+                && downedCount > 0
+                && nonDownedMatchActiveCount == 0)
+            {
+                _endingForTeamDowned = true;
+                try
+                {
+                    EliminateDownedPlayersAuthoritative();
+                    TryEndMatch(
+                        NetworkMatchResult.Lose,
+                        NetworkMatchEndReason.AllPlayersEliminated,
+                        PlayerRef.None);
+                }
+                finally
+                {
+                    _endingForTeamDowned = false;
+                }
+                return;
+            }
+
             if (trackedCount > 0 && activeCount == 0 && survivorCount == 0)
             {
                 TryEndMatch(
@@ -486,9 +514,26 @@ namespace EchoProtocol.Networking
             out int activeCount,
             out int trackedCount)
         {
+            CountFinalPlayers(
+                out survivorCount,
+                out activeCount,
+                out trackedCount,
+                out _,
+                out _);
+        }
+
+        private void CountFinalPlayers(
+            out int survivorCount,
+            out int activeCount,
+            out int trackedCount,
+            out int downedCount,
+            out int nonDownedMatchActiveCount)
+        {
             survivorCount = 0;
             activeCount = 0;
             trackedCount = 0;
+            downedCount = 0;
+            nonDownedMatchActiveCount = 0;
             foreach (var player in Runner.ActivePlayers)
             {
                 if (!Runner.TryGetPlayerObject(player, out var playerObject)
@@ -502,7 +547,38 @@ namespace EchoProtocol.Networking
 
                 trackedCount++;
                 if (lifeState.Status == NetworkPlayerLifeStatus.Escaped) survivorCount++;
-                else if (lifeState.IsMatchActive) activeCount++;
+                else if (lifeState.IsMatchActive)
+                {
+                    activeCount++;
+                    if (lifeState.IsDowned)
+                    {
+                        downedCount++;
+                    }
+                    else
+                    {
+                        nonDownedMatchActiveCount++;
+                    }
+                }
+            }
+        }
+
+        private void EliminateDownedPlayersAuthoritative()
+        {
+            foreach (var player in Runner.ActivePlayers)
+            {
+                if (!Runner.TryGetPlayerObject(player, out var playerObject)
+                    || playerObject == null
+                    || !playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyState)
+                    || !lobbyState.IsGameplayPlayer
+                    || !playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState)
+                    || !lifeState.IsDowned)
+                {
+                    continue;
+                }
+
+                lifeState.ForceEliminateAuthoritative(
+                    NetworkPlayerLifeTransitionCause.Bleedout,
+                    "TEAM_DOWNED");
             }
         }
 

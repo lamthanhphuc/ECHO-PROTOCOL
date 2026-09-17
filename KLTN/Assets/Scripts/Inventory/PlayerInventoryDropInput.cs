@@ -8,7 +8,7 @@ public class PlayerInventoryDropInput : MonoBehaviour
     [SerializeField] private PlayerEnergyCoreCarrier coreCarrier;
     [SerializeField] private Transform dropOrigin;
     [SerializeField] private float dropForwardDistance = 1.25f;
-    [SerializeField] private float throwForwardDistance = 3.0f;
+    [SerializeField] private float throwForwardDistance = 15.0f;
     [SerializeField] private int selectedNormalSlot;
     [SerializeField] private GameObject noiseMakerDeployedPrefab;
 

@@ -30,6 +30,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private Collider _blockingCollider;
         [SerializeField] private Vector3 _closedEulerAngles;
         [SerializeField] private Vector3 _openEulerAngles = new Vector3(0f, 90f, 0f);
+        [SerializeField] private bool _startsOpen = true;
         [SerializeField] private bool _startsLocked;
 
         [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
@@ -47,7 +48,7 @@ namespace EchoProtocol.Networking
         {
             if (Object.HasStateAuthority)
             {
-                State = _startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed;
+                State = _startsOpen ? NetworkDoorState.Open : (_startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed);
                 Broken = false;
             }
             ApplyReplicatedState();
@@ -57,7 +58,9 @@ namespace EchoProtocol.Networking
         {
             if (!Object.HasStateAuthority || !matchStateId.IsValid) return;
             MatchStateId = matchStateId;
-            State = NetworkDoorState.Locked;
+            State = _startsOpen
+                ? NetworkDoorState.Open
+                : NetworkDoorState.Locked;
             ApplyReplicatedState();
         }
 
