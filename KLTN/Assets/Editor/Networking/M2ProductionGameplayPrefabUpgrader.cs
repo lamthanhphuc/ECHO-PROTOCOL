@@ -254,11 +254,11 @@ namespace EchoProtocol.Editor.Networking
             }
             changed |= ConfigureFirstPersonVisibility(visibility);
 
-            PlayerFirstPersonWristCuffs wristCuffs = root.GetComponent<PlayerFirstPersonWristCuffs>();
-            if (wristCuffs == null)
+            PlayerFirstPersonWristCuffs wristCuffs =
+                root.GetComponent<PlayerFirstPersonWristCuffs>();
+
             if (wristCuffs != null)
             {
-                wristCuffs = root.AddComponent<PlayerFirstPersonWristCuffs>();
                 Object.DestroyImmediate(wristCuffs, true);
                 changed = true;
             }
@@ -740,22 +740,50 @@ namespace EchoProtocol.Editor.Networking
                 target.rootBone = source.rootBone;
                 changed = true;
             }
-            if (target.bones != source.bones)
+            if (!UnityObjectArraysEqual(target.bones, source.bones))
             {
                 target.bones = source.bones;
                 changed = true;
             }
-            if (target.sharedMaterials != source.sharedMaterials)
+            if (!UnityObjectArraysEqual(
+                    target.sharedMaterials,
+                    source.sharedMaterials))
             {
                 target.sharedMaterials = source.sharedMaterials;
                 changed = true;
             }
-            if (target.updateWhenOffscreen != source.updateWhenOffscreen)
-            {
-                target.updateWhenOffscreen = source.updateWhenOffscreen;
-                changed = true;
-            }
             return changed;
+        }
+
+        private static bool UnityObjectArraysEqual<T>(
+            T[] left,
+            T[] right)
+            where T : Object
+        {
+            if (ReferenceEquals(left, right))
+            {
+                return true;
+            }
+
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            if (left.Length != right.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < left.Length; i++)
+            {
+                if (left[i] != right[i])
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static void EnsureAssetFolder(string folderPath)
