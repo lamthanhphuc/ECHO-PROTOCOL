@@ -18,18 +18,16 @@ public class PlayerFlashlight : MonoBehaviour
     [SerializeField, Min(1f)] private float beamRange = 44f;
     [SerializeField, Range(1f, 179f)] private float beamSpotAngle = 42f;
     [SerializeField, Range(1f, 179f)] private float beamInnerSpotAngle = 24f;
-    [SerializeField, Min(0.5f)] private float visibleBeamLength = 15.5f;
-    [SerializeField, Range(0f, 1f)] private float visibleBeamAlpha = 0.16f;
-    [SerializeField] private Color visibleBeamColor = new Color(1f, 0.92f, 0.72f, 1f);
 
     private InputAction _flashlightAction;
     private float _cooldownUntil;
     private PlayerCamera _playerCamera;
-    private FlashlightBeamVisual _beamVisual;
+    private PlayerDownState _downState;
 
     private void Awake()
     {
         ResolveLight();
+        ResolveDownState();
 
         if (inputActions != null)
         {
@@ -63,6 +61,17 @@ public class PlayerFlashlight : MonoBehaviour
 
     private void Update()
     {
+        if (!CanUseFlashlight())
+        {
+            if (flashlight != null)
+            {
+                flashlight.enabled = false;
+                RemoveBeamVisual();
+            }
+
+            return;
+        }
+
         if (Time.time < _cooldownUntil) return;
 
         bool pressed = false;
@@ -81,8 +90,7 @@ public class PlayerFlashlight : MonoBehaviour
             if (flashlight != null)
             {
                 flashlight.enabled = !flashlight.enabled;
-                EnsureBeamVisual();
-                _beamVisual.SetVisible(flashlight.enabled);
+                RemoveBeamVisual();
             }
 
             _cooldownUntil = Time.time + toggleCooldown;
@@ -149,6 +157,20 @@ public class PlayerFlashlight : MonoBehaviour
         ApplyBeamTuning();
     }
 
+    private void ResolveDownState()
+    {
+        if (_downState == null)
+        {
+            _downState = GetComponent<PlayerDownState>();
+        }
+    }
+
+    private bool CanUseFlashlight()
+    {
+        ResolveDownState();
+        return _downState == null || !_downState.IsEliminated;
+    }
+
     private void ApplyBeamTuning()
     {
         if (flashlight == null)
@@ -166,29 +188,26 @@ public class PlayerFlashlight : MonoBehaviour
         flashlight.bounceIntensity = 0.4f;
         flashlight.shadows = LightShadows.Soft;
 
-        EnsureBeamVisual();
-        _beamVisual.Configure(
-            Mathf.Min(visibleBeamLength, beamRange),
-            beamSpotAngle,
-            visibleBeamColor,
-            visibleBeamAlpha);
-        _beamVisual.SetVisible(flashlight.enabled);
+        RemoveBeamVisual();
     }
 
-    private void EnsureBeamVisual()
+    private void RemoveBeamVisual()
     {
         if (flashlight == null)
         {
             return;
         }
 
-        if (_beamVisual == null)
+        var beamVisual = flashlight.GetComponent<FlashlightBeamVisual>();
+        if (beamVisual != null)
         {
-            _beamVisual = flashlight.GetComponent<FlashlightBeamVisual>();
-            if (_beamVisual == null)
-            {
-                _beamVisual = flashlight.gameObject.AddComponent<FlashlightBeamVisual>();
-            }
+            Destroy(beamVisual);
+        }
+
+        Transform beam = flashlight.transform.Find("Flashlight_Beam_Visual");
+        if (beam != null)
+        {
+            Destroy(beam.gameObject);
         }
     }
 
