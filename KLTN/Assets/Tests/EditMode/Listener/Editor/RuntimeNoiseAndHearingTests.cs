@@ -40,13 +40,13 @@ namespace EchoProtocol.AI.Listener.Tests
         {
             var catalog = RuntimeNoiseCatalog.CreateDefault();
 
-            AssertDefinition(catalog, RuntimeNoiseType.CROUCH, 0.3d, 5d, 2d,
+            AssertDefinition(catalog, RuntimeNoiseType.CROUCH, 0.3d, 7d, 2d,
                 RuntimeNoiseEmissionMode.RecurringMovement);
-            AssertDefinition(catalog, RuntimeNoiseType.WALK, 0.45d, 8d, 2d,
+            AssertDefinition(catalog, RuntimeNoiseType.WALK, 0.45d, 12d, 2d,
                 RuntimeNoiseEmissionMode.RecurringMovement);
-            AssertDefinition(catalog, RuntimeNoiseType.SPRINT, 0.8d, 16d, 2d,
+            AssertDefinition(catalog, RuntimeNoiseType.SPRINT, 0.8d, 30d, 2d,
                 RuntimeNoiseEmissionMode.RecurringMovement);
-            AssertDefinition(catalog, RuntimeNoiseType.CORE_CARRY, 0.95d, 20d, 2d,
+            AssertDefinition(catalog, RuntimeNoiseType.CORE_CARRY, 0.95d, 36d, 2d,
                 RuntimeNoiseEmissionMode.RecurringMovement);
 
             catalog.TryGetDefinition(RuntimeNoiseType.CROUCH, out var crouch);
@@ -63,13 +63,13 @@ namespace EchoProtocol.AI.Listener.Tests
         {
             var catalog = RuntimeNoiseCatalog.CreateDefault();
 
-            AssertDefinition(catalog, RuntimeNoiseType.DOOR, 0.55d, 10d, 2d,
+            AssertDefinition(catalog, RuntimeNoiseType.DOOR, 0.55d, 16d, 2d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
-            AssertDefinition(catalog, RuntimeNoiseType.CORE_INSERT, 0.8d, 14d, 3d,
+            AssertDefinition(catalog, RuntimeNoiseType.CORE_INSERT, 0.8d, 24d, 3d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
-            AssertDefinition(catalog, RuntimeNoiseType.INTERACTION, 0.35d, 6d, 2d,
+            AssertDefinition(catalog, RuntimeNoiseType.INTERACTION, 0.35d, 8d, 2d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
-            AssertDefinition(catalog, RuntimeNoiseType.CORE_DROP, 0.9d, 15d, 3d,
+            AssertDefinition(catalog, RuntimeNoiseType.CORE_DROP, 0.9d, 28d, 3d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
             AssertDefinition(catalog, RuntimeNoiseType.NOISE_MAKER, 1d, 40d, 6d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
