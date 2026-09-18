@@ -154,7 +154,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
-        public void STK_RoomSweepIntegration_SelfProbeWithAlternateStartsInPlaceScanWithoutImmediateReject()
+        public void STK_RoomSweepIntegration_SelfProbeWithAlternate_TriesAlternateBeforeFallbackSelfScan()
         {
             var controller = CreateController();
             var room = new RegionId(1);
@@ -181,7 +181,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(IsRegionCleared(memory, room), Is.False);
             Assert.That(GetBlackboardNode(controller, "DestinationSpatialNodeId"), Is.EqualTo(-1));
             Assert.That(GetNavigationObjectiveKindName(controller), Is.EqualTo("None"));
-            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(0));
+            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(1));
             Assert.That((bool)GetPrivateField(controller, "_roomSweepSelfProbeScanActive"), Is.True);
             Assert.That((int)GetPrivateField(controller, "_roomSweepSelfProbeScanNodeId"), Is.EqualTo(0));
         }

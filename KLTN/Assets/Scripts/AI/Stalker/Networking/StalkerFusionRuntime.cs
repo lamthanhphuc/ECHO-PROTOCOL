@@ -504,7 +504,8 @@ namespace EchoProtocol.AI.Stalker.Networking
                     isHidden || (lifeState != null && lifeState.IsCaught));
                 _targetStatuses.Add(new StalkerTargetStatus(
                     playerId,
-                    StalkerTargetEligibility.Evaluate(eligibilitySnapshot)));
+                    StalkerTargetEligibility.Evaluate(eligibilitySnapshot),
+                    isHidden));
                 _perceptionSnapshots.Add(new StalkerPerceptionTargetSnapshot(
                     playerId,
                     playerObject.transform,

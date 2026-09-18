@@ -38,5 +38,39 @@ namespace EchoProtocol.AI.Stalker
 
             return found;
         }
+
+        public static bool TryGetUniqueStatus(
+            IReadOnlyList<StalkerTargetStatus> statuses,
+            PlayerId playerId,
+            out StalkerTargetStatus status)
+        {
+            status = default;
+
+            if (!playerId.IsValid || statuses == null)
+            {
+                return false;
+            }
+
+            var found = false;
+            for (var i = 0; i < statuses.Count; i++)
+            {
+                var candidate = statuses[i];
+                if (candidate.PlayerId != playerId)
+                {
+                    continue;
+                }
+
+                if (found)
+                {
+                    status = default;
+                    return false;
+                }
+
+                status = candidate;
+                found = true;
+            }
+
+            return found;
+        }
     }
 }
