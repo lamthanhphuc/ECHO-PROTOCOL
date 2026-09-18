@@ -41,7 +41,7 @@ namespace EchoProtocol.AI.Stalker
 
         [Header("Movement Speed")]
         [SerializeField, Min(0f)] private float patrolSpeed = 7f;
-        [SerializeField, Min(0f)] private float chaseSpeed = 9f;
+        [SerializeField, Min(0f)] private float chaseSpeed = 8f;
 
         [Header("Diagnostics")]
         [SerializeField] private bool enableDiagnostics;

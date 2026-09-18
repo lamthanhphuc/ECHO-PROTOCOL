@@ -138,7 +138,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.StalkerVisionSensor
   visionOrigin: {fileID: 100011}
   candidate: {fileID: 0}
-  visionDistance: 30
+  visionDistance: 15
   visionAngle: 140
   losBlockerMask:
     serializedVersion: 2
@@ -160,7 +160,7 @@ MonoBehaviour:
   patrolRoute: {fileID: 0}
   visionSensor: {fileID: 100005}
   patrolMode: 3
-  patrolSpeed: 6
+  patrolSpeed: 7
   chaseSpeed: 8
   enableDiagnostics: 0
   candidateBfsDepth: 128
@@ -238,6 +238,7 @@ MonoBehaviour:
   hearingThreshold: 0.1
   closedDoorMultiplier: 0.5
   wallMultiplier: 0.25
+  hearingDiagnosticIntervalSeconds: 0.5
   attackDamage: 25
   maximumDamageDistance: 2
   catchEndsInDeath: 0

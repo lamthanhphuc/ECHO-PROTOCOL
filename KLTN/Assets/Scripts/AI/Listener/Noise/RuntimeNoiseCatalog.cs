@@ -11,7 +11,7 @@ namespace EchoProtocol.AI.Listener.Noise
             {
                 {
                     RuntimeNoiseType.SPRINT,
-                    new RuntimeNoiseDefinition(RuntimeNoiseType.SPRINT, 0.8d, 16d, TimeSpan.FromSeconds(2d),
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.SPRINT, 0.8d, 30d, TimeSpan.FromSeconds(2d),
                         RuntimeNoiseEmissionMode.RecurringMovement)
                 },
                 {
