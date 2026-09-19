@@ -21,12 +21,18 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string NavigationRequestIntentTypeName = "EchoProtocol.AI.Stalker.NavigationRequestIntent";
         private const string NavigationRecoveryReasonTypeName = "EchoProtocol.AI.Stalker.NavigationRecoveryReason";
         private const string PlayerIdTypeName = "EchoProtocol.AI.Common.PlayerId";
+        private const string StalkerHideSpotCandidateTypeName = "EchoProtocol.AI.Stalker.StalkerHideSpotCandidate";
+        private const string StalkerHideSpotMemoryTypeName = "EchoProtocol.AI.Stalker.StalkerHideSpotMemory";
+        private const string StalkerHidingInvestigationTypeName = "EchoProtocol.AI.Stalker.StalkerHidingInvestigation";
+        private const string StalkerNavigationObjectiveKeyTypeName = "EchoProtocol.AI.Stalker.StalkerNavigationObjectiveKey";
+        private const string StalkerNavigationObjectiveKindTypeName = "EchoProtocol.AI.Stalker.StalkerNavigationObjectiveKind";
         private const string StalkerControllerTypeName = "EchoProtocol.AI.Stalker.StalkerController";
         private const string StalkerSearchContextTypeName = "EchoProtocol.AI.Stalker.StalkerSearchContext";
         private const string SearchEpisodeIdTypeName = "EchoProtocol.AI.Stalker.SearchEpisodeId";
         private const string VisionObservationTypeName = "EchoProtocol.AI.Stalker.VisionObservation";
         private const string StalkerSearchPlannerTypeName = "EchoProtocol.AI.Stalker.StalkerSearchPlanner";
         private const string SearchPathEvaluatorTypeName = "EchoProtocol.AI.Stalker.SearchPathEvaluator";
+        private const string StalkerUnityHideSpotAdapterTypeName = "EchoProtocol.AI.Stalker.StalkerUnityHideSpotAdapter";
         private const string NavMeshSpatialGraphTypeName = "EchoProtocol.AI.Stalker.Spatial.NavMeshSpatialGraph";
         private const string SpatialNodeTypeName = "EchoProtocol.AI.Stalker.Spatial.SpatialNode";
         private const string RegionIdTypeName = "EchoProtocol.AI.Common.Spatial.RegionId";
@@ -592,13 +598,27 @@ namespace EchoProtocol.AI.Stalker.Tests
                     "lastKnownPosition"),
                 pointB);
 
-            // Continuous loss beyond the 0.45 s grace period enters SEARCH.
+            // Continuous loss beyond the 2.0 s grace period enters SEARCH.
             Assert.That(
                 SimulateAtTime(
                     fixture.StalkerController,
                     4L,
-                    0.6d,
-                    0.4f),
+                    2.0d,
+                    1.8f),
+                Is.True);
+
+            Assert.That(
+                GetEnumPropertyName(
+                    fixture.StalkerController,
+                    "CurrentState"),
+                Is.EqualTo("CHASE"));
+
+            Assert.That(
+                SimulateAtTime(
+                    fixture.StalkerController,
+                    5L,
+                    2.11d,
+                    0.11f),
                 Is.True);
 
             Assert.That(
@@ -894,6 +914,72 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             Assert.That(InvokeTryPlanNextSearchCandidateIfNotHolding(fixture.StalkerController), Is.False);
             Assert.That(fixture.PathEvaluationCount, Is.EqualTo(1));
+        }
+
+        [UnityTest]
+        public IEnumerator SEARCH_REC_HideSpotNavigationFailureResetsActiveInvestigation()
+        {
+            var fixture = CreateRecoveryPolicyFixture();
+            yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
+
+            var investigation =
+                CreateActiveHidingInvestigation();
+
+            SetPrivateField(
+                fixture.StalkerController,
+                "currentState",
+                ResolveEnumValue(
+                    "EchoProtocol.AI.Stalker.StalkerState",
+                    "SEARCH"));
+
+            SetPrivateField(
+                fixture.StalkerController,
+                "_hidingInvestigation",
+                investigation);
+
+            SetPrivateField(
+                fixture.StalkerController,
+                "_navigationObjectiveKey",
+                CreateNavigationObjectiveKey("HideSpotInspection"));
+
+            SetPrivateField(
+                fixture.StalkerController,
+                "_navigationRecoveryAttemptUsed",
+                true);
+
+            Assert.That(
+                GetEnumPropertyName(fixture.StalkerController, "CurrentState"),
+                Is.EqualTo("SEARCH"));
+
+            Assert.That(
+                GetBoolProperty(investigation, "HasActiveCandidate"),
+                Is.True);
+
+            Assert.That(
+                GetEnumPropertyName(
+                    GetPrivateField<object>(
+                        fixture.StalkerController,
+                        "_navigationObjectiveKey"),
+                    "Kind"),
+                Is.EqualTo("HideSpotInspection"));
+
+            InvokePrivateMethod(
+                fixture.StalkerController,
+                "HandleSearchNavigationFailure",
+                new[] { ResolveType(NavigationFailureReasonTypeName) },
+                new[] { ResolveEnumValue(NavigationFailureReasonTypeName, "PathInvalid") });
+
+            Assert.That(
+                GetBoolProperty(investigation, "HasActiveCandidate"),
+                Is.False);
+
+            Assert.That(
+                GetEnumPropertyName(
+                    GetPrivateField<object>(
+                        fixture.StalkerController,
+                        "_navigationObjectiveKey"),
+                    "Kind"),
+                Is.Not.EqualTo("HideSpotInspection"));
         }
 
         [UnityTest]
@@ -2074,6 +2160,55 @@ namespace EchoProtocol.AI.Stalker.Tests
             var enumType = ResolveType(fullTypeName);
             Assert.That(enumType.IsEnum, Is.True, $"Production type '{fullTypeName}' must be an enum.");
             return Enum.Parse(enumType, valueName);
+        }
+
+        private static object CreateActiveHidingInvestigation()
+        {
+            var memory =
+                Activator.CreateInstance(
+                    ResolveType(StalkerHideSpotMemoryTypeName));
+
+            var resolver =
+                Activator.CreateInstance(
+                    ResolveType(StalkerUnityHideSpotAdapterTypeName));
+
+            var investigation =
+                Activator.CreateInstance(
+                    ResolveType(StalkerHidingInvestigationTypeName),
+                    memory,
+                    resolver);
+
+            var candidate =
+                Activator.CreateInstance(
+                    ResolveType(StalkerHideSpotCandidateTypeName),
+                    7001UL,
+                    Destination,
+                    Destination,
+                    true);
+
+            InvokeMethod(
+                investigation,
+                "Begin",
+                new[] { ResolveType(StalkerHideSpotCandidateTypeName) },
+                new[] { candidate });
+
+            return investigation;
+        }
+
+        private static object CreateNavigationObjectiveKey(string kindName)
+        {
+            var kind =
+                ResolveEnumValue(
+                    StalkerNavigationObjectiveKindTypeName,
+                    kindName);
+
+            return Activator.CreateInstance(
+                ResolveType(StalkerNavigationObjectiveKeyTypeName),
+                kind,
+                -1,
+                -1,
+                -1,
+                7001UL);
         }
 
         private static void AssertEvaluationResult(object result, string expectedStatusName, bool expectedComplete, Vector3 expectedDestination)

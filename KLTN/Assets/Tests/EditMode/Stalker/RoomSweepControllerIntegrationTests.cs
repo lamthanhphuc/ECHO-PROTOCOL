@@ -350,6 +350,64 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
+        public void STK_RoomSweepIntegration_SelfProbeFullScanMarksCurrentNodeObserved()
+        {
+            var controller = CreateController();
+            var room = new RegionId(1);
+            var spatialGraph = CreateSpatialGraph(Node(0, Vector3.zero));
+            var regionGraph = CreateRegionGraph(
+                spatialGraph,
+                new[] { room },
+                RoomRegion(room, 1, "Zone01/Room"));
+            var memory = CreateMemory();
+            AttachRoomSweepState(controller, spatialGraph, regionGraph, memory);
+            AttachNavigationAndLocalSelector(controller, spatialGraph, regionGraph);
+            SetPrivateField(controller, "_currentSimulationDeltaSeconds", 1f);
+
+            var agent =
+                ((Component)controller).GetComponent<NavMeshAgent>();
+
+            agent.angularSpeed = 180f;
+            agent.updateRotation = true;
+
+            InvokePrivate(
+                controller,
+                "TryBeginOrContinueCurrentRoomSweep",
+                new[] { typeof(int), typeof(RegionId) },
+                0,
+                room);
+
+            InvokePrivate(
+                controller,
+                "TickRoomSweepSelfProbeScan",
+                Type.EmptyTypes);
+
+            Assert.That(IsObserved(memory, room, 0), Is.False);
+            Assert.That(
+                (bool)GetPrivateField(
+                    controller,
+                    "_roomSweepSelfProbeScanActive"),
+                Is.True);
+            Assert.That(agent.updateRotation, Is.False);
+
+            InvokePrivate(
+                controller,
+                "TickRoomSweepSelfProbeScan",
+                Type.EmptyTypes);
+
+            Assert.That(IsObserved(memory, room, 0), Is.True);
+            Assert.That(
+                GetPlannerInt(controller, "RejectedProbeCount"),
+                Is.EqualTo(0));
+            Assert.That(
+                (bool)GetPrivateField(
+                    controller,
+                    "_roomSweepSelfProbeScanActive"),
+                Is.False);
+            Assert.That(agent.updateRotation, Is.True);
+        }
+
+        [Test]
         public void STK_RoomSweepIntegration_ObservedSelfProbeScanSuccessRestoresAgentUpdateRotation()
         {
             var controller = CreateController();
@@ -374,7 +432,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
-        public void STK_RoomSweepIntegration_SelfProbeFullScanBlockedRejectsAfterFullRotationOnly()
+        public void STK_RoomSweepIntegration_SelfProbeFullScanBlockedMarksObservedAfterFullRotationOnly()
         {
             var controller = CreateController();
             var room = new RegionId(1);
@@ -396,17 +454,16 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(0));
             Assert.That(IsObserved(memory, room, 0), Is.False);
 
-            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("SELF_PROBE_FULL_SCAN_UNSEEN"));
             InvokePrivate(controller, "TickRoomSweepSelfProbeScan", Type.EmptyTypes);
 
-            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(1));
-            Assert.That(IsObserved(memory, room, 0), Is.False);
+            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(0));
+            Assert.That(IsObserved(memory, room, 0), Is.True);
             Assert.That(IsRegionCleared(memory, room), Is.False);
             Assert.That((bool)GetPrivateField(controller, "_roomSweepSelfProbeScanActive"), Is.False);
         }
 
         [Test]
-        public void STK_RoomSweepIntegration_FullScanUnseenRestoresAgentUpdateRotation()
+        public void STK_RoomSweepIntegration_FullScanCompletionRestoresAgentUpdateRotation()
         {
             var controller = CreateController();
             var room = new RegionId(1);
@@ -426,7 +483,6 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             InvokePrivate(controller, "TryBeginOrContinueCurrentRoomSweep", new[] { typeof(int), typeof(RegionId) }, 0, room);
             InvokePrivate(controller, "TickRoomSweepSelfProbeScan", Type.EmptyTypes);
-            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("SELF_PROBE_FULL_SCAN_UNSEEN"));
             InvokePrivate(controller, "TickRoomSweepSelfProbeScan", Type.EmptyTypes);
 
             Assert.That(agent.updateRotation, Is.True);

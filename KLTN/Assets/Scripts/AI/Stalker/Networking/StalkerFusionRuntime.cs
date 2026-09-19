@@ -611,15 +611,40 @@ namespace EchoProtocol.AI.Stalker.Networking
                  i < _activeNoiseEvents.Count;
                  i++)
             {
-                if (_hearingSensor.TryEvaluate(
-                        _activeNoiseEvents[i],
+                var noiseEvent =
+                    _activeNoiseEvents[i];
+
+                var heard =
+                    _hearingSensor.TryEvaluate(
+                        noiseEvent,
                         origin,
                         heardAtUtc,
                         out var observation,
-                        out _))
+                        out var rejectReason);
+
+                if (heard)
                 {
                     _hearingObservations.Add(
                         observation);
+                }
+
+                if (RuntimeLog.IsEnabled(
+                        RuntimeLogCategory.StalkerHearing)
+                    && _hearingSensor.LastEvaluationStatus
+                        == ListenerHearingEvaluationStatus.Evaluated)
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.StalkerHearing,
+                        $"[STK_HEARING][EVAL] " +
+                        $"type={noiseEvent.NoiseType} " +
+                        $"distance={Vector3.Distance(origin, noiseEvent.WorldPosition):F2} " +
+                        $"radius={noiseEvent.HearingRadius:F2} " +
+                        $"loudness={noiseEvent.Loudness:F3} " +
+                        $"result={(heard ? "HEARD" : "REJECT")} " +
+                        $"reject={rejectReason} " +
+                        $"noisePos={noiseEvent.WorldPosition} " +
+                        $"origin={origin}",
+                        this);
                 }
             }
 
@@ -750,7 +775,9 @@ namespace EchoProtocol.AI.Stalker.Networking
                     new ListenerHearingSensor(
                         new UnityListenerOcclusionResolver(
                             acousticBlockerMask,
-                            transform),
+                            transform,
+                            triggerInteraction:
+                                QueryTriggerInteraction.Ignore),
                         new ListenerHearingPolicy(
                             hearingThreshold,
                             closedDoorMultiplier,

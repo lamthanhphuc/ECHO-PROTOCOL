@@ -108,11 +108,38 @@ namespace EchoProtocol.AI.Stalker
                 return _lastResolutionResult;
             }
 
-            var isHit = targetSnapshot.IsUsableForHit(_activeEpisode.TargetIdAtEntry)
-                && IsWithinAttackRange(stalkerPosition, targetSnapshot.AuthoritativePosition, attackRange);
-            var outcome = isHit ? StalkerAttackOutcome.Hit : StalkerAttackOutcome.Miss;
+            var canApplyConsequence =
+                targetSnapshot.IsUsableForHit(_activeEpisode.TargetIdAtEntry)
+                && IsWithinAttackRange(stalkerPosition, targetSnapshot.AuthoritativePosition, attackRange)
+                && targetSnapshot.HasConsequenceReceiver
+                && consequenceSink != null;
+            var consequenceApplied = false;
 
-            // Commit the guard and immutable outcome before invoking external gameplay code.
+            // Commit the exactly-once guard before invoking external gameplay code.
+            _activeEpisode = new StalkerAttackEpisode(
+                _activeEpisode.EpisodeId,
+                _activeEpisode.TargetIdAtEntry,
+                _activeEpisode.StartedAt,
+                _activeEpisode.WindupElapsedSeconds,
+                true,
+                StalkerAttackOutcome.Miss,
+                step.IsValid ? step.Time : AiSimulationTime.Invalid);
+            _resolutionCount++;
+
+            if (canApplyConsequence)
+            {
+                consequenceApplied =
+                    consequenceSink.TryApplyStalkerHit(
+                    _activeEpisode.EpisodeId,
+                    _activeEpisode.TargetIdAtEntry,
+                    targetSnapshot.AuthoritativePosition,
+                    _activeEpisode.ResolutionTime);
+            }
+
+            var outcome = consequenceApplied
+                ? StalkerAttackOutcome.Hit
+                : StalkerAttackOutcome.Miss;
+
             _activeEpisode = new StalkerAttackEpisode(
                 _activeEpisode.EpisodeId,
                 _activeEpisode.TargetIdAtEntry,
@@ -120,23 +147,13 @@ namespace EchoProtocol.AI.Stalker
                 _activeEpisode.WindupElapsedSeconds,
                 true,
                 outcome,
-                step.IsValid ? step.Time : AiSimulationTime.Invalid);
-            _resolutionCount++;
+                _activeEpisode.ResolutionTime);
             _lastCommittedResolutionFact = new StalkerAttackResolvedFact(
                 _activeEpisode.EpisodeId,
                 outcome,
                 _activeEpisode.ResolutionTime);
 
-            if (isHit && consequenceSink != null)
-            {
-                consequenceSink.TryApplyStalkerHit(
-                    _activeEpisode.EpisodeId,
-                    _activeEpisode.TargetIdAtEntry,
-                    targetSnapshot.AuthoritativePosition,
-                    _activeEpisode.ResolutionTime);
-            }
-
-            _lastResolutionResult = isHit
+            _lastResolutionResult = consequenceApplied
                 ? StalkerAttackResolutionResult.ResolvedHit
                 : StalkerAttackResolutionResult.ResolvedMiss;
             return _lastResolutionResult;
@@ -153,7 +170,7 @@ namespace EchoProtocol.AI.Stalker
             var clampedRange = Mathf.Max(0f, attackRange);
             var delta = targetPosition - stalkerPosition;
             var horizontalDeltaSqr = delta.x * delta.x + delta.z * delta.z;
-            var maxEffectiveRange = clampedRange + 0.6f;
+            var maxEffectiveRange = clampedRange;
             return horizontalDeltaSqr <= maxEffectiveRange * maxEffectiveRange && Mathf.Abs(delta.y) <= 3.0f;
         }
     }

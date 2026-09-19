@@ -31,6 +31,8 @@ namespace EchoProtocol.Diagnostics
         Door = 1 << 18,
         Inventory = 1 << 19,
 
+        StalkerHideFlow = 1 << 20,
+
         All =
             NetworkSession
             | MatchAuthority
@@ -52,5 +54,6 @@ namespace EchoProtocol.Diagnostics
             | Interaction
             | Door
             | Inventory
+            | StalkerHideFlow
     }
 }

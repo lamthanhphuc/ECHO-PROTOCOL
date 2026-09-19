@@ -16,7 +16,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const int MaxDetectFrames = 5;
         private const int MaxChaseFrames = 30;
         private const int MaxSearchFrames = 5;
-        private const float MaxGraceExpirySeconds = 1f;
+        private const float MaxGraceExpirySeconds = 2.5f;
         private const int MaxVisibleLkpUpdateFrames = 3;
         private const float FloatTolerance = 0.0001f;
         private const float VectorTolerance = 0.001f;

@@ -18,6 +18,9 @@ namespace EchoProtocol.Diagnostics
         public RuntimeLogCategory EnabledCategories =>
             enabledCategories;
 
+        public bool StalkerHideFlowEnabled =>
+            IsEnabled(RuntimeLogCategory.StalkerHideFlow);
+
         public bool IsEnabled(
             RuntimeLogCategory category)
         {

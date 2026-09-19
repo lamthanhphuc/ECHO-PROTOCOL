@@ -82,12 +82,12 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
-        public void STK_ATTACK_ResolveHitMoment_HitsWithoutConsequenceSink_WhenTargetIsValidCorrectAndInRange()
+        public void STK_ATTACK_MissingConsequenceSink_ResolvesMiss()
         {
             var controller = CreateController();
             var step = CreateStep(11L, 1.1d, 0.25f);
             var episode = BeginAttack(controller, true, CreatePlayerId(1), step);
-            var snapshot = CreateTargetSnapshot(1, true, Vector3.forward, false);
+            var snapshot = CreateTargetSnapshot(1, true, Vector3.forward, true);
 
             var result = ResolveHitMoment(
                 controller,
@@ -99,17 +99,84 @@ namespace EchoProtocol.AI.Stalker.Tests
                 null,
                 step);
 
+            Assert.That(GetEnumName(result, AttackResolutionResultTypeName), Is.EqualTo("ResolvedMiss"));
+            Assert.That(GetEnumPropertyName(controller, "Outcome", AttackOutcomeTypeName), Is.EqualTo("Miss"));
+            Assert.That(GetIntProperty(controller, "ResolutionCount"), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void STK_ATTACK_ConsequenceSinkFalse_ResolvesMiss()
+        {
+            var controller = CreateController();
+            var step = CreateStep(12L, 1.2d, 0.25f);
+            var episode = BeginAttack(controller, true, CreatePlayerId(1), step);
+            var snapshot = CreateTargetSnapshot(1, true, Vector3.forward, true);
+            var sink = CreateConsequenceSink(false, out var proxy);
+
+            var result = ResolveHitMoment(
+                controller,
+                true,
+                GetProperty(episode, "EpisodeId"),
+                Vector3.zero,
+                2f,
+                snapshot,
+                sink,
+                step);
+
+            Assert.That(GetEnumName(result, AttackResolutionResultTypeName), Is.EqualTo("ResolvedMiss"));
+            Assert.That(GetEnumPropertyName(controller, "Outcome", AttackOutcomeTypeName), Is.EqualTo("Miss"));
+            Assert.That(GetIntProperty(proxy, "CallCount"), Is.EqualTo(1));
+            Assert.That(GetEnumPropertyName(GetProperty(controller, "LastCommittedResolutionFact"), "Outcome", AttackOutcomeTypeName), Is.EqualTo("Miss"));
+        }
+
+        [Test]
+        public void STK_ATTACK_SuccessfulConsequence_ResolvesHit()
+        {
+            var controller = CreateController();
+            var step = CreateStep(13L, 1.3d, 0.25f);
+            var episode = BeginAttack(controller, true, CreatePlayerId(1), step);
+            var snapshot = CreateTargetSnapshot(1, true, Vector3.forward, true);
+            var sink = CreateConsequenceSink(true, out var proxy);
+
+            var result = ResolveHitMoment(
+                controller,
+                true,
+                GetProperty(episode, "EpisodeId"),
+                Vector3.zero,
+                2f,
+                snapshot,
+                sink,
+                step);
+
             Assert.That(GetEnumName(result, AttackResolutionResultTypeName), Is.EqualTo("ResolvedHit"));
             Assert.That(GetEnumPropertyName(controller, "Outcome", AttackOutcomeTypeName), Is.EqualTo("Hit"));
-            Assert.That(GetIntProperty(controller, "ResolutionCount"), Is.EqualTo(1));
+            Assert.That(GetIntProperty(proxy, "CallCount"), Is.EqualTo(1));
+            Assert.That(GetEnumPropertyName(GetProperty(controller, "LastCommittedResolutionFact"), "Outcome", AttackOutcomeTypeName), Is.EqualTo("Hit"));
+        }
+
+        [Test]
+        public void STK_ATTACK_OutsideExactAttackRange_ResolvesMiss()
+        {
+            AssertMiss(
+                CreateTargetSnapshot(1, true, new Vector3(0f, 0f, 2.01f), true),
+                2f);
+        }
+
+        [Test]
+        public void STK_ATTACK_NoPlusPointSixTolerance()
+        {
+            AssertMiss(
+                CreateTargetSnapshot(1, true, new Vector3(0f, 0f, 2.5f), true),
+                2f);
         }
 
         [Test]
         public void STK_ATTACK_ResolveHitMoment_MissesForOutOfRangeInvalidOrWrongTarget()
         {
-            AssertMiss(CreateTargetSnapshot(1, true, new Vector3(0f, 0f, 5f), true));
-            AssertMiss(CreateTargetSnapshot(1, false, new Vector3(0f, 0f, 1f), true));
-            AssertMiss(CreateTargetSnapshot(2, true, new Vector3(0f, 0f, 1f), true));
+            AssertMiss(CreateTargetSnapshot(1, true, new Vector3(0f, 0f, 5f), true), 2f);
+            AssertMiss(CreateTargetSnapshot(1, false, new Vector3(0f, 0f, 1f), true), 2f);
+            AssertMiss(CreateTargetSnapshot(2, true, new Vector3(0f, 0f, 1f), true), 2f);
+            AssertMiss(CreateTargetSnapshot(1, true, new Vector3(0f, 0f, 1f), false), 2f);
         }
 
         [Test]
@@ -157,26 +224,26 @@ namespace EchoProtocol.AI.Stalker.Tests
                 Is.EqualTo("PLAYER_LIFE_STATE_BINDING_REQUIRED"));
         }
 
-        private static void AssertMiss(object snapshot)
+        private static void AssertMiss(object snapshot, float attackRange)
         {
             var controller = CreateController();
             var step = CreateStep(2L, 2d, 0.1f);
             var episode = BeginAttack(controller, true, CreatePlayerId(1), step);
-            var sink = Activator.CreateInstance(ResolveType(DiagnosticSinkTypeName));
+            var sink = CreateConsequenceSink(true, out var proxy);
 
             var result = ResolveHitMoment(
                 controller,
                 true,
                 GetProperty(episode, "EpisodeId"),
                 Vector3.zero,
-                2f,
+                attackRange,
                 snapshot,
                 sink,
                 step);
 
             Assert.That(GetEnumName(result, AttackResolutionResultTypeName), Is.EqualTo("ResolvedMiss"));
             Assert.That(GetEnumPropertyName(controller, "Outcome", AttackOutcomeTypeName), Is.EqualTo("Miss"));
-            Assert.That(GetIntProperty(sink, "CallCount"), Is.EqualTo(0));
+            Assert.That(GetIntProperty(proxy, "CallCount"), Is.EqualTo(0));
         }
 
         private static object CreateController()
@@ -227,6 +294,19 @@ namespace EchoProtocol.AI.Stalker.Tests
                 valid,
                 position,
                 hasConsequenceReceiver);
+        }
+
+        private static object CreateConsequenceSink(
+            bool result,
+            out object sink)
+        {
+            sink = Activator.CreateInstance(ResolveType(DiagnosticSinkTypeName));
+            var property = sink.GetType().GetProperty(
+                "ShouldApplyHit",
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(property, Is.Not.Null, "Diagnostic sink must expose configurable consequence result.");
+            property.SetValue(sink, result);
+            return sink;
         }
 
         private static object CreatePlayerId(int value)
@@ -310,5 +390,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.Fail($"Could not find production type '{fullTypeName}' in the loaded Unity AppDomain.");
             return null;
         }
+
     }
 }

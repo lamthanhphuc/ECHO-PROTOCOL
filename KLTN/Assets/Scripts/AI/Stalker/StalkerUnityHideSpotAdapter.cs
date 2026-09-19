@@ -1,14 +1,18 @@
 using System.Collections.Generic;
 using EchoProtocol.AI.Common;
+using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
 using EchoProtocol.Player;
 using Fusion;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace EchoProtocol.AI.Stalker
 {
     public sealed class StalkerUnityHideSpotAdapter : IStalkerHideSpotInspectionResolver
     {
+        private const float InspectPointNavMeshSampleRadius = 1.5f;
+
         private readonly Dictionary<ulong, global::HidingSpot> _spotsById =
             new Dictionary<ulong, global::HidingSpot>();
 
@@ -35,14 +39,45 @@ namespace EchoProtocol.AI.Stalker
                 }
 
                 var stableId = spot.StableId;
-                var inspectPoint = spot.ExitPoint != null
-                    ? spot.ExitPoint
-                    : spot.transform;
+                var inspectPoint = spot.InspectPoint != null
+                    ? spot.InspectPoint
+                    : spot.ExitPoint != null
+                        ? spot.ExitPoint
+                        : spot.transform;
+
+                var rawInspectPosition = inspectPoint.position;
+
+                if (!NavMesh.SamplePosition(
+                        rawInspectPosition,
+                        out var inspectHit,
+                        InspectPointNavMeshSampleRadius,
+                        NavMesh.AllAreas))
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.StalkerHideFlow,
+                        $"[STK_HIDE_FLOW][INSPECT_NAVMESH_REJECT] " +
+                        $"stableId={stableId} " +
+                        $"raw={rawInspectPosition}",
+                        inspectPoint);
+
+                    continue;
+                }
+
+                var inspectPosition = inspectHit.position;
+
+                RuntimeLog.Log(
+                    RuntimeLogCategory.StalkerHideFlow,
+                    $"[STK_HIDE_FLOW][INSPECT_NAVMESH_SNAP] " +
+                    $"stableId={stableId} " +
+                    $"raw={rawInspectPosition} " +
+                    $"sampled={inspectPosition} " +
+                    $"delta={Vector3.Distance(rawInspectPosition, inspectPosition):F2}",
+                    inspectPoint);
 
                 results.Add(new StalkerHideSpotCandidate(
                     stableId,
                     spot.transform.position,
-                    inspectPoint.position,
+                    inspectPosition,
                     spot.gameObject.activeInHierarchy));
 
                 _spotsById[stableId] = spot;
@@ -91,13 +126,6 @@ namespace EchoProtocol.AI.Stalker
                     return false;
                 }
 
-                var occupantTransform = movement.transform;
-                var observedPosition = occupantTransform.position;
-                var observedDirection =
-                    occupantTransform.forward.sqrMagnitude > 0f
-                        ? occupantTransform.forward
-                        : Vector3.forward;
-
                 var exitPoint = spot.ExitPoint != null
                     ? spot.ExitPoint
                     : spot.transform;
@@ -107,12 +135,37 @@ namespace EchoProtocol.AI.Stalker
                     exitPoint.eulerAngles.y,
                     0f);
 
-                if (!movement.TryForceExitHidingAuthoritative(
+                var preExitPosition =
+                    movement.transform.position;
+
+                var forceExitSucceeded =
+                    movement.TryForceExitHidingAuthoritative(
                         exitPoint.position,
-                        exitRotation))
+                        exitRotation);
+
+                RuntimeLog.Log(
+                    RuntimeLogCategory.StalkerHideFlow,
+                    $"[STK_HIDE_FLOW][FORCE_EXIT] " +
+                    $"player={playerId} " +
+                    $"stableId={candidate.StableId} " +
+                    $"success={forceExitSucceeded} " +
+                    $"pre={preExitPosition} " +
+                    $"requestedExit={exitPoint.position} " +
+                    $"post={movement.transform.position} " +
+                    $"hidden={movement.IsHidden}",
+                    movement);
+
+                if (!forceExitSucceeded)
                 {
                     return false;
                 }
+
+                var occupantTransform = movement.transform;
+                var observedPosition = occupantTransform.position;
+                var observedDirection =
+                    occupantTransform.forward.sqrMagnitude > 0f
+                        ? occupantTransform.forward
+                        : Vector3.forward;
 
                 var postRevealEligibility =
                     EvaluatePostRevealEligibility(
@@ -141,14 +194,14 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
+            occupant.ExitHiding();
+
             var localTransform = occupant.transform;
             var localObservedPosition = localTransform.position;
             var localObservedDirection =
                 localTransform.forward.sqrMagnitude > 0f
                     ? localTransform.forward
                     : Vector3.forward;
-
-            occupant.ExitHiding();
 
             result = StalkerHideSpotInspectionResult.OccupiedBy(
                 localPlayerId,

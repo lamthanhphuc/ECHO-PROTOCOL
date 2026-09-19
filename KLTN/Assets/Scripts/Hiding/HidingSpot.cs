@@ -4,6 +4,7 @@ public class HidingSpot : MonoBehaviour, IInteractable
 {
     [SerializeField] private Transform hidePoint;
     [SerializeField] private Transform exitPoint;
+    [SerializeField] private Transform inspectPoint;
     [SerializeField] private string enterPrompt = "Hide";
     [SerializeField] private string exitPrompt = "Exit hiding";
     [SerializeField] private float yawLimitDegrees = 45f;
@@ -13,6 +14,7 @@ public class HidingSpot : MonoBehaviour, IInteractable
 
     public Transform HidePoint => hidePoint != null ? hidePoint : transform;
     public Transform ExitPoint => exitPoint;
+    public Transform InspectPoint => inspectPoint;
     public ulong StableId
     {
         get

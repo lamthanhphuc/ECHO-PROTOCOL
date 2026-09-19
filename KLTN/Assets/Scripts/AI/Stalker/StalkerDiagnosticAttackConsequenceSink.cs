@@ -9,6 +9,8 @@ namespace EchoProtocol.AI.Stalker
 
         public int CallCount { get; private set; }
 
+        public bool ShouldApplyHit { get; set; } = true;
+
         public StalkerAttackEpisodeId LastEpisodeId { get; private set; }
 
         public PlayerId LastPlayerId { get; private set; }
@@ -28,7 +30,7 @@ namespace EchoProtocol.AI.Stalker
             LastPlayerId = playerId;
             LastHitPosition = authoritativeHitPosition;
             LastResolvedAt = resolvedAt;
-            return true;
+            return ShouldApplyHit;
         }
     }
 }
