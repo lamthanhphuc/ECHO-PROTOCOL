@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Common.AED;
@@ -5,6 +6,7 @@ using EchoProtocol.AI.Common.Spatial;
 using EchoProtocol.AI.Listener.Perception;
 using EchoProtocol.AI.Stalker.Hearing;
 using EchoProtocol.AI.Stalker.Spatial;
+using EchoProtocol.AI.Stalker.Spatial.Strategic;
 using EchoProtocol.AI.Stalker.Telemetry;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
@@ -39,6 +41,11 @@ namespace EchoProtocol.AI.Stalker
 
         [Header("Patrol Mode")]
         [SerializeField] private StalkerPatrolMode patrolMode = StalkerPatrolMode.FixedWaypoint;
+
+        [Header("Smart Patrol Director")]
+        [SerializeField] private bool useSmartPatrolDirector = true;
+        [SerializeField] private StalkerSmartPatrolSettings smartPatrolSettings =
+            new StalkerSmartPatrolSettings();
 
         [Header("Movement Speed")]
         [SerializeField, Min(0f)] private float patrolSpeed = 7f;
@@ -132,6 +139,9 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private int canonicalNextRegionId;
         [SerializeField] private long searchEpisodeId;
         [SerializeField] private int searchCandidateNodeId = -1;
+        [SerializeField] private string smartPatrolPacingMode;
+        [SerializeField] private string smartPatrolHotspot;
+        [SerializeField] private float smartPatrolPressure;
 
         private const float TargetSelectionTieEpsilon = 0f;
         private const float TopologyPathSegmentSampleSpacing = 1f;
@@ -195,6 +205,7 @@ namespace EchoProtocol.AI.Stalker
         private RoomSweepCoverageMemory _roomSweepCoverageMemory;
         private RoomSweepPlanner _roomSweepPlanner;
         private RoomSweepGlobalPlanner _roomSweepGlobalPlanner;
+        private StalkerStrategicPatrolRuntime _strategicPatrolRuntime;
         private bool _hasPatrolVariationSeed;
         private int _patrolVariationSeed;
         private int _patrolNearOptimalHopSlack;
@@ -324,6 +335,11 @@ namespace EchoProtocol.AI.Stalker
         public double AppliedDetectionDecayRate => GetDetectionDecayRate();
         public double AppliedChaseSpeed => GetChaseSpeed();
         public double AppliedSearchDuration => GetSearchDuration();
+        public bool SmartPatrolEnabled => useSmartPatrolDirector;
+        public float SmartPatrolOccupancySampleIntervalSeconds =>
+            smartPatrolSettings != null
+                ? smartPatrolSettings.OccupancySampleIntervalSeconds
+                : 0.5f;
 
         public bool TryGetNavigationDestination(out Vector3 destination)
         {
@@ -347,6 +363,11 @@ namespace EchoProtocol.AI.Stalker
             var to = new RegionId(toRegionId);
             var affectsCurrentRoute = !open && IsTopologyEdgeRelevantToCurrentNavigation(from, to);
             var changed = _regionGraph.TrySetEdgeOpen(from, to, open);
+            if (changed)
+            {
+                _strategicPatrolRuntime?.InvalidateTopology();
+            }
+
             if (!changed || open)
             {
                 if (changed && open && currentState == StalkerState.SEARCH)
@@ -363,6 +384,68 @@ namespace EchoProtocol.AI.Stalker
             }
 
             return true;
+        }
+
+        public bool BeginStrategicPatrolMatch(
+            Guid matchId)
+        {
+            if (!useSmartPatrolDirector
+                || matchId == Guid.Empty
+                || !EnsureRoomSweepPatrolInitialized()
+                || _strategicPatrolRuntime == null)
+            {
+                return false;
+            }
+
+            _strategicPatrolRuntime.BeginMatch(
+                matchId);
+
+            return true;
+        }
+
+        public void ResetStrategicPatrolRuntime()
+        {
+            _strategicPatrolRuntime?.ResetForMatch();
+            smartPatrolPacingMode = string.Empty;
+            smartPatrolHotspot = string.Empty;
+            smartPatrolPressure = 0f;
+        }
+
+        public bool TryResolveStrategicActivityRoom(
+            Vector3 worldPosition,
+            out ActivityRoomKey room)
+        {
+            room = ActivityRoomKey.Invalid;
+            if (!useSmartPatrolDirector
+                || !EnsureRoomSweepPatrolInitialized()
+                || _strategicPatrolRuntime == null
+                || !TryResolveNearestSpatialNode(worldPosition, out var nodeId)
+                || !_regionGraph.TryGetRegionForNode(nodeId, out var regionId))
+            {
+                return false;
+            }
+
+            return _strategicPatrolRuntime.RoomIndex.TryGetAreaForRegion(
+                regionId,
+                out room);
+        }
+
+        public void ApplyStrategicWorldFrame(StalkerStrategicWorldFrame frame)
+        {
+            if (frame == null
+                || !useSmartPatrolDirector
+                || !EnsureRoomSweepPatrolInitialized()
+                || _strategicPatrolRuntime == null)
+            {
+                return;
+            }
+
+            _strategicPatrolRuntime.ApplyFrame(frame, currentState);
+            smartPatrolPacingMode = _strategicPatrolRuntime.Mode.ToString();
+            smartPatrolHotspot = _strategicPatrolRuntime.HasHotspot
+                ? _strategicPatrolRuntime.Hotspot.ToString()
+                : "none";
+            smartPatrolPressure = _strategicPatrolRuntime.Pressure01;
         }
 
         public void ConfigurePhase4AttackAcceptanceDiagnostics(
@@ -414,6 +497,10 @@ namespace EchoProtocol.AI.Stalker
                         _roomSweepCoverageMemory,
                         _patrolVariationSeed,
                         _patrolNearOptimalHopSlack);
+
+                _strategicPatrolRuntime?.ConfigureVariationSeed(
+                    _patrolVariationSeed);
+                EnsureStrategicPatrolRuntimeInitialized();
             }
         }
 
@@ -4558,6 +4645,7 @@ namespace EchoProtocol.AI.Stalker
                 && _roomSweepPlanner != null
                 && _roomSweepGlobalPlanner != null)
             {
+                EnsureStrategicPatrolRuntimeInitialized();
                 return true;
             }
 
@@ -4586,7 +4674,47 @@ namespace EchoProtocol.AI.Stalker
                 : new RoomSweepGlobalPlanner(
                     _regionGraph,
                     _roomSweepCoverageMemory);
+            EnsureStrategicPatrolRuntimeInitialized();
             return true;
+        }
+
+        private void EnsureStrategicPatrolRuntimeInitialized()
+        {
+            if (_roomSweepGlobalPlanner == null)
+            {
+                return;
+            }
+
+            if (!useSmartPatrolDirector)
+            {
+                _roomSweepGlobalPlanner.ConfigureTargetStrategy(null);
+                return;
+            }
+
+            if (_regionGraph == null
+                || _coverageMemory == null
+                || _roomSweepCoverageMemory == null)
+            {
+                return;
+            }
+
+            if (smartPatrolSettings == null)
+            {
+                smartPatrolSettings = new StalkerSmartPatrolSettings();
+            }
+
+            if (_strategicPatrolRuntime == null)
+            {
+                _strategicPatrolRuntime = new StalkerStrategicPatrolRuntime(
+                    _regionGraph,
+                    _coverageMemory,
+                    _roomSweepCoverageMemory,
+                    smartPatrolSettings,
+                    _hasPatrolVariationSeed ? _patrolVariationSeed : 0);
+            }
+
+            _roomSweepGlobalPlanner.ConfigureTargetStrategy(
+                _strategicPatrolRuntime.TargetStrategy);
         }
 
         private bool EnsureSpatialGraphBuilt()
@@ -4741,7 +4869,12 @@ namespace EchoProtocol.AI.Stalker
                 case RoomSweepCurrentRoomResult.NotApplicable:
                     return TrySetRoomSweepTransitDestinationWithGlobalAlternates(out _);
                 case RoomSweepCurrentRoomResult.RoomCleared:
-                    CompleteRoomSweepCurrentRoomObjective(currentRegionId);
+                    _strategicPatrolRuntime?.RecordCompletedRoomSweep(
+                        currentRegionId);
+
+                    CompleteRoomSweepCurrentRoomObjective(
+                        currentRegionId);
+
                     return TrySetRoomSweepTransitDestinationWithGlobalAlternates(
                         RoomSweepGlobalObjectiveInvalidationReason.TargetCleared,
                         out _);
@@ -4813,7 +4946,12 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            CompleteRoomSweepCurrentRoomObjective(clearedRoomRegionId);
+            _strategicPatrolRuntime?.RecordCompletedRoomSweep(
+                clearedRoomRegionId);
+
+            CompleteRoomSweepCurrentRoomObjective(
+                clearedRoomRegionId);
+
             _navigation?.Stop();
             ClearRoomSweepDestination();
             return true;
@@ -5140,9 +5278,18 @@ namespace EchoProtocol.AI.Stalker
                 var currentRoomResult = _roomSweepGlobalPlanner.LastInvalidationReason == RoomSweepGlobalObjectiveInvalidationReason.TargetReached
                     ? TryBeginOrContinueCurrentRoomSweep(currentNodeId, currentRegionId)
                     : RoomSweepCurrentRoomResult.NotApplicable;
-                if (currentRoomResult == RoomSweepCurrentRoomResult.DestinationSet
-                    || currentRoomResult == RoomSweepCurrentRoomResult.RoomCleared)
+                if (currentRoomResult
+                    == RoomSweepCurrentRoomResult.DestinationSet)
                 {
+                    return true;
+                }
+
+                if (currentRoomResult
+                    == RoomSweepCurrentRoomResult.RoomCleared)
+                {
+                    _strategicPatrolRuntime?.RecordCompletedRoomSweep(
+                        currentRegionId);
+
                     return true;
                 }
 

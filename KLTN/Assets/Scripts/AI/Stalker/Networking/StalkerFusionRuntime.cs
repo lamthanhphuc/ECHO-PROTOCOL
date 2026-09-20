@@ -5,10 +5,12 @@ using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.AI.Listener.Perception;
+using EchoProtocol.AI.Stalker.Spatial.Strategic;
 using EchoProtocol.AI.Stalker.Telemetry;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
+using EchoProtocol.Player;
 using Fusion;
 using UnityEngine;
 using UnityEngine.AI;
@@ -82,6 +84,15 @@ namespace EchoProtocol.AI.Stalker.Networking
             new List<HearingObservation>();
         private readonly List<RuntimeNoiseEvent> _activeNoiseEvents =
             new List<RuntimeNoiseEvent>();
+        private readonly List<PlayerRuntimeIdentity> _strategicPlayers =
+            new List<PlayerRuntimeIdentity>();
+        private readonly Dictionary<ActivityRoomKey, StrategicOccupancyAccumulator>
+            _strategicOccupancyByRoom =
+                new Dictionary<ActivityRoomKey, StrategicOccupancyAccumulator>();
+        private readonly List<ActivityRoomOccupancy> _strategicOccupancy =
+            new List<ActivityRoomOccupancy>();
+        private readonly List<StrategicNoisePulse> _strategicNoisePulses =
+            new List<StrategicNoisePulse>();
         private readonly StalkerPresentationDriver _presentationDriver = new StalkerPresentationDriver();
         private bool _networkSimulationOwned;
         private AiSimulationStep _lastAuthoritativeStep;
@@ -102,11 +113,19 @@ namespace EchoProtocol.AI.Stalker.Networking
         private HostRuntimeNoiseService _runtimeNoiseService;
         private Guid _boundHearingMatchId;
         private Guid _boundPatrolMatchId;
+        private Guid _boundStrategicPatrolMatchId;
+        private double _nextStrategicOccupancySampleSeconds;
         private Guid _boundScenarioMatchId;
         private string _boundScenarioConfigFingerprint;
         private NavMeshAgent _navigationAgent;
         private StalkerAttackResult _previousAttackResult;
         private bool _networkPrefabGuard;
+
+        private struct StrategicOccupancyAccumulator
+        {
+            public int ActiveCount;
+            public int HiddenCount;
+        }
 
         public int AuthoritativeSimulationCount { get; private set; }
         public bool HasLastAuthoritativeStep => _lastAuthoritativeStep.IsValid;
@@ -180,6 +199,13 @@ namespace EchoProtocol.AI.Stalker.Networking
             _runtimeNoiseService = null;
             _boundHearingMatchId = Guid.Empty;
             _boundPatrolMatchId = Guid.Empty;
+            controller?.ResetStrategicPatrolRuntime();
+            _boundStrategicPatrolMatchId = Guid.Empty;
+            _nextStrategicOccupancySampleSeconds = 0d;
+            _strategicPlayers.Clear();
+            _strategicOccupancyByRoom.Clear();
+            _strategicOccupancy.Clear();
+            _strategicNoisePulses.Clear();
             controller?.ClearScenarioMonsterParameters();
             _boundScenarioMatchId =
                 Guid.Empty;
@@ -274,29 +300,51 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return;
             }
 
-            var authority = MatchAuthorityRuntime.Instance;
+            var authority =
+                MatchAuthorityRuntime.Instance;
+
             if (authority == null
                 || !authority.HasStateAuthority
-                || !authority.TryGetMatchId(out var matchId)
-                || matchId == Guid.Empty
-                || _boundPatrolMatchId == matchId)
+                || !authority.TryGetMatchId(
+                    out var matchId)
+                || matchId == Guid.Empty)
             {
                 return;
             }
 
-            var seed = DerivePatrolVariationSeed(matchId);
-            controller.ConfigurePatrolVariation(
-                seed,
-                patrolNearOptimalHopSlack);
+            if (_boundPatrolMatchId != matchId)
+            {
+                var seed =
+                    DerivePatrolVariationSeed(
+                        matchId);
 
-            RuntimeLog.Log(
-                RuntimeLogCategory.StalkerPatrol,
-                $"[STK_PATROL][BIND] " +
-                $"match={matchId:D} " +
-                $"seed={seed} " +
-                $"slack={patrolNearOptimalHopSlack}");
+                controller.ConfigurePatrolVariation(
+                    seed,
+                    patrolNearOptimalHopSlack);
 
-            _boundPatrolMatchId = matchId;
+                RuntimeLog.Log(
+                    RuntimeLogCategory.StalkerPatrol,
+                    $"[STK_PATROL][BIND] " +
+                    $"match={matchId:D} " +
+                    $"seed={seed} " +
+                    $"slack={patrolNearOptimalHopSlack}");
+
+                _boundPatrolMatchId =
+                    matchId;
+            }
+
+            if (controller.SmartPatrolEnabled
+                && _boundStrategicPatrolMatchId
+                    != matchId
+                && controller.BeginStrategicPatrolMatch(
+                    matchId))
+            {
+                _boundStrategicPatrolMatchId =
+                    matchId;
+
+                _nextStrategicOccupancySampleSeconds =
+                    0d;
+            }
         }
 
         private void BindScenarioConfigFromRegistry()
@@ -411,6 +459,10 @@ namespace EchoProtocol.AI.Stalker.Networking
                 DateTime.UtcNow;
 
             BuildAuthoritativeHearingFrame(
+                hearingEvaluationTimeUtc);
+
+            BuildAndApplyStrategicPatrolFrame(
+                step,
                 hearingEvaluationTimeUtc);
 
             var input = new StalkerSimulationInput(
@@ -651,6 +703,146 @@ namespace EchoProtocol.AI.Stalker.Networking
             LogHearingFrameDiagnostic(
                 origin,
                 heardAtUtc);
+        }
+
+        private void BuildAndApplyStrategicPatrolFrame(
+            AiSimulationStep step,
+            DateTime nowUtc)
+        {
+            if (!step.IsValid
+                || nowUtc.Kind != DateTimeKind.Utc
+                || controller == null
+                || !controller.SmartPatrolEnabled
+                || lifecycle == null
+                || Runner == null
+                || !Runner.IsServer
+                || Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || _boundStrategicPatrolMatchId == Guid.Empty)
+            {
+                return;
+            }
+
+            // Exact player/noise world positions are consumed only here to resolve
+            // logical ActivityRoomKey. They are not retained in the strategic frame.
+            var sampleInterval = Math.Max(
+                0.1d,
+                controller.SmartPatrolOccupancySampleIntervalSeconds);
+            var hasOccupancySample =
+                step.Time.Seconds >= _nextStrategicOccupancySampleSeconds;
+
+            if (hasOccupancySample)
+            {
+                _nextStrategicOccupancySampleSeconds =
+                    step.Time.Seconds + sampleInterval;
+                _strategicPlayers.Clear();
+                _strategicOccupancyByRoom.Clear();
+                _strategicOccupancy.Clear();
+                lifecycle.EntityRegistry.CollectActiveEntities(
+                    _strategicPlayers);
+
+                for (var i = 0; i < _strategicPlayers.Count; i++)
+                {
+                    var identity = _strategicPlayers[i];
+                    if (identity == null || !identity.IsBound)
+                    {
+                        continue;
+                    }
+
+                    var lobbyState = identity.GetComponent<LobbyPlayerState>();
+                    if (lobbyState != null
+                        && lobbyState.Object != null
+                        && lobbyState.Object.IsValid
+                        && !lobbyState.IsGameplayPlayer)
+                    {
+                        continue;
+                    }
+
+                    var lifeState =
+                        identity.GetComponent<NetworkPlayerLifeState>();
+
+                    if (lifeState == null
+                        || lifeState.Object == null
+                        || !lifeState.Object.IsValid
+                        || lifeState.Status != NetworkPlayerLifeStatus.Alive)
+                    {
+                        continue;
+                    }
+
+                    if (!controller.TryResolveStrategicActivityRoom(
+                            identity.EntityRoot.position,
+                            out var room))
+                    {
+                        continue;
+                    }
+
+                    var movement = identity.GetComponent<NetworkPlayerMovement>();
+                    var hidden = movement != null && movement.IsHidden;
+                    var hiding = identity.GetComponent<PlayerHidingController>();
+                    hidden |= hiding != null && hiding.IsHidden;
+
+                    _strategicOccupancyByRoom.TryGetValue(
+                        room,
+                        out var accumulator);
+                    accumulator.ActiveCount++;
+                    if (hidden)
+                    {
+                        accumulator.HiddenCount++;
+                    }
+
+                    _strategicOccupancyByRoom[room] = accumulator;
+                }
+
+                foreach (var pair in _strategicOccupancyByRoom)
+                {
+                    _strategicOccupancy.Add(new ActivityRoomOccupancy(
+                        pair.Key,
+                        pair.Value.ActiveCount,
+                        pair.Value.HiddenCount));
+                }
+
+                _strategicOccupancy.Sort(
+                    (left, right) => left.Room.CompareTo(right.Room));
+            }
+
+            _strategicNoisePulses.Clear();
+            for (var i = 0; i < _activeNoiseEvents.Count; i++)
+            {
+                var noise = _activeNoiseEvents[i];
+                if (!controller.TryResolveStrategicActivityRoom(
+                        noise.WorldPosition,
+                        out var room))
+                {
+                    continue;
+                }
+
+                _strategicNoisePulses.Add(new StrategicNoisePulse(
+                    noise.NoiseEventId,
+                    room,
+                    Mathf.Clamp01((float)noise.Loudness),
+                    noise.NoiseType == RuntimeNoiseType.CORE_INSERT));
+            }
+
+            var legalLastKnownRoom = ActivityRoomKey.Invalid;
+            var hasLegalLastKnownRoom =
+                controller.HasLastKnownPosition
+                && controller.CurrentState == StalkerState.SEARCH
+                && controller.TryResolveStrategicActivityRoom(
+                    controller.LastKnownPosition,
+                    out legalLastKnownRoom);
+
+            var frame = new StalkerStrategicWorldFrame(
+                step.Time.Seconds,
+                hasOccupancySample,
+                _strategicOccupancy,
+                _strategicNoisePulses,
+                hasLegalLastKnownRoom,
+                hasLegalLastKnownRoom
+                    ? legalLastKnownRoom
+                    : ActivityRoomKey.Invalid);
+
+            controller.ApplyStrategicWorldFrame(frame);
         }
 
         private void LogHearingFrameDiagnostic(

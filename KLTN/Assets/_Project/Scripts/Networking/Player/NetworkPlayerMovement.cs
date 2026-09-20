@@ -534,6 +534,13 @@ namespace EchoProtocol.Networking
             Vector3 position,
             Quaternion rotation)
         {
+            if (isHidden
+                && global::HidingSpot.IsTemporarilyLockedOut(
+                    hideSpotId))
+            {
+                return;
+            }
+
             IsHidden = isHidden;
             CurrentHideSpotId = isHidden
                 ? hideSpotId
@@ -582,6 +589,44 @@ namespace EchoProtocol.Networking
             }
 
             return true;
+        }
+
+        public bool TryBroadcastHideSpotLockoutAuthoritative(
+            ulong hideSpotId,
+            float durationSeconds)
+        {
+            if (hideSpotId == 0UL
+                || durationSeconds <= 0f
+                || Runner == null
+                || Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority)
+            {
+                return false;
+            }
+
+            // Apply immediately on StateAuthority.
+            global::HidingSpot.BeginTemporaryLockoutByStableId(
+                hideSpotId,
+                durationSeconds);
+
+            RpcApplyHideSpotLockout(
+                hideSpotId,
+                durationSeconds);
+
+            return true;
+        }
+
+        [Rpc(
+            RpcSources.StateAuthority,
+            RpcTargets.All)]
+        private void RpcApplyHideSpotLockout(
+            ulong hideSpotId,
+            float durationSeconds)
+        {
+            global::HidingSpot.BeginTemporaryLockoutByStableId(
+                hideSpotId,
+                durationSeconds);
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]

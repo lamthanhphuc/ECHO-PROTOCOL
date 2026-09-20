@@ -12,6 +12,7 @@ namespace EchoProtocol.AI.Stalker
     public sealed class StalkerUnityHideSpotAdapter : IStalkerHideSpotInspectionResolver
     {
         private const float InspectPointNavMeshSampleRadius = 1.5f;
+        private const float RevealedHideSpotLockoutSeconds = 15f;
 
         private readonly Dictionary<ulong, global::HidingSpot> _spotsById =
             new Dictionary<ulong, global::HidingSpot>();
@@ -33,7 +34,35 @@ namespace EchoProtocol.AI.Stalker
             for (var i = 0; i < spots.Length; i++)
             {
                 var spot = spots[i];
-                if (spot == null || !spot.isActiveAndEnabled)
+
+                if (spot == null
+                    || !spot.isActiveAndEnabled)
+                {
+                    continue;
+                }
+
+                var parentTransform =
+                    spot.transform.parent;
+
+                var parentHideSpot =
+                    parentTransform != null
+                        ? parentTransform.GetComponentInParent<global::HidingSpot>()
+                        : null;
+
+                if (parentHideSpot != null
+                    && parentHideSpot != spot)
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.StalkerHideFlow,
+                        $"[STK_HIDE_FLOW][NESTED_SPOT_SKIPPED] " +
+                        $"child={spot.name} " +
+                        $"parent={parentHideSpot.name}",
+                        spot);
+
+                    continue;
+                }
+
+                if (spot.IsTemporarilyLockedOut())
                 {
                     continue;
                 }
@@ -47,32 +76,34 @@ namespace EchoProtocol.AI.Stalker
 
                 var rawInspectPosition = inspectPoint.position;
 
-                if (!NavMesh.SamplePosition(
+                var inspectPosition = rawInspectPosition;
+
+                if (NavMesh.SamplePosition(
                         rawInspectPosition,
                         out var inspectHit,
                         InspectPointNavMeshSampleRadius,
                         NavMesh.AllAreas))
                 {
+                    inspectPosition = inspectHit.position;
+
                     RuntimeLog.Log(
                         RuntimeLogCategory.StalkerHideFlow,
-                        $"[STK_HIDE_FLOW][INSPECT_NAVMESH_REJECT] " +
+                        $"[STK_HIDE_FLOW][INSPECT_NAVMESH_SNAP] " +
+                        $"stableId={stableId} " +
+                        $"raw={rawInspectPosition} " +
+                        $"sampled={inspectPosition} " +
+                        $"delta={Vector3.Distance(rawInspectPosition, inspectPosition):F2}",
+                        inspectPoint);
+                }
+                else
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.StalkerHideFlow,
+                        $"[STK_HIDE_FLOW][INSPECT_NAVMESH_FALLBACK] " +
                         $"stableId={stableId} " +
                         $"raw={rawInspectPosition}",
                         inspectPoint);
-
-                    continue;
                 }
-
-                var inspectPosition = inspectHit.position;
-
-                RuntimeLog.Log(
-                    RuntimeLogCategory.StalkerHideFlow,
-                    $"[STK_HIDE_FLOW][INSPECT_NAVMESH_SNAP] " +
-                    $"stableId={stableId} " +
-                    $"raw={rawInspectPosition} " +
-                    $"sampled={inspectPosition} " +
-                    $"delta={Vector3.Distance(rawInspectPosition, inspectPosition):F2}",
-                    inspectPoint);
 
                 results.Add(new StalkerHideSpotCandidate(
                     stableId,
@@ -160,6 +191,25 @@ namespace EchoProtocol.AI.Stalker
                     return false;
                 }
 
+                var lockoutBroadcastSucceeded =
+                    movement.TryBroadcastHideSpotLockoutAuthoritative(
+                        candidate.StableId,
+                        RevealedHideSpotLockoutSeconds);
+
+                if (!lockoutBroadcastSucceeded)
+                {
+                    spot.BeginTemporaryLockout(
+                        RevealedHideSpotLockoutSeconds);
+                }
+
+                RuntimeLog.Log(
+                    RuntimeLogCategory.StalkerHideFlow,
+                    $"[STK_HIDE_FLOW][LOCKOUT_TRIGGERED] " +
+                    $"stableId={candidate.StableId} " +
+                    $"duration={RevealedHideSpotLockoutSeconds:F2} " +
+                    $"networked={lockoutBroadcastSucceeded}",
+                    spot);
+
                 var occupantTransform = movement.transform;
                 var observedPosition = occupantTransform.position;
                 var observedDirection =
@@ -195,6 +245,17 @@ namespace EchoProtocol.AI.Stalker
             }
 
             occupant.ExitHiding();
+
+            spot.BeginTemporaryLockout(
+                RevealedHideSpotLockoutSeconds);
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerHideFlow,
+                $"[STK_HIDE_FLOW][LOCKOUT_TRIGGERED] " +
+                $"stableId={candidate.StableId} " +
+                $"duration={RevealedHideSpotLockoutSeconds:F2} " +
+                $"networked=False",
+                spot);
 
             var localTransform = occupant.transform;
             var localObservedPosition = localTransform.position;

@@ -11,6 +11,7 @@ public class HidingSpot : MonoBehaviour, IInteractable
 
     private PlayerHidingController _occupant;
     private ulong _stableId;
+    private float _lockoutUntilTime;
 
     public Transform HidePoint => hidePoint != null ? hidePoint : transform;
     public Transform ExitPoint => exitPoint;
@@ -30,17 +31,48 @@ public class HidingSpot : MonoBehaviour, IInteractable
 
     public float YawLimitDegrees => yawLimitDegrees;
     public bool IsOccupied => _occupant != null;
-    public string InteractionPrompt => IsOccupied ? exitPrompt : enterPrompt;
+    public bool IsTemporarilyLockedOut() =>
+        Time.time < _lockoutUntilTime;
+
+    public float RemainingLockoutSeconds =>
+        Mathf.Max(0f, _lockoutUntilTime - Time.time);
+
+    public string InteractionPrompt =>
+        IsTemporarilyLockedOut() && !IsOccupied
+            ? string.Empty
+            : IsOccupied
+                ? exitPrompt
+                : enterPrompt;
 
     public bool CanInteract(GameObject interactor)
     {
-        PlayerHidingController hidingController = GetHidingController(interactor);
-        return hidingController != null && (_occupant == null || _occupant == hidingController);
+        PlayerHidingController hidingController =
+            GetHidingController(interactor);
+
+        if (hidingController == null)
+        {
+            return false;
+        }
+
+        // An existing occupant must always be allowed to exit.
+        if (_occupant == hidingController)
+        {
+            return true;
+        }
+
+        if (IsTemporarilyLockedOut())
+        {
+            return false;
+        }
+
+        return _occupant == null;
     }
 
     public void Interact(GameObject interactor)
     {
-        PlayerHidingController hidingController = GetHidingController(interactor);
+        PlayerHidingController hidingController =
+            GetHidingController(interactor);
+
         if (hidingController == null)
         {
             return;
@@ -52,11 +84,21 @@ public class HidingSpot : MonoBehaviour, IInteractable
             return;
         }
 
+        if (IsTemporarilyLockedOut())
+        {
+            return;
+        }
+
         hidingController.EnterHiding(this);
     }
 
     public bool TryOccupy(PlayerHidingController hidingController)
     {
+        if (IsTemporarilyLockedOut())
+        {
+            return false;
+        }
+
         if (_occupant != null && _occupant != hidingController)
         {
             return false;
@@ -78,6 +120,88 @@ public class HidingSpot : MonoBehaviour, IInteractable
     {
         occupant = _occupant;
         return occupant != null;
+    }
+
+    public void BeginTemporaryLockout(float durationSeconds)
+    {
+        if (durationSeconds <= 0f)
+        {
+            return;
+        }
+
+        float requestedUntil =
+            Time.time + durationSeconds;
+
+        if (requestedUntil > _lockoutUntilTime)
+        {
+            _lockoutUntilTime = requestedUntil;
+        }
+
+        EchoProtocol.Diagnostics.RuntimeLog.Log(
+            EchoProtocol.Diagnostics.RuntimeLogCategory.StalkerHideFlow,
+            $"[STK_HIDE_FLOW][LOCKOUT_START] " +
+            $"stableId={StableId} " +
+            $"duration={durationSeconds:F2} " +
+            $"remaining={RemainingLockoutSeconds:F2}",
+            this);
+    }
+
+    public static bool BeginTemporaryLockoutByStableId(
+        ulong stableId,
+        float durationSeconds)
+    {
+        if (stableId == 0UL || durationSeconds <= 0f)
+        {
+            return false;
+        }
+
+        var spots =
+            Object.FindObjectsByType<HidingSpot>(
+                FindObjectsInactive.Exclude);
+
+        bool found = false;
+
+        for (int i = 0; i < spots.Length; i++)
+        {
+            HidingSpot spot = spots[i];
+
+            if (spot == null || spot.StableId != stableId)
+            {
+                continue;
+            }
+
+            spot.BeginTemporaryLockout(durationSeconds);
+            found = true;
+        }
+
+        return found;
+    }
+
+    public static bool IsTemporarilyLockedOut(
+        ulong stableId)
+    {
+        if (stableId == 0UL)
+        {
+            return false;
+        }
+
+        var spots =
+            Object.FindObjectsByType<HidingSpot>(
+                FindObjectsInactive.Exclude);
+
+        for (int i = 0; i < spots.Length; i++)
+        {
+            HidingSpot spot = spots[i];
+
+            if (spot != null
+                && spot.StableId == stableId
+                && spot.IsTemporarilyLockedOut())
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private ulong ComputeStableId()

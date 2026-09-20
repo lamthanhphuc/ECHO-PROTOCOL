@@ -160,6 +160,43 @@ MonoBehaviour:
   patrolRoute: {fileID: 0}
   visionSensor: {fileID: 100005}
   patrolMode: 3
+  useSmartPatrolDirector: 1
+  smartPatrolSettings:
+    occupancySampleIntervalSeconds: 0.5
+    occupancyInformationDelaySeconds: 1.5
+    playerDensityWeight: 0.35
+    lingerWeight: 0.1
+    noiseWeight: 0.25
+    objectiveWeight: 0.1
+    lastKnownWeight: 0.2
+    densitySaturation: 1.25
+    hiddenPlayerInfluenceMultiplier: 0.25
+    lingerFullSeconds: 25
+    noiseHalfLifeSeconds: 8
+    lastKnownHalfLifeSeconds: 10
+    objectiveHalfLifeSeconds: 15
+    ring1Propagation: 0.55
+    ring2Propagation: 0.25
+    explorationFullTimeSeconds: 45
+    recentVisitPenalty: 0.3
+    recentVisitDecaySeconds: 15
+    repeatVisitPenalty: 0.15
+    recentPressurePenalty: 0.25
+    distancePenaltyPerHop: 0.04
+    routeEfficiencyFullHopCount: 6
+    recentRepeatNormalizationCount: 3
+    topK: 3
+    softmaxTemperature: 0.2
+    explorationProbability: 0.08
+    minimumPeripheralSweepsBeforeHotRoom: 1
+    maxPeripheralApproachSeconds: 12
+    pressureBuildThreshold: 0.3
+    pressureModeThreshold: 0.85
+    pressureBuildSeconds: 30
+    pressureDecaySeconds: 10
+    postChaseCooldownSeconds: 18
+    postAttackCooldownSeconds: 22
+    sameRoomPressureCooldownSeconds: 15
   patrolSpeed: 7
   chaseSpeed: 8
   enableDiagnostics: 0
@@ -193,7 +230,7 @@ MonoBehaviour:
   attackRecovery: 0.4
   attackDamage: 100
   hideSpotRevealGraceSeconds: 3
-  hideSpotRevealTrackSeconds: 1.5
+  hideSpotRevealTrackSeconds: 1.3
   worldInteractionDistance: 1.75
   stalkerDoorBreakDurationSeconds: 3
   worldInteractionProbeRadius: 0.35
@@ -218,6 +255,9 @@ MonoBehaviour:
   canonicalNextRegionId: 0
   searchEpisodeId: 0
   searchCandidateNodeId: -1
+  smartPatrolPacingMode: 
+  smartPatrolHotspot: 
+  smartPatrolPressure: 0
   regionGraphAsset: {fileID: 11400000, guid: 09bfa2fa79ecc554995513d832a11be4, type: 2}
 --- !u!114 &100007
 MonoBehaviour:
