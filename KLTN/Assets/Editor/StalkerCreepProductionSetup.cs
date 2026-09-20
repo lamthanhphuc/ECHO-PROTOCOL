@@ -18,7 +18,10 @@ public static class StalkerCreepProductionSetup
         "Assets/Prefabs/StalkerNetwork.prefab";
 
     private const string CreepModelPath =
-        "Assets/Creep Horror Creature/Meshes/Creep_mesh.fbx";
+    "Assets/Creep Horror Creature/Meshes/Creep_mesh.fbx";
+
+    private const string CreepMaterialPath =
+        "Assets/Creep Horror Creature/Materials/Creep1_mat.mat";
 
     private const string ControllerPath =
         "Assets/Animations/Stalker/AC_Stalker.controller";
@@ -427,7 +430,80 @@ public static class StalkerCreepProductionSetup
                 localRotation;
 
             creepVisual.transform.localScale =
-                localScale;
+    localScale;
+
+            //
+            // Always restore the authored Creep material.
+            //
+            // WireStalkerPrefab deliberately destroys and recreates
+            // CreepVisual whenever the migration tool is run again.
+            // Therefore material assignment must also be deterministic
+            // and repeatable.
+            //
+            var creepMaterial =
+                AssetDatabase.LoadAssetAtPath<Material>(
+                    CreepMaterialPath);
+
+            if (creepMaterial == null)
+            {
+                throw new InvalidOperationException(
+                    "Cannot load Creep material: "
+                    + CreepMaterialPath);
+            }
+
+            var creepRenderers =
+                creepVisual.GetComponentsInChildren<
+                    SkinnedMeshRenderer>(
+                        true);
+
+            if (creepRenderers == null
+                || creepRenderers.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    "Creep visual contains no SkinnedMeshRenderer.");
+            }
+
+            for (var rendererIndex = 0;
+                 rendererIndex < creepRenderers.Length;
+                 rendererIndex++)
+            {
+                var creepRenderer =
+                    creepRenderers[rendererIndex];
+
+                if (creepRenderer == null)
+                {
+                    continue;
+                }
+
+                var materials =
+                    creepRenderer.sharedMaterials;
+
+                if (materials == null
+                    || materials.Length == 0)
+                {
+                    creepRenderer.sharedMaterial =
+                        creepMaterial;
+
+                    EditorUtility.SetDirty(
+                        creepRenderer);
+
+                    continue;
+                }
+
+                for (var materialIndex = 0;
+                     materialIndex < materials.Length;
+                     materialIndex++)
+                {
+                    materials[materialIndex] =
+                        creepMaterial;
+                }
+
+                creepRenderer.sharedMaterials =
+                    materials;
+
+                EditorUtility.SetDirty(
+                    creepRenderer);
+            }
 
             var animator =
                 creepVisual.GetComponent<Animator>();

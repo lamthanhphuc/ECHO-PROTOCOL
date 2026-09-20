@@ -881,7 +881,23 @@ namespace EchoProtocol.AI.Stalker.Special
 
         private bool IsCoolingDown(AiSimulationTime now)
         {
-            return _cooldownUntil.IsValid && now.IsValid && now.CompareTo(_cooldownUntil) < 0;
+            //
+            // Cooldown is a real-duration rule, not an AiSimulationTime
+            // total-order rule.
+            //
+            // AiSimulationTime.CompareTo() orders by Tick first and
+            // Seconds second. AddSeconds() intentionally advances only
+            // the Seconds deadline because this runtime does not own the
+            // simulation tick rate.
+            //
+            // Therefore CompareTo() would make the cooldown expire as soon
+            // as the simulation advances to the next tick.
+            //
+            // Compare the monotonic Seconds clock directly instead.
+            //
+            return _cooldownUntil.IsValid
+                && now.IsValid
+                && now.Seconds < _cooldownUntil.Seconds;
         }
 
         private static AiSimulationTime AddSeconds(AiSimulationTime time, float seconds)
