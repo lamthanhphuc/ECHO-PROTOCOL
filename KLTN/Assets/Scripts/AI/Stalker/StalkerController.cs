@@ -70,6 +70,10 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float searchDuration = 5f;
         [SerializeField] private float searchRadius = 8f;
 
+        [Header("Search LKP Presentation")]
+        [SerializeField, Min(0.1f)]
+        private float searchLkpSniffDurationSeconds = 1.5f;
+
         [Header("Hide Spot Inspection")]
         [SerializeField, Min(0f)] private float hideSpotSearchRadius = 6f;
         [SerializeField, Min(0f)] private float hideSpotInspectDistance = 1.5f;
@@ -211,6 +215,11 @@ namespace EchoProtocol.AI.Stalker
         private int _patrolNearOptimalHopSlack;
         private StalkerSearchPlanner _searchPlanner;
         private StalkerSearchContext _searchContext;
+        private bool _searchLkpSniffActive;
+        private float _searchLkpSniffElapsed;
+        private bool _searchLkpSniffCompletedForCurrentSearch;
+        private int _searchLkpSniffOrdinal;
+        private bool _specialEncounterOverrideActive;
         private StalkerHidingInvestigation _hidingInvestigation;
         private readonly StalkerWorldInteractionDriver _worldInteractionDriver = new StalkerWorldInteractionDriver();
         private int _currentPatrolIndex;
@@ -279,6 +288,15 @@ namespace EchoProtocol.AI.Stalker
 
         public StalkerPatrolMode PatrolMode => patrolMode;
         public StalkerState CurrentState => currentState;
+        public bool SpecialEncounterOverrideActive => _specialEncounterOverrideActive;
+        public bool IsSearchLkpSniffActive => _searchLkpSniffActive;
+        public float SearchLkpSniffProgress01 => !_searchLkpSniffActive
+            ? 0f
+            : Mathf.Clamp01(
+                _searchLkpSniffElapsed / Mathf.Max(
+                    0.1f,
+                    searchLkpSniffDurationSeconds));
+        public int SearchLkpSniffOrdinal => _searchLkpSniffOrdinal;
         public float DetectionMeter => detectionMeter;
         public Transform DetectionTarget => detectionTarget;
         public Transform CurrentTarget => currentTarget;
@@ -350,6 +368,164 @@ namespace EchoProtocol.AI.Stalker
 
             destination = default;
             return false;
+        }
+
+        public void BeginSpecialEncounterOverride()
+        {
+            if (_specialEncounterOverrideActive)
+            {
+                return;
+            }
+
+            _specialEncounterOverrideActive = true;
+            ResetSearchLkpSniffRuntime();
+            StopAgentPath();
+        }
+
+        public void EndSpecialEncounterOverrideToPatrol()
+        {
+            //
+            // Release the Special Encounter ownership first.
+            //
+            _specialEncounterOverrideActive =
+                false;
+
+            //
+            // The pre-special combat target must never survive the
+            // JumpOut / hidden transfer / JumpIn sequence.
+            //
+            // After ReactionLock the normal FSM must reacquire only
+            // from the CURRENT perception frame through PATROL ->
+            // DETECT. It must never resume CHASE from stale memory.
+            //
+            _attackController.ClearActiveEpisode();
+
+            ClearDetectionContext();
+            ClearTargetContext();
+            ClearSearchRuntimeContext();
+
+            detectionTarget = null;
+            currentTarget = null;
+
+            detectionMeter = 0f;
+            attackElapsedTime = 0f;
+            recoverElapsedTime = 0f;
+
+            ResetChaseDestinationTracking();
+            ResetNavigationRecoveryBudget();
+
+            StopAgentPath();
+
+            currentState =
+                StalkerState.PATROL;
+
+            ApplyMovementSpeedForCurrentState();
+
+            //
+            // Do NOT set a patrol destination here.
+            //
+            // StalkerFusionRuntime calls controller.Simulate()
+            // immediately after Special Encounter Tick.
+            //
+            // PATROL will therefore inspect the fresh authoritative
+            // vision frame in that same simulation step:
+            //
+            // visible player -> DETECT
+            // no visible player -> normal patrol
+            //
+            // This preserves the 1.5 s reaction opportunity and
+            // prevents magical post-jump CHASE.
+            //
+        }
+
+        public bool TrySetSpecialEncounterDestination(
+            Vector3 destination)
+        {
+            if (!_specialEncounterOverrideActive)
+            {
+                return false;
+            }
+
+            InitializeNavigation();
+            if (!CanUseNavigation())
+            {
+                return false;
+            }
+
+            var evaluation = _navigation.EvaluateDestination(destination);
+            if (!evaluation.IsComplete)
+            {
+                return false;
+            }
+
+            var result = _navigation.RequestDestination(
+                destination,
+                NavigationRequestIntent.NewGoal);
+            return result.IsAccepted;
+        }
+
+        public bool HasArrivedAtSpecialEncounterDestination(
+            float tolerance)
+        {
+            if (!_specialEncounterOverrideActive
+                || _navigation == null
+                || !_navigation.HasActiveDestination)
+            {
+                return false;
+            }
+
+            if (_navigation.HasArrived())
+            {
+                return true;
+            }
+
+            if (!_navigation.TryGetActiveDestination(
+                    out var destination))
+            {
+                return false;
+            }
+
+            var delta = destination - transform.position;
+            delta.y = 0f;
+            var arrivalTolerance = Mathf.Max(0.01f, tolerance);
+            return delta.sqrMagnitude <= arrivalTolerance * arrivalTolerance;
+        }
+
+        public void StopSpecialEncounterNavigation()
+        {
+            if (!_specialEncounterOverrideActive)
+            {
+                return;
+            }
+
+            _navigation?.Stop();
+        }
+
+        public void FaceSpecialEncounterPoint(
+            Vector3 point,
+            float maxDegreesDelta)
+        {
+            if (!_specialEncounterOverrideActive)
+            {
+                return;
+            }
+
+            var direction = point - transform.position;
+            direction.y = 0f;
+            if (direction.sqrMagnitude <= 0.0001f)
+            {
+                return;
+            }
+
+            var targetRotation = Quaternion.LookRotation(
+                direction.normalized,
+                Vector3.up);
+            transform.rotation = Quaternion.RotateTowards(
+                transform.rotation,
+                targetRotation,
+                Mathf.Max(
+                    0f,
+                    maxDegreesDelta));
         }
 
         public bool TrySetPatrolRegionEdgeOpen(int fromRegionId, int toRegionId, bool open)
@@ -591,17 +767,32 @@ namespace EchoProtocol.AI.Stalker
             try
             {
                 ApplyMovementSpeedForCurrentState();
-                TickCurrentState();
-                TryBeginHeardNoiseSearchFromCurrentFrame();
-                TryUpdateHeardNoiseSearchFromCurrentFrame();
-                _navigation?.TickProgress(CurrentSimulationDeltaSeconds);
-                TickNavigationRecovery();
-                TickNavigationFallback();
+                if (_specialEncounterOverrideActive)
+                {
+                    //
+                    // Special Encounter temporarily owns tactical movement.
+                    // Perception input has already been copied into the
+                    // current authoritative frame above, but the normal
+                    // six-state FSM must not advance.
+                    //
+                    _navigation?.TickProgress(
+                        CurrentSimulationDeltaSeconds);
+                }
+                else
+                {
+                    TickCurrentState();
+                    TryBeginHeardNoiseSearchFromCurrentFrame();
+                    TryUpdateHeardNoiseSearchFromCurrentFrame();
+                    _navigation?.TickProgress(
+                        CurrentSimulationDeltaSeconds);
+                    TickNavigationRecovery();
+                    TickNavigationFallback();
+                }
 
                 // Learn the current legal visual frame only after all target
                 // decisions for this simulation step have completed.
-                // This keeps recent-detection memory fresh without allowing
-                // the current frame to self-reinforce its own selection score.
+                // This must continue even during Special Encounter so the
+                // authoritative visual frame remains current.
                 if (_currentVisibleTargetCandidates != null)
                 {
                     _targetHistoryMemory.RecordVisibleFrame(
@@ -633,7 +824,24 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            //
+            // An already-running Punch interaction owns this tick.
+            //
             if (TickWorldInteraction())
+            {
+                return;
+            }
+
+            //
+            // Proactively detect a closed/jammed door before the
+            // NavMeshAgent physically reaches it.
+            //
+            // Closed doors intentionally do not carve the NavMesh,
+            // therefore waiting for a navigation failure is not
+            // sufficient: the path itself may still be considered valid.
+            //
+            if (TryBeginWorldInteractionForCurrentNavigation(
+                    NavigationFailureReason.DoorBlocked))
             {
                 return;
             }
@@ -1724,6 +1932,12 @@ namespace EchoProtocol.AI.Stalker
             currentState = StalkerState.SEARCH;
             searchElapsedTime = 0f;
             EnsureSearchContext();
+            if (_searchContext != null
+                && _searchContext.Source == StalkerSearchSource.VisualTargetLoss)
+            {
+                ResetSearchLkpSniffRuntime();
+            }
+
             if (HasTypedTargetFrame)
             {
                 if (!TrySetSearchOriginDestination(_memory.LastKnownPosition))
@@ -1783,6 +1997,15 @@ namespace EchoProtocol.AI.Stalker
 
                 currentState = StalkerState.CHASE;
                 SetChaseDestination(observedPosition);
+                return;
+            }
+
+            //
+            // Real visual reacquisition above always wins.
+            // Only sniff if the target is still not visible.
+            //
+            if (TickSearchLkpSniff())
+            {
                 return;
             }
 
@@ -1981,6 +2204,15 @@ namespace EchoProtocol.AI.Stalker
             }
 
             if (TryAcquireDifferentVisibleTargetDuringSearch(currentTargetId))
+            {
+                return;
+            }
+
+            //
+            // All legitimate visual reacquisition opportunities above
+            // have priority over the presentation sniff.
+            //
+            if (TickSearchLkpSniff())
             {
                 return;
             }
@@ -3086,8 +3318,99 @@ namespace EchoProtocol.AI.Stalker
             SetCurrentPatrolDestination();
         }
 
+        private void ResetSearchLkpSniffRuntime()
+        {
+            _searchLkpSniffActive = false;
+            _searchLkpSniffElapsed = 0f;
+            _searchLkpSniffCompletedForCurrentSearch = false;
+        }
+
+        private bool TickSearchLkpSniff()
+        {
+            //
+            // Sniff is only a presentation hold for visual
+            // Last Known Position search.
+            //
+            // HeardNoise SEARCH must never use this behavior.
+            //
+            if (_searchContext == null
+                || _searchContext.Source != StalkerSearchSource.VisualTargetLoss)
+            {
+                if (_searchLkpSniffActive)
+                {
+                    _searchLkpSniffActive = false;
+                    _searchLkpSniffElapsed = 0f;
+                }
+
+                return false;
+            }
+
+            //
+            // Continue an already-started sniff.
+            //
+            if (_searchLkpSniffActive)
+            {
+                _navigation?.Stop();
+
+                _searchLkpSniffElapsed += CurrentSimulationDeltaSeconds;
+                var duration = Mathf.Max(
+                    0.1f,
+                    searchLkpSniffDurationSeconds);
+
+                if (_searchLkpSniffElapsed < duration)
+                {
+                    return true;
+                }
+
+                _searchLkpSniffElapsed = duration;
+                _searchLkpSniffActive = false;
+                _searchLkpSniffCompletedForCurrentSearch = true;
+                return false;
+            }
+
+            //
+            // Only sniff once for this visual SEARCH episode.
+            //
+            if (_searchLkpSniffCompletedForCurrentSearch)
+            {
+                return false;
+            }
+
+            //
+            // Sniff only when the current navigation objective is
+            // the ORIGINAL Last Known Position, not a later
+            // SearchCandidate / HideSpot / hearing hypothesis.
+            //
+            if (_navigation == null
+                || !_navigation.HasActiveDestination
+                || _navigationObjectiveKey.Kind != StalkerNavigationObjectiveKind.SearchOriginLkp
+                || !_navigation.HasArrived())
+            {
+                return false;
+            }
+
+            //
+            // Arrival confirmed.
+            // Stop movement and expose a presentation-only Sniff.
+            //
+            _navigation.Stop();
+            _searchLkpSniffActive = true;
+            _searchLkpSniffElapsed = 0f;
+            if (_searchLkpSniffOrdinal == int.MaxValue)
+            {
+                _searchLkpSniffOrdinal = 1;
+            }
+            else
+            {
+                _searchLkpSniffOrdinal++;
+            }
+
+            return true;
+        }
+
         private void ClearSearchRuntimeContext()
         {
+            ResetSearchLkpSniffRuntime();
             searchElapsedTime = 0f;
             _searchContext = null;
             _hidingInvestigation?.Reset();
@@ -6174,46 +6497,101 @@ namespace EchoProtocol.AI.Stalker
             _navigation?.RequestDestination(destination, NavigationRequestIntent.NewGoal);
         }
 
-        private bool TryFindCurrentWorldInteractionBlocker(out Component blocker)
+        private bool TryFindCurrentWorldInteractionBlocker(
+            out Component blocker)
         {
             blocker = null;
-            var origin = transform.position + Vector3.up * 0.8f;
-            if (!TryGetCurrentWorldInteractionDirection(origin, out var direction, out var maxDistance))
+
+            var origin =
+                transform.position
+                + Vector3.up * 0.8f;
+
+            if (!TryGetCurrentWorldInteractionDirection(
+                    origin,
+                    out var direction,
+                    out var maxDistance))
             {
                 return false;
             }
 
-            var hits = Physics.SphereCastAll(
-                origin,
-                Mathf.Max(0.01f, worldInteractionProbeRadius),
-                direction,
-                maxDistance,
-                ~0,
-                QueryTriggerInteraction.Collide);
-            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            //
+            // The interaction probe must be at least as wide as
+            // the NavMeshAgent itself.
+            //
+            // Current prefab:
+            // Agent radius = 0.5
+            // Old probe     = 0.35
+            //
+            // A smaller probe can miss a door that still physically
+            // blocks the Agent's body.
+            //
+            var probeRadius =
+                Mathf.Max(
+                    0.01f,
+                    worldInteractionProbeRadius);
 
-            for (var i = 0; i < hits.Length; i++)
+            var agent =
+                GetComponent<NavMeshAgent>();
+
+            if (agent != null)
             {
-                var hitCollider = hits[i].collider;
+                probeRadius =
+                    Mathf.Max(
+                        probeRadius,
+                        agent.radius + 0.05f);
+            }
+
+            var hits =
+                Physics.SphereCastAll(
+                    origin,
+                    probeRadius,
+                    direction,
+                    maxDistance,
+                    ~0,
+                    QueryTriggerInteraction.Ignore);
+
+            System.Array.Sort(
+                hits,
+                (a, b) =>
+                    a.distance.CompareTo(
+                        b.distance));
+
+            for (var i = 0;
+                 i < hits.Length;
+                 i++)
+            {
+                var hitCollider =
+                    hits[i].collider;
+
                 if (hitCollider == null
-                    || hitCollider.isTrigger
                     || hitCollider.transform == transform
-                    || hitCollider.transform.IsChildOf(transform))
+                    || hitCollider.transform.IsChildOf(
+                        transform))
                 {
                     continue;
                 }
 
-                var jammer = hitCollider.GetComponentInParent<NetworkDoorJammer>();
-                if (jammer != null && jammer.IsActive)
+                var jammer =
+                    hitCollider.GetComponentInParent<
+                        NetworkDoorJammer>();
+
+                if (jammer != null
+                    && jammer.IsActive)
                 {
                     blocker = jammer;
                     return true;
                 }
 
-                var door = hitCollider.GetComponentInParent<NetworkSlidingDoor>();
-                if (door != null && door.BlocksTraversal)
+                var door =
+                    hitCollider.GetComponentInParent<
+                        NetworkSlidingDoor>();
+
+                if (door != null
+                    && door.BlocksTraversal)
                 {
-                    if (door.HasActiveJammer && door.TryGetActiveJammer(out var doorJammer))
+                    if (door.HasActiveJammer
+                        && door.TryGetActiveJammer(
+                            out var doorJammer))
                     {
                         blocker = doorJammer;
                         return true;
@@ -6223,6 +6601,11 @@ namespace EchoProtocol.AI.Stalker
                     return true;
                 }
 
+                //
+                // A real solid environment collider before the door
+                // occludes it. Do not allow the Stalker to Punch a
+                // door through a wall.
+                //
                 return false;
             }
 
@@ -6256,14 +6639,34 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            var distance = direction.magnitude;
+            //
+            // World-interaction detection is horizontal.
+            //
+            // The cast origin is approximately chest height while
+            // NavMesh path corners are usually on the floor.
+            // Keeping that vertical delta makes the SphereCast point
+            // downward and can cause it to hit the floor before the door.
+            //
+            direction.y = 0f;
+
+            var distance =
+                direction.magnitude;
+
             if (distance <= Mathf.Epsilon)
             {
                 return false;
             }
 
-            direction /= distance;
-            maxDistance = Mathf.Min(distance, Mathf.Max(0.1f, worldInteractionDistance));
+            direction /=
+                distance;
+
+            maxDistance =
+                Mathf.Min(
+                    distance,
+                    Mathf.Max(
+                        0.1f,
+                        worldInteractionDistance));
+
             return true;
         }
 

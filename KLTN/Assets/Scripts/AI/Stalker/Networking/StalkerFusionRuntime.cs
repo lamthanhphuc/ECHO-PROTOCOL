@@ -5,6 +5,8 @@ using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.AI.Listener.Perception;
+using EchoProtocol.AI.Stalker.Presentation;
+using EchoProtocol.AI.Stalker.Special;
 using EchoProtocol.AI.Stalker.Spatial.Strategic;
 using EchoProtocol.AI.Stalker.Telemetry;
 using EchoProtocol.Diagnostics;
@@ -22,10 +24,12 @@ namespace EchoProtocol.AI.Stalker.Networking
     [DisallowMultipleComponent]
     [RequireComponent(typeof(StalkerController))]
     [RequireComponent(typeof(StalkerVisionSensor))]
+    [RequireComponent(typeof(StalkerSpecialEncounterRuntime))]
     public sealed class StalkerFusionRuntime : NetworkBehaviour
     {
         [SerializeField] private StalkerController controller;
         [SerializeField] private StalkerVisionSensor visionSensor;
+        [SerializeField] private StalkerSpecialEncounterRuntime specialEncounterRuntime;
         [SerializeField] private FusionPlayerLifecycle lifecycle;
         [SerializeField, Min(0)] private int patrolNearOptimalHopSlack = 1;
 
@@ -109,6 +113,13 @@ namespace EchoProtocol.AI.Stalker.Networking
         [Networked] public int ReplicatedAttackOutcome { get; private set; }
         [Networked] public long ReplicatedAttackStartedTick { get; private set; }
         [Networked] public long ReplicatedAttackResolvedTick { get; private set; }
+        [Networked] public int ReplicatedPresentationActionValue { get; private set; }
+        [Networked] public int ReplicatedPresentationActionOrdinal { get; private set; }
+        [Networked] public float ReplicatedPresentationActionProgress01 { get; private set; }
+        [Networked] public int ReplicatedSpecialPhaseValue { get; private set; }
+        [Networked] public uint ReplicatedSpecialSequenceOrdinal { get; private set; }
+        [Networked] public float ReplicatedSpecialPhaseElapsed { get; private set; }
+        [Networked] public NetworkBool ReplicatedSpecialVisible { get; private set; }
         private ListenerHearingSensor _hearingSensor;
         private HostRuntimeNoiseService _runtimeNoiseService;
         private Guid _boundHearingMatchId;
@@ -465,15 +476,47 @@ namespace EchoProtocol.AI.Stalker.Networking
                 step,
                 hearingEvaluationTimeUtc);
 
-            var input = new StalkerSimulationInput(
-                step,
-                _visibleCandidates,
-                _targetStatuses,
-                BuildCurrentAttackTargetSnapshot(
-                    controller.CurrentTargetId),
-                _hearingObservations,
-                hearingEvaluationTimeUtc,
-                _visibleObjectiveCarrierIds);
+            //
+            // Special Encounter must evaluate BEFORE the normal FSM
+            // simulation.
+            //
+            // This is critical for the ATTACK -> RECOVER handoff:
+            //
+            // Bite causes Player Down
+            //      ↓
+            // Stalker enters RECOVER
+            //      ↓
+            // Special runtime sees RECOVER here
+            //      ↓
+            // Special acquires controller override
+            //      ↓
+            // controller.Simulate() below cannot advance RECOVER
+            // into normal CHASE / SEARCH / PATROL first.
+            //
+            // Perception frames have already been built above, so Vision,
+            // Hearing and target-status information remain fresh.
+            //
+            specialEncounterRuntime?.TickAuthoritative(
+                Runner,
+                lifecycle,
+                step);
+
+            if (specialEncounterRuntime != null
+                && specialEncounterRuntime.IsActive)
+            {
+                controller.BeginSpecialEncounterOverride();
+            }
+
+            var input =
+                new StalkerSimulationInput(
+                    step,
+                    _visibleCandidates,
+                    _targetStatuses,
+                    BuildCurrentAttackTargetSnapshot(
+                        controller.CurrentTargetId),
+                    _hearingObservations,
+                    hearingEvaluationTimeUtc,
+                    _visibleObjectiveCarrierIds);
 
             if (!controller.Simulate(input))
             {
@@ -481,8 +524,11 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             AuthoritativeSimulationCount++;
+
             PublishReplicatedPresentationState();
+
             PublishCommittedTelemetryFacts();
+
             return true;
         }
 
@@ -498,7 +544,14 @@ namespace EchoProtocol.AI.Stalker.Networking
                 ReplicatedAttackHitMomentResolved,
                 ToReplicatedAttackOutcome(ReplicatedAttackOutcome),
                 ReplicatedAttackStartedTick,
-                ReplicatedAttackResolvedTick);
+                ReplicatedAttackResolvedTick,
+                ToReplicatedPresentationAction(ReplicatedPresentationActionValue),
+                ReplicatedPresentationActionOrdinal,
+                ReplicatedPresentationActionProgress01,
+                ToReplicatedSpecialPhase(ReplicatedSpecialPhaseValue),
+                ReplicatedSpecialSequenceOrdinal,
+                ReplicatedSpecialPhaseElapsed,
+                ReplicatedSpecialVisible);
         }
 
         public StalkerPresentationConsumeResult ConsumeReplicatedPresentationState()
@@ -953,12 +1006,14 @@ namespace EchoProtocol.AI.Stalker.Networking
         {
             if (controller == null)
             {
-                controller = GetComponent<StalkerController>();
+                controller =
+                    GetComponent<StalkerController>();
             }
 
             if (visionSensor == null)
             {
-                visionSensor = GetComponent<StalkerVisionSensor>();
+                visionSensor =
+                    GetComponent<StalkerVisionSensor>();
             }
 
             if (_hearingSensor == null)
@@ -978,7 +1033,22 @@ namespace EchoProtocol.AI.Stalker.Networking
 
             if (_navigationAgent == null)
             {
-                _navigationAgent = GetComponent<NavMeshAgent>();
+                _navigationAgent =
+                    GetComponent<NavMeshAgent>();
+            }
+
+            if (specialEncounterRuntime == null)
+            {
+                specialEncounterRuntime =
+                    GetComponent<
+                        StalkerSpecialEncounterRuntime>();
+            }
+
+            if (specialEncounterRuntime == null)
+            {
+                specialEncounterRuntime =
+                    gameObject.AddComponent<
+                        StalkerSpecialEncounterRuntime>();
             }
         }
 
@@ -1012,12 +1082,40 @@ namespace EchoProtocol.AI.Stalker.Networking
                 new StalkerNetworkLifeStateConsequenceSink(
                     Runner,
                     lifecycle.IdentityRegistry,
-                    this);
+                    OnPlayerDownedByStalkerAuthoritative);
             if (controller.AttackConsequenceSink == null
                 || controller.AttackConsequenceSink is StalkerDiagnosticAttackConsequenceSink)
             {
                 controller.AttackConsequenceSink = _productionConsequenceSink;
             }
+        }
+
+        private void OnPlayerDownedByStalkerAuthoritative(
+            StalkerDownedPlayerFact fact)
+        {
+            if (Object == null
+                || !Object.HasStateAuthority
+                || !fact.IsValid)
+            {
+                return;
+            }
+
+            if (specialEncounterRuntime == null)
+            {
+                ResolveLocalDependencies();
+            }
+
+            if (specialEncounterRuntime == null)
+            {
+                RuntimeLog.Log(
+                    RuntimeLogCategory.StalkerCombat,
+                    "[STK_SPECIAL][ARM_FAILED] " +
+                    "runtime-missing");
+
+                return;
+            }
+
+            specialEncounterRuntime.Arm(fact);
         }
 
         private void BindProductionTelemetryProducer()
@@ -1125,6 +1223,13 @@ namespace EchoProtocol.AI.Stalker.Networking
             ReplicatedAttackOutcome = (int)_lastAuthoritativePresentationState.AttackOutcome;
             ReplicatedAttackStartedTick = _lastAuthoritativePresentationState.AttackStartedTick;
             ReplicatedAttackResolvedTick = _lastAuthoritativePresentationState.AttackResolvedTick;
+            ReplicatedPresentationActionValue = (int)_lastAuthoritativePresentationState.PresentationAction;
+            ReplicatedPresentationActionOrdinal = _lastAuthoritativePresentationState.PresentationActionOrdinal;
+            ReplicatedPresentationActionProgress01 = _lastAuthoritativePresentationState.PresentationActionProgress01;
+            ReplicatedSpecialPhaseValue = (int)_lastAuthoritativePresentationState.SpecialPhase;
+            ReplicatedSpecialSequenceOrdinal = _lastAuthoritativePresentationState.SpecialSequenceOrdinal;
+            ReplicatedSpecialPhaseElapsed = _lastAuthoritativePresentationState.SpecialPhaseElapsed;
+            ReplicatedSpecialVisible = _lastAuthoritativePresentationState.PresentationVisible;
         }
 
         private void PublishCommittedTelemetryFacts()
@@ -1162,6 +1267,17 @@ namespace EchoProtocol.AI.Stalker.Networking
             var activeEpisode = controller.ActiveAttackEpisode;
             var currentAttackActive = activeEpisode.EpisodeId.IsValid
                 && (controller.CurrentState == StalkerState.ATTACK || controller.CurrentState == StalkerState.RECOVER);
+            var action = ResolvePresentationAction(out var actionProgress);
+            var specialPhase = specialEncounterRuntime != null
+                ? specialEncounterRuntime.Phase
+                : StalkerSpecialEncounterPhase.None;
+            var specialSequence = specialEncounterRuntime != null
+                ? specialEncounterRuntime.SequenceOrdinal
+                : 0u;
+            var specialElapsed = specialEncounterRuntime != null
+                ? specialEncounterRuntime.PhaseElapsed
+                : 0f;
+            var visible = specialEncounterRuntime == null || specialEncounterRuntime.PresentationVisible;
 
             if (!currentAttackActive)
             {
@@ -1173,7 +1289,14 @@ namespace EchoProtocol.AI.Stalker.Networking
                     false,
                     StalkerAttackOutcome.None,
                     -1L,
-                    -1L);
+                    -1L,
+                    action,
+                    ResolvePresentationActionOrdinal(action, specialSequence),
+                    actionProgress,
+                    specialPhase,
+                    specialSequence,
+                    specialElapsed,
+                    visible);
             }
 
             return new StalkerNetworkPresentationState(
@@ -1184,7 +1307,68 @@ namespace EchoProtocol.AI.Stalker.Networking
                 activeEpisode.HitMomentResolved,
                 activeEpisode.Outcome,
                 activeEpisode.StartedAt.IsValid ? activeEpisode.StartedAt.Tick : -1L,
-                activeEpisode.ResolutionTime.IsValid ? activeEpisode.ResolutionTime.Tick : -1L);
+                activeEpisode.ResolutionTime.IsValid ? activeEpisode.ResolutionTime.Tick : -1L,
+                action,
+                ResolvePresentationActionOrdinal(action, specialSequence),
+                actionProgress,
+                specialPhase,
+                specialSequence,
+                specialElapsed,
+                visible);
+        }
+
+        private StalkerPresentationAction ResolvePresentationAction(out float progress01)
+        {
+            progress01 = 0f;
+            if (specialEncounterRuntime != null && specialEncounterRuntime.IsActive)
+            {
+                progress01 = specialEncounterRuntime.PhaseProgress01;
+                switch (specialEncounterRuntime.Phase)
+                {
+                    case StalkerSpecialEncounterPhase.Sniff:
+                        return StalkerPresentationAction.SpecialSniff;
+                    case StalkerSpecialEncounterPhase.JumpOut:
+                        return StalkerPresentationAction.SpecialJumpOut;
+                    case StalkerSpecialEncounterPhase.JumpIn:
+                        return StalkerPresentationAction.SpecialJumpIn;
+                    case StalkerSpecialEncounterPhase.ReactionLock:
+                        return StalkerPresentationAction.SpecialReactionRoar;
+                    default:
+                        return StalkerPresentationAction.None;
+                }
+            }
+
+            if (controller.CurrentWorldInteractionKind == StalkerWorldInteractionKind.BreakingDoor
+                || controller.CurrentWorldInteractionKind == StalkerWorldInteractionKind.BreakingJammer)
+            {
+                progress01 = controller.WorldInteractionProgress01;
+                return StalkerPresentationAction.DoorPunch;
+            }
+
+            if (controller.IsSearchLkpSniffActive)
+            {
+                progress01 = controller.SearchLkpSniffProgress01;
+                return StalkerPresentationAction.SearchSniff;
+            }
+
+            return StalkerPresentationAction.None;
+        }
+
+        private int ResolvePresentationActionOrdinal(
+            StalkerPresentationAction action,
+            uint specialSequence)
+        {
+            if (action == StalkerPresentationAction.SearchSniff)
+            {
+                return controller.SearchLkpSniffOrdinal;
+            }
+
+            if (action == StalkerPresentationAction.None)
+            {
+                return 0;
+            }
+
+            return specialSequence > int.MaxValue ? int.MaxValue : (int)specialSequence;
         }
 
         private static StalkerNetworkAttackPhase ResolveAttackPhase(
@@ -1245,6 +1429,20 @@ namespace EchoProtocol.AI.Stalker.Networking
             return System.Enum.IsDefined(typeof(StalkerAttackOutcome), value)
                 ? (StalkerAttackOutcome)value
                 : StalkerAttackOutcome.None;
+        }
+
+        private static StalkerPresentationAction ToReplicatedPresentationAction(int value)
+        {
+            return System.Enum.IsDefined(typeof(StalkerPresentationAction), value)
+                ? (StalkerPresentationAction)value
+                : StalkerPresentationAction.None;
+        }
+
+        private static StalkerSpecialEncounterPhase ToReplicatedSpecialPhase(int value)
+        {
+            return System.Enum.IsDefined(typeof(StalkerSpecialEncounterPhase), value)
+                ? (StalkerSpecialEncounterPhase)value
+                : StalkerSpecialEncounterPhase.None;
         }
 
         private StalkerAttackTargetSnapshot? BuildCurrentAttackTargetSnapshot(PlayerId currentTargetId)
