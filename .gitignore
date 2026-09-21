@@ -63,3 +63,4 @@ KLTN/.git.backup/
 # Unity recovery artifacts
 /KLTN/Assets/_Recovery/
 /KLTN/Assets/_Recovery.meta
+.codex/environments/environment.toml
