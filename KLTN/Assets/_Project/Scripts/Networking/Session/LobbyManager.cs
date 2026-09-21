@@ -17,6 +17,27 @@ namespace EchoProtocol.Networking
 
         [SerializeField] private NetworkBootstrap _bootstrap;
         private bool _matchStartInProgress;
+        private string _localOperatorName = string.Empty;
+        private LobbyPlayerState _namedPlayer;
+
+        public string LocalOperatorName => _localOperatorName;
+
+        public bool SetLocalOperatorName(string name)
+        {
+            var normalized = LobbyPlayerState.NormalizeOperatorName(name);
+            if (normalized.Length == 0) return false;
+            _localOperatorName = normalized;
+            _namedPlayer = null;
+            return true;
+        }
+
+        private void Update()
+        {
+            // Player objects can spawn after StartGame completes. Submit once per owned object.
+            if (_localOperatorName.Length == 0 || !IsInRoom) return;
+            if (!TryGetLocalPlayerState(out var player, false) || player == _namedPlayer) return;
+            if (player.RequestOperatorName(_localOperatorName)) _namedPlayer = player;
+        }
 
         public event Action<RoomInfoViewModel> OnRoomUpdated;
         public event Action<string> OnLobbyError;
@@ -213,12 +234,14 @@ namespace EchoProtocol.Networking
                 var isReady = false;
                 var teamId = 0;
                 var toolId = 0;
+                var operatorName = string.Empty;
                 if (runner.TryGetPlayerObject(player, out var playerObject)
                     && playerObject.TryGetComponent<LobbyPlayerState>(out var playerState))
                 {
                     isReady = playerState.IsReady;
                     teamId = playerState.TeamId;
                     toolId = playerState.ToolId;
+                    operatorName = playerState.OperatorName.ToString();
                 }
 
                 var isLocal = player == runner.LocalPlayer;
@@ -231,6 +254,7 @@ namespace EchoProtocol.Networking
                     IsReady = isReady,
                     TeamId = teamId,
                     ToolId = toolId,
+                    OperatorName = operatorName,
                 });
             }
             members.Sort((left, right) => left.ActorId.CompareTo(right.ActorId));

@@ -26,6 +26,7 @@ namespace EchoProtocol.Networking
         public int TeamId;
         public int ToolId;
 
-        public string DisplayName => $"Player {ActorId}";
+        public string OperatorName;
+        public string DisplayName => string.IsNullOrWhiteSpace(OperatorName) ? $"Player {ActorId}" : OperatorName;
     }
 }
