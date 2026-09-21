@@ -1,5 +1,9 @@
 # Audio theo code ECHO PROTOCOL
 
+## Jumpscare (2026-09-20)
+
+`stalker/jumpscare.wav`: dedicated original synthesized sting, 1.8 s, mono PCM16 / 44.1 kHz, peak -3 dBFS. Regenerate with `python scripts/generate_jumpscare_audio.py`. Bind and verify the existing player prefabs with **ECHO Protocol > Setup > Ghost Jumpscare Audio**. The existing local controller plays it at 0.15 s and cleans it up when the catch ends. See `docs/GHOST_JUMPSCARE.md` for integration and PlayMode listening checks. The older catalog notes below predate this integration.
+
 Bộ WAV tổng hợp dùng thử, không phải bản thu thực tế. Đã đối chiếu các nhánh gameplay/network liên quan audio và thông số prefab; source_inventory.json ghi phạm vi quét mã nguồn. Chưa nghe thử trong Unity và chưa gắn AudioSource vào gameplay.
 
 ## Các khác biệt đã xử lý

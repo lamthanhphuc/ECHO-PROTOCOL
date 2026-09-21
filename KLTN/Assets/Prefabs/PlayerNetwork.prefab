@@ -929,7 +929,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerJumpscareController
   _ghostJumpscarePrefab: {fileID: 8145755207363234366, guid: 3fab18e8a651d3446a4007c22dcfa8f2, type: 3}
-  _scream: {fileID: 8300000, guid: cd2d6fb1d7a3dea428864b5f27c45104, type: 3}
+  _scream: {fileID: 8300000, guid: ea5fc17da703d6d4d9f661baf3a6bd31, type: 3}
   _gameplayHud: {fileID: 0}
   _ghostOffset: {x: 0, y: 0, z: 1}
   _ghostEuler: {x: 0, y: 180, z: 0}

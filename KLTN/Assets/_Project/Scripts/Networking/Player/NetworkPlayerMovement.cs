@@ -744,7 +744,7 @@ namespace EchoProtocol.Networking
 
             var hiding = GetComponent<PlayerHidingController>();
             bool isHidden = IsHidden || (hiding != null && hiding.IsHidden);
-            if (isHidden)
+            if (isHidden || EchoProtocol.Voice.VoiceSettingsPanel.IsOpen)
             {
                 return new NetworkPlayerInput
                 {

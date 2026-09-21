@@ -16,12 +16,14 @@ Configured in the Unity Editor on 2026-09-11:
 | --- | --- |
 | `Assets/Prefabs/Player/Jumpscare/GhostJumpscare.prefab` | HumanDeer visual, local root Animator with `Jumpscare` trigger and procedural lunge animation; no network/gameplay components |
 | `Assets/Prefabs/PlayerNetwork.prefab` | `PlayerJumpscareController` added, visual prefab and audio assigned |
-| `Assets/_Project/Prefabs/Network/TestNetworkPlayer.prefab` | Same jumpscare references for the test player |
+| Legacy `Assets/_Project/Prefabs/Network/TestNetworkPlayer.prefab` | No longer present in this checkout; setup includes it only if restored |
 | `Assets/Prefabs/StalkerNetwork.prefab` | Catch range 2 m, duration 2 s, cooldown 2 s, Downed outcome |
-| Audio | `Assets/Audio/stalker/chase_start.wav`, existing Stalker vocal used as a placeholder scream |
+| Audio | `Assets/Audio/stalker/jumpscare.wav`, dedicated 1.8-second procedural impact/scream with a fading reverb tail; audio update dated 2026-09-20 |
 | HUD | Existing automatic `GameplayHUD_Canvas` lookup; no scene reference serialized into a prefab |
 
-The reusable Editor menu is **ECHO Protocol > Setup > Ghost Jumpscare** (`GhostJumpscarePrefabSetup.cs`). Running it again restores the above player references and Downed defaults. The current lunge is a procedural presentation animation, not a bespoke skeletal jumpscare performance. Replace the placeholder vocal/animation when final art is available. Editor setup/reference validation passed; the seven multiplayer acceptance scenarios still require PlayMode testing.
+The reusable Editor menu is **ECHO Protocol > Setup > Ghost Jumpscare** (`GhostJumpscarePrefabSetup.cs`). Running it again restores the above player references and Downed defaults. For audio updates alone, use **ECHO Protocol > Setup > Ghost Jumpscare Audio**: it assigns the dedicated clip to the main player prefab (and the legacy test prefab if present), configures preloaded/decompressed PCM, and verifies saved references without resetting catch settings or visual configuration. The current lunge is a procedural presentation animation, not a bespoke skeletal jumpscare performance. Multiplayer acceptance scenarios still require PlayMode testing.
+
+The original synthesized sting combines a low impact, distorted voiced scream, metallic dissonance and short echoes. Regenerate only this asset with `python scripts/generate_jumpscare_audio.py`; preserve its `.meta` GUID. Format: mono PCM16, 44.1 kHz, 1.8 seconds, peak -3 dBFS, smooth fade to zero. It starts at the existing 0.15-second scream cue and ends at 1.95 seconds within the default 2-second catch. Playback remains local to the caught player's input owner and stops on state change/disable/despawn. Listen in PlayMode to judge the mix against other gameplay audio; waveform validation cannot establish perceived loudness or artistic quality.
 
 1. On the existing Stalker network prefab's `StalkerFusionRuntime`, set `Maximum Damage Distance` (catch range), `Jumpscare Seconds` (default 2), `Catch Cooldown Seconds`, and `Catch Ends In Death` (off = Downed, on = Eliminated/Dead).
 2. Add `PlayerJumpscareController` to the existing gameplay player prefab to configure it. Runtime adds a default component if absent, but that default has no model or scream asset.
@@ -33,6 +35,8 @@ The reusable Editor menu is **ECHO Protocol > Setup > Ghost Jumpscare** (`GhostJ
 The default timeline locks controls at Caught, shows the model at .05 s, triggers animation at .10 s, plays scream at .15 s, shakes at .20 s and fades between 1.5–2 s. A late Caught snapshot seeks the timeline using the replicated remaining time. The model hides at the deadline; black holds until authoritative Downed/Eliminated arrives. HUD and FOV restore on state change, disable or despawn. No event is replayed for clients joining after Caught ended.
 
 ## Validation
+
+Audio update (2026-09-20): Unity Editor import and audio-only setup passed; saved main player prefab reference verified against `jumpscare.wav`, PCM decompression/preload enabled. Final Editor compilation check reported no errors. WAV validation passed for duration/format, non-silent blocks, zero endpoints and no clipping. In-game listening and multiplayer PlayMode checks remain manual.
 
 EditMode: `PlayerCaughtRulesTests` exercises non-Alive action/damage rejection, Caught movement/escape/early-revive rejection, and retained revive/protection rules. The existing telemetry contract now expects the catch sink.
 

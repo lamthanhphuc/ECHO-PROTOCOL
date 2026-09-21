@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.photonengine.voice-fusion": "https://github.com/Photon-Server/Photon-UPM.git#1b93daae7984009cedc51f761a198d145fcf44ad",
     "com.unity.ai.assistant": "2.19.0-pre.2",
     "com.unity.ai.inference": "2.6.1",
     "com.unity.ai.navigation": "2.0.14",
