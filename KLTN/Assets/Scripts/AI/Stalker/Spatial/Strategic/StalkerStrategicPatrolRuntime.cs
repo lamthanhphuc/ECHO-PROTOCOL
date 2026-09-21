@@ -48,6 +48,14 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
         public bool HasHotspot => _director.HasHotspot;
         public ActivityRoomKey Hotspot => _director.Hotspot;
 
+        public bool CanStartMajorEncounter(float maxPressure01) =>
+            _director.CanStartMajorEncounter(maxPressure01);
+
+        public void RecordMajorEncounter(
+            double nowSeconds,
+            float cooldownSeconds) =>
+            _director.RecordMajorEncounter(nowSeconds, cooldownSeconds);
+
         public void BeginMatch(Guid matchId)
         {
             if (matchId == Guid.Empty || _boundMatchId == matchId)

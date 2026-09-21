@@ -15,6 +15,44 @@ namespace EchoProtocol.AI.Stalker.Special
             StalkerSpecialEncounterSettings settings,
             out Vector3 entryPosition)
         {
+            return TrySelectCore(
+                registry,
+                alivePlayers,
+                null,
+                excludedPlayerId,
+                now,
+                settings,
+                out entryPosition);
+        }
+
+        public static bool TrySelectWithFairness(
+            StalkerJumpEntryRegistry registry,
+            IReadOnlyList<Transform> alivePlayers,
+            IReadOnlyDictionary<Transform, float> recentPressureByPlayer,
+            PlayerId excludedPlayerId,
+            AiSimulationTime now,
+            StalkerSpecialEncounterSettings settings,
+            out Vector3 entryPosition)
+        {
+            return TrySelectCore(
+                registry,
+                alivePlayers,
+                recentPressureByPlayer,
+                excludedPlayerId,
+                now,
+                settings,
+                out entryPosition);
+        }
+
+        private static bool TrySelectCore(
+            StalkerJumpEntryRegistry registry,
+            IReadOnlyList<Transform> alivePlayers,
+            IReadOnlyDictionary<Transform, float> recentPressureByPlayer,
+            PlayerId excludedPlayerId,
+            AiSimulationTime now,
+            StalkerSpecialEncounterSettings settings,
+            out Vector3 entryPosition)
+        {
             entryPosition = default;
 
             if (alivePlayers == null
@@ -45,15 +83,14 @@ namespace EchoProtocol.AI.Stalker.Special
                         continue;
                     }
 
-                    if (!TryScorePosition(
+                    if (!TryScorePositionWithFairness(
                             entry.EntryPosition,
                             alivePlayers,
+                            recentPressureByPlayer,
                             entry.MinPlayerDistance,
                             entry.MaxPlayerDistance,
                             entry.FrontFacingDotThreshold,
-                            settings.PreferredJumpInDistance,
-                            settings.GroupRadius,
-                            settings.CandidateLosHeight,
+                            settings,
                             out var score))
                     {
                         continue;
@@ -88,12 +125,14 @@ namespace EchoProtocol.AI.Stalker.Special
 
             return TrySelectDynamic(
                 alivePlayers,
+                recentPressureByPlayer,
                 settings,
                 out entryPosition);
         }
 
         private static bool TrySelectDynamic(
             IReadOnlyList<Transform> alivePlayers,
+            IReadOnlyDictionary<Transform, float> recentPressureByPlayer,
             StalkerSpecialEncounterSettings settings,
             out Vector3 entryPosition)
         {
@@ -201,15 +240,14 @@ namespace EchoProtocol.AI.Stalker.Special
                             continue;
                         }
 
-                        if (!TryScorePosition(
+                        if (!TryScorePositionWithFairness(
                                 hit.position,
                                 alivePlayers,
+                                recentPressureByPlayer,
                                 settings.JumpInMinDistance,
                                 settings.JumpInMaxDistance,
                                 settings.FrontFacingDotThreshold,
-                                settings.PreferredJumpInDistance,
-                                settings.GroupRadius,
-                                settings.CandidateLosHeight,
+                                settings,
                                 out var score))
                         {
                             continue;
@@ -241,150 +279,214 @@ namespace EchoProtocol.AI.Stalker.Special
             float candidateLosHeight,
             out float score)
         {
-            score =
-                float.NegativeInfinity;
+            return TryScorePositionCore(
+                position,
+                alivePlayers,
+                null,
+                minDistance,
+                maxDistance,
+                frontFacingDotThreshold,
+                preferredDistance,
+                groupRadius,
+                candidateLosHeight,
+                0f,
+                false,
+                0f,
+                0f,
+                0f,
+                out score);
+        }
 
-            var foundEligiblePlayer =
-                false;
+        private static bool TryScorePositionWithFairness(
+            Vector3 position,
+            IReadOnlyList<Transform> alivePlayers,
+            IReadOnlyDictionary<Transform, float> recentPressureByPlayer,
+            float minDistance,
+            float maxDistance,
+            float frontFacingDotThreshold,
+            StalkerSpecialEncounterSettings settings,
+            out float score)
+        {
+            return TryScorePositionCore(
+                position,
+                alivePlayers,
+                recentPressureByPlayer,
+                minDistance,
+                maxDistance,
+                frontFacingDotThreshold,
+                settings.PreferredJumpInDistance,
+                settings.GroupRadius,
+                settings.CandidateLosHeight,
+                settings.RecentPlayerPressurePenalty,
+                settings.RequireEscapeRoute,
+                settings.EscapeProbeDistance,
+                settings.EscapeNavMeshSampleRadius,
+                settings.MinimumEscapeDistanceGain,
+                out score);
+        }
 
-            var clampedMinDistance =
-                Mathf.Max(
-                    0f,
-                    minDistance);
+        private static bool TryScorePositionCore(
+            Vector3 position,
+            IReadOnlyList<Transform> alivePlayers,
+            IReadOnlyDictionary<Transform, float> recentPressureByPlayer,
+            float minDistance,
+            float maxDistance,
+            float frontFacingDotThreshold,
+            float preferredDistance,
+            float groupRadius,
+            float candidateLosHeight,
+            float recentPressurePenalty,
+            bool requireEscapeRoute,
+            float escapeProbeDistance,
+            float escapeNavMeshSampleRadius,
+            float minimumEscapeDistanceGain,
+            out float score)
+        {
+            score = float.NegativeInfinity;
+            var foundEligiblePlayer = false;
 
-            var clampedMaxDistance =
-                Mathf.Max(
-                    clampedMinDistance,
-                    maxDistance);
+            var clampedMinDistance = Mathf.Max(0f, minDistance);
+            var clampedMaxDistance = Mathf.Max(clampedMinDistance, maxDistance);
+            var preferred = Mathf.Clamp(preferredDistance, clampedMinDistance, clampedMaxDistance);
+            var facingThreshold = Mathf.Clamp(frontFacingDotThreshold, -1f, 1f);
+            var distanceRange = Mathf.Max(0.01f, clampedMaxDistance - clampedMinDistance);
+            var groupRadiusSqr = Mathf.Max(0f, groupRadius);
+            groupRadiusSqr *= groupRadiusSqr;
 
-            var preferred =
-                Mathf.Clamp(
-                    preferredDistance,
-                    clampedMinDistance,
-                    clampedMaxDistance);
-
-            var facingThreshold =
-                Mathf.Clamp(
-                    frontFacingDotThreshold,
-                    -1f,
-                    1f);
-
-            var distanceRange =
-                Mathf.Max(
-                    0.01f,
-                    clampedMaxDistance
-                        - clampedMinDistance);
-
-            var groupRadiusSqr =
-                Mathf.Max(
-                    0f,
-                    groupRadius);
-
-            groupRadiusSqr *=
-                groupRadiusSqr;
-
-            for (var i = 0;
-                 i < alivePlayers.Count;
-                 i++)
+            for (var i = 0; i < alivePlayers.Count; i++)
             {
-                var player =
-                    alivePlayers[i];
-
+                var player = alivePlayers[i];
                 if (player == null)
                 {
                     continue;
                 }
 
-                var playerForward =
-                    player.forward;
-
+                var playerForward = player.forward;
                 playerForward.y = 0f;
-
-                if (playerForward.sqrMagnitude
-                    <= 0.0001f)
+                if (playerForward.sqrMagnitude <= 0.0001f)
                 {
                     continue;
                 }
 
                 playerForward.Normalize();
-
-                var playerToEntry =
-                    position - player.position;
-
+                var playerToEntry = position - player.position;
                 playerToEntry.y = 0f;
+                var distance = playerToEntry.magnitude;
 
-                var distance =
-                    playerToEntry.magnitude;
-
-                if (distance
-                        < clampedMinDistance
-                    || distance
-                        > clampedMaxDistance
+                if (distance < clampedMinDistance
+                    || distance > clampedMaxDistance
                     || distance <= 0.0001f)
                 {
                     continue;
                 }
 
-                var directionToEntry =
-                    playerToEntry / distance;
-
-                //
-                // Positive dot means the entry is physically
-                // in FRONT of the Player's current facing.
-                //
-                var facingDot =
-                    Vector3.Dot(
-                        playerForward,
-                        directionToEntry);
-
-                if (facingDot
-                    < facingThreshold)
+                var directionToEntry = playerToEntry / distance;
+                var facingDot = Vector3.Dot(playerForward, directionToEntry);
+                if (facingDot < facingThreshold
+                    || !HasClearPlayerToEntryLine(player, position, candidateLosHeight))
                 {
                     continue;
                 }
 
-                if (!HasClearPlayerToEntryLine(
-                        player,
-                        position,
-                        candidateLosHeight))
-                {
-                    continue;
-                }
-
-                var distanceError =
-                    Mathf.Abs(
-                        distance
-                        - preferred);
-
-                var distanceScore =
-                    1f
-                    - Mathf.Clamp01(
-                        distanceError
-                        / distanceRange);
-
-                var nearbyPlayers =
-                    CountNearbyPlayers(
+                if (requireEscapeRoute
+                    && !HasEscapeOpportunity(
                         player.position,
-                        alivePlayers,
-                        groupRadiusSqr);
+                        position,
+                        escapeProbeDistance,
+                        escapeNavMeshSampleRadius,
+                        minimumEscapeDistanceGain))
+                {
+                    continue;
+                }
+
+                var distanceError = Mathf.Abs(distance - preferred);
+                var distanceScore = 1f - Mathf.Clamp01(distanceError / distanceRange);
+                var nearbyPlayers = CountNearbyPlayers(player.position, alivePlayers, groupRadiusSqr);
+                var recentPressure = 0f;
+
+                if (recentPressureByPlayer != null
+                    && recentPressureByPlayer.TryGetValue(player, out var pressure))
+                {
+                    recentPressure = Mathf.Clamp01(pressure);
+                }
 
                 var candidateScore =
                     facingDot * 4f
                     + distanceScore * 2f
-                    + nearbyPlayers;
+                    + nearbyPlayers
+                    - recentPressure * Mathf.Max(0f, recentPressurePenalty);
 
-                if (!foundEligiblePlayer
-                    || candidateScore > score)
+                if (!foundEligiblePlayer || candidateScore > score)
                 {
-                    score =
-                        candidateScore;
-
-                    foundEligiblePlayer =
-                        true;
+                    score = candidateScore;
+                    foundEligiblePlayer = true;
                 }
             }
 
             return foundEligiblePlayer;
+        }
+
+        private static bool HasEscapeOpportunity(
+            Vector3 playerPosition,
+            Vector3 entryPosition,
+            float probeDistance,
+            float sampleRadius,
+            float minimumDistanceGain)
+        {
+            if (!NavMesh.SamplePosition(
+                    playerPosition,
+                    out var playerHit,
+                    Mathf.Max(0.1f, sampleRadius),
+                    NavMesh.AllAreas))
+            {
+                return false;
+            }
+
+            var away = playerPosition - entryPosition;
+            away.y = 0f;
+            if (away.sqrMagnitude <= 0.0001f)
+            {
+                return false;
+            }
+
+            away.Normalize();
+            var initialDistance = Vector3.Distance(playerHit.position, entryPosition);
+            var angles = new[] { 0f, -45f, 45f, -90f, 90f };
+            var path = new NavMeshPath();
+
+            for (var i = 0; i < angles.Length; i++)
+            {
+                var direction = Quaternion.AngleAxis(angles[i], Vector3.up) * away;
+                var rawTarget = playerHit.position + direction * Mathf.Max(0.5f, probeDistance);
+
+                if (!NavMesh.SamplePosition(
+                        rawTarget,
+                        out var targetHit,
+                        Mathf.Max(0.1f, sampleRadius),
+                        NavMesh.AllAreas))
+                {
+                    continue;
+                }
+
+                if (Vector3.Distance(targetHit.position, entryPosition)
+                    < initialDistance + Mathf.Max(0f, minimumDistanceGain))
+                {
+                    continue;
+                }
+
+                path.ClearCorners();
+                if (NavMesh.CalculatePath(
+                        playerHit.position,
+                        targetHit.position,
+                        NavMesh.AllAreas,
+                        path)
+                    && path.status == NavMeshPathStatus.PathComplete)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool HasClearPlayerToEntryLine(

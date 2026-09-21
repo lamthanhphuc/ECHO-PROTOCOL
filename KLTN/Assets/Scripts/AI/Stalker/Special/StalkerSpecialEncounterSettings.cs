@@ -53,6 +53,16 @@ namespace EchoProtocol.AI.Stalker.Special
         [SerializeField] private float groupRadius = 8f;
         [SerializeField] private float candidateLosHeight = 1.2f;
 
+        [Header("Shared pacing / fairness")]
+        [SerializeField, Range(0f, 1f)] private float maxDirectorPressureForStart = 1f;
+        [SerializeField] private float postSpecialDirectorCooldownSeconds = 20f;
+        [SerializeField] private float recentPlayerPressureWindowSeconds = 45f;
+        [SerializeField] private float recentPlayerPressurePenalty = 3f;
+        [SerializeField] private bool requireEscapeRoute = true;
+        [SerializeField] private float escapeProbeDistance = 4f;
+        [SerializeField] private float escapeNavMeshSampleRadius = 1.5f;
+        [SerializeField] private float minimumEscapeDistanceGain = 1.25f;
+
         [SerializeField] private bool allowDynamicEntryFallback = true;
 
         public bool Enabled =>
@@ -188,6 +198,29 @@ namespace EchoProtocol.AI.Stalker.Special
             Mathf.Max(
                 0f,
                 candidateLosHeight);
+
+        public float MaxDirectorPressureForStart =>
+            Mathf.Clamp01(maxDirectorPressureForStart);
+
+        public float PostSpecialDirectorCooldownSeconds =>
+            Mathf.Max(0f, postSpecialDirectorCooldownSeconds);
+
+        public float RecentPlayerPressureWindowSeconds =>
+            Mathf.Max(0.1f, recentPlayerPressureWindowSeconds);
+
+        public float RecentPlayerPressurePenalty =>
+            Mathf.Max(0f, recentPlayerPressurePenalty);
+
+        public bool RequireEscapeRoute => requireEscapeRoute;
+
+        public float EscapeProbeDistance =>
+            Mathf.Max(0.5f, escapeProbeDistance);
+
+        public float EscapeNavMeshSampleRadius =>
+            Mathf.Max(0.1f, escapeNavMeshSampleRadius);
+
+        public float MinimumEscapeDistanceGain =>
+            Mathf.Max(0f, minimumEscapeDistanceGain);
 
         public bool AllowDynamicEntryFallback =>
             allowDynamicEntryFallback;

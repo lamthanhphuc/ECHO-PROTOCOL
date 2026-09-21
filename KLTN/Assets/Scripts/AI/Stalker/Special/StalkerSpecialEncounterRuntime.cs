@@ -20,6 +20,8 @@ namespace EchoProtocol.AI.Stalker.Special
         [SerializeField] private StalkerJumpEntryRegistry jumpEntryRegistry;
 
         private readonly List<Transform> _eligibleAlivePlayerRoots = new List<Transform>();
+        private readonly Dictionary<Transform, float> _recentPressureByPlayerRoot =
+            new Dictionary<Transform, float>();
         private StalkerDownedPlayerFact _pendingFact;
         private StalkerSpecialEncounterPhase _phase;
         private AiSimulationTime _cooldownUntil = AiSimulationTime.Invalid;
@@ -59,8 +61,31 @@ namespace EchoProtocol.AI.Stalker.Special
                 return;
             }
 
+            ResolveDependencies();
+
+            if (settings == null
+                || !settings.Enabled
+                || controller == null
+                || IsCoolingDown(fact.ResolvedAt))
+            {
+                return;
+            }
+
+            if (!controller.CanStartSpecialEncounter(
+                    settings.MaxDirectorPressureForStart))
+            {
+                RuntimeLog.Log(
+                    RuntimeLogCategory.StalkerCombat,
+                    "[STK_SPECIAL][SKIP] reason=director-pacing");
+
+                return;
+            }
+
             _pendingFact = fact;
-            RuntimeLog.Log(RuntimeLogCategory.StalkerCombat, "[STK_SPECIAL][ARM]");
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerCombat,
+                "[STK_SPECIAL][ARM]");
         }
 
         public void TickAuthoritative(
@@ -159,7 +184,8 @@ namespace EchoProtocol.AI.Stalker.Special
                         //
                         if (!RefreshEligibleAlivePlayerRoots(
                                 lifecycle,
-                                _pendingFact.PlayerId))
+                                _pendingFact.PlayerId,
+                                step.Time))
                         {
                             Abort(
                                 "missing-player-registry-after-transfer",
@@ -188,9 +214,10 @@ namespace EchoProtocol.AI.Stalker.Special
                         // Resolve a fresh entry around the Players'
                         // CURRENT positions.
                         //
-                        if (!StalkerJumpEntrySelector.TrySelect(
+                        if (!StalkerJumpEntrySelector.TrySelectWithFairness(
                                 jumpEntryRegistry,
                                 _eligibleAlivePlayerRoots,
+                                _recentPressureByPlayerRoot,
                                 _pendingFact.PlayerId,
                                 step.Time,
                                 settings,
@@ -247,17 +274,6 @@ namespace EchoProtocol.AI.Stalker.Special
                 || runner == null
                 || lifecycle == null)
             {
-                return;
-            }
-
-            //
-            // A Down event that occurred while the global Special
-            // cooldown was active must not remain queued and fire
-            // several minutes later.
-            //
-            if (IsCoolingDown(step.Time))
-            {
-                _pendingFact = default;
                 return;
             }
 
@@ -358,7 +374,8 @@ namespace EchoProtocol.AI.Stalker.Special
 
             if (!RefreshEligibleAlivePlayerRoots(
                     lifecycle,
-                    _pendingFact.PlayerId))
+                    _pendingFact.PlayerId,
+                    step.Time))
             {
                 Abort(
                     "missing-player-registry",
@@ -436,9 +453,11 @@ namespace EchoProtocol.AI.Stalker.Special
 
         private bool RefreshEligibleAlivePlayerRoots(
            FusionPlayerLifecycle lifecycle,
-           PlayerId excludedPlayerId)
+           PlayerId excludedPlayerId,
+           AiSimulationTime now)
         {
             _eligibleAlivePlayerRoots.Clear();
+            _recentPressureByPlayerRoot.Clear();
 
             if (lifecycle == null)
             {
@@ -493,6 +512,14 @@ namespace EchoProtocol.AI.Stalker.Special
 
                 _eligibleAlivePlayerRoots.Add(
                     identity.EntityRoot);
+
+                _recentPressureByPlayerRoot[identity.EntityRoot] =
+                    controller != null
+                        ? controller.GetRecentTargetPressure01(
+                            playerId,
+                            now,
+                            settings.RecentPlayerPressureWindowSeconds)
+                        : 0f;
             }
 
             return true;
@@ -840,6 +867,14 @@ namespace EchoProtocol.AI.Stalker.Special
         private void Complete(AiSimulationTime now)
         {
             _cooldownUntil = AddSeconds(now, settings.CooldownSeconds);
+
+            if (now.IsValid)
+            {
+                controller?.RecordSpecialEncounterCompleted(
+                    now.Seconds,
+                    settings.PostSpecialDirectorCooldownSeconds);
+            }
+
             Cleanup();
             RuntimeLog.Log(RuntimeLogCategory.StalkerCombat, "[STK_SPECIAL][COMPLETE]");
         }
@@ -873,6 +908,7 @@ namespace EchoProtocol.AI.Stalker.Special
                 default;
 
             _eligibleAlivePlayerRoots.Clear();
+            _recentPressureByPlayerRoot.Clear();
 
             _presentationVisible = true;
 

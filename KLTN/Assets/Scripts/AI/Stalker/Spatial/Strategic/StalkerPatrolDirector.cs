@@ -194,6 +194,22 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
                 || _hotspotApproachSeconds
                     >= _settings.MaxPeripheralApproachSeconds);
 
+        public bool CanStartMajorEncounter(float maxPressure01) =>
+            CurrentTimeSeconds >= _cooldownUntilSeconds
+            && Pressure01 <= Mathf.Clamp01(maxPressure01);
+
+        public void RecordMajorEncounter(
+            double nowSeconds,
+            float cooldownSeconds)
+        {
+            CurrentTimeSeconds = Math.Max(CurrentTimeSeconds, nowSeconds);
+            Pressure01 = Mathf.Max(Pressure01, _settings.PressureModeThreshold);
+            _cooldownUntilSeconds = Math.Max(
+                _cooldownUntilSeconds,
+                nowSeconds + Math.Max(0f, cooldownSeconds));
+            Mode = StalkerPatrolPacingMode.Cooldown;
+        }
+
         public float GetRecentRoomPressure01(ActivityRoomKey room)
         {
             if (!_lastPressureAtByRoom.TryGetValue(room, out var lastPressureAt))

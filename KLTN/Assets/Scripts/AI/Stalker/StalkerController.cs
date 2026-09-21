@@ -359,6 +359,50 @@ namespace EchoProtocol.AI.Stalker
                 ? smartPatrolSettings.OccupancySampleIntervalSeconds
                 : 0.5f;
 
+        public bool CanStartSpecialEncounter(float maxDirectorPressure01) =>
+            !useSmartPatrolDirector
+            || _strategicPatrolRuntime == null
+            || _strategicPatrolRuntime.CanStartMajorEncounter(
+                maxDirectorPressure01);
+
+        public void RecordSpecialEncounterCompleted(
+            double nowSeconds,
+            float directorCooldownSeconds)
+        {
+            if (!useSmartPatrolDirector)
+            {
+                return;
+            }
+
+            _strategicPatrolRuntime?.RecordMajorEncounter(
+                nowSeconds,
+                directorCooldownSeconds);
+
+            if (_strategicPatrolRuntime != null)
+            {
+                smartPatrolPacingMode = _strategicPatrolRuntime.Mode.ToString();
+                smartPatrolPressure = _strategicPatrolRuntime.Pressure01;
+            }
+        }
+
+        public float GetRecentTargetPressure01(
+            PlayerId playerId,
+            AiSimulationTime now,
+            float decayWindowSeconds)
+        {
+            if (!playerId.IsValid
+                || !now.IsValid
+                || decayWindowSeconds <= 0f)
+            {
+                return 0f;
+            }
+
+            return _targetHistoryMemory.GetTargetHistory01(
+                playerId,
+                now,
+                decayWindowSeconds);
+        }
+
         public bool TryGetNavigationDestination(out Vector3 destination)
         {
             if (_navigation != null)
