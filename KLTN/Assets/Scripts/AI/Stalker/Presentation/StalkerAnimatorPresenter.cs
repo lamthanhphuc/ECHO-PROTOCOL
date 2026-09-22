@@ -106,6 +106,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         private bool _lastPresentationVisible = true;
 
+        private bool _localVisibilitySuppressed;
+
         private Vector3 _lastRootPosition;
 
         private bool _hasLastRootPosition;
@@ -589,7 +591,11 @@ namespace EchoProtocol.AI.Stalker.Presentation
                     CrouchStateHash,
 
                 StalkerState.RECOVER =>
-                    Idle1StateHash,
+                    presentation.HasAttackEpisode
+                    && presentation.AttackOutcome
+                        == StalkerAttackOutcome.Hit
+                        ? BiteStateHash
+                        : Idle1StateHash,
 
                 _ =>
                     Idle1StateHash
@@ -709,6 +715,16 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 visualSpeed);
         }
 
+        public void SetLocalVisibilitySuppressed(
+            bool suppressed)
+        {
+            _localVisibilitySuppressed =
+                suppressed;
+
+            ApplyVisibility(
+                _lastPresentationVisible);
+        }
+
         private void ApplyVisibility(
             bool visible)
         {
@@ -727,7 +743,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 if (current != null)
                 {
                     current.enabled =
-                        visible;
+                        visible
+                        && !_localVisibilitySuppressed;
                 }
             }
         }

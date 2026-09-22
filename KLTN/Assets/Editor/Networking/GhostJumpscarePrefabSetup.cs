@@ -42,11 +42,21 @@ namespace EchoProtocol.Editor.Networking
             if (source == null || scream == null) throw new InvalidOperationException("Missing Stalker model/audio.");
             Directory.CreateDirectory(Folder);
             AssetDatabase.Refresh();
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
-            if (prefab == null) prefab = CreatePresentation(source);
+            AssetDatabase.DeleteAsset(
+                PrefabPath);
 
-            foreach (var path in new[] { "Assets/Prefabs/PlayerNetwork.prefab",
-                         "Assets/_Project/Prefabs/Network/TestNetworkPlayer.prefab" })
+            AssetDatabase.DeleteAsset(
+                Folder + "/JumpscareLunge.anim");
+
+            AssetDatabase.DeleteAsset(
+                Folder + "/GhostJumpscare.controller");
+
+            AssetDatabase.Refresh();
+
+            var prefab =
+                CreatePresentation(source);
+
+            foreach (var path in ExistingPlayerPrefabPaths())
             {
                 var player = PrefabUtility.LoadPrefabContents(path);
                 try
@@ -58,6 +68,9 @@ namespace EchoProtocol.Editor.Networking
                     settings.FindProperty("_scream").objectReferenceValue = scream;
                     settings.FindProperty("_ghostOffset").vector3Value = new Vector3(0f, 0f, 1f);
                     settings.FindProperty("_ghostEuler").vector3Value = new Vector3(0f, 180f, 0f);
+                    settings.FindProperty(
+                            "_stalkerBiteSeconds")
+                        .floatValue = 1.5f;
                     settings.ApplyModifiedPropertiesWithoutUndo();
                     PrefabUtility.SaveAsPrefabAsset(player, path);
                 }
@@ -82,13 +95,44 @@ namespace EchoProtocol.Editor.Networking
 
         private static GameObject CreatePresentation(GameObject source)
         {
-            var sourceAnimator = source.GetComponentInChildren<Animator>(true);
-            if (sourceAnimator == null) throw new InvalidOperationException("Stalker has no visual Animator.");
+            var sourceAnimator =
+                source.GetComponentsInChildren<Animator>(true)
+                    .FirstOrDefault(
+                        animator =>
+                            animator.runtimeAnimatorController != null
+                            && AssetDatabase.GetAssetPath(
+                                animator.runtimeAnimatorController)
+                            == "Assets/Animations/Stalker/AC_Stalker.controller");
+
+            if (sourceAnimator == null)
+            {
+                throw new InvalidOperationException(
+                    "Stalker AC_Stalker Animator not found.");
+            }
+
             var root = new GameObject("GhostJumpscare");
             try
             {
                 var visual = UnityEngine.Object.Instantiate(sourceAnimator.gameObject, root.transform);
                 visual.name = "Visual";
+
+                var visualAnimator =
+                    visual.GetComponent<Animator>()
+                    ?? visual.GetComponentInChildren<Animator>(true);
+
+                if (visualAnimator == null)
+                {
+                    throw new InvalidOperationException(
+                        "Jumpscare visual Animator missing.");
+                }
+
+                visualAnimator.runtimeAnimatorController =
+                    sourceAnimator.runtimeAnimatorController;
+
+                visualAnimator.applyRootMotion = false;
+                visualAnimator.cullingMode =
+                    AnimatorCullingMode.AlwaysAnimate;
+
                 // Keep model/rig/materials only. The root Animator owns the local lunge timeline.
                 foreach (var component in visual.GetComponentsInChildren<Component>(true).Reverse())
                     if (!(component is Transform) && !(component is Renderer)
@@ -143,8 +187,31 @@ namespace EchoProtocol.Editor.Networking
                 || prefab.GetComponentsInChildren<Collider>(true).Length != 0
                 || prefab.GetComponentsInChildren<AudioSource>(true).Length != 0)
                 throw new InvalidOperationException("Presentation prefab isolation failed.");
-            foreach (var path in new[] { "Assets/Prefabs/PlayerNetwork.prefab",
-                         "Assets/_Project/Prefabs/Network/TestNetworkPlayer.prefab" })
+
+            var visualAnimator =
+                prefab.GetComponentsInChildren<Animator>(true)
+                    .FirstOrDefault(
+                        animator =>
+                            animator.gameObject != prefab);
+
+            if (visualAnimator == null)
+            {
+                throw new InvalidOperationException(
+                    "Jumpscare visual Animator missing.");
+            }
+
+            var controllerPath =
+                AssetDatabase.GetAssetPath(
+                    visualAnimator.runtimeAnimatorController);
+
+            if (controllerPath
+                != "Assets/Animations/Stalker/AC_Stalker.controller")
+            {
+                throw new InvalidOperationException(
+                    $"Wrong visual Animator: {controllerPath}");
+            }
+
+            foreach (var path in ExistingPlayerPrefabPaths())
             {
                 var component = AssetDatabase.LoadAssetAtPath<GameObject>(path).GetComponent<PlayerJumpscareController>();
                 var settings = new SerializedObject(component);
@@ -154,6 +221,14 @@ namespace EchoProtocol.Editor.Networking
             }
             File.WriteAllText(Report, "PASS: presentation prefab, Animator trigger/lunge, both player references and Downed defaults saved. Audio: chase_start.wav (existing Stalker vocal placeholder). Multiplayer PlayMode not run.");
             Debug.Log("[GhostJumpscareSetup] " + File.ReadAllText(Report));
+        }
+
+        private static string[] ExistingPlayerPrefabPaths()
+        {
+            return new[] { "Assets/Prefabs/PlayerNetwork.prefab",
+                    "Assets/_Project/Prefabs/Network/TestNetworkPlayer.prefab" }
+                .Where(path => AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+                .ToArray();
         }
     }
 }

@@ -13,15 +13,18 @@ namespace EchoProtocol.AI.Stalker.Networking
         private readonly NetworkRunner _runner;
         private readonly FusionPlayerIdentityRegistry _identityRegistry;
         private readonly Action<StalkerDownedPlayerFact> _onPlayerDowned;
+        private readonly Action<PlayerId> _onHitApplied;
 
         public StalkerNetworkLifeStateConsequenceSink(
             NetworkRunner runner,
             FusionPlayerIdentityRegistry identityRegistry,
-            Action<StalkerDownedPlayerFact> onPlayerDowned = null)
+            Action<StalkerDownedPlayerFact> onPlayerDowned = null,
+            Action<PlayerId> onHitApplied = null)
         {
             _runner = runner;
             _identityRegistry = identityRegistry;
             _onPlayerDowned = onPlayerDowned;
+            _onHitApplied = onHitApplied;
         }
 
         public bool TryApplyStalkerHit(
@@ -77,6 +80,12 @@ namespace EchoProtocol.AI.Stalker.Networking
 
                 default:
                     return false;
+            }
+
+            if (consequenceApplied)
+            {
+                _onHitApplied?.Invoke(
+                    playerId);
             }
 
             var transitionedAliveToDowned =

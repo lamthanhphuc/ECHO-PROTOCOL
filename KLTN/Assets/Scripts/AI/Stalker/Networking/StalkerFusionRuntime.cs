@@ -1091,12 +1091,68 @@ namespace EchoProtocol.AI.Stalker.Networking
                 new StalkerNetworkLifeStateConsequenceSink(
                     Runner,
                     lifecycle.IdentityRegistry,
-                    OnPlayerDownedByStalkerAuthoritative);
+                    OnPlayerDownedByStalkerAuthoritative,
+                    OnStalkerHitAppliedAuthoritative);
             if (controller.AttackConsequenceSink == null
                 || controller.AttackConsequenceSink is StalkerDiagnosticAttackConsequenceSink)
             {
                 controller.AttackConsequenceSink = _productionConsequenceSink;
             }
+        }
+
+        private void OnStalkerHitAppliedAuthoritative(
+            PlayerId playerId)
+        {
+            if (Object == null
+                || !Object.HasStateAuthority
+                || !playerId.IsValid
+                || lifecycle == null
+                || lifecycle.IdentityRegistry == null
+                || !lifecycle.IdentityRegistry.TryGetPlayerRef(
+                    playerId,
+                    out var targetPlayer)
+                || !targetPlayer.IsRealPlayer)
+            {
+                return;
+            }
+
+            RPC_PlayStalkerBite(
+                targetPlayer);
+        }
+
+        [Rpc(
+            RpcSources.StateAuthority,
+            RpcTargets.All)]
+        private void RPC_PlayStalkerBite(
+            [RpcTarget] PlayerRef targetPlayer)
+        {
+            if (Runner == null
+                || !Runner.IsRunning
+                || !targetPlayer.IsRealPlayer
+                || !Runner.TryGetPlayerObject(
+                    targetPlayer,
+                    out var playerObject)
+                || playerObject == null)
+            {
+                return;
+            }
+
+            var jumpscare =
+                playerObject.GetComponent<
+                    PlayerJumpscareController>();
+
+            var stalkerPresenter =
+                GetComponent<
+                    StalkerAnimatorPresenter>();
+
+            if (jumpscare == null
+                || stalkerPresenter == null)
+            {
+                return;
+            }
+
+            jumpscare.PlayStalkerBite(
+                stalkerPresenter);
         }
 
         private void OnPlayerDownedByStalkerAuthoritative(

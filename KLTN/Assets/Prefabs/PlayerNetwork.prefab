@@ -929,13 +929,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 424211e0903852a49816101b4e50fe09, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerJumpscareController
-  _ghostJumpscarePrefab: {fileID: 8145755207363234366, guid: 3fab18e8a651d3446a4007c22dcfa8f2, type: 3}
+  _ghostJumpscarePrefab: {fileID: 5502666549623492024, guid: 3fab18e8a651d3446a4007c22dcfa8f2, type: 3}
   _scream: {fileID: 8300000, guid: cd2d6fb1d7a3dea428864b5f27c45104, type: 3}
   _gameplayHud: {fileID: 0}
-  _ghostOffset: {x: 0, y: 0, z: 1}
+  _ghostOffset: {x: 0, y: -1.5, z: 1}
   _ghostEuler: {x: 0, y: 180, z: 0}
   _shakeDegrees: 3
   _fovPunch: 10
+  _stalkerBiteSeconds: 1.5
 --- !u!1 &7403492165048496517
 GameObject:
   m_ObjectHideFlags: 0
