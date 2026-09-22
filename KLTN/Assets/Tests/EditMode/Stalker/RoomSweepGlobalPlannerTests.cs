@@ -363,6 +363,79 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(selectedTargets.Count, Is.GreaterThanOrEqualTo(2));
         }
 
+        [Test]
+        public void STK_RoomSweepGlobalPlanner_AllReachableRoomsCleared_StartsNewSweepCycle()
+        {
+            var current = new RegionId(1);
+            var roomA = new RegionId(2);
+            var roomB = new RegionId(3);
+
+            var graph = CreateRegionGraph(
+                new[] { current, roomA, roomB },
+                RoomRegion(
+                    current,
+                    1,
+                    "Zone01/Current",
+                    roomA,
+                    roomB),
+                RoomRegion(
+                    roomA,
+                    2,
+                    "Zone01/A",
+                    current),
+                RoomRegion(
+                    roomB,
+                    3,
+                    "Zone01/B",
+                    current));
+
+            var memory = CreateMemory();
+
+            RegisterRegion(memory, roomA, 1);
+            RegisterRegion(memory, roomB, 2);
+
+            MarkRegionCleared(memory, roomA);
+            MarkRegionCleared(memory, roomB);
+
+            var planner =
+                CreatePlanner(
+                    graph,
+                    memory);
+
+            Assert.That(
+                TryGetOrCreateObjective(
+                    planner,
+                    current,
+                    out var firstObjective),
+                Is.True);
+
+            var firstTarget =
+                GetObjectiveRegionId(
+                    firstObjective,
+                    "TargetRoomRegionId");
+
+            Assert.That(
+                firstTarget == roomA
+                || firstTarget == roomB,
+                Is.True);
+
+            // The recycled objective must still be valid on the
+            // following planner tick instead of being invalidated
+            // immediately as TargetCleared.
+            Assert.That(
+                TryGetOrCreateObjective(
+                    planner,
+                    current,
+                    out var secondObjective),
+                Is.True);
+
+            Assert.That(
+                GetObjectiveRegionId(
+                    secondObjective,
+                    "TargetRoomRegionId"),
+                Is.EqualTo(firstTarget));
+        }
+
         private static object CreatePlanner(object regionGraph, object memory)
         {
             return Activator.CreateInstance(RoomSweepGlobalPlannerType, regionGraph, memory);

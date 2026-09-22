@@ -642,7 +642,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetBlackboardNode(controller, "DestinationSpatialNodeId"), Is.EqualTo(-1));
             Assert.That(GetNavigationObjectiveKindName(controller), Is.EqualTo("None"));
             Assert.That((bool)GetProperty(navigation, "HasActiveDestination"), Is.False);
-            Assert.That((bool)GetProperty(controller, "FixedFallbackActive"), Is.True);
+            Assert.That((bool)GetProperty(controller, "FixedFallbackActive"), Is.False);
         }
 
         [Test]
@@ -826,7 +826,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             InvokePrivate(controller, "HandleRoomSweepNavigationFailure", new[] { NavigationFailureReasonType }, Enum.Parse(NavigationFailureReasonType, "PathInvalid"));
 
             Assert.That(IsRegionCleared(memory, room), Is.False);
-            Assert.That((bool)GetProperty(controller, "FixedFallbackActive"), Is.True);
+            Assert.That((bool)GetProperty(controller, "FixedFallbackActive"), Is.False);
         }
 
         [Test]

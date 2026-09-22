@@ -436,7 +436,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(RunPipeline(fixture.Runtime, 40L, 4d, 0.1f), Is.True);
 
             AssertSearchFact(fixture.Controller, 1L, "SAME_TARGET_REACQUIRED");
-            AssertSearchExitedAndCleared(fixture.Controller, "CHASE");
+            AssertSearchExitedAndCleared(fixture.Controller, "DETECT");
             Assert.That(RunPipeline(fixture.Runtime, 41L, 4.1d, 0.1f), Is.True);
             AssertSearchFact(fixture.Controller, 1L, "SAME_TARGET_REACQUIRED");
             yield return null;

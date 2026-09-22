@@ -44,7 +44,8 @@ namespace EchoProtocol.AI.Stalker
 
         [Header("Smart Patrol Director")]
         [SerializeField] private bool useSmartPatrolDirector = true;
-        [SerializeField] private StalkerSmartPatrolSettings smartPatrolSettings =
+        [SerializeField]
+        private StalkerSmartPatrolSettings smartPatrolSettings =
             new StalkerSmartPatrolSettings();
 
         [Header("Movement Speed")]
@@ -70,9 +71,17 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float searchDuration = 5f;
         [SerializeField] private float searchRadius = 8f;
 
+        [Header("Search Reacquire Detect")]
+        [SerializeField, Min(0f)]
+        private float searchReacquireDetectHoldSeconds = 1f;
+
         [Header("Search LKP Presentation")]
         [SerializeField, Min(0.1f)]
-        private float searchLkpSniffDurationSeconds = 1.5f;
+        private float searchLkpSniffDurationSeconds = 3f;
+
+        [Header("Search Point Hold")]
+        [SerializeField, Min(0.1f)]
+        private float searchPointHoldDurationSeconds = 3f;
 
         [Header("Hide Spot Inspection")]
         [SerializeField, Min(0f)] private float hideSpotSearchRadius = 6f;
@@ -115,13 +124,17 @@ namespace EchoProtocol.AI.Stalker
         private float hideSpotRevealTrackSeconds = 0.35f;
 
         [Header("World Interaction")]
-        [SerializeField, Min(0.1f)] private float worldInteractionDistance = 1.75f;
+        [SerializeField, Min(0.1f)] private float worldInteractionDistance = 1.15f;
         [SerializeField, Min(0.01f)] private float stalkerDoorBreakDurationSeconds = 3f;
         [SerializeField, Min(0.01f)] private float worldInteractionProbeRadius = 0.35f;
+        [SerializeField, Min(0f)] private float worldInteractionTurnSpeedDegrees = 720f;
 
         [Header("Debug Runtime")]
         [SerializeField] private StalkerState currentState = StalkerState.PATROL;
         [SerializeField] private float detectionMeter;
+
+        private float _detectMinimumHoldRemaining;
+
         [SerializeField] private Transform detectionTarget;
         [SerializeField] private Transform currentTarget;
         [SerializeField] private Vector3 lastKnownPosition;
@@ -215,10 +228,20 @@ namespace EchoProtocol.AI.Stalker
         private int _patrolNearOptimalHopSlack;
         private StalkerSearchPlanner _searchPlanner;
         private StalkerSearchContext _searchContext;
+
         private bool _searchLkpSniffActive;
         private float _searchLkpSniffElapsed;
         private bool _searchLkpSniffCompletedForCurrentSearch;
         private int _searchLkpSniffOrdinal;
+
+        private bool _searchPointHoldActive;
+        private float _searchPointHoldElapsed;
+
+        private StalkerNavigationObjectiveKind
+            _searchPointHoldObjectiveKind =
+                StalkerNavigationObjectiveKind.None;
+
+        private int _searchPointHoldCandidateNodeId = -1;
         private bool _specialEncounterOverrideActive;
         private StalkerHidingInvestigation _hidingInvestigation;
         private readonly StalkerWorldInteractionDriver _worldInteractionDriver = new StalkerWorldInteractionDriver();
@@ -1155,6 +1178,7 @@ namespace EchoProtocol.AI.Stalker
 
             detectionTarget = visibleCandidate;
             detectionMeter = 0f;
+            _detectMinimumHoldRemaining = 0f;
             currentState = StalkerState.DETECT;
             StopAgentPath();
         }
@@ -1207,6 +1231,7 @@ namespace EchoProtocol.AI.Stalker
             detectionTarget = null;
             currentTarget = null;
             detectionMeter = 0f;
+            _detectMinimumHoldRemaining = 0f;
             currentState = StalkerState.DETECT;
             StopAgentPath();
             return true;
@@ -1219,6 +1244,12 @@ namespace EchoProtocol.AI.Stalker
                 TickDetectTyped();
                 return;
             }
+
+            _detectMinimumHoldRemaining =
+                Mathf.Max(
+                    0f,
+                    _detectMinimumHoldRemaining
+                        - CurrentSimulationDeltaSeconds);
 
             if (detectionTarget == null)
             {
@@ -1233,7 +1264,8 @@ namespace EchoProtocol.AI.Stalker
                 detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
 
-                if (detectionMeter >= GetDetectionMeterFull())
+                if (detectionMeter >= GetDetectionMeterFull()
+                    && _detectMinimumHoldRemaining <= 0f)
                 {
                     PromoteDetectionTargetToCurrentTarget(observedPosition);
                 }
@@ -1254,6 +1286,12 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickDetectTyped()
         {
+            _detectMinimumHoldRemaining =
+                Mathf.Max(
+                    0f,
+                    _detectMinimumHoldRemaining
+                        - CurrentSimulationDeltaSeconds);
+
             var detectionTargetId = _memory.DetectionTargetId;
             if (!detectionTargetId.IsValid)
             {
@@ -1298,7 +1336,8 @@ namespace EchoProtocol.AI.Stalker
                 detectionMeter = ClampDetectionMeter(detectionMeter);
                 _memory.SetDetectionMeter(detectionMeter);
 
-                if (detectionMeter >= GetDetectionMeterFull())
+                if (detectionMeter >= GetDetectionMeterFull()
+                    && _detectMinimumHoldRemaining <= 0f)
                 {
                     PromoteDetectionTargetToCurrentTarget(observation);
                 }
@@ -1975,9 +2014,14 @@ namespace EchoProtocol.AI.Stalker
 
             currentState = StalkerState.SEARCH;
             searchElapsedTime = 0f;
+
             EnsureSearchContext();
+
+            ResetSearchPointHoldRuntime();
+
             if (_searchContext != null
-                && _searchContext.Source == StalkerSearchSource.VisualTargetLoss)
+                && _searchContext.Source
+                    == StalkerSearchSource.VisualTargetLoss)
             {
                 ResetSearchLkpSniffRuntime();
             }
@@ -2029,18 +2073,22 @@ namespace EchoProtocol.AI.Stalker
             if (TryGetVisibleCurrentTargetObservation(
                     out var observedPosition))
             {
-                lastKnownPosition = observedPosition;
+                detectionTarget = currentTarget;
+                currentTarget = null;
+                detectionMeter = 0f;
 
                 CommitSearchEnded(
                     StalkerSearchTerminalOutcome
                         .SAME_TARGET_REACQUIRED);
 
                 ClearSearchRuntimeContext();
-                ResetChaseDestinationTracking();
-                ResetNavigationRecoveryBudget();
 
-                currentState = StalkerState.CHASE;
-                SetChaseDestination(observedPosition);
+                _detectMinimumHoldRemaining =
+                    searchReacquireDetectHoldSeconds;
+
+                currentState = StalkerState.DETECT;
+
+                StopAgentPath();
                 return;
             }
 
@@ -2049,6 +2097,11 @@ namespace EchoProtocol.AI.Stalker
             // Only sniff if the target is still not visible.
             //
             if (TickSearchLkpSniff())
+            {
+                return;
+            }
+
+            if (TickSearchPointHold())
             {
                 return;
             }
@@ -2122,6 +2175,11 @@ namespace EchoProtocol.AI.Stalker
                     PlayerId.Invalid))
             {
                 _hearingMemory.ClearNoiseInvestigation();
+                return;
+            }
+
+            if (TickSearchPointHold())
+            {
                 return;
             }
 
@@ -2225,19 +2283,36 @@ namespace EchoProtocol.AI.Stalker
                 }
 
                 var observation = candidate.Observation;
-                if (!_memory.TryAcceptCurrentTargetObservation(observation))
+                _memory.SetDetectionTarget(
+                    observation.PlayerId);
+
+                if (!_memory.TryAcceptDetectionTargetObservation(
+                        observation))
                 {
-                    CommitSearchTerminalAndInvalidateCurrentTarget(StalkerSearchTerminalOutcome.CURRENT_TARGET_INVALID_NO_REPLACEMENT);
+                    CommitSearchTerminalAndInvalidateDetectionTarget(
+                        StalkerSearchTerminalOutcome
+                            .CURRENT_TARGET_INVALID_NO_REPLACEMENT);
                     return;
                 }
 
-                lastKnownPosition = _memory.LastKnownPosition;
-                CommitSearchEnded(StalkerSearchTerminalOutcome.SAME_TARGET_REACQUIRED);
+                CommitSearchEnded(
+                    StalkerSearchTerminalOutcome
+                        .SAME_TARGET_REACQUIRED);
+
+                currentTarget = null;
+                _memory.ClearCurrentTarget();
+
                 ClearSearchRuntimeContext();
-                ResetChaseDestinationTracking();
-                ResetNavigationRecoveryBudget();
-                currentState = StalkerState.CHASE;
-                SetChaseDestination(observation.ObservedPosition);
+
+                detectionMeter = 0f;
+                detectionTarget = null;
+
+                _detectMinimumHoldRemaining =
+                    searchReacquireDetectHoldSeconds;
+
+                currentState = StalkerState.DETECT;
+
+                StopAgentPath();
                 return;
             }
 
@@ -2257,6 +2332,11 @@ namespace EchoProtocol.AI.Stalker
             // have priority over the presentation sniff.
             //
             if (TickSearchLkpSniff())
+            {
+                return;
+            }
+
+            if (TickSearchPointHold())
             {
                 return;
             }
@@ -3016,6 +3096,8 @@ namespace EchoProtocol.AI.Stalker
             ClearSearchRuntimeContext();
             ResetChaseDestinationTracking();
             ResetNavigationRecoveryBudget();
+
+            _detectMinimumHoldRemaining = 0f;
             currentState = StalkerState.DETECT;
 
             _navigation?.Stop();
@@ -3242,6 +3324,9 @@ namespace EchoProtocol.AI.Stalker
             detectionMeter = 0f;
             detectionTarget = null;
 
+            _detectMinimumHoldRemaining =
+                searchReacquireDetectHoldSeconds;
+
             currentState = StalkerState.DETECT;
 
             StopAgentPath();
@@ -3369,6 +3454,135 @@ namespace EchoProtocol.AI.Stalker
             _searchLkpSniffCompletedForCurrentSearch = false;
         }
 
+        private void ResetSearchPointHoldRuntime()
+        {
+            _searchPointHoldActive = false;
+            _searchPointHoldElapsed = 0f;
+
+            _searchPointHoldObjectiveKind =
+                StalkerNavigationObjectiveKind.None;
+
+            _searchPointHoldCandidateNodeId = -1;
+        }
+
+        private bool TickSearchPointHold()
+        {
+            if (_searchContext == null)
+            {
+                ResetSearchPointHoldRuntime();
+                return false;
+            }
+
+            //
+            // Continue an already-started Search Hold.
+            //
+            if (_searchPointHoldActive)
+            {
+                //
+                // Stop() also clears the accepted destination cache.
+                // That is intentional: while holding, the Stalker must
+                // remain physically stationary.
+                //
+                _navigation?.Stop();
+
+                _searchPointHoldElapsed +=
+                    CurrentSimulationDeltaSeconds;
+
+                var duration =
+                    Mathf.Max(
+                        0.1f,
+                        searchPointHoldDurationSeconds);
+
+                if (_searchPointHoldElapsed < duration)
+                {
+                    return true;
+                }
+
+                var completedObjectiveKind =
+                    _searchPointHoldObjectiveKind;
+
+                var completedCandidateNodeId =
+                    _searchPointHoldCandidateNodeId;
+
+                ResetSearchPointHoldRuntime();
+
+                //
+                // Candidate arrival is considered complete only AFTER
+                // the Search Hold has finished.
+                //
+                if (completedObjectiveKind
+                        == StalkerNavigationObjectiveKind.SearchCandidate
+                    && completedCandidateNodeId >= 0
+                    && searchCandidateNodeId
+                        == completedCandidateNodeId)
+                {
+                    MarkSearchCandidateReached();
+                }
+
+                return false;
+            }
+
+            //
+            // A hold can only start after physically reaching the
+            // currently accepted search destination.
+            //
+            if (_navigation == null
+                || !_navigation.HasActiveDestination
+                || !_navigation.HasArrived())
+            {
+                return false;
+            }
+
+            var objectiveKind =
+                _navigationObjectiveKey.Kind;
+
+            //
+            // HideSpotInspection already has its own dedicated
+            // investigation/inspection timing and must not be affected.
+            //
+            if (objectiveKind
+                    != StalkerNavigationObjectiveKind.SearchOriginLkp
+                && objectiveKind
+                    != StalkerNavigationObjectiveKind.SearchCandidate)
+            {
+                return false;
+            }
+
+            //
+            // Visual Last Known Position already uses the dedicated
+            // Sniff presentation hold.
+            //
+            // Do not add another 3-second Search hold on top of Sniff.
+            //
+            if (objectiveKind
+                    == StalkerNavigationObjectiveKind.SearchOriginLkp
+                && _searchContext.Source
+                    == StalkerSearchSource.VisualTargetLoss)
+            {
+                return false;
+            }
+
+            _searchPointHoldActive = true;
+            _searchPointHoldElapsed = 0f;
+
+            _searchPointHoldObjectiveKind =
+                objectiveKind;
+
+            _searchPointHoldCandidateNodeId =
+                objectiveKind
+                    == StalkerNavigationObjectiveKind.SearchCandidate
+                    ? searchCandidateNodeId
+                    : -1;
+
+            //
+            // Reset the path immediately so NavMeshAgent does not
+            // continue sliding while the Search animation plays.
+            //
+            _navigation.Stop();
+
+            return true;
+        }
+
         private bool TickSearchLkpSniff()
         {
             //
@@ -3455,11 +3669,16 @@ namespace EchoProtocol.AI.Stalker
         private void ClearSearchRuntimeContext()
         {
             ResetSearchLkpSniffRuntime();
+            ResetSearchPointHoldRuntime();
+
             searchElapsedTime = 0f;
             _searchContext = null;
+
             _hidingInvestigation?.Reset();
+
             searchEpisodeId = 0;
             searchCandidateNodeId = -1;
+
             _searchCandidatePlanningExhausted = false;
         }
 
@@ -4510,39 +4729,17 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            if (!TryResolveAuthoritativePlayerTransform(
+            if (!TryGetUniqueVisibleTargetCandidate(
                     playerId,
-                    out var playerTransform))
+                    out var visibleCandidate,
+                    out var hasDuplicate)
+                || hasDuplicate)
             {
-                if (TryGetUniqueVisibleTargetCandidate(
-                        playerId,
-                        out var visibleCandidate,
-                        out var hasDuplicate)
-                    && !hasDuplicate)
-                {
-                    observation = visibleCandidate.Observation;
-                    return true;
-                }
-
                 return false;
             }
 
-            var playerPosition =
-                playerTransform.position;
-
-            var playerDirection =
-                playerTransform.forward.sqrMagnitude > 0f
-                    ? playerTransform.forward
-                    : Vector3.forward;
-
-            observation = new VisionObservation(
-                playerId,
-                playerPosition,
-                playerDirection,
-                GetCurrentSimulationTime(),
-                Vector3.Distance(
-                    transform.position,
-                    playerPosition));
+            observation =
+                visibleCandidate.Observation;
 
             return true;
         }
@@ -4645,85 +4842,6 @@ namespace EchoProtocol.AI.Stalker
                 $"player={revealedPlayerId} " +
                 $"lkp={_memory.LastKnownPosition}",
                 this);
-        }
-
-        private static bool TryResolveAuthoritativePlayerTransform(
-            PlayerId playerId,
-            out Transform playerTransform)
-        {
-            playerTransform = null;
-
-            if (!playerId.IsValid)
-            {
-                return false;
-            }
-
-            var movements =
-                UnityEngine.Object.FindObjectsByType<NetworkPlayerMovement>(
-                    FindObjectsInactive.Exclude);
-
-            for (var i = 0; i < movements.Length; i++)
-            {
-                var movement = movements[i];
-                if (movement == null
-                    || movement.Object == null
-                    || !movement.Object.IsValid
-                    || !movement.Object.HasStateAuthority)
-                {
-                    continue;
-                }
-
-                if (!TryResolvePlayerId(
-                        movement,
-                        out var candidatePlayerId)
-                    || candidatePlayerId != playerId)
-                {
-                    continue;
-                }
-
-                playerTransform = movement.transform;
-                return true;
-            }
-
-            return false;
-        }
-
-        private static bool TryResolvePlayerId(
-            NetworkPlayerMovement movement,
-            out PlayerId playerId)
-        {
-            playerId = PlayerId.Invalid;
-
-            if (movement == null)
-            {
-                return false;
-            }
-
-            var identity =
-                movement.GetComponentInParent<PlayerRuntimeIdentity>();
-
-            if (identity != null
-                && identity.IsBound
-                && identity.PlayerId.IsValid)
-            {
-                playerId = identity.PlayerId;
-                return true;
-            }
-
-            if (movement.Object != null
-                && movement.Object.IsValid)
-            {
-                var actorId =
-                    movement.Object.InputAuthority.PlayerId;
-
-                if (actorId >= 0)
-                {
-                    playerId = new PlayerId(actorId + 1);
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private bool ShouldRefreshChaseDestination(Vector3 observedPosition)
@@ -6236,22 +6354,55 @@ namespace EchoProtocol.AI.Stalker
 
         private void ActivateRoomSweepPatrolFallback()
         {
-            if (regionGraphFallbackReason == RegionGraphFallbackReason.None)
+            if (regionGraphFallbackReason
+                == RegionGraphFallbackReason.None)
             {
-                regionGraphFallbackReason = RegionGraphFallbackReason.MalformedRegionGraph;
+                regionGraphFallbackReason =
+                    RegionGraphFallbackReason.MalformedRegionGraph;
+            }
+
+            _roomSweepGlobalPlanner?.Invalidate(
+                RoomSweepGlobalObjectiveInvalidationReason
+                    .NavigationRecoveryFailed);
+
+            _rejectedRoomSweepTransitNodeIds.Clear();
+
+            _navigation?.Stop();
+            ClearRoomSweepDestination();
+
+            // Production RoomSweep does not currently have a
+            // FixedWaypoint route. Do not latch into an unusable mode.
+            if (patrolRoute == null
+                || patrolRoute.PointCount == 0)
+            {
+                _roomSweepPatrolFallbackActive = false;
+
+                // Allow RoomSweep to make a fresh decision next tick.
+                _rejectedRoomSweepGlobalRegionIds.Clear();
+
+                _navigation?.RecordRecoveryReason(
+                    NavigationRecoveryReason.None);
+
+                return;
             }
 
             LogRoomSweepFallbackActivated();
+
             _roomSweepPatrolFallbackActive = true;
-            _roomSweepGlobalPlanner?.Invalidate(RoomSweepGlobalObjectiveInvalidationReason.NavigationRecoveryFailed);
-            _rejectedRoomSweepTransitNodeIds.Clear();
-            var recoveryReason = regionGraphFallbackReason == RegionGraphFallbackReason.SpatialGraphCompatibilityMismatch
-                ? NavigationRecoveryReason.RegionGraphCompatibilityFallback
-                : NavigationRecoveryReason.FixedPatrolFallback;
-            _navigation?.Stop();
-            ClearRoomSweepDestination();
+
+            var recoveryReason =
+                regionGraphFallbackReason
+                    == RegionGraphFallbackReason
+                        .SpatialGraphCompatibilityMismatch
+                    ? NavigationRecoveryReason
+                        .RegionGraphCompatibilityFallback
+                    : NavigationRecoveryReason
+                        .FixedPatrolFallback;
+
             TickFixedWaypointPatrol();
-            _navigation?.RecordRecoveryReason(recoveryReason);
+
+            _navigation?.RecordRecoveryReason(
+                recoveryReason);
         }
 
         private void ResetRoomSweepFallbackState()
@@ -6430,6 +6581,45 @@ namespace EchoProtocol.AI.Stalker
             return _navigation != null && _navigation.IsUsable;
         }
 
+        private void FaceWorldInteractionBlocker(
+            Component blocker,
+            bool immediate)
+        {
+            if (blocker == null)
+            {
+                return;
+            }
+
+            var targetPosition =
+                blocker is NetworkSlidingDoor door
+                    ? door.TraversalBlockerCenter
+                    : blocker.transform.position;
+
+            var direction =
+                targetPosition - transform.position;
+
+            direction.y = 0f;
+
+            if (direction.sqrMagnitude <= 0.0001f)
+            {
+                return;
+            }
+
+            var targetRotation =
+                Quaternion.LookRotation(
+                    direction.normalized,
+                    Vector3.up);
+
+            transform.rotation =
+                immediate
+                    ? targetRotation
+                    : Quaternion.RotateTowards(
+                        transform.rotation,
+                        targetRotation,
+                        worldInteractionTurnSpeedDegrees
+                            * CurrentSimulationDeltaSeconds);
+        }
+
         private bool TryBeginWorldInteractionForCurrentNavigation(NavigationFailureReason failureReason)
         {
             if (_worldInteractionDriver.HasActiveInteraction
@@ -6471,9 +6661,15 @@ namespace EchoProtocol.AI.Stalker
                 $"destinationNode={_blackboard.DestinationSpatialNodeId}");
 
             _navigation?.Stop();
+
+            FaceWorldInteractionBlocker(
+                blocker,
+                immediate: true);
+
             if (result == StalkerWorldInteractionStartResult.Completed)
             {
-                ResumeCurrentNavigationObjectiveAfterWorldInteraction("immediate-complete");
+                ResumeCurrentNavigationObjectiveAfterWorldInteraction(
+                    "immediate-complete");
             }
 
             return true;
@@ -6493,6 +6689,10 @@ namespace EchoProtocol.AI.Stalker
                 CancelWorldInteraction("objective-or-state-changed");
                 return false;
             }
+
+            FaceWorldInteractionBlocker(
+                _worldInteractionDriver.CurrentBlocker,
+                immediate: false);
 
             if (!_worldInteractionDriver.Tick(
                     CurrentSimulationDeltaSeconds,

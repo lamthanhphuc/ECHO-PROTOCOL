@@ -461,9 +461,14 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 ResolveNormalizedStart(
                     presentation);
 
+            var enteringDetect =
+                presentation.SemanticState == StalkerState.DETECT
+                && semanticChanged;
+
             if (immediate
                 || !_hasPresented
-                || forceRefresh)
+                || forceRefresh
+                || enteringDetect)
             {
                 animator.Play(
                     targetHash,
@@ -504,6 +509,18 @@ namespace EchoProtocol.AI.Stalker.Presentation
             StalkerNetworkPresentationState presentation,
             bool moving)
         {
+            //
+            // Semantic DETECT must always own presentation.
+            //
+            // This prevents a stale SearchSniff / previous presentation
+            // action from masking the DETECT Roar when SEARCH reacquires
+            // a visible player.
+            //
+            if (presentation.SemanticState == StalkerState.DETECT)
+            {
+                return RoarStateHash;
+            }
+
             switch (presentation.PresentationAction)
             {
                 case StalkerPresentationAction

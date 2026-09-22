@@ -190,8 +190,9 @@ namespace EchoProtocol.AI.Stalker.Tests
             var fixture = SetupSearchControllerWithTarget();
             Simulate(fixture.Controller, 0.1f, TargetCandidateList(CreateCandidate(2, true), CreateCandidate(1, true)), TargetStatusList(CreateStatus(1, true), CreateStatus(2, true)));
 
-            Assert.That(GetProperty(fixture.Controller, "CurrentState").ToString(), Is.EqualTo("CHASE"));
-            Assert.That((PlayerId)GetProperty(fixture.Controller, "CurrentTargetId"), Is.EqualTo(new PlayerId(1)));
+            Assert.That(GetProperty(fixture.Controller, "CurrentState").ToString(), Is.EqualTo("DETECT"));
+            Assert.That((PlayerId)GetProperty(fixture.Controller, "DetectionTargetId"), Is.EqualTo(new PlayerId(1)));
+            Assert.That(((PlayerId)GetProperty(fixture.Controller, "CurrentTargetId")).IsValid, Is.False);
             yield return null;
         }
 

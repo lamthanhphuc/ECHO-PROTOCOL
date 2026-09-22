@@ -244,6 +244,10 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 return true;
             }
 
+            RecycleLegacyCoverageIfExhausted(
+                currentRegionId,
+                rejectedRoomRegionIds);
+
             if (_useSeededVariation)
             {
                 return TrySelectSeededTarget(
@@ -289,6 +293,83 @@ namespace EchoProtocol.AI.Stalker.Spatial
 
             objective = new RoomSweepGlobalObjective(bestTarget, bestNextRegion);
             return true;
+        }
+
+        private void RecycleLegacyCoverageIfExhausted(
+            RegionId currentRegionId,
+            ISet<RegionId> rejectedRoomRegionIds)
+        {
+            var regions = _regionGraph.Regions;
+            var hasReachableClearedCandidate = false;
+
+            for (var i = 0; i < regions.Count; i++)
+            {
+                var candidate = regions[i].Id;
+
+                if (!IsLegacyFallbackCandidate(
+                        currentRegionId,
+                        candidate,
+                        rejectedRoomRegionIds))
+                {
+                    continue;
+                }
+
+                if (!_regionGraph.TryGetRouteHopCost(
+                        currentRegionId,
+                        candidate,
+                        out _)
+                    || !_regionGraph.TryGetNextRegionOnRoute(
+                        currentRegionId,
+                        candidate,
+                        out _))
+                {
+                    continue;
+                }
+
+                // At least one normal reachable room still exists.
+                // Keep the current sweep cycle unchanged.
+                if (!_coverageMemory.IsRegionCleared(candidate))
+                {
+                    return;
+                }
+
+                hasReachableClearedCandidate = true;
+            }
+
+            if (!hasReachableClearedCandidate)
+            {
+                return;
+            }
+
+            // Every reachable legacy room has already been swept.
+            // Start a new patrol cycle using the existing coverage system.
+            for (var i = 0; i < regions.Count; i++)
+            {
+                var candidate = regions[i].Id;
+
+                if (!IsLegacyFallbackCandidate(
+                        currentRegionId,
+                        candidate,
+                        rejectedRoomRegionIds)
+                    || !_coverageMemory.IsRegionCleared(candidate))
+                {
+                    continue;
+                }
+
+                if (!_regionGraph.TryGetRouteHopCost(
+                        currentRegionId,
+                        candidate,
+                        out _)
+                    || !_regionGraph.TryGetNextRegionOnRoute(
+                        currentRegionId,
+                        candidate,
+                        out _))
+                {
+                    continue;
+                }
+
+                _coverageMemory.ResetRegion(candidate);
+            }
         }
 
         private bool TrySelectSeededTarget(
@@ -374,10 +455,29 @@ namespace EchoProtocol.AI.Stalker.Spatial
             RegionId candidate,
             ISet<RegionId> rejectedRoomRegionIds)
         {
-            return IsEligibleTarget(
+            return IsLegacyFallbackCandidate(
                     currentRegionId,
                     candidate,
                     rejectedRoomRegionIds)
+                && !_coverageMemory.IsRegionCleared(candidate);
+        }
+
+        private bool IsLegacyFallbackCandidate(
+            RegionId currentRegionId,
+            RegionId candidate,
+            ISet<RegionId> rejectedRoomRegionIds)
+        {
+            return candidate.IsValid
+                && candidate != currentRegionId
+                && !IsRejected(
+                    candidate,
+                    rejectedRoomRegionIds)
+                && _regionGraph.ContainsRegion(candidate)
+                && _regionGraph.IsRegionEnabled(candidate)
+                && _regionGraph.TryGetRegionSemanticMetadata(
+                    candidate,
+                    out var metadata)
+                && metadata.Kind == RegionSemanticKind.Room
                 && (_targetStrategy == null
                     || _targetStrategy.IsLegacyFallbackTargetAllowed(
                         candidate));
@@ -391,21 +491,6 @@ namespace EchoProtocol.AI.Stalker.Spatial
             value *= 0x846ca68bU;
             value ^= value >> 16;
             return value;
-        }
-
-        private bool IsEligibleTarget(
-            RegionId currentRegionId,
-            RegionId candidate,
-            ISet<RegionId> rejectedRoomRegionIds)
-        {
-            return candidate.IsValid
-                && candidate != currentRegionId
-                && !IsRejected(candidate, rejectedRoomRegionIds)
-                && _regionGraph.ContainsRegion(candidate)
-                && _regionGraph.IsRegionEnabled(candidate)
-                && !_coverageMemory.IsRegionCleared(candidate)
-                && _regionGraph.TryGetRegionSemanticMetadata(candidate, out var metadata)
-                && metadata.Kind == RegionSemanticKind.Room;
         }
 
         private bool IsValidCurrentRegion(RegionId currentRegionId)
