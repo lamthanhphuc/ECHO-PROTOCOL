@@ -18,9 +18,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("status == NetworkMatchStatus.Running", source);
             StringAssert.Contains("current == expected", source);
             StringAssert.Contains("next != current", source);
-            StringAssert.Contains("next != NetworkMatchPhase.MatchEnded", source);
-            StringAssert.Contains("TryAdvancePhase(NetworkMatchPhase.Puzzle, NetworkMatchPhase.SecurityHold", source);
-            StringAssert.Contains("NetworkMatchPhase.SecurityHold,\n                    NetworkMatchPhase.FinalHunt", source.Replace("\r\n", "\n"));
+            StringAssert.Contains("TryAdvancePhase(\n                    NetworkMatchPhase.CoreObjective,\n                    NetworkMatchPhase.Zone2Objective", source.Replace("\r\n", "\n"));
         }
 
         [Test]

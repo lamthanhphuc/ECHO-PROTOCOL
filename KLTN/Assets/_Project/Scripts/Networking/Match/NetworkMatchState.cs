@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.MatchFlow;
 using EchoProtocol.Networking.Authority;
 using Fusion;
 using UnityEngine;
@@ -13,6 +14,7 @@ namespace EchoProtocol.Networking
         FinalHunt = 3,
         Escape = 4,
         MatchEnded = 5,
+        Zone2Objective = 6,
     }
 
     public enum NetworkMatchStatus
@@ -82,6 +84,33 @@ namespace EchoProtocol.Networking
         [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
         public NetworkMatchEndReason EndReason { get; private set; }
 
+        [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
+        public NetworkString<_16> PowerAuthorizationCode { get; private set; }
+
+        [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
+        public NetworkBool SecurityHoldCompleted { get; private set; }
+
+        [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
+        public NetworkBool PowerAuthorizationAvailable { get; private set; }
+
+        [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
+        public NetworkBool PowerPuzzleCompleted { get; private set; }
+
+        [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
+        public NetworkBool RestoreMainPowerCompleted { get; private set; }
+
+        [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
+        public Zone2MissionStage Zone2Stage { get; private set; }
+
+        [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
+        public int RelayCompletionMask { get; private set; }
+
+        [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
+        public NetworkBool SecurityTerminalDiscovered { get; private set; }
+
+        [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
+        public NetworkBool ZoneDoorsUnlocked { get; private set; }
+
         [Networked] public NetworkId ObjectiveSourceId { get; private set; }
         [Networked] public NetworkId EscapeDoorId { get; private set; }
         [Networked] public PlayerRef LastActor { get; private set; }
@@ -93,9 +122,17 @@ namespace EchoProtocol.Networking
         [Networked] private TickTimer ReturnToLobbyTimer { get; set; }
         [Networked] private NetworkBool ReturnToLobbyRequested { get; set; }
 
+        public static NetworkMatchState Instance { get; private set; }
+
+        public int CompletedRelayCount => (RelayCompletionMask & 1) + ((RelayCompletionMask >> 1) & 1) + ((RelayCompletionMask >> 2) & 1) + ((RelayCompletionMask >> 3) & 1);
+        public bool AreAllRelaysOnline => (RelayCompletionMask & 0x0F) == 0x0F;
+        public int PowerRelaysOnline => (RelayCompletionMask & 1) + ((RelayCompletionMask >> 1) & 1);
+        public int DataRelaysOnline => ((RelayCompletionMask >> 2) & 1) + ((RelayCompletionMask >> 3) & 1);
+
         private MatchFlowController _legacyMatchFlow;
         private EscapeDoorCountdown _legacyEscapeCountdown;
         private bool _endingForTeamDowned;
+        private string _serverGeneratedAuthCode;
 
         public bool IsEnded => Status == NetworkMatchStatus.Ended;
         public bool IsEscapeTimerRunning => CurrentPhase == NetworkMatchPhase.Escape
@@ -105,11 +142,16 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            Instance = this;
             NetworkPlayerLifeState.StateChanged += HandlePlayerLifeStateChanged;
             ResolveLegacyPresentation();
             if (Object.HasStateAuthority)
             {
                 CurrentPhase = NetworkMatchPhase.CoreObjective;
+                Zone2Stage = Zone2MissionStage.Zone1CoreObjective;
+                RelayCompletionMask = 0;
+                SecurityTerminalDiscovered = false;
+                ZoneDoorsUnlocked = false;
                 Status = NetworkMatchStatus.Running;
                 Result = NetworkMatchResult.None;
                 EndReason = NetworkMatchEndReason.None;
@@ -123,6 +165,12 @@ namespace EchoProtocol.Networking
                 MatchTimer = TickTimer.CreateFromSeconds(Runner, _matchDurationSeconds);
                 ReturnToLobbyTimer = TickTimer.None;
                 ReturnToLobbyRequested = false;
+                _serverGeneratedAuthCode = UnityEngine.Random.Range(0, 10000).ToString("D4");
+                PowerAuthorizationCode = string.Empty;
+                SecurityHoldCompleted = false;
+                PowerAuthorizationAvailable = false;
+                PowerPuzzleCompleted = false;
+                RestoreMainPowerCompleted = false;
             }
 
             ApplyPresentation(notifyListeners: true);
@@ -130,6 +178,7 @@ namespace EchoProtocol.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            if (Instance == this) Instance = null;
             NetworkPlayerLifeState.StateChanged -= HandlePlayerLifeStateChanged;
         }
 
@@ -223,9 +272,10 @@ namespace EchoProtocol.Networking
                 }
             }
 
+            Zone2Stage = Zone2MissionStage.FindSecurityTerminal;
             if (!TryAdvancePhase(
                     NetworkMatchPhase.CoreObjective,
-                    NetworkMatchPhase.Puzzle,
+                    NetworkMatchPhase.Zone2Objective,
                     "CORE_COLLECTION"))
             {
                 return false;
@@ -234,19 +284,128 @@ namespace EchoProtocol.Networking
             return true;
         }
 
-        public bool TryCompletePuzzle(NetworkId sourceId)
+        public bool TryDiscoverSecurityTerminal(PlayerRef actor)
         {
-            return ValidateObjectiveSource(sourceId)
-                && TryAdvancePhase(NetworkMatchPhase.Puzzle, NetworkMatchPhase.SecurityHold, "PUZZLE");
+            if (!Object.HasStateAuthority || IsEnded) return false;
+            if (Zone2Stage != Zone2MissionStage.FindSecurityTerminal) return false;
+
+            SecurityTerminalDiscovered = true;
+            Zone2Stage = Zone2MissionStage.RepairRelays;
+            HandleReplicatedStateChanged();
+            Debug.Log($"[MatchState] Security terminal discovered by {actor}. Stage -> RepairRelays.");
+            return true;
+        }
+
+        public bool TryReportRelayOnline(RelaySlot slot)
+        {
+            if (!Object.HasStateAuthority || IsEnded) return false;
+            int bit = 1 << (int)slot;
+            if ((RelayCompletionMask & bit) != 0) return false;
+
+            RelayCompletionMask |= bit;
+            Debug.Log($"[MatchState] Relay {slot} repaired. Online mask: {RelayCompletionMask} ({CompletedRelayCount}/4).");
+
+            if (AreAllRelaysOnline && (Zone2Stage == Zone2MissionStage.RepairRelays || Zone2Stage == Zone2MissionStage.FindSecurityTerminal))
+            {
+                Zone2Stage = Zone2MissionStage.SecurityHoldReady;
+                Debug.Log("[MatchState] All 4 relays online. Stage -> SecurityHoldReady.");
+            }
+
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
+        public bool TryStartSecurityHold(PlayerRef actor)
+        {
+            if (!Object.HasStateAuthority || IsEnded) return false;
+            if (!AreAllRelaysOnline) return false;
+            if (Zone2Stage == Zone2MissionStage.SecurityHoldReady)
+            {
+                Zone2Stage = Zone2MissionStage.SecurityHold;
+                HandleReplicatedStateChanged();
+                return true;
+            }
+            return Zone2Stage == Zone2MissionStage.SecurityHold;
         }
 
         public bool TryCompleteSecurityHold(NetworkId sourceId)
         {
-            return ValidateObjectiveSource(sourceId)
-                && TryAdvancePhase(
-                    NetworkMatchPhase.SecurityHold,
-                    NetworkMatchPhase.FinalHunt,
-                    "SECURITY_HOLD");
+            if (sourceId.IsValid && !ValidateObjectiveSource(sourceId))
+            {
+                return false;
+            }
+
+            if (SecurityHoldCompleted)
+            {
+                return false;
+            }
+
+            SecurityHoldCompleted = true;
+            PowerAuthorizationAvailable = true;
+            if (string.IsNullOrEmpty(PowerAuthorizationCode.ToString()))
+            {
+                if (string.IsNullOrEmpty(_serverGeneratedAuthCode))
+                {
+                    _serverGeneratedAuthCode = UnityEngine.Random.Range(0, 10000).ToString("D4");
+                }
+                PowerAuthorizationCode = _serverGeneratedAuthCode;
+            }
+
+            Zone2Stage = Zone2MissionStage.AuthorizationCodeGranted;
+            HandleReplicatedStateChanged();
+            Debug.Log($"[MatchState] Security Hold completed! Code: {PowerAuthorizationCode}. Stage -> AuthorizationCodeGranted.");
+            return true;
+        }
+
+        public bool TrySubmitZoneAccessCode(PlayerRef requester, string code)
+        {
+            if (!Object.HasStateAuthority || IsEnded) return false;
+            if (!SecurityHoldCompleted || ZoneDoorsUnlocked) return false;
+            if (string.IsNullOrEmpty(code) || code != _serverGeneratedAuthCode) return false;
+
+            ZoneDoorsUnlocked = true;
+            PowerPuzzleCompleted = true;
+            RestoreMainPowerCompleted = true;
+            Zone2Stage = Zone2MissionStage.Zone2Completed;
+            HandleReplicatedStateChanged();
+            Debug.Log($"[MatchState] Zone access code '{code}' accepted! Doors unlocked. Zone 2 complete.");
+            return true;
+        }
+
+        public bool TrySubmitPowerCode(PlayerRef requester, string code)
+        {
+            return TrySubmitZoneAccessCode(requester, code);
+        }
+
+        public bool TryCompletePuzzle(NetworkId sourceId)
+        {
+            if (sourceId.IsValid && !ValidateObjectiveSource(sourceId)) return false;
+            if (ZoneDoorsUnlocked) return false;
+
+            return TrySubmitZoneAccessCode(PlayerRef.None, _serverGeneratedAuthCode);
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void RpcDiscoverSecurityTerminal(PlayerRef sender)
+        {
+            TryDiscoverSecurityTerminal(sender);
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void RpcReportRelayOnline(PlayerRef sender, int relaySlot)
+        {
+            TryReportRelayOnline((RelaySlot)relaySlot);
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void RpcSubmitZoneAccessCode(PlayerRef sender, string code)
+        {
+            TrySubmitZoneAccessCode(sender, code);
+        }
+
+        public bool VerifyPowerCode(string code)
+        {
+            return !string.IsNullOrEmpty(code) && code == _serverGeneratedAuthCode;
         }
 
         public bool TryEnterEscape(NetworkId doorId, PlayerRef actor)
@@ -534,6 +693,7 @@ namespace EchoProtocol.Networking
             return phase switch
             {
                 NetworkMatchPhase.CoreObjective => "CORE_COLLECTION",
+                NetworkMatchPhase.Zone2Objective => "ZONE_2_OBJECTIVE",
                 NetworkMatchPhase.Puzzle => "POWER_PUZZLE",
                 NetworkMatchPhase.SecurityHold => "SECURITY_HOLD",
                 NetworkMatchPhase.FinalHunt => "FINAL_HUNT",
@@ -570,12 +730,31 @@ namespace EchoProtocol.Networking
         private void ApplyPresentation(bool notifyListeners)
         {
             ResolveLegacyPresentation();
-            _legacyMatchFlow?.ApplyAuthoritativeSnapshot(CurrentPhase, Status, Result);
+            _legacyMatchFlow?.ApplyAuthoritativeSnapshot(
+                CurrentPhase,
+                Status,
+                Result,
+                PowerAuthorizationCode.ToString(),
+                SecurityHoldCompleted,
+                PowerPuzzleCompleted,
+                RestoreMainPowerCompleted);
             _legacyEscapeCountdown?.ApplyAuthoritativeSnapshot(
                 CurrentPhase == NetworkMatchPhase.FinalHunt || CurrentPhase == NetworkMatchPhase.Escape,
                 IsEscapeTimerRunning,
                 IsEnded && Result == NetworkMatchResult.Win,
                 EscapeRemainingSeconds);
+
+            if (Zone2MissionDirector.Instance != null)
+            {
+                Zone2MissionDirector.Instance.OnAuthoritativeStateChanged(
+                    Zone2Stage,
+                    RelayCompletionMask,
+                    SecurityTerminalDiscovered,
+                    SecurityHoldCompleted,
+                    ZoneDoorsUnlocked,
+                    PowerAuthorizationCode.ToString());
+            }
+
             if (notifyListeners) StateChanged?.Invoke(this);
         }
 
