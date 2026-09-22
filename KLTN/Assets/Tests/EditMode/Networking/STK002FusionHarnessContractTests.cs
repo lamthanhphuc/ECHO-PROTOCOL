@@ -24,6 +24,8 @@ namespace EchoProtocol.Networking.Tests
         private const string StalkerControllerTypeName = "EchoProtocol.AI.Stalker.StalkerController";
         private const string StalkerVisionSensorTypeName = "EchoProtocol.AI.Stalker.StalkerVisionSensor";
         private const string StalkerFusionRuntimeTypeName = "EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime";
+        private const string StalkerSpecialEncounterRuntimeTypeName =
+            "EchoProtocol.AI.Stalker.Special.StalkerSpecialEncounterRuntime";
 
         [Test]
         public void HARNESS_01_STK002HarnessSceneExists()
@@ -83,6 +85,44 @@ namespace EchoProtocol.Networking.Tests
             Assert.That(GetComponentByTypeName(prefab, StalkerControllerTypeName), Is.Not.Null);
             Assert.That(GetComponentByTypeName(prefab, StalkerVisionSensorTypeName), Is.Not.Null);
             Assert.That(GetComponentByTypeName(prefab, StalkerFusionRuntimeTypeName), Is.Not.Null);
+        }
+
+        [Test]
+        public void HARNESS_05A_StalkerSpecialEncounterPreservesReactionWindow()
+        {
+            var prefab =
+                AssetDatabase.LoadAssetAtPath<GameObject>(
+                    StalkerPrefabPath);
+
+            Assert.That(
+                prefab,
+                Is.Not.Null);
+
+            var specialRuntime =
+                GetComponentByTypeName(
+                    prefab,
+                    StalkerSpecialEncounterRuntimeTypeName);
+
+            Assert.That(
+                specialRuntime,
+                Is.Not.Null);
+
+            var serializedRuntime =
+                new SerializedObject(
+                    specialRuntime);
+
+            var reactionLockSeconds =
+                serializedRuntime.FindProperty(
+                    "settings.reactionLockSeconds");
+
+            Assert.That(
+                reactionLockSeconds,
+                Is.Not.Null);
+
+            Assert.That(
+                reactionLockSeconds.floatValue,
+                Is.EqualTo(1.5f)
+                    .Within(0.001f));
         }
 
         [Test]
