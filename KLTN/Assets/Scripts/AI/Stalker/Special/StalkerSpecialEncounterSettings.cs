@@ -36,8 +36,8 @@ namespace EchoProtocol.AI.Stalker.Special
         [SerializeField] private float hiddenTransferMinSeconds = 1f;
         [SerializeField] private float hiddenTransferMaxSeconds = 8f;
 
-        [SerializeField, Min(5f)]
-        private float jumpInDurationSeconds = 5f;
+        [SerializeField, Min(3f)]
+        private float jumpInDurationSeconds = 3f;
         [SerializeField] private float reactionLockSeconds = 1.5f;
 
         [SerializeField] private int minimumOtherAlivePlayers = 2;
@@ -136,7 +136,7 @@ namespace EchoProtocol.AI.Stalker.Special
 
         public float JumpInDurationSeconds =>
             Mathf.Max(
-                5f,
+                3f,
                 jumpInDurationSeconds);
 
         public float ReactionLockSeconds =>

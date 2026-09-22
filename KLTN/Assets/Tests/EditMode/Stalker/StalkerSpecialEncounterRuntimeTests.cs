@@ -134,7 +134,7 @@ namespace EchoProtocol.AI.Stalker.Tests
                 GetPublicProperty<float>(
                     settings,
                     "JumpInDurationSeconds"),
-                Is.EqualTo(5f));
+                Is.EqualTo(3f));
 
             Assert.That(
                 GetPublicProperty<float>(
@@ -286,7 +286,7 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             Assert.That(
                 InvokeGetPhaseDuration("JumpIn"),
-                Is.EqualTo(5f).Within(0.001f));
+                Is.EqualTo(3f).Within(0.001f));
 
             Assert.That(
                 InvokeGetPhaseDuration(

@@ -376,7 +376,7 @@ MonoBehaviour:
     hiddenTransferVirtualSpeed: 8
     hiddenTransferMinSeconds: 1
     hiddenTransferMaxSeconds: 8
-    jumpInDurationSeconds: 5
+    jumpInDurationSeconds: 3
     reactionLocionSeconds: 0 
     minimumOtherAlivePlayers: 1
     jumpInMinDistance: 7
