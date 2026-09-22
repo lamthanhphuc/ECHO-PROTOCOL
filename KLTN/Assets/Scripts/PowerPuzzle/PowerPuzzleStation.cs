@@ -15,7 +15,28 @@ public class PowerPuzzleStation : MonoBehaviour, IInteractable
         get
         {
             PowerPuzzleController activeController = GetController();
-            return activeController != null ? activeController.GetPrompt(stationType) : fallbackPrompt;
+            if (activeController != null)
+            {
+                return activeController.GetPrompt(stationType);
+            }
+
+            if (stationType == PowerPuzzleStationType.PowerControl)
+            {
+                var flow = FindAnyObjectByType<MatchFlowController>();
+                bool isComplete = flow != null && flow.IsPowerPuzzleComplete;
+                bool isAuth = flow != null && flow.IsSecurityHoldComplete;
+                if (!isAuth)
+                {
+                    var terminal = FindAnyObjectByType<SecurityTerminalDownload>();
+                    if (terminal != null && terminal.IsComplete) isAuth = true;
+                }
+
+                if (isComplete) return "MAIN POWER RESTORED. POWER CONTROL ONLINE. [E]";
+                if (!isAuth) return "LOCKED. SECURITY AUTHENTICATION REQUIRED. [E]";
+                return "AUTHORIZATION AVAILABLE. ENTER MAIN POWER ACCESS CODE. [E]";
+            }
+
+            return fallbackPrompt;
         }
     }
 
@@ -24,12 +45,37 @@ public class PowerPuzzleStation : MonoBehaviour, IInteractable
         if (_networkAuthorityPresentationOnly) return false;
 
         PowerPuzzleController activeController = GetController();
-        return activeController != null && !activeController.IsComplete;
+        if (activeController == null)
+        {
+            return stationType == PowerPuzzleStationType.PowerControl;
+        }
+
+        if (stationType == PowerPuzzleStationType.PowerControl)
+        {
+            return true;
+        }
+
+        return !activeController.IsComplete;
     }
 
     public void Interact(GameObject interactor)
     {
         if (_networkAuthorityPresentationOnly) return;
+
+        if (stationType == PowerPuzzleStationType.PowerControl)
+        {
+            var ui = GetComponentInChildren<PowerControlUIController>(true);
+            if (ui == null)
+            {
+                ui = FindAnyObjectByType<PowerControlUIController>();
+            }
+
+            if (ui != null)
+            {
+                ui.Open(interactor);
+                return;
+            }
+        }
 
         PowerPuzzleController activeController = GetController();
         if (activeController != null)
