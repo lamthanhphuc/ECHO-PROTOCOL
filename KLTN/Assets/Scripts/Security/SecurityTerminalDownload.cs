@@ -35,13 +35,35 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
     public event Action<SecurityTerminalDownload> DownloadCompleted;
     public event Action<SecurityTerminalDownload, float> ProgressChanged;
 
+    private string _fallbackAuthCode;
+
     public SecurityDownloadState State => _state;
     public bool IsDownloading => _state == SecurityDownloadState.Downloading;
     public bool IsPaused => _state == SecurityDownloadState.Paused;
     public bool IsComplete => _state == SecurityDownloadState.Completed;
-    public bool RequiresHold => requireHoldToDownload;
+    public bool RequiresHold => requireHoldToDownload && !IsComplete && EmergencyNetworkState.AreRelaysOnline();
     public float Progress01 => downloadDurationSeconds <= 0f ? 1f : Mathf.Clamp01(_progressSeconds / downloadDurationSeconds);
     public GameObject ActiveInteractor => _activeInteractor;
+
+    public string AuthorizationCode
+    {
+        get
+        {
+            var matchState = UnityEngine.Object.FindAnyObjectByType<EchoProtocol.Networking.NetworkMatchState>();
+            if (matchState != null && !string.IsNullOrEmpty(matchState.PowerAuthorizationCode.ToString()))
+            {
+                return matchState.PowerAuthorizationCode.ToString();
+            }
+
+            var flow = UnityEngine.Object.FindAnyObjectByType<MatchFlowController>();
+            if (flow != null && !string.IsNullOrEmpty(flow.PowerAuthorizationCode))
+            {
+                return flow.PowerAuthorizationCode;
+            }
+
+            return _fallbackAuthCode;
+        }
+    }
 
     public string InteractionPrompt
     {
@@ -49,21 +71,40 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
         {
             if (IsComplete)
             {
-                return completePrompt;
+                string code = AuthorizationCode;
+                return string.IsNullOrEmpty(code)
+                    ? completePrompt
+                    : $"XÁC THỰC BẢO MẬT HOÀN TẤT [MÃ: {code}] - NHẤN [E] ĐỂ XEM";
+            }
+
+            if (!EmergencyNetworkState.AreRelaysOnline())
+            {
+                int online = 0;
+                if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
+                {
+                    online = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.CompletedRelayCount;
+                    if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.CurrentStage == EchoProtocol.MatchFlow.Zone2MissionStage.FindSecurityTerminal)
+                    {
+                        return "SECURITY TERMINAL [E] - KIỂM TRA HỆ THỐNG BẢO MẬT";
+                    }
+                }
+                return $"MẠNG BẢO MẬT OFFLINE [E] - TIẾN ĐỘ RELAY: {online}/4";
             }
 
             string percent = " (" + Mathf.RoundToInt(Progress01 * 100f) + "%)";
             if (IsDownloading)
             {
-                return downloadingPrompt + percent;
+                return (string.IsNullOrWhiteSpace(downloadingPrompt) ? "Đang Tải Dữ Liệu" : downloadingPrompt) + percent;
             }
 
             if (IsPaused && Progress01 > 0f)
             {
-                return resumePrompt + percent;
+                return (string.IsNullOrWhiteSpace(resumePrompt) ? "Giữ [E] để Tiếp tục Tải Dữ Liệu" : resumePrompt) + percent;
             }
 
-            string prompt = string.IsNullOrWhiteSpace(startPrompt) || startPrompt == "Download Access Code" ? "Giữ để Tải Dữ Liệu" : startPrompt;
+            string prompt = string.IsNullOrWhiteSpace(startPrompt) || startPrompt == "Download Access Code" || startPrompt == "Giữ để Tải Dữ Liệu"
+                ? "Giữ [E] để Bắt đầu Security Hold"
+                : startPrompt;
             return prompt;
         }
     }
@@ -102,18 +143,38 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
             return true;
         }
 
+        if (!EmergencyNetworkState.AreRelaysOnline())
+        {
+            return true;
+        }
+
         return !IsDownloading || _activeInteractor == interactor;
     }
 
     public void Interact(GameObject interactor)
     {
+        // First terminal interaction: discovers terminal, does NOT start security hold
+        if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null &&
+            EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.CurrentStage == EchoProtocol.MatchFlow.Zone2MissionStage.FindSecurityTerminal)
+        {
+            EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.DiscoverSecurityTerminal();
+            OpenUI(interactor);
+            return;
+        }
+
+        if (IsComplete || !EmergencyNetworkState.AreRelaysOnline())
+        {
+            OpenUI(interactor);
+            return;
+        }
+
         if (requireHoldToDownload)
         {
             BeginHoldInteract(interactor);
             return;
         }
 
-        if (interactor == null || IsComplete || !CanInteract(interactor))
+        if (interactor == null || !CanInteract(interactor))
         {
             return;
         }
@@ -198,10 +259,50 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
     {
         _progressSeconds = Mathf.Max(0.01f, downloadDurationSeconds);
         _state = SecurityDownloadState.Completed;
+        var interactor = _activeInteractor;
         _activeInteractor = null;
+
+        if (string.IsNullOrEmpty(_fallbackAuthCode))
+        {
+            _fallbackAuthCode = UnityEngine.Random.Range(0, 10000).ToString("D4");
+        }
+
+        // Notify Fusion Host if active and has authority
+        var matchState = UnityEngine.Object.FindAnyObjectByType<EchoProtocol.Networking.NetworkMatchState>();
+        if (matchState != null && matchState.Object != null && matchState.Object.HasStateAuthority)
+        {
+            matchState.TryCompleteSecurityHold(default);
+        }
+
+        // Notify local MatchFlowController if active
+        var flow = UnityEngine.Object.FindAnyObjectByType<MatchFlowController>();
+        if (flow != null)
+        {
+            flow.NotifySecurityHoldComplete();
+        }
+
+        if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
+        {
+            EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.OnSecurityHoldCompleted(this);
+        }
+
         downloadCompleted?.Invoke();
         DownloadCompleted?.Invoke(this);
         ProgressChanged?.Invoke(this, Progress01);
+
+        if (interactor != null)
+        {
+            OpenUI(interactor);
+        }
+    }
+
+    public void OpenUI(GameObject interactor)
+    {
+        var ui = GetComponentInChildren<SecurityTerminalUIController>(true);
+        if (ui != null)
+        {
+            ui.Open(interactor);
+        }
     }
 
     private bool IsInteractorStillValid()
