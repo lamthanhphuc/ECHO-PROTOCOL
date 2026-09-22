@@ -633,8 +633,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f1cdc9d0e4176a64894098fd64ff1837, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkPlayerFlashlight
-  _flashlight: {fileID: 0}
-  _inputActions: {fileID: 0}
+  _flashlight: {fileID: 6225725814926081252}
+  _inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   _startOn: 1
   _toggleCooldown: 0.2
   _beamIntensity: 80
