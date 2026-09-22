@@ -580,6 +580,48 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains("\"action\": \"Interact\"", keyboardBindingJson);
         }
 
+        [Test]
+        public void TEAM_TOOL_NoiseMakerChecksObstacleBeforeSpawn()
+        {
+            var interactorSource =
+                File.ReadAllText(
+                    NetworkPlayerInteractorScriptPath);
+
+            var useMethod =
+                MethodBody(
+                    interactorSource,
+                    "private InteractionValidationResult TryUseNoiseMakerAuthoritative");
+
+            var sphereCastIndex =
+                useMethod.IndexOf(
+                    "Physics.SphereCastAll",
+                    StringComparison.Ordinal);
+
+            var selfFilterIndex =
+                useMethod.IndexOf(
+                    "IsSelfCollider",
+                    StringComparison.Ordinal);
+
+            var spawnIndex =
+                useMethod.IndexOf(
+                    "Runner.Spawn",
+                    StringComparison.Ordinal);
+
+            Assert.That(
+                sphereCastIndex,
+                Is.GreaterThanOrEqualTo(0));
+
+            Assert.That(
+                selfFilterIndex,
+                Is.GreaterThan(
+                    sphereCastIndex));
+
+            Assert.That(
+                spawnIndex,
+                Is.GreaterThan(
+                    selfFilterIndex));
+        }
+
         private static Type ResolveProductionType(string fullName)
         {
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())

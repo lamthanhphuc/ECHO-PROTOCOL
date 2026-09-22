@@ -152,8 +152,17 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private void Awake()
         {
+            if (acousticBlockerMask.value == 0)
+            {
+                Debug.LogWarning(
+                    "[StalkerFusion] acousticBlockerMask is empty; " +
+                    "authoritative hearing cannot classify wall/door occlusion.",
+                    this);
+            }
+
             ResolveLocalDependencies();
-            _networkPrefabGuard = GetComponent<NetworkObject>() != null;
+            _networkPrefabGuard =
+                GetComponent<NetworkObject>() != null;
         }
 
         private void OnEnable()

@@ -582,12 +582,126 @@ namespace EchoProtocol.AI.Listener.Tests
             Assert.That(resolver.CallCount, Is.EqualTo(2));
         }
 
+        [TestCase(ListenerOcclusionClass.CLEAR, 12f, true)]
+        [TestCase(ListenerOcclusionClass.OPEN_DOOR, 12f, true)]
+        [TestCase(ListenerOcclusionClass.SOLID_WALL, 6f, true)]
+        [TestCase(ListenerOcclusionClass.SOLID_WALL, 12f, false)]
+        [TestCase(ListenerOcclusionClass.CLOSED_DOOR, 6f, true)]
+        [TestCase(ListenerOcclusionClass.CLOSED_DOOR, 12f, false)]
+        public void Hearing_SprintNearAndFar_UsesConfiguredOcclusionRadius(
+            ListenerOcclusionClass occlusionClass,
+            float distance,
+            bool expectedHeard)
+        {
+            var now = Now();
+
+            var noise = CreateNoise(
+                RuntimeNoiseType.SPRINT,
+                "sprint-occlusion-radius",
+                1,
+                Vector3.zero,
+                now,
+                1);
+
+            var sensor = new ListenerHearingSensor(
+                new StaticListenerOcclusionResolver(occlusionClass),
+                new ListenerHearingPolicy(
+                    0.1d,
+                    0.35d,
+                    0.35d));
+
+            sensor.BeginMatch(Guid.NewGuid());
+
+            var heard = sensor.TryEvaluate(
+                noise,
+                new Vector3(0f, 0f, distance),
+                now,
+                out _,
+                out var rejectReason);
+
+            Assert.That(heard, Is.EqualTo(expectedHeard));
+
+            Assert.That(
+                rejectReason,
+                Is.EqualTo(
+                    expectedHeard
+                        ? ListenerHearingRejectReason.None
+                        : ListenerHearingRejectReason.OccludedBelowThreshold));
+        }
+
+        [Test]
+        public void Hearing_NoiseMaker_IgnoresOcclusionResolver()
+        {
+            var now = Now();
+
+            var noise = CreateNoise(
+                RuntimeNoiseType.NOISE_MAKER,
+                "noise-maker-ignore-occlusion",
+                1,
+                Vector3.zero,
+                now,
+                1);
+
+            var resolver =
+                new CountingResolver(
+                    ListenerOcclusionClass.SOLID_WALL);
+
+            var sensor =
+                new ListenerHearingSensor(
+                    resolver,
+                    new ListenerHearingPolicy(
+                        0.1d,
+                        0.01d,
+                        0.01d));
+
+            sensor.BeginMatch(
+                Guid.NewGuid());
+
+            var heard =
+                sensor.TryEvaluate(
+                    noise,
+                    new Vector3(
+                        0f,
+                        0f,
+                        30f),
+                    now,
+                    out var observation,
+                    out var rejectReason);
+
+            Assert.That(
+                heard,
+                Is.True);
+
+            Assert.That(
+                rejectReason,
+                Is.EqualTo(
+                    ListenerHearingRejectReason.None));
+
+            Assert.That(
+                resolver.CallCount,
+                Is.EqualTo(0));
+
+            Assert.That(
+                observation.OcclusionClass,
+                Is.EqualTo(
+                    ListenerOcclusionClass.CLEAR));
+
+            Assert.That(
+                observation.EffectiveIntensity,
+                Is.EqualTo(0.25d)
+                    .Within(0.0001d));
+        }
+
         [Test]
         public void LIS002_T_U_V_W_X_Y_Z_HearingUsesCanonicalDistanceIntensityAndRadius()
         {
             var now = Now();
             var open = CreateNoise(RuntimeNoiseType.NOISE_MAKER, "noise-open", 1, Vector3.zero, now, 1);
-            var policy = new ListenerHearingPolicy(0.1d, 0.5d, 0.25d);
+            var policy = new ListenerHearingPolicy(
+                0.1d,
+                0.25d, // ClosedDoorMultiplier
+                0.25d  // WallMultiplier
+            );
 
             var clearSensor = new ListenerHearingSensor(
                 new StaticListenerOcclusionResolver(ListenerOcclusionClass.CLEAR),
@@ -613,6 +727,10 @@ namespace EchoProtocol.AI.Listener.Tests
                 out var wallObservation,
                 out _), Is.True);
             Assert.That(wallObservation.EffectiveIntensity, Is.EqualTo(0.75d).Within(0.0001d));
+            Assert.That(
+                wallObservation.OcclusionClass,
+                Is.EqualTo(
+                    ListenerOcclusionClass.CLEAR));
 
             var closedDoorSensor = new ListenerHearingSensor(
                 new StaticListenerOcclusionResolver(ListenerOcclusionClass.CLOSED_DOOR),
@@ -625,6 +743,10 @@ namespace EchoProtocol.AI.Listener.Tests
                 out var doorObservation,
                 out _), Is.True);
             Assert.That(doorObservation.EffectiveIntensity, Is.EqualTo(wallObservation.EffectiveIntensity).Within(0.0001d));
+            Assert.That(
+                doorObservation.OcclusionClass,
+                Is.EqualTo(
+                    ListenerOcclusionClass.CLEAR));
             Assert.That(
                 ListenerOcclusionClassifier.Strongest(
                     ListenerOcclusionClass.OPEN_DOOR,
@@ -753,8 +875,8 @@ namespace EchoProtocol.AI.Listener.Tests
                 new Vector3(0, 0, 5),
                 now,
                 out _,
-                out var occludedReason), Is.True);
-            Assert.That(occludedReason, Is.EqualTo(ListenerHearingRejectReason.None));
+                out var occludedReason), Is.False);
+            Assert.That(occludedReason, Is.EqualTo(ListenerHearingRejectReason.OccludedBelowThreshold));
 
             var queryFailed = CreateNoise(RuntimeNoiseType.INTERACTION, "query-failed", 1, Vector3.zero, now, 3);
             var queryFailedSensor = new ListenerHearingSensor(

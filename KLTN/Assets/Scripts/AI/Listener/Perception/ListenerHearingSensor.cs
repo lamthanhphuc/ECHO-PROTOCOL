@@ -91,39 +91,72 @@ namespace EchoProtocol.AI.Listener.Perception
                 return false;
             }
 
-            var distance = Vector3.Distance(listenerHearingOrigin, noiseEvent.WorldPosition);
+            var distance =
+                Vector3.Distance(
+                    listenerHearingOrigin,
+                    noiseEvent.WorldPosition);
+
             if (distance > noiseEvent.HearingRadius)
             {
-                rejectReason = ListenerHearingRejectReason.OutsideRange;
+                rejectReason =
+                    ListenerHearingRejectReason.OutsideRange;
+
                 return false;
             }
 
-            var occlusionClass = _occlusionResolver.Classify(listenerHearingOrigin, noiseEvent.WorldPosition);
-            if (occlusionClass == ListenerOcclusionClass.QUERY_FAILED)
+            var ignoresOcclusion =
+                noiseEvent.NoiseType ==
+                RuntimeNoiseType.NOISE_MAKER;
+
+            var occlusionClass =
+                ignoresOcclusion
+                    ? ListenerOcclusionClass.CLEAR
+                    : _occlusionResolver.Classify(
+                        listenerHearingOrigin,
+                        noiseEvent.WorldPosition);
+
+            if (occlusionClass ==
+                ListenerOcclusionClass.QUERY_FAILED)
             {
-                rejectReason = ListenerHearingRejectReason.OcclusionQueryFailed;
+                rejectReason =
+                    ListenerHearingRejectReason
+                        .OcclusionQueryFailed;
+
                 return false;
             }
 
-            var radius =
-                Math.Max(
-                    noiseEvent.HearingRadius,
-                    0.0001d);
+            var occlusionMultiplier =
+                ignoresOcclusion
+                    ? 1d
+                    : _policy.OcclusionMultiplier(
+                        occlusionClass);
+
+            var effectiveHearingRadius =
+                noiseEvent.HearingRadius
+                * occlusionMultiplier;
+
+            if (distance > effectiveHearingRadius)
+            {
+                rejectReason =
+                    ListenerHearingRejectReason
+                        .OccludedBelowThreshold;
+
+                return false;
+            }
 
             var normalizedDistance =
                 Math.Clamp(
-                    distance / radius,
+                    distance / noiseEvent.HearingRadius,
                     0d,
                     1d);
 
             var distanceAttenuation =
                 1d - normalizedDistance;
 
-            // Intensity is retained only for ranking/prioritization.
-            // Noise inside HearingRadius is not rejected by threshold.
             var effectiveIntensity =
                 noiseEvent.Loudness
-                * distanceAttenuation;
+                * distanceAttenuation
+                * occlusionMultiplier;
 
             observation = new HearingObservation(
                 noiseEvent.NoiseEventId,

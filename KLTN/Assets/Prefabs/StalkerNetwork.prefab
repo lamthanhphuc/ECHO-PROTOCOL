@@ -281,10 +281,10 @@ MonoBehaviour:
   hearingOrigin: {fileID: 100011}
   acousticBlockerMask:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 1
   hearingThreshold: 0.1
-  closedDoorMultiplier: 0.5
-  wallMultiplier: 0.25
+  closedDoorMultiplier: 0.35
+  wallMultiplier: 0.35
   hearingDiagnosticIntervalSeconds: 0.5
   attackDamage: 25
   maximumDamageDistance: 2

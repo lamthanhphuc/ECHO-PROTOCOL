@@ -447,6 +447,7 @@ MonoBehaviour:
   _coreStabilizerPickupPrefab: {fileID: 8956166517133272461, guid: 4bc59d90b02c44647a16c758ef482e2c, type: 3}
   _noiseMakerBeaconPrefab: {fileID: 5536313895210414100, guid: 4a8de518f84dfbe4a9620fbab3379f24, type: 3}
   _noiseMakerThrowForwardDistance: 15
+  _noiseMakerObstacleProbeRadius: 0.2
   _coreStabilizerPulseClip: {fileID: 8300000, guid: beb47eddae77bfb4cbfee2ac089245a3, type: 3}
 --- !u!114 &1555193095892173610
 MonoBehaviour:
