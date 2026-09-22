@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using Fusion;
 using EchoProtocol.Networking.Authority;
@@ -91,6 +92,9 @@ namespace EchoProtocol.Networking
 
         [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
         public NetworkBool IsReady { get; private set; }
+
+        [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
+        public NetworkString<_32> OperatorName { get; private set; }
 
         [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
         public int TeamId { get; private set; }
@@ -202,6 +206,38 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public bool RequestOperatorName(string name)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasInputAuthority) return false;
+            var normalized = NormalizeOperatorName(name);
+            if (normalized.Length == 0) return false;
+            RpcRequestOperatorName(normalized);
+            return true;
+        }
+
+        public static string NormalizeOperatorName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return string.Empty;
+            var result = new System.Text.StringBuilder(32);
+            foreach (var character in name.Trim())
+            {
+                if (char.IsControl(character) || char.IsSurrogate(character)) continue;
+                result.Append(character);
+                if (result.Length == 32) break;
+            }
+            return result.ToString().Trim();
+        }
+
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        private void RpcRequestOperatorName(string name, RpcInfo info = default)
+        {
+            if (!TryResolveOwnedRequester(info.Source, out _)) return;
+            var normalized = NormalizeOperatorName(name);
+            if (normalized.Length == 0) return;
+            OperatorName = normalized;
+            AnyStateChanged?.Invoke();
+        }
+
         public void SubmitJoinProof(string proof, int actorNumber)
         {
             if (!Object.HasInputAuthority || string.IsNullOrWhiteSpace(proof)) return;
@@ -278,7 +314,9 @@ namespace EchoProtocol.Networking
             }
 
             IsReady = isReady;
-            Debug.Log($"[LobbyPlayerState] {requester} ready={isReady}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.Lobby,
+                $"[LobbyPlayerState] {requester} ready={isReady}.");
             AnyStateChanged?.Invoke();
         }
 
@@ -417,7 +455,9 @@ namespace EchoProtocol.Networking
             LobbySelectionError error)
         {
             var accepted = error == LobbySelectionError.None;
-            Debug.Log($"[LobbyPlayerState] {target} {kind}={requestedId}, accepted={accepted}, error={error}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.Lobby,
+                $"[LobbyPlayerState] {target} {kind}={requestedId}, accepted={accepted}, error={error}.");
             RpcSelectionResult(target, (int)kind, requestedId, accepted, (int)error);
         }
 

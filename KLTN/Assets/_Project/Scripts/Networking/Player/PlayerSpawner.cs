@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using EchoProtocol.Diagnostics;
 using Fusion;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -114,7 +115,9 @@ namespace EchoProtocol.Networking
             if (!runner.IsServer) return;
 
             TryAttachLifecycle(runner);
-            Debug.Log("[PlayerSpawner] Gameplay scene ready. Placing lifecycle-owned player objects.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                "[PlayerSpawner] Gameplay scene ready. Placing lifecycle-owned player objects.");
             foreach (var player in runner.ActivePlayers)
             {
                 if (!runner.TryGetPlayerObject(player, out var playerObject) || playerObject == null)
@@ -144,7 +147,9 @@ namespace EchoProtocol.Networking
             if (_matchStateInstance == null && _matchStatePrefab != null)
             {
                 _matchStateInstance = runner.Spawn(_matchStatePrefab, Vector3.zero, Quaternion.identity);
-                Debug.Log($"[PlayerSpawner] Spawned authoritative Match State {_matchStateInstance.Id}.");
+                RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"[PlayerSpawner] Spawned authoritative Match State {_matchStateInstance.Id}.");
             }
             if (_powerPuzzlePrefab == null)
             {
@@ -157,7 +162,9 @@ namespace EchoProtocol.Networking
             if (_doorInstance == null && _doorPrefab != null)
             {
                 _doorInstance = runner.Spawn(_doorPrefab, new Vector3(0f, 1f, 2.5f), Quaternion.identity);
-                Debug.Log($"[PlayerSpawner] Spawned authoritative door {_doorInstance.Id}.");
+                RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"[PlayerSpawner] Spawned authoritative door {_doorInstance.Id}.");
             }
             RegisterExistingNetworkSectorBoxes();
             while (_energyCoreInstances.Count < _energyCoreCount && _pickupItemPrefab != null)
@@ -186,7 +193,9 @@ namespace EchoProtocol.Networking
                     }
                 }
                 _energyCoreInstances.Add(core);
-                Debug.Log($"[PlayerSpawner] Spawned authoritative Energy Core {index + 1}/{_energyCoreCount}: {(core != null ? core.Id.ToString() : "null")} at {pose.Position}.");
+                RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"[PlayerSpawner] Spawned authoritative Energy Core {index + 1}/{_energyCoreCount}: {(core != null ? core.Id.ToString() : "null")} at {pose.Position}.");
             }
             if (_sectorBoxPrefab != null && _sectorBoxInstances.Count == 0)
             {
@@ -202,7 +211,9 @@ namespace EchoProtocol.Networking
                             box.transform.position,
                             box.transform.rotation);
                         _sectorBoxInstances.Add(boxInstance);
-                        Debug.Log($"[PlayerSpawner] Spawned authoritative Sector Box {i + 1}/{count} from scene marker '{box.name}': {boxInstance.Id}.");
+                        RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"[PlayerSpawner] Spawned authoritative Sector Box {i + 1}/{count} from scene marker '{box.name}': {boxInstance.Id}.");
                     }
 
                     _sectorBoxInstance = _sectorBoxInstances[0];
@@ -215,7 +226,9 @@ namespace EchoProtocol.Networking
                         sectorPose.Position,
                         sectorPose.Rotation);
                     _sectorBoxInstances.Add(_sectorBoxInstance);
-                    Debug.Log($"[PlayerSpawner] Spawned fallback authoritative Sector Box {_sectorBoxInstance.Id}.");
+                    RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"[PlayerSpawner] Spawned fallback authoritative Sector Box {_sectorBoxInstance.Id}.");
                 }
             }
             EnsurePowerPuzzle(runner);
@@ -234,7 +247,9 @@ namespace EchoProtocol.Networking
                     spawnPosition,
                     spawnRotation);
 
-                Debug.Log(
+                RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+
                     $"[PlayerSpawner] Spawned host-authoritative monster {_monsterInstance.Id} " +
                     $"at {spawnPosition} markerFound={stalkerSpawn != null}.");
             }
@@ -282,7 +297,9 @@ namespace EchoProtocol.Networking
                 if (!_sectorBoxInstances.Contains(box.Object))
                 {
                     _sectorBoxInstances.Add(box.Object);
-                    Debug.Log($"[PlayerSpawner] Registered existing Network Sector Box '{box.name}': {box.Object.Id}.");
+                    RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"[PlayerSpawner] Registered existing Network Sector Box '{box.name}': {box.Object.Id}.");
                 }
             }
 
@@ -303,7 +320,9 @@ namespace EchoProtocol.Networking
                 {
                     puzzle.InitializeAuthoritative(_sectorBoxInstance.Id);
                 }
-                Debug.Log($"[PlayerSpawner] Spawned authoritative Power Puzzle {_powerPuzzleInstance.Id}.");
+                RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"[PlayerSpawner] Spawned authoritative Power Puzzle {_powerPuzzleInstance.Id}.");
             }
 
             if (_powerPuzzleStationPrefab == null) return;
@@ -391,10 +410,14 @@ namespace EchoProtocol.Networking
             {
                 var candidate = candidates[i];
                 _selectedEnergyCoreSpawnPoses.Add(new SpawnPose(candidate.position, candidate.rotation));
-                Debug.Log($"[PlayerSpawner] Selected Energy Core spawn candidate '{candidate.name}' at {candidate.position}.");
+                RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"[PlayerSpawner] Selected Energy Core spawn candidate '{candidate.name}' at {candidate.position}.");
             }
 
-            Debug.Log($"[PlayerSpawner] Selected {_selectedEnergyCoreSpawnPoses.Count}/{candidates.Count} Energy Core spawn candidates.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"[PlayerSpawner] Selected {_selectedEnergyCoreSpawnPoses.Count}/{candidates.Count} Energy Core spawn candidates.");
         }
 
         private static List<Transform> GetOrderedEnergyCoreSpawnCandidates()
@@ -637,7 +660,9 @@ namespace EchoProtocol.Networking
                 Debug.LogWarning($"[PlayerSpawner] Could not teleport lifecycle-owned player object for {player}; object={playerObject.Id}.");
             }
 
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+
                 $"[PlayerSpawner] Placed {player} object={playerObject.Id}, slot={slot}, " +
                 $"inputAuthority={playerObject.InputAuthority}, stateAuthority=Host, gameplay={gameplay}.");
         }

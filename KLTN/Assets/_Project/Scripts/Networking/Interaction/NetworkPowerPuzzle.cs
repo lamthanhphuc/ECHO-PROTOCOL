@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Diagnostics;
 using Fusion;
 using UnityEngine;
 
@@ -100,7 +101,9 @@ namespace EchoProtocol.Networking
         {
             if (!Object.HasStateAuthority || !sectorBoxId.IsValid) return;
             SectorBoxId = sectorBoxId;
-            Debug.Log($"[PowerPuzzle] Bound puzzle {Object.Id} to Sector Box {sectorBoxId}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.PowerPuzzle,
+                $"[PowerPuzzle] Bound puzzle {Object.Id} to Sector Box {sectorBoxId}.");
         }
 
         public bool CanAcceptInput(int inputId)
@@ -163,7 +166,9 @@ namespace EchoProtocol.Networking
                 HandleStateChanged();
             }
 
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.PowerPuzzle,
+
                 $"[PowerPuzzle] Correct input={inputId}, player={requester}, " +
                 $"progress={CurrentSequenceIndex}/{SequenceLength}.");
             return result;

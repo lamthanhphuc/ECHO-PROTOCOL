@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Diagnostics;
 using Fusion;
 using UnityEngine;
 
@@ -23,7 +24,7 @@ namespace EchoProtocol.Networking
         {
             IsActive = !IsActive;
             ApplyReplicatedState();
-            Debug.Log($"[Interaction] {context.Player} set target {Object.Id} active={IsActive}.");
+            RuntimeLog.Log(RuntimeLogCategory.Interaction, $"[Interaction] {context.Player} set target {Object.Id} active={IsActive}.");
         }
 
         private void ApplyReplicatedState()

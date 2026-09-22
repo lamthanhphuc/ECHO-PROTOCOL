@@ -13,7 +13,7 @@ namespace EchoProtocol.Networking.Tests
         [Test]
         public void MATCH_NET_FsmOnlyAdvancesFromExpectedRunningPhase()
         {
-            var source = File.ReadAllText(MatchSourcePath);
+            var source = LoadNetworkMatchStateSource();
 
             StringAssert.Contains("status == NetworkMatchStatus.Running", source);
             StringAssert.Contains("current == expected", source);
@@ -24,7 +24,7 @@ namespace EchoProtocol.Networking.Tests
         [Test]
         public void MATCH_NET_EndAndObjectiveMutationFreezeAfterTerminalCommit()
         {
-            var source = File.ReadAllText(MatchSourcePath);
+            var source = LoadNetworkMatchStateSource();
 
             StringAssert.Contains("result != NetworkMatchResult.None", source);
             StringAssert.Contains("Status = NetworkMatchStatus.Ended", source);
@@ -36,7 +36,7 @@ namespace EchoProtocol.Networking.Tests
         [Test]
         public void MATCH_NET_CoreProgressHasOneAuthoritativeSource()
         {
-            var matchSource = File.ReadAllText(MatchSourcePath);
+            var matchSource = LoadNetworkMatchStateSource();
             var objectiveSource = File.ReadAllText(ObjectiveSourcePath);
 
             StringAssert.DoesNotContain("[Networked] public int ObjectiveProgress", matchSource);
@@ -48,7 +48,7 @@ namespace EchoProtocol.Networking.Tests
         [Test]
         public void MATCH_NET_TimersAndTerminalResultAreReplicatedSemanticState()
         {
-            var source = File.ReadAllText(MatchSourcePath);
+            var source = LoadNetworkMatchStateSource();
 
             StringAssert.Contains("public NetworkMatchPhase CurrentPhase", source);
             StringAssert.Contains("public NetworkMatchStatus Status", source);
@@ -56,18 +56,54 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("public NetworkMatchEndReason EndReason", source);
             StringAssert.Contains("private TickTimer EscapeTimer", source);
             StringAssert.Contains("private TickTimer MatchTimer", source);
-            StringAssert.Contains("TickTimer.CreateFromSeconds(Runner, _escapeDurationSeconds)", source);
+            StringAssert.Contains("public float CurrentScenarioEscapeDoorTimerSeconds", source);
+            StringAssert.Contains("TickTimer.CreateFromSeconds(Runner, CurrentScenarioEscapeDoorTimerSeconds)", source);
             StringAssert.Contains("EscapeTimer.Expired(Runner)", source);
             StringAssert.DoesNotContain("Time.deltaTime", source);
         }
 
         [Test]
+        public void MATCH_NET_ScenarioNumericStatePreservesDoublePrecision()
+        {
+            var source = LoadNetworkMatchStateSource();
+
+            StringAssert.Contains(
+                "[Networked] public double ScenarioDetectionFillRate",
+                source);
+
+            StringAssert.Contains(
+                "[Networked] public double ScenarioDetectionDecayRate",
+                source);
+
+            StringAssert.Contains(
+                "[Networked] public double ScenarioChaseSpeed",
+                source);
+
+            StringAssert.Contains(
+                "[Networked] public double ScenarioSearchDuration",
+                source);
+
+            StringAssert.Contains(
+                "[Networked] public double ScenarioEscapeDoorTimerSeconds",
+                source);
+
+            StringAssert.DoesNotContain(
+                "(float)config.MonsterParameters.DetectionFillRate",
+                source);
+        }
+
+        [Test]
         public void MATCH_NET_AllEliminatedRequiresAtLeastOneTrackedGameplayPlayer()
         {
-            var source = File.ReadAllText(MatchSourcePath);
+            var source = LoadNetworkMatchStateSource();
 
             StringAssert.Contains("trackedCount > 0 && activeCount == 0 && survivorCount == 0", source);
             StringAssert.Contains("lobbyState.IsGameplayPlayer", source);
+        }
+
+        private static string LoadNetworkMatchStateSource()
+        {
+            return File.ReadAllText(MatchSourcePath);
         }
     }
 }

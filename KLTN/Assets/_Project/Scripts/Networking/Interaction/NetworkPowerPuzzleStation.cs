@@ -1,4 +1,5 @@
 using Fusion;
+using EchoProtocol.Diagnostics;
 using UnityEngine;
 
 namespace EchoProtocol.Networking
@@ -27,7 +28,9 @@ namespace EchoProtocol.Networking
             InputId = inputId;
             ShowFallbackVisual = showFallbackVisual;
             ApplyPresentation();
-            Debug.Log($"[PowerPuzzleStation] Station {Object.Id} input={inputId}, puzzle={puzzleId}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.PowerPuzzle,
+                $"[PowerPuzzleStation] Station {Object.Id} input={inputId}, puzzle={puzzleId}.");
         }
 
         protected override InteractionValidationResult ValidateCurrentState(in InteractionContext context)
@@ -47,7 +50,9 @@ namespace EchoProtocol.Networking
             if (!TryGetPuzzle(out var puzzle)) return;
 
             var result = puzzle.TryApplyInput(context.Player, InputId);
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.PowerPuzzle,
+
                 $"[PowerPuzzleStation] player={context.Player}, station={Object.Id}, " +
                 $"input={InputId}, result={result}.");
         }

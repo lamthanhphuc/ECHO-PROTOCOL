@@ -138,7 +138,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.StalkerVisionSensor
   visionOrigin: {fileID: 100011}
   candidate: {fileID: 0}
-  visionDistance: 30
+  visionDistance: 22
   visionAngle: 140
   losBlockerMask:
     serializedVersion: 2
@@ -160,7 +160,7 @@ MonoBehaviour:
   patrolRoute: {fileID: 0}
   visionSensor: {fileID: 100005}
   patrolMode: 3
-  patrolSpeed: 6
+  patrolSpeed: 7
   chaseSpeed: 8
   enableDiagnostics: 0
   candidateBfsDepth: 128
@@ -169,7 +169,7 @@ MonoBehaviour:
   connectivityWeight: 0.15
   immediateBacktrackPenalty: 0.75
   detectionMeterFull: 1
-  detectionFillRate: 1
+  detectionFillRate: 0.6666667
   detectionDecayRate: 3.3333333
   searchDuration: 5
   searchRadius: 8
@@ -183,13 +183,17 @@ MonoBehaviour:
   chaseDestinationRefreshInterval: 0.1
   chasePredictionLeadSeconds: 0.08
   chasePredictionMaxDistance: 1.5
-  chaseVisualLossGraceSeconds: 0.45
+  chaseVisualLossGraceSeconds: 2
+  chaseRetargetDistanceAdvantage: 1
+  chaseRetargetCooldownSeconds: 0.5
   chaseRuntimeDiagnostics: 0
   chaseRuntimeDiagnosticInterval: 0.1
   attackRange: 3
   attackWindup: 0.35
   attackRecovery: 0.4
   attackDamage: 100
+  hideSpotRevealGraceSeconds: 3
+  hideSpotRevealTrackSeconds: 1.5
   worldInteractionDistance: 1.75
   stalkerDoorBreakDurationSeconds: 3
   worldInteractionProbeRadius: 0.35
@@ -231,13 +235,14 @@ MonoBehaviour:
   visionSensor: {fileID: 100005}
   lifecycle: {fileID: 0}
   patrolNearOptimalHopSlack: 1
-  hearingOrigin: {fileID: 0}
+  hearingOrigin: {fileID: 100011}
   acousticBlockerMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 0
   hearingThreshold: 0.1
   closedDoorMultiplier: 0.5
   wallMultiplier: 0.25
+  hearingDiagnosticIntervalSeconds: 0.5
   attackDamage: 25
   maximumDamageDistance: 2
   catchEndsInDeath: 0

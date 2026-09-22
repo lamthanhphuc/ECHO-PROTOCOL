@@ -105,18 +105,25 @@ namespace EchoProtocol.AI.Listener.Perception
                 return false;
             }
 
-            var distanceFactor = Math.Max(0d, Math.Min(1d, 1d - distance / noiseEvent.HearingRadius));
-            var effectiveIntensity = noiseEvent.Loudness
-                * distanceFactor
-                * _policy.OcclusionMultiplier(occlusionClass);
-            if (effectiveIntensity < _policy.HearingThreshold)
-            {
-                rejectReason = occlusionClass == ListenerOcclusionClass.CLEAR
-                    || occlusionClass == ListenerOcclusionClass.OPEN_DOOR
-                        ? ListenerHearingRejectReason.BelowThreshold
-                        : ListenerHearingRejectReason.OccludedBelowThreshold;
-                return false;
-            }
+            var radius =
+                Math.Max(
+                    noiseEvent.HearingRadius,
+                    0.0001d);
+
+            var normalizedDistance =
+                Math.Clamp(
+                    distance / radius,
+                    0d,
+                    1d);
+
+            var distanceAttenuation =
+                1d - normalizedDistance;
+
+            // Intensity is retained only for ranking/prioritization.
+            // Noise inside HearingRadius is not rejected by threshold.
+            var effectiveIntensity =
+                noiseEvent.Loudness
+                * distanceAttenuation;
 
             observation = new HearingObservation(
                 noiseEvent.NoiseEventId,
@@ -130,6 +137,7 @@ namespace EchoProtocol.AI.Listener.Perception
                 noiseEvent.Loudness,
                 effectiveIntensity,
                 occlusionClass);
+            rejectReason = ListenerHearingRejectReason.None;
             return true;
         }
 

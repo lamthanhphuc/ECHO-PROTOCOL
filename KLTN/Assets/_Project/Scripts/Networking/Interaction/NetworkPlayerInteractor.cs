@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
+using EchoProtocol.Diagnostics;
 using EchoProtocol.Tools.Scanner;
 using Fusion;
 using UnityEngine;
@@ -123,6 +124,12 @@ namespace EchoProtocol.Networking
 
         private void Update()
         {
+            if (EchoProtocol.Voice.VoiceSettingsPanel.IsOpen)
+            {
+                if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
+                CurrentCandidate = null;
+                return;
+            }
             bool isOnline = Runner != null && Runner.IsRunning && Object != null && Object.IsValid;
             var playerState = GetComponent<LobbyPlayerState>();
             if (isOnline && (!Object.HasInputAuthority || (playerState != null && playerState.Object != null && playerState.Object.IsValid && !playerState.IsGameplayPlayer)))
@@ -441,7 +448,7 @@ namespace EchoProtocol.Networking
 
             var command = new InteractionCommand(target.Object.Id, NextSequence());
             RpcRequestInteraction(command.TargetId, command.Sequence);
-            Debug.Log($"[Interaction] Sent target={command.TargetId}, sequence={command.Sequence}.");
+            RuntimeLog.Log(RuntimeLogCategory.Interaction, $"[Interaction] Sent target={command.TargetId}, sequence={command.Sequence}.");
             return true;
         }
 
@@ -589,7 +596,8 @@ namespace EchoProtocol.Networking
             }
 
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.Interaction,
                 $"[LifeState] Revive request reviver={requester}, target={targetId}, " +
                 $"sequence={sequence}, result={result}.");
             RpcInteractionResult(requester, targetId, sequence, (int)result);
@@ -1300,7 +1308,8 @@ namespace EchoProtocol.Networking
             // Consume every new sequence, including rejected commands, so it cannot be replayed later.
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
 
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.Interaction,
                 $"[Interaction] Requester={requester}, target={targetId}, sequence={sequence}, result={result}.");
             RpcInteractionResult(requester, targetId, sequence, (int)result);
         }

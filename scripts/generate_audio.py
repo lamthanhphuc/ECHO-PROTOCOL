@@ -51,6 +51,16 @@ def render(item, replace=False):
                 x = env * (.28 * math.sin(TAU * 740 * q) + .16 * math.sin(TAU * 1110 * q))
             else:
                 x = 0
+        elif profile == 'detect_roar':
+            # Abrupt chesty bark, descending rasp, then a short guttural tail.
+            phase += TAU * (58 + 105 * math.exp(-t * 12)
+                            + 5 * math.sin(TAU * 31 * t)) / RATE
+            voice = sum(math.sin(phase * h) / h for h in range(1, 11))
+            rasp = math.tanh(voice * 2.4) * (.78 + .22 * math.sin(TAU * 37 * t))
+            chest = math.sin(phase * .5)
+            bark = high * .24 * math.exp(-t * 24)
+            envelope = math.exp(-t * 2.8) * min(1, (duration - t) / .18)
+            x = (.55 * rasp + .30 * chest + low * 1.8 + bark) * envelope
         elif breath:
             rhythm = .5 - .5 * math.cos(TAU * t / item.get('breath_period', 2.5))
             phase += TAU * base * (1 + .09 * math.sin(TAU * 3.2 * t)) / RATE
@@ -151,8 +161,13 @@ def render(item, replace=False):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--replace', action='store_true', help='Replace catalog WAVs, preserving Unity meta files')
+    parser.add_argument('--file', help='Render only this manifest-relative WAV path')
     args = parser.parse_args()
     items = json.loads((OUT / 'audio_manifest.json').read_text(encoding='utf-8'))
+    if args.file:
+        items = [item for item in items if item['file'] == args.file]
+        if not items:
+            parser.error('File is not in the audio manifest')
     for index, item in enumerate(items, 1):
         render(item, replace=args.replace)
         print(f'{index}/{len(items)} {item["file"]}', flush=True)

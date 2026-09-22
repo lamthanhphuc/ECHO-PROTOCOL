@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Diagnostics;
 using Fusion;
 using UnityEngine;
 
@@ -108,7 +109,7 @@ namespace EchoProtocol.Networking
                 {
                     State = NetworkDoorState.Open;
                     ApplyReplicatedState();
-                    Debug.Log($"[NetworkDoor] {context.Player} opened escape door {Object.Id}.");
+            RuntimeLog.Log(RuntimeLogCategory.Door, $"[NetworkDoor] {context.Player} opened escape door {Object.Id}.");
                 }
                 return;
             }
@@ -117,7 +118,7 @@ namespace EchoProtocol.Networking
                 ? NetworkDoorState.Closed
                 : NetworkDoorState.Open;
             ApplyReplicatedState();
-            Debug.Log($"[NetworkDoor] {context.Player} changed door {Object.Id} to {State}.");
+            RuntimeLog.Log(RuntimeLogCategory.Door, $"[NetworkDoor] {context.Player} changed door {Object.Id} to {State}.");
         }
 
         private bool TryGetMatchState(out NetworkMatchState matchState)

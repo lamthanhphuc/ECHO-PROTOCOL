@@ -140,6 +140,11 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 return false;
             }
 
+            if (candidates.Count > 1)
+            {
+                candidates.Remove(currentSpatialNodeId);
+            }
+
             candidates.Sort();
             if (_spatialGraph == null || !_spatialGraph.TryGetNode(currentSpatialNodeId, out _))
             {

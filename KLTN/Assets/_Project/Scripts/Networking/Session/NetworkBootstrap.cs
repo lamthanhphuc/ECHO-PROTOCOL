@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Fusion;
@@ -53,6 +54,7 @@ namespace EchoProtocol.Networking
 
             _instance = this;
             DontDestroyOnLoad(gameObject);
+            EchoProtocol.Voice.VoiceManager.EnsureExists();
             _matchAuthority = MatchAuthorityRuntime.EnsureExists(this);
         }
 
@@ -201,7 +203,9 @@ namespace EchoProtocol.Networking
                     args.SessionProperties = _matchAuthority.BuildHostSessionProperties();
                 }
 
-                Debug.Log($"[NetworkSession] Starting {gameMode} for room '{normalizedName}'.");
+                RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                $"[NetworkSession] Starting {gameMode} for room '{normalizedName}'.");
                 var result = await runner.StartGame(args);
                 if (!result.Ok)
                 {
@@ -219,11 +223,15 @@ namespace EchoProtocol.Networking
                 }
                 SetState(NetworkSessionState.InLobby,
                     $"{(gameMode == GameMode.Host ? "Created" : "Joined")} room '{normalizedName}'.");
-                Debug.Log($"[NetworkSession] Connected. Mode={gameMode}, Room='{normalizedName}', LocalPlayer={runner.LocalPlayer}.");
+                RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                $"[NetworkSession] Connected. Mode={gameMode}, Room='{normalizedName}', LocalPlayer={runner.LocalPlayer}.");
 
                 if (runner.IsSceneAuthority && SceneManager.GetActiveScene().name != LobbySceneName)
                 {
-                    Debug.Log($"[NetworkSession] Loading network scene '{LobbySceneName}'.");
+                    RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                $"[NetworkSession] Loading network scene '{LobbySceneName}'.");
                     _ = runner.LoadScene(LobbySceneName, LoadSceneMode.Single);
                 }
 
@@ -279,7 +287,9 @@ namespace EchoProtocol.Networking
         private void SetState(NetworkSessionState state, string message)
         {
             State = state;
-            Debug.Log($"[NetworkSession] State={state}. {message}");
+            RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                $"[NetworkSession] State={state}. {message}");
             SessionStateChanged?.Invoke(state, message);
         }
 
@@ -328,14 +338,18 @@ namespace EchoProtocol.Networking
 
         void INetworkRunnerCallbacks.OnPlayerJoined(NetworkRunner runner, PlayerRef player)
         {
-            Debug.Log($"[NetworkSession] Player joined: {player}. Players={CountPlayers(runner)}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                $"[NetworkSession] Player joined: {player}. Players={CountPlayers(runner)}.");
             PlayerJoined?.Invoke(player);
             if (player == runner.LocalPlayer) _matchAuthority?.TrySubmitLocalIdentity();
         }
 
         void INetworkRunnerCallbacks.OnPlayerLeft(NetworkRunner runner, PlayerRef player)
         {
-            Debug.Log($"[NetworkSession] Player left: {player}. Players={CountPlayers(runner)}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                $"[NetworkSession] Player left: {player}. Players={CountPlayers(runner)}.");
             var actorNumber = runner.GetPlayerActorId(player) ?? player.PlayerId;
             if (runner.IsServer) _matchAuthority?.MarkPlayerDisconnected(actorNumber);
             PlayerLeft?.Invoke(player);
@@ -343,14 +357,18 @@ namespace EchoProtocol.Networking
 
         void INetworkRunnerCallbacks.OnShutdown(NetworkRunner runner, ShutdownReason reason)
         {
-            Debug.Log($"[NetworkSession] Runner shutdown: {reason}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                $"[NetworkSession] Runner shutdown: {reason}.");
             if (Runner == runner && State != NetworkSessionState.ShuttingDown)
             {
                 CleanupUnexpectedTermination(runner, $"Session ended: {reason}");
             }
         }
 
-        void INetworkRunnerCallbacks.OnConnectedToServer(NetworkRunner runner) => Debug.Log("[NetworkSession] Connected to Photon server.");
+        void INetworkRunnerCallbacks.OnConnectedToServer(NetworkRunner runner) => RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                "[NetworkSession] Connected to Photon server.");
 
         void INetworkRunnerCallbacks.OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
         {
@@ -418,10 +436,14 @@ namespace EchoProtocol.Networking
         void INetworkRunnerCallbacks.OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken) { }
         void INetworkRunnerCallbacks.OnSceneLoadDone(NetworkRunner runner)
         {
-            Debug.Log($"[NetworkSession] Scene load complete: {SceneManager.GetActiveScene().name}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                $"[NetworkSession] Scene load complete: {SceneManager.GetActiveScene().name}.");
             NetworkSceneLoadDone?.Invoke(runner);
         }
-        void INetworkRunnerCallbacks.OnSceneLoadStart(NetworkRunner runner) => Debug.Log("[NetworkSession] Network scene load started.");
+        void INetworkRunnerCallbacks.OnSceneLoadStart(NetworkRunner runner) => RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                "[NetworkSession] Network scene load started.");
         void INetworkRunnerCallbacks.OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ReadOnlySpan<byte> data) { }
         void INetworkRunnerCallbacks.OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
     }

@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.AI.Listener.Perception;
 using EchoProtocol.AI.Stalker.Telemetry;
+using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
 using Fusion;
@@ -30,6 +33,10 @@ namespace EchoProtocol.AI.Stalker.Networking
         [SerializeField, Min(0f)] private double hearingThreshold = 0.1d;
         [SerializeField, Range(0.01f, 0.99f)] private float closedDoorMultiplier = 0.5f;
         [SerializeField, Range(0.01f, 0.99f)] private float wallMultiplier = 0.25f;
+
+        [Header("Runtime Diagnostics")]
+        [SerializeField, Min(0.1f)]
+        private float hearingDiagnosticIntervalSeconds = 0.5f;
 
         [Header("Authoritative Combat")]
         [SerializeField, Min(1)] private int attackDamage = 25;
@@ -81,6 +88,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         private StalkerNetworkLifeStateConsequenceSink _productionConsequenceSink;
         private StalkerProductionTelemetryProducer _productionTelemetryProducer;
         private StalkerNetworkPresentationState _lastAuthoritativePresentationState;
+        private float _nextHearingDiagnosticTime;
 
         [Networked] public int ReplicatedSemanticState { get; private set; }
         [Networked] public long ReplicatedAttackEpisodeId { get; private set; }
@@ -94,6 +102,8 @@ namespace EchoProtocol.AI.Stalker.Networking
         private HostRuntimeNoiseService _runtimeNoiseService;
         private Guid _boundHearingMatchId;
         private Guid _boundPatrolMatchId;
+        private Guid _boundScenarioMatchId;
+        private string _boundScenarioConfigFingerprint;
         private NavMeshAgent _navigationAgent;
         private StalkerAttackResult _previousAttackResult;
         private bool _networkPrefabGuard;
@@ -170,6 +180,11 @@ namespace EchoProtocol.AI.Stalker.Networking
             _runtimeNoiseService = null;
             _boundHearingMatchId = Guid.Empty;
             _boundPatrolMatchId = Guid.Empty;
+            controller?.ClearScenarioMonsterParameters();
+            _boundScenarioMatchId =
+                Guid.Empty;
+            _boundScenarioConfigFingerprint =
+                null;
             _hearingObservations.Clear();
             SetLegacySimulationSuppressed(false);
         }
@@ -191,6 +206,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             BindPatrolVariationFromMatchAuthority();
+            BindScenarioConfigFromRegistry();
             _lastAuthoritativeStep = step;
             if (!RunAuthoritativePipeline(step))
             {
@@ -273,13 +289,93 @@ namespace EchoProtocol.AI.Stalker.Networking
                 seed,
                 patrolNearOptimalHopSlack);
 
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerPatrol,
                 $"[STK_PATROL][BIND] " +
                 $"match={matchId:D} " +
                 $"seed={seed} " +
                 $"slack={patrolNearOptimalHopSlack}");
 
             _boundPatrolMatchId = matchId;
+        }
+
+        private void BindScenarioConfigFromRegistry()
+        {
+            if (controller == null)
+            {
+                return;
+            }
+
+            var authority =
+                MatchAuthorityRuntime.Instance;
+
+            if (authority == null
+                || !authority.HasStateAuthority
+                || !authority.TryGetMatchId(
+                    out var matchId)
+                || matchId == Guid.Empty)
+            {
+                ClearScenarioConfigBinding();
+                return;
+            }
+
+            if (!ScenarioConfigRuntimeRegistry
+                    .TryGetAppliedConfig(
+                        matchId,
+                        out var config)
+                || config == null)
+            {
+                ClearScenarioConfigBinding();
+                return;
+            }
+
+            var fingerprint =
+                ScenarioConfigFingerprint.Compute(
+                    config);
+
+            if (_boundScenarioMatchId == matchId
+                && string.Equals(
+                    _boundScenarioConfigFingerprint,
+                    fingerprint,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            controller.ApplyScenarioMonsterParameters(
+                config.MonsterParameters);
+
+            _boundScenarioMatchId =
+                matchId;
+
+            _boundScenarioConfigFingerprint =
+                fingerprint;
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerAed,
+                $"[STK_AED][BIND] " +
+                $"match={matchId:D} " +
+                $"config={config.ScenarioConfigVersion} " +
+                $"source={config.ConfigSource} " +
+                $"chase={config.MonsterParameters.ChaseSpeed:0.###}");
+        }
+
+        private void ClearScenarioConfigBinding()
+        {
+            if (_boundScenarioMatchId == Guid.Empty
+                && string.IsNullOrEmpty(
+                    _boundScenarioConfigFingerprint))
+            {
+                return;
+            }
+
+            controller?.ClearScenarioMonsterParameters();
+
+            _boundScenarioMatchId =
+                Guid.Empty;
+
+            _boundScenarioConfigFingerprint =
+                null;
         }
 
         private bool RunAuthoritativePipeline(AiSimulationStep step)
@@ -408,7 +504,8 @@ namespace EchoProtocol.AI.Stalker.Networking
                     isHidden || (lifeState != null && lifeState.IsCaught));
                 _targetStatuses.Add(new StalkerTargetStatus(
                     playerId,
-                    StalkerTargetEligibility.Evaluate(eligibilitySnapshot)));
+                    StalkerTargetEligibility.Evaluate(eligibilitySnapshot),
+                    isHidden));
                 _perceptionSnapshots.Add(new StalkerPerceptionTargetSnapshot(
                     playerId,
                     playerObject.transform,
@@ -514,27 +611,84 @@ namespace EchoProtocol.AI.Stalker.Networking
                  i < _activeNoiseEvents.Count;
                  i++)
             {
-                if (_hearingSensor.TryEvaluate(
-                        _activeNoiseEvents[i],
+                var noiseEvent =
+                    _activeNoiseEvents[i];
+
+                var heard =
+                    _hearingSensor.TryEvaluate(
+                        noiseEvent,
                         origin,
                         heardAtUtc,
                         out var observation,
-                        out _))
+                        out var rejectReason);
+
+                if (heard)
                 {
                     _hearingObservations.Add(
                         observation);
                 }
+
+                if (RuntimeLog.IsEnabled(
+                        RuntimeLogCategory.StalkerHearing)
+                    && _hearingSensor.LastEvaluationStatus
+                        == ListenerHearingEvaluationStatus.Evaluated)
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.StalkerHearing,
+                        $"[STK_HEARING][EVAL] " +
+                        $"type={noiseEvent.NoiseType} " +
+                        $"distance={Vector3.Distance(origin, noiseEvent.WorldPosition):F2} " +
+                        $"radius={noiseEvent.HearingRadius:F2} " +
+                        $"loudness={noiseEvent.Loudness:F3} " +
+                        $"result={(heard ? "HEARD" : "REJECT")} " +
+                        $"reject={rejectReason} " +
+                        $"noisePos={noiseEvent.WorldPosition} " +
+                        $"origin={origin}",
+                        this);
+                }
             }
 
-            if (_activeNoiseEvents.Count > 0)
+            LogHearingFrameDiagnostic(
+                origin,
+                heardAtUtc);
+        }
+
+        private void LogHearingFrameDiagnostic(
+            Vector3 origin,
+            DateTime heardAtUtc)
+        {
+            if (_activeNoiseEvents.Count <= 0)
             {
-                Debug.Log(
-                    $"[STK_HEARING][FRAME] " +
-                    $"activeNoise={_activeNoiseEvents.Count} " +
-                    $"heard={_hearingObservations.Count} " +
-                    $"origin={origin} " +
-                    $"utc={heardAtUtc:O}");
+                _nextHearingDiagnosticTime = 0f;
+                return;
             }
+
+            if (!RuntimeLog.IsEnabled(
+                    RuntimeLogCategory.StalkerHearing))
+            {
+                return;
+            }
+
+            var now = Time.unscaledTime;
+
+            if (now < _nextHearingDiagnosticTime)
+            {
+                return;
+            }
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerHearing,
+                $"[STK_HEARING][FRAME] " +
+                $"activeNoise={_activeNoiseEvents.Count} " +
+                $"heard={_hearingObservations.Count} " +
+                $"origin={origin} " +
+                $"utc={heardAtUtc:O}");
+
+            _nextHearingDiagnosticTime =
+                now
+                + Mathf.Max(
+                    0.1f,
+                    hearingDiagnosticIntervalSeconds);
         }
 
         private PlayerId CreateRunnerPlayerId(PlayerRef player)
@@ -596,7 +750,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             AttackSequence++;
-            UnityEngine.Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerCombat,
                 $"[StalkerFusion] Attack committed target={TargetPlayer}, sequence={AttackSequence}, " +
                 $"damage={attackDamage}.");
             return true;
@@ -620,7 +775,9 @@ namespace EchoProtocol.AI.Stalker.Networking
                     new ListenerHearingSensor(
                         new UnityListenerOcclusionResolver(
                             acousticBlockerMask,
-                            transform),
+                            transform,
+                            triggerInteraction:
+                                QueryTriggerInteraction.Ignore),
                         new ListenerHearingPolicy(
                             hearingThreshold,
                             closedDoorMultiplier,
@@ -941,7 +1098,8 @@ namespace EchoProtocol.AI.Stalker.Networking
         {
             var isAuthority = Object != null && Object.HasStateAuthority;
             SetDecisionComponentsEnabled(isAuthority);
-            UnityEngine.Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerLifecycle,
                 $"[StalkerFusion] Spawned authority={isAuthority}; " +
                 $"NavMesh/vision decision systems enabled={isAuthority}.");
         }

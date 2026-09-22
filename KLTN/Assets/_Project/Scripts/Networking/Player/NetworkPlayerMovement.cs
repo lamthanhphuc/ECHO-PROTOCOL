@@ -1,4 +1,5 @@
 using EchoProtocol.AI.Listener.Noise;
+using EchoProtocol.Diagnostics;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -280,7 +281,9 @@ namespace EchoProtocol.Networking
             _sprintAction?.Enable();
             _crouchAction?.Enable();
             _bootstrap?.RegisterLocalInputProvider(Object, ReadLocalInput);
-            Debug.Log($"[NetworkMovement] Local input provider registered for {Object.InputAuthority}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerMovement,
+                $"[NetworkMovement] Local input provider registered for {Object.InputAuthority}.");
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -696,7 +699,9 @@ namespace EchoProtocol.Networking
             _playerCamera = playerCamera;
 
             playerCamera.SetTarget(transform);
-            Debug.Log($"[NetworkMovement] Bound local PlayerCamera to player.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerMovement,
+                $"[NetworkMovement] Bound local PlayerCamera to player.");
         }
 
         private static PlayerCamera FindLocalPlayerCamera()
@@ -739,7 +744,7 @@ namespace EchoProtocol.Networking
 
             var hiding = GetComponent<PlayerHidingController>();
             bool isHidden = IsHidden || (hiding != null && hiding.IsHidden);
-            if (isHidden)
+            if (isHidden || EchoProtocol.Voice.VoiceSettingsPanel.IsOpen)
             {
                 return new NetworkPlayerInput
                 {

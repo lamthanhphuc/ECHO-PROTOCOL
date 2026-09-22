@@ -182,6 +182,7 @@ public class PlayerCamera : MonoBehaviour
 
     private void Update()
     {
+        if (EchoProtocol.Voice.VoiceSettingsPanel.IsOpen) { UnlockCursor(); return; }
         if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
         {
             UnlockCursor();
@@ -207,6 +208,7 @@ public class PlayerCamera : MonoBehaviour
         Vector2 lookInput = _lookAction != null
             ? _lookAction.ReadValue<Vector2>()
             : Vector2.zero;
+        if (EchoProtocol.Voice.VoiceSettingsPanel.IsOpen) lookInput = Vector2.zero;
 
         if (_networkLifeState != null && (_networkLifeState.IsCaught || _networkLifeState.IsEliminated))
             lookInput = Vector2.zero;

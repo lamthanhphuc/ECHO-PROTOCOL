@@ -40,13 +40,13 @@ namespace EchoProtocol.AI.Listener.Tests
         {
             var catalog = RuntimeNoiseCatalog.CreateDefault();
 
-            AssertDefinition(catalog, RuntimeNoiseType.CROUCH, 0.3d, 5d, 2d,
+            AssertDefinition(catalog, RuntimeNoiseType.CROUCH, 0.3d, 7d, 2d,
                 RuntimeNoiseEmissionMode.RecurringMovement);
-            AssertDefinition(catalog, RuntimeNoiseType.WALK, 0.45d, 8d, 2d,
+            AssertDefinition(catalog, RuntimeNoiseType.WALK, 0.45d, 12d, 2d,
                 RuntimeNoiseEmissionMode.RecurringMovement);
-            AssertDefinition(catalog, RuntimeNoiseType.SPRINT, 0.8d, 16d, 2d,
+            AssertDefinition(catalog, RuntimeNoiseType.SPRINT, 0.8d, 30d, 2d,
                 RuntimeNoiseEmissionMode.RecurringMovement);
-            AssertDefinition(catalog, RuntimeNoiseType.CORE_CARRY, 0.95d, 20d, 2d,
+            AssertDefinition(catalog, RuntimeNoiseType.CORE_CARRY, 0.95d, 36d, 2d,
                 RuntimeNoiseEmissionMode.RecurringMovement);
 
             catalog.TryGetDefinition(RuntimeNoiseType.CROUCH, out var crouch);
@@ -63,15 +63,15 @@ namespace EchoProtocol.AI.Listener.Tests
         {
             var catalog = RuntimeNoiseCatalog.CreateDefault();
 
-            AssertDefinition(catalog, RuntimeNoiseType.DOOR, 0.55d, 10d, 2d,
+            AssertDefinition(catalog, RuntimeNoiseType.DOOR, 0.55d, 16d, 2d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
-            AssertDefinition(catalog, RuntimeNoiseType.CORE_INSERT, 0.8d, 14d, 3d,
+            AssertDefinition(catalog, RuntimeNoiseType.CORE_INSERT, 0.8d, 24d, 3d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
-            AssertDefinition(catalog, RuntimeNoiseType.INTERACTION, 0.35d, 6d, 2d,
+            AssertDefinition(catalog, RuntimeNoiseType.INTERACTION, 0.35d, 8d, 2d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
-            AssertDefinition(catalog, RuntimeNoiseType.CORE_DROP, 0.9d, 15d, 3d,
+            AssertDefinition(catalog, RuntimeNoiseType.CORE_DROP, 0.9d, 28d, 3d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
-            AssertDefinition(catalog, RuntimeNoiseType.NOISE_MAKER, 1d, 22d, 6d,
+            AssertDefinition(catalog, RuntimeNoiseType.NOISE_MAKER, 1d, 40d, 6d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
             AssertDefinition(catalog, RuntimeNoiseType.FIELD_SCANNER, 0.45d, 8d, 2.5d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
@@ -583,7 +583,7 @@ namespace EchoProtocol.AI.Listener.Tests
         }
 
         [Test]
-        public void LIS002_T_U_V_W_X_Y_Z_HearingUsesCanonicalDistanceAndOcclusionFormula()
+        public void LIS002_T_U_V_W_X_Y_Z_HearingUsesCanonicalDistanceIntensityAndRadius()
         {
             var now = Now();
             var open = CreateNoise(RuntimeNoiseType.NOISE_MAKER, "noise-open", 1, Vector3.zero, now, 1);
@@ -600,7 +600,7 @@ namespace EchoProtocol.AI.Listener.Tests
                 out var clearObservation,
                 out var clearReject), Is.True);
             Assert.That(clearReject, Is.EqualTo(ListenerHearingRejectReason.None));
-            Assert.That(clearObservation.EffectiveIntensity, Is.EqualTo(0.5454545454545454d).Within(0.0001d));
+            Assert.That(clearObservation.EffectiveIntensity, Is.EqualTo(0.75d).Within(0.0001d));
 
             var wallSensor = new ListenerHearingSensor(
                 new StaticListenerOcclusionResolver(ListenerOcclusionClass.SOLID_WALL),
@@ -612,7 +612,7 @@ namespace EchoProtocol.AI.Listener.Tests
                 now,
                 out var wallObservation,
                 out _), Is.True);
-            Assert.That(wallObservation.EffectiveIntensity, Is.EqualTo(0.13636363636363635d).Within(0.0001d));
+            Assert.That(wallObservation.EffectiveIntensity, Is.EqualTo(0.75d).Within(0.0001d));
 
             var closedDoorSensor = new ListenerHearingSensor(
                 new StaticListenerOcclusionResolver(ListenerOcclusionClass.CLOSED_DOOR),
@@ -624,7 +624,7 @@ namespace EchoProtocol.AI.Listener.Tests
                 now,
                 out var doorObservation,
                 out _), Is.True);
-            Assert.That(doorObservation.EffectiveIntensity, Is.GreaterThan(wallObservation.EffectiveIntensity));
+            Assert.That(doorObservation.EffectiveIntensity, Is.EqualTo(wallObservation.EffectiveIntensity).Within(0.0001d));
             Assert.That(
                 ListenerOcclusionClassifier.Strongest(
                     ListenerOcclusionClass.OPEN_DOOR,
@@ -642,7 +642,7 @@ namespace EchoProtocol.AI.Listener.Tests
             outOfRangeSensor.BeginMatch(Guid.NewGuid());
             Assert.That(outOfRangeSensor.TryEvaluate(
                 open,
-                new Vector3(0, 0, 23),
+                new Vector3(0, 0, 41),
                 now,
                 out _,
                 out var outOfRange), Is.False);
@@ -650,7 +650,83 @@ namespace EchoProtocol.AI.Listener.Tests
         }
 
         [Test]
-        public void LIS002_V_W_X_HearingRejectReasonsSeparateThresholdOcclusionAndQueryFailure()
+        public void Hearing_InsideConfiguredRadius_IsAlwaysHeard()
+        {
+            var sensor =
+                new ListenerHearingSensor(
+                    new StaticListenerOcclusionResolver(
+                        ListenerOcclusionClass.CLEAR),
+                    new ListenerHearingPolicy(
+                        0.99d,
+                        0.5d,
+                        0.25d));
+
+            sensor.BeginMatch(Guid.NewGuid());
+
+            var noise =
+                CreateNoise(
+                    RuntimeNoiseType.WALK,
+                    "walk-radius-test",
+                    1,
+                    Vector3.zero,
+                    Now(),
+                    1);
+
+            Assert.That(
+                sensor.TryEvaluate(
+                    noise,
+                    new Vector3(11.99f, 0f, 0f),
+                    Now(),
+                    out _,
+                    out var reject),
+                Is.True);
+
+            Assert.That(
+                reject,
+                Is.EqualTo(
+                    ListenerHearingRejectReason.None));
+        }
+
+        [Test]
+        public void Hearing_OutsideConfiguredRadius_IsRejected()
+        {
+            var sensor =
+                new ListenerHearingSensor(
+                    new StaticListenerOcclusionResolver(
+                        ListenerOcclusionClass.CLEAR),
+                    new ListenerHearingPolicy(
+                        0.1d,
+                        0.5d,
+                        0.25d));
+
+            sensor.BeginMatch(Guid.NewGuid());
+
+            var noise =
+                CreateNoise(
+                    RuntimeNoiseType.WALK,
+                    "walk-outside-radius-test",
+                    1,
+                    Vector3.zero,
+                    Now(),
+                    1);
+
+            Assert.That(
+                sensor.TryEvaluate(
+                    noise,
+                    new Vector3(12.01f, 0f, 0f),
+                    Now(),
+                    out _,
+                    out var reject),
+                Is.False);
+
+            Assert.That(
+                reject,
+                Is.EqualTo(
+                    ListenerHearingRejectReason.OutsideRange));
+        }
+
+        [Test]
+        public void LIS002_V_W_X_HearingRejectReasonsSeparateRangeAndQueryFailure()
         {
             var now = Now();
             var noiseEvent = CreateNoise(RuntimeNoiseType.INTERACTION, "threshold", 1, Vector3.zero, now, 1);
@@ -664,8 +740,8 @@ namespace EchoProtocol.AI.Listener.Tests
                 new Vector3(0, 0, 5),
                 now,
                 out _,
-                out var clearReason), Is.False);
-            Assert.That(clearReason, Is.EqualTo(ListenerHearingRejectReason.BelowThreshold));
+                out var clearReason), Is.True);
+            Assert.That(clearReason, Is.EqualTo(ListenerHearingRejectReason.None));
 
             var occluded = CreateNoise(RuntimeNoiseType.INTERACTION, "threshold-occluded", 1, Vector3.zero, now, 2);
             var occludedSensor = new ListenerHearingSensor(
@@ -677,8 +753,8 @@ namespace EchoProtocol.AI.Listener.Tests
                 new Vector3(0, 0, 5),
                 now,
                 out _,
-                out var occludedReason), Is.False);
-            Assert.That(occludedReason, Is.EqualTo(ListenerHearingRejectReason.OccludedBelowThreshold));
+                out var occludedReason), Is.True);
+            Assert.That(occludedReason, Is.EqualTo(ListenerHearingRejectReason.None));
 
             var queryFailed = CreateNoise(RuntimeNoiseType.INTERACTION, "query-failed", 1, Vector3.zero, now, 3);
             var queryFailedSensor = new ListenerHearingSensor(
@@ -762,7 +838,7 @@ namespace EchoProtocol.AI.Listener.Tests
             var outside = CreateNoise(RuntimeNoiseType.NOISE_MAKER, "retro", 1, Vector3.zero, now, 12);
             Assert.That(retroactiveSensor.TryEvaluate(
                 outside,
-                new Vector3(0, 0, 23),
+                new Vector3(0, 0, 41),
                 now,
                 out _,
                 out var outsideReason), Is.False);

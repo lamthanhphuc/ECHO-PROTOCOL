@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using EchoProtocol.AI.Common;
 using EchoProtocol.Player;
@@ -63,11 +64,15 @@ namespace EchoProtocol.Networking
 
         public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
         {
-            Debug.Log($"FPL|JOIN_CALLBACK|player={player}|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|JOIN_CALLBACK|player={player}|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
 
             if (!CanMutateLifecycle(runner))
             {
-                Debug.Log($"FPL|JOIN_REJECT|player={player}|reason=Authority|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
+                RuntimeLog.Log(
+                RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|JOIN_REJECT|player={player}|reason=Authority|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                 return;
             }
 
@@ -75,18 +80,24 @@ namespace EchoProtocol.Networking
             {
                 if (IsCommitted(player, existingObject))
                 {
-                    Debug.Log($"FPL|JOIN_REJECT|player={player}|reason=AlreadyCommitted|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
+                    RuntimeLog.Log(
+                RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|JOIN_REJECT|player={player}|reason=AlreadyCommitted|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                     return;
                 }
 
-                Debug.Log($"FPL|JOIN_REJECT|player={player}|reason=InconsistentExistingPlayerObject|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
+                RuntimeLog.Log(
+                RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|JOIN_REJECT|player={player}|reason=InconsistentExistingPlayerObject|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                 Debug.LogError($"[FusionPlayerLifecycle] Player {player} already has an inconsistent player object.");
                 return;
             }
 
             if (playerPrefab == null)
             {
-                Debug.Log($"FPL|JOIN_REJECT|player={player}|reason=MissingPlayerPrefab|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
+                RuntimeLog.Log(
+                RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|JOIN_REJECT|player={player}|reason=MissingPlayerPrefab|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                 Debug.LogError("[FusionPlayerLifecycle] Player prefab is not assigned.");
                 return;
             }
@@ -101,7 +112,9 @@ namespace EchoProtocol.Networking
             {
                 if (!_identityRegistry.TryRegister(player, out playerId))
                 {
-                    Debug.Log($"FPL|JOIN_REJECT|player={player}|reason=IdentityRegistryRejected|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
+                    RuntimeLog.Log(
+                RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|JOIN_REJECT|player={player}|reason=IdentityRegistryRejected|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                     Debug.LogError($"[FusionPlayerLifecycle] Failed to register logical identity for player {player}.");
                     return;
                 }
@@ -147,23 +160,31 @@ namespace EchoProtocol.Networking
             catch (Exception ex)
             {
                 RollbackJoin(runner, player, playerId, identity, spawnedObject, entityRegistered, playerObjectCommitted);
-                Debug.Log($"FPL|JOIN_REJECT|player={player}|reason=TransactionFailed|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
+                RuntimeLog.Log(
+                RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|JOIN_REJECT|player={player}|reason=TransactionFailed|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                 Debug.LogError($"[FusionPlayerLifecycle] Failed to spawn/register player {player}: {ex.Message}");
                 return;
             }
 
             var commit = new FusionPlayerObjectCommit(player, spawnedObject, playerId);
-            Debug.Log($"FPL|JOIN_COMMIT|player={player}|playerId={playerId.Value}");
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|JOIN_COMMIT|player={player}|playerId={playerId.Value}");
             NotifyPlayerObjectCommitted(commit);
         }
 
         public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
         {
-            Debug.Log($"FPL|LEFT_CALLBACK|player={player}|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|LEFT_CALLBACK|player={player}|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
 
             if (!CanMutateLifecycle(runner))
             {
-                Debug.Log($"FPL|LEFT_REJECT|player={player}|reason=Authority|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
+                RuntimeLog.Log(
+                RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|LEFT_REJECT|player={player}|reason=Authority|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
                 return;
             }
 
@@ -200,7 +221,9 @@ namespace EchoProtocol.Networking
                 }
             }
 
-            Debug.Log($"FPL|LEFT_COMMIT|player={player}|playerId={(oldPlayerId.IsValid ? oldPlayerId.Value.ToString() : "none")}|hadPlayerObject={playerObject != null}");
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|LEFT_COMMIT|player={player}|playerId={(oldPlayerId.IsValid ? oldPlayerId.Value.ToString() : "none")}|hadPlayerObject={playerObject != null}");
         }
 
         private void RegisterCallbacks()

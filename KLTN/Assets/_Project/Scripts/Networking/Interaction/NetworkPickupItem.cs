@@ -1,5 +1,6 @@
 using System;
 using EchoProtocol.AI.Listener.Noise;
+using EchoProtocol.Diagnostics;
 using Fusion;
 using UnityEngine;
 using EchoProtocol.Networking.Authority;
@@ -110,7 +111,7 @@ namespace EchoProtocol.Networking
             }
 
             var disconnectedHolder = Holder;
-            Debug.Log($"[NetworkItem] Holder {disconnectedHolder} left; dropping item {Object.Id} at its last authoritative pose {transform.position}.");
+            RuntimeLog.Log(RuntimeLogCategory.Inventory, $"[NetworkItem] Holder {disconnectedHolder} left; dropping item {Object.Id} at its last authoritative pose {transform.position}.");
             WorldPosition = transform.position;
             WorldRotation = transform.rotation;
             State = NetworkItemState.Dropped;
@@ -161,7 +162,7 @@ namespace EchoProtocol.Networking
             AdvanceTransition();
             ApplyReplicatedState();
             PublishTransition(context.Player);
-            Debug.Log($"[NetworkItem] {context.Player} picked up item {Object.Id}.");
+            RuntimeLog.Log(RuntimeLogCategory.Inventory, $"[NetworkItem] {context.Player} picked up item {Object.Id}.");
         }
 
         public bool CanBeDroppedBy(PlayerRef actor, LobbyPlayerState carrierState = null)
@@ -204,7 +205,7 @@ namespace EchoProtocol.Networking
                     RuntimeNoiseSourceOccurrenceKey.ForCoreDrop(Object.Id.ToString(), TransitionOrdinal),
                     position,
                     out _);
-            Debug.Log($"[NetworkItem] {actor} dropped item {Object.Id} at {position}.");
+            RuntimeLog.Log(RuntimeLogCategory.Inventory, $"[NetworkItem] {actor} dropped item {Object.Id} at {position}.");
             return true;
         }
 
@@ -263,7 +264,7 @@ namespace EchoProtocol.Networking
                         TransitionOrdinal),
                     position,
                     out _);
-            Debug.Log($"[NetworkItem] {actor} placed item {Object.Id} at {position}.");
+            RuntimeLog.Log(RuntimeLogCategory.Inventory, $"[NetworkItem] {actor} placed item {Object.Id} at {position}.");
             return true;
         }
 

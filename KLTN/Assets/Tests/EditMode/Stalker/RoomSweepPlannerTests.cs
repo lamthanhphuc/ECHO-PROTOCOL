@@ -119,6 +119,51 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
+        public void STK_RoomSweepPlanner_CurrentUnobservedNodeWithAlternate_PrefersAlternate()
+        {
+            var spatialGraph = CreateSpatialGraph(
+                Node(0, 1),
+                Node(1, 0));
+            var room = new RegionId(1);
+            var regionGraph = CreateRegionGraph(
+                spatialGraph,
+                new[] { room, room },
+                RoomRegion(room, 1, "Zone01/Room"));
+            var memory = CreateMemory();
+            var planner = CreatePlanner(spatialGraph, regionGraph, memory);
+            Assert.That(TryBeginRegion(planner, room), Is.True);
+
+            Assert.That(TrySelectNextProbe(planner, 0, out var target), Is.True);
+
+            Assert.That(target, Is.EqualTo(1));
+            Assert.That(GetIntProperty(planner, "RejectedProbeCount"), Is.EqualTo(0));
+            Assert.That(GetMemoryInt(memory, "GetObservedCount", room), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void STK_RoomSweepPlanner_CurrentNodeOnlyRemaining_AllowsSelfProbe()
+        {
+            var spatialGraph = CreateSpatialGraph(
+                Node(0, 1),
+                Node(1, 0));
+            var room = new RegionId(1);
+            var regionGraph = CreateRegionGraph(
+                spatialGraph,
+                new[] { room, room },
+                RoomRegion(room, 1, "Zone01/Room"));
+            var memory = CreateMemory();
+            var planner = CreatePlanner(spatialGraph, regionGraph, memory);
+            Assert.That(TryBeginRegion(planner, room), Is.True);
+            Assert.That(MarkObserved(memory, room, 1), Is.True);
+
+            Assert.That(TrySelectNextProbe(planner, 0, out var target), Is.True);
+
+            Assert.That(target, Is.EqualTo(0));
+            Assert.That(GetIntProperty(planner, "RejectedProbeCount"), Is.EqualTo(0));
+            Assert.That(GetMemoryInt(memory, "GetObservedCount", room), Is.EqualTo(1));
+        }
+
+        [Test]
         public void STK_RoomSweepPlanner_InvalidCurrentNode_SelectsLowestEligibleProbe()
         {
             var spatialGraph = CreateSpatialGraph(Node(0), Node(1), Node(2), Node(3), Node(4), Node(5), Node(6), Node(7));

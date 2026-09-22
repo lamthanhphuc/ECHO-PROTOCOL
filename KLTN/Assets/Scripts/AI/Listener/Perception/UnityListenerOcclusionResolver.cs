@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
 using UnityEngine;
 
@@ -68,6 +69,8 @@ namespace EchoProtocol.AI.Listener.Perception
             }
 
             var strongest = ListenerOcclusionClass.CLEAR;
+            var strongestHit = default(RaycastHit);
+            var hasStrongestHit = false;
             for (var index = 0; index < hitCount; index++)
             {
                 var collider = _hits[index].collider;
@@ -80,7 +83,32 @@ namespace EchoProtocol.AI.Listener.Perception
                 var classified = door == null
                     ? ListenerOcclusionClass.SOLID_WALL
                     : ListenerOcclusionClassifier.ClassifyDoorState(door.State);
-                strongest = ListenerOcclusionClassifier.Strongest(strongest, classified);
+                var nextStrongest =
+                    ListenerOcclusionClassifier.Strongest(
+                        strongest,
+                        classified);
+
+                if (nextStrongest != strongest)
+                {
+                    strongestHit = _hits[index];
+                    hasStrongestHit = true;
+                }
+
+                strongest = nextStrongest;
+            }
+
+            if (hasStrongestHit
+                && RuntimeLog.IsEnabled(RuntimeLogCategory.StalkerHearing))
+            {
+                var collider = strongestHit.collider;
+                RuntimeLog.Log(
+                    RuntimeLogCategory.StalkerHearing,
+                    $"[STK_HEARING][OCCLUSION] " +
+                    $"class={strongest} " +
+                    $"blocker={collider.transform.root.name}/{collider.name} " +
+                    $"layer={LayerMask.LayerToName(collider.gameObject.layer)} " +
+                    $"point={strongestHit.point}",
+                    collider);
             }
 
             return strongest;

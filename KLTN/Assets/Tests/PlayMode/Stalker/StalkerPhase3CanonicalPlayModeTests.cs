@@ -250,11 +250,23 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetProperty(fixture.Controller, "CurrentState").ToString(), Is.EqualTo("CHASE"));
             var frozenLkp = (Vector3)GetProperty(fixture.Controller, "LastKnownPosition");
 
+            // Lost sight for only 0.1s:
+            // still inside the new 2-second visual-loss grace.
             Simulate(fixture.Controller, 0.1f, null, TargetStatusList(CreateStatus(1, true)));
             Assert.That(GetProperty(fixture.Controller, "CurrentState").ToString(), Is.EqualTo("CHASE"));
             Assert.That((Vector3)GetProperty(fixture.Controller, "LastKnownPosition"), Is.EqualTo(frozenLkp));
-            Simulate(fixture.Controller, 0.4f, null, TargetStatusList(CreateStatus(1, true)));
+
+            // Total visual loss = 1.9s:
+            // still inside the 2-second grace.
+            Simulate(fixture.Controller, 1.8f, null, TargetStatusList(CreateStatus(1, true)));
+            Assert.That(GetProperty(fixture.Controller, "CurrentState").ToString(), Is.EqualTo("CHASE"));
+            Assert.That((Vector3)GetProperty(fixture.Controller, "LastKnownPosition"), Is.EqualTo(frozenLkp));
+
+            // Total visual loss = 2.01s:
+            // grace expired, now enter SEARCH.
+            Simulate(fixture.Controller, 0.11f, null, TargetStatusList(CreateStatus(1, true)));
             Assert.That(GetProperty(fixture.Controller, "CurrentState").ToString(), Is.EqualTo("SEARCH"));
+            Assert.That((Vector3)GetProperty(fixture.Controller, "LastKnownPosition"), Is.EqualTo(frozenLkp));
             SetPrivateField(fixture.Controller, "searchDuration", 0.1f);
             Simulate(fixture.Controller, 0.2f, null, TargetStatusList(CreateStatus(1, true)));
             Assert.That(GetProperty(fixture.Controller, "CurrentState").ToString(), Is.EqualTo("PATROL"));

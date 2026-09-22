@@ -30,7 +30,7 @@ DESIGNS = '''
 idle_breathing_growl_loop growl 8.2
 footstep_cham step .48
 footstep_chay_chase step .32
-detect_cue stinger .65
+detect_cue detect_roar .65
 chase_start stinger 1.1
 chase_loop_vocal_loop growl 6.2
 attack_swing whoosh .75

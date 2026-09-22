@@ -67,7 +67,10 @@ namespace EchoProtocol.AI.Stalker.Networking
                     isEliminated,
                     isHidden || (lifeState != null && lifeState.IsCaught));
                 var eligibility = StalkerTargetEligibility.Evaluate(eligibilitySnapshot);
-                InsertStatusSortedUnique(targetStatuses, new StalkerTargetStatus(playerId, eligibility));
+                InsertStatusSortedUnique(targetStatuses, new StalkerTargetStatus(
+                    playerId,
+                    eligibility,
+                    isHidden));
                 var isObjectiveCarrier =
                     identity.TryGetComponent<LobbyPlayerState>(
                         out var lobbyState)

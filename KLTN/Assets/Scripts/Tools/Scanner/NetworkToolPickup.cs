@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
@@ -189,7 +190,7 @@ namespace EchoProtocol.Tools.Scanner
                 Debug.LogWarning($"[NetworkToolPickup] ToolPickedUp event exception: {ex.Message}");
             }
 
-            Debug.Log($"[NetworkToolPickup] Player {context.Player} picked up tool '{_toolItemDefinition?.DisplayName ?? _toolId.ToString()}'.");
+            RuntimeLog.Log(RuntimeLogCategory.Inventory, $"[NetworkToolPickup] Player {context.Player} picked up tool '{_toolItemDefinition?.DisplayName ?? _toolId.ToString()}'.");
         }
 
         public override void FixedUpdateNetwork()

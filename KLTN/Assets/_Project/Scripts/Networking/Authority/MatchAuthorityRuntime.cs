@@ -1,6 +1,9 @@
 using System;
+using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using EchoProtocol.AI.AED;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Auth;
 using Fusion;
 using EchoProtocol.Telemetry;
@@ -26,6 +29,7 @@ namespace EchoProtocol.Networking.Authority
         IUnityTelemetryProvenanceProvider
     {
         public const string MatchIdSessionProperty = "matchId";
+        public const string ScenarioResolutionModeSessionProperty = "scenarioResolutionMode";
         private const float LeaseRenewIntervalSeconds = 15f;
 
         private static MatchAuthorityRuntime _instance;
@@ -40,12 +44,23 @@ namespace EchoProtocol.Networking.Authority
         private DateTime _matchStartedAtUtc;
         private bool _telemetryMatchActive;
         private bool _matchEndEmitted;
+        private bool _pendingAuthoritativeTelemetryMatchStart;
         private string _currentTelemetryPhase = "CORE_COLLECTION";
         private HostRuntimeNoiseService _runtimeNoise;
         [SerializeField] private bool _researchCaptureEnabled;
-
+        [SerializeField] private ScenarioResolutionMode requestedScenarioResolutionMode = ScenarioResolutionMode.Fixed;
+        [SerializeField] private string experimentCondition;
+        [SerializeField]
+        private string experimentProtocolVersion;
+        [SerializeField]
+        private string telemetryMapContentVersion =
+            "M2-MAP-1";
         public static MatchAuthorityRuntime Instance => _instance;
         public Guid MatchId { get; private set; }
+        public ScenarioResolutionMode RequestedScenarioResolutionMode => requestedScenarioResolutionMode;
+        public string ExperimentCondition => experimentCondition ?? string.Empty;
+        public string ExperimentProtocolVersion =>
+            experimentProtocolVersion ?? string.Empty;
         public bool IsHostBinding { get; private set; }
         public bool HasBinding => MatchId != Guid.Empty;
         public bool HasStateAuthority => IsHostBinding && _bootstrap?.Runner != null
@@ -147,14 +162,20 @@ namespace EchoProtocol.Networking.Authority
             MatchId = matchId;
             IsHostBinding = true;
             _nextLeaseRenewal = Time.unscaledTime + LeaseRenewIntervalSeconds;
-            Debug.Log($"[MatchAuthority] Host binding created. Match={MatchId:D}, Session='{sessionName}'.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+                $"[MatchAuthority] Host binding created. Match={MatchId:D}, Session='{sessionName}'.");
             return true;
         }
 
         public Dictionary<string, SessionProperty> BuildHostSessionProperties() =>
             new Dictionary<string, SessionProperty>
             {
-                [MatchIdSessionProperty] = MatchId.ToString("D")
+                [MatchIdSessionProperty] = MatchId.ToString("D"),
+                [ScenarioResolutionModeSessionProperty] =
+                    requestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive
+                        ? "ADAPTIVE"
+                        : "FIXED"
             };
 
         public bool AttachJoinedSession(NetworkRunner runner)
@@ -180,11 +201,29 @@ namespace EchoProtocol.Networking.Authority
 
             MatchId = matchId;
             IsHostBinding = runner.IsServer;
-            Debug.Log(
+            requestedScenarioResolutionMode = ReadScenarioResolutionMode(runner);
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+
                 $"[MatchAuthority] Fusion session attached. Match={MatchId:D}, " +
-                $"Host={IsHostBinding}, Session='{runner.SessionInfo.Name}'.");
+                $"Host={IsHostBinding}, Mode={requestedScenarioResolutionMode}, Session='{runner.SessionInfo.Name}'.");
             TrySubmitLocalIdentity();
             return true;
+        }
+
+        public void RequestScenarioResolutionMode(
+            ScenarioResolutionMode mode,
+            string condition = null,
+            string protocolVersion = null)
+        {
+            requestedScenarioResolutionMode =
+                mode;
+
+            experimentCondition =
+                condition ?? string.Empty;
+
+            experimentProtocolVersion =
+                protocolVersion ?? string.Empty;
         }
 
         public async Task<bool> EndAsync(string reason)
@@ -249,7 +288,9 @@ namespace EchoProtocol.Networking.Authority
             }
 
             playerState.ApplyVerifiedBackendIdentity(result.Data.data.userId);
-            Debug.Log(
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+
                 $"[MatchAuthority] Player verified. Actor={actorNumber}, " +
                 $"User={result.Data.data.userId}, Match={MatchId:D}.");
         }
@@ -277,7 +318,9 @@ namespace EchoProtocol.Networking.Authority
             var success = IsSuccessful(result);
             if (success)
             {
-                Debug.Log($"[MatchAuthority] Backend confirmed match start. Match={MatchId:D}.");
+                RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+                $"[MatchAuthority] Backend confirmed match start. Match={MatchId:D}.");
                 completed?.Invoke(true, string.Empty);
             }
             else
@@ -289,16 +332,24 @@ namespace EchoProtocol.Networking.Authority
 
         public void ResetBinding()
         {
+            var oldMatchId = MatchId;
             MatchId = Guid.Empty;
             IsHostBinding = false;
+            requestedScenarioResolutionMode = ScenarioResolutionMode.Fixed;
+            experimentCondition = string.Empty;
+            experimentProtocolVersion =
+                string.Empty;
             _leaseRequestInProgress = false;
             _identityRequestInProgress = false;
             _backendEndRequestInProgress = false;
             _matchStartedAtUtc = default;
             _telemetryMatchActive = false;
             _matchEndEmitted = false;
+            _pendingAuthoritativeTelemetryMatchStart = false;
             _currentTelemetryPhase = "CORE_COLLECTION";
             _runtimeNoise?.ResetForMatch();
+            ScenarioConfigRuntimeRegistry.Clear(oldMatchId);
+            ScenarioConfigAuthorityRuntime.Instance?.ResetForMatch(oldMatchId);
         }
 
         public bool TryGetMatchId(out Guid matchId)
@@ -307,33 +358,218 @@ namespace EchoProtocol.Networking.Authority
             return matchId != Guid.Empty;
         }
 
-        public TelemetryProvenanceSnapshot Capture() => new TelemetryProvenanceSnapshot(
-            "M2-SCENARIO-1",
-            "M2-POLICY-1",
-            TelemetryConfigSource.Fixed,
-            _researchCaptureEnabled);
+        public TelemetryProvenanceSnapshot Capture()
+        {
+            if (MatchId == Guid.Empty)
+            {
+                throw new InvalidOperationException(
+                    "Telemetry provenance is unavailable: " +
+                    "no authoritative match is bound.");
+            }
+
+            if (!ScenarioConfigRuntimeRegistry
+                    .TryGetAppliedConfig(
+                        MatchId,
+                        out var applied)
+                || applied == null)
+            {
+                throw new InvalidOperationException(
+                    "Telemetry provenance is unavailable: " +
+                    "no AppliedScenarioConfig exists for " +
+                    "the authoritative match.");
+            }
+
+            return new TelemetryProvenanceSnapshot(
+                applied.ScenarioConfigVersion,
+                applied.PolicyVersion,
+                applied.ConfigSource
+                    == ScenarioConfigSource.Adaptive
+                        ? TelemetryConfigSource.Adaptive
+                        : TelemetryConfigSource.Fixed,
+                _researchCaptureEnabled);
+        }
 
         private void HandleSessionStateChanged(NetworkSessionState state, string message)
         {
             if (state != NetworkSessionState.InMatch || !HasStateAuthority) return;
             _runtimeNoise?.BeginMatch(MatchId);
-            if (_telemetry == null) return;
-            if (!_telemetry.TryBeginAuthoritativeMatch()) return;
+            _pendingAuthoritativeTelemetryMatchStart = true;
+            TryBeginAuthoritativeTelemetryMatch();
+        }
 
-            var occurredAtUtc = DateTime.UtcNow;
+        public void NotifyScenarioResolutionFinalized(
+            Guid matchId,
+            ScenarioResolutionRecord record)
+        {
+            if (!HasStateAuthority
+                || matchId == Guid.Empty
+                || matchId != MatchId
+                || record == null
+                || record.TargetMatchId != matchId)
+            {
+                return;
+            }
+
+            TryBeginAuthoritativeTelemetryMatch();
+        }
+
+        private void TryBeginAuthoritativeTelemetryMatch()
+        {
+            if (!_pendingAuthoritativeTelemetryMatchStart
+                || _telemetryMatchActive
+                || !HasStateAuthority
+                || MatchId == Guid.Empty
+                || _telemetry == null
+                || !ScenarioConfigRuntimeRegistry
+                    .TryGetAppliedConfig(
+                        MatchId,
+                        out var applied)
+                || applied == null)
+            {
+                return;
+            }
+
+            var scenarioRuntime =
+                ScenarioConfigAuthorityRuntime.Instance;
+
+            var resolutionRecord =
+                scenarioRuntime != null
+                    ? scenarioRuntime.LastResolutionRecord
+                    : null;
+
+            if (resolutionRecord == null
+                || resolutionRecord.TargetMatchId
+                    != MatchId
+                || !resolutionRecord.HasStateAuthority)
+            {
+                return;
+            }
+
+            var resolvedContentWhitelistVersion =
+                resolutionRecord.ContentWhitelistVersion;
+
+            if (string.IsNullOrWhiteSpace(
+                    telemetryMapContentVersion)
+                || string.IsNullOrWhiteSpace(
+                    resolvedContentWhitelistVersion))
+            {
+                Debug.LogError(
+                    "[Telemetry] MATCH_STARTED blocked: " +
+                    "map/content provenance binding is missing.");
+
+                return;
+            }
+
+            string activeExperimentCondition =
+                string.IsNullOrWhiteSpace(
+                    experimentCondition)
+                    ? null
+                    : experimentCondition;
+
+            string activeExperimentProtocolVersion =
+                string.IsNullOrWhiteSpace(
+                    experimentProtocolVersion)
+                    ? null
+                    : experimentProtocolVersion;
+
+            if ((activeExperimentCondition == null)
+                != (activeExperimentProtocolVersion == null))
+            {
+                Debug.LogError(
+                    "[Telemetry] MATCH_STARTED blocked: " +
+                    "experimentCondition and " +
+                    "experimentProtocolVersion must " +
+                    "either both be present or both be absent.");
+
+                return;
+            }
+
+            if (activeExperimentCondition != null
+                && !string.Equals(
+                    activeExperimentCondition,
+                    "FIXED",
+                    StringComparison.Ordinal)
+                && !string.Equals(
+                    activeExperimentCondition,
+                    "ADAPTIVE",
+                    StringComparison.Ordinal))
+            {
+                Debug.LogError(
+                    "[Telemetry] MATCH_STARTED blocked: " +
+                    "invalid experimentCondition.");
+
+                return;
+            }
+
             var teamSize = 0;
-            foreach (var _ in _bootstrap.Runner.ActivePlayers) teamSize++;
+
+            foreach (var _ in
+                     _bootstrap.Runner.ActivePlayers)
+            {
+                teamSize++;
+            }
+
+            if (teamSize < 1)
+            {
+                Debug.LogWarning(
+                    "[Telemetry] MATCH_STARTED deferred: " +
+                    "authoritative roster is empty.");
+
+                return;
+            }
+
+            if (!_telemetry.TryInitialize())
+            {
+                return;
+            }
+
+            var sequenceAllocator =
+                _telemetry.SequenceAllocator;
+
+            if (sequenceAllocator == null)
+            {
+                return;
+            }
+
+            if (sequenceAllocator.IsActive)
+            {
+                if (sequenceAllocator.MatchId != MatchId)
+                {
+                    Debug.LogError(
+                        "[Telemetry] MATCH_STARTED blocked: " +
+                        "another telemetry match is already active.");
+
+                    return;
+                }
+
+                // Same authoritative match already owns the sequence
+                // domain. Do not BeginMatch again. This allows a
+                // previously created-but-not-buffered MATCH_STARTED
+                // occurrence to retry through TelemetryEmitter.
+            }
+            else if (!_telemetry.TryBeginAuthoritativeMatch())
+            {
+                return;
+            }
+
+            var occurredAtUtc =
+                DateTime.UtcNow;
+
             if (!_telemetry.MatchAdapter.EmitMatchStarted(
                 "match-start",
                 occurredAtUtc,
-                LobbyManager.GameSceneName,
+                applied.MapId,
                 teamSize,
                 Application.version,
-                "M2-MAP-1",
-                "M2-WHITELIST-1",
+                telemetryMapContentVersion,
+                resolvedContentWhitelistVersion,
                 _researchCaptureEnabled,
                 out _,
-                out var startFailure))
+                out var startFailure,
+                experimentCondition:
+                    activeExperimentCondition,
+                experimentProtocolVersion:
+                    activeExperimentProtocolVersion))
             {
                 Debug.LogWarning($"[Telemetry] MATCH_STARTED was not buffered: {startFailure}.");
                 return;
@@ -341,6 +577,7 @@ namespace EchoProtocol.Networking.Authority
 
             _matchStartedAtUtc = occurredAtUtc;
             _telemetryMatchActive = true;
+            _pendingAuthoritativeTelemetryMatchStart = false;
             _matchEndEmitted = false;
             _currentTelemetryPhase = "CORE_COLLECTION";
             if (!_telemetry.MatchAdapter.EmitPhaseStarted(
@@ -352,6 +589,23 @@ namespace EchoProtocol.Networking.Authority
             {
                 Debug.LogWarning($"[Telemetry] initial PHASE_STARTED was not buffered: {phaseFailure}.");
             }
+        }
+
+        private static ScenarioResolutionMode ReadScenarioResolutionMode(NetworkRunner runner)
+        {
+            if (runner != null
+                && runner.SessionInfo.IsValid
+                && runner.SessionInfo.Properties != null
+                && runner.SessionInfo.Properties.TryGetValue(ScenarioResolutionModeSessionProperty, out var property))
+            {
+                var raw = ((string)property) ?? string.Empty;
+                if (string.Equals(raw, "ADAPTIVE", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ScenarioResolutionMode.Adaptive;
+                }
+            }
+
+            return ScenarioResolutionMode.Fixed;
         }
 
         private void HandlePickupStateCommitted(NetworkItemTransition transition)
@@ -489,7 +743,9 @@ namespace EchoProtocol.Networking.Authority
             }
 
             IsHostBinding = false;
-            Debug.Log($"[MatchAuthority] Backend confirmed match end. Match={MatchId:D}, Reason={reasonCode}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+                $"[MatchAuthority] Backend confirmed match end. Match={MatchId:D}, Reason={reasonCode}.");
         }
 
         public bool RecordPlayerDowned(

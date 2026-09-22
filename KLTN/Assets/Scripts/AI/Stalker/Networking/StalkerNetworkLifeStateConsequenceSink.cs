@@ -37,7 +37,26 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return false;
             }
 
-            return _ghost != null && _ghost.TryCatchPlayer(lifeState);
+            if (playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement)
+                && movement.IsHidden)
+            {
+                return false;
+            }
+
+            var hidingController =
+                playerObject.GetComponentInChildren<global::PlayerHidingController>(true);
+
+            if (hidingController != null
+                && hidingController.IsHidden)
+            {
+                return false;
+            }
+
+            return lifeState.Status == NetworkPlayerLifeStatus.Downed
+                ? lifeState.TryEliminateForReviveLimit()
+                : lifeState.TryApplyMonsterDown(
+                    "STALKER",
+                    authoritativeHitPosition);
         }
     }
 }

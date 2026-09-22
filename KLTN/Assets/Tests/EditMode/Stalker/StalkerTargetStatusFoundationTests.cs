@@ -47,6 +47,47 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
+        public void STK_STATUS_HiddenFlag_IsStoredWithoutWorldTransform()
+        {
+            var status = CreateStatus(3, CreateIneligibleResult("OtherGameplayState"), true);
+
+            AssertPlayerIdValue(GetProperty(status, "PlayerId"), 3);
+            Assert.That(GetBoolProperty(GetProperty(status, "Eligibility"), "Eligible"), Is.False);
+            Assert.That(GetBoolProperty(status, "IsHidden"), Is.True);
+            Assert.That(ResolveType(TargetStatusTypeName).GetProperty("Transform"), Is.Null);
+            Assert.That(ResolveType(TargetStatusTypeName).GetProperty("TargetSample"), Is.Null);
+            Assert.That(ResolveType(TargetStatusTypeName).GetProperty("TargetHierarchyRoot"), Is.Null);
+            Assert.That(ResolveType(TargetStatusTypeName).GetProperty("Position"), Is.Null);
+        }
+
+        [Test]
+        public void STK_STATUS_LegacyConstructor_DefaultsHiddenFlagToFalse()
+        {
+            var status = CreateStatus(3, CreateIneligibleResult("OtherGameplayState"));
+
+            Assert.That(GetBoolProperty(status, "IsHidden"), Is.False);
+        }
+
+        [Test]
+        public void STK_STATUS_FullStatusLookup_ReturnsUniqueDetailAndFailsClosedOnDuplicate()
+        {
+            var hidden = CreateStatus(2, CreateIneligibleResult("OtherGameplayState"), true);
+            var statuses = CreateStatusList(CreateStatus(3, CreateEligibleResult()), hidden);
+
+            Assert.That(TryGetUniqueStatus(statuses, CreatePlayerId(2), out var result), Is.True);
+            Assert.That(GetBoolProperty(result, "IsHidden"), Is.True);
+            Assert.That(GetListCount(statuses), Is.EqualTo(2));
+            AssertPlayerIdValue(GetProperty(GetListItem(statuses, 0), "PlayerId"), 3);
+            AssertPlayerIdValue(GetProperty(GetListItem(statuses, 1), "PlayerId"), 2);
+
+            statuses = CreateStatusList(hidden, CreateStatus(2, CreateEligibleResult()));
+            Assert.That(TryGetUniqueStatus(statuses, CreatePlayerId(2), out _), Is.False);
+            Assert.That(GetListCount(statuses), Is.EqualTo(2));
+            AssertPlayerIdValue(GetProperty(GetListItem(statuses, 0), "PlayerId"), 2);
+            AssertPlayerIdValue(GetProperty(GetListItem(statuses, 1), "PlayerId"), 2);
+        }
+
+        [Test]
         public void STK_STATUS_UnknownPlayerIdLookup_ReturnsFalse()
         {
             var statuses = CreateStatusList(CreateStatus(1, CreateEligibleResult()));
@@ -198,6 +239,20 @@ namespace EchoProtocol.AI.Stalker.Tests
             return (bool)result;
         }
 
+        private static bool TryGetUniqueStatus(object statuses, object playerId, out object status)
+        {
+            var args = new[] { statuses, playerId, null };
+            var method = ResolveType(TargetStatusLookupTypeName).GetMethod(
+                "TryGetUniqueStatus",
+                BindingFlags.Public | BindingFlags.Static);
+            Assert.That(method, Is.Not.Null, "Missing StalkerTargetStatusLookup.TryGetUniqueStatus.");
+
+            var result = method.Invoke(null, args);
+            Assert.That(result, Is.TypeOf<bool>());
+            status = args[2];
+            return (bool)result;
+        }
+
         private static bool TryGetUniqueCandidate(object candidates, object playerId, out object candidate, out bool hasDuplicate)
         {
             var args = new[] { candidates, playerId, null, null };
@@ -219,6 +274,15 @@ namespace EchoProtocol.AI.Stalker.Tests
                 ResolveType(TargetStatusTypeName),
                 CreatePlayerId(playerId),
                 eligibility);
+        }
+
+        private static object CreateStatus(int playerId, object eligibility, bool isHidden)
+        {
+            return Activator.CreateInstance(
+                ResolveType(TargetStatusTypeName),
+                CreatePlayerId(playerId),
+                eligibility,
+                isHidden);
         }
 
         private static object CreateStatusList(params object[] statuses)
