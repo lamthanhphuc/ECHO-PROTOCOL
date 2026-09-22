@@ -377,7 +377,7 @@ MonoBehaviour:
     hiddenTransferMinSeconds: 1
     hiddenTransferMaxSeconds: 8
     jumpInDurationSeconds: 5
-    reactionLockSeconds: 1.5
+    reactionLocionSeconds: 0 
     minimumOtherAlivePlayers: 1
     jumpInMinDistance: 7
     jumpInMaxDistance: 10

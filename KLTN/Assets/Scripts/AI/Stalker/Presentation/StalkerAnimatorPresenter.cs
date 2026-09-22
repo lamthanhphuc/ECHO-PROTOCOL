@@ -588,7 +588,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
                     BiteStateHash,
 
                 StalkerState.SEARCH =>
-                    CrouchStateHash,
+                    SniffStateHash,
 
                 StalkerState.RECOVER =>
                     presentation.HasAttackEpisode
@@ -623,22 +623,22 @@ namespace EchoProtocol.AI.Stalker.Presentation
         return presentation.SemanticState switch
         {
             StalkerState.PATROL =>
-                    Mathf.Max(
-                        0.01f,
-                        patrolPlaybackSpeed),
+                Mathf.Max(
+                    0.01f,
+                    patrolPlaybackSpeed),
 
-                StalkerState.CHASE =>
-                    Mathf.Max(
-                        0.01f,
-                        chasePlaybackSpeed),
+            StalkerState.CHASE =>
+                Mathf.Max(
+                    0.01f,
+                    chasePlaybackSpeed),
 
-                StalkerState.SEARCH =>
-                    Mathf.Max(
-                        0.01f,
-                        searchPlaybackSpeed),
+            StalkerState.SEARCH =>
+                Mathf.Max(
+                    0.01f,
+                    searchPlaybackSpeed),
 
-                _ => 1f
-            };
+            _ => 1f
+        };
         }
 
         private float ResolveNormalizedStart(
