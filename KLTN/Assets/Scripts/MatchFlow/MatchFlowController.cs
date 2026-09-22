@@ -23,6 +23,11 @@ public class MatchFlowController : MonoBehaviour
     private PlayerDownState[] _players;
     private MatchPhase _phase = MatchPhase.ExploreCore;
     private bool _networkAuthorityPresentationOnly;
+    private string _offlineAuthCode;
+    private string _powerAuthorizationCode = string.Empty;
+    private bool _securityHoldCompleted;
+    private bool _powerPuzzleCompleted;
+    private bool _restoreMainPowerCompleted;
 
     public event Action<MatchPhase> PhaseChanged;
     public event Action MatchWon;
@@ -30,9 +35,33 @@ public class MatchFlowController : MonoBehaviour
 
     public MatchPhase Phase => _phase;
     public bool IsMatchEnded => _phase == MatchPhase.Win || _phase == MatchPhase.Lose;
+    public string PowerAuthorizationCode
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(_powerAuthorizationCode) && _securityHoldCompleted)
+            {
+                _powerAuthorizationCode = GetOrGenerateAuthCode();
+            }
+            return _powerAuthorizationCode;
+        }
+    }
+    public bool IsSecurityHoldComplete => _securityHoldCompleted;
+    public bool IsPowerPuzzleComplete => _powerPuzzleCompleted;
+    public bool IsRestoreMainPowerComplete => _restoreMainPowerCompleted;
+
+    private string GetOrGenerateAuthCode()
+    {
+        if (string.IsNullOrEmpty(_offlineAuthCode))
+        {
+            _offlineAuthCode = UnityEngine.Random.Range(0, 10000).ToString("D4");
+        }
+        return _offlineAuthCode;
+    }
 
     private void Awake()
     {
+        GetOrGenerateAuthCode();
         ResolveReferences();
         RefreshPlayers();
     }
@@ -62,20 +91,40 @@ public class MatchFlowController : MonoBehaviour
     public void NotifyCoreObjectiveComplete()
     {
         if (_networkAuthorityPresentationOnly) return;
-        SetPhase(MatchPhase.PowerPuzzle);
-    }
-
-    public void NotifyPowerPuzzleComplete()
-    {
-        if (_networkAuthorityPresentationOnly) return;
+        if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
+        {
+            EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.SetOfflineStage(EchoProtocol.MatchFlow.Zone2MissionStage.FindSecurityTerminal);
+        }
         SetPhase(MatchPhase.SecurityHold);
     }
 
     public void NotifySecurityHoldComplete()
     {
         if (_networkAuthorityPresentationOnly) return;
-        SetPhase(MatchPhase.FinalHunt);
-        finalHuntStarted?.Invoke();
+        _securityHoldCompleted = true;
+        _powerAuthorizationCode = GetOrGenerateAuthCode();
+        if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
+        {
+            EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.SetOfflineStage(EchoProtocol.MatchFlow.Zone2MissionStage.AuthorizationCodeGranted);
+        }
+        SetPhase(MatchPhase.PowerPuzzle);
+    }
+
+    public void NotifyPowerPuzzleComplete()
+    {
+        if (_networkAuthorityPresentationOnly) return;
+        _powerPuzzleCompleted = true;
+        _restoreMainPowerCompleted = true;
+        if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
+        {
+            EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.ApplyDoorState(true);
+            EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.SetOfflineStage(EchoProtocol.MatchFlow.Zone2MissionStage.Zone2Completed);
+        }
+    }
+
+    public bool VerifyPowerCode(string code)
+    {
+        return !string.IsNullOrEmpty(code) && code == GetOrGenerateAuthCode();
     }
 
     public void StartExitCountdown()
@@ -289,13 +338,34 @@ public class MatchFlowController : MonoBehaviour
         NetworkMatchStatus networkStatus,
         NetworkMatchResult networkResult)
     {
+        ApplyAuthoritativeSnapshot(networkPhase, networkStatus, networkResult, string.Empty, false, false, false);
+    }
+
+    public void ApplyAuthoritativeSnapshot(
+        NetworkMatchPhase networkPhase,
+        NetworkMatchStatus networkStatus,
+        NetworkMatchResult networkResult,
+        string powerAuthorizationCode,
+        bool securityHoldCompleted,
+        bool powerPuzzleCompleted,
+        bool restoreMainPowerCompleted)
+    {
+        if (!string.IsNullOrEmpty(powerAuthorizationCode))
+        {
+            _powerAuthorizationCode = powerAuthorizationCode;
+        }
+        _securityHoldCompleted = securityHoldCompleted;
+        _powerPuzzleCompleted = powerPuzzleCompleted;
+        _restoreMainPowerCompleted = restoreMainPowerCompleted;
+
         var nextPhase = networkStatus == NetworkMatchStatus.Ended
             ? networkResult == NetworkMatchResult.Win ? MatchPhase.Win : MatchPhase.Lose
             : networkPhase switch
             {
                 NetworkMatchPhase.CoreObjective => MatchPhase.ExploreCore,
-                NetworkMatchPhase.Puzzle => MatchPhase.PowerPuzzle,
+                NetworkMatchPhase.Zone2Objective => MatchPhase.SecurityHold,
                 NetworkMatchPhase.SecurityHold => MatchPhase.SecurityHold,
+                NetworkMatchPhase.Puzzle => MatchPhase.PowerPuzzle,
                 NetworkMatchPhase.FinalHunt => MatchPhase.FinalHunt,
                 NetworkMatchPhase.Escape => MatchPhase.ExitCountdown,
                 _ => _phase,
