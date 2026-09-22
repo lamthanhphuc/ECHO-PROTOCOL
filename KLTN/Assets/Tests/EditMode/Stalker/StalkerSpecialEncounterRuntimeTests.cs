@@ -98,7 +98,7 @@ namespace EchoProtocol.AI.Stalker.Tests
                 GetPublicProperty<float>(
                     settings,
                     "CooldownSeconds"),
-                Is.EqualTo(600f));
+                Is.EqualTo(300f));
 
             Assert.That(
                 GetPublicProperty<float>(
@@ -134,7 +134,13 @@ namespace EchoProtocol.AI.Stalker.Tests
                 GetPublicProperty<float>(
                     settings,
                     "JumpInDurationSeconds"),
-                Is.EqualTo(1f));
+                Is.EqualTo(5f));
+
+            Assert.That(
+                GetPublicProperty<float>(
+                    settings,
+                    "JumpOutDurationSeconds"),
+                Is.EqualTo(5f));
 
             Assert.That(
                 GetPublicProperty<float>(
@@ -275,16 +281,12 @@ namespace EchoProtocol.AI.Stalker.Tests
                     .Within(0.001f));
 
             Assert.That(
-                InvokeGetPhaseDuration(
-                    "JumpOut"),
-                Is.EqualTo(1f)
-                    .Within(0.001f));
+                InvokeGetPhaseDuration("JumpOut"),
+                Is.EqualTo(5f).Within(0.001f));
 
             Assert.That(
-                InvokeGetPhaseDuration(
-                    "JumpIn"),
-                Is.EqualTo(1f)
-                    .Within(0.001f));
+                InvokeGetPhaseDuration("JumpIn"),
+                Is.EqualTo(5f).Within(0.001f));
 
             Assert.That(
                 InvokeGetPhaseDuration(
@@ -332,7 +334,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
-        public void STK_SPECIAL_RUNTIME_007_GlobalCooldownBoundary_Is600Seconds()
+        public void STK_SPECIAL_RUNTIME_007_GlobalCooldownBoundary_Is300Seconds()
         {
             var settings =
                 GetPrivateField<object>(
@@ -345,7 +347,7 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             Assert.That(
                 cooldownSeconds,
-                Is.EqualTo(600f));
+                Is.EqualTo(300f));
 
             var start =
                 CreateSimulationTime(
@@ -364,12 +366,12 @@ namespace EchoProtocol.AI.Stalker.Tests
             var beforeExpiry =
                 CreateSimulationTime(
                     101,
-                    699.99d);
+                    399.99d);
 
             var atExpiry =
                 CreateSimulationTime(
                     102,
-                    700d);
+                    400d);
 
             Assert.That(
                 InvokeIsCoolingDown(
@@ -431,6 +433,73 @@ namespace EchoProtocol.AI.Stalker.Tests
                 InvokeIsCoolingDown(
                     atExpiry),
                 Is.False);
+        }
+
+        [Test]
+        public void STK_SPECIAL_RUNTIME_009_CleanupWithoutOverrideOwnership_PreservesRecoverState()
+        {
+            var controllerType =
+                ResolveProductionType(
+                    "EchoProtocol.AI.Stalker.StalkerController");
+
+            var stateType =
+                ResolveProductionType(
+                    "EchoProtocol.AI.Stalker.StalkerState");
+
+            var controller =
+                _runtimeObject.AddComponent(
+                    controllerType);
+
+            Assert.That(
+                controller,
+                Is.Not.Null);
+
+            var currentStateField =
+                controllerType.GetField(
+                    "currentState",
+                    BindingFlags.Instance
+                    | BindingFlags.NonPublic);
+
+            Assert.That(
+                currentStateField,
+                Is.Not.Null);
+
+            currentStateField.SetValue(
+                controller,
+                Enum.Parse(
+                    stateType,
+                    "RECOVER"));
+
+            SetPrivateField(
+                "controller",
+                controller);
+
+            SetPrivateField(
+                "_ownsControllerOverride",
+                false);
+
+            GetPrivateMethod(
+                    "Cleanup")
+                .Invoke(
+                    _runtime,
+                    null);
+
+            var currentStateProperty =
+                controllerType.GetProperty(
+                    "CurrentState",
+                    BindingFlags.Instance
+                    | BindingFlags.Public);
+
+            Assert.That(
+                currentStateProperty,
+                Is.Not.Null);
+
+            Assert.That(
+                currentStateProperty.GetValue(
+                        controller)
+                    .ToString(),
+                Is.EqualTo(
+                    "RECOVER"));
         }
 
         private void AddEligiblePlayer(

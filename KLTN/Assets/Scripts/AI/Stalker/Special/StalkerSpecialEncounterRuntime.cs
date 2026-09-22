@@ -41,6 +41,7 @@ namespace EchoProtocol.AI.Stalker.Special
         private Vector3 _downedPlayerForward;
 
         private bool _presentationVisible = true;
+        private bool _ownsControllerOverride;
 
         public bool IsActive => _phase != StalkerSpecialEncounterPhase.None;
         public StalkerSpecialEncounterPhase Phase => _phase;
@@ -430,6 +431,7 @@ namespace EchoProtocol.AI.Stalker.Special
             _presentationVisible = true;
 
             controller.BeginSpecialEncounterOverride();
+            _ownsControllerOverride = true;
 
             if (!controller.TrySetSpecialEncounterDestination(
                     approachPoint))
@@ -879,11 +881,28 @@ namespace EchoProtocol.AI.Stalker.Special
             RuntimeLog.Log(RuntimeLogCategory.StalkerCombat, "[STK_SPECIAL][COMPLETE]");
         }
 
-        private void Abort(string reason, AiSimulationTime now, float backoffSeconds)
+        private void Abort(
+            string reason,
+            AiSimulationTime now,
+            float backoffSeconds)
         {
-            _cooldownUntil = AddSeconds(now, backoffSeconds);
+            bool jumpAlreadyStarted =
+                _phase == StalkerSpecialEncounterPhase.JumpOut
+                || _phase == StalkerSpecialEncounterPhase.HiddenTransfer
+                || _phase == StalkerSpecialEncounterPhase.JumpIn
+                || _phase == StalkerSpecialEncounterPhase.ReactionLock;
+
+            float cooldown = jumpAlreadyStarted
+                ? Mathf.Max(backoffSeconds, settings.CooldownSeconds)
+                : backoffSeconds;
+
+            _cooldownUntil = AddSeconds(now, cooldown);
+
             Cleanup();
-            RuntimeLog.Log(RuntimeLogCategory.StalkerCombat, $"[STK_SPECIAL][ABORT] reason={reason}");
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerCombat,
+                $"[STK_SPECIAL][ABORT] reason={reason}");
         }
 
         private void Cleanup()
@@ -912,7 +931,11 @@ namespace EchoProtocol.AI.Stalker.Special
 
             _presentationVisible = true;
 
-            controller?.EndSpecialEncounterOverrideToPatrol();
+            if (_ownsControllerOverride)
+            {
+                _ownsControllerOverride = false;
+                controller?.EndSpecialEncounterOverrideToPatrol();
+            }
         }
 
         private bool IsCoolingDown(AiSimulationTime now)

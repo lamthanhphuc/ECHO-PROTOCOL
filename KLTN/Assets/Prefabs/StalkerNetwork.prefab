@@ -364,16 +364,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerSpecialEncounterRuntime
   settings:
     enabled: 1
-    cooldownSeconds: 600
+    cooldownSeconds: 300
     failedAttemptBackoffSeconds: 15
     isolationRadius: 10
     sniffApproachDistance: 2
     sniffApproachSampleRadius: 1.5
     stagingArrivalTolerance: 0.35
-    specialSniffDurationSeconds: 1.5
-    jumpOutDurationSeconds: 1
+    specialSniffDurationSeconds: 3.5
+    jumpOutDurationSeconds: 5
     hiddenTransferDelaySeconds: 0.05
-    jumpInDurationSeconds: 1
+    hiddenTransferVirtualSpeed: 8
+    hiddenTransferMinSeconds: 1
+    hiddenTransferMaxSeconds: 8
+    jumpInDurationSeconds: 5
     reactionLockSeconds: 1.5
     minimumOtherAlivePlayers: 1
     jumpInMinDistance: 7
@@ -386,6 +389,14 @@ MonoBehaviour:
     minimumEntryReuseSeconds: 120
     groupRadius: 8
     candidateLosHeight: 1.2
+    maxDirectorPressureForStart: 1
+    postSpecialDirectorCooldownSeconds: 20
+    recentPlayerPressureWindowSeconds: 45
+    recentPlayerPressurePenalty: 3
+    requireEscapeRoute: 1
+    escapeProbeDistance: 4
+    escapeNavMeshSampleRadius: 1.5
+    minimumEscapeDistanceGain: 1.25
     allowDynamicEntryFallback: 1
   controller: {fileID: 0}
   networkTransform: {fileID: 0}

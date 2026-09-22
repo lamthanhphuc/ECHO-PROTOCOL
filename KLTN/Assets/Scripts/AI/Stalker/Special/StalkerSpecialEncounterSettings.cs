@@ -8,7 +8,8 @@ namespace EchoProtocol.AI.Stalker.Special
     {
         [SerializeField] private bool enabled = true;
 
-        [SerializeField] private float cooldownSeconds = 600f;
+        [SerializeField, Min(300f)]
+        private float cooldownSeconds = 300f;
         [SerializeField] private float failedAttemptBackoffSeconds = 15f;
 
         [SerializeField] private float isolationRadius = 10f;
@@ -18,7 +19,8 @@ namespace EchoProtocol.AI.Stalker.Special
         [SerializeField] private float stagingArrivalTolerance = 0.35f;
 
         [SerializeField] private float specialSniffDurationSeconds = 1.5f;
-        [SerializeField] private float jumpOutDurationSeconds = 1.0f;
+        [SerializeField, Min(5f)]
+        private float jumpOutDurationSeconds = 5f;
 
         //
         // Hidden transfer is now distance based.
@@ -34,7 +36,8 @@ namespace EchoProtocol.AI.Stalker.Special
         [SerializeField] private float hiddenTransferMinSeconds = 1f;
         [SerializeField] private float hiddenTransferMaxSeconds = 8f;
 
-        [SerializeField] private float jumpInDurationSeconds = 1.0f;
+        [SerializeField, Min(5f)]
+        private float jumpInDurationSeconds = 5f;
         [SerializeField] private float reactionLockSeconds = 1.5f;
 
         [SerializeField] private int minimumOtherAlivePlayers = 2;
@@ -70,7 +73,7 @@ namespace EchoProtocol.AI.Stalker.Special
 
         public float CooldownSeconds =>
             Mathf.Max(
-                0f,
+                300f,
                 cooldownSeconds);
 
         public float FailedAttemptBackoffSeconds =>
@@ -105,7 +108,7 @@ namespace EchoProtocol.AI.Stalker.Special
 
         public float JumpOutDurationSeconds =>
             Mathf.Max(
-                0f,
+                5f,
                 jumpOutDurationSeconds);
 
         //
@@ -133,7 +136,7 @@ namespace EchoProtocol.AI.Stalker.Special
 
         public float JumpInDurationSeconds =>
             Mathf.Max(
-                0f,
+                5f,
                 jumpInDurationSeconds);
 
         public float ReactionLockSeconds =>
