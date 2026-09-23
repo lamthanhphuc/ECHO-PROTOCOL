@@ -22,6 +22,226 @@ namespace EchoProtocol.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", b =>
+                {
+                    b.Property<Guid>("SnapshotId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecisionPoint")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NoiseAggregationStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("NoiseComparisonKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<decimal?>("NoiseMeanObservedScore")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<int>("NoiseObservedActiveCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProfileFormulaSemanticId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ReasonCodesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("RosterIdentity")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("SnapshotContentFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("SurvivalAggregationStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SurvivalComparisonKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<decimal?>("SurvivalMeanObservedScore")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<int>("SurvivalObservedActiveCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TeamSize")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Validity")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("SnapshotId");
+
+                    b.HasIndex("MatchId", "CreatedAtUtc");
+
+                    b.ToTable("AdaptiveInputSnapshots", t =>
+                        {
+                            t.HasCheckConstraint("CK_AdaptiveSnapshots_Means_Range", "(\"SurvivalMeanObservedScore\" IS NULL OR (CAST(\"SurvivalMeanObservedScore\" AS NUMERIC) >= 0 AND CAST(\"SurvivalMeanObservedScore\" AS NUMERIC) <= 100)) AND (\"NoiseMeanObservedScore\" IS NULL OR (CAST(\"NoiseMeanObservedScore\" AS NUMERIC) >= 0 AND CAST(\"NoiseMeanObservedScore\" AS NUMERIC) <= 100))");
+
+                            t.HasCheckConstraint("CK_AdaptiveSnapshots_TeamSize_Positive", "\"TeamSize\" >= 1 AND \"TeamSize\" <= 4");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshotPlayer", b =>
+                {
+                    b.Property<Guid>("SnapshotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AlphaConfigVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("CapturedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeferredDimensionsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("MatchScoreFormulaVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("NoiseComparisonKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<int?>("NoiseSampleCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("NoiseScore")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<string>("NoiseStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("NormalizationConfigVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<bool>("ProfileAvailable")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ProfileFormulaVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid?>("ProfileLineageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProfileNoiseFilterVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<long?>("ProfileRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("SurvivalComparisonKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<int?>("SurvivalSampleCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("SurvivalScore")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<string>("SurvivalStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("SnapshotId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("AdaptiveInputSnapshotPlayers", t =>
+                        {
+                            t.HasCheckConstraint("CK_AdaptiveSnapshotPlayers_DeferredCanonical", "\"DeferredDimensionsJson\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_AdaptiveSnapshotPlayers_Scores_Range", "(\"SurvivalScore\" IS NULL OR (CAST(\"SurvivalScore\" AS NUMERIC) >= 0 AND CAST(\"SurvivalScore\" AS NUMERIC) <= 100)) AND (\"NoiseScore\" IS NULL OR (CAST(\"NoiseScore\" AS NUMERIC) >= 0 AND CAST(\"NoiseScore\" AS NUMERIC) <= 100))");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.InventoryItem", b =>
+                {
+                    b.Property<Guid>("InventoryItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AcquiredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PurchaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ShopItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("InventoryItemId");
+
+                    b.HasAlternateKey("UserId", "InventoryItemId");
+
+                    b.HasIndex("PurchaseId")
+                        .IsUnique();
+
+                    b.HasIndex("ShopItemId");
+
+                    b.HasIndex("UserId", "ShopItemId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_InventoryItems_UserId_ShopItemId");
+
+                    b.ToTable("InventoryItems", (string)null);
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.MatchAuthorityBinding", b =>
                 {
                     b.Property<Guid>("MatchId")
@@ -47,6 +267,9 @@ namespace EchoProtocol.Api.Migrations
 
                     b.Property<int>("MaxPlayers")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -94,6 +317,9 @@ namespace EchoProtocol.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasAlternateKey("MatchId", "UserId")
+                        .HasName("AK_MatchPlayerBindings_MatchId_UserId");
+
                     b.HasIndex("JoinProofId")
                         .IsUnique();
 
@@ -102,10 +328,750 @@ namespace EchoProtocol.Api.Migrations
                     b.HasIndex("MatchId", "FusionActorNumber")
                         .IsUnique();
 
+                    b.ToTable("MatchPlayerBindings", (string)null);
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchResult", b =>
+                {
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DurationSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("ObjectiveCompletion")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("PayloadHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<int>("PlayerCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RewardStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("SubmittedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SubmittedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("MatchId");
+
+                    b.HasIndex("SubmittedAtUtc");
+
+                    b.HasIndex("SubmittedByUserId");
+
+                    b.ToTable("MatchResults", t =>
+                        {
+                            t.HasCheckConstraint("CK_MatchResults_DurationSeconds_Range", "\"DurationSeconds\" >= 60 AND \"DurationSeconds\" <= 900");
+
+                            t.HasCheckConstraint("CK_MatchResults_ObjectiveCompletion_Range", "CAST(\"ObjectiveCompletion\" AS NUMERIC) >= 0 AND CAST(\"ObjectiveCompletion\" AS NUMERIC) <= 1");
+
+                            t.HasCheckConstraint("CK_MatchResults_Outcome_Allowed", "\"Outcome\" IN ('WIN', 'LOSE')");
+
+                            t.HasCheckConstraint("CK_MatchResults_PlayerCount_Range", "\"PlayerCount\" >= 1 AND \"PlayerCount\" <= 4");
+
+                            t.HasCheckConstraint("CK_MatchResults_RewardStatus_Allowed", "\"RewardStatus\" IN ('Pending', 'Completed')");
+
+                            t.HasCheckConstraint("CK_MatchResults_Timestamp_Order", "\"EndedAtUtc\" >= \"StartedAtUtc\"");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchResultPlayer", b =>
+                {
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DetectionCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Disconnected")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("DownedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ObjectiveContribution")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ReviveCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Survived")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("MatchId", "UserId");
+
+                    b.ToTable("MatchResultPlayers", t =>
+                        {
+                            t.HasCheckConstraint("CK_MatchResultPlayers_DetectionCount_NonNegative", "\"DetectionCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_MatchResultPlayers_DownedCount_NonNegative", "\"DownedCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_MatchResultPlayers_ObjectiveContribution_NonNegative", "\"ObjectiveContribution\" >= 0");
+
+                            t.HasCheckConstraint("CK_MatchResultPlayers_ReviveCount_NonNegative", "\"ReviveCount\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchRewardGrant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CurrencyAmount")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("ExperiencePointsAwarded")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("ProcessedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProgressionPolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("WalletId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WalletId");
+
                     b.HasIndex("MatchId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MatchRewardGrants_MatchId_UserId");
+
+                    b.ToTable("MatchRewardGrants", t =>
+                        {
+                            t.HasCheckConstraint("CK_MatchRewardGrants_CurrencyAmount_NonNegative", "\"CurrencyAmount\" >= 0");
+
+                            t.HasCheckConstraint("CK_MatchRewardGrants_ExperiencePointsAwarded_NonNegative", "\"ExperiencePointsAwarded\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchScore", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AlphaConfigVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ContributionStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Dimension")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("MatchEndTs")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MatchScoreFormulaVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("NormalizationConfigVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("ProfileLineageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProfileNoiseFilterVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime?>("RetractedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RetractionReason")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<decimal>("Score")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<string>("SemanticFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("SourceEvidenceFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("SourceTelemetrySchemaVersion")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfileLineageId");
+
+                    b.HasIndex("MatchId", "UserId");
+
+                    b.HasIndex("UserId", "MatchId", "ProfileLineageId", "Dimension")
+                        .IsUnique()
+                        .HasDatabaseName("UX_MatchScores_ApplyKey");
+
+                    b.HasIndex("UserId", "ProfileLineageId", "Dimension", "MatchEndTs", "MatchId")
+                        .HasDatabaseName("IX_MatchScores_ReplayOrder");
+
+                    b.ToTable("MatchScores", t =>
+                        {
+                            t.HasCheckConstraint("CK_MatchScores_Score_Range", "CAST(\"Score\" AS NUMERIC) >= 0 AND CAST(\"Score\" AS NUMERIC) <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentCheckout", b =>
+                {
+                    b.Property<long>("CheckoutSequenceId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("CheckoutSequenceId"));
+
+                    b.Property<string>("CheckoutUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("PaymentOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ProviderOrderId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ProviderPaymentLinkId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("ReadyAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ReservedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("CheckoutSequenceId");
+
+                    b.HasIndex("PaymentOrderId")
                         .IsUnique();
 
-                    b.ToTable("MatchPlayerBindings", (string)null);
+                    b.HasIndex("Provider", "ProviderOrderId")
+                        .IsUnique();
+
+                    b.ToTable("PaymentCheckouts", t =>
+                        {
+                            t.HasCheckConstraint("CK_PaymentCheckouts_Ready_Data", "\"Status\" <> 'READY' OR (\"ProviderPaymentLinkId\" IS NOT NULL AND \"CheckoutUrl\" IS NOT NULL AND \"ReadyAtUtc\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_PaymentCheckouts_Status_Allowed", "\"Status\" IN ('RESERVED', 'READY')");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentFulfillment", b =>
+                {
+                    b.Property<Guid>("PaymentOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FulfillmentReference")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("InventoryItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("WalletTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("PaymentOrderId");
+
+                    b.HasIndex("FulfillmentReference")
+                        .IsUnique();
+
+                    b.HasIndex("InventoryItemId")
+                        .IsUnique();
+
+                    b.HasIndex("WalletTransactionId")
+                        .IsUnique();
+
+                    b.ToTable("PaymentFulfillments", t =>
+                        {
+                            t.HasCheckConstraint("CK_PaymentFulfillments_Target", "(\"Kind\" = 'WALLET_CREDIT' AND \"WalletTransactionId\" IS NOT NULL AND \"InventoryItemId\" IS NULL) OR (\"Kind\" = 'INVENTORY_ITEM' AND \"WalletTransactionId\" IS NULL AND \"InventoryItemId\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentCheckout", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.PaymentOrder", "PaymentOrder")
+                        .WithOne("Checkout")
+                        .HasForeignKey("EchoProtocol.Api.Entities.PaymentCheckout", "PaymentOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PaymentOrder");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentFulfillment", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.InventoryItem", "InventoryItem")
+                        .WithMany()
+                        .HasForeignKey("InventoryItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EchoProtocol.Api.Entities.PaymentOrder", "PaymentOrder")
+                        .WithOne("Fulfillment")
+                        .HasForeignKey("EchoProtocol.Api.Entities.PaymentFulfillment", "PaymentOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.WalletTransaction", "WalletTransaction")
+                        .WithMany()
+                        .HasForeignKey("WalletTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("InventoryItem");
+
+                    b.Navigation("PaymentOrder");
+
+                    b.Navigation("WalletTransaction");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentOrder", b =>
+                {
+                    b.Property<Guid>("PaymentOrderId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<DateTime?>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FulfilledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FulfillmentReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("PaidAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProductReference")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ProviderOrderId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ProviderTransactionId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("RequestFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("PaymentOrderId");
+
+                    b.HasIndex("CreatedAtUtc", "PaymentOrderId")
+                        .IsDescending(true, true)
+                        .HasDatabaseName("IX_Admin_PaymentOrders_Created");
+
+                    b.HasIndex("FulfillmentReference")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PaymentOrders_FulfillmentReference")
+                        .HasFilter("\"FulfillmentReference\" IS NOT NULL");
+
+                    b.HasIndex("UserId", "CreatedAtUtc");
+
+                    b.HasIndex("ProductReference", "CreatedAtUtc", "PaymentOrderId")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_Admin_PaymentOrders_Product_Created");
+
+                    b.HasIndex("Provider", "CreatedAtUtc", "PaymentOrderId")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_Admin_PaymentOrders_Provider_Created");
+
+                    b.HasIndex("Provider", "ProviderOrderId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PaymentOrders_Provider_ProviderOrderId")
+                        .HasFilter("\"ProviderOrderId\" IS NOT NULL");
+
+                    b.HasIndex("Provider", "ProviderTransactionId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PaymentOrders_Provider_ProviderTransactionId")
+                        .HasFilter("\"ProviderTransactionId\" IS NOT NULL");
+
+                    b.HasIndex("UserId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PaymentOrders_UserId_IdempotencyKey");
+
+                    b.HasIndex("Status", "CreatedAtUtc", "PaymentOrderId")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_Admin_PaymentOrders_Status_Created");
+
+                    b.ToTable("PaymentOrders", t =>
+                        {
+                            t.HasCheckConstraint("CK_PaymentOrders_Amount_Positive", "\"Amount\" > 0");
+
+                            t.HasCheckConstraint("CK_PaymentOrders_Currency_Format", "length(\"Currency\") = 3 AND \"Currency\" = upper(\"Currency\")");
+
+                            t.HasCheckConstraint("CK_PaymentOrders_State_Data", "(\"Status\" <> 'PENDING_PAYMENT' OR \"ProviderOrderId\" IS NOT NULL) AND (\"Status\" NOT IN ('PAID', 'FULFILLED') OR (\"ProviderOrderId\" IS NOT NULL AND \"ProviderTransactionId\" IS NOT NULL AND \"PaidAtUtc\" IS NOT NULL)) AND (\"Status\" <> 'FULFILLED' OR (\"FulfillmentReference\" IS NOT NULL AND \"FulfilledAtUtc\" IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_PaymentOrders_Status_Allowed", "\"Status\" IN ('CREATED', 'PENDING_PAYMENT', 'PAID', 'FULFILLED', 'FAILED', 'CANCELLED', 'EXPIRED')");
+
+                            t.HasCheckConstraint("CK_PaymentOrders_Timestamps", "\"UpdatedAtUtc\" >= \"CreatedAtUtc\" AND (\"ExpiresAtUtc\" IS NULL OR \"ExpiresAtUtc\" > \"CreatedAtUtc\") AND (\"PaidAtUtc\" IS NULL OR \"PaidAtUtc\" >= \"CreatedAtUtc\") AND (\"FulfilledAtUtc\" IS NULL OR (\"PaidAtUtc\" IS NOT NULL AND \"FulfilledAtUtc\" >= \"PaidAtUtc\"))");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentProviderEvent", b =>
+                {
+                    b.Property<Guid>("PaymentProviderEventId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<string>("NormalizedStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("PaymentOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ProcessedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProcessingOutcome")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ProviderEventId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ProviderOrderId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SemanticFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("PaymentProviderEventId");
+
+                    b.HasIndex("PaymentOrderId");
+
+                    b.HasIndex("Provider", "ProviderEventId")
+                        .IsUnique();
+
+                    b.ToTable("PaymentProviderEvents", t =>
+                        {
+                            t.HasCheckConstraint("CK_PaymentProviderEvents_Amount_Positive", "\"Amount\" > 0");
+
+                            t.HasCheckConstraint("CK_PaymentProviderEvents_Verified", "\"VerificationStatus\" = 'VERIFIED'");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerAIProfile", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AlphaConfigVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("ExplorationScore")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("MatchScoreFormulaVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<decimal?>("NavigationScore")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("NoiseLastMatchEndTs")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("NoiseLastMatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("NoiseLastUpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("NoiseSampleCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("NoiseScore")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasDefaultValue(50m);
+
+                    b.Property<string>("NoiseStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("NormalizationConfigVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<decimal?>("ObjectiveScore")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ProfileFormulaVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("ProfileLineageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProfileNoiseFilterVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<long>("ProfileRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal?>("ReviveScore")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("RiskScore")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("SurvivalLastMatchEndTs")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SurvivalLastMatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("SurvivalLastUpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SurvivalSampleCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("SurvivalScore")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasDefaultValue(50m);
+
+                    b.Property<string>("SurvivalStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal?>("TeamworkScore")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("ToolUsageScore")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("PlayerAIProfiles", t =>
+                        {
+                            t.HasCheckConstraint("CK_PlayerAIProfiles_Deferred_Null", "\"ObjectiveScore\" IS NULL AND \"TeamworkScore\" IS NULL AND \"ExplorationScore\" IS NULL AND \"NavigationScore\" IS NULL AND \"ToolUsageScore\" IS NULL AND \"RiskScore\" IS NULL AND \"ReviveScore\" IS NULL");
+
+                            t.HasCheckConstraint("CK_PlayerAIProfiles_NoiseScore_Range", "CAST(\"NoiseScore\" AS NUMERIC) >= 0 AND CAST(\"NoiseScore\" AS NUMERIC) <= 100");
+
+                            t.HasCheckConstraint("CK_PlayerAIProfiles_Revision_NonNegative", "\"ProfileRevision\" >= 0");
+
+                            t.HasCheckConstraint("CK_PlayerAIProfiles_SampleCounts_NonNegative", "\"SurvivalSampleCount\" >= 0 AND \"NoiseSampleCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_PlayerAIProfiles_SurvivalScore_Range", "CAST(\"SurvivalScore\" AS NUMERIC) >= 0 AND CAST(\"SurvivalScore\" AS NUMERIC) <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerLoadoutItem", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SlotId")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("EquippedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("InventoryItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "SlotId");
+
+                    b.HasIndex("UserId", "InventoryItemId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PlayerLoadoutItems_UserId_InventoryItemId");
+
+                    b.ToTable("PlayerLoadoutItems", t =>
+                        {
+                            t.HasCheckConstraint("CK_PlayerLoadoutItems_Timestamps", "\"UpdatedAtUtc\" >= \"EquippedAtUtc\"");
+                        });
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerProfile", b =>
@@ -121,6 +1087,16 @@ namespace EchoProtocol.Api.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<long>("ExperiencePoints")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
+                    b.Property<int>("Level")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
 
                     b.Property<int>("TotalMatches")
                         .ValueGeneratedOnAdd()
@@ -146,11 +1122,669 @@ namespace EchoProtocol.Api.Migrations
 
                     b.ToTable("PlayerProfiles", t =>
                         {
+                            t.HasCheckConstraint("CK_PlayerProfiles_ExperiencePoints_NonNegative", "\"ExperiencePoints\" >= 0");
+
+                            t.HasCheckConstraint("CK_PlayerProfiles_Level_Positive", "\"Level\" >= 1");
+
                             t.HasCheckConstraint("CK_PlayerProfiles_TotalMatches_NonNegative", "\"TotalMatches\" >= 0");
 
                             t.HasCheckConstraint("CK_PlayerProfiles_TotalWins_Lte_Matches", "\"TotalWins\" <= \"TotalMatches\"");
 
                             t.HasCheckConstraint("CK_PlayerProfiles_TotalWins_NonNegative", "\"TotalWins\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PurchaseTransaction", b =>
+                {
+                    b.Property<Guid>("PurchaseId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("PriceAtPurchase")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ShopItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("WalletTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("PurchaseId");
+
+                    b.HasIndex("CreatedAtUtc", "PurchaseId")
+                        .IsDescending(true, true)
+                        .HasDatabaseName("IX_Admin_Purchases_Created");
+
+                    b.HasIndex("ShopItemId");
+
+                    b.HasIndex("ShopItemId", "CreatedAtUtc", "PurchaseId")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_Admin_Purchases_Item_Created");
+
+                    b.HasIndex("WalletTransactionId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PurchaseTransactions_UserId_IdempotencyKey");
+
+                    b.HasIndex("UserId", "CreatedAtUtc", "PurchaseId")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_Admin_Purchases_User_Created");
+
+                    b.ToTable("PurchaseTransactions", t =>
+                        {
+                            t.HasCheckConstraint("CK_PurchaseTransactions_PriceAtPurchase_NonNegative", "\"PriceAtPurchase\" >= 0");
+
+                            t.HasCheckConstraint("CK_PurchaseTransactions_Status_Completed", "\"Status\" = 'COMPLETED'");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioApplyReceipt", b =>
+                {
+                    b.Property<Guid>("DecisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AppliedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AppliedScenarioConfigFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("AppliedScenarioConfigId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("AppliedScenarioConfigVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ReportedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("DecisionId");
+
+                    b.HasIndex("MatchId")
+                        .IsUnique();
+
+                    b.HasIndex("ReportedByUserId");
+
+                    b.ToTable("ScenarioApplyReceipts", (string)null);
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioConfigDefinition", b =>
+                {
+                    b.Property<string>("ScenarioConfigId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ScenarioConfigVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<double>("ChaseSpeed")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("ConfigSource")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ContentWhitelistVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("DetectionDecayRate")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("DetectionFillRate")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("EscapeDoorTimerSeconds")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("FallbackConfigId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("FallbackConfigVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsFixedFallback")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsProductionApproved")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MapId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("MonsterType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ObjectiveSpawnSetId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("Provenance")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RouteModifier")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("SchemaVersion")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<double>("SearchDuration")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("SupportItemBudget")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UnityCompatibilityVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ScenarioConfigId", "ScenarioConfigVersion");
+
+                    b.HasIndex("ScenarioConfigVersion")
+                        .HasDatabaseName("IX_ScenarioConfigs_ScenarioConfigVersion");
+
+                    b.HasIndex("UnityCompatibilityVersion")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ScenarioConfigs_ProductionFallbackCompatibility")
+                        .HasFilter("\"IsActive\" AND \"IsProductionApproved\" AND \"IsFixedFallback\"");
+
+                    b.ToTable("ScenarioConfigs", t =>
+                        {
+                            t.HasCheckConstraint("CK_ScenarioConfigs_EscapeTimer_Range", "\"EscapeDoorTimerSeconds\" >= 45 AND \"EscapeDoorTimerSeconds\" <= 60");
+
+                            t.HasCheckConstraint("CK_ScenarioConfigs_Fallback_IsFixed", "NOT \"IsFixedFallback\" OR \"ConfigSource\" = 'Fixed'");
+
+                            t.HasCheckConstraint("CK_ScenarioConfigs_Numerics_NonNegative", "\"DetectionFillRate\" >= 0 AND \"DetectionDecayRate\" >= 0 AND \"ChaseSpeed\" >= 0 AND \"SearchDuration\" >= 0");
+
+                            t.HasCheckConstraint("CK_ScenarioConfigs_Source_Allowed", "\"ConfigSource\" IN ('Fixed', 'Adaptive')");
+
+                            t.HasCheckConstraint("CK_ScenarioConfigs_SupportBudget_NonNegative", "\"SupportItemBudget\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioContentDefinition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("ContentWhitelistVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsProductionApproved")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Provenance")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("UnityCompatibilityVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive", "IsProductionApproved", "UnityCompatibilityVersion");
+
+                    b.HasIndex("ContentType", "ContentId", "ContentWhitelistVersion", "UnityCompatibilityVersion")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ScenarioContent_IdentityVersion");
+
+                    b.ToTable("ScenarioContentDefinitions", t =>
+                        {
+                            t.HasCheckConstraint("CK_ScenarioContentDefinitions_Type_Allowed", "\"ContentType\" IN ('Map', 'Monster', 'ObjectiveSpawnSet', 'RouteModifier')");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioDecision", b =>
+                {
+                    b.Property<Guid>("DecisionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CandidateValidationStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("CommittedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ContentWhitelistVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("DecisionPoint")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("DecisionSemanticFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("EvidencePolicyVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ExperimentCondition")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("FallbackConfigId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("FallbackConfigVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("FallbackReasonCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("HostUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsCurrent")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ParameterRegistryVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("PolicyConfigVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("RequestFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("ResolutionMode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ResolutionResult")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("ScenarioConfigFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("ScenarioConfigId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ScenarioConfigVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("SnapshotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("UsedFixedFallback")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("DecisionId");
+
+                    b.HasIndex("HostUserId");
+
+                    b.HasIndex("MatchId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ScenarioDecisions_CurrentMatch")
+                        .HasFilter("\"IsCurrent\"");
+
+                    b.HasIndex("SnapshotId")
+                        .IsUnique();
+
+                    b.HasIndex("ScenarioConfigId", "ScenarioConfigVersion");
+
+                    b.ToTable("ScenarioDecisions", (string)null);
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ShopItem", b =>
+                {
+                    b.Property<Guid>("ItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssetReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ItemName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Price")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ItemId");
+
+                    b.HasIndex("IsActive", "Category", "ItemName", "ItemId")
+                        .HasDatabaseName("IX_ShopItems_Active_Category_Name");
+
+                    b.ToTable("ShopItems", t =>
+                        {
+                            t.HasCheckConstraint("CK_ShopItems_Price_NonNegative", "\"Price\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.TeamProfile", b =>
+                {
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("AvgDistance")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("AvgDistanceStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal?>("Communication")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("CommunicationStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NormalizationConfigVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<decimal?>("ObjectiveSpeedScore")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<string>("ObjectiveSpeedStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal?>("ObjectiveTimeSeconds")
+                        .HasPrecision(14, 6)
+                        .HasColumnType("numeric(14,6)");
+
+                    b.Property<string>("ObjectiveTimeStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("PhaseRegistryVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ProcessingReason")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("ProcessingRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ProcessingStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ProfileFormulaVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ProjectionFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<decimal?>("ResourceEfficiency")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("ResourceEfficiencyScore")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ResourceEfficiencyScoreStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ResourceEfficiencyStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal?>("ReviveSuccess")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ReviveSuccessStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SourceFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("SourceTelemetrySchemaVersion")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal?>("SplitTime")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("SplitTimeStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal?>("SurvivalScore")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<string>("SurvivalStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TeamPerformanceFormulaVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<decimal?>("TeamPerformanceScore")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("TeamPerformanceStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal?>("TeamworkScore")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("TeamworkStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TelemetryCompleteness")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("WipeRecovery")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("WipeRecoveryStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("MatchId");
+
+                    b.HasIndex("ProcessingStatus");
+
+                    b.ToTable("TeamProfiles", t =>
+                        {
+                            t.HasCheckConstraint("CK_TeamProfiles_Deferred_Null", "\"SplitTime\" IS NULL AND \"SplitTimeStatus\" = 'Deferred' AND \"AvgDistance\" IS NULL AND \"AvgDistanceStatus\" = 'Deferred' AND \"ReviveSuccess\" IS NULL AND \"ReviveSuccessStatus\" = 'Deferred' AND \"ResourceEfficiency\" IS NULL AND \"ResourceEfficiencyStatus\" = 'Deferred' AND \"Communication\" IS NULL AND \"CommunicationStatus\" = 'Deferred' AND \"WipeRecovery\" IS NULL AND \"WipeRecoveryStatus\" = 'Deferred' AND \"TeamworkScore\" IS NULL AND \"TeamworkStatus\" = 'Deferred' AND \"ResourceEfficiencyScore\" IS NULL AND \"ResourceEfficiencyScoreStatus\" = 'Deferred'");
+
+                            t.HasCheckConstraint("CK_TeamProfiles_ObjectiveSpeed_StatusValue", "(\"ObjectiveSpeedStatus\" = 'Available' AND \"ObjectiveSpeedScore\" IS NOT NULL) OR (\"ObjectiveSpeedStatus\" <> 'Available' AND \"ObjectiveSpeedScore\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_TeamProfiles_ObjectiveTime_NonNegative", "\"ObjectiveTimeSeconds\" IS NULL OR CAST(\"ObjectiveTimeSeconds\" AS NUMERIC) >= 0");
+
+                            t.HasCheckConstraint("CK_TeamProfiles_ObjectiveTime_StatusValue", "(\"ObjectiveTimeStatus\" = 'Available' AND \"ObjectiveTimeSeconds\" IS NOT NULL) OR (\"ObjectiveTimeStatus\" <> 'Available' AND \"ObjectiveTimeSeconds\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_TeamProfiles_Performance_Incomplete", "\"TeamPerformanceStatus\" = 'Incomplete' AND \"TeamPerformanceScore\" IS NULL");
+
+                            t.HasCheckConstraint("CK_TeamProfiles_Revision_NonNegative", "\"ProcessingRevision\" >= 0");
+
+                            t.HasCheckConstraint("CK_TeamProfiles_Scores_Range", "(\"ObjectiveSpeedScore\" IS NULL OR (CAST(\"ObjectiveSpeedScore\" AS NUMERIC) >= 0 AND CAST(\"ObjectiveSpeedScore\" AS NUMERIC) <= 100)) AND (\"SurvivalScore\" IS NULL OR (CAST(\"SurvivalScore\" AS NUMERIC) >= 0 AND CAST(\"SurvivalScore\" AS NUMERIC) <= 100))");
+
+                            t.HasCheckConstraint("CK_TeamProfiles_Survival_StatusValue", "(\"SurvivalStatus\" = 'Available' AND \"SurvivalScore\" IS NOT NULL) OR (\"SurvivalStatus\" <> 'Available' AND \"SurvivalScore\" IS NULL)");
                         });
                 });
 
@@ -233,6 +1867,122 @@ namespace EchoProtocol.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.WalletTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Amount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BalanceAfter")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BalanceBefore")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<Guid>("ReferenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("WalletId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc", "Id")
+                        .IsDescending(true, true)
+                        .HasDatabaseName("IX_Admin_WalletTransactions_Created");
+
+                    b.HasIndex("ReferenceId");
+
+                    b.HasIndex("Type", "CreatedAtUtc", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_Admin_WalletTransactions_Type_Created");
+
+                    b.HasIndex("WalletId", "CreatedAtUtc", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_Admin_WalletTransactions_Wallet_Created");
+
+                    b.HasIndex("WalletId", "Type", "ReferenceId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WalletTransactions_WalletId_Type_ReferenceId");
+
+                    b.ToTable("WalletTransactions", t =>
+                        {
+                            t.HasCheckConstraint("CK_WalletTransactions_Amount_ByType", "(\"Type\" IN ('MATCH_REWARD', 'PAYMENT_FULFILLMENT') AND \"Amount\" >= 0) OR (\"Type\" = 'PURCHASE' AND \"Amount\" <= 0)");
+
+                            t.HasCheckConstraint("CK_WalletTransactions_BalanceEquation", "\"BalanceAfter\" = \"BalanceBefore\" + \"Amount\"");
+
+                            t.HasCheckConstraint("CK_WalletTransactions_Balances_NonNegative", "\"BalanceBefore\" >= 0 AND \"BalanceAfter\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.MatchAuthorityBinding", null)
+                        .WithMany()
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshotPlayer", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", "Snapshot")
+                        .WithMany("Players")
+                        .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Snapshot");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.InventoryItem", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.PurchaseTransaction", "PurchaseTransaction")
+                        .WithOne("InventoryItem")
+                        .HasForeignKey("EchoProtocol.Api.Entities.InventoryItem", "PurchaseId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EchoProtocol.Api.Entities.ShopItem", "ShopItem")
+                        .WithMany("InventoryItems")
+                        .HasForeignKey("ShopItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.User", "User")
+                        .WithMany("InventoryItems")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PurchaseTransaction");
+
+                    b.Navigation("ShopItem");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.MatchAuthorityBinding", b =>
                 {
                     b.HasOne("EchoProtocol.Api.Entities.User", "HostUser")
@@ -263,6 +2013,136 @@ namespace EchoProtocol.Api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchResult", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.MatchAuthorityBinding", "Match")
+                        .WithOne("Result")
+                        .HasForeignKey("EchoProtocol.Api.Entities.MatchResult", "MatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.User", "SubmittedByUser")
+                        .WithMany()
+                        .HasForeignKey("SubmittedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Match");
+
+                    b.Navigation("SubmittedByUser");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchResultPlayer", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.MatchResult", "MatchResult")
+                        .WithMany("Players")
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.MatchPlayerBinding", "PlayerBinding")
+                        .WithOne("ResultPlayer")
+                        .HasForeignKey("EchoProtocol.Api.Entities.MatchResultPlayer", "MatchId", "UserId")
+                        .HasPrincipalKey("EchoProtocol.Api.Entities.MatchPlayerBinding", "MatchId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MatchResult");
+
+                    b.Navigation("PlayerBinding");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchRewardGrant", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.Wallet", "Wallet")
+                        .WithMany("MatchRewardGrants")
+                        .HasForeignKey("WalletId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.MatchResultPlayer", "ResultPlayer")
+                        .WithOne("RewardGrant")
+                        .HasForeignKey("EchoProtocol.Api.Entities.MatchRewardGrant", "MatchId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ResultPlayer");
+
+                    b.Navigation("Wallet");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchScore", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.PlayerAIProfile", "PlayerAIProfile")
+                        .WithMany("MatchScores")
+                        .HasForeignKey("ProfileLineageId")
+                        .HasPrincipalKey("ProfileLineageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.MatchResultPlayer", "ResultPlayer")
+                        .WithMany("MatchScores")
+                        .HasForeignKey("MatchId", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PlayerAIProfile");
+
+                    b.Navigation("ResultPlayer");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentOrder", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.User", "User")
+                        .WithMany("PaymentOrders")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentProviderEvent", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.PaymentOrder", "PaymentOrder")
+                        .WithMany("ProviderEvents")
+                        .HasForeignKey("PaymentOrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("PaymentOrder");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerAIProfile", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.User", "User")
+                        .WithOne("PlayerAIProfile")
+                        .HasForeignKey("EchoProtocol.Api.Entities.PlayerAIProfile", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerLoadoutItem", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.InventoryItem", "InventoryItem")
+                        .WithMany("LoadoutItems")
+                        .HasForeignKey("UserId", "InventoryItemId")
+                        .HasPrincipalKey("UserId", "InventoryItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.User", "User")
+                        .WithMany("LoadoutItems")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("InventoryItem");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerProfile", b =>
                 {
                     b.HasOne("EchoProtocol.Api.Entities.User", "User")
@@ -272,6 +2152,105 @@ namespace EchoProtocol.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PurchaseTransaction", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.ShopItem", "ShopItem")
+                        .WithMany("PurchaseTransactions")
+                        .HasForeignKey("ShopItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.User", "User")
+                        .WithMany("PurchaseTransactions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.WalletTransaction", "WalletTransaction")
+                        .WithOne("PurchaseTransaction")
+                        .HasForeignKey("EchoProtocol.Api.Entities.PurchaseTransaction", "WalletTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ShopItem");
+
+                    b.Navigation("User");
+
+                    b.Navigation("WalletTransaction");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentOrder", b =>
+                {
+                    b.Navigation("Checkout");
+
+                    b.Navigation("Fulfillment");
+
+                    b.Navigation("ProviderEvents");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioApplyReceipt", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.ScenarioDecision", "Decision")
+                        .WithOne("ApplyReceipt")
+                        .HasForeignKey("EchoProtocol.Api.Entities.ScenarioApplyReceipt", "DecisionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReportedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Decision");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioDecision", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.User", "HostUser")
+                        .WithMany()
+                        .HasForeignKey("HostUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.MatchAuthorityBinding", "Match")
+                        .WithMany()
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", "Snapshot")
+                        .WithOne("Decision")
+                        .HasForeignKey("EchoProtocol.Api.Entities.ScenarioDecision", "SnapshotId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.ScenarioConfigDefinition", "ScenarioConfig")
+                        .WithMany()
+                        .HasForeignKey("ScenarioConfigId", "ScenarioConfigVersion")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("HostUser");
+
+                    b.Navigation("Match");
+
+                    b.Navigation("ScenarioConfig");
+
+                    b.Navigation("Snapshot");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.TeamProfile", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.MatchResult", "MatchResult")
+                        .WithOne("TeamProfile")
+                        .HasForeignKey("EchoProtocol.Api.Entities.TeamProfile", "MatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MatchResult");
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.Wallet", b =>
@@ -285,16 +2264,105 @@ namespace EchoProtocol.Api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.WalletTransaction", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.Wallet", "Wallet")
+                        .WithMany("Transactions")
+                        .HasForeignKey("WalletId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Wallet");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", b =>
+                {
+                    b.Navigation("Decision");
+
+                    b.Navigation("Players");
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.MatchAuthorityBinding", b =>
                 {
                     b.Navigation("Players");
+
+                    b.Navigation("Result");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.InventoryItem", b =>
+                {
+                    b.Navigation("LoadoutItems");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchPlayerBinding", b =>
+                {
+                    b.Navigation("ResultPlayer");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchResult", b =>
+                {
+                    b.Navigation("Players");
+
+                    b.Navigation("TeamProfile");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchResultPlayer", b =>
+                {
+                    b.Navigation("MatchScores");
+
+                    b.Navigation("RewardGrant");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerAIProfile", b =>
+                {
+                    b.Navigation("MatchScores");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PurchaseTransaction", b =>
+                {
+                    b.Navigation("InventoryItem")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioDecision", b =>
+                {
+                    b.Navigation("ApplyReceipt");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ShopItem", b =>
+                {
+                    b.Navigation("InventoryItems");
+
+                    b.Navigation("PurchaseTransactions");
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.User", b =>
                 {
+                    b.Navigation("InventoryItems");
+
+                    b.Navigation("LoadoutItems");
+
+                    b.Navigation("PaymentOrders");
+
+                    b.Navigation("PlayerAIProfile");
+
                     b.Navigation("PlayerProfile");
 
+                    b.Navigation("PurchaseTransactions");
+
                     b.Navigation("Wallet");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.Wallet", b =>
+                {
+                    b.Navigation("MatchRewardGrants");
+
+                    b.Navigation("Transactions");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.WalletTransaction", b =>
+                {
+                    b.Navigation("PurchaseTransaction");
                 });
 #pragma warning restore 612, 618
         }

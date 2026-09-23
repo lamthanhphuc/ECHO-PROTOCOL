@@ -1014,6 +1014,13 @@ public sealed class TelemetryServiceTests
 
     private sealed class FakeTelemetryEventRepository : ITelemetryEventRepository
     {
+        public Task<IReadOnlyList<TelemetryEventDocument>> LoadAcceptedMatchEventsAsync(
+            Guid matchId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<TelemetryEventDocument>>(
+                InsertedEvents.Where(item => item.MatchId == matchId)
+                    .OrderBy(item => item.EventSequence)
+                    .ToArray());
         public List<TelemetryEventDocument> InsertedEvents { get; } = [];
         public Dictionary<Guid, TelemetryMatchBoundary> Boundaries { get; } = [];
         public Dictionary<Guid, TelemetryWriteItemResult> ConflictResults { get; } = [];

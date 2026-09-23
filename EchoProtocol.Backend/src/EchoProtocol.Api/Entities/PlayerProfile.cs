@@ -8,6 +8,8 @@ public class PlayerProfile
     public string DisplayName { get; set; } = string.Empty;
     public int TotalMatches { get; set; }
     public int TotalWins { get; set; }
+    public long ExperiencePoints { get; set; }
+    public int Level { get; set; } = 1;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

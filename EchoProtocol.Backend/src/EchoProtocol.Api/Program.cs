@@ -76,6 +76,26 @@ builder.Services.Configure<MongoDbSettings>(
     builder.Configuration.GetSection(MongoDbSettings.SectionName));
 builder.Services.Configure<MatchAuthoritySettings>(
     builder.Configuration.GetSection(MatchAuthoritySettings.SectionName));
+builder.Services.Configure<PlayerAIProfileSettings>(
+    builder.Configuration.GetSection(PlayerAIProfileSettings.SectionName));
+builder.Services.Configure<TeamProfileSettings>(
+    builder.Configuration.GetSection(TeamProfileSettings.SectionName));
+builder.Services.AddOptions<LoadoutSettings>()
+    .Bind(builder.Configuration.GetSection(LoadoutSettings.SectionName))
+    .Validate(settings => settings.TeamToolSlotCount == 1,
+        "Loadout:TeamToolSlotCount must be exactly 1 for the current gameplay contract")
+    .ValidateOnStart();
+builder.Services.Configure<PaymentCatalogSettings>(
+    builder.Configuration.GetSection(PaymentCatalogSettings.SectionName));
+builder.Services.Configure<PayOSSettings>(settings =>
+{
+    settings.ClientId = builder.Configuration["PAYOS_CLIENT_ID"] ?? string.Empty;
+    settings.ApiKey = builder.Configuration["PAYOS_API_KEY"] ?? string.Empty;
+    settings.ChecksumKey = builder.Configuration["PAYOS_CHECKSUM_KEY"] ?? string.Empty;
+    settings.BaseUrl = builder.Configuration["PAYOS_BASE_URL"] ?? "https://api-merchant.payos.vn";
+    settings.ReturnUrl = builder.Configuration["PAYOS_RETURN_URL"] ?? string.Empty;
+    settings.CancelUrl = builder.Configuration["PAYOS_CANCEL_URL"] ?? string.Empty;
+});
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
@@ -187,6 +207,35 @@ builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<ITelemetryService, TelemetryService>();
 builder.Services.AddScoped<IMatchAuthorityService, MatchAuthorityService>();
+builder.Services.AddScoped<IMatchResultService, MatchResultService>();
+builder.Services.AddScoped<IRewardService, RewardService>();
+builder.Services.AddSingleton<IRewardPolicy, UnconfiguredRewardPolicy>();
+builder.Services.AddScoped<IPlayerProfileService, PlayerProfileService>();
+builder.Services.AddScoped<IProgressionService, ProgressionService>();
+builder.Services.AddSingleton<IProgressionPolicy, UnconfiguredProgressionPolicy>();
+builder.Services.AddScoped<IShopCatalogService, ShopCatalogService>();
+builder.Services.AddScoped<IPurchaseService, PurchaseService>();
+builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddScoped<ILoadoutService, LoadoutService>();
+builder.Services.AddScoped<IAdminQueryService, AdminQueryService>();
+builder.Services.AddScoped<IMatchTelemetryAggregator, MatchTelemetryAggregator>();
+builder.Services.AddScoped<IPlayerAIProfileUpdater, PlayerAIProfileUpdater>();
+builder.Services.AddSingleton<IPlayerAIProfilePolicy, ConfiguredPlayerAIProfilePolicy>();
+builder.Services.AddScoped<ITeamProfileService, TeamProfileService>();
+builder.Services.AddSingleton<ITeamProfilePolicy, ConfiguredTeamProfilePolicy>();
+builder.Services.AddScoped<IScenarioConfigRegistry, ScenarioConfigRegistry>();
+builder.Services.AddScoped<IAIProfileReadService, AIProfileReadService>();
+builder.Services.AddScoped<IAdaptiveInputSnapshotBuilder, AdaptiveInputSnapshotBuilder>();
+builder.Services.AddScoped<IScenarioService, ScenarioService>();
+builder.Services.AddScoped<IPaymentOrderService, PaymentOrderService>();
+builder.Services.AddSingleton<IPaymentCatalogService, PaymentCatalogService>();
+builder.Services.AddHttpClient<PayOSPaymentProvider>();
+builder.Services.AddScoped<IPaymentProvider>(services =>
+    services.GetRequiredService<PayOSPaymentProvider>());
+builder.Services.AddScoped<IPaymentProviderRegistry, PaymentProviderRegistry>();
+builder.Services.AddScoped<IPaymentCheckoutService, PaymentCheckoutService>();
+builder.Services.AddScoped<IPaymentFulfillmentService, PaymentFulfillmentService>();
+builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
 builder.Services.AddSingleton<IMatchJoinProofService, MatchJoinProofService>();
 builder.Services.AddSingleton(TimeProvider.System);
 
@@ -242,6 +291,11 @@ if (app.Environment.IsDevelopment())
             scope.ServiceProvider.GetRequiredService<IOptions<AdminSeedSettings>>(),
             scope.ServiceProvider.GetRequiredService<IPasswordHasher>(),
             scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbInitializer"));
+
+        await ShopCatalogSeeder.SeedTestCatalogAsync(
+            db,
+            scope.ServiceProvider.GetRequiredService<TimeProvider>(),
+            scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("ShopCatalogSeeder"));
     }
     catch (Exception ex)
     {
