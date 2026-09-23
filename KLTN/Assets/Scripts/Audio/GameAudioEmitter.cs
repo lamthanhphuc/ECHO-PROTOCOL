@@ -19,6 +19,7 @@ namespace EchoProtocol.Audio
         private LobbyPlayerState _lobby;
         private PlayerHidingController _hiding;
         private StalkerFusionRuntime _stalker;
+        private StalkerController _stalkerController;
         private NetworkSlidingDoor _slidingDoor;
         private NetworkDoor _door;
         private NetworkPickupItem _core;
@@ -33,6 +34,7 @@ namespace EchoProtocol.Audio
 
         private void Awake()
         {
+            GameAudioRuntime.EnsureInitialized();
             _effects = GameAudioRuntime.CreateSource(gameObject, true);
             _loop = GameAudioRuntime.CreateSource(gameObject, true);
             _network = GetComponent<NetworkObject>();
@@ -42,6 +44,7 @@ namespace EchoProtocol.Audio
             _lobby = GetComponent<LobbyPlayerState>();
             _hiding = GetComponent<PlayerHidingController>();
             _stalker = GetComponent<StalkerFusionRuntime>();
+            _stalkerController = GetComponent<StalkerController>();
             _slidingDoor = GetComponent<NetworkSlidingDoor>();
             _door = GetComponent<NetworkDoor>();
             _core = GetComponent<NetworkPickupItem>();
@@ -50,6 +53,13 @@ namespace EchoProtocol.Audio
             _match = GetComponent<NetworkMatchState>();
             _terminal = GetComponent<SecurityTerminalDownload>();
             _beacon = GetComponent<NoiseMakerBeacon>();
+            if (_stalker != null)
+            {
+                _effects.minDistance = 4f;
+                _effects.maxDistance = 55f;
+                _loop.minDistance = 6f;
+                _loop.maxDistance = 60f;
+            }
             _lastPosition = transform.position;
             _lastSample = Time.time;
         }
@@ -65,7 +75,7 @@ namespace EchoProtocol.Audio
 
         private void Update()
         {
-            if (_network != null && !_network.IsValid)
+            if (_network != null && !_network.IsValid && _stalker == null)
             {
                 _loop.Stop();
                 return;
@@ -173,7 +183,17 @@ namespace EchoProtocol.Audio
 
         private void UpdateStalker(float speed)
         {
-            var state = _stalker.GetReplicatedPresentationState();
+            var state = _network != null && !_network.IsValid && _stalkerController != null
+                ? new StalkerNetworkPresentationState(
+                    _stalkerController.CurrentState,
+                    StalkerAttackEpisodeId.Invalid,
+                    StalkerNetworkAttackPhase.None,
+                    0f,
+                    false,
+                    StalkerAttackOutcome.None,
+                    -1L,
+                    -1L)
+                : _stalker.GetReplicatedPresentationState();
             if (Changed("stalker", state.SemanticState))
             {
                 switch (state.SemanticState)
@@ -185,12 +205,12 @@ namespace EchoProtocol.Audio
                 }
             }
             if (Changed("attackPhase", state.AttackPhase) && state.AttackPhase == StalkerNetworkAttackPhase.Windup)
-                Play("stalker/attack_swing");
+                Play("stalker/attack_swing", 1.15f);
             if (Changed("attackResolution", state.AttackResolvedTick) && state.AttackHitMomentResolved)
-                Play(state.AttackOutcome == StalkerAttackOutcome.Hit ? "stalker/attack_hit" : "stalker/miss_attack");
+                Play(state.AttackOutcome == StalkerAttackOutcome.Hit ? "stalker/attack_hit" : "stalker/miss_attack", 1.2f);
             var chasing = state.SemanticState == StalkerState.CHASE;
-            GameAudioRuntime.Loop(_loop, chasing ? "stalker/chase_loop_vocal_loop" : "stalker/idle_breathing_growl_loop", 0.3f);
-            Footstep(speed, chasing ? "stalker/chase_footstep_" : "stalker/patrol_footstep_", chasing ? 0.3f : 0.65f, 0.8f);
+            GameAudioRuntime.Loop(_loop, chasing ? "stalker/chase_loop_vocal_loop" : "stalker/idle_breathing_growl_loop", chasing ? 1f : 0.75f);
+            Footstep(speed, chasing ? "stalker/chase_footstep_" : "stalker/patrol_footstep_", chasing ? 0.3f : 0.65f, chasing ? 1.05f : 0.9f);
         }
 
         private void Footstep(float speed, string prefix, float interval, float volume)

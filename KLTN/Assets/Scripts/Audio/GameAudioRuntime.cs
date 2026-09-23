@@ -39,6 +39,8 @@ namespace EchoProtocol.Audio
             EchoProtocol.Tools.Scanner.NetworkToolPickup.ToolPickedUp += _instance.OnToolPickedUp;
         }
 
+        public static void EnsureInitialized() => Initialize();
+
         public static AudioSource CreateSource(GameObject owner, bool spatial)
         {
             var source = owner.AddComponent<AudioSource>();

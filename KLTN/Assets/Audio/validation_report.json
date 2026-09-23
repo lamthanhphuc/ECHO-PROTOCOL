@@ -1,5 +1,5 @@
 {
-  "count": 130,
+  "count": 131,
   "format": "44100 Hz mono PCM16 WAV",
   "checks": [
     "catalog coverage",
@@ -18,114 +18,114 @@
     {
       "file": "stalker/idle_breathing_growl_loop.wav",
       "seconds": 8.0,
-      "peak_dbfs": -18.0,
-      "rms_dbfs": -33.36,
-      "loop_boundary_delta": 55,
-      "sha256": "69d5b81b9dd3f606b346bca4652b0c8ecbd81ddf57e0876632de202b5251a773"
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -21.36,
+      "loop_boundary_delta": 219,
+      "sha256": "c474cd43c08e86c7293b38cd59711817adbfa11ed65d30a7dd11c7a370f629ea"
     },
     {
       "file": "stalker/footstep_cham.wav",
       "seconds": 0.48,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -23.42,
+      "peak_dbfs": -5.0,
+      "rms_dbfs": -22.42,
       "loop_boundary_delta": null,
-      "sha256": "701d334a6ec13af4eb82257e4d4f8b15a3bdc9b1bb2c8b8707be33d6d610c9f1"
+      "sha256": "e7f3b53718cb8bc3db8a68b70b3de2451c2dfa4de6976358d633c829feddc9da"
     },
     {
       "file": "stalker/footstep_chay_chase.wav",
       "seconds": 0.32,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -21.09,
+      "peak_dbfs": -5.0,
+      "rms_dbfs": -20.09,
       "loop_boundary_delta": null,
-      "sha256": "9d4ddfcce46dcefa0504e2878a83193a7a2ff0a73bad69254f6614187fc33c2d"
+      "sha256": "fa74524295224e39a05c26691dd49e7388cae29680f6680e13f4ab4d3b827adf"
     },
     {
       "file": "stalker/detect_cue.wav",
       "seconds": 0.65,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -18.44,
+      "peak_dbfs": -4.0,
+      "rms_dbfs": -16.44,
       "loop_boundary_delta": null,
-      "sha256": "610c95b18cdec0c7a0c4e8c966667981077e1a0368c87b1b19bb630e2def211d"
+      "sha256": "40299f1cee5892c22e2de889892d1aaa4feb5a941f42d6ec11a5727085a41934"
     },
     {
       "file": "stalker/chase_start.wav",
       "seconds": 1.1,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -17.74,
+      "peak_dbfs": -4.0,
+      "rms_dbfs": -15.74,
       "loop_boundary_delta": null,
-      "sha256": "b14e9a1af948b07c0cc1cfbce0112a076b9303a6a27fc732e9aa4ce1afca97b4"
+      "sha256": "25d0e3bace889ced03a8e84cb9d5d9e4075099ea045435a464cb1830ae0922a4"
     },
     {
       "file": "stalker/chase_loop_vocal_loop.wav",
       "seconds": 6.0,
-      "peak_dbfs": -18.0,
-      "rms_dbfs": -33.22,
-      "loop_boundary_delta": 81,
-      "sha256": "d2d1576eb4a2387ccb0a1348abec098be85880af7f34de80137118d9b7dc8b62"
+      "peak_dbfs": -6.0,
+      "rms_dbfs": -21.22,
+      "loop_boundary_delta": 323,
+      "sha256": "d9161ae0416d08a6424e7348f147cc794e201ed6a4bb6b78e91ded0d50848d62"
     },
     {
       "file": "stalker/attack_swing.wav",
       "seconds": 0.75,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -18.98,
+      "peak_dbfs": -4.0,
+      "rms_dbfs": -16.98,
       "loop_boundary_delta": null,
-      "sha256": "d3c1deb2d12727a0ebc7a1ad9eea6760a174645035bcb5415dde6a243fca8328"
+      "sha256": "50434a09c2ac5531a2f65922db643909f08631839e71b4a8539ca1845400012a"
     },
     {
       "file": "stalker/attack_hit.wav",
       "seconds": 0.32,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -20.69,
+      "peak_dbfs": -4.0,
+      "rms_dbfs": -18.69,
       "loop_boundary_delta": null,
-      "sha256": "1a9638ed2a4d01d0a2bb0eca023c1ba6a24239c0777e0d38da3032e101975b02"
+      "sha256": "148dec6498cd3af8d28d2be41c16a0b4d0fa08262a001b2c9d7ca9b990c0b0cc"
     },
     {
       "file": "stalker/miss_attack.wav",
       "seconds": 0.38,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -19.11,
+      "peak_dbfs": -4.0,
+      "rms_dbfs": -17.11,
       "loop_boundary_delta": null,
-      "sha256": "f85004e9731a383848424e17fbd947f24bd7b52a26304c5e9ff6070de4c45a64"
+      "sha256": "daedfe6c6cd140af0a1d0fb62ac636ed48b69a1d26572faef2d15f82d44c9072"
     },
     {
       "file": "stalker/search_vocal.wav",
       "seconds": 1.6,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -17.32,
+      "peak_dbfs": -4.0,
+      "rms_dbfs": -15.32,
       "loop_boundary_delta": null,
-      "sha256": "159a7d78065785be85a1476c8e560f47e31b76389bacfc9ee2536d5b000408c0"
+      "sha256": "8536a8e02a38f8ab396089daafa805e1132c1aaa2795b006d573650b65ae1dc4"
     },
     {
       "file": "stalker/recover_stun.wav",
       "seconds": 0.8,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -17.99,
+      "peak_dbfs": -4.0,
+      "rms_dbfs": -15.99,
       "loop_boundary_delta": null,
-      "sha256": "8ff82f409e2f45837984ea1ec1d5ffffc3f669ce330e9243f91f3768cdfb597e"
+      "sha256": "1babf8bdb3cfb0b1a4f03954d7b6154723dec6615918189cd629b10c70874140"
     },
     {
       "file": "stalker/door_hit.wav",
       "seconds": 0.65,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -25.14,
+      "peak_dbfs": -4.0,
+      "rms_dbfs": -23.14,
       "loop_boundary_delta": null,
-      "sha256": "a495f70a06f3779a3ee90fffa9b424ab21fe486f483c520ffcb0d4d67a44f185"
+      "sha256": "89e1821e3cc95e7a926e5d46a041eefea1a79f92840c546e43173ec2b313eae7"
     },
     {
       "file": "stalker/door_break.wav",
       "seconds": 1.7,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -24.89,
+      "peak_dbfs": -4.0,
+      "rms_dbfs": -22.89,
       "loop_boundary_delta": null,
-      "sha256": "629947b98d49c57acaaa5265ccdae5e2399bd3c12e0d6ddbab76b5bd2d42b220"
+      "sha256": "f80559272a7246de0d665b741f958372e22db9ce60d6f55ff0a1bc8d8f1c4d1b"
     },
     {
       "file": "stalker/door_jammer_break.wav",
       "seconds": 0.9,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -22.51,
+      "peak_dbfs": -4.0,
+      "rms_dbfs": -20.51,
       "loop_boundary_delta": null,
-      "sha256": "b37bd3878ae0bd34e9bc3d28cc7913d2ba07e46fe82ce62df43150d9f5be0162"
+      "sha256": "251a0dc5935d663075cedc1e986b70b28d12ecd8c6ed1a4dc07f3916431cd8db"
     },
     {
       "file": "player/metal_footsteps.wav",
@@ -818,10 +818,10 @@
     {
       "file": "stalker/recover_exhale.wav",
       "seconds": 0.8,
-      "peak_dbfs": -9.0,
-      "rms_dbfs": -20.42,
+      "peak_dbfs": -4.0,
+      "rms_dbfs": -15.42,
       "loop_boundary_delta": null,
-      "sha256": "0c05bf80d3f9ac5f7fe23827d9cc7b348fa0b491ca13f5ff68982dc9a7cd492e"
+      "sha256": "fc0eb50bf6907fddf2e5aca6eee98ae314a35a4822c5d0c8b1b827c02487f81d"
     },
     {
       "file": "energy_core/carry_rattle.wav",
@@ -994,66 +994,74 @@
     {
       "file": "stalker/patrol_footstep_01.wav",
       "seconds": 0.48,
-      "peak_dbfs": -7.0,
-      "rms_dbfs": -24.37,
+      "peak_dbfs": -5.0,
+      "rms_dbfs": -22.37,
       "loop_boundary_delta": null,
-      "sha256": "bcd4ef52a4feeda63371e0c1f6521226617633cfb4f5d54f64c474405eb30019"
+      "sha256": "878c1e271be856000d28627b2d2e3c0a8c09a79f3e21a94b0340426b01312b92"
     },
     {
       "file": "stalker/patrol_footstep_02.wav",
       "seconds": 0.48,
-      "peak_dbfs": -7.0,
-      "rms_dbfs": -23.92,
+      "peak_dbfs": -5.0,
+      "rms_dbfs": -21.92,
       "loop_boundary_delta": null,
-      "sha256": "1f6919da06b70ea36eb244795c6a54f253875d89dcf90e091f4f6438f5dc3d77"
+      "sha256": "0cb7836a466c40d0d0fa393ccdf4647fd81bb5c8653cde77db08288e744a2ed5"
     },
     {
       "file": "stalker/patrol_footstep_03.wav",
       "seconds": 0.48,
-      "peak_dbfs": -7.0,
-      "rms_dbfs": -24.54,
+      "peak_dbfs": -5.0,
+      "rms_dbfs": -22.54,
       "loop_boundary_delta": null,
-      "sha256": "72280e622605c55c5a5db92acc18efbeaa609b9c4f69158c16482d7777967713"
+      "sha256": "8deace868aef3c194012dd10a5d930a1dc0554250556fcf84e91bc8f45da03ac"
     },
     {
       "file": "stalker/patrol_footstep_04.wav",
       "seconds": 0.48,
-      "peak_dbfs": -7.0,
-      "rms_dbfs": -24.91,
+      "peak_dbfs": -5.0,
+      "rms_dbfs": -22.91,
       "loop_boundary_delta": null,
-      "sha256": "a702ba667a43151163e8febbedcdda3c3a1e48b42b97c57bd6709ae3bbc807e4"
+      "sha256": "e0148a18382232351887f9de12a4f137275558c8340a3a688ff33e0cbbfe6293"
     },
     {
       "file": "stalker/chase_footstep_01.wav",
       "seconds": 0.32,
-      "peak_dbfs": -7.0,
-      "rms_dbfs": -23.38,
+      "peak_dbfs": -5.0,
+      "rms_dbfs": -21.38,
       "loop_boundary_delta": null,
-      "sha256": "06c507aa3921be545050d06bf6baddd5e22085322a4bb62df0cfebc229712605"
+      "sha256": "4912d6974e5952f35ac4c400d7469f67fe5c2d79fa7f373c5b3071c8853de3b4"
     },
     {
       "file": "stalker/chase_footstep_02.wav",
       "seconds": 0.32,
-      "peak_dbfs": -7.0,
-      "rms_dbfs": -22.51,
+      "peak_dbfs": -5.0,
+      "rms_dbfs": -20.51,
       "loop_boundary_delta": null,
-      "sha256": "b39c71907c5ce5b6582c96ae0f0e8b2970de6fe8784e10919cc29dbd3b5fb798"
+      "sha256": "4e70c5ea9fa5960ecb276e8e3554bb9a09188b09612fbed20690977b789e8cc4"
     },
     {
       "file": "stalker/chase_footstep_03.wav",
       "seconds": 0.32,
-      "peak_dbfs": -7.0,
-      "rms_dbfs": -22.85,
+      "peak_dbfs": -5.0,
+      "rms_dbfs": -20.85,
       "loop_boundary_delta": null,
-      "sha256": "fbb91673ce1df6b1f960a9eccc6d6e6fd03bc150375a112badb55a12b96cb8b7"
+      "sha256": "41487dfd7e254da82b85648bff9773c077061306541599ef1dafd47887332ab2"
     },
     {
       "file": "stalker/chase_footstep_04.wav",
       "seconds": 0.32,
-      "peak_dbfs": -7.0,
-      "rms_dbfs": -22.39,
+      "peak_dbfs": -5.0,
+      "rms_dbfs": -20.39,
       "loop_boundary_delta": null,
-      "sha256": "256ff0c65bba73e97aa7cbafdf9a3efe5716d74385436ca4fd6a3443f252b62b"
+      "sha256": "24acc9f70bc858d22cf812e211c5d74c2ed6bd8034fe3ce2221758491c688ca5"
+    },
+    {
+      "file": "stalker/jumpscare.wav",
+      "seconds": 1.8,
+      "peak_dbfs": -2.0,
+      "rms_dbfs": -20.39,
+      "loop_boundary_delta": null,
+      "sha256": "7806155fbf44e95e6577116183b178dfc6f171873cf9dc1076a43d753f76a8aa"
     }
   ]
 }
