@@ -24,13 +24,26 @@ namespace EchoProtocol.Editor.Networking
 
         private static void RunRequested()
         {
-            if (File.Exists(AudioRequest) && !EditorApplication.isPlayingOrWillChangePlaymode
+            if (File.Exists(AudioRequest)
+                && !EditorApplication.isPlayingOrWillChangePlaymode
                 && !EditorApplication.isCompiling)
             {
                 File.Delete(AudioRequest);
-                try { SetupAudio(); }
-                catch (Exception error) { File.WriteAllText(AudioReport, error.ToString()); Debug.LogException(error); }
+
+                try
+                {
+                    SetupAudio();
+                }
+                catch (Exception error)
+                {
+                    File.WriteAllText(
+                        AudioReport,
+                        error.ToString());
+
+                    Debug.LogException(error);
+                }
             }
+
             if (!File.Exists(Request)) return;
             if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
             {
@@ -48,12 +61,25 @@ namespace EchoProtocol.Editor.Networking
             if (EditorApplication.isPlayingOrWillChangePlaymode)
                 throw new InvalidOperationException("Exit Play Mode before configuring prefabs.");
             var source = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/StalkerNetwork.prefab");
-            var scream = AssetDatabase.LoadAssetAtPath<AudioClip>(ScreamPath);
+            var scream =
+                AssetDatabase.LoadAssetAtPath<AudioClip>(
+                    ScreamPath);
             if (source == null || scream == null) throw new InvalidOperationException("Missing Stalker model/audio.");
             Directory.CreateDirectory(Folder);
             AssetDatabase.Refresh();
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
-            if (prefab == null) prefab = CreatePresentation(source);
+            AssetDatabase.DeleteAsset(
+                PrefabPath);
+
+            AssetDatabase.DeleteAsset(
+                Folder + "/JumpscareLunge.anim");
+
+            AssetDatabase.DeleteAsset(
+                Folder + "/GhostJumpscare.controller");
+
+            AssetDatabase.Refresh();
+
+            var prefab =
+                CreatePresentation(source);
 
             foreach (var path in PlayerPrefabPaths())
             {
@@ -65,8 +91,11 @@ namespace EchoProtocol.Editor.Networking
                     var settings = new SerializedObject(effect);
                     settings.FindProperty("_ghostJumpscarePrefab").objectReferenceValue = prefab;
                     settings.FindProperty("_scream").objectReferenceValue = scream;
-                    settings.FindProperty("_ghostOffset").vector3Value = new Vector3(0f, 0f, 1f);
+                    settings.FindProperty("_ghostOffset").vector3Value = new Vector3(0f, -1.5f, 1f);
                     settings.FindProperty("_ghostEuler").vector3Value = new Vector3(0f, 180f, 0f);
+                    settings.FindProperty(
+                            "_stalkerBiteSeconds")
+                        .floatValue = 1.5f;
                     settings.ApplyModifiedPropertiesWithoutUndo();
                     PrefabUtility.SaveAsPrefabAsset(player, path);
                 }
@@ -93,58 +122,173 @@ namespace EchoProtocol.Editor.Networking
         public static void SetupAudio()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode)
-                throw new InvalidOperationException("Exit Play Mode before configuring audio.");
-            AssetDatabase.ImportAsset(ScreamPath, ImportAssetOptions.ForceSynchronousImport);
-            var importer = AssetImporter.GetAtPath(ScreamPath) as AudioImporter;
-            if (importer == null) throw new InvalidOperationException("Missing jumpscare audio.");
-            var audioSettings = importer.defaultSampleSettings;
-            audioSettings.loadType = AudioClipLoadType.DecompressOnLoad;
-            audioSettings.compressionFormat = AudioCompressionFormat.PCM;
+            {
+                throw new InvalidOperationException(
+                    "Exit Play Mode before configuring audio.");
+            }
+
+            AssetDatabase.ImportAsset(
+                ScreamPath,
+                ImportAssetOptions.ForceSynchronousImport);
+
+            var importer =
+                AssetImporter.GetAtPath(ScreamPath)
+                    as AudioImporter;
+
+            if (importer == null)
+            {
+                throw new InvalidOperationException(
+                    "Missing jumpscare audio.");
+            }
+
+            var audioSettings =
+                importer.defaultSampleSettings;
+
+            audioSettings.loadType =
+                AudioClipLoadType.DecompressOnLoad;
+
+            audioSettings.compressionFormat =
+                AudioCompressionFormat.PCM;
+
             audioSettings.preloadAudioData = true;
-            importer.defaultSampleSettings = audioSettings;
+
+            importer.defaultSampleSettings =
+                audioSettings;
+
             importer.SaveAndReimport();
-            var scream = AssetDatabase.LoadAssetAtPath<AudioClip>(ScreamPath);
-            if (scream == null || Mathf.Abs(scream.length - 1.8f) > 0.01f)
-                throw new InvalidOperationException("Expected the 1.8 second jumpscare clip.");
+
+            var scream =
+                AssetDatabase.LoadAssetAtPath<AudioClip>(
+                    ScreamPath);
+
+            if (scream == null
+                || Mathf.Abs(scream.length - 1.8f) > 0.01f)
+            {
+                throw new InvalidOperationException(
+                    "Expected the 1.8 second jumpscare clip.");
+            }
+
             foreach (var path in PlayerPrefabPaths())
             {
-                var player = PrefabUtility.LoadPrefabContents(path);
+                var player =
+                    PrefabUtility.LoadPrefabContents(path);
+
                 try
                 {
-                    var effect = player.GetComponent<PlayerJumpscareController>();
-                    if (effect == null) throw new InvalidOperationException("Missing jumpscare controller: " + path);
-                    var settings = new SerializedObject(effect);
-                    settings.FindProperty("_scream").objectReferenceValue = scream;
+                    var effect =
+                        player.GetComponent<
+                            PlayerJumpscareController>();
+
+                    if (effect == null)
+                    {
+                        throw new InvalidOperationException(
+                            "Missing jumpscare controller: "
+                            + path);
+                    }
+
+                    var settings =
+                        new SerializedObject(effect);
+
+                    settings.FindProperty("_scream")
+                        .objectReferenceValue =
+                        scream;
+
                     settings.ApplyModifiedPropertiesWithoutUndo();
-                    PrefabUtility.SaveAsPrefabAsset(player, path);
+
+                    PrefabUtility.SaveAsPrefabAsset(
+                        player,
+                        path);
                 }
-                finally { PrefabUtility.UnloadPrefabContents(player); }
-                var saved = new SerializedObject(AssetDatabase.LoadAssetAtPath<GameObject>(path)
-                    .GetComponent<PlayerJumpscareController>());
-                if (saved.FindProperty("_scream").objectReferenceValue != scream)
-                    throw new InvalidOperationException("Audio reference not saved: " + path);
+                finally
+                {
+                    PrefabUtility.UnloadPrefabContents(
+                        player);
+                }
+
+                var saved =
+                    new SerializedObject(
+                        AssetDatabase
+                            .LoadAssetAtPath<GameObject>(path)
+                            .GetComponent<
+                                PlayerJumpscareController>());
+
+                if (saved.FindProperty("_scream")
+                        .objectReferenceValue
+                    != scream)
+                {
+                    throw new InvalidOperationException(
+                        "Audio reference not saved: "
+                        + path);
+                }
             }
+
             AssetDatabase.SaveAssets();
-            File.WriteAllText(AudioReport, "PASS: jumpscare.wav (1.8s), preloaded PCM, existing player prefab audio references saved and verified. PlayMode listening not run.");
-            Debug.Log("[GhostJumpscareAudioSetup] " + File.ReadAllText(AudioReport));
+
+            File.WriteAllText(
+                AudioReport,
+                "PASS: jumpscare.wav (1.8s), preloaded PCM, existing player prefab audio references saved and verified. PlayMode listening not run.");
+
+            Debug.Log(
+                "[GhostJumpscareAudioSetup] "
+                + File.ReadAllText(AudioReport));
         }
 
-        private static System.Collections.Generic.IEnumerable<string> PlayerPrefabPaths()
+        private static
+            System.Collections.Generic.IEnumerable<string>
+                PlayerPrefabPaths()
         {
-            yield return "Assets/Prefabs/PlayerNetwork.prefab";
-            const string legacyTestPlayer = "Assets/_Project/Prefabs/Network/TestNetworkPlayer.prefab";
-            if (File.Exists(legacyTestPlayer)) yield return legacyTestPlayer;
+            yield return
+                "Assets/Prefabs/PlayerNetwork.prefab";
+
+            const string legacyTestPlayer =
+                "Assets/_Project/Prefabs/Network/TestNetworkPlayer.prefab";
+
+            if (File.Exists(legacyTestPlayer))
+            {
+                yield return legacyTestPlayer;
+            }
         }
 
         private static GameObject CreatePresentation(GameObject source)
         {
-            var sourceAnimator = source.GetComponentInChildren<Animator>(true);
-            if (sourceAnimator == null) throw new InvalidOperationException("Stalker has no visual Animator.");
+            var sourceAnimator =
+                source.GetComponentsInChildren<Animator>(true)
+                    .FirstOrDefault(
+                        animator =>
+                            animator.runtimeAnimatorController != null
+                            && AssetDatabase.GetAssetPath(
+                                animator.runtimeAnimatorController)
+                            == "Assets/Animations/Stalker/AC_Stalker.controller");
+
+            if (sourceAnimator == null)
+            {
+                throw new InvalidOperationException(
+                    "Stalker AC_Stalker Animator not found.");
+            }
+
             var root = new GameObject("GhostJumpscare");
             try
             {
                 var visual = UnityEngine.Object.Instantiate(sourceAnimator.gameObject, root.transform);
                 visual.name = "Visual";
+
+                var visualAnimator =
+                    visual.GetComponent<Animator>()
+                    ?? visual.GetComponentInChildren<Animator>(true);
+
+                if (visualAnimator == null)
+                {
+                    throw new InvalidOperationException(
+                        "Jumpscare visual Animator missing.");
+                }
+
+                visualAnimator.runtimeAnimatorController =
+                    sourceAnimator.runtimeAnimatorController;
+
+                visualAnimator.applyRootMotion = false;
+                visualAnimator.cullingMode =
+                    AnimatorCullingMode.AlwaysAnimate;
+
                 // Keep model/rig/materials only. The root Animator owns the local lunge timeline.
                 foreach (var component in visual.GetComponentsInChildren<Component>(true).Reverse())
                     if (!(component is Transform) && !(component is Renderer)
@@ -199,12 +343,38 @@ namespace EchoProtocol.Editor.Networking
                 || prefab.GetComponentsInChildren<Collider>(true).Length != 0
                 || prefab.GetComponentsInChildren<AudioSource>(true).Length != 0)
                 throw new InvalidOperationException("Presentation prefab isolation failed.");
+
+            var visualAnimator =
+                prefab.GetComponentsInChildren<Animator>(true)
+                    .FirstOrDefault(
+                        animator =>
+                            animator.gameObject != prefab);
+
+            if (visualAnimator == null)
+            {
+                throw new InvalidOperationException(
+                    "Jumpscare visual Animator missing.");
+            }
+
+            var controllerPath =
+                AssetDatabase.GetAssetPath(
+                    visualAnimator.runtimeAnimatorController);
+
+            if (controllerPath
+                != "Assets/Animations/Stalker/AC_Stalker.controller")
+            {
+                throw new InvalidOperationException(
+                    $"Wrong visual Animator: {controllerPath}");
+            }
+
             foreach (var path in PlayerPrefabPaths())
             {
                 var component = AssetDatabase.LoadAssetAtPath<GameObject>(path).GetComponent<PlayerJumpscareController>();
                 var settings = new SerializedObject(component);
                 if (settings.FindProperty("_ghostJumpscarePrefab").objectReferenceValue != prefab
-                    || settings.FindProperty("_scream").objectReferenceValue != AssetDatabase.LoadAssetAtPath<AudioClip>(ScreamPath))
+                    || settings.FindProperty("_scream").objectReferenceValue
+                    != AssetDatabase.LoadAssetAtPath<AudioClip>(
+                        ScreamPath))
                     throw new InvalidOperationException("Player references not saved: " + path);
             }
             File.WriteAllText(Report, "PASS: presentation prefab, Animator trigger/lunge, existing player references and Downed defaults saved. Audio: jumpscare.wav. Multiplayer PlayMode not run.");

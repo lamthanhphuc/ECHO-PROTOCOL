@@ -24,6 +24,8 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string VisionObservationTypeName = "EchoProtocol.AI.Stalker.VisionObservation";
         private const string DiagnosticAttackSinkTypeName = "EchoProtocol.AI.Stalker.StalkerDiagnosticAttackConsequenceSink";
         private const string SearchOutcomeTypeName = "EchoProtocol.AI.Stalker.Telemetry.StalkerSearchTerminalOutcome";
+        private const string SpecialRuntimeTypeName = "EchoProtocol.AI.Stalker.Special.StalkerSpecialEncounterRuntime";
+        private const string SpecialPhaseTypeName = "EchoProtocol.AI.Stalker.Special.StalkerSpecialEncounterPhase";
         private const float VectorTolerance = 0.001f;
 
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
@@ -434,7 +436,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(RunPipeline(fixture.Runtime, 40L, 4d, 0.1f), Is.True);
 
             AssertSearchFact(fixture.Controller, 1L, "SAME_TARGET_REACQUIRED");
-            AssertSearchExitedAndCleared(fixture.Controller, "CHASE");
+            AssertSearchExitedAndCleared(fixture.Controller, "DETECT");
             Assert.That(RunPipeline(fixture.Runtime, 41L, 4.1d, 0.1f), Is.True);
             AssertSearchFact(fixture.Controller, 1L, "SAME_TARGET_REACQUIRED");
             yield return null;
@@ -520,6 +522,123 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             AssertSearchFact(fixture.Controller, 1L, "TIMEOUT");
             yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RUNTIME_SPECIAL_25_SniffAndJumpOutMapToPresentationActions()
+        {
+            var fixture = CreateRuntimeFixture();
+            var specialRuntime = GetOrCreateSpecialRuntime(fixture.Runtime);
+
+            SetSpecialPresentationState(specialRuntime, "Sniff", 0.75f, 11u, true);
+
+            var sniffState = BuildCurrentPresentationState(fixture.Runtime);
+
+            Assert.That(GetProperty(sniffState, "PresentationAction").ToString(), Is.EqualTo("SpecialSniff"));
+            Assert.That(GetProperty(sniffState, "SpecialPhase").ToString(), Is.EqualTo("Sniff"));
+            Assert.That(GetProperty(sniffState, "SpecialSequenceOrdinal"), Is.EqualTo(11u));
+            Assert.That((float)GetProperty(sniffState, "SpecialPhaseElapsed"), Is.EqualTo(0.75f).Within(VectorTolerance));
+            Assert.That(GetProperty(sniffState, "PresentationVisible"), Is.EqualTo(true));
+
+            SetSpecialPresentationState(specialRuntime, "JumpOut", 0.5f, 11u, true);
+
+            var jumpOutState = BuildCurrentPresentationState(fixture.Runtime);
+
+            Assert.That(GetProperty(jumpOutState, "PresentationAction").ToString(), Is.EqualTo("SpecialJumpOut"));
+            Assert.That(GetProperty(jumpOutState, "SpecialPhase").ToString(), Is.EqualTo("JumpOut"));
+            Assert.That(GetProperty(jumpOutState, "SpecialSequenceOrdinal"), Is.EqualTo(11u));
+            Assert.That(GetProperty(jumpOutState, "PresentationVisible"), Is.EqualTo(true));
+
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RUNTIME_SPECIAL_26_HiddenTransferReplicatesInvisibleState()
+        {
+            var fixture = CreateRuntimeFixture();
+            var specialRuntime = GetOrCreateSpecialRuntime(fixture.Runtime);
+
+            SetSpecialPresentationState(specialRuntime, "HiddenTransfer", 2.25f, 12u, false);
+
+            var state = BuildCurrentPresentationState(fixture.Runtime);
+
+            Assert.That(GetProperty(state, "SpecialPhase").ToString(), Is.EqualTo("HiddenTransfer"));
+            Assert.That(GetProperty(state, "PresentationAction").ToString(), Is.EqualTo("None"));
+            Assert.That(GetProperty(state, "SpecialSequenceOrdinal"), Is.EqualTo(12u));
+            Assert.That((float)GetProperty(state, "SpecialPhaseElapsed"), Is.EqualTo(2.25f).Within(VectorTolerance));
+            Assert.That(GetProperty(state, "PresentationVisible"), Is.EqualTo(false));
+
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RUNTIME_SPECIAL_27_JumpInAndReactionLockRestoreVisiblePresentation()
+        {
+            var fixture = CreateRuntimeFixture();
+            var specialRuntime = GetOrCreateSpecialRuntime(fixture.Runtime);
+
+            SetSpecialPresentationState(specialRuntime, "JumpIn", 0.4f, 13u, true);
+
+            var jumpInState = BuildCurrentPresentationState(fixture.Runtime);
+
+            Assert.That(GetProperty(jumpInState, "PresentationAction").ToString(), Is.EqualTo("SpecialJumpIn"));
+            Assert.That(GetProperty(jumpInState, "SpecialPhase").ToString(), Is.EqualTo("JumpIn"));
+            Assert.That(GetProperty(jumpInState, "PresentationVisible"), Is.EqualTo(true));
+            Assert.That(GetProperty(jumpInState, "SpecialSequenceOrdinal"), Is.EqualTo(13u));
+
+            SetSpecialPresentationState(specialRuntime, "ReactionLock", 0.8f, 13u, true);
+
+            var reactionState = BuildCurrentPresentationState(fixture.Runtime);
+
+            Assert.That(GetProperty(reactionState, "PresentationAction").ToString(), Is.EqualTo("SpecialReactionRoar"));
+            Assert.That(GetProperty(reactionState, "SpecialPhase").ToString(), Is.EqualTo("ReactionLock"));
+            Assert.That(GetProperty(reactionState, "PresentationVisible"), Is.EqualTo(true));
+            Assert.That(GetProperty(reactionState, "SpecialSequenceOrdinal"), Is.EqualTo(13u));
+
+            yield return null;
+        }
+
+        private static Component GetOrCreateSpecialRuntime(Component fusionRuntime)
+        {
+            var existing = GetPrivateField(fusionRuntime, "specialEncounterRuntime") as Component;
+
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            var specialRuntimeType = ResolveType(SpecialRuntimeTypeName);
+            var specialRuntime = fusionRuntime.gameObject.GetComponent(specialRuntimeType) as Component;
+
+            if (specialRuntime == null)
+            {
+                specialRuntime = fusionRuntime.gameObject.AddComponent(specialRuntimeType) as Component;
+            }
+
+            Assert.That(specialRuntime, Is.Not.Null);
+            SetPrivateField(fusionRuntime, "specialEncounterRuntime", specialRuntime);
+            return specialRuntime;
+        }
+
+        private static void SetSpecialPresentationState(
+            Component specialRuntime,
+            string phaseName,
+            float phaseElapsed,
+            uint sequenceOrdinal,
+            bool presentationVisible)
+        {
+            var phaseType = ResolveType(SpecialPhaseTypeName);
+            var phase = Enum.Parse(phaseType, phaseName);
+
+            SetPrivateField(specialRuntime, "_phase", phase);
+            SetPrivateField(specialRuntime, "_phaseElapsed", phaseElapsed);
+            SetPrivateField(specialRuntime, "_sequenceOrdinal", sequenceOrdinal);
+            SetPrivateField(specialRuntime, "_presentationVisible", presentationVisible);
+        }
+
+        private static object BuildCurrentPresentationState(Component fusionRuntime)
+        {
+            return InvokeInstanceMethod(fusionRuntime, "BuildCurrentPresentationState", Type.EmptyTypes, Array.Empty<object>());
         }
 
         private RuntimeFixture CreateRuntimeFixture()

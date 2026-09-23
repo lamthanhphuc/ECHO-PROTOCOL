@@ -9,7 +9,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8328068171425003308}
-  - component: {fileID: 5063793686333660103}
   m_Layer: 0
   m_Name: InspectPoint
   m_TagString: Untagged
@@ -32,24 +31,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2866053586569123100}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &5063793686333660103
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7573132932226569630}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6b37756ef44730244a72c1a3f17cfdf2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::HidingSpot
-  hidePoint: {fileID: 655111202465867379}
-  exitPoint: {fileID: 7829822358167062251}
-  inspectPoint: {fileID: 8328068171425003308}
-  enterPrompt: Hide
-  exitPrompt: Exit hiding
-  yawLimitDegrees: 45
 --- !u!1 &8685920071050939432
 GameObject:
   m_ObjectHideFlags: 0
@@ -184,7 +165,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::HidingSpot
   hidePoint: {fileID: 655111202465867379}
   exitPoint: {fileID: 7829822358167062251}
-  inspectPoint: {fileID: 0}
+  inspectPoint: {fileID: 8328068171425003308}
   enterPrompt: Hide
   exitPrompt: Exit hiding
   yawLimitDegrees: 45

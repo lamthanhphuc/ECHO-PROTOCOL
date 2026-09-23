@@ -101,24 +101,55 @@ public class MatchFlowController : MonoBehaviour
     public void NotifySecurityHoldComplete()
     {
         if (_networkAuthorityPresentationOnly) return;
+
         _securityHoldCompleted = true;
-        _powerAuthorizationCode = GetOrGenerateAuthCode();
-        if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
+
+        var zone2Director = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance;
+        if (zone2Director != null &&
+            !string.IsNullOrEmpty(zone2Director.AuthorizationCode))
         {
-            EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.SetOfflineStage(EchoProtocol.MatchFlow.Zone2MissionStage.AuthorizationCodeGranted);
+            _powerAuthorizationCode = zone2Director.AuthorizationCode;
         }
+        else
+        {
+            _powerAuthorizationCode = GetOrGenerateAuthCode();
+        }
+
+        if (zone2Director != null)
+        {
+            zone2Director.SetOfflineStage(
+                EchoProtocol.MatchFlow.Zone2MissionStage.AuthorizationCodeGranted);
+        }
+
         SetPhase(MatchPhase.PowerPuzzle);
     }
 
     public void NotifyPowerPuzzleComplete()
     {
         if (_networkAuthorityPresentationOnly) return;
+
+        bool enteringFinalHunt =
+            _phase == MatchPhase.PowerPuzzle
+            && !IsMatchEnded;
+
         _powerPuzzleCompleted = true;
         _restoreMainPowerCompleted = true;
+
         if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
         {
             EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.ApplyDoorState(true);
-            EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.SetOfflineStage(EchoProtocol.MatchFlow.Zone2MissionStage.Zone2Completed);
+            EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.SetOfflineStage(
+                EchoProtocol.MatchFlow.Zone2MissionStage.Zone2Completed);
+        }
+
+        if (enteringFinalHunt)
+        {
+            SetPhase(MatchPhase.FinalHunt);
+
+            if (_phase == MatchPhase.FinalHunt)
+            {
+                finalHuntStarted?.Invoke();
+            }
         }
     }
 

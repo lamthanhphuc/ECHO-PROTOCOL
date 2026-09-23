@@ -3368,7 +3368,6 @@ GameObject:
   - component: {fileID: 7702492081070123632}
   - component: {fileID: 6101730975981320465}
   - component: {fileID: 5011220752064409170}
-  - component: {fileID: 636724797440539758}
   m_Layer: 0
   m_Name: RelayB
   m_TagString: Untagged
@@ -3550,22 +3549,6 @@ MonoBehaviour:
   prompt: Synchronize Data Relay B
   onlinePrompt: Data Relay B - Online
   allowInspectWhenOnline: 1
---- !u!114 &636724797440539758
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4865583464237585255}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8e9be37e47325a04490e7d7a4908988b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.RelayB.RelayBNetworkState
-  controller: {fileID: 6101730975981320465}
-  _RelayBOnline:
-    RawValue: 0
-  _ActivePresetIndex: 0
 --- !u!1 &5050075165218855487
 GameObject:
   m_ObjectHideFlags: 0

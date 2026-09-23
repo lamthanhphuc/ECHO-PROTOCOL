@@ -1,3 +1,5 @@
+using EchoProtocol.MatchFlow;
+using EchoProtocol.Networking;
 using UnityEngine;
 
 [RequireComponent(typeof(Collider))]
@@ -14,6 +16,21 @@ public class PowerPuzzleStation : MonoBehaviour, IInteractable
     {
         get
         {
+            if (stationType == PowerPuzzleStationType.PowerControl
+                && TryGetNetworkMatchState(out var matchState))
+            {
+                bool isComplete = matchState.ZoneDoorsUnlocked
+                    || matchState.PowerPuzzleCompleted
+                    || matchState.Zone2Stage == Zone2MissionStage.Zone2Completed;
+                bool isAuthorized = matchState.SecurityHoldCompleted
+                    && matchState.PowerAuthorizationAvailable;
+
+                if (isComplete) return "MAIN POWER RESTORED. POWER CONTROL ONLINE. [E]";
+                if (!isAuthorized) return "LOCKED. SECURITY AUTHENTICATION REQUIRED. [E]";
+                if (matchState.IsZoneAccessCooldownActive) return "ACCESS PANEL TEMPORARILY LOCKED. [E]";
+                return "AUTHORIZATION AVAILABLE. ENTER MAIN POWER ACCESS CODE. [E]";
+            }
+
             PowerPuzzleController activeController = GetController();
             if (activeController != null)
             {
@@ -106,5 +123,11 @@ public class PowerPuzzleStation : MonoBehaviour, IInteractable
         }
 
         return controller;
+    }
+
+    private static bool TryGetNetworkMatchState(out NetworkMatchState matchState)
+    {
+        matchState = NetworkMatchState.Instance ?? FindAnyObjectByType<NetworkMatchState>();
+        return matchState != null && matchState.Object != null && matchState.Object.IsValid;
     }
 }

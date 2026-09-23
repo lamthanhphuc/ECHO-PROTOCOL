@@ -12,7 +12,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
         TargetDisabled = 3,
         TargetUnreachable = 4,
         TopologyChanged = 5,
-        NavigationRecoveryFailed = 6
+        NavigationRecoveryFailed = 6,
+        StrategicPolicyChanged = 7
     }
 
     public readonly struct RoomSweepGlobalObjective
@@ -36,6 +37,7 @@ namespace EchoProtocol.AI.Stalker.Spatial
         private readonly int _variationSeed;
         private readonly int _nearOptimalHopSlack;
         private readonly bool _useSeededVariation;
+        private IRoomSweepTargetStrategy _targetStrategy;
 
         private readonly List<SeededCandidate> _seededCandidates =
             new List<SeededCandidate>();
@@ -86,6 +88,12 @@ namespace EchoProtocol.AI.Stalker.Spatial
         public RoomSweepGlobalObjective CurrentObjective { get; private set; }
         public RoomSweepGlobalObjectiveInvalidationReason LastInvalidationReason { get; private set; }
 
+        public void ConfigureTargetStrategy(
+            IRoomSweepTargetStrategy targetStrategy)
+        {
+            _targetStrategy = targetStrategy;
+        }
+
         public bool TryGetOrCreateObjective(
             RegionId currentRegionId,
             out RoomSweepGlobalObjective objective)
@@ -107,40 +115,79 @@ namespace EchoProtocol.AI.Stalker.Spatial
 
             if (CurrentObjective.IsValid)
             {
-                var target = CurrentObjective.TargetRoomRegionId;
+                var target =
+                    CurrentObjective.TargetRoomRegionId;
+
                 if (target == currentRegionId)
                 {
-                    Invalidate(RoomSweepGlobalObjectiveInvalidationReason.TargetReached);
+                    _targetStrategy?.PrepareReachedTarget(
+                        target);
+
+                    Invalidate(
+                        RoomSweepGlobalObjectiveInvalidationReason
+                            .TargetReached);
+
                     return false;
                 }
-
-                if (IsRejected(target, rejectedRoomRegionIds))
+                else if (_targetStrategy != null
+                    && !_targetStrategy.IsLegacyFallbackTargetAllowed(
+                        target))
                 {
-                    Invalidate(RoomSweepGlobalObjectiveInvalidationReason.NavigationRecoveryFailed);
+                    Invalidate(
+                        RoomSweepGlobalObjectiveInvalidationReason
+                            .StrategicPolicyChanged);
                 }
-                else if (_coverageMemory.IsRegionCleared(target))
+                else if (IsRejected(
+                    target,
+                    rejectedRoomRegionIds))
                 {
-                    Invalidate(RoomSweepGlobalObjectiveInvalidationReason.TargetCleared);
+                    Invalidate(
+                        RoomSweepGlobalObjectiveInvalidationReason
+                            .NavigationRecoveryFailed);
+                }
+                else if (_coverageMemory.IsRegionCleared(target)
+                    && (_targetStrategy == null
+                        || !_targetStrategy.IsCommittedStrategicTarget(
+                            target)))
+                {
+                    Invalidate(
+                        RoomSweepGlobalObjectiveInvalidationReason
+                            .TargetCleared);
                 }
                 else if (!_regionGraph.ContainsRegion(target)
-                    || !_regionGraph.TryGetRegionSemanticMetadata(target, out var metadata)
+                    || !_regionGraph.TryGetRegionSemanticMetadata(
+                        target,
+                        out var metadata)
                     || metadata.Kind != RegionSemanticKind.Room)
                 {
-                    Invalidate(RoomSweepGlobalObjectiveInvalidationReason.TopologyChanged);
+                    Invalidate(
+                        RoomSweepGlobalObjectiveInvalidationReason
+                            .TopologyChanged);
                 }
                 else if (!_regionGraph.IsRegionEnabled(target))
                 {
-                    Invalidate(RoomSweepGlobalObjectiveInvalidationReason.TargetDisabled);
+                    Invalidate(
+                        RoomSweepGlobalObjectiveInvalidationReason
+                            .TargetDisabled);
                 }
-                else if (_regionGraph.TryGetNextRegionOnRoute(currentRegionId, target, out var nextRegionId))
+                else if (_regionGraph.TryGetNextRegionOnRoute(
+                    currentRegionId,
+                    target,
+                    out var nextRegionId))
                 {
-                    CurrentObjective = new RoomSweepGlobalObjective(target, nextRegionId);
+                    CurrentObjective =
+                        new RoomSweepGlobalObjective(
+                            target,
+                            nextRegionId);
+
                     objective = CurrentObjective;
                     return true;
                 }
                 else
                 {
-                    Invalidate(RoomSweepGlobalObjectiveInvalidationReason.TargetUnreachable);
+                    Invalidate(
+                        RoomSweepGlobalObjectiveInvalidationReason
+                            .TargetUnreachable);
                 }
             }
 
@@ -172,6 +219,35 @@ namespace EchoProtocol.AI.Stalker.Spatial
             ISet<RegionId> rejectedRoomRegionIds,
             out RoomSweepGlobalObjective objective)
         {
+            objective = RoomSweepGlobalObjective.Invalid;
+
+            if (_targetStrategy != null
+                && _targetStrategy.TrySelectTarget(
+                    currentRegionId,
+                    rejectedRoomRegionIds,
+                    out var strategicTarget)
+                && IsEligibleStrategicTarget(
+                    currentRegionId,
+                    strategicTarget,
+                    rejectedRoomRegionIds)
+                && _regionGraph.TryGetNextRegionOnRoute(
+                    currentRegionId,
+                    strategicTarget,
+                    out var strategicNextRegion))
+            {
+                _targetStrategy.CommitSelectedTarget(
+                    strategicTarget);
+
+                objective = new RoomSweepGlobalObjective(
+                    strategicTarget,
+                    strategicNextRegion);
+                return true;
+            }
+
+            RecycleLegacyCoverageIfExhausted(
+                currentRegionId,
+                rejectedRoomRegionIds);
+
             if (_useSeededVariation)
             {
                 return TrySelectSeededTarget(
@@ -180,7 +256,6 @@ namespace EchoProtocol.AI.Stalker.Spatial
                     out objective);
             }
 
-            objective = RoomSweepGlobalObjective.Invalid;
             var bestTarget = RegionId.Invalid;
             var bestNextRegion = RegionId.Invalid;
             var bestCost = int.MaxValue;
@@ -189,7 +264,10 @@ namespace EchoProtocol.AI.Stalker.Spatial
             for (var i = 0; i < regions.Count; i++)
             {
                 var candidate = regions[i].Id;
-                if (!IsEligibleTarget(currentRegionId, candidate, rejectedRoomRegionIds))
+                if (!IsEligibleLegacyFallbackTarget(
+                        currentRegionId,
+                        candidate,
+                        rejectedRoomRegionIds))
                 {
                     continue;
                 }
@@ -217,6 +295,83 @@ namespace EchoProtocol.AI.Stalker.Spatial
             return true;
         }
 
+        private void RecycleLegacyCoverageIfExhausted(
+            RegionId currentRegionId,
+            ISet<RegionId> rejectedRoomRegionIds)
+        {
+            var regions = _regionGraph.Regions;
+            var hasReachableClearedCandidate = false;
+
+            for (var i = 0; i < regions.Count; i++)
+            {
+                var candidate = regions[i].Id;
+
+                if (!IsLegacyFallbackCandidate(
+                        currentRegionId,
+                        candidate,
+                        rejectedRoomRegionIds))
+                {
+                    continue;
+                }
+
+                if (!_regionGraph.TryGetRouteHopCost(
+                        currentRegionId,
+                        candidate,
+                        out _)
+                    || !_regionGraph.TryGetNextRegionOnRoute(
+                        currentRegionId,
+                        candidate,
+                        out _))
+                {
+                    continue;
+                }
+
+                // At least one normal reachable room still exists.
+                // Keep the current sweep cycle unchanged.
+                if (!_coverageMemory.IsRegionCleared(candidate))
+                {
+                    return;
+                }
+
+                hasReachableClearedCandidate = true;
+            }
+
+            if (!hasReachableClearedCandidate)
+            {
+                return;
+            }
+
+            // Every reachable legacy room has already been swept.
+            // Start a new patrol cycle using the existing coverage system.
+            for (var i = 0; i < regions.Count; i++)
+            {
+                var candidate = regions[i].Id;
+
+                if (!IsLegacyFallbackCandidate(
+                        currentRegionId,
+                        candidate,
+                        rejectedRoomRegionIds)
+                    || !_coverageMemory.IsRegionCleared(candidate))
+                {
+                    continue;
+                }
+
+                if (!_regionGraph.TryGetRouteHopCost(
+                        currentRegionId,
+                        candidate,
+                        out _)
+                    || !_regionGraph.TryGetNextRegionOnRoute(
+                        currentRegionId,
+                        candidate,
+                        out _))
+                {
+                    continue;
+                }
+
+                _coverageMemory.ResetRegion(candidate);
+            }
+        }
+
         private bool TrySelectSeededTarget(
             RegionId currentRegionId,
             ISet<RegionId> rejectedRoomRegionIds,
@@ -230,7 +385,10 @@ namespace EchoProtocol.AI.Stalker.Spatial
             for (var i = 0; i < regions.Count; i++)
             {
                 var candidate = regions[i].Id;
-                if (!IsEligibleTarget(currentRegionId, candidate, rejectedRoomRegionIds))
+                if (!IsEligibleLegacyFallbackTarget(
+                        currentRegionId,
+                        candidate,
+                        rejectedRoomRegionIds))
                 {
                     continue;
                 }
@@ -274,6 +432,57 @@ namespace EchoProtocol.AI.Stalker.Spatial
             return true;
         }
 
+        private bool IsEligibleStrategicTarget(
+            RegionId currentRegionId,
+            RegionId candidate,
+            ISet<RegionId> rejectedRoomRegionIds)
+        {
+            return candidate.IsValid
+                && candidate != currentRegionId
+                && !IsRejected(
+                    candidate,
+                    rejectedRoomRegionIds)
+                && _regionGraph.ContainsRegion(candidate)
+                && _regionGraph.IsRegionEnabled(candidate)
+                && _regionGraph.TryGetRegionSemanticMetadata(
+                    candidate,
+                    out var metadata)
+                && metadata.Kind == RegionSemanticKind.Room;
+        }
+
+        private bool IsEligibleLegacyFallbackTarget(
+            RegionId currentRegionId,
+            RegionId candidate,
+            ISet<RegionId> rejectedRoomRegionIds)
+        {
+            return IsLegacyFallbackCandidate(
+                    currentRegionId,
+                    candidate,
+                    rejectedRoomRegionIds)
+                && !_coverageMemory.IsRegionCleared(candidate);
+        }
+
+        private bool IsLegacyFallbackCandidate(
+            RegionId currentRegionId,
+            RegionId candidate,
+            ISet<RegionId> rejectedRoomRegionIds)
+        {
+            return candidate.IsValid
+                && candidate != currentRegionId
+                && !IsRejected(
+                    candidate,
+                    rejectedRoomRegionIds)
+                && _regionGraph.ContainsRegion(candidate)
+                && _regionGraph.IsRegionEnabled(candidate)
+                && _regionGraph.TryGetRegionSemanticMetadata(
+                    candidate,
+                    out var metadata)
+                && metadata.Kind == RegionSemanticKind.Room
+                && (_targetStrategy == null
+                    || _targetStrategy.IsLegacyFallbackTargetAllowed(
+                        candidate));
+        }
+
         private static uint Mix(uint value)
         {
             value ^= value >> 16;
@@ -282,21 +491,6 @@ namespace EchoProtocol.AI.Stalker.Spatial
             value *= 0x846ca68bU;
             value ^= value >> 16;
             return value;
-        }
-
-        private bool IsEligibleTarget(
-            RegionId currentRegionId,
-            RegionId candidate,
-            ISet<RegionId> rejectedRoomRegionIds)
-        {
-            return candidate.IsValid
-                && candidate != currentRegionId
-                && !IsRejected(candidate, rejectedRoomRegionIds)
-                && _regionGraph.ContainsRegion(candidate)
-                && _regionGraph.IsRegionEnabled(candidate)
-                && !_coverageMemory.IsRegionCleared(candidate)
-                && _regionGraph.TryGetRegionSemanticMetadata(candidate, out var metadata)
-                && metadata.Kind == RegionSemanticKind.Room;
         }
 
         private bool IsValidCurrentRegion(RegionId currentRegionId)

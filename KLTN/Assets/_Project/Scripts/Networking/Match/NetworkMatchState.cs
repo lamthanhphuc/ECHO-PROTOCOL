@@ -4,6 +4,8 @@ using EchoProtocol.Diagnostics;
 using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Networking.Authority;
+using EchoProtocol.RelayA;
+using EchoProtocol.RelayB;
 using Fusion;
 using UnityEngine;
 
@@ -74,6 +76,9 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(1f)] private float _escapeDurationSeconds = 45f;
         [SerializeField, Min(1f)] private float _matchDurationSeconds = 900f;
         [SerializeField, Min(0.1f)] private float _returnToLobbyDelaySeconds = 4f;
+        [SerializeField, Min(0.1f)] private float _zone2InteractionDistance = 3f;
+        [SerializeField, Min(0.1f)] private float _zoneAccessCooldownSeconds = 5f;
+        [SerializeField, Min(1)] private int _zoneAccessFailuresBeforeCooldown = 3;
 
         [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
         public NetworkMatchPhase CurrentPhase { get; private set; }
@@ -114,6 +119,32 @@ namespace EchoProtocol.Networking
         [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
         public NetworkBool ZoneDoorsUnlocked { get; private set; }
 
+        [Networked] public PlayerRef RelayA1Operator { get; private set; }
+        [Networked] public PlayerRef RelayA2Operator { get; private set; }
+        [Networked] public PlayerRef RelayB1Operator { get; private set; }
+        [Networked] public PlayerRef RelayB2Operator { get; private set; }
+        [Networked] public Vector3 RelayA1Controls { get; private set; }
+        [Networked] public NetworkBool RelayA1Running { get; private set; }
+        [Networked] public Vector3 RelayA2Controls { get; private set; }
+        [Networked] public NetworkBool RelayA2Running { get; private set; }
+        [Networked] public int RelayB1PresetIndex { get; private set; }
+        [Networked] public int RelayB1Channel { get; private set; }
+        [Networked] public float RelayB1Frequency { get; private set; }
+        [Networked] public float RelayB1Phase { get; private set; }
+        [Networked] public NetworkBool RelayB1Synchronizing { get; private set; }
+        [Networked] public int RelayB2PresetIndex { get; private set; }
+        [Networked] public int RelayB2Channel { get; private set; }
+        [Networked] public float RelayB2Frequency { get; private set; }
+        [Networked] public float RelayB2Phase { get; private set; }
+        [Networked] public NetworkBool RelayB2Synchronizing { get; private set; }
+        [Networked] private NetworkBool Zone2RelayRuntimeInitialized { get; set; }
+        [Networked] public PlayerRef SecurityHoldOperator { get; private set; }
+        [Networked] public float SecurityHoldDurationSeconds { get; private set; }
+        [Networked] public float SecurityHoldAccumulatedSeconds { get; private set; }
+        [Networked] private TickTimer SecurityHoldTimer { get; set; }
+        [Networked] public int ZoneAccessFailureCount { get; private set; }
+        [Networked] private TickTimer ZoneAccessCooldown { get; set; }
+
         [Networked] public NetworkId ObjectiveSourceId { get; private set; }
         [Networked] public NetworkId EscapeDoorId { get; private set; }
         [Networked] public PlayerRef LastActor { get; private set; }
@@ -143,11 +174,36 @@ namespace EchoProtocol.Networking
         [Networked] public double ScenarioEscapeDoorTimerSeconds { get; private set; }
 
         public static NetworkMatchState Instance { get; private set; }
+        public static event Action<Zone2AccessCodeResult> LocalZoneAccessCodeRequestCompleted;
 
         public int CompletedRelayCount => (RelayCompletionMask & 1) + ((RelayCompletionMask >> 1) & 1) + ((RelayCompletionMask >> 2) & 1) + ((RelayCompletionMask >> 3) & 1);
         public bool AreAllRelaysOnline => (RelayCompletionMask & 0x0F) == 0x0F;
         public int PowerRelaysOnline => (RelayCompletionMask & 1) + ((RelayCompletionMask >> 1) & 1);
         public int DataRelaysOnline => ((RelayCompletionMask >> 2) & 1) + ((RelayCompletionMask >> 3) & 1);
+        public bool IsSecurityHoldRunning => !SecurityHoldCompleted
+            && CurrentPhase == NetworkMatchPhase.Zone2Objective
+            && Zone2Stage == Zone2MissionStage.SecurityHold
+            && SecurityHoldTimer.IsRunning;
+        public float SecurityHoldProgress01
+        {
+            get
+            {
+                if (SecurityHoldCompleted) return 1f;
+                float duration = Mathf.Max(0f, SecurityHoldDurationSeconds);
+                if (duration <= 0f) return 0f;
+                float elapsed = SecurityHoldTimer.IsRunning
+                    ? duration - Remaining(SecurityHoldTimer)
+                    : SecurityHoldAccumulatedSeconds;
+                return Mathf.Clamp01(elapsed / duration);
+            }
+        }
+        public bool IsZoneAccessCooldownActive => ZoneAccessCooldown.IsRunning
+            && Runner != null
+            && !ZoneAccessCooldown.Expired(Runner);
+        public float ZoneAccessCooldownRemainingSeconds => IsZoneAccessCooldownActive
+            ? Remaining(ZoneAccessCooldown)
+            : 0f;
+        public bool HasInitializedZone2RelayRuntime => Zone2RelayRuntimeInitialized;
 
         private MatchFlowController _legacyMatchFlow;
         private EscapeDoorCountdown _legacyEscapeCountdown;
@@ -202,6 +258,7 @@ namespace EchoProtocol.Networking
                 RelayCompletionMask = 0;
                 SecurityTerminalDiscovered = false;
                 ZoneDoorsUnlocked = false;
+                ResetZone2AuthoritativeState();
                 Status = NetworkMatchStatus.Running;
                 Result = NetworkMatchResult.None;
                 EndReason = NetworkMatchEndReason.None;
@@ -297,6 +354,16 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            if (CurrentPhase == NetworkMatchPhase.Zone2Objective)
+            {
+                if (!Zone2RelayRuntimeInitialized)
+                {
+                    InitializeZone2RelayRuntimeAuthoritative();
+                }
+                ReleaseInvalidRelayOperatorsAuthoritative();
+                AdvanceSecurityHoldAuthoritative();
+            }
+
             if (CurrentPhase == NetworkMatchPhase.Escape && EscapeTimer.Expired(Runner))
             {
                 TryEndMatch(NetworkMatchResult.Lose, NetworkMatchEndReason.EscapeTimeout, PlayerRef.None);
@@ -352,7 +419,8 @@ namespace EchoProtocol.Networking
 
         public bool TryCompleteCoreObjective(NetworkSectorBox source)
         {
-            if (!ValidateObjectiveSource(source))
+            if (CurrentPhase != NetworkMatchPhase.CoreObjective
+                || !ValidateObjectiveSource(source))
             {
                 return false;
             }
@@ -367,6 +435,11 @@ namespace EchoProtocol.Networking
                 }
             }
 
+            ResetZone2AuthoritativeState();
+            if (!InitializeZone2RelayRuntimeAuthoritative())
+            {
+                return false;
+            }
             Zone2Stage = Zone2MissionStage.FindSecurityTerminal;
             if (!TryAdvancePhase(
                     NetworkMatchPhase.CoreObjective,
@@ -381,26 +454,57 @@ namespace EchoProtocol.Networking
 
         public bool TryDiscoverSecurityTerminal(PlayerRef actor)
         {
-            if (!Object.HasStateAuthority || IsEnded) return false;
-            if (Zone2Stage != Zone2MissionStage.FindSecurityTerminal) return false;
+            if (!Object.HasStateAuthority
+                || IsEnded
+                || CurrentPhase != NetworkMatchPhase.Zone2Objective
+                || Zone2Stage != Zone2MissionStage.FindSecurityTerminal
+                || !TryGetZone2Director(out var director)
+                || director.SecurityTerminal == null
+                || !TryValidateZone2Requester(actor, director.SecurityTerminal, director.SecurityTerminal.MaxInteractorDistance))
+            {
+                return false;
+            }
 
             SecurityTerminalDiscovered = true;
             Zone2Stage = Zone2MissionStage.RepairRelays;
             HandleReplicatedStateChanged();
-            Debug.Log($"[MatchState] Security terminal discovered by {actor}. Stage -> RepairRelays.");
             return true;
+        }
+
+        public bool RequestDiscoverSecurityTerminal()
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+            {
+                return TryGetLocalRequester(out var requester)
+                    && TryDiscoverSecurityTerminal(requester);
+            }
+            RpcDiscoverSecurityTerminal();
+            return true;
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcDiscoverSecurityTerminal(RpcInfo info = default)
+        {
+            TryDiscoverSecurityTerminal(info.Source);
         }
 
         public bool TryReportRelayOnline(RelaySlot slot)
         {
-            if (!Object.HasStateAuthority || IsEnded) return false;
+            if (!Object.HasStateAuthority
+                || IsEnded
+                || CurrentPhase != NetworkMatchPhase.Zone2Objective
+                || Zone2Stage != Zone2MissionStage.RepairRelays
+                || !IsValidRelaySlot(slot)) return false;
             int bit = 1 << (int)slot;
             if ((RelayCompletionMask & bit) != 0) return false;
 
             RelayCompletionMask |= bit;
+            SetRelayOperator(slot, PlayerRef.None);
+            SetRelayActiveState(slot, false);
             Debug.Log($"[MatchState] Relay {slot} repaired. Online mask: {RelayCompletionMask} ({CompletedRelayCount}/4).");
 
-            if (AreAllRelaysOnline && (Zone2Stage == Zone2MissionStage.RepairRelays || Zone2Stage == Zone2MissionStage.FindSecurityTerminal))
+            if (AreAllRelaysOnline)
             {
                 Zone2Stage = Zone2MissionStage.SecurityHoldReady;
                 Debug.Log("[MatchState] All 4 relays online. Stage -> SecurityHoldReady.");
@@ -412,59 +516,19 @@ namespace EchoProtocol.Networking
 
         public bool TryStartSecurityHold(PlayerRef actor)
         {
-            if (!Object.HasStateAuthority || IsEnded) return false;
-            if (!AreAllRelaysOnline) return false;
-            if (Zone2Stage == Zone2MissionStage.SecurityHoldReady)
-            {
-                Zone2Stage = Zone2MissionStage.SecurityHold;
-                HandleReplicatedStateChanged();
-                return true;
-            }
-            return Zone2Stage == Zone2MissionStage.SecurityHold;
+            return TryStartSecurityHoldAuthoritative(actor);
         }
 
         public bool TryCompleteSecurityHold(NetworkId sourceId)
         {
-            if (sourceId.IsValid && !ValidateObjectiveSource(sourceId))
-            {
-                return false;
-            }
-
-            if (SecurityHoldCompleted)
-            {
-                return false;
-            }
-
-            SecurityHoldCompleted = true;
-            PowerAuthorizationAvailable = true;
-            if (string.IsNullOrEmpty(PowerAuthorizationCode.ToString()))
-            {
-                if (string.IsNullOrEmpty(_serverGeneratedAuthCode))
-                {
-                    _serverGeneratedAuthCode = UnityEngine.Random.Range(0, 10000).ToString("D4");
-                }
-                PowerAuthorizationCode = _serverGeneratedAuthCode;
-            }
-
-            Zone2Stage = Zone2MissionStage.AuthorizationCodeGranted;
-            HandleReplicatedStateChanged();
-            Debug.Log($"[MatchState] Security Hold completed! Code: {PowerAuthorizationCode}. Stage -> AuthorizationCodeGranted.");
-            return true;
+            // Legacy compatibility: scene objects cannot bypass the authoritative timer.
+            return CompleteSecurityHoldAuthoritative();
         }
 
         public bool TrySubmitZoneAccessCode(PlayerRef requester, string code)
         {
-            if (!Object.HasStateAuthority || IsEnded) return false;
-            if (!SecurityHoldCompleted || ZoneDoorsUnlocked) return false;
-            if (string.IsNullOrEmpty(code) || code != _serverGeneratedAuthCode) return false;
-
-            ZoneDoorsUnlocked = true;
-            PowerPuzzleCompleted = true;
-            RestoreMainPowerCompleted = true;
-            Zone2Stage = Zone2MissionStage.Zone2Completed;
-            HandleReplicatedStateChanged();
-            Debug.Log($"[MatchState] Zone access code '{code}' accepted! Doors unlocked. Zone 2 complete.");
-            return true;
+            // Legacy compatibility: callers without an exact panel cannot satisfy target validation.
+            return false;
         }
 
         public bool TrySubmitPowerCode(PlayerRef requester, string code)
@@ -474,34 +538,509 @@ namespace EchoProtocol.Networking
 
         public bool TryCompletePuzzle(NetworkId sourceId)
         {
-            if (sourceId.IsValid && !ValidateObjectiveSource(sourceId)) return false;
-            if (ZoneDoorsUnlocked) return false;
-
-            return TrySubmitZoneAccessCode(PlayerRef.None, _serverGeneratedAuthCode);
-        }
-
-        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        public void RpcDiscoverSecurityTerminal(PlayerRef sender)
-        {
-            TryDiscoverSecurityTerminal(sender);
-        }
-
-        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        public void RpcReportRelayOnline(PlayerRef sender, int relaySlot)
-        {
-            TryReportRelayOnline((RelaySlot)relaySlot);
-        }
-
-        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        public void RpcSubmitZoneAccessCode(PlayerRef sender, string code)
-        {
-            TrySubmitZoneAccessCode(sender, code);
+            // Legacy compatibility: retired NetworkPowerPuzzle cannot unlock Zone 2.
+            return false;
         }
 
         public bool VerifyPowerCode(string code)
         {
             return !string.IsNullOrEmpty(code) && code == _serverGeneratedAuthCode;
         }
+
+        public bool RequestAcquireRelay(RelaySlot slot)
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+            {
+                return TryGetLocalRequester(out var requester)
+                    && TryAcquireRelayAuthoritative(requester, slot);
+            }
+            RpcAcquireRelay((int)slot);
+            return true;
+        }
+
+        public void RequestReleaseRelay(RelaySlot slot)
+        {
+            if (!HasValidNetworkObject()) return;
+            if (Object.HasStateAuthority)
+            {
+                if (TryGetLocalRequester(out var requester)) ReleaseRelayAuthoritative(requester, slot);
+            }
+            else RpcReleaseRelay((int)slot);
+        }
+
+        public bool RequestRelayAControls(RelaySlot slot, float generatorOutput, float frequencyRegulator, float loadDistribution)
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+            {
+                if (!TryGetLocalRequester(out var requester)) return false;
+                return TryApplyRelayAControlsAuthoritative(
+                    requester, slot, generatorOutput, frequencyRegulator, loadDistribution);
+            }
+            RpcRelayAControls((int)slot, generatorOutput, frequencyRegulator, loadDistribution);
+            return true;
+        }
+
+        public bool RequestRelayAStart(RelaySlot slot)
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+            {
+                return TryGetLocalRequester(out var requester)
+                    && TrySetRelayARunningAuthoritative(requester, slot, true);
+            }
+            RpcRelayAStart((int)slot);
+            return true;
+        }
+
+        public bool RequestRelayAEmergencyStop(RelaySlot slot)
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+            {
+                return TryGetLocalRequester(out var requester)
+                    && TrySetRelayARunningAuthoritative(requester, slot, false);
+            }
+            RpcRelayAEmergencyStop((int)slot);
+            return true;
+        }
+
+        public bool RequestRelayBControls(RelaySlot slot, int channel, float frequency, float phase)
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+            {
+                return TryGetLocalRequester(out var requester)
+                    && TryApplyRelayBControlsAuthoritative(requester, slot, channel, frequency, phase);
+            }
+            RpcRelayBControls((int)slot, channel, frequency, phase);
+            return true;
+        }
+
+        public bool RequestRelayBScan(RelaySlot slot)
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+            {
+                return TryGetLocalRequester(out var requester)
+                    && TryRelayBActionAuthoritative(requester, slot, RelayBAction.Scan);
+            }
+            RpcRelayBScan((int)slot);
+            return true;
+        }
+
+        public bool RequestRelayBStartSync(RelaySlot slot)
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+            {
+                return TryGetLocalRequester(out var requester)
+                    && TryRelayBActionAuthoritative(requester, slot, RelayBAction.StartSync);
+            }
+            RpcRelayBStartSync((int)slot);
+            return true;
+        }
+
+        public bool RequestRelayBCancelSync(RelaySlot slot)
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+            {
+                return TryGetLocalRequester(out var requester)
+                    && TryRelayBActionAuthoritative(requester, slot, RelayBAction.CancelSync);
+            }
+            RpcRelayBCancelSync((int)slot);
+            return true;
+        }
+
+        public bool RequestStartSecurityHold()
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+            {
+                return TryGetLocalRequester(out var requester)
+                    && TryStartSecurityHoldAuthoritative(requester);
+            }
+            RpcStartSecurityHold();
+            return true;
+        }
+
+        public void RequestCancelSecurityHold()
+        {
+            if (!HasValidNetworkObject()) return;
+            if (Object.HasStateAuthority)
+            {
+                if (TryGetLocalRequester(out var requester)) PauseSecurityHoldAuthoritative(requester);
+            }
+            else RpcCancelSecurityHold();
+        }
+
+        public Zone2AccessSubmissionDisposition RequestSubmitZoneAccessCode(int panelIndex, string code)
+        {
+            if (!HasValidNetworkObject()) return Zone2AccessSubmissionDisposition.Rejected;
+            if (Object.HasStateAuthority)
+            {
+                if (!TryGetLocalRequester(out var requester)) return Zone2AccessSubmissionDisposition.Rejected;
+                TrySubmitZoneAccessCodeAuthoritative(requester, panelIndex, code, out var result);
+                float cooldownSeconds = result == Zone2NetworkCommandResult.Cooldown
+                    ? ZoneAccessCooldownRemainingSeconds
+                    : 0f;
+
+                LocalZoneAccessCodeRequestCompleted?.Invoke(
+                    new Zone2AccessCodeResult(
+                        panelIndex,
+                        result,
+                        cooldownSeconds));
+
+                return result == Zone2NetworkCommandResult.Accepted
+                    ? Zone2AccessSubmissionDisposition.Accepted
+                    : Zone2AccessSubmissionDisposition.Rejected;
+            }
+            RpcSubmitZoneAccessCode(panelIndex, code);
+            return Zone2AccessSubmissionDisposition.Pending;
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcAcquireRelay(int relaySlot, RpcInfo info = default) =>
+            TryAcquireRelayAuthoritative(info.Source, (RelaySlot)relaySlot);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcReleaseRelay(int relaySlot, RpcInfo info = default) =>
+            ReleaseRelayAuthoritative(info.Source, (RelaySlot)relaySlot);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRelayAControls(int relaySlot, float generatorOutput, float frequencyRegulator, float loadDistribution, RpcInfo info = default) =>
+            TryApplyRelayAControlsAuthoritative(info.Source, (RelaySlot)relaySlot, generatorOutput, frequencyRegulator, loadDistribution);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRelayAStart(int relaySlot, RpcInfo info = default) =>
+            TrySetRelayARunningAuthoritative(info.Source, (RelaySlot)relaySlot, true);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRelayAEmergencyStop(int relaySlot, RpcInfo info = default) =>
+            TrySetRelayARunningAuthoritative(info.Source, (RelaySlot)relaySlot, false);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRelayBControls(int relaySlot, int channel, float frequency, float phase, RpcInfo info = default) =>
+            TryApplyRelayBControlsAuthoritative(info.Source, (RelaySlot)relaySlot, channel, frequency, phase);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRelayBScan(int relaySlot, RpcInfo info = default) =>
+            TryRelayBActionAuthoritative(info.Source, (RelaySlot)relaySlot, RelayBAction.Scan);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRelayBStartSync(int relaySlot, RpcInfo info = default) =>
+            TryRelayBActionAuthoritative(info.Source, (RelaySlot)relaySlot, RelayBAction.StartSync);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRelayBCancelSync(int relaySlot, RpcInfo info = default) =>
+            TryRelayBActionAuthoritative(info.Source, (RelaySlot)relaySlot, RelayBAction.CancelSync);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcStartSecurityHold(RpcInfo info = default) => TryStartSecurityHoldAuthoritative(info.Source);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcCancelSecurityHold(RpcInfo info = default) => PauseSecurityHoldAuthoritative(info.Source);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcSubmitZoneAccessCode(int panelIndex, string code, RpcInfo info = default)
+        {
+            TrySubmitZoneAccessCodeAuthoritative(info.Source, panelIndex, code, out var result);
+            float cooldownSeconds = result == Zone2NetworkCommandResult.Cooldown
+                ? ZoneAccessCooldownRemainingSeconds
+                : 0f;
+
+            if (info.Source.IsRealPlayer) RpcZoneAccessCodeResult(info.Source, panelIndex, (int)result, cooldownSeconds);
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+        private void RpcZoneAccessCodeResult([RpcTarget] PlayerRef target, int panelIndex, int result, float cooldownSeconds)
+        {
+            LocalZoneAccessCodeRequestCompleted?.Invoke(
+                new Zone2AccessCodeResult(
+                    panelIndex,
+                    (Zone2NetworkCommandResult)result,
+                    cooldownSeconds));
+        }
+
+        private bool TryAcquireRelayAuthoritative(PlayerRef requester, RelaySlot slot)
+        {
+            if (!TryValidateRelayCommand(requester, slot, out _)) return false;
+            var current = GetRelayOperator(slot);
+            if (!current.IsNone && current != requester) return false;
+            SetRelayOperator(slot, requester);
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
+        private void ReleaseRelayAuthoritative(PlayerRef requester, RelaySlot slot)
+        {
+            if (Object == null
+                || !Object.HasStateAuthority
+                || !IsValidRelaySlot(slot)
+                || !requester.IsRealPlayer
+                || GetRelayOperator(slot) != requester)
+            {
+                return;
+            }
+
+            SetRelayOperator(
+                slot,
+                PlayerRef.None);
+
+            HandleReplicatedStateChanged();
+        }
+
+        private bool TryApplyRelayAControlsAuthoritative(
+            PlayerRef requester, RelaySlot slot, float generatorOutput, float frequencyRegulator, float loadDistribution)
+        {
+            if (!IsRelayASlot(slot) || !TryValidateRelayCommand(requester, slot, out var target)) return false;
+            if (!float.IsFinite(generatorOutput) || !float.IsFinite(frequencyRegulator) || !float.IsFinite(loadDistribution)) return false;
+            if (!ClaimRelayOperator(requester, slot)) return false;
+            var controller = (RelayAController)target;
+            controller.SetControls(generatorOutput, frequencyRegulator, loadDistribution);
+            var controls = controller.Snapshot.Controls;
+            if (slot == RelaySlot.RelayA_1) RelayA1Controls = controls;
+            else RelayA2Controls = controls;
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
+        private bool TrySetRelayARunningAuthoritative(PlayerRef requester, RelaySlot slot, bool running)
+        {
+            if (!IsRelayASlot(slot) || !TryValidateRelayCommand(requester, slot, out var target)) return false;
+            if (!ClaimRelayOperator(requester, slot)) return false;
+            if (slot == RelaySlot.RelayA_1) RelayA1Running = running;
+            else RelayA2Running = running;
+            if (running) ((RelayAController)target).StartStabilization();
+            else ((RelayAController)target).EmergencyStop();
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
+        private bool TryApplyRelayBControlsAuthoritative(
+            PlayerRef requester, RelaySlot slot, int channel, float frequency, float phase)
+        {
+            if (!IsRelayBSlot(slot) || channel < -1 || channel > 3
+                || !float.IsFinite(frequency) || !float.IsFinite(phase)
+                || !TryValidateRelayCommand(requester, slot, out var target)) return false;
+            if (!ClaimRelayOperator(requester, slot)) return false;
+            var controller = (RelayBController)target;
+            controller.ApplyAuthoritativeControls(channel, frequency, phase);
+            var snapshot = controller.Snapshot;
+            if (slot == RelaySlot.RelayB_1)
+            {
+                RelayB1Channel = snapshot.SelectedChannelIndex;
+                RelayB1Frequency = snapshot.CurrentFrequency;
+                RelayB1Phase = snapshot.CurrentPhase;
+            }
+            else
+            {
+                RelayB2Channel = snapshot.SelectedChannelIndex;
+                RelayB2Frequency = snapshot.CurrentFrequency;
+                RelayB2Phase = snapshot.CurrentPhase;
+            }
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
+        private bool TryRelayBActionAuthoritative(PlayerRef requester, RelaySlot slot, RelayBAction action)
+        {
+            if (!IsRelayBSlot(slot) || !TryValidateRelayCommand(requester, slot, out var target)) return false;
+            var controller = (RelayBController)target;
+            if (action == RelayBAction.StartSync && controller.Snapshot.SelectedChannelIndex < 0) return false;
+            if (!ClaimRelayOperator(requester, slot)) return false;
+            switch (action)
+            {
+                case RelayBAction.Scan:
+                    controller.ScanChannels();
+                    break;
+                case RelayBAction.StartSync:
+                    SetRelayActiveState(slot, true);
+                    controller.StartSynchronization();
+                    break;
+                default:
+                    SetRelayActiveState(slot, false);
+                    controller.CancelSynchronization();
+                    break;
+            }
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
+        private bool TryStartSecurityHoldAuthoritative(PlayerRef requester)
+        {
+            if (!Object.HasStateAuthority || IsEnded || CurrentPhase != NetworkMatchPhase.Zone2Objective
+                || !AreAllRelaysOnline || SecurityHoldCompleted
+                || (Zone2Stage != Zone2MissionStage.SecurityHoldReady && Zone2Stage != Zone2MissionStage.SecurityHold)
+                || !TryGetZone2Director(out var director)
+                || director.SecurityTerminal == null
+                || !TryValidateZone2Requester(requester, director.SecurityTerminal, director.SecurityTerminal.MaxInteractorDistance)
+                || (!SecurityHoldOperator.IsNone && SecurityHoldOperator != requester)) return false;
+
+            float duration = director.SecurityTerminal != null ? director.SecurityTerminal.DownloadDurationSeconds : 12f;
+            SecurityHoldDurationSeconds = Mathf.Max(0.01f, duration);
+            SecurityHoldAccumulatedSeconds = Mathf.Clamp(SecurityHoldAccumulatedSeconds, 0f, SecurityHoldDurationSeconds);
+            float remaining = Mathf.Max(0.01f, SecurityHoldDurationSeconds - SecurityHoldAccumulatedSeconds);
+            SecurityHoldOperator = requester;
+            Zone2Stage = Zone2MissionStage.SecurityHold;
+            SecurityHoldTimer = TickTimer.CreateFromSeconds(Runner, remaining);
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
+        private void PauseSecurityHoldAuthoritative(PlayerRef requester)
+        {
+            if (Object == null
+                || !Object.HasStateAuthority
+                || IsEnded
+                || CurrentPhase != NetworkMatchPhase.Zone2Objective
+                || Zone2Stage != Zone2MissionStage.SecurityHold
+                || !requester.IsRealPlayer
+                || SecurityHoldOperator != requester)
+            {
+                return;
+            }
+
+            PauseSecurityHoldAuthoritative();
+        }
+
+        private void PauseSecurityHoldAuthoritative()
+        {
+            if (SecurityHoldTimer.IsRunning)
+            {
+                SecurityHoldAccumulatedSeconds = Mathf.Clamp(
+                    SecurityHoldDurationSeconds - Remaining(SecurityHoldTimer), 0f, SecurityHoldDurationSeconds);
+            }
+            SecurityHoldTimer = TickTimer.None;
+            SecurityHoldOperator = PlayerRef.None;
+            if (!SecurityHoldCompleted) Zone2Stage = Zone2MissionStage.SecurityHoldReady;
+            HandleReplicatedStateChanged();
+        }
+
+        private void AdvanceSecurityHoldAuthoritative()
+        {
+            if (!IsSecurityHoldRunning)
+            {
+                return;
+            }
+
+            if (SecurityHoldTimer.Expired(Runner))
+            {
+                CompleteSecurityHoldAuthoritative();
+                return;
+            }
+
+            if (!TryGetZone2Director(out var director)
+                || director.SecurityTerminal == null
+                || !TryValidateZone2Requester(
+                    SecurityHoldOperator,
+                    director.SecurityTerminal,
+                    director.SecurityTerminal.MaxInteractorDistance))
+            {
+                PauseSecurityHoldAuthoritative();
+            }
+        }
+
+        private bool CompleteSecurityHoldAuthoritative()
+        {
+            if (!Object.HasStateAuthority || IsEnded || CurrentPhase != NetworkMatchPhase.Zone2Objective
+                || !AreAllRelaysOnline || Zone2Stage != Zone2MissionStage.SecurityHold || SecurityHoldCompleted
+                || (!SecurityHoldTimer.Expired(Runner)
+                    && SecurityHoldAccumulatedSeconds < SecurityHoldDurationSeconds)) return false;
+
+            SecurityHoldCompleted = true;
+            PowerAuthorizationAvailable = true;
+            SecurityHoldAccumulatedSeconds = SecurityHoldDurationSeconds;
+            SecurityHoldTimer = TickTimer.None;
+            SecurityHoldOperator = PlayerRef.None;
+            if (string.IsNullOrEmpty(_serverGeneratedAuthCode))
+            {
+                _serverGeneratedAuthCode = UnityEngine.Random.Range(0, 10000).ToString("D4");
+            }
+            PowerAuthorizationCode = _serverGeneratedAuthCode;
+            Zone2Stage = Zone2MissionStage.AuthorizationCodeGranted;
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
+        private bool TrySubmitZoneAccessCodeAuthoritative(
+            PlayerRef requester, int panelIndex, string code, out Zone2NetworkCommandResult result)
+        {
+            result = Zone2NetworkCommandResult.InvalidStage;
+            if (!Object.HasStateAuthority || IsEnded || CurrentPhase != NetworkMatchPhase.Zone2Objective
+                || !SecurityHoldCompleted || !PowerAuthorizationAvailable
+                || Zone2Stage != Zone2MissionStage.AuthorizationCodeGranted)
+            {
+                return false;
+            }
+            if (ZoneDoorsUnlocked)
+            {
+                result = Zone2NetworkCommandResult.AlreadyComplete;
+                return false;
+            }
+            if (!TryGetDistributionPanelTarget(panelIndex, out var panel))
+            {
+                result = Zone2NetworkCommandResult.InvalidTarget;
+                return false;
+            }
+            result = ValidateZone2Requester(requester, panel, _zone2InteractionDistance);
+            if (result != Zone2NetworkCommandResult.Accepted)
+            {
+                return false;
+            }
+            if (IsZoneAccessCooldownActive)
+            {
+                result = Zone2NetworkCommandResult.Cooldown;
+                return false;
+            }
+            if (string.IsNullOrEmpty(code) || code.Length != 4 || code != _serverGeneratedAuthCode)
+            {
+                ZoneAccessFailureCount++;
+                bool startedCooldown = false;
+
+                if (ZoneAccessFailureCount >= Mathf.Max(1, _zoneAccessFailuresBeforeCooldown))
+                {
+                    ZoneAccessFailureCount = 0;
+                    ZoneAccessCooldown = TickTimer.CreateFromSeconds(Runner, Mathf.Max(0.1f, _zoneAccessCooldownSeconds));
+                    startedCooldown = true;
+                }
+
+                result = startedCooldown
+                    ? Zone2NetworkCommandResult.Cooldown
+                    : Zone2NetworkCommandResult.InvalidCode;
+
+                HandleReplicatedStateChanged();
+                return false;
+            }
+            if (!NetworkMatchStateRules.CanAdvance(
+                    Status, CurrentPhase, NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.FinalHunt)) return false;
+
+            int previousFailureCount = ZoneAccessFailureCount;
+            TickTimer previousCooldown = ZoneAccessCooldown;
+            ZoneAccessFailureCount = 0;
+            ZoneAccessCooldown = TickTimer.None;
+            ZoneDoorsUnlocked = true;
+            PowerPuzzleCompleted = true;
+            RestoreMainPowerCompleted = true;
+            Zone2Stage = Zone2MissionStage.Zone2Completed;
+            if (!TryAdvancePhase(NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.FinalHunt, "ZONE2_OBJECTIVE"))
+            {
+                ZoneDoorsUnlocked = false;
+                PowerPuzzleCompleted = false;
+                RestoreMainPowerCompleted = false;
+                Zone2Stage = Zone2MissionStage.AuthorizationCodeGranted;
+                ZoneAccessFailureCount = previousFailureCount;
+                ZoneAccessCooldown = previousCooldown;
+                HandleReplicatedStateChanged();
+                return false;
+            }
+            result = Zone2NetworkCommandResult.Accepted;
+            return true;
+        }
+
+        private enum RelayBAction { Scan, StartSync, CancelSync }
 
         public bool TryEnterEscape(NetworkId doorId, PlayerRef actor)
         {
@@ -750,13 +1289,265 @@ namespace EchoProtocol.Networking
             }
         }
 
+        private void ResetZone2AuthoritativeState()
+        {
+            RelayCompletionMask = 0;
+            SecurityTerminalDiscovered = false;
+            SecurityHoldCompleted = false;
+            PowerAuthorizationAvailable = false;
+            PowerAuthorizationCode = string.Empty;
+            ZoneDoorsUnlocked = false;
+            PowerPuzzleCompleted = false;
+            RestoreMainPowerCompleted = false;
+            SecurityHoldOperator = PlayerRef.None;
+            SecurityHoldDurationSeconds = 0f;
+            SecurityHoldAccumulatedSeconds = 0f;
+            SecurityHoldTimer = TickTimer.None;
+            RelayA1Operator = PlayerRef.None;
+            RelayA2Operator = PlayerRef.None;
+            RelayB1Operator = PlayerRef.None;
+            RelayB2Operator = PlayerRef.None;
+            RelayA1Running = false;
+            RelayA2Running = false;
+            RelayB1Synchronizing = false;
+            RelayB2Synchronizing = false;
+            ZoneAccessFailureCount = 0;
+            ZoneAccessCooldown = TickTimer.None;
+            Zone2RelayRuntimeInitialized = false;
+        }
+
+        private bool InitializeZone2RelayRuntimeAuthoritative()
+        {
+            if (Zone2RelayRuntimeInitialized) return true;
+            if (!Object.HasStateAuthority || !TryGetZone2Director(out var director)
+                || director.RelayA1 == null || director.RelayA2 == null
+                || director.RelayB1 == null || director.RelayB2 == null) return false;
+
+            var a1 = director.RelayA1.Snapshot;
+            RelayA1Controls = a1.Controls;
+            RelayA1Running = a1.IsRunning;
+            var a2 = director.RelayA2.Snapshot;
+            RelayA2Controls = a2.Controls;
+            RelayA2Running = a2.IsRunning;
+
+            RelayB1PresetIndex = ChooseRelayBPreset(director.RelayB1);
+            director.RelayB1.SetPresetIndex(RelayB1PresetIndex);
+            var b1 = director.RelayB1.Snapshot;
+            RelayB1Channel = b1.SelectedChannelIndex;
+            RelayB1Frequency = b1.CurrentFrequency;
+            RelayB1Phase = b1.CurrentPhase;
+            RelayB1Synchronizing = false;
+
+            RelayB2PresetIndex = ChooseRelayBPreset(director.RelayB2);
+            director.RelayB2.SetPresetIndex(RelayB2PresetIndex);
+            var b2 = director.RelayB2.Snapshot;
+            RelayB2Channel = b2.SelectedChannelIndex;
+            RelayB2Frequency = b2.CurrentFrequency;
+            RelayB2Phase = b2.CurrentPhase;
+            RelayB2Synchronizing = false;
+            Zone2RelayRuntimeInitialized = true;
+            return true;
+        }
+
+        private static int ChooseRelayBPreset(RelayBController controller)
+        {
+            int count = controller.Config != null && controller.Config.Presets != null
+                ? controller.Config.Presets.Count
+                : 0;
+            return count > 0 ? UnityEngine.Random.Range(0, count) : 0;
+        }
+
+        private bool TryGetZone2Director(out Zone2MissionDirector director)
+        {
+            director = Zone2MissionDirector.Instance;
+            if (director == null) return false;
+            director.ResolveReferences();
+            return true;
+        }
+
+        private bool TryGetRelayTarget(RelaySlot slot, out Component target)
+        {
+            target = null;
+            if (!IsValidRelaySlot(slot) || !TryGetZone2Director(out var director)) return false;
+            target = slot switch
+            {
+                RelaySlot.RelayA_1 => director.RelayA1,
+                RelaySlot.RelayA_2 => director.RelayA2,
+                RelaySlot.RelayB_1 => director.RelayB1,
+                RelaySlot.RelayB_2 => director.RelayB2,
+                _ => null,
+            };
+            return target != null;
+        }
+
+        private bool TryGetDistributionPanelTarget(int panelIndex, out PowerControlUIController panel)
+        {
+            panel = null;
+            if ((panelIndex != 0 && panelIndex != 1) || !TryGetZone2Director(out var director)) return false;
+            panel = panelIndex == 0 ? director.DistributionPanel1 : director.DistributionPanel2;
+            return panel != null;
+        }
+
+        private bool TryValidateZone2Requester(PlayerRef requester, Component target, float maxDistance)
+        {
+            return ValidateZone2Requester(requester, target, maxDistance) == Zone2NetworkCommandResult.Accepted;
+        }
+
+        private Zone2NetworkCommandResult ValidateZone2Requester(PlayerRef requester, Component target, float maxDistance)
+        {
+            if (target == null) return Zone2NetworkCommandResult.InvalidTarget;
+            if (!requester.IsRealPlayer || Runner == null
+                || !Runner.TryGetPlayerObject(requester, out var playerObject)
+                || playerObject == null || !playerObject.IsValid || playerObject.InputAuthority != requester
+                || !TryResolveActivePlayer(requester, out _)) return Zone2NetworkCommandResult.InvalidRequester;
+
+            Vector3 requesterPosition = playerObject.transform.position;
+            float closestSqrDistance = float.PositiveInfinity;
+            bool foundCollider = false;
+            foreach (var targetCollider in target.GetComponentsInChildren<Collider>(true))
+            {
+                if (targetCollider == null || !targetCollider.enabled) continue;
+                foundCollider = true;
+                float sqrDistance = (targetCollider.ClosestPoint(requesterPosition) - requesterPosition).sqrMagnitude;
+                if (sqrDistance < closestSqrDistance) closestSqrDistance = sqrDistance;
+            }
+            if (!foundCollider)
+            {
+                closestSqrDistance = (target.transform.position - requesterPosition).sqrMagnitude;
+            }
+            float distance = Mathf.Max(0.1f, maxDistance);
+            return closestSqrDistance <= distance * distance
+                ? Zone2NetworkCommandResult.Accepted
+                : Zone2NetworkCommandResult.OutOfRange;
+        }
+
+        private bool TryValidateRelayCommand(PlayerRef requester, RelaySlot slot, out Component target)
+        {
+            target = null;
+            if (!Object.HasStateAuthority || IsEnded || CurrentPhase != NetworkMatchPhase.Zone2Objective
+                || Zone2Stage != Zone2MissionStage.RepairRelays || !IsValidRelaySlot(slot)
+                || (RelayCompletionMask & (1 << (int)slot)) != 0
+                || !TryGetRelayTarget(slot, out target)) return false;
+            return TryValidateZone2Requester(requester, target, _zone2InteractionDistance);
+        }
+
+        private void ReleaseInvalidRelayOperatorsAuthoritative()
+        {
+            if (Object == null || !Object.HasStateAuthority)
+            {
+                return;
+            }
+
+            bool changed = false;
+
+            for (int index = 0; index < 4; index++)
+            {
+                var slot = (RelaySlot)index;
+                var currentOperator = GetRelayOperator(slot);
+
+                if (currentOperator.IsNone)
+                {
+                    continue;
+                }
+
+                bool relayStillAvailable =
+                    CurrentPhase == NetworkMatchPhase.Zone2Objective
+                    && Zone2Stage == Zone2MissionStage.RepairRelays
+                    && (RelayCompletionMask & (1 << index)) == 0;
+
+                bool operatorStillValid = false;
+
+                if (relayStillAvailable
+                    && TryGetRelayTarget(
+                        slot,
+                        out var target))
+                {
+                    operatorStillValid =
+                        ValidateZone2Requester(
+                            currentOperator,
+                            target,
+                            _zone2InteractionDistance)
+                        == Zone2NetworkCommandResult.Accepted;
+                }
+
+                if (operatorStillValid)
+                {
+                    continue;
+                }
+
+                SetRelayOperator(
+                    slot,
+                    PlayerRef.None);
+
+                changed = true;
+            }
+
+            if (changed)
+            {
+                HandleReplicatedStateChanged();
+            }
+        }
+
+        private bool ClaimRelayOperator(PlayerRef requester, RelaySlot slot)
+        {
+            var current = GetRelayOperator(slot);
+            if (!current.IsNone && current != requester) return false;
+            if (current.IsNone) SetRelayOperator(slot, requester);
+            return true;
+        }
+
+        private PlayerRef GetRelayOperator(RelaySlot slot) => slot switch
+        {
+            RelaySlot.RelayA_1 => RelayA1Operator,
+            RelaySlot.RelayA_2 => RelayA2Operator,
+            RelaySlot.RelayB_1 => RelayB1Operator,
+            RelaySlot.RelayB_2 => RelayB2Operator,
+            _ => PlayerRef.None,
+        };
+
+        private void SetRelayOperator(RelaySlot slot, PlayerRef player)
+        {
+            switch (slot)
+            {
+                case RelaySlot.RelayA_1: RelayA1Operator = player; break;
+                case RelaySlot.RelayA_2: RelayA2Operator = player; break;
+                case RelaySlot.RelayB_1: RelayB1Operator = player; break;
+                case RelaySlot.RelayB_2: RelayB2Operator = player; break;
+            }
+        }
+
+        private void SetRelayActiveState(RelaySlot slot, bool active)
+        {
+            switch (slot)
+            {
+                case RelaySlot.RelayA_1: RelayA1Running = active; break;
+                case RelaySlot.RelayA_2: RelayA2Running = active; break;
+                case RelaySlot.RelayB_1: RelayB1Synchronizing = active; break;
+                case RelaySlot.RelayB_2: RelayB2Synchronizing = active; break;
+            }
+        }
+
+        private static bool IsValidRelaySlot(RelaySlot slot) => (int)slot >= 0 && (int)slot <= 3;
+        private static bool IsRelayASlot(RelaySlot slot) => slot == RelaySlot.RelayA_1 || slot == RelaySlot.RelayA_2;
+        private static bool IsRelayBSlot(RelaySlot slot) => slot == RelaySlot.RelayB_1 || slot == RelaySlot.RelayB_2;
+        private bool HasValidNetworkObject() => Object != null && Object.IsValid && Runner != null;
+
+        private bool TryGetLocalRequester(out PlayerRef requester)
+        {
+            requester = Runner != null ? Runner.LocalPlayer : PlayerRef.None;
+            return requester.IsRealPlayer;
+        }
+
         private bool TryResolveActivePlayer(PlayerRef player, out NetworkPlayerLifeState lifeState)
         {
             lifeState = null;
-            return player.IsValid
+            return player.IsRealPlayer
                 && Runner.TryGetPlayerObject(player, out var playerObject)
                 && playerObject != null
+                && playerObject.IsValid
                 && playerObject.InputAuthority == player
+                && playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyState)
+                && lobbyState.IsGameplayPlayer
                 && playerObject.TryGetComponent(out lifeState)
                 && lifeState.CanInitiateAction;
         }

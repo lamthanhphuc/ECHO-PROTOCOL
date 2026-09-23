@@ -32,6 +32,7 @@ namespace EchoProtocol.Diagnostics
         Inventory = 1 << 19,
 
         StalkerHideFlow = 1 << 20,
+        StalkerDirector = 1 << 21,
 
         All =
             NetworkSession
@@ -55,5 +56,6 @@ namespace EchoProtocol.Diagnostics
             | Door
             | Inventory
             | StalkerHideFlow
+            | StalkerDirector
     }
 }

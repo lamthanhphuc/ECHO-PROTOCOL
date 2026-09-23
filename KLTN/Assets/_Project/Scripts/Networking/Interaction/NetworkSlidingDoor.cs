@@ -71,6 +71,12 @@ namespace EchoProtocol.Networking
         public bool HasActiveJammer => TryGetActiveJammer(out _);
         public bool BlocksTraversal => DoorBlocksTraversal || HasActiveJammer;
         public bool DoorBlocksTraversal => !IsBroken && CurrentState != NetworkDoorState.Open;
+
+        public Vector3 TraversalBlockerCenter =>
+            _blockingCollider != null
+                ? _blockingCollider.bounds.center
+                : transform.position;
+
         public NetworkObject DoorJammerPrefab => _doorJammerPrefab;
         public override RuntimeNoiseType RuntimeInteractionNoiseType =>
             RuntimeNoiseType.DOOR;

@@ -1,3 +1,6 @@
+using EchoProtocol.AI.Stalker.Presentation;
+using EchoProtocol.AI.Stalker.Special;
+
 namespace EchoProtocol.AI.Stalker.Networking
 {
     public readonly struct StalkerPresentationConsumeResult
@@ -8,7 +11,10 @@ namespace EchoProtocol.AI.Stalker.Networking
             bool newAttackEpisode,
             bool attackPhaseChanged,
             bool attackProgressUpdated,
-            bool attackResolutionChanged)
+            bool attackResolutionChanged,
+            bool presentationActionChanged = false,
+            bool specialPhaseChanged = false,
+            bool visibilityChanged = false)
         {
             Changed = changed;
             SemanticStateChanged = semanticStateChanged;
@@ -16,6 +22,9 @@ namespace EchoProtocol.AI.Stalker.Networking
             AttackPhaseChanged = attackPhaseChanged;
             AttackProgressUpdated = attackProgressUpdated;
             AttackResolutionChanged = attackResolutionChanged;
+            PresentationActionChanged = presentationActionChanged;
+            SpecialPhaseChanged = specialPhaseChanged;
+            VisibilityChanged = visibilityChanged;
         }
 
         public bool Changed { get; }
@@ -24,6 +33,9 @@ namespace EchoProtocol.AI.Stalker.Networking
         public bool AttackPhaseChanged { get; }
         public bool AttackProgressUpdated { get; }
         public bool AttackResolutionChanged { get; }
+        public bool PresentationActionChanged { get; }
+        public bool SpecialPhaseChanged { get; }
+        public bool VisibilityChanged { get; }
 
         public static StalkerPresentationConsumeResult NoChange =>
             new StalkerPresentationConsumeResult(false, false, false, false, false, false);
@@ -41,49 +53,110 @@ namespace EchoProtocol.AI.Stalker.Networking
         public StalkerAttackOutcome LastConsumedAttackOutcome => _lastState.AttackOutcome;
         public int ChangeCount { get; private set; }
 
-        public StalkerPresentationConsumeResult Consume(StalkerNetworkPresentationState state)
+        public StalkerPresentationConsumeResult Consume(
+            StalkerNetworkPresentationState state)
         {
-            if (_hasState && Equivalent(_lastState, state))
+            if (_hasState
+                && EquivalentForEvents(
+                    _lastState,
+                    state))
             {
-                return StalkerPresentationConsumeResult.NoChange;
+                //
+                // Continuous replicated progress is still refreshed
+                // even though it is not treated as a new presentation
+                // event.
+                //
+                _lastState = state;
+
+                return
+                    StalkerPresentationConsumeResult.NoChange;
             }
 
-            var result = _hasState
-                ? new StalkerPresentationConsumeResult(
-                    true,
-                    _lastState.SemanticState != state.SemanticState,
-                    _lastState.AttackEpisodeId != state.AttackEpisodeId && state.AttackEpisodeId.IsValid,
-                    _lastState.AttackPhase != state.AttackPhase,
-                    !NearlyEqual(_lastState.AttackProgressSeconds, state.AttackProgressSeconds),
-                    _lastState.AttackHitMomentResolved != state.AttackHitMomentResolved
-                        || _lastState.AttackOutcome != state.AttackOutcome
-                        || _lastState.AttackResolvedTick != state.AttackResolvedTick)
-                : new StalkerPresentationConsumeResult(
-                    true,
-                    true,
-                    state.AttackEpisodeId.IsValid,
-                    state.AttackPhase != StalkerNetworkAttackPhase.None,
-                    state.AttackProgressSeconds > 0f,
-                    state.AttackHitMomentResolved || state.AttackOutcome != StalkerAttackOutcome.None);
+            var result =
+                _hasState
+                    ? new StalkerPresentationConsumeResult(
+                        true,
+                        _lastState.SemanticState
+                            != state.SemanticState,
+                        _lastState.AttackEpisodeId
+                                != state.AttackEpisodeId
+                            && state.AttackEpisodeId.IsValid,
+                        _lastState.AttackPhase
+                            != state.AttackPhase,
+                        !NearlyEqual(
+                            _lastState.AttackProgressSeconds,
+                            state.AttackProgressSeconds),
+                        _lastState.AttackHitMomentResolved
+                                != state.AttackHitMomentResolved
+                            || _lastState.AttackOutcome
+                                != state.AttackOutcome
+                            || _lastState.AttackResolvedTick
+                                != state.AttackResolvedTick,
+                        _lastState.PresentationAction
+                                != state.PresentationAction
+                            || _lastState.PresentationActionOrdinal
+                                != state.PresentationActionOrdinal,
+                        _lastState.SpecialPhase
+                                != state.SpecialPhase
+                            || _lastState.SpecialSequenceOrdinal
+                                != state.SpecialSequenceOrdinal,
+                        _lastState.PresentationVisible
+                            != state.PresentationVisible)
+                    : new StalkerPresentationConsumeResult(
+                        true,
+                        true,
+                        state.AttackEpisodeId.IsValid,
+                        state.AttackPhase
+                            != StalkerNetworkAttackPhase.None,
+                        state.AttackProgressSeconds > 0f,
+                        state.AttackHitMomentResolved
+                            || state.AttackOutcome
+                                != StalkerAttackOutcome.None,
+                        state.PresentationAction
+                            != StalkerPresentationAction.None,
+                        state.SpecialPhase
+                            != StalkerSpecialEncounterPhase.None,
+                        !state.PresentationVisible);
 
             _lastState = state;
             _hasState = true;
+
             ChangeCount++;
+
             return result;
         }
 
-        private static bool Equivalent(
+        private static bool EquivalentForEvents(
             StalkerNetworkPresentationState left,
             StalkerNetworkPresentationState right)
         {
-            return left.SemanticState == right.SemanticState
-                && left.AttackEpisodeId == right.AttackEpisodeId
-                && left.AttackPhase == right.AttackPhase
-                && NearlyEqual(left.AttackProgressSeconds, right.AttackProgressSeconds)
-                && left.AttackHitMomentResolved == right.AttackHitMomentResolved
-                && left.AttackOutcome == right.AttackOutcome
-                && left.AttackStartedTick == right.AttackStartedTick
-                && left.AttackResolvedTick == right.AttackResolvedTick;
+            return left.SemanticState
+                    == right.SemanticState
+                && left.AttackEpisodeId
+                    == right.AttackEpisodeId
+                && left.AttackPhase
+                    == right.AttackPhase
+                && NearlyEqual(
+                    left.AttackProgressSeconds,
+                    right.AttackProgressSeconds)
+                && left.AttackHitMomentResolved
+                    == right.AttackHitMomentResolved
+                && left.AttackOutcome
+                    == right.AttackOutcome
+                && left.AttackStartedTick
+                    == right.AttackStartedTick
+                && left.AttackResolvedTick
+                    == right.AttackResolvedTick
+                && left.PresentationAction
+                    == right.PresentationAction
+                && left.PresentationActionOrdinal
+                    == right.PresentationActionOrdinal
+                && left.SpecialPhase
+                    == right.SpecialPhase
+                && left.SpecialSequenceOrdinal
+                    == right.SpecialSequenceOrdinal
+                && left.PresentationVisible
+                    == right.PresentationVisible;
         }
 
         private static bool NearlyEqual(float left, float right)

@@ -162,12 +162,47 @@ namespace EchoProtocol.RelayB
                 _simulation.SelectChannel(channelIndex);
             }
 
-            _simulation.SetFrequency(frequency);
-            _simulation.SetPhase(phase);
+            if (!Mathf.Approximately(frequency, _simulation.CurrentFrequency))
+            {
+                _simulation.SetFrequency(frequency);
+            }
+            if (!Mathf.Approximately(phase, _simulation.CurrentPhase))
+            {
+                _simulation.SetPhase(phase);
+            }
+        }
+
+        public void ApplyAuthoritativePresetIndex(int presetIndex)
+        {
+            int normalized = Mathf.Max(0, presetIndex);
+            if (_simulation.IsOnline || _presetIndex == normalized)
+            {
+                return;
+            }
+
+            _presetIndex = normalized;
+            _simulation.Initialize(config, _presetIndex);
+        }
+
+        public void ApplyAuthoritativeSyncState(bool synchronizing)
+        {
+            var snapshot = _simulation.Snapshot;
+            bool isSynchronizing = snapshot.Status == RelayBStatus.Synchronizing
+                || snapshot.Status == RelayBStatus.SignalMismatch
+                || snapshot.Status == RelayBStatus.ConnectionLost
+                || snapshot.Status == RelayBStatus.DriftWarning;
+            if (snapshot.IsOnline || isSynchronizing == synchronizing)
+            {
+                return;
+            }
+
+            if (synchronizing) _simulation.StartSynchronization();
+            else _simulation.CancelSynchronization();
         }
 
         public void ApplyOnlineFromAuthority()
         {
+            if (_simulation.IsOnline) return;
             _simulation.ForceCompleteForAuthoritativeSync();
         }
 

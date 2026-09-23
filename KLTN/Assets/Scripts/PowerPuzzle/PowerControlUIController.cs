@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using EchoProtocol.MatchFlow;
 using EchoProtocol.Networking;
 using UnityEngine;
 using UnityEngine.UI;
@@ -33,10 +34,45 @@ public class PowerControlUIController : MonoBehaviour
         private bool _isOpen;
         private int _consecutiveFails;
         private float _cooldownUntil;
+        private bool _awaitingServerResult;
+        private float _networkCooldownPresentationUntil;
 
         public bool IsOpen => _isOpen;
-        public bool IsInCooldown => Time.time < _cooldownUntil;
-        public float CooldownRemaining => Mathf.Max(0f, _cooldownUntil - Time.time);
+        public bool IsInCooldown => TryGetNetworkMatchState(out var matchState)
+            ? matchState.IsZoneAccessCooldownActive
+                || Time.unscaledTime < _networkCooldownPresentationUntil
+            : Time.time < _cooldownUntil;
+        public float CooldownRemaining
+        {
+            get
+            {
+                if (TryGetNetworkMatchState(out var matchState))
+                {
+                    float replicated = matchState.ZoneAccessCooldownRemainingSeconds;
+                    float acknowledged = Mathf.Max(
+                        0f,
+                        _networkCooldownPresentationUntil - Time.unscaledTime);
+
+                    return Mathf.Max(
+                        replicated,
+                        acknowledged);
+                }
+
+                return Mathf.Max(0f, _cooldownUntil - Time.time);
+            }
+        }
+
+        private void OnEnable()
+        {
+            NetworkMatchState.LocalZoneAccessCodeRequestCompleted += HandleServerAccessCodeResult;
+        }
+
+        private void OnDisable()
+        {
+            NetworkMatchState.LocalZoneAccessCodeRequestCompleted -= HandleServerAccessCodeResult;
+            _awaitingServerResult = false;
+            _networkCooldownPresentationUntil = 0f;
+        }
 
         private void Awake()
         {
@@ -107,7 +143,7 @@ public class PowerControlUIController : MonoBehaviour
 
         private void HandleKeyboardInput()
         {
-            if (IsInCooldown || IsOnline())
+            if (IsInCooldown || IsOnline() || _awaitingServerResult)
             {
                 return;
             }
@@ -165,7 +201,7 @@ public class PowerControlUIController : MonoBehaviour
 
         public void OnDigitClicked(int digit)
         {
-            if (IsInCooldown || IsOnline() || !IsSecurityHoldComplete())
+            if (IsInCooldown || IsOnline() || _awaitingServerResult || !IsSecurityHoldComplete())
             {
                 return;
             }
@@ -180,7 +216,7 @@ public class PowerControlUIController : MonoBehaviour
 
         public void OnClearClicked()
         {
-            if (IsInCooldown || IsOnline())
+            if (IsInCooldown || IsOnline() || _awaitingServerResult)
             {
                 return;
             }
@@ -195,7 +231,7 @@ public class PowerControlUIController : MonoBehaviour
 
         public void OnConfirmClicked()
         {
-            if (IsInCooldown || IsOnline() || !IsSecurityHoldComplete())
+            if (IsInCooldown || IsOnline() || _awaitingServerResult || !IsSecurityHoldComplete())
             {
                 return;
             }
@@ -211,7 +247,43 @@ public class PowerControlUIController : MonoBehaviour
             }
 
             string enteredCode = _inputBuffer.ToString();
-            bool success = SubmitCode(enteredCode);
+            var director = Zone2MissionDirector.Instance;
+            bool networked = TryGetNetworkMatchState(out var networkMatchState);
+            if (director != null)
+            {
+                var disposition = director.SubmitAccessCode(this, enteredCode);
+                if (networked)
+                {
+                    if (disposition == Zone2AccessSubmissionDisposition.Pending)
+                    {
+                        _awaitingServerResult = true;
+                        if (feedbackText != null) feedbackText.text = "<color=#00E5FF>VERIFYING // WAITING FOR AUTHORIZATION</color>";
+                        RefreshDisplay();
+                    }
+                    else if (disposition == Zone2AccessSubmissionDisposition.Rejected
+                        && !networkMatchState.Object.HasStateAuthority)
+                    {
+                        if (feedbackText != null) feedbackText.text = "<color=#FFB300>REQUEST REJECTED // STATE CHANGED</color>";
+                        RefreshDisplay();
+                    }
+                    return;
+                }
+
+                HandleOfflineSubmission(disposition == Zone2AccessSubmissionDisposition.Accepted);
+                return;
+            }
+
+            if (networked)
+            {
+                if (feedbackText != null) feedbackText.text = "<color=#FFB300>REQUEST REJECTED // STATE CHANGED</color>";
+                return;
+            }
+
+            HandleOfflineSubmission(SubmitCodeOffline(enteredCode));
+        }
+
+        private void HandleOfflineSubmission(bool success)
+        {
 
             if (success)
             {
@@ -250,36 +322,13 @@ public class PowerControlUIController : MonoBehaviour
             }
         }
 
-        private bool SubmitCode(string code)
+        private bool SubmitCodeOffline(string code)
         {
-            // 1. Zone2MissionDirector (handles both Fusion RPCs and offline)
-            if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
-            {
-                return EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.SubmitAccessCode(code);
-            }
-
-            // 2. If Fusion networked match state
-            var matchState = NetworkMatchState.Instance ?? FindAnyObjectByType<NetworkMatchState>();
-            if (matchState != null && matchState.Object != null && matchState.Object.IsValid)
-            {
-                if (matchState.Object.HasStateAuthority)
-                {
-                    return matchState.TrySubmitZoneAccessCode(Fusion.PlayerRef.None, code);
-                }
-                else
-                {
-                    matchState.RpcSubmitZoneAccessCode(matchState.Runner.LocalPlayer, code);
-                    return true;
-                }
-            }
-
-            // 3. Controller submission fallback
             if (controller != null)
             {
                 return controller.SubmitAuthorizationCode(code, gameObject);
             }
 
-            // 4. Fallback to MatchFlowController
             var flow = FindAnyObjectByType<MatchFlowController>();
             if (flow != null && flow.VerifyPowerCode(code))
             {
@@ -290,12 +339,43 @@ public class PowerControlUIController : MonoBehaviour
             return false;
         }
 
+        private void HandleServerAccessCodeResult(Zone2AccessCodeResult response)
+        {
+            var director = Zone2MissionDirector.Instance;
+            if (director == null || !director.TryGetDistributionPanelIndex(this, out var panelIndex)
+                || panelIndex != response.PanelIndex) return;
+
+            _awaitingServerResult = false;
+            switch (response.Result)
+            {
+                case Zone2NetworkCommandResult.Accepted:
+                    _inputBuffer.Clear();
+                    if (feedbackText != null) feedbackText.text = "<color=#00FF99>XÁC THỰC THÀNH CÔNG // KHÔI PHỤC NGUỒN ĐIỆN!</color>";
+                    EchoProtocol.Audio.GameAudioRuntime.UI("power_puzzle/puzzle_complete");
+                    break;
+                case Zone2NetworkCommandResult.InvalidCode:
+                    _inputBuffer.Clear();
+                    EchoProtocol.Audio.GameAudioRuntime.UI("power_puzzle/wrong_input");
+                    if (feedbackText != null) feedbackText.text = "<color=#FF1744>ACCESS DENIED</color>";
+                    break;
+                case Zone2NetworkCommandResult.Cooldown:
+                    _networkCooldownPresentationUntil = Mathf.Max(
+                        _networkCooldownPresentationUntil,
+                        Time.unscaledTime + Mathf.Max(0f, response.CooldownSeconds));
+                    if (feedbackText != null) feedbackText.text = "<color=#FF9100>HỆ THỐNG TẠM KHÓA // VUI LÒNG CHỜ</color>";
+                    break;
+                default:
+                    if (feedbackText != null) feedbackText.text = "<color=#FFB300>REQUEST REJECTED // STATE CHANGED</color>";
+                    break;
+            }
+            RefreshDisplay();
+        }
+
         private bool IsSecurityHoldComplete()
         {
-            if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null && EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.IsSecurityHoldComplete) return true;
+            if (TryGetNetworkMatchState(out var networkMatchState)) return networkMatchState.SecurityHoldCompleted;
 
-            var matchState = NetworkMatchState.Instance ?? FindAnyObjectByType<NetworkMatchState>();
-            if (matchState != null && matchState.SecurityHoldCompleted) return true;
+            if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null && EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.IsSecurityHoldComplete) return true;
 
             var flow = FindAnyObjectByType<MatchFlowController>();
             if (flow != null && flow.IsSecurityHoldComplete) return true;
@@ -310,10 +390,9 @@ public class PowerControlUIController : MonoBehaviour
 
         private bool IsOnline()
         {
-            if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null && EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.AreZoneDoorsUnlocked) return true;
+            if (TryGetNetworkMatchState(out var networkMatchState)) return networkMatchState.ZoneDoorsUnlocked;
 
-            var matchState = NetworkMatchState.Instance ?? FindAnyObjectByType<NetworkMatchState>();
-            if (matchState != null && (matchState.ZoneDoorsUnlocked || matchState.PowerPuzzleCompleted)) return true;
+            if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null && EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.AreZoneDoorsUnlocked) return true;
 
             var flow = FindAnyObjectByType<MatchFlowController>();
             if (flow != null && flow.IsPowerPuzzleComplete) return true;
@@ -378,7 +457,7 @@ public class PowerControlUIController : MonoBehaviour
                     {
                         statusBannerText.text = "<color=#00E5FF>AUTHORIZATION AVAILABLE // ENTER ACCESS CODE</color>";
                     }
-                    SetKeypadInteractable(true);
+                    SetKeypadInteractable(!_awaitingServerResult);
                 }
 
                 UpdateCodeSlotsText();
@@ -409,5 +488,11 @@ public class PowerControlUIController : MonoBehaviour
 
             if (clearButton != null) clearButton.interactable = interactable;
             if (confirmButton != null) confirmButton.interactable = interactable;
+        }
+
+        private static bool TryGetNetworkMatchState(out NetworkMatchState matchState)
+        {
+            matchState = NetworkMatchState.Instance ?? FindAnyObjectByType<NetworkMatchState>();
+            return matchState != null && matchState.Object != null && matchState.Object.IsValid;
         }
     }

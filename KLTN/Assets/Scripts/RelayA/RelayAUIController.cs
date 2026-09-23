@@ -1,4 +1,6 @@
 using TMPro;
+using EchoProtocol.MatchFlow;
+using EchoProtocol.Networking;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -114,11 +116,13 @@ namespace EchoProtocol.RelayA
         {
             EnsureEventSystem();
             _controlLock.Acquire(interactor);
+            if (TryGetNetworkDirector(out var director)) director.RequestRelayAcquire(_controller);
             SetVisible(true);
         }
 
         public void Close()
         {
+            if (TryGetNetworkDirector(out var director)) director.RequestRelayRelease(_controller);
             SetVisible(false);
             _controlLock.Release();
         }
@@ -170,11 +174,12 @@ namespace EchoProtocol.RelayA
             RefreshWarning(snapshot);
 
             bool readOnly = snapshot.IsOnline;
-            SetInteractable(generatorSlider, !readOnly);
-            SetInteractable(frequencySlider, !readOnly);
-            SetInteractable(loadSlider, !readOnly);
-            SetInteractable(startButton, !readOnly && !snapshot.IsRunning);
-            SetInteractable(emergencyStopButton, !readOnly && snapshot.IsRunning);
+            bool canOperate = !TryGetNetworkDirector(out var director) || director.CanLocalPlayerOperateRelay(_controller);
+            SetInteractable(generatorSlider, !readOnly && canOperate);
+            SetInteractable(frequencySlider, !readOnly && canOperate);
+            SetInteractable(loadSlider, !readOnly && canOperate);
+            SetInteractable(startButton, !readOnly && canOperate && !snapshot.IsRunning);
+            SetInteractable(emergencyStopButton, !readOnly && canOperate && snapshot.IsRunning);
         }
 
         private static string GetParameterStatus(float value, Vector2 safeRange, string paramName)
@@ -322,17 +327,33 @@ namespace EchoProtocol.RelayA
                 return;
             }
 
-            _controller.SetControls(generatorSlider.value, frequencySlider.value, loadSlider.value);
+            if (TryGetNetworkDirector(out var director))
+            {
+                director.RequestRelayAControls(_controller, generatorSlider.value, frequencySlider.value, loadSlider.value);
+            }
+            else
+            {
+                _controller.SetControls(generatorSlider.value, frequencySlider.value, loadSlider.value);
+            }
         }
 
         private void HandleStartClicked()
         {
-            _controller?.StartStabilization();
+            if (TryGetNetworkDirector(out var director)) director.RequestRelayAStart(_controller);
+            else _controller?.StartStabilization();
         }
 
         private void HandleEmergencyStopClicked()
         {
-            _controller?.EmergencyStop();
+            if (TryGetNetworkDirector(out var director)) director.RequestRelayAEmergencyStop(_controller);
+            else _controller?.EmergencyStop();
+        }
+
+        private static bool TryGetNetworkDirector(out Zone2MissionDirector director)
+        {
+            director = Zone2MissionDirector.Instance;
+            var matchState = NetworkMatchState.Instance ?? FindAnyObjectByType<NetworkMatchState>();
+            return director != null && matchState != null && matchState.Object != null && matchState.Object.IsValid;
         }
 
         private void SetVisible(bool visible)

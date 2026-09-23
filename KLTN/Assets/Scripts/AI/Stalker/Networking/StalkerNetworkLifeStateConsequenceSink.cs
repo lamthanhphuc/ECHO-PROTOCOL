@@ -1,6 +1,8 @@
 using EchoProtocol.AI.Common;
+using EchoProtocol.AI.Stalker.Special;
 using EchoProtocol.Networking;
 using Fusion;
+using System;
 using UnityEngine;
 
 namespace EchoProtocol.AI.Stalker.Networking
@@ -10,16 +12,19 @@ namespace EchoProtocol.AI.Stalker.Networking
     {
         private readonly NetworkRunner _runner;
         private readonly FusionPlayerIdentityRegistry _identityRegistry;
-        private readonly StalkerFusionRuntime _ghost;
+        private readonly Action<StalkerDownedPlayerFact> _onPlayerDowned;
+        private readonly Action<PlayerId> _onHitApplied;
 
         public StalkerNetworkLifeStateConsequenceSink(
             NetworkRunner runner,
             FusionPlayerIdentityRegistry identityRegistry,
-            StalkerFusionRuntime ghost)
+            Action<StalkerDownedPlayerFact> onPlayerDowned = null,
+            Action<PlayerId> onHitApplied = null)
         {
             _runner = runner;
             _identityRegistry = identityRegistry;
-            _ghost = ghost;
+            _onPlayerDowned = onPlayerDowned;
+            _onHitApplied = onHitApplied;
         }
 
         public bool TryApplyStalkerHit(
@@ -52,11 +57,55 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return false;
             }
 
-            return lifeState.Status == NetworkPlayerLifeStatus.Downed
-                ? lifeState.TryEliminateForReviveLimit()
-                : lifeState.TryApplyMonsterDown(
-                    "STALKER",
-                    authoritativeHitPosition);
+            var previousStatus =
+                lifeState.Status;
+
+            bool consequenceApplied;
+
+            switch (previousStatus)
+            {
+                case NetworkPlayerLifeStatus.Alive:
+                    consequenceApplied =
+                        lifeState.TryApplyMonsterDown(
+                            "STALKER",
+                            authoritativeHitPosition);
+
+                    break;
+
+                case NetworkPlayerLifeStatus.Downed:
+                    consequenceApplied =
+                        lifeState.TryEliminateForReviveLimit();
+
+                    break;
+
+                default:
+                    return false;
+            }
+
+            if (consequenceApplied)
+            {
+                _onHitApplied?.Invoke(
+                    playerId);
+            }
+
+            var transitionedAliveToDowned =
+                consequenceApplied
+                && previousStatus
+                    == NetworkPlayerLifeStatus.Alive
+                && lifeState.Status
+                    == NetworkPlayerLifeStatus.Downed;
+
+            if (transitionedAliveToDowned)
+            {
+                _onPlayerDowned?.Invoke(
+                    new StalkerDownedPlayerFact(
+                        episodeId,
+                        playerId,
+                        authoritativeHitPosition,
+                        resolvedAt));
+            }
+
+            return consequenceApplied;
         }
     }
 }

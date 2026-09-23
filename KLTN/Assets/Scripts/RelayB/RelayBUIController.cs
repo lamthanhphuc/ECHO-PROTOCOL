@@ -1,4 +1,6 @@
 using System;
+using EchoProtocol.MatchFlow;
+using EchoProtocol.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -145,11 +147,13 @@ namespace EchoProtocol.RelayB
         {
             EnsureEventSystem();
             _controlLock.Acquire(interactor);
+            if (TryGetNetworkDirector(out var director)) director.RequestRelayAcquire(_controller);
             SetVisible(true);
         }
 
         public void Close()
         {
+            if (TryGetNetworkDirector(out var director)) director.RequestRelayRelease(_controller);
             SetVisible(false);
             _controlLock.Release();
         }
@@ -315,16 +319,17 @@ namespace EchoProtocol.RelayB
 
             // Interactability
             bool readOnly = snapshot.IsOnline;
+            bool canOperate = !TryGetNetworkDirector(out var director) || director.CanLocalPlayerOperateRelay(_controller);
             for (int i = 0; i < channelButtons.Length; i++)
             {
-                SetInteractable(channelButtons[i], !readOnly);
+                SetInteractable(channelButtons[i], !readOnly && canOperate);
             }
 
-            SetInteractable(frequencySlider, !readOnly);
-            SetInteractable(phaseSlider, !readOnly);
-            SetInteractable(scanButton, !readOnly);
-            SetInteractable(startSyncButton, !readOnly && snapshot.SelectedChannelIndex >= 0 && snapshot.Status != RelayBStatus.Synchronizing);
-            SetInteractable(cancelSyncButton, !readOnly && snapshot.Status == RelayBStatus.Synchronizing);
+            SetInteractable(frequencySlider, !readOnly && canOperate);
+            SetInteractable(phaseSlider, !readOnly && canOperate);
+            SetInteractable(scanButton, !readOnly && canOperate);
+            SetInteractable(startSyncButton, !readOnly && canOperate && snapshot.SelectedChannelIndex >= 0 && snapshot.Status != RelayBStatus.Synchronizing);
+            SetInteractable(cancelSyncButton, !readOnly && canOperate && snapshot.Status == RelayBStatus.Synchronizing);
             SetInteractable(closeButton, true);
 
             // Log transitions
@@ -392,7 +397,11 @@ namespace EchoProtocol.RelayB
 
         private void HandleChannelClicked(int channelIndex)
         {
-            _controller?.SelectChannel(channelIndex);
+            if (_controller == null) return;
+            var snapshot = _controller.Snapshot;
+            if (TryGetNetworkDirector(out var director))
+                director.RequestRelayBControls(_controller, channelIndex, snapshot.CurrentFrequency, snapshot.CurrentPhase);
+            else _controller.SelectChannel(channelIndex);
         }
 
         private void HandleFrequencyChanged(float value)
@@ -402,7 +411,10 @@ namespace EchoProtocol.RelayB
                 return;
             }
 
-            _controller.SetFrequency(value);
+            var snapshot = _controller.Snapshot;
+            if (TryGetNetworkDirector(out var director))
+                director.RequestRelayBControls(_controller, snapshot.SelectedChannelIndex, value, snapshot.CurrentPhase);
+            else _controller.SetFrequency(value);
         }
 
         private void HandlePhaseChanged(float value)
@@ -412,22 +424,35 @@ namespace EchoProtocol.RelayB
                 return;
             }
 
-            _controller.SetPhase(value);
+            var snapshot = _controller.Snapshot;
+            if (TryGetNetworkDirector(out var director))
+                director.RequestRelayBControls(_controller, snapshot.SelectedChannelIndex, snapshot.CurrentFrequency, value);
+            else _controller.SetPhase(value);
         }
 
         private void HandleScanClicked()
         {
-            _controller?.ScanChannels();
+            if (TryGetNetworkDirector(out var director)) director.RequestRelayBScan(_controller);
+            else _controller?.ScanChannels();
         }
 
         private void HandleStartSyncClicked()
         {
-            _controller?.StartSynchronization();
+            if (TryGetNetworkDirector(out var director)) director.RequestRelayBStartSync(_controller);
+            else _controller?.StartSynchronization();
         }
 
         private void HandleCancelSyncClicked()
         {
-            _controller?.CancelSynchronization();
+            if (TryGetNetworkDirector(out var director)) director.RequestRelayBCancelSync(_controller);
+            else _controller?.CancelSynchronization();
+        }
+
+        private static bool TryGetNetworkDirector(out Zone2MissionDirector director)
+        {
+            director = Zone2MissionDirector.Instance;
+            var matchState = NetworkMatchState.Instance ?? FindAnyObjectByType<NetworkMatchState>();
+            return director != null && matchState != null && matchState.Object != null && matchState.Object.IsValid;
         }
 
         private void SetVisible(bool visible)

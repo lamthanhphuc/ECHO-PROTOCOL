@@ -745,7 +745,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
-        public IEnumerator STK_AUTH_SEARCH_ReacquiresSamePlayerIdToChase()
+        public IEnumerator STK_AUTH_SEARCH_ReacquiresSamePlayerIdToDetect()
         {
             var fixture = CreateFixture();
             var oldPosition = new Vector3(0f, 1f, 4f);
@@ -763,10 +763,9 @@ namespace EchoProtocol.AI.Stalker.Tests
                 CreateStatusList(CreateStatus(1, true), CreateStatus(2, true))),
                 Is.True);
 
-            AssertState(fixture.Controller, "CHASE");
-            AssertPlayerIdValue(GetProperty(GetMemory(fixture.Controller), "CurrentTargetId"), 1);
-            AssertVectorNear(GetVector3Property(fixture.Controller, "LastKnownPosition"), reacquiredPosition);
-            AssertVectorNear(GetVector3Property(GetMemory(fixture.Controller), "LastKnownPosition"), reacquiredPosition);
+            AssertState(fixture.Controller, "DETECT");
+            AssertPlayerIdValue(GetProperty(GetMemory(fixture.Controller), "DetectionTargetId"), 1);
+            AssertInvalidPlayerId(GetProperty(GetMemory(fixture.Controller), "CurrentTargetId"));
             yield return null;
         }
 
