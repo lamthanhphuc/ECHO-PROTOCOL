@@ -357,6 +357,17 @@ public sealed class MongoTelemetryEventRepository : ITelemetryEventRepository
                 });
     }
 
+    public async Task<IReadOnlyList<TelemetryEventDocument>> LoadAcceptedMatchEventsAsync(
+        Guid matchId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _collection
+            .Find(item => item.MatchId == matchId)
+            .SortBy(item => item.EventSequence)
+            .ThenBy(item => item.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     private static bool? TryReadResearchCaptureEnabled(TelemetryEventDocument? document)
     {
         if (document?.ValueJson is null ||
