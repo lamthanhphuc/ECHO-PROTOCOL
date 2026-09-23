@@ -68,6 +68,13 @@ services:
       AdminSeed__Password: ${AdminSeed__Password:-}
       AdminSeed__DisplayName: ${AdminSeed__DisplayName:-}
       AdminSeed__InitialWalletBalance: ${AdminSeed__InitialWalletBalance:-0}
+      PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-}
+      PAYOS_API_KEY: ${PAYOS_API_KEY:-}
+      PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:-}
+      PAYOS_BASE_URL: ${PAYOS_BASE_URL:-https://api-merchant.payos.vn}
+      PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-}
+      PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-}
+      PaymentCatalog__AllowedProviders__0: ${PaymentCatalog__AllowedProviders__0:-PAYOS}
     ports:
       - "5042:5042"
 
