@@ -54,6 +54,7 @@ namespace EchoProtocol.Networking
 
             _instance = this;
             DontDestroyOnLoad(gameObject);
+            EchoProtocol.Voice.VoiceManager.EnsureExists();
             _matchAuthority = MatchAuthorityRuntime.EnsureExists(this);
         }
 

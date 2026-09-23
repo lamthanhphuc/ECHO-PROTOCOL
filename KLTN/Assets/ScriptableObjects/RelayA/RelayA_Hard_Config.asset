@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 123bc77296d6b004d9edf07ff99f4c7a, type: 3}
+  m_Name: RelayA_Hard_Config
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.RelayA.RelayAConfig
+  voltageSafeRange: {x: 220, y: 230}
+  frequencySafeRange: {x: 49, y: 51}
+  loadSafeRange: {x: 47, y: 53}
+  voltageDangerRange: {x: 210, y: 240}
+  frequencyDangerRange: {x: 46.5, y: 53.5}
+  loadDangerRange: {x: 38, y: 62}
+  responseDelaySeconds: 1
+  stabilityRequiredSeconds: 12
+  instabilityToleranceSeconds: 0.5
+  initialControls: {x: 34, y: 66, z: 38}
+  solvedControls: {x: 58, y: 42, z: 54}
+  voltageWeights: {x: 0.72, y: 0.18, z: -0.26}
+  frequencyWeights: {x: -0.08, y: 0.56, z: 0.12}
+  loadWeights: {x: 0.16, y: -0.12, z: 0.62}
+  neutralControls: {x: 50, y: 50, z: 50}
+  baselines: {x: 225, y: 50, z: 50}
+  outputScales: {x: 22, y: 5.2, z: 18}
+  signalDriftAmplitude: 0.35
+  signalDriftFrequency: 0.43
+  enableFault: 1
+  earliestFaultAtSeconds: 8
+  faultWarningSeconds: 4
+  faultDurationSeconds: 6
+  overvoltageFaultOffset: {x: 9, y: -0.35, z: -2.2}
+  frequencyFaultOffset: {x: -2, y: 2.2, z: 1.1}
+  loadFaultOffset: {x: 3, y: -0.35, z: 8.5}

@@ -54,6 +54,49 @@ public class PowerPuzzleController : MonoBehaviour
     public bool HasInstructionForCurrentStep => _instructionReadForStep;
     public float LockoutRemaining => Mathf.Max(0f, _lockoutUntil - Time.time);
 
+    private string _authoritativeCode;
+
+    public bool IsSecurityHoldComplete
+    {
+        get
+        {
+            var matchState = FindAnyObjectByType<EchoProtocol.Networking.NetworkMatchState>();
+            if (matchState != null && matchState.SecurityHoldCompleted) return true;
+
+            var flow = FindAnyObjectByType<MatchFlowController>();
+            if (flow != null && flow.IsSecurityHoldComplete) return true;
+
+            var terminal = FindAnyObjectByType<SecurityTerminalDownload>();
+            if (terminal != null && terminal.IsComplete) return true;
+
+            return false;
+        }
+    }
+
+    public string AuthoritativeCode
+    {
+        get
+        {
+            var matchState = FindAnyObjectByType<EchoProtocol.Networking.NetworkMatchState>();
+            if (matchState != null && !string.IsNullOrEmpty(matchState.PowerAuthorizationCode.ToString()))
+            {
+                return matchState.PowerAuthorizationCode.ToString();
+            }
+
+            var flow = FindAnyObjectByType<MatchFlowController>();
+            if (flow != null && !string.IsNullOrEmpty(flow.PowerAuthorizationCode))
+            {
+                return flow.PowerAuthorizationCode;
+            }
+
+            return _authoritativeCode;
+        }
+        set
+        {
+            _authoritativeCode = value;
+        }
+    }
+
     public string CurrentCode
     {
         get
@@ -61,6 +104,11 @@ public class PowerPuzzleController : MonoBehaviour
             if (_networkAuthorityPresentationOnly)
             {
                 return string.Empty;
+            }
+
+            if (!string.IsNullOrEmpty(AuthoritativeCode))
+            {
+                return AuthoritativeCode;
             }
 
             if (sequence == null || sequence.Length == 0 || _stepIndex >= sequence.Length)
@@ -102,22 +150,27 @@ public class PowerPuzzleController : MonoBehaviour
     {
         if (_isComplete)
         {
-            return "Power restored";
+            return "MAIN POWER RESTORED. POWER CONTROL ONLINE. [E]";
         }
 
-        if (!_isActive)
+        if (!IsSecurityHoldComplete && stationType == PowerPuzzleStationType.PowerControl)
+        {
+            return "LOCKED. SECURITY AUTHENTICATION REQUIRED. [E]";
+        }
+
+        if (!_isActive && !IsSecurityHoldComplete)
         {
             return "Power puzzle locked";
         }
 
         if (IsLockedOut)
         {
-            return "Power system cooling down";
+            return "Power system cooling down (" + Mathf.CeilToInt(LockoutRemaining) + "s)";
         }
 
         if (stationType == PowerPuzzleStationType.PowerControl)
         {
-            return IsSoloFallbackActive ? "Read solo power code" : "Read power routing code";
+            return "AUTHORIZATION AVAILABLE. ENTER MAIN POWER ACCESS CODE. [E]";
         }
 
         if (requirePowerControlRead && !_instructionReadForStep && !IsSoloFallbackActive)
@@ -130,13 +183,22 @@ public class PowerPuzzleController : MonoBehaviour
 
     public bool CanUseStation(PowerPuzzleStationType stationType)
     {
-        if (_networkAuthorityPresentationOnly || !_isActive || _isComplete || IsLockedOut)
+        if (_networkAuthorityPresentationOnly || _isComplete || IsLockedOut)
         {
             return false;
         }
 
-        return stationType == PowerPuzzleStationType.PowerControl
-            || !requirePowerControlRead
+        if (stationType == PowerPuzzleStationType.PowerControl)
+        {
+            return true;
+        }
+
+        if (!IsSecurityHoldComplete)
+        {
+            return false;
+        }
+
+        return !requirePowerControlRead
             || _instructionReadForStep
             || IsSoloFallbackActive;
     }
@@ -150,11 +212,61 @@ public class PowerPuzzleController : MonoBehaviour
 
         if (stationType == PowerPuzzleStationType.PowerControl)
         {
+            var ui = GetComponentInChildren<PowerControlUIController>(true);
+            if (ui == null && interactor != null)
+            {
+                ui = FindAnyObjectByType<PowerControlUIController>();
+            }
+
+            if (ui != null)
+            {
+                ui.Open(interactor);
+                return true;
+            }
+
             ReadCurrentInstruction();
             return true;
         }
 
         return false;
+    }
+
+    public bool SubmitAuthorizationCode(string code, GameObject interactor)
+    {
+        if (_isComplete) return false;
+        if (!IsSecurityHoldComplete) return false;
+        if (IsLockedOut) return false;
+
+        string expected = AuthoritativeCode;
+        if (string.IsNullOrEmpty(expected))
+        {
+            expected = CurrentCode;
+        }
+
+        if (string.Equals(code, expected, StringComparison.OrdinalIgnoreCase))
+        {
+            _failureCount = 0;
+            CompletePuzzle();
+
+            var matchState = FindAnyObjectByType<EchoProtocol.Networking.NetworkMatchState>();
+            if (matchState != null && matchState.Object != null && matchState.Object.HasStateAuthority)
+            {
+                matchState.TrySubmitPowerCode(Fusion.PlayerRef.None, code);
+            }
+
+            var flow = FindAnyObjectByType<MatchFlowController>();
+            if (flow != null)
+            {
+                flow.NotifyPowerPuzzleComplete();
+            }
+
+            return true;
+        }
+        else
+        {
+            FailPuzzle();
+            return false;
+        }
     }
 
     public bool SubmitCurrentDistributionCode(GameObject interactor)
@@ -169,7 +281,8 @@ public class PowerPuzzleController : MonoBehaviour
             return false;
         }
 
-        if (!string.Equals(submittedCode, CurrentCode, StringComparison.OrdinalIgnoreCase))
+        string expected = CurrentCode;
+        if (!string.Equals(submittedCode, expected, StringComparison.OrdinalIgnoreCase))
         {
             FailPuzzle();
             return false;

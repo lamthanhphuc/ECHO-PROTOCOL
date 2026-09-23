@@ -85,7 +85,6 @@ Các chức năng sau **không triển khai trong MVP**:
 | ------------------------- | ---------- |
 | Real-money payment        | Won’t Have |
 | Dedicated game server     | Won’t Have |
-| Voice chat                | Won’t Have |
 | Public matchmaking        | Won’t Have |
 | Ranking system            | Won’t Have |
 | Multiple maps             | Won’t Have |
@@ -2579,7 +2578,6 @@ Nếu ảnh không load được:
 | ---------------------- |
 | Real-money payment     |
 | Dedicated server       |
-| Voice chat             |
 | Public matchmaking     |
 | Ranking system         |
 | Multiple maps          |
@@ -2770,3 +2768,8 @@ Windows build
 ```
 
 Ưu tiên lớn nhất là hoàn thành MVP ổn định trước: **login, room/lobby, multiplayer sync, objective flow, monster AI, Adaptive AI MVP, backend deployed, PostgreSQL cloud, shop 15 items, admin dashboard và reward anti-cheat**. Các phần như ping system, dual-switch puzzle, route ambush, upload ảnh trực tiếp và 4-player demo ổn định chỉ nên làm sau khi các phần Must Have đã hoàn thành.
+
+
+## Scope update — 2026-09-20: Photon Voice 2
+
+Voice chat is now an authorized extension, replacing the earlier Won’t Have classification. Fusion continues to own player/network gameplay; Photon Voice 2 handles voice transport. The implementation contract, configuration and outstanding acceptance checks are maintained in [VOICE_CHAT.md](VOICE_CHAT.md). This change does not introduce backend audio endpoints.

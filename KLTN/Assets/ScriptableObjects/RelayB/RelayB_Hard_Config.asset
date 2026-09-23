@@ -1,0 +1,114 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 60a557579c52bc84981299c6ba98a824, type: 3}
+  m_Name: RelayB_Hard_Config
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.RelayB.RelayBConfig
+  frequencyTolerancePercent: 3
+  phaseToleranceDegrees: 12
+  holdRequiredSeconds: 8
+  instabilityGraceSeconds: 0.5
+  minFrequency: 10
+  maxFrequency: 100
+  enableDrift: 1
+  driftWarningSeconds: 3
+  driftTriggerHoldSeconds: 3.5
+  driftPhaseOffset: 22
+  driftFrequencyOffsetPercent: 0
+  presets:
+  - presetName: Carrier Alpha (Echo-01)
+    correctChannelIndex: 1
+    referenceWaveform: 0
+    targetFrequency: 42
+    targetPhase: 90
+    channels:
+    - channelLabel: CHANNEL 01
+      waveform: 2
+      harmonicDistortion: 0.2
+      frequencyMultiplier: 1
+    - channelLabel: CHANNEL 02
+      waveform: 0
+      harmonicDistortion: 0
+      frequencyMultiplier: 1
+    - channelLabel: CHANNEL 03
+      waveform: 1
+      harmonicDistortion: 0.15
+      frequencyMultiplier: 1
+    - channelLabel: CHANNEL 04
+      waveform: 4
+      harmonicDistortion: 0.3
+      frequencyMultiplier: 1
+  - presetName: Pulse Beta (Echo-02)
+    correctChannelIndex: 2
+    referenceWaveform: 2
+    targetFrequency: 68
+    targetPhase: 240
+    channels:
+    - channelLabel: CHANNEL 01
+      waveform: 1
+      harmonicDistortion: 0.25
+      frequencyMultiplier: 1
+    - channelLabel: CHANNEL 02
+      waveform: 4
+      harmonicDistortion: 0.2
+      frequencyMultiplier: 1
+    - channelLabel: CHANNEL 03
+      waveform: 2
+      harmonicDistortion: 0
+      frequencyMultiplier: 1
+    - channelLabel: CHANNEL 04
+      waveform: 0
+      harmonicDistortion: 0.1
+      frequencyMultiplier: 1
+  - presetName: Sub-Harmonic Gamma (Echo-03)
+    correctChannelIndex: 0
+    referenceWaveform: 4
+    targetFrequency: 28.5
+    targetPhase: 180
+    channels:
+    - channelLabel: CHANNEL 01
+      waveform: 4
+      harmonicDistortion: 0
+      frequencyMultiplier: 1
+    - channelLabel: CHANNEL 02
+      waveform: 0
+      harmonicDistortion: 0.2
+      frequencyMultiplier: 1
+    - channelLabel: CHANNEL 03
+      waveform: 2
+      harmonicDistortion: 0.35
+      frequencyMultiplier: 1
+    - channelLabel: CHANNEL 04
+      waveform: 1
+      harmonicDistortion: 0.4
+      frequencyMultiplier: 1
+  - presetName: Flux Delta (Echo-04)
+    correctChannelIndex: 3
+    referenceWaveform: 1
+    targetFrequency: 85
+    targetPhase: 315
+    channels:
+    - channelLabel: CHANNEL 01
+      waveform: 0
+      harmonicDistortion: 0.3
+      frequencyMultiplier: 1
+    - channelLabel: CHANNEL 02
+      waveform: 2
+      harmonicDistortion: 0.15
+      frequencyMultiplier: 1
+    - channelLabel: CHANNEL 03
+      waveform: 4
+      harmonicDistortion: 0.25
+      frequencyMultiplier: 1
+    - channelLabel: CHANNEL 04
+      waveform: 1
+      harmonicDistortion: 0
+      frequencyMultiplier: 1

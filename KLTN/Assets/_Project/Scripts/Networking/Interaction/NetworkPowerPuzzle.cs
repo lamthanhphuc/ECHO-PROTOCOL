@@ -187,6 +187,22 @@ namespace EchoProtocol.Networking
             }
         }
 
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void RpcSubmitAuthorizationCode(PlayerRef sender, string code)
+        {
+            if (!Object.HasStateAuthority) return;
+
+            var matchState = FindAnyObjectByType<NetworkMatchState>();
+            if (matchState != null)
+            {
+                bool success = matchState.TrySubmitPowerCode(sender, code);
+                if (success)
+                {
+                    CommitCompletionOnce();
+                }
+            }
+        }
+
         private int ExpectedInput()
         {
             return _sequence != null

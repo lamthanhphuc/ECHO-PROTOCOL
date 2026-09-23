@@ -127,6 +127,12 @@ namespace EchoProtocol.Networking
 
         private void Update()
         {
+            if (EchoProtocol.Voice.VoiceSettingsPanel.IsOpen)
+            {
+                if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
+                CurrentCandidate = null;
+                return;
+            }
             bool isOnline = Runner != null && Runner.IsRunning && Object != null && Object.IsValid;
             var playerState = GetComponent<LobbyPlayerState>();
             if (isOnline && (!Object.HasInputAuthority || (playerState != null && playerState.Object != null && playerState.Object.IsValid && !playerState.IsGameplayPlayer)))

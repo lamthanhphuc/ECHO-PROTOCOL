@@ -29,7 +29,7 @@ public class PlayerInteraction : MonoBehaviour
     {
         if (raycastCamera == null)
         {
-            raycastCamera = Camera.main;
+            raycastCamera = GetRaycastCamera();
         }
 
         BindInput();
@@ -73,12 +73,6 @@ public class PlayerInteraction : MonoBehaviour
             return;
         }
 
-        if (IsActiveFusionGameplay())
-        {
-            UpdateCurrentHidingSpotPrompt();
-            return;
-        }
-
         UpdateCurrentInteractable();
         ValidateHeldInteractable();
     }
@@ -94,24 +88,81 @@ public class PlayerInteraction : MonoBehaviour
         _interactAction = playerMap?.FindAction("Interact", false);
     }
 
-    private void UpdateCurrentInteractable()
+    private Camera GetRaycastCamera()
     {
-        if (raycastCamera == null)
+        if (raycastCamera != null && raycastCamera.gameObject.activeInHierarchy && raycastCamera.enabled)
         {
-            raycastCamera = Camera.main;
+            return raycastCamera;
         }
 
-        if (raycastCamera == null)
+        // 1. Try local camera on player or its children
+        Camera cam = GetComponentInChildren<Camera>();
+        if (cam != null && cam.gameObject.activeInHierarchy && cam.enabled)
+        {
+            raycastCamera = cam;
+            return raycastCamera;
+        }
+
+        // 2. Try PlayerCamera in scene
+        PlayerCamera playerCam = FindAnyObjectByType<PlayerCamera>();
+        if (playerCam != null)
+        {
+            cam = playerCam.GetComponent<Camera>();
+            if (cam != null && cam.gameObject.activeInHierarchy && cam.enabled)
+            {
+                raycastCamera = cam;
+                return raycastCamera;
+            }
+        }
+
+        // 3. Fallback to Camera.main
+        if (Camera.main != null && Camera.main.gameObject.activeInHierarchy && Camera.main.enabled)
+        {
+            raycastCamera = Camera.main;
+            return raycastCamera;
+        }
+
+        Camera anyCam = FindAnyObjectByType<Camera>();
+        if (anyCam != null)
+        {
+            raycastCamera = anyCam;
+            return raycastCamera;
+        }
+
+        return null;
+    }
+
+    private void UpdateCurrentInteractable()
+    {
+        Camera cam = GetRaycastCamera();
+        if (cam == null)
         {
             SetCurrentInteractable(null);
             return;
         }
 
-        Ray ray = raycastCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+        Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
         if (!Physics.Raycast(ray, out RaycastHit hit, interactDistance, interactableLayers, triggerInteraction))
         {
             SetCurrentInteractable(null);
             return;
+        }
+
+        // If in active Fusion gameplay, yield to NetworkPlayerInteractor for NetworkInteractable or downed teammates
+        if (IsActiveFusionGameplay())
+        {
+            if (hit.collider.GetComponentInParent<EchoProtocol.Networking.NetworkInteractable>() != null)
+            {
+                SetCurrentInteractable(null);
+                return;
+            }
+
+            var lifeState = hit.collider.GetComponentInParent<EchoProtocol.Networking.NetworkPlayerLifeState>();
+            if (lifeState != null && lifeState.IsDowned)
+            {
+                SetCurrentInteractable(null);
+                return;
+            }
         }
 
         IInteractable interactable = hit.collider.GetComponentInParent<IInteractable>();
@@ -122,45 +173,6 @@ public class PlayerInteraction : MonoBehaviour
         }
 
         SetCurrentInteractable(interactable);
-    }
-
-    private void UpdateCurrentHidingSpotPrompt()
-    {
-        if (raycastCamera == null)
-        {
-            raycastCamera = Camera.main;
-        }
-
-        if (raycastCamera == null)
-        {
-            SetCurrentInteractable(null);
-            return;
-        }
-
-        Ray ray = raycastCamera.ViewportPointToRay(
-            new Vector3(0.5f, 0.5f, 0f));
-
-        if (!Physics.Raycast(
-                ray,
-                out RaycastHit hit,
-                interactDistance,
-                interactableLayers,
-                triggerInteraction))
-        {
-            SetCurrentInteractable(null);
-            return;
-        }
-
-        HidingSpot hidingSpot =
-            hit.collider.GetComponentInParent<HidingSpot>();
-
-        if (hidingSpot == null || !hidingSpot.CanInteract(gameObject))
-        {
-            SetCurrentInteractable(null);
-            return;
-        }
-
-        SetCurrentInteractable(hidingSpot);
     }
 
     private void SetCurrentInteractable(IInteractable interactable)
@@ -178,13 +190,19 @@ public class PlayerInteraction : MonoBehaviour
 
     private void OnInteractPerformed(InputAction.CallbackContext context)
     {
-        if (!HasLocalControl() || IsActiveFusionGameplay())
+        if (!HasLocalControl())
         {
             return;
         }
 
         if (_currentInteractable != null && _currentInteractable.CanInteract(gameObject))
         {
+            // In active Fusion gameplay, NetworkPlayerInteractor handles HidingSpot
+            if (IsActiveFusionGameplay() && _currentInteractable is HidingSpot)
+            {
+                return;
+            }
+
             if (_currentInteractable is IHoldInteractable holdInteractable && holdInteractable.RequiresHold)
             {
                 return;
@@ -197,7 +215,13 @@ public class PlayerInteraction : MonoBehaviour
 
     private void OnInteractStarted(InputAction.CallbackContext context)
     {
-        if (!HasLocalControl() || IsActiveFusionGameplay())
+        if (!HasLocalControl())
+        {
+            return;
+        }
+
+        // In active Fusion gameplay, NetworkPlayerInteractor handles HidingSpot
+        if (IsActiveFusionGameplay() && _currentInteractable is HidingSpot)
         {
             return;
         }

@@ -149,8 +149,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static BlockingCollider FindRealBlockingCollider(params string[] ownerNameFragments)
         {
             var transforms = UnityEngine.Object.FindObjectsByType<Transform>(
-                FindObjectsInactive.Exclude,
-                FindObjectsSortMode.None);
+                FindObjectsInactive.Exclude);
             for (var i = 0; i < transforms.Length; i++)
             {
                 var owner = transforms[i];
@@ -184,8 +183,13 @@ namespace EchoProtocol.AI.Stalker.Tests
             params string[] ownerNameFragments)
         {
             var transforms = UnityEngine.Object.FindObjectsByType<Transform>(
-                FindObjectsInactive.Exclude,
-                FindObjectsSortMode.InstanceID);
+                FindObjectsInactive.Exclude);
+            Array.Sort(
+                transforms,
+                (left, right) => string.Compare(
+                    GetTransformSortKey(left),
+                    GetTransformSortKey(right),
+                    StringComparison.Ordinal));
 
             for (var i = 0; i < transforms.Length; i++)
             {
@@ -243,6 +247,17 @@ namespace EchoProtocol.AI.Stalker.Tests
                 "with a physically unobstructed control ray.");
 
             return default;
+        }
+
+        private static string GetTransformSortKey(Transform transform)
+        {
+            var segments = new Stack<string>();
+            for (var current = transform; current != null; current = current.parent)
+            {
+                segments.Push($"{current.GetSiblingIndex():D4}:{current.name}");
+            }
+
+            return $"{transform.gameObject.scene.name}/{string.Join("/", segments)}";
         }
 
         private static bool ContainsAny(string value, IReadOnlyList<string> fragments)
