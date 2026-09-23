@@ -18,6 +18,7 @@ GameObject:
   - component: {fileID: 2724922159459071681}
   - component: {fileID: 3304601295473621463}
   - component: {fileID: 9127953891830777717}
+  - component: {fileID: -3738140652220264265}
   m_Layer: 0
   m_Name: StalkerNetwork
   m_TagString: Untagged
@@ -350,6 +351,13 @@ MonoBehaviour:
   chasePlaybackSpeed: 1
   searchPlaybackSpeed: 1
   visualSpeedFloor: 0.03
+  runStopMinSpeed: 1.25
+  runStopPresentationSeconds: 0.65
+  turnMaxMoveSpeed: 0.1
+  turnAngleThreshold: 35
+  neutralTurnAngleThreshold: 165
+  turnPresentationSeconds: 0.65
+  turnCooldownSeconds: 0.35
 --- !u!114 &9127953891830777717
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -402,6 +410,18 @@ MonoBehaviour:
   networkTransform: {fileID: 0}
   navMeshAgent: {fileID: 0}
   jumpEntryRegistry: {fileID: 0}
+--- !u!114 &-3738140652220264265
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e6df4710ee9422c429ef10a7a5813587, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Audio.GameAudioEmitter
 --- !u!1 &100010
 GameObject:
   m_ObjectHideFlags: 0
