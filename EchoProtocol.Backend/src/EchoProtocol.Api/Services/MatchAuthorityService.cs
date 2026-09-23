@@ -193,8 +193,10 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                 ErrorCodes.ValidationError);
         }
 
+        var now = UtcNow();
         match.Status = MatchAuthorityStatus.InMatch;
-        match.UpdatedAtUtc = UtcNow();
+        match.StartedAtUtc ??= now;
+        match.UpdatedAtUtc = now;
         await _db.SaveChangesAsync(cancellationToken);
         return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Match started");
     }
