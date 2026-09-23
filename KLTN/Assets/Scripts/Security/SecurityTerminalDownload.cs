@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using EchoProtocol.Networking;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -37,21 +38,35 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
 
     private string _fallbackAuthCode;
 
-    public SecurityDownloadState State => _state;
-    public bool IsDownloading => _state == SecurityDownloadState.Downloading;
-    public bool IsPaused => _state == SecurityDownloadState.Paused;
-    public bool IsComplete => _state == SecurityDownloadState.Completed;
+    public float DownloadDurationSeconds => Mathf.Max(0.01f, downloadDurationSeconds);
+    public float MaxInteractorDistance => Mathf.Max(0.1f, maxInteractorDistance);
+    public SecurityDownloadState State
+    {
+        get
+        {
+            if (!TryGetNetworkMatchState(out var matchState)) return _state;
+            if (matchState.SecurityHoldCompleted) return SecurityDownloadState.Completed;
+            if (matchState.IsSecurityHoldRunning) return SecurityDownloadState.Downloading;
+            return matchState.SecurityHoldProgress01 > 0f ? SecurityDownloadState.Paused : SecurityDownloadState.Idle;
+        }
+    }
+    public bool IsDownloading => State == SecurityDownloadState.Downloading;
+    public bool IsPaused => State == SecurityDownloadState.Paused;
+    public bool IsComplete => State == SecurityDownloadState.Completed;
     public bool RequiresHold => requireHoldToDownload && !IsComplete && EmergencyNetworkState.AreRelaysOnline();
-    public float Progress01 => downloadDurationSeconds <= 0f ? 1f : Mathf.Clamp01(_progressSeconds / downloadDurationSeconds);
+    public float Progress01 => TryGetNetworkMatchState(out var matchState)
+        ? matchState.SecurityHoldProgress01
+        : Mathf.Clamp01(_progressSeconds / DownloadDurationSeconds);
     public GameObject ActiveInteractor => _activeInteractor;
 
     public string AuthorizationCode
     {
         get
         {
-            var matchState = UnityEngine.Object.FindAnyObjectByType<EchoProtocol.Networking.NetworkMatchState>();
-            if (matchState != null && !string.IsNullOrEmpty(matchState.PowerAuthorizationCode.ToString()))
+            if (TryGetNetworkMatchState(out var matchState))
             {
+                // Multiplayer uses only the State Authority-owned value.
+                // Empty means authorization is not available yet.
                 return matchState.PowerAuthorizationCode.ToString();
             }
 
@@ -111,6 +126,8 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
 
     private void Update()
     {
+        if (TryGetNetworkMatchState(out _)) return;
+
         if (!IsDownloading)
         {
             return;
@@ -144,6 +161,11 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
         }
 
         if (!EmergencyNetworkState.AreRelaysOnline())
+        {
+            return true;
+        }
+
+        if (TryGetNetworkMatchState(out _))
         {
             return true;
         }
@@ -189,10 +211,18 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
 
     public void BeginHoldInteract(GameObject interactor)
     {
-        if (interactor == null || IsComplete || !CanInteract(interactor))
+        if (interactor == null || IsComplete)
         {
             return;
         }
+
+        if (TryGetNetworkMatchState(out _))
+        {
+            EchoProtocol.MatchFlow.Zone2MissionDirector.Instance?.RequestStartSecurityHold(this);
+            return;
+        }
+
+        if (!CanInteract(interactor)) return;
 
         StartOrResumeDownload(interactor);
     }
@@ -204,6 +234,12 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
 
     public void InterruptDownload(GameObject interactor)
     {
+        if (TryGetNetworkMatchState(out _))
+        {
+            EchoProtocol.MatchFlow.Zone2MissionDirector.Instance?.RequestCancelSecurityHold(this);
+            return;
+        }
+
         if (!IsDownloading)
         {
             return;
@@ -217,6 +253,8 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
 
     public void ResetDownload()
     {
+        if (TryGetNetworkMatchState(out _)) return;
+
         _activeInteractor = null;
         _progressSeconds = 0f;
         _state = SecurityDownloadState.Idle;
@@ -257,6 +295,8 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
 
     private void CompleteDownload()
     {
+        if (TryGetNetworkMatchState(out _)) return;
+
         _progressSeconds = Mathf.Max(0.01f, downloadDurationSeconds);
         _state = SecurityDownloadState.Completed;
         var interactor = _activeInteractor;
@@ -265,13 +305,6 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
         if (string.IsNullOrEmpty(_fallbackAuthCode))
         {
             _fallbackAuthCode = UnityEngine.Random.Range(0, 10000).ToString("D4");
-        }
-
-        // Notify Fusion Host if active and has authority
-        var matchState = UnityEngine.Object.FindAnyObjectByType<EchoProtocol.Networking.NetworkMatchState>();
-        if (matchState != null && matchState.Object != null && matchState.Object.HasStateAuthority)
-        {
-            matchState.TryCompleteSecurityHold(default);
         }
 
         // Notify local MatchFlowController if active
@@ -330,6 +363,12 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
 
         PlayerInteraction interaction = _activeInteractor.GetComponentInParent<PlayerInteraction>();
         return interaction == null || ReferenceEquals(interaction.CurrentInteractable, this);
+    }
+
+    private static bool TryGetNetworkMatchState(out NetworkMatchState matchState)
+    {
+        matchState = NetworkMatchState.Instance ?? UnityEngine.Object.FindAnyObjectByType<NetworkMatchState>();
+        return matchState != null && matchState.Object != null && matchState.Object.IsValid;
     }
 
     private bool IsInteractorDowned(GameObject interactor)

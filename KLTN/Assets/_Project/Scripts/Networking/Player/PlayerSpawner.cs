@@ -231,7 +231,8 @@ namespace EchoProtocol.Networking
                 $"[PlayerSpawner] Spawned fallback authoritative Sector Box {_sectorBoxInstance.Id}.");
                 }
             }
-            EnsurePowerPuzzle(runner);
+            // Zone 2 uses scene authorization panels with NetworkMatchState as
+            // the authoritative multiplayer state. Keep the retired path dormant.
             if (_monsterInstance == null && _monsterPrefab != null)
             {
                 var stalkerSpawn = GameObject.Find("MonsterSpawn_Stalker_EMPTY");
@@ -560,6 +561,11 @@ namespace EchoProtocol.Networking
 
             foreach (var legacyStation in FindObjectsByType<PowerPuzzleStation>(FindObjectsInactive.Include))
             {
+                if (legacyStation.StationType == PowerPuzzleStationType.PowerControl)
+                {
+                    continue;
+                }
+
                 legacyStation.SetNetworkAuthorityPresentationOnly(true);
                 foreach (var stationCollider in legacyStation.GetComponentsInChildren<Collider>())
                 {

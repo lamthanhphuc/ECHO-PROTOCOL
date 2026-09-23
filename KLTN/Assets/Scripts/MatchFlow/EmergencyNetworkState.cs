@@ -42,6 +42,17 @@ public static class EmergencyNetworkState
 
     public static bool IsRelayAOnline()
     {
+        if (Zone2MissionDirector.Instance != null)
+        {
+            return Zone2MissionDirector.Instance.PowerRelaysOnline >= 2;
+        }
+
+        var matchState = UnityEngine.Object.FindAnyObjectByType<EchoProtocol.Networking.NetworkMatchState>();
+        if (matchState != null && matchState.Object != null && matchState.Object.IsValid)
+        {
+            return matchState.PowerRelaysOnline >= 2;
+        }
+
         var relayAs = UnityEngine.Object.FindObjectsByType<EchoProtocol.RelayA.RelayAController>(FindObjectsInactive.Exclude);
         if (relayAs.Length > 0)
         {
@@ -52,17 +63,22 @@ public static class EmergencyNetworkState
             return true;
         }
 
-        var relayANet = UnityEngine.Object.FindAnyObjectByType<EchoProtocol.RelayA.RelayANetworkState>();
-        if (relayANet != null)
-        {
-            return relayANet.RelayAOnline;
-        }
-
         return true;
     }
 
     public static bool IsRelayBOnline()
     {
+        if (Zone2MissionDirector.Instance != null)
+        {
+            return Zone2MissionDirector.Instance.DataRelaysOnline >= 2;
+        }
+
+        var matchState = UnityEngine.Object.FindAnyObjectByType<EchoProtocol.Networking.NetworkMatchState>();
+        if (matchState != null && matchState.Object != null && matchState.Object.IsValid)
+        {
+            return matchState.DataRelaysOnline >= 2;
+        }
+
         var relayBs = UnityEngine.Object.FindObjectsByType<EchoProtocol.RelayB.RelayBController>(FindObjectsInactive.Exclude);
         if (relayBs.Length > 0)
         {
@@ -71,12 +87,6 @@ public static class EmergencyNetworkState
                 if (relayBs[i] != null && !relayBs[i].IsOnline) return false;
             }
             return true;
-        }
-
-        var relayBNet = UnityEngine.Object.FindAnyObjectByType<EchoProtocol.RelayB.RelayBNetworkState>();
-        if (relayBNet != null)
-        {
-            return relayBNet.RelayBOnline;
         }
 
         return true;

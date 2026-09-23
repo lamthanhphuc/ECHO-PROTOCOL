@@ -119,8 +119,35 @@ namespace EchoProtocol.RelayA
             }
         }
 
+        public void ApplyAuthoritativeControls(
+            float generatorOutput,
+            float frequencyRegulator,
+            float loadDistribution)
+        {
+            var controls = new Vector3(generatorOutput, frequencyRegulator, loadDistribution);
+            if ((_simulation.Snapshot.Controls - controls).sqrMagnitude <= 0.000001f)
+            {
+                return;
+            }
+
+            _simulation.SetControls(controls.x, controls.y, controls.z);
+        }
+
+        public void ApplyAuthoritativeRunningState(bool running)
+        {
+            var snapshot = _simulation.Snapshot;
+            if (snapshot.IsOnline || snapshot.IsRunning == running)
+            {
+                return;
+            }
+
+            if (running) _simulation.Start();
+            else _simulation.EmergencyStop();
+        }
+
         public void ApplyOnlineFromAuthority()
         {
+            if (_simulation.Snapshot.IsOnline) return;
             _simulation.ForceCompleteForAuthoritativeSync();
         }
 

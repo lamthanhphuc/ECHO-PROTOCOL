@@ -1,3 +1,5 @@
+using EchoProtocol.MatchFlow;
+using EchoProtocol.Networking;
 using UnityEngine;
 
 namespace EchoProtocol.RelayB
@@ -28,7 +30,32 @@ namespace EchoProtocol.RelayB
                 return false;
             }
 
-            return allowInspectWhenOnline || !controller.IsOnline;
+            var matchState = NetworkMatchState.Instance ?? FindAnyObjectByType<NetworkMatchState>();
+            bool networked = matchState != null && matchState.Object != null && matchState.Object.IsValid;
+            if (!networked)
+            {
+                return allowInspectWhenOnline || !controller.IsOnline;
+            }
+
+            if (controller.IsOnline)
+            {
+                return allowInspectWhenOnline;
+            }
+
+            if (matchState.CurrentPhase != NetworkMatchPhase.Zone2Objective
+                || matchState.Zone2Stage != Zone2MissionStage.RepairRelays)
+            {
+                return false;
+            }
+
+            var director = Zone2MissionDirector.Instance;
+            if (director == null || !director.TryGetRelaySlot(controller, out var slot))
+            {
+                return false;
+            }
+
+            int bit = 1 << (int)slot;
+            return (matchState.RelayCompletionMask & bit) == 0;
         }
 
         public void Interact(GameObject interactor)
