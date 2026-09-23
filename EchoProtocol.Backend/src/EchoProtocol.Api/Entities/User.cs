@@ -15,4 +15,9 @@ public class User
 
     public PlayerProfile? PlayerProfile { get; set; }
     public Wallet? Wallet { get; set; }
+    public PlayerAIProfile? PlayerAIProfile { get; set; }
+    public ICollection<InventoryItem> InventoryItems { get; set; } = [];
+    public ICollection<PlayerLoadoutItem> LoadoutItems { get; set; } = [];
+    public ICollection<PurchaseTransaction> PurchaseTransactions { get; set; } = [];
+    public ICollection<PaymentOrder> PaymentOrders { get; set; } = [];
 }

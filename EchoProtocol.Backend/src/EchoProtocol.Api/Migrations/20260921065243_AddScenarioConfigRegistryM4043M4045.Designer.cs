@@ -3,6 +3,7 @@ using System;
 using EchoProtocol.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EchoProtocol.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260921065243_AddScenarioConfigRegistryM4043M4045")]
+    partial class AddScenarioConfigRegistryM4043M4045
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,187 +24,6 @@ namespace EchoProtocol.Api.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", b =>
-                {
-                    b.Property<Guid>("SnapshotId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DecisionPoint")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<Guid>("MatchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("NoiseAggregationStatus")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("NoiseComparisonKey")
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<decimal?>("NoiseMeanObservedScore")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)");
-
-                    b.Property<int>("NoiseObservedActiveCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ProfileFormulaSemanticId")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<string>("ReasonCodesJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<string>("RosterIdentity")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<string>("SnapshotContentFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<string>("SurvivalAggregationStatus")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("SurvivalComparisonKey")
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<decimal?>("SurvivalMeanObservedScore")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)");
-
-                    b.Property<int>("SurvivalObservedActiveCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TeamSize")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Validity")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.HasKey("SnapshotId");
-
-                    b.HasIndex("MatchId", "CreatedAtUtc");
-
-                    b.ToTable("AdaptiveInputSnapshots", t =>
-                        {
-                            t.HasCheckConstraint("CK_AdaptiveSnapshots_Means_Range", "(\"SurvivalMeanObservedScore\" IS NULL OR (CAST(\"SurvivalMeanObservedScore\" AS NUMERIC) >= 0 AND CAST(\"SurvivalMeanObservedScore\" AS NUMERIC) <= 100)) AND (\"NoiseMeanObservedScore\" IS NULL OR (CAST(\"NoiseMeanObservedScore\" AS NUMERIC) >= 0 AND CAST(\"NoiseMeanObservedScore\" AS NUMERIC) <= 100))");
-
-                            t.HasCheckConstraint("CK_AdaptiveSnapshots_TeamSize_Positive", "\"TeamSize\" >= 1 AND \"TeamSize\" <= 4");
-                        });
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshotPlayer", b =>
-                {
-                    b.Property<Guid>("SnapshotId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AlphaConfigVersion")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<DateTime>("CapturedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DeferredDimensionsJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<string>("MatchScoreFormulaVersion")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<string>("NoiseComparisonKey")
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<int?>("NoiseSampleCount")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("NoiseScore")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)");
-
-                    b.Property<string>("NoiseStatus")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("NormalizationConfigVersion")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<bool>("ProfileAvailable")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("ProfileFormulaVersion")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<Guid?>("ProfileLineageId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ProfileNoiseFilterVersion")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<long?>("ProfileRevision")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("SurvivalComparisonKey")
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<int?>("SurvivalSampleCount")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("SurvivalScore")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)");
-
-                    b.Property<string>("SurvivalStatus")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.HasKey("SnapshotId", "UserId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("AdaptiveInputSnapshotPlayers", t =>
-                        {
-                            t.HasCheckConstraint("CK_AdaptiveSnapshotPlayers_DeferredCanonical", "\"DeferredDimensionsJson\" IS NOT NULL");
-
-                            t.HasCheckConstraint("CK_AdaptiveSnapshotPlayers_Scores_Range", "(\"SurvivalScore\" IS NULL OR (CAST(\"SurvivalScore\" AS NUMERIC) >= 0 AND CAST(\"SurvivalScore\" AS NUMERIC) <= 100)) AND (\"NoiseScore\" IS NULL OR (CAST(\"NoiseScore\" AS NUMERIC) >= 0 AND CAST(\"NoiseScore\" AS NUMERIC) <= 100))");
-                        });
-                });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.InventoryItem", b =>
                 {
@@ -227,8 +49,6 @@ namespace EchoProtocol.Api.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("InventoryItemId");
-
-                    b.HasAlternateKey("UserId", "InventoryItemId");
 
                     b.HasIndex("PurchaseId")
                         .IsUnique();
@@ -583,344 +403,6 @@ namespace EchoProtocol.Api.Migrations
                         });
                 });
 
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentCheckout", b =>
-                {
-                    b.Property<long>("CheckoutSequenceId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("CheckoutSequenceId"));
-
-                    b.Property<string>("CheckoutUrl")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<Guid>("PaymentOrderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("ProviderOrderId")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("ProviderPaymentLinkId")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime?>("ReadyAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ReservedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.HasKey("CheckoutSequenceId");
-
-                    b.HasIndex("PaymentOrderId")
-                        .IsUnique();
-
-                    b.HasIndex("Provider", "ProviderOrderId")
-                        .IsUnique();
-
-                    b.ToTable("PaymentCheckouts", t =>
-                        {
-                            t.HasCheckConstraint("CK_PaymentCheckouts_Ready_Data", "\"Status\" <> 'READY' OR (\"ProviderPaymentLinkId\" IS NOT NULL AND \"CheckoutUrl\" IS NOT NULL AND \"ReadyAtUtc\" IS NOT NULL)");
-
-                            t.HasCheckConstraint("CK_PaymentCheckouts_Status_Allowed", "\"Status\" IN ('RESERVED', 'READY')");
-                        });
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentFulfillment", b =>
-                {
-                    b.Property<Guid>("PaymentOrderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FulfillmentReference")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid?>("InventoryItemId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<Guid?>("WalletTransactionId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("PaymentOrderId");
-
-                    b.HasIndex("FulfillmentReference")
-                        .IsUnique();
-
-                    b.HasIndex("InventoryItemId")
-                        .IsUnique();
-
-                    b.HasIndex("WalletTransactionId")
-                        .IsUnique();
-
-                    b.ToTable("PaymentFulfillments", t =>
-                        {
-                            t.HasCheckConstraint("CK_PaymentFulfillments_Target", "(\"Kind\" = 'WALLET_CREDIT' AND \"WalletTransactionId\" IS NOT NULL AND \"InventoryItemId\" IS NULL) OR (\"Kind\" = 'INVENTORY_ITEM' AND \"WalletTransactionId\" IS NULL AND \"InventoryItemId\" IS NOT NULL)");
-                        });
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentCheckout", b =>
-                {
-                    b.HasOne("EchoProtocol.Api.Entities.PaymentOrder", "PaymentOrder")
-                        .WithOne("Checkout")
-                        .HasForeignKey("EchoProtocol.Api.Entities.PaymentCheckout", "PaymentOrderId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("PaymentOrder");
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentFulfillment", b =>
-                {
-                    b.HasOne("EchoProtocol.Api.Entities.InventoryItem", "InventoryItem")
-                        .WithMany()
-                        .HasForeignKey("InventoryItemId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("EchoProtocol.Api.Entities.PaymentOrder", "PaymentOrder")
-                        .WithOne("Fulfillment")
-                        .HasForeignKey("EchoProtocol.Api.Entities.PaymentFulfillment", "PaymentOrderId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EchoProtocol.Api.Entities.WalletTransaction", "WalletTransaction")
-                        .WithMany()
-                        .HasForeignKey("WalletTransactionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("InventoryItem");
-
-                    b.Navigation("PaymentOrder");
-
-                    b.Navigation("WalletTransaction");
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentOrder", b =>
-                {
-                    b.Property<Guid>("PaymentOrderId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("character(3)")
-                        .IsFixedLength();
-
-                    b.Property<DateTime?>("ExpiresAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("FulfilledAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FulfillmentReference")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("IdempotencyKey")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime?>("PaidAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ProductReference")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("ProviderOrderId")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("ProviderTransactionId")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Purpose")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("RequestFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("PaymentOrderId");
-
-                    b.HasIndex("CreatedAtUtc", "PaymentOrderId")
-                        .IsDescending(true, true)
-                        .HasDatabaseName("IX_Admin_PaymentOrders_Created");
-
-                    b.HasIndex("FulfillmentReference")
-                        .IsUnique()
-                        .HasDatabaseName("IX_PaymentOrders_FulfillmentReference")
-                        .HasFilter("\"FulfillmentReference\" IS NOT NULL");
-
-                    b.HasIndex("UserId", "CreatedAtUtc");
-
-                    b.HasIndex("ProductReference", "CreatedAtUtc", "PaymentOrderId")
-                        .IsDescending(false, true, true)
-                        .HasDatabaseName("IX_Admin_PaymentOrders_Product_Created");
-
-                    b.HasIndex("Provider", "CreatedAtUtc", "PaymentOrderId")
-                        .IsDescending(false, true, true)
-                        .HasDatabaseName("IX_Admin_PaymentOrders_Provider_Created");
-
-                    b.HasIndex("Provider", "ProviderOrderId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_PaymentOrders_Provider_ProviderOrderId")
-                        .HasFilter("\"ProviderOrderId\" IS NOT NULL");
-
-                    b.HasIndex("Provider", "ProviderTransactionId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_PaymentOrders_Provider_ProviderTransactionId")
-                        .HasFilter("\"ProviderTransactionId\" IS NOT NULL");
-
-                    b.HasIndex("UserId", "IdempotencyKey")
-                        .IsUnique()
-                        .HasDatabaseName("IX_PaymentOrders_UserId_IdempotencyKey");
-
-                    b.HasIndex("Status", "CreatedAtUtc", "PaymentOrderId")
-                        .IsDescending(false, true, true)
-                        .HasDatabaseName("IX_Admin_PaymentOrders_Status_Created");
-
-                    b.ToTable("PaymentOrders", t =>
-                        {
-                            t.HasCheckConstraint("CK_PaymentOrders_Amount_Positive", "\"Amount\" > 0");
-
-                            t.HasCheckConstraint("CK_PaymentOrders_Currency_Format", "length(\"Currency\") = 3 AND \"Currency\" = upper(\"Currency\")");
-
-                            t.HasCheckConstraint("CK_PaymentOrders_State_Data", "(\"Status\" <> 'PENDING_PAYMENT' OR \"ProviderOrderId\" IS NOT NULL) AND (\"Status\" NOT IN ('PAID', 'FULFILLED') OR (\"ProviderOrderId\" IS NOT NULL AND \"ProviderTransactionId\" IS NOT NULL AND \"PaidAtUtc\" IS NOT NULL)) AND (\"Status\" <> 'FULFILLED' OR (\"FulfillmentReference\" IS NOT NULL AND \"FulfilledAtUtc\" IS NOT NULL))");
-
-                            t.HasCheckConstraint("CK_PaymentOrders_Status_Allowed", "\"Status\" IN ('CREATED', 'PENDING_PAYMENT', 'PAID', 'FULFILLED', 'FAILED', 'CANCELLED', 'EXPIRED')");
-
-                            t.HasCheckConstraint("CK_PaymentOrders_Timestamps", "\"UpdatedAtUtc\" >= \"CreatedAtUtc\" AND (\"ExpiresAtUtc\" IS NULL OR \"ExpiresAtUtc\" > \"CreatedAtUtc\") AND (\"PaidAtUtc\" IS NULL OR \"PaidAtUtc\" >= \"CreatedAtUtc\") AND (\"FulfilledAtUtc\" IS NULL OR (\"PaidAtUtc\" IS NOT NULL AND \"FulfilledAtUtc\" >= \"PaidAtUtc\"))");
-                        });
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentProviderEvent", b =>
-                {
-                    b.Property<Guid>("PaymentProviderEventId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("Currency")
-                        .HasMaxLength(3)
-                        .HasColumnType("character(3)")
-                        .IsFixedLength();
-
-                    b.Property<string>("NormalizedStatus")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<Guid?>("PaymentOrderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("ProcessedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ProcessingOutcome")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("ProviderEventId")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("ProviderOrderId")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime>("ReceivedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("SemanticFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<string>("VerificationStatus")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.HasKey("PaymentProviderEventId");
-
-                    b.HasIndex("PaymentOrderId");
-
-                    b.HasIndex("Provider", "ProviderEventId")
-                        .IsUnique();
-
-                    b.ToTable("PaymentProviderEvents", t =>
-                        {
-                            t.HasCheckConstraint("CK_PaymentProviderEvents_Amount_Positive", "\"Amount\" > 0");
-
-                            t.HasCheckConstraint("CK_PaymentProviderEvents_Verified", "\"VerificationStatus\" = 'VERIFIED'");
-                        });
-                });
-
             modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerAIProfile", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -1044,36 +526,6 @@ namespace EchoProtocol.Api.Migrations
                         });
                 });
 
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerLoadoutItem", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("SlotId")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<DateTime>("EquippedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("InventoryItemId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("UserId", "SlotId");
-
-                    b.HasIndex("UserId", "InventoryItemId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_PlayerLoadoutItems_UserId_InventoryItemId");
-
-                    b.ToTable("PlayerLoadoutItems", t =>
-                        {
-                            t.HasCheckConstraint("CK_PlayerLoadoutItems_Timestamps", "\"UpdatedAtUtc\" >= \"EquippedAtUtc\"");
-                        });
-                });
-
             modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerProfile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1167,15 +619,7 @@ namespace EchoProtocol.Api.Migrations
 
                     b.HasKey("PurchaseId");
 
-                    b.HasIndex("CreatedAtUtc", "PurchaseId")
-                        .IsDescending(true, true)
-                        .HasDatabaseName("IX_Admin_Purchases_Created");
-
                     b.HasIndex("ShopItemId");
-
-                    b.HasIndex("ShopItemId", "CreatedAtUtc", "PurchaseId")
-                        .IsDescending(false, true, true)
-                        .HasDatabaseName("IX_Admin_Purchases_Item_Created");
 
                     b.HasIndex("WalletTransactionId")
                         .IsUnique();
@@ -1184,56 +628,12 @@ namespace EchoProtocol.Api.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_PurchaseTransactions_UserId_IdempotencyKey");
 
-                    b.HasIndex("UserId", "CreatedAtUtc", "PurchaseId")
-                        .IsDescending(false, true, true)
-                        .HasDatabaseName("IX_Admin_Purchases_User_Created");
-
                     b.ToTable("PurchaseTransactions", t =>
                         {
                             t.HasCheckConstraint("CK_PurchaseTransactions_PriceAtPurchase_NonNegative", "\"PriceAtPurchase\" >= 0");
 
                             t.HasCheckConstraint("CK_PurchaseTransactions_Status_Completed", "\"Status\" = 'COMPLETED'");
                         });
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioApplyReceipt", b =>
-                {
-                    b.Property<Guid>("DecisionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("AppliedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("AppliedScenarioConfigFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<string>("AppliedScenarioConfigId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("AppliedScenarioConfigVersion")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<Guid>("MatchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ReportedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("DecisionId");
-
-                    b.HasIndex("MatchId")
-                        .IsUnique();
-
-                    b.HasIndex("ReportedByUserId");
-
-                    b.ToTable("ScenarioApplyReceipts", (string)null);
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioConfigDefinition", b =>
@@ -1342,7 +742,7 @@ namespace EchoProtocol.Api.Migrations
                     b.HasKey("ScenarioConfigId", "ScenarioConfigVersion");
 
                     b.HasIndex("ScenarioConfigVersion")
-                        .HasDatabaseName("IX_ScenarioConfigs_ScenarioConfigVersion");
+                        .IsUnique();
 
                     b.HasIndex("UnityCompatibilityVersion")
                         .IsUnique()
@@ -1355,9 +755,9 @@ namespace EchoProtocol.Api.Migrations
 
                             t.HasCheckConstraint("CK_ScenarioConfigs_Fallback_IsFixed", "NOT \"IsFixedFallback\" OR \"ConfigSource\" = 'Fixed'");
 
-                            t.HasCheckConstraint("CK_ScenarioConfigs_Numerics_NonNegative", "\"DetectionFillRate\" >= 0 AND \"DetectionDecayRate\" >= 0 AND \"ChaseSpeed\" >= 0 AND \"SearchDuration\" >= 0");
-
                             t.HasCheckConstraint("CK_ScenarioConfigs_Source_Allowed", "\"ConfigSource\" IN ('Fixed', 'Adaptive')");
+
+                            t.HasCheckConstraint("CK_ScenarioConfigs_Numerics_NonNegative", "\"DetectionFillRate\" >= 0 AND \"DetectionDecayRate\" >= 0 AND \"ChaseSpeed\" >= 0 AND \"SearchDuration\" >= 0");
 
                             t.HasCheckConstraint("CK_ScenarioConfigs_SupportBudget_NonNegative", "\"SupportItemBudget\" >= 0");
                         });
@@ -1418,139 +818,6 @@ namespace EchoProtocol.Api.Migrations
                         {
                             t.HasCheckConstraint("CK_ScenarioContentDefinitions_Type_Allowed", "\"ContentType\" IN ('Map', 'Monster', 'ObjectiveSpawnSet', 'RouteModifier')");
                         });
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioDecision", b =>
-                {
-                    b.Property<Guid>("DecisionId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CandidateValidationStatus")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTime>("CommittedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ContentWhitelistVersion")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<string>("DecisionPoint")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<string>("DecisionSemanticFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<string>("EvidencePolicyVersion")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<string>("ExperimentCondition")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<string>("FallbackConfigId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("FallbackConfigVersion")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<string>("FallbackReasonCode")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<Guid>("HostUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsCurrent")
-                        .HasColumnType("boolean");
-
-                    b.Property<Guid>("MatchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ParameterRegistryVersion")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<string>("PolicyConfigVersion")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<string>("PolicyVersion")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<string>("RequestFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<string>("ResolutionMode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("ResolutionResult")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<string>("ScenarioConfigFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<string>("ScenarioConfigId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("ScenarioConfigVersion")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<Guid>("SnapshotId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<bool>("UsedFixedFallback")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("DecisionId");
-
-                    b.HasIndex("HostUserId");
-
-                    b.HasIndex("MatchId")
-                        .IsUnique()
-                        .HasDatabaseName("UX_ScenarioDecisions_CurrentMatch")
-                        .HasFilter("\"IsCurrent\"");
-
-                    b.HasIndex("SnapshotId")
-                        .IsUnique();
-
-                    b.HasIndex("ScenarioConfigId", "ScenarioConfigVersion");
-
-                    b.ToTable("ScenarioDecisions", (string)null);
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.ShopItem", b =>
@@ -1903,19 +1170,7 @@ namespace EchoProtocol.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CreatedAtUtc", "Id")
-                        .IsDescending(true, true)
-                        .HasDatabaseName("IX_Admin_WalletTransactions_Created");
-
                     b.HasIndex("ReferenceId");
-
-                    b.HasIndex("Type", "CreatedAtUtc", "Id")
-                        .IsDescending(false, true, true)
-                        .HasDatabaseName("IX_Admin_WalletTransactions_Type_Created");
-
-                    b.HasIndex("WalletId", "CreatedAtUtc", "Id")
-                        .IsDescending(false, true, true)
-                        .HasDatabaseName("IX_Admin_WalletTransactions_Wallet_Created");
 
                     b.HasIndex("WalletId", "Type", "ReferenceId")
                         .IsUnique()
@@ -1923,38 +1178,12 @@ namespace EchoProtocol.Api.Migrations
 
                     b.ToTable("WalletTransactions", t =>
                         {
-                            t.HasCheckConstraint("CK_WalletTransactions_Amount_ByType", "(\"Type\" IN ('MATCH_REWARD', 'PAYMENT_FULFILLMENT') AND \"Amount\" >= 0) OR (\"Type\" = 'PURCHASE' AND \"Amount\" <= 0)");
+                            t.HasCheckConstraint("CK_WalletTransactions_Amount_ByType", "(\"Type\" = 'MATCH_REWARD' AND \"Amount\" >= 0) OR (\"Type\" = 'PURCHASE' AND \"Amount\" <= 0)");
 
                             t.HasCheckConstraint("CK_WalletTransactions_BalanceEquation", "\"BalanceAfter\" = \"BalanceBefore\" + \"Amount\"");
 
                             t.HasCheckConstraint("CK_WalletTransactions_Balances_NonNegative", "\"BalanceBefore\" >= 0 AND \"BalanceAfter\" >= 0");
                         });
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", b =>
-                {
-                    b.HasOne("EchoProtocol.Api.Entities.MatchAuthorityBinding", null)
-                        .WithMany()
-                        .HasForeignKey("MatchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshotPlayer", b =>
-                {
-                    b.HasOne("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", "Snapshot")
-                        .WithMany("Players")
-                        .HasForeignKey("SnapshotId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("EchoProtocol.Api.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Snapshot");
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.InventoryItem", b =>
@@ -2091,27 +1320,6 @@ namespace EchoProtocol.Api.Migrations
                     b.Navigation("ResultPlayer");
                 });
 
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentOrder", b =>
-                {
-                    b.HasOne("EchoProtocol.Api.Entities.User", "User")
-                        .WithMany("PaymentOrders")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentProviderEvent", b =>
-                {
-                    b.HasOne("EchoProtocol.Api.Entities.PaymentOrder", "PaymentOrder")
-                        .WithMany("ProviderEvents")
-                        .HasForeignKey("PaymentOrderId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("PaymentOrder");
-                });
-
             modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerAIProfile", b =>
                 {
                     b.HasOne("EchoProtocol.Api.Entities.User", "User")
@@ -2119,26 +1327,6 @@ namespace EchoProtocol.Api.Migrations
                         .HasForeignKey("EchoProtocol.Api.Entities.PlayerAIProfile", "UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerLoadoutItem", b =>
-                {
-                    b.HasOne("EchoProtocol.Api.Entities.InventoryItem", "InventoryItem")
-                        .WithMany("LoadoutItems")
-                        .HasForeignKey("UserId", "InventoryItemId")
-                        .HasPrincipalKey("UserId", "InventoryItemId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EchoProtocol.Api.Entities.User", "User")
-                        .WithMany("LoadoutItems")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("InventoryItem");
 
                     b.Navigation("User");
                 });
@@ -2181,67 +1369,6 @@ namespace EchoProtocol.Api.Migrations
                     b.Navigation("WalletTransaction");
                 });
 
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentOrder", b =>
-                {
-                    b.Navigation("Checkout");
-
-                    b.Navigation("Fulfillment");
-
-                    b.Navigation("ProviderEvents");
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioApplyReceipt", b =>
-                {
-                    b.HasOne("EchoProtocol.Api.Entities.ScenarioDecision", "Decision")
-                        .WithOne("ApplyReceipt")
-                        .HasForeignKey("EchoProtocol.Api.Entities.ScenarioApplyReceipt", "DecisionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EchoProtocol.Api.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("ReportedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Decision");
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioDecision", b =>
-                {
-                    b.HasOne("EchoProtocol.Api.Entities.User", "HostUser")
-                        .WithMany()
-                        .HasForeignKey("HostUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EchoProtocol.Api.Entities.MatchAuthorityBinding", "Match")
-                        .WithMany()
-                        .HasForeignKey("MatchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", "Snapshot")
-                        .WithOne("Decision")
-                        .HasForeignKey("EchoProtocol.Api.Entities.ScenarioDecision", "SnapshotId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EchoProtocol.Api.Entities.ScenarioConfigDefinition", "ScenarioConfig")
-                        .WithMany()
-                        .HasForeignKey("ScenarioConfigId", "ScenarioConfigVersion")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("HostUser");
-
-                    b.Navigation("Match");
-
-                    b.Navigation("ScenarioConfig");
-
-                    b.Navigation("Snapshot");
-                });
-
             modelBuilder.Entity("EchoProtocol.Api.Entities.TeamProfile", b =>
                 {
                     b.HasOne("EchoProtocol.Api.Entities.MatchResult", "MatchResult")
@@ -2275,23 +1402,11 @@ namespace EchoProtocol.Api.Migrations
                     b.Navigation("Wallet");
                 });
 
-            modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", b =>
-                {
-                    b.Navigation("Decision");
-
-                    b.Navigation("Players");
-                });
-
             modelBuilder.Entity("EchoProtocol.Api.Entities.MatchAuthorityBinding", b =>
                 {
                     b.Navigation("Players");
 
                     b.Navigation("Result");
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.InventoryItem", b =>
-                {
-                    b.Navigation("LoadoutItems");
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.MatchPlayerBinding", b =>
@@ -2324,11 +1439,6 @@ namespace EchoProtocol.Api.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioDecision", b =>
-                {
-                    b.Navigation("ApplyReceipt");
-                });
-
             modelBuilder.Entity("EchoProtocol.Api.Entities.ShopItem", b =>
                 {
                     b.Navigation("InventoryItems");
@@ -2339,10 +1449,6 @@ namespace EchoProtocol.Api.Migrations
             modelBuilder.Entity("EchoProtocol.Api.Entities.User", b =>
                 {
                     b.Navigation("InventoryItems");
-
-                    b.Navigation("LoadoutItems");
-
-                    b.Navigation("PaymentOrders");
 
                     b.Navigation("PlayerAIProfile");
 
