@@ -12,6 +12,7 @@ namespace EchoProtocol.Audio
     {
         private readonly Dictionary<string, object> _previous = new Dictionary<string, object>();
         private AudioSource _effects, _loop;
+        private AudioReverbFilter _stalkerReverb;
         private NetworkObject _network;
         private NetworkPlayerMovement _player;
         private NetworkPlayerLifeState _life;
@@ -59,6 +60,12 @@ namespace EchoProtocol.Audio
                 _effects.maxDistance = 55f;
                 _loop.minDistance = 6f;
                 _loop.maxDistance = 60f;
+                _effects.spread = 25f;
+                _loop.spread = 35f;
+                _effects.reverbZoneMix = 1f;
+                _loop.reverbZoneMix = 1f;
+                _stalkerReverb = gameObject.AddComponent<AudioReverbFilter>();
+                _stalkerReverb.reverbPreset = AudioReverbPreset.Cave;
             }
             _lastPosition = transform.position;
             _lastSample = Time.time;
@@ -72,6 +79,9 @@ namespace EchoProtocol.Audio
         }
 
         private void Play(string key, float volume = 1f) => GameAudioRuntime.Play(_effects, key, volume);
+
+        private void PlayStalker(string key, float volume = 1f, float pitchMin = 0.88f, float pitchMax = 1.02f) =>
+            GameAudioRuntime.Play(_effects, key, volume, pitchMin, pitchMax);
 
         private void Update()
         {
@@ -198,19 +208,24 @@ namespace EchoProtocol.Audio
             {
                 switch (state.SemanticState)
                 {
-                    case StalkerState.DETECT: Play("stalker/detect_cue"); break;
-                    case StalkerState.CHASE: Play("stalker/chase_start"); break;
-                    case StalkerState.SEARCH: Play("stalker/search_vocal"); break;
-                    case StalkerState.RECOVER: Play("stalker/recover_exhale"); break;
+                    case StalkerState.DETECT: PlayStalker("stalker/detect_cue", 1.1f, 0.92f, 1.01f); break;
+                    case StalkerState.CHASE: PlayStalker("stalker/chase_start", 1.15f, 0.86f, 0.96f); break;
+                    case StalkerState.SEARCH: PlayStalker("stalker/search_vocal", 1.05f, 0.78f, 0.94f); break;
+                    case StalkerState.RECOVER: PlayStalker("stalker/recover_exhale", 0.95f, 0.82f, 0.94f); break;
                 }
             }
             if (Changed("attackPhase", state.AttackPhase) && state.AttackPhase == StalkerNetworkAttackPhase.Windup)
-                Play("stalker/attack_swing", 1.15f);
+                PlayStalker("stalker/attack_swing", 1.2f, 0.86f, 0.98f);
             if (Changed("attackResolution", state.AttackResolvedTick) && state.AttackHitMomentResolved)
-                Play(state.AttackOutcome == StalkerAttackOutcome.Hit ? "stalker/attack_hit" : "stalker/miss_attack", 1.2f);
+            {
+                var hit = state.AttackOutcome == StalkerAttackOutcome.Hit;
+                PlayStalker(hit ? "stalker/attack_hit" : "stalker/miss_attack", hit ? 1.25f : 1.05f,
+                    hit ? 0.78f : 0.88f, hit ? 0.92f : 1.01f);
+                if (hit) PlayStalker("stalker/recover_stun", 0.9f, 0.72f, 0.86f);
+            }
             var chasing = state.SemanticState == StalkerState.CHASE;
-            GameAudioRuntime.Loop(_loop, chasing ? "stalker/chase_loop_vocal_loop" : "stalker/idle_breathing_growl_loop", chasing ? 1f : 0.75f);
-            Footstep(speed, chasing ? "stalker/chase_footstep_" : "stalker/patrol_footstep_", chasing ? 0.3f : 0.65f, chasing ? 1.05f : 0.9f);
+            GameAudioRuntime.Loop(_loop, chasing ? "stalker/chase_loop_vocal_loop" : "stalker/idle_breathing_growl_loop", chasing ? 1.05f : 0.8f);
+            Footstep(speed, chasing ? "stalker/chase_footstep_" : "stalker/patrol_footstep_", chasing ? 0.3f : 0.65f, chasing ? 1.1f : 0.95f);
         }
 
         private void Footstep(float speed, string prefix, float interval, float volume)
