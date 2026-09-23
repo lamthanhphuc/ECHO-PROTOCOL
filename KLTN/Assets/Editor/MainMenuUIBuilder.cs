@@ -108,6 +108,9 @@ public static class MainMenuUIBuilder
         topUpPopup.transform.Find("Overlay")?.gameObject.SetActive(false);
 
         var serialized = new SerializedObject(controller);
+        Assign(serialized, "welcomeText", welcome);
+        Assign(serialized, "roleText", role);
+        Assign(serialized, "walletText", wallet);
         Assign(serialized, "playerNameText", player);
         Assign(serialized, "playButton", play);
         Assign(serialized, "logoutButton", logout);
@@ -123,8 +126,8 @@ public static class MainMenuUIBuilder
         Assign(serialized, "package5500Button", package5500);
         serialized.ApplyModifiedPropertiesWithoutUndo();
 
-        shopPopup.SetActive(true);
-        topUpPopup.SetActive(true);
+        shopPopup.SetActive(false);
+        topUpPopup.SetActive(false);
         EditorSceneManager.MarkSceneDirty(scene);
         Undo.CollapseUndoOperations(group);
         Selection.activeGameObject = root.gameObject;

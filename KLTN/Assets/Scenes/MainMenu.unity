@@ -5375,6 +5375,7 @@ MonoBehaviour:
   package5500Button: {fileID: 1865396335}
   shopPopup: {fileID: 2011058422}
   topUpPopup: {fileID: 1920669809}
+  topUpWebUrl: http://localhost:3000/wallet
   lobbySceneName: Lobby
   loginSceneName: Login
 --- !u!114 &1088643551
@@ -8660,7 +8661,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &2011058423
 RectTransform:
   m_ObjectHideFlags: 0

@@ -27,6 +27,7 @@ namespace EchoProtocol.UI.MainMenu
     [SerializeField] private Button package5500Button;
     [SerializeField] private GameObject shopPopup;
     [SerializeField] private GameObject topUpPopup;
+    [SerializeField] private string topUpWebUrl = "http://localhost:3000/wallet";
     [SerializeField] private string lobbySceneName = GameConstants.SceneLobby;
     [SerializeField] private string loginSceneName = GameConstants.SceneLogin;
     private int _credits;
@@ -43,6 +44,8 @@ namespace EchoProtocol.UI.MainMenu
 
       LoadCredits();
       RefreshProfile();
+      CloseShop();
+      CloseTopUp();
     }
 
     private void OnEnable()
@@ -145,9 +148,16 @@ namespace EchoProtocol.UI.MainMenu
 
     public void OnClickTopUp()
     {
-      if (topUpPopup != null) topUpPopup.SetActive(true);
-      if (shopPopup != null) shopPopup.SetActive(false);
-      Debug.Log("[MainMenu] Top Up opened.");
+      if (string.IsNullOrWhiteSpace(topUpWebUrl))
+      {
+        Debug.LogWarning("[MainMenu] Top Up web URL is empty.");
+        return;
+      }
+
+      CloseShop();
+      CloseTopUp();
+      Application.OpenURL(topUpWebUrl);
+      Debug.Log($"[MainMenu] Top Up web opened: {topUpWebUrl}");
     }
 
     public void CloseShop()
