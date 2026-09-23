@@ -1,5 +1,5 @@
 {
-  "count": 131,
+  "count": 125,
   "format": "44100 Hz mono PCM16 WAV",
   "checks": [
     "catalog coverage",
@@ -10,19 +10,11 @@
     "per-clip peak targets",
     "duration",
     "door 0.85 s",
-    "attack windup 0.75 s",
+    "monster attack scream 2.2 s",
     "beacon four timed pulses"
   ],
   "limitations": "Procedural prototype assets. Not auditioned or integrated in Unity. No gameplay C# changes.",
   "results": [
-    {
-      "file": "stalker/idle_breathing_growl_loop.wav",
-      "seconds": 8.0,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -21.36,
-      "loop_boundary_delta": 219,
-      "sha256": "c474cd43c08e86c7293b38cd59711817adbfa11ed65d30a7dd11c7a370f629ea"
-    },
     {
       "file": "stalker/footstep_cham.wav",
       "seconds": 0.48,
@@ -40,60 +32,12 @@
       "sha256": "fa74524295224e39a05c26691dd49e7388cae29680f6680e13f4ab4d3b827adf"
     },
     {
-      "file": "stalker/detect_cue.wav",
-      "seconds": 0.65,
-      "peak_dbfs": -4.0,
-      "rms_dbfs": -16.44,
-      "loop_boundary_delta": null,
-      "sha256": "40299f1cee5892c22e2de889892d1aaa4feb5a941f42d6ec11a5727085a41934"
-    },
-    {
-      "file": "stalker/chase_start.wav",
-      "seconds": 1.1,
-      "peak_dbfs": -4.0,
-      "rms_dbfs": -15.74,
-      "loop_boundary_delta": null,
-      "sha256": "25d0e3bace889ced03a8e84cb9d5d9e4075099ea045435a464cb1830ae0922a4"
-    },
-    {
-      "file": "stalker/chase_loop_vocal_loop.wav",
-      "seconds": 6.0,
-      "peak_dbfs": -6.0,
-      "rms_dbfs": -21.22,
-      "loop_boundary_delta": 323,
-      "sha256": "d9161ae0416d08a6424e7348f147cc794e201ed6a4bb6b78e91ded0d50848d62"
-    },
-    {
-      "file": "stalker/attack_swing.wav",
-      "seconds": 0.75,
-      "peak_dbfs": -4.0,
-      "rms_dbfs": -16.98,
-      "loop_boundary_delta": null,
-      "sha256": "50434a09c2ac5531a2f65922db643909f08631839e71b4a8539ca1845400012a"
-    },
-    {
-      "file": "stalker/attack_hit.wav",
-      "seconds": 0.32,
-      "peak_dbfs": -4.0,
-      "rms_dbfs": -18.69,
-      "loop_boundary_delta": null,
-      "sha256": "148dec6498cd3af8d28d2be41c16a0b4d0fa08262a001b2c9d7ca9b990c0b0cc"
-    },
-    {
       "file": "stalker/miss_attack.wav",
       "seconds": 0.38,
       "peak_dbfs": -4.0,
       "rms_dbfs": -17.11,
       "loop_boundary_delta": null,
       "sha256": "daedfe6c6cd140af0a1d0fb62ac636ed48b69a1d26572faef2d15f82d44c9072"
-    },
-    {
-      "file": "stalker/search_vocal.wav",
-      "seconds": 1.6,
-      "peak_dbfs": -4.0,
-      "rms_dbfs": -15.32,
-      "loop_boundary_delta": null,
-      "sha256": "8536a8e02a38f8ab396089daafa805e1132c1aaa2795b006d573650b65ae1dc4"
     },
     {
       "file": "stalker/recover_stun.wav",
@@ -816,14 +760,6 @@
       "sha256": "a062fb428eab9700aeb1f80a6cd428a1442bbc183debc71f5ff70f86ec9a69d3"
     },
     {
-      "file": "stalker/recover_exhale.wav",
-      "seconds": 0.8,
-      "peak_dbfs": -4.0,
-      "rms_dbfs": -15.42,
-      "loop_boundary_delta": null,
-      "sha256": "fc0eb50bf6907fddf2e5aca6eee98ae314a35a4822c5d0c8b1b827c02487f81d"
-    },
-    {
       "file": "energy_core/carry_rattle.wav",
       "seconds": 0.24,
       "peak_dbfs": -9.0,
@@ -992,76 +928,92 @@
       "sha256": "c9b6fca2d4cd2aa6955fe14a255ec52a8f97d471cbcdf3d4442a38997c2cdcce"
     },
     {
-      "file": "stalker/patrol_footstep_01.wav",
-      "seconds": 0.48,
-      "peak_dbfs": -5.0,
-      "rms_dbfs": -22.37,
-      "loop_boundary_delta": null,
-      "sha256": "878c1e271be856000d28627b2d2e3c0a8c09a79f3e21a94b0340426b01312b92"
-    },
-    {
-      "file": "stalker/patrol_footstep_02.wav",
-      "seconds": 0.48,
-      "peak_dbfs": -5.0,
-      "rms_dbfs": -21.92,
-      "loop_boundary_delta": null,
-      "sha256": "0cb7836a466c40d0d0fa393ccdf4647fd81bb5c8653cde77db08288e744a2ed5"
-    },
-    {
-      "file": "stalker/patrol_footstep_03.wav",
-      "seconds": 0.48,
-      "peak_dbfs": -5.0,
-      "rms_dbfs": -22.54,
-      "loop_boundary_delta": null,
-      "sha256": "8deace868aef3c194012dd10a5d930a1dc0554250556fcf84e91bc8f45da03ac"
-    },
-    {
-      "file": "stalker/patrol_footstep_04.wav",
-      "seconds": 0.48,
-      "peak_dbfs": -5.0,
-      "rms_dbfs": -22.91,
-      "loop_boundary_delta": null,
-      "sha256": "e0148a18382232351887f9de12a4f137275558c8340a3a688ff33e0cbbfe6293"
-    },
-    {
-      "file": "stalker/chase_footstep_01.wav",
-      "seconds": 0.32,
-      "peak_dbfs": -5.0,
-      "rms_dbfs": -21.38,
-      "loop_boundary_delta": null,
-      "sha256": "4912d6974e5952f35ac4c400d7469f67fe5c2d79fa7f373c5b3071c8853de3b4"
-    },
-    {
-      "file": "stalker/chase_footstep_02.wav",
-      "seconds": 0.32,
-      "peak_dbfs": -5.0,
-      "rms_dbfs": -20.51,
-      "loop_boundary_delta": null,
-      "sha256": "4e70c5ea9fa5960ecb276e8e3554bb9a09188b09612fbed20690977b789e8cc4"
-    },
-    {
-      "file": "stalker/chase_footstep_03.wav",
-      "seconds": 0.32,
-      "peak_dbfs": -5.0,
-      "rms_dbfs": -20.85,
-      "loop_boundary_delta": null,
-      "sha256": "41487dfd7e254da82b85648bff9773c077061306541599ef1dafd47887332ab2"
-    },
-    {
-      "file": "stalker/chase_footstep_04.wav",
-      "seconds": 0.32,
-      "peak_dbfs": -5.0,
-      "rms_dbfs": -20.39,
-      "loop_boundary_delta": null,
-      "sha256": "24acc9f70bc858d22cf812e211c5d74c2ed6bd8034fe3ce2221758491c688ca5"
-    },
-    {
       "file": "stalker/jumpscare.wav",
       "seconds": 1.8,
       "peak_dbfs": -2.0,
       "rms_dbfs": -20.39,
       "loop_boundary_delta": null,
       "sha256": "7806155fbf44e95e6577116183b178dfc6f171873cf9dc1076a43d753f76a8aa"
+    },
+    {
+      "file": "stalker/monster_breathing_idle_loop.wav",
+      "seconds": 6.0,
+      "peak_dbfs": -5.19,
+      "rms_dbfs": -21.8,
+      "loop_boundary_delta": 0,
+      "sha256": "f2362dd6c01c0a271b075f1f9e0517c92ae9bf6c72892fc0ec2ed8140f424a76"
+    },
+    {
+      "file": "stalker/monster_breathing_chase_loop.wav",
+      "seconds": 4.0,
+      "peak_dbfs": -3.74,
+      "rms_dbfs": -19.36,
+      "loop_boundary_delta": 0,
+      "sha256": "4942eb11b0902ae05cf14cc285f1c47a2ac9c7bbe902c8739b458c72fda5f694"
+    },
+    {
+      "file": "stalker/monster_proximity_rumble_loop.wav",
+      "seconds": 5.0,
+      "peak_dbfs": -5.68,
+      "rms_dbfs": -13.08,
+      "loop_boundary_delta": 917,
+      "sha256": "b0da63be38ebf9e1e8f785783d0e4ad6a5592017267242e4683f1a2b595bd034"
+    },
+    {
+      "file": "stalker/monster_growl_01.wav",
+      "seconds": 1.8,
+      "peak_dbfs": -2.5,
+      "rms_dbfs": -16.03,
+      "loop_boundary_delta": null,
+      "sha256": "fad154cd6b80781e954205320dcb57b02c4edc93c48a7710724b28ffe08218bd"
+    },
+    {
+      "file": "stalker/monster_growl_02.wav",
+      "seconds": 2.2,
+      "peak_dbfs": -1.94,
+      "rms_dbfs": -15.16,
+      "loop_boundary_delta": null,
+      "sha256": "e80f7d59e55bb95b9b0b88634c7b20731fd64cdffedbca0b3bbc9324de12d89e"
+    },
+    {
+      "file": "stalker/monster_scream_attack.wav",
+      "seconds": 2.2,
+      "peak_dbfs": -1.21,
+      "rms_dbfs": -14.01,
+      "loop_boundary_delta": null,
+      "sha256": "e940aa5f44d3a370b67d88cf1de99dd38a0ae02846aa4d6b05bda36b8c10919a"
+    },
+    {
+      "file": "stalker/monster_step_01.wav",
+      "seconds": 1.03,
+      "peak_dbfs": -1.72,
+      "rms_dbfs": -20.23,
+      "loop_boundary_delta": null,
+      "sha256": "26b112ca4de0fc632148ab2ead2f442473e8331fa9c8937a6f6416b02c807ada"
+    },
+    {
+      "file": "stalker/monster_step_02.wav",
+      "seconds": 1.1,
+      "peak_dbfs": -1.72,
+      "rms_dbfs": -20.61,
+      "loop_boundary_delta": null,
+      "sha256": "239e0b5f6f5dbe32464a8b22cf28915e88bdab997208d33bf2715810be7f0cc6"
+    },
+    {
+      "file": "stalker/monster_step_03.wav",
+      "seconds": 1.17,
+      "peak_dbfs": -1.72,
+      "rms_dbfs": -21.94,
+      "loop_boundary_delta": null,
+      "sha256": "3b08a1646924cd0380150f5cb927e015db6e5c2d21f9912d958975bde7a2d097"
+    },
+    {
+      "file": "stalker/monster_step_04.wav",
+      "seconds": 1.24,
+      "peak_dbfs": -1.72,
+      "rms_dbfs": -22.35,
+      "loop_boundary_delta": null,
+      "sha256": "4143386ef13bb8e7b27d24537f6818989b76f67f73fb7317890b86f9a8419c4a"
     }
   ]
 }

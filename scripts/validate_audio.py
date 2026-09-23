@@ -44,9 +44,9 @@ def main():
     assert {p.relative_to(OUT).as_posix() for p in OUT.rglob('*.wav')} == {i['file'] for i in items}
     durations = {r['file']:r['seconds'] for r in results}
     assert durations['door/sliding_open.wav'] == durations['door/sliding_close.wav'] == .85
-    assert durations['stalker/attack_swing.wav'] == .75
+    assert durations['stalker/monster_scream_attack.wav'] == 2.2
     report=dict(count=len(results),format='44100 Hz mono PCM16 WAV',
-        checks=['catalog coverage','source paths exist','unique WAV content','non-silence','no clipping','per-clip peak targets','duration','door 0.85 s','attack windup 0.75 s','beacon four timed pulses'],
+        checks=['catalog coverage','source paths exist','unique WAV content','non-silence','no clipping','per-clip peak targets','duration','door 0.85 s','monster attack scream 2.2 s','beacon four timed pulses'],
         limitations='Procedural prototype assets. Not auditioned or integrated in Unity. No gameplay C# changes.',results=results)
     (OUT/'validation_report.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
     print(f'PASS: {len(results)} WAVs; {sum(i["loop"] for i in items)} loops; source references and critical timing verified')
