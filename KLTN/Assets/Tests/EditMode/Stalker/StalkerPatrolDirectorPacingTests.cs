@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using NUnit.Framework;
 
 namespace EchoProtocol.AI.Stalker.Tests
@@ -29,6 +30,30 @@ namespace EchoProtocol.AI.Stalker.Tests
             update.Invoke(director, new[] { detect, null, null, (object)191d });
             Assert.That(shouldSeek.GetValue(director), Is.False);
             update.Invoke(director, new[] { patrol, null, null, (object)371d });
+            Assert.That(shouldSeek.GetValue(director), Is.True);
+        }
+
+        [Test]
+        public void STK_DIRECTOR_PACING_003_UsesConfiguredSeekDelay()
+        {
+            var settingsType = ResolveProductionType(
+                "EchoProtocol.AI.Stalker.Spatial.Strategic.StalkerSmartPatrolSettings");
+            var settings = Activator.CreateInstance(settingsType);
+            settingsType.GetField("seekPlayersAfterSeconds",
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(settings, 120f);
+            var directorType = ResolveProductionType(
+                "EchoProtocol.AI.Stalker.Spatial.Strategic.StalkerPatrolDirector");
+            var director = Activator.CreateInstance(directorType, settings);
+            var patrol = Enum.Parse(
+                ResolveProductionType("EchoProtocol.AI.Stalker.StalkerState"), "PATROL");
+            var update = directorType.GetMethod("Update");
+            var shouldSeek = directorType.GetProperty("ShouldSeekPlayers");
+
+            update.Invoke(director, new[] { patrol, null, null, (object)10d });
+            update.Invoke(director, new[] { patrol, null, null, (object)129d });
+            Assert.That(shouldSeek.GetValue(director), Is.False);
+            update.Invoke(director, new[] { patrol, null, null, (object)130d });
             Assert.That(shouldSeek.GetValue(director), Is.True);
         }
 

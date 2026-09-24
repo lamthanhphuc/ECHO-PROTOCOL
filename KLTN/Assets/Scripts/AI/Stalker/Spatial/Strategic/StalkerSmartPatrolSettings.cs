@@ -50,6 +50,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
         [SerializeField, Min(0f)] private float postChaseCooldownSeconds = 18f;
         [SerializeField, Min(0f)] private float postAttackCooldownSeconds = 22f;
         [SerializeField, Min(0.01f)] private float sameRoomPressureCooldownSeconds = 15f;
+        [SerializeField, Min(1f)] private float seekPlayersAfterSeconds = 180f;
 
         public float OccupancySampleIntervalSeconds => Mathf.Max(0.1f, occupancySampleIntervalSeconds);
         public float OccupancyInformationDelaySeconds => Mathf.Max(0f, occupancyInformationDelaySeconds);
@@ -86,5 +87,6 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
         public float PostChaseCooldownSeconds => Mathf.Max(0f, postChaseCooldownSeconds);
         public float PostAttackCooldownSeconds => Mathf.Max(0f, postAttackCooldownSeconds);
         public float SameRoomPressureCooldownSeconds => Mathf.Max(0.01f, sameRoomPressureCooldownSeconds);
+        public float SeekPlayersAfterSeconds => seekPlayersAfterSeconds > 0f ? seekPlayersAfterSeconds : 180f;
     }
 }

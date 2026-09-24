@@ -44,7 +44,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
         public bool ShouldSeekPlayers =>
             _hasPreviousState
             && _previousState == StalkerState.PATROL
-            && CurrentTimeSeconds - _lastPlayerContactSeconds >= 180d;
+            && CurrentTimeSeconds - _lastPlayerContactSeconds >= _settings.SeekPlayersAfterSeconds;
 
         public void Reset()
         {
