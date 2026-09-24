@@ -774,7 +774,7 @@ namespace EchoProtocol.Networking
             if (info.Source.IsRealPlayer) RpcZoneAccessCodeResult(info.Source, panelIndex, (int)result, cooldownSeconds);
         }
 
-        [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
         private void RpcZoneAccessCodeResult([RpcTarget] PlayerRef target, int panelIndex, int result, float cooldownSeconds)
         {
             LocalZoneAccessCodeRequestCompleted?.Invoke(

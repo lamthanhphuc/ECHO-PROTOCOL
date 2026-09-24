@@ -1,6 +1,7 @@
 using System;
 using EchoProtocol.MatchFlow;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 public class SecurityTerminalUIController : MonoBehaviour
@@ -53,7 +54,11 @@ public class SecurityTerminalUIController : MonoBehaviour
                 return;
             }
 
-            if (_controlLock.ShouldAutoRelease() || Input.GetKeyDown(KeyCode.Escape))
+            var keyboard = Keyboard.current;
+
+            if (_controlLock.ShouldAutoRelease()
+                || (keyboard != null
+                    && keyboard.escapeKey.wasPressedThisFrame))
             {
                 Close();
                 return;

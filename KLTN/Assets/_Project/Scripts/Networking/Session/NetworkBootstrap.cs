@@ -362,6 +362,12 @@ namespace EchoProtocol.Networking
                 $"[NetworkSession] Runner shutdown: {reason}.");
             if (Runner == runner && State != NetworkSessionState.ShuttingDown)
             {
+                if (reason == ShutdownReason.Ok)
+                {
+                    CleanupTermination(runner);
+                    return;
+                }
+
                 CleanupUnexpectedTermination(runner, $"Session ended: {reason}");
             }
         }
@@ -404,6 +410,19 @@ namespace EchoProtocol.Networking
             CurrentSessionName = string.Empty;
             LastError = message;
             SetState(NetworkSessionState.Failed, message);
+            if (runner != null) Destroy(runner.gameObject);
+            ReturnToBootstrapScene();
+        }
+
+        private void CleanupTermination(NetworkRunner runner)
+        {
+            ClearLocalInputProvider();
+            Runner = null;
+            _callbacksRegistered = false;
+            _sessionOperationInProgress = false;
+            CurrentSessionName = string.Empty;
+            LastError = string.Empty;
+            SetState(NetworkSessionState.Disconnected, "Disconnected");
             if (runner != null) Destroy(runner.gameObject);
             ReturnToBootstrapScene();
         }

@@ -3,6 +3,7 @@ using System.Text;
 using EchoProtocol.MatchFlow;
 using EchoProtocol.Networking;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 public class PowerControlUIController : MonoBehaviour
@@ -131,7 +132,11 @@ public class PowerControlUIController : MonoBehaviour
                 return;
             }
 
-            if (_controlLock.ShouldAutoRelease() || Input.GetKeyDown(KeyCode.Escape))
+            var keyboard = Keyboard.current;
+
+            if (_controlLock.ShouldAutoRelease()
+                || (keyboard != null
+                    && keyboard.escapeKey.wasPressedThisFrame))
             {
                 Close();
                 return;
@@ -143,27 +148,95 @@ public class PowerControlUIController : MonoBehaviour
 
         private void HandleKeyboardInput()
         {
-            if (IsInCooldown || IsOnline() || _awaitingServerResult)
+            if (IsInCooldown
+                || IsOnline()
+                || _awaitingServerResult)
             {
                 return;
             }
 
-            for (int i = 0; i <= 9; i++)
+            var keyboard = Keyboard.current;
+            if (keyboard == null)
             {
-                if (Input.GetKeyDown(KeyCode.Alpha0 + i) || Input.GetKeyDown(KeyCode.Keypad0 + i))
+                return;
+            }
+
+            for (int digit = 0; digit <= 9; digit++)
+            {
+                if (WasDigitPressed(
+                        keyboard,
+                        digit))
                 {
-                    OnDigitClicked(i);
+                    OnDigitClicked(digit);
                     return;
                 }
             }
 
-            if (Input.GetKeyDown(KeyCode.Backspace) || Input.GetKeyDown(KeyCode.Delete))
+            if (keyboard.backspaceKey.wasPressedThisFrame
+                || keyboard.deleteKey.wasPressedThisFrame)
             {
                 OnClearClicked();
             }
-            else if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
+            else if (keyboard.enterKey.wasPressedThisFrame
+                || keyboard.numpadEnterKey.wasPressedThisFrame)
             {
                 OnConfirmClicked();
+            }
+        }
+
+        private static bool WasDigitPressed(
+            Keyboard keyboard,
+            int digit)
+        {
+            if (keyboard == null)
+            {
+                return false;
+            }
+
+            switch (digit)
+            {
+                case 0:
+                    return keyboard.digit0Key.wasPressedThisFrame
+                        || keyboard.numpad0Key.wasPressedThisFrame;
+
+                case 1:
+                    return keyboard.digit1Key.wasPressedThisFrame
+                        || keyboard.numpad1Key.wasPressedThisFrame;
+
+                case 2:
+                    return keyboard.digit2Key.wasPressedThisFrame
+                        || keyboard.numpad2Key.wasPressedThisFrame;
+
+                case 3:
+                    return keyboard.digit3Key.wasPressedThisFrame
+                        || keyboard.numpad3Key.wasPressedThisFrame;
+
+                case 4:
+                    return keyboard.digit4Key.wasPressedThisFrame
+                        || keyboard.numpad4Key.wasPressedThisFrame;
+
+                case 5:
+                    return keyboard.digit5Key.wasPressedThisFrame
+                        || keyboard.numpad5Key.wasPressedThisFrame;
+
+                case 6:
+                    return keyboard.digit6Key.wasPressedThisFrame
+                        || keyboard.numpad6Key.wasPressedThisFrame;
+
+                case 7:
+                    return keyboard.digit7Key.wasPressedThisFrame
+                        || keyboard.numpad7Key.wasPressedThisFrame;
+
+                case 8:
+                    return keyboard.digit8Key.wasPressedThisFrame
+                        || keyboard.numpad8Key.wasPressedThisFrame;
+
+                case 9:
+                    return keyboard.digit9Key.wasPressedThisFrame
+                        || keyboard.numpad9Key.wasPressedThisFrame;
+
+                default:
+                    return false;
             }
         }
 
