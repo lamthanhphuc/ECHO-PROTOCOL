@@ -59,6 +59,9 @@ public sealed class MatchAuthorityServiceTests
 
         Assert.True(started.IsSuccess);
         Assert.Equal(MatchAuthorityStatus.InMatch, started.Data!.Status);
+        Assert.Equal(
+            Now.UtcDateTime,
+            (await db.MatchAuthorityBindings.SingleAsync()).StartedAtUtc);
     }
 
     [Fact]

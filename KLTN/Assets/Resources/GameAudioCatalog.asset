@@ -213,24 +213,26 @@ MonoBehaviour:
     clip: {fileID: 8300000, guid: 319d8127c7c0512478ace45a668291e2, type: 3}
   - key: security_terminal/terminal_boot
     clip: {fileID: 8300000, guid: 3bc7814eb1325cd448c5da7632813dda, type: 3}
-  - key: stalker/attack_hit
-    clip: {fileID: 8300000, guid: 788e6769a3c39b44f8fbc4c1a2eeb6df, type: 3}
-  - key: stalker/attack_swing
-    clip: {fileID: 8300000, guid: 6c4ce23ce296cb5498a75f56f23f3c4d, type: 3}
-  - key: stalker/chase_footstep_01
-    clip: {fileID: 8300000, guid: 62eed7c6a16807a47a3e65f0fc714bfb, type: 3}
-  - key: stalker/chase_footstep_02
-    clip: {fileID: 8300000, guid: 6ff58c6eec0b48d49ac18cfddff6599d, type: 3}
-  - key: stalker/chase_footstep_03
-    clip: {fileID: 8300000, guid: ae95586299d51e645a71508699357607, type: 3}
-  - key: stalker/chase_footstep_04
-    clip: {fileID: 8300000, guid: 5119b50c95d982f4a8a1754d9699e22a, type: 3}
-  - key: stalker/chase_loop_vocal_loop
-    clip: {fileID: 8300000, guid: 700271dea8f67a04e978af099d8355fc, type: 3}
-  - key: stalker/chase_start
-    clip: {fileID: 8300000, guid: cd2d6fb1d7a3dea428864b5f27c45104, type: 3}
-  - key: stalker/detect_cue
-    clip: {fileID: 8300000, guid: 5e70ccbcd4a790e4ab86e8e6d50b1e78, type: 3}
+  - key: stalker/monster_breathing_chase_loop
+    clip: {fileID: 8300000, guid: 8a0c4e9b13f5472e9b7f6d1a0c3e5f82, type: 3}
+  - key: stalker/monster_breathing_idle_loop
+    clip: {fileID: 8300000, guid: 3e7b1a5c9d204f86a2b0c6e1f4d8a973, type: 3}
+  - key: stalker/monster_growl_01
+    clip: {fileID: 8300000, guid: 4b9e2c7f1a5d4386b0e3f9c2a7d1e854, type: 3}
+  - key: stalker/monster_growl_02
+    clip: {fileID: 8300000, guid: 7d2f6a9c0b4e4185a3c8f1e6b9d2a740, type: 3}
+  - key: stalker/monster_proximity_rumble_loop
+    clip: {fileID: 8300000, guid: 2c8f5a1e7b3d4690a4e6c9f2b1d8a753, type: 3}
+  - key: stalker/monster_scream_attack
+    clip: {fileID: 8300000, guid: 9f1d4b7e2c6a4385b0e8d3f7a1c5e692, type: 3}
+  - key: stalker/monster_step_01
+    clip: {fileID: 8300000, guid: 6a3e8f1c5b7d4290a2f4c9e6b1d8a753, type: 3}
+  - key: stalker/monster_step_02
+    clip: {fileID: 8300000, guid: 1e7b4c9a2d5f4386b0f3a8d6c1e9b752, type: 3}
+  - key: stalker/monster_step_03
+    clip: {fileID: 8300000, guid: 5c1a8e3f7b4d4690a2e6f9c1d8b753a4, type: 3}
+  - key: stalker/monster_step_04
+    clip: {fileID: 8300000, guid: 8b2d6f1a4c9e4370a5f3d7c1e6b9a852, type: 3}
   - key: stalker/door_break
     clip: {fileID: 8300000, guid: 987c306eb8e3398478ccbc78171615a0, type: 3}
   - key: stalker/door_hit
@@ -241,24 +243,8 @@ MonoBehaviour:
     clip: {fileID: 8300000, guid: 2938e02c27650834ab12a1b8112944fc, type: 3}
   - key: stalker/footstep_chay_chase
     clip: {fileID: 8300000, guid: 90ff4ef06b7c2f74aafe9958612fcd31, type: 3}
-  - key: stalker/idle_breathing_growl_loop
-    clip: {fileID: 8300000, guid: 23a49aae44fb6cf449bf7a9f316b5854, type: 3}
   - key: stalker/miss_attack
     clip: {fileID: 8300000, guid: 9134bdebf7c88c247a7f1e4414c6e2f9, type: 3}
-  - key: stalker/patrol_footstep_01
-    clip: {fileID: 8300000, guid: b3667ad549ef34c4a9e2670976d630d2, type: 3}
-  - key: stalker/patrol_footstep_02
-    clip: {fileID: 8300000, guid: 0a733fccfa5252f4785f783a39c1d7a5, type: 3}
-  - key: stalker/patrol_footstep_03
-    clip: {fileID: 8300000, guid: f794414fea3378248acd5673fc4059f3, type: 3}
-  - key: stalker/patrol_footstep_04
-    clip: {fileID: 8300000, guid: 1354801cb4bbbae44842875578fa2e0a, type: 3}
-  - key: stalker/recover_exhale
-    clip: {fileID: 8300000, guid: 34e31f843e6f7cb408ed19bad7c065f8, type: 3}
-  - key: stalker/recover_stun
-    clip: {fileID: 8300000, guid: 9b018f25d6fc1134dad9644b04e8ec11, type: 3}
-  - key: stalker/search_vocal
-    clip: {fileID: 8300000, guid: d2c318b6f24636e48a19f5fd2702212f, type: 3}
   - key: ui/click
     clip: {fileID: 8300000, guid: 35cfa3ff77ba91b459f082e80185c5ef, type: 3}
   - key: ui/confirm

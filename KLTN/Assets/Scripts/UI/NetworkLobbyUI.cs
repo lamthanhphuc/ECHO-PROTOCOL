@@ -157,18 +157,18 @@ namespace EchoProtocol.UI
             var session = sessionNameInput.text.Trim();
             if (session.Length == 0)
             {
-                ReportError("SESSION CODE REQUIRED.");
+                ReportError("ROOM CODE REQUIRED.");
                 return;
             }
             if (!lobbyManager.SetLocalOperatorName(playerNameInput.text))
             {
-                ReportError("OPERATOR ID REQUIRED.");
+                ReportError("YOUR NAME REQUIRED.");
                 return;
             }
             playerNameInput.SetTextWithoutNotify(lobbyManager.LocalOperatorName);
             sessionNameInput.SetTextWithoutNotify(session);
             _busy = true;
-            SetStatus(host ? "> INITIALIZING NETWORK INTERFACE..." : "> SEARCHING FOR SESSION...");
+            SetStatus(host ? "> CREATING ROOM..." : "> JOINING ROOM...");
             RefreshControls();
             var service = bootstrap;
             try
@@ -205,7 +205,7 @@ namespace EchoProtocol.UI
 
         public void SetMemberCount(int current, int max)
         {
-            if (memberCountText != null) memberCountText.text = $"ACTIVE OPERATORS: {current} / {max}";
+            if (memberCountText != null) memberCountText.text = $"PLAYERS IN ROOM: {current} / {max}";
         }
 
         public void RefreshMemberList()
@@ -226,7 +226,7 @@ namespace EchoProtocol.UI
                         .Append("  |  TOOL ").Append(member.ToolId);
                 }
             if (emptyMemberText != null) emptyMemberText.gameObject.SetActive(list.Length == 0);
-            memberListText.text = list.Length == 0 ? (emptyMemberText == null ? "NO SIGNALS DETECTED" : string.Empty) : list.ToString();
+            memberListText.text = list.Length == 0 ? (emptyMemberText == null ? "NO PLAYERS YET" : string.Empty) : list.ToString();
         }
 
         private void OnRoomUpdated(RoomInfoViewModel state) => RefreshMemberList();
@@ -239,13 +239,13 @@ namespace EchoProtocol.UI
                 state == NetworkSessionState.Connecting || state == NetworkSessionState.ShuttingDown ? Connecting : Offline;
             switch (state)
             {
-                case NetworkSessionState.Connecting: SetStatus("SIGNAL: CONNECTING\n> ESTABLISHING UPLINK...\n" + message); break;
+                case NetworkSessionState.Connecting: SetStatus("CONNECTION STATUS: CONNECTING\n> Joining the network...\n" + message); break;
                 case NetworkSessionState.InLobby:
-                    SetStatus("SIGNAL: ESTABLISHED\n> WAITING FOR ADDITIONAL OPERATORS..."); break;
-                case NetworkSessionState.InMatch: SetStatus("SIGNAL: ESTABLISHED\n> DEPLOYING OPERATORS..."); break;
-                case NetworkSessionState.ShuttingDown: SetStatus("> CLOSING UPLINK..."); break;
+                    SetStatus("CONNECTION STATUS: ROOM OPEN\n> Waiting for players to ready up..."); break;
+                case NetworkSessionState.InMatch: SetStatus("CONNECTION STATUS: IN MISSION\n> Loading the mission..."); break;
+                case NetworkSessionState.ShuttingDown: SetStatus("> LEAVING ROOM..."); break;
                 case NetworkSessionState.Failed: ReportError(message); break;
-                default: SetStatus("SIGNAL: OFFLINE\nNO EXTERNAL NETWORK\nAWAITING UPLINK..."); break;
+                default: SetStatus("CONNECTION STATUS: OFFLINE\nEnter your name and room code.\nThen create or join a room."); break;
             }
             RefreshMemberList();
         }
@@ -272,7 +272,7 @@ namespace EchoProtocol.UI
             {
                 readyButton.interactable = inLobby;
                 var label = readyButton.GetComponentInChildren<TMP_Text>();
-                if (label != null) label.text = _room.IsReady ? "CANCEL READY" : "SET READY";
+                if (label != null) label.text = _room.IsReady ? "NOT READY" : "READY";
             }
             if (startButton != null) startButton.interactable = inLobby && _room.IsHost && _room.CanStartMatch;
             if (leaveButton != null) leaveButton.interactable = Connected && !Busy;

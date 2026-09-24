@@ -1,0 +1,73 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.8.0
+2 info using node@v24.13.1
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:C:\Users\Admin\Desktop\ECHO-PROTOCOL\EchoProtocol.Web\.npmrc
+5 silly config load:file:C:\Users\Admin\.npmrc
+6 silly config load:file:C:\Users\Admin\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm ci
+8 verbose argv "ci" "--cache" ".npm-cache" "--prefer-online" "--no-audit" "--no-fund"
+9 verbose logfile logs-max:10 dir:C:\Users\Admin\Desktop\ECHO-PROTOCOL\EchoProtocol.Web\.npm-cache\_logs\2026-09-23T09_48_24_034Z-
+10 verbose logfile C:\Users\Admin\Desktop\ECHO-PROTOCOL\EchoProtocol.Web\.npm-cache\_logs\2026-09-23T09_48_24_034Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+13 silly idealTree buildDeps
+14 http fetch GET https://registry.npmjs.org/npm attempt 1 failed with EACCES
+15 silly reify moves {}
+16 http fetch GET https://registry.npmjs.org/zod-validation-error/-/zod-validation-error-4.0.2.tgz attempt 1 failed with EACCES
+17 http fetch GET https://registry.npmjs.org/zod/-/zod-4.6.5.tgz attempt 1 failed with EACCES
+18 http fetch GET https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz attempt 1 failed with EACCES
+19 http fetch GET https://registry.npmjs.org/yocto-queue/-/yocto-queue-0.1.0.tgz attempt 1 failed with EACCES
+20 http fetch GET https://registry.npmjs.org/which-typed-array/-/which-typed-array-1.1.24.tgz attempt 1 failed with EACCES
+21 http fetch GET https://registry.npmjs.org/which-builtin-type/-/which-builtin-type-1.2.1.tgz attempt 1 failed with EACCES
+22 http fetch GET https://registry.npmjs.org/word-wrap/-/word-wrap-1.2.5.tgz attempt 1 failed with EACCES
+23 http fetch GET https://registry.npmjs.org/which/-/which-2.0.2.tgz attempt 1 failed with EACCES
+24 http fetch GET https://registry.npmjs.org/which-boxed-primitive/-/which-boxed-primitive-1.1.1.tgz attempt 1 failed with EACCES
+25 http fetch GET https://registry.npmjs.org/uri-js/-/uri-js-4.4.1.tgz attempt 1 failed with EACCES
+26 http fetch GET https://registry.npmjs.org/which-collection/-/which-collection-1.0.2.tgz attempt 1 failed with EACCES
+27 http fetch GET https://registry.npmjs.org/unrs-resolver/-/unrs-resolver-1.12.2.tgz attempt 1 failed with EACCES
+28 http fetch GET https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.3.3.tgz attempt 1 failed with EACCES
+29 http fetch GET https://registry.npmjs.org/unbox-primitive/-/unbox-primitive-1.1.0.tgz attempt 1 failed with EACCES
+30 http fetch GET https://registry.npmjs.org/undici-types/-/undici-types-6.21.0.tgz attempt 1 failed with EACCES
+31 http fetch GET https://registry.npmjs.org/npm attempt 2 failed with EACCES
+32 http fetch GET https://registry.npmjs.org/zod-validation-error/-/zod-validation-error-4.0.2.tgz attempt 2 failed with EACCES
+33 http fetch GET https://registry.npmjs.org/zod/-/zod-4.6.5.tgz attempt 2 failed with EACCES
+34 http fetch GET https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz attempt 2 failed with EACCES
+35 http fetch GET https://registry.npmjs.org/yocto-queue/-/yocto-queue-0.1.0.tgz attempt 2 failed with EACCES
+36 http fetch GET https://registry.npmjs.org/which-typed-array/-/which-typed-array-1.1.24.tgz attempt 2 failed with EACCES
+37 http fetch GET https://registry.npmjs.org/which-builtin-type/-/which-builtin-type-1.2.1.tgz attempt 2 failed with EACCES
+38 http fetch GET https://registry.npmjs.org/word-wrap/-/word-wrap-1.2.5.tgz attempt 2 failed with EACCES
+39 http fetch GET https://registry.npmjs.org/which/-/which-2.0.2.tgz attempt 2 failed with EACCES
+40 http fetch GET https://registry.npmjs.org/which-boxed-primitive/-/which-boxed-primitive-1.1.1.tgz attempt 2 failed with EACCES
+41 http fetch GET https://registry.npmjs.org/uri-js/-/uri-js-4.4.1.tgz attempt 2 failed with EACCES
+42 http fetch GET https://registry.npmjs.org/which-collection/-/which-collection-1.0.2.tgz attempt 2 failed with EACCES
+43 http fetch GET https://registry.npmjs.org/unrs-resolver/-/unrs-resolver-1.12.2.tgz attempt 2 failed with EACCES
+44 http fetch GET https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.3.3.tgz attempt 2 failed with EACCES
+45 http fetch GET https://registry.npmjs.org/unbox-primitive/-/unbox-primitive-1.1.0.tgz attempt 2 failed with EACCES
+46 http fetch GET https://registry.npmjs.org/undici-types/-/undici-types-6.21.0.tgz attempt 2 failed with EACCES
+47 http fetch GET https://registry.npmjs.org/npm attempt 3 failed with EACCES
+48 http fetch GET https://registry.npmjs.org/zod-validation-error/-/zod-validation-error-4.0.2.tgz attempt 3 failed with EACCES
+49 http fetch GET https://registry.npmjs.org/zod/-/zod-4.6.5.tgz attempt 3 failed with EACCES
+50 http fetch GET https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz attempt 3 failed with EACCES
+51 http fetch GET https://registry.npmjs.org/yocto-queue/-/yocto-queue-0.1.0.tgz attempt 3 failed with EACCES
+52 http fetch GET https://registry.npmjs.org/which-typed-array/-/which-typed-array-1.1.24.tgz attempt 3 failed with EACCES
+53 http fetch GET https://registry.npmjs.org/which-builtin-type/-/which-builtin-type-1.2.1.tgz attempt 3 failed with EACCES
+54 http fetch GET https://registry.npmjs.org/word-wrap/-/word-wrap-1.2.5.tgz attempt 3 failed with EACCES
+55 http fetch GET https://registry.npmjs.org/which/-/which-2.0.2.tgz attempt 3 failed with EACCES
+56 http fetch GET https://registry.npmjs.org/which-boxed-primitive/-/which-boxed-primitive-1.1.1.tgz attempt 3 failed with EACCES
+57 http fetch GET https://registry.npmjs.org/uri-js/-/uri-js-4.4.1.tgz attempt 3 failed with EACCES
+58 http fetch GET https://registry.npmjs.org/which-collection/-/which-collection-1.0.2.tgz attempt 3 failed with EACCES
+59 http fetch GET https://registry.npmjs.org/unrs-resolver/-/unrs-resolver-1.12.2.tgz attempt 3 failed with EACCES
+60 http fetch GET https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.3.3.tgz attempt 3 failed with EACCES
+61 http fetch GET https://registry.npmjs.org/unbox-primitive/-/unbox-primitive-1.1.0.tgz attempt 3 failed with EACCES
+62 http fetch GET https://registry.npmjs.org/undici-types/-/undici-types-6.21.0.tgz attempt 3 failed with EACCES
+63 verbose cwd C:\Users\Admin\Desktop\ECHO-PROTOCOL\EchoProtocol.Web
+64 verbose os Windows_NT 10.0.26200
+65 verbose node v24.13.1
+66 verbose npm  v11.8.0
+67 error Exit handler never called!
+68 error This is an error with npm itself. Please report this error at:
+69 error   <https://github.com/npm/cli/issues>
+70 verbose exit 1
+71 verbose code 1
+72 error A complete log of this run can be found in: C:\Users\Admin\Desktop\ECHO-PROTOCOL\EchoProtocol.Web\.npm-cache\_logs\2026-09-23T09_48_24_034Z-debug-0.log

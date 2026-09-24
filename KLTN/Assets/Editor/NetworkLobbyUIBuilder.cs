@@ -65,23 +65,23 @@ public static partial class NetworkLobbyUIBuilder
         Line(border, "Right", 459, 0, 1, 1016);
         var header = Rect("Header", terminal, 24, 26, 412, 102);
         Label("Title", header, 0, 0, 412, 42, "ECHO PROTOCOL", 30, Main, font);
-        Label("Subtitle", header, 0, 47, 412, 24, "MULTIPLAYER UPLINK", 16, Secondary, font);
+        Label("Subtitle", header, 0, 47, 412, 24, "MULTIPLAYER LOBBY", 16, Secondary, font);
         Line(header, "Divider", 0, 94, 412, 1);
         var operatorSection = Rect("OperatorSection", terminal, 24, 148, 412, 90);
-        Label("Label", operatorSection, 0, 0, 412, 24, "OPERATOR ID", 16, Secondary, font);
-        var player = Input("PlayerNameInput", operatorSection, 32, "ENTER OPERATOR ID", "", font);
+        Label("Label", operatorSection, 0, 0, 412, 24, "1. YOUR NAME", 16, Secondary, font);
+        var player = Input("PlayerNameInput", operatorSection, 32, "ENTER YOUR NAME", "", font);
         var sessionSection = Rect("SessionSection", terminal, 24, 252, 412, 90);
-        Label("Label", sessionSection, 0, 0, 412, 24, "SESSION CODE", 16, Secondary, font);
-        var session = Input("SessionInput", sessionSection, 32, "ENTER SESSION CODE", "echo-test", font);
+        Label("Label", sessionSection, 0, 0, 412, 24, "2. ROOM CODE", 16, Secondary, font);
+        var session = Input("SessionInput", sessionSection, 32, "ENTER ROOM CODE", "echo-test", font);
         var actions = Rect("ActionButtons", terminal, 24, 368, 412, 116);
-        var host = Button("HostButton", actions, 0, 0, 412, 52, "INITIALIZE HOST", font);
-        var join = Button("JoinButton", actions, 0, 64, 412, 52, "CONNECT TO SESSION", font);
+        var host = Button("HostButton", actions, 0, 0, 412, 52, "CREATE ROOM", font);
+        var join = Button("JoinButton", actions, 0, 64, 412, 52, "JOIN ROOM", font);
         var status = Rect("StatusSection", terminal, 24, 514, 412, 164);
         var indicator = Rect("StatusIndicator", status, 0, 8, 8, 8).gameObject.AddComponent<Image>();
         indicator.color = Hex("8F1D1D"); indicator.raycastTarget = false;
-        var statusText = Label("StatusText", status, 20, 0, 392, 114, "SIGNAL: OFFLINE", 16, Main, font);
+        var statusText = Label("StatusText", status, 20, 0, 392, 114, "CONNECTION STATUS: OFFLINE", 16, Main, font);
         statusText.enableAutoSizing = true; statusText.fontSizeMin = 12; statusText.fontSizeMax = 16;
-        var count = Label("MemberCount", status, 0, 132, 412, 28, "ACTIVE OPERATORS: 0 / 4", 16, Secondary, font);
+        var count = Label("MemberCount", status, 0, 132, 412, 28, "PLAYERS IN ROOM: 0 / 4", 16, Secondary, font);
         Line(terminal, "MemberDivider", 24, 690, 412, 1);
 
         var listRoot = Rect("MemberList", terminal, 24, 710, 412, 170);
@@ -89,7 +89,7 @@ public static partial class NetworkLobbyUIBuilder
         var viewport = Rect("Viewport", listRoot, 0, 0, 412, 170);
         viewport.gameObject.AddComponent<RectMask2D>();
         var hit = viewport.gameObject.AddComponent<Image>(); hit.color = Color.clear;
-        var members = Label("Content", viewport, 0, 0, 396, 170, "NO SIGNALS DETECTED", 17, Main, font);
+        var members = Label("Content", viewport, 0, 0, 396, 170, "NO PLAYERS YET", 17, Main, font);
         var fitter = members.gameObject.AddComponent<ContentSizeFitter>();
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         scroll.viewport = viewport; scroll.content = members.rectTransform;
@@ -97,9 +97,9 @@ public static partial class NetworkLobbyUIBuilder
         scroll.scrollSensitivity = 24;
 
         var controls = Rect("LobbyControls", terminal, 24, 908, 412, 84);
-        var ready = Button("ReadyButton", controls, 0, 0, 200, 36, "SET READY", font);
-        var start = Button("StartButton", controls, 212, 0, 200, 36, "START MATCH", font);
-        var leave = Button("LeaveButton", controls, 0, 46, 412, 36, "DISCONNECT", font);
+        var ready = Button("ReadyButton", controls, 0, 0, 200, 36, "READY", font);
+        var start = Button("StartButton", controls, 212, 0, 200, 36, "START MISSION", font);
+        var leave = Button("LeaveButton", controls, 0, 46, 412, 36, "LEAVE ROOM", font);
         ready.interactable = start.interactable = leave.interactable = false;
 
         var controller = terminal.gameObject.AddComponent<NetworkLobbyUI>();

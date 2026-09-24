@@ -60,6 +60,18 @@ namespace EchoProtocol.Audio
             if (clip != null) source.PlayOneShot(clip, volume * _instance._catalog.effectsVolume);
         }
 
+        public static void Play(AudioSource source, string key, float volume, float pitchMin, float pitchMax)
+        {
+            if (_instance == null || source == null || !Application.isPlaying) return;
+            var clip = _instance._catalog.Find(key);
+            if (clip == null) return;
+
+            var originalPitch = source.pitch;
+            source.pitch = Random.Range(Mathf.Min(pitchMin, pitchMax), Mathf.Max(pitchMin, pitchMax));
+            source.PlayOneShot(clip, volume * _instance._catalog.effectsVolume);
+            source.pitch = originalPitch;
+        }
+
         public static void UI(string key) { if (_instance != null) Play(_instance._ui, key); }
 
         public static void AtPoint(string key, Vector3 position)
