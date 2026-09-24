@@ -52,8 +52,25 @@ namespace EchoProtocol.Networking
         private uint _nextSequence;
         private NetworkId _lastRequestedTargetId;
         private float _lastInteractionRequestTime;
+        private bool _suppressInteractionPrompt;
 
         public NetworkInteractable CurrentCandidate { get; private set; }
+        public bool IsInteractionPromptSuppressed => _suppressInteractionPrompt;
+
+        public void SetInteractionPromptSuppressed(bool suppressed)
+        {
+            if (_suppressInteractionPrompt == suppressed)
+            {
+                return;
+            }
+
+            _suppressInteractionPrompt = suppressed;
+            if (suppressed)
+            {
+                CurrentCandidate = null;
+                _currentReviveTarget = null;
+            }
+        }
 
         private void Awake()
         {
@@ -127,6 +144,13 @@ namespace EchoProtocol.Networking
 
         private void Update()
         {
+            if (_suppressInteractionPrompt)
+            {
+                CurrentCandidate = null;
+                _currentReviveTarget = null;
+                return;
+            }
+
             if (EchoProtocol.Voice.VoiceSettingsPanel.IsOpen)
             {
                 if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);

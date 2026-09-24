@@ -62,11 +62,13 @@ namespace EchoProtocol.RelayA
 
             if (_interaction != null)
             {
+                _interaction.SetInteractionPromptSuppressed(true);
                 _interaction.enabled = false;
             }
 
             if (_networkInteractor != null)
             {
+                _networkInteractor.SetInteractionPromptSuppressed(true);
                 _networkInteractor.enabled = false;
             }
 
@@ -111,11 +113,13 @@ namespace EchoProtocol.RelayA
 
             if (_interaction != null)
             {
+                _interaction.SetInteractionPromptSuppressed(false);
                 _interaction.enabled = _interactionWasEnabled;
             }
 
             if (_networkInteractor != null)
             {
+                _networkInteractor.SetInteractionPromptSuppressed(false);
                 _networkInteractor.enabled = _networkInteractorWasEnabled;
             }
 

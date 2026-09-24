@@ -48,6 +48,13 @@ namespace EchoProtocol.UI.HUD
 
         private void Update()
         {
+            if ((playerInteraction != null && playerInteraction.IsInteractionPromptSuppressed)
+                || (networkPlayerInteractor != null && networkPlayerInteractor.IsInteractionPromptSuppressed))
+            {
+                HidePromptImmediate();
+                return;
+            }
+
             if (TryGetNetworkPrompt(out var networkPrompt, out var networkIsHold, out var networkProgress01))
             {
                 ShowPrompt(networkPrompt, networkIsHold, networkProgress01);
@@ -106,6 +113,11 @@ namespace EchoProtocol.UI.HUD
                 || !networkPlayerInteractor.Object.HasInputAuthority)
             {
                 networkPlayerInteractor = FindOwnedNetworkInteractor();
+            }
+
+            if (networkPlayerInteractor != null && networkPlayerInteractor.IsInteractionPromptSuppressed)
+            {
+                return false;
             }
 
             var candidate = networkPlayerInteractor != null
@@ -197,6 +209,16 @@ namespace EchoProtocol.UI.HUD
                 0f,
                 fadeSpeed * Time.deltaTime));
 
+            if (holdProgressContainer != null && holdProgressContainer.activeSelf)
+            {
+                holdProgressContainer.SetActive(false);
+            }
+        }
+
+        private void HidePromptImmediate()
+        {
+            _targetAlpha = 0f;
+            SetAlpha(0f);
             if (holdProgressContainer != null && holdProgressContainer.activeSelf)
             {
                 holdProgressContainer.SetActive(false);

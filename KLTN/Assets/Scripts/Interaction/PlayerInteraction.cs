@@ -18,12 +18,31 @@ public class PlayerInteraction : MonoBehaviour
     private IInteractable _currentInteractable;
     private IHoldInteractable _heldInteractable;
     private string _currentPrompt = string.Empty;
+    private bool _suppressInteractionPrompt;
 
     public event Action<string> PromptChanged;
 
     public IInteractable CurrentInteractable => _currentInteractable;
-    public string CurrentPrompt => _currentPrompt;
+    public string CurrentPrompt => _suppressInteractionPrompt ? string.Empty : _currentPrompt;
     public bool IsInteractHeld => _heldInteractable != null;
+    public bool IsInteractionPromptSuppressed => _suppressInteractionPrompt;
+
+    public void SetInteractionPromptSuppressed(bool suppressed)
+    {
+        if (_suppressInteractionPrompt == suppressed)
+        {
+            return;
+        }
+
+        _suppressInteractionPrompt = suppressed;
+        if (suppressed)
+        {
+            CancelHeldInteractable();
+            SetCurrentInteractable(null);
+        }
+
+        PromptChanged?.Invoke(CurrentPrompt);
+    }
 
     private void Awake()
     {
@@ -68,6 +87,12 @@ public class PlayerInteraction : MonoBehaviour
     private void Update()
     {
         if (!HasLocalControl())
+        {
+            SetCurrentInteractable(null);
+            return;
+        }
+
+        if (_suppressInteractionPrompt)
         {
             SetCurrentInteractable(null);
             return;
@@ -195,6 +220,11 @@ public class PlayerInteraction : MonoBehaviour
             return;
         }
 
+        if (_suppressInteractionPrompt)
+        {
+            return;
+        }
+
         if (_currentInteractable != null && _currentInteractable.CanInteract(gameObject))
         {
             // In active Fusion gameplay, NetworkPlayerInteractor handles HidingSpot
@@ -216,6 +246,11 @@ public class PlayerInteraction : MonoBehaviour
     private void OnInteractStarted(InputAction.CallbackContext context)
     {
         if (!HasLocalControl())
+        {
+            return;
+        }
+
+        if (_suppressInteractionPrompt)
         {
             return;
         }

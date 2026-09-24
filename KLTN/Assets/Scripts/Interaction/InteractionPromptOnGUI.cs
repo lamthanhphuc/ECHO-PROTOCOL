@@ -36,11 +36,15 @@ public class InteractionPromptOnGUI : MonoBehaviour
         }
 
         string prompt = null;
-        if (interaction != null && !string.IsNullOrWhiteSpace(interaction.CurrentPrompt))
+        if (interaction != null
+            && !interaction.IsInteractionPromptSuppressed
+            && !string.IsNullOrWhiteSpace(interaction.CurrentPrompt))
         {
             prompt = interaction.CurrentPrompt;
         }
-        else if (networkInteractor != null && networkInteractor.CurrentCandidate != null)
+        else if (networkInteractor != null
+            && !networkInteractor.IsInteractionPromptSuppressed
+            && networkInteractor.CurrentCandidate != null)
         {
             prompt = networkInteractor.CurrentCandidate.InteractionPrompt;
         }
