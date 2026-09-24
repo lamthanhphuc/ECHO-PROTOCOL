@@ -24,6 +24,7 @@ namespace EchoProtocol.RelayA
         private readonly RelayASimulation _simulation = new RelayASimulation();
         private float _nextAdjustSoundAt;
         private float _nextNoiseEmissionAt;
+        private int _attemptSeed;
 
         public event Action<RelayASnapshot> StateChanged;
         public event Action RelayAOnline;
@@ -55,7 +56,8 @@ namespace EchoProtocol.RelayA
             _simulation.FaultWarningStarted += HandleFaultWarningStarted;
             _simulation.FaultActivated += HandleFaultActivated;
             _simulation.OverloadStarted += HandleOverloadStarted;
-            _simulation.Initialize(config);
+            _attemptSeed = NewAttemptSeed();
+            _simulation.Initialize(config, true, _attemptSeed);
         }
 
         private void OnDestroy()
@@ -151,6 +153,32 @@ namespace EchoProtocol.RelayA
             _simulation.ForceCompleteForAuthoritativeSync();
         }
 
+        public void ApplyAuthoritativeAttemptSeed(int attemptSeed)
+        {
+            if (attemptSeed == 0 || _attemptSeed == attemptSeed || _simulation.Snapshot.IsOnline)
+            {
+                return;
+            }
+
+            _attemptSeed = attemptSeed;
+            _simulation.Initialize(config, true, _attemptSeed);
+            ui?.Refresh(_simulation.Snapshot);
+        }
+
+        public void ResetForRetry(int attemptSeed = 0)
+        {
+            ui?.Close();
+            _attemptSeed = attemptSeed != 0 ? attemptSeed : NewAttemptSeed();
+            _simulation.Initialize(config, true, _attemptSeed);
+            ui?.Refresh(_simulation.Snapshot);
+        }
+
+        private static int NewAttemptSeed()
+        {
+            int seed = UnityEngine.Random.Range(1, int.MaxValue);
+            return seed == 0 ? 1 : seed;
+        }
+
         private void HandleSimulationChanged(RelayASnapshot snapshot)
         {
             ui?.Refresh(snapshot);
@@ -161,6 +189,7 @@ namespace EchoProtocol.RelayA
         {
             PlayOneShot(completeClip, 0.9f);
             TryEmitNoiseEvent();
+            ui?.Close();
             RelayAOnline?.Invoke();
         }
 

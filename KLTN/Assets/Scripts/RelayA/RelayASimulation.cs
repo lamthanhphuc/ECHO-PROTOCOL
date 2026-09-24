@@ -15,11 +15,14 @@ namespace EchoProtocol.RelayA
         private float _instabilitySeconds;
         private float _faultWarningRemaining;
         private float _faultActiveRemaining;
+        private float _faultTriggerAtSeconds;
         private bool _running;
         private bool _online;
         private bool _faultConsumed;
+        private bool _randomizeAttempt;
         private RelayAFaultType _warningFault;
         private RelayAFaultType _activeFault;
+        private RelayAFaultType _scheduledFault;
 
         public event Action<RelayASnapshot> Changed;
         public event Action Completed;
@@ -29,10 +32,15 @@ namespace EchoProtocol.RelayA
 
         public RelayASnapshot Snapshot => BuildSnapshot();
 
-        public void Initialize(RelayAConfig config)
+        public void Initialize(RelayAConfig config, bool randomizeAttempt = false, int attemptSeed = 0)
         {
             _config = config;
-            _controls = config != null ? config.InitialControls : new Vector3(50f, 50f, 50f);
+            System.Random attemptRandom = randomizeAttempt
+                ? new System.Random(attemptSeed != 0 ? attemptSeed : Environment.TickCount)
+                : null;
+            _controls = config != null && randomizeAttempt
+                ? RandomizeControls(config.InitialControls, attemptRandom)
+                : config != null ? config.InitialControls : new Vector3(50f, 50f, 50f);
             _outputs = config != null
                 ? config.EvaluateTarget(_controls, RelayAFaultType.None, 0f)
                 : new RelayAOutputs(225f, 50f, 50f);
@@ -42,11 +50,16 @@ namespace EchoProtocol.RelayA
             _instabilitySeconds = 0f;
             _faultWarningRemaining = 0f;
             _faultActiveRemaining = 0f;
+            _faultTriggerAtSeconds = config != null
+                ? config.EarliestFaultAtSeconds + (randomizeAttempt ? Range(attemptRandom, 0f, 7f) : 0f)
+                : 8f;
             _running = false;
             _online = false;
             _faultConsumed = false;
+            _randomizeAttempt = randomizeAttempt;
             _warningFault = RelayAFaultType.None;
             _activeFault = RelayAFaultType.None;
+            _scheduledFault = randomizeAttempt ? SelectRandomFault(attemptRandom) : RelayAFaultType.None;
             NotifyChanged();
         }
 
@@ -191,18 +204,20 @@ namespace EchoProtocol.RelayA
                 return;
             }
 
-            if (_elapsedRunningSeconds >= _config.EarliestFaultAtSeconds)
+            if (_elapsedRunningSeconds >= _faultTriggerAtSeconds)
             {
-                _warningFault = SelectFaultType();
+                _warningFault = SelectFaultType(_randomizeAttempt);
                 _faultWarningRemaining = _config.FaultWarningSeconds;
                 FaultWarningStarted?.Invoke(_warningFault);
             }
         }
 
-        private RelayAFaultType SelectFaultType()
+        private RelayAFaultType SelectFaultType(bool randomizeAttempt)
         {
-            int seed = Mathf.RoundToInt(_controls.x * 13f + _controls.y * 7f + _controls.z * 5f);
-            switch (Mathf.Abs(seed) % 3)
+            int choice = randomizeAttempt
+                ? (int)_scheduledFault - 1
+                : Mathf.Abs(Mathf.RoundToInt(_controls.x * 13f + _controls.y * 7f + _controls.z * 5f)) % 3;
+            switch (choice)
             {
                 case 0:
                     return RelayAFaultType.Overvoltage;
@@ -211,6 +226,32 @@ namespace EchoProtocol.RelayA
                 default:
                     return RelayAFaultType.LoadImbalance;
             }
+        }
+
+        private static Vector3 RandomizeControls(Vector3 baseControls, System.Random random)
+        {
+            return new Vector3(
+                Mathf.Clamp(baseControls.x + Range(random, -10f, 10f), 0f, 100f),
+                Mathf.Clamp(baseControls.y + Range(random, -10f, 10f), 0f, 100f),
+                Mathf.Clamp(baseControls.z + Range(random, -10f, 10f), 0f, 100f));
+        }
+
+        private static RelayAFaultType SelectRandomFault(System.Random random)
+        {
+            switch (random.Next(0, 3))
+            {
+                case 0:
+                    return RelayAFaultType.Overvoltage;
+                case 1:
+                    return RelayAFaultType.FrequencyDesynchronization;
+                default:
+                    return RelayAFaultType.LoadImbalance;
+            }
+        }
+
+        private static float Range(System.Random random, float min, float max)
+        {
+            return min + (float)random.NextDouble() * (max - min);
         }
 
         private RelayASnapshot BuildSnapshot()

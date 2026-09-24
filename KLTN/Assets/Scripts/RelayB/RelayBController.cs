@@ -27,6 +27,7 @@ namespace EchoProtocol.RelayB
         private float _nextMismatchSoundAt;
         private float _nextNoiseEmissionAt;
         private int _presetIndex = 0;
+        private int _attemptSeed;
 
         public event Action<RelayBSnapshot> StateChanged;
         public event Action RelayBOnline;
@@ -63,7 +64,9 @@ namespace EchoProtocol.RelayB
             _simulation.SignalMismatchOccurred += HandleSignalMismatch;
             _simulation.InstabilityReset += HandleInstabilityReset;
 
-            _simulation.Initialize(config, _presetIndex);
+            RandomizePresetIndex();
+            _attemptSeed = NewAttemptSeed();
+            _simulation.Initialize(config, _presetIndex, true, _attemptSeed);
         }
 
         private void OnDestroy()
@@ -86,7 +89,8 @@ namespace EchoProtocol.RelayB
             _presetIndex = Mathf.Max(0, presetIndex);
             if (!_simulation.IsOnline)
             {
-                _simulation.Initialize(config, _presetIndex);
+                _attemptSeed = NewAttemptSeed();
+                _simulation.Initialize(config, _presetIndex, true, _attemptSeed);
             }
         }
 
@@ -181,7 +185,8 @@ namespace EchoProtocol.RelayB
             }
 
             _presetIndex = normalized;
-            _simulation.Initialize(config, _presetIndex);
+            _attemptSeed = NewAttemptSeed();
+            _simulation.Initialize(config, _presetIndex, true, _attemptSeed);
         }
 
         public void ApplyAuthoritativeSyncState(bool synchronizing)
@@ -206,6 +211,51 @@ namespace EchoProtocol.RelayB
             _simulation.ForceCompleteForAuthoritativeSync();
         }
 
+        public void ApplyAuthoritativeAttempt(int presetIndex, int attemptSeed)
+        {
+            if (attemptSeed == 0 || _simulation.IsOnline)
+            {
+                return;
+            }
+
+            int normalizedPreset = Mathf.Max(0, presetIndex);
+            if (_presetIndex == normalizedPreset && _attemptSeed == attemptSeed)
+            {
+                return;
+            }
+
+            _presetIndex = normalizedPreset;
+            _attemptSeed = attemptSeed;
+            _simulation.Initialize(config, _presetIndex, true, _attemptSeed);
+            ui?.Refresh(_simulation.Snapshot);
+        }
+
+        public void ResetForRetry(int presetIndex = -1, int attemptSeed = 0)
+        {
+            ui?.Close();
+            _presetIndex = presetIndex >= 0 ? presetIndex : ChooseRandomPresetIndex();
+            _attemptSeed = attemptSeed != 0 ? attemptSeed : NewAttemptSeed();
+            _simulation.Initialize(config, _presetIndex, true, _attemptSeed);
+            ui?.Refresh(_simulation.Snapshot);
+        }
+
+        private void RandomizePresetIndex()
+        {
+            _presetIndex = ChooseRandomPresetIndex();
+        }
+
+        private int ChooseRandomPresetIndex()
+        {
+            int count = config != null && config.Presets != null ? config.Presets.Count : 0;
+            return count > 0 ? UnityEngine.Random.Range(0, count) : 0;
+        }
+
+        private static int NewAttemptSeed()
+        {
+            int seed = UnityEngine.Random.Range(1, int.MaxValue);
+            return seed == 0 ? 1 : seed;
+        }
+
         private void HandleSimulationChanged(RelayBSnapshot snapshot)
         {
             ui?.Refresh(snapshot);
@@ -215,6 +265,7 @@ namespace EchoProtocol.RelayB
         private void HandleCompleted()
         {
             PlayOneShot(completeClip, 0.95f);
+            ui?.Close();
             RelayBOnline?.Invoke();
         }
 

@@ -23,6 +23,9 @@ namespace EchoProtocol.RelayB
         private bool _isDriftActive;
         private bool _isDriftWarning;
         private bool _driftWarningFired;
+        private float _driftTriggerHoldSeconds;
+        private float _driftPhaseOffset;
+        private float _driftFrequencyOffsetPercent;
 
         public event Action<RelayBSnapshot> Changed;
         public event Action Completed;
@@ -38,13 +41,18 @@ namespace EchoProtocol.RelayB
         public float CurrentFrequency => _currentFrequency;
         public float CurrentPhase => _currentPhase;
 
-        public void Initialize(RelayBConfig config, int presetIndex = 0)
+        public void Initialize(RelayBConfig config, int presetIndex = 0, bool randomizeAttempt = false, int attemptSeed = 0)
         {
             _config = config;
+            System.Random attemptRandom = randomizeAttempt
+                ? new System.Random(attemptSeed != 0 ? attemptSeed : Environment.TickCount)
+                : null;
             _presetIndex = Mathf.Max(0, presetIndex);
             _selectedChannelIndex = -1;
-            _currentFrequency = config != null ? (config.MinFrequency + config.MaxFrequency) * 0.5f : 50f;
-            _currentPhase = 0f;
+            _currentFrequency = randomizeAttempt && config != null
+                ? Range(attemptRandom, config.MinFrequency, config.MaxFrequency)
+                : config != null ? (config.MinFrequency + config.MaxFrequency) * 0.5f : 50f;
+            _currentPhase = randomizeAttempt ? Range(attemptRandom, 0f, 360f) : 0f;
 
             _syncTimer = 0f;
             _instabilityGraceTimer = 0f;
@@ -57,6 +65,15 @@ namespace EchoProtocol.RelayB
             _isDriftActive = false;
             _isDriftWarning = false;
             _driftWarningFired = false;
+            _driftTriggerHoldSeconds = config != null
+                ? Mathf.Max(1f, config.DriftTriggerHoldSeconds + (randomizeAttempt ? Range(attemptRandom, -1f, 1.5f) : 0f))
+                : 3.5f;
+            _driftPhaseOffset = config != null
+                ? config.DriftPhaseOffset + (randomizeAttempt ? Range(attemptRandom, -10f, 10f) : 0f)
+                : 22f;
+            _driftFrequencyOffsetPercent = config != null
+                ? config.DriftFrequencyOffsetPercent + (randomizeAttempt ? Range(attemptRandom, -1.5f, 1.5f) : 0f)
+                : 0f;
 
             NotifyChanged();
         }
@@ -315,7 +332,7 @@ namespace EchoProtocol.RelayB
                 return;
             }
 
-            float triggerAt = _config.DriftTriggerHoldSeconds;
+            float triggerAt = _driftTriggerHoldSeconds;
             float warnAt = Mathf.Max(0.5f, triggerAt - _config.DriftWarningSeconds);
 
             if (_syncTimer >= warnAt && !_isDriftWarning && !_driftWarningFired)
@@ -339,7 +356,7 @@ namespace EchoProtocol.RelayB
             float phase = preset.TargetPhase;
             if (_isDriftActive && _config != null)
             {
-                phase = NormalizeAngle(phase + _config.DriftPhaseOffset);
+                phase = NormalizeAngle(phase + _driftPhaseOffset);
             }
 
             return phase;
@@ -350,7 +367,7 @@ namespace EchoProtocol.RelayB
             float freq = preset.TargetFrequency;
             if (_isDriftActive && _config != null)
             {
-                freq *= (1f + _config.DriftFrequencyOffsetPercent / 100f);
+                freq *= (1f + _driftFrequencyOffsetPercent / 100f);
             }
 
             return freq;
@@ -434,6 +451,10 @@ namespace EchoProtocol.RelayB
         {
             Changed?.Invoke(BuildSnapshot());
         }
+
+        private static float Range(System.Random random, float min, float max)
+        {
+            return min + (float)random.NextDouble() * (max - min);
+        }
     }
 }
-
