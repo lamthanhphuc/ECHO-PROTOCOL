@@ -287,6 +287,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 1
   hearingThreshold: 0.1
+  hearingRangeMultiplier: 1.25
   closedDoorMultiplier: 0.35
   wallMultiplier: 0.35
   hearingDiagnosticIntervalSeconds: 0.5

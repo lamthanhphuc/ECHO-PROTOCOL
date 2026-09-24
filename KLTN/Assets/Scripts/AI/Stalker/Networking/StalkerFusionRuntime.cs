@@ -36,9 +36,18 @@ namespace EchoProtocol.AI.Stalker.Networking
         [Header("Authoritative Hearing")]
         [SerializeField] private Transform hearingOrigin;
         [SerializeField] private LayerMask acousticBlockerMask = ~0;
-        [SerializeField, Min(0f)] private double hearingThreshold = 0.1d;
-        [SerializeField, Range(0.01f, 0.99f)] private float closedDoorMultiplier = 0.5f;
-        [SerializeField, Range(0.01f, 0.99f)] private float wallMultiplier = 0.25f;
+
+        [SerializeField, Min(0f)]
+        private double hearingThreshold = 0.1d;
+
+        [SerializeField, Range(0.5f, 2f)]
+        private float hearingRangeMultiplier = 1.25f;
+
+        [SerializeField, Range(0.01f, 0.99f)]
+        private float closedDoorMultiplier = 0.5f;
+
+        [SerializeField, Range(0.01f, 0.99f)]
+        private float wallMultiplier = 0.25f;
 
         [Header("Runtime Diagnostics")]
         [SerializeField, Min(0.1f)]
@@ -1056,7 +1065,8 @@ namespace EchoProtocol.AI.Stalker.Networking
                         new ListenerHearingPolicy(
                             hearingThreshold,
                             closedDoorMultiplier,
-                            wallMultiplier));
+                            wallMultiplier,
+                            hearingRangeMultiplier));
             }
 
             if (_navigationAgent == null)

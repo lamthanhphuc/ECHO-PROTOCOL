@@ -96,7 +96,11 @@ namespace EchoProtocol.AI.Listener.Perception
                     listenerHearingOrigin,
                     noiseEvent.WorldPosition);
 
-            if (distance > noiseEvent.HearingRadius)
+            var baseHearingRadius =
+                noiseEvent.HearingRadius
+                * _policy.HearingRangeMultiplier;
+
+            if (distance > baseHearingRadius)
             {
                 rejectReason =
                     ListenerHearingRejectReason.OutsideRange;
@@ -132,7 +136,7 @@ namespace EchoProtocol.AI.Listener.Perception
                         occlusionClass);
 
             var effectiveHearingRadius =
-                noiseEvent.HearingRadius
+                baseHearingRadius
                 * occlusionMultiplier;
 
             if (distance > effectiveHearingRadius)
@@ -146,7 +150,7 @@ namespace EchoProtocol.AI.Listener.Perception
 
             var normalizedDistance =
                 Math.Clamp(
-                    distance / noiseEvent.HearingRadius,
+                    distance / baseHearingRadius,
                     0d,
                     1d);
 

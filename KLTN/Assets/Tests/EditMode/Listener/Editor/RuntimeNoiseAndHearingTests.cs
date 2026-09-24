@@ -280,6 +280,76 @@ namespace EchoProtocol.AI.Listener.Tests
                     "CapacityEvicted",
                     "ConsumedByStatePolicy"
                 }));
+        } 
+
+        [Test]
+        public void Hearing_RangeMultiplier_ExtendsBaseRadius()
+        {
+            var now = Now();
+
+            var noise =
+                CreateNoise(
+                    RuntimeNoiseType.WALK,
+                    "walk-range-multiplier",
+                    1,
+                    Vector3.zero,
+                    now,
+                    1);
+
+            var policy =
+                new ListenerHearingPolicy(
+                    0.1d,
+                    0.5d,
+                    0.25d,
+                    1.25d);
+
+            var insideSensor =
+                new ListenerHearingSensor(
+                    new StaticListenerOcclusionResolver(
+                        ListenerOcclusionClass.CLEAR),
+                    policy);
+
+            insideSensor.BeginMatch(Guid.NewGuid());
+
+            Assert.That(
+                noise.HearingRadius,
+                Is.EqualTo(12d));
+
+            Assert.That(
+                insideSensor.TryEvaluate(
+                    noise,
+                    new Vector3(14.99f, 0f, 0f),
+                    now,
+                    out _,
+                    out var insideReject),
+                Is.True);
+
+            Assert.That(
+                insideReject,
+                Is.EqualTo(
+                    ListenerHearingRejectReason.None));
+
+            var outsideSensor =
+                new ListenerHearingSensor(
+                    new StaticListenerOcclusionResolver(
+                        ListenerOcclusionClass.CLEAR),
+                    policy);
+
+            outsideSensor.BeginMatch(Guid.NewGuid());
+
+            Assert.That(
+                outsideSensor.TryEvaluate(
+                    noise,
+                    new Vector3(15.01f, 0f, 0f),
+                    now,
+                    out _,
+                    out var outsideReject),
+                Is.False);
+
+            Assert.That(
+                outsideReject,
+                Is.EqualTo(
+                    ListenerHearingRejectReason.OutsideRange));
         }
 
         [Test]
