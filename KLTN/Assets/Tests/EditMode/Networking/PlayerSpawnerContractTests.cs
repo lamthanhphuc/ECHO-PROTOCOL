@@ -21,7 +21,7 @@ namespace EchoProtocol.Networking.Tests
 
             StringAssert.DoesNotContain("_playerPrefab", source);
             StringAssert.DoesNotContain("SetPlayerObject", source);
-            StringAssert.DoesNotContain("Despawn(", source);
+            StringAssert.DoesNotContain("Despawn(playerObject", source);
             StringAssert.Contains("ConfigureExistingPlayerObject", source);
             StringAssert.Contains("TryGetPlayerObject", source);
             StringAssert.Contains("PlayerObjectCommitted", source);

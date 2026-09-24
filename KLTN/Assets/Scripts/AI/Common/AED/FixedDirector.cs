@@ -12,8 +12,15 @@ namespace EchoProtocol.AI.Common.AED
         public const string FixedBaselineRouteModifier = "DEFAULT_ROUTE";
         public const string FixedBaselineFallbackConfigId = "FIXED_BASELINE_V1";
         public const int FixedBaselineSupportItemBudget = 0;
-        public const double FixedBaselineDetectionFillRate = 3.3333333d;
-        public const double FixedBaselineDetectionDecayRate = 3.3333333d;
+        public const double FixedBaselineDetectionDurationSeconds = 2d;
+        public const double FixedBaselineDetectionDecayDurationSeconds = 1d;
+
+        public const double FixedBaselineDetectionFillRate =
+            1d / FixedBaselineDetectionDurationSeconds;
+
+        public const double FixedBaselineDetectionDecayRate =
+            1d / FixedBaselineDetectionDecayDurationSeconds;
+
         public const double FixedBaselineChaseSpeed = 9d;
         public const double FixedBaselineSearchDuration = 5d;
         public const double FixedBaselineEscapeDoorTimerSeconds = 45d;

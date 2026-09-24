@@ -5,6 +5,7 @@ using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Common.Spatial;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace EchoProtocol.AI.Stalker.Tests
 {
@@ -37,6 +38,42 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             Assert.That((bool)GetProperty(GetProperty(graphA, "CompatibilityIdentity"), "IsValid"), Is.True);
             Assert.That(GetProperty(graphA, "CompatibilityIdentity"), Is.Not.EqualTo(GetProperty(graphB, "CompatibilityIdentity")));
+        }
+
+        [Test]
+        public void STK_P3_SpatialGraphBuilder_ConnectsOverlappingNavMeshTriangleEdges()
+        {
+            var graph = BuildSpatialGraph(new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(4f, 0f, 0f),
+                new Vector3(0f, 0f, 1f),
+                new Vector3(2f, 0f, 0f),
+                new Vector3(4f, 0f, 0f),
+                new Vector3(3f, 0f, -1f)
+            });
+
+            Assert.That(GetIntProperty(graph, "NodeCount"), Is.EqualTo(2));
+            Assert.That(NeighborIds(graph, 0), Does.Contain(1));
+            Assert.That(NeighborIds(graph, 1), Does.Contain(0));
+        }
+
+        [Test]
+        public void STK_P3_SpatialGraphBuilder_DoesNotConnectStackedFloorEdges()
+        {
+            var graph = BuildSpatialGraph(new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(4f, 0f, 0f),
+                new Vector3(0f, 0f, 1f),
+                new Vector3(2f, 1f, 0f),
+                new Vector3(4f, 1f, 0f),
+                new Vector3(3f, 1f, -1f)
+            });
+
+            Assert.That(GetIntProperty(graph, "NodeCount"), Is.EqualTo(2));
+            Assert.That(NeighborIds(graph, 0), Is.Empty);
+            Assert.That(NeighborIds(graph, 1), Is.Empty);
         }
 
         [Test]
@@ -348,6 +385,26 @@ namespace EchoProtocol.AI.Stalker.Tests
             return Activator.CreateInstance(NodeType, id, new Vector3(x, 0f, 0f), 0, id, id * 3, id * 3 + 1, id * 3 + 2, new List<int>(neighbors));
         }
 
+        private static object BuildSpatialGraph(Vector3[] vertices)
+        {
+            return Invoke(
+                SpatialGraphBuilderType,
+                "Build",
+                new[] { typeof(NavMeshTriangulation) },
+                new NavMeshTriangulation
+                {
+                    vertices = vertices,
+                    indices = new[] { 0, 1, 2, 3, 4, 5 },
+                    areas = new[] { 0, 0 }
+                });
+        }
+
+        private static int[] NeighborIds(object graph, int nodeId)
+        {
+            var nodes = (System.Collections.IList)GetProperty(graph, "Nodes");
+            return ToIntArray(GetProperty(nodes[nodeId], "NeighborIds"));
+        }
+
         private static object RegionNode(RegionId regionId, params object[] edges)
         {
             return Activator.CreateInstance(RegionNodeType, regionId, RegionEdgeArray(edges));
@@ -361,6 +418,18 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static Array NodeArray(params object[] values) => ToArray(NodeType, values);
         private static Array RegionNodeArray(params object[] values) => ToArray(RegionNodeType, values);
         private static Array RegionEdgeArray(params object[] values) => ToArray(RegionEdgeType, values);
+
+        private static int[] ToIntArray(object values)
+        {
+            var items = (System.Collections.IEnumerable)values;
+            var result = new List<int>();
+            foreach (var item in items)
+            {
+                result.Add((int)item);
+            }
+
+            return result.ToArray();
+        }
 
         private static Array ToArray(Type elementType, object[] values)
         {
@@ -512,6 +581,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         private static Type GraphType => ResolveType("EchoProtocol.AI.Stalker.Spatial.NavMeshSpatialGraph");
+        private static Type SpatialGraphBuilderType => ResolveType("EchoProtocol.AI.Stalker.Spatial.NavMeshSpatialGraphBuilder");
         private static Type NodeType => ResolveType("EchoProtocol.AI.Stalker.Spatial.SpatialNode");
         private static Type RegionGraphType => ResolveType("EchoProtocol.AI.Stalker.Spatial.RegionGraph");
         private static Type RegionNodeType => ResolveType("EchoProtocol.AI.Stalker.Spatial.RegionNode");

@@ -63,7 +63,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
 
     public static class FullStationRegionGraphAuthoringCore
     {
-        public const int MaxDecompositionDepth = 16;
+        public const int MaxDecompositionDepth = 32;
         private const string NavigationName = "Navigation";
         private const string StalkerRegionsName = "StalkerRegions";
         private const string GeneratedPrefix = "Generated_StationRegion_";
@@ -92,7 +92,9 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
             new SemanticCatalogEntry("Zone02_PowerEngineering/Rooms", "04_Power_Control_PC_EMPTY", SemanticZone.Zone02, SemanticKind.Room),
             new SemanticCatalogEntry("Zone02_PowerEngineering/Rooms", "05_Distribution_Panel_DP_EMPTY", SemanticZone.Zone02, SemanticKind.Room),
             new SemanticCatalogEntry("Zone02_PowerEngineering/Rooms", "06_Service_Maintenance_Bypass_Pocket_EMPTY", SemanticZone.Zone02, SemanticKind.Room),
-            new SemanticCatalogEntry("Zone02_PowerEngineering/Rooms", "07_Transition_To_Zone3_EMPTY", SemanticZone.Zone02, SemanticKind.Room),
+            new SemanticCatalogEntry("Zone02_PowerEngineering/Rooms", "06B_Service_Maintenance_Bypass_Pocket_EMPTY", SemanticZone.Zone02, SemanticKind.Room),
+            new SemanticCatalogEntry("Zone02_PowerEngineering/Rooms", "07_Transition_To_Zone3_A_EMPTY", SemanticZone.Zone02, SemanticKind.Route),
+            new SemanticCatalogEntry("Zone02_PowerEngineering/Rooms", "08_Transition_To_Zone3_B_EMPTY", SemanticZone.Zone02, SemanticKind.Route),
             new SemanticCatalogEntry("Zone02_PowerEngineering", "route", SemanticZone.Zone02, SemanticKind.Route),
             new SemanticCatalogEntry("Zone03_SecurityContainment/Rooms", "02_Security_Junction_EMPTY", SemanticZone.Zone03, SemanticKind.Room),
             new SemanticCatalogEntry("Zone03_SecurityContainment/Rooms", "03_Security_Terminal_ST_EMPTY", SemanticZone.Zone03, SemanticKind.Room),
@@ -761,7 +763,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                 connectedGroups.Sort(CompareNodeGroups);
                 for (var i = 0; i < connectedGroups.Count; i++)
                 {
-                    DecomposeGroup(graph, ownerByNode, source, connectedGroups[i], depth + 1, "disconnected source cluster", options, report);
+                    DecomposeGroup(graph, ownerByNode, source, connectedGroups[i], depth, "disconnected source cluster", options, report);
                 }
 
                 return;
@@ -854,14 +856,21 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
 
             if (largestGap <= 0f)
             {
-                var mid = coords.Count / 2;
-                if (mid <= 0 || mid >= coords.Count)
-                {
-                    return;
-                }
+                return;
+            }
 
-                pivot = (coords[mid - 1].Coordinate + coords[mid].Coordinate) * 0.5f;
-                largestGap = 0f;
+            var lowerCount = 0;
+            for (var i = 0; i < coords.Count; i++)
+            {
+                if (coords[i].Coordinate <= pivot)
+                {
+                    lowerCount++;
+                }
+            }
+
+            if (lowerCount == 0 || lowerCount == coords.Count)
+            {
+                return;
             }
 
             var avoidsForeign = 0;

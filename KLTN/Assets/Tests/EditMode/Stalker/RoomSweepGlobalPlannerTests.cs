@@ -10,6 +10,31 @@ namespace EchoProtocol.AI.Stalker.Tests
     public sealed class RoomSweepGlobalPlannerTests
     {
         [Test]
+        public void STK_RoomSweepGlobalPlanner_ZoneInstancesSelectOnlyTheirOwnRooms()
+        {
+            var zone1Start = new RegionId(1);
+            var zone1Room = new RegionId(2);
+            var zone2Start = new RegionId(3);
+            var zone2Room = new RegionId(4);
+            var graph = CreateRegionGraph(
+                new[] { zone1Start, zone1Room, zone2Start, zone2Room },
+                RoomRegion(zone1Start, 1, "Zone01/Start", zone1Room, zone2Start),
+                RoomRegion(zone1Room, 2, "Zone01/Room", zone1Start),
+                SemanticRegion(zone2Start, 3, "Zone02/Start", "Zone02", "Room", zone1Start, zone2Room),
+                SemanticRegion(zone2Room, 4, "Zone02/Room", "Zone02", "Room", zone2Start));
+            var zone1 = CreatePlanner(graph, CreateMemory());
+            var zone2 = CreatePlanner(graph, CreateMemory());
+            Invoke(zone1, "ConfigureZone", new[] { RegionSemanticZoneType }, Enum.Parse(RegionSemanticZoneType, "Zone01"));
+            Invoke(zone2, "ConfigureZone", new[] { RegionSemanticZoneType }, Enum.Parse(RegionSemanticZoneType, "Zone02"));
+
+            Assert.That(TryGetOrCreateObjective(zone1, zone1Start, out var first), Is.True);
+            AssertObjective(first, zone1Room, zone1Room);
+            Assert.That(TryGetOrCreateObjective(zone2, zone2Start, out var second), Is.True);
+            AssertObjective(second, zone2Room, zone2Room);
+            Assert.That(TryGetOrCreateObjective(zone2, zone1Start, out _), Is.False);
+        }
+
+        [Test]
         public void STK_RoomSweepGlobalPlanner_SelectsNearestReachableUnclearedRoom()
         {
             var current = new RegionId(1);

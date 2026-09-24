@@ -93,6 +93,20 @@ namespace EchoProtocol.AI.Stalker
             IReadOnlyList<HearingObservation> hearingObservations,
             DateTime hearingEvaluationTimeUtc,
             IReadOnlyList<PlayerId> visibleObjectiveCarrierIds)
+            : this(step, visibleTargetCandidates, targetStatuses, currentAttackTargetSnapshot,
+                hearingObservations, hearingEvaluationTimeUtc, visibleObjectiveCarrierIds, null)
+        {
+        }
+
+        public StalkerSimulationInput(
+            AiSimulationStep step,
+            IReadOnlyList<StalkerTargetCandidate> visibleTargetCandidates,
+            IReadOnlyList<StalkerTargetStatus> targetStatuses,
+            StalkerAttackTargetSnapshot? currentAttackTargetSnapshot,
+            IReadOnlyList<HearingObservation> hearingObservations,
+            DateTime hearingEvaluationTimeUtc,
+            IReadOnlyList<PlayerId> visibleObjectiveCarrierIds,
+            StalkerPerceptionTargetSnapshot? sustainedCoreCarrier)
         {
             if (hearingEvaluationTimeUtc != default
                 && hearingEvaluationTimeUtc.Kind
@@ -116,6 +130,7 @@ namespace EchoProtocol.AI.Stalker
                 hearingEvaluationTimeUtc;
             VisibleObjectiveCarrierIds =
                 visibleObjectiveCarrierIds;
+            SustainedCoreCarrier = sustainedCoreCarrier;
         }
 
         public AiSimulationStep Step { get; }
@@ -153,6 +168,8 @@ namespace EchoProtocol.AI.Stalker
         /// </summary>
         public IReadOnlyList<PlayerId>
             VisibleObjectiveCarrierIds { get; }
+
+        public StalkerPerceptionTargetSnapshot? SustainedCoreCarrier { get; }
 
         public bool HasHearingEvaluationTimeUtc =>
             HearingEvaluationTimeUtc != default

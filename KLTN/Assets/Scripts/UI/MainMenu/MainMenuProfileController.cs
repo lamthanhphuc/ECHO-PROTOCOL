@@ -45,7 +45,7 @@ namespace EchoProtocol.UI.MainMenu
       LoadCredits();
       RefreshProfile();
       CloseShop();
-      CloseTopUp();
+      if (topUpPopup != null) topUpPopup.SetActive(true);
     }
 
     private void OnEnable()
@@ -72,10 +72,10 @@ namespace EchoProtocol.UI.MainMenu
 
       if (shopCloseButton != null) shopCloseButton.onClick.AddListener(CloseShop);
       if (topUpCloseButton != null) topUpCloseButton.onClick.AddListener(CloseTopUp);
-      if (package500Button != null) package500Button.onClick.AddListener(TestAdd500Credits);
-      if (package1200Button != null) package1200Button.onClick.AddListener(TestAdd1200Credits);
-      if (package2500Button != null) package2500Button.onClick.AddListener(TestAdd2500Credits);
-      if (package5500Button != null) package5500Button.onClick.AddListener(TestAdd5500Credits);
+      if (package500Button != null) package500Button.onClick.AddListener(OpenTopUpWebsite);
+      if (package1200Button != null) package1200Button.onClick.AddListener(OpenTopUpWebsite);
+      if (package2500Button != null) package2500Button.onClick.AddListener(OpenTopUpWebsite);
+      if (package5500Button != null) package5500Button.onClick.AddListener(OpenTopUpWebsite);
     }
 
     private void OnDisable()
@@ -102,10 +102,10 @@ namespace EchoProtocol.UI.MainMenu
 
       if (shopCloseButton != null) shopCloseButton.onClick.RemoveListener(CloseShop);
       if (topUpCloseButton != null) topUpCloseButton.onClick.RemoveListener(CloseTopUp);
-      if (package500Button != null) package500Button.onClick.RemoveListener(TestAdd500Credits);
-      if (package1200Button != null) package1200Button.onClick.RemoveListener(TestAdd1200Credits);
-      if (package2500Button != null) package2500Button.onClick.RemoveListener(TestAdd2500Credits);
-      if (package5500Button != null) package5500Button.onClick.RemoveListener(TestAdd5500Credits);
+      if (package500Button != null) package500Button.onClick.RemoveListener(OpenTopUpWebsite);
+      if (package1200Button != null) package1200Button.onClick.RemoveListener(OpenTopUpWebsite);
+      if (package2500Button != null) package2500Button.onClick.RemoveListener(OpenTopUpWebsite);
+      if (package5500Button != null) package5500Button.onClick.RemoveListener(OpenTopUpWebsite);
     }
 
     private void RefreshProfile()
@@ -148,14 +148,17 @@ namespace EchoProtocol.UI.MainMenu
 
     public void OnClickTopUp()
     {
+      OpenTopUpWebsite();
+    }
+
+    public void OpenTopUpWebsite()
+    {
       if (string.IsNullOrWhiteSpace(topUpWebUrl))
       {
         Debug.LogWarning("[MainMenu] Top Up web URL is empty.");
         return;
       }
 
-      CloseShop();
-      CloseTopUp();
       Application.OpenURL(topUpWebUrl);
       Debug.Log($"[MainMenu] Top Up web opened: {topUpWebUrl}");
     }
@@ -172,9 +175,10 @@ namespace EchoProtocol.UI.MainMenu
 
     public void LoadCredits()
     {
-      var savedCredits = PlayerPrefs.GetInt(CreditsKey, DefaultCredits);
-      _credits = AuthSession.WalletBalance > 0 ? AuthSession.WalletBalance : savedCredits;
-      SaveCredits();
+      _credits = AuthSession.IsAuthenticated
+        ? Mathf.Max(0, AuthSession.WalletBalance)
+        : PlayerPrefs.GetInt(CreditsKey, DefaultCredits);
+      UpdateCreditsUI();
     }
 
     public void SaveCredits()

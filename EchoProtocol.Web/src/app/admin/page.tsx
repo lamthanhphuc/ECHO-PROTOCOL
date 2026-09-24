@@ -31,7 +31,7 @@ export default async function AdminDashboard() {
       <Panel>
         <div className="mb-4 flex items-center justify-between"><h2 className="text-lg text-white">Thanh toán gần đây</h2><Link className="eyebrow" href="/admin/payments">Xem tất cả</Link></div>
         {payments.items.length === 0 ? <EmptyState title="Chưa có thanh toán" /> : <div className="space-y-3">
-          {payments.items.map((item) => <Link key={item.paymentOrderId} href={`/admin/payments/${item.paymentOrderId}`} className="block rounded border border-[#1d3942] p-3 hover:border-emerald-700">
+          {payments.items.map((item) => <Link key={item.paymentOrderId} href={`/admin/payments/${item.paymentOrderId}`} className="block rounded border border-[#4a2b2b] p-3 hover:border-red-700">
             <div className="flex items-start justify-between gap-3"><div><p className="text-sm text-white">{item.username}</p><p className="code muted mt-1">{item.productReference}</p></div><StatusBadge status={item.status} /></div>
             <p className="muted mt-2 text-xs">{formatMoney(item.amount, item.currency)} · {formatDate(item.createdAtUtc)}</p>
           </Link>)}
@@ -40,7 +40,7 @@ export default async function AdminDashboard() {
       <Panel>
         <div className="mb-4 flex items-center justify-between"><h2 className="text-lg text-white">Purchase gần đây</h2><Link className="eyebrow" href="/admin/purchases">Xem tất cả</Link></div>
         {recentPurchases.items.length === 0 ? <EmptyState title="Chưa có purchase" /> : <div className="space-y-3">
-          {recentPurchases.items.map((item) => <div key={item.purchaseId} className="rounded border border-[#1d3942] p-3">
+          {recentPurchases.items.map((item) => <div key={item.purchaseId} className="rounded border border-[#4a2b2b] p-3">
             <div className="flex justify-between gap-3"><p className="text-sm text-white">{item.shopItemName}</p><StatusBadge status={item.status} /></div>
             <p className="muted mt-2 text-xs">{item.username} · {item.priceAtPurchase} credits · {formatDate(item.createdAtUtc)}</p>
           </div>)}

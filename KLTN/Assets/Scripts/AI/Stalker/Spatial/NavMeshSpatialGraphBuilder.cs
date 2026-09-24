@@ -9,6 +9,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
     {
         private const float VertexWeldEpsilon = 0.001f;
         private const float VertexWeldEpsilonSqr = VertexWeldEpsilon * VertexWeldEpsilon;
+        private const float EdgeOverlapEpsilon = 0.003f;
+        private const float EdgeOverlapEpsilonSqr = EdgeOverlapEpsilon * EdgeOverlapEpsilon;
 
         // Compared against cross.sqrMagnitude, which is four times squared triangle area.
         private const float DegenerateTriangleAreaSqrEpsilon = 0.000001f;
@@ -32,7 +34,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
             var nodeBuildData = new List<NodeBuildData>(indices.Length / 3);
             var neighborSets = new List<HashSet<int>>(indices.Length / 3);
             var edgeMap = new Dictionary<EdgeKey, List<int>>();
-            var rawToWeldedVertexIds = BuildWeldedVertexMap(vertices);
+            var edgeRecordsByVertex = new Dictionary<int, List<EdgeRecord>>();
+            var rawToWeldedVertexIds = BuildWeldedVertexMap(vertices, out var weldedVertexPositions);
 
             for (var triangleStart = 0; triangleStart + 2 < indices.Length; triangleStart += 3)
             {
@@ -75,8 +78,11 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 }
 
                 ConnectEdge(edgeMap, neighborSets, new EdgeKey(weldedVertexId0, weldedVertexId1), nodeId);
+                ConnectOverlappingEdges(edgeRecordsByVertex, neighborSets, weldedVertexPositions, weldedVertexId0, weldedVertexId1, nodeId);
                 ConnectEdge(edgeMap, neighborSets, new EdgeKey(weldedVertexId1, weldedVertexId2), nodeId);
+                ConnectOverlappingEdges(edgeRecordsByVertex, neighborSets, weldedVertexPositions, weldedVertexId1, weldedVertexId2, nodeId);
                 ConnectEdge(edgeMap, neighborSets, new EdgeKey(weldedVertexId2, weldedVertexId0), nodeId);
+                ConnectOverlappingEdges(edgeRecordsByVertex, neighborSets, weldedVertexPositions, weldedVertexId2, weldedVertexId0, nodeId);
             }
 
             if (nodeBuildData.Count == 0)
@@ -102,10 +108,10 @@ namespace EchoProtocol.AI.Stalker.Spatial
             return new NavMeshSpatialGraph(nodes);
         }
 
-        private static int[] BuildWeldedVertexMap(Vector3[] vertices)
+        private static int[] BuildWeldedVertexMap(Vector3[] vertices, out List<Vector3> canonicalPositions)
         {
             var rawToWeldedVertexIds = new int[vertices.Length];
-            var canonicalPositions = new List<Vector3>(vertices.Length);
+            canonicalPositions = new List<Vector3>(vertices.Length);
             var cells = new Dictionary<VertexCellKey, List<int>>();
 
             for (var rawVertexIndex = 0; rawVertexIndex < vertices.Length; rawVertexIndex++)
@@ -205,6 +211,135 @@ namespace EchoProtocol.AI.Stalker.Spatial
             previousNodeIds.Add(nodeId);
         }
 
+        private static void ConnectOverlappingEdges(
+            Dictionary<int, List<EdgeRecord>> edgeRecordsByVertex,
+            List<HashSet<int>> neighborSets,
+            List<Vector3> weldedVertexPositions,
+            int weldedVertexId0,
+            int weldedVertexId1,
+            int nodeId)
+        {
+            var edge = new EdgeRecord(weldedVertexId0, weldedVertexId1, nodeId);
+            ConnectOverlappingEdgesForVertex(
+                edgeRecordsByVertex,
+                neighborSets,
+                weldedVertexPositions,
+                edge,
+                weldedVertexId0);
+
+            if (weldedVertexId1 != weldedVertexId0)
+            {
+                ConnectOverlappingEdgesForVertex(
+                    edgeRecordsByVertex,
+                    neighborSets,
+                    weldedVertexPositions,
+                    edge,
+                    weldedVertexId1);
+            }
+
+            AddEdgeRecord(edgeRecordsByVertex, weldedVertexId0, edge);
+            if (weldedVertexId1 != weldedVertexId0)
+            {
+                AddEdgeRecord(edgeRecordsByVertex, weldedVertexId1, edge);
+            }
+        }
+
+        private static void ConnectOverlappingEdgesForVertex(
+            Dictionary<int, List<EdgeRecord>> edgeRecordsByVertex,
+            List<HashSet<int>> neighborSets,
+            List<Vector3> weldedVertexPositions,
+            EdgeRecord edge,
+            int weldedVertexId)
+        {
+            if (!edgeRecordsByVertex.TryGetValue(weldedVertexId, out var edgeRecords))
+            {
+                return;
+            }
+
+            for (var i = 0; i < edgeRecords.Count; i++)
+            {
+                var previous = edgeRecords[i];
+                if (previous.NodeId == edge.NodeId)
+                {
+                    continue;
+                }
+
+                if (!EdgesOverlap(weldedVertexPositions, edge, previous))
+                {
+                    continue;
+                }
+
+                neighborSets[edge.NodeId].Add(previous.NodeId);
+                neighborSets[previous.NodeId].Add(edge.NodeId);
+            }
+        }
+
+        private static void AddEdgeRecord(
+            Dictionary<int, List<EdgeRecord>> edgeRecordsByVertex,
+            int weldedVertexId,
+            EdgeRecord edge)
+        {
+            if (!edgeRecordsByVertex.TryGetValue(weldedVertexId, out var edgeRecords))
+            {
+                edgeRecords = new List<EdgeRecord>(1);
+                edgeRecordsByVertex.Add(weldedVertexId, edgeRecords);
+            }
+
+            edgeRecords.Add(edge);
+        }
+
+        private static bool EdgesOverlap(
+            List<Vector3> weldedVertexPositions,
+            EdgeRecord left,
+            EdgeRecord right)
+        {
+            var left0 = weldedVertexPositions[left.VertexId0];
+            var left1 = weldedVertexPositions[left.VertexId1];
+            var right0 = weldedVertexPositions[right.VertexId0];
+            var right1 = weldedVertexPositions[right.VertexId1];
+            var leftVector = left1 - left0;
+            var rightVector = right1 - right0;
+            var leftLengthSqr = leftVector.sqrMagnitude;
+            var rightLengthSqr = rightVector.sqrMagnitude;
+            if (leftLengthSqr <= EdgeOverlapEpsilonSqr || rightLengthSqr <= EdgeOverlapEpsilonSqr)
+            {
+                return false;
+            }
+
+            if (Vector3.Cross(leftVector, rightVector).sqrMagnitude
+                > EdgeOverlapEpsilonSqr * leftLengthSqr * rightLengthSqr)
+            {
+                return false;
+            }
+
+            if (DistancePointToLineSqr(right0, left0, leftVector, leftLengthSqr) > EdgeOverlapEpsilonSqr
+                || DistancePointToLineSqr(right1, left0, leftVector, leftLengthSqr) > EdgeOverlapEpsilonSqr)
+            {
+                return false;
+            }
+
+            var rightT0 = Vector3.Dot(right0 - left0, leftVector) / leftLengthSqr;
+            var rightT1 = Vector3.Dot(right1 - left0, leftVector) / leftLengthSqr;
+            var overlapMin = Mathf.Max(0f, Mathf.Min(rightT0, rightT1));
+            var overlapMax = Mathf.Min(1f, Mathf.Max(rightT0, rightT1));
+            return (overlapMax - overlapMin) * Mathf.Sqrt(leftLengthSqr) > EdgeOverlapEpsilon;
+        }
+
+        private static float DistancePointToLineSqr(
+            Vector3 point,
+            Vector3 lineOrigin,
+            Vector3 lineVector,
+            float lineLengthSqr)
+        {
+            if (lineLengthSqr <= EdgeOverlapEpsilonSqr)
+            {
+                return (point - lineOrigin).sqrMagnitude;
+            }
+
+            var t = Vector3.Dot(point - lineOrigin, lineVector) / lineLengthSqr;
+            return (point - (lineOrigin + lineVector * t)).sqrMagnitude;
+        }
+
         private static bool IsValidTriangle(Vector3[] vertices, int index0, int index1, int index2)
         {
             if (index0 < 0 || index0 >= vertices.Length
@@ -265,6 +400,20 @@ namespace EchoProtocol.AI.Stalker.Spatial
                     return (_a * 397) ^ _b;
                 }
             }
+        }
+
+        private readonly struct EdgeRecord
+        {
+            public EdgeRecord(int vertexId0, int vertexId1, int nodeId)
+            {
+                VertexId0 = vertexId0;
+                VertexId1 = vertexId1;
+                NodeId = nodeId;
+            }
+
+            public int VertexId0 { get; }
+            public int VertexId1 { get; }
+            public int NodeId { get; }
         }
 
         private readonly struct VertexCellKey : IEquatable<VertexCellKey>

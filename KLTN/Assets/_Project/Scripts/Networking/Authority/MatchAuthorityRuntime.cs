@@ -47,6 +47,7 @@ namespace EchoProtocol.Networking.Authority
         private bool _pendingAuthoritativeTelemetryMatchStart;
         private string _currentTelemetryPhase = "CORE_COLLECTION";
         private HostRuntimeNoiseService _runtimeNoise;
+        private bool _runtimeNoiseTelemetryCapacityWarningLogged;
         [SerializeField] private bool _researchCaptureEnabled;
         [SerializeField] private ScenarioResolutionMode requestedScenarioResolutionMode = ScenarioResolutionMode.Fixed;
         [SerializeField] private string experimentCondition;
@@ -347,6 +348,7 @@ namespace EchoProtocol.Networking.Authority
             _matchEndEmitted = false;
             _pendingAuthoritativeTelemetryMatchStart = false;
             _currentTelemetryPhase = "CORE_COLLECTION";
+            _runtimeNoiseTelemetryCapacityWarningLogged = false;
             _runtimeNoise?.ResetForMatch();
             ScenarioConfigRuntimeRegistry.Clear(oldMatchId);
             ScenarioConfigAuthorityRuntime.Instance?.ResetForMatch(oldMatchId);
@@ -942,17 +944,39 @@ namespace EchoProtocol.Networking.Authority
                 return false;
             }
 
-            return _telemetry.NoiseAdapter.EmitAcceptedRuntimeNoise(
-                noiseEventId,
-                emittedAtUtc,
-                userId,
-                _currentTelemetryPhase,
-                noiseType,
-                loudness,
-                Snapshot(position),
-                out _,
-                out _,
-                hearingRadius);
+            try
+            {
+                return _telemetry.NoiseAdapter.EmitAcceptedRuntimeNoise(
+                    noiseEventId,
+                    emittedAtUtc,
+                    userId,
+                    _currentTelemetryPhase,
+                    noiseType,
+                    loudness,
+                    Snapshot(position),
+                    out _,
+                    out _,
+                    hearingRadius);
+            }
+            catch (InvalidOperationException exception)
+                when (string.Equals(
+                    exception.Message,
+                    "Telemetry occurrence identity capacity is exhausted.",
+                    StringComparison.Ordinal))
+            {
+                if (!_runtimeNoiseTelemetryCapacityWarningLogged)
+                {
+                    _runtimeNoiseTelemetryCapacityWarningLogged = true;
+
+                    Debug.LogWarning(
+                        "[Telemetry] Runtime noise telemetry occurrence "
+                        + "capacity was exhausted. Runtime noise gameplay "
+                        + "continues; additional noise telemetry is suppressed "
+                        + "for this match.");
+                }
+
+                return false;
+            }
         }
 
         public bool RecordStalkerAttackResolved(

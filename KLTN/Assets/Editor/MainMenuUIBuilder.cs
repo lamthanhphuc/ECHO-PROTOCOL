@@ -99,7 +99,7 @@ public static class MainMenuUIBuilder
         var topUpPopup = CreateTopUpPopup(canvasTransform, font, out var package500, out var package1200, out var package2500, out var package5500, out var topUpClose);
         var shopClose = shopPopup.transform.Find("Window/CloseButton")?.GetComponent<Button>();
 
-        // Keep the reference layout visible in edit mode; gameplay scripts can toggle these panels later.
+        // Place the panels within the main menu layout.
         var shopWindow = shopPopup.transform.Find("Window") as RectTransform;
         var topUpWindow = topUpPopup.transform.Find("Window") as RectTransform;
         PlaceCenter(shopWindow, -350f, -315f, 920f, 390f);
@@ -127,7 +127,7 @@ public static class MainMenuUIBuilder
         serialized.ApplyModifiedPropertiesWithoutUndo();
 
         shopPopup.SetActive(false);
-        topUpPopup.SetActive(false);
+        topUpPopup.SetActive(true);
         EditorSceneManager.MarkSceneDirty(scene);
         Undo.CollapseUndoOperations(group);
         Selection.activeGameObject = root.gameObject;

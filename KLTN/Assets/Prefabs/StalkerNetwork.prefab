@@ -199,6 +199,7 @@ MonoBehaviour:
     postChaseCooldownSeconds: 18
     postAttackCooldownSeconds: 22
     sameRoomPressureCooldownSeconds: 15
+  useScenarioMonsterOverrides: 0
   patrolSpeed: 7
   chaseSpeed: 8
   enableDiagnostics: 0
@@ -207,9 +208,11 @@ MonoBehaviour:
   stalenessWeight: 1
   connectivityWeight: 0.15
   immediateBacktrackPenalty: 0.75
+  detectionDurationSeconds: 2
+  detectionDecayDurationSeconds: 1
   detectionMeterFull: 1
-  detectionFillRate: 0.6666667
-  detectionDecayRate: 3.3333333
+  detectionFillRate: 0.5
+  detectionDecayRate: 1
   searchDuration: 5
   searchRadius: 8
   searchReacquireDetectHoldSeconds: 1.5
@@ -287,6 +290,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 1
   hearingThreshold: 0.1
+  hearingRangeMultiplier: 1.25
   closedDoorMultiplier: 0.35
   wallMultiplier: 0.35
   hearingDiagnosticIntervalSeconds: 0.5
@@ -351,13 +355,6 @@ MonoBehaviour:
   chasePlaybackSpeed: 1
   searchPlaybackSpeed: 1
   visualSpeedFloor: 0.03
-  runStopMinSpeed: 1.25
-  runStopPresentationSeconds: 0.65
-  turnMaxMoveSpeed: 0.1
-  turnAngleThreshold: 35
-  neutralTurnAngleThreshold: 165
-  turnPresentationSeconds: 0.65
-  turnCooldownSeconds: 0.35
 --- !u!114 &9127953891830777717
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -385,7 +382,7 @@ MonoBehaviour:
     hiddenTransferMinSeconds: 1
     hiddenTransferMaxSeconds: 8
     jumpInDurationSeconds: 3
-    reactionLocionSeconds: 0 
+    reactionLockSeconds: 1.5
     minimumOtherAlivePlayers: 1
     jumpInMinDistance: 7
     jumpInMaxDistance: 10

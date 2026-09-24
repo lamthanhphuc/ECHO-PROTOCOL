@@ -262,6 +262,26 @@ public class MatchFlowController : MonoBehaviour
             colliders[i].enabled = !unlocked;
         }
 
+        // The bay-door prefab puts its passage-wide collider on the wall sibling.
+        Transform wall = zone1DoorToZone2Blocker.transform.parent?.Find("LP_Bay_Door_Wall_snaps");
+        if (wall != null)
+        {
+            BoxCollider passageCollider = null;
+            var wallColliders = wall.GetComponents<BoxCollider>();
+            for (int i = 0; i < wallColliders.Length; i++)
+            {
+                if (passageCollider == null || wallColliders[i].size.z > passageCollider.size.z)
+                {
+                    passageCollider = wallColliders[i];
+                }
+            }
+
+            if (passageCollider != null)
+            {
+                passageCollider.enabled = !unlocked;
+            }
+        }
+
         var obstacles = zone1DoorToZone2Blocker.GetComponentsInChildren<UnityEngine.AI.NavMeshObstacle>(true);
         for (int i = 0; i < obstacles.Length; i++)
         {

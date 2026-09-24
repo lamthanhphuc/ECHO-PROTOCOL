@@ -16,6 +16,7 @@ namespace EchoProtocol.Telemetry.Unity
     public sealed class TelemetryRuntimeBehaviour : MonoBehaviour
     {
         private const string RuntimeObjectName = "TelemetryRuntime";
+        private const int MinimumOccurrenceCapacity = 65536;
 
         [Header("Cross-team bindings (must implement the telemetry provider interfaces)")]
         [SerializeField] private MonoBehaviour authorityProvider;
@@ -23,7 +24,8 @@ namespace EchoProtocol.Telemetry.Unity
 
         [Header("Implementation tuning")]
         [SerializeField, Min(1)] private int bufferCapacity = 1024;
-        [SerializeField, Min(1)] private int occurrenceCapacity = 4096;
+        [SerializeField, Min(1)] private int occurrenceCapacity =
+            MinimumOccurrenceCapacity;
         [SerializeField, Min(1)] private int batchSize = 50;
         [SerializeField, Min(0.5f)] private float flushIntervalSeconds = 5f;
         [SerializeField, Min(1)] private int maxRetryAttempts = 6;
@@ -144,6 +146,11 @@ namespace EchoProtocol.Telemetry.Unity
             LocalLogPath = Path.Combine(Application.persistentDataPath, "telemetry", "telemetry-v1.1.jsonl");
             _localLog = new TelemetryFileLocalLog(LocalLogPath);
             _sequenceAllocator = new TelemetrySequenceAllocator();
+            int effectiveOccurrenceCapacity =
+                Mathf.Max(
+                    occurrenceCapacity,
+                    MinimumOccurrenceCapacity);
+
             _buffer = new TelemetryBuffer(
                 bufferCapacity,
                 new TelemetryRetryPolicy(maxRetryAttempts));
@@ -151,7 +158,7 @@ namespace EchoProtocol.Telemetry.Unity
                 _sequenceAllocator,
                 authority,
                 provenance,
-                occurrenceCapacity);
+                effectiveOccurrenceCapacity);
             _emitter = new TelemetryEmitter(_eventFactory, _buffer, provenance, _localLog);
             _matchAdapter = new MatchTelemetryAdapter(_emitter);
             _objectiveAdapter = new ObjectiveTelemetryAdapter(_emitter);

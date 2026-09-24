@@ -39,7 +39,8 @@ namespace EchoProtocol.AI.Listener.Perception
         public ListenerHearingPolicy(
             double hearingThreshold,
             double closedDoorMultiplier,
-            double wallMultiplier)
+            double wallMultiplier,
+            double hearingRangeMultiplier = 1d)
         {
             if (!RuntimeNoiseDefinition.IsFinite(hearingThreshold) || hearingThreshold < 0d)
             {
@@ -55,19 +56,31 @@ namespace EchoProtocol.AI.Listener.Perception
                 throw new ArgumentOutOfRangeException(nameof(wallMultiplier));
             }
 
+            if (!RuntimeNoiseDefinition.IsFinite(hearingRangeMultiplier)
+                || hearingRangeMultiplier <= 0d)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(hearingRangeMultiplier));
+            }
+
             HearingThreshold = hearingThreshold;
             ClosedDoorMultiplier = closedDoorMultiplier;
             WallMultiplier = wallMultiplier;
+            HearingRangeMultiplier = hearingRangeMultiplier;
         }
 
         public double HearingThreshold { get; }
         public double ClosedDoorMultiplier { get; }
         public double WallMultiplier { get; }
+        public double HearingRangeMultiplier { get; }
 
         public static ListenerHearingPolicy CreateImplementationDefault()
         {
-            // Implementation defaults only. Canonical Listener v1.0 marks final tuning TBD.
-            return new ListenerHearingPolicy(0.1d, 0.5d, 0.25d);
+            return new ListenerHearingPolicy(
+                0.1d,
+                0.5d,
+                0.25d,
+                1d);
         }
 
         public double OcclusionMultiplier(ListenerOcclusionClass occlusionClass)

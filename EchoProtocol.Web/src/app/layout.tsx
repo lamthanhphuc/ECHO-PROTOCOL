@@ -7,5 +7,10 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="vi"><body>{children}</body></html>;
+  return <html lang="vi"><body>
+    <div className="blood-edge" aria-hidden="true">
+      {Array.from({ length: 8 }, (_, index) => <span className="blood-stream" key={index} />)}
+    </div>
+    <div className="site-content">{children}</div>
+  </body></html>;
 }

@@ -38,6 +38,7 @@ namespace EchoProtocol.AI.Stalker.Spatial
         private readonly int _nearOptimalHopSlack;
         private readonly bool _useSeededVariation;
         private IRoomSweepTargetStrategy _targetStrategy;
+        private RegionSemanticZone _zone = RegionSemanticZone.Unknown;
 
         private readonly List<SeededCandidate> _seededCandidates =
             new List<SeededCandidate>();
@@ -92,6 +93,13 @@ namespace EchoProtocol.AI.Stalker.Spatial
             IRoomSweepTargetStrategy targetStrategy)
         {
             _targetStrategy = targetStrategy;
+        }
+
+        public void ConfigureZone(RegionSemanticZone zone)
+        {
+            if (_zone == zone) return;
+            _zone = zone;
+            ClearObjective();
         }
 
         public bool TryGetOrCreateObjective(
@@ -158,7 +166,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
                     || !_regionGraph.TryGetRegionSemanticMetadata(
                         target,
                         out var metadata)
-                    || metadata.Kind != RegionSemanticKind.Room)
+                    || metadata.Kind != RegionSemanticKind.Room
+                    || !IsInZone(target))
                 {
                     Invalidate(
                         RoomSweepGlobalObjectiveInvalidationReason
@@ -173,7 +182,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 else if (_regionGraph.TryGetNextRegionOnRoute(
                     currentRegionId,
                     target,
-                    out var nextRegionId))
+                    out var nextRegionId)
+                    && IsInZone(nextRegionId))
                 {
                     CurrentObjective =
                         new RoomSweepGlobalObjective(
@@ -233,7 +243,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 && _regionGraph.TryGetNextRegionOnRoute(
                     currentRegionId,
                     strategicTarget,
-                    out var strategicNextRegion))
+                    out var strategicNextRegion)
+                && IsInZone(strategicNextRegion))
             {
                 _targetStrategy.CommitSelectedTarget(
                     strategicTarget);
@@ -273,7 +284,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 }
 
                 if (!_regionGraph.TryGetRouteHopCost(currentRegionId, candidate, out var cost)
-                    || !_regionGraph.TryGetNextRegionOnRoute(currentRegionId, candidate, out var nextRegionId))
+                    || !_regionGraph.TryGetNextRegionOnRoute(currentRegionId, candidate, out var nextRegionId)
+                    || !IsInZone(nextRegionId))
                 {
                     continue;
                 }
@@ -321,7 +333,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
                     || !_regionGraph.TryGetNextRegionOnRoute(
                         currentRegionId,
                         candidate,
-                        out _))
+                        out var nextRegionId)
+                    || !IsInZone(nextRegionId))
                 {
                     continue;
                 }
@@ -363,7 +376,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
                     || !_regionGraph.TryGetNextRegionOnRoute(
                         currentRegionId,
                         candidate,
-                        out _))
+                        out var nextRegionId)
+                    || !IsInZone(nextRegionId))
                 {
                     continue;
                 }
@@ -394,7 +408,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 }
 
                 if (!_regionGraph.TryGetRouteHopCost(currentRegionId, candidate, out var cost)
-                    || !_regionGraph.TryGetNextRegionOnRoute(currentRegionId, candidate, out var nextRegionId))
+                    || !_regionGraph.TryGetNextRegionOnRoute(currentRegionId, candidate, out var nextRegionId)
+                    || !IsInZone(nextRegionId))
                 {
                     continue;
                 }
@@ -447,7 +462,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 && _regionGraph.TryGetRegionSemanticMetadata(
                     candidate,
                     out var metadata)
-                && metadata.Kind == RegionSemanticKind.Room;
+                && metadata.Kind == RegionSemanticKind.Room
+                && IsInZone(candidate);
         }
 
         private bool IsEligibleLegacyFallbackTarget(
@@ -478,6 +494,7 @@ namespace EchoProtocol.AI.Stalker.Spatial
                     candidate,
                     out var metadata)
                 && metadata.Kind == RegionSemanticKind.Room
+                && IsInZone(candidate)
                 && (_targetStrategy == null
                     || _targetStrategy.IsLegacyFallbackTargetAllowed(
                         candidate));
@@ -497,7 +514,15 @@ namespace EchoProtocol.AI.Stalker.Spatial
         {
             return currentRegionId.IsValid
                 && _regionGraph.ContainsRegion(currentRegionId)
-                && _regionGraph.IsRegionEnabled(currentRegionId);
+                && _regionGraph.IsRegionEnabled(currentRegionId)
+                && IsInZone(currentRegionId);
+        }
+
+        private bool IsInZone(RegionId regionId)
+        {
+            return _zone == RegionSemanticZone.Unknown
+                || (_regionGraph.TryGetRegionSemanticMetadata(regionId, out var metadata)
+                    && metadata.Zone == _zone);
         }
 
         private static bool IsRejected(RegionId regionId, ISet<RegionId> rejectedRoomRegionIds)
