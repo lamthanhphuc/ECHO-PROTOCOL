@@ -199,6 +199,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             _coreCarryStartedAt.Clear();
             _networkSimulationOwned = true;
             ResolveLocalDependencies();
+            specialEncounterRuntime?.ResetForMatch();
             ResolveLifecycle();
             BindProductionConsequenceSink();
             BindProductionTelemetryProducer();
@@ -220,6 +221,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             _coreCarryStartedAt.Clear();
+            specialEncounterRuntime?.ResetForMatch();
             _networkSimulationOwned = false;
             lifecycle = null;
             _productionConsequenceSink = null;
@@ -355,6 +357,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
             if (_boundPatrolMatchId != matchId)
             {
+                specialEncounterRuntime?.ResetForMatch();
                 var seed =
                     DerivePatrolVariationSeed(
                         matchId);

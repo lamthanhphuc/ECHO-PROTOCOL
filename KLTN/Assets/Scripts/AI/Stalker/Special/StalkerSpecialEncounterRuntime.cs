@@ -52,6 +52,15 @@ namespace EchoProtocol.AI.Stalker.Special
         public bool PresentationVisible => _presentationVisible;
         public float PhaseProgress01 => GetPhaseDuration(_phase) <= 0f ? 1f : Mathf.Clamp01(_phaseElapsed / GetPhaseDuration(_phase));
 
+        public void ResetForMatch()
+        {
+            Cleanup();
+            _cooldownUntil = AiSimulationTime.Invalid;
+            _sequenceOrdinal = 0;
+            _lastJumpInPosition = null;
+            jumpEntryRegistry?.ResetForMatch();
+        }
+
         private void Awake()
         {
             ResolveDependencies();
@@ -265,6 +274,8 @@ namespace EchoProtocol.AI.Stalker.Special
                                 step.Time,
                                 settings,
                                 _lastJumpInPosition,
+                                navMeshAgent != null ? navMeshAgent.areaMask : NavMesh.AllAreas,
+                                controller.IsPositionInsidePatrolZone,
                                 out _jumpInPosition))
                         {
                             AbortHiddenTransfer(

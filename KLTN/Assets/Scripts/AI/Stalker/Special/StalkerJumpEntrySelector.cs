@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Common;
 using UnityEngine;
@@ -23,6 +24,8 @@ namespace EchoProtocol.AI.Stalker.Special
                 now,
                 settings,
                 null,
+                NavMesh.AllAreas,
+                null,
                 out entryPosition);
         }
 
@@ -36,6 +39,24 @@ namespace EchoProtocol.AI.Stalker.Special
             Vector3? previousEntryPosition,
             out Vector3 entryPosition)
         {
+            return TrySelectWithFairness(
+                registry, alivePlayers, recentPressureByPlayer, excludedPlayerId,
+                now, settings, previousEntryPosition, NavMesh.AllAreas, null,
+                out entryPosition);
+        }
+
+        public static bool TrySelectWithFairness(
+            StalkerJumpEntryRegistry registry,
+            IReadOnlyList<Transform> alivePlayers,
+            IReadOnlyDictionary<Transform, float> recentPressureByPlayer,
+            PlayerId excludedPlayerId,
+            AiSimulationTime now,
+            StalkerSpecialEncounterSettings settings,
+            Vector3? previousEntryPosition,
+            int areaMask,
+            Func<Vector3, bool> isAllowedPosition,
+            out Vector3 entryPosition)
+        {
             return TrySelectCore(
                 registry,
                 alivePlayers,
@@ -44,6 +65,8 @@ namespace EchoProtocol.AI.Stalker.Special
                 now,
                 settings,
                 previousEntryPosition,
+                areaMask,
+                isAllowedPosition,
                 out entryPosition);
         }
 
@@ -55,6 +78,8 @@ namespace EchoProtocol.AI.Stalker.Special
             AiSimulationTime now,
             StalkerSpecialEncounterSettings settings,
             Vector3? previousEntryPosition,
+            int areaMask,
+            Func<Vector3, bool> isAllowedPosition,
             out Vector3 entryPosition)
         {
             entryPosition = default;
@@ -67,6 +92,7 @@ namespace EchoProtocol.AI.Stalker.Special
             }
 
             StalkerJumpEntryPoint bestAuthoredEntry = null;
+            var bestAuthoredPosition = default(Vector3);
             var bestAuthoredScore = float.NegativeInfinity;
 
             if (registry != null)
@@ -87,8 +113,19 @@ namespace EchoProtocol.AI.Stalker.Special
                         continue;
                     }
 
-                    if (!TryScorePositionWithFairness(
+                    if (!NavMesh.SamplePosition(
                             entry.EntryPosition,
+                            out var hit,
+                            settings.DynamicNavMeshSampleRadius,
+                            areaMask)
+                        || (isAllowedPosition != null
+                            && !isAllowedPosition(hit.position)))
+                    {
+                        continue;
+                    }
+
+                    if (!TryScorePositionWithFairness(
+                            hit.position,
                             alivePlayers,
                             recentPressureByPlayer,
                             entry.MinPlayerDistance,
@@ -107,13 +144,13 @@ namespace EchoProtocol.AI.Stalker.Special
 
                     bestAuthoredScore = score;
                     bestAuthoredEntry = entry;
+                    bestAuthoredPosition = hit.position;
                 }
             }
 
             if (bestAuthoredEntry != null)
             {
-                entryPosition =
-                    bestAuthoredEntry.EntryPosition;
+                entryPosition = bestAuthoredPosition;
 
                 registry.MarkUsed(
                     bestAuthoredEntry,
@@ -132,6 +169,8 @@ namespace EchoProtocol.AI.Stalker.Special
                 recentPressureByPlayer,
                 settings,
                 previousEntryPosition,
+                areaMask,
+                isAllowedPosition,
                 out entryPosition);
         }
 
@@ -140,6 +179,8 @@ namespace EchoProtocol.AI.Stalker.Special
             IReadOnlyDictionary<Transform, float> recentPressureByPlayer,
             StalkerSpecialEncounterSettings settings,
             Vector3? previousEntryPosition,
+            int areaMask,
+            Func<Vector3, bool> isAllowedPosition,
             out Vector3 entryPosition)
         {
             entryPosition = default;
@@ -241,7 +282,9 @@ namespace EchoProtocol.AI.Stalker.Special
                                 candidate,
                                 out var hit,
                                 settings.DynamicNavMeshSampleRadius,
-                                NavMesh.AllAreas))
+                                areaMask)
+                            || (isAllowedPosition != null
+                                && !isAllowedPosition(hit.position)))
                         {
                             continue;
                         }

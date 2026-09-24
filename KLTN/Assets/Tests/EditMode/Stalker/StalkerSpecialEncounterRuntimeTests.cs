@@ -608,6 +608,32 @@ namespace EchoProtocol.AI.Stalker.Tests
                 Is.False);
         }
 
+        [Test]
+        public void STK_SPECIAL_RUNTIME_013_NewMatch_ClearsEncounterHistoryAndOverride()
+        {
+            var controllerType = ResolveProductionType(
+                "EchoProtocol.AI.Stalker.StalkerController");
+            var controller = _runtimeObject.AddComponent(controllerType);
+            SetPrivateField("controller", controller);
+            controllerType.GetMethod("BeginSpecialEncounterOverride")
+                .Invoke(controller, null);
+            SetPrivateField("_ownsControllerOverride", true);
+            SetPrivateField("_cooldownUntil", CreateSimulationTime(1L, 300d));
+            SetPrivateField("_sequenceOrdinal", 4u);
+            SetPrivateField("_lastJumpInPosition", new Vector3(1f, 0f, 2f));
+            InvokeSetPhase("ApproachDownedPlayer");
+
+            _runtimeType.GetMethod("ResetForMatch").Invoke(_runtime, null);
+
+            Assert.That(GetPublicProperty<object>(_runtime, "Phase").ToString(),
+                Is.EqualTo("None"));
+            Assert.That(GetPublicProperty<uint>(_runtime, "SequenceOrdinal"), Is.Zero);
+            Assert.That(GetPrivateField<Vector3?>("_lastJumpInPosition"), Is.Null);
+            Assert.That(InvokeIsCoolingDown(CreateSimulationTime(2L, 1d)), Is.False);
+            Assert.That(GetPublicProperty<bool>(controller, "SpecialEncounterOverrideActive"),
+                Is.False);
+        }
+
         private void AddEligiblePlayer(
             Vector3 position)
         {
