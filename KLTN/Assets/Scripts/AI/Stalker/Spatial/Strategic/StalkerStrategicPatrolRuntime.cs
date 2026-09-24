@@ -43,6 +43,19 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
 
         public ActivityRoomIndex RoomIndex { get; }
         public IRoomSweepTargetStrategy TargetStrategy => _targetStrategy;
+
+        public bool ShouldSeekPlayers =>
+            _director.ShouldSeekPlayers || _targetStrategy.HasCoreCarrierRoom;
+
+        public void SetCoreCarrierRoom(ActivityRoomKey room) =>
+            _targetStrategy.SetCoreCarrierRoom(room);
+
+        public bool TryGetCrowdedTarget(
+            RegionId currentRegionId,
+            ISet<RegionId> rejectedRoomRegionIds,
+            out RegionId targetRegion) =>
+            _targetStrategy.TryGetCrowdedTarget(
+                currentRegionId, rejectedRoomRegionIds, out _, out targetRegion);
         public StalkerPatrolPacingMode Mode => _director.Mode;
         public float Pressure01 => _director.Pressure01;
         public bool HasHotspot => _director.HasHotspot;
@@ -69,6 +82,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
 
         public void ResetForMatch()
         {
+            SetCoreCarrierRoom(ActivityRoomKey.Invalid);
             _pendingOccupancy.Clear();
             _heatSystem.Reset();
             _director.Reset();

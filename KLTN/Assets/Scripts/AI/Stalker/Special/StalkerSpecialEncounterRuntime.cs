@@ -126,6 +126,13 @@ namespace EchoProtocol.AI.Stalker.Special
                         SetPhase(
                             StalkerSpecialEncounterPhase.Sniff);
                     }
+                    else if (_phaseElapsed >= settings.ApproachTimeoutSeconds)
+                    {
+                        Abort(
+                            "approach-timeout",
+                            step.Time,
+                            settings.FailedAttemptBackoffSeconds);
+                    }
 
                     break;
 
@@ -970,6 +977,7 @@ namespace EchoProtocol.AI.Stalker.Special
         {
             return phase switch
             {
+                StalkerSpecialEncounterPhase.ApproachDownedPlayer => settings.ApproachTimeoutSeconds,
                 StalkerSpecialEncounterPhase.Sniff => settings.SpecialSniffDurationSeconds,
                 StalkerSpecialEncounterPhase.JumpOut => settings.JumpOutDurationSeconds,
                 StalkerSpecialEncounterPhase.HiddenTransfer => Mathf.Max(

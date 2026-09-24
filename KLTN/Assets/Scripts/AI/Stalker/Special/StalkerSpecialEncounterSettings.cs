@@ -17,6 +17,7 @@ namespace EchoProtocol.AI.Stalker.Special
         [SerializeField] private float sniffApproachDistance = 2f;
         [SerializeField] private float sniffApproachSampleRadius = 1.5f;
         [SerializeField] private float stagingArrivalTolerance = 0.35f;
+        [SerializeField, Min(0.1f)] private float approachTimeoutSeconds = 12f;
 
         [SerializeField] private float specialSniffDurationSeconds = 1.5f;
         [SerializeField, Min(5f)]
@@ -100,6 +101,9 @@ namespace EchoProtocol.AI.Stalker.Special
             Mathf.Max(
                 0.01f,
                 stagingArrivalTolerance);
+
+        public float ApproachTimeoutSeconds =>
+            Mathf.Max(0.1f, approachTimeoutSeconds);
 
         public float SpecialSniffDurationSeconds =>
             Mathf.Max(

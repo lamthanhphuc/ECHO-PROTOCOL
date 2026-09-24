@@ -5,6 +5,33 @@ namespace EchoProtocol.AI.Stalker.Tests
 {
     public sealed class StalkerPatrolDirectorPacingTests
     {
+        [Test]
+        public void STK_DIRECTOR_PACING_002_SeeksAfterThreeMinutesAndResetsOnDetection()
+        {
+            var directorType = ResolveProductionType(
+                "EchoProtocol.AI.Stalker.Spatial.Strategic.StalkerPatrolDirector");
+            var settings = Activator.CreateInstance(ResolveProductionType(
+                "EchoProtocol.AI.Stalker.Spatial.Strategic.StalkerSmartPatrolSettings"));
+            var director = Activator.CreateInstance(directorType, settings);
+            var stateType = ResolveProductionType("EchoProtocol.AI.Stalker.StalkerState");
+            var update = directorType.GetMethod("Update");
+            var shouldSeek = directorType.GetProperty("ShouldSeekPlayers");
+            Assert.That(update, Is.Not.Null);
+            Assert.That(shouldSeek, Is.Not.Null);
+
+            var patrol = Enum.Parse(stateType, "PATROL");
+            var detect = Enum.Parse(stateType, "DETECT");
+            update.Invoke(director, new[] { patrol, null, null, (object)10d });
+            update.Invoke(director, new[] { patrol, null, null, (object)189d });
+            Assert.That(shouldSeek.GetValue(director), Is.False);
+            update.Invoke(director, new[] { patrol, null, null, (object)190d });
+            Assert.That(shouldSeek.GetValue(director), Is.True);
+            update.Invoke(director, new[] { detect, null, null, (object)191d });
+            Assert.That(shouldSeek.GetValue(director), Is.False);
+            update.Invoke(director, new[] { patrol, null, null, (object)371d });
+            Assert.That(shouldSeek.GetValue(director), Is.True);
+        }
+
         private const string DirectorTypeName =
             "EchoProtocol.AI.Stalker.Spatial.Strategic.StalkerPatrolDirector";
 

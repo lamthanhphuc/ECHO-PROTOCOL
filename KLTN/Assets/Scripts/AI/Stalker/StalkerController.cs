@@ -90,7 +90,9 @@ namespace EchoProtocol.AI.Stalker
         private float detectionDecayRate = 1f;
 
         [Header("Search Spike Defaults")]
-        [SerializeField] private float searchDuration = 5f;
+        [SerializeField]
+        [Tooltip("Active SEARCH time budget; LKP sniff and search point holds pause this timer.")]
+        private float searchDuration = 5f;
         [SerializeField] private float searchRadius = 8f;
 
         [Header("Search Reacquire Detect")]
@@ -136,7 +138,9 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float attackRange = 2.8f;
         [SerializeField] private float attackWindup = 0.75f;
         [SerializeField] private float attackRecovery = 1f;
-        [SerializeField] private float attackDamage = 100f;
+        [SerializeField]
+        [Tooltip("Damage for the legacy PlayerDownState path; the typed attack uses its consequence sink.")]
+        private float attackDamage = 100f;
 
         [Header("Hide Spot Reveal")]
         [SerializeField, Min(0f)]
@@ -246,6 +250,8 @@ namespace EchoProtocol.AI.Stalker
         private RoomSweepPlanner _roomSweepPlanner;
         private RoomSweepGlobalPlanner _roomSweepGlobalPlanner;
         private StalkerStrategicPatrolRuntime _strategicPatrolRuntime;
+        private double _nextCrowdedPatrolRefreshSeconds;
+        private RegionId _crowdedPatrolTargetRegion = RegionId.Invalid;
         private bool _hasPatrolVariationSeed;
         private int _patrolVariationSeed;
         private int _patrolNearOptimalHopSlack;
@@ -273,6 +279,9 @@ namespace EchoProtocol.AI.Stalker
         private bool _dynamicPatrolFallbackActive;
         private bool _canonicalPatrolFallbackActive;
         private bool _roomSweepPatrolFallbackActive;
+        private int _roomSweepFallbackNodeId = -1;
+        private float _nextRoomSweepFallbackAttemptSeconds;
+        private readonly HashSet<int> _rejectedRoomSweepFallbackNodeIds = new HashSet<int>();
         private RegionId _currentRegionId = RegionId.Invalid;
         private RegionId _previousRegionId = RegionId.Invalid;
         private long _searchEpisodeSequence;
@@ -317,8 +326,6 @@ namespace EchoProtocol.AI.Stalker
         private IReadOnlyList<StalkerTargetCandidate> _currentVisibleTargetCandidates;
         private IReadOnlyList<PlayerId> _currentVisibleObjectiveCarrierIds;
         private IReadOnlyList<StalkerTargetStatus> _currentTargetStatuses;
-        private StalkerPerceptionTargetSnapshot? _sustainedCoreCarrier;
-        private PlayerId _coreCarrierPursuitTargetId;
         private IReadOnlyList<HearingObservation>
             _currentHearingObservations;
         private System.DateTime
@@ -669,6 +676,8 @@ namespace EchoProtocol.AI.Stalker
 
             _strategicPatrolRuntime.BeginMatch(
                 matchId);
+            _nextCrowdedPatrolRefreshSeconds = 0d;
+            _crowdedPatrolTargetRegion = RegionId.Invalid;
 
             return true;
         }
@@ -676,6 +685,8 @@ namespace EchoProtocol.AI.Stalker
         public void ResetStrategicPatrolRuntime()
         {
             _strategicPatrolRuntime?.ResetForMatch();
+            _nextCrowdedPatrolRefreshSeconds = 0d;
+            _crowdedPatrolTargetRegion = RegionId.Invalid;
             smartPatrolPacingMode = string.Empty;
             smartPatrolHotspot = string.Empty;
             smartPatrolPressure = 0f;
@@ -847,8 +858,6 @@ namespace EchoProtocol.AI.Stalker
 
             private void Awake()
             {
-                SyncDetectionRatesFromDurations();
-
                 InitializeNavigation();
                 InitializeHidingInvestigation();
             }
@@ -900,7 +909,15 @@ namespace EchoProtocol.AI.Stalker
 
             _currentTargetStatuses =
                 input.TargetStatuses;
-            _sustainedCoreCarrier = input.SustainedCoreCarrier;
+            var coreCarrierRoom = ActivityRoomKey.Invalid;
+            if (input.SustainedCoreCarrier.HasValue
+                && input.SustainedCoreCarrier.Value.TargetSample != null)
+            {
+                TryResolveStrategicActivityRoom(
+                    input.SustainedCoreCarrier.Value.TargetSample.position,
+                    out coreCarrierRoom);
+            }
+            _strategicPatrolRuntime?.SetCoreCarrierRoom(coreCarrierRoom);
 
             _currentAttackTargetSnapshot =
                 input.CurrentAttackTargetSnapshot;
@@ -953,7 +970,6 @@ namespace EchoProtocol.AI.Stalker
                 _currentVisibleTargetCandidates = null;
                 _currentVisibleObjectiveCarrierIds = null;
                 _currentTargetStatuses = null;
-                _sustainedCoreCarrier = null;
                 _currentAttackTargetSnapshot = null;
                 _currentHearingObservations = null;
                 _currentHearingEvaluationTimeUtc =
@@ -967,11 +983,6 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickCurrentState()
         {
-            if (TickSustainedCoreCarrier())
-            {
-                return;
-            }
-
             if (TickHideSpotRevealGrace())
             {
                 return;
@@ -1028,68 +1039,6 @@ namespace EchoProtocol.AI.Stalker
                     TickSearch();
                     break;
             }
-        }
-
-        private bool TickSustainedCoreCarrier()
-        {
-            if (!_sustainedCoreCarrier.HasValue)
-            {
-                if (_coreCarrierPursuitTargetId.IsValid)
-                {
-                    if (currentState == StalkerState.CHASE
-                        && _memory.CurrentTargetId == _coreCarrierPursuitTargetId
-                        && !TryGetUniqueVisibleTargetCandidate(
-                            _coreCarrierPursuitTargetId,
-                            out _,
-                            out _))
-                    {
-                        InvalidateCurrentTarget();
-                    }
-
-                    _coreCarrierPursuitTargetId = PlayerId.Invalid;
-                }
-
-                return false;
-            }
-
-            if (currentState == StalkerState.ATTACK
-                || currentState == StalkerState.RECOVER)
-            {
-                return false;
-            }
-
-            var carrier = _sustainedCoreCarrier.Value;
-            if (carrier.TargetSample == null
-                || !TryGetUniqueTargetStatusDetail(carrier.PlayerId, out var status)
-                || !status.Eligibility.Eligible)
-            {
-                return false;
-            }
-
-            if (currentState != StalkerState.CHASE
-                || _memory.CurrentTargetId != carrier.PlayerId)
-            {
-                ClearTargetContext();
-                ClearSearchRuntimeContext();
-                _memory.SetCurrentTarget(carrier.PlayerId);
-                currentState = StalkerState.CHASE;
-                ApplyMovementSpeedForCurrentState();
-            }
-
-            _coreCarrierPursuitTargetId = carrier.PlayerId;
-            var position = carrier.TargetSample.position;
-            lastKnownPosition = position;
-            _chaseVisualLossElapsed = 0f;
-            if (IsWithinAttackRange(position))
-            {
-                EnterAttack();
-            }
-            else
-            {
-                SetChaseDestination(position);
-            }
-
-            return true;
         }
 
         private void TickPatrol()
@@ -1268,6 +1217,25 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickRoomSweepSpatialPatrol()
         {
+            if (_roomSweepFallbackNodeId >= 0)
+            {
+                if (_navigation != null
+                    && _navigation.HasActiveDestination
+                    && !_navigation.HasArrived())
+                {
+                    return;
+                }
+
+                if (_navigation != null && _navigation.HasActiveDestination)
+                {
+                    MarkRoomSweepDestinationReached();
+                }
+                _rejectedRoomSweepFallbackNodeIds.Add(_roomSweepFallbackNodeId);
+                _roomSweepFallbackNodeId = -1;
+                _navigation?.Stop();
+                ClearRoomSweepDestination();
+            }
+
             if (_roomSweepPatrolFallbackActive)
             {
                 TickFixedWaypointPatrol();
@@ -1284,6 +1252,11 @@ namespace EchoProtocol.AI.Stalker
             if (!EnsureRoomSweepPatrolInitialized())
             {
                 ActivateRoomSweepPatrolFallback();
+                return;
+            }
+
+            if (RefreshCrowdedPatrolDestination())
+            {
                 return;
             }
 
@@ -3837,6 +3810,70 @@ namespace EchoProtocol.AI.Stalker
                 && _scenarioMonsterParameters != null;
         }
 
+        private bool RefreshCrowdedPatrolDestination()
+        {
+            if (!useSmartPatrolDirector || _strategicPatrolRuntime == null)
+            {
+                return false;
+            }
+
+            if (!_strategicPatrolRuntime.ShouldSeekPlayers)
+            {
+                var previousTarget = _crowdedPatrolTargetRegion;
+                _crowdedPatrolTargetRegion = RegionId.Invalid;
+                _nextCrowdedPatrolRefreshSeconds = 0d;
+                if (!previousTarget.IsValid
+                    || _roomSweepGlobalPlanner.CurrentObjective.TargetRoomRegionId
+                        != previousTarget)
+                {
+                    return false;
+                }
+
+                ReplanRoomSweepAfterStrategicChange();
+                return true;
+            }
+
+            var nowSeconds = _currentSimulationStep.Time.Seconds;
+            if (nowSeconds < _nextCrowdedPatrolRefreshSeconds
+                || !ResolveCurrentRoomSweepLocation(out _, out var currentRegionId))
+            {
+                return false;
+            }
+
+            _nextCrowdedPatrolRefreshSeconds = nowSeconds + 2.5d;
+            var hasTarget = _strategicPatrolRuntime.TryGetCrowdedTarget(
+                currentRegionId,
+                _rejectedRoomSweepGlobalRegionIds,
+                out var targetRegion);
+            var objective = _roomSweepGlobalPlanner.CurrentObjective;
+            var wasCrowdedTarget = _crowdedPatrolTargetRegion.IsValid;
+            _crowdedPatrolTargetRegion = hasTarget
+                ? targetRegion
+                : RegionId.Invalid;
+
+            if ((hasTarget && objective.TargetRoomRegionId == targetRegion)
+                || (!hasTarget && !wasCrowdedTarget))
+            {
+                return false;
+            }
+
+            ReplanRoomSweepAfterStrategicChange();
+            return true;
+        }
+
+        private void ReplanRoomSweepAfterStrategicChange()
+        {
+            _roomSweepGlobalPlanner.Invalidate(
+                RoomSweepGlobalObjectiveInvalidationReason.StrategicPolicyChanged);
+            _navigation.Stop();
+            ClearRoomSweepSelfProbeScan();
+            ClearRoomSweepDestination();
+            if (!SetRoomSweepPatrolDestination())
+            {
+                ActivateRoomSweepPatrolFallback();
+            }
+        }
+
         private float ClampDetectionMeter(float value)
         {
             return Mathf.Clamp(value, 0f, GetDetectionMeterFull());
@@ -4064,6 +4101,17 @@ namespace EchoProtocol.AI.Stalker
 
         private void HandlePatrolNavigationFailure(NavigationFailureReason failureReason)
         {
+            if (patrolMode == StalkerPatrolMode.RoomSweepSpatial
+                && _roomSweepFallbackNodeId >= 0)
+            {
+                _rejectedRoomSweepFallbackNodeIds.Add(_roomSweepFallbackNodeId);
+                _roomSweepFallbackNodeId = -1;
+                _navigation?.Stop();
+                ClearRoomSweepDestination();
+                ActivateRoomSweepPatrolFallback();
+                return;
+            }
+
             if (patrolMode == StalkerPatrolMode.RoomSweepSpatial && !_roomSweepPatrolFallbackActive)
             {
                 HandleRoomSweepNavigationFailure(failureReason);
@@ -6534,20 +6582,20 @@ namespace EchoProtocol.AI.Stalker
             _navigation?.Stop();
             ClearRoomSweepDestination();
 
-            // Production RoomSweep does not currently have a
-            // FixedWaypoint route. Do not latch into an unusable mode.
+            // Production RoomSweep has no FixedWaypoint route. Use a
+            // reachable node in this Stalker's zone when graph metadata exists.
             if (patrolRoute == null
                 || patrolRoute.PointCount == 0
                 || _patrolZone != RegionSemanticZone.Unknown)
             {
                 _roomSweepPatrolFallbackActive = false;
-
-                // Allow RoomSweep to make a fresh decision next tick.
                 _rejectedRoomSweepGlobalRegionIds.Clear();
-
-                _navigation?.RecordRecoveryReason(
-                    NavigationRecoveryReason.None);
-
+                if (CurrentSimulationTimeSeconds >= _nextRoomSweepFallbackAttemptSeconds
+                    && !TrySetRoomSweepLocalFallbackDestination())
+                {
+                    _rejectedRoomSweepFallbackNodeIds.Clear();
+                    _nextRoomSweepFallbackAttemptSeconds = CurrentSimulationTimeSeconds + 2.5f;
+                }
                 return;
             }
 
@@ -6570,9 +6618,109 @@ namespace EchoProtocol.AI.Stalker
                 recoveryReason);
         }
 
+        private bool TrySetRoomSweepLocalFallbackDestination()
+        {
+            if (_patrolZone == RegionSemanticZone.Unknown
+                || _regionGraph == null
+                || !EnsureSpatialGraphBuilt()
+                || !CanUseNavigation())
+            {
+                return false;
+            }
+
+            var agent = GetComponent<NavMeshAgent>();
+            var path = new NavMeshPath();
+            SpatialNode bestNode = null;
+            var bestRegionId = RegionId.Invalid;
+            var bestDistance = float.PositiveInfinity;
+            var nodes = _spatialPatrolGraph.Nodes;
+            // ponytail: scan paths only after RoomSweep fails; cache zone routes if fallback becomes frequent.
+            for (var i = 0; i < nodes.Count; i++)
+            {
+                var node = nodes[i];
+                var distance = (node.Position - transform.position).sqrMagnitude;
+                if (distance < 1f
+                    || distance >= bestDistance
+                    || _rejectedRoomSweepFallbackNodeIds.Contains(node.Id)
+                    || !IsRoomSweepFallbackNodeInZone(node.Id, out var regionId)
+                    || !_navigation.EvaluateDestination(node.Position).IsComplete
+                    || !agent.CalculatePath(node.Position, path)
+                    || path.status != NavMeshPathStatus.PathComplete
+                    || !IsRoomSweepFallbackPathInZone(path))
+                {
+                    continue;
+                }
+
+                bestDistance = distance;
+                bestNode = node;
+                bestRegionId = regionId;
+            }
+
+            if (bestNode == null
+                || !_navigation.RequestDestination(bestNode.Position).IsAccepted)
+            {
+                return false;
+            }
+
+            _roomSweepFallbackNodeId = bestNode.Id;
+            _blackboard.DestinationSpatialNodeId = bestNode.Id;
+            SetNavigationObjective(new StalkerNavigationObjectiveKey(
+                StalkerNavigationObjectiveKind.RoomSweepTransit,
+                bestNode.Id, bestRegionId.Value, -1));
+            _navigation.RecordRecoveryReason(
+                NavigationRecoveryReason.AlternateLocalCandidate);
+            RuntimeLog.Log(RuntimeLogCategory.StalkerPatrol,
+                $"[STK_PATROL][FALLBACK_NODE] node={bestNode.Id} zone={_patrolZone}");
+            return true;
+        }
+
+        private bool IsRoomSweepFallbackNodeInZone(int nodeId, out RegionId regionId)
+        {
+            regionId = RegionId.Invalid;
+            return _regionGraph != null
+                && _patrolZone != RegionSemanticZone.Unknown
+                && _regionGraph.TryGetRegionForNode(nodeId, out regionId)
+                && _regionGraph.IsRegionEnabled(regionId)
+                && _regionGraph.TryGetRegionSemanticMetadata(regionId, out var metadata)
+                && metadata.Zone == _patrolZone;
+        }
+
+        private bool IsRoomSweepFallbackPathInZone(NavMeshPath path)
+        {
+            var corners = path.corners;
+            if (corners == null || corners.Length == 0)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < corners.Length - 1; i++)
+            {
+                var samples = Mathf.Max(1, Mathf.CeilToInt(
+                    Vector3.Distance(corners[i], corners[i + 1])
+                    / TopologyPathSegmentSampleSpacing));
+                for (var j = 0; j <= samples; j++)
+                {
+                    var point = Vector3.Lerp(corners[i], corners[i + 1],
+                        (float)j / samples);
+                    if (!TryResolveNearestSpatialNode(point, out var nodeId)
+                        || !_regionGraph.TryGetNodeSemanticMetadata(
+                            nodeId, out var metadata)
+                        || metadata.Zone != _patrolZone)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return corners.Length > 1;
+        }
+
         private void ResetRoomSweepFallbackState()
         {
             _roomSweepPatrolFallbackActive = false;
+            _roomSweepFallbackNodeId = -1;
+            _nextRoomSweepFallbackAttemptSeconds = 0f;
+            _rejectedRoomSweepFallbackNodeIds.Clear();
             regionGraphFallbackReason = RegionGraphFallbackReason.None;
             _rejectedRoomSweepTransitNodeIds.Clear();
             _rejectedRoomSweepGlobalRegionIds.Clear();
