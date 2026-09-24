@@ -543,6 +543,71 @@ namespace EchoProtocol.AI.Stalker.Tests
                 Is.EqualTo("PATROL"));
         }
 
+        [Test]
+        public void STK_SPECIAL_RUNTIME_011_DisablingSettings_ReleasesOverride()
+        {
+            var controllerType = ResolveProductionType(
+                "EchoProtocol.AI.Stalker.StalkerController");
+            var controller = _runtimeObject.AddComponent(controllerType);
+            SetPrivateField("controller", controller);
+            controllerType.GetMethod("BeginSpecialEncounterOverride")
+                .Invoke(controller, null);
+            SetPrivateField("_ownsControllerOverride", true);
+            InvokeSetPhase("ApproachDownedPlayer");
+
+            var settings = GetPrivateField<object>("settings");
+            _settingsType.GetField("enabled", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(settings, false);
+
+            var stepType = ResolveProductionTypeBySimpleName("AiSimulationStep");
+            var step = Activator.CreateInstance(stepType,
+                CreateSimulationTime(1L, 1d), 0.1f);
+            _runtimeType.GetMethod("TickAuthoritative")
+                .Invoke(_runtime, new[] { null, null, step });
+
+            Assert.That(GetPublicProperty<object>(_runtime, "Phase").ToString(),
+                Is.EqualTo("None"));
+            Assert.That(GetPublicProperty<bool>(controller, "SpecialEncounterOverrideActive"),
+                Is.False);
+        }
+
+        [Test]
+        public void STK_SPECIAL_RUNTIME_012_FailedHiddenTransfer_PlaysJumpInBeforePatrol()
+        {
+            var controllerType = ResolveProductionType(
+                "EchoProtocol.AI.Stalker.StalkerController");
+            var controller = _runtimeObject.AddComponent(controllerType);
+            SetPrivateField("controller", controller);
+            controllerType.GetMethod("BeginSpecialEncounterOverride")
+                .Invoke(controller, null);
+            SetPrivateField("_ownsControllerOverride", true);
+            SetPrivateField("_presentationVisible", false);
+            SetPrivateField("_hiddenTransferDurationSeconds", 0.1f);
+            InvokeSetPhase("HiddenTransfer");
+
+            var stepType = ResolveProductionTypeBySimpleName("AiSimulationStep");
+            var tick = _runtimeType.GetMethod("TickAuthoritative");
+            var failed = Activator.CreateInstance(stepType,
+                CreateSimulationTime(1L, 1d), 0.2f);
+            tick.Invoke(_runtime, new[] { null, null, failed });
+
+            Assert.That(GetPublicProperty<object>(_runtime, "Phase").ToString(),
+                Is.EqualTo("JumpIn"));
+            Assert.That(GetPublicProperty<bool>(_runtime, "PresentationVisible"),
+                Is.True);
+            Assert.That(GetPublicProperty<bool>(controller, "SpecialEncounterOverrideActive"),
+                Is.True);
+
+            var recovered = Activator.CreateInstance(stepType,
+                CreateSimulationTime(2L, 10d), 10f);
+            tick.Invoke(_runtime, new[] { null, null, recovered });
+
+            Assert.That(GetPublicProperty<object>(_runtime, "Phase").ToString(),
+                Is.EqualTo("None"));
+            Assert.That(GetPublicProperty<bool>(controller, "SpecialEncounterOverrideActive"),
+                Is.False);
+        }
+
         private void AddEligiblePlayer(
             Vector3 position)
         {

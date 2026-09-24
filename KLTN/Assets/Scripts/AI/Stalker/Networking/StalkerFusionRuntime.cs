@@ -211,6 +211,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 ReplicatedState = controller != null ? controller.CurrentState : StalkerState.PATROL;
                 TargetPlayer = PlayerRef.None;
                 CatchCooldown = TickTimer.None;
+                ReplicatedSpecialVisible = true;
             }
 
             if (Object != null) ApplyReplicatedPresentation();

@@ -22,6 +22,7 @@ namespace EchoProtocol.AI.Stalker.Special
                 excludedPlayerId,
                 now,
                 settings,
+                null,
                 out entryPosition);
         }
 
@@ -32,6 +33,7 @@ namespace EchoProtocol.AI.Stalker.Special
             PlayerId excludedPlayerId,
             AiSimulationTime now,
             StalkerSpecialEncounterSettings settings,
+            Vector3? previousEntryPosition,
             out Vector3 entryPosition)
         {
             return TrySelectCore(
@@ -41,6 +43,7 @@ namespace EchoProtocol.AI.Stalker.Special
                 excludedPlayerId,
                 now,
                 settings,
+                previousEntryPosition,
                 out entryPosition);
         }
 
@@ -51,6 +54,7 @@ namespace EchoProtocol.AI.Stalker.Special
             PlayerId excludedPlayerId,
             AiSimulationTime now,
             StalkerSpecialEncounterSettings settings,
+            Vector3? previousEntryPosition,
             out Vector3 entryPosition)
         {
             entryPosition = default;
@@ -127,6 +131,7 @@ namespace EchoProtocol.AI.Stalker.Special
                 alivePlayers,
                 recentPressureByPlayer,
                 settings,
+                previousEntryPosition,
                 out entryPosition);
         }
 
@@ -134,6 +139,7 @@ namespace EchoProtocol.AI.Stalker.Special
             IReadOnlyList<Transform> alivePlayers,
             IReadOnlyDictionary<Transform, float> recentPressureByPlayer,
             StalkerSpecialEncounterSettings settings,
+            Vector3? previousEntryPosition,
             out Vector3 entryPosition)
         {
             entryPosition = default;
@@ -251,6 +257,13 @@ namespace EchoProtocol.AI.Stalker.Special
                                 out var score))
                         {
                             continue;
+                        }
+
+                        if (previousEntryPosition.HasValue
+                            && (hit.position - previousEntryPosition.Value).sqrMagnitude
+                                < settings.JumpInMinDistance * settings.JumpInMinDistance)
+                        {
+                            score -= 100f;
                         }
 
                         if (score <= bestScore)

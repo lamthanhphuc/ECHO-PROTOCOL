@@ -706,6 +706,13 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
+            if (_patrolZone != RegionSemanticZone.Unknown
+                && (!_regionGraph.TryGetNodeSemanticMetadata(nodeId, out var metadata)
+                    || metadata.Zone != _patrolZone))
+            {
+                return false;
+            }
+
             return _strategicPatrolRuntime.RoomIndex.TryGetAreaForRegion(
                 regionId,
                 out room);
