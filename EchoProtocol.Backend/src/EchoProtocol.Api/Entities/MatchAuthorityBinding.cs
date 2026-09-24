@@ -12,8 +12,10 @@ public sealed class MatchAuthorityBinding
     public DateTime LeaseExpiresAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
+    public DateTime? StartedAtUtc { get; set; }
     public DateTime? EndedAtUtc { get; set; }
 
     public User? HostUser { get; set; }
     public ICollection<MatchPlayerBinding> Players { get; set; } = [];
+    public MatchResult? Result { get; set; }
 }

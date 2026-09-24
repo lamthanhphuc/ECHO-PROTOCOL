@@ -13,4 +13,5 @@ public sealed class MatchPlayerBinding
 
     public MatchAuthorityBinding? Match { get; set; }
     public User? User { get; set; }
+    public MatchResultPlayer? ResultPlayer { get; set; }
 }

@@ -71,38 +71,50 @@ Wallets 1──* WalletTransactions
 
 | Column | Type | Notes |
 |---|---|---|
-| Id | UUID PK | |
-| Name | VARCHAR(100) | |
-| Description | TEXT | |
-| Price | INT | |
-| ImageUrl | VARCHAR(500) | Cosmetic image |
-| Category | VARCHAR(50) | |
-| IsActive | BOOLEAN | |
-| CreatedAt | TIMESTAMPTZ | |
+| ItemId | UUID PK | Public immutable catalog identity |
+| ItemName | VARCHAR(100) | |
+| Description | VARCHAR(1000) | |
+| Price | INT | Check `>= 0` |
+| AssetReference | VARCHAR(500) | Unity cosmetic asset/address reference |
+| Category | VARCHAR(50) | Normalized uppercase |
+| IsActive | BOOLEAN | Disabled items are hidden from public catalog |
+| CreatedAtUtc | TIMESTAMPTZ | UTC |
+| UpdatedAtUtc | TIMESTAMPTZ | UTC |
 
 ---
 
-## Inventories
+## InventoryItems
 
 | Column | Type | Notes |
 |---|---|---|
-| Id | UUID PK | |
+| InventoryItemId | UUID PK | |
 | UserId | UUID FK → Users | |
 | ShopItemId | UUID FK → ShopItems | |
-| AcquiredAt | TIMESTAMPTZ | |
-| Source | VARCHAR(50) | purchase, reward |
+| Source | VARCHAR(50) | `PURCHASE` in M4-015 |
+| PurchaseId | UUID NULL UNIQUE FK | References PurchaseTransactions for purchase grants |
+| AcquiredAtUtc | TIMESTAMPTZ | UTC |
+
+Unique `(UserId, ShopItemId)` enforces one owned copy per cosmetic.
 
 ---
 
-## EquippedItems
+## PlayerLoadoutItems (M4-052)
 
 | Column | Type | Notes |
 |---|---|---|
-| Id | UUID PK | |
-| UserId | UUID FK → Users | |
-| InventoryItemId | UUID FK → Inventories | |
-| Slot | VARCHAR(50) | hat, outfit, etc. |
-| EquippedAt | TIMESTAMPTZ | |
+| UserId | UUID PK/FK → Users | JWT owner |
+| SlotId | VARCHAR(50) PK | Current contract: `CHARACTER` or `TEAM_TOOL_1` |
+| InventoryItemId | UUID | Composite FK `(UserId, InventoryItemId)` enforces ownership |
+| EquippedAtUtc | TIMESTAMPTZ | Current selection timestamp |
+| UpdatedAtUtc | TIMESTAMPTZ | Must be >= EquippedAtUtc |
+
+Unique `(UserId, SlotId)` permits one item per slot. Unique `(UserId, InventoryItemId)` prevents
+the same owned item from occupying multiple slots. Slot availability is configuration/service
+validation rather than a database enum so legacy `TEAM_TOOL_2` rows can remain recoverable.
+Such disabled-slot rows are excluded from loadout responses and gameplay mapping; Inventory and
+Purchase ownership is unchanged until an explicit cleanup is approved.
+Category/slot compatibility is validated inside the transactional service because it spans the
+InventoryItem and ShopItem records.
 
 ---
 
@@ -113,9 +125,11 @@ Wallets 1──* WalletTransactions
 | Id | UUID PK | |
 | UserId | UUID FK → Users | |
 | ShopItemId | UUID FK → ShopItems | |
-| Amount | INT | |
-| Status | VARCHAR(20) | completed, failed |
-| CreatedAt | TIMESTAMPTZ | |
+| IdempotencyKey | VARCHAR(100) | Unique with UserId |
+| PriceAtPurchase | INT | Server-resolved price, check `>= 0` |
+| WalletTransactionId | UUID UNIQUE FK | References WalletTransactions |
+| Status | VARCHAR(20) | `COMPLETED` |
+| CreatedAtUtc | TIMESTAMPTZ | UTC |
 
 ---
 
@@ -125,10 +139,13 @@ Wallets 1──* WalletTransactions
 |---|---|---|
 | Id | UUID PK | |
 | WalletId | UUID FK → Wallets | |
-| Amount | INT | +/- |
-| Type | VARCHAR(50) | purchase, reward, admin |
-| ReferenceId | UUID NULL | |
-| CreatedAt | TIMESTAMPTZ | |
+| Amount | INT | Reward `>= 0`; purchase `<= 0` |
+| Type | VARCHAR(30) | `MATCH_REWARD`, `PURCHASE` |
+| BalanceBefore | INT | Non-negative |
+| BalanceAfter | INT | Non-negative; after = before + amount |
+| ReferenceId | UUID | MatchId or PurchaseId |
+| Description | VARCHAR(255) | Audit description |
+| CreatedAtUtc | TIMESTAMPTZ | UTC |
 
 ---
 
@@ -217,9 +234,44 @@ milestone decision and is not implied by the ingestion-age validation.
 
 Unique indexes enforce one backend user and one Fusion actor per match.
 
+The M4-009 migration promotes `(MatchId, UserId)` to an alternate unique key so
+`MatchResultPlayers` can reference the authoritative roster at database level.
+
+## MatchResults (M4-009 implemented)
+
+| Column | Type | Notes |
+|---|---|---|
+| MatchId | UUID PK/FK -> MatchAuthorityBindings | One final Result per authoritative match; ON DELETE RESTRICT |
+| SubmittedByUserId | UUID FK -> Users | Authenticated bound Host; ON DELETE RESTRICT |
+| Outcome | VARCHAR(20) | Normal Host flow accepts `WIN`, `LOSE` |
+| StartedAtUtc / EndedAtUtc | TIMESTAMPTZ | Server timestamps; Ended >= Started |
+| DurationSeconds | INT | Server-derived, CHECK 60-900 |
+| ObjectiveCompletion | NUMERIC(5,4) | CHECK 0-1 |
+| PlayerCount | INT | CHECK 1-4; retains the current M2 minimum-player behavior |
+| PayloadHash | CHAR(64) | Canonical SHA-256 used for retry/conflict detection |
+| RewardStatus | VARCHAR(20) | `Pending` in M4-009 |
+| SubmittedAtUtc | TIMESTAMPTZ | Server audit timestamp |
+
+`MatchAuthorityBindings.StartedAtUtc` is nullable for compatibility with existing rows and is set
+once by `StartAsync`. A new result requires this value.
+
+## MatchResultPlayers (M4-009 implemented)
+
+| Column | Type | Notes |
+|---|---|---|
+| MatchId + UserId | Composite PK | One player Result per match |
+| MatchId | FK -> MatchResults | ON DELETE CASCADE |
+| MatchId + UserId | Composite FK -> MatchPlayerBindings | Rejects unbound users; ON DELETE RESTRICT |
+| Survived / Disconnected | BOOLEAN | Disconnected must match the stored binding state |
+| DetectionCount / DownedCount / ReviveCount | INT | CHECK >= 0 |
+| ObjectiveContribution | INT | CHECK >= 0 |
+
+The Result transaction inserts both tables and transitions the authority binding to `Ended`.
+M4-009 creates no wallet ledger and does not update wallet/profile/progression values.
+
 ---
 
 ## Seed data (future phase)
 
 - Admin user (hashed password via env/seed script — not in repo)
-- 15 cosmetic `ShopItems` with `ImageUrl`
+- Development-only idempotent seed of 3 test cosmetic `ShopItems`; replace with an approved catalog before release

@@ -19,6 +19,10 @@ public interface ITelemetryEventRepository
     Task<IReadOnlyDictionary<Guid, TelemetryMatchBoundary>> LoadMatchBoundariesAsync(
         IReadOnlyCollection<Guid> matchIds,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<TelemetryEventDocument>> LoadAcceptedMatchEventsAsync(
+        Guid matchId,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record TelemetryMatchBoundary(bool? ResearchCaptureEnabled, long? TerminalSequence);

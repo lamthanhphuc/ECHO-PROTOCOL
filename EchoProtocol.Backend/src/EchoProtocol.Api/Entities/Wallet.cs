@@ -7,4 +7,6 @@ public class Wallet
     public User User { get; set; } = null!;
     public int Balance { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public ICollection<WalletTransaction> Transactions { get; set; } = [];
+    public ICollection<MatchRewardGrant> MatchRewardGrants { get; set; } = [];
 }

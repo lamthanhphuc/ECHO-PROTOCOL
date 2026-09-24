@@ -56,13 +56,13 @@ public static partial class NetworkLobbyUIBuilder
         var font = root.GetComponentInChildren<TMP_Text>(true)?.font ?? TMP_Settings.defaultFontAsset;
         var header = GetRect(root, "Header", 24, 26, 412, 112);
         TextAt(header, "Title", 0, 0, 412, 42, "ECHO PROTOCOL", 32, "D8D8D8", font);
-        TextAt(header, "Subtitle", 0, 46, 412, 20, "M U L T I P L A Y E R   U P L I N K", 11, "8C9499", font);
-        var info = TextAt(header, "FacilityInfo", 0, 77, 412, 18, "FACILITY A3     /     NET 7.3.9     /     SECURE ONLY", 10, "8C9499", font);
+        TextAt(header, "Subtitle", 0, 46, 412, 20, "M U L T I P L A Y E R   L O B B Y", 11, "8C9499", font);
+        var info = TextAt(header, "FacilityInfo", 0, 77, 412, 18, "CREATE A ROOM OR JOIN A FRIEND", 10, "8C9499", font);
         info.alignment = TextAlignmentOptions.Right;
         if (header.Find("Divider") != null) header.Find("Divider").gameObject.SetActive(false);
         Stroke(header, "RedLine", 0, 108, 412, 2, "8F1D1D");
-        StyleInput(root, "OperatorSection", 162, "OPERATOR ID", "PlayerNameInput", font);
-        StyleInput(root, "SessionSection", 266, "SESSION CODE", "SessionInput", font);
+        StyleInput(root, "OperatorSection", 162, "1. YOUR NAME", "PlayerNameInput", font);
+        StyleInput(root, "SessionSection", 266, "2. ROOM CODE", "SessionInput", font);
         GetRect(root, "ActionButtons", 24, 376, 412, 116);
         StyleButton(root.Find("ActionButtons/HostButton"), 0, 0, 412, 52);
         StyleButton(root.Find("ActionButtons/JoinButton"), 0, 64, 412, 52);
@@ -76,10 +76,10 @@ public static partial class NetworkLobbyUIBuilder
         var dot = GetRect(status, "StatusIndicator", 0, 6, 9, 9).GetComponent<Image>();
         dot.color = Hex("D51D27");
         dot.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
-        TextAt(status, "StatusText", 20, 0, 392, 26, "SIGNAL: OFFLINE", 17, "D8D8D8", font);
+        TextAt(status, "StatusText", 20, 0, 392, 26, "CONNECTION STATUS: OFFLINE", 17, "D8D8D8", font);
         var statusText = status.Find("StatusText").GetComponent<TMP_Text>();
         statusText.enableAutoSizing = false;
-        var message = TextAt(status, "NetworkMessage", 20, 36, 392, 94, "NO EXTERNAL NETWORK\nAWAITING UPLINK...", 14, "8C9499", font);
+        var message = TextAt(status, "NetworkMessage", 20, 36, 392, 94, "Enter your name and room code.\nThen create or join a room.", 14, "8C9499", font);
         message.enableAutoSizing = true; message.fontSizeMin = 11; message.fontSizeMax = 14;
         // Existing serialized count reference stays intact.
         GetRect(status, "MemberCount", 0, 142, 412, 26);
@@ -95,7 +95,7 @@ public static partial class NetworkLobbyUIBuilder
             Stroke(members, "BracketV" + i, i % 2 == 0 ? 0 : 411, i < 2 ? 0 : 152, 1, 14, "586065");
         }
         var content = members.Find("Viewport/Content").GetComponent<TMP_Text>(); content.text = string.Empty;
-        var empty = TextAt(members, "EmptyState", 12, 10, 388, 146, "NO SIGNALS DETECTED", 15, "8C9499", font);
+        var empty = TextAt(members, "EmptyState", 12, 10, 388, 146, "No players yet.\nCreate or join a room to begin.", 15, "8C9499", font);
         empty.alignment = TextAlignmentOptions.Center;
         GetRect(root, "LobbyControls", 24, 907, 412, 80);
         StyleButton(root.Find("LobbyControls/ReadyButton"), 0, 0, 200, 36);
