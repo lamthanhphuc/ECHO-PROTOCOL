@@ -31,7 +31,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       <button className="button md:col-span-3 xl:col-span-6" type="submit">Áp dụng bộ lọc</button>
     </form></Panel>
     {result.items.length === 0 ? <EmptyState title="Không có PaymentOrder phù hợp" /> : <div className="table-wrap rounded-lg"><table><thead><tr><th>Order</th><th>User</th><th>Product</th><th>Amount</th><th>Status</th><th>Created</th></tr></thead><tbody>
-      {result.items.map((item) => <tr key={item.paymentOrderId}><td><Link className="code text-emerald-300 hover:underline" href={`/admin/payments/${item.paymentOrderId}`}>{item.paymentOrderId.slice(0, 8)}…</Link><p className="muted text-xs">{item.provider}</p></td><td><Link className="hover:underline" href={`/admin/users/${item.userId}`}>{item.displayName ?? item.username}</Link></td><td className="code">{item.productReference}</td><td>{formatMoney(item.amount, item.currency)}</td><td><StatusBadge status={item.status} /></td><td>{formatDate(item.createdAtUtc)}</td></tr>)}
+      {result.items.map((item) => <tr key={item.paymentOrderId}><td><Link className="code text-red-300 hover:underline" href={`/admin/payments/${item.paymentOrderId}`}>{item.paymentOrderId.slice(0, 8)}…</Link><p className="muted text-xs">{item.provider}</p></td><td><Link className="hover:underline" href={`/admin/users/${item.userId}`}>{item.displayName ?? item.username}</Link></td><td className="code">{item.productReference}</td><td>{formatMoney(item.amount, item.currency)}</td><td><StatusBadge status={item.status} /></td><td>{formatDate(item.createdAtUtc)}</td></tr>)}
     </tbody></table></div>}
     <Pagination page={result.page} totalPages={result.totalPages} pathname="/admin/payments" params={pageParams} />
   </>;
