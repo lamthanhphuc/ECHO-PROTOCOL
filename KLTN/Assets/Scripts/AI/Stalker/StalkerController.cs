@@ -64,7 +64,7 @@ namespace EchoProtocol.AI.Stalker
 
         [Header("Detection Spike Defaults")]
         [SerializeField] private float detectionMeterFull = 1f;
-        [SerializeField] private float detectionFillRate = 3.3333333f;
+        [SerializeField] private float detectionFillRate = 0.5f;
         [SerializeField] private float detectionDecayRate = 3.3333333f;
 
         [Header("Search Spike Defaults")]
@@ -217,6 +217,7 @@ namespace EchoProtocol.AI.Stalker
         private SpatialPatrolPlanner _spatialPatrolPlanner;
         private CoverageMemory _coverageMemory;
         private RegionGraph _regionGraph;
+        private RegionSemanticZone _patrolZone = RegionSemanticZone.Unknown;
         private GlobalPatrolPlanner _globalPatrolPlanner;
         private LocalPatrolSelector _localPatrolSelector;
         private RoomSweepCoverageMemory _roomSweepCoverageMemory;
@@ -294,6 +295,8 @@ namespace EchoProtocol.AI.Stalker
         private IReadOnlyList<StalkerTargetCandidate> _currentVisibleTargetCandidates;
         private IReadOnlyList<PlayerId> _currentVisibleObjectiveCarrierIds;
         private IReadOnlyList<StalkerTargetStatus> _currentTargetStatuses;
+        private StalkerPerceptionTargetSnapshot? _sustainedCoreCarrier;
+        private PlayerId _coreCarrierPursuitTargetId;
         private IReadOnlyList<HearingObservation>
             _currentHearingObservations;
         private System.DateTime
@@ -740,11 +743,32 @@ namespace EchoProtocol.AI.Stalker
                         _roomSweepCoverageMemory,
                         _patrolVariationSeed,
                         _patrolNearOptimalHopSlack);
+                _roomSweepGlobalPlanner.ConfigureZone(_patrolZone);
 
                 _strategicPatrolRuntime?.ConfigureVariationSeed(
                     _patrolVariationSeed);
                 EnsureStrategicPatrolRuntimeInitialized();
             }
+        }
+
+        public void ConfigurePatrolZone(RegionSemanticZone zone)
+        {
+            _patrolZone = zone;
+            _roomSweepGlobalPlanner?.ConfigureZone(zone);
+        }
+
+        public bool CanPursueCoreCarrierAt(Vector3 position)
+        {
+            if (_patrolZone == RegionSemanticZone.Unknown)
+            {
+                return true;
+            }
+
+            return EnsureCanonicalPatrolInitialized()
+                && TryResolveNearestSpatialNode(position, out var nodeId)
+                && _regionGraph != null
+                && _regionGraph.TryGetNodeSemanticMetadata(nodeId, out var metadata)
+                && metadata.Zone == _patrolZone;
         }
 
         public void ApplyScenarioMonsterParameters(ScenarioMonsterParameters parameters)
@@ -821,6 +845,7 @@ namespace EchoProtocol.AI.Stalker
 
             _currentTargetStatuses =
                 input.TargetStatuses;
+            _sustainedCoreCarrier = input.SustainedCoreCarrier;
 
             _currentAttackTargetSnapshot =
                 input.CurrentAttackTargetSnapshot;
@@ -873,6 +898,7 @@ namespace EchoProtocol.AI.Stalker
                 _currentVisibleTargetCandidates = null;
                 _currentVisibleObjectiveCarrierIds = null;
                 _currentTargetStatuses = null;
+                _sustainedCoreCarrier = null;
                 _currentAttackTargetSnapshot = null;
                 _currentHearingObservations = null;
                 _currentHearingEvaluationTimeUtc =
@@ -886,6 +912,11 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickCurrentState()
         {
+            if (TickSustainedCoreCarrier())
+            {
+                return;
+            }
+
             if (TickHideSpotRevealGrace())
             {
                 return;
@@ -942,6 +973,68 @@ namespace EchoProtocol.AI.Stalker
                     TickSearch();
                     break;
             }
+        }
+
+        private bool TickSustainedCoreCarrier()
+        {
+            if (!_sustainedCoreCarrier.HasValue)
+            {
+                if (_coreCarrierPursuitTargetId.IsValid)
+                {
+                    if (currentState == StalkerState.CHASE
+                        && _memory.CurrentTargetId == _coreCarrierPursuitTargetId
+                        && !TryGetUniqueVisibleTargetCandidate(
+                            _coreCarrierPursuitTargetId,
+                            out _,
+                            out _))
+                    {
+                        InvalidateCurrentTarget();
+                    }
+
+                    _coreCarrierPursuitTargetId = PlayerId.Invalid;
+                }
+
+                return false;
+            }
+
+            if (currentState == StalkerState.ATTACK
+                || currentState == StalkerState.RECOVER)
+            {
+                return false;
+            }
+
+            var carrier = _sustainedCoreCarrier.Value;
+            if (carrier.TargetSample == null
+                || !TryGetUniqueTargetStatusDetail(carrier.PlayerId, out var status)
+                || !status.Eligibility.Eligible)
+            {
+                return false;
+            }
+
+            if (currentState != StalkerState.CHASE
+                || _memory.CurrentTargetId != carrier.PlayerId)
+            {
+                ClearTargetContext();
+                ClearSearchRuntimeContext();
+                _memory.SetCurrentTarget(carrier.PlayerId);
+                currentState = StalkerState.CHASE;
+                ApplyMovementSpeedForCurrentState();
+            }
+
+            _coreCarrierPursuitTargetId = carrier.PlayerId;
+            var position = carrier.TargetSample.position;
+            lastKnownPosition = position;
+            _chaseVisualLossElapsed = 0f;
+            if (IsWithinAttackRange(position))
+            {
+                EnterAttack();
+            }
+            else
+            {
+                SetChaseDestination(position);
+            }
+
+            return true;
         }
 
         private void TickPatrol()
@@ -5159,6 +5252,7 @@ namespace EchoProtocol.AI.Stalker
                 : new RoomSweepGlobalPlanner(
                     _regionGraph,
                     _roomSweepCoverageMemory);
+            _roomSweepGlobalPlanner.ConfigureZone(_patrolZone);
             EnsureStrategicPatrolRuntimeInitialized();
             return true;
         }
@@ -6373,7 +6467,8 @@ namespace EchoProtocol.AI.Stalker
             // Production RoomSweep does not currently have a
             // FixedWaypoint route. Do not latch into an unusable mode.
             if (patrolRoute == null
-                || patrolRoute.PointCount == 0)
+                || patrolRoute.PointCount == 0
+                || _patrolZone != RegionSemanticZone.Unknown)
             {
                 _roomSweepPatrolFallbackActive = false;
 
@@ -6433,7 +6528,8 @@ namespace EchoProtocol.AI.Stalker
         {
             return _regionGraph != null
                 && _regionGraph.TryGetRegionSemanticMetadata(regionId, out var metadata)
-                && metadata.Kind == RegionSemanticKind.Room;
+                && metadata.Kind == RegionSemanticKind.Room
+                && (_patrolZone == RegionSemanticZone.Unknown || metadata.Zone == _patrolZone);
         }
 
         private void UpdateRoomSweepVisualCoverage(RegionId roomRegionId)

@@ -1,7 +1,10 @@
 using System.Collections.Generic;
+using EchoProtocol.AI.Stalker;
+using EchoProtocol.AI.Stalker.Spatial;
 using EchoProtocol.Diagnostics;
 using Fusion;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.SceneManagement;
 
 namespace EchoProtocol.Networking
@@ -42,6 +45,21 @@ namespace EchoProtocol.Networking
         private NetworkObject _powerPuzzleInstance;
         private readonly List<NetworkObject> _powerPuzzleStationInstances = new List<NetworkObject>();
         private NetworkObject _monsterInstance;
+        private NetworkObject _zone2MonsterInstance;
+        private bool _zone2MonsterSpawned;
+
+        private void Update()
+        {
+            var runner = _bootstrap != null ? _bootstrap.Runner : null;
+            if (runner != null && runner.IsServer && IsValidNetworkObject(_zone2MonsterInstance)
+                && _matchStateInstance != null
+                && _matchStateInstance.TryGetComponent<NetworkMatchState>(out var matchState)
+                && matchState.IsEnded)
+            {
+                runner.Despawn(_zone2MonsterInstance);
+                _zone2MonsterInstance = null;
+            }
+        }
 
         private void Awake()
         {
@@ -110,6 +128,7 @@ namespace EchoProtocol.Networking
             }
 
             PruneInvalidAuthoritativeWorldStateReferences();
+            if (_zone2MonsterInstance == null) _zone2MonsterSpawned = false;
             DisableLegacyObjectiveMutators();
             EnsureGameplayHUD();
             if (!runner.IsServer) return;
@@ -236,25 +255,63 @@ namespace EchoProtocol.Networking
             if (_monsterInstance == null && _monsterPrefab != null)
             {
                 var stalkerSpawn = GameObject.Find("MonsterSpawn_Stalker_EMPTY");
-                var spawnPosition = stalkerSpawn != null
-                    ? stalkerSpawn.transform.position
-                    : new Vector3(0f, 0f, 8f);
-                var spawnRotation = stalkerSpawn != null
-                    ? stalkerSpawn.transform.rotation
-                    : Quaternion.identity;
-
-                _monsterInstance = runner.Spawn(
-                    _monsterPrefab,
-                    spawnPosition,
-                    spawnRotation);
-
-                RuntimeLog.Log(
-                RuntimeLogCategory.PlayerSpawner,
-
-                    $"[PlayerSpawner] Spawned host-authoritative monster {_monsterInstance.Id} " +
-                    $"at {spawnPosition} markerFound={stalkerSpawn != null}.");
+                if (TryGetStalkerSpawnPosition(stalkerSpawn != null ? stalkerSpawn.transform : null, out var spawnPosition))
+                {
+                    _monsterInstance = SpawnStalker(runner, spawnPosition, stalkerSpawn.transform.rotation, RegionSemanticZone.Zone01);
+                }
             }
             BindAuthoritativeWorldState();
+        }
+
+        public void TrySpawnZone2Stalker(Collider entrant, Transform spawnMarker)
+        {
+            var runner = _bootstrap != null ? _bootstrap.Runner : null;
+            var playerState = entrant != null ? entrant.GetComponentInParent<LobbyPlayerState>() : null;
+            if (runner == null || !runner.IsServer || !runner.IsRunning
+                || _bootstrap.State != NetworkSessionState.InMatch
+                || SceneManager.GetActiveScene().name != LobbyManager.GameSceneName
+                || _zone2MonsterSpawned || IsValidNetworkObject(_zone2MonsterInstance)
+                || _monsterPrefab == null || playerState == null
+                || playerState.Object == null || !playerState.Object.IsValid
+                || !playerState.IsGameplayPlayer
+                || playerState.Object.InputAuthority == PlayerRef.None
+                || !runner.TryGetPlayerObject(playerState.Object.InputAuthority, out var playerObject)
+                || playerObject != playerState.Object
+                || !IsValidNetworkObject(_matchStateInstance)
+                || !_matchStateInstance.TryGetComponent<NetworkMatchState>(out var matchState)
+                || matchState.IsEnded
+                || !TryGetStalkerSpawnPosition(spawnMarker, out var spawnPosition))
+            {
+                return;
+            }
+
+            _zone2MonsterInstance = SpawnStalker(runner, spawnPosition, spawnMarker.rotation, RegionSemanticZone.Zone02);
+            _zone2MonsterSpawned = _zone2MonsterInstance != null;
+        }
+
+        private NetworkObject SpawnStalker(NetworkRunner runner, Vector3 position, Quaternion rotation, RegionSemanticZone zone)
+        {
+            var spawned = runner.Spawn(_monsterPrefab, position, rotation, PlayerRef.None,
+                (_, obj) => obj.GetComponent<StalkerController>()?.ConfigurePatrolZone(zone));
+            if (spawned != null)
+            {
+                RuntimeLog.Log(RuntimeLogCategory.PlayerSpawner,
+                    $"[PlayerSpawner] Spawned {zone} Stalker {spawned.Id} at {position}.");
+            }
+            return spawned;
+        }
+
+        private static bool TryGetStalkerSpawnPosition(Transform marker, out Vector3 position)
+        {
+            position = default;
+            if (marker != null && NavMesh.SamplePosition(marker.position, out var hit, 1f, NavMesh.AllAreas))
+            {
+                position = hit.position;
+                return true;
+            }
+
+            Debug.LogWarning($"[PlayerSpawner] Stalker spawn marker '{(marker != null ? marker.name : "missing")}' is not on NavMesh.");
+            return false;
         }
 
         private void BindAuthoritativeWorldState()
@@ -830,6 +887,8 @@ namespace EchoProtocol.Networking
             _powerPuzzleInstance = null;
             _powerPuzzleStationInstances.Clear();
             _monsterInstance = null;
+            _zone2MonsterInstance = null;
+            _zone2MonsterSpawned = false;
         }
 
         private void PruneInvalidAuthoritativeWorldStateReferences()
@@ -839,6 +898,7 @@ namespace EchoProtocol.Networking
             if (!IsValidNetworkObject(_matchStateInstance)) _matchStateInstance = null;
             if (!IsValidNetworkObject(_powerPuzzleInstance)) _powerPuzzleInstance = null;
             if (!IsValidNetworkObject(_monsterInstance)) _monsterInstance = null;
+            if (!IsValidNetworkObject(_zone2MonsterInstance)) _zone2MonsterInstance = null;
 
             _energyCoreInstances.RemoveAll(core => !IsValidNetworkObject(core));
             _sectorBoxInstances.RemoveAll(box => !IsValidNetworkObject(box));

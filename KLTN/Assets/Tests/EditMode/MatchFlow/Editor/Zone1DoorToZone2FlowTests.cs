@@ -9,6 +9,8 @@ namespace EchoProtocol.Tests.MatchFlow
     {
         private GameObject _doorRoot;
         private GameObject _blocker;
+        private BoxCollider _passageCollider;
+        private BoxCollider _wallEdgeCollider;
         private MatchFlowController _flow;
 
         [SetUp]
@@ -18,6 +20,13 @@ namespace EchoProtocol.Tests.MatchFlow
             _blocker = new GameObject("LP_Bay_Door_snaps");
             _blocker.transform.SetParent(_doorRoot.transform);
             _blocker.AddComponent<BoxCollider>();
+
+            var wall = new GameObject("LP_Bay_Door_Wall_snaps");
+            wall.transform.SetParent(_doorRoot.transform);
+            _passageCollider = wall.AddComponent<BoxCollider>();
+            _passageCollider.size = new Vector3(0.3f, 9f, 6f);
+            _wallEdgeCollider = wall.AddComponent<BoxCollider>();
+            _wallEdgeCollider.size = new Vector3(1.03f, 0.87f, 0.19f);
 
             _flow = new GameObject("MatchFlow").AddComponent<MatchFlowController>();
         }
@@ -46,6 +55,8 @@ namespace EchoProtocol.Tests.MatchFlow
 
             Assert.IsFalse(_blocker.activeSelf);
             Assert.IsFalse(_blocker.GetComponent<BoxCollider>().enabled);
+            Assert.IsFalse(_passageCollider.enabled);
+            Assert.IsTrue(_wallEdgeCollider.enabled);
         }
 
         [Test]
@@ -58,6 +69,17 @@ namespace EchoProtocol.Tests.MatchFlow
 
             Assert.IsFalse(_blocker.activeSelf);
             Assert.IsFalse(_blocker.GetComponent<BoxCollider>().enabled);
+            Assert.IsFalse(_passageCollider.enabled);
+            Assert.IsTrue(_wallEdgeCollider.enabled);
+
+            _flow.ApplyAuthoritativeSnapshot(
+                NetworkMatchPhase.CoreObjective,
+                NetworkMatchStatus.Running,
+                NetworkMatchResult.None);
+
+            Assert.IsTrue(_blocker.activeSelf);
+            Assert.IsTrue(_passageCollider.enabled);
+            Assert.IsTrue(_wallEdgeCollider.enabled);
         }
     }
 }

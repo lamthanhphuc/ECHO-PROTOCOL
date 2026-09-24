@@ -84,6 +84,12 @@ namespace EchoProtocol.AI.Stalker.Networking
             new List<StalkerTargetCandidate>();
         private readonly List<PlayerId> _visibleObjectiveCarrierIds =
             new List<PlayerId>();
+        private readonly Dictionary<PlayerId, double> _coreCarryStartedAt =
+            new Dictionary<PlayerId, double>();
+        private readonly HashSet<PlayerId> _currentCoreCarriers =
+            new HashSet<PlayerId>();
+        private readonly List<PlayerId> _expiredCoreCarriers =
+            new List<PlayerId>();
         private readonly List<HearingObservation> _hearingObservations =
             new List<HearingObservation>();
         private readonly List<RuntimeNoiseEvent> _activeNoiseEvents =
@@ -178,6 +184,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         public override void Spawned()
         {
+            _coreCarryStartedAt.Clear();
             _networkSimulationOwned = true;
             ResolveLocalDependencies();
             ResolveLifecycle();
@@ -199,6 +206,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            _coreCarryStartedAt.Clear();
             _networkSimulationOwned = false;
             lifecycle = null;
             _productionConsequenceSink = null;
@@ -474,6 +482,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 step.Time,
                 _visibleCandidates);
             CollectVisibleObjectiveCarrierIds();
+            var sustainedCoreCarrier = SelectSustainedCoreCarrier(step.Time.Seconds);
 
             var hearingEvaluationTimeUtc =
                 DateTime.UtcNow;
@@ -516,16 +525,26 @@ namespace EchoProtocol.AI.Stalker.Networking
                 controller.BeginSpecialEncounterOverride();
             }
 
+            if (controller.CurrentState == StalkerState.ATTACK
+                || controller.CurrentState == StalkerState.RECOVER
+                || (specialEncounterRuntime != null && specialEncounterRuntime.IsActive))
+            {
+                sustainedCoreCarrier = null;
+            }
+
             var input =
                 new StalkerSimulationInput(
                     step,
                     _visibleCandidates,
                     _targetStatuses,
                     BuildCurrentAttackTargetSnapshot(
-                        controller.CurrentTargetId),
+                        sustainedCoreCarrier.HasValue
+                            ? sustainedCoreCarrier.Value.PlayerId
+                            : controller.CurrentTargetId),
                     _hearingObservations,
                     hearingEvaluationTimeUtc,
-                    _visibleObjectiveCarrierIds);
+                    _visibleObjectiveCarrierIds,
+                    sustainedCoreCarrier);
 
             if (!controller.Simulate(input))
             {
@@ -1234,12 +1253,67 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private void ClearFrameBuffers()
         {
+            _coreCarryStartedAt.Clear();
             _perceptionSnapshots.Clear();
             _targetStatuses.Clear();
             _visibleCandidates.Clear();
             _visibleObjectiveCarrierIds.Clear();
             _hearingObservations.Clear();
             _activeNoiseEvents.Clear();
+        }
+
+        private StalkerPerceptionTargetSnapshot? SelectSustainedCoreCarrier(double nowSeconds)
+        {
+            _currentCoreCarriers.Clear();
+            StalkerPerceptionTargetSnapshot? selected = null;
+            var bestDistanceSquared = float.PositiveInfinity;
+
+            for (var i = 0; i < _perceptionSnapshots.Count; i++)
+            {
+                var snapshot = _perceptionSnapshots[i];
+                if (!snapshot.IsObjectiveCarrier
+                    || !StalkerTargetEligibility.Evaluate(snapshot.EligibilitySnapshot).Eligible
+                    || snapshot.TargetSample == null)
+                {
+                    continue;
+                }
+
+                _currentCoreCarriers.Add(snapshot.PlayerId);
+                if (!_coreCarryStartedAt.TryGetValue(snapshot.PlayerId, out var startedAt))
+                {
+                    _coreCarryStartedAt.Add(snapshot.PlayerId, nowSeconds);
+                    continue;
+                }
+
+                if (nowSeconds - startedAt < 15d
+                    || !controller.CanPursueCoreCarrierAt(snapshot.TargetSample.position))
+                {
+                    continue;
+                }
+
+                var distanceSquared = (snapshot.TargetSample.position - transform.position).sqrMagnitude;
+                if (distanceSquared < bestDistanceSquared)
+                {
+                    bestDistanceSquared = distanceSquared;
+                    selected = snapshot;
+                }
+            }
+
+            _expiredCoreCarriers.Clear();
+            foreach (var playerId in _coreCarryStartedAt.Keys)
+            {
+                if (!_currentCoreCarriers.Contains(playerId))
+                {
+                    _expiredCoreCarriers.Add(playerId);
+                }
+            }
+
+            for (var i = 0; i < _expiredCoreCarriers.Count; i++)
+            {
+                _coreCarryStartedAt.Remove(_expiredCoreCarriers[i]);
+            }
+
+            return selected;
         }
 
         private void CollectVisibleObjectiveCarrierIds()

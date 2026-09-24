@@ -58,6 +58,34 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
+        public IEnumerator RUNTIME_CoreCarryPursuit_Requires15ContinuousSeconds()
+        {
+            var fixture = CreateRuntimeFixture();
+            var carrier = CreatePlayerObject("Core carrier", new Vector3(3f, 0f, 0f));
+            var eligibilityType = ResolveType("EchoProtocol.AI.Stalker.StalkerTargetEligibilitySnapshot");
+            var snapshotType = ResolveType("EchoProtocol.AI.Stalker.StalkerPerceptionTargetSnapshot");
+            var eligibility = Activator.CreateInstance(eligibilityType, true, true, false, false, false);
+            var snapshot = Activator.CreateInstance(snapshotType,
+                CreatePlayerId(1), carrier.transform, carrier.transform, eligibility, true);
+            var snapshots = (IList)GetPrivateField(fixture.Runtime, "_perceptionSnapshots");
+            var method = fixture.Runtime.GetType().GetMethod("SelectSustainedCoreCarrier",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+
+            snapshots.Add(snapshot);
+            Assert.That(method.Invoke(fixture.Runtime, new object[] { 2d }), Is.Null);
+            Assert.That(method.Invoke(fixture.Runtime, new object[] { 16.9d }), Is.Null);
+            Assert.That(method.Invoke(fixture.Runtime, new object[] { 17d }), Is.Not.Null);
+
+            snapshots.Clear();
+            Assert.That(method.Invoke(fixture.Runtime, new object[] { 18d }), Is.Null);
+            snapshots.Add(snapshot);
+            Assert.That(method.Invoke(fixture.Runtime, new object[] { 32.9d }), Is.Null);
+            Assert.That(method.Invoke(fixture.Runtime, new object[] { 47.9d }), Is.Not.Null);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator RUNTIME_02_InvalidOrNotRunningRunner_DoesNotExecuteSimulation()
         {
             var fixture = CreateRuntimeFixture();
