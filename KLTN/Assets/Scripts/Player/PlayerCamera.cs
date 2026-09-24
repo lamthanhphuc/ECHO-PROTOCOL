@@ -168,7 +168,7 @@ public class PlayerCamera : MonoBehaviour
 
         _lookAction?.Enable();
 
-        if (lockCursorOnEnable)
+        if (lockCursorOnEnable && !PlayerInteractionControlLock.HasModal)
         {
             LockCursor();
         }
@@ -182,11 +182,8 @@ public class PlayerCamera : MonoBehaviour
 
     private void Update()
     {
-        if (EchoProtocol.Voice.VoiceSettingsPanel.IsOpen) { UnlockCursor(); return; }
-        if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
-        {
-            UnlockCursor();
-        }
+        if (PlayerInteractionControlLock.HasModal) { UnlockCursor(); return; }
+        if (PlayerInteractionControlLock.IsGameplayInputBlocked()) return;
 
         if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
         {
@@ -208,7 +205,7 @@ public class PlayerCamera : MonoBehaviour
         Vector2 lookInput = _lookAction != null
             ? _lookAction.ReadValue<Vector2>()
             : Vector2.zero;
-        if (EchoProtocol.Voice.VoiceSettingsPanel.IsOpen) lookInput = Vector2.zero;
+        if (PlayerInteractionControlLock.IsGameplayInputBlocked()) lookInput = Vector2.zero;
 
         if (_networkLifeState != null && (_networkLifeState.IsCaught || _networkLifeState.IsEliminated))
             lookInput = Vector2.zero;

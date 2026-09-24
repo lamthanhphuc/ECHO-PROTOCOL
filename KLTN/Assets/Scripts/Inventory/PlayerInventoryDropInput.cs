@@ -13,6 +13,7 @@ public class PlayerInventoryDropInput : MonoBehaviour
     [SerializeField] private GameObject noiseMakerDeployedPrefab;
 
     public int SelectedNormalSlot => selectedNormalSlot;
+    public void SelectNormalSlot(int slot) => selectedNormalSlot = Mathf.Clamp(slot, 0, 1);
 
     private void Awake()
     {
@@ -35,7 +36,7 @@ public class PlayerInventoryDropInput : MonoBehaviour
 
     private void Update()
     {
-        if (!HasLocalControl())
+        if (!HasLocalControl() || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject))
         {
             return;
         }
@@ -80,6 +81,7 @@ public class PlayerInventoryDropInput : MonoBehaviour
 
     public bool DropCurrentItem()
     {
+        if (PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return false;
         if (coreCarrier != null && coreCarrier.IsCarrying)
         {
             return false;
@@ -115,6 +117,7 @@ public class PlayerInventoryDropInput : MonoBehaviour
 
     public bool TryUseOrThrowTeamTool()
     {
+        if (PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return false;
         if (coreCarrier != null && coreCarrier.IsCarrying)
         {
             return false;

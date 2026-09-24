@@ -196,11 +196,12 @@ namespace EchoProtocol.Networking
                 BindLocalPlayerCameraIfNeeded();
             }
 
-            Vector2 moveInput = _moveAction?.ReadValue<Vector2>() ?? Vector2.zero;
-            bool sprintHeld = _sprintAction?.IsPressed() ?? false;
-            bool jumpPressed = _jumpAction?.WasPressedThisFrame() ?? false;
+            bool blocked = PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject);
+            Vector2 moveInput = blocked ? Vector2.zero : _moveAction?.ReadValue<Vector2>() ?? Vector2.zero;
+            bool sprintHeld = !blocked && (_sprintAction?.IsPressed() ?? false);
+            bool jumpPressed = !blocked && (_jumpAction?.WasPressedThisFrame() ?? false);
             bool isCarryingCoreOffline = IsCarryingCore();
-            _offlineAnimationCrouching = !isCarryingCoreOffline && IsCrouchPressed();
+            if (!blocked) _offlineAnimationCrouching = !isCarryingCoreOffline && IsCrouchPressed();
 
             Vector3 localDirection = new Vector3(moveInput.x, 0f, moveInput.y);
             if (localDirection.sqrMagnitude > 1f)
@@ -789,7 +790,7 @@ namespace EchoProtocol.Networking
 
             var hiding = GetComponent<PlayerHidingController>();
             bool isHidden = IsHidden || (hiding != null && hiding.IsHidden);
-            if (isHidden || EchoProtocol.Voice.VoiceSettingsPanel.IsOpen)
+            if (isHidden || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject))
             {
                 return new NetworkPlayerInput
                 {
@@ -798,7 +799,7 @@ namespace EchoProtocol.Networking
                     LookPitch = _playerCamera != null ? _playerCamera.Pitch : 0f,
                     JumpPressed = false,
                     SprintHeld = false,
-                    CrouchHeld = false,
+                    CrouchHeld = IsCrouching,
                 };
             }
 
