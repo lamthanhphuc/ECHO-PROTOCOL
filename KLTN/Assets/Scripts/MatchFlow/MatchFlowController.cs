@@ -10,6 +10,7 @@ public class MatchFlowController : MonoBehaviour
     [SerializeField] private PowerPuzzleController powerPuzzle;
     [SerializeField] private SecurityTerminalDownload securityTerminal;
     [SerializeField] private EscapeDoorCountdown escapeDoor;
+    [SerializeField] private GameObject zone1DoorToZone2Blocker;
 
     [Header("Player State")]
     [SerializeField] private bool loseWhenAllPlayersEliminated = true;
@@ -91,6 +92,7 @@ public class MatchFlowController : MonoBehaviour
     public void NotifyCoreObjectiveComplete()
     {
         if (_networkAuthorityPresentationOnly) return;
+        SetZone1DoorToZone2Unlocked(true);
         if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
         {
             EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.SetOfflineStage(EchoProtocol.MatchFlow.Zone2MissionStage.FindSecurityTerminal);
@@ -212,6 +214,58 @@ public class MatchFlowController : MonoBehaviour
         if (escapeDoor == null)
         {
             escapeDoor = FindAnyObjectByType<EscapeDoorCountdown>();
+        }
+
+        ResolveZone1DoorToZone2Blocker();
+    }
+
+    private void ResolveZone1DoorToZone2Blocker()
+    {
+        if (zone1DoorToZone2Blocker != null)
+        {
+            return;
+        }
+
+        GameObject doorToZone2 = GameObject.Find("DoorToZone2");
+        if (doorToZone2 == null)
+        {
+            return;
+        }
+
+        Transform[] children = doorToZone2.GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < children.Length; i++)
+        {
+            if (children[i] != null && children[i].name == "LP_Bay_Door_snaps")
+            {
+                zone1DoorToZone2Blocker = children[i].gameObject;
+                return;
+            }
+        }
+    }
+
+    private void SetZone1DoorToZone2Unlocked(bool unlocked)
+    {
+        ResolveZone1DoorToZone2Blocker();
+        if (zone1DoorToZone2Blocker == null)
+        {
+            return;
+        }
+
+        if (zone1DoorToZone2Blocker.activeSelf == unlocked)
+        {
+            zone1DoorToZone2Blocker.SetActive(!unlocked);
+        }
+
+        var colliders = zone1DoorToZone2Blocker.GetComponentsInChildren<Collider>(true);
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            colliders[i].enabled = !unlocked;
+        }
+
+        var obstacles = zone1DoorToZone2Blocker.GetComponentsInChildren<UnityEngine.AI.NavMeshObstacle>(true);
+        for (int i = 0; i < obstacles.Length; i++)
+        {
+            obstacles[i].enabled = !unlocked;
         }
     }
 
@@ -401,6 +455,9 @@ public class MatchFlowController : MonoBehaviour
                 NetworkMatchPhase.Escape => MatchPhase.ExitCountdown,
                 _ => _phase,
             };
+
+        SetZone1DoorToZone2Unlocked(networkStatus == NetworkMatchStatus.Ended
+            || networkPhase != NetworkMatchPhase.CoreObjective);
 
         if (_phase == nextPhase) return;
         _phase = nextPhase;
