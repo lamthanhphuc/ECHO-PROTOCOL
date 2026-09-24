@@ -79,6 +79,7 @@ namespace EchoProtocol.Networking
 
         public async Task Shutdown()
         {
+            PlayerInteractionControlLock.ReleaseAll();
             ClearLocalInputProvider();
             if (_matchAuthority != null) await _matchAuthority.EndAsync("HOST_SHUTDOWN");
             if (Runner == null)
@@ -351,7 +352,13 @@ namespace EchoProtocol.Networking
                 RuntimeLogCategory.NetworkSession,
                 $"[NetworkSession] Player left: {player}. Players={CountPlayers(runner)}.");
             var actorNumber = runner.GetPlayerActorId(player) ?? player.PlayerId;
-            if (runner.IsServer) _matchAuthority?.MarkPlayerDisconnected(actorNumber);
+            if (runner.IsServer)
+            {
+                _matchAuthority?.MarkPlayerDisconnected(actorNumber);
+                NetworkMatchState.Instance?.ReleasePlayerOperationsAuthoritative(player);
+                foreach (var life in FindObjectsByType<NetworkPlayerLifeState>())
+                    life.ReleaseDisconnectedReviverAuthoritative(player);
+            }
             PlayerLeft?.Invoke(player);
         }
 
@@ -362,13 +369,16 @@ namespace EchoProtocol.Networking
                 $"[NetworkSession] Runner shutdown: {reason}.");
             if (Runner == runner && State != NetworkSessionState.ShuttingDown)
             {
-                if (reason == ShutdownReason.Ok)
+                if (reason == ShutdownReason.Ok && State != NetworkSessionState.InMatch)
                 {
                     CleanupTermination(runner);
                     return;
                 }
 
-                CleanupUnexpectedTermination(runner, $"Session ended: {reason}");
+                CleanupUnexpectedTermination(runner,
+                    runner.IsClient && State == NetworkSessionState.InMatch
+                        ? "Host disconnected. Match ended. Create or join a new room."
+                        : $"Session ended: {reason}");
             }
         }
 
@@ -399,6 +409,8 @@ namespace EchoProtocol.Networking
 
         private void CleanupUnexpectedTermination(NetworkRunner runner, string message)
         {
+            if (Runner != runner) return;
+            PlayerInteractionControlLock.ReleaseAll();
             ClearLocalInputProvider();
             if (_matchAuthority != null)
             {
@@ -410,8 +422,25 @@ namespace EchoProtocol.Networking
             CurrentSessionName = string.Empty;
             LastError = message;
             SetState(NetworkSessionState.Failed, message);
-            if (runner != null) Destroy(runner.gameObject);
-            ReturnToBootstrapScene();
+            _ = FinishUnexpectedTerminationAsync(runner);
+        }
+
+        private async Task FinishUnexpectedTerminationAsync(NetworkRunner runner)
+        {
+            if (runner != null)
+            {
+                try
+                {
+                    if (!runner.IsShutdown) await runner.Shutdown();
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning($"[NetworkSession] Unexpected shutdown cleanup failed: {exception.Message}");
+                }
+                if (runner != null) Destroy(runner.gameObject);
+            }
+            if (SceneManager.GetActiveScene().name != LobbySceneName)
+                _ = SceneManager.LoadSceneAsync(LobbySceneName, LoadSceneMode.Single);
         }
 
         private void CleanupTermination(NetworkRunner runner)
@@ -452,7 +481,11 @@ namespace EchoProtocol.Networking
         void INetworkRunnerCallbacks.OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
         void INetworkRunnerCallbacks.OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList) { }
         void INetworkRunnerCallbacks.OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
-        void INetworkRunnerCallbacks.OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken) { }
+        void INetworkRunnerCallbacks.OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken)
+        {
+            if (Runner == runner)
+                CleanupUnexpectedTermination(runner, "Host disconnected. Match ended. Create or join a new room.");
+        }
         void INetworkRunnerCallbacks.OnSceneLoadDone(NetworkRunner runner)
         {
             RuntimeLog.Log(

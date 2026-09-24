@@ -144,10 +144,14 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkBool RelayB2Synchronizing { get; private set; }
         [Networked] private NetworkBool Zone2RelayRuntimeInitialized { get; set; }
         [Networked] public PlayerRef SecurityHoldOperator { get; private set; }
+        [Networked] public PlayerRef SecurityHoldOperator2 { get; private set; }
+        [Networked] public PlayerRef SecurityHoldOperator3 { get; private set; }
+        [Networked] public PlayerRef SecurityHoldOperator4 { get; private set; }
+        private readonly TickTimer[] _securityHoldLeases = new TickTimer[4];
         [Networked] public float SecurityHoldDurationSeconds { get; private set; }
         [Networked] public float SecurityHoldAccumulatedSeconds { get; private set; }
-        [Networked] private TickTimer SecurityHoldTimer { get; set; }
         [Networked] private TickTimer RelayRepairWindowTimer { get; set; }
+        [Networked] private TickTimer RelayRepairResetNoticeTimer { get; set; }
         [Networked] public int ZoneAccessFailureCount { get; private set; }
         [Networked] private TickTimer ZoneAccessCooldown { get; set; }
 
@@ -186,10 +190,24 @@ namespace EchoProtocol.Networking
         public bool AreAllRelaysOnline => (RelayCompletionMask & 0x0F) == 0x0F;
         public int PowerRelaysOnline => (RelayCompletionMask & 1) + ((RelayCompletionMask >> 1) & 1);
         public int DataRelaysOnline => ((RelayCompletionMask >> 2) & 1) + ((RelayCompletionMask >> 3) & 1);
+        public int SecurityHoldParticipantCount => (SecurityHoldOperator.IsNone ? 0 : 1)
+            + (SecurityHoldOperator2.IsNone ? 0 : 1)
+            + (SecurityHoldOperator3.IsNone ? 0 : 1)
+            + (SecurityHoldOperator4.IsNone ? 0 : 1);
+        public float SecurityHoldEstimatedRemainingSeconds
+        {
+            get
+            {
+                float rate = SecurityHoldWorkRate(SecurityHoldParticipantCount);
+                return rate > 0f
+                    ? Mathf.Max(0f, SecurityHoldDurationSeconds - SecurityHoldAccumulatedSeconds) / rate
+                    : 0f;
+            }
+        }
         public bool IsSecurityHoldRunning => !SecurityHoldCompleted
             && CurrentPhase == NetworkMatchPhase.Zone2Objective
             && Zone2Stage == Zone2MissionStage.SecurityHold
-            && SecurityHoldTimer.IsRunning;
+            && SecurityHoldParticipantCount > 0;
         public float SecurityHoldProgress01
         {
             get
@@ -197,10 +215,7 @@ namespace EchoProtocol.Networking
                 if (SecurityHoldCompleted) return 1f;
                 float duration = Mathf.Max(0f, SecurityHoldDurationSeconds);
                 if (duration <= 0f) return 0f;
-                float elapsed = SecurityHoldTimer.IsRunning
-                    ? duration - Remaining(SecurityHoldTimer)
-                    : SecurityHoldAccumulatedSeconds;
-                return Mathf.Clamp01(elapsed / duration);
+                return Mathf.Clamp01(SecurityHoldAccumulatedSeconds / duration);
             }
         }
         public bool IsZoneAccessCooldownActive => ZoneAccessCooldown.IsRunning
@@ -215,6 +230,8 @@ namespace EchoProtocol.Networking
         public float RelayRepairWindowRemainingSeconds => IsRelayRepairWindowRunning
             ? Remaining(RelayRepairWindowTimer)
             : 0f;
+        public bool IsRelayRepairResetNoticeActive => RelayRepairResetNoticeTimer.IsRunning
+            && Runner != null && !RelayRepairResetNoticeTimer.Expired(Runner);
         public bool HasInitializedZone2RelayRuntime => Zone2RelayRuntimeInitialized;
 
         private MatchFlowController _legacyMatchFlow;
@@ -696,6 +713,16 @@ namespace EchoProtocol.Networking
             else RpcCancelSecurityHold();
         }
 
+        public void RequestRefreshSecurityHold()
+        {
+            if (!HasValidNetworkObject()) return;
+            if (Object.HasStateAuthority)
+            {
+                if (TryGetLocalRequester(out var requester)) RefreshSecurityHoldAuthoritative(requester);
+            }
+            else RpcRefreshSecurityHold();
+        }
+
         public Zone2AccessSubmissionDisposition RequestSubmitZoneAccessCode(int panelIndex, string code)
         {
             if (!HasValidNetworkObject()) return Zone2AccessSubmissionDisposition.Rejected;
@@ -762,6 +789,9 @@ namespace EchoProtocol.Networking
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         private void RpcCancelSecurityHold(RpcInfo info = default) => PauseSecurityHoldAuthoritative(info.Source);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRefreshSecurityHold(RpcInfo info = default) => RefreshSecurityHoldAuthoritative(info.Source);
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         private void RpcSubmitZoneAccessCode(int panelIndex, string code, RpcInfo info = default)
@@ -896,16 +926,21 @@ namespace EchoProtocol.Networking
                 || (Zone2Stage != Zone2MissionStage.SecurityHoldReady && Zone2Stage != Zone2MissionStage.SecurityHold)
                 || !TryGetZone2Director(out var director)
                 || director.SecurityTerminal == null
-                || !TryValidateZone2Requester(requester, director.SecurityTerminal, director.SecurityTerminal.MaxInteractorDistance)
-                || (!SecurityHoldOperator.IsNone && SecurityHoldOperator != requester)) return false;
+                || !TryValidateZone2Requester(requester, director.SecurityTerminal, director.SecurityTerminal.MaxInteractorDistance)) return false;
 
-            float duration = director.SecurityTerminal != null ? director.SecurityTerminal.DownloadDurationSeconds : 12f;
-            SecurityHoldDurationSeconds = Mathf.Max(0.01f, duration);
+            if (HasSecurityHoldParticipant(requester)) return true;
+            if (SecurityHoldParticipantCount >= 4) return false;
+
+            SecurityHoldDurationSeconds = director.SecurityTerminal.DownloadDurationSeconds;
             SecurityHoldAccumulatedSeconds = Mathf.Clamp(SecurityHoldAccumulatedSeconds, 0f, SecurityHoldDurationSeconds);
-            float remaining = Mathf.Max(0.01f, SecurityHoldDurationSeconds - SecurityHoldAccumulatedSeconds);
-            SecurityHoldOperator = requester;
+            for (int index = 0; index < 4; index++)
+            {
+                if (!GetSecurityHoldParticipant(index).IsNone) continue;
+                SetSecurityHoldParticipant(index, requester);
+                _securityHoldLeases[index] = TickTimer.CreateFromSeconds(Runner, 1.25f);
+                break;
+            }
             Zone2Stage = Zone2MissionStage.SecurityHold;
-            SecurityHoldTimer = TickTimer.CreateFromSeconds(Runner, remaining);
             HandleReplicatedStateChanged();
             return true;
         }
@@ -917,65 +952,132 @@ namespace EchoProtocol.Networking
                 || IsEnded
                 || CurrentPhase != NetworkMatchPhase.Zone2Objective
                 || Zone2Stage != Zone2MissionStage.SecurityHold
-                || !requester.IsRealPlayer
-                || SecurityHoldOperator != requester)
+                || !requester.IsRealPlayer)
             {
                 return;
             }
 
-            PauseSecurityHoldAuthoritative();
+            if (RemoveSecurityHoldParticipant(requester)) HandleReplicatedStateChanged();
         }
 
-        private void PauseSecurityHoldAuthoritative()
+        private bool HasSecurityHoldParticipant(PlayerRef player)
         {
-            if (SecurityHoldTimer.IsRunning)
+            if (!player.IsRealPlayer) return false;
+            for (int index = 0; index < 4; index++)
+                if (GetSecurityHoldParticipant(index) == player) return true;
+            return false;
+        }
+
+        private void RefreshSecurityHoldAuthoritative(PlayerRef requester)
+        {
+            if (!Object.HasStateAuthority || Zone2Stage != Zone2MissionStage.SecurityHold) return;
+            for (int index = 0; index < 4; index++)
             {
-                SecurityHoldAccumulatedSeconds = Mathf.Clamp(
-                    SecurityHoldDurationSeconds - Remaining(SecurityHoldTimer), 0f, SecurityHoldDurationSeconds);
+                if (GetSecurityHoldParticipant(index) != requester) continue;
+                _securityHoldLeases[index] = TickTimer.CreateFromSeconds(Runner, 1.25f);
+                return;
             }
-            SecurityHoldTimer = TickTimer.None;
-            SecurityHoldOperator = PlayerRef.None;
-            if (!SecurityHoldCompleted) Zone2Stage = Zone2MissionStage.SecurityHoldReady;
-            HandleReplicatedStateChanged();
+        }
+
+        private PlayerRef GetSecurityHoldParticipant(int index) => index switch
+        {
+            0 => SecurityHoldOperator,
+            1 => SecurityHoldOperator2,
+            2 => SecurityHoldOperator3,
+            3 => SecurityHoldOperator4,
+            _ => PlayerRef.None
+        };
+
+        private void SetSecurityHoldParticipant(int index, PlayerRef player)
+        {
+            if (player.IsNone) _securityHoldLeases[index] = TickTimer.None;
+            switch (index)
+            {
+                case 0: SecurityHoldOperator = player; break;
+                case 1: SecurityHoldOperator2 = player; break;
+                case 2: SecurityHoldOperator3 = player; break;
+                case 3: SecurityHoldOperator4 = player; break;
+            }
+        }
+
+        private bool RemoveSecurityHoldParticipant(PlayerRef player)
+        {
+            if (!player.IsRealPlayer) return false;
+            for (int index = 0; index < 4; index++)
+            {
+                if (GetSecurityHoldParticipant(index) != player) continue;
+                SetSecurityHoldParticipant(index, PlayerRef.None);
+                if (SecurityHoldParticipantCount == 0 && !SecurityHoldCompleted)
+                    Zone2Stage = Zone2MissionStage.SecurityHoldReady;
+                return true;
+            }
+            return false;
+        }
+
+        private void ClearSecurityHoldParticipants()
+        {
+            for (int index = 0; index < 4; index++)
+                SetSecurityHoldParticipant(index, PlayerRef.None);
         }
 
         private void AdvanceSecurityHoldAuthoritative()
         {
-            if (!IsSecurityHoldRunning)
+            if (!IsSecurityHoldRunning) return;
+            if (!TryGetZone2Director(out var director) || director.SecurityTerminal == null)
             {
+                ClearSecurityHoldParticipants();
+                Zone2Stage = Zone2MissionStage.SecurityHoldReady;
+                HandleReplicatedStateChanged();
                 return;
             }
 
-            if (SecurityHoldTimer.Expired(Runner))
+            bool changed = false;
+            for (int index = 0; index < 4; index++)
             {
+                var player = GetSecurityHoldParticipant(index);
+                if (player.IsNone || (!_securityHoldLeases[index].ExpiredOrNotRunning(Runner)
+                    && TryValidateZone2Requester(player, director.SecurityTerminal,
+                        director.SecurityTerminal.MaxInteractorDistance))) continue;
+                SetSecurityHoldParticipant(index, PlayerRef.None);
+                changed = true;
+            }
+            int participants = SecurityHoldParticipantCount;
+            if (participants == 0)
+            {
+                Zone2Stage = Zone2MissionStage.SecurityHoldReady;
+                HandleReplicatedStateChanged();
+                return;
+            }
+
+            SecurityHoldAccumulatedSeconds = Mathf.Min(SecurityHoldDurationSeconds,
+                SecurityHoldAccumulatedSeconds + Runner.DeltaTime * SecurityHoldWorkRate(participants));
+            if (SecurityHoldAccumulatedSeconds >= SecurityHoldDurationSeconds)
                 CompleteSecurityHoldAuthoritative();
-                return;
-            }
-
-            if (!TryGetZone2Director(out var director)
-                || director.SecurityTerminal == null
-                || !TryValidateZone2Requester(
-                    SecurityHoldOperator,
-                    director.SecurityTerminal,
-                    director.SecurityTerminal.MaxInteractorDistance))
-            {
-                PauseSecurityHoldAuthoritative();
-            }
+            else if (changed) HandleReplicatedStateChanged();
         }
+
+        public static float SecurityHoldWorkRate(int participants) => participants switch
+        {
+            1 => 1f,
+            2 => 1.2f,
+            3 => 1.5f,
+            4 => 2f,
+            _ => 0f
+        };
 
         private bool CompleteSecurityHoldAuthoritative()
         {
             if (!Object.HasStateAuthority || IsEnded || CurrentPhase != NetworkMatchPhase.Zone2Objective
                 || !AreAllRelaysOnline || Zone2Stage != Zone2MissionStage.SecurityHold || SecurityHoldCompleted
-                || (!SecurityHoldTimer.Expired(Runner)
-                    && SecurityHoldAccumulatedSeconds < SecurityHoldDurationSeconds)) return false;
+                || SecurityHoldDurationSeconds <= 0f
+                || SecurityHoldAccumulatedSeconds < SecurityHoldDurationSeconds) return false;
 
             SecurityHoldCompleted = true;
             PowerAuthorizationAvailable = true;
             SecurityHoldAccumulatedSeconds = SecurityHoldDurationSeconds;
-            SecurityHoldTimer = TickTimer.None;
             RelayRepairWindowTimer = TickTimer.None;
-            SecurityHoldOperator = PlayerRef.None;
+            RelayRepairResetNoticeTimer = TickTimer.None;
+            ClearSecurityHoldParticipants();
             if (string.IsNullOrEmpty(_serverGeneratedAuthCode))
             {
                 _serverGeneratedAuthCode = UnityEngine.Random.Range(0, 10000).ToString("D4");
@@ -1320,11 +1422,11 @@ namespace EchoProtocol.Networking
             ZoneDoorsUnlocked = false;
             PowerPuzzleCompleted = false;
             RestoreMainPowerCompleted = false;
-            SecurityHoldOperator = PlayerRef.None;
+            ClearSecurityHoldParticipants();
             SecurityHoldDurationSeconds = 0f;
             SecurityHoldAccumulatedSeconds = 0f;
-            SecurityHoldTimer = TickTimer.None;
             RelayRepairWindowTimer = TickTimer.None;
+            RelayRepairResetNoticeTimer = TickTimer.None;
             RelayA1Operator = PlayerRef.None;
             RelayA2Operator = PlayerRef.None;
             RelayB1Operator = PlayerRef.None;
@@ -1366,10 +1468,10 @@ namespace EchoProtocol.Networking
         {
             RelayCompletionMask = 0;
             Zone2Stage = Zone2MissionStage.RepairRelays;
-            SecurityHoldOperator = PlayerRef.None;
+            RelayRepairResetNoticeTimer = TickTimer.CreateFromSeconds(Runner, 6f);
+            ClearSecurityHoldParticipants();
             SecurityHoldDurationSeconds = 0f;
             SecurityHoldAccumulatedSeconds = 0f;
-            SecurityHoldTimer = TickTimer.None;
             RelayRepairWindowTimer = TickTimer.None;
             RelayA1Operator = PlayerRef.None;
             RelayA2Operator = PlayerRef.None;
@@ -1401,7 +1503,7 @@ namespace EchoProtocol.Networking
                 RelayB1Frequency = director.RelayB1 != null ? director.RelayB1.Snapshot.CurrentFrequency : 0f;
                 RelayB1Phase = director.RelayB1 != null ? director.RelayB1.Snapshot.CurrentPhase : 0f;
 
-                RelayB2PresetIndex = ChooseRelayBPreset(director.RelayB2);
+                RelayB2PresetIndex = ChooseRelayBPreset(director.RelayB2, director.RelayB1, RelayB1PresetIndex);
                 director.RelayB2?.ResetForRetry(RelayB2PresetIndex, RelayB2AttemptSeed);
                 RelayB2Channel = director.RelayB2 != null ? director.RelayB2.Snapshot.SelectedChannelIndex : -1;
                 RelayB2Frequency = director.RelayB2 != null ? director.RelayB2.Snapshot.CurrentFrequency : 0f;
@@ -1441,7 +1543,7 @@ namespace EchoProtocol.Networking
             RelayB1Phase = b1.CurrentPhase;
             RelayB1Synchronizing = false;
 
-            RelayB2PresetIndex = ChooseRelayBPreset(director.RelayB2);
+            RelayB2PresetIndex = ChooseRelayBPreset(director.RelayB2, director.RelayB1, RelayB1PresetIndex);
             RelayB2AttemptSeed = NewRelayAttemptSeed();
             director.RelayB2.ApplyAuthoritativeAttempt(RelayB2PresetIndex, RelayB2AttemptSeed);
             var b2 = director.RelayB2.Snapshot;
@@ -1453,12 +1555,29 @@ namespace EchoProtocol.Networking
             return true;
         }
 
-        private static int ChooseRelayBPreset(RelayBController controller)
+        private static int ChooseRelayBPreset(RelayBController controller,
+            RelayBController otherController = null, int otherPresetIndex = -1)
         {
             int count = controller != null && controller.Config != null && controller.Config.Presets != null
                 ? controller.Config.Presets.Count
                 : 0;
-            return count > 0 ? UnityEngine.Random.Range(0, count) : 0;
+            if (count <= 1) return 0;
+
+            RelayBPreset other = otherController != null && otherController.Config != null && otherPresetIndex >= 0
+                ? otherController.Config.GetPreset(otherPresetIndex) : null;
+            int selected = -1;
+            int candidates = 0;
+            for (int index = 0; index < count; index++)
+            {
+                var preset = controller.Config.GetPreset(index);
+                if (other != null && preset != null
+                    && preset.CorrectChannelIndex == other.CorrectChannelIndex
+                    && preset.ReferenceWaveform == other.ReferenceWaveform
+                    && Mathf.Approximately(preset.TargetFrequency, other.TargetFrequency)
+                    && Mathf.Approximately(preset.TargetPhase, other.TargetPhase)) continue;
+                if (UnityEngine.Random.Range(0, ++candidates) == 0) selected = index;
+            }
+            return selected >= 0 ? selected : UnityEngine.Random.Range(0, count);
         }
 
         private static int NewRelayAttemptSeed()
@@ -1596,6 +1715,21 @@ namespace EchoProtocol.Networking
             {
                 HandleReplicatedStateChanged();
             }
+        }
+
+        public void ReleasePlayerOperationsAuthoritative(PlayerRef player)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority || !player.IsRealPlayer) return;
+            bool changed = false;
+            for (int index = 0; index < 4; index++)
+            {
+                var slot = (RelaySlot)index;
+                if (GetRelayOperator(slot) != player) continue;
+                SetRelayOperator(slot, PlayerRef.None);
+                changed = true;
+            }
+            if (RemoveSecurityHoldParticipant(player)) changed = true;
+            if (changed) HandleReplicatedStateChanged();
         }
 
         private bool ClaimRelayOperator(PlayerRef requester, RelaySlot slot)

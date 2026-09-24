@@ -19,6 +19,7 @@ public class PlayerInteraction : MonoBehaviour
     private IHoldInteractable _heldInteractable;
     private string _currentPrompt = string.Empty;
     private bool _suppressInteractionPrompt;
+    private float _nextSecurityHoldRefresh;
 
     public event Action<string> PromptChanged;
 
@@ -100,6 +101,7 @@ public class PlayerInteraction : MonoBehaviour
 
         UpdateCurrentInteractable();
         ValidateHeldInteractable();
+        RefreshSecurityHold();
     }
 
     private void BindInput()
@@ -288,10 +290,18 @@ public class PlayerInteraction : MonoBehaviour
             return;
         }
 
-        if (!ReferenceEquals(_currentInteractable, _heldInteractable) || !_heldInteractable.CanInteract(gameObject))
+        if (!Application.isFocused || _interactAction == null || !_interactAction.IsPressed()
+            || !ReferenceEquals(_currentInteractable, _heldInteractable) || !_heldInteractable.CanInteract(gameObject))
         {
             CancelHeldInteractable();
         }
+    }
+
+    private void RefreshSecurityHold()
+    {
+        if (!(_heldInteractable is SecurityTerminalDownload) || Time.unscaledTime < _nextSecurityHoldRefresh) return;
+        _nextSecurityHoldRefresh = Time.unscaledTime + 0.25f;
+        EchoProtocol.Networking.NetworkMatchState.Instance?.RequestRefreshSecurityHold();
     }
 
     private void CancelHeldInteractable()

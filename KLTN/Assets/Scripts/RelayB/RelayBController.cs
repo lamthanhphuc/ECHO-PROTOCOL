@@ -23,6 +23,7 @@ namespace EchoProtocol.RelayB
         [SerializeField, Min(0f)] private float noiseEmissionCooldown = 2.0f;
 
         private readonly RelayBSignalSimulation _simulation = new RelayBSignalSimulation();
+        private AudioSource _statusLoop;
         private float _nextAdjustSoundAt;
         private float _nextMismatchSoundAt;
         private float _nextNoiseEmissionAt;
@@ -46,6 +47,10 @@ namespace EchoProtocol.RelayB
             {
                 audioSource = GetComponent<AudioSource>();
             }
+            EchoProtocol.Audio.GameAudioRuntime.EnsureInitialized();
+            if (audioSource != null) audioSource.spatialBlend = 1f;
+            _statusLoop = EchoProtocol.Audio.GameAudioRuntime.CreateSource(gameObject, true);
+            _statusLoop.maxDistance = 16f;
 
             if (ui == null)
             {
@@ -71,6 +76,7 @@ namespace EchoProtocol.RelayB
 
         private void OnDestroy()
         {
+            if (_statusLoop != null) _statusLoop.Stop();
             _simulation.Changed -= HandleSimulationChanged;
             _simulation.Completed -= HandleCompleted;
             _simulation.DriftWarning -= HandleDriftWarning;
@@ -137,7 +143,7 @@ namespace EchoProtocol.RelayB
         public void ScanChannels()
         {
             _simulation.ScanChannels(1.0f);
-            PlayOneShot(startupClip, 0.75f);
+            PlayOneShot(startupClip, 0.75f, "security_terminal/terminal_boot");
         }
 
         public void StartSynchronization()
@@ -148,14 +154,14 @@ namespace EchoProtocol.RelayB
             }
 
             _simulation.StartSynchronization();
-            PlayOneShot(startupClip, 0.85f);
+            PlayOneShot(startupClip, 0.85f, "security_terminal/terminal_boot");
             StartSyncRequested?.Invoke();
         }
 
         public void CancelSynchronization()
         {
             _simulation.CancelSynchronization();
-            PlayOneShot(warningClip, 0.5f);
+            PlayOneShot(warningClip, 0.5f, "security_terminal/download_pause");
             CancelSyncRequested?.Invoke();
         }
 
@@ -258,25 +264,31 @@ namespace EchoProtocol.RelayB
 
         private void HandleSimulationChanged(RelayBSnapshot snapshot)
         {
+            string loop = snapshot.Status == RelayBStatus.Online ? "map_ambience/fluorescent_buzz_loop"
+                : snapshot.Status == RelayBStatus.DriftWarning || snapshot.Status == RelayBStatus.ConnectionLost
+                    || snapshot.Status == RelayBStatus.SignalMismatch ? "map_ambience/alarm_ambience_loop"
+                : snapshot.Status == RelayBStatus.Synchronizing || snapshot.Status == RelayBStatus.Scanning
+                    ? "map_ambience/hvac_loop" : "map_ambience/server_room_loop";
+            EchoProtocol.Audio.GameAudioRuntime.Loop(_statusLoop, loop, 0.1f);
             ui?.Refresh(snapshot);
             StateChanged?.Invoke(snapshot);
         }
 
         private void HandleCompleted()
         {
-            PlayOneShot(completeClip, 0.95f);
+            PlayOneShot(completeClip, 0.95f, "security_terminal/access_granted");
             ui?.Close();
             RelayBOnline?.Invoke();
         }
 
         private void HandleDriftWarning()
         {
-            PlayOneShot(warningClip, 0.8f);
+            PlayOneShot(warningClip, 0.8f, "map_ambience/electrical_flicker");
         }
 
         private void HandleDriftTriggered()
         {
-            PlayOneShot(warningClip, 0.9f);
+            PlayOneShot(warningClip, 0.9f, "security_terminal/download_pause");
         }
 
         private void HandleSignalMismatch()
@@ -284,7 +296,7 @@ namespace EchoProtocol.RelayB
             if (Time.unscaledTime >= _nextMismatchSoundAt)
             {
                 _nextMismatchSoundAt = Time.unscaledTime + mismatchSoundCooldown;
-                PlayOneShot(mismatchClip != null ? mismatchClip : warningClip, 0.75f);
+                PlayOneShot(mismatchClip, 0.75f, "security_terminal/access_denied");
             }
 
             TryEmitNoiseEvent();
@@ -292,7 +304,7 @@ namespace EchoProtocol.RelayB
 
         private void HandleInstabilityReset()
         {
-            PlayOneShot(warningClip, 0.8f);
+            PlayOneShot(warningClip, 0.8f, "security_terminal/download_pause");
             TryEmitNoiseEvent();
         }
 
@@ -301,16 +313,17 @@ namespace EchoProtocol.RelayB
             if (Time.unscaledTime >= _nextAdjustSoundAt)
             {
                 _nextAdjustSoundAt = Time.unscaledTime + adjustSoundCooldown;
-                PlayOneShot(adjustClip, 0.35f);
+                PlayOneShot(adjustClip, 0.35f, "ui/click");
             }
         }
 
-        private void PlayOneShot(AudioClip clip, float volume)
+        private void PlayOneShot(AudioClip clip, float volume, string fallbackKey)
         {
             if (audioSource != null && clip != null)
             {
                 audioSource.PlayOneShot(clip, volume);
             }
+            else EchoProtocol.Audio.GameAudioRuntime.Play(audioSource, fallbackKey, volume);
         }
 
         private void TryEmitNoiseEvent()

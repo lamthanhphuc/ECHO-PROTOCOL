@@ -149,6 +149,18 @@ namespace EchoProtocol.MatchFlow
 
         public bool AreAllRelaysOnline => CompletedRelayCount >= 4;
         public float RelayRepairRetryWindowSeconds => Mathf.Max(1f, relayRepairRetryWindowSeconds);
+        public float RelayRepairRemainingSeconds
+        {
+            get
+            {
+                var matchState = NetworkMatchState.Instance ?? FindAnyObjectByType<NetworkMatchState>();
+                if (matchState != null && matchState.Object != null && matchState.Object.IsValid)
+                    return matchState.RelayRepairWindowRemainingSeconds;
+                return _offlineRelayRepairDeadline > 0f && !_offlineSecurityHoldComplete
+                    ? Mathf.Max(0f, _offlineRelayRepairDeadline - Time.time) : 0f;
+            }
+        }
+        public bool IsRelayRepairWindowRunning => RelayRepairRemainingSeconds > 0f && !IsSecurityHoldComplete;
 
         public bool IsSecurityTerminalDiscovered
         {
@@ -199,6 +211,12 @@ namespace EchoProtocol.MatchFlow
                     // Multiplayer uses only the server-owned replicated code.
                     // Empty means authorization has not been granted yet.
                     return matchState.PowerAuthorizationCode.ToString();
+                }
+
+                // In offline mode, do not reveal code until security hold is complete
+                if (!_offlineSecurityHoldComplete && _offlineStage < Zone2MissionStage.AuthorizationCodeGranted)
+                {
+                    return string.Empty;
                 }
 
                 if (string.IsNullOrEmpty(_offlineAuthCode))
@@ -416,6 +434,12 @@ namespace EchoProtocol.MatchFlow
             }
 
             // Offline / Standalone:
+            if (!AreAllRelaysOnline)
+            {
+                Debug.LogWarning("[Zone2MissionDirector] Cannot complete Security Hold before all 4 relays are online.");
+                return;
+            }
+
             if (!_offlineSecurityHoldComplete)
             {
                 _offlineSecurityHoldComplete = true;
@@ -447,7 +471,25 @@ namespace EchoProtocol.MatchFlow
             }
 
             // Offline / Standalone:
-            if (code == AuthorizationCode)
+            if (!AreAllRelaysOnline || !IsSecurityHoldComplete)
+            {
+                return false;
+            }
+
+            if (_offlineStage != Zone2MissionStage.AuthorizationCodeGranted
+                && _offlineStage != Zone2MissionStage.UnlockZoneDoors
+                && _offlineStage != Zone2MissionStage.Zone2Completed)
+            {
+                return false;
+            }
+
+            string expectedCode = AuthorizationCode;
+            if (string.IsNullOrEmpty(expectedCode))
+            {
+                return false;
+            }
+
+            if (code == expectedCode)
             {
                 _offlineZoneDoorsUnlocked = true;
                 SetOfflineStage(Zone2MissionStage.Zone2Completed);
@@ -556,8 +598,11 @@ namespace EchoProtocol.MatchFlow
                 return false;
             }
 
-            PlayerRef current = matchState.SecurityHoldOperator;
-            return current.IsNone || current == matchState.Runner.LocalPlayer;
+            return matchState.SecurityHoldParticipantCount < 4
+                || matchState.SecurityHoldOperator == matchState.Runner.LocalPlayer
+                || matchState.SecurityHoldOperator2 == matchState.Runner.LocalPlayer
+                || matchState.SecurityHoldOperator3 == matchState.Runner.LocalPlayer
+                || matchState.SecurityHoldOperator4 == matchState.Runner.LocalPlayer;
         }
 
         public bool RequestStartSecurityHold(SecurityTerminalDownload terminal)

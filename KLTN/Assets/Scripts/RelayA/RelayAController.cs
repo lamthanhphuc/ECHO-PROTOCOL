@@ -22,6 +22,7 @@ namespace EchoProtocol.RelayA
         [SerializeField, Min(0f)] private float noiseEmissionCooldown = 2.0f;
 
         private readonly RelayASimulation _simulation = new RelayASimulation();
+        private AudioSource _statusLoop;
         private float _nextAdjustSoundAt;
         private float _nextNoiseEmissionAt;
         private int _attemptSeed;
@@ -40,6 +41,10 @@ namespace EchoProtocol.RelayA
             {
                 audioSource = GetComponent<AudioSource>();
             }
+            EchoProtocol.Audio.GameAudioRuntime.EnsureInitialized();
+            if (audioSource != null) audioSource.spatialBlend = 1f;
+            _statusLoop = EchoProtocol.Audio.GameAudioRuntime.CreateSource(gameObject, true);
+            _statusLoop.maxDistance = 16f;
 
             if (ui == null)
             {
@@ -62,6 +67,7 @@ namespace EchoProtocol.RelayA
 
         private void OnDestroy()
         {
+            if (_statusLoop != null) _statusLoop.Stop();
             _simulation.Changed -= HandleSimulationChanged;
             _simulation.Completed -= HandleCompleted;
             _simulation.FaultWarningStarted -= HandleFaultWarningStarted;
@@ -101,14 +107,14 @@ namespace EchoProtocol.RelayA
             }
 
             _simulation.Start();
-            PlayOneShot(startupClip, 0.85f);
+            PlayOneShot(startupClip, 0.85f, "power_puzzle/breaker_toggle");
             TryEmitNoiseEvent();
         }
 
         public void EmergencyStop()
         {
             _simulation.EmergencyStop();
-            PlayOneShot(warningClip, 0.5f);
+            PlayOneShot(warningClip, 0.5f, "security_terminal/download_pause");
         }
 
         public void SetControls(float generatorOutput, float frequencyRegulator, float loadDistribution)
@@ -117,7 +123,7 @@ namespace EchoProtocol.RelayA
             if (Time.unscaledTime >= _nextAdjustSoundAt)
             {
                 _nextAdjustSoundAt = Time.unscaledTime + adjustSoundCooldown;
-                PlayOneShot(adjustClip, 0.35f);
+                PlayOneShot(adjustClip, 0.35f, "power_puzzle/rotary_switch");
             }
         }
 
@@ -181,13 +187,19 @@ namespace EchoProtocol.RelayA
 
         private void HandleSimulationChanged(RelayASnapshot snapshot)
         {
+            string loop = snapshot.Status == RelayAStatus.Online ? "sector_box_power_hub/idle_machinery_loop"
+                : snapshot.Status == RelayAStatus.FaultWarning || snapshot.Status == RelayAStatus.Overload
+                    ? "map_ambience/alarm_ambience_loop"
+                : snapshot.IsRunning ? "map_ambience/generator_loop"
+                : "map_ambience/electrical_room_loop";
+            EchoProtocol.Audio.GameAudioRuntime.Loop(_statusLoop, loop, 0.1f);
             ui?.Refresh(snapshot);
             StateChanged?.Invoke(snapshot);
         }
 
         private void HandleCompleted()
         {
-            PlayOneShot(completeClip, 0.9f);
+            PlayOneShot(completeClip, 0.9f, "sector_box_power_hub/fully_powered");
             TryEmitNoiseEvent();
             ui?.Close();
             RelayAOnline?.Invoke();
@@ -195,26 +207,27 @@ namespace EchoProtocol.RelayA
 
         private void HandleFaultWarningStarted(RelayAFaultType faultType)
         {
-            PlayOneShot(warningClip, 0.8f);
+            PlayOneShot(warningClip, 0.8f, "map_ambience/electrical_flicker");
         }
 
         private void HandleFaultActivated(RelayAFaultType faultType)
         {
-            PlayOneShot(overloadClip, 0.85f);
+            PlayOneShot(overloadClip, 0.85f, "power_puzzle/electrical_sparks");
         }
 
         private void HandleOverloadStarted()
         {
-            PlayOneShot(overloadClip, 0.85f);
+            PlayOneShot(overloadClip, 0.85f, "power_puzzle/electrical_sparks");
             TryEmitNoiseEvent();
         }
 
-        private void PlayOneShot(AudioClip clip, float volume)
+        private void PlayOneShot(AudioClip clip, float volume, string fallbackKey)
         {
             if (audioSource != null && clip != null)
             {
                 audioSource.PlayOneShot(clip, volume);
             }
+            else EchoProtocol.Audio.GameAudioRuntime.Play(audioSource, fallbackKey, volume);
         }
 
         private void TryEmitNoiseEvent()

@@ -520,6 +520,13 @@ namespace EchoProtocol.Networking
             Debug.Log($"[LifeState] Revive cancelled target={Object.InputAuthority}, reviver={previousReviver}, reason={reason}.");
         }
 
+        public void ReleaseDisconnectedReviverAuthoritative(PlayerRef player)
+        {
+            if (Object != null && Object.IsValid && Object.HasStateAuthority
+                && IsReviveInProgress && Reviver == player)
+                CancelReviveAuthoritative("reviver disconnected");
+        }
+
         private void CompleteReviveAuthoritative()
         {
             if (!IsReviveInProgress || !CanContinueRevive()) return;

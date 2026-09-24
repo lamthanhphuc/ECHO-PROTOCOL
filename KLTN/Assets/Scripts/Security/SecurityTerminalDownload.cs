@@ -70,6 +70,15 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
                 return matchState.PowerAuthorizationCode.ToString();
             }
 
+            if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
+            {
+                string directorCode = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.AuthorizationCode;
+                if (!string.IsNullOrEmpty(directorCode))
+                {
+                    return directorCode;
+                }
+            }
+
             var flow = UnityEngine.Object.FindAnyObjectByType<MatchFlowController>();
             if (flow != null && !string.IsNullOrEmpty(flow.PowerAuthorizationCode))
             {
@@ -107,6 +116,8 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
             }
 
             string percent = " (" + Mathf.RoundToInt(Progress01 * 100f) + "%)";
+            if (IsDownloading && TryGetNetworkMatchState(out var holdMatch))
+                percent += $" [{holdMatch.SecurityHoldParticipantCount}/4]";
             if (IsDownloading)
             {
                 return (string.IsNullOrWhiteSpace(downloadingPrompt) ? "Đang Tải Dữ Liệu" : downloadingPrompt) + percent;
@@ -222,6 +233,8 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
             EchoProtocol.MatchFlow.Zone2MissionDirector.Instance?.RequestStartSecurityHold(this);
             return;
         }
+
+        if (!EmergencyNetworkState.AreRelaysOnline()) return;
 
         if (!CanInteract(interactor)) return;
 

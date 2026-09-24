@@ -8,6 +8,10 @@ namespace EchoProtocol.MatchFlow
     {
         public static void CloseOthers(Object keepOpen)
         {
+            foreach (var ui in Object.FindObjectsByType<PowerControlUIController>(FindObjectsInactive.Include))
+            {
+                if (ui != null && ui != keepOpen && ui.IsOpen) ui.Close();
+            }
             foreach (var ui in Object.FindObjectsByType<RelayAUIController>(FindObjectsInactive.Include))
             {
                 if (ui != null && ui != keepOpen && ui.IsOpen) ui.Close();
