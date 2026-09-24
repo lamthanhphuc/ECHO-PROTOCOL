@@ -156,7 +156,7 @@ namespace EchoProtocol.Networking
             {
                 AudioSource.PlayClipAtPoint(_breakClip, transform.position);
             }
-            else EchoProtocol.Audio.GameAudioRuntime.AtPoint("stalker/door_jammer_break", transform.position);
+            else EchoProtocol.Audio.GameAudioRuntime.AtPoint("power_puzzle/electrical_sparks", transform.position);
         }
 
         private void TryReconcileDoorRelationAuthoritative()

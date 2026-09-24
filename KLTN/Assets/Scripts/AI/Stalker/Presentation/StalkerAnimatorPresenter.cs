@@ -68,6 +68,10 @@ namespace EchoProtocol.AI.Stalker.Presentation
         [SerializeField]
         private Renderer[] controlledRenderers;
 
+        [Tooltip("Optional: assign StalkerAudioController on the same or a child GameObject.")]
+        [SerializeField]
+        private StalkerAudioController audioController;
+
         [Header("Crossfade")]
         [SerializeField, Min(0f)]
         private float defaultCrossfadeSeconds = 0.10f;
@@ -111,6 +115,9 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private Vector3 _lastRootPosition;
 
         private bool _hasLastRootPosition;
+
+        private bool _lastMoving;
+        private StalkerAnimationAudioEvents _animationAudioEvents;
 
         private void Awake()
         {
@@ -224,6 +231,22 @@ namespace EchoProtocol.AI.Stalker.Presentation
                     GetComponentsInChildren<
                         Renderer>(
                             true);
+            }
+
+            if (audioController == null)
+            {
+                audioController =
+                    GetComponent<StalkerAudioController>()
+                    ?? GetComponentInChildren<StalkerAudioController>(true);
+            }
+
+            if (animator != null && audioController != null
+                && animator.gameObject != audioController.gameObject)
+            {
+                if (_animationAudioEvents == null || _animationAudioEvents.gameObject != animator.gameObject)
+                    _animationAudioEvents = animator.GetComponent<StalkerAnimationAudioEvents>()
+                        ?? animator.gameObject.AddComponent<StalkerAnimationAudioEvents>();
+                _animationAudioEvents.Bind(audioController);
             }
 
             return animator != null;
@@ -488,6 +511,53 @@ namespace EchoProtocol.AI.Stalker.Presentation
                     normalizedStart);
             }
 
+            // ── Audio state transitions ─────────────────────────────────────
+            // All audio calls are gated on the same semanticChanged / actionChanged
+            // booleans already computed above – no per-frame polling.
+            if (audioController != null)
+            {
+                if (!_hasPresented || _lastMoving != moving)
+                {
+                    audioController.SetMoving(moving);
+                    _lastMoving = moving;
+                }
+
+                if (semanticChanged)
+                {
+                    var prevState = _hasPresented
+                        ? _presentedSemanticState
+                        : (StalkerState?)null;
+
+                    var nextState = presentation.SemanticState;
+
+                    // Exiting CHASE
+                    if (prevState == StalkerState.CHASE
+                        && nextState != StalkerState.CHASE)
+                    {
+                        audioController.ExitChase();
+                    }
+
+                    // Entering states
+                    switch (nextState)
+                    {
+                        case StalkerState.PATROL:
+                            audioController.EnterIdle();
+                            break;
+
+                        case StalkerState.CHASE:
+                            audioController.EnterChase();
+                            break;
+
+                        case StalkerState.SEARCH:
+                            audioController.PlaySearch();
+                            break;
+                    }
+                }
+            }
+
+            // Detect and impact sounds are emitted by animation events on the Animator child.
+            // ───────────────────────────────────────────────────────────────
+
             _presentedSemanticState =
                 presentation.SemanticState;
 
@@ -588,7 +658,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
                     BiteStateHash,
 
                 StalkerState.SEARCH =>
-                    SniffStateHash,
+                    CrouchStateHash,
 
                 StalkerState.RECOVER =>
                     presentation.HasAttackEpisode

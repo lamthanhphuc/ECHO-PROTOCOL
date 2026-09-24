@@ -31,6 +31,8 @@ namespace EchoProtocol.Audio
         private NoiseMakerBeacon _beacon;
         private Vector3 _lastPosition;
         private float _lastSample, _nextStep;
+        private float _lastRelayWindowRemaining = -1f;
+        private int _lastTerminalHolderCount;
         private int _step;
 
         private void Awake()
@@ -47,6 +49,13 @@ namespace EchoProtocol.Audio
             _hiding = GetComponent<PlayerHidingController>();
             _stalker = GetComponent<StalkerFusionRuntime>();
             _stalkerController = GetComponent<StalkerController>();
+            if (GetComponent<EchoProtocol.AI.Stalker.Presentation.StalkerAudioController>() != null)
+            {
+                // When StalkerAudioController is present, it handles all Stalker audio with dedicated 3D sources & animation events.
+                // Neutralize legacy handling here to prevent duplicate AudioSources, unwanted Cave reverb filter, and audio conflicts.
+                _stalker = null;
+                _stalkerController = null;
+            }
             _slidingDoor = GetComponent<NetworkSlidingDoor>();
             _door = GetComponent<NetworkDoor>();
             _core = GetComponent<NetworkPickupItem>();
@@ -151,9 +160,46 @@ namespace EchoProtocol.Audio
                     Play(_terminal.IsComplete ? "security_terminal/download_complete" :
                         _terminal.IsPaused ? "security_terminal/download_pause" :
                         _terminal.Progress01 > 0.01f ? "security_terminal/download_resume" : "security_terminal/download_start");
+                int holders = NetworkMatchState.Instance != null && NetworkMatchState.Instance.Object != null
+                    && NetworkMatchState.Instance.Object.IsValid
+                    ? NetworkMatchState.Instance.SecurityHoldParticipantCount
+                    : _terminal.IsDownloading ? 1 : 0;
+                if (Changed("terminal_holders", holders) && holders > _lastTerminalHolderCount && holders > 1)
+                    Play("power_puzzle/terminal_interaction", 0.65f);
+                _lastTerminalHolderCount = holders;
                 GameAudioRuntime.Loop(_loop, _terminal.IsDownloading ? "security_terminal/download_progress_loop" : null, 0.3f);
+                UpdateTerminalDeadlineWarning();
             }
             if (_beacon != null) GameAudioRuntime.Loop(_loop, "noise_maker/beacon_loop_loop", 0.5f);
+        }
+
+        private void UpdateTerminalDeadlineWarning()
+        {
+            var match = NetworkMatchState.Instance;
+            float remaining;
+            bool completed;
+            if (match != null && match.Object != null && match.Object.IsValid)
+            {
+                remaining = match.RelayRepairWindowRemainingSeconds;
+                completed = match.SecurityHoldCompleted;
+            }
+            else
+            {
+                var director = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance;
+                remaining = director != null ? director.RelayRepairRemainingSeconds : 0f;
+                completed = director != null && director.IsSecurityHoldComplete;
+            }
+
+            if (remaining > 0f && _lastRelayWindowRemaining > remaining)
+            {
+                if ((_lastRelayWindowRemaining > 60f && remaining <= 60f)
+                    || (_lastRelayWindowRemaining > 30f && remaining <= 30f)
+                    || (_lastRelayWindowRemaining > 10f && remaining <= 10f))
+                    Play("security_terminal/access_denied", 0.8f);
+            }
+            else if (_lastRelayWindowRemaining > 0f && remaining <= 0f && !completed)
+                Play("ui/error", 0.8f);
+            _lastRelayWindowRemaining = remaining;
         }
 
         private void UpdatePlayer(float speed)
@@ -282,6 +328,8 @@ namespace EchoProtocol.Audio
             _previous.Clear();
             _lastPosition = transform.position;
             _lastSample = Time.time;
+            _lastRelayWindowRemaining = -1f;
+            _lastTerminalHolderCount = 0;
         }
     }
 }

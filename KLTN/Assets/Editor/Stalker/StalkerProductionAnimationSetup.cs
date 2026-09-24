@@ -1,3 +1,4 @@
+using System;
 using EchoProtocol.AI.Stalker.Networking;
 using EchoProtocol.AI.Stalker.Presentation;
 using System.Linq;
@@ -79,9 +80,14 @@ public static class StalkerProductionAnimationSetup
             turnLeft,
             turnRight);
         AssignPrefab(controller);
+        SetupAudioInPrefab();
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
+
+        // Inject audio animation events into the baked clips
+        StalkerAudioEventSetup.AddAudioAnimationEvents();
+
         Debug.Log("[StalkerProductionAnim] Production Stalker Animator presentation setup complete.");
     }
 
@@ -519,6 +525,206 @@ public static class StalkerProductionAnimationSetup
             Debug.LogWarning(
                 $"[StalkerProductionAnim] Clip {clip.name} loopTime={settings.loopTime}; expected {expected}. " +
                 "Leaving clip asset unchanged.");
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Audio prefab wiring
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Creates (or refreshes) the four AudioSource child GameObjects inside the
+    /// StalkerNetwork prefab and wires them into a StalkerAudioController component.
+    ///
+    /// Child hierarchy produced:
+    ///   StalkerNetwork
+    ///   └─ Audio_Voice       (AudioSource – one-shot voice)
+    ///   └─ Audio_Movement    (AudioSource – one-shot footstep / jump)
+    ///   └─ Audio_Breathing   (AudioSource – loop, volume 0.7)
+    ///   └─ Audio_Chase       (AudioSource – loop, volume 0)
+    [MenuItem("Tools/Stalker/Setup All Audio (Prefab + Events)")]
+    public static void SetupAllAudio()
+    {
+        SetupAudioInPrefab();
+        StalkerAudioEventSetup.AddAudioAnimationEvents();
+        Debug.Log("[StalkerProductionAnim] ✓ Complete audio setup (Prefab AudioSources + Animation Events) completed!");
+    }
+
+    /// <summary>
+    /// Creates (or refreshes) the four AudioSource child GameObjects inside the
+    /// StalkerNetwork prefab and wires them into a StalkerAudioController component.
+    ///
+    /// Child hierarchy produced:
+    ///   StalkerNetwork
+    ///   └─ Audio_Voice       (AudioSource – one-shot voice)
+    ///   └─ Audio_Movement    (AudioSource – one-shot footstep / jump)
+    ///   └─ Audio_Breathing   (AudioSource – loop, volume 1.0)
+    ///   └─ Audio_Chase       (AudioSource – loop, volume 0)
+    /// </summary>
+    [MenuItem("Tools/Stalker/Setup Audio In Prefab")]
+    public static void SetupAudioInPrefab()
+    {
+        var prefabRoot = PrefabUtility.LoadPrefabContents(PrefabPath);
+        try
+        {
+            // Ensure StalkerAudioController exists on the root
+            var audioController =
+                prefabRoot.GetComponent<EchoProtocol.AI.Stalker.Presentation.StalkerAudioController>();
+            if (audioController == null)
+            {
+                audioController =
+                    prefabRoot.AddComponent<EchoProtocol.AI.Stalker.Presentation.StalkerAudioController>();
+            }
+
+            // Remove legacy GameAudioEmitter from StalkerNetwork prefab to avoid redundancy
+            var legacyEmitter = prefabRoot.GetComponent<EchoProtocol.Audio.GameAudioEmitter>();
+            if (legacyEmitter != null)
+            {
+                UnityEngine.Object.DestroyImmediate(legacyEmitter, true);
+                Debug.Log("[StalkerProductionAnim] Cleaned up legacy GameAudioEmitter from StalkerNetwork prefab.");
+            }
+
+            // Helper: find or create a named child with full 3D audio settings
+            AudioSource GetOrCreateAudioChild(
+                string childName,
+                bool loop,
+                float volume,
+                float minDist,
+                float maxDist,
+                AudioRolloffMode rolloff)
+            {
+                var existing = prefabRoot.transform.Find(childName);
+                GameObject childGo;
+                if (existing != null)
+                {
+                    childGo = existing.gameObject;
+                }
+                else
+                {
+                    childGo = new GameObject(childName);
+                    childGo.transform.SetParent(prefabRoot.transform, false);
+                }
+
+                var src = childGo.GetComponent<AudioSource>();
+                if (src == null)
+                {
+                    src = childGo.AddComponent<AudioSource>();
+                }
+
+                src.loop                  = loop;
+                src.playOnAwake           = false;
+                src.volume                = volume;
+                src.spatialBlend          = 1f;          // full 3D
+                src.minDistance           = minDist;
+                src.maxDistance           = maxDist;
+                src.rolloffMode           = rolloff;
+                src.dopplerLevel          = 0f;          // disable doppler on monster
+                src.spread                = 60f;         // wider spread = more omni, audible off-axis
+                EditorUtility.SetDirty(src);
+                return src;
+            }
+
+            //
+            // 3D settings per source type (tuned for loud, clear audio across large distance):
+            //
+            //   Voice  (Detect/Search/Bite/Punch/Sniff)
+            //     → Linear rolloff so volume stays strong until maxDistance
+            //     → minDistance 30 m: full volume within 30 m radius
+            //     → maxDistance 150 m: audible up to 150 m across the complex
+            //
+            //   Chase  (Conveyor loop)
+            //     → Same as Voice – wide, persistent dread audio
+            //
+            //   Breathing (idle_Breathing loop)
+            //     → Linear rolloff, wide hearing range
+            //     → minDistance 15 m, maxDistance 60 m
+            //
+            //   Movement (footsteps, jumps)
+            //     → Linear rolloff, heavy footsteps heard through hallways
+            //     → minDistance 20 m, maxDistance 90 m
+            //
+            var voiceSrc    = GetOrCreateAudioChild("Audio_Voice",
+                loop: false, volume: 1.0f,
+                minDist:  30f, maxDist: 150f,
+                rolloff: AudioRolloffMode.Linear);
+
+            var movementSrc = GetOrCreateAudioChild("Audio_Movement",
+                loop: false, volume: 1.0f,
+                minDist:  20f, maxDist: 90f,
+                rolloff: AudioRolloffMode.Linear);
+
+            var breathSrc   = GetOrCreateAudioChild("Audio_Breathing",
+                loop: true,  volume: 1.00f,
+                minDist:  15f, maxDist: 60f,
+                rolloff: AudioRolloffMode.Linear);
+
+            var chaseSrc    = GetOrCreateAudioChild("Audio_Chase",
+                loop: true,  volume: 0.00f,
+                minDist: 30f, maxDist: 150f,
+                rolloff: AudioRolloffMode.Linear);
+
+            // Load audio clips from the project
+            AudioClip LoadClipAsset(string assetPath) =>
+                AssetDatabase.LoadAssetAtPath<AudioClip>(assetPath);
+
+            var clipBite     = LoadClipAsset("Assets/Audio/stalker/Bite.wav");
+            var clipDetect   = LoadClipAsset("Assets/Audio/stalker/Detect.wav");
+            var clipSearch   = LoadClipAsset("Assets/Audio/stalker/Search.wav");
+            var clipSniff    = LoadClipAsset("Assets/Audio/stalker/sniff.mp3");
+            var clipPunch    = LoadClipAsset("Assets/Audio/stalker/punch.mp3");
+            var clipWalk     = LoadClipAsset("Assets/Audio/stalker/walk.wav");
+            var clipJump     = LoadClipAsset("Assets/Audio/stalker/jumpin.mp3");
+            var clipBreath   = LoadClipAsset("Assets/Audio/stalker/idle_Breathing.mp3");
+            var clipConveyor = LoadClipAsset("Assets/Audio/stalker/Conveyor LOOPED.wav");
+
+            // Wire AudioSources + AudioClips into StalkerAudioController
+            var so = new SerializedObject(audioController);
+            so.FindProperty("voiceSource").objectReferenceValue     = voiceSrc;
+            so.FindProperty("movementSource").objectReferenceValue  = movementSrc;
+            so.FindProperty("breathingSource").objectReferenceValue = breathSrc;
+            so.FindProperty("chaseSource").objectReferenceValue     = chaseSrc;
+
+            // Clips – Voice
+            so.FindProperty("detectClip").objectReferenceValue       = clipDetect;
+            so.FindProperty("searchClip").objectReferenceValue       = clipSearch;
+            so.FindProperty("sniffClip").objectReferenceValue        = clipSniff;
+            so.FindProperty("biteClip").objectReferenceValue         = clipBite;
+            so.FindProperty("punchClip").objectReferenceValue        = clipPunch;
+
+            // Clips – Movement
+            so.FindProperty("walkClip").objectReferenceValue         = clipWalk;
+            so.FindProperty("jumpClip").objectReferenceValue         = clipJump;
+
+            // Clips – Ambient
+            so.FindProperty("idleBreathingClip").objectReferenceValue  = clipBreath;
+            so.FindProperty("conveyorLoopedClip").objectReferenceValue = clipConveyor;
+
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(audioController);
+
+            // Also wire the presenter's audioController reference
+            var presenter =
+                prefabRoot.GetComponent<EchoProtocol.AI.Stalker.Presentation.StalkerAnimatorPresenter>();
+            if (presenter != null)
+            {
+                var presenterSo = new SerializedObject(presenter);
+                presenterSo.FindProperty("audioController").objectReferenceValue = audioController;
+                presenterSo.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(presenter);
+            }
+
+            PrefabUtility.SaveAsPrefabAsset(prefabRoot, PrefabPath);
+            Debug.Log(
+                "[StalkerProductionAnim] Audio sources created and StalkerAudioController " +
+                "wired in StalkerNetwork prefab: Voice / Movement / Breathing / Chase.");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[StalkerProductionAnim] SetupAudioInPrefab failed: {ex}");
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(prefabRoot);
         }
     }
 }
