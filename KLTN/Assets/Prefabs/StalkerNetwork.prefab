@@ -207,9 +207,11 @@ MonoBehaviour:
   stalenessWeight: 1
   connectivityWeight: 0.15
   immediateBacktrackPenalty: 0.75
+  detectionDurationSeconds: 2
+  detectionDecayDurationSeconds: 1
   detectionMeterFull: 1
   detectionFillRate: 0.5
-  detectionDecayRate: 3.3333333
+  detectionDecayRate: 1
   searchDuration: 5
   searchRadius: 8
   searchReacquireDetectHoldSeconds: 1.5
