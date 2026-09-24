@@ -561,7 +561,7 @@ namespace EchoProtocol.AI.Stalker.Special
                 }
 
                 if (controller != null
-                    && !controller.CanPursueCoreCarrierAt(
+                    && !controller.IsPositionInsidePatrolZone(
                         identity.EntityRoot.position))
                 {
                     continue;
@@ -795,7 +795,7 @@ namespace EchoProtocol.AI.Stalker.Special
             var teleportPosition =
                 navMeshHit.position;
 
-            if (!controller.CanPursueCoreCarrierAt(teleportPosition))
+            if (!controller.IsPositionInsidePatrolZone(teleportPosition))
             {
                 return false;
             }

@@ -799,7 +799,10 @@ namespace EchoProtocol.AI.Stalker
             _roomSweepGlobalPlanner?.ConfigureZone(zone);
         }
 
-        public bool CanPursueCoreCarrierAt(Vector3 position)
+        public bool CanPursueCoreCarrierAt(Vector3 position) =>
+            IsPositionInsidePatrolZone(position);
+
+        public bool IsPositionInsidePatrolZone(Vector3 position)
         {
             if (_patrolZone == RegionSemanticZone.Unknown)
             {

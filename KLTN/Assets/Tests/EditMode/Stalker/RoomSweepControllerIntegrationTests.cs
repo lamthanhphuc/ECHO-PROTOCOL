@@ -673,6 +673,40 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
+        public void STK_RoomSweepIntegration_StrategicAndSpecialPositionsStayInZone()
+        {
+            var controller = CreateController();
+            var zone01 = new RegionId(18);
+            var zone02 = new RegionId(19);
+            var localPosition = Vector3.zero;
+            var foreignPosition = Vector3.right * 10f;
+            var spatialGraph = CreateSpatialGraph(
+                Node(0, localPosition), Node(1, foreignPosition));
+            var regionGraph = CreateRegionGraph(spatialGraph,
+                new[] { zone01, zone02 },
+                SemanticRegion(zone01, 18, "Zone01/Room", "Zone01", "Room"),
+                SemanticRegion(zone02, 19, "Zone02/Room", "Zone02", "Room"));
+            AttachRoomSweepState(controller, spatialGraph, regionGraph, CreateMemory());
+            AttachNavigationAndLocalSelector(controller, spatialGraph, regionGraph);
+            SetPrivateField(controller, "_globalPatrolPlanner", Activator.CreateInstance(
+                ResolveType("EchoProtocol.AI.Stalker.Spatial.GlobalPatrolPlanner"),
+                regionGraph, GetPrivateField(controller, "_coverageMemory")));
+            Invoke(controller, "ConfigurePatrolZone", new[] { RegionSemanticZoneType },
+                Enum.Parse(RegionSemanticZoneType, "Zone01"));
+
+            var roomType = ResolveType("EchoProtocol.AI.Stalker.Spatial.Strategic.ActivityRoomKey");
+            var signature = new[] { typeof(Vector3), roomType.MakeByRefType() };
+            var localRoom = new object[] { localPosition, Activator.CreateInstance(roomType) };
+            var foreignRoom = new object[] { foreignPosition, Activator.CreateInstance(roomType) };
+            Assert.That((bool)Invoke(controller, "TryResolveStrategicActivityRoom", signature, localRoom), Is.True);
+            Assert.That((bool)Invoke(controller, "TryResolveStrategicActivityRoom", signature, foreignRoom), Is.False);
+            Assert.That((bool)Invoke(controller, "IsPositionInsidePatrolZone",
+                new[] { typeof(Vector3) }, localPosition), Is.True);
+            Assert.That((bool)Invoke(controller, "IsPositionInsidePatrolZone",
+                new[] { typeof(Vector3) }, foreignPosition), Is.False);
+        }
+
+        [Test]
         public void STK_RoomSweepIntegration_ExhaustedRoomDoesNotMarkCleared()
         {
             var controller = CreateController();
