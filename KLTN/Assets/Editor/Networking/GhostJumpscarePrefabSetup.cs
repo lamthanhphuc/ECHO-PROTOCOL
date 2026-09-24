@@ -16,7 +16,7 @@ namespace EchoProtocol.Editor.Networking
         private const string PrefabPath = Folder + "/GhostJumpscare.prefab";
         private const string Request = "Temp/GhostJumpscareSetup.request";
         private const string Report = "Temp/GhostJumpscareSetup.result.txt";
-        private const string ScreamPath = "Assets/Audio/stalker/jumpscare.wav";
+        private const string ScreamPath = "Assets/Audio/horror_ambience/distant_monster_sound.wav";
         private const string AudioRequest = "Temp/GhostJumpscareAudioSetup.request";
         private const string AudioReport = "Temp/GhostJumpscareAudioSetup.result.txt";
 
@@ -161,11 +161,10 @@ namespace EchoProtocol.Editor.Networking
                 AssetDatabase.LoadAssetAtPath<AudioClip>(
                     ScreamPath);
 
-            if (scream == null
-                || Mathf.Abs(scream.length - 1.8f) > 0.01f)
+            if (scream == null || scream.length <= 0f)
             {
                 throw new InvalidOperationException(
-                    "Expected the 1.8 second jumpscare clip.");
+                    "Missing or empty jumpscare audio clip.");
             }
 
             foreach (var path in PlayerPrefabPaths())
@@ -226,7 +225,7 @@ namespace EchoProtocol.Editor.Networking
 
             File.WriteAllText(
                 AudioReport,
-                "PASS: jumpscare.wav (1.8s), preloaded PCM, existing player prefab audio references saved and verified. PlayMode listening not run.");
+                "PASS: distant_monster_sound.wav, preloaded PCM, existing player prefab audio references saved and verified. PlayMode listening not run.");
 
             Debug.Log(
                 "[GhostJumpscareAudioSetup] "
@@ -377,7 +376,7 @@ namespace EchoProtocol.Editor.Networking
                         ScreamPath))
                     throw new InvalidOperationException("Player references not saved: " + path);
             }
-            File.WriteAllText(Report, "PASS: presentation prefab, Animator trigger/lunge, existing player references and Downed defaults saved. Audio: jumpscare.wav. Multiplayer PlayMode not run.");
+            File.WriteAllText(Report, "PASS: presentation prefab, Animator trigger/lunge, existing player references and Downed defaults saved. Audio: distant_monster_sound.wav. Multiplayer PlayMode not run.");
             Debug.Log("[GhostJumpscareSetup] " + File.ReadAllText(Report));
         }
     }
