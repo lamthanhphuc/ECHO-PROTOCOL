@@ -199,8 +199,9 @@ MonoBehaviour:
     postChaseCooldownSeconds: 18
     postAttackCooldownSeconds: 22
     sameRoomPressureCooldownSeconds: 15
-  patrolSpeed: 6
-  chaseSpeed: 7
+  useScenarioMonsterOverrides: 0
+  patrolSpeed: 7
+  chaseSpeed: 8
   enableDiagnostics: 0
   candidateBfsDepth: 128
   stalenessHorizon: 15

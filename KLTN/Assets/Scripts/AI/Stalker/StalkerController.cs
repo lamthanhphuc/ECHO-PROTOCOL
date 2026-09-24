@@ -48,9 +48,15 @@ namespace EchoProtocol.AI.Stalker
         private StalkerSmartPatrolSettings smartPatrolSettings =
             new StalkerSmartPatrolSettings();
 
+        [Header("Scenario Overrides")]
+
+        [SerializeField]
+        [Tooltip("When enabled, AED/Scenario monster parameters override Detection, Detection Decay, Chase Speed, and Search Duration. Disable this to tune those values directly from the StalkerNetwork prefab.")]
+        private bool useScenarioMonsterOverrides = false;
+
         [Header("Movement Speed")]
-        [SerializeField, Min(0f)] private float patrolSpeed = 7f;
-        [SerializeField, Min(0f)] private float chaseSpeed = 8f;
+        [SerializeField, Min(0f)] private float patrolSpeed = 6f;
+        [SerializeField, Min(0f)] private float chaseSpeed = 7f;
 
         [Header("Diagnostics")]
         [SerializeField] private bool enableDiagnostics;
@@ -81,7 +87,7 @@ namespace EchoProtocol.AI.Stalker
         private float detectionFillRate = 0.5f;
 
         [SerializeField, HideInInspector]
-        private float detectionDecayRate = 3.3333333f;
+        private float detectionDecayRate = 1f;
 
         [Header("Search Spike Defaults")]
         [SerializeField] private float searchDuration = 5f;
@@ -391,6 +397,8 @@ namespace EchoProtocol.AI.Stalker
         public IPlayerAttackConsequenceSink AttackConsequenceSink { get; set; }
         public bool SuppressLegacyUpdateSimulation { get; set; }
         public bool HasScenarioMonsterParameters => _hasScenarioMonsterParameters;
+        public bool UsesScenarioMonsterOverrides =>
+            ShouldUseScenarioMonsterParameters();
         public double AppliedDetectionFillRate => GetDetectionFillRate();
         public double AppliedDetectionDecayRate => GetDetectionDecayRate();
         public double AppliedChaseSpeed => GetChaseSpeed();
@@ -808,35 +816,42 @@ namespace EchoProtocol.AI.Stalker
             ApplyMovementSpeedForCurrentState();
         }
 
-        private void OnValidate()
-        {
-            detectionDurationSeconds =
-                Mathf.Max(
-                    0.05f,
-                    detectionDurationSeconds);
+            private void OnValidate()
+            {
+                SyncDetectionRatesFromDurations();
+            }
 
-            detectionDecayDurationSeconds =
-                Mathf.Max(
-                    0.05f,
-                    detectionDecayDurationSeconds);
+            private void SyncDetectionRatesFromDurations()
+            {
+                detectionDurationSeconds =
+                    Mathf.Max(
+                        0.05f,
+                        detectionDurationSeconds);
 
-            var meterFull =
-                GetDetectionMeterFull();
+                detectionDecayDurationSeconds =
+                    Mathf.Max(
+                        0.05f,
+                        detectionDecayDurationSeconds);
 
-            detectionFillRate =
-                meterFull
-                / detectionDurationSeconds;
+                var meterFull =
+                    GetDetectionMeterFull();
 
-            detectionDecayRate =
-                meterFull
-                / detectionDecayDurationSeconds;
-        }
+                detectionFillRate =
+                    meterFull
+                    / detectionDurationSeconds;
 
-        private void Awake()
-        {
-            InitializeNavigation();
-            InitializeHidingInvestigation();
-        }
+                detectionDecayRate =
+                    meterFull
+                    / detectionDecayDurationSeconds;
+            }
+
+            private void Awake()
+            {
+                SyncDetectionRatesFromDurations();
+
+                InitializeNavigation();
+                InitializeHidingInvestigation();
+            }
 
         private void OnEnable()
         {
@@ -3815,6 +3830,13 @@ namespace EchoProtocol.AI.Stalker
             _searchCandidatePlanningExhausted = false;
         }
 
+        private bool ShouldUseScenarioMonsterParameters()
+        {
+            return useScenarioMonsterOverrides
+                && _hasScenarioMonsterParameters
+                && _scenarioMonsterParameters != null;
+        }
+
         private float ClampDetectionMeter(float value)
         {
             return Mathf.Clamp(value, 0f, GetDetectionMeterFull());
@@ -3827,33 +3849,41 @@ namespace EchoProtocol.AI.Stalker
 
         private float GetDetectionFillRate()
         {
-            var value = _hasScenarioMonsterParameters
-                ? (float)_scenarioMonsterParameters.DetectionFillRate
-                : detectionFillRate;
+            var value =
+                ShouldUseScenarioMonsterParameters()
+                    ? (float)_scenarioMonsterParameters.DetectionFillRate
+                    : detectionFillRate;
+
             return Mathf.Max(0f, value);
         }
 
         private float GetDetectionDecayRate()
         {
-            var value = _hasScenarioMonsterParameters
-                ? (float)_scenarioMonsterParameters.DetectionDecayRate
-                : detectionDecayRate;
+            var value =
+                ShouldUseScenarioMonsterParameters()
+                    ? (float)_scenarioMonsterParameters.DetectionDecayRate
+                    : detectionDecayRate;
+
             return Mathf.Max(0f, value);
         }
 
         private float GetSearchDuration()
         {
-            var value = _hasScenarioMonsterParameters
-                ? (float)_scenarioMonsterParameters.SearchDuration
-                : searchDuration;
+            var value =
+                ShouldUseScenarioMonsterParameters()
+                    ? (float)_scenarioMonsterParameters.SearchDuration
+                    : searchDuration;
+
             return Mathf.Max(0f, value);
         }
 
         private float GetChaseSpeed()
         {
-            var value = _hasScenarioMonsterParameters
-                ? (float)_scenarioMonsterParameters.ChaseSpeed
-                : chaseSpeed;
+            var value =
+                ShouldUseScenarioMonsterParameters()
+                    ? (float)_scenarioMonsterParameters.ChaseSpeed
+                    : chaseSpeed;
+
             return Mathf.Max(0f, value);
         }
 
