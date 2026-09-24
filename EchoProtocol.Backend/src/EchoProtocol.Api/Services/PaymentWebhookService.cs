@@ -58,8 +58,7 @@ public sealed class PaymentWebhookService(
                 storedEvent.ProcessedAtUtc = now;
                 await db.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
-                return Fail("Verified webhook references an unknown provider order",
-                    ErrorCodes.PaymentWebhookUnknownOrder);
+                return Success(storedEvent, false);
             }
 
             var order = await LoadOrderForUpdateAsync(checkout.PaymentOrderId, cancellationToken);

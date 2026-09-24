@@ -64,3 +64,4 @@ KLTN/.git.backup/
 /KLTN/Assets/_Recovery/
 /KLTN/Assets/_Recovery.meta
 .codex/environments/environment.toml
+/deploy/aws-lightsail/.env.production
