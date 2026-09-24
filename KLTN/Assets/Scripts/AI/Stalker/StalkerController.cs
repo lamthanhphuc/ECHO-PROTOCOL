@@ -62,10 +62,22 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float connectivityWeight = 0.15f;
         [SerializeField] private float immediateBacktrackPenalty = 0.75f;
 
-        [Header("Detection Spike Defaults")]
-        [SerializeField] private float detectionMeterFull = 1f;
-        [SerializeField] private float detectionFillRate = 0.5f;
-        [SerializeField] private float detectionDecayRate = 3.3333333f;
+        [Header("Detection")]
+
+        [SerializeField, Min(0.05f)]
+        [Tooltip("Seconds the player must remain continuously visible before DETECT promotes to CHASE.")]
+        private float detectionDurationSeconds = 2f;
+
+        // Legacy/internal meter values.
+        // Kept for AED, scenario configuration, diagnostics, and existing tests.
+        [SerializeField, HideInInspector]
+        private float detectionMeterFull = 1f;
+
+        [SerializeField, HideInInspector]
+        private float detectionFillRate = 0.5f;
+
+        [SerializeField]
+        private float detectionDecayRate = 3.3333333f;
 
         [Header("Search Spike Defaults")]
         [SerializeField] private float searchDuration = 5f;
@@ -790,6 +802,18 @@ namespace EchoProtocol.AI.Stalker
             _hasScenarioMonsterParameters = false;
 
             ApplyMovementSpeedForCurrentState();
+        }
+
+        private void OnValidate()
+        {
+            detectionDurationSeconds =
+                Mathf.Max(
+                    0.05f,
+                    detectionDurationSeconds);
+
+            detectionFillRate =
+                GetDetectionMeterFull()
+                / detectionDurationSeconds;
         }
 
         private void Awake()
