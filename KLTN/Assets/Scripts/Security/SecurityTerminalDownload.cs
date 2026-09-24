@@ -8,7 +8,7 @@ using UnityEngine.Events;
 public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
 {
     [Header("Download")]
-    [SerializeField] private float downloadDurationSeconds = 12f;
+    [SerializeField] private float downloadDurationSeconds = 60f;
     [SerializeField] private float maxInteractorDistance = 3f;
     [SerializeField] private bool pauseWhenInteractorLooksAway = true;
     [SerializeField] private bool requireHoldToDownload = true;
@@ -167,7 +167,8 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
 
         if (TryGetNetworkMatchState(out _))
         {
-            return true;
+            var director = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance;
+            return director == null || director.CanLocalPlayerOperateSecurityTerminal(this);
         }
 
         return !IsDownloading || _activeInteractor == interactor;
@@ -253,6 +254,7 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
 
     public void ResetDownload()
     {
+        GetComponentInChildren<SecurityTerminalUIController>(true)?.Close();
         if (TryGetNetworkMatchState(out _)) return;
 
         _activeInteractor = null;

@@ -79,6 +79,7 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(0.1f)] private float _zone2InteractionDistance = 3f;
         [SerializeField, Min(0.1f)] private float _zoneAccessCooldownSeconds = 5f;
         [SerializeField, Min(1)] private int _zoneAccessFailuresBeforeCooldown = 3;
+        [SerializeField, Min(1f)] private float _securityHoldRelayRetryWindowSeconds = 300f;
 
         [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
         public NetworkMatchPhase CurrentPhase { get; private set; }
@@ -123,15 +124,19 @@ namespace EchoProtocol.Networking
         [Networked] public PlayerRef RelayA2Operator { get; private set; }
         [Networked] public PlayerRef RelayB1Operator { get; private set; }
         [Networked] public PlayerRef RelayB2Operator { get; private set; }
+        [Networked] public int RelayA1AttemptSeed { get; private set; }
         [Networked] public Vector3 RelayA1Controls { get; private set; }
         [Networked] public NetworkBool RelayA1Running { get; private set; }
+        [Networked] public int RelayA2AttemptSeed { get; private set; }
         [Networked] public Vector3 RelayA2Controls { get; private set; }
         [Networked] public NetworkBool RelayA2Running { get; private set; }
+        [Networked] public int RelayB1AttemptSeed { get; private set; }
         [Networked] public int RelayB1PresetIndex { get; private set; }
         [Networked] public int RelayB1Channel { get; private set; }
         [Networked] public float RelayB1Frequency { get; private set; }
         [Networked] public float RelayB1Phase { get; private set; }
         [Networked] public NetworkBool RelayB1Synchronizing { get; private set; }
+        [Networked] public int RelayB2AttemptSeed { get; private set; }
         [Networked] public int RelayB2PresetIndex { get; private set; }
         [Networked] public int RelayB2Channel { get; private set; }
         [Networked] public float RelayB2Frequency { get; private set; }
@@ -142,6 +147,7 @@ namespace EchoProtocol.Networking
         [Networked] public float SecurityHoldDurationSeconds { get; private set; }
         [Networked] public float SecurityHoldAccumulatedSeconds { get; private set; }
         [Networked] private TickTimer SecurityHoldTimer { get; set; }
+        [Networked] private TickTimer RelayRepairWindowTimer { get; set; }
         [Networked] public int ZoneAccessFailureCount { get; private set; }
         [Networked] private TickTimer ZoneAccessCooldown { get; set; }
 
@@ -202,6 +208,12 @@ namespace EchoProtocol.Networking
             && !ZoneAccessCooldown.Expired(Runner);
         public float ZoneAccessCooldownRemainingSeconds => IsZoneAccessCooldownActive
             ? Remaining(ZoneAccessCooldown)
+            : 0f;
+        public bool IsRelayRepairWindowRunning => RelayRepairWindowTimer.IsRunning
+            && Runner != null
+            && !RelayRepairWindowTimer.Expired(Runner);
+        public float RelayRepairWindowRemainingSeconds => IsRelayRepairWindowRunning
+            ? Remaining(RelayRepairWindowTimer)
             : 0f;
         public bool HasInitializedZone2RelayRuntime => Zone2RelayRuntimeInitialized;
 
@@ -361,6 +373,11 @@ namespace EchoProtocol.Networking
                     InitializeZone2RelayRuntimeAuthoritative();
                 }
                 ReleaseInvalidRelayOperatorsAuthoritative();
+                if (ShouldResetRelayRepairForSecurityHoldTimeout())
+                {
+                    ResetRelayRepairForRetryAuthoritative();
+                    return;
+                }
                 AdvanceSecurityHoldAuthoritative();
             }
 
@@ -507,6 +524,9 @@ namespace EchoProtocol.Networking
             if (AreAllRelaysOnline)
             {
                 Zone2Stage = Zone2MissionStage.SecurityHoldReady;
+                RelayRepairWindowTimer = TickTimer.CreateFromSeconds(
+                    Runner,
+                    Mathf.Max(1f, _securityHoldRelayRetryWindowSeconds));
                 Debug.Log("[MatchState] All 4 relays online. Stage -> SecurityHoldReady.");
             }
 
@@ -954,6 +974,7 @@ namespace EchoProtocol.Networking
             PowerAuthorizationAvailable = true;
             SecurityHoldAccumulatedSeconds = SecurityHoldDurationSeconds;
             SecurityHoldTimer = TickTimer.None;
+            RelayRepairWindowTimer = TickTimer.None;
             SecurityHoldOperator = PlayerRef.None;
             if (string.IsNullOrEmpty(_serverGeneratedAuthCode))
             {
@@ -1303,17 +1324,94 @@ namespace EchoProtocol.Networking
             SecurityHoldDurationSeconds = 0f;
             SecurityHoldAccumulatedSeconds = 0f;
             SecurityHoldTimer = TickTimer.None;
+            RelayRepairWindowTimer = TickTimer.None;
             RelayA1Operator = PlayerRef.None;
             RelayA2Operator = PlayerRef.None;
             RelayB1Operator = PlayerRef.None;
             RelayB2Operator = PlayerRef.None;
+            RelayA1AttemptSeed = 0;
+            RelayA2AttemptSeed = 0;
+            RelayB1AttemptSeed = 0;
+            RelayB2AttemptSeed = 0;
+            RelayA1Controls = Vector3.zero;
+            RelayA2Controls = Vector3.zero;
             RelayA1Running = false;
             RelayA2Running = false;
+            RelayB1PresetIndex = 0;
+            RelayB2PresetIndex = 0;
+            RelayB1Channel = -1;
+            RelayB2Channel = -1;
+            RelayB1Frequency = 0f;
+            RelayB2Frequency = 0f;
+            RelayB1Phase = 0f;
+            RelayB2Phase = 0f;
             RelayB1Synchronizing = false;
             RelayB2Synchronizing = false;
             ZoneAccessFailureCount = 0;
             ZoneAccessCooldown = TickTimer.None;
             Zone2RelayRuntimeInitialized = false;
+        }
+
+        private bool ShouldResetRelayRepairForSecurityHoldTimeout()
+        {
+            return Object.HasStateAuthority
+                && CurrentPhase == NetworkMatchPhase.Zone2Objective
+                && !SecurityHoldCompleted
+                && AreAllRelaysOnline
+                && RelayRepairWindowTimer.IsRunning
+                && RelayRepairWindowTimer.Expired(Runner);
+        }
+
+        private void ResetRelayRepairForRetryAuthoritative()
+        {
+            RelayCompletionMask = 0;
+            Zone2Stage = Zone2MissionStage.RepairRelays;
+            SecurityHoldOperator = PlayerRef.None;
+            SecurityHoldDurationSeconds = 0f;
+            SecurityHoldAccumulatedSeconds = 0f;
+            SecurityHoldTimer = TickTimer.None;
+            RelayRepairWindowTimer = TickTimer.None;
+            RelayA1Operator = PlayerRef.None;
+            RelayA2Operator = PlayerRef.None;
+            RelayB1Operator = PlayerRef.None;
+            RelayB2Operator = PlayerRef.None;
+            RelayA1AttemptSeed = 0;
+            RelayA2AttemptSeed = 0;
+            RelayB1AttemptSeed = 0;
+            RelayB2AttemptSeed = 0;
+            RelayA1Running = false;
+            RelayA2Running = false;
+            RelayB1Synchronizing = false;
+            RelayB2Synchronizing = false;
+
+            if (TryGetZone2Director(out var director))
+            {
+                director.SecurityTerminal?.ResetDownload();
+                RelayA1AttemptSeed = NewRelayAttemptSeed();
+                RelayA2AttemptSeed = NewRelayAttemptSeed();
+                RelayB1AttemptSeed = NewRelayAttemptSeed();
+                RelayB2AttemptSeed = NewRelayAttemptSeed();
+
+                director.RelayA1?.ResetForRetry(RelayA1AttemptSeed);
+                director.RelayA2?.ResetForRetry(RelayA2AttemptSeed);
+
+                RelayB1PresetIndex = ChooseRelayBPreset(director.RelayB1);
+                director.RelayB1?.ResetForRetry(RelayB1PresetIndex, RelayB1AttemptSeed);
+                RelayB1Channel = director.RelayB1 != null ? director.RelayB1.Snapshot.SelectedChannelIndex : -1;
+                RelayB1Frequency = director.RelayB1 != null ? director.RelayB1.Snapshot.CurrentFrequency : 0f;
+                RelayB1Phase = director.RelayB1 != null ? director.RelayB1.Snapshot.CurrentPhase : 0f;
+
+                RelayB2PresetIndex = ChooseRelayBPreset(director.RelayB2);
+                director.RelayB2?.ResetForRetry(RelayB2PresetIndex, RelayB2AttemptSeed);
+                RelayB2Channel = director.RelayB2 != null ? director.RelayB2.Snapshot.SelectedChannelIndex : -1;
+                RelayB2Frequency = director.RelayB2 != null ? director.RelayB2.Snapshot.CurrentFrequency : 0f;
+                RelayB2Phase = director.RelayB2 != null ? director.RelayB2.Snapshot.CurrentPhase : 0f;
+
+                RelayA1Controls = director.RelayA1 != null ? director.RelayA1.Snapshot.Controls : Vector3.zero;
+                RelayA2Controls = director.RelayA2 != null ? director.RelayA2.Snapshot.Controls : Vector3.zero;
+            }
+
+            HandleReplicatedStateChanged();
         }
 
         private bool InitializeZone2RelayRuntimeAuthoritative()
@@ -1323,15 +1421,20 @@ namespace EchoProtocol.Networking
                 || director.RelayA1 == null || director.RelayA2 == null
                 || director.RelayB1 == null || director.RelayB2 == null) return false;
 
+            RelayA1AttemptSeed = NewRelayAttemptSeed();
+            director.RelayA1.ApplyAuthoritativeAttemptSeed(RelayA1AttemptSeed);
             var a1 = director.RelayA1.Snapshot;
             RelayA1Controls = a1.Controls;
             RelayA1Running = a1.IsRunning;
+            RelayA2AttemptSeed = NewRelayAttemptSeed();
+            director.RelayA2.ApplyAuthoritativeAttemptSeed(RelayA2AttemptSeed);
             var a2 = director.RelayA2.Snapshot;
             RelayA2Controls = a2.Controls;
             RelayA2Running = a2.IsRunning;
 
             RelayB1PresetIndex = ChooseRelayBPreset(director.RelayB1);
-            director.RelayB1.SetPresetIndex(RelayB1PresetIndex);
+            RelayB1AttemptSeed = NewRelayAttemptSeed();
+            director.RelayB1.ApplyAuthoritativeAttempt(RelayB1PresetIndex, RelayB1AttemptSeed);
             var b1 = director.RelayB1.Snapshot;
             RelayB1Channel = b1.SelectedChannelIndex;
             RelayB1Frequency = b1.CurrentFrequency;
@@ -1339,7 +1442,8 @@ namespace EchoProtocol.Networking
             RelayB1Synchronizing = false;
 
             RelayB2PresetIndex = ChooseRelayBPreset(director.RelayB2);
-            director.RelayB2.SetPresetIndex(RelayB2PresetIndex);
+            RelayB2AttemptSeed = NewRelayAttemptSeed();
+            director.RelayB2.ApplyAuthoritativeAttempt(RelayB2PresetIndex, RelayB2AttemptSeed);
             var b2 = director.RelayB2.Snapshot;
             RelayB2Channel = b2.SelectedChannelIndex;
             RelayB2Frequency = b2.CurrentFrequency;
@@ -1351,10 +1455,16 @@ namespace EchoProtocol.Networking
 
         private static int ChooseRelayBPreset(RelayBController controller)
         {
-            int count = controller.Config != null && controller.Config.Presets != null
+            int count = controller != null && controller.Config != null && controller.Config.Presets != null
                 ? controller.Config.Presets.Count
                 : 0;
             return count > 0 ? UnityEngine.Random.Range(0, count) : 0;
+        }
+
+        private static int NewRelayAttemptSeed()
+        {
+            int seed = UnityEngine.Random.Range(1, int.MaxValue);
+            return seed == 0 ? 1 : seed;
         }
 
         private bool TryGetZone2Director(out Zone2MissionDirector director)

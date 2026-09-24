@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.MatchFlow;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -63,6 +64,7 @@ public class SecurityTerminalUIController : MonoBehaviour
 
         public void Open(GameObject interactor)
         {
+            Zone2MinigameUIFocus.CloseOthers(this);
             _controlLock.Acquire(interactor);
             _isOpen = true;
 

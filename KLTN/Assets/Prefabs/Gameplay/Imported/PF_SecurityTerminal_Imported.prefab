@@ -1651,7 +1651,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3faacf33700abf74e8c94d7be3727002, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SecurityTerminalDownload
-  downloadDurationSeconds: 12
+  downloadDurationSeconds: 60
   maxInteractorDistance: 3
   pauseWhenInteractorLooksAway: 1
   requireHoldToDownload: 1

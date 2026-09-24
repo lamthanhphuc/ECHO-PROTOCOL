@@ -94,7 +94,7 @@ public static class ResearchFacilityMissionPlacement
             SecurityTerminalDownload secComp = secTerminalGo.GetComponent<SecurityTerminalDownload>();
             if (secComp != null)
             {
-                SetSerializedFloat(secComp, "downloadDurationSeconds", 15f);
+                SetSerializedFloat(secComp, "downloadDurationSeconds", 60f);
                 SetSerializedBool(secComp, "requireHoldToDownload", true);
             }
         }

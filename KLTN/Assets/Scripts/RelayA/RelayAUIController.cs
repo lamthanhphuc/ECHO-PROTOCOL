@@ -115,8 +115,17 @@ namespace EchoProtocol.RelayA
         public void Open(GameObject interactor)
         {
             EnsureEventSystem();
+            Zone2MinigameUIFocus.CloseOthers(this);
+            if (TryGetNetworkDirector(out var director))
+            {
+                if (!director.CanLocalPlayerOperateRelay(_controller)
+                    || !director.RequestRelayAcquire(_controller))
+                {
+                    return;
+                }
+            }
+
             _controlLock.Acquire(interactor);
-            if (TryGetNetworkDirector(out var director)) director.RequestRelayAcquire(_controller);
             SetVisible(true);
         }
 
@@ -129,6 +138,14 @@ namespace EchoProtocol.RelayA
 
         public void Refresh(RelayASnapshot snapshot)
         {
+            bool readOnly = snapshot.IsOnline;
+            bool canOperate = !TryGetNetworkDirector(out var director) || director.CanLocalPlayerOperateRelay(_controller);
+            if (IsOpen && !readOnly && !canOperate)
+            {
+                Close();
+                return;
+            }
+
             _suppressSliderEvents = true;
             SetSlider(generatorSlider, snapshot.Controls.x);
             SetSlider(frequencySlider, snapshot.Controls.y);
@@ -173,8 +190,6 @@ namespace EchoProtocol.RelayA
             SetText(instabilityReasonLabel, BuildInstabilityReason(snapshot));
             RefreshWarning(snapshot);
 
-            bool readOnly = snapshot.IsOnline;
-            bool canOperate = !TryGetNetworkDirector(out var director) || director.CanLocalPlayerOperateRelay(_controller);
             SetInteractable(generatorSlider, !readOnly && canOperate);
             SetInteractable(frequencySlider, !readOnly && canOperate);
             SetInteractable(loadSlider, !readOnly && canOperate);

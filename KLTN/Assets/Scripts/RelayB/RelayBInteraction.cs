@@ -55,7 +55,8 @@ namespace EchoProtocol.RelayB
             }
 
             int bit = 1 << (int)slot;
-            return (matchState.RelayCompletionMask & bit) == 0;
+            return (matchState.RelayCompletionMask & bit) == 0
+                && director.CanLocalPlayerOperateRelay(controller);
         }
 
         public void Interact(GameObject interactor)

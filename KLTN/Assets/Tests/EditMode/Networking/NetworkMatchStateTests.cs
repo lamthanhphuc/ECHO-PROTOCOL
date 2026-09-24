@@ -101,6 +101,18 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("lobbyState.IsGameplayPlayer", source);
         }
 
+        [Test]
+        public void MATCH_NET_Zone2RelayRepairExpiresIfSecurityHoldIsNotCompleted()
+        {
+            var source = LoadNetworkMatchStateSource();
+
+            StringAssert.Contains("_securityHoldRelayRetryWindowSeconds = 300f", source);
+            StringAssert.Contains("private TickTimer RelayRepairWindowTimer", source);
+            StringAssert.Contains("ShouldResetRelayRepairForSecurityHoldTimeout()", source);
+            StringAssert.Contains("ResetRelayRepairForRetryAuthoritative()", source);
+            StringAssert.Contains("Zone2Stage = Zone2MissionStage.RepairRelays", source);
+        }
+
         private static string LoadNetworkMatchStateSource()
         {
             return File.ReadAllText(MatchSourcePath);

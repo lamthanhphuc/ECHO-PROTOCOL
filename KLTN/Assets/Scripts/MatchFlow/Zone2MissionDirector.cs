@@ -50,11 +50,15 @@ namespace EchoProtocol.MatchFlow
         [SerializeField] private GameObject doorBlocker1;
         [SerializeField] private GameObject doorBlocker2;
 
+        [Header("Security Hold Pressure")]
+        [SerializeField, Min(1f)] private float relayRepairRetryWindowSeconds = 300f;
+
         private Zone2MissionStage _offlineStage = Zone2MissionStage.FindSecurityTerminal;
         private int _offlineRelayMask;
         private bool _offlineTerminalDiscovered;
         private bool _offlineSecurityHoldComplete;
         private bool _offlineZoneDoorsUnlocked;
+        private float _offlineRelayRepairDeadline = -1f;
         private string _offlineAuthCode;
         private bool _hasAuthoritativePresentation;
         private Zone2MissionStage _presentedStage;
@@ -144,6 +148,7 @@ namespace EchoProtocol.MatchFlow
         }
 
         public bool AreAllRelaysOnline => CompletedRelayCount >= 4;
+        public float RelayRepairRetryWindowSeconds => Mathf.Max(1f, relayRepairRetryWindowSeconds);
 
         public bool IsSecurityTerminalDiscovered
         {
@@ -230,6 +235,26 @@ namespace EchoProtocol.MatchFlow
         {
             // Initial sync of door presentation
             ApplyDoorState(AreZoneDoorsUnlocked);
+        }
+
+        private void Update()
+        {
+            if (TryGetNetworkMatch(out _))
+            {
+                return;
+            }
+
+            if (_offlineRelayRepairDeadline <= 0f
+                || _offlineSecurityHoldComplete
+                || _offlineStage == Zone2MissionStage.Zone2Completed)
+            {
+                return;
+            }
+
+            if (Time.time >= _offlineRelayRepairDeadline)
+            {
+                ResetRelayRepairProgressForRetry();
+            }
         }
 
         public void ResolveReferences()
@@ -359,6 +384,7 @@ namespace EchoProtocol.MatchFlow
 
                 if (AreAllRelaysOnline && (_offlineStage == Zone2MissionStage.RepairRelays || _offlineStage == Zone2MissionStage.FindSecurityTerminal))
                 {
+                    _offlineRelayRepairDeadline = Time.time + RelayRepairRetryWindowSeconds;
                     SetOfflineStage(Zone2MissionStage.SecurityHoldReady);
                 }
             }
@@ -393,6 +419,7 @@ namespace EchoProtocol.MatchFlow
             if (!_offlineSecurityHoldComplete)
             {
                 _offlineSecurityHoldComplete = true;
+                _offlineRelayRepairDeadline = -1f;
                 if (string.IsNullOrEmpty(_offlineAuthCode))
                 {
                     _offlineAuthCode = UnityEngine.Random.Range(0, 10000).ToString("D4");
@@ -511,6 +538,28 @@ namespace EchoProtocol.MatchFlow
             !TryGetNetworkMatch(out var matchState) || (TryGetRelaySlot(controller, out var slot)
                 && CanLocalPlayerOperateRelay(matchState, slot));
 
+        public bool CanLocalPlayerOperateSecurityTerminal(SecurityTerminalDownload terminal)
+        {
+            if (!TryGetNetworkMatch(out var matchState))
+            {
+                return terminal == securityTerminal;
+            }
+
+            if (terminal != securityTerminal
+                || matchState.Runner == null
+                || matchState.CurrentPhase != NetworkMatchPhase.Zone2Objective
+                || !matchState.AreAllRelaysOnline
+                || matchState.SecurityHoldCompleted
+                || (matchState.Zone2Stage != Zone2MissionStage.SecurityHoldReady
+                    && matchState.Zone2Stage != Zone2MissionStage.SecurityHold))
+            {
+                return false;
+            }
+
+            PlayerRef current = matchState.SecurityHoldOperator;
+            return current.IsNone || current == matchState.Runner.LocalPlayer;
+        }
+
         public bool RequestStartSecurityHold(SecurityTerminalDownload terminal)
         {
             return terminal == securityTerminal && TryGetNetworkMatch(out var matchState)
@@ -606,6 +655,21 @@ namespace EchoProtocol.MatchFlow
             if (distributionPanel2 != null) distributionPanel2.RefreshDisplay();
         }
 
+        public void ResetRelayRepairProgressForRetry()
+        {
+            _offlineRelayMask = 0;
+            _offlineSecurityHoldComplete = false;
+            _offlineRelayRepairDeadline = -1f;
+            securityTerminal?.ResetDownload();
+            relayA1?.ResetForRetry();
+            relayA2?.ResetForRetry();
+            relayB1?.ResetForRetry();
+            relayB2?.ResetForRetry();
+            RelayProgressChanged?.Invoke(0);
+            SetOfflineStage(Zone2MissionStage.RepairRelays);
+            RefreshBothPanels();
+        }
+
         public void SetOfflineStage(Zone2MissionStage nextStage)
         {
             if (_offlineStage == nextStage) return;
@@ -622,6 +686,19 @@ namespace EchoProtocol.MatchFlow
             bool doorsUnlocked,
             string code)
         {
+            bool relayRetryReset =
+                _hasAuthoritativePresentation
+                && _presentedRelayMask != 0
+                && relayMask == 0
+                && stage == Zone2MissionStage.RepairRelays
+                && !securityHoldComplete
+                && !doorsUnlocked;
+
+            if (relayRetryReset)
+            {
+                ApplyRelayRetryPresentationReset();
+            }
+
             var matchState = NetworkMatchState.Instance;
             if (matchState != null && matchState.Object != null && matchState.Object.IsValid
                 && matchState.HasInitializedZone2RelayRuntime)
@@ -653,22 +730,33 @@ namespace EchoProtocol.MatchFlow
             _presentedAuthorizationCode = code ?? string.Empty;
         }
 
+        private void ApplyRelayRetryPresentationReset()
+        {
+            securityTerminal?.ResetDownload();
+            relayA1?.ResetForRetry();
+            relayA2?.ResetForRetry();
+            relayB1?.ResetForRetry();
+            relayB2?.ResetForRetry();
+        }
+
         private void ApplyRelayPresentation(NetworkMatchState matchState, int relayMask)
         {
+            relayA1?.ApplyAuthoritativeAttemptSeed(matchState.RelayA1AttemptSeed);
             relayA1?.ApplyAuthoritativeControls(matchState.RelayA1Controls.x, matchState.RelayA1Controls.y, matchState.RelayA1Controls.z);
             relayA1?.ApplyAuthoritativeRunningState(matchState.RelayA1Running);
+            relayA2?.ApplyAuthoritativeAttemptSeed(matchState.RelayA2AttemptSeed);
             relayA2?.ApplyAuthoritativeControls(matchState.RelayA2Controls.x, matchState.RelayA2Controls.y, matchState.RelayA2Controls.z);
             relayA2?.ApplyAuthoritativeRunningState(matchState.RelayA2Running);
 
             if (relayB1 != null)
             {
-                relayB1.ApplyAuthoritativePresetIndex(matchState.RelayB1PresetIndex);
+                relayB1.ApplyAuthoritativeAttempt(matchState.RelayB1PresetIndex, matchState.RelayB1AttemptSeed);
                 relayB1.ApplyAuthoritativeControls(matchState.RelayB1Channel, matchState.RelayB1Frequency, matchState.RelayB1Phase);
                 relayB1.ApplyAuthoritativeSyncState(matchState.RelayB1Synchronizing);
             }
             if (relayB2 != null)
             {
-                relayB2.ApplyAuthoritativePresetIndex(matchState.RelayB2PresetIndex);
+                relayB2.ApplyAuthoritativeAttempt(matchState.RelayB2PresetIndex, matchState.RelayB2AttemptSeed);
                 relayB2.ApplyAuthoritativeControls(matchState.RelayB2Channel, matchState.RelayB2Frequency, matchState.RelayB2Phase);
                 relayB2.ApplyAuthoritativeSyncState(matchState.RelayB2Synchronizing);
             }

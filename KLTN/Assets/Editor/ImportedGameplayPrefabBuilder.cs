@@ -422,6 +422,7 @@ public static class ImportedGameplayPrefabBuilder
     private static void AddSecurityTerminalDownload(GameObject root)
     {
         SecurityTerminalDownload download = root.AddComponent<SecurityTerminalDownload>();
+        SetSerializedField(download, "downloadDurationSeconds", 60f);
         SetSerializedField(download, "startPrompt", "Download Access Code");
         SetSerializedField(download, "resumePrompt", "Resume Access Code Download");
         SetSerializedField(download, "downloadingPrompt", "Access Code downloading");

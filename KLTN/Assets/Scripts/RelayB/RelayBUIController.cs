@@ -146,8 +146,17 @@ namespace EchoProtocol.RelayB
         public void Open(GameObject interactor)
         {
             EnsureEventSystem();
+            Zone2MinigameUIFocus.CloseOthers(this);
+            if (TryGetNetworkDirector(out var director))
+            {
+                if (!director.CanLocalPlayerOperateRelay(_controller)
+                    || !director.RequestRelayAcquire(_controller))
+                {
+                    return;
+                }
+            }
+
             _controlLock.Acquire(interactor);
-            if (TryGetNetworkDirector(out var director)) director.RequestRelayAcquire(_controller);
             SetVisible(true);
         }
 
@@ -160,6 +169,14 @@ namespace EchoProtocol.RelayB
 
         public void Refresh(RelayBSnapshot snapshot)
         {
+            bool readOnly = snapshot.IsOnline;
+            bool canOperate = !TryGetNetworkDirector(out var director) || director.CanLocalPlayerOperateRelay(_controller);
+            if (IsOpen && !readOnly && !canOperate)
+            {
+                Close();
+                return;
+            }
+
             _suppressSliderEvents = true;
 
             if (frequencySlider != null)
@@ -318,8 +335,6 @@ namespace EchoProtocol.RelayB
             }
 
             // Interactability
-            bool readOnly = snapshot.IsOnline;
-            bool canOperate = !TryGetNetworkDirector(out var director) || director.CanLocalPlayerOperateRelay(_controller);
             for (int i = 0; i < channelButtons.Length; i++)
             {
                 SetInteractable(channelButtons[i], !readOnly && canOperate);
