@@ -40,7 +40,7 @@ namespace EchoProtocol.Tools.Scanner
             {
                 if (Object != null && Object.IsValid)
                 {
-                    return NetworkMode;
+                    return Object.HasInputAuthority ? _localMode : NetworkMode;
                 }
                 return _localMode;
             }
@@ -159,7 +159,7 @@ namespace EchoProtocol.Tools.Scanner
         {
             EnsureTuningDefaults();
             _switchModeAction = new InputAction("ScannerSwitchMode", InputActionType.Button);
-            _switchModeAction.AddBinding("<Keyboard>/b");
+            _switchModeAction.AddBinding("<Mouse>/rightButton");
         }
 
         public bool IsLocalControllingPlayer()
@@ -196,6 +196,7 @@ namespace EchoProtocol.Tools.Scanner
                 CurrentMode = FieldScannerMode.Core;
                 ScanPulseOrdinal = 0;
             }
+            _localMode = NetworkMode;
 
             if (IsLocalControllingPlayer())
             {
@@ -255,7 +256,7 @@ namespace EchoProtocol.Tools.Scanner
             bool isLocal = IsLocalControllingPlayer();
             if (isLocal)
             {
-                bool equipped = IsScannerEquipped() && !IsCarryingCore();
+                bool equipped = CanUseScannerLocally();
                 var hud = EchoProtocol.UI.HUD.HUDFieldScanner.EnsureInstance();
                 if (hud != null)
                 {
@@ -269,8 +270,9 @@ namespace EchoProtocol.Tools.Scanner
                 return;
             }
 
-            if (!IsScannerEquipped())
+            if (!CanUseScannerLocally())
             {
+                if (_hasLocalActiveResult) ClearLocalResult();
                 return;
             }
 
@@ -381,9 +383,27 @@ namespace EchoProtocol.Tools.Scanner
             return false;
         }
 
+        public bool CanUseScannerLocally()
+        {
+            if (!IsLocalControllingPlayer() || !IsScannerEquipped() || IsCarryingCore()
+                || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return false;
+            return CanUseScannerAuthoritative();
+        }
+
+        private bool CanUseScannerAuthoritative()
+        {
+            if (!IsScannerEquipped() || IsCarryingCore()) return false;
+            var life = GetComponent<NetworkPlayerLifeState>();
+            if (life != null && life.Object != null && life.Object.IsValid && !life.CanInitiateAction) return false;
+            var down = GetComponent<PlayerDownState>();
+            return down == null || (!down.IsDowned && !down.IsEliminated);
+        }
+
+        private static bool IsValidMode(FieldScannerMode mode) => mode == FieldScannerMode.Core || mode == FieldScannerMode.Motion;
+
         public bool RequestScan()
         {
-            if (!IsScannerEquipped())
+            if (!CanUseScannerLocally())
             {
                 return false;
             }
@@ -409,6 +429,7 @@ namespace EchoProtocol.Tools.Scanner
                 if (Object.HasInputAuthority)
                 {
                     RpcRequestScan(CurrentMode, NextSequence());
+                    return true;
                 }
                 else if (!Object.HasStateAuthority)
                 {
@@ -435,7 +456,7 @@ namespace EchoProtocol.Tools.Scanner
 
         public bool RequestSetMode(FieldScannerMode newMode)
         {
-            if (!IsScannerEquipped() || IsCarryingCore())
+            if (!IsValidMode(newMode) || !CanUseScannerLocally())
             {
                 return false;
             }
@@ -488,7 +509,7 @@ namespace EchoProtocol.Tools.Scanner
                 return;
             }
 
-            if (IsCarryingCore())
+            if (!IsValidMode(newMode) || !CanUseScannerAuthoritative())
             {
                 return;
             }
@@ -505,7 +526,8 @@ namespace EchoProtocol.Tools.Scanner
                 return;
             }
 
-            if (!IsScannerEquipped() || IsCarryingCore() || !IsCooldownReady || IsScanActive)
+            if (!IsValidMode(requestedMode) || !CanUseScannerAuthoritative()
+                || !IsCooldownReady || IsScanActive || sequence <= _lastProcessedSequence)
             {
                 return;
             }
@@ -516,7 +538,8 @@ namespace EchoProtocol.Tools.Scanner
                 return;
             }
 
-            // Accept scan: Total duration = ActiveDuration (10s) + ScanCooldown (60s)
+            CurrentMode = requestedMode;
+            // Active time and cooldown are accepted only by State Authority.
             float totalDuration = _tuning.ActiveDuration + _tuning.ScanCooldown;
             ScanCooldownTimer = TickTimer.CreateFromSeconds(Runner, totalDuration);
             ScanPulseOrdinal++;
@@ -718,7 +741,9 @@ namespace EchoProtocol.Tools.Scanner
             var active = MotionScannableTarget.ActiveTargets;
             for (int i = 0; i < active.Count; i++)
             {
-                if (active[i] != null && active[i].IsActiveTarget)
+                if (active[i] is Component targetComponent
+                    && targetComponent.GetComponentInParent<EchoProtocol.AI.Stalker.StalkerController>() != null
+                    && active[i].IsActiveTarget)
                 {
                     targets.Add(active[i]);
                 }
