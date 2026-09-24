@@ -70,7 +70,7 @@ namespace EchoProtocol.AI.Stalker
 
         [SerializeField, Min(0.05f)]
         [Tooltip("Seconds for a full detection meter to decay back to zero after losing sight of the player.")]
-        private float detectionDecayDurationSeconds = 0.3f;
+        private float detectionDecayDurationSeconds = 1f;
 
         // Legacy/internal meter values.
         // Kept for AED, scenario configuration, diagnostics, and existing tests.
