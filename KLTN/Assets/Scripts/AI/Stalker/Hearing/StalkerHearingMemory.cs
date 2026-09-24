@@ -106,9 +106,7 @@ namespace EchoProtocol.AI.Stalker.Hearing
                 observation.ObservedNoisePosition;
 
             CommittedEffectiveIntensity =
-                Math.Max(
-                    CommittedEffectiveIntensity,
-                    observation.EffectiveIntensity);
+                observation.EffectiveIntensity;
 
             RecordHeardObservation(observation);
         }

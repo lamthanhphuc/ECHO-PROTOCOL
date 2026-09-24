@@ -58,7 +58,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
-        public IEnumerator RUNTIME_CoreCarryPursuit_Requires15ContinuousSeconds()
+        public IEnumerator RUNTIME_CoreCarryPatrol_Requires15ContinuousSeconds()
         {
             var fixture = CreateRuntimeFixture();
             var carrier = CreatePlayerObject("Core carrier", new Vector3(3f, 0f, 0f));
@@ -82,6 +82,17 @@ namespace EchoProtocol.AI.Stalker.Tests
             snapshots.Add(snapshot);
             Assert.That(method.Invoke(fixture.Runtime, new object[] { 32.9d }), Is.Null);
             Assert.That(method.Invoke(fixture.Runtime, new object[] { 47.9d }), Is.Not.Null);
+
+            var candidateListType = typeof(List<>).MakeGenericType(
+                ResolveType("EchoProtocol.AI.Stalker.StalkerTargetCandidate"));
+            var simulationInput = Activator.CreateInstance(
+                ResolveType("EchoProtocol.AI.Stalker.StalkerSimulationInput"),
+                CreateSimulationStep(1L, 47.9d, 0.1f),
+                Activator.CreateInstance(candidateListType),
+                null, null, null, default(DateTime), null, snapshot);
+            Assert.That(InvokeInstanceMethod(fixture.Controller, "Simulate",
+                new[] { simulationInput.GetType() }, new[] { simulationInput }), Is.EqualTo(true));
+            AssertState(fixture.Controller, "PATROL");
             yield return null;
         }
 

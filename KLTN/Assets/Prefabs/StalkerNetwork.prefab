@@ -375,6 +375,7 @@ MonoBehaviour:
     sniffApproachDistance: 2
     sniffApproachSampleRadius: 1.5
     stagingArrivalTolerance: 0.35
+    approachTimeoutSeconds: 12
     specialSniffDurationSeconds: 3.5
     jumpOutDurationSeconds: 5
     hiddenTransferDelaySeconds: 0.05

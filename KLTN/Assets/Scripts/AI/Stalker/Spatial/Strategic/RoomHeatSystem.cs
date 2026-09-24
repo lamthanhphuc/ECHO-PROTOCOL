@@ -24,6 +24,11 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
         public int TotalActivePlayers { get; private set; }
         public float EffectivePlayerPresence { get; private set; }
 
+        public int GetVisiblePlayerCount(ActivityRoomKey room) =>
+            _states.TryGetValue(room, out var state)
+                ? Math.Max(0, state.ActivePlayerCount - state.HiddenPlayerCount)
+                : 0;
+
         public void Reset()
         {
             _states.Clear();

@@ -240,6 +240,45 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
+        public void InvestigationUpdate_WeakerRelatedSoundAllowsLaterUnrelatedInterrupt()
+        {
+            var selector = CreateSelector();
+            var memory = CreateMemory();
+            var now = DateTime.UtcNow;
+
+            BeginInvestigation(
+                memory,
+                Observation("root", Vector3.zero, now, 0.9d));
+
+            var support = Observation(
+                "support",
+                new Vector3(1f, 0f, 0f),
+                now.AddMilliseconds(10),
+                0.3d);
+
+            var update = memory.GetType().GetMethod(
+                "UpdateNoiseInvestigation",
+                BindingFlags.Public | BindingFlags.Instance);
+            Assert.That(update, Is.Not.Null);
+            update.Invoke(memory, new[] { support });
+
+            var interrupt = Observation(
+                "interrupt",
+                new Vector3(20f, 0f, 0f),
+                now.AddMilliseconds(20),
+                0.6d);
+
+            var selection = SelectInvestigationUpdate(
+                selector,
+                memory,
+                ObservationArray(interrupt),
+                now.AddMilliseconds(30));
+
+            Assert.That(SelectionNoiseEventId(selection), Is.EqualTo("interrupt"));
+            Assert.That(SelectionReason(selection), Is.EqualTo("StrongerUnrelatedInterrupt"));
+        }
+
+        [Test]
         public void InvestigationUpdate_PrioritizesStrongInterruptOverRelatedSupport()
         {
             var selector = CreateSelector();

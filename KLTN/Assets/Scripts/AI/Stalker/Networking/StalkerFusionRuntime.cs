@@ -37,7 +37,8 @@ namespace EchoProtocol.AI.Stalker.Networking
         [SerializeField] private Transform hearingOrigin;
         [SerializeField] private LayerMask acousticBlockerMask = ~0;
 
-        [SerializeField, Min(0f)]
+        // Radius-based hearing keeps this serialized for legacy policy compatibility.
+        [SerializeField, HideInInspector, Min(0f)]
         private double hearingThreshold = 0.1d;
 
         [SerializeField, Range(0.5f, 2f)]
@@ -54,7 +55,9 @@ namespace EchoProtocol.AI.Stalker.Networking
         private float hearingDiagnosticIntervalSeconds = 0.5f;
 
         [Header("Authoritative Combat")]
-        [SerializeField, Min(1)] private int attackDamage = 25;
+        [SerializeField, Min(1)]
+        [Tooltip("Damage for the legacy NetworkPlayerHealth fallback. NetworkPlayerLifeState uses the catch flow instead.")]
+        private int attackDamage = 25;
         [SerializeField, Min(0.1f)] private float maximumDamageDistance = 2f;
         [SerializeField] private bool catchEndsInDeath;
         [SerializeField, Min(0.2f)] private float jumpscareSeconds = 2f;
@@ -196,6 +199,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             _coreCarryStartedAt.Clear();
             _networkSimulationOwned = true;
             ResolveLocalDependencies();
+            specialEncounterRuntime?.ResetForMatch();
             ResolveLifecycle();
             BindProductionConsequenceSink();
             BindProductionTelemetryProducer();
@@ -208,6 +212,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 ReplicatedState = controller != null ? controller.CurrentState : StalkerState.PATROL;
                 TargetPlayer = PlayerRef.None;
                 CatchCooldown = TickTimer.None;
+                ReplicatedSpecialVisible = true;
             }
 
             if (Object != null) ApplyReplicatedPresentation();
@@ -216,6 +221,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             _coreCarryStartedAt.Clear();
+            specialEncounterRuntime?.ResetForMatch();
             _networkSimulationOwned = false;
             lifecycle = null;
             _productionConsequenceSink = null;
@@ -351,6 +357,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
             if (_boundPatrolMatchId != matchId)
             {
+                specialEncounterRuntime?.ResetForMatch();
                 var seed =
                     DerivePatrolVariationSeed(
                         matchId);
@@ -442,7 +449,9 @@ namespace EchoProtocol.AI.Stalker.Networking
                 $"match={matchId:D} " +
                 $"config={config.ScenarioConfigVersion} " +
                 $"source={config.ConfigSource} " +
-                $"chase={config.MonsterParameters.ChaseSpeed:0.###}");
+                $"scenarioOverrides={controller.UsesScenarioMonsterOverrides} " +
+                $"scenarioChase={config.MonsterParameters.ChaseSpeed:0.###} " +
+                $"appliedChase={controller.AppliedChaseSpeed:0.###}");
         }
 
         private void ClearScenarioConfigBinding()
@@ -546,10 +555,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                     step,
                     _visibleCandidates,
                     _targetStatuses,
-                    BuildCurrentAttackTargetSnapshot(
-                        sustainedCoreCarrier.HasValue
-                            ? sustainedCoreCarrier.Value.PlayerId
-                            : controller.CurrentTargetId),
+                    BuildCurrentAttackTargetSnapshot(controller.CurrentTargetId),
                     _hearingObservations,
                     hearingEvaluationTimeUtc,
                     _visibleObjectiveCarrierIds,

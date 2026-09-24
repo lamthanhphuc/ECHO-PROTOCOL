@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace EchoProtocol.AI.Stalker.Tests
 {
@@ -66,6 +67,63 @@ namespace EchoProtocol.AI.Stalker.Tests
                 score,
                 Is.GreaterThan(
                     float.NegativeInfinity));
+        }
+
+        [Test]
+        public void STK_SPECIAL_ENTRY_ZoneFilter_SelectsAllowedCandidate()
+        {
+            var buildSettings = NavMesh.GetSettingsByID(0);
+            Assert.That(buildSettings.agentTypeID, Is.Not.EqualTo(-1));
+            var sources = new List<NavMeshBuildSource>
+            {
+                new NavMeshBuildSource
+                {
+                    shape = NavMeshBuildSourceShape.Box,
+                    transform = Matrix4x4.TRS(new Vector3(0f, -0.05f, 0f),
+                        Quaternion.identity, Vector3.one),
+                    size = new Vector3(24f, 0.1f, 24f),
+                    area = 0
+                }
+            };
+            var data = NavMeshBuilder.BuildNavMeshData(buildSettings, sources,
+                new Bounds(Vector3.zero, new Vector3(26f, 4f, 26f)),
+                Vector3.zero, Quaternion.identity);
+            Assert.That(data, Is.Not.Null);
+            var instance = NavMesh.AddNavMeshData(data);
+            try
+            {
+                var selector = ResolveProductionType(SelectorTypeName);
+                var settingsType = ResolveProductionType(
+                    "EchoProtocol.AI.Stalker.Special.StalkerSpecialEncounterSettings");
+                var settings = Activator.CreateInstance(settingsType);
+                settingsType.GetField("requireEscapeRoute",
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(settings, false);
+                var method = Array.Find(selector.GetMethods(), candidate =>
+                    candidate.Name == "TrySelectWithFairness"
+                    && candidate.GetParameters().Length == 10);
+                Assert.That(method, Is.Not.Null);
+                var player = CreatePlayer("Player", Vector3.zero, Vector3.forward);
+                var arguments = new object[]
+                {
+                    null, new List<Transform> { player }, null,
+                    Activator.CreateInstance(ResolveProductionType(
+                        "EchoProtocol.AI.Common.PlayerId")),
+                    Activator.CreateInstance(ResolveProductionType(
+                        "EchoProtocol.AI.Common.AiSimulationTime"), 1L, 1d),
+                    settings, null, NavMesh.AllAreas,
+                    new Func<Vector3, bool>(position => position.x > 2f),
+                    Vector3.zero
+                };
+
+                Assert.That((bool)method.Invoke(null, arguments), Is.True);
+                Assert.That(((Vector3)arguments[9]).x, Is.GreaterThan(2f));
+            }
+            finally
+            {
+                instance.Remove();
+                UnityEngine.Object.DestroyImmediate(data);
+            }
         }
 
         [Test]

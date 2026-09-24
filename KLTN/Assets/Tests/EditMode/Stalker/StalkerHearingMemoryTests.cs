@@ -225,7 +225,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
-        public void UpdateNoiseInvestigation_PreservesPeakCommittedIntensity()
+        public void UpdateNoiseInvestigation_UsesLatestCommittedIntensity()
         {
             var memory = Create(HearingMemoryTypeName);
             var now = DateTime.UtcNow;
@@ -265,7 +265,7 @@ namespace EchoProtocol.AI.Stalker.Tests
                 Read<double>(
                     memory,
                     "CommittedEffectiveIntensity"),
-                Is.EqualTo(0.8d));
+                Is.EqualTo(0.5d));
         }
 
         [Test]

@@ -54,5 +54,7 @@ namespace EchoProtocol.AI.Stalker.Special
                 _lastUseByStableId[entry.StableId] = now;
             }
         }
+
+        public void ResetForMatch() => _lastUseByStableId.Clear();
     }
 }

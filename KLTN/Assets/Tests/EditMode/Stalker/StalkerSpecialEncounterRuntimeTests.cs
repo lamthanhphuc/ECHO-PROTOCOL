@@ -109,6 +109,12 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(
                 GetPublicProperty<float>(
                     settings,
+                    "ApproachTimeoutSeconds"),
+                Is.EqualTo(12f));
+
+            Assert.That(
+                GetPublicProperty<float>(
+                    settings,
                     "HiddenTransferDelaySeconds"),
                 Is.EqualTo(0.05f));
 
@@ -500,6 +506,132 @@ namespace EchoProtocol.AI.Stalker.Tests
                     .ToString(),
                 Is.EqualTo(
                     "RECOVER"));
+        }
+
+        [Test]
+        public void STK_SPECIAL_RUNTIME_010_ApproachTimeout_ReleasesOverrideToPatrol()
+        {
+            var controllerType = ResolveProductionType(
+                "EchoProtocol.AI.Stalker.StalkerController");
+            var controller = _runtimeObject.AddComponent(controllerType);
+            Assert.That(controller, Is.Not.Null);
+            SetPrivateField("controller", controller);
+
+            controllerType.GetMethod("BeginSpecialEncounterOverride")
+                .Invoke(controller, null);
+            SetPrivateField("_ownsControllerOverride", true);
+            InvokeSetPhase("ApproachDownedPlayer");
+            SetPrivateField("_phaseElapsed", 11.8f);
+
+            var stepType = ResolveProductionTypeBySimpleName("AiSimulationStep");
+            var tick = _runtimeType.GetMethod("TickAuthoritative");
+            Assert.That(tick, Is.Not.Null);
+            var beforeTimeout = Activator.CreateInstance(stepType,
+                CreateSimulationTime(1L, 11.9d), 0.1f);
+            tick.Invoke(_runtime, new[] { null, null, beforeTimeout });
+            Assert.That(GetPublicProperty<object>(_runtime, "Phase").ToString(),
+                Is.EqualTo("ApproachDownedPlayer"));
+
+            var afterTimeout = Activator.CreateInstance(stepType,
+                CreateSimulationTime(2L, 12.1d), 0.2f);
+            tick.Invoke(_runtime, new[] { null, null, afterTimeout });
+            Assert.That(GetPublicProperty<object>(_runtime, "Phase").ToString(),
+                Is.EqualTo("None"));
+            Assert.That(GetPublicProperty<bool>(controller, "SpecialEncounterOverrideActive"),
+                Is.False);
+            Assert.That(GetPublicProperty<object>(controller, "CurrentState").ToString(),
+                Is.EqualTo("PATROL"));
+        }
+
+        [Test]
+        public void STK_SPECIAL_RUNTIME_011_DisablingSettings_ReleasesOverride()
+        {
+            var controllerType = ResolveProductionType(
+                "EchoProtocol.AI.Stalker.StalkerController");
+            var controller = _runtimeObject.AddComponent(controllerType);
+            SetPrivateField("controller", controller);
+            controllerType.GetMethod("BeginSpecialEncounterOverride")
+                .Invoke(controller, null);
+            SetPrivateField("_ownsControllerOverride", true);
+            InvokeSetPhase("ApproachDownedPlayer");
+
+            var settings = GetPrivateField<object>("settings");
+            _settingsType.GetField("enabled", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(settings, false);
+
+            var stepType = ResolveProductionTypeBySimpleName("AiSimulationStep");
+            var step = Activator.CreateInstance(stepType,
+                CreateSimulationTime(1L, 1d), 0.1f);
+            _runtimeType.GetMethod("TickAuthoritative")
+                .Invoke(_runtime, new[] { null, null, step });
+
+            Assert.That(GetPublicProperty<object>(_runtime, "Phase").ToString(),
+                Is.EqualTo("None"));
+            Assert.That(GetPublicProperty<bool>(controller, "SpecialEncounterOverrideActive"),
+                Is.False);
+        }
+
+        [Test]
+        public void STK_SPECIAL_RUNTIME_012_FailedHiddenTransfer_PlaysJumpInBeforePatrol()
+        {
+            var controllerType = ResolveProductionType(
+                "EchoProtocol.AI.Stalker.StalkerController");
+            var controller = _runtimeObject.AddComponent(controllerType);
+            SetPrivateField("controller", controller);
+            controllerType.GetMethod("BeginSpecialEncounterOverride")
+                .Invoke(controller, null);
+            SetPrivateField("_ownsControllerOverride", true);
+            SetPrivateField("_presentationVisible", false);
+            SetPrivateField("_hiddenTransferDurationSeconds", 0.1f);
+            InvokeSetPhase("HiddenTransfer");
+
+            var stepType = ResolveProductionTypeBySimpleName("AiSimulationStep");
+            var tick = _runtimeType.GetMethod("TickAuthoritative");
+            var failed = Activator.CreateInstance(stepType,
+                CreateSimulationTime(1L, 1d), 0.2f);
+            tick.Invoke(_runtime, new[] { null, null, failed });
+
+            Assert.That(GetPublicProperty<object>(_runtime, "Phase").ToString(),
+                Is.EqualTo("JumpIn"));
+            Assert.That(GetPublicProperty<bool>(_runtime, "PresentationVisible"),
+                Is.True);
+            Assert.That(GetPublicProperty<bool>(controller, "SpecialEncounterOverrideActive"),
+                Is.True);
+
+            var recovered = Activator.CreateInstance(stepType,
+                CreateSimulationTime(2L, 10d), 10f);
+            tick.Invoke(_runtime, new[] { null, null, recovered });
+
+            Assert.That(GetPublicProperty<object>(_runtime, "Phase").ToString(),
+                Is.EqualTo("None"));
+            Assert.That(GetPublicProperty<bool>(controller, "SpecialEncounterOverrideActive"),
+                Is.False);
+        }
+
+        [Test]
+        public void STK_SPECIAL_RUNTIME_013_NewMatch_ClearsEncounterHistoryAndOverride()
+        {
+            var controllerType = ResolveProductionType(
+                "EchoProtocol.AI.Stalker.StalkerController");
+            var controller = _runtimeObject.AddComponent(controllerType);
+            SetPrivateField("controller", controller);
+            controllerType.GetMethod("BeginSpecialEncounterOverride")
+                .Invoke(controller, null);
+            SetPrivateField("_ownsControllerOverride", true);
+            SetPrivateField("_cooldownUntil", CreateSimulationTime(1L, 300d));
+            SetPrivateField("_sequenceOrdinal", 4u);
+            SetPrivateField("_lastJumpInPosition", new Vector3(1f, 0f, 2f));
+            InvokeSetPhase("ApproachDownedPlayer");
+
+            _runtimeType.GetMethod("ResetForMatch").Invoke(_runtime, null);
+
+            Assert.That(GetPublicProperty<object>(_runtime, "Phase").ToString(),
+                Is.EqualTo("None"));
+            Assert.That(GetPublicProperty<uint>(_runtime, "SequenceOrdinal"), Is.Zero);
+            Assert.That(GetPrivateField<Vector3?>("_lastJumpInPosition"), Is.Null);
+            Assert.That(InvokeIsCoolingDown(CreateSimulationTime(2L, 1d)), Is.False);
+            Assert.That(GetPublicProperty<bool>(controller, "SpecialEncounterOverrideActive"),
+                Is.False);
         }
 
         private void AddEligiblePlayer(

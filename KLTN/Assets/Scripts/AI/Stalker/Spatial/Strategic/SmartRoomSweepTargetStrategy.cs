@@ -22,6 +22,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
         private ActivityRoomKey _pendingCurrentRoom;
         private RegionId _committedStrategicRegion;
         private bool _hasPendingCandidate;
+        private ActivityRoomKey _coreCarrierRoom = ActivityRoomKey.Invalid;
         private int _variationSeed;
         private int _decisionSequence;
 
@@ -67,7 +68,13 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
             _pendingCurrentRoom = ActivityRoomKey.Invalid;
             _committedStrategicRegion = RegionId.Invalid;
             _hasPendingCandidate = false;
+            _coreCarrierRoom = ActivityRoomKey.Invalid;
         }
+
+        public void SetCoreCarrierRoom(ActivityRoomKey room) =>
+            _coreCarrierRoom = room;
+
+        public bool HasCoreCarrierRoom => _coreCarrierRoom.IsValid;
 
         public bool TrySelectTarget(
             RegionId currentRegionId,
@@ -84,6 +91,22 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
             _pendingCurrentRegion = RegionId.Invalid;
             _pendingCurrentRoom = ActivityRoomKey.Invalid;
             _hasPendingCandidate = false;
+
+            if (TryGetCrowdedTarget(
+                    currentRegionId,
+                    rejectedRoomRegionIds,
+                    out var crowdedRoom,
+                    out var crowdedRegion))
+            {
+                _pendingCandidate = new Candidate(
+                    crowdedRoom, crowdedRegion, 0, 0,
+                    0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+                _pendingCurrentRegion = currentRegionId;
+                _roomIndex.TryGetAreaForRegion(currentRegionId, out _pendingCurrentRoom);
+                _hasPendingCandidate = true;
+                targetRoomRegionId = crowdedRegion;
+                return true;
+            }
 
             if (!_director.HasHotspot
                 || _heatSystem.EffectivePlayerPresence <= 0f
@@ -178,6 +201,107 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
                 selected.RepresentativeRegion;
 
             return true;
+        }
+
+        public bool TryGetCrowdedTarget(
+            RegionId currentRegionId,
+            ISet<RegionId> rejectedRoomRegionIds,
+            out ActivityRoomKey targetRoom,
+            out RegionId targetRegion)
+        {
+            targetRoom = ActivityRoomKey.Invalid;
+            targetRegion = RegionId.Invalid;
+            if ((!_director.ShouldSeekPlayers && !_coreCarrierRoom.IsValid)
+                || !_roomIndex.TryGetAreaForRegion(currentRegionId, out var currentRoom)
+                || !_regionGraph.TryGetRegionSemanticMetadata(
+                    currentRegionId, out var currentMetadata))
+            {
+                return false;
+            }
+
+            if (_coreCarrierRoom.IsValid)
+            {
+                if (_coreCarrierRoom == currentRoom)
+                {
+                    return false;
+                }
+
+                var nearestCarrierRoomHops = int.MaxValue;
+                var nearestStalkerHops = int.MaxValue;
+                if (currentRoom.IsRoom
+                    && _roomIndex.TryGetMinimumHopDistance(
+                        currentRoom, _coreCarrierRoom, out var currentHops))
+                {
+                    nearestCarrierRoomHops = currentHops;
+                    nearestStalkerHops = 0;
+                }
+                for (var i = 0; i < _roomIndex.RoomAreas.Count; i++)
+                {
+                    var room = _roomIndex.RoomAreas[i];
+                    if (room == currentRoom
+                        || !_roomIndex.TryGetMinimumHopDistance(
+                            room, _coreCarrierRoom, out var carrierHops)
+                        || !TryChooseRepresentativeRegion(currentRegionId,
+                            room, rejectedRoomRegionIds,
+                            out var region, out var stalkerHops)
+                        || !_regionGraph.TryGetRegionSemanticMetadata(
+                            region, out var carrierMetadata)
+                        || (currentMetadata.Zone != RegionSemanticZone.Unknown
+                            && carrierMetadata.Zone != currentMetadata.Zone))
+                    {
+                        continue;
+                    }
+
+                    if (carrierHops < nearestCarrierRoomHops
+                        || (carrierHops == nearestCarrierRoomHops
+                            && stalkerHops < nearestStalkerHops))
+                    {
+                        nearestCarrierRoomHops = carrierHops;
+                        nearestStalkerHops = stalkerHops;
+                        targetRoom = room;
+                        targetRegion = region;
+                    }
+                }
+
+                if (targetRegion.IsValid)
+                {
+                    return true;
+                }
+            }
+
+            if (!_director.ShouldSeekPlayers)
+            {
+                return false;
+            }
+
+            var bestCount = _heatSystem.GetVisiblePlayerCount(currentRoom);
+            var bestHops = bestCount > 0 ? 0 : int.MaxValue;
+            for (var i = 0; i < _roomIndex.RoomAreas.Count; i++)
+            {
+                var room = _roomIndex.RoomAreas[i];
+                var count = _heatSystem.GetVisiblePlayerCount(room);
+                if (room == currentRoom || count == 0
+                    || !TryChooseRepresentativeRegion(currentRegionId, room,
+                        rejectedRoomRegionIds, out var region, out var hops)
+                    || !_regionGraph.TryGetRegionSemanticMetadata(
+                        region, out var candidateMetadata)
+                    || (currentMetadata.Zone != RegionSemanticZone.Unknown
+                        && candidateMetadata.Zone != currentMetadata.Zone))
+                {
+                    continue;
+                }
+
+                if (count > bestCount
+                    || (count == bestCount && hops < bestHops))
+                {
+                    bestCount = count;
+                    bestHops = hops;
+                    targetRoom = room;
+                    targetRegion = region;
+                }
+            }
+
+            return targetRegion.IsValid;
         }
 
         public void CommitSelectedTarget(

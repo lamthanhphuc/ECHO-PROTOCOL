@@ -29,6 +29,7 @@ namespace EchoProtocol.AI.Stalker.Special
         private uint _sequenceOrdinal;
 
         private Vector3 _jumpInPosition;
+        private Vector3? _lastJumpInPosition;
 
         //
         // Duration is calculated independently for every
@@ -42,6 +43,7 @@ namespace EchoProtocol.AI.Stalker.Special
 
         private bool _presentationVisible = true;
         private bool _ownsControllerOverride;
+        private bool _returnToPatrolAfterJumpIn;
 
         public bool IsActive => _phase != StalkerSpecialEncounterPhase.None;
         public StalkerSpecialEncounterPhase Phase => _phase;
@@ -49,6 +51,15 @@ namespace EchoProtocol.AI.Stalker.Special
         public uint SequenceOrdinal => _sequenceOrdinal;
         public bool PresentationVisible => _presentationVisible;
         public float PhaseProgress01 => GetPhaseDuration(_phase) <= 0f ? 1f : Mathf.Clamp01(_phaseElapsed / GetPhaseDuration(_phase));
+
+        public void ResetForMatch()
+        {
+            Cleanup();
+            _cooldownUntil = AiSimulationTime.Invalid;
+            _sequenceOrdinal = 0;
+            _lastJumpInPosition = null;
+            jumpEntryRegistry?.ResetForMatch();
+        }
 
         private void Awake()
         {
@@ -95,8 +106,21 @@ namespace EchoProtocol.AI.Stalker.Special
             AiSimulationStep step)
         {
             ResolveDependencies();
-            if (settings == null || !settings.Enabled || controller == null || !step.IsValid)
+            if (settings == null || controller == null || !step.IsValid)
             {
+                return;
+            }
+
+            if (!settings.Enabled)
+            {
+                if (IsActive)
+                {
+                    Abort(
+                        "special-disabled",
+                        step.Time,
+                        settings.FailedAttemptBackoffSeconds);
+                }
+
                 return;
             }
 
@@ -110,6 +134,17 @@ namespace EchoProtocol.AI.Stalker.Special
             switch (_phase)
             {
                 case StalkerSpecialEncounterPhase.ApproachDownedPlayer:
+                    if (lifecycle != null
+                        && !IsPendingVictimStillDowned(lifecycle))
+                    {
+                        Abort(
+                            "downed-player-revived",
+                            step.Time,
+                            settings.FailedAttemptBackoffSeconds);
+
+                        break;
+                    }
+
                     controller.FaceSpecialEncounterPoint(
                         _downedPlayerPosition,
                         720f * step.DeltaSeconds);
@@ -126,10 +161,28 @@ namespace EchoProtocol.AI.Stalker.Special
                         SetPhase(
                             StalkerSpecialEncounterPhase.Sniff);
                     }
+                    else if (_phaseElapsed >= settings.ApproachTimeoutSeconds)
+                    {
+                        Abort(
+                            "approach-timeout",
+                            step.Time,
+                            settings.FailedAttemptBackoffSeconds);
+                    }
 
                     break;
 
                 case StalkerSpecialEncounterPhase.Sniff:
+                    if (lifecycle != null
+                        && !IsPendingVictimStillDowned(lifecycle))
+                    {
+                        Abort(
+                            "downed-player-revived",
+                            step.Time,
+                            settings.FailedAttemptBackoffSeconds);
+
+                        break;
+                    }
+
                     controller.FaceSpecialEncounterPoint(
                         _downedPlayerPosition,
                         720f * step.DeltaSeconds);
@@ -188,10 +241,9 @@ namespace EchoProtocol.AI.Stalker.Special
                                 _pendingFact.PlayerId,
                                 step.Time))
                         {
-                            Abort(
+                            AbortHiddenTransfer(
                                 "missing-player-registry-after-transfer",
-                                step.Time,
-                                settings.FailedAttemptBackoffSeconds);
+                                step.Time);
 
                             break;
                         }
@@ -199,10 +251,9 @@ namespace EchoProtocol.AI.Stalker.Special
                         if (_eligibleAlivePlayerRoots.Count
                             < settings.MinimumOtherAlivePlayers)
                         {
-                            Abort(
+                            AbortHiddenTransfer(
                                 "not-enough-alive-players-after-transfer",
-                                step.Time,
-                                settings.FailedAttemptBackoffSeconds);
+                                step.Time);
 
                             break;
                         }
@@ -222,22 +273,23 @@ namespace EchoProtocol.AI.Stalker.Special
                                 _pendingFact.PlayerId,
                                 step.Time,
                                 settings,
+                                _lastJumpInPosition,
+                                navMeshAgent != null ? navMeshAgent.areaMask : NavMesh.AllAreas,
+                                controller.IsPositionInsidePatrolZone,
                                 out _jumpInPosition))
                         {
-                            Abort(
+                            AbortHiddenTransfer(
                                 "no-valid-entry-after-transfer",
-                                step.Time,
-                                settings.FailedAttemptBackoffSeconds);
+                                step.Time);
 
                             break;
                         }
 
                         if (!TryTeleportToJumpIn())
                         {
-                            Abort(
+                            AbortHiddenTransfer(
                                 "jump-transfer-failed",
-                                step.Time,
-                                settings.FailedAttemptBackoffSeconds);
+                                step.Time);
 
                             break;
                         }
@@ -254,7 +306,14 @@ namespace EchoProtocol.AI.Stalker.Special
                 case StalkerSpecialEncounterPhase.JumpIn:
                     if (_phaseElapsed >= settings.JumpInDurationSeconds)
                     {
-                        SetPhase(StalkerSpecialEncounterPhase.ReactionLock);
+                        if (_returnToPatrolAfterJumpIn)
+                        {
+                            Cleanup();
+                        }
+                        else
+                        {
+                            SetPhase(StalkerSpecialEncounterPhase.ReactionLock);
+                        }
                     }
                     break;
                 case StalkerSpecialEncounterPhase.ReactionLock:
@@ -512,6 +571,13 @@ namespace EchoProtocol.AI.Stalker.Special
                     continue;
                 }
 
+                if (controller != null
+                    && !controller.IsPositionInsidePatrolZone(
+                        identity.EntityRoot.position))
+                {
+                    continue;
+                }
+
                 _eligibleAlivePlayerRoots.Add(
                     identity.EntityRoot);
 
@@ -740,6 +806,11 @@ namespace EchoProtocol.AI.Stalker.Special
             var teleportPosition =
                 navMeshHit.position;
 
+            if (!controller.IsPositionInsidePatrolZone(teleportPosition))
+            {
+                return false;
+            }
+
             if (!TryResolveJumpInRotation(
                     teleportPosition,
                     out var teleportRotation))
@@ -781,6 +852,7 @@ namespace EchoProtocol.AI.Stalker.Special
 
             _jumpInPosition =
                 teleportPosition;
+            _lastJumpInPosition = teleportPosition;
 
             return true;
         }
@@ -859,6 +931,26 @@ namespace EchoProtocol.AI.Stalker.Special
             return true;
         }
 
+        private bool IsPendingVictimStillDowned(
+            FusionPlayerLifecycle lifecycle)
+        {
+            if (!_pendingFact.IsValid
+                || lifecycle == null
+                || lifecycle.EntityRegistry == null)
+            {
+                return false;
+            }
+
+            return lifecycle.EntityRegistry.TryGetEntity(
+                    _pendingFact.PlayerId,
+                    out var identity)
+                && identity != null
+                && identity.TryGetComponent<NetworkPlayerLifeState>(
+                    out var lifeState)
+                && lifeState != null
+                && lifeState.Status == NetworkPlayerLifeStatus.Downed;
+        }
+
         private void SetPhase(StalkerSpecialEncounterPhase phase)
         {
             _phase = phase;
@@ -905,6 +997,19 @@ namespace EchoProtocol.AI.Stalker.Special
                 $"[STK_SPECIAL][ABORT] reason={reason}");
         }
 
+        private void AbortHiddenTransfer(string reason, AiSimulationTime now)
+        {
+            _cooldownUntil = AddSeconds(
+                now,
+                Mathf.Max(settings.FailedAttemptBackoffSeconds, settings.CooldownSeconds));
+            _returnToPatrolAfterJumpIn = true;
+            _presentationVisible = true;
+            SetPhase(StalkerSpecialEncounterPhase.JumpIn);
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerCombat,
+                $"[STK_SPECIAL][ABORT] reason={reason}");
+        }
+
         private void Cleanup()
         {
             _pendingFact = default;
@@ -929,6 +1034,7 @@ namespace EchoProtocol.AI.Stalker.Special
             _eligibleAlivePlayerRoots.Clear();
             _recentPressureByPlayerRoot.Clear();
 
+            _returnToPatrolAfterJumpIn = false;
             _presentationVisible = true;
 
             if (_ownsControllerOverride)
@@ -970,6 +1076,7 @@ namespace EchoProtocol.AI.Stalker.Special
         {
             return phase switch
             {
+                StalkerSpecialEncounterPhase.ApproachDownedPlayer => settings.ApproachTimeoutSeconds,
                 StalkerSpecialEncounterPhase.Sniff => settings.SpecialSniffDurationSeconds,
                 StalkerSpecialEncounterPhase.JumpOut => settings.JumpOutDurationSeconds,
                 StalkerSpecialEncounterPhase.HiddenTransfer => Mathf.Max(
@@ -1015,6 +1122,14 @@ namespace EchoProtocol.AI.Stalker.Special
             {
                 jumpEntryRegistry =
                     GetComponent<StalkerJumpEntryRegistry>();
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (IsActive)
+            {
+                Cleanup();
             }
         }
     }

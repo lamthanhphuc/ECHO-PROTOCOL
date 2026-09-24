@@ -209,6 +209,13 @@ namespace EchoProtocol.Audio
                     -1L,
                     -1L)
                 : _stalker.GetReplicatedPresentationState();
+            if (!state.PresentationVisible)
+            {
+                GameAudioRuntime.Loop(_loop, null, 0f);
+                GameAudioRuntime.Loop(_proximity, null, 0f);
+                return;
+            }
+
             if (Changed("stalker", state.SemanticState))
             {
                 switch (state.SemanticState)

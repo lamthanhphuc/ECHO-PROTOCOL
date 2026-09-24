@@ -25,6 +25,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
         private double _lastUpdateSeconds;
         private double _cooldownUntilSeconds;
         private double _hotspotApproachSeconds;
+        private double _lastPlayerContactSeconds;
         private ActivityRoomKey _pendingStrategicSweepRoom;
         private ActivityRoomKey _pendingStrategicSweepHotspot;
 
@@ -40,6 +41,10 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
         public bool HasHotspot { get; private set; }
         public double CurrentTimeSeconds { get; private set; }
         public int PeripheralSweepsForCurrentHotspot { get; private set; }
+        public bool ShouldSeekPlayers =>
+            _hasPreviousState
+            && _previousState == StalkerState.PATROL
+            && CurrentTimeSeconds - _lastPlayerContactSeconds >= _settings.SeekPlayersAfterSeconds;
 
         public void Reset()
         {
@@ -54,6 +59,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
             _lastUpdateSeconds = 0d;
             _cooldownUntilSeconds = 0d;
             _hotspotApproachSeconds = 0d;
+            _lastPlayerContactSeconds = 0d;
             _pendingStrategicSweepRoom = ActivityRoomKey.Invalid;
             _pendingStrategicSweepHotspot = ActivityRoomKey.Invalid;
             _lastPressureAtByRoom.Clear();
@@ -67,6 +73,13 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
             double nowSeconds)
         {
             CurrentTimeSeconds = nowSeconds;
+            if (!_hasPreviousState
+                || currentState == StalkerState.DETECT
+                || currentState == StalkerState.CHASE
+                || currentState == StalkerState.ATTACK)
+            {
+                _lastPlayerContactSeconds = nowSeconds;
+            }
             var delta = _hasPreviousState
                 ? Math.Max(0d, nowSeconds - _lastUpdateSeconds)
                 : 0d;
