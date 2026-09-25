@@ -70,7 +70,7 @@ namespace EchoProtocol.AI.Stalker
                 0.65f,
                 0.90f,
                 0.60f,
-                0.45f,
+                0f,
                 0.35f,
                 0.0001f);
 

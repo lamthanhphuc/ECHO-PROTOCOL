@@ -588,9 +588,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
                     BiteStateHash,
 
                 StalkerState.SEARCH =>
-                    moving
-                        ? Walk1StateHash
-                        : Idle1StateHash,
+                    CrouchStateHash,
 
                 StalkerState.RECOVER =>
                     presentation.HasAttackEpisode

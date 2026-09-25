@@ -1506,6 +1506,12 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return StalkerPresentationAction.SearchSniff;
             }
 
+            if (controller.IsSearchPointHoldActive)
+            {
+                progress01 = controller.SearchPointHoldProgress01;
+                return StalkerPresentationAction.SearchSniff;
+            }
+
             return StalkerPresentationAction.None;
         }
 

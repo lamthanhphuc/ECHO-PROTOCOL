@@ -345,12 +345,19 @@ namespace EchoProtocol.AI.Stalker
         public StalkerState CurrentState => currentState;
         public bool SpecialEncounterOverrideActive => _specialEncounterOverrideActive;
         public bool IsSearchLkpSniffActive => _searchLkpSniffActive;
+        public bool IsSearchPointHoldActive => _searchPointHoldActive;
         public float SearchLkpSniffProgress01 => !_searchLkpSniffActive
             ? 0f
             : Mathf.Clamp01(
                 _searchLkpSniffElapsed / Mathf.Max(
                     0.1f,
                     searchLkpSniffDurationSeconds));
+        public float SearchPointHoldProgress01 => !_searchPointHoldActive
+            ? 0f
+            : Mathf.Clamp01(
+                _searchPointHoldElapsed / Mathf.Max(
+                    0.1f,
+                    searchPointHoldDurationSeconds));
         public int SearchLkpSniffOrdinal => _searchLkpSniffOrdinal;
         public float DetectionMeter => detectionMeter;
         public Transform DetectionTarget => detectionTarget;

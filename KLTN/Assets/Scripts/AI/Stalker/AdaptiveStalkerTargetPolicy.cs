@@ -75,7 +75,7 @@ namespace EchoProtocol.AI.Stalker
                     * signals.RecentDetection01,
                 _weights.ConfirmedNoiseWeight
                     * signals.ConfirmedNoisyBehavior01,
-                _weights.TargetHistoryWeight
+                -_weights.TargetHistoryWeight
                     * signals.TargetHistory01);
         }
 

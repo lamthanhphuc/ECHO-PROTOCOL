@@ -100,15 +100,31 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
-        public void STK_ADAPTIVE_TargetHistorySignal_AffectsSelection()
+        public void STK_ADAPTIVE_TargetHistorySignal_DiscouragesRecentlyAcquiredTarget()
         {
-            var weights = CreateWeights(0f, 0f, 0f, 0f, 0f, 1f, 0.0001f);
+            var weights = CreateWeights(
+                0f,
+                0f,
+                0f,
+                0f,
+                0f,
+                1f,
+                0.0001f);
+
             AssertPlayerId(
                 SelectWithPolicy(
                     CreatePolicy(weights),
                     CreateCandidate(1, 1f, true),
-                    CreateCandidate(2, 5f, true, false, 0f, 0f, 0f, 1f)),
-                2);
+                    CreateCandidate(
+                        2,
+                        5f,
+                        true,
+                        false,
+                        0f,
+                        0f,
+                        0f,
+                        1f)),
+                1);
         }
 
         [Test]
