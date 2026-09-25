@@ -16,7 +16,7 @@ namespace EchoProtocol.AI.Listener.Noise
                 },
                 {
                     RuntimeNoiseType.INTERACTION,
-                    new RuntimeNoiseDefinition(RuntimeNoiseType.INTERACTION, 0.35d, 8d, TimeSpan.FromSeconds(2d),
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.INTERACTION, 0.35d, 200d, TimeSpan.FromSeconds(2d),
                         RuntimeNoiseEmissionMode.DiscreteAction)
                 },
                 {
@@ -58,6 +58,11 @@ namespace EchoProtocol.AI.Listener.Noise
                     RuntimeNoiseType.CORE_INSERT,
                     new RuntimeNoiseDefinition(RuntimeNoiseType.CORE_INSERT, 0.8d, 24d, TimeSpan.FromSeconds(3d),
                         RuntimeNoiseEmissionMode.DiscreteAction)
+                },
+                {
+                    RuntimeNoiseType.MACHINE_REPAIR,
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.MACHINE_REPAIR, 1.5d, 200d, TimeSpan.FromSeconds(3d),
+                        RuntimeNoiseEmissionMode.RecurringMovement, 2.5d)
                 }
             };
 

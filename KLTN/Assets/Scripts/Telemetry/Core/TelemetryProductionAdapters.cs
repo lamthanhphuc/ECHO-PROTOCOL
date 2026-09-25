@@ -461,7 +461,8 @@ namespace EchoProtocol.Telemetry
                 { "CROUCH", "PLAYER_CROUCH" },
                 { "WALK", "PLAYER_WALK" },
                 { "DOOR", "DOOR_INTERACTION" },
-                { "CORE_INSERT", "CORE_INSERT" }
+                { "CORE_INSERT", "CORE_INSERT" },
+                { "MACHINE_REPAIR", "MACHINE_REPAIR" }
             };
 
         private readonly TelemetryEmitter _emitter;

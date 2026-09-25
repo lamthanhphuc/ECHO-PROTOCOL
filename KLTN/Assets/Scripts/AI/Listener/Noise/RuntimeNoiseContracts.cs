@@ -14,7 +14,8 @@ namespace EchoProtocol.AI.Listener.Noise
         CROUCH,
         WALK,
         DOOR,
-        CORE_INSERT
+        CORE_INSERT,
+        MACHINE_REPAIR
     }
 
     public enum RuntimeNoiseEmissionMode
@@ -151,7 +152,8 @@ namespace EchoProtocol.AI.Listener.Noise
             double baseLoudness,
             double hearingRadius,
             TimeSpan lifetime,
-            RuntimeNoiseEmissionMode emissionMode)
+            RuntimeNoiseEmissionMode emissionMode,
+            double pulseIntervalSeconds = 0d)
         {
             if (!IsFinite(baseLoudness) || baseLoudness < 0d)
             {
@@ -167,12 +169,17 @@ namespace EchoProtocol.AI.Listener.Noise
             {
                 throw new ArgumentOutOfRangeException(nameof(lifetime));
             }
+            if (!IsFinite(pulseIntervalSeconds) || pulseIntervalSeconds < 0d)
+            {
+                throw new ArgumentOutOfRangeException(nameof(pulseIntervalSeconds));
+            }
 
             NoiseType = noiseType;
             BaseLoudness = baseLoudness;
             HearingRadius = hearingRadius;
             Lifetime = lifetime;
             EmissionMode = emissionMode;
+            PulseInterval = TimeSpan.FromSeconds(pulseIntervalSeconds);
         }
 
         public RuntimeNoiseType NoiseType { get; }
@@ -180,6 +187,7 @@ namespace EchoProtocol.AI.Listener.Noise
         public double HearingRadius { get; }
         public TimeSpan Lifetime { get; }
         public RuntimeNoiseEmissionMode EmissionMode { get; }
+        public TimeSpan PulseInterval { get; }
 
         internal static bool IsFinite(double value)
         {

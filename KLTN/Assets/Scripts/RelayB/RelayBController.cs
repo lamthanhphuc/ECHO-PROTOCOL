@@ -1,7 +1,4 @@
 using System;
-using EchoProtocol.AI.Listener.Noise;
-using EchoProtocol.Networking.Authority;
-using Fusion;
 using UnityEngine;
 
 namespace EchoProtocol.RelayB
@@ -20,13 +17,11 @@ namespace EchoProtocol.RelayB
         [SerializeField] private AudioClip completeClip;
         [SerializeField, Min(0f)] private float adjustSoundCooldown = 0.12f;
         [SerializeField, Min(0f)] private float mismatchSoundCooldown = 1.0f;
-        [SerializeField, Min(0f)] private float noiseEmissionCooldown = 2.0f;
 
         private readonly RelayBSignalSimulation _simulation = new RelayBSignalSimulation();
         private AudioSource _statusLoop;
         private float _nextAdjustSoundAt;
         private float _nextMismatchSoundAt;
-        private float _nextNoiseEmissionAt;
         private int _presetIndex = 0;
         private int _attemptSeed;
 
@@ -50,7 +45,7 @@ namespace EchoProtocol.RelayB
             EchoProtocol.Audio.GameAudioRuntime.EnsureInitialized();
             if (audioSource != null) audioSource.spatialBlend = 1f;
             _statusLoop = EchoProtocol.Audio.GameAudioRuntime.CreateSource(gameObject, true);
-            _statusLoop.maxDistance = 16f;
+            _statusLoop.maxDistance = 28f;
 
             if (ui == null)
             {
@@ -269,7 +264,8 @@ namespace EchoProtocol.RelayB
                     || snapshot.Status == RelayBStatus.SignalMismatch ? "map_ambience/alarm_ambience_loop"
                 : snapshot.Status == RelayBStatus.Synchronizing || snapshot.Status == RelayBStatus.Scanning
                     ? "map_ambience/hvac_loop" : "map_ambience/server_room_loop";
-            EchoProtocol.Audio.GameAudioRuntime.Loop(_statusLoop, loop, 0.1f);
+            bool repairing = snapshot.Status == RelayBStatus.Synchronizing;
+            EchoProtocol.Audio.GameAudioRuntime.Loop(_statusLoop, loop, repairing ? 0.72f : 0.1f);
             ui?.Refresh(snapshot);
             StateChanged?.Invoke(snapshot);
         }
@@ -299,13 +295,11 @@ namespace EchoProtocol.RelayB
                 PlayOneShot(mismatchClip, 0.75f, "security_terminal/access_denied");
             }
 
-            TryEmitNoiseEvent();
         }
 
         private void HandleInstabilityReset()
         {
             PlayOneShot(warningClip, 0.8f, "security_terminal/download_pause");
-            TryEmitNoiseEvent();
         }
 
         private void PlayAdjustSound()
@@ -326,29 +320,5 @@ namespace EchoProtocol.RelayB
             else EchoProtocol.Audio.GameAudioRuntime.Play(audioSource, fallbackKey, volume);
         }
 
-        private void TryEmitNoiseEvent()
-        {
-            if (Time.unscaledTime < _nextNoiseEmissionAt)
-            {
-                return;
-            }
-
-            _nextNoiseEmissionAt = Time.unscaledTime + noiseEmissionCooldown;
-
-            var noiseService = FindAnyObjectByType<HostRuntimeNoiseService>();
-            if (noiseService != null)
-            {
-                var key = RuntimeNoiseSourceOccurrenceKey.ForInteraction(
-                    "RELAY_B",
-                    (uint)Mathf.FloorToInt(Time.time * 10f));
-
-                noiseService.TryAccept(
-                    PlayerRef.None,
-                    RuntimeNoiseType.INTERACTION,
-                    key,
-                    transform.position,
-                    out _);
-            }
-        }
     }
 }

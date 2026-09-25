@@ -170,6 +170,36 @@ namespace EchoProtocol.Telemetry.Tests
         }
 
         [Test]
+        public void Emitter_DoesNotTerminalizeAllocatorUntilMatchEndedIsBuffered()
+        {
+            var fixture = new Fixture(bufferCapacity: 1);
+            fixture.Factory.BeginMatch();
+            Assert.That(fixture.Emitter.TryEmit(
+                fixture.Request(TelemetryEventTypes.MatchStarted, "start"),
+                out _, out _), Is.True);
+
+            var endedRequest = fixture.Request(TelemetryEventTypes.MatchEnded, "end");
+            Assert.That(fixture.Emitter.TryEmit(
+                endedRequest, out var endedEvent, out var failure), Is.False);
+            Assert.That(failure, Is.EqualTo(TelemetryBufferFailureReason.BufferCapacityExceeded));
+            Assert.That(fixture.Allocator.IsActive, Is.True);
+            Assert.That(fixture.Allocator.IsTerminal, Is.False);
+
+            var submitted = fixture.Buffer.GetReadyBatch(10, DateTime.UtcNow);
+            fixture.Buffer.ApplyAcknowledgements(
+                submitted,
+                new[] { new TelemetryAckItem(submitted[0].Event.Id, TelemetryAckStatus.Accepted) },
+                DateTime.UtcNow);
+
+            Assert.That(fixture.Emitter.TryEmit(
+                endedRequest, out var retriedEvent, out var retryFailure), Is.True);
+            Assert.That(retryFailure, Is.EqualTo(TelemetryBufferFailureReason.None));
+            Assert.That(retriedEvent, Is.SameAs(endedEvent));
+            Assert.That(fixture.Allocator.IsActive, Is.False);
+            Assert.That(fixture.Allocator.IsTerminal, Is.True);
+        }
+
+        [Test]
         public void Emitter_DuplicatePendingOccurrenceRemainsIdempotentSuccess()
         {
             var fixture = new Fixture();

@@ -1,7 +1,4 @@
 using System;
-using EchoProtocol.AI.Listener.Noise;
-using EchoProtocol.Networking.Authority;
-using Fusion;
 using UnityEngine;
 
 namespace EchoProtocol.RelayA
@@ -19,12 +16,10 @@ namespace EchoProtocol.RelayA
         [SerializeField] private AudioClip overloadClip;
         [SerializeField] private AudioClip completeClip;
         [SerializeField, Min(0f)] private float adjustSoundCooldown = 0.12f;
-        [SerializeField, Min(0f)] private float noiseEmissionCooldown = 2.0f;
 
         private readonly RelayASimulation _simulation = new RelayASimulation();
         private AudioSource _statusLoop;
         private float _nextAdjustSoundAt;
-        private float _nextNoiseEmissionAt;
         private int _attemptSeed;
 
         public event Action<RelayASnapshot> StateChanged;
@@ -44,7 +39,7 @@ namespace EchoProtocol.RelayA
             EchoProtocol.Audio.GameAudioRuntime.EnsureInitialized();
             if (audioSource != null) audioSource.spatialBlend = 1f;
             _statusLoop = EchoProtocol.Audio.GameAudioRuntime.CreateSource(gameObject, true);
-            _statusLoop.maxDistance = 16f;
+            _statusLoop.maxDistance = 28f;
 
             if (ui == null)
             {
@@ -108,7 +103,6 @@ namespace EchoProtocol.RelayA
 
             _simulation.Start();
             PlayOneShot(startupClip, 0.85f, "power_puzzle/breaker_toggle");
-            TryEmitNoiseEvent();
         }
 
         public void EmergencyStop()
@@ -192,7 +186,8 @@ namespace EchoProtocol.RelayA
                     ? "map_ambience/alarm_ambience_loop"
                 : snapshot.IsRunning ? "map_ambience/generator_loop"
                 : "map_ambience/electrical_room_loop";
-            EchoProtocol.Audio.GameAudioRuntime.Loop(_statusLoop, loop, 0.1f);
+            float volume = snapshot.IsRunning && !snapshot.IsOnline ? 0.72f : 0.1f;
+            EchoProtocol.Audio.GameAudioRuntime.Loop(_statusLoop, loop, volume);
             ui?.Refresh(snapshot);
             StateChanged?.Invoke(snapshot);
         }
@@ -200,7 +195,6 @@ namespace EchoProtocol.RelayA
         private void HandleCompleted()
         {
             PlayOneShot(completeClip, 0.9f, "sector_box_power_hub/fully_powered");
-            TryEmitNoiseEvent();
             ui?.Close();
             RelayAOnline?.Invoke();
         }
@@ -218,7 +212,6 @@ namespace EchoProtocol.RelayA
         private void HandleOverloadStarted()
         {
             PlayOneShot(overloadClip, 0.85f, "power_puzzle/electrical_sparks");
-            TryEmitNoiseEvent();
         }
 
         private void PlayOneShot(AudioClip clip, float volume, string fallbackKey)
@@ -230,29 +223,5 @@ namespace EchoProtocol.RelayA
             else EchoProtocol.Audio.GameAudioRuntime.Play(audioSource, fallbackKey, volume);
         }
 
-        private void TryEmitNoiseEvent()
-        {
-            if (Time.unscaledTime < _nextNoiseEmissionAt)
-            {
-                return;
-            }
-
-            _nextNoiseEmissionAt = Time.unscaledTime + noiseEmissionCooldown;
-
-            var noiseService = UnityEngine.Object.FindAnyObjectByType<HostRuntimeNoiseService>();
-            if (noiseService != null)
-            {
-                var key = RuntimeNoiseSourceOccurrenceKey.ForInteraction(
-                    "RELAY_A",
-                    (uint)Mathf.FloorToInt(Time.time * 10f));
-
-                noiseService.TryAccept(
-                    PlayerRef.None,
-                    RuntimeNoiseType.INTERACTION,
-                    key,
-                    transform.position,
-                    out _);
-            }
-        }
     }
 }

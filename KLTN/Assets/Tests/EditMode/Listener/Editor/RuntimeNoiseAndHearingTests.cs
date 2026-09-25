@@ -31,7 +31,8 @@ namespace EchoProtocol.AI.Listener.Tests
                     "CROUCH",
                     "WALK",
                     "DOOR",
-                    "CORE_INSERT"
+                    "CORE_INSERT",
+                    "MACHINE_REPAIR"
                 }));
         }
 
@@ -67,7 +68,7 @@ namespace EchoProtocol.AI.Listener.Tests
                 RuntimeNoiseEmissionMode.DiscreteAction);
             AssertDefinition(catalog, RuntimeNoiseType.CORE_INSERT, 0.8d, 24d, 3d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
-            AssertDefinition(catalog, RuntimeNoiseType.INTERACTION, 0.35d, 8d, 2d,
+            AssertDefinition(catalog, RuntimeNoiseType.INTERACTION, 0.35d, 200d, 2d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
             AssertDefinition(catalog, RuntimeNoiseType.CORE_DROP, 0.9d, 28d, 3d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
@@ -75,6 +76,10 @@ namespace EchoProtocol.AI.Listener.Tests
                 RuntimeNoiseEmissionMode.DiscreteAction);
             AssertDefinition(catalog, RuntimeNoiseType.FIELD_SCANNER, 0.45d, 8d, 2.5d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
+            AssertDefinition(catalog, RuntimeNoiseType.MACHINE_REPAIR, 1.5d, 200d, 3d,
+                RuntimeNoiseEmissionMode.RecurringMovement);
+            catalog.TryGetDefinition(RuntimeNoiseType.MACHINE_REPAIR, out var machineRepair);
+            Assert.That(machineRepair.PulseInterval.TotalSeconds, Is.EqualTo(2.5d));
 
             catalog.TryGetDefinition(RuntimeNoiseType.CROUCH, out var crouch);
             catalog.TryGetDefinition(RuntimeNoiseType.WALK, out var walk);
@@ -583,6 +588,26 @@ namespace EchoProtocol.AI.Listener.Tests
         }
 
         [Test]
+        public void RelayRepairNoise_UsesAuthoritativePerSlotEmitter()
+        {
+            var relayA = File.ReadAllText("Assets/Scripts/RelayA/RelayAController.cs");
+            var relayB = File.ReadAllText("Assets/Scripts/RelayB/RelayBController.cs");
+            var matchState = File.ReadAllText("Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs");
+
+            StringAssert.DoesNotContain("TryEmitNoiseEvent", relayA);
+            StringAssert.DoesNotContain("TryEmitNoiseEvent", relayB);
+            StringAssert.DoesNotContain("PlayerRef.None", relayA);
+            StringAssert.DoesNotContain("PlayerRef.None", relayB);
+            StringAssert.Contains("RelayA1Operator", matchState);
+            StringAssert.Contains("RelayB2Synchronizing", matchState);
+            StringAssert.Contains("EmitRelayInteractionNoiseAuthoritative", matchState);
+            StringAssert.Contains("relay-interaction:", matchState);
+            StringAssert.Contains("relay-repair:", matchState);
+            StringAssert.Contains("RuntimeNoiseType.MACHINE_REPAIR", matchState);
+            StringAssert.Contains("RuntimeNoiseType.INTERACTION", matchState);
+        }
+
+        [Test]
         public void LIS001_InteractionOccurrenceKeyStaysOnOneStreamAcrossTargetsAndSequences()
         {
             var first = RuntimeNoiseSourceOccurrenceKey.ForInteraction("player-1", 1);
@@ -760,6 +785,36 @@ namespace EchoProtocol.AI.Listener.Tests
                 observation.EffectiveIntensity,
                 Is.EqualTo(0.25d)
                     .Within(0.0001d));
+        }
+
+        [TestCase(ListenerOcclusionClass.SOLID_WALL)]
+        [TestCase(ListenerOcclusionClass.CLOSED_DOOR)]
+        public void Hearing_MachineRepair_IgnoresOcclusionResolver(
+            ListenerOcclusionClass occlusionClass)
+        {
+            var now = Now();
+            var noise = CreateNoise(
+                RuntimeNoiseType.MACHINE_REPAIR,
+                "relay-repair:match:RelayA_1:1",
+                1,
+                Vector3.zero,
+                now,
+                1);
+            var resolver = new CountingResolver(occlusionClass);
+            var sensor = new ListenerHearingSensor(
+                resolver,
+                new ListenerHearingPolicy(0.1d, 0.01d, 0.01d));
+
+            sensor.BeginMatch(Guid.NewGuid());
+
+            Assert.That(sensor.TryEvaluate(
+                noise,
+                new Vector3(0f, 0f, 70f),
+                now,
+                out _,
+                out var rejectReason), Is.True);
+            Assert.That(rejectReason, Is.EqualTo(ListenerHearingRejectReason.None));
+            Assert.That(resolver.CallCount, Is.EqualTo(0));
         }
 
         [Test]

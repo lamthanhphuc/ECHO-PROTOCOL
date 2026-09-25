@@ -1,0 +1,108 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  mongodb:
+    image: mongo:8.0
+    restart: unless-stopped
+    command:
+      - mongod
+      - --wiredTigerCacheSizeGB
+      - "0.25"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?Mongo username required}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Mongo password required}
+    volumes:
+      - mongodb_data:/data/db
+
+  backend:
+    image: aws-lightsail-backend:latest
+    build:
+      context: ../../EchoProtocol.Backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5042
+
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      ConnectionStrings__MongoDb: "mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/?authSource=admin"
+
+      MongoDb__DatabaseName: ${MONGO_DATABASE:-echo_protocol_telemetry}
+
+      JwtSettings__SecretKey: ${JWT_SECRET:?JWT_SECRET required}
+      MatchAuthority__ProofSigningKey: ${MATCH_PROOF_KEY:?MATCH_PROOF_KEY required}
+
+      Loadout__TeamToolSlotCount: "1"
+
+      Database__MigrateOnStartup: ${DB_MIGRATE_ON_STARTUP:-false}
+      AdminSeed__Enabled: ${ADMIN_SEED_ENABLED:-false}
+      AdminSeed__Email: ${ADMIN_EMAIL:-}
+      AdminSeed__Username: ${ADMIN_USERNAME:-}
+      AdminSeed__Password: ${ADMIN_PASSWORD:-}
+      AdminSeed__DisplayName: ${ADMIN_DISPLAY_NAME:-Echo Admin}
+      AdminSeed__InitialWalletBalance: "0"
+
+      PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:?PAYOS_CLIENT_ID required}
+      PAYOS_API_KEY: ${PAYOS_API_KEY:?PAYOS_API_KEY required}
+      PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:?PAYOS_CHECKSUM_KEY required}
+      PAYOS_BASE_URL: https://api-merchant.payos.vn
+      PAYOS_RETURN_URL: https://${WEB_DOMAIN}/wallet/payment/return
+      PAYOS_CANCEL_URL: https://${WEB_DOMAIN}/wallet/payment/cancel
+
+      PaymentCatalog__AllowedProviders__0: PAYOS
+
+  web:
+    image: aws-lightsail-web:latest
+    build:
+      context: ../../EchoProtocol.Web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      BACKEND_API_URL: http://backend:5042
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - web
+      - backend
+    environment:
+      WEB_DOMAIN: ${WEB_DOMAIN:?WEB_DOMAIN required}
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN required}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  caddy_data:
+  caddy_config:

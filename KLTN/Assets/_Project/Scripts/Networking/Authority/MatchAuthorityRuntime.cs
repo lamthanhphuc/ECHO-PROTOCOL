@@ -44,10 +44,18 @@ namespace EchoProtocol.Networking.Authority
         private DateTime _matchStartedAtUtc;
         private bool _telemetryMatchActive;
         private bool _matchEndEmitted;
+        private bool _pendingMatchEnd;
+        private string _pendingMatchEndOccurrenceKey;
+        private string _pendingMatchEndOutcome;
+        private int _pendingMatchEndSurvivorCount;
+        private string _pendingMatchEndReasonCode;
+        private float _nextMatchEndRetryAt;
+        private bool _matchEndRetryWarningLogged;
         private bool _pendingAuthoritativeTelemetryMatchStart;
         private string _currentTelemetryPhase = "CORE_COLLECTION";
         private HostRuntimeNoiseService _runtimeNoise;
         private bool _runtimeNoiseTelemetryCapacityWarningLogged;
+        private bool _runtimeNoiseTelemetryInactiveWarningLogged;
         [SerializeField] private bool _researchCaptureEnabled;
         [SerializeField] private ScenarioResolutionMode requestedScenarioResolutionMode = ScenarioResolutionMode.Fixed;
         [SerializeField] private string experimentCondition;
@@ -128,6 +136,12 @@ namespace EchoProtocol.Networking.Authority
 
         private async void Update()
         {
+            if (_pendingMatchEnd
+                && Time.unscaledTime >= _nextMatchEndRetryAt)
+            {
+                TryEmitPendingMatchEnd();
+            }
+
             if (!IsHostBinding || !HasBinding || _leaseRequestInProgress
                 || Time.unscaledTime < _nextLeaseRenewal)
             {
@@ -346,9 +360,17 @@ namespace EchoProtocol.Networking.Authority
             _matchStartedAtUtc = default;
             _telemetryMatchActive = false;
             _matchEndEmitted = false;
+            _pendingMatchEnd = false;
+            _pendingMatchEndOccurrenceKey = null;
+            _pendingMatchEndOutcome = null;
+            _pendingMatchEndSurvivorCount = 0;
+            _pendingMatchEndReasonCode = null;
+            _nextMatchEndRetryAt = 0f;
+            _matchEndRetryWarningLogged = false;
             _pendingAuthoritativeTelemetryMatchStart = false;
             _currentTelemetryPhase = "CORE_COLLECTION";
             _runtimeNoiseTelemetryCapacityWarningLogged = false;
+            _runtimeNoiseTelemetryInactiveWarningLogged = false;
             _runtimeNoise?.ResetForMatch();
             ScenarioConfigRuntimeRegistry.Clear(oldMatchId);
             ScenarioConfigAuthorityRuntime.Instance?.ResetForMatch(oldMatchId);
@@ -700,33 +722,58 @@ namespace EchoProtocol.Networking.Authority
         {
             if (!CanEmitProductionTelemetry() || _matchEndEmitted) return false;
 
+            _pendingMatchEnd = true;
+            _pendingMatchEndOccurrenceKey = occurrenceKey;
+            _pendingMatchEndOutcome = outcome;
+            _pendingMatchEndSurvivorCount = survivorCount;
+            _pendingMatchEndReasonCode = reasonCode;
+            return TryEmitPendingMatchEnd();
+        }
+
+        private bool TryEmitPendingMatchEnd()
+        {
+            if (!_pendingMatchEnd || !CanEmitProductionTelemetry() || _matchEndEmitted)
+            {
+                return false;
+            }
+
+            _nextMatchEndRetryAt = Time.unscaledTime + 1f;
             var occurredAtUtc = DateTime.UtcNow;
             var durationSeconds = Math.Max(0d, (occurredAtUtc - _matchStartedAtUtc).TotalSeconds);
             try
             {
                 if (!_telemetry.MatchAdapter.EmitMatchEnded(
-                        occurrenceKey,
+                        _pendingMatchEndOccurrenceKey,
                         occurredAtUtc,
-                        outcome,
+                        _pendingMatchEndOutcome,
                         durationSeconds,
-                        survivorCount,
-                        reasonCode,
+                        _pendingMatchEndSurvivorCount,
+                        _pendingMatchEndReasonCode,
                         out _,
                         out var failure))
                 {
-                    Debug.LogWarning($"[Telemetry] MATCH_ENDED was not buffered: {failure}.");
+                    if (!_matchEndRetryWarningLogged)
+                    {
+                        _matchEndRetryWarningLogged = true;
+                        Debug.LogWarning($"[Telemetry] MATCH_ENDED was not buffered: {failure}. Retrying with the same occurrence.");
+                    }
                     return false;
                 }
 
                 _matchEndEmitted = true;
                 _telemetryMatchActive = false;
+                _pendingMatchEnd = false;
                 _telemetry.TryFlushNow();
-                CompleteBackendMatch(reasonCode);
+                CompleteBackendMatch(_pendingMatchEndReasonCode);
                 return true;
             }
             catch (Exception exception)
             {
-                Debug.LogWarning("[Telemetry] MATCH_ENDED could not be emitted: " + exception.Message);
+                if (!_matchEndRetryWarningLogged)
+                {
+                    _matchEndRetryWarningLogged = true;
+                    Debug.LogWarning("[Telemetry] MATCH_ENDED could not be emitted: " + exception.Message);
+                }
                 return false;
             }
         }
@@ -977,6 +1024,29 @@ namespace EchoProtocol.Networking.Authority
 
                 return false;
             }
+            catch (InvalidOperationException exception)
+                when (string.Equals(
+                    exception.Message,
+                    "Telemetry sequence allocation requires an active match.",
+                    StringComparison.Ordinal))
+            {
+                if (!_runtimeNoiseTelemetryInactiveWarningLogged)
+                {
+                    _runtimeNoiseTelemetryInactiveWarningLogged = true;
+                    var allocator = _telemetry?.SequenceAllocator;
+                    Debug.LogWarning(
+                        $"[Telemetry] Runtime noise skipped because telemetry "
+                        + $"is inactive. Match={MatchId:D}, "
+                        + $"allocatorMatch={allocator?.MatchId:D}, "
+                        + $"isActive={allocator?.IsActive}, "
+                        + $"isTerminal={allocator?.IsTerminal}, "
+                        + $"telemetryMatchActive={_telemetryMatchActive}, "
+                        + $"matchEndEmitted={_matchEndEmitted}, "
+                        + $"pendingBuffer={_telemetry?.Buffer?.PendingCount}.");
+                }
+
+                return false;
+            }
         }
 
         public bool RecordStalkerAttackResolved(
@@ -1068,8 +1138,12 @@ namespace EchoProtocol.Networking.Authority
 
         private bool CanEmitProductionTelemetry()
         {
+            var allocator = _telemetry?.SequenceAllocator;
             return HasStateAuthority && _telemetryMatchActive
-                && _telemetry != null && _telemetry.IsInitialized;
+                && _telemetry != null && _telemetry.IsInitialized
+                && allocator != null
+                && allocator.IsActive
+                && allocator.MatchId == MatchId;
         }
 
         private bool TryResolveBackendUser(PlayerRef player, out Guid userId)

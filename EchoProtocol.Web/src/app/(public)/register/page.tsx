@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
-import { LoginForm } from "@/components/auth/login-form";
+import { RegisterForm } from "@/components/auth/register-form";
 
-export const metadata = { title: "Đăng nhập" };
+export const metadata = { title: "Đăng ký" };
 
-export default async function LoginPage() {
+export default async function RegisterPage() {
   const session = await getSession();
   if (session) redirect(session.role === "ADMIN" ? "/admin" : "/dashboard");
 
@@ -18,16 +18,16 @@ export default async function LoginPage() {
         </h1>
         <div className="mt-8 h-px w-32 bg-[#9f2b30]" />
         <p className="mt-7 max-w-lg text-lg leading-relaxed text-[#c1aea5]">
-          Đăng nhập để vào hệ thống.
+          Tạo tài khoản để bắt đầu.
         </p>
       </div>
 
       <section className="panel login-card w-full rounded-sm p-7 shadow-[0_24px_90px_rgba(0,0,0,.55)] md:p-10">
-        <h2 className="page-title text-3xl text-[#f5eee6]">Đăng nhập</h2>
+        <h2 className="page-title text-3xl text-[#f5eee6]">Đăng ký</h2>
         <p className="muted mt-3 text-sm leading-relaxed">
-          Nhập tài khoản và mật khẩu để tiếp tục.
+          Điền thông tin để tạo tài khoản mới.
         </p>
-        <LoginForm />
+        <RegisterForm />
       </section>
     </main>
   );

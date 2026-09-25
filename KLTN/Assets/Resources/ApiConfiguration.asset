@@ -12,5 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 74da46374c17388419dc450c2dc636d3, type: 3}
   m_Name: ApiConfiguration
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Api.ApiConfiguration
-  baseUrl: http://localhost:5042
+  baseUrl: https://api.3.1.238.6.sslip.io
   requestTimeoutSeconds: 15

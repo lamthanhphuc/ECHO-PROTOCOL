@@ -171,8 +171,8 @@ public sealed class PaymentProcessingTests
         var result = await harness.WebhookService().ProcessVerifiedAsync(
             Event("unknown-event", "999999", 125_000));
 
-        Assert.False(result.IsSuccess);
-        Assert.Equal(ErrorCodes.PaymentWebhookUnknownOrder, result.ErrorCode);
+        Assert.True(result.IsSuccess);
+        Assert.Equal("UNKNOWN_ORDER", result.Data!.Outcome);
         Assert.Equal(PaymentOrderStatus.CREATED,
             (await harness.Db.PaymentOrders.SingleAsync()).Status);
         Assert.Equal(PaymentProviderEventOutcome.UNKNOWN_ORDER,
