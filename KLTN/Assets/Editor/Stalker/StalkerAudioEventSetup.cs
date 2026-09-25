@@ -102,11 +102,31 @@ public static class StalkerAudioEventSetup
             ),
             (
                 "Creep|Walk1_Action",
-                new (float, string)[] { (10f, MethodFootstep), (70f, MethodFootstep) }
+                new (float, string)[]
+                {
+                    (0f, MethodFootstep),
+                    (17f, MethodFootstep),
+                    (36f, MethodFootstep),
+                    (53f, MethodFootstep),
+                    (72f, MethodFootstep),
+                    (89f, MethodFootstep),
+                    (108f, MethodFootstep),
+                    (125f, MethodFootstep),
+                }
             ),
             (
                 "Creep|Walk2_Action",
-                new (float, string)[] { (10f, MethodFootstep), (70f, MethodFootstep) }
+                new (float, string)[]
+                {
+                    (0f, MethodFootstep),
+                    (17f, MethodFootstep),
+                    (36f, MethodFootstep),
+                    (53f, MethodFootstep),
+                    (72f, MethodFootstep),
+                    (89f, MethodFootstep),
+                    (108f, MethodFootstep),
+                    (125f, MethodFootstep),
+                }
             ),
             (
                 "Creep|JumpOut_Action",

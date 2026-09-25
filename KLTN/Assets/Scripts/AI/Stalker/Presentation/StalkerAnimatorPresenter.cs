@@ -1,5 +1,6 @@
 using EchoProtocol.AI.Stalker.Networking;
 using EchoProtocol.AI.Stalker.Special;
+using Fusion;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -562,22 +563,13 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             audioController.SetMoving(moving);
 
+            var pursuing = IsPursuing(presentation.SemanticState);
+            var isLocalTarget = IsTargetingLocalPlayer();
+
+            audioController.UpdateChasePresentation(pursuing, isLocalTarget);
+
             if (semanticChanged)
             {
-                var wasPursuing =
-                    _hasPresented
-                    && IsPursuing(_presentedSemanticState);
-                var pursuing = IsPursuing(presentation.SemanticState);
-
-                if (pursuing && !wasPursuing)
-                {
-                    audioController.EnterChase();
-                }
-                else if (!pursuing && wasPursuing)
-                {
-                    audioController.ExitChase();
-                }
-
                 switch (presentation.SemanticState)
                 {
                     case StalkerState.PATROL:
@@ -606,6 +598,53 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 audioController.PlayBite();
                 _playedBiteEpisodeId = presentation.AttackEpisodeId;
             }
+        }
+
+        private bool IsTargetingLocalPlayer()
+        {
+            if (fusionRuntime != null && fusionRuntime.Object != null && fusionRuntime.Runner != null && fusionRuntime.Runner.IsRunning)
+            {
+                var targetPlayer = fusionRuntime.TargetPlayer;
+                if (targetPlayer.IsRealPlayer)
+                {
+                    return targetPlayer == fusionRuntime.Runner.LocalPlayer;
+                }
+
+                if (fusionRuntime.Object.HasStateAuthority && controller != null)
+                {
+                    return IsControllerTargetLocal();
+                }
+
+                return false;
+            }
+
+            if (controller != null)
+            {
+                return IsControllerTargetLocal();
+            }
+
+            return true;
+        }
+
+        private bool IsControllerTargetLocal()
+        {
+            if (controller == null)
+            {
+                return false;
+            }
+
+            var target = controller.CurrentTarget != null ? controller.CurrentTarget : controller.DetectionTarget;
+            if (target == null)
+            {
+                return false;
+            }
+
+            if (target.gameObject.TryGetComponent<NetworkObject>(out var netObj) && netObj.IsValid)
+            {
+                return netObj.HasInputAuthority;
+            }
+
+            return true;
         }
 
         private static bool IsPursuing(StalkerState state)

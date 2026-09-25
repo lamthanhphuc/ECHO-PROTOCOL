@@ -90,8 +90,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         [Header("Chase Fade Tuning")]
         [SerializeField, Range(0f, 1f)] private float chasePeakVolume        = 1.00f;
-        [SerializeField, Min(0.05f)]    private float chaseFadeInSeconds      = 0.80f;
-        [SerializeField, Min(0.05f)]    private float chaseFadeOutSeconds     = 1.50f;
+        [SerializeField, Min(0.05f)]    private float chaseFadeInSeconds      = 0.50f;
+        [SerializeField, Min(0.05f)]    private float chaseFadeOutSeconds     = 5.00f;
 
         [Header("Search Cooldown")]
         [Tooltip("Minimum seconds between consecutive Search voice plays to avoid spam.")]
@@ -100,13 +100,13 @@ namespace EchoProtocol.AI.Stalker.Presentation
         [Header("3D Distance Audio Tuning (Audible from afar)")]
         [Tooltip("Ensure AudioSources use 3D linear rolloff with wide reach.")]
         [SerializeField] private bool autoConfigure3D = true;
-        [SerializeField, Min(1f)] private float voiceMinDistance = 30f;
-        [SerializeField, Min(10f)] private float voiceMaxDistance = 150f;
+        [SerializeField, Min(1f)] private float voiceMinDistance = 40f;
+        [SerializeField, Min(10f)] private float voiceMaxDistance = 100f;
         [SerializeField, Min(1f)] private float movementMinDistance = 20f;
-        [SerializeField, Min(10f)] private float movementMaxDistance = 90f;
-        [SerializeField, Min(1f)] private float breathingMinDistance = 15f;
-        [SerializeField, Min(10f)] private float breathingMaxDistance = 60f;
-        [SerializeField, Min(1f)] private float chaseMinDistance = 30f;
+        [SerializeField, Min(10f)] private float movementMaxDistance = 50f;
+        [SerializeField, Min(1f)] private float breathingMinDistance = 10f;
+        [SerializeField, Min(10f)] private float breathingMaxDistance = 20f;
+        [SerializeField, Min(1f)] private float chaseMinDistance = 40f;
         [SerializeField, Min(10f)] private float chaseMaxDistance = 150f;
 
         // ──────────────────────────────────────────────────────────────────────
@@ -116,6 +116,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private Coroutine _chaseFadeCoroutine;
         private float     _lastSearchPlayTime = float.NegativeInfinity;
         private bool      _chaseActive;
+        private bool      _chaseMusicActive;
         private bool      _isMoving;
         private bool      _suppressDetectAnimationEvent;
         private bool      _biteAudioPlayedForEpisode;
@@ -277,39 +278,49 @@ namespace EchoProtocol.AI.Stalker.Presentation
         }
 
         /// <summary>
-        /// Call when the monster enters CHASE state.
-        /// Fades in Conveyor loop.  Dims breathing.
+        /// Call continuously or on state/target change to update chase presentation.
+        /// - monsterInPursuit: true when monster is chasing, attacking, or recovering.
+        /// - isTargetingLocalPlayer: true ONLY when the local client is the player currently targeted.
+        /// Chase tension music will ONLY fade in and play for the targeted player.
+        /// If the monster switches target to another player, the music fades out for the previous target
+        /// and fades in for the new target.
         /// </summary>
-        public void EnterChase()
+        public void UpdateChasePresentation(bool monsterInPursuit, bool isTargetingLocalPlayer)
         {
-            _chaseActive = true;
+            _chaseActive = monsterInPursuit;
 
             // Dim breathing while chasing (keep loop going)
             if (breathingSource != null && breathingSource.isPlaying)
             {
-                breathingSource.volume = breathingWalkVolume;
+                breathingSource.volume = monsterInPursuit
+                    ? breathingWalkVolume
+                    : (_isMoving ? breathingWalkVolume : breathingFullVolume);
             }
 
-            // Fade in the Conveyor chase loop
-            StartChaseFade(fadeIn: true);
+            bool shouldPlayChaseMusic = monsterInPursuit && isTargetingLocalPlayer;
+            if (shouldPlayChaseMusic != _chaseMusicActive)
+            {
+                _chaseMusicActive = shouldPlayChaseMusic;
+                StartChaseFade(fadeIn: shouldPlayChaseMusic);
+            }
+        }
+
+        /// <summary>
+        /// Call when the monster enters CHASE state.
+        /// Backward-compatible wrapper for entering chase (assumes target is local).
+        /// </summary>
+        public void EnterChase()
+        {
+            UpdateChasePresentation(monsterInPursuit: true, isTargetingLocalPlayer: true);
         }
 
         /// <summary>
         /// Call when the monster exits CHASE state.
-        /// Fades out Conveyor loop.  Restores breathing volume.
+        /// Backward-compatible wrapper for exiting chase.
         /// </summary>
         public void ExitChase()
         {
-            _chaseActive = false;
-
-            // Restore breathing volume
-            if (breathingSource != null && breathingSource.isPlaying)
-            {
-                breathingSource.volume = breathingFullVolume;
-            }
-
-            // Fade out Conveyor
-            StartChaseFade(fadeIn: false);
+            UpdateChasePresentation(monsterInPursuit: false, isTargetingLocalPlayer: false);
         }
 
         // ──────────────────────────────────────────────────────────────────────
@@ -480,6 +491,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
             }
             if (chaseSource != null) chaseSource.volume = 0f;
             _chaseActive = false;
+            _chaseMusicActive = false;
             _isMoving = false;
             _suppressDetectAnimationEvent = false;
             _biteAudioPlayedForEpisode = false;

@@ -144,7 +144,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.StalkerVisionSensor
   visionOrigin: {fileID: 100011}
   candidate: {fileID: 0}
-  visionDistance: 22
+  visionDistance: 30
   visionAngle: 140
   losBlockerMask:
     serializedVersion: 2
@@ -452,13 +452,13 @@ MonoBehaviour:
   chaseFadeOutSeconds: 5
   searchCooldownSeconds: 4
   autoConfigure3D: 1
-  voiceMinDistance: 30
-  voiceMaxDistance: 150
+  voiceMinDistance: 40
+  voiceMaxDistance: 100
   movementMinDistance: 20
-  movementMaxDistance: 90
-  breathingMinDistance: 15
-  breathingMaxDistance: 60
-  chaseMinDistance: 30
+  movementMaxDistance: 50
+  breathingMinDistance: 10
+  breathingMaxDistance: 20
+  chaseMinDistance: 40
   chaseMaxDistance: 150
 --- !u!1 &100010
 GameObject:
