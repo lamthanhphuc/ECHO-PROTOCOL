@@ -5,7 +5,7 @@ namespace EchoProtocol.Api
     [CreateAssetMenu(fileName = "ApiConfiguration", menuName = "Echo Protocol/Api Configuration")]
     public class ApiConfiguration : ScriptableObject
     {
-        [SerializeField] private string baseUrl = ApiConfig.DevBaseUrl;
+        [SerializeField] private string baseUrl = ApiConfig.ProductionBaseUrl;
         [SerializeField] private int requestTimeoutSeconds = 15;
 
         public string BaseUrl => baseUrl;

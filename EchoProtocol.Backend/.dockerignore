@@ -10,3 +10,13 @@
 *.mdb
 Dockerfile
 docker-compose*.yml
+.env
+.env.*
+**/.env
+**/.env.*
+appsettings.Production.json
+appsettings.*.local.json
+**/secrets.json
+*.pem
+*.pfx
+*.key

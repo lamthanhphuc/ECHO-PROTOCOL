@@ -304,6 +304,53 @@ if (app.Environment.IsDevelopment())
     }
 }
 
+if (app.Environment.IsProduction())
+{
+    var migrateOnStartup =
+        app.Configuration.GetValue<bool>("Database:MigrateOnStartup");
+
+    var seedAdmin =
+        app.Configuration.GetValue<bool>("AdminSeed:Enabled");
+
+    if (migrateOnStartup || seedAdmin)
+    {
+        using var scope = app.Services.CreateScope();
+
+        var db = scope.ServiceProvider
+            .GetRequiredService<AppDbContext>();
+
+        if (seedAdmin)
+        {
+            var settings = scope.ServiceProvider
+                .GetRequiredService<IOptions<AdminSeedSettings>>();
+
+            if (string.IsNullOrWhiteSpace(settings.Value.Username) ||
+                string.IsNullOrWhiteSpace(settings.Value.Password))
+            {
+                throw new InvalidOperationException(
+                    "Production admin bootstrap requires username and password.");
+            }
+        }
+
+        if (migrateOnStartup)
+        {
+            await db.Database.MigrateAsync();
+        }
+
+        if (seedAdmin)
+        {
+            await DbInitializer.InitializeAsync(
+                db,
+                scope.ServiceProvider
+                    .GetRequiredService<IOptions<AdminSeedSettings>>(),
+                scope.ServiceProvider
+                    .GetRequiredService<IPasswordHasher>(),
+                scope.ServiceProvider
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("DbInitializer"));
+        }
+    }
+}
 app.UseHttpsRedirection();
 app.UseCors("EchoProtocolDev");
 app.UseAuthentication();

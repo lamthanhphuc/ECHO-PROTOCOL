@@ -5375,7 +5375,7 @@ MonoBehaviour:
   package5500Button: {fileID: 1865396335}
   shopPopup: {fileID: 2011058422}
   topUpPopup: {fileID: 1920669809}
-  topUpWebUrl: http://localhost:3000/wallet
+  topUpWebUrl: https://web.3.1.238.6.sslip.io/wallet
   lobbySceneName: Lobby
   loginSceneName: Login
 --- !u!114 &1088643551

@@ -9,5 +9,6 @@ namespace EchoProtocol.Api
         /// Local ASP.NET Core host (no /api suffix). Endpoints include /api/... via ApiConfiguration.BuildApiUrl.
         /// </summary>
         public const string DevBaseUrl = "http://localhost:5042";
+        public const string ProductionBaseUrl = "https://api.3.1.238.6.sslip.io";
     }
 }
