@@ -3,6 +3,7 @@ using EchoProtocol.MatchFlow;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common.AED;
+using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.Networking.Authority;
 using EchoProtocol.RelayA;
 using EchoProtocol.RelayB;
@@ -148,6 +149,15 @@ namespace EchoProtocol.Networking
         [Networked] public PlayerRef SecurityHoldOperator3 { get; private set; }
         [Networked] public PlayerRef SecurityHoldOperator4 { get; private set; }
         private readonly TickTimer[] _securityHoldLeases = new TickTimer[4];
+        private static readonly RuntimeNoiseCatalog RelayNoiseCatalog = RuntimeNoiseCatalog.CreateDefault();
+        private TickTimer _relayA1NoiseTimer;
+        private TickTimer _relayA2NoiseTimer;
+        private TickTimer _relayB1NoiseTimer;
+        private TickTimer _relayB2NoiseTimer;
+        private long _relayA1NoiseSequence;
+        private long _relayA2NoiseSequence;
+        private long _relayB1NoiseSequence;
+        private long _relayB2NoiseSequence;
         [Networked] public float SecurityHoldDurationSeconds { get; private set; }
         [Networked] public float SecurityHoldAccumulatedSeconds { get; private set; }
         [Networked] private TickTimer RelayRepairWindowTimer { get; set; }
@@ -395,6 +405,7 @@ namespace EchoProtocol.Networking
                     ResetRelayRepairForRetryAuthoritative();
                     return;
                 }
+                EmitRelayRepairNoiseAuthoritative();
                 AdvanceSecurityHoldAuthoritative();
             }
 
@@ -816,10 +827,11 @@ namespace EchoProtocol.Networking
 
         private bool TryAcquireRelayAuthoritative(PlayerRef requester, RelaySlot slot)
         {
-            if (!TryValidateRelayCommand(requester, slot, out _)) return false;
+            if (!TryValidateRelayCommand(requester, slot, out var target)) return false;
             var current = GetRelayOperator(slot);
             if (!current.IsNone && current != requester) return false;
             SetRelayOperator(slot, requester);
+            EmitRelayInteractionNoiseAuthoritative(requester, slot, target);
             HandleReplicatedStateChanged();
             return true;
         }
@@ -1431,6 +1443,14 @@ namespace EchoProtocol.Networking
             RelayA2Operator = PlayerRef.None;
             RelayB1Operator = PlayerRef.None;
             RelayB2Operator = PlayerRef.None;
+            _relayA1NoiseTimer = TickTimer.None;
+            _relayA2NoiseTimer = TickTimer.None;
+            _relayB1NoiseTimer = TickTimer.None;
+            _relayB2NoiseTimer = TickTimer.None;
+            _relayA1NoiseSequence = 0;
+            _relayA2NoiseSequence = 0;
+            _relayB1NoiseSequence = 0;
+            _relayB2NoiseSequence = 0;
             RelayA1AttemptSeed = 0;
             RelayA2AttemptSeed = 0;
             RelayB1AttemptSeed = 0;
@@ -1768,6 +1788,145 @@ namespace EchoProtocol.Networking
                 case RelaySlot.RelayA_2: RelayA2Running = active; break;
                 case RelaySlot.RelayB_1: RelayB1Synchronizing = active; break;
                 case RelaySlot.RelayB_2: RelayB2Synchronizing = active; break;
+            }
+        }
+
+        private void EmitRelayRepairNoiseAuthoritative()
+        {
+            if (!RelayNoiseCatalog.TryGetDefinition(
+                    RuntimeNoiseType.MACHINE_REPAIR,
+                    out var definition)
+                || definition.PulseInterval <= TimeSpan.Zero)
+            {
+                return;
+            }
+
+            EmitRelayRepairNoise(
+                RelaySlot.RelayA_1,
+                RelayA1Operator,
+                RelayA1Running,
+                ref _relayA1NoiseTimer,
+                ref _relayA1NoiseSequence,
+                definition.PulseInterval);
+            EmitRelayRepairNoise(
+                RelaySlot.RelayA_2,
+                RelayA2Operator,
+                RelayA2Running,
+                ref _relayA2NoiseTimer,
+                ref _relayA2NoiseSequence,
+                definition.PulseInterval);
+            EmitRelayRepairNoise(
+                RelaySlot.RelayB_1,
+                RelayB1Operator,
+                RelayB1Synchronizing,
+                ref _relayB1NoiseTimer,
+                ref _relayB1NoiseSequence,
+                definition.PulseInterval);
+            EmitRelayRepairNoise(
+                RelaySlot.RelayB_2,
+                RelayB2Operator,
+                RelayB2Synchronizing,
+                ref _relayB2NoiseTimer,
+                ref _relayB2NoiseSequence,
+                definition.PulseInterval);
+        }
+
+        private void EmitRelayInteractionNoiseAuthoritative(
+            PlayerRef actor,
+            RelaySlot slot,
+            Component target)
+        {
+            if (!actor.IsRealPlayer
+                || target == null
+                || MatchAuthorityRuntime.Instance == null
+                || MatchAuthorityRuntime.Instance.MatchId == Guid.Empty)
+            {
+                return;
+            }
+
+            var authority = MatchAuthorityRuntime.Instance;
+            var sequence = slot switch
+            {
+                RelaySlot.RelayA_1 => ++_relayA1NoiseSequence,
+                RelaySlot.RelayA_2 => ++_relayA2NoiseSequence,
+                RelaySlot.RelayB_1 => ++_relayB1NoiseSequence,
+                RelaySlot.RelayB_2 => ++_relayB2NoiseSequence,
+                _ => 0,
+            };
+            if (sequence <= 0)
+            {
+                return;
+            }
+
+            var key = new RuntimeNoiseSourceOccurrenceKey(
+                $"relay-interaction:{authority.MatchId:D}:{slot}",
+                sequence);
+            var noiseService = HostRuntimeNoiseService.EnsureExists(authority);
+            if (!noiseService.TryAccept(
+                    actor,
+                    RuntimeNoiseType.INTERACTION,
+                    key,
+                    target.transform.position,
+                    out _))
+            {
+                switch (slot)
+                {
+                    case RelaySlot.RelayA_1: _relayA1NoiseSequence--; break;
+                    case RelaySlot.RelayA_2: _relayA2NoiseSequence--; break;
+                    case RelaySlot.RelayB_1: _relayB1NoiseSequence--; break;
+                    case RelaySlot.RelayB_2: _relayB2NoiseSequence--; break;
+                }
+            }
+        }
+
+        private void EmitRelayRepairNoise(
+            RelaySlot slot,
+            PlayerRef operatorPlayer,
+            bool active,
+            ref TickTimer pulseTimer,
+            ref long sequence,
+            TimeSpan pulseInterval)
+        {
+            if (!active
+                || !operatorPlayer.IsRealPlayer
+                || !TryGetRelayTarget(slot, out var target)
+                || !TryValidateZone2Requester(
+                    operatorPlayer,
+                    target,
+                    _zone2InteractionDistance)
+                || !pulseTimer.Expired(Runner))
+            {
+                if (!active || !operatorPlayer.IsRealPlayer)
+                {
+                    pulseTimer = TickTimer.None;
+                }
+                return;
+            }
+
+            pulseTimer = TickTimer.CreateFromSeconds(
+                Runner,
+                (float)pulseInterval.TotalSeconds);
+
+            var authority = MatchAuthorityRuntime.Instance;
+            if (authority == null || authority.MatchId == Guid.Empty)
+            {
+                return;
+            }
+
+            var noiseService = HostRuntimeNoiseService.EnsureExists(authority);
+            var nextSequence = sequence == long.MaxValue ? 1 : sequence + 1;
+            var key = new RuntimeNoiseSourceOccurrenceKey(
+                $"relay-repair:{authority.MatchId:D}:{slot}",
+                nextSequence);
+
+            if (noiseService.TryAccept(
+                    operatorPlayer,
+                    RuntimeNoiseType.MACHINE_REPAIR,
+                    key,
+                    target.transform.position,
+                    out _))
+            {
+                sequence = nextSequence;
             }
         }
 

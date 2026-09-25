@@ -762,6 +762,13 @@ namespace EchoProtocol.AI.Stalker.Networking
                 var noiseEvent =
                     _activeNoiseEvents[i];
 
+                if (noiseEvent.NoiseType == RuntimeNoiseType.MACHINE_REPAIR
+                    && !controller.IsPositionInsidePatrolZone(
+                        noiseEvent.WorldPosition))
+                {
+                    continue;
+                }
+
                 var heard =
                     _hearingSensor.TryEvaluate(
                         noiseEvent,

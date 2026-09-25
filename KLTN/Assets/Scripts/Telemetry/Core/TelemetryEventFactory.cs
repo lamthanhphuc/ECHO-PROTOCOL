@@ -146,13 +146,21 @@ namespace EchoProtocol.Telemetry
                 TelemetrySchemaVersions.CurrentV11);
 
             _eventsByOccurrence.Add(occurrenceKey, telemetryEvent);
-            if (request.EventType == TelemetryEventTypes.MatchEnded)
-            {
-                _sequenceAllocator.MarkTerminal();
-            }
 
             created = true;
             return telemetryEvent;
+        }
+
+        internal void MarkTerminalAfterSuccessfulEnqueue(TelemetryEvent telemetryEvent)
+        {
+            if (telemetryEvent == null
+                || telemetryEvent.EventType != TelemetryEventTypes.MatchEnded
+                || _sequenceAllocator.IsTerminal)
+            {
+                return;
+            }
+
+            _sequenceAllocator.MarkTerminal();
         }
 
         private void EnsureAuthority()
@@ -250,6 +258,7 @@ namespace EchoProtocol.Telemetry
             }
 
             _failedEnqueueIds.Remove(telemetryEvent.Id);
+            _factory.MarkTerminalAfterSuccessfulEnqueue(telemetryEvent);
             _localLog.Append("EVENT_CREATED", telemetryEvent.Id, serialized);
             return true;
         }
