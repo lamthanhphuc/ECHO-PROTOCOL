@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { ApiResponse, UserRole } from "@/lib/types/common";
@@ -20,7 +21,12 @@ export function LoginForm() {
       });
       const payload = await response.json() as ApiResponse<LoginResult>;
       if (!response.ok || !payload.success || !payload.data) throw new Error(payload.message);
-      router.replace(payload.data.user.role === "ADMIN" ? "/admin" : "/dashboard");
+      const next = new URLSearchParams(window.location.search).get("next");
+      const paymentReturnPath =
+        next === "/wallet/payment/return" || next === "/wallet/payment/cancel"
+          ? next
+          : null;
+      router.replace(payload.data.user.role === "ADMIN" ? "/admin" : paymentReturnPath ?? "/dashboard");
       router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Đăng nhập thất bại.");
@@ -28,11 +34,11 @@ export function LoginForm() {
   }
   return <form onSubmit={submit} className="mt-7 grid gap-4">
     <label className="grid gap-2 text-sm"><span>Tài khoản</span>
-      <input className="input" name="username" autoComplete="username" required placeholder="player01" /></label>
+      <input className="input" name="username" autoComplete="username" required placeholder="Nhập tài khoản" /></label>
     <label className="grid gap-2 text-sm"><span>Mật khẩu</span>
       <input className="input" name="password" type="password" autoComplete="current-password" required /></label>
     {error && <p role="alert" className="rounded border border-rose-800 bg-rose-950/30 p-3 text-sm text-rose-300">{error}</p>}
-    <button className="button mt-2" type="submit" disabled={loading}>{loading ? "Đang xác thực…" : "Kết nối hệ thống"}</button>
-    <p className="muted text-xs">Backend hiện xác thực bằng username; email login chưa có contract.</p>
+    <button className="button mt-2" type="submit" disabled={loading}>{loading ? "Đang đăng nhập..." : "Đăng nhập"}</button>
+    <Link className="button button-secondary text-center" href="/register">Đăng ký tài khoản</Link>
   </form>;
 }
