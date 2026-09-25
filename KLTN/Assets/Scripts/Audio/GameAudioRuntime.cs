@@ -151,7 +151,6 @@ namespace EchoProtocol.Audio
             _nextDiscovery = Time.unscaledTime + 1f;
             UpdateEnvironment();
             Attach<NetworkPlayerMovement>();
-            Attach<StalkerFusionRuntime>();
             Attach<NetworkSlidingDoor>();
             Attach<NetworkDoor>();
             Attach<NetworkPickupItem>();

@@ -267,26 +267,115 @@ namespace EchoProtocol.Networking
         {
             var runner = _bootstrap != null ? _bootstrap.Runner : null;
             var playerState = entrant != null ? entrant.GetComponentInParent<LobbyPlayerState>() : null;
-            if (runner == null || !runner.IsServer || !runner.IsRunning
-                || _bootstrap.State != NetworkSessionState.InMatch
-                || SceneManager.GetActiveScene().name != LobbyManager.GameSceneName
-                || _zone2MonsterSpawned || IsValidNetworkObject(_zone2MonsterInstance)
-                || _monsterPrefab == null || playerState == null
-                || playerState.Object == null || !playerState.Object.IsValid
-                || !playerState.IsGameplayPlayer
-                || playerState.Object.InputAuthority == PlayerRef.None
-                || !runner.TryGetPlayerObject(playerState.Object.InputAuthority, out var playerObject)
-                || playerObject != playerState.Object
-                || !IsValidNetworkObject(_matchStateInstance)
-                || !_matchStateInstance.TryGetComponent<NetworkMatchState>(out var matchState)
-                || matchState.IsEnded
-                || !TryGetStalkerSpawnPosition(spawnMarker, out var spawnPosition))
+            if (playerState == null)
             {
                 return;
             }
 
-            _zone2MonsterInstance = SpawnStalker(runner, spawnPosition, spawnMarker.rotation, RegionSemanticZone.Zone02);
-            _zone2MonsterSpawned = _zone2MonsterInstance != null;
+            if (runner == null)
+            {
+                RejectZone2Spawn(playerState, "runner-missing");
+                return;
+            }
+            if (!runner.IsServer)
+            {
+                RejectZone2Spawn(playerState, "not-state-authority-server");
+                return;
+            }
+            if (!runner.IsRunning)
+            {
+                RejectZone2Spawn(playerState, "runner-not-running");
+                return;
+            }
+            if (_bootstrap == null || _bootstrap.State != NetworkSessionState.InMatch)
+            {
+                RejectZone2Spawn(playerState, "session-not-in-match");
+                return;
+            }
+            if (SceneManager.GetActiveScene().name != LobbyManager.GameSceneName)
+            {
+                RejectZone2Spawn(playerState, $"wrong-scene:{SceneManager.GetActiveScene().name}");
+                return;
+            }
+            if (_zone2MonsterSpawned)
+            {
+                RejectZone2Spawn(playerState, "already-spawned-flag");
+                return;
+            }
+            if (IsValidNetworkObject(_zone2MonsterInstance))
+            {
+                RejectZone2Spawn(playerState, $"existing-instance:{_zone2MonsterInstance.Id}");
+                return;
+            }
+            if (_monsterPrefab == null)
+            {
+                RejectZone2Spawn(playerState, "monster-prefab-missing");
+                return;
+            }
+            if (playerState.Object == null || !playerState.Object.IsValid)
+            {
+                RejectZone2Spawn(playerState, "player-network-object-invalid");
+                return;
+            }
+            if (!playerState.IsGameplayPlayer)
+            {
+                RejectZone2Spawn(playerState, "player-not-gameplay-player");
+                return;
+            }
+            if (playerState.Object.InputAuthority == PlayerRef.None)
+            {
+                RejectZone2Spawn(playerState, "player-input-authority-missing");
+                return;
+            }
+            if (!runner.TryGetPlayerObject(playerState.Object.InputAuthority, out var playerObject)
+                || playerObject != playerState.Object)
+            {
+                RejectZone2Spawn(playerState, "player-object-identity-mismatch");
+                return;
+            }
+            if (!IsValidNetworkObject(_matchStateInstance))
+            {
+                RejectZone2Spawn(playerState, "match-state-instance-invalid");
+                return;
+            }
+            if (!_matchStateInstance.TryGetComponent<NetworkMatchState>(out var matchState))
+            {
+                RejectZone2Spawn(playerState, "match-state-component-missing");
+                return;
+            }
+            if (matchState.IsEnded)
+            {
+                RejectZone2Spawn(playerState, "match-ended");
+                return;
+            }
+            if (!TryGetStalkerSpawnPosition(spawnMarker, out var spawnPosition))
+            {
+                RejectZone2Spawn(playerState, "spawn-marker-not-on-navmesh-within-1m");
+                return;
+            }
+
+            var spawned = SpawnStalker(
+                runner,
+                spawnPosition,
+                spawnMarker.rotation,
+                RegionSemanticZone.Zone02);
+            if (!IsValidNetworkObject(spawned))
+            {
+                RejectZone2Spawn(playerState, "runner-spawn-returned-invalid-object");
+                _zone2MonsterInstance = null;
+                return;
+            }
+
+            _zone2MonsterInstance = spawned;
+            _zone2MonsterSpawned = true;
+        }
+
+        private static void RejectZone2Spawn(LobbyPlayerState playerState, string reason)
+        {
+            Debug.LogWarning(
+                $"[STK_ZONE2][REJECT] reason={reason} player={playerState.name} " +
+                $"inputAuthority={playerState.Object?.InputAuthority}.",
+                playerState);
         }
 
         private NetworkObject SpawnStalker(NetworkRunner runner, Vector3 position, Quaternion rotation, RegionSemanticZone zone)
@@ -310,7 +399,9 @@ namespace EchoProtocol.Networking
                 return true;
             }
 
-            Debug.LogWarning($"[PlayerSpawner] Stalker spawn marker '{(marker != null ? marker.name : "missing")}' is not on NavMesh.");
+            Debug.LogWarning(
+                $"[PlayerSpawner] Stalker spawn marker '{(marker != null ? marker.name : "missing")}' " +
+                $"is not on NavMesh within 1m at {(marker != null ? marker.position.ToString() : "missing")}.");
             return false;
         }
 

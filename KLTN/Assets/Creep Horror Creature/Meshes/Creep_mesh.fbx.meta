@@ -79,7 +79,13 @@ ModelImporter:
     removeConstantScaleCurves: 1
     motionNodeName: 
     animationImportErrors: 
-    animationImportWarnings: 
+    animationImportWarnings: Event PlayPunch has a time (8.800000) outside the clip's
+      valid range (0.000000..4.800000). It will never be firedEvent PlaySniff has
+      a time (14.197334) outside the clip's valid range (0.000000..4.840000). It
+      will never be firedEvent PlayFootstep has a time (11.293333) outside the clip's
+      valid range (0.000000..4.840000). It will never be firedEvent PlayFootstep
+      has a time (11.293333) outside the clip's valid range (0.000000..4.840000).
+      It will never be fired
     animationRetargetingWarnings: 
     animationDoRetargetingWarnings: 0
     importAnimatedCustomProperties: 0

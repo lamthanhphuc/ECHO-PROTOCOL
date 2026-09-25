@@ -361,6 +361,10 @@ MonoBehaviour:
     _isUnique: 1
   _IsReady:
     RawValue: 0
+  _OperatorName:
+    _length: 0
+    _data:
+      Data: 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
   _TeamId: 0
   _ToolId: 0
   _IsGameplayPlayer:
@@ -872,9 +876,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Tools.Scanner.NetworkFieldScanner
   _tuning:
     CoreRange: 50
-    MotionRange: 35
+    MotionRange: 100
     ActiveDuration: 10
-    ScanCooldown: 60
+    ScanCooldown: 30
     ResultLifetime: 10
     MovingSpeedThreshold: 0.15
     OccludedSignalMultiplier: 0.6

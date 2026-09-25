@@ -66,6 +66,12 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private NavMeshAgent navMeshAgent;
 
         [SerializeField]
+        private StalkerAudioController audioController;
+
+        [SerializeField]
+        private StalkerAnimationAudioEvents animationAudioEvents;
+
+        [SerializeField]
         private Renderer[] controlledRenderers;
 
         [Header("Crossfade")]
@@ -102,6 +108,10 @@ namespace EchoProtocol.AI.Stalker.Presentation
             _presentedAttackEpisodeId =
                 StalkerAttackEpisodeId.Invalid;
 
+        private StalkerAttackEpisodeId
+            _playedBiteEpisodeId =
+                StalkerAttackEpisodeId.Invalid;
+
         private int _presentedAnimatorStateHash;
 
         private bool _lastPresentationVisible = true;
@@ -133,6 +143,13 @@ namespace EchoProtocol.AI.Stalker.Presentation
             SynchronizeImmediate();
         }
 
+        private void OnDisable()
+        {
+            audioController?.StopAllLoops();
+            _hasPresented = false;
+            _playedBiteEpisodeId = StalkerAttackEpisodeId.Invalid;
+        }
+
         private void Update()
         {
             if (!ResolveDependencies()
@@ -158,6 +175,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
             //
             if (!presentation.PresentationVisible)
             {
+                audioController?.StopAllLoops();
+                _hasPresented = false;
                 _lastPresentationVisible = false;
                 return;
             }
@@ -217,6 +236,23 @@ namespace EchoProtocol.AI.Stalker.Presentation
                             true);
             }
 
+            if (audioController == null)
+            {
+                audioController =
+                    GetComponent<StalkerAudioController>()
+                    ?? GetComponentInParent<StalkerAudioController>()
+                    ?? GetComponentInChildren<StalkerAudioController>(true);
+            }
+
+            if (animationAudioEvents == null && animator != null)
+            {
+                animationAudioEvents =
+                    animator.GetComponent<StalkerAnimationAudioEvents>()
+                    ?? animator.gameObject.AddComponent<StalkerAnimationAudioEvents>();
+            }
+
+            animationAudioEvents?.Bind(audioController);
+
             if (controlledRenderers == null
                 || controlledRenderers.Length == 0)
             {
@@ -269,6 +305,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             if (!presentation.PresentationVisible)
             {
+                audioController?.StopAllLoops();
+                _hasPresented = false;
                 return;
             }
 
@@ -424,6 +462,11 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 || _presentedSemanticState
                     != presentation.SemanticState;
 
+            ApplyAudioPresentation(
+                presentation,
+                moving,
+                semanticChanged);
+
             var actionChanged =
                 !_hasPresented
                 || _presentedAction
@@ -505,6 +548,71 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 targetHash;
 
             _hasPresented = true;
+        }
+
+        private void ApplyAudioPresentation(
+            StalkerNetworkPresentationState presentation,
+            bool moving,
+            bool semanticChanged)
+        {
+            if (audioController == null)
+            {
+                return;
+            }
+
+            audioController.SetMoving(moving);
+
+            if (semanticChanged)
+            {
+                var wasPursuing =
+                    _hasPresented
+                    && IsPursuing(_presentedSemanticState);
+                var pursuing = IsPursuing(presentation.SemanticState);
+
+                if (pursuing && !wasPursuing)
+                {
+                    audioController.EnterChase();
+                }
+                else if (!pursuing && wasPursuing)
+                {
+                    audioController.ExitChase();
+                }
+
+                switch (presentation.SemanticState)
+                {
+                    case StalkerState.PATROL:
+                        audioController.EnterIdle();
+                        break;
+                    case StalkerState.DETECT:
+                        audioController.BeginDetectAudioEntry();
+                        audioController.EnterIdle();
+                        audioController.PlayDetect();
+                        break;
+                    case StalkerState.ATTACK:
+                        audioController.BeginAttackAudioEpisode();
+                        break;
+                    case StalkerState.SEARCH:
+                        audioController.EnterIdle();
+                        audioController.PlaySearch();
+                        break;
+                }
+            }
+
+            if (presentation.AttackHitMomentResolved
+                && presentation.AttackEpisodeId.IsValid
+                && _playedBiteEpisodeId
+                    != presentation.AttackEpisodeId)
+            {
+                audioController.PlayBite();
+                _playedBiteEpisodeId = presentation.AttackEpisodeId;
+            }
+        }
+
+        private static bool IsPursuing(StalkerState state)
+        {
+            return state == StalkerState.CHASE
+                || state == StalkerState.ATTACK
+                || state == StalkerState.RECOVER;
         }
 
         private static int ResolveAnimatorStateHash(

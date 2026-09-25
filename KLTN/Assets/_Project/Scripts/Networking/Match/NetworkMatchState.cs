@@ -1796,15 +1796,19 @@ namespace EchoProtocol.Networking
                 && lifeState.CanInitiateAction;
         }
 
+        
         private bool ValidateObjectiveSource(NetworkSectorBox source)
         {
-            return Object.HasStateAuthority
+            return Object != null
+                && Object.HasStateAuthority
                 && !IsEnded
+                && ObjectiveSourceId.IsValid
                 && source != null
                 && source.Object != null
-                && source.Object.Id == ObjectiveSourceId
-                && (source.Object.Id == ObjectiveSourceId || IsTrackedSectorBox(source))
-                && source.Object.HasStateAuthority;
+                && source.Object.IsValid
+                && source.Object.HasStateAuthority
+                && source.MatchStateId == Object.Id
+                && IsTrackedSectorBox(source);
         }
 
         private bool IsTrackedSectorBox(NetworkSectorBox source)

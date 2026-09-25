@@ -117,6 +117,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private float     _lastSearchPlayTime = float.NegativeInfinity;
         private bool      _chaseActive;
         private bool      _isMoving;
+        private bool      _suppressDetectAnimationEvent;
+        private bool      _biteAudioPlayedForEpisode;
 
         // ──────────────────────────────────────────────────────────────────────
         // Unity lifecycle
@@ -129,6 +131,17 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 chaseFootstepClip = EchoProtocol.Audio.GameAudioRuntime.FindClip("player/metal_footstep_01");
             if (jumpOutClip == null)
                 jumpOutClip = EchoProtocol.Audio.GameAudioRuntime.FindClip("map_ambience/distant_metal_bang");
+            ValidateSources();
+            if (autoConfigure3D)
+            {
+                Configure3DSources();
+            }
+            InitBreathing();
+            InitChase();
+        }
+
+        private void OnEnable()
+        {
             ValidateSources();
             if (autoConfigure3D)
             {
@@ -309,12 +322,29 @@ namespace EchoProtocol.AI.Stalker.Presentation
         /// </summary>
         public void PlayDetect()
         {
+            _suppressDetectAnimationEvent = true;
+            PlayDetectClip();
+        }
+
+        public void BeginDetectAudioEntry()
+        {
+            _suppressDetectAnimationEvent = false;
+        }
+
+        public void PlayDetectFromAnimation()
+        {
+            if (_suppressDetectAnimationEvent) return;
+            PlayDetectClip();
+        }
+
+        private void PlayDetectClip()
+        {
             if (!ClipAndSourceReady(voiceSource, detectClip)) return;
             if (voiceSource.isPlaying && voiceSource.clip == detectClip) return;
 
             voiceSource.clip   = detectClip;
             voiceSource.pitch  = 1f;
-            voiceSource.volume = 1f;
+            voiceSource.volume = 0.1f;
             voiceSource.Play();
         }
 
@@ -370,11 +400,24 @@ namespace EchoProtocol.AI.Stalker.Presentation
         /// </summary>
         public void PlayBite()
         {
+            if (_biteAudioPlayedForEpisode) return;
             if (!ClipAndSourceReady(voiceSource, biteClip)) return;
+
+            _biteAudioPlayedForEpisode = true;
 
             voiceSource.pitch  = 1f;
             voiceSource.volume = 1f;
             voiceSource.PlayOneShot(biteClip);
+        }
+
+        public void BeginAttackAudioEpisode()
+        {
+            _biteAudioPlayedForEpisode = false;
+        }
+
+        public void PlayBiteFromAnimation()
+        {
+            PlayBite();
         }
 
         /// <summary>
@@ -430,6 +473,16 @@ namespace EchoProtocol.AI.Stalker.Presentation
         {
             if (breathingSource != null && breathingSource.isPlaying) breathingSource.Stop();
             if (chaseSource     != null && chaseSource.isPlaying)     chaseSource.Stop();
+            if (_chaseFadeCoroutine != null)
+            {
+                StopCoroutine(_chaseFadeCoroutine);
+                _chaseFadeCoroutine = null;
+            }
+            if (chaseSource != null) chaseSource.volume = 0f;
+            _chaseActive = false;
+            _isMoving = false;
+            _suppressDetectAnimationEvent = false;
+            _biteAudioPlayedForEpisode = false;
         }
 
         // ──────────────────────────────────────────────────────────────────────

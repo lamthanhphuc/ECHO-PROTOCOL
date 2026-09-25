@@ -11,9 +11,9 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         public void PlayFootstep() => _audio?.PlayFootstep();
         public void PlaySniff() => _audio?.PlaySniff();
-        public void PlayBite() => _audio?.PlayBite();
+        public void PlayBite() => _audio?.PlayBiteFromAnimation();
         public void PlayPunch() => _audio?.PlayPunch();
-        public void PlayDetect() => _audio?.PlayDetect();
+        public void PlayDetect() => _audio?.PlayDetectFromAnimation();
         public void PlayJumpOut() => _audio?.PlayJumpOut();
         public void PlayJumpIn() => _audio?.PlayJumpIn();
     }

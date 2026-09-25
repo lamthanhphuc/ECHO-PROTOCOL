@@ -179,10 +179,9 @@ namespace EchoProtocol.UI.HUD
                     case EchoProtocol.MatchFlow.Zone2MissionStage.AuthorizationCodeGranted:
                     case EchoProtocol.MatchFlow.Zone2MissionStage.UnlockZoneDoors:
                         SetPhaseBadge("ZONE 2 // UNLOCK ZONE ACCESS", "#00FF99");
-                        string code = z2.AuthorizationCode;
                         SetObjective(
                             "UNLOCK ZONE ACCESS",
-                            $"Input authorization code at either Access Panel | Code: <color=#00FF99><b>{code}</b></color>",
+                            "Input authorization code at either Access Panel",
                             1f,
                             new Color(0f, 1f, 0.6f, 1f));
                         return;
@@ -225,17 +224,9 @@ namespace EchoProtocol.UI.HUD
 
                 case MatchPhase.PowerPuzzle:
                     SetPhaseBadge("PRIMARY OBJECTIVE // RESTORE MAIN POWER", "#FFB300");
-                    string authCode = securityTerminal != null ? securityTerminal.AuthorizationCode : string.Empty;
-                    if (string.IsNullOrEmpty(authCode) && matchFlow != null)
-                    {
-                        authCode = matchFlow.PowerAuthorizationCode;
-                    }
-                    string codeDisplay = !string.IsNullOrEmpty(authCode)
-                        ? $" | Code: <color=#00FF99><b>{authCode}</b></color>"
-                        : "";
                     SetObjective(
                         "ENTER ACCESS CODE",
-                        $"Proceed to Power Control panel and input authorization code{codeDisplay}",
+                        "Proceed to Power Control panel and input authorization code",
                         1f,
                         new Color(1f, 0.7f, 0.1f, 1f));
                     break;
