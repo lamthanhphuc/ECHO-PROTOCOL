@@ -296,22 +296,42 @@ namespace EchoProtocol.MatchFlow
             AssignDistinct(panels, ref distributionPanel1, ref distributionPanel2);
 
             // Door blockers
-            if (doorBlocker1 == null || doorBlocker2 == null)
+            ResolveDoorBlockers();
+        }
+
+        private void ResolveDoorBlockers()
+        {
+            if (doorBlocker1 != null && doorBlocker2 != null)
             {
-                var doorZone = GameObject.Find("DoorZone");
-                if (doorZone != null)
+                return;
+            }
+
+            var doorZone = GameObject.Find("DoorZone");
+            if (doorZone == null)
+            {
+                var allTransforms = FindObjectsByType<Transform>(FindObjectsInactive.Include);
+                for (int i = 0; i < allTransforms.Length; i++)
                 {
-                    var snaps = doorZone.GetComponentsInChildren<Transform>(true);
-                    for (int i = 0; i < snaps.Length; i++)
+                    if (allTransforms[i].name == "DoorZone")
                     {
-                        if (snaps[i].name == "LP_Bay_Door_snaps")
+                        doorZone = allTransforms[i].gameObject;
+                        break;
+                    }
+                }
+            }
+
+            if (doorZone != null)
+            {
+                var snaps = doorZone.GetComponentsInChildren<Transform>(true);
+                for (int i = 0; i < snaps.Length; i++)
+                {
+                    if (snaps[i].name == "LP_Bay_Door_snaps")
+                    {
+                        if (doorBlocker1 == null) doorBlocker1 = snaps[i].gameObject;
+                        else if (doorBlocker2 == null && snaps[i].gameObject != doorBlocker1)
                         {
-                            if (doorBlocker1 == null) doorBlocker1 = snaps[i].gameObject;
-                            else if (doorBlocker2 == null && snaps[i].gameObject != doorBlocker1)
-                            {
-                                doorBlocker2 = snaps[i].gameObject;
-                                break;
-                            }
+                            doorBlocker2 = snaps[i].gameObject;
+                            break;
                         }
                     }
                 }
@@ -665,18 +685,25 @@ namespace EchoProtocol.MatchFlow
 
         public void ApplyDoorState(bool unlocked)
         {
-            if (doorBlocker1 != null && doorBlocker1.activeSelf == unlocked)
+            if (doorBlocker1 == null || doorBlocker2 == null)
             {
-                doorBlocker1.SetActive(!unlocked);
-            }
-            if (doorBlocker2 != null && doorBlocker2.activeSelf == unlocked)
-            {
-                doorBlocker2.SetActive(!unlocked);
+                ResolveDoorBlockers();
             }
 
-            // Also ensure colliders or obstacles on blockers are disabled
-            EnsurePassageColliders(doorBlocker1, !unlocked);
-            EnsurePassageColliders(doorBlocker2, !unlocked);
+            SetBlockerState(doorBlocker1, unlocked);
+            SetBlockerState(doorBlocker2, unlocked);
+        }
+
+        private void SetBlockerState(GameObject blocker, bool unlocked)
+        {
+            if (blocker == null) return;
+
+            if (blocker.activeSelf == unlocked)
+            {
+                blocker.SetActive(!unlocked);
+            }
+
+            EnsurePassageColliders(blocker, !unlocked);
         }
 
         private void EnsurePassageColliders(GameObject blocker, bool active)
@@ -687,6 +714,29 @@ namespace EchoProtocol.MatchFlow
             {
                 colliders[i].enabled = active;
             }
+
+            // The bay-door prefab puts its passage-wide collider on the wall sibling.
+            Transform wall = blocker.transform.parent != null
+                ? blocker.transform.parent.Find("LP_Bay_Door_Wall_snaps")
+                : null;
+            if (wall != null)
+            {
+                BoxCollider passageCollider = null;
+                var wallColliders = wall.GetComponents<BoxCollider>();
+                for (int i = 0; i < wallColliders.Length; i++)
+                {
+                    if (passageCollider == null || wallColliders[i].size.z > passageCollider.size.z)
+                    {
+                        passageCollider = wallColliders[i];
+                    }
+                }
+
+                if (passageCollider != null)
+                {
+                    passageCollider.enabled = active;
+                }
+            }
+
             var obstacles = blocker.GetComponentsInChildren<UnityEngine.AI.NavMeshObstacle>(true);
             for (int i = 0; i < obstacles.Length; i++)
             {

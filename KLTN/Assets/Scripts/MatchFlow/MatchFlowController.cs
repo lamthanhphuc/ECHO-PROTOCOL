@@ -491,6 +491,18 @@ public class MatchFlowController : MonoBehaviour
         SetZone1DoorToZone2Unlocked(networkStatus == NetworkMatchStatus.Ended
             || networkPhase != NetworkMatchPhase.CoreObjective);
 
+        bool zone2DoorsUnlocked = networkStatus == NetworkMatchStatus.Ended
+            || powerPuzzleCompleted
+            || restoreMainPowerCompleted
+            || (networkPhase != NetworkMatchPhase.CoreObjective
+                && networkPhase != NetworkMatchPhase.Zone2Objective
+                && networkPhase != NetworkMatchPhase.SecurityHold
+                && networkPhase != NetworkMatchPhase.Puzzle);
+        if (zone2DoorsUnlocked && EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
+        {
+            EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.ApplyDoorState(true);
+        }
+
         if (_phase == nextPhase) return;
         _phase = nextPhase;
         phaseChanged?.Invoke();

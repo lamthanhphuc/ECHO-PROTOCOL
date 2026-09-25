@@ -144,7 +144,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.StalkerVisionSensor
   visionOrigin: {fileID: 100011}
   candidate: {fileID: 0}
-  visionDistance: 30
+  visionDistance: 40
   visionAngle: 140
   losBlockerMask:
     serializedVersion: 2
