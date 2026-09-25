@@ -78,6 +78,9 @@ namespace EchoProtocol.AI.Stalker
         [Tooltip("Seconds for a full detection meter to decay back to zero after losing sight of the player.")]
         private float detectionDecayDurationSeconds = 1f;
 
+        [SerializeField, Min(0f)]
+        private float detectTurnSpeedDegrees = 360f;
+
         // Legacy/internal meter values.
         // Kept for AED, scenario configuration, diagnostics, and existing tests.
         [SerializeField, HideInInspector]
@@ -160,6 +163,8 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float detectionMeter;
 
         private float _detectMinimumHoldRemaining;
+        private bool _detectRotationOwnershipCaptured;
+        private bool _detectPreviousAgentUpdateRotation;
 
         [SerializeField] private Transform detectionTarget;
         [SerializeField] private Transform currentTarget;
@@ -486,6 +491,7 @@ namespace EchoProtocol.AI.Stalker
             }
 
             _specialEncounterOverrideActive = true;
+            EndDetectRotationControl();
             ResetSearchLkpSniffRuntime();
             StopAgentPath();
         }
@@ -889,6 +895,11 @@ namespace EchoProtocol.AI.Stalker
             ResetHideSpotRevealGrace();
         }
 
+        private void OnDisable()
+        {
+            EndDetectRotationControl();
+        }
+
         private void Update()
         {
             LogRoomSweepSuppressLegacyGateOnce();
@@ -984,6 +995,11 @@ namespace EchoProtocol.AI.Stalker
             }
             finally
             {
+                if (currentState != StalkerState.DETECT)
+                {
+                    EndDetectRotationControl();
+                }
+
                 _currentVisibleTargetCandidates = null;
                 _currentVisibleObjectiveCarrierIds = null;
                 _currentTargetStatuses = null;
@@ -1317,8 +1333,7 @@ namespace EchoProtocol.AI.Stalker
             detectionTarget = visibleCandidate;
             detectionMeter = 0f;
             _detectMinimumHoldRemaining = 0f;
-            currentState = StalkerState.DETECT;
-            StopAgentPath();
+            EnterDetectState();
         }
 
         private bool TryAcquireTypedDetectionTargetFromVisibleFrame()
@@ -1370,8 +1385,7 @@ namespace EchoProtocol.AI.Stalker
             currentTarget = null;
             detectionMeter = 0f;
             _detectMinimumHoldRemaining = 0f;
-            currentState = StalkerState.DETECT;
-            StopAgentPath();
+            EnterDetectState();
             return true;
         }
 
@@ -1399,6 +1413,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (TryGetVisibleDetectionTargetObservation(out var observedPosition))
             {
+                FaceDetectObservedPosition(observedPosition);
                 detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
 
@@ -1470,6 +1485,7 @@ namespace EchoProtocol.AI.Stalker
                     return;
                 }
 
+                FaceDetectObservedPosition(observation.ObservedPosition);
                 detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
                 _memory.SetDetectionMeter(detectionMeter);
@@ -1497,6 +1513,66 @@ namespace EchoProtocol.AI.Stalker
             {
                 InvalidateDetectionTarget();
             }
+        }
+
+        private void EnterDetectState()
+        {
+            currentState = StalkerState.DETECT;
+            StopAgentPath();
+            BeginDetectRotationControl();
+        }
+
+        private void BeginDetectRotationControl()
+        {
+            if (_detectRotationOwnershipCaptured)
+            {
+                return;
+            }
+
+            var agent = GetComponent<NavMeshAgent>();
+            if (agent == null)
+            {
+                return;
+            }
+
+            _detectPreviousAgentUpdateRotation = agent.updateRotation;
+            _detectRotationOwnershipCaptured = true;
+            agent.updateRotation = false;
+        }
+
+        private void EndDetectRotationControl()
+        {
+            if (!_detectRotationOwnershipCaptured)
+            {
+                return;
+            }
+
+            var agent = GetComponent<NavMeshAgent>();
+            if (agent != null)
+            {
+                agent.updateRotation = _detectPreviousAgentUpdateRotation;
+            }
+
+            _detectRotationOwnershipCaptured = false;
+        }
+
+        private void FaceDetectObservedPosition(Vector3 observedPosition)
+        {
+            var direction = observedPosition - transform.position;
+            direction.y = 0f;
+            if (direction.sqrMagnitude <= 0.0001f)
+            {
+                return;
+            }
+
+            var targetRotation = Quaternion.LookRotation(
+                direction.normalized,
+                Vector3.up);
+            transform.rotation = Quaternion.RotateTowards(
+                transform.rotation,
+                targetRotation,
+                Mathf.Max(0f, detectTurnSpeedDegrees)
+                    * CurrentSimulationDeltaSeconds);
         }
 
         private bool TryGetVisibleSpikeCandidate(out Transform visibleCandidate)
@@ -2224,9 +2300,7 @@ namespace EchoProtocol.AI.Stalker
                 _detectMinimumHoldRemaining =
                     searchReacquireDetectHoldSeconds;
 
-                currentState = StalkerState.DETECT;
-
-                StopAgentPath();
+                EnterDetectState();
                 return;
             }
 
@@ -2448,9 +2522,7 @@ namespace EchoProtocol.AI.Stalker
                 _detectMinimumHoldRemaining =
                     searchReacquireDetectHoldSeconds;
 
-                currentState = StalkerState.DETECT;
-
-                StopAgentPath();
+                EnterDetectState();
                 return;
             }
 
@@ -3236,9 +3308,7 @@ namespace EchoProtocol.AI.Stalker
             ResetNavigationRecoveryBudget();
 
             _detectMinimumHoldRemaining = 0f;
-            currentState = StalkerState.DETECT;
-
-            _navigation?.Stop();
+            EnterDetectState();
 
             _hideSpotRevealGraceActive = true;
             _hideSpotRevealGraceElapsed = 0f;
@@ -3465,9 +3535,7 @@ namespace EchoProtocol.AI.Stalker
             _detectMinimumHoldRemaining =
                 searchReacquireDetectHoldSeconds;
 
-            currentState = StalkerState.DETECT;
-
-            StopAgentPath();
+            EnterDetectState();
             return true;
         }
 

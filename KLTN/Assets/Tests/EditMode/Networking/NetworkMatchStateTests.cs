@@ -128,6 +128,8 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("TryValidateZone2Requester(player, director.SecurityTerminal", source);
             StringAssert.Contains("RemoveSecurityHoldParticipant(player)", source);
             StringAssert.Contains("RpcRefreshSecurityHold", source);
+            StringAssert.Contains("EmitSecurityTerminalInteractionNoiseAuthoritative", source);
+            StringAssert.Contains("RuntimeNoiseType.INTERACTION", source);
             StringAssert.Contains("_securityHoldLeases[index].ExpiredOrNotRunning(Runner)", source);
             StringAssert.Contains("if (player.IsNone) _securityHoldLeases[index] = TickTimer.None", source);
             StringAssert.DoesNotContain("SecurityHoldTimer", source);

@@ -135,6 +135,25 @@ namespace EchoProtocol.AI.Stalker.Hearing
                 observations,
                 nowUtc);
 
+            if (IsRelayNoise(memory.ActiveNoiseEventId))
+            {
+                for (var i = 0; i < _scratch.Count; i++)
+                {
+                    var nearestRelay = _scratch[i];
+                    if (!IsRelayNoise(nearestRelay.NoiseEventId))
+                    {
+                        continue;
+                    }
+
+                    selection = new StalkerHearingSelection(
+                        nearestRelay,
+                        IsRelated(memory.InvestigationPosition, nearestRelay.ObservedNoisePosition)
+                            ? StalkerHearingSelectionReason.RelatedSupport
+                            : StalkerHearingSelectionReason.StrongerUnrelatedInterrupt);
+                    return true;
+                }
+            }
+
             //
             // Priority 1:
             // A sufficiently stronger unrelated sound may redirect
@@ -193,6 +212,12 @@ namespace EchoProtocol.AI.Stalker.Hearing
             }
 
             return false;
+        }
+
+        private static bool IsRelayNoise(string noiseEventId)
+        {
+            return !string.IsNullOrWhiteSpace(noiseEventId)
+                && noiseEventId.StartsWith("relay-", StringComparison.Ordinal);
         }
 
         private void BuildRankedCandidates(

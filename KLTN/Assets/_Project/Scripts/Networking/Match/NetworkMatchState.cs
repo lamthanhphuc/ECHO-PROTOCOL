@@ -158,6 +158,7 @@ namespace EchoProtocol.Networking
         private long _relayA2NoiseSequence;
         private long _relayB1NoiseSequence;
         private long _relayB2NoiseSequence;
+        private long _securityHoldNoiseSequence;
         [Networked] public float SecurityHoldDurationSeconds { get; private set; }
         [Networked] public float SecurityHoldAccumulatedSeconds { get; private set; }
         [Networked] private TickTimer RelayRepairWindowTimer { get; set; }
@@ -950,11 +951,43 @@ namespace EchoProtocol.Networking
                 if (!GetSecurityHoldParticipant(index).IsNone) continue;
                 SetSecurityHoldParticipant(index, requester);
                 _securityHoldLeases[index] = TickTimer.CreateFromSeconds(Runner, 1.25f);
+                EmitSecurityTerminalInteractionNoiseAuthoritative(requester, director.SecurityTerminal);
                 break;
             }
             Zone2Stage = Zone2MissionStage.SecurityHold;
             HandleReplicatedStateChanged();
             return true;
+        }
+
+        private void EmitSecurityTerminalInteractionNoiseAuthoritative(
+            PlayerRef actor,
+            SecurityTerminalDownload terminal)
+        {
+            if (!actor.IsRealPlayer
+                || terminal == null
+                || MatchAuthorityRuntime.Instance == null
+                || MatchAuthorityRuntime.Instance.MatchId == Guid.Empty)
+            {
+                return;
+            }
+
+            var authority = MatchAuthorityRuntime.Instance;
+            var sequence = _securityHoldNoiseSequence == long.MaxValue
+                ? 1
+                : _securityHoldNoiseSequence + 1;
+            var key = new RuntimeNoiseSourceOccurrenceKey(
+                $"security-terminal:{authority.MatchId:D}",
+                sequence);
+
+            if (HostRuntimeNoiseService.EnsureExists(authority).TryAccept(
+                    actor,
+                    RuntimeNoiseType.INTERACTION,
+                    key,
+                    terminal.transform.position,
+                    out _))
+            {
+                _securityHoldNoiseSequence = sequence;
+            }
         }
 
         private void PauseSecurityHoldAuthoritative(PlayerRef requester)
@@ -1451,6 +1484,7 @@ namespace EchoProtocol.Networking
             _relayA2NoiseSequence = 0;
             _relayB1NoiseSequence = 0;
             _relayB2NoiseSequence = 0;
+            _securityHoldNoiseSequence = 0;
             RelayA1AttemptSeed = 0;
             RelayA2AttemptSeed = 0;
             RelayB1AttemptSeed = 0;

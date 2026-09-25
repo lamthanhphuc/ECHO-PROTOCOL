@@ -85,6 +85,38 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
+        public void TrySelectInitial_RelayNoisePrefersNearestRelay()
+        {
+            var selector = CreateSelector();
+            var now = DateTime.UtcNow;
+
+            var farRelay = Observation(
+                "relay-repair:match:RelayA_1:1",
+                new Vector3(8f, 0f, 0f),
+                now,
+                0.9d,
+                1,
+                1);
+
+            var nearRelay = Observation(
+                "relay-repair:match:RelayB_1:1",
+                new Vector3(2f, 0f, 0f),
+                now,
+                0.4d,
+                1,
+                2);
+
+            var selection = SelectInitial(
+                selector,
+                ObservationArray(farRelay, nearRelay),
+                now);
+
+            Assert.That(
+                SelectionNoiseEventId(selection),
+                Is.EqualTo("relay-repair:match:RelayB_1:1"));
+        }
+
+        [Test]
         public void TrySelectInitial_IgnoresExpiredObservations()
         {
             var selector = CreateSelector();

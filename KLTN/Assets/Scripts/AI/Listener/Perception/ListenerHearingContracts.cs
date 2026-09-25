@@ -207,6 +207,12 @@ namespace EchoProtocol.AI.Listener.Perception
 
         public int Compare(HearingObservation left, HearingObservation right)
         {
+            if (IsRelayNoise(left) && IsRelayNoise(right))
+            {
+                var relayDistance = left.Distance.CompareTo(right.Distance);
+                if (relayDistance != 0) return relayDistance;
+            }
+
             var intensity = right.EffectiveIntensity.CompareTo(left.EffectiveIntensity);
             if (intensity != 0) return intensity;
 
@@ -217,6 +223,11 @@ namespace EchoProtocol.AI.Listener.Perception
             if (distance != 0) return distance;
 
             return left.EventOrderKey.CompareTo(right.EventOrderKey);
+        }
+
+        private static bool IsRelayNoise(HearingObservation observation)
+        {
+            return observation.NoiseEventId.StartsWith("relay-", StringComparison.Ordinal);
         }
     }
 }
