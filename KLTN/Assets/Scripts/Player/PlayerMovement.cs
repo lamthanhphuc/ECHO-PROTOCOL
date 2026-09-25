@@ -89,7 +89,8 @@ public class PlayerMovement : MonoBehaviour
             _coreCarrier = GetComponent<PlayerEnergyCoreCarrier>() ?? GetComponentInParent<PlayerEnergyCoreCarrier>();
         }
 
-        Vector2 input = _moveAction != null ? _moveAction.ReadValue<Vector2>() : Vector2.zero;
+        bool blocked = PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject);
+        Vector2 input = !blocked && _moveAction != null ? _moveAction.ReadValue<Vector2>() : Vector2.zero;
         _moveInput = input.sqrMagnitude > 1f ? input.normalized : input;
 
         Vector3 move = transform.right * _moveInput.x + transform.forward * _moveInput.y;
@@ -99,9 +100,9 @@ public class PlayerMovement : MonoBehaviour
             move.Normalize();
         }
 
-        bool wantsSprint = _sprintAction != null && _sprintAction.IsPressed();
+        bool wantsSprint = !blocked && _sprintAction != null && _sprintAction.IsPressed();
         bool isCarryingCore = _coreCarrier != null && _coreCarrier.IsCarrying;
-        bool wantsCrouch = !isCarryingCore && IsCrouchPressed();
+        bool wantsCrouch = blocked ? _isCrouching : !isCarryingCore && IsCrouchPressed();
         _isCrouching = wantsCrouch || (_isCrouching && !CanStandUp());
         if (isCarryingCore && CanStandUp())
         {

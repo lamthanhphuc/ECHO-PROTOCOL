@@ -437,5 +437,42 @@ namespace EchoProtocol.Tests.MatchFlow
                 flow.IsRestoreMainPowerComplete);
         }
 
+
+        [Test]
+        public void TEST_20_SubmitAccessCode_Rejected_Before_Relays_And_Hold_Complete()
+        {
+            // Initial state: 0 relays, no hold
+            Assert.IsFalse(_director.AreAllRelaysOnline);
+            Assert.IsFalse(_director.IsSecurityHoldComplete);
+
+            // Attempting to submit any 4-digit code must be rejected
+            bool accepted = _director.SubmitAccessCode("1234");
+            Assert.IsFalse(accepted, "SubmitAccessCode must reject codes before relays and security hold are complete.");
+            Assert.IsFalse(_director.AreZoneDoorsUnlocked, "Doors must remain locked.");
+            Assert.AreNotEqual(Zone2MissionStage.Zone2Completed, _director.CurrentStage);
+        }
+
+        [Test]
+        public void TEST_21_AuthorizationCode_IsEmpty_Before_SecurityHold_Complete()
+        {
+            // Before Security Hold, authorization code must be empty (no early leak)
+            Assert.IsTrue(string.IsNullOrEmpty(_director.AuthorizationCode), "AuthorizationCode must be empty before Security Hold is completed.");
+        }
+
+        [Test]
+        public void TEST_22_SecurityHold_Cannot_Complete_Before_All_Relays_Online()
+        {
+            _director.DiscoverSecurityTerminal();
+            // Only 2 of 4 relays repaired
+            _director.ReportRelayOnline(RelaySlot.RelayA_1);
+            _director.ReportRelayOnline(RelaySlot.RelayA_2);
+            Assert.IsFalse(_director.AreAllRelaysOnline);
+
+            // Premature Security Hold completion must be ignored
+            _director.OnSecurityHoldCompleted(_terminal);
+            Assert.IsFalse(_director.IsSecurityHoldComplete, "Security Hold must NOT complete if not all 4 relays are online.");
+            Assert.IsTrue(string.IsNullOrEmpty(_director.AuthorizationCode), "Authorization code must NOT be issued without 4 online relays.");
+            Assert.AreNotEqual(Zone2MissionStage.AuthorizationCodeGranted, _director.CurrentStage);
+        }
     }
 }

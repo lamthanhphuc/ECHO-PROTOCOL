@@ -11,28 +11,46 @@ namespace EchoProtocol.Voice
         public static bool IsOpen { get; private set; }
         private Rect _window = new Rect(20, 70, 390, 520);
         private Vector2 _scroll;
-        private CursorLockMode _previousLock;
-        private bool _previousVisible;
+        private readonly PlayerInteractionControlLock _controlLock = new PlayerInteractionControlLock();
 
         private void Awake() => _voice = GetComponent<VoiceManager>();
         private void Update()
         {
             var keyboard = Keyboard.current;
+            if (_open && (_controlLock.ShouldAutoRelease() || (!_rebinding && _controlLock.ConsumeEscape())))
+            {
+                Close();
+                return;
+            }
             if (keyboard == null) return;
             if (_rebinding)
             {
                 foreach (var key in keyboard.allKeys)
                     if (key.wasPressedThisFrame) { if (key.keyCode != Key.Escape && key.keyCode != Key.F8) _voice.SetPushToTalk(key.keyCode); _rebinding = false; break; }
             }
-            else if (keyboard.f8Key.wasPressedThisFrame) Toggle();
+            else if (keyboard.f8Key.wasPressedThisFrame && (_open || !PlayerInteractionControlLock.HasModal)) Toggle();
         }
 
         private void Toggle()
         {
+            if (!_open && PlayerInteractionControlLock.HasModal) return;
             _open = !_open;
             IsOpen = _open;
-            if (_open) { _previousLock = Cursor.lockState; _previousVisible = Cursor.visible; Cursor.lockState = CursorLockMode.None; Cursor.visible = true; }
-            else { _rebinding = false; _voice.StopTest(); Cursor.lockState = _previousLock; Cursor.visible = _previousVisible; }
+            if (_open)
+            {
+                var camera = FindAnyObjectByType<PlayerCamera>();
+                _controlLock.Acquire(camera != null && camera.Target != null ? camera.Target.gameObject : gameObject, Close);
+            }
+            else Close();
+        }
+
+        private void Close()
+        {
+            _open = false;
+            IsOpen = false;
+            _rebinding = false;
+            if (_voice != null) _voice.StopTest();
+            _controlLock.Release();
         }
 
         private void OnGUI()

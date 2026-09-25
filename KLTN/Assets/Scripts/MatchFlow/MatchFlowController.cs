@@ -42,7 +42,15 @@ public class MatchFlowController : MonoBehaviour
         {
             if (string.IsNullOrEmpty(_powerAuthorizationCode) && _securityHoldCompleted)
             {
-                _powerAuthorizationCode = GetOrGenerateAuthCode();
+                var zone2Director = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance;
+                if (zone2Director != null && !string.IsNullOrEmpty(zone2Director.AuthorizationCode))
+                {
+                    _powerAuthorizationCode = zone2Director.AuthorizationCode;
+                }
+                else
+                {
+                    _powerAuthorizationCode = GetOrGenerateAuthCode();
+                }
             }
             return _powerAuthorizationCode;
         }
@@ -62,7 +70,6 @@ public class MatchFlowController : MonoBehaviour
 
     private void Awake()
     {
-        GetOrGenerateAuthCode();
         ResolveReferences();
         RefreshPlayers();
     }
@@ -157,7 +164,12 @@ public class MatchFlowController : MonoBehaviour
 
     public bool VerifyPowerCode(string code)
     {
-        return !string.IsNullOrEmpty(code) && code == GetOrGenerateAuthCode();
+        if (!_securityHoldCompleted || _phase != MatchPhase.PowerPuzzle)
+        {
+            return false;
+        }
+        string expectedCode = PowerAuthorizationCode;
+        return !string.IsNullOrEmpty(code) && code == expectedCode;
     }
 
     public void StartExitCountdown()

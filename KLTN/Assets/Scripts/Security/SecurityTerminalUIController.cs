@@ -21,6 +21,7 @@ public class SecurityTerminalUIController : MonoBehaviour
         [SerializeField] private TMPro.TMP_Text progressText;
         [SerializeField] private TMPro.TMP_Text codeDisplayText;
         [SerializeField] private TMPro.TMP_Text instructionText;
+        [SerializeField] private TMPro.TMP_Text offlineDetailText;
         [SerializeField] private Image progressBarFill;
         [SerializeField] private Button closeButton;
 
@@ -54,11 +55,8 @@ public class SecurityTerminalUIController : MonoBehaviour
                 return;
             }
 
-            var keyboard = Keyboard.current;
-
             if (_controlLock.ShouldAutoRelease()
-                || (keyboard != null
-                    && keyboard.escapeKey.wasPressedThisFrame))
+                || _controlLock.ConsumeEscape())
             {
                 Close();
                 return;
@@ -70,7 +68,8 @@ public class SecurityTerminalUIController : MonoBehaviour
         public void Open(GameObject interactor)
         {
             Zone2MinigameUIFocus.CloseOthers(this);
-            _controlLock.Acquire(interactor);
+            _controlLock.Acquire(interactor, Close);
+            if (!_controlLock.IsLocked) return;
             _isOpen = true;
 
             if (rootCanvas != null)
@@ -83,6 +82,8 @@ public class SecurityTerminalUIController : MonoBehaviour
 
         public void Close()
         {
+            if (terminal != null && _controlLock.Player != null)
+                terminal.InterruptDownload(_controlLock.Player);
             _isOpen = false;
 
             if (rootCanvas != null)
@@ -93,14 +94,18 @@ public class SecurityTerminalUIController : MonoBehaviour
             _controlLock.Release();
         }
 
+        private void OnDisable() => Close();
+        private void OnDestroy() => Close();
+
         public void RefreshDisplay()
         {
             bool relaysOnline = EmergencyNetworkState.AreRelaysOnline();
             bool isComplete = terminal != null && terminal.IsComplete;
+            var director = Zone2MissionDirector.Instance;
 
             if (headerTitleText != null)
             {
-                headerTitleText.text = "ECHO FACILITY // SECURITY JUNCTION";
+                headerTitleText.text = "ECHO PROTOCOL // SECURITY TERMINAL [ZONE 2]";
             }
 
             if (!relaysOnline && !isComplete)
@@ -129,9 +134,30 @@ public class SecurityTerminalUIController : MonoBehaviour
                     }
                 }
 
+                // Clean single-line status badge on header
                 if (statusBannerText != null)
                 {
-                    statusBannerText.text = $"<color=#FF1744>SECURITY NETWORK OFFLINE\nRELAY CONNECTION LOST\nRESTORE RELAY NETWORK TO CONTINUE\nPOWER RELAYS: {powerCount}/2 | DATA RELAYS: {dataCount}/2\nRELAYS ONLINE: {totalRelays} / 4</color>";
+                    statusBannerText.text = "<color=#FF1744>● STATUS: NETWORK OFFLINE</color>";
+                }
+
+                // Clean structured diagnostic details inside the offline warning panel
+                if (offlineDetailText != null)
+                {
+                    string powerStatus = powerCount >= 2
+                        ? "<color=#00E676><b>2 / 2 ONLINE</b></color>"
+                        : $"<color=#FF5252><b>{powerCount} / 2 OFFLINE</b></color>";
+                    string dataStatus = dataCount >= 2
+                        ? "<color=#00E676><b>2 / 2 ONLINE</b></color>"
+                        : $"<color=#FF5252><b>{dataCount} / 2 OFFLINE</b></color>";
+                    string totalStatus = totalRelays >= 4
+                        ? "<color=#00E676><b>4 / 4 RESTORED</b></color>"
+                        : $"<color=#FFD54F><b>{totalRelays} / 4 ACTIVE</b></color>";
+
+                    offlineDetailText.text =
+                        $"<size=17><color=#90A4AE>FACILITY RELAY GRID DIAGNOSTIC</color></size>\n\n" +
+                        $"  • POWER RELAYS (RELAY A):   {powerStatus}\n" +
+                        $"  • DATA RELAYS  (RELAY B):   {dataStatus}\n\n" +
+                        $"<size=19>SYSTEM INTEGRITY: {totalStatus}</size>";
                 }
                 return;
             }
@@ -148,17 +174,17 @@ public class SecurityTerminalUIController : MonoBehaviour
 
                 if (statusBannerText != null)
                 {
-                    statusBannerText.text = "<color=#00E676>AUTHENTICATION SUCCESSFUL</color>";
+                    statusBannerText.text = "<color=#00E676>● STATUS: ACCESS GRANTED</color>";
                 }
 
                 if (codeDisplayText != null)
                 {
-                    codeDisplayText.text = $"ZONE ACCESS AUTHORIZATION CODE:\n<size=56><color=#00FF99><b>{code}</b></color></size>";
+                    codeDisplayText.text = $"ZONE 2 EXIT AUTHORIZATION CODE:\n<size=56><color=#00FF99><b>{code}</b></color></size>";
                 }
 
                 if (instructionText != null)
                 {
-                    instructionText.text = "PROCEED TO ZONE ACCESS PANEL\nENTER CODE AT EITHER PANEL TO UNLOCK ZONE DOORS";
+                    instructionText.text = "<color=#FFEB3B><b>OBJECTIVE UPDATED:</b></color> ENTER ACCESS CODE AT ZONE DOOR\n<color=#90A4AE>Input code at either of the two exit distribution panels to unlock doors.</color>";
                 }
             }
             else
@@ -172,13 +198,17 @@ public class SecurityTerminalUIController : MonoBehaviour
                 if (statusBannerText != null)
                 {
                     statusBannerText.text = terminal != null && terminal.IsDownloading
-                        ? "<color=#FFB300>SECURITY AUTHENTICATION IN PROGRESS...</color>"
-                        : "<color=#00E5FF>SECURITY NETWORK RESTORED\nAUTHENTICATION AVAILABLE</color>";
+                        ? $"<color=#FFB300>● DOWNLOADING... ({percent}%)</color>"
+                        : "<color=#00E5FF>● STATUS: READY FOR AUTHENTICATION</color>";
                 }
 
                 if (progressText != null)
                 {
-                    progressText.text = $"AUTHENTICATION PROGRESS: {percent}%";
+                    float remaining = director != null ? director.RelayRepairRemainingSeconds : 0f;
+                    int seconds = Mathf.CeilToInt(remaining);
+                    progressText.text = remaining > 0f
+                        ? $"AUTHENTICATION: {percent}% | RELAYS RESET IN {seconds / 60:00}:{seconds % 60:00}"
+                        : $"AUTHENTICATION PROGRESS: {percent}%";
                 }
 
                 if (progressBarFill != null)

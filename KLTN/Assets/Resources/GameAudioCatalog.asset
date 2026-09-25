@@ -213,38 +213,10 @@ MonoBehaviour:
     clip: {fileID: 8300000, guid: 319d8127c7c0512478ace45a668291e2, type: 3}
   - key: security_terminal/terminal_boot
     clip: {fileID: 8300000, guid: 3bc7814eb1325cd448c5da7632813dda, type: 3}
-  - key: stalker/monster_breathing_chase_loop
-    clip: {fileID: 8300000, guid: 8a0c4e9b13f5472e9b7f6d1a0c3e5f82, type: 3}
-  - key: stalker/monster_breathing_idle_loop
-    clip: {fileID: 8300000, guid: 3e7b1a5c9d204f86a2b0c6e1f4d8a973, type: 3}
-  - key: stalker/monster_growl_01
-    clip: {fileID: 8300000, guid: 4b9e2c7f1a5d4386b0e3f9c2a7d1e854, type: 3}
-  - key: stalker/monster_growl_02
-    clip: {fileID: 8300000, guid: 7d2f6a9c0b4e4185a3c8f1e6b9d2a740, type: 3}
-  - key: stalker/monster_proximity_rumble_loop
-    clip: {fileID: 8300000, guid: 2c8f5a1e7b3d4690a4e6c9f2b1d8a753, type: 3}
-  - key: stalker/monster_scream_attack
-    clip: {fileID: 8300000, guid: 9f1d4b7e2c6a4385b0e8d3f7a1c5e692, type: 3}
-  - key: stalker/monster_step_01
-    clip: {fileID: 8300000, guid: 6a3e8f1c5b7d4290a2f4c9e6b1d8a753, type: 3}
-  - key: stalker/monster_step_02
-    clip: {fileID: 8300000, guid: 1e7b4c9a2d5f4386b0f3a8d6c1e9b752, type: 3}
-  - key: stalker/monster_step_03
-    clip: {fileID: 8300000, guid: 5c1a8e3f7b4d4690a2e6f9c1d8b753a4, type: 3}
-  - key: stalker/monster_step_04
-    clip: {fileID: 8300000, guid: 8b2d6f1a4c9e4370a5f3d7c1e6b9a852, type: 3}
   - key: stalker/door_break
     clip: {fileID: 8300000, guid: 987c306eb8e3398478ccbc78171615a0, type: 3}
-  - key: stalker/door_hit
-    clip: {fileID: 8300000, guid: 70162f5385e88194fbf3c662dd3ac96b, type: 3}
   - key: stalker/door_jammer_break
     clip: {fileID: 8300000, guid: b53fc737fe63f254e826cb9a5fe8610a, type: 3}
-  - key: stalker/footstep_cham
-    clip: {fileID: 8300000, guid: 2938e02c27650834ab12a1b8112944fc, type: 3}
-  - key: stalker/footstep_chay_chase
-    clip: {fileID: 8300000, guid: 90ff4ef06b7c2f74aafe9958612fcd31, type: 3}
-  - key: stalker/miss_attack
-    clip: {fileID: 8300000, guid: 9134bdebf7c88c247a7f1e4414c6e2f9, type: 3}
   - key: ui/click
     clip: {fileID: 8300000, guid: 35cfa3ff77ba91b459f082e80185c5ef, type: 3}
   - key: ui/confirm

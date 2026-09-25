@@ -273,7 +273,7 @@ namespace EchoProtocol.UI.HUD
                 if (titleText != null) titleText.text = "FIELD SCANNER";
                 if (modeBadgeText != null)
                 {
-                    modeBadgeText.text = "[ PHÁT HIỆN CHUYỂN ĐỘNG ]";
+                    modeBadgeText.text = "[ QUÉT MONSTER ]";
                     modeBadgeText.color = new Color(1f, 0.45f, 0.2f, 1f); // Coral
                 }
                 if (panelOutline != null) panelOutline.effectColor = new Color(1f, 0.45f, 0.2f, 0.65f);
@@ -322,7 +322,7 @@ namespace EchoProtocol.UI.HUD
                     }
                     if (signalDetailText != null)
                     {
-                        signalDetailText.text = "[CHUỘT PHẢI] QUÉT / DÙNG  •  [B] ĐỔI CHẾ ĐỘ\nHỆ THỐNG SẴN SÀNG";
+                        signalDetailText.text = "[CHUỘT TRÁI] QUÉT  •  [CHUỘT PHẢI] ĐỔI CHẾ ĐỘ\nHỆ THỐNG SẴN SÀNG";
                         signalDetailText.color = (mode == FieldScannerMode.Core)
                             ? new Color(0.15f, 0.95f, 0.85f, 1f)
                             : new Color(1f, 0.5f, 0.2f, 1f);
@@ -392,7 +392,7 @@ namespace EchoProtocol.UI.HUD
                     }
                     if (signalBarsText != null)
                     {
-                        signalBarsText.text = "<color=#FF3300>● CẢNH BÁO MỤC TIÊU DI CHUYỂN</color>";
+                        signalBarsText.text = "<color=#FF3300>● CẢNH BÁO MONSTER DI CHUYỂN</color>";
                     }
                     if (signalDetailText != null)
                     {
@@ -421,7 +421,7 @@ namespace EchoProtocol.UI.HUD
                     }
                     if (signalDetailText != null)
                     {
-                        signalDetailText.text = "RADAR CHUYỂN ĐỘNG\nKHÔNG CÓ CHUYỂN ĐỘNG";
+                        signalDetailText.text = "QUÉT MONSTER\nKHÔNG CÓ TÍN HIỆU DI CHUYỂN";
                         signalDetailText.color = new Color(0.75f, 0.7f, 0.65f, 0.9f);
                     }
 

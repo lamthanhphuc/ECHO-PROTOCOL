@@ -79,8 +79,10 @@ namespace EchoProtocol.RelayA
 
         private void OnDestroy()
         {
-            _controlLock.Release();
+            Close();
         }
+
+        private void OnDisable() => Close();
 
         private void Update()
         {
@@ -89,16 +91,13 @@ namespace EchoProtocol.RelayA
                 return;
             }
 
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
-
             if (_controlLock.ShouldAutoRelease())
             {
                 Close();
                 return;
             }
 
-            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+            if (_controlLock.ConsumeEscape())
             {
                 Close();
             }
@@ -125,12 +124,14 @@ namespace EchoProtocol.RelayA
                 }
             }
 
-            _controlLock.Acquire(interactor);
+            _controlLock.Acquire(interactor, Close);
+            if (!_controlLock.IsLocked) return;
             SetVisible(true);
         }
 
         public void Close()
         {
+            if (!_controlLock.IsLocked && !IsOpen) return;
             if (TryGetNetworkDirector(out var director)) director.RequestRelayRelease(_controller);
             SetVisible(false);
             _controlLock.Release();
@@ -158,7 +159,7 @@ namespace EchoProtocol.RelayA
 
             SetText(facilityLabel, "ECHO FACILITY");
             SetText(relayLabel, snapshot.IsOnline ? "POWER RELAY A - ONLINE" : "POWER RELAY A");
-            SetText(modeLabel, snapshot.IsOnline ? "EMERGENCY POWER RESTORED" : "VOLTAGE STABILIZATION");
+            SetText(modeLabel, snapshot.IsOnline ? "EMERGENCY POWER RESTORED" : "BALANCE VOLTAGE, FREQUENCY AND LOAD");
             SetText(statusLabel, StatusText(snapshot.Status));
             if (statusLabel != null)
             {
@@ -266,10 +267,27 @@ namespace EchoProtocol.RelayA
 
         private string BuildInstabilityReason(RelayASnapshot snapshot)
         {
-            if (!snapshot.IsRunning) return snapshot.IsOnline ? "Relay A is locked online." : "System offline. Start stabilization.";
-            if (snapshot.IsStable) return "All readings inside safe band.";
-            if (snapshot.IsDangerous) return "Danger threshold exceeded. Stabilizer timer reset.";
-            return $"Signal outside safe band. Grace: {snapshot.InstabilityGraceRemaining:0.0}s";
+            if (!snapshot.IsRunning) return snapshot.IsOnline ? "Relay A online." : "Keep all three readings inside their safe bands, then start.";
+            var config = _controller != null ? _controller.Config : null;
+            if (snapshot.IsDangerous)
+            {
+                if (config != null && config.IsVoltageDangerous(snapshot.Outputs.Voltage))
+                    return "Voltage exceeded danger range. Stability reset.";
+                if (config != null && config.IsFrequencyDangerous(snapshot.Outputs.Frequency))
+                    return "Frequency exceeded danger range. Stability reset.";
+                if (config != null && config.IsLoadDangerous(snapshot.Outputs.LoadBalance))
+                    return "Load exceeded danger range. Stability reset.";
+                return "Danger threshold exceeded. Stability reset.";
+            }
+            if (snapshot.IsStable)
+                return $"Readings stable. Hold for {Mathf.Max(0f, snapshot.StabilityRequiredSeconds - snapshot.StabilitySeconds):0.0}s.";
+            if (config != null)
+            {
+                if (!config.IsVoltageSafe(snapshot.Outputs.Voltage)) return "Voltage outside safe band; adjust generator.";
+                if (!config.IsFrequencySafe(snapshot.Outputs.Frequency)) return "Frequency outside safe band; adjust regulator.";
+                if (!config.IsLoadSafe(snapshot.Outputs.LoadBalance)) return "Load outside safe band; adjust distribution.";
+            }
+            return $"Unstable output. Grace: {snapshot.InstabilityGraceRemaining:0.0}s.";
         }
 
         private string BuildFaultTimer(RelayASnapshot snapshot)

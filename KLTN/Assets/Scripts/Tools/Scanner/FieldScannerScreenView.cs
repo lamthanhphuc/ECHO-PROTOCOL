@@ -168,7 +168,7 @@ namespace EchoProtocol.Tools.Scanner
             // 1. Header
             string headerText = mode == FieldScannerMode.Core
                 ? "FIELD SCANNER\n<color=#40E0D0>[ CORE MODE ]</color>"
-                : "FIELD SCANNER\n<color=#FF7F50>[ MOTION MODE ]</color>";
+                : "FIELD SCANNER\n<color=#FF7F50>[ MONSTER MODE ]</color>";
             SetHeaderText(headerText);
 
             // 2. Radar & Signal
@@ -198,12 +198,12 @@ namespace EchoProtocol.Tools.Scanner
                 {
                     var res = _boundScanner.CurrentMotionResult;
                     SetRadarText(BuildMotionRadarString(res));
-                    SetSignalText("<color=#FF4500>MOTION DETECTED</color>");
+                    SetSignalText("<color=#FF4500>MONSTER DETECTED</color>");
                 }
                 else if (hasResult)
                 {
                     SetRadarText("\n   ▲\n");
-                    SetSignalText("<color=#888888>NO MOTION DETECTED</color>");
+                    SetSignalText("<color=#888888>NO MONSTER MOTION</color>");
                 }
                 else
                 {

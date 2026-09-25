@@ -113,6 +113,26 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("Zone2Stage = Zone2MissionStage.RepairRelays", source);
         }
 
+        [Test]
+        public void MATCH_NET_SecurityHoldAccumulatesAcrossUpToFourValidParticipants()
+        {
+            var source = LoadNetworkMatchStateSource();
+
+            StringAssert.Contains("SecurityHoldOperator4", source);
+            StringAssert.Contains("SecurityHoldParticipantCount >= 4", source);
+            StringAssert.Contains("SecurityHoldAccumulatedSeconds + Runner.DeltaTime * SecurityHoldWorkRate(participants)", source);
+            StringAssert.Contains("1 => 1f", source);
+            StringAssert.Contains("2 => 1.2f", source);
+            StringAssert.Contains("3 => 1.5f", source);
+            StringAssert.Contains("4 => 2f", source);
+            StringAssert.Contains("TryValidateZone2Requester(player, director.SecurityTerminal", source);
+            StringAssert.Contains("RemoveSecurityHoldParticipant(player)", source);
+            StringAssert.Contains("RpcRefreshSecurityHold", source);
+            StringAssert.Contains("_securityHoldLeases[index].ExpiredOrNotRunning(Runner)", source);
+            StringAssert.Contains("if (player.IsNone) _securityHoldLeases[index] = TickTimer.None", source);
+            StringAssert.DoesNotContain("SecurityHoldTimer", source);
+        }
+
         private static string LoadNetworkMatchStateSource()
         {
             return File.ReadAllText(MatchSourcePath);

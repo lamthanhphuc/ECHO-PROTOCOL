@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 using EchoProtocol.Networking;
 
 namespace EchoProtocol.UI.HUD
@@ -15,19 +16,23 @@ namespace EchoProtocol.UI.HUD
         [Header("Stamina UI")]
         [SerializeField] private Image staminaBarFill;
         [SerializeField] private Text staminaValueText;
+        [SerializeField] private TMP_Text staminaValueTmp;
         [SerializeField] private Color staminaNormalColor = new Color(0f, 0.9f, 1f, 1f);
         [SerializeField] private Color staminaLowColor = new Color(1f, 0.3f, 0.1f, 1f);
 
         [Header("Status UI")]
         [SerializeField] private Image statusBadgeBg;
         [SerializeField] private Text statusLabelText;
+        [SerializeField] private TMP_Text statusLabelTmp;
         [SerializeField] private GameObject bleedoutContainer;
         [SerializeField] private Image bleedoutBarFill;
         [SerializeField] private Text bleedoutTimerText;
+        [SerializeField] private TMP_Text bleedoutTimerTmp;
 
         [Header("Noise Indicator UI")]
         [SerializeField] private Image noiseIcon;
         [SerializeField] private Text noiseLabel;
+        [SerializeField] private TMP_Text noiseLabelTmp;
         [SerializeField] private CanvasGroup noiseCanvasGroup;
 
         private float _displayStamina = 1f;
@@ -73,6 +78,7 @@ namespace EchoProtocol.UI.HUD
             if (bleedoutContainer != null)
             {
                 bleedoutContainer.SetActive(false);
+                bleedoutContainer.transform.localScale = Vector3.one;
             }
         }
 
@@ -101,6 +107,11 @@ namespace EchoProtocol.UI.HUD
                     carrier.CarryNoiseEmitted += OnCarryNoise;
                 }
             }
+
+            if (staminaValueTmp == null && staminaValueText != null) staminaValueTmp = staminaValueText.GetComponent<TMP_Text>();
+            if (statusLabelTmp == null && statusLabelText != null) statusLabelTmp = statusLabelText.GetComponent<TMP_Text>();
+            if (bleedoutTimerTmp == null && bleedoutTimerText != null) bleedoutTimerTmp = bleedoutTimerText.GetComponent<TMP_Text>();
+            if (noiseLabelTmp == null && noiseLabel != null) noiseLabelTmp = noiseLabel.GetComponent<TMP_Text>();
         }
 
         private void UpdateStamina()
@@ -118,23 +129,12 @@ namespace EchoProtocol.UI.HUD
                 staminaBarFill.color = Color.Lerp(staminaLowColor, staminaNormalColor, Mathf.Clamp01(_displayStamina * 2.5f));
             }
 
-            if (staminaValueText != null)
-            {
-                staminaValueText.text = $"{Mathf.RoundToInt(_displayStamina * 100f)}%";
-            }
+            SetText(staminaValueTmp, staminaValueText, $"{Mathf.RoundToInt(_displayStamina * 100f)}%");
         }
 
         private void UpdateStatus()
         {
             if (downState == null) return;
-            if (downState == null)
-            {
-                if (bleedoutContainer != null && bleedoutContainer.activeSelf)
-                {
-                    bleedoutContainer.SetActive(false);
-                }
-                return;
-            }
 
             PlayerLifeState life = downState.State;
             _flashTimer += Time.deltaTime * 5f;
@@ -143,16 +143,24 @@ namespace EchoProtocol.UI.HUD
             if (life == PlayerLifeState.Spectating)
             {
                 SetStatusBadge("ĐANG QUAN SÁT (SPECTATOR)", "#B388FF", new Color(0.7f, 0.5f, 1f, 0.3f));
-                if (bleedoutContainer != null) bleedoutContainer.SetActive(false);
+                if (bleedoutContainer != null)
+                {
+                    bleedoutContainer.SetActive(false);
+                    bleedoutContainer.transform.localScale = Vector3.one;
+                }
             }
             else if (life == PlayerLifeState.Eliminated)
             {
                 SetStatusBadge("ĐÃ TỬ VONG", "#D50000", new Color(0.8f, 0.1f, 0.1f, 0.4f));
-                if (bleedoutContainer != null) bleedoutContainer.SetActive(false);
+                if (bleedoutContainer != null)
+                {
+                    bleedoutContainer.SetActive(false);
+                    bleedoutContainer.transform.localScale = Vector3.one;
+                }
             }
             else if (life == PlayerLifeState.Downed)
             {
-                // Downed state with bleedout countdown
+                // Downed state with bleedout countdown and heartbeat pulse
                 float bleedout = downState.BleedoutRemaining;
                 float bleedout01 = downState.Bleedout01;
 
@@ -162,21 +170,29 @@ namespace EchoProtocol.UI.HUD
                 if (bleedoutContainer != null)
                 {
                     bleedoutContainer.SetActive(true);
+
+                    // Dynamic Heartbeat Pulse: speeds up when bleedout is critically low (< 10s)
+                    float pulseRate = bleedout < 10f ? 12f : 6f;
+                    float pulseScale = 1f + 0.08f * Mathf.Sin(Time.time * pulseRate);
+                    bleedoutContainer.transform.localScale = new Vector3(pulseScale, pulseScale, 1f);
+
                     if (bleedoutBarFill != null)
                     {
                         bleedoutBarFill.fillAmount = bleedout01;
                         bleedoutBarFill.color = Color.Lerp(new Color(1f, 0.1f, 0.1f), new Color(1f, 0.6f, 0.1f), bleedout01);
                     }
-                    if (bleedoutTimerText != null)
-                    {
-                        bleedoutTimerText.text = $"HẾT MÁU SAU: {bleedout:F1}s";
-                    }
+
+                    SetText(bleedoutTimerTmp, bleedoutTimerText, $"HẾT MÁU SAU: {bleedout:F1}s");
                 }
             }
             else
             {
                 // Active: check health
-                if (bleedoutContainer != null) bleedoutContainer.SetActive(false);
+                if (bleedoutContainer != null)
+                {
+                    bleedoutContainer.SetActive(false);
+                    bleedoutContainer.transform.localScale = Vector3.one;
+                }
 
                 if (downState.Health < 75f)
                 {
@@ -191,10 +207,7 @@ namespace EchoProtocol.UI.HUD
 
         private void SetStatusBadge(string label, string hexColor, Color bgColor)
         {
-            if (statusLabelText != null)
-            {
-                statusLabelText.text = $"<color={hexColor}><b>{label}</b></color>";
-            }
+            SetText(statusLabelTmp, statusLabelText, $"<color={hexColor}><b>{label}</b></color>");
 
             if (statusBadgeBg != null)
             {
@@ -224,20 +237,27 @@ namespace EchoProtocol.UI.HUD
 
             if (noiseIcon != null)
             {
-                float pulse = 1f + 0.15f * Mathf.Sin(Time.time * 15f);
-                noiseIcon.transform.localScale = Vector3.one * (1f + (_noiseIntensity * 0.25f * pulse));
-                noiseIcon.color = Color.Lerp(new Color(1f, 0.8f, 0.2f, 0.6f), new Color(1f, 0.2f, 0.2f, 1f), _noiseIntensity);
+                // Sound pulse wave animation
+                float pulse = 1f + 0.22f * Mathf.Sin(Time.time * 16f);
+                noiseIcon.transform.localScale = Vector3.one * (1f + (_noiseIntensity * 0.3f * pulse));
+                noiseIcon.color = Color.Lerp(new Color(1f, 0.8f, 0.2f, 0.6f), new Color(1f, 0.15f, 0.15f, 1f), _noiseIntensity);
             }
 
-            if (noiseLabel != null)
-            {
-                noiseLabel.text = isCarryMoving ? "TIẾNG ĐỘNG // VÁC NẶNG" : "TIẾNG ĐỘNG // CHẠY NHANH";
-            }
+            string noiseDesc = isCarryMoving
+                ? "CẢNH BÁO TIẾNG ĐỘNG // VÁC NẶNG [BÁN KÍNH CAO]"
+                : "CẢNH BÁO TIẾNG ĐỘNG // BƯỚC CHẠY GÂY CHÚ Ý STALKER";
+            SetText(noiseLabelTmp, noiseLabel, noiseDesc);
         }
 
         private void OnCarryNoise(PlayerEnergyCoreCarrier carrierObj)
         {
             _noiseIntensity = 1f;
+        }
+
+        private static void SetText(TMP_Text tmp, Text legacy, string content)
+        {
+            if (tmp != null) tmp.text = content;
+            if (legacy != null) legacy.text = content;
         }
     }
 }

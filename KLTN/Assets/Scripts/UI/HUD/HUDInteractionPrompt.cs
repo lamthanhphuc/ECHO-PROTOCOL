@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 using EchoProtocol.Networking;
 
 namespace EchoProtocol.UI.HUD
@@ -10,17 +11,21 @@ namespace EchoProtocol.UI.HUD
         [SerializeField] private PlayerInteraction playerInteraction;
         [SerializeField] private NetworkPlayerInteractor networkPlayerInteractor;
         [SerializeField] private CanvasGroup promptCanvasGroup;
+        [SerializeField] private Image promptBackgroundPlate;
         [SerializeField] private Text promptText;
+        [SerializeField] private TMP_Text promptTmp;
         [SerializeField] private GameObject holdProgressContainer;
         [SerializeField] private Image holdProgressRing;
         [SerializeField] private Text holdProgressText;
+        [SerializeField] private TMP_Text holdProgressTmp;
 
         [Header("Settings")]
-        [SerializeField] private float fadeSpeed = 12f;
+        [SerializeField] private float fadeSpeed = 14f;
         [SerializeField] private Color normalPromptColor = new Color(0f, 0.9f, 1f, 1f);
         [SerializeField] private Color holdPromptColor = new Color(1f, 0.7f, 0.1f, 1f);
 
         private float _targetAlpha;
+        private bool _completedTriggered;
 
         public void BindInteraction(PlayerInteraction interaction)
         {
@@ -43,6 +48,44 @@ namespace EchoProtocol.UI.HUD
                 promptCanvasGroup.alpha = 0f;
                 promptCanvasGroup.interactable = false;
                 promptCanvasGroup.blocksRaycasts = false;
+            }
+
+            ResolveComponents();
+        }
+
+        private void ResolveComponents()
+        {
+            if (promptTmp == null && promptText != null)
+            {
+                promptTmp = promptText.GetComponent<TMP_Text>();
+            }
+            if (holdProgressTmp == null && holdProgressText != null)
+            {
+                holdProgressTmp = holdProgressText.GetComponent<TMP_Text>();
+            }
+            if (promptBackgroundPlate == null)
+            {
+                // Find background plate if present
+                var images = GetComponentsInChildren<Image>(true);
+                for (int i = 0; i < images.Length; i++)
+                {
+                    if (images[i] != holdProgressRing && images[i].gameObject != gameObject)
+                    {
+                        promptBackgroundPlate = images[i];
+                        break;
+                    }
+                }
+            }
+
+            if (promptBackgroundPlate != null)
+            {
+                // Ensure good contrast background plate
+                Color plateColor = promptBackgroundPlate.color;
+                if (plateColor.a < 0.6f)
+                {
+                    plateColor.a = 0.85f;
+                    promptBackgroundPlate.color = plateColor;
+                }
             }
         }
 
@@ -168,19 +211,18 @@ namespace EchoProtocol.UI.HUD
                     fadeSpeed * Time.deltaTime);
             }
 
-            if (promptText != null)
-            {
-                string keyColorHex = isHold ? "#FFB300" : "#00E5FF";
-                string keyLabel = "[E]";
-                
-                // Clean existing [E] or [E GIỮ] if present in source prompt
-                string cleanPrompt = prompt.Replace("[E GIỮ]", "").Replace("[E]", "").Replace("[E ]", "").Trim();
-                promptText.text = isHold
-                    ? $"<color={keyColorHex}><b>{keyLabel}</b></color>  {cleanPrompt} <color=#FFB300>(Giữ)</color>"
-                    : $"<color={keyColorHex}><b>{keyLabel}</b></color>  {cleanPrompt}";
-            }
+            string keyColorHex = isHold ? "#FFB300" : "#00E5FF";
+            string keyLabel = "[E]";
 
-            // Update Radial Progress
+            // Clean existing [E] or [E GIỮ] if present in source prompt
+            string cleanPrompt = prompt.Replace("[E GIỮ]", "").Replace("[E]", "").Replace("[E ]", "").Trim();
+            string formattedText = isHold
+                ? $"<color={keyColorHex}><b>{keyLabel}</b></color>  {cleanPrompt} <color=#FFB300>(Giữ)</color>"
+                : $"<color={keyColorHex}><b>{keyLabel}</b></color>  {cleanPrompt}";
+
+            SetText(promptTmp, promptText, formattedText);
+
+            // Update Radial Progress with enhanced feedback
             if (holdProgressContainer != null)
             {
                 bool showProgress = isHold && progress01 > 0f;
@@ -191,11 +233,23 @@ namespace EchoProtocol.UI.HUD
                     if (holdProgressRing != null)
                     {
                         holdProgressRing.fillAmount = progress01;
+                        // Transition color from amber towards bright cyan/green as completion nears
+                        holdProgressRing.color = Color.Lerp(holdPromptColor, new Color(0f, 1f, 0.6f, 1f), progress01);
+
+                        // Subtle breathing pulse during hold
+                        float pulse = 1f + 0.05f * Mathf.Sin(Time.time * 12f);
+                        holdProgressRing.transform.localScale = Vector3.one * pulse;
                     }
 
-                    if (holdProgressText != null)
+                    SetText(holdProgressTmp, holdProgressText, $"{Mathf.RoundToInt(progress01 * 100f)}%");
+
+                    if (progress01 >= 0.99f && !_completedTriggered)
                     {
-                        holdProgressText.text = $"{Mathf.RoundToInt(progress01 * 100f)}%";
+                        _completedTriggered = true;
+                    }
+                    else if (progress01 < 0.99f)
+                    {
+                        _completedTriggered = false;
                     }
                 }
             }
@@ -204,6 +258,7 @@ namespace EchoProtocol.UI.HUD
         private void HidePrompt()
         {
             _targetAlpha = 0f;
+            _completedTriggered = false;
             SetAlpha(Mathf.MoveTowards(
                 promptCanvasGroup != null ? promptCanvasGroup.alpha : 0f,
                 0f,
@@ -218,6 +273,7 @@ namespace EchoProtocol.UI.HUD
         private void HidePromptImmediate()
         {
             _targetAlpha = 0f;
+            _completedTriggered = false;
             SetAlpha(0f);
             if (holdProgressContainer != null && holdProgressContainer.activeSelf)
             {
@@ -231,6 +287,12 @@ namespace EchoProtocol.UI.HUD
             {
                 promptCanvasGroup.alpha = alpha;
             }
+        }
+
+        private static void SetText(TMP_Text tmp, Text legacy, string content)
+        {
+            if (tmp != null) tmp.text = content;
+            if (legacy != null) legacy.text = content;
         }
     }
 }

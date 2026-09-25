@@ -913,7 +913,7 @@ namespace EchoProtocol.Networking
             {
                 AudioSource.PlayClipAtPoint(_doorBreakClip, transform.position);
             }
-            else EchoProtocol.Audio.GameAudioRuntime.AtPoint("stalker/door_break", transform.position);
+            else EchoProtocol.Audio.GameAudioRuntime.AtPoint("map_ambience/distant_metal_bang", transform.position);
         }
 
         private void PlayJammerDeployAudio()

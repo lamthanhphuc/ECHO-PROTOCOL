@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 namespace EchoProtocol.UI.HUD
 {
@@ -14,16 +15,26 @@ namespace EchoProtocol.UI.HUD
             public Image background;
             public Image accentBar;
             public Text nameText;
+            public TMP_Text nameTmp;
             public Image statusBadgeBg;
             public Text statusText;
+            public TMP_Text statusTmp;
             public Image coreCarryIcon;
             public Image healthFill;
             public Text distanceText;
+            public TMP_Text distanceTmp;
 
             [HideInInspector] public PlayerDownState boundPlayer;
             [HideInInspector] public PlayerEnergyCoreCarrier boundCarrier;
             [HideInInspector] public string simulatedName;
             [HideInInspector] public bool isSimulated;
+
+            public void ResolveComponents()
+            {
+                if (nameTmp == null && nameText != null) nameTmp = nameText.GetComponent<TMP_Text>();
+                if (statusTmp == null && statusText != null) statusTmp = statusText.GetComponent<TMP_Text>();
+                if (distanceTmp == null && distanceText != null) distanceTmp = distanceText.GetComponent<TMP_Text>();
+            }
         }
 
         [Header("UI Slots (Up to 4 players)")]
@@ -62,9 +73,13 @@ namespace EchoProtocol.UI.HUD
             {
                 for (int i = 0; i < slots.Length; i++)
                 {
-                    if (slots[i]?.root != null)
+                    if (slots[i] != null)
                     {
-                        slots[i].root.SetActive(false);
+                        slots[i].ResolveComponents();
+                        if (slots[i].root != null)
+                        {
+                            slots[i].root.SetActive(false);
+                        }
                     }
                 }
             }
@@ -127,6 +142,7 @@ namespace EchoProtocol.UI.HUD
             for (int i = 0; i < slots.Length; i++)
             {
                 if (slots[i] == null) continue;
+                slots[i].ResolveComponents();
 
                 if (i < realPlayerCount)
                 {
@@ -138,16 +154,16 @@ namespace EchoProtocol.UI.HUD
                 }
                 else if (simulateTeammatesIfSolo && realPlayerCount <= 1)
                 {
-                    // Provide 3 simulated teammates if solo testing to showcase complete 4-player HUD
+                    // Provide 3 simulated teammates if solo testing
                     slots[i].boundPlayer = null;
                     slots[i].boundCarrier = null;
                     slots[i].isSimulated = true;
                     slots[i].simulatedName = i switch
                     {
-                        1 => "Đồng đội 2 (Alex)",
-                        2 => "Đồng đội 3 (Kael)",
-                        3 => "Đồng đội 4 (Elena)",
-                        _ => $"Đồng đội {i + 1}"
+                        1 => "Operative 2 (Alex)",
+                        2 => "Operative 3 (Kael)",
+                        3 => "Operative 4 (Elena)",
+                        _ => $"Operative {i + 1}"
                     };
                     if (slots[i].root != null) slots[i].root.SetActive(true);
                 }
@@ -184,8 +200,8 @@ namespace EchoProtocol.UI.HUD
         private void UpdateRealPlayerSlot(TeammateSlotUI slot, int index)
         {
             PlayerDownState p = slot.boundPlayer;
-            string displayName = index == 0 ? $"Bạn (P{index + 1})" : $"P{index + 1} ({p.name})";
-            if (slot.nameText != null) slot.nameText.text = displayName;
+            string displayName = index == 0 ? $"YOU (P{index + 1})" : $"P{index + 1} ({p.name})";
+            SetSlotName(slot, displayName);
 
             bool isCarrying = slot.boundCarrier != null && slot.boundCarrier.IsCarrying;
             if (slot.coreCarryIcon != null) slot.coreCarryIcon.gameObject.SetActive(isCarrying);
@@ -194,74 +210,97 @@ namespace EchoProtocol.UI.HUD
 
             if (matchWon && !p.IsEliminated)
             {
-                ApplySlotStatus(slot, "ĐÃ THOÁT", escapedColor);
+                ApplySlotStatus(slot, "EXTRACTED", escapedColor);
                 if (slot.healthFill != null) slot.healthFill.fillAmount = 1f;
+                ResetSlotScale(slot);
             }
             else if (p.IsDowned)
             {
+                // Emergency Flash for Downed Teammate
                 float bleedout = p.BleedoutRemaining;
-                bool flash = Mathf.PingPong(Time.time * 3.5f, 1f) > 0.3f;
-                Color statusCol = flash ? downedColor : new Color(0.8f, 0.1f, 0.1f, 0.6f);
+                bool flash = Mathf.PingPong(Time.time * 6f, 1f) > 0.35f;
+                Color statusCol = flash ? downedColor : new Color(0.5f, 0.05f, 0.05f, 0.8f);
 
-                ApplySlotStatus(slot, $"HẤP HỐI ({bleedout:F0}s)", statusCol);
+                ApplySlotStatus(slot, $"DOWNED ({bleedout:F0}s)", statusCol);
                 if (slot.healthFill != null)
                 {
                     slot.healthFill.fillAmount = p.Bleedout01;
                     slot.healthFill.color = downedColor;
                 }
+
+                // Visual punch scale on emergency
+                if (slot.root != null)
+                {
+                    float punch = 1f + (flash ? 0.035f : 0f);
+                    slot.root.transform.localScale = new Vector3(punch, punch, 1f);
+                }
             }
             else if (p.IsEliminated)
             {
-                ApplySlotStatus(slot, "TỬ VONG", eliminatedColor);
+                ApplySlotStatus(slot, "KIA", eliminatedColor);
                 if (slot.healthFill != null)
                 {
                     slot.healthFill.fillAmount = 0f;
                     slot.healthFill.color = eliminatedColor;
                 }
+                ResetSlotScale(slot);
             }
             else if (isCarrying)
             {
-                ApplySlotStatus(slot, "VÁC CORE", carryingColor);
+                ApplySlotStatus(slot, "CARRYING CORE", carryingColor);
                 if (slot.healthFill != null)
                 {
                     slot.healthFill.fillAmount = Mathf.Clamp01(p.Health / 100f);
                     slot.healthFill.color = carryingColor;
                 }
+                ResetSlotScale(slot);
             }
             else
             {
-                ApplySlotStatus(slot, "KHỎE MẠNH", healthyColor);
-                if (slot.healthFill != null)
+                if (p.Health < 50f)
                 {
-                    slot.healthFill.fillAmount = Mathf.Clamp01(p.Health / 100f);
-                    slot.healthFill.color = healthyColor;
-                }
-            }
-
-            // Distance text
-            if (slot.distanceText != null)
-            {
-                if (index == 0 || _mainCamera == null)
-                {
-                    slot.distanceText.gameObject.SetActive(false);
+                    ApplySlotStatus(slot, "INJURED", new Color(1f, 0.7f, 0.1f, 1f));
                 }
                 else
                 {
-                    slot.distanceText.gameObject.SetActive(true);
-                    float dist = Vector3.Distance(_mainCamera.transform.position, p.transform.position);
-                    slot.distanceText.text = $"{dist:F0}m";
+                    ApplySlotStatus(slot, "OPERATIONAL", healthyColor);
                 }
+
+                if (slot.healthFill != null)
+                {
+                    slot.healthFill.fillAmount = Mathf.Clamp01(p.Health / 100f);
+                    slot.healthFill.color = p.Health < 50f ? new Color(1f, 0.7f, 0.1f, 1f) : healthyColor;
+                }
+                ResetSlotScale(slot);
+            }
+
+            // Distance text with danger warning formatting
+            if (index == 0 || _mainCamera == null)
+            {
+                SetDistanceActive(slot, false);
+            }
+            else
+            {
+                SetDistanceActive(slot, true);
+                float dist = Vector3.Distance(_mainCamera.transform.position, p.transform.position);
+                string distStr = $"{dist:F0}m";
+                if (p.IsDowned || dist > 35f)
+                {
+                    distStr = $"<color=#FFB300>{distStr}</color>";
+                }
+                SetDistanceText(slot, distStr);
             }
         }
 
         private void UpdateSimulatedSlot(TeammateSlotUI slot, int index)
         {
-            if (slot.nameText != null) slot.nameText.text = slot.simulatedName;
+            SetSlotName(slot, slot.simulatedName);
+            ResetSlotScale(slot);
 
             bool matchWon = _matchFlow != null && _matchFlow.Phase == MatchPhase.Win;
             if (matchWon)
             {
-                ApplySlotStatus(slot, "ĐÃ THOÁT", escapedColor);
+                ApplySlotStatus(slot, "EXTRACTED", escapedColor);
                 if (slot.healthFill != null) slot.healthFill.fillAmount = 1f;
                 return;
             }
@@ -269,42 +308,50 @@ namespace EchoProtocol.UI.HUD
             switch (index)
             {
                 case 1: // Teammate 2: Carrying Core
-                    ApplySlotStatus(slot, "VÁC CORE", carryingColor);
+                    ApplySlotStatus(slot, "CARRYING CORE", carryingColor);
                     if (slot.coreCarryIcon != null) slot.coreCarryIcon.gameObject.SetActive(true);
                     if (slot.healthFill != null)
                     {
                         slot.healthFill.fillAmount = 0.85f;
                         slot.healthFill.color = carryingColor;
                     }
-                    if (slot.distanceText != null) { slot.distanceText.gameObject.SetActive(true); slot.distanceText.text = "14m"; }
+                    SetDistanceActive(slot, true);
+                    SetDistanceText(slot, "14m");
                     break;
 
-                case 2: // Teammate 3: Healthy
-                    ApplySlotStatus(slot, "KHỎE MẠNH", healthyColor);
+                case 2: // Teammate 3: Operational
+                    ApplySlotStatus(slot, "OPERATIONAL", healthyColor);
                     if (slot.coreCarryIcon != null) slot.coreCarryIcon.gameObject.SetActive(false);
                     if (slot.healthFill != null)
                     {
                         slot.healthFill.fillAmount = 1.0f;
                         slot.healthFill.color = healthyColor;
                     }
-                    if (slot.distanceText != null) { slot.distanceText.gameObject.SetActive(true); slot.distanceText.text = "22m"; }
+                    SetDistanceActive(slot, true);
+                    SetDistanceText(slot, "22m");
                     break;
 
-                case 3: // Teammate 4: Healthy
-                    ApplySlotStatus(slot, "KHỎE MẠNH", healthyColor);
+                case 3: // Teammate 4: Operational
+                    ApplySlotStatus(slot, "OPERATIONAL", healthyColor);
                     if (slot.coreCarryIcon != null) slot.coreCarryIcon.gameObject.SetActive(false);
                     if (slot.healthFill != null)
                     {
                         slot.healthFill.fillAmount = 0.95f;
                         slot.healthFill.color = healthyColor;
                     }
-                    if (slot.distanceText != null) { slot.distanceText.gameObject.SetActive(true); slot.distanceText.text = "31m"; }
+                    SetDistanceActive(slot, true);
+                    SetDistanceText(slot, "31m");
                     break;
             }
         }
 
         private void ApplySlotStatus(TeammateSlotUI slot, string status, Color color)
         {
+            if (slot.statusTmp != null)
+            {
+                slot.statusTmp.text = status;
+                slot.statusTmp.color = color;
+            }
             if (slot.statusText != null)
             {
                 slot.statusText.text = status;
@@ -313,12 +360,38 @@ namespace EchoProtocol.UI.HUD
 
             if (slot.statusBadgeBg != null)
             {
-                slot.statusBadgeBg.color = new Color(color.r, color.g, color.b, 0.2f);
+                slot.statusBadgeBg.color = new Color(color.r, color.g, color.b, 0.22f);
             }
 
             if (slot.accentBar != null)
             {
                 slot.accentBar.color = color;
+            }
+        }
+
+        private static void SetSlotName(TeammateSlotUI slot, string name)
+        {
+            if (slot.nameTmp != null) slot.nameTmp.text = name;
+            if (slot.nameText != null) slot.nameText.text = name;
+        }
+
+        private static void SetDistanceText(TeammateSlotUI slot, string dist)
+        {
+            if (slot.distanceTmp != null) slot.distanceTmp.text = dist;
+            if (slot.distanceText != null) slot.distanceText.text = dist;
+        }
+
+        private static void SetDistanceActive(TeammateSlotUI slot, bool active)
+        {
+            if (slot.distanceTmp != null) slot.distanceTmp.gameObject.SetActive(active);
+            if (slot.distanceText != null) slot.distanceText.gameObject.SetActive(active);
+        }
+
+        private static void ResetSlotScale(TeammateSlotUI slot)
+        {
+            if (slot?.root != null && slot.root.transform.localScale != Vector3.one)
+            {
+                slot.root.transform.localScale = Vector3.one;
             }
         }
     }

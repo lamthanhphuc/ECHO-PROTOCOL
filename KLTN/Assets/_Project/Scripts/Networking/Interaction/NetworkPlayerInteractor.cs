@@ -67,6 +67,7 @@ namespace EchoProtocol.Networking
             _suppressInteractionPrompt = suppressed;
             if (suppressed)
             {
+                if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
                 CurrentCandidate = null;
                 _currentReviveTarget = null;
             }
@@ -144,8 +145,9 @@ namespace EchoProtocol.Networking
 
         private void Update()
         {
-            if (_suppressInteractionPrompt)
+            if (_suppressInteractionPrompt || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject))
             {
+                if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
                 CurrentCandidate = null;
                 _currentReviveTarget = null;
                 return;

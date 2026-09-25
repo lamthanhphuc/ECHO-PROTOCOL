@@ -112,8 +112,10 @@ namespace EchoProtocol.RelayB
 
         private void OnDestroy()
         {
-            _controlLock.Release();
+            Close();
         }
+
+        private void OnDisable() => Close();
 
         private void Update()
         {
@@ -122,16 +124,13 @@ namespace EchoProtocol.RelayB
                 return;
             }
 
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
-
             if (_controlLock.ShouldAutoRelease())
             {
                 Close();
                 return;
             }
 
-            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+            if (_controlLock.ConsumeEscape())
             {
                 Close();
             }
@@ -156,12 +155,14 @@ namespace EchoProtocol.RelayB
                 }
             }
 
-            _controlLock.Acquire(interactor);
+            _controlLock.Acquire(interactor, Close);
+            if (!_controlLock.IsLocked) return;
             SetVisible(true);
         }
 
         public void Close()
         {
+            if (!_controlLock.IsLocked && !IsOpen) return;
             if (TryGetNetworkDirector(out var director)) director.RequestRelayRelease(_controller);
             SetVisible(false);
             _controlLock.Release();
@@ -200,7 +201,7 @@ namespace EchoProtocol.RelayB
             // Header
             SetText(facilityLabel, "ECHO FACILITY");
             SetText(relayLabel, snapshot.IsOnline ? "DATA RELAY B – ONLINE" : "DATA RELAY B");
-            SetText(modeLabel, snapshot.IsOnline ? "SECURITY NETWORK CONNECTED" : "SIGNAL SYNCHRONIZATION");
+            SetText(modeLabel, snapshot.IsOnline ? "SECURITY NETWORK CONNECTED" : "SCAN, MATCH CHANNEL, ALIGN FREQUENCY AND PHASE");
             SetText(statusLabel, StatusToDisplayString(snapshot.Status));
             if (statusLabel != null)
             {
@@ -317,8 +318,16 @@ namespace EchoProtocol.RelayB
                 }
                 else if (snapshot.Status == RelayBStatus.ConnectionLost)
                 {
-                    warningBannerText.text = "CONNECTION LOST: SIGNAL DESYNCHRONIZED";
+                    warningBannerText.text = !freqPass ? "SIGNAL LOST: FREQUENCY OUT OF RANGE"
+                        : !phasePass ? "SIGNAL LOST: PHASE MISALIGNED"
+                        : "SIGNAL LOST: CHANNEL OR WAVEFORM MISMATCH";
                     warningBannerText.color = dangerColor;
+                    warningBannerText.gameObject.SetActive(true);
+                }
+                else if (snapshot.Status == RelayBStatus.Synchronizing)
+                {
+                    warningBannerText.text = $"SYNC HOLD: {Mathf.Max(0f, snapshot.HoldRequiredSeconds - snapshot.SyncProgressSeconds):0.0}s REMAINING";
+                    warningBannerText.color = referenceColor;
                     warningBannerText.gameObject.SetActive(true);
                 }
                 else if (snapshot.IsSynchronized && snapshot.Status != RelayBStatus.Synchronizing)
@@ -329,8 +338,9 @@ namespace EchoProtocol.RelayB
                 }
                 else
                 {
-                    warningBannerText.text = string.Empty;
-                    warningBannerText.gameObject.SetActive(false);
+                    warningBannerText.text = "SCAN CHANNELS, THEN ALIGN FREQUENCY AND PHASE";
+                    warningBannerText.color = offlineColor;
+                    warningBannerText.gameObject.SetActive(true);
                 }
             }
 
