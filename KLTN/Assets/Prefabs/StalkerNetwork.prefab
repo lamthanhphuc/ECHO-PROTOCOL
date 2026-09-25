@@ -199,6 +199,7 @@ MonoBehaviour:
     postChaseCooldownSeconds: 18
     postAttackCooldownSeconds: 22
     sameRoomPressureCooldownSeconds: 15
+    seekPlayersAfterSeconds: 180
   useScenarioMonsterOverrides: 0
   patrolSpeed: 7
   chaseSpeed: 8
