@@ -27,7 +27,7 @@ namespace EchoProtocol.UI.MainMenu
     [SerializeField] private Button package5500Button;
     [SerializeField] private GameObject shopPopup;
     [SerializeField] private GameObject topUpPopup;
-    [SerializeField] private string topUpWebUrl = "http://localhost:3000/wallet";
+    [SerializeField] private string topUpWebUrl = "https://web.3.1.238.6.sslip.io/wallet";
     [SerializeField] private string lobbySceneName = GameConstants.SceneLobby;
     [SerializeField] private string loginSceneName = GameConstants.SceneLogin;
     private int _credits;
