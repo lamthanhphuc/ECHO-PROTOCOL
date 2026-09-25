@@ -342,6 +342,50 @@ namespace EchoProtocol.Tests.MatchFlow
         }
 
         [Test]
+        public void TEST_16b_DoorUnlocked_Disables_Wall_Passage_Collider_Like_Zone1()
+        {
+            var doorParent1 = new GameObject("Wall BayDoor");
+            doorParent1.transform.SetParent(_holder.transform);
+            _doorBlocker1.transform.SetParent(doorParent1.transform);
+
+            var wall1 = new GameObject("LP_Bay_Door_Wall_snaps");
+            wall1.transform.SetParent(doorParent1.transform);
+            var passage1 = wall1.AddComponent<BoxCollider>();
+            passage1.size = new Vector3(0.3f, 9f, 6f);
+            var edge1 = wall1.AddComponent<BoxCollider>();
+            edge1.size = new Vector3(1.03f, 0.87f, 0.19f);
+
+            var doorParent2 = new GameObject("Wall BayDoor (1)");
+            doorParent2.transform.SetParent(_holder.transform);
+            _doorBlocker2.transform.SetParent(doorParent2.transform);
+
+            var wall2 = new GameObject("LP_Bay_Door_Wall_snaps");
+            wall2.transform.SetParent(doorParent2.transform);
+            var passage2 = wall2.AddComponent<BoxCollider>();
+            passage2.size = new Vector3(0.3f, 9f, 6f);
+            var edge2 = wall2.AddComponent<BoxCollider>();
+            edge2.size = new Vector3(1.03f, 0.87f, 0.19f);
+
+            Assert.IsTrue(passage1.enabled);
+            Assert.IsTrue(passage2.enabled);
+
+            _director.ApplyDoorState(true);
+
+            Assert.IsFalse(_doorBlocker1.activeSelf);
+            Assert.IsFalse(_doorBlocker2.activeSelf);
+            Assert.IsFalse(passage1.enabled, "Passage collider 1 must be disabled when door unlocks!");
+            Assert.IsFalse(passage2.enabled, "Passage collider 2 must be disabled when door unlocks!");
+            Assert.IsTrue(edge1.enabled, "Wall edge collider 1 must remain enabled!");
+            Assert.IsTrue(edge2.enabled, "Wall edge collider 2 must remain enabled!");
+
+            _director.ApplyDoorState(false);
+            Assert.IsTrue(_doorBlocker1.activeSelf);
+            Assert.IsTrue(_doorBlocker2.activeSelf);
+            Assert.IsTrue(passage1.enabled, "Passage collider 1 must be re-enabled when door locks!");
+            Assert.IsTrue(passage2.enabled, "Passage collider 2 must be re-enabled when door locks!");
+        }
+
+        [Test]
         public void TEST_17_Late_Join_Presentation_Shows_Correct_Door_State()
         {
             // Simulate late-join receiving unlocked door state

@@ -8,7 +8,7 @@ namespace EchoProtocol.AI.Stalker
     {
         [SerializeField] private Transform visionOrigin;
         [SerializeField] private Transform candidate;
-        [SerializeField] private float visionDistance = 30f;
+        [SerializeField] private float visionDistance = 40f;
         [SerializeField] private float visionAngle = 140f;
         [SerializeField] private LayerMask losBlockerMask = Physics.DefaultRaycastLayers;
 
