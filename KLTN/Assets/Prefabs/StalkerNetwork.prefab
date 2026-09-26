@@ -205,19 +205,19 @@ MonoBehaviour:
     sameRoomPressureCooldownSeconds: 15
     seekPlayersAfterSeconds: 75
   useScenarioMonsterOverrides: 0
-  patrolSpeed: 7
-  chaseSpeed: 8
+  patrolSpeed: 8
+  chaseSpeed: 9
   enableDiagnostics: 0
   candidateBfsDepth: 128
   stalenessHorizon: 15
   stalenessWeight: 1
   connectivityWeight: 0.15
   immediateBacktrackPenalty: 0.75
-  detectionDurationSeconds: 1
+  detectionDurationSeconds: 0.75
   detectionDecayDurationSeconds: 1
   detectTurnSpeedDegrees: 360
   detectionMeterFull: 1
-  detectionFillRate: 1
+  detectionFillRate: 1.3333334
   detectionDecayRate: 1
   searchDuration: 3
   searchRadius: 8
