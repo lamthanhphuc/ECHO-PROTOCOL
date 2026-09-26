@@ -23,13 +23,25 @@ namespace EchoProtocol.Networking
             }
         }
 
+        public static bool Zone2Triggered { get; private set; }
+        public static event System.Action OnZone2Triggered;
+
+        private void OnDestroy()
+        {
+            Zone2Triggered = false;
+        }
+
         private void OnTriggerEnter(Collider other)
         {
             var playerState = other != null ? other.GetComponentInParent<LobbyPlayerState>() : null;
-            if (playerState == null)
+            var playerMovement = other != null ? other.GetComponentInParent<PlayerMovement>() : null;
+            if (playerState == null && playerMovement == null)
             {
                 return;
             }
+
+            Zone2Triggered = true;
+            OnZone2Triggered?.Invoke();
 
             if (_spawner == null)
             {

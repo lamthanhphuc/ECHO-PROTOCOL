@@ -44,6 +44,9 @@ namespace EchoProtocol.Networking
         [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
         public NetworkItemState State { get; private set; }
 
+        public bool IsCarried => State == NetworkItemState.Carried;
+        public bool IsAvailableInWorld => State == NetworkItemState.Available || State == NetworkItemState.Dropped;
+
         [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
         public PlayerRef Holder { get; private set; }
 
@@ -68,6 +71,10 @@ namespace EchoProtocol.Networking
             if (gameObject.name.StartsWith("PF_EnergyCore_Imported", StringComparison.OrdinalIgnoreCase))
             {
                 gameObject.name = $"EnergyCore_Network_{Object.Id}";
+            }
+            if (GetComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>() == null)
+            {
+                gameObject.AddComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>();
             }
             ApplyReplicatedState();
         }

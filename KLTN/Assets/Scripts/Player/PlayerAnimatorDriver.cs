@@ -140,8 +140,11 @@ public class PlayerAnimatorDriver : MonoBehaviour
         animator?.SetTrigger(ReviveHash);
     }
 
+    public bool IsReviving { get; private set; }
+
     public void SetReviving(bool isReviving)
     {
+        IsReviving = isReviving;
         if (animator == null || animator.runtimeAnimatorController == null)
         {
             animator = ResolvePlayableAnimator();

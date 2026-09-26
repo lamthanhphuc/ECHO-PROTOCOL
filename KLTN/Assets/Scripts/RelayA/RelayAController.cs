@@ -32,6 +32,11 @@ namespace EchoProtocol.RelayA
 
         private void Awake()
         {
+            if (GetComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>() == null)
+            {
+                gameObject.AddComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>();
+            }
+
             if (audioSource == null)
             {
                 audioSource = GetComponent<AudioSource>();
