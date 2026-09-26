@@ -1,6 +1,7 @@
 using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
+using System.Collections;
 using EchoProtocol.AI.Common;
 using EchoProtocol.Player;
 using Fusion;
@@ -29,14 +30,20 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject playerPrefab;
         [SerializeField] private Vector3 spawnOrigin = Vector3.zero;
         [SerializeField] private float spawnSpacing = 2f;
+        [SerializeField, Min(1f)] private float reconnectGraceSeconds = 60f;
 
         private readonly FusionPlayerIdentityRegistry _identityRegistry = new FusionPlayerIdentityRegistry();
         private readonly PlayerRuntimeEntityRegistry _entityRegistry = new PlayerRuntimeEntityRegistry();
 
         private NetworkRunner _runner;
         private bool _callbacksRegistered;
+        private readonly Dictionary<PlayerRef, byte[]> _connectionTokens = new();
+        private readonly Dictionary<PlayerRef, Coroutine> _graceTimers = new();
+        private readonly Dictionary<PlayerRef, NetworkObject> _playerObjects = new();
+        private readonly HashSet<PlayerRef> _expiring = new();
 
         public FusionPlayerIdentityRegistry IdentityRegistry => _identityRegistry;
+        public float ReconnectGraceSeconds => reconnectGraceSeconds;
 
         public PlayerRuntimeEntityRegistry EntityRegistry => _entityRegistry;
 
@@ -76,10 +83,36 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            if (runner.TryGetPlayerObject(player, out var existingObject) && existingObject != null)
+            if (!runner.TryGetPlayerObject(player, out var existingObject) || existingObject == null)
+                _playerObjects.TryGetValue(player, out existingObject);
+            if (existingObject == null && NetworkBootstrap.Instance != null
+                && NetworkBootstrap.Instance.State == NetworkSessionState.InMatch)
+            {
+                runner.Disconnect(player);
+                return;
+            }
+            if (existingObject != null)
             {
                 if (IsCommitted(player, existingObject))
                 {
+                    if (existingObject.TryGetComponent<LobbyPlayerState>(out var retained)
+                        && retained.Disconnected)
+                    {
+                        var token = runner.GetPlayerConnectionToken(player);
+                        if (!_connectionTokens.TryGetValue(player, out var previous)
+                            || !TokensMatch(previous, token))
+                        {
+                            runner.Disconnect(player);
+                            return;
+                        }
+                        if (_graceTimers.Remove(player, out var timer)) StopCoroutine(timer);
+                        runner.SetPlayerObject(player, existingObject);
+                        existingObject.AssignInputAuthority(player);
+                        retained.SetDisconnectedAuthoritative(false);
+                        NotifyPlayerObjectCommitted(new FusionPlayerObjectCommit(
+                            player, existingObject, retained.GetComponent<PlayerRuntimeIdentity>().PlayerId));
+                        return;
+                    }
                     RuntimeLog.Log(
                 RuntimeLogCategory.PlayerLifecycle,
                 $"FPL|JOIN_REJECT|player={player}|reason=AlreadyCommitted|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
@@ -168,6 +201,8 @@ namespace EchoProtocol.Networking
             }
 
             var commit = new FusionPlayerObjectCommit(player, spawnedObject, playerId);
+            _connectionTokens[player] = runner.GetPlayerConnectionToken(player);
+            _playerObjects[player] = spawnedObject;
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerLifecycle,
                 $"FPL|JOIN_COMMIT|player={player}|playerId={playerId.Value}");
@@ -189,7 +224,33 @@ namespace EchoProtocol.Networking
             }
 
             _identityRegistry.TryGetPlayerId(player, out var oldPlayerId);
-            runner.TryGetPlayerObject(player, out var playerObject);
+            if (!runner.TryGetPlayerObject(player, out var playerObject) || playerObject == null)
+                _playerObjects.TryGetValue(player, out playerObject);
+
+            if (NetworkBootstrap.Instance != null
+                && NetworkBootstrap.Instance.State == NetworkSessionState.InMatch
+                && !_expiring.Remove(player)
+                && playerObject != null)
+            {
+                if (playerObject.TryGetComponent<LobbyPlayerState>(out var state))
+                {
+                    if (state.CarriedCoreId.IsValid
+                        && runner.TryFindObject(state.CarriedCoreId, out var core)
+                        && core.TryGetComponent<NetworkPickupItem>(out var item))
+                    {
+                        item.TryDrop(player, playerObject.transform.position,
+                            playerObject.transform.rotation, state);
+                    }
+                    state.SetDisconnectedAuthoritative(true);
+                }
+                playerObject.RemoveInputAuthority();
+                if (_graceTimers.Remove(player, out var oldTimer)) StopCoroutine(oldTimer);
+                _graceTimers[player] = StartCoroutine(ExpireDisconnectedPlayer(runner, player, playerObject));
+                return;
+            }
+
+            _connectionTokens.Remove(player);
+            _playerObjects.Remove(player);
 
             PlayerRuntimeIdentity identity = null;
             if (playerObject != null)
@@ -224,6 +285,37 @@ namespace EchoProtocol.Networking
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerLifecycle,
                 $"FPL|LEFT_COMMIT|player={player}|playerId={(oldPlayerId.IsValid ? oldPlayerId.Value.ToString() : "none")}|hadPlayerObject={playerObject != null}");
+        }
+
+        public bool CanReconnect(byte[] token)
+        {
+            if (token == null || token.Length == 0) return false;
+            foreach (var entry in _connectionTokens)
+            {
+                if (!TokensMatch(entry.Value, token)) continue;
+                if (_playerObjects.TryGetValue(entry.Key, out var obj) && obj != null
+                    && obj.TryGetComponent<LobbyPlayerState>(out var state)
+                    && state.Disconnected) return true;
+            }
+            return false;
+        }
+
+        private static bool TokensMatch(byte[] left, byte[] right)
+        {
+            if (left == null || right == null || left.Length != right.Length) return false;
+            var difference = 0;
+            for (var i = 0; i < left.Length; i++) difference |= left[i] ^ right[i];
+            return difference == 0;
+        }
+
+        private IEnumerator ExpireDisconnectedPlayer(NetworkRunner runner, PlayerRef player, NetworkObject obj)
+        {
+            yield return new WaitForSecondsRealtime(reconnectGraceSeconds);
+            _graceTimers.Remove(player);
+            if (runner == null || !runner.IsRunning || obj == null || !obj.IsValid) yield break;
+            if (!obj.TryGetComponent<LobbyPlayerState>(out var state) || !state.Disconnected) yield break;
+            _expiring.Add(player);
+            OnPlayerLeft(runner, player);
         }
 
         private void RegisterCallbacks()

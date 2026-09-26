@@ -135,6 +135,26 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.DoesNotContain("SecurityHoldTimer", source);
         }
 
+        [Test]
+        public void MATCH_NET_FirstSecurityTerminalInteractionEmitsNoise()
+        {
+            var source = LoadNetworkMatchStateSource();
+
+            StringAssert.Contains(
+                "EmitSecurityTerminalInteractionNoiseAuthoritative(\n" +
+                "                actor,\n" +
+                "                director.SecurityTerminal);",
+                source.Replace("\r\n", "\n"));
+
+            StringAssert.Contains(
+                "SecurityTerminalDiscovered = true",
+                source);
+
+            StringAssert.Contains(
+                "Zone2Stage = Zone2MissionStage.RepairRelays",
+                source);
+        }
+
         private static string LoadNetworkMatchStateSource()
         {
             return File.ReadAllText(MatchSourcePath);

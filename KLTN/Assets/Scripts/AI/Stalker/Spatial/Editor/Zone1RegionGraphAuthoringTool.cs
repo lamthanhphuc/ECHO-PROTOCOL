@@ -337,6 +337,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                 }
             }
 
+            var incomingEdgeDistance = new float[graph.NodeCount];
             var queue = new Queue<int>();
             var initializedSeedNodeIds = new HashSet<int>();
             for (var i = 0; i < orderedSeedNodes.Count; i++)
@@ -384,15 +385,34 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                     }
 
                     var nextDistance = distance + 1;
+                    if (!graph.TryGetNode(neighborId, out var neighbor))
+                    {
+                        continue;
+                    }
+
+                    var edgeDistance = (node.Position - neighbor.Position).sqrMagnitude;
                     if (result.OwnerByNode[neighborId] < 0)
                     {
                         result.OwnerByNode[neighborId] = owner;
                         result.DistanceByNode[neighborId] = nextDistance;
+                        incomingEdgeDistance[neighborId] = edgeDistance;
                         queue.Enqueue(neighborId);
                         continue;
                     }
 
-                    if (result.OwnerByNode[neighborId] != owner && result.DistanceByNode[neighborId] == nextDistance)
+                    if (result.DistanceByNode[neighborId] != nextDistance)
+                    {
+                        continue;
+                    }
+
+                    if (edgeDistance < incomingEdgeDistance[neighborId] - 0.0001f)
+                    {
+                        result.OwnerByNode[neighborId] = owner;
+                        incomingEdgeDistance[neighborId] = edgeDistance;
+                        result.BoundaryTieNodeIds.Remove(neighborId);
+                    }
+                    else if (result.OwnerByNode[neighborId] != owner
+                        && Mathf.Abs(edgeDistance - incomingEdgeDistance[neighborId]) <= 0.0001f)
                     {
                         result.BoundaryTieNodeIds.Add(neighborId);
                     }

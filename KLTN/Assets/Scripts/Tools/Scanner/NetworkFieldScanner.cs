@@ -817,7 +817,9 @@ namespace EchoProtocol.Tools.Scanner
 
             public int TargetId => _stalker != null ? _stalker.gameObject.GetHashCode() : 0;
             public Vector3 WorldPosition => _stalker != null ? _stalker.transform.position : Vector3.zero;
-            public float CurrentSpeed => _agent != null && _agent.enabled && _agent.isOnNavMesh ? _agent.velocity.magnitude : 0f;
+            public float CurrentSpeed => _stalker != null && _stalker.HasAuthoritativeLocomotion
+                ? _stalker.AuthoritativeMoveSpeed
+                : _agent != null && _agent.enabled && _agent.isOnNavMesh ? _agent.velocity.magnitude : 0f;
             public bool IsMoving => CurrentSpeed >= 0.2f;
             public bool IsActiveTarget => _stalker != null && _stalker.gameObject.activeInHierarchy;
         }

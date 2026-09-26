@@ -106,6 +106,7 @@ public static class AuthUiSceneSetup
     var loginPassword = FindOrCreateInputField(loginPanel.transform, "PasswordInput", "Password", password: true);
     var loginButton = FindOrCreateButton(loginPanel.transform, "LoginButton", "Login");
     var goRegisterButton = FindOrCreateButton(loginPanel.transform, "GoToRegisterButton", "Create account");
+    var quitButton = FindOrCreateButton(loginPanel.transform, "QuitButton", "Exit Game");
 
     var registerEmail = FindOrCreateInputField(registerPanel.transform, "EmailInput", "Email");
     var registerUsername = FindOrCreateInputField(registerPanel.transform, "UsernameInput", "Username");
@@ -125,6 +126,7 @@ public static class AuthUiSceneSetup
       loginPassword,
       loginButton,
       goRegisterButton,
+      quitButton,
       registerEmail,
       registerUsername,
       registerPassword,
@@ -196,6 +198,7 @@ public static class AuthUiSceneSetup
     InputField loginPassword,
     Button loginButton,
     Button goRegisterButton,
+    Button quitButton,
     InputField registerEmail,
     InputField registerUsername,
     InputField registerPassword,
@@ -212,6 +215,7 @@ public static class AuthUiSceneSetup
     so.FindProperty("loginPasswordInput").objectReferenceValue = loginPassword;
     so.FindProperty("loginButton").objectReferenceValue = loginButton;
     so.FindProperty("goToRegisterButton").objectReferenceValue = goRegisterButton;
+    so.FindProperty("quitButton").objectReferenceValue = quitButton;
     so.FindProperty("registerEmailInput").objectReferenceValue = registerEmail;
     so.FindProperty("registerUsernameInput").objectReferenceValue = registerUsername;
     so.FindProperty("registerPasswordInput").objectReferenceValue = registerPassword;

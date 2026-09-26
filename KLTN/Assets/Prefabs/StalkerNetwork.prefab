@@ -117,7 +117,7 @@ NavMeshAgent:
   m_GameObject: {fileID: 100000}
   m_Enabled: 0
   m_AgentTypeID: 0
-  m_Radius: 0.5
+  m_Radius: 0.65
   m_Speed: 7
   m_Acceleration: 20
   avoidancePriority: 50
@@ -205,21 +205,21 @@ MonoBehaviour:
     sameRoomPressureCooldownSeconds: 15
     seekPlayersAfterSeconds: 75
   useScenarioMonsterOverrides: 0
-  patrolSpeed: 7
-  chaseSpeed: 8
+  patrolSpeed: 8
+  chaseSpeed: 9
   enableDiagnostics: 0
   candidateBfsDepth: 128
   stalenessHorizon: 15
   stalenessWeight: 1
   connectivityWeight: 0.15
   immediateBacktrackPenalty: 0.75
-  detectionDurationSeconds: 2
+  detectionDurationSeconds: 0.75
   detectionDecayDurationSeconds: 1
   detectTurnSpeedDegrees: 360
   detectionMeterFull: 1
-  detectionFillRate: 0.5
+  detectionFillRate: 1.3333334
   detectionDecayRate: 1
-  searchDuration: 5
+  searchDuration: 3
   searchRadius: 8
   searchReacquireDetectHoldSeconds: 1.5
   searchLkpSniffDurationSeconds: 3
@@ -243,7 +243,7 @@ MonoBehaviour:
   attackWindup: 0.35
   attackRecovery: 0.4
   attackDamage: 100
-  hideSpotRevealGraceSeconds: 3
+  hideSpotRevealGraceSeconds: 1.5
   hideSpotRevealTrackSeconds: 1.3
   worldInteractionDistance: 1.15
   stalkerDoorBreakDurationSeconds: 3
@@ -297,7 +297,7 @@ MonoBehaviour:
     m_Bits: 1
   hearingThreshold: 0.1
   hearingRangeMultiplier: 1.25
-  closedDoorMultiplier: 0.35
+  closedDoorMultiplier: 0.75
   wallMultiplier: 0.35
   hearingDiagnosticIntervalSeconds: 0.5
   attackDamage: 25
@@ -1018,15 +1018,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: 055d3fd7bd3901042a44bb13f3160e0e, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.4
+      value: 0.6
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 055d3fd7bd3901042a44bb13f3160e0e, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.4
+      value: 0.6
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 055d3fd7bd3901042a44bb13f3160e0e, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.4
+      value: 0.6
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 055d3fd7bd3901042a44bb13f3160e0e, type: 3}
       propertyPath: m_LocalPosition.x

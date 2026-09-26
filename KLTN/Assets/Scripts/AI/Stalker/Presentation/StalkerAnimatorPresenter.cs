@@ -735,7 +735,9 @@ namespace EchoProtocol.AI.Stalker.Presentation
                     BiteStateHash,
 
                 StalkerState.SEARCH =>
-                    CrouchStateHash,
+                    moving
+                        ? Walk2StateHash
+                        : CrouchStateHash,
 
                 StalkerState.RECOVER =>
                     presentation.HasAttackEpisode
@@ -823,7 +825,11 @@ namespace EchoProtocol.AI.Stalker.Presentation
         {
             var agentSpeed = 0f;
 
-            if (navMeshAgent != null
+            if (controller != null && controller.HasAuthoritativeLocomotion)
+            {
+                agentSpeed = controller.AuthoritativeMoveSpeed;
+            }
+            else if (navMeshAgent != null
                 && navMeshAgent.enabled)
             {
                 agentSpeed =

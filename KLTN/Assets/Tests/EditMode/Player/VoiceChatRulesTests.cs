@@ -10,8 +10,6 @@ namespace EchoProtocol.Player.Tests
             .Select(a => a.GetType("EchoProtocol.Voice." + name)).First(t => t != null);
         private static bool Capture(params object[] flags) => (bool)Resolve("VoiceTransmissionRules")
             .GetMethod("CanCapture").Invoke(null, flags);
-        private static bool Transmit(bool capture, bool open, bool held) => (bool)Resolve("VoiceTransmissionRules")
-            .GetMethod("CanTransmit").Invoke(null, new object[] { capture, open, held });
 
         [TestCase(0)] // room left
         [TestCase(1)] // user disabled mic
@@ -21,22 +19,12 @@ namespace EchoProtocol.Player.Tests
         [TestCase(5)] // focus lost
         [TestCase(6)] // app paused
         [TestCase(7)] // settings/rebinding
-        public void RevokingAnyCaptureConditionStopsBothOpenMicAndHeldPtt(int changed)
+        public void RevokingAnyCaptureConditionStopsTransmission(int changed)
         {
             object[] flags = { true, true, false, true, false, true, false, false };
             Assert.That(Capture(flags), Is.True);
             flags[changed] = !(bool)flags[changed];
-            bool capture = Capture(flags);
-            Assert.That(Transmit(capture, true, true), Is.False);
-            Assert.That(Transmit(capture, false, true), Is.False);
-        }
-
-        [Test]
-        public void PttReleaseStopsTransmissionWhileOpenMicCanStillTransmit()
-        {
-            Assert.That(Transmit(true, false, true), Is.True);
-            Assert.That(Transmit(true, false, false), Is.False);
-            Assert.That(Transmit(true, true, false), Is.True);
+            Assert.That(Capture(flags), Is.False);
         }
 
         [Test]

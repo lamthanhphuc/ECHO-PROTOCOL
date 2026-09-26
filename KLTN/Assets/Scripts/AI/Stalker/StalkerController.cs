@@ -95,7 +95,7 @@ namespace EchoProtocol.AI.Stalker
         [Header("Search Spike Defaults")]
         [SerializeField]
         [Tooltip("Active SEARCH time budget; LKP sniff and search point holds pause this timer.")]
-        private float searchDuration = 5f;
+        private float searchDuration = 3f;
         [SerializeField] private float searchRadius = 8f;
 
         [Header("Search Reacquire Detect")]
@@ -2611,6 +2611,18 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            _chaseDestinationRefreshElapsed += CurrentSimulationDeltaSeconds;
+
+            if (_navigation.HasActiveDestination
+                && _hasLastChaseRequestedDestination
+                && _chaseDestinationRefreshElapsed < GetChaseDestinationRefreshInterval()
+                && Vector3.Distance(
+                    _lastChaseRequestedDestination,
+                    observedPosition) < GetChaseDestinationRefreshDistance())
+            {
+                return;
+            }
+
             if (!TryResolveReachableChaseDestination(
                     observedPosition,
                     out var chaseDestination))
@@ -2618,15 +2630,10 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            _chaseDestinationRefreshElapsed += CurrentSimulationDeltaSeconds;
-            if (!ShouldRefreshChaseDestination(chaseDestination))
-            {
-                return;
-            }
-
             var result = _navigation.RequestDestination(
                 chaseDestination,
                 NavigationRequestIntent.TrackMovingGoal);
+
             if (!result.IsAccepted)
             {
                 return;
@@ -2635,11 +2642,14 @@ namespace EchoProtocol.AI.Stalker
             _lastChaseRequestedDestination = chaseDestination;
             _hasLastChaseRequestedDestination = true;
             _chaseDestinationRefreshElapsed = 0f;
+
             SetNavigationObjective(new StalkerNavigationObjectiveKey(
                 StalkerNavigationObjectiveKind.ChaseTarget,
                 -1,
                 -1,
-                _memory.CurrentTargetId.IsValid ? _memory.CurrentTargetId.Value : -1));
+                _memory.CurrentTargetId.IsValid
+                    ? _memory.CurrentTargetId.Value
+                    : -1));
         }
 
         private void LogChaseRuntimeDiagnostic(
@@ -5140,25 +5150,6 @@ namespace EchoProtocol.AI.Stalker
                 this);
         }
 
-        private bool ShouldRefreshChaseDestination(Vector3 observedPosition)
-        {
-            if (!_navigation.HasActiveDestination)
-            {
-                return true;
-            }
-
-            if (!_hasLastChaseRequestedDestination)
-            {
-                return true;
-            }
-
-            if (Vector3.Distance(_lastChaseRequestedDestination, observedPosition) >= GetChaseDestinationRefreshDistance())
-            {
-                return true;
-            }
-
-            return _chaseDestinationRefreshElapsed >= GetChaseDestinationRefreshInterval();
-        }
 
         private void ResetChaseDestinationTracking()
         {
@@ -6929,6 +6920,23 @@ namespace EchoProtocol.AI.Stalker
             }
         }
 
+        public void SetAuthoritativeLocomotion(bool enabled)
+        {
+            InitializeNavigation();
+            _navigation.SetAuthoritativeLocomotion(enabled);
+        }
+
+        public bool HasAuthoritativeLocomotion =>
+            _navigation != null && _navigation.HasAuthoritativeLocomotion;
+
+        public float AuthoritativeMoveSpeed =>
+            _navigation != null ? _navigation.AuthoritativeMoveSpeed : 0f;
+
+        public void TickAuthoritativeLocomotion(float deltaSeconds)
+        {
+            _navigation?.TickAuthoritativeLocomotion(deltaSeconds);
+        }
+
         private void InitializeHidingInvestigation()
         {
             if (_hidingInvestigation == null)
@@ -6948,9 +6956,17 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            var rushingToHeardNoiseOrigin =
+                currentState == StalkerState.SEARCH
+                && _searchContext != null
+                && _searchContext.Source == StalkerSearchSource.HeardNoise
+                && _navigationObjectiveKey.Kind
+                    == StalkerNavigationObjectiveKind.SearchOriginLkp;
+
             agent.speed =
                 currentState == StalkerState.CHASE
                 || currentState == StalkerState.ATTACK
+                || rushingToHeardNoiseOrigin
                     ? GetChaseSpeed()
                     : Mathf.Max(0f, patrolSpeed);
         }
