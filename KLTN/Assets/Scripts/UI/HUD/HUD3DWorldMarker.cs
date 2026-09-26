@@ -25,10 +25,18 @@ namespace EchoProtocol.UI.HUD
         [SerializeField] private float edgePadding = 48f;
         [SerializeField] private Color downedTeammateColor = new Color(1f, 0.25f, 0.25f, 1f);
         [SerializeField] private Color escapeDoorColor = new Color(0f, 0.9f, 1f, 1f);
+        [SerializeField] private Color sectorBoxColor = new Color(1f, 0.85f, 0.1f, 1f);
+        [SerializeField] private Color terminalColor = new Color(0f, 0.95f, 1f, 1f);
+        [SerializeField] private Color distributionPanelColor = new Color(0.2f, 1f, 0.4f, 1f);
 
         private Camera _mainCamera;
         private MatchFlowController _matchFlow;
         private EscapeDoorCountdown _escapeDoor;
+        private PlayerEnergyCoreCarrier _localCarrier;
+        private Networking.LobbyPlayerState _localPlayerState;
+        private Networking.NetworkSectorBox _networkSectorBox;
+        private SectorBox _sectorBox;
+
         private readonly List<Transform> _targetTransforms = new List<Transform>();
         private readonly List<string> _targetTitles = new List<string>();
         private readonly List<Color> _targetColors = new List<Color>();
@@ -88,7 +96,124 @@ namespace EchoProtocol.UI.HUD
                 _targetColors.Add(downedTeammateColor);
             }
 
-            // 2. Escape Door during FinalHunt or ExitCountdown
+            // 2. Sector Box (Trạm nạp điện Zone 1) - Only shown when player carries Energy Core
+            CollectSectorBoxTarget();
+
+            // 3. Security Terminal / Exit Panel (Zone 2) - Only shown when Zone 2 entry trigger activated
+            CollectZone2TerminalTarget();
+
+            // 4. Escape Door during FinalHunt or ExitCountdown
+            CollectEscapeDoorTarget();
+        }
+
+        private void CollectSectorBoxTarget()
+        {
+            if (_localCarrier == null)
+            {
+                var carriers = FindObjectsByType<PlayerEnergyCoreCarrier>(FindObjectsInactive.Exclude);
+                for (int i = 0; i < carriers.Length; i++)
+                {
+                    var pm = carriers[i].GetComponent<PlayerMovement>();
+                    if (pm != null && pm.enabled)
+                    {
+                        _localCarrier = carriers[i];
+                        break;
+                    }
+                }
+            }
+
+            if (_localPlayerState == null)
+            {
+                var states = FindObjectsByType<Networking.LobbyPlayerState>(FindObjectsInactive.Exclude);
+                for (int i = 0; i < states.Length; i++)
+                {
+                    if (states[i].Object != null && states[i].Object.IsValid && states[i].Object.HasInputAuthority)
+                    {
+                        _localPlayerState = states[i];
+                        break;
+                    }
+                }
+            }
+
+            bool isCarryingCore = (_localCarrier != null && _localCarrier.IsCarrying)
+                || (_localPlayerState != null && _localPlayerState.CarriedCoreId.IsValid);
+
+            if (!isCarryingCore) return;
+
+            if (_networkSectorBox == null) _networkSectorBox = FindAnyObjectByType<Networking.NetworkSectorBox>();
+            if (_sectorBox == null) _sectorBox = FindAnyObjectByType<SectorBox>();
+
+            Transform target = null;
+            bool isComplete = false;
+
+            if (_networkSectorBox != null && _networkSectorBox.gameObject.activeInHierarchy)
+            {
+                target = _networkSectorBox.transform;
+                isComplete = _networkSectorBox.IsCoreObjectiveComplete;
+            }
+            else if (_sectorBox != null && _sectorBox.gameObject.activeInHierarchy)
+            {
+                target = _sectorBox.transform;
+                isComplete = _sectorBox.PlacedCoreCount >= _sectorBox.MaxCoreCapacity;
+            }
+
+            if (target != null && !isComplete)
+            {
+                _targetTransforms.Add(target);
+                _targetTitles.Add("TRẠM NẠP ĐIỆN (SECTOR BOX)");
+                _targetColors.Add(sectorBoxColor);
+            }
+        }
+
+        private void CollectZone2TerminalTarget()
+        {
+            bool zone2Active = EchoProtocol.Networking.StalkerZone2EntryTrigger.Zone2Triggered;
+            var director = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance;
+            if (director != null && director.CurrentStage >= EchoProtocol.MatchFlow.Zone2MissionStage.FindSecurityTerminal)
+            {
+                zone2Active = true;
+            }
+
+            if (!zone2Active) return;
+
+            if (director != null)
+            {
+                var stage = director.CurrentStage;
+                if (stage < EchoProtocol.MatchFlow.Zone2MissionStage.AuthorizationCodeGranted)
+                {
+                    var terminal = director.SecurityTerminal;
+                    if (terminal != null && !terminal.IsComplete)
+                    {
+                        _targetTransforms.Add(terminal.transform);
+                        _targetTitles.Add("MÁY BẢO MẬT (SECURITY TERMINAL)");
+                        _targetColors.Add(terminalColor);
+                    }
+                }
+                else if (stage < EchoProtocol.MatchFlow.Zone2MissionStage.Zone2Completed)
+                {
+                    var panel = director.DistributionPanel1 != null ? director.DistributionPanel1 : director.DistributionPanel2;
+                    if (panel != null)
+                    {
+                        _targetTransforms.Add(panel.transform);
+                        _targetTitles.Add("BẢNG ĐIỀU KHIỂN CỬA (DISTRIBUTION PANEL)");
+                        _targetColors.Add(distributionPanelColor);
+                    }
+                }
+            }
+            else
+            {
+                var terminal = FindAnyObjectByType<SecurityTerminalDownload>();
+                if (terminal != null && !terminal.IsComplete)
+                {
+                    _targetTransforms.Add(terminal.transform);
+                    _targetTitles.Add("MÁY BẢO MẬT (SECURITY TERMINAL)");
+                    _targetColors.Add(terminalColor);
+                }
+            }
+        }
+
+        private void CollectEscapeDoorTarget()
+        {
             if (_escapeDoor == null) _escapeDoor = FindAnyObjectByType<EscapeDoorCountdown>();
             if (_escapeDoor != null && _matchFlow != null &&
                 (_matchFlow.Phase == MatchPhase.FinalHunt || _matchFlow.Phase == MatchPhase.ExitCountdown))

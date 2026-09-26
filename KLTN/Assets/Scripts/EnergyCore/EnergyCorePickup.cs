@@ -11,6 +11,14 @@ public class EnergyCorePickup : MonoBehaviour, IInteractable
     public string CoreId => coreId;
     public string InteractionPrompt => string.IsNullOrWhiteSpace(pickupPrompt) || pickupPrompt == "Pick up Energy Core" ? "Nhặt Energy Core" : pickupPrompt;
 
+    private void Awake()
+    {
+        if (GetComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>() == null)
+        {
+            gameObject.AddComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>();
+        }
+    }
+
     public bool CanInteract(GameObject interactor)
     {
         PlayerEnergyCoreCarrier carrier = GetCarrier(interactor);
