@@ -825,7 +825,11 @@ namespace EchoProtocol.AI.Stalker.Presentation
         {
             var agentSpeed = 0f;
 
-            if (navMeshAgent != null
+            if (controller != null && controller.HasAuthoritativeLocomotion)
+            {
+                agentSpeed = controller.AuthoritativeMoveSpeed;
+            }
+            else if (navMeshAgent != null
                 && navMeshAgent.enabled)
             {
                 agentSpeed =
