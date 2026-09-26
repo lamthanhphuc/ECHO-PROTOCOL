@@ -34,6 +34,11 @@ public class SectorBox : MonoBehaviour, IInteractable
 
     private void Awake()
     {
+        if (GetComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>() == null)
+        {
+            gameObject.AddComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>();
+        }
+
         if (objectiveProgress == null)
         {
             objectiveProgress = GetComponent<EnergyCoreObjectiveProgress>();
