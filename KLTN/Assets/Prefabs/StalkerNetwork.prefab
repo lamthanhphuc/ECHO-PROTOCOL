@@ -163,9 +163,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3fa86950ad57d2943aa0196e0f69b142, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.StalkerController
-  patrolRoute: {fileID: 0}
   visionSensor: {fileID: 100005}
-  patrolMode: 3
   useSmartPatrolDirector: 1
   smartPatrolSettings:
     occupancySampleIntervalSeconds: 0.5
@@ -209,10 +207,6 @@ MonoBehaviour:
   chaseSpeed: 9
   enableDiagnostics: 0
   candidateBfsDepth: 128
-  stalenessHorizon: 15
-  stalenessWeight: 1
-  connectivityWeight: 0.15
-  immediateBacktrackPenalty: 0.75
   detectionDurationSeconds: 0.75
   detectionDecayDurationSeconds: 1
   detectTurnSpeedDegrees: 360
@@ -241,7 +235,7 @@ MonoBehaviour:
   chaseRuntimeDiagnosticInterval: 0.1
   attackRange: 3
   attackWindup: 0.35
-  attackRecovery: 0.4
+  attackRecovery: 1
   attackDamage: 100
   hideSpotRevealGraceSeconds: 1.5
   hideSpotRevealTrackSeconds: 1.3
@@ -258,21 +252,8 @@ MonoBehaviour:
   attackElapsedTime: 0
   lastAttackResult: 0
   recoverElapsedTime: 0
-  dynamicCurrentSpatialNodeId: -1
-  dynamicDestinationSpatialNodeId: -1
-  dynamicPreviousSpatialNodeId: -1
-  lastPatrolScore: 0
-  plannerRunCount: 0
-  candidateCount: 0
   regionGraphFallbackReason: 0
-  canonicalCurrentRegionId: 0
-  canonicalObjectiveRegionId: 0
-  canonicalNextRegionId: 0
-  searchEpisodeId: 0
   searchCandidateNodeId: -1
-  smartPatrolPacingMode: 
-  smartPatrolHotspot: 
-  smartPatrolPressure: 0
   regionGraphAsset: {fileID: 11400000, guid: 09bfa2fa79ecc554995513d832a11be4, type: 2}
 --- !u!114 &100007
 MonoBehaviour:

@@ -41,23 +41,18 @@ namespace EchoProtocol.AI.Stalker
         RetryLogicalObjective,
         AlternateLocalCandidate,
         AlternateGlobalObjective,
-        RegionGraphCompatibilityFallback,
-        FixedPatrolFallback,
-        EmergencyNavMeshRecovery
+        EmergencyNavMeshRecovery = 8
     }
 
     public enum StalkerNavigationObjectiveKind
     {
-        None,
-        FixedWaypoint,
-        DynamicSpatialNode,
-        ConfidenceSpatialNode,
-        SearchOriginLkp,
-        SearchCandidate,
-        HideSpotInspection,
-        ChaseTarget,
-        RoomSweepTransit,
-        RoomSweepProbe
+        None = 0,
+        SearchOriginLkp = 4,
+        SearchCandidate = 5,
+        HideSpotInspection = 6,
+        ChaseTarget = 7,
+        RoomSweepTransit = 8,
+        RoomSweepProbe = 9
     }
 
     public readonly struct StalkerNavigationObjectiveKey

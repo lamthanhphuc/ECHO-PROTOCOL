@@ -181,42 +181,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             yield return null;
         }
 
-        [UnityTest]
-        public IEnumerator STK_SIM_DynamicSpatialPatrol_OnEnable_DoesNotPerformTimeDependentPlanning()
-        {
-            var controllerType = ResolveType(StalkerControllerTypeName);
-            var stalker = new GameObject("STK_SIM_DynamicSpatialStalker");
-            stalker.SetActive(false);
-            _createdObjects.Add(stalker);
-
-            var controller = (Component)stalker.AddComponent(controllerType);
-            stalker.GetComponent<NavMeshAgent>().enabled = false;
-            SetPrivateField(controller, "patrolMode", Enum.Parse(ResolveType("EchoProtocol.AI.Stalker.StalkerPatrolMode"), "DynamicSpatial"));
-            SetState(controller, "PATROL");
-
-            stalker.SetActive(true);
-            yield return null;
-
-            Assert.That((bool)GetPrivateField(controller, "_spatialPatrolInitializationAttempted"), Is.False);
-            Assert.That(GetFloatProperty(controller, "LastPatrolScore"), Is.EqualTo(0f));
-            Assert.That((int)GetProperty(controller, "PlannerRunCount"), Is.EqualTo(0));
-
-            var confidenceSpatialStalker = new GameObject("STK_SIM_ConfidenceSpatialStalker");
-            confidenceSpatialStalker.SetActive(false);
-            _createdObjects.Add(confidenceSpatialStalker);
-
-            var confidenceSpatialController = (Component)confidenceSpatialStalker.AddComponent(controllerType);
-            confidenceSpatialStalker.GetComponent<NavMeshAgent>().enabled = false;
-            SetPrivateField(confidenceSpatialController, "patrolMode", Enum.Parse(ResolveType("EchoProtocol.AI.Stalker.StalkerPatrolMode"), "ConfidenceSpatial"));
-            SetState(confidenceSpatialController, "PATROL");
-
-            confidenceSpatialStalker.SetActive(true);
-            yield return null;
-
-            Assert.That((bool)GetPrivateField(confidenceSpatialController, "_spatialPatrolInitializationAttempted"), Is.False);
-            yield return null;
-        }
-
         private StalkerFixture CreateFixture()
         {
             return CreateFixture(new Vector3(0f, 1f, 4f));

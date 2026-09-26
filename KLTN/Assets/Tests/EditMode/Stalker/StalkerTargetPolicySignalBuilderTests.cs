@@ -21,8 +21,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             "EchoProtocol.AI.Stalker.StalkerTargetCandidate";
         private const string PolicyCandidateTypeName =
             "EchoProtocol.AI.Stalker.StalkerTargetPolicyCandidate";
-        private const string ContextTypeName =
-            "EchoProtocol.AI.Stalker.StalkerTargetPolicyContext";
         private const string HistoryTypeName =
             "EchoProtocol.AI.Stalker.StalkerTargetHistoryMemory";
         private const string BuilderTypeName =
@@ -89,7 +87,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
-        public void STK_SIGNALS_LegalObjectiveIdentity_IsUsedWhileNoiseRemainsNeutral()
+        public void STK_SIGNALS_LegalObjectiveIdentity_IsUsed()
         {
             var results = BuildWithCarriers(
                 CreateHistory(),
@@ -101,9 +99,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(
                 GetProperty(signals, "IsObjectiveCarrier"),
                 Is.EqualTo(true));
-            Assert.That(
-                GetProperty(signals, "ConfirmedNoisyBehavior01"),
-                Is.EqualTo(0f));
         }
 
         private static IList Build(
@@ -124,27 +119,22 @@ namespace EchoProtocol.AI.Stalker.Tests
             int[] carrierIds,
             params object[] candidates)
         {
-            var builder = Activator.CreateInstance(
-                ResolveType(BuilderTypeName));
             var policyCandidateType = ResolveType(
                 PolicyCandidateTypeName);
             var listType = typeof(List<>).MakeGenericType(
                 policyCandidateType);
             var results = Activator.CreateInstance(listType);
-            var context = Activator.CreateInstance(
-                ResolveType(ContextTypeName),
-                CreateTime((long)seconds, seconds),
-                Activator.CreateInstance(
-                    ResolveType(PlayerIdTypeName)));
-
-            Invoke(
-                builder,
-                "Build",
+            var method = ResolveType(BuilderTypeName).GetMethod(
+                "Build", BindingFlags.Static | BindingFlags.Public);
+            Assert.That(method, Is.Not.Null);
+            method.Invoke(null, new object[]
+            {
                 CreateArray(TargetCandidateTypeName, candidates),
                 CreatePlayerIdArray(carrierIds),
-                context,
+                CreateTime((long)seconds, seconds),
                 history,
-                results);
+                results
+            });
 
             return (IList)results;
         }

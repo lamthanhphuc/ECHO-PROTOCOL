@@ -59,40 +59,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             yield return null;
         }
 
-        [UnityTest] public IEnumerator STK_P_021_ConfidenceSpatialUsesCanonicalGlobalObjective()
-        {
-            var graph = CreateFixtureGraph();
-            var regionGraph = GetProperty(BakeFixture(graph), "Graph");
-            var coverage = Activator.CreateInstance(CoverageMemoryType, (int)GetProperty(graph, "NodeCount"), regionGraph);
-            var planner = Activator.CreateInstance(GlobalPatrolPlannerType, regionGraph, coverage);
-            var args = new object[] { new RegionId(1), RegionId.Invalid, null };
-
-            Assert.That((bool)Invoke(planner, "TryGetOrCreateObjective", TryGetObjectiveSignature, args), Is.True);
-            Assert.That((RegionId)GetProperty(args[2], "TargetRegionId"), Is.EqualTo(new RegionId(2)));
-            Assert.That((RegionId)GetProperty(args[2], "NextRegionId"), Is.EqualTo(new RegionId(2)));
-            yield return null;
-        }
-
-        [UnityTest] public IEnumerator STK_P_022_GlobalObjectivePersistsUntilPhysicalVisit()
-        {
-            var graph = CreateFixtureGraph();
-            var regionGraph = GetProperty(BakeFixture(graph), "Graph");
-            var coverage = Activator.CreateInstance(CoverageMemoryType, (int)GetProperty(graph, "NodeCount"), regionGraph);
-            var planner = Activator.CreateInstance(GlobalPatrolPlannerType, regionGraph, coverage);
-            var first = new object[] { new RegionId(1), RegionId.Invalid, null };
-            var second = new object[] { new RegionId(1), RegionId.Invalid, null };
-
-            Assert.That((bool)Invoke(planner, "TryGetOrCreateObjective", TryGetObjectiveSignature, first), Is.True);
-            Assert.That((bool)Invoke(planner, "TryGetOrCreateObjective", TryGetObjectiveSignature, second), Is.True);
-            Invoke(coverage, "RecordPhysicalNodeArrival", new[] { typeof(int), typeof(float) }, 2, 4f);
-            var third = new object[] { new RegionId(2), new RegionId(1), null };
-            Assert.That((bool)Invoke(planner, "TryGetOrCreateObjective", TryGetObjectiveSignature, third), Is.True);
-
-            Assert.That(GetProperty(second[2], "TargetRegionId"), Is.EqualTo(GetProperty(first[2], "TargetRegionId")));
-            Assert.That(GetProperty(third[2], "TargetRegionId"), Is.Not.EqualTo(GetProperty(first[2], "TargetRegionId")));
-            yield return null;
-        }
-
         [UnityTest] public IEnumerator STK_P_023_PatrolSelectionDoesNotMutateCoverage()
         {
             var graph = CreateFixtureGraph();
@@ -544,8 +510,6 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static Type RegionEdgeType => ResolveType("EchoProtocol.AI.Stalker.Spatial.RegionEdge");
         private static Type CompatibilityIdentityType => ResolveType("EchoProtocol.AI.Stalker.Spatial.SpatialGraphCompatibilityIdentity");
         private static Type CoverageMemoryType => ResolveType("EchoProtocol.AI.Stalker.Spatial.CoverageMemory");
-        private static Type GlobalPatrolPlannerType => ResolveType("EchoProtocol.AI.Stalker.Spatial.GlobalPatrolPlanner");
-        private static Type GlobalPatrolObjectiveType => ResolveType("EchoProtocol.AI.Stalker.Spatial.GlobalPatrolObjective");
         private static Type LocalPatrolSelectorType => ResolveType("EchoProtocol.AI.Stalker.Spatial.LocalPatrolSelector");
         private static Type LocalPatrolSelectionType => ResolveType("EchoProtocol.AI.Stalker.Spatial.LocalPatrolSelection");
         private static Type PatrolPathValidatorType => ResolveType("EchoProtocol.AI.Stalker.Spatial.PatrolPathValidator");
@@ -560,7 +524,6 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static Type SearchSelectionType => ResolveType("EchoProtocol.AI.Stalker.SearchCandidateSelection");
         private static Type SearchPathEvaluatorType => ResolveType("EchoProtocol.AI.Stalker.SearchPathEvaluator");
         private static Type NavigationEvaluationStatusType => ResolveType("EchoProtocol.AI.Stalker.NavigationEvaluationStatus");
-        private static Type[] TryGetObjectiveSignature => new[] { typeof(RegionId), typeof(RegionId), GlobalPatrolObjectiveType.MakeByRefType() };
         private static Type[] TryLocalSelectSignature => new[] { typeof(int), typeof(int), typeof(RegionId), LocalPatrolSelectionType.MakeByRefType() };
         private static Type[] TryGetRouteHopCostSignature => new[] { typeof(RegionId), typeof(RegionId), typeof(int).MakeByRefType() };
         private static Type[] TrySearchSelectSignature => new[] { SearchContextType, typeof(float), typeof(int), typeof(int), SearchSelectionType.MakeByRefType() };

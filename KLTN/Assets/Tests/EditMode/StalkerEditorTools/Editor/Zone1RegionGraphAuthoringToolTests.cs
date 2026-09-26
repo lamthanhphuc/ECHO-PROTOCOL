@@ -15,7 +15,6 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
     public sealed class FullStationRegionGraphAuthoringToolTests
     {
         private const string TempAssetPath = "Assets/AI/Stalker/Station/__Test_Invalid_RegionGraph.asset";
-        private const string ProtectedAssetPath = "Assets/AI/Stalker/Phase3/AI_Stalker_SpatialV3_RegionGraph.asset";
 
         [TearDown]
         public void TearDown()
@@ -968,18 +967,6 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
 
             Assert.That(returned, Is.SameAs(report));
             Assert.That(AssetDatabase.LoadAssetAtPath<RegionGraphAsset>(TempAssetPath), Is.Null);
-        }
-
-        [Test]
-        public void STK_FullStation_SpatialV3ProtectedAssetCannotBeOverwritten()
-        {
-            var graph = Graph(Node(0, V(0, 0)));
-            var report = Build(graph, Source(0, SemanticZone.Zone01, SemanticKind.Room, "A", 0));
-
-            var returned = FullStationRegionGraphAuthoringCore.BakeAsset(ProtectedAssetPath, report);
-
-            Assert.That(returned.IsValid, Is.False);
-            Assert.That(returned.Errors, Has.Some.Contains("Refusing to overwrite protected asset"));
         }
 
         private static FullStationRegionGraphAuthoringCore.DryRunReport BasicValidReport()

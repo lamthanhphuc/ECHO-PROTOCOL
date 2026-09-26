@@ -11,32 +11,13 @@ namespace EchoProtocol.AI.Stalker
             out StalkerTargetEligibilityResult eligibility)
         {
             eligibility = default;
-
-            if (!playerId.IsValid || statuses == null)
+            if (!TryGetUniqueStatus(statuses, playerId, out var status))
             {
                 return false;
             }
 
-            var found = false;
-            for (var i = 0; i < statuses.Count; i++)
-            {
-                var status = statuses[i];
-                if (status.PlayerId != playerId)
-                {
-                    continue;
-                }
-
-                if (found)
-                {
-                    eligibility = default;
-                    return false;
-                }
-
-                eligibility = status.Eligibility;
-                found = true;
-            }
-
-            return found;
+            eligibility = status.Eligibility;
+            return true;
         }
 
         public static bool TryGetUniqueStatus(

@@ -30,10 +30,6 @@ namespace EchoProtocol.AI.Stalker.Tests
         [Test]
         public void STK_RoomSweepIntegration_EnumValuesAreAppended()
         {
-            Assert.That(EnumValue(StalkerPatrolModeType, "FixedWaypoint"), Is.EqualTo(0));
-            Assert.That(EnumValue(StalkerPatrolModeType, "DynamicSpatial"), Is.EqualTo(1));
-            Assert.That(EnumValue(StalkerPatrolModeType, "ConfidenceSpatial"), Is.EqualTo(2));
-            Assert.That(EnumValue(StalkerPatrolModeType, "RoomSweepSpatial"), Is.EqualTo(3));
 
             var chaseTarget = EnumValue(StalkerNavigationObjectiveKindType, "ChaseTarget");
             var roomSweepTransit = EnumValue(StalkerNavigationObjectiveKindType, "RoomSweepTransit");
@@ -592,7 +588,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(IsRegionCleared(memory, completedRoom), Is.True);
             Assert.That(GetProperty(globalPlanner, "LastInvalidationReason").ToString(), Is.EqualTo("TargetCleared"));
             Assert.That(GetPrivateCollectionCount(controller, "_rejectedRoomSweepGlobalRegionIds"), Is.EqualTo(1));
-            Assert.That((bool)GetProperty(controller, "FixedFallbackActive"), Is.False);
         }
 
         [Test]
@@ -615,7 +610,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(result, Is.False);
             Assert.That(IsRegionCleared(memory, completedRoom), Is.True);
             Assert.That(GetProperty(controller, "RegionGraphFallbackReason").ToString(), Is.EqualTo("NoReachableRegionObjective"));
-            Assert.That((bool)GetProperty(controller, "FixedFallbackActive"), Is.False);
         }
 
         [Test]
@@ -630,7 +624,6 @@ namespace EchoProtocol.AI.Stalker.Tests
                 RoomRegion(room, 18, "Zone01/Completed"));
             AttachRoomSweepState(controller, spatialGraph, regionGraph, CreateMemory());
             AttachNavigationAndLocalSelector(controller, spatialGraph, regionGraph);
-            SetPrivateField(controller, "patrolMode", Enum.Parse(StalkerPatrolModeType, "RoomSweepSpatial"));
             SetPrivateField(controller, "currentState", Enum.Parse(StalkerStateType, "PATROL"));
             SetBlackboardNode(controller, "DestinationSpatialNodeId", -1);
             var navigation = GetPrivateField(controller, "_navigation");
@@ -642,7 +635,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetBlackboardNode(controller, "DestinationSpatialNodeId"), Is.EqualTo(-1));
             Assert.That(GetNavigationObjectiveKindName(controller), Is.EqualTo("None"));
             Assert.That((bool)GetProperty(navigation, "HasActiveDestination"), Is.False);
-            Assert.That((bool)GetProperty(controller, "FixedFallbackActive"), Is.False);
         }
 
         [Test]
@@ -688,9 +680,6 @@ namespace EchoProtocol.AI.Stalker.Tests
                 SemanticRegion(zone02, 19, "Zone02/Room", "Zone02", "Room"));
             AttachRoomSweepState(controller, spatialGraph, regionGraph, CreateMemory());
             AttachNavigationAndLocalSelector(controller, spatialGraph, regionGraph);
-            SetPrivateField(controller, "_globalPatrolPlanner", Activator.CreateInstance(
-                ResolveType("EchoProtocol.AI.Stalker.Spatial.GlobalPatrolPlanner"),
-                regionGraph, GetPrivateField(controller, "_coverageMemory")));
             Invoke(controller, "ConfigurePatrolZone", new[] { RegionSemanticZoneType },
                 Enum.Parse(RegionSemanticZoneType, "Zone01"));
 
@@ -793,7 +782,6 @@ namespace EchoProtocol.AI.Stalker.Tests
                 new[] { room, room },
                 RoomRegion(room, 1, "Zone01/Room"));
             AttachRoomSweepState(controller, spatialGraph, regionGraph, CreateMemory());
-            SetPrivateField(controller, "patrolMode", Enum.Parse(StalkerPatrolModeType, "RoomSweepSpatial"));
             SetBlackboardNode(controller, "DestinationSpatialNodeId", 1);
 
             var args = new object[] { default(Vector3) };
@@ -878,7 +866,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             AttachNavigationAndLocalSelector(controller, spatialGraph, regionGraph);
             Invoke(GetPrivateField(controller, "_roomSweepPlanner"), "TryBeginRegion", new[] { typeof(RegionId) }, room);
             MarkObserved(memory, room, 0);
-            SetPrivateField(controller, "patrolMode", Enum.Parse(StalkerPatrolModeType, "RoomSweepSpatial"));
             SetBlackboardNode(controller, "CurrentSpatialNodeId", 0);
             SetBlackboardNode(controller, "DestinationSpatialNodeId", 1);
             SetNavigationObjective(controller, "RoomSweepProbe", 1, room.Value);
@@ -887,7 +874,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             InvokePrivate(controller, "HandleRoomSweepNavigationFailure", new[] { NavigationFailureReasonType }, Enum.Parse(NavigationFailureReasonType, "PathInvalid"));
 
             Assert.That(IsRegionCleared(memory, room), Is.False);
-            Assert.That((bool)GetProperty(controller, "FixedFallbackActive"), Is.False);
         }
 
         [Test]
@@ -909,7 +895,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             var planner = GetPrivateField(controller, "_roomSweepPlanner");
             Invoke(planner, "TryBeginRegion", new[] { typeof(RegionId) }, room);
             Invoke(planner, "RejectProbe", new[] { typeof(int) }, 1);
-            SetPrivateField(controller, "patrolMode", Enum.Parse(StalkerPatrolModeType, "RoomSweepSpatial"));
 
             InvokePrivate(controller, "SetCurrentPatrolDestination", Type.EmptyTypes);
 
@@ -1482,7 +1467,6 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static Type NavigationFailureReasonType => ResolveType("EchoProtocol.AI.Stalker.NavigationFailureReason");
         private static Type NavigationRecoveryReasonType => ResolveType("EchoProtocol.AI.Stalker.NavigationRecoveryReason");
         private static Type NavigationObjectiveKeyType => ResolveType("EchoProtocol.AI.Stalker.StalkerNavigationObjectiveKey");
-        private static Type StalkerPatrolModeType => ResolveType("EchoProtocol.AI.Stalker.StalkerPatrolMode");
         private static Type StalkerNavigationObjectiveKindType => ResolveType("EchoProtocol.AI.Stalker.StalkerNavigationObjectiveKind");
         private static Type StalkerVisionSensorType => ResolveType("EchoProtocol.AI.Stalker.StalkerVisionSensor");
         private static Type GraphType => ResolveType("EchoProtocol.AI.Stalker.Spatial.NavMeshSpatialGraph");

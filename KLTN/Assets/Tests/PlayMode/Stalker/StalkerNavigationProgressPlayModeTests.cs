@@ -40,7 +40,6 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string AiSimulationTimeTypeName = "EchoProtocol.AI.Common.AiSimulationTime";
         private const string AiSimulationStepTypeName = "EchoProtocol.AI.Common.AiSimulationStep";
         private const string StalkerSimulationInputTypeName = "EchoProtocol.AI.Stalker.StalkerSimulationInput";
-        private const string PatrolRouteTypeName = "EchoProtocol.AI.Stalker.PatrolRoute";
 
         private const float PathSettleTimeoutSeconds = 2f;
         private const int PathSettleFrameCap = 1000;
@@ -636,47 +635,6 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
-        public IEnumerator NAV_4C3_StalkerControllerUpdate_DrivesNavigationProgressToNoProgress()
-        {
-            var fixture = CreateUpdateDrivenProgressFixture();
-            yield return fixture.ActivateAndWait();
-
-            var navigation = GetInternalNavigation(fixture.StalkerController);
-            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("PATROL"));
-            Assert.That(((Behaviour)fixture.StalkerController).enabled, Is.True);
-            Assert.That(fixture.Agent.isOnNavMesh, Is.True);
-            Assert.That(GetBoolProperty(navigation, "HasActiveDestination"), Is.True);
-
-            AssertPlanResultAccepted(RequestDestination(navigation, fixture.Destination));
-            yield return WaitUntilComplete(fixture.Agent, navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
-
-            fixture.Agent.isStopped = true;
-            yield return null;
-
-            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("PATROL"));
-            Assert.That(((Behaviour)fixture.StalkerController).enabled, Is.True);
-            Assert.That(fixture.Agent.isOnNavMesh, Is.True);
-            Assert.That(GetBoolProperty(navigation, "HasActiveDestination"), Is.True);
-            Assert.That(GetPathStatusName(navigation), Is.EqualTo("Complete"));
-            Assert.That(HasArrived(navigation), Is.False);
-            Assert.That(fixture.Agent.isStopped, Is.True);
-
-            var elapsed = 0f;
-            while (GetExecutionStatusName(navigation) != "NoProgress"
-                && elapsed < UpdateDrivenNoProgressTimeoutSeconds)
-            {
-                yield return null;
-                elapsed += Time.deltaTime;
-            }
-
-            Assert.That(
-                GetExecutionStatusName(navigation),
-                Is.EqualTo("NoProgress"),
-                $"Expected enabled StalkerController.Update to drive navigation progress to NoProgress within {UpdateDrivenNoProgressTimeoutSeconds:0.###} gameplay seconds.");
-            Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("PATROL"));
-        }
-
-        [UnityTest]
         public IEnumerator NAV_REC_StuckCompletePath_RequestsSingleRecoveryRepath()
         {
             var fixture = CreateRecoveryPolicyFixture();
@@ -1075,108 +1033,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetEnumPropertyName(fixture.StalkerController, "CurrentState"), Is.EqualTo("PATROL"));
         }
 
-        [UnityTest]
-        public IEnumerator NAV_FBK_FixedPatrolPartial_AdvancesToNextWaypoint()
-        {
-            var fixture = CreateFixedPatrolFallbackFixture(
-                true,
-                Destination,
-                ReachableFallbackDestination);
-            yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
-
-            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(0));
-            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.False);
-            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
-
-            InvokeTickPatrol(fixture.StalkerController);
-
-            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(1));
-            Assert.That(GetFixedPatrolFallbackFailureCount(fixture.StalkerController), Is.EqualTo(1));
-            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
-            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.False);
-
-            InvokeTickPatrol(fixture.StalkerController);
-
-            AssertVectorApproximately(GetActiveNavigationDestination(fixture.Navigation), fixture.SecondDestination);
-            yield return WaitUntilPathComplete(fixture.Agent, fixture.Navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
-        }
-
-        [UnityTest]
-        public IEnumerator NAV_FBK_FixedPatrolExhaustedStuck_AdvancesToNextWaypoint()
-        {
-            var fixture = CreateFixedPatrolFallbackFixture(
-                false,
-                Destination,
-                NewGoalDestination);
-            yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
-
-            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(0));
-            AssertPlanResult(RequestDestination(fixture.Navigation, fixture.FirstDestination), "Accepted", true);
-            yield return WaitUntilComplete(fixture.Agent, fixture.Navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
-
-            StopAgent(fixture.Agent);
-            yield return null;
-            AssertStoppedCompletePath(fixture.Agent, fixture.Navigation);
-
-            TickUntilStuck(fixture.Navigation);
-            InvokeTickNavigationRecovery(fixture.StalkerController);
-            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
-            yield return WaitUntilComplete(fixture.Agent, fixture.Navigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
-
-            TickUntilStuck(fixture.Navigation);
-            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Stuck"));
-            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(0));
-            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
-
-            InvokeTickNavigationRecovery(fixture.StalkerController);
-            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Stuck"));
-
-            InvokeTickNavigationFallback(fixture.StalkerController);
-
-            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(1));
-            Assert.That(GetFixedPatrolFallbackFailureCount(fixture.StalkerController), Is.EqualTo(1));
-            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
-            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.False);
-
-            InvokeTickPatrol(fixture.StalkerController);
-
-            AssertVectorApproximately(GetActiveNavigationDestination(fixture.Navigation), fixture.SecondDestination);
-        }
-
-        [UnityTest]
-        public IEnumerator NAV_FBK_FixedPatrolAllWaypointsFail_HoldsWithoutRouteWrap()
-        {
-            var fixture = CreateFixedPatrolFallbackFixture(
-                true,
-                Destination,
-                TrackedDestination);
-            yield return fixture.ActivateInitializeReplaceNavigationAndDisable();
-
-            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(0));
-
-            InvokeTickPatrol(fixture.StalkerController);
-
-            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(1));
-            Assert.That(GetFixedPatrolFallbackFailureCount(fixture.StalkerController), Is.EqualTo(1));
-            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.False);
-            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("NoDestination"));
-
-            InvokeTickPatrol(fixture.StalkerController);
-
-            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(1));
-            Assert.That(GetFixedPatrolFallbackFailureCount(fixture.StalkerController), Is.EqualTo(2));
-            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.False);
-            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("NoDestination"));
-
-            InvokeTickPatrol(fixture.StalkerController);
-            InvokeTickPatrol(fixture.StalkerController);
-
-            Assert.That(GetCurrentPatrolIndex(fixture.StalkerController), Is.EqualTo(1));
-            Assert.That(GetFixedPatrolFallbackFailureCount(fixture.StalkerController), Is.EqualTo(2));
-            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.False);
-            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("NoDestination"));
-        }
-
         private NavigationFixture CreateFixture()
         {
             BuildRuntimeNavMesh();
@@ -1202,33 +1058,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             return new ChaseCadenceFixture(agent, stalkerController);
         }
 
-        private UpdateDrivenProgressFixture CreateUpdateDrivenProgressFixture()
-        {
-            BuildRuntimeNavMesh();
-
-            var destination = SampleChaseDestinationPointOnNavMesh(Destination);
-            var stalkerRoot = new GameObject("STK_Test_UpdateDrivenProgressStalker");
-            stalkerRoot.SetActive(false);
-            stalkerRoot.transform.position = AgentStart;
-            _createdObjects.Add(stalkerRoot);
-
-            var agent = stalkerRoot.AddComponent<NavMeshAgent>();
-            ConfigureAgent(agent);
-
-            var patrolRouteObject = new GameObject("STK_Test_UpdateDrivenProgressPatrolRoute");
-            _createdObjects.Add(patrolRouteObject);
-
-            var waypoint = new GameObject("STK_Test_UpdateDrivenProgressWaypoint");
-            waypoint.transform.SetParent(patrolRouteObject.transform, false);
-            waypoint.transform.position = destination;
-
-            var patrolRoute = patrolRouteObject.AddComponent(ResolveType(PatrolRouteTypeName));
-            var stalkerController = stalkerRoot.AddComponent(ResolveType(StalkerControllerTypeName));
-            SetPrivateField(stalkerController, "patrolRoute", patrolRoute);
-
-            return new UpdateDrivenProgressFixture(agent, stalkerController, destination);
-        }
-
         private RecoveryPolicyFixture CreateRecoveryPolicyFixture()
         {
             BuildRuntimeNavMesh();
@@ -1242,16 +1071,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             var agent = stalkerRoot.AddComponent<NavMeshAgent>();
             ConfigureAgent(agent);
 
-            var patrolRouteObject = new GameObject("STK_Test_RecoveryPolicyPatrolRoute");
-            _createdObjects.Add(patrolRouteObject);
-
-            var waypoint = new GameObject("STK_Test_RecoveryPolicyWaypoint");
-            waypoint.transform.SetParent(patrolRouteObject.transform, false);
-            waypoint.transform.position = destination;
-
-            var patrolRoute = patrolRouteObject.AddComponent(ResolveType(PatrolRouteTypeName));
             var stalkerController = stalkerRoot.AddComponent(ResolveType(StalkerControllerTypeName));
-            SetPrivateField(stalkerController, "patrolRoute", patrolRoute);
 
             return new RecoveryPolicyFixture(agent, stalkerController, destination);
         }
@@ -1269,16 +1089,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             var agent = stalkerRoot.AddComponent<NavMeshAgent>();
             ConfigureAgent(agent);
 
-            var patrolRouteObject = new GameObject("STK_Test_PartialRecoveryPolicyPatrolRoute");
-            _createdObjects.Add(patrolRouteObject);
-
-            var waypoint = new GameObject("STK_Test_PartialRecoveryPolicyWaypoint");
-            waypoint.transform.SetParent(patrolRouteObject.transform, false);
-            waypoint.transform.position = destination;
-
-            var patrolRoute = patrolRouteObject.AddComponent(ResolveType(PatrolRouteTypeName));
             var stalkerController = stalkerRoot.AddComponent(ResolveType(StalkerControllerTypeName));
-            SetPrivateField(stalkerController, "patrolRoute", patrolRoute);
 
             return new RecoveryPolicyFixture(agent, stalkerController, destination);
         }
@@ -1312,53 +1123,6 @@ namespace EchoProtocol.AI.Stalker.Tests
                 reachableDestination,
                 includeReachableCandidate,
                 requestStageAvailabilityMutation);
-        }
-
-        private FixedPatrolFallbackFixture CreateFixedPatrolFallbackFixture(
-            bool disconnectedIslands,
-            Vector3 firstRequestedDestination,
-            Vector3 secondRequestedDestination)
-        {
-            if (disconnectedIslands)
-            {
-                BuildDisconnectedIslandNavMesh();
-            }
-            else
-            {
-                BuildRuntimeNavMesh();
-            }
-
-            var firstDestination = SampleChaseDestinationPointOnNavMesh(firstRequestedDestination);
-            var secondDestination = SampleChaseDestinationPointOnNavMesh(secondRequestedDestination);
-            Assert.That(Vector3.Distance(firstDestination, secondDestination), Is.GreaterThan(0.1f));
-
-            var stalkerRoot = new GameObject("STK_Test_FixedPatrolFallbackStalker");
-            stalkerRoot.SetActive(false);
-            stalkerRoot.transform.position = AgentStart;
-            _createdObjects.Add(stalkerRoot);
-
-            var agent = stalkerRoot.AddComponent<NavMeshAgent>();
-            ConfigureAgent(agent);
-
-            var patrolRouteObject = new GameObject("STK_Test_FixedPatrolFallbackPatrolRoute");
-            _createdObjects.Add(patrolRouteObject);
-
-            CreateWaypoint(patrolRouteObject.transform, "STK_Test_FixedPatrolFallbackWaypoint0", firstDestination);
-            CreateWaypoint(patrolRouteObject.transform, "STK_Test_FixedPatrolFallbackWaypoint1", secondDestination);
-
-            var patrolRoute = patrolRouteObject.AddComponent(ResolveType(PatrolRouteTypeName));
-            var stalkerController = stalkerRoot.AddComponent(ResolveType(StalkerControllerTypeName));
-            SetPrivateField(stalkerController, "patrolRoute", patrolRoute);
-            SetPrivateField(stalkerController, "patrolMode", ResolveEnumValue("EchoProtocol.AI.Stalker.StalkerPatrolMode", "FixedWaypoint"));
-
-            return new FixedPatrolFallbackFixture(agent, stalkerController, firstDestination, secondDestination);
-        }
-
-        private static void CreateWaypoint(Transform parent, string name, Vector3 position)
-        {
-            var waypoint = new GameObject(name);
-            waypoint.transform.SetParent(parent, false);
-            waypoint.transform.position = position;
         }
 
         private void BuildRuntimeNavMesh()
@@ -1975,11 +1739,6 @@ namespace EchoProtocol.AI.Stalker.Tests
                 new[] { ResolveEnumValue(NavigationFailureReasonTypeName, failureReasonName) });
         }
 
-        private static void InvokeTickNavigationFallback(object stalkerController)
-        {
-            InvokePrivateMethod(stalkerController, "TickNavigationFallback", Type.EmptyTypes, Array.Empty<object>());
-        }
-
         private static bool GetHasLastChaseRequestedDestination(object stalkerController)
         {
             return GetPrivateField<bool>(stalkerController, "_hasLastChaseRequestedDestination");
@@ -1988,16 +1747,6 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static bool GetNavigationRecoveryAttemptUsed(object stalkerController)
         {
             return GetPrivateField<bool>(stalkerController, "_navigationRecoveryAttemptUsed");
-        }
-
-        private static int GetFixedPatrolFallbackFailureCount(object stalkerController)
-        {
-            return GetPrivateField<int>(stalkerController, "_fixedPatrolFallbackFailureCount");
-        }
-
-        private static int GetCurrentPatrolIndex(object stalkerController)
-        {
-            return GetPrivateField<int>(stalkerController, "_currentPatrolIndex");
         }
 
         private static Vector3 GetLastChaseRequestedDestination(object stalkerController)
@@ -2267,30 +2016,18 @@ namespace EchoProtocol.AI.Stalker.Tests
             }
         }
 
-        private readonly struct UpdateDrivenProgressFixture
+
+
+        private static void InstallRoomSweepRecoveryDestination(object stalkerController, Vector3 destination)
         {
-            public UpdateDrivenProgressFixture(NavMeshAgent agent, object stalkerController, Vector3 destination)
-            {
-                Agent = agent;
-                StalkerController = stalkerController;
-                Destination = destination;
-            }
-
-            public NavMeshAgent Agent { get; }
-
-            public object StalkerController { get; }
-
-            public Vector3 Destination { get; }
-
-            public IEnumerator ActivateAndWait()
-            {
-                Agent.gameObject.SetActive(true);
-                yield return null;
-
-                Assert.That(Agent.enabled, Is.True, "Runtime Update-driven progress test NavMeshAgent must be enabled.");
-                Assert.That(Agent.isOnNavMesh, Is.True, "Runtime Update-driven progress test NavMeshAgent must be placed on the generated NavMesh.");
-                Assert.That(((Behaviour)StalkerController).enabled, Is.True, "StalkerController must remain enabled so Update can drive TickProgress.");
-            }
+            var node = Activator.CreateInstance(ResolveType(SpatialNodeTypeName),
+                0, destination, 0, 0, 0, 0, 0, 0, new List<int>());
+            var nodes = Array.CreateInstance(ResolveType(SpatialNodeTypeName), 1);
+            nodes.SetValue(node, 0);
+            var graph = Activator.CreateInstance(ResolveType(NavMeshSpatialGraphTypeName), nodes);
+            SetPrivateField(stalkerController, "_spatialPatrolGraph", graph);
+            var blackboard = GetPrivateField<object>(stalkerController, "_blackboard");
+            blackboard.GetType().GetProperty("DestinationSpatialNodeId").SetValue(blackboard, 0);
         }
 
         private sealed class RecoveryPolicyFixture
@@ -2321,6 +2058,7 @@ namespace EchoProtocol.AI.Stalker.Tests
                 var navigation = CreateController(Agent);
                 SetPrivateField(StalkerController, "_navigation", navigation);
                 SetPrivateField(StalkerController, "_navigationRecoveryAttemptUsed", false);
+                InstallRoomSweepRecoveryDestination(StalkerController, Destination);
                 Navigation = navigation;
 
                 var behaviour = (Behaviour)StalkerController;
@@ -2484,53 +2222,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             }
         }
 
-        private sealed class FixedPatrolFallbackFixture
-        {
-            public FixedPatrolFallbackFixture(
-                NavMeshAgent agent,
-                object stalkerController,
-                Vector3 firstDestination,
-                Vector3 secondDestination)
-            {
-                Agent = agent;
-                StalkerController = stalkerController;
-                FirstDestination = firstDestination;
-                SecondDestination = secondDestination;
-            }
 
-            public NavMeshAgent Agent { get; }
-
-            public object StalkerController { get; }
-
-            public Vector3 FirstDestination { get; }
-
-            public Vector3 SecondDestination { get; }
-
-            public object Navigation { get; private set; }
-
-            public IEnumerator ActivateInitializeReplaceNavigationAndDisable()
-            {
-                Agent.gameObject.SetActive(true);
-                yield return null;
-
-                Assert.That(Agent.enabled, Is.True, "Runtime fixed patrol fallback test NavMeshAgent must be enabled.");
-                Assert.That(Agent.isOnNavMesh, Is.True, "Runtime fixed patrol fallback test NavMeshAgent must be placed on the generated NavMesh.");
-
-                var navigation = CreateController(Agent);
-                SetPrivateField(StalkerController, "_navigation", navigation);
-                SetPrivateField(StalkerController, "_currentPatrolIndex", 0);
-                SetPrivateField(StalkerController, "_navigationRecoveryAttemptUsed", false);
-                SetPrivateField(StalkerController, "_fixedPatrolFallbackFailureCount", 0);
-                Navigation = navigation;
-
-                var behaviour = (Behaviour)StalkerController;
-                behaviour.enabled = false;
-                Assert.That(behaviour.enabled, Is.False, "StalkerController must be disabled before manual TickNavigationFallback invocation.");
-
-                Assert.That(GetEnumPropertyName(StalkerController, "CurrentState"), Is.EqualTo("PATROL"));
-                Assert.That(GetFixedPatrolFallbackFailureCount(StalkerController), Is.EqualTo(0));
-                Assert.That(Navigation, Is.Not.Null, "Fixed patrol fallback fixture must install a short-threshold navigation controller.");
-            }
-        }
     }
 }

@@ -7,424 +7,130 @@ namespace EchoProtocol.AI.Stalker.Tests
 {
     public sealed class AdaptiveStalkerTargetPolicyTests
     {
-        private const string PlayerIdTypeName =
-            "EchoProtocol.AI.Common.PlayerId";
-        private const string SimulationTimeTypeName =
-            "EchoProtocol.AI.Common.AiSimulationTime";
-        private const string ObservationTypeName =
-            "EchoProtocol.AI.Stalker.VisionObservation";
-        private const string EligibilityTypeName =
-            "EchoProtocol.AI.Stalker.StalkerTargetEligibilityResult";
-        private const string TargetCandidateTypeName =
-            "EchoProtocol.AI.Stalker.StalkerTargetCandidate";
-        private const string SignalsTypeName =
-            "EchoProtocol.AI.Stalker.StalkerTargetPolicySignals";
-        private const string PolicyCandidateTypeName =
-            "EchoProtocol.AI.Stalker.StalkerTargetPolicyCandidate";
-        private const string ContextTypeName =
-            "EchoProtocol.AI.Stalker.StalkerTargetPolicyContext";
-        private const string WeightsTypeName =
-            "EchoProtocol.AI.Stalker.StalkerTargetPolicyWeights";
-        private const string PolicyTypeName =
-            "EchoProtocol.AI.Stalker.AdaptiveStalkerTargetPolicy";
+        private const string Prefix = "EchoProtocol.AI.Stalker.";
+        private const BindingFlags PublicStatic = BindingFlags.Public | BindingFlags.Static;
 
         [Test]
         public void STK_ADAPTIVE_NullCandidates_AreRejected()
         {
-            var policy = CreatePolicy();
-            var method = GetPolicyMethod(policy);
-            var exception = Assert.Throws<TargetInvocationException>(
-                () => method.Invoke(
-                    policy,
-                    new[] { null, CreateContext(), null }));
-
-            Assert.That(
-                exception.InnerException,
-                Is.TypeOf<ArgumentNullException>());
+            var error = Assert.Throws<TargetInvocationException>(
+                () => PolicyMethod.Invoke(null, new object[] { null, null }));
+            Assert.That(error.InnerException, Is.TypeOf<ArgumentNullException>());
         }
 
         [Test]
         public void STK_ADAPTIVE_IneligibleHighSignalTarget_NeverWins()
         {
-            var selected = Select(
-                CreateCandidate(1, 1f, false, true, 1f, 1f, 1f, 1f),
-                CreateCandidate(2, 5f, true, false, 0f, 0f, 0f, 0f));
-
-            AssertPlayerId(selected, 2);
+            AssertPlayerId(Select(
+                Candidate(1, 1f, false, true, 1f, 1f, 0f),
+                Candidate(2, 5f, true)), 2);
         }
 
         [Test]
-        public void STK_ADAPTIVE_NearerTarget_WinsWhenSignalsMatch()
+        public void STK_ADAPTIVE_DistanceAndSignals_SelectProductionPriorities()
         {
-            AssertPlayerId(
-                Select(
-                    CreateCandidate(1, 5f, true),
-                    CreateCandidate(2, 2f, true)),
-                2);
-        }
-
-        [Test]
-        public void STK_ADAPTIVE_IsolationCanOutweighDistance()
-        {
-            var weights = CreateWeights(1f, 2f, 0f, 0f, 0f, 0f, 0.0001f);
-            AssertPlayerId(
-                SelectWithPolicy(
-                    CreatePolicy(weights),
-                    CreateCandidate(1, 1f, true, false, 0f, 0f, 0f, 0f),
-                    CreateCandidate(2, 3f, true, false, 1f, 0f, 0f, 0f)),
-                2);
-        }
-
-        [Test]
-        public void STK_ADAPTIVE_ObjectiveCarrierBonus_AffectsSelection()
-        {
-            var weights = CreateWeights(0f, 0f, 1f, 0f, 0f, 0f, 0.0001f);
-            AssertPlayerId(
-                SelectWithPolicy(
-                    CreatePolicy(weights),
-                    CreateCandidate(1, 1f, true),
-                    CreateCandidate(2, 5f, true, true)),
-                2);
-        }
-
-        [Test]
-        public void STK_ADAPTIVE_ConfirmedNoiseSignal_AffectsSelection()
-        {
-            var weights = CreateWeights(0f, 0f, 0f, 0f, 1f, 0f, 0.0001f);
-            AssertPlayerId(
-                SelectWithPolicy(
-                    CreatePolicy(weights),
-                    CreateCandidate(1, 1f, true),
-                    CreateCandidate(2, 5f, true, false, 0f, 0f, 1f, 0f)),
-                2);
-        }
-
-        [Test]
-        public void STK_ADAPTIVE_TargetHistorySignal_DiscouragesRecentlyAcquiredTarget()
-        {
-            var weights = CreateWeights(
-                0f,
-                0f,
-                0f,
-                0f,
-                0f,
-                1f,
-                0.0001f);
-
-            AssertPlayerId(
-                SelectWithPolicy(
-                    CreatePolicy(weights),
-                    CreateCandidate(1, 1f, true),
-                    CreateCandidate(
-                        2,
-                        5f,
-                        true,
-                        false,
-                        0f,
-                        0f,
-                        0f,
-                        1f)),
-                1);
-        }
-
-        [Test]
-        public void STK_ADAPTIVE_RecentDetectionSignal_AffectsSelection()
-        {
-            var weights = CreateWeights(0f, 0f, 0f, 1f, 0f, 0f, 0.0001f);
-            AssertPlayerId(
-                SelectWithPolicy(
-                    CreatePolicy(weights),
-                    CreateCandidate(1, 1f, true),
-                    CreateCandidate(2, 5f, true, false, 0f, 1f, 0f, 0f)),
-                2);
-        }
-
-        [Test]
-        public void STK_ADAPTIVE_AllScoreComponents_AreFinite()
-        {
-            var policy = CreatePolicy();
-            var candidate = CreateCandidate(
-                1,
-                float.MaxValue,
-                true,
-                true,
-                1f,
-                1f,
-                1f,
-                1f);
-            var breakdown = policy.GetType().GetMethod(
-                "CalculateScore",
-                BindingFlags.Instance | BindingFlags.Public).Invoke(
-                    policy,
-                    new[] { candidate });
-
-            var propertyNames = new[]
-            {
-                "DistanceContribution",
-                "IsolationContribution",
-                "ObjectiveCarrierContribution",
-                "RecentDetectionContribution",
-                "ConfirmedNoiseContribution",
-                "TargetHistoryContribution",
-                "TotalScore"
-            };
-
-            for (var i = 0; i < propertyNames.Length; i++)
-            {
-                var value = (float)GetProperty(
-                    breakdown,
-                    propertyNames[i]);
-                Assert.That(float.IsNaN(value), Is.False);
-                Assert.That(float.IsInfinity(value), Is.False);
-            }
+            AssertPlayerId(Select(Candidate(1, 1f, true), Candidate(2, 2f, true)), 1);
+            AssertPlayerId(Select(Candidate(1, 1f, true), Candidate(2, 3f, true, false, 1f)), 2);
+            AssertPlayerId(Select(Candidate(1, 1f, true), Candidate(2, 5f, true, true)), 2);
+            AssertPlayerId(Select(Candidate(1, 1f, true), Candidate(2, 5f, true, false, 0f, 1f)), 2);
+            AssertPlayerId(Select(Candidate(1, 1f, true, false, 0f, 0f, 1f), Candidate(2, 3f, true)), 2);
         }
 
         [Test]
         public void STK_ADAPTIVE_EqualScores_UseStablePlayerIdRegardlessOfOrder()
         {
-            var playerFive = CreateCandidate(5, 2f, true);
-            var playerTwo = CreateCandidate(2, 2f, true);
-
-            AssertPlayerId(Select(playerFive, playerTwo), 2);
-            AssertPlayerId(Select(playerTwo, playerFive), 2);
+            var five = Candidate(5, 2f, true);
+            var two = Candidate(2, 2f, true);
+            AssertPlayerId(Select(five, two), 2);
+            AssertPlayerId(Select(two, five), 2);
         }
 
         [Test]
-        public void STK_ADAPTIVE_ZeroSignals_PreserveDistanceBehavior()
+        public void STK_ADAPTIVE_NoEligibleCandidate_ReturnsFalse()
         {
-            AssertPlayerId(
-                Select(
-                    CreateCandidate(3, 8f, true),
-                    CreateCandidate(2, 4f, true),
-                    CreateCandidate(1, 6f, true)),
-                2);
+            var args = new object[] { Candidates(Candidate(1, 1f, false)), null };
+            Assert.That(PolicyMethod.Invoke(null, args), Is.EqualTo(false));
         }
 
         [Test]
-        public void STK_ADAPTIVE_InvalidWeights_AreRejected()
+        public void STK_ADAPTIVE_ScoreIsFiniteForMaximumDistance()
         {
-            AssertInvalidWeight(float.NaN);
-            AssertInvalidWeight(float.PositiveInfinity);
-            AssertInvalidWeight(-0.01f);
+            var method = Resolve(Prefix + "AdaptiveStalkerTargetPolicy").GetMethod(
+                "CalculateScore", BindingFlags.Static | BindingFlags.NonPublic);
+            var score = (float)method.Invoke(null, new[] { Candidate(1, float.MaxValue, true) });
+            Assert.That(float.IsNaN(score) || float.IsInfinity(score), Is.False);
         }
 
         [Test]
         public void STK_ADAPTIVE_Selection_DoesNotMutateCandidates()
         {
-            var first = CreateCandidate(4, 3f, true, false, 0.2f, 0.3f, 0.4f, 0.5f);
-            var second = CreateCandidate(2, 2f, true, true, 0.6f, 0.7f, 0.8f, 0.9f);
-            var candidates = CreateCandidateArray(first, second);
-
-            SelectArray(CreatePolicy(), candidates);
-
-            Assert.That(GetPlayerId(candidates.GetValue(0)), Is.EqualTo(4));
-            Assert.That(GetPlayerId(candidates.GetValue(1)), Is.EqualTo(2));
-            Assert.That(
-                GetProperty(
-                    GetProperty(candidates.GetValue(0), "Signals"),
-                    "TargetHistory01"),
-                Is.EqualTo(0.5f));
+            var candidates = Candidates(Candidate(4, 3f, true), Candidate(2, 2f, true));
+            var args = new object[] { candidates, null };
+            Assert.That(PolicyMethod.Invoke(null, args), Is.EqualTo(true));
+            Assert.That(Id(GetProperty(candidates.GetValue(0), "PlayerId")), Is.EqualTo(4));
+            Assert.That(Id(GetProperty(candidates.GetValue(1), "PlayerId")), Is.EqualTo(2));
         }
+
+        private static MethodInfo PolicyMethod => Resolve(Prefix + "AdaptiveStalkerTargetPolicy")
+            .GetMethod("TrySelectTarget", PublicStatic);
 
         private static object Select(params object[] candidates)
         {
-            return SelectWithPolicy(CreatePolicy(), candidates);
+            var args = new object[] { Candidates(candidates), null };
+            Assert.That(PolicyMethod.Invoke(null, args), Is.EqualTo(true));
+            return args[1];
         }
 
-        private static object SelectWithPolicy(
-            object policy,
-            params object[] candidates)
+        private static Array Candidates(params object[] values)
         {
-            return SelectArray(
-                policy,
-                CreateCandidateArray(candidates));
+            var array = Array.CreateInstance(Resolve(Prefix + "StalkerTargetPolicyCandidate"), values.Length);
+            for (var i = 0; i < values.Length; i++) array.SetValue(values[i], i);
+            return array;
         }
 
-        private static object SelectArray(
-            object policy,
-            Array candidates)
+        private static object Candidate(int id, float distance, bool eligible,
+            bool carrier = false, float isolation = 0f, float recent = 0f, float history = 0f)
         {
-            var args = new object[]
-            {
-                candidates,
-                CreateContext(),
-                null
-            };
-            var selected = GetPolicyMethod(policy).Invoke(policy, args);
-            Assert.That(selected, Is.EqualTo(true));
-            return args[2];
-        }
-
-        private static MethodInfo GetPolicyMethod(object policy)
-        {
-            var method = policy.GetType().GetMethod(
-                "TrySelectTarget",
-                BindingFlags.Instance | BindingFlags.Public);
-            Assert.That(method, Is.Not.Null);
-            return method;
-        }
-
-        private static object CreatePolicy(object weights = null)
-        {
-            return weights == null
-                ? Activator.CreateInstance(ResolveType(PolicyTypeName))
-                : Activator.CreateInstance(
-                    ResolveType(PolicyTypeName),
-                    weights);
-        }
-
-        private static object CreateWeights(
-            float distance,
-            float isolation,
-            float objective,
-            float recent,
-            float noise,
-            float history,
-            float epsilon)
-        {
-            return Activator.CreateInstance(
-                ResolveType(WeightsTypeName),
-                distance,
-                isolation,
-                objective,
-                recent,
-                noise,
-                history,
-                epsilon);
-        }
-
-        private static void AssertInvalidWeight(float value)
-        {
-            var exception = Assert.Throws<TargetInvocationException>(
-                () => CreateWeights(value, 0f, 0f, 0f, 0f, 0f, 0f));
-            Assert.That(
-                exception.InnerException,
-                Is.TypeOf<ArgumentOutOfRangeException>());
-        }
-
-        private static object CreateCandidate(
-            int playerId,
-            float distance,
-            bool eligible,
-            bool objective = false,
-            float isolation = 0f,
-            float recent = 0f,
-            float noise = 0f,
-            float history = 0f)
-        {
-            var observation = Activator.CreateInstance(
-                ResolveType(ObservationTypeName),
-                CreatePlayerId(playerId),
-                new Vector3(playerId, 0f, 0f),
-                Vector3.forward,
-                CreateTime(10L, 1d),
-                distance);
+            var player = Activator.CreateInstance(Resolve("EchoProtocol.AI.Common.PlayerId"), id);
+            var time = Activator.CreateInstance(Resolve("EchoProtocol.AI.Common.AiSimulationTime"), 10L, 1d);
+            var observation = Activator.CreateInstance(Resolve(Prefix + "VisionObservation"),
+                player, new Vector3(distance, 0f, 0f), Vector3.forward, time, distance);
+            var eligibilityType = Resolve(Prefix + "StalkerTargetEligibilityResult");
             var eligibility = eligible
-                ? ResolveType(EligibilityTypeName).GetMethod(
-                    "EligibleTarget",
-                    BindingFlags.Static | BindingFlags.Public).Invoke(
-                        null,
-                        null)
-                : Activator.CreateInstance(
-                    ResolveType(EligibilityTypeName));
-            var target = Activator.CreateInstance(
-                ResolveType(TargetCandidateTypeName),
-                observation,
-                eligibility);
-            var signals = Activator.CreateInstance(
-                ResolveType(SignalsTypeName),
-                objective,
-                isolation,
-                recent,
-                noise,
-                history);
-
-            return Activator.CreateInstance(
-                ResolveType(PolicyCandidateTypeName),
-                target,
-                signals);
+                ? eligibilityType.GetMethod("EligibleTarget", PublicStatic).Invoke(null, null)
+                : Activator.CreateInstance(eligibilityType);
+            var target = Activator.CreateInstance(Resolve(Prefix + "StalkerTargetCandidate"),
+                observation, eligibility);
+            var signals = Activator.CreateInstance(Resolve(Prefix + "StalkerTargetPolicySignals"),
+                carrier, isolation, recent, history);
+            return Activator.CreateInstance(Resolve(Prefix + "StalkerTargetPolicyCandidate"),
+                target, signals);
         }
 
-        private static Array CreateCandidateArray(params object[] candidates)
+        private static void AssertPlayerId(object observation, int expected)
         {
-            var result = Array.CreateInstance(
-                ResolveType(PolicyCandidateTypeName),
-                candidates.Length);
-            for (var i = 0; i < candidates.Length; i++)
-            {
-                result.SetValue(candidates[i], i);
-            }
-
-            return result;
+            Assert.That(Id(GetProperty(observation, "PlayerId")), Is.EqualTo(expected));
         }
 
-        private static object CreateContext()
-        {
-            return Activator.CreateInstance(
-                ResolveType(ContextTypeName),
-                CreateTime(20L, 2d),
-                Activator.CreateInstance(
-                    ResolveType(PlayerIdTypeName)));
-        }
+        private static int Id(object playerId) => (int)GetProperty(playerId, "Value");
 
-        private static object CreatePlayerId(int value)
+        private static object GetProperty(object value, string name)
         {
-            return Activator.CreateInstance(
-                ResolveType(PlayerIdTypeName),
-                value);
-        }
-
-        private static object CreateTime(long tick, double seconds)
-        {
-            return Activator.CreateInstance(
-                ResolveType(SimulationTimeTypeName),
-                tick,
-                seconds);
-        }
-
-        private static int GetPlayerId(object policyCandidate)
-        {
-            return (int)GetProperty(
-                GetProperty(policyCandidate, "PlayerId"),
-                "Value");
-        }
-
-        private static void AssertPlayerId(
-            object observation,
-            int expected)
-        {
-            Assert.That(
-                (int)GetProperty(
-                    GetProperty(observation, "PlayerId"),
-                    "Value"),
-                Is.EqualTo(expected));
-        }
-
-        private static object GetProperty(
-            object target,
-            string propertyName)
-        {
-            Assert.That(target, Is.Not.Null);
-            var property = target.GetType().GetProperty(
-                propertyName,
-                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(value, Is.Not.Null);
+            var property = value.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public);
             Assert.That(property, Is.Not.Null);
-            return property.GetValue(target);
+            return property.GetValue(value);
         }
 
-        private static Type ResolveType(string fullTypeName)
+        private static Type Resolve(string fullName)
         {
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            for (var i = 0; i < assemblies.Length; i++)
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                var type = assemblies[i].GetType(fullTypeName, false);
-                if (type != null)
-                {
-                    return type;
-                }
+                var type = assembly.GetType(fullName, false);
+                if (type != null) return type;
             }
 
-            Assert.Fail($"Could not resolve production type '{fullTypeName}'.");
+            Assert.Fail($"Could not resolve production type {fullName}.");
             return null;
         }
     }
