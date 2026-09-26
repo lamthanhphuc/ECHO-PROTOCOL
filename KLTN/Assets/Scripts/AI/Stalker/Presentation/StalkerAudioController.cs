@@ -97,17 +97,17 @@ namespace EchoProtocol.AI.Stalker.Presentation
         [Tooltip("Minimum seconds between consecutive Search voice plays to avoid spam.")]
         [SerializeField, Min(0f)] private float searchCooldownSeconds = 4.0f;
 
-        [Header("3D Distance Audio Tuning (Audible from afar)")]
-        [Tooltip("Ensure AudioSources use 3D linear rolloff with wide reach.")]
+        [Header("3D Distance Audio Tuning (Realistic Logarithmic Rolloff)")]
+        [Tooltip("Ensure AudioSources use realistic 3D logarithmic rolloff with accurate distance perception.")]
         [SerializeField] private bool autoConfigure3D = true;
-        [SerializeField, Min(1f)] private float voiceMinDistance = 40f;
-        [SerializeField, Min(10f)] private float voiceMaxDistance = 100f;
-        [SerializeField, Min(1f)] private float movementMinDistance = 20f;
-        [SerializeField, Min(10f)] private float movementMaxDistance = 50f;
-        [SerializeField, Min(1f)] private float breathingMinDistance = 10f;
-        [SerializeField, Min(10f)] private float breathingMaxDistance = 20f;
-        [SerializeField, Min(1f)] private float chaseMinDistance = 40f;
-        [SerializeField, Min(10f)] private float chaseMaxDistance = 150f;
+        [SerializeField, Min(0.5f)] private float voiceMinDistance = 3f;
+        [SerializeField, Min(5f)] private float voiceMaxDistance = 45f;
+        [SerializeField, Min(0.5f)] private float movementMinDistance = 1.5f;
+        [SerializeField, Min(5f)] private float movementMaxDistance = 25f;
+        [SerializeField, Min(0.2f)] private float breathingMinDistance = 0.8f;
+        [SerializeField, Min(2f)] private float breathingMaxDistance = 6f;
+        [SerializeField, Min(0.5f)] private float chaseMinDistance = 2f;
+        [SerializeField, Min(5f)] private float chaseMaxDistance = 30f;
 
         // ──────────────────────────────────────────────────────────────────────
         // Private runtime state
@@ -201,10 +201,10 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         private void Configure3DSources()
         {
-            ConfigureSource3D(voiceSource,     voiceMinDistance,     voiceMaxDistance,     AudioRolloffMode.Linear);
-            ConfigureSource3D(chaseSource,     chaseMinDistance,     chaseMaxDistance,     AudioRolloffMode.Linear);
-            ConfigureSource3D(movementSource,  movementMinDistance,  movementMaxDistance,  AudioRolloffMode.Linear);
-            ConfigureSource3D(breathingSource, breathingMinDistance, breathingMaxDistance, AudioRolloffMode.Linear);
+            ConfigureSource3D(voiceSource,     voiceMinDistance,     voiceMaxDistance,     AudioRolloffMode.Logarithmic);
+            ConfigureSource3D(chaseSource,     chaseMinDistance,     chaseMaxDistance,     AudioRolloffMode.Logarithmic);
+            ConfigureSource3D(movementSource,  movementMinDistance,  movementMaxDistance,  AudioRolloffMode.Logarithmic);
+            ConfigureSource3D(breathingSource, breathingMinDistance, breathingMaxDistance, AudioRolloffMode.Logarithmic);
         }
 
         private static void ConfigureSource3D(AudioSource src, float minDist, float maxDist, AudioRolloffMode rolloff)
@@ -215,7 +215,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
             src.maxDistance  = maxDist;
             src.rolloffMode  = rolloff;
             src.dopplerLevel = 0f;
-            src.spread       = 60f;
+            src.spread       = 0f; // Point source for accurate 3D spatial panning
         }
 
         private void InitBreathing()

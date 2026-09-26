@@ -18,7 +18,7 @@ public static class StalkerCreepProductionSetup
         "Assets/Prefabs/StalkerNetwork.prefab";
 
     private const string CreepModelPath =
-    "Assets/Creep Horror Creature/Meshes/Creep_mesh.fbx";
+        "Assets/Creep Horror Creature/Meshes/Creep_mesh_lod1.fbx";
 
     private const string CreepMaterialPath =
         "Assets/Creep Horror Creature/Materials/Creep1_mat.mat";
@@ -162,6 +162,12 @@ public static class StalkerCreepProductionSetup
             clip.loopPose =
                 LoopingClipNames.Contains(
                     clip.name);
+
+            clip.maskType =
+                ClipAnimationMaskType.None;
+
+            clip.keepOriginalPositionY =
+                false;
         }
 
         importer.clipAnimations =
