@@ -53,6 +53,43 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
+        public IEnumerator STK_R_003_DetectTracksOnlyCurrentVisiblePosition()
+        {
+            var fixture = CreateFixture(100f, 0f, 0f);
+            fixture.Stalker.SetActive(true);
+
+            yield return WaitUntilState(fixture.Controller, "DETECT", MaxDetectFrames);
+
+            var leftPosition = new Vector3(-3f, 1f, 5f);
+            fixture.PlayerDummy.transform.position = leftPosition;
+            for (var frame = 0; frame < 10; frame++)
+            {
+                yield return null;
+            }
+
+            AssertState(fixture.Controller, "DETECT");
+            Assert.That(
+                Vector3.Angle(
+                    fixture.Stalker.transform.forward,
+                    FlattenDirection(leftPosition - fixture.Stalker.transform.position)),
+                Is.LessThan(10f));
+
+            var rightPosition = new Vector3(3f, 1f, 5f);
+            fixture.PlayerDummy.transform.position = rightPosition;
+            for (var frame = 0; frame < 10; frame++)
+            {
+                yield return null;
+            }
+
+            Assert.That(
+                Vector3.Angle(
+                    fixture.Stalker.transform.forward,
+                    FlattenDirection(rightPosition - fixture.Stalker.transform.position)),
+                Is.LessThan(10f));
+            Assert.That(fixture.Stalker.transform.position, Is.EqualTo(Vector3.zero));
+        }
+
+        [UnityTest]
         public IEnumerator STK_R_004_DetectMeterFull_PromotesToChase()
         {
             var fixture = CreateFixture(0.1f, 10f, 0f);
@@ -229,6 +266,12 @@ namespace EchoProtocol.AI.Stalker.Tests
             }
 
             Assert.Fail($"Expected LastKnownPosition near {expectedPosition} within {maxFrames} frames, but was {GetVector3Property(controller, "LastKnownPosition")}.");
+        }
+
+        private static Vector3 FlattenDirection(Vector3 direction)
+        {
+            direction.y = 0f;
+            return direction.normalized;
         }
 
         private static Type ResolveType(string fullTypeName)

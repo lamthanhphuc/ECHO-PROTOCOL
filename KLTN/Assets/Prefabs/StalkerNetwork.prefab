@@ -203,7 +203,7 @@ MonoBehaviour:
     postChaseCooldownSeconds: 18
     postAttackCooldownSeconds: 22
     sameRoomPressureCooldownSeconds: 15
-    seekPlayersAfterSeconds: 180
+    seekPlayersAfterSeconds: 75
   useScenarioMonsterOverrides: 0
   patrolSpeed: 7
   chaseSpeed: 8
@@ -215,6 +215,7 @@ MonoBehaviour:
   immediateBacktrackPenalty: 0.75
   detectionDurationSeconds: 2
   detectionDecayDurationSeconds: 1
+  detectTurnSpeedDegrees: 360
   detectionMeterFull: 1
   detectionFillRate: 0.5
   detectionDecayRate: 1
