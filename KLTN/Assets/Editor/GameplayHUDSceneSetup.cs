@@ -618,6 +618,7 @@ namespace EchoProtocol.EditorTools
             so.FindProperty("toolLockedOverlay").objectReferenceValue = toolLock;
             so.ApplyModifiedProperties();
 
+            hotbarGo.SetActive(false);
             return comp;
         }
 

@@ -22,8 +22,7 @@ namespace EchoProtocol.Voice
         public string Status { get; private set; } = "Waiting for a Fusion session";
         public bool MicrophoneEnabled { get; private set; }
         public bool SelfMuted { get; private set; }
-        public bool OpenMic { get; private set; }
-        public Key PushToTalkKey { get; private set; } = Key.V;
+        public Key ToggleMicrophoneKey { get; private set; } = Key.V;
         public float OutputVolume { get; private set; } = 1;
         public bool Speaking => _recorder != null && _recorder.IsCurrentlyTransmitting;
         public float InputLevel => Devices.Testing ? Devices.TestLevel : (_recorder.LevelMeter?.CurrentPeakAmp ?? 0);
@@ -67,15 +66,18 @@ namespace EchoProtocol.Voice
                 var groups = mixer.FindMatchingGroups("Master");
                 if (groups.Length > 0) _outputMixer = groups[0];
             }
-            OpenMic = PlayerPrefs.GetInt("Echo.Voice.OpenMic", 0) != 0;
             SelfMuted = PlayerPrefs.GetInt("Echo.Voice.Muted", 0) != 0;
             OutputVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("Echo.Voice.Volume", 1));
-            if (Enum.TryParse(PlayerPrefs.GetString("Echo.Voice.PTT", "V"), out Key key) && key != Key.None) PushToTalkKey = key;
+            if (Enum.TryParse(PlayerPrefs.GetString("Echo.Voice.ToggleKey", "V"), out Key key) && key != Key.None) ToggleMicrophoneKey = key;
             gameObject.AddComponent<VoiceSettingsPanel>();
         }
 
         private void Update()
         {
+            if (_focused && !_paused && !VoiceSettingsPanel.IsOpen && !PlayerInteractionControlLock.HasModal
+                && Keyboard.current != null && Keyboard.current[ToggleMicrophoneKey].wasPressedThisFrame)
+                ToggleMicrophone();
+
             var bootstrap = NetworkBootstrap.Instance;
             var runner = bootstrap != null ? bootstrap.Runner : null;
             NetworkObject local = null;
@@ -169,10 +171,8 @@ namespace EchoProtocol.Voice
                 _recorder.RecordingEnabled = true;
                 _captureStarted = Time.unscaledTime;
             }
-            // Keep the mic warm while PTT is released, but never transmit without the key.
-            bool pressed = Keyboard.current != null && Keyboard.current[PushToTalkKey].isPressed;
-            _recorder.VoiceDetection = OpenMic;
-            _recorder.TransmitEnabled = VoiceTransmissionRules.CanTransmit(canCapture, OpenMic, pressed);
+            _recorder.VoiceDetection = false;
+            _recorder.TransmitEnabled = canCapture;
             if (Time.unscaledTime - _captureStarted > 3 && !Microphone.IsRecording(Devices.Selected))
             {
                 StopCapture(); Devices.ReportCaptureFailure();
@@ -217,11 +217,15 @@ namespace EchoProtocol.Voice
         }
 
         public void Retry() { ResetConnection(); Devices.Refresh(); _attempts = 0; _nextAttempt = Time.unscaledTime + 1; }
+        public void ToggleMicrophone()
+        {
+            if (MicrophoneEnabled && !SelfMuted) EnableMicrophone(false);
+            else { SetMuted(false); EnableMicrophone(true); }
+        }
         public void EnableMicrophone(bool enabled) { MicrophoneEnabled = enabled; if (!enabled) { StopCapture(); StopTest(); } }
         public void SetMuted(bool muted) { SelfMuted = muted; PlayerPrefs.SetInt("Echo.Voice.Muted", muted ? 1 : 0); if (muted) StopCapture(); }
-        public void SetOpenMic(bool enabled) { OpenMic = enabled; PlayerPrefs.SetInt("Echo.Voice.OpenMic", enabled ? 1 : 0); }
         public void SetVolume(float volume) { OutputVolume = Mathf.Clamp01(volume); PlayerPrefs.SetFloat("Echo.Voice.Volume", OutputVolume); }
-        public void SetPushToTalk(Key key) { if (key == Key.None) return; PushToTalkKey = key; PlayerPrefs.SetString("Echo.Voice.PTT", key.ToString()); }
+        public void SetToggleMicrophoneKey(Key key) { if (key == Key.None) return; ToggleMicrophoneKey = key; PlayerPrefs.SetString("Echo.Voice.ToggleKey", key.ToString()); }
         public void SelectDevice(string device) { StopCapture(); Devices.Select(device); }
         public void StartTest() { StopCapture(); Devices.StartTest(); }
         public void StopTest() => Devices.StopTest();
