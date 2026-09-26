@@ -643,25 +643,30 @@ public static class StalkerProductionAnimationSetup
             //     → Linear rolloff, heavy footsteps heard through hallways
             //     → minDistance 20 m, maxDistance 90 m
             //
+            var detectSrc   = GetOrCreateAudioChild("Audio_Detect",
+                loop: false, volume: 1.0f,
+                minDist:   6f, maxDist: 60f,
+                rolloff: AudioRolloffMode.Logarithmic);
+
             var voiceSrc    = GetOrCreateAudioChild("Audio_Voice",
                 loop: false, volume: 1.0f,
-                minDist:  30f, maxDist: 150f,
-                rolloff: AudioRolloffMode.Linear);
+                minDist:  2.5f, maxDist: 25f,
+                rolloff: AudioRolloffMode.Logarithmic);
 
             var movementSrc = GetOrCreateAudioChild("Audio_Movement",
                 loop: false, volume: 1.0f,
-                minDist:  20f, maxDist: 90f,
-                rolloff: AudioRolloffMode.Linear);
+                minDist:  3.5f, maxDist: 35f,
+                rolloff: AudioRolloffMode.Logarithmic);
 
             var breathSrc   = GetOrCreateAudioChild("Audio_Breathing",
                 loop: true,  volume: 1.00f,
-                minDist:  15f, maxDist: 60f,
-                rolloff: AudioRolloffMode.Linear);
+                minDist:  0.8f, maxDist: 6f,
+                rolloff: AudioRolloffMode.Logarithmic);
 
             var chaseSrc    = GetOrCreateAudioChild("Audio_Chase",
                 loop: true,  volume: 0.00f,
-                minDist: 30f, maxDist: 150f,
-                rolloff: AudioRolloffMode.Linear);
+                minDist: 2f, maxDist: 30f,
+                rolloff: AudioRolloffMode.Logarithmic);
 
             // Load audio clips from the project
             AudioClip LoadClipAsset(string assetPath) =>
@@ -679,6 +684,7 @@ public static class StalkerProductionAnimationSetup
 
             // Wire AudioSources + AudioClips into StalkerAudioController
             var so = new SerializedObject(audioController);
+            so.FindProperty("detectSource").objectReferenceValue    = detectSrc;
             so.FindProperty("voiceSource").objectReferenceValue     = voiceSrc;
             so.FindProperty("movementSource").objectReferenceValue  = movementSrc;
             so.FindProperty("breathingSource").objectReferenceValue = breathSrc;

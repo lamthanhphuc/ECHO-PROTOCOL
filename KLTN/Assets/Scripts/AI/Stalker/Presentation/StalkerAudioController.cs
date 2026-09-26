@@ -38,7 +38,10 @@ namespace EchoProtocol.AI.Stalker.Presentation
         // ──────────────────────────────────────────────────────────────────────
 
         [Header("Audio Sources")]
-        [Tooltip("Handles one-shot vocalisations: Detect, Search, Sniff, Bite, Punch.")]
+        [Tooltip("Handles Detect scream/roar when spotting player from distance.")]
+        [SerializeField] private AudioSource detectSource;
+
+        [Tooltip("Handles close-range vocalisations: Search, Sniff, Bite, Punch.")]
         [SerializeField] private AudioSource voiceSource;
 
         [Tooltip("Handles one-shot foot/impact sounds: footstep, JumpIn, JumpOut.")]
@@ -75,8 +78,11 @@ namespace EchoProtocol.AI.Stalker.Presentation
         // Serialised – Tuning
         // ──────────────────────────────────────────────────────────────────────
 
+        [Header("Detect Voice Tuning")]
+        [SerializeField, Range(0f, 1f)]     private float detectVolume       = 1.00f;
+
         [Header("Footstep Tuning")]
-        [SerializeField, Range(0f, 1f)]     private float footstepVolume     = 1.00f;
+        [SerializeField, Range(0f, 2f)]     private float footstepVolume     = 1.25f;
 
         [Header("JumpOut Tuning (monster leaps off metal)")]
         [SerializeField, Range(0f, 1f)]     private float jumpOutVolume      = 0.85f;
@@ -100,14 +106,16 @@ namespace EchoProtocol.AI.Stalker.Presentation
         [Header("3D Distance Audio Tuning (Realistic Logarithmic Rolloff)")]
         [Tooltip("Ensure AudioSources use realistic 3D logarithmic rolloff with accurate distance perception.")]
         [SerializeField] private bool autoConfigure3D = true;
-        [SerializeField, Min(0.5f)] private float voiceMinDistance = 3f;
-        [SerializeField, Min(5f)] private float voiceMaxDistance = 45f;
-        [SerializeField, Min(0.5f)] private float movementMinDistance = 1.5f;
-        [SerializeField, Min(5f)] private float movementMaxDistance = 25f;
+        [SerializeField, Min(0.5f)] private float detectMinDistance = 30f;
+        [SerializeField, Min(5f)] private float detectMaxDistance = 60f;
+        [SerializeField, Min(0.5f)] private float voiceMinDistance = 10f;
+        [SerializeField, Min(5f)] private float voiceMaxDistance = 25f;
+        [SerializeField, Min(0.5f)] private float movementMinDistance = 15f;
+        [SerializeField, Min(5f)] private float movementMaxDistance = 40f;
         [SerializeField, Min(0.2f)] private float breathingMinDistance = 0.8f;
         [SerializeField, Min(2f)] private float breathingMaxDistance = 6f;
-        [SerializeField, Min(0.5f)] private float chaseMinDistance = 2f;
-        [SerializeField, Min(5f)] private float chaseMaxDistance = 30f;
+        [SerializeField, Min(0.5f)] private float chaseMinDistance = 40f;
+        [SerializeField, Min(5f)] private float chaseMaxDistance = 80f;
 
         // ──────────────────────────────────────────────────────────────────────
         // Private runtime state
@@ -171,11 +179,13 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         private void ValidateSources()
         {
+            detectSource    = ResolveAudioChild(detectSource,    "Audio_Detect");
             voiceSource     = ResolveAudioChild(voiceSource,     "Audio_Voice");
             movementSource  = ResolveAudioChild(movementSource,  "Audio_Movement");
             breathingSource = ResolveAudioChild(breathingSource, "Audio_Breathing");
             chaseSource     = ResolveAudioChild(chaseSource,     "Audio_Chase");
 
+            if (detectSource    == null) Debug.LogError("[StalkerAudio] detectSource is not assigned.",    this);
             if (voiceSource     == null) Debug.LogError("[StalkerAudio] voiceSource is not assigned.",     this);
             if (movementSource  == null) Debug.LogError("[StalkerAudio] movementSource is not assigned.",  this);
             if (breathingSource == null) Debug.LogError("[StalkerAudio] breathingSource is not assigned.", this);
@@ -201,6 +211,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         private void Configure3DSources()
         {
+            ConfigureSource3D(detectSource,    detectMinDistance,    detectMaxDistance,    AudioRolloffMode.Logarithmic);
             ConfigureSource3D(voiceSource,     voiceMinDistance,     voiceMaxDistance,     AudioRolloffMode.Logarithmic);
             ConfigureSource3D(chaseSource,     chaseMinDistance,     chaseMaxDistance,     AudioRolloffMode.Logarithmic);
             ConfigureSource3D(movementSource,  movementMinDistance,  movementMaxDistance,  AudioRolloffMode.Logarithmic);
@@ -350,13 +361,14 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         private void PlayDetectClip()
         {
-            if (!ClipAndSourceReady(voiceSource, detectClip)) return;
-            if (voiceSource.isPlaying && voiceSource.clip == detectClip) return;
+            var src = detectSource != null ? detectSource : voiceSource;
+            if (!ClipAndSourceReady(src, detectClip)) return;
+            if (src.isPlaying && src.clip == detectClip) return;
 
-            voiceSource.clip   = detectClip;
-            voiceSource.pitch  = 1f;
-            voiceSource.volume = 0.1f;
-            voiceSource.Play();
+            src.clip   = detectClip;
+            src.pitch  = 1f;
+            src.volume = detectVolume;
+            src.Play();
         }
 
         /// <summary>
@@ -388,8 +400,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
             if (!ClipAndSourceReady(movementSource, clip)) return;
 
             movementSource.pitch  = 1f;
-            movementSource.volume = footstepVolume;
-            movementSource.PlayOneShot(clip);
+            movementSource.volume = Mathf.Clamp01(footstepVolume);
+            movementSource.PlayOneShot(clip, footstepVolume);
         }
 
         /// <summary>
@@ -482,6 +494,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
         /// </summary>
         public void StopAllLoops()
         {
+            if (detectSource    != null && detectSource.isPlaying)    detectSource.Stop();
             if (breathingSource != null && breathingSource.isPlaying) breathingSource.Stop();
             if (chaseSource     != null && chaseSource.isPlaying)     chaseSource.Stop();
             if (_chaseFadeCoroutine != null)
