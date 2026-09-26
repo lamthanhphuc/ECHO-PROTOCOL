@@ -35,6 +35,9 @@ public class PlayerCamera : MonoBehaviour
     private CharacterController _characterController;
     private EchoProtocol.Networking.NetworkPlayerLifeState _networkLifeState;
     private PlayerDownState _playerDownState;
+    private PlayerAnimatorDriver _animatorDriver;
+    private Animator _targetAnimator;
+    private static readonly int IsRevivingHash = Animator.StringToHash("IsReviving");
     private float _pitch;
     private float _yaw;
     private float _currentEyeHeight;
@@ -63,6 +66,8 @@ public class PlayerCamera : MonoBehaviour
         _characterController = target != null ? target.GetComponent<CharacterController>() : null;
         _networkLifeState = target != null ? target.GetComponent<EchoProtocol.Networking.NetworkPlayerLifeState>() : null;
         _playerDownState = target != null ? target.GetComponent<PlayerDownState>() : null;
+        _animatorDriver = target != null ? target.GetComponentInChildren<PlayerAnimatorDriver>() : null;
+        _targetAnimator = target != null ? target.GetComponentInChildren<Animator>() : null;
 
         if (target != null)
         {
@@ -251,10 +256,15 @@ public class PlayerCamera : MonoBehaviour
             _playerDownState = target.GetComponent<PlayerDownState>();
         }
 
+        if (_animatorDriver == null && target != null) _animatorDriver = target.GetComponentInChildren<PlayerAnimatorDriver>();
+        if (_targetAnimator == null && target != null) _targetAnimator = target.GetComponentInChildren<Animator>();
+
         bool isDowned = (_networkLifeState != null && _networkLifeState.IsDowned)
             || (_playerDownState != null && _playerDownState.IsDowned);
         bool isCrouching = (_playerMovement != null && _playerMovement.IsCrouching)
             || (_networkMovement != null && _networkMovement.IsAnimationCrouching);
+        bool isReviving = (_animatorDriver != null && _animatorDriver.IsReviving)
+            || (_targetAnimator != null && _targetAnimator.isActiveAndEnabled && _targetAnimator.GetBool(IsRevivingHash));
 
         if (isDowned && !_spectateThirdPerson)
         {
@@ -265,7 +275,7 @@ public class PlayerCamera : MonoBehaviour
             _forcedEyeHeight ??
             (isDowned
                 ? downedEyeHeight
-                : (isCrouching
+                : ((isCrouching || isReviving)
                     ? crouchEyeHeight
                     : eyeHeight));
         float targetRightOffset = isDowned

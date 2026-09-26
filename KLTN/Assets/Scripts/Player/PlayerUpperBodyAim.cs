@@ -37,6 +37,9 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 #pragma warning restore CS0414
     [SerializeField, Range(0f, 1f)] private float rightHandPosWeight = 0.82f;
 
+    private static readonly int IsRevivingHash = Animator.StringToHash("IsReviving");
+    private static readonly int IsDownedHash = Animator.StringToHash("IsDowned");
+
     private PlayerInventory _inventory;
     private PlayerEnergyCoreCarrier _coreCarrier;
     private LobbyPlayerState _lobbyState;
@@ -68,6 +71,11 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
     private void OnAnimatorIK(int layerIndex)
     {
+        if (IsReviving() || IsDowned())
+        {
+            if (animator != null && animator.isHuman) animator.SetLookAtWeight(0f);
+            return;
+        }
         if (animator == null || (!TryGetAim(out Vector3 aimOrigin, out Vector3 aimForward, out Vector3 aimUp)))
         {
             return;
@@ -94,6 +102,11 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     private void ApplyArmPosingInLateUpdate()
     {
         if (!driveRightHandWhenHolding || animator == null || !animator.isHuman)
+        {
+            return;
+        }
+
+        if (IsReviving() || IsDowned())
         {
             return;
         }
@@ -290,6 +303,26 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         forward = transform.forward;
         up = Vector3.up;
         return true;
+    }
+
+    private bool IsReviving()
+    {
+        if (animator == null || !animator.isActiveAndEnabled || animator.runtimeAnimatorController == null)
+        {
+            return false;
+        }
+
+        return animator.GetBool(IsRevivingHash) || animator.GetCurrentAnimatorStateInfo(0).IsName("Reviving");
+    }
+
+    private bool IsDowned()
+    {
+        if (animator == null || !animator.isActiveAndEnabled || animator.runtimeAnimatorController == null)
+        {
+            return false;
+        }
+
+        return animator.GetBool(IsDownedHash) || animator.GetCurrentAnimatorStateInfo(0).IsName("Downed Crawl");
     }
 
     private bool IsHoldingTeamTool()
