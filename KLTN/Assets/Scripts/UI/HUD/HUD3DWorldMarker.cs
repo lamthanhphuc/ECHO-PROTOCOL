@@ -23,6 +23,8 @@ namespace EchoProtocol.UI.HUD
 
         [Header("Settings")]
         [SerializeField] private float edgePadding = 48f;
+        [SerializeField] private bool showSectorBoxHUDMarker = false;
+        [SerializeField] private bool showZone2TerminalHUDMarker = false;
         [SerializeField] private Color downedTeammateColor = new Color(1f, 0.25f, 0.25f, 1f);
         [SerializeField] private Color escapeDoorColor = new Color(0f, 0.9f, 1f, 1f);
         [SerializeField] private Color sectorBoxColor = new Color(1f, 0.85f, 0.1f, 1f);
@@ -96,11 +98,17 @@ namespace EchoProtocol.UI.HUD
                 _targetColors.Add(downedTeammateColor);
             }
 
-            // 2. Sector Box (Trạm nạp điện Zone 1) - Only shown when player carries Energy Core
-            CollectSectorBoxTarget();
+            // 2. Sector Box (Trạm nạp điện Zone 1) - Only shown when player carries Energy Core (Replaced by 3D X-Ray Outline if false)
+            if (showSectorBoxHUDMarker)
+            {
+                CollectSectorBoxTarget();
+            }
 
-            // 3. Security Terminal / Exit Panel (Zone 2) - Only shown when Zone 2 entry trigger activated
-            CollectZone2TerminalTarget();
+            // 3. Security Terminal / Exit Panel (Zone 2) - Only shown when Zone 2 entry trigger activated (Replaced by 3D X-Ray Outline if false)
+            if (showZone2TerminalHUDMarker)
+            {
+                CollectZone2TerminalTarget();
+            }
 
             // 4. Escape Door during FinalHunt or ExitCountdown
             CollectEscapeDoorTarget();
