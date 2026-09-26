@@ -236,6 +236,8 @@ namespace EchoProtocol.Networking
                 RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
                 $"[NetworkSession] Starting {gameMode} for room '{normalizedName}'.");
+                Application.targetFrameRate =
+                    gameMode == GameMode.Host ? 60 : -1;
                 var result = await runner.StartGame(args);
                 if (!result.Ok)
                 {
