@@ -59,6 +59,37 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
         : Mathf.Clamp01(_progressSeconds / DownloadDurationSeconds);
     public GameObject ActiveInteractor => _activeInteractor;
 
+    private void Awake()
+    {
+        if (GetComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>() == null)
+        {
+            gameObject.AddComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>();
+        }
+    }
+
+    public bool HasBeenTouched { get; private set; }
+
+    public void MarkTouched()
+    {
+        HasBeenTouched = true;
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other != null && (other.GetComponentInParent<PlayerMovement>() != null || other.GetComponentInParent<EchoProtocol.Networking.LobbyPlayerState>() != null))
+        {
+            MarkTouched();
+        }
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (collision != null && (collision.collider.GetComponentInParent<PlayerMovement>() != null || collision.collider.GetComponentInParent<EchoProtocol.Networking.LobbyPlayerState>() != null))
+        {
+            MarkTouched();
+        }
+    }
+
     public string AuthorizationCode
     {
         get
@@ -187,6 +218,8 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
 
     public void Interact(GameObject interactor)
     {
+        MarkTouched();
+
         // First terminal interaction: discovers terminal, does NOT start security hold
         if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null &&
             EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.CurrentStage == EchoProtocol.MatchFlow.Zone2MissionStage.FindSecurityTerminal)
@@ -223,6 +256,8 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
 
     public void BeginHoldInteract(GameObject interactor)
     {
+        MarkTouched();
+
         if (interactor == null || IsComplete)
         {
             return;

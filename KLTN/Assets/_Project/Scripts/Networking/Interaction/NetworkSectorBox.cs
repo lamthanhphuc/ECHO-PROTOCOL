@@ -32,6 +32,10 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            if (GetComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>() == null)
+            {
+                gameObject.AddComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>();
+            }
             ConfigurePresentation();
             if (Object.HasStateAuthority)
             {
