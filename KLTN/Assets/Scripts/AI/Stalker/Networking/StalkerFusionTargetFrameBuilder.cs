@@ -56,6 +56,15 @@ namespace EchoProtocol.AI.Stalker.Networking
                     return false;
                 }
 
+                if (identity.TryGetComponent<LobbyPlayerState>(out var disconnectedState)
+                    && disconnectedState.Disconnected)
+                {
+                    var disconnected = StalkerFusionTargetEligibilityAdapter.CreateDisconnected(playerId);
+                    InsertStatusSortedUnique(targetStatuses, new StalkerTargetStatus(
+                        playerId, StalkerTargetEligibility.Evaluate(disconnected)));
+                    continue;
+                }
+
                 var isDowned = (identity.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && lifeState.IsDowned)
                     || (identity.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned);
                 var isEliminated = lifeState != null && lifeState.IsEliminated;

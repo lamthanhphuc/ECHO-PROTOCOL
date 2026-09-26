@@ -506,11 +506,17 @@ namespace EchoProtocol.Networking
                 || Zone2Stage != Zone2MissionStage.FindSecurityTerminal
                 || !TryGetZone2Director(out var director)
                 || director.SecurityTerminal == null
-                || !TryValidateZone2Requester(actor, director.SecurityTerminal, director.SecurityTerminal.MaxInteractorDistance))
+                || !TryValidateZone2Requester(
+                    actor,
+                    director.SecurityTerminal,
+                    director.SecurityTerminal.MaxInteractorDistance))
             {
                 return false;
             }
 
+            EmitSecurityTerminalInteractionNoiseAuthoritative(
+                actor,
+                director.SecurityTerminal);
             SecurityTerminalDiscovered = true;
             Zone2Stage = Zone2MissionStage.RepairRelays;
             HandleReplicatedStateChanged();
@@ -1928,12 +1934,13 @@ namespace EchoProtocol.Networking
                     operatorPlayer,
                     target,
                     _zone2InteractionDistance)
-                || !pulseTimer.Expired(Runner))
+                || !pulseTimer.ExpiredOrNotRunning(Runner))
             {
                 if (!active || !operatorPlayer.IsRealPlayer)
                 {
                     pulseTimer = TickTimer.None;
                 }
+
                 return;
             }
 

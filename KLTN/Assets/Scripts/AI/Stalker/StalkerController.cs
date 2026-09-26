@@ -95,7 +95,7 @@ namespace EchoProtocol.AI.Stalker
         [Header("Search Spike Defaults")]
         [SerializeField]
         [Tooltip("Active SEARCH time budget; LKP sniff and search point holds pause this timer.")]
-        private float searchDuration = 5f;
+        private float searchDuration = 3f;
         [SerializeField] private float searchRadius = 8f;
 
         [Header("Search Reacquire Detect")]
@@ -6948,9 +6948,17 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            var rushingToHeardNoiseOrigin =
+                currentState == StalkerState.SEARCH
+                && _searchContext != null
+                && _searchContext.Source == StalkerSearchSource.HeardNoise
+                && _navigationObjectiveKey.Kind
+                    == StalkerNavigationObjectiveKind.SearchOriginLkp;
+
             agent.speed =
                 currentState == StalkerState.CHASE
                 || currentState == StalkerState.ATTACK
+                || rushingToHeardNoiseOrigin
                     ? GetChaseSpeed()
                     : Mathf.Max(0f, patrolSpeed);
         }

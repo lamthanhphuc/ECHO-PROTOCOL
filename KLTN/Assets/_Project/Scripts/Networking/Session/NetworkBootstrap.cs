@@ -2,6 +2,7 @@ using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using EchoProtocol.Auth;
 using Fusion;
 using Fusion.Sockets;
 using EchoProtocol.Networking.Authority;
@@ -29,6 +30,10 @@ namespace EchoProtocol.Networking
         private NetworkObject _localInputOwner;
         private Func<NetworkPlayerInput> _localInputProvider;
         private MatchAuthorityRuntime _matchAuthority;
+        private string _reconnectSessionName;
+        private bool _reconnectIdentityPending;
+        private float _nextReconnectProofRetryAt;
+        private readonly Dictionary<PlayerRef, int> _actorIds = new();
 
         public event Action<NetworkSessionState, string> SessionStateChanged;
         public event Action<PlayerRef> PlayerJoined;
@@ -42,6 +47,17 @@ namespace EchoProtocol.Networking
         public string LastError { get; private set; } = string.Empty;
         public bool HasRunningRunner => Runner != null && Runner.IsRunning;
         public bool IsBusy => _sessionOperationInProgress || State == NetworkSessionState.ShuttingDown;
+        public bool ReconnectIdentityPending => _reconnectIdentityPending;
+
+        private void Update()
+        {
+            if (!_reconnectIdentityPending || !HasRunningRunner
+                || Time.unscaledTime < _nextReconnectProofRetryAt) return;
+            _nextReconnectProofRetryAt = Time.unscaledTime + 2f;
+            _matchAuthority?.TrySubmitLocalIdentity(force: true);
+        }
+
+        public void MarkReconnectProofSubmitted() => _reconnectIdentityPending = false;
 
         private void Awake()
         {
@@ -79,6 +95,8 @@ namespace EchoProtocol.Networking
 
         public async Task Shutdown()
         {
+            _reconnectSessionName = null;
+            _reconnectIdentityPending = false;
             PlayerInteractionControlLock.ReleaseAll();
             ClearLocalInputProvider();
             if (_matchAuthority != null) await _matchAuthority.EndAsync("HOST_SHUTDOWN");
@@ -171,6 +189,8 @@ namespace EchoProtocol.Networking
         {
             var normalizedName = sessionName?.Trim();
             if (string.IsNullOrWhiteSpace(normalizedName)) return await FailWithoutStarting("Room name is required.");
+            if (!Guid.TryParse(AuthSession.CurrentUserId, out var userId))
+                return await FailWithoutStarting("An authenticated user is required to join a room.");
             if (_sessionOperationInProgress) return await FailWithoutStarting("A create/join operation is already in progress.");
             if (HasRunningRunner) return await FailWithoutStarting($"Already connected to room '{CurrentSessionName}'.");
 
@@ -198,6 +218,15 @@ namespace EchoProtocol.Networking
                     SceneManager = runner.GetComponent<INetworkSceneManager>(),
                     ObjectProvider = runner.GetComponent<INetworkObjectProvider>(),
                 };
+                var tokenKey = $"EchoProtocol.ConnectionToken.{userId:D}";
+                if (!Guid.TryParse(PlayerPrefs.GetString(tokenKey), out var connectionId))
+                {
+                    connectionId = Guid.NewGuid();
+                    PlayerPrefs.SetString(tokenKey, connectionId.ToString("D"));
+                    PlayerPrefs.Save();
+                }
+                args.ConnectionToken = connectionId.ToByteArray();
+                args.PlayerUniqueId = Math.Max(1L, BitConverter.ToInt64(args.ConnectionToken, 0) & long.MaxValue);
                 if (playerCount.HasValue) args.PlayerCount = playerCount.Value;
                 if (gameMode == GameMode.Host)
                 {
@@ -222,8 +251,13 @@ namespace EchoProtocol.Networking
                     await HandleStartFailureAsync("Fusion room has no valid backend match binding.");
                     return false;
                 }
-                SetState(NetworkSessionState.InLobby,
+                var reconnecting = _reconnectSessionName == normalizedName;
+                SetState(gameMode == GameMode.Client
+                        && SceneManager.GetActiveScene().name == LobbyManager.GameSceneName
+                        ? NetworkSessionState.InMatch : NetworkSessionState.InLobby,
                     $"{(gameMode == GameMode.Host ? "Created" : "Joined")} room '{normalizedName}'.");
+                _reconnectSessionName = null;
+                if (reconnecting) _matchAuthority.TrySubmitLocalIdentity(force: true);
                 RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
                 $"[NetworkSession] Connected. Mode={gameMode}, Room='{normalizedName}', LocalPlayer={runner.LocalPlayer}.");
@@ -301,9 +335,10 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            Runner.SessionInfo.IsOpen = false;
+            // Reconnects need an open session; OnConnectRequest admits only retained tokens.
+            Runner.SessionInfo.IsOpen = true;
             Runner.SessionInfo.IsVisible = false;
-            SetState(NetworkSessionState.InMatch, "Match started; room closed to late joins.");
+            SetState(NetworkSessionState.InMatch, "Match started; new players blocked.");
             return true;
         }
 
@@ -339,6 +374,7 @@ namespace EchoProtocol.Networking
 
         void INetworkRunnerCallbacks.OnPlayerJoined(NetworkRunner runner, PlayerRef player)
         {
+            _actorIds[player] = runner.GetPlayerActorId(player) ?? player.PlayerId;
             RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
                 $"[NetworkSession] Player joined: {player}. Players={CountPlayers(runner)}.");
@@ -351,7 +387,9 @@ namespace EchoProtocol.Networking
             RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
                 $"[NetworkSession] Player left: {player}. Players={CountPlayers(runner)}.");
-            var actorNumber = runner.GetPlayerActorId(player) ?? player.PlayerId;
+            var actorNumber = _actorIds.TryGetValue(player, out var joinedActor)
+                ? joinedActor : runner.GetPlayerActorId(player) ?? player.PlayerId;
+            _actorIds.Remove(player);
             if (runner.IsServer)
             {
                 _matchAuthority?.MarkPlayerDisconnected(actorNumber);
@@ -388,7 +426,9 @@ namespace EchoProtocol.Networking
 
         void INetworkRunnerCallbacks.OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
         {
-            LastError = $"Disconnected from server: {reason}";
+            LastError = State == NetworkSessionState.InMatch
+                ? "Host disconnected – Match aborted."
+                : $"Disconnected from server: {reason}";
             Debug.LogWarning($"[NetworkSession] {LastError}");
             if (Runner == runner) CleanupUnexpectedTermination(runner, LastError);
         }
@@ -410,6 +450,8 @@ namespace EchoProtocol.Networking
         private void CleanupUnexpectedTermination(NetworkRunner runner, string message)
         {
             if (Runner != runner) return;
+            var reconnect = runner.IsClient && State == NetworkSessionState.InMatch;
+            var reconnectName = reconnect ? CurrentSessionName : null;
             PlayerInteractionControlLock.ReleaseAll();
             ClearLocalInputProvider();
             if (_matchAuthority != null)
@@ -420,12 +462,15 @@ namespace EchoProtocol.Networking
             _callbacksRegistered = false;
             _sessionOperationInProgress = false;
             CurrentSessionName = string.Empty;
+            _reconnectSessionName = reconnectName;
+            _reconnectIdentityPending = reconnect;
             LastError = message;
             SetState(NetworkSessionState.Failed, message);
-            _ = FinishUnexpectedTerminationAsync(runner);
+            var graceSeconds = runner.GetComponent<FusionPlayerLifecycle>()?.ReconnectGraceSeconds ?? 60f;
+            _ = FinishUnexpectedTerminationAsync(runner, message, graceSeconds);
         }
 
-        private async Task FinishUnexpectedTerminationAsync(NetworkRunner runner)
+        private async Task FinishUnexpectedTerminationAsync(NetworkRunner runner, string message, float graceSeconds)
         {
             if (runner != null)
             {
@@ -438,6 +483,24 @@ namespace EchoProtocol.Networking
                     Debug.LogWarning($"[NetworkSession] Unexpected shutdown cleanup failed: {exception.Message}");
                 }
                 if (runner != null) Destroy(runner.gameObject);
+            }
+            if (!string.IsNullOrEmpty(_reconnectSessionName))
+            {
+                var sessionName = _reconnectSessionName;
+                var deadline = Time.realtimeSinceStartup + Mathf.Max(1f, graceSeconds - 5f);
+                while (_reconnectSessionName == sessionName && Time.realtimeSinceStartup < deadline)
+                {
+                    await Task.Delay(2000);
+                    if (_reconnectSessionName != sessionName) return;
+                    if (await JoinRoomAsync(sessionName)) return;
+                }
+                _reconnectSessionName = null;
+            }
+            _reconnectIdentityPending = false;
+            if (message.StartsWith("Host disconnected", StringComparison.Ordinal))
+            {
+                LastError = "Host disconnected – Match aborted.";
+                SetState(NetworkSessionState.Failed, LastError);
             }
             if (SceneManager.GetActiveScene().name != LobbySceneName)
                 _ = SceneManager.LoadSceneAsync(LobbySceneName, LoadSceneMode.Single);
@@ -478,20 +541,36 @@ namespace EchoProtocol.Networking
             if (_localInputProvider != null) input.Set(_localInputProvider());
         }
         void INetworkRunnerCallbacks.OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
-        void INetworkRunnerCallbacks.OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
+        void INetworkRunnerCallbacks.OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
+        {
+            if (!runner.IsServer) return;
+            if (State != NetworkSessionState.InMatch)
+            {
+                request.Accept();
+                return;
+            }
+            var lifecycle = runner.GetComponent<FusionPlayerLifecycle>();
+            if (lifecycle != null && lifecycle.CanReconnect(token)) request.Accept();
+            else request.Refuse();
+        }
         void INetworkRunnerCallbacks.OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList) { }
         void INetworkRunnerCallbacks.OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
         void INetworkRunnerCallbacks.OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken)
         {
             if (Runner == runner)
-                CleanupUnexpectedTermination(runner, "Host disconnected. Match ended. Create or join a new room.");
+                CleanupUnexpectedTermination(runner, "Host disconnected – Match aborted.");
         }
         void INetworkRunnerCallbacks.OnSceneLoadDone(NetworkRunner runner)
         {
             RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
                 $"[NetworkSession] Scene load complete: {SceneManager.GetActiveScene().name}.");
+            if (Runner == runner && SceneManager.GetActiveScene().name == LobbyManager.GameSceneName
+                && State == NetworkSessionState.InLobby)
+                SetState(NetworkSessionState.InMatch, "Match scene loaded.");
             NetworkSceneLoadDone?.Invoke(runner);
+            if (Runner == runner && _reconnectIdentityPending && runner.IsClient)
+                _matchAuthority?.TrySubmitLocalIdentity(force: true);
         }
         void INetworkRunnerCallbacks.OnSceneLoadStart(NetworkRunner runner) => RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,

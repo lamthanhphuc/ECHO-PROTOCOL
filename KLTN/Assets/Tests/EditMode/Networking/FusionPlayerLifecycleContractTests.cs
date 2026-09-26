@@ -157,6 +157,17 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("_identityRegistry.Unregister(player)", source);
         }
 
+        [Test]
+        public void FND_NET_LIFECYCLE_ReconnectRequiresExactToken()
+        {
+            var lifecycleType = ResolveType(LifecycleTypeName);
+            var matches = lifecycleType.GetMethod("TokensMatch", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(matches, Is.Not.Null);
+            Assert.That(matches.Invoke(null, new object[] { new byte[] { 1, 2, 3 }, new byte[] { 1, 2, 3 } }), Is.True);
+            Assert.That(matches.Invoke(null, new object[] { new byte[] { 1, 2, 3 }, new byte[] { 1, 2, 4 } }), Is.False);
+            Assert.That(matches.Invoke(null, new object[] { new byte[] { 1, 2, 3 }, new byte[] { 1, 2 } }), Is.False);
+        }
+
         private static GameObject LoadPrefab(string path)
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
