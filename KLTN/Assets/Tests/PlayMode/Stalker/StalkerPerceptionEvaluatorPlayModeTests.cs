@@ -16,7 +16,6 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string StalkerPerceptionTargetSnapshotTypeName = "EchoProtocol.AI.Stalker.StalkerPerceptionTargetSnapshot";
         private const string StalkerPerceptionEvaluatorTypeName = "EchoProtocol.AI.Stalker.StalkerPerceptionEvaluator";
         private const string StalkerTargetCandidateTypeName = "EchoProtocol.AI.Stalker.StalkerTargetCandidate";
-        private const string StalkerTargetSelectorTypeName = "EchoProtocol.AI.Stalker.StalkerTargetSelector";
         private const string StalkerTargetEligibilitySnapshotTypeName = "EchoProtocol.AI.Stalker.StalkerTargetEligibilitySnapshot";
         private const string VisionObservationTypeName = "EchoProtocol.AI.Stalker.VisionObservation";
         private const float FloatTolerance = 0.0001f;
@@ -127,27 +126,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(count, Is.EqualTo(1));
             Assert.That(GetBoolProperty(eligibility, "Eligible"), Is.False);
             Assert.That(GetProperty(eligibility, "Reason").ToString(), Is.EqualTo("Downed"));
-            yield return null;
-        }
-
-        [UnityTest]
-        public IEnumerator STK_PER_SelectorExcludesNearerIneligibleAndSelectsFartherEligible()
-        {
-            var fixture = CreateSensorFixture();
-            var downedRoot = CreateCandidate("STK_PER_NearDowned", new Vector3(0f, 1f, 2f));
-            var eligibleRoot = CreateCandidate("STK_PER_FarEligible", new Vector3(0f, 1f, 4f));
-            SetSensorFields(fixture.Sensor, fixture.Origin, null, 10f, 90f, 0);
-            Physics.SyncTransforms();
-
-            var results = CreateCandidateResultList();
-            var targets = CreateTargetList(
-                CreateTargetSnapshot(1, downedRoot, downedRoot, CreateEligibilitySnapshot(isDowned: true)),
-                CreateTargetSnapshot(2, eligibleRoot, eligibleRoot, CreateEligibilitySnapshot()));
-            var count = CollectVisibleTargetCandidates(fixture.Sensor, targets, CreateAiSimulationTime(1, 0d), results);
-            var selected = SelectNearestEligibleVisible(results);
-
-            Assert.That(count, Is.EqualTo(2));
-            AssertPlayerIdValue(GetProperty(selected, "PlayerId"), 2);
             yield return null;
         }
 
@@ -315,19 +293,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             var count = method.Invoke(null, new[] { sensor, targets, observedAt, results });
             Assert.That(count, Is.TypeOf<int>());
             return (int)count;
-        }
-
-        private static object SelectNearestEligibleVisible(object candidates)
-        {
-            var method = ResolveType(StalkerTargetSelectorTypeName).GetMethod(
-                "TrySelectNearestEligibleVisible",
-                BindingFlags.Public | BindingFlags.Static);
-            Assert.That(method, Is.Not.Null, "Missing StalkerTargetSelector.TrySelectNearestEligibleVisible.");
-
-            var args = new object[] { candidates, 0f, null };
-            var accepted = method.Invoke(null, args);
-            Assert.That(accepted, Is.EqualTo(true));
-            return args[2];
         }
 
         private static void SetSensorFields(

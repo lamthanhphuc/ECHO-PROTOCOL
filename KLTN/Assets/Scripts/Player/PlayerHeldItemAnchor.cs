@@ -13,6 +13,10 @@ public sealed class PlayerHeldItemAnchor : MonoBehaviour
 
     private Transform _runtimeFallbackAnchor;
     private Transform _runtimeCoreCarryAnchor;
+    private PlayerHidingController _hidingController;
+    private EchoProtocol.Networking.NetworkPlayerMovement _networkMovement;
+    private bool _hiddenStateInitialized;
+    private bool _lastHiddenState;
 
     public Transform RightHandAnchor
     {
@@ -106,6 +110,48 @@ public sealed class PlayerHeldItemAnchor : MonoBehaviour
     private void Awake()
     {
         ResolveAnimator();
+        _hidingController = GetComponentInParent<PlayerHidingController>();
+        _networkMovement = GetComponentInParent<EchoProtocol.Networking.NetworkPlayerMovement>();
+    }
+
+    private void LateUpdate()
+    {
+        bool hidden = ResolveHiddenState();
+        if (_hiddenStateInitialized && hidden == _lastHiddenState)
+        {
+            return;
+        }
+
+        _hiddenStateInitialized = true;
+        _lastHiddenState = hidden;
+        SetHeldVisualsVisible(!hidden);
+    }
+
+    private bool ResolveHiddenState()
+    {
+        if (_networkMovement != null
+            && _networkMovement.Object != null
+            && _networkMovement.Object.IsValid)
+        {
+            return _networkMovement.IsHidden;
+        }
+
+        return _hidingController != null && _hidingController.IsHidden;
+    }
+
+    private void SetHeldVisualsVisible(bool visible)
+    {
+        Transform rightHand = RightHandAnchor;
+        if (rightHand != null && rightHand.gameObject.activeSelf != visible)
+        {
+            rightHand.gameObject.SetActive(visible);
+        }
+
+        Transform core = CoreCarryAnchor;
+        if (core != null && core != rightHand && core.gameObject.activeSelf != visible)
+        {
+            core.gameObject.SetActive(visible);
+        }
     }
 
     private void ResolveAnimator()

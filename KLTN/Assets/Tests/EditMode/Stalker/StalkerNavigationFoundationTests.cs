@@ -189,9 +189,7 @@ namespace EchoProtocol.AI.Stalker.Tests
                     "RetryLogicalObjective",
                     "AlternateLocalCandidate",
                     "AlternateGlobalObjective",
-                    "RegionGraphCompatibilityFallback",
-                    "FixedPatrolFallback",
-                    "EmergencyNavMeshRecovery"
+                                        "EmergencyNavMeshRecovery"
                 });
         }
 
@@ -200,8 +198,8 @@ namespace EchoProtocol.AI.Stalker.Tests
         {
             var keyType = ResolveType(NavigationObjectiveKeyTypeName);
             var kindType = ResolveType(NavigationObjectiveKindTypeName);
-            var dynamicKind = Enum.Parse(kindType, "DynamicSpatialNode");
-            var confidenceKind = Enum.Parse(kindType, "ConfidenceSpatialNode");
+            var dynamicKind = Enum.Parse(kindType, "RoomSweepProbe");
+            var confidenceKind = Enum.Parse(kindType, "RoomSweepTransit");
 
             var sameA = Activator.CreateInstance(keyType, dynamicKind, 3, -1, -1);
             var sameB = Activator.CreateInstance(keyType, dynamicKind, 3, -1, -1);

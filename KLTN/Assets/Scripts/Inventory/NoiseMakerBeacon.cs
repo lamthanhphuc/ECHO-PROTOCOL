@@ -14,6 +14,14 @@ public sealed class NoiseMakerBeacon : MonoBehaviour
     [SerializeField, Min(0.1f)] private float pulseInterval = 2f;
     [SerializeField, Min(0f)] private float despawnDelayAfterLastPulse = 1f;
 
+    [Header("Warning Light")]
+    [SerializeField] private Light warningLight;
+    [SerializeField] private Color warningColor = new Color(1f, 0.16f, 0.05f);
+    [SerializeField, Min(0f)] private float minimumLightIntensity = 1.5f;
+    [SerializeField, Min(0f)] private float maximumLightIntensity = 5f;
+    [SerializeField, Min(0.1f)] private float warningLightRange = 7f;
+    [SerializeField, Min(0.1f)] private float warningPulseSpeed = 5f;
+
     private PlayerRef _actor;
     private string _streamKey;
     private long _baseSequence;
@@ -23,6 +31,32 @@ public sealed class NoiseMakerBeacon : MonoBehaviour
     private void Awake()
     {
         _networkObject = GetComponent<NetworkObject>();
+
+        if (warningLight == null)
+        {
+            warningLight = GetComponentInChildren<Light>(true);
+        }
+
+        if (warningLight != null)
+        {
+            warningLight.type = LightType.Point;
+            warningLight.color = warningColor;
+            warningLight.range = warningLightRange;
+            warningLight.shadows = LightShadows.None;
+            warningLight.enabled = true;
+        }
+    }
+
+    private void Update()
+    {
+        if (warningLight == null)
+        {
+            return;
+        }
+
+        float pulse = (Mathf.Sin(Time.time * warningPulseSpeed) + 1f) * 0.5f;
+        pulse *= pulse;
+        warningLight.intensity = Mathf.Lerp(minimumLightIntensity, maximumLightIntensity, pulse);
     }
 
     public void Initialize(PlayerRef actor, string streamKey, long baseSequence)

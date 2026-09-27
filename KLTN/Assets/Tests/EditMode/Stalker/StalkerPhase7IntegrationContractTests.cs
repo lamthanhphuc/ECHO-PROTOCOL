@@ -14,7 +14,6 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const string TelemetryAdapterPath = "Assets/Scripts/AI/Stalker/Telemetry/StalkerTelemetryAdapter.cs";
         private const string ProductionTelemetryProducerPath = "Assets/Scripts/AI/Stalker/Telemetry/StalkerProductionTelemetryProducer.cs";
         private const string MatchAuthorityRuntimePath = "Assets/_Project/Scripts/Networking/Authority/MatchAuthorityRuntime.cs";
-        private const string DebugSnapshotTypeName = "EchoProtocol.AI.Stalker.Debug.StalkerAIDebugSnapshot";
         private const string PresentationDriverTypeName = "EchoProtocol.AI.Stalker.Networking.StalkerPresentationDriver";
         private const string PresentationStateTypeName = "EchoProtocol.AI.Stalker.Networking.StalkerNetworkPresentationState";
         private const string AttackPhaseTypeName = "EchoProtocol.AI.Stalker.Networking.StalkerNetworkAttackPhase";
@@ -131,18 +130,6 @@ namespace EchoProtocol.AI.Stalker.Tests
                     .SelectMany(constructor => constructor.GetParameters())
                     .Select(parameter => parameter.Name),
                 Has.No.Member("authoritativeSimulationCount"));
-        }
-
-        [Test]
-        public void STK_OBS_001_DebugSnapshotIsImmutableProjection()
-        {
-            var snapshotType = ResolveType(DebugSnapshotTypeName);
-
-            Assert.That(snapshotType.IsValueType, Is.True);
-            foreach (var property in snapshotType.GetProperties(BindingFlags.Instance | BindingFlags.Public))
-            {
-                Assert.That(property.CanWrite, Is.False, $"{property.Name} must be read-only.");
-            }
         }
 
         [Test]
@@ -383,6 +370,19 @@ namespace EchoProtocol.AI.Stalker.Tests
             StringAssert.Contains("StalkerTelemetryPublishResult.InvalidOccurrence", producerSource);
             StringAssert.Contains("StalkerTelemetryPublishResult.Accepted", producerSource);
             StringAssert.Contains("ToUpperInvariant", producerSource);
+        }
+
+        [Test]
+        public void STK_AUDIO_WalkAndChaseUseIndependentVolumeTuning()
+        {
+            var source = File.ReadAllText(
+                "Assets/Scripts/AI/Stalker/Presentation/StalkerAudioController.cs");
+
+            StringAssert.Contains("walkFootstepVolume", source);
+            StringAssert.Contains("chaseFootstepVolume", source);
+            StringAssert.Contains("_chaseActive", source);
+            StringAssert.Contains("detectVolume", source);
+            StringAssert.DoesNotContain("voiceSource.volume = 0.1f", source);
         }
 
         private static object CreatePresentationState(

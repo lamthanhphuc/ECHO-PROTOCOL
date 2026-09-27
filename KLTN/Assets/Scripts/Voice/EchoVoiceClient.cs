@@ -6,6 +6,9 @@ namespace EchoProtocol.Voice
     /// <summary>Standalone Photon Voice client. Fusion only supplies player/session identity.</summary>
     public sealed class EchoVoiceClient : UnityVoiceClient
     {
+        private const float GameplayVoiceMinDistance = 2f;
+        private const float GameplayVoiceMaxDistance = 15f;
+
         public VoiceManager Owner { get; set; }
 
         protected override Speaker InstantiateSpeakerForRemoteVoice(int playerId, byte voiceId, object userData)
@@ -18,9 +21,10 @@ namespace EchoProtocol.Voice
             source.playOnAwake = false;
             source.mute = true; // Never play at the origin before the owning avatar is found.
             source.dopplerLevel = 0;
+            source.spatialBlend = 1f;
             source.rolloffMode = AudioRolloffMode.Linear;
-            source.minDistance = 2;
-            source.maxDistance = 15;
+            source.minDistance = GameplayVoiceMinDistance;
+            source.maxDistance = GameplayVoiceMaxDistance;
             var speaker = go.AddComponent<Speaker>();
             speaker.OnRemoteVoiceRemoveAction += removed => { if (removed != null) Destroy(removed.gameObject); };
             go.AddComponent<VoicePlayerBinding>().Initialize(Owner, key, source, speaker);

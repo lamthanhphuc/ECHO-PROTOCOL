@@ -190,21 +190,6 @@
     "sha256": "7428118289736a4491f22687f1d6c4bc008210d299a05075da3811fbc5997fdf"
   },
   {
-    "file": "KLTN/Assets/Scripts/AI/Stalker/Debug/StalkerAIDebugSnapshot.cs",
-    "lines": 160,
-    "sha256": "f7a505bc26e352185281f73b94abd0e9f5834e4337ac69fd90317d6f0ba04248"
-  },
-  {
-    "file": "KLTN/Assets/Scripts/AI/Stalker/Debug/StalkerDebugProvider.cs",
-    "lines": 88,
-    "sha256": "fbf71aa5b2486c19a38a770d8d77f3ed2866b895a2f3eb5b8db14d58002eb454"
-  },
-  {
-    "file": "KLTN/Assets/Scripts/AI/Stalker/Debug/StalkerSpatialGraphDebug.cs",
-    "lines": 150,
-    "sha256": "e810948902246ee55d0260ba3bb9cb17791d60c7309220e6320ed3f9de761604"
-  },
-  {
     "file": "KLTN/Assets/Scripts/AI/Stalker/Networking/Diagnostics/StalkerFusionC2CHarnessProbe.cs",
     "lines": 1235,
     "sha256": "9e1a3ca711a32eb7b86041dabb46662cb05106ab0c9382ecaa5bc810ac7ebc17"
@@ -213,11 +198,6 @@
     "file": "KLTN/Assets/Scripts/AI/Stalker/Networking/StalkerFusionRuntime.cs",
     "lines": 694,
     "sha256": "abcc78a0ea99a5badacc67f593e78adf8d843598058d6d9f6869cafdca75875d"
-  },
-  {
-    "file": "KLTN/Assets/Scripts/AI/Stalker/Networking/StalkerFusionTargetEligibilityAdapter.cs",
-    "lines": 45,
-    "sha256": "0849420ff3ac384516fe5f1082d898eacb91d8dc5938b14df8329ea1eac5655b"
   },
   {
     "file": "KLTN/Assets/Scripts/AI/Stalker/Networking/StalkerFusionTargetFrameBuilder.cs",
@@ -240,34 +220,14 @@
     "sha256": "d184a9d9a2d381083f3da884d5889aefda7e7a7c682647280b4009c7520ac7fe"
   },
   {
-    "file": "KLTN/Assets/Scripts/AI/Stalker/PatrolRoute.cs",
-    "lines": 100,
-    "sha256": "2fa146805ea60a8bf95c165ebdfd8b0d877ccaa38f3ebe31d1d24eb098d368c7"
-  },
-  {
-    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/ConfidenceSpatialPatrolPlanner.cs",
-    "lines": 808,
-    "sha256": "1cf4ef9c9dcf1fbe91f10ca2ffe8a008e95c0704cf487bb0645b5d2d463fc1ce"
-  },
-  {
     "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/CoverageMemory.cs",
     "lines": 273,
     "sha256": "2b6c9510e137ab397f6a4646b07cab379eecc3b331edf6e42aba589e4f3ee7fb"
   },
   {
-    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/Editor/Phase3AcceptanceFixtureBuilder.cs",
-    "lines": 122,
-    "sha256": "ab54d17632ee221e473b22c36faff819f1ac5d3f3a0f242237f9f267e28eebaf"
-  },
-  {
     "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/Editor/Zone1RegionGraphAuthoringTool.cs",
     "lines": 3085,
     "sha256": "b782fdc4fe22d022e73ab54a883263514f51af111026797973e4fbcda7da29be"
-  },
-  {
-    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/GlobalPatrolPlanner.cs",
-    "lines": 225,
-    "sha256": "442ba11353adf1b1a63bc571ce2f36d80dc910bcdfd05819cf4e7ecbb99f2335"
   },
   {
     "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/LocalPatrolSelector.cs",
@@ -325,11 +285,6 @@
     "sha256": "f11e1f9746d9ff0b3f4921eb1f55d03dbd4ea0ab0a0b00d757406b152a654212"
   },
   {
-    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/SpatialCoverageMemory.cs",
-    "lines": 280,
-    "sha256": "38dad98fd57d7ce77e5541dc304da99c27a60f614af4ef2253b30abe24323c9f"
-  },
-  {
     "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/SpatialGraphCompatibilityIdentity.cs",
     "lines": 26,
     "sha256": "cea333c5eab6ffed9ac4be29c69670bd4b0e604a258ab9e5adc8fbb8ab597ea9"
@@ -338,16 +293,6 @@
     "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/SpatialNode.cs",
     "lines": 54,
     "sha256": "148d91def5dfa333ee9b08afd6c568cc8274995b89598ef4e6a5caeb996dfdf8"
-  },
-  {
-    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/SpatialPatrolMemory.cs",
-    "lines": 51,
-    "sha256": "c3f326314798d162ba05a0b3be5a785a2d0b6ce10c8746cf0c75d40a10f85795"
-  },
-  {
-    "file": "KLTN/Assets/Scripts/AI/Stalker/Spatial/SpatialPatrolPlanner.cs",
-    "lines": 260,
-    "sha256": "6227aa44ebdc4c06476761f4b7f278a50e2547745b53a1222e256c4388ce6321"
   },
   {
     "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerAttackController.cs",
@@ -395,11 +340,6 @@
     "sha256": "7597664968cca8b93f74b51bc6fa3867d67d30a08846e1dea5a7c1b0a8b808ff"
   },
   {
-    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerPatrolMode.cs",
-    "lines": 10,
-    "sha256": "1e7b203dfc15b8773b588166fd6713dd2352a110de38c3403dac1b101b8566ce"
-  },
-  {
     "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerPerceptionEvaluator.cs",
     "lines": 73,
     "sha256": "b017a7302707bfb102f1c45686672fe78458f4e659b6b09cba354ffde4b0d168"
@@ -443,11 +383,6 @@
     "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerTargetEligibility.cs",
     "lines": 100,
     "sha256": "8fb4386909a6fef85b7876690398b37eaa93f9f6dc0d968ae395f4419beac885"
-  },
-  {
-    "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerTargetSelector.cs",
-    "lines": 88,
-    "sha256": "2d9af6db735002343c953ed7fc3161194249a1aaea80300a82742630a6fbca7f"
   },
   {
     "file": "KLTN/Assets/Scripts/AI/Stalker/StalkerTargetStatus.cs",

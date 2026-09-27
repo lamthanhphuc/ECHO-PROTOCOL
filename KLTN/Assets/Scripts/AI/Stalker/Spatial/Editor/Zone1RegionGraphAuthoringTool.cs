@@ -67,7 +67,6 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
         private const string NavigationName = "Navigation";
         private const string StalkerRegionsName = "StalkerRegions";
         private const string GeneratedPrefix = "Generated_StationRegion_";
-        private const string ProtectedSpatialV3Path = "Assets/AI/Stalker/Phase3/AI_Stalker_SpatialV3_RegionGraph.asset";
         private const float BoundsPadding = 0.05f;
         private const float FloorVerticalTolerance = 1.25f;
         private const float SeedGeometryComparisonEpsilon = 0.001f;
@@ -162,13 +161,6 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
             }
 
             var normalizedPath = assetPath.Replace('\\', '/');
-            if (string.Equals(normalizedPath, ProtectedSpatialV3Path, StringComparison.OrdinalIgnoreCase))
-            {
-                var blocked = new DryRunReport();
-                blocked.Errors.Add($"Refusing to overwrite protected asset: {ProtectedSpatialV3Path}");
-                return blocked;
-            }
-
             var report = DryRunActiveScene();
             if (!report.CanBakeRuntimeAsset)
             {

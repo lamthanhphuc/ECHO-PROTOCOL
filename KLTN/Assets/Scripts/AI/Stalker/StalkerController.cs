@@ -36,11 +36,8 @@ namespace EchoProtocol.AI.Stalker
     [RequireComponent(typeof(NavMeshAgent))]
     public sealed class StalkerController : MonoBehaviour
     {
-        [SerializeField] private PatrolRoute patrolRoute;
         [SerializeField] private StalkerVisionSensor visionSensor;
 
-        [Header("Patrol Mode")]
-        [SerializeField] private StalkerPatrolMode patrolMode = StalkerPatrolMode.FixedWaypoint;
 
         [Header("Smart Patrol Director")]
         [SerializeField] private bool useSmartPatrolDirector = true;
@@ -61,12 +58,8 @@ namespace EchoProtocol.AI.Stalker
         [Header("Diagnostics")]
         [SerializeField] private bool enableDiagnostics;
 
-        [Header("Dynamic Patrol Spike Defaults")]
+        [Header("Spatial Planning")]
         [SerializeField] private int candidateBfsDepth = 3;
-        [SerializeField] private float stalenessHorizon = 15f;
-        [SerializeField] private float stalenessWeight = 1f;
-        [SerializeField] private float connectivityWeight = 0.15f;
-        [SerializeField] private float immediateBacktrackPenalty = 0.75f;
 
         [Header("Detection")]
 
@@ -174,34 +167,14 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private StalkerAttackResult lastAttackResult;
         [SerializeField] private float recoverElapsedTime;
 
-        [Header("Dynamic Patrol Debug Runtime")]
-        [SerializeField] private int dynamicCurrentSpatialNodeId = -1;
-        [SerializeField] private int dynamicDestinationSpatialNodeId = -1;
-        [SerializeField] private int dynamicPreviousSpatialNodeId = -1;
-        [SerializeField] private float lastPatrolScore;
-        [SerializeField] private int plannerRunCount;
-        [SerializeField] private int candidateCount;
+        [Header("Spatial Diagnostics")]
         [SerializeField] private RegionGraphFallbackReason regionGraphFallbackReason;
-        [SerializeField] private int canonicalCurrentRegionId;
-        [SerializeField] private int canonicalObjectiveRegionId;
-        [SerializeField] private int canonicalNextRegionId;
-        [SerializeField] private long searchEpisodeId;
         [SerializeField] private int searchCandidateNodeId = -1;
-        [SerializeField] private string smartPatrolPacingMode;
-        [SerializeField] private string smartPatrolHotspot;
-        [SerializeField] private float smartPatrolPressure;
 
         private const float TargetSelectionTieEpsilon = 0f;
         private const float TopologyPathSegmentSampleSpacing = 1f;
         private const int MaxTopologyPathSegmentSamples = 8;
         private const float EmergencyNavMeshRecoverySampleDistance = 2f;
-
-        private IStalkerTargetPolicy _targetPolicy =
-            new AdaptiveStalkerTargetPolicy();
-
-        private readonly StalkerTargetPolicySignalBuilder
-            _targetPolicySignalBuilder =
-                new StalkerTargetPolicySignalBuilder();
 
         private readonly StalkerTargetHistoryMemory
             _targetHistoryMemory =
@@ -244,12 +217,9 @@ namespace EchoProtocol.AI.Stalker
         private StalkerNavigationController _navigation;
         private NavMeshSpatialGraph _spatialPatrolGraph;
         [SerializeField] private RegionGraphAsset regionGraphAsset;
-        private SpatialPatrolMemory _spatialPatrolMemory;
-        private SpatialPatrolPlanner _spatialPatrolPlanner;
         private CoverageMemory _coverageMemory;
         private RegionGraph _regionGraph;
         private RegionSemanticZone _patrolZone = RegionSemanticZone.Unknown;
-        private GlobalPatrolPlanner _globalPatrolPlanner;
         private LocalPatrolSelector _localPatrolSelector;
         private RoomSweepCoverageMemory _roomSweepCoverageMemory;
         private RoomSweepPlanner _roomSweepPlanner;
@@ -279,11 +249,6 @@ namespace EchoProtocol.AI.Stalker
         private bool _specialEncounterOverrideActive;
         private StalkerHidingInvestigation _hidingInvestigation;
         private readonly StalkerWorldInteractionDriver _worldInteractionDriver = new StalkerWorldInteractionDriver();
-        private int _currentPatrolIndex;
-        private bool _spatialPatrolInitializationAttempted;
-        private bool _dynamicPatrolFallbackActive;
-        private bool _canonicalPatrolFallbackActive;
-        private bool _roomSweepPatrolFallbackActive;
         private int _roomSweepFallbackNodeId = -1;
         private float _nextRoomSweepFallbackAttemptSeconds;
         private readonly HashSet<int> _rejectedRoomSweepFallbackNodeIds = new HashSet<int>();
@@ -307,16 +272,12 @@ namespace EchoProtocol.AI.Stalker
         private bool _hideSpotInspectionLogged;
         private bool _navigationRecoveryAttemptUsed;
         private StalkerNavigationObjectiveKey _navigationObjectiveKey;
-        private readonly HashSet<int> _rejectedDynamicPatrolNodeIds = new HashSet<int>();
-        private readonly HashSet<int> _rejectedCanonicalLocalNodeIds = new HashSet<int>();
-        private readonly HashSet<RegionId> _rejectedCanonicalGlobalRegionIds = new HashSet<RegionId>();
         private readonly HashSet<int> _rejectedRoomSweepTransitNodeIds = new HashSet<int>();
         private readonly HashSet<RegionId> _rejectedRoomSweepGlobalRegionIds = new HashSet<RegionId>();
         private const int MaxRoomSweepProbeFailuresPerAnchor = 4;
         private int _roomSweepProbeFailureAnchorNodeId = -1;
         private RegionId _roomSweepProbeFailureAnchorRegionId = RegionId.Invalid;
         private int _roomSweepProbeFailureCountForAnchor;
-        private int _fixedPatrolFallbackFailureCount;
         private bool _searchCandidatePlanningExhausted;
         private bool _isSimulating;
         private float _currentSimulationDeltaSeconds;
@@ -346,7 +307,6 @@ namespace EchoProtocol.AI.Stalker
         private bool _roomSweepSelfProbeScanPreviousAgentUpdateRotation;
         private readonly HashSet<int> _roomSweepResidualDiagLoggedRegionIds = new HashSet<int>();
 
-        public StalkerPatrolMode PatrolMode => patrolMode;
         public StalkerState CurrentState => currentState;
         public bool SpecialEncounterOverrideActive => _specialEncounterOverrideActive;
         public bool IsSearchLkpSniffActive => _searchLkpSniffActive;
@@ -373,12 +333,6 @@ namespace EchoProtocol.AI.Stalker
         public StalkerAttackResult LastAttackResult => lastAttackResult;
         public float RecoverElapsedTime => recoverElapsedTime;
         public StalkerBlackboard Blackboard => _blackboard;
-        public int DynamicCurrentSpatialNodeId => dynamicCurrentSpatialNodeId;
-        public int DynamicDestinationSpatialNodeId => dynamicDestinationSpatialNodeId;
-        public int DynamicPreviousSpatialNodeId => dynamicPreviousSpatialNodeId;
-        public float LastPatrolScore => lastPatrolScore;
-        public int PlannerRunCount => plannerRunCount;
-        public int CandidateCount => candidateCount;
         public RegionGraphFallbackReason RegionGraphFallbackReason => regionGraphFallbackReason;
         public SearchEpisodeId ActiveSearchEpisodeId => _searchContext?.EpisodeId ?? SearchEpisodeId.Invalid;
         public PlayerId DetectionTargetId => _memory.DetectionTargetId;
@@ -402,12 +356,8 @@ namespace EchoProtocol.AI.Stalker
         public Vector3 LastSeenDirection => _memory.LastSeenDirection;
         public bool HasTargetLastSeenTime => _memory.HasTargetLastSeenTime;
         public AiSimulationTime TargetLastSeenTime => _memory.TargetLastSeenTime;
-        public int CurrentRegionIdValue => _currentRegionId.IsValid ? _currentRegionId.Value : canonicalCurrentRegionId;
-        public int GlobalObjectiveRegionIdValue => canonicalObjectiveRegionId;
         public int SearchCandidateNodeId => searchCandidateNodeId;
-        public bool FixedFallbackActive => _dynamicPatrolFallbackActive || _canonicalPatrolFallbackActive || _roomSweepPatrolFallbackActive;
         public NavigationFailureReason NavigationFailureReason => _navigation?.CurrentFailureReason ?? EchoProtocol.AI.Stalker.NavigationFailureReason.AgentUnavailable;
-        public NavigationRecoveryReason RecoveryReason => _navigation?.CurrentRecoveryReason ?? NavigationRecoveryReason.None;
         public NavigationPathStatus NavigationPathStatus => _navigation?.GetPathStatus() ?? NavigationPathStatus.AgentUnavailable;
         public NavigationExecutionStatus NavigationExecutionStatus => _navigation?.GetExecutionStatus() ?? NavigationExecutionStatus.Failed;
         public StalkerWorldInteractionKind CurrentWorldInteractionKind => _worldInteractionDriver.CurrentKind;
@@ -447,11 +397,6 @@ namespace EchoProtocol.AI.Stalker
                 nowSeconds,
                 directorCooldownSeconds);
 
-            if (_strategicPatrolRuntime != null)
-            {
-                smartPatrolPacingMode = _strategicPatrolRuntime.Mode.ToString();
-                smartPatrolPressure = _strategicPatrolRuntime.Pressure01;
-            }
         }
 
         public float GetRecentTargetPressure01(
@@ -470,17 +415,6 @@ namespace EchoProtocol.AI.Stalker
                 playerId,
                 now,
                 decayWindowSeconds);
-        }
-
-        public bool TryGetNavigationDestination(out Vector3 destination)
-        {
-            if (_navigation != null)
-            {
-                return _navigation.TryGetActiveDestination(out destination);
-            }
-
-            destination = default;
-            return false;
         }
 
         public void BeginSpecialEncounterOverride()
@@ -644,7 +578,7 @@ namespace EchoProtocol.AI.Stalker
 
         public bool TrySetPatrolRegionEdgeOpen(int fromRegionId, int toRegionId, bool open)
         {
-            if (fromRegionId <= 0 || toRegionId <= 0 || !EnsureCanonicalPatrolInitialized())
+            if (fromRegionId <= 0 || toRegionId <= 0 || !EnsureStalkerSpatialRuntimeInitialized())
             {
                 return false;
             }
@@ -700,9 +634,6 @@ namespace EchoProtocol.AI.Stalker
             _strategicPatrolRuntime?.ResetForMatch();
             _nextCrowdedPatrolRefreshSeconds = 0d;
             _crowdedPatrolTargetRegion = RegionId.Invalid;
-            smartPatrolPacingMode = string.Empty;
-            smartPatrolHotspot = string.Empty;
-            smartPatrolPressure = 0f;
         }
 
         public bool TryResolveStrategicActivityRoom(
@@ -742,11 +673,6 @@ namespace EchoProtocol.AI.Stalker
             }
 
             _strategicPatrolRuntime.ApplyFrame(frame, currentState);
-            smartPatrolPacingMode = _strategicPatrolRuntime.Mode.ToString();
-            smartPatrolHotspot = _strategicPatrolRuntime.HasHotspot
-                ? _strategicPatrolRuntime.Hotspot.ToString()
-                : "none";
-            smartPatrolPressure = _strategicPatrolRuntime.Pressure01;
         }
 
         public void ConfigurePhase4AttackAcceptanceDiagnostics(
@@ -822,7 +748,7 @@ namespace EchoProtocol.AI.Stalker
                 return true;
             }
 
-            return EnsureCanonicalPatrolInitialized()
+            return EnsureStalkerSpatialRuntimeInitialized()
                 && TryResolveNearestSpatialNode(position, out var nodeId)
                 && _regionGraph != null
                 && _regionGraph.TryGetNodeSemanticMetadata(nodeId, out var metadata)
@@ -978,7 +904,6 @@ namespace EchoProtocol.AI.Stalker
                     _navigation?.TickProgress(
                         CurrentSimulationDeltaSeconds);
                     TickNavigationRecovery();
-                    TickNavigationFallback();
                 }
 
                 // Learn the current legal visual frame only after all target
@@ -1076,176 +1001,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickPatrol()
         {
-            if (patrolMode == StalkerPatrolMode.RoomSweepSpatial)
-            {
-                TickRoomSweepSpatialPatrol();
-                return;
-            }
-
-            if (patrolMode == StalkerPatrolMode.DynamicSpatial)
-            {
-                TickDynamicSpatialPatrol();
-                return;
-            }
-
-            if (patrolMode == StalkerPatrolMode.ConfidenceSpatial)
-            {
-                TickConfidenceSpatialPatrol();
-                return;
-            }
-
-            TickFixedWaypointPatrol();
-        }
-
-        private void TickFixedWaypointPatrol()
-        {
-            if (!CanUseNavigation() || patrolRoute == null || patrolRoute.PointCount == 0)
-            {
-                return;
-            }
-
-            if (!_navigation.HasActiveDestination)
-            {
-                SetCurrentFixedPatrolDestination();
-                return;
-            }
-
-            if (!_navigation.HasArrived())
-            {
-                return;
-            }
-
-            AdvancePatrolDestination();
-        }
-
-        private void TickDynamicSpatialPatrol()
-        {
-            if (_dynamicPatrolFallbackActive)
-            {
-                TickFixedWaypointPatrol();
-                return;
-            }
-
-            if (!CanUseNavigation())
-            {
-                _navigation?.ClearDestinationCache();
-                return;
-            }
-
-            if (!EnsureSpatialPatrolInitialized())
-            {
-                ActivateDynamicPatrolFallback();
-                return;
-            }
-
-            if (!_navigation.HasActiveDestination)
-            {
-                if (!SetDynamicSpatialPatrolDestination())
-                {
-                    ActivateDynamicPatrolFallback();
-                }
-
-                return;
-            }
-
-            if (!_navigation.HasArrived())
-            {
-                return;
-            }
-
-            MarkDynamicSpatialDestinationReached();
-            if (!SetDynamicSpatialPatrolDestination())
-            {
-                ActivateDynamicPatrolFallback();
-            }
-        }
-
-        private void TickConfidenceSpatialPatrol()
-        {
-            if (_canonicalPatrolFallbackActive)
-            {
-                TickFixedWaypointPatrol();
-                return;
-            }
-
-            if (!CanUseNavigation())
-            {
-                _navigation?.ClearDestinationCache();
-                return;
-            }
-
-            if (!EnsureCanonicalPatrolInitialized())
-            {
-                ActivateCanonicalPatrolFallback();
-                return;
-            }
-
-            if (!_navigation.HasActiveDestination)
-            {
-                if (!SetCanonicalPatrolDestinationWithGlobalAlternates())
-                {
-                    ActivateCanonicalPatrolFallback();
-                }
-
-                return;
-            }
-
-            if (!_navigation.HasArrived())
-            {
-                return;
-            }
-
-            var agent = GetComponent<NavMeshAgent>();
-
-            var nearestNodeId = -1;
-            TryResolveNearestSpatialNode(transform.position, out nearestNodeId);
-
-            var nearestRegionId = RegionId.Invalid;
-            var destinationRegionId = RegionId.Invalid;
-
-            if (_regionGraph != null)
-            {
-                _regionGraph.TryGetRegionForNode(nearestNodeId, out nearestRegionId);
-                _regionGraph.TryGetRegionForNode(
-                    _blackboard.DestinationSpatialNodeId,
-                    out destinationRegionId);
-            }
-
-            var activeDestination = default(Vector3);
-            _navigation.TryGetActiveDestination(out activeDestination);
-
-            var corners = agent.path != null ? agent.path.corners : null;
-            var pathEnd = corners != null && corners.Length > 0
-                ? corners[corners.Length - 1]
-                : transform.position;
-
-            var pathEndToRequested =
-                Vector3.Distance(pathEnd, activeDestination);
-
-            LogDiagnosticWarning(
-                $"[STK ARRIVAL DIAG] " +
-                $"currentRegion={(_currentRegionId.IsValid ? _currentRegionId.Value : -1)} " +
-                $"previousRegion={(_previousRegionId.IsValid ? _previousRegionId.Value : -1)} " +
-                $"objectiveRegion={canonicalObjectiveRegionId} " +
-                $"nextRegion={canonicalNextRegionId} " +
-                $"currentNode={_blackboard.CurrentSpatialNodeId} " +
-                $"destinationNode={_blackboard.DestinationSpatialNodeId} " +
-                $"nearestNode={nearestNodeId} " +
-                $"nearestRegion={(nearestRegionId.IsValid ? nearestRegionId.Value : -1)} " +
-                $"destinationRegion={(destinationRegionId.IsValid ? destinationRegionId.Value : -1)} " +
-                $"remaining={agent.remainingDistance:0.000} " +
-                $"stopping={agent.stoppingDistance:0.000} " +
-                $"pathEnd={pathEnd} " +
-                $"pathEndToRequested={pathEndToRequested:0.000} " +
-                $"worldDistance={Vector3.Distance(transform.position, activeDestination):0.000} " +
-                $"position={transform.position} " +
-                $"destination={activeDestination}");
-
-            MarkCanonicalDestinationReached();
-            if (!SetCanonicalPatrolDestinationWithGlobalAlternates())
-            {
-                ActivateCanonicalPatrolFallback();
-            }
+            TickRoomSweepSpatialPatrol();
         }
 
         private void TickRoomSweepSpatialPatrol()
@@ -1267,12 +1023,6 @@ namespace EchoProtocol.AI.Stalker
                 _roomSweepFallbackNodeId = -1;
                 _navigation?.Stop();
                 ClearRoomSweepDestination();
-            }
-
-            if (_roomSweepPatrolFallbackActive)
-            {
-                TickFixedWaypointPatrol();
-                return;
             }
 
             LogRoomSweepNavigationGateOnce();
@@ -1343,21 +1093,17 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            var policyContext =
-                new StalkerTargetPolicyContext(
-                    GetCurrentSimulationTime(),
-                    _memory.CurrentTargetId);
+            var simulationTime = GetCurrentSimulationTime();
 
-            _targetPolicySignalBuilder.Build(
+            StalkerTargetPolicySignalBuilder.Build(
                 _currentVisibleTargetCandidates,
                 _currentVisibleObjectiveCarrierIds,
-                policyContext,
+                simulationTime,
                 _targetHistoryMemory,
                 _targetPolicyCandidates);
 
-            if (!_targetPolicy.TrySelectTarget(
+            if (!AdaptiveStalkerTargetPolicy.TrySelectTarget(
                     _targetPolicyCandidates,
-                    policyContext,
                     out var selectedObservation))
             {
                 return false;
@@ -1379,7 +1125,7 @@ namespace EchoProtocol.AI.Stalker
             // adaptive target history.
             _targetHistoryMemory.RecordTargetAcquired(
                 selectedObservation.PlayerId,
-                policyContext.SimulationTime);
+                simulationTime);
 
             detectionTarget = null;
             currentTarget = null;
@@ -2395,6 +2141,16 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            // Reach the heard source before spending the search timer.
+            if (_navigationObjectiveKey.Kind == StalkerNavigationObjectiveKind.SearchOriginLkp
+                && _navigation != null
+                && _navigation.HasActiveDestination
+                && (_navigation.GetExecutionStatus() == NavigationExecutionStatus.Moving
+                    || _navigation.GetExecutionStatus() == NavigationExecutionStatus.RepathPending))
+            {
+                return;
+            }
+
             searchElapsedTime +=
                 CurrentSimulationDeltaSeconds;
 
@@ -2953,11 +2709,6 @@ namespace EchoProtocol.AI.Stalker
             return false;
         }
 
-        private void SetSearchDestination()
-        {
-            TrySetSearchOriginDestination(lastKnownPosition);
-        }
-
         private void EnsureSearchContext()
         {
             if (_searchContext != null)
@@ -2994,7 +2745,7 @@ namespace EchoProtocol.AI.Stalker
             var originRegionId =
                 RegionId.Invalid;
 
-            if (EnsureCanonicalPatrolInitialized()
+            if (EnsureStalkerSpatialRuntimeInitialized()
                 && TryResolveNearestSpatialNode(
                     origin,
                     out var originNodeId)
@@ -3026,8 +2777,6 @@ namespace EchoProtocol.AI.Stalker
                     startTime,
                     originRegionId);
 
-            searchEpisodeId =
-                _searchContext.EpisodeId.Value;
 
             _searchCandidatePlanningExhausted =
                 false;
@@ -3378,7 +3127,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (_searchPlanner == null)
             {
-                EnsureCanonicalPatrolInitialized();
+                EnsureStalkerSpatialRuntimeInitialized();
             }
 
             if (_searchPlanner == null || !TryResolveNearestSpatialNode(transform.position, out var currentNodeId))
@@ -3472,15 +3221,12 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            var policyContext =
-                new StalkerTargetPolicyContext(
-                    GetCurrentSimulationTime(),
-                    _memory.CurrentTargetId);
+            var simulationTime = GetCurrentSimulationTime();
 
-            _targetPolicySignalBuilder.Build(
+            StalkerTargetPolicySignalBuilder.Build(
                 _currentVisibleTargetCandidates,
                 _currentVisibleObjectiveCarrierIds,
-                policyContext,
+                simulationTime,
                 _targetHistoryMemory,
                 _targetPolicyCandidates);
 
@@ -3503,9 +3249,8 @@ namespace EchoProtocol.AI.Stalker
                     candidate);
             }
 
-            if (!_targetPolicy.TrySelectTarget(
+            if (!AdaptiveStalkerTargetPolicy.TrySelectTarget(
                     _searchTargetPolicyCandidates,
-                    policyContext,
                     out var selectedObservation))
             {
                 return false;
@@ -3528,7 +3273,7 @@ namespace EchoProtocol.AI.Stalker
             // may influence adaptive target history.
             _targetHistoryMemory.RecordTargetAcquired(
                 selectedObservation.PlayerId,
-                policyContext.SimulationTime);
+                simulationTime);
 
             CommitSearchEnded(
                 StalkerSearchTerminalOutcome
@@ -3635,7 +3380,6 @@ namespace EchoProtocol.AI.Stalker
             _memory.ClearCurrentTarget();
             ResetChaseDestinationTracking();
             ResetNavigationRecoveryBudget();
-            ResetFixedPatrolFallbackState();
             ClearDetectionContext();
             ResetHideSpotRevealGrace();
         }
@@ -3892,7 +3636,6 @@ namespace EchoProtocol.AI.Stalker
 
             _hidingInvestigation?.Reset();
 
-            searchEpisodeId = 0;
             searchCandidateNodeId = -1;
 
             _searchCandidatePlanningExhausted = false;
@@ -4084,7 +3827,6 @@ namespace EchoProtocol.AI.Stalker
             _hidingInvestigation?.Reset();
             ResetChaseDestinationTracking();
             ClearNavigationObjective();
-            ResetFixedPatrolFallbackState();
             _navigation?.Stop();
         }
 
@@ -4159,14 +3901,6 @@ namespace EchoProtocol.AI.Stalker
 
             if (currentState == StalkerState.PATROL)
             {
-                if (patrolMode == StalkerPatrolMode.RoomSweepSpatial
-                    && _roomSweepPatrolFallbackActive
-                    && _blackboard.DestinationSpatialNodeId < 0
-                    && !_navigation.HasActiveDestination)
-                {
-                    return;
-                }
-
                 HandlePatrolNavigationFailure(failureReason);
             }
         }
@@ -4196,8 +3930,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void HandlePatrolNavigationFailure(NavigationFailureReason failureReason)
         {
-            if (patrolMode == StalkerPatrolMode.RoomSweepSpatial
-                && _roomSweepFallbackNodeId >= 0)
+            if (_roomSweepFallbackNodeId >= 0)
             {
                 _rejectedRoomSweepFallbackNodeIds.Add(_roomSweepFallbackNodeId);
                 _roomSweepFallbackNodeId = -1;
@@ -4207,96 +3940,7 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            if (patrolMode == StalkerPatrolMode.RoomSweepSpatial && !_roomSweepPatrolFallbackActive)
-            {
-                HandleRoomSweepNavigationFailure(failureReason);
-                return;
-            }
-
-            if (patrolMode == StalkerPatrolMode.DynamicSpatial && !_dynamicPatrolFallbackActive)
-            {
-                HandleDynamicSpatialNavigationFailure(failureReason);
-                return;
-            }
-
-            if (patrolMode == StalkerPatrolMode.ConfidenceSpatial && !_canonicalPatrolFallbackActive)
-            {
-                HandleConfidenceSpatialNavigationFailure(failureReason);
-                return;
-            }
-
-            if (IsNavigationExecutionRetryableFailure(failureReason)
-                && HasRecoveryBudgetForCurrentObjective()
-                && TryIssueNavigationRecoveryRepath(ToSameObjectiveRecoveryReason(failureReason)))
-            {
-                return;
-            }
-        }
-
-        private void HandleDynamicSpatialNavigationFailure(NavigationFailureReason failureReason)
-        {
-            if (IsNavigationAgentUnavailableFailure(failureReason))
-            {
-                return;
-            }
-
-            if (IsNavigationExecutionRetryableFailure(failureReason)
-                && HasRecoveryBudgetForCurrentObjective()
-                && TryIssueNavigationRecoveryRepath(ToSameObjectiveRecoveryReason(failureReason)))
-            {
-                return;
-            }
-
-            if (_blackboard.DestinationSpatialNodeId >= 0)
-            {
-                _rejectedDynamicPatrolNodeIds.Add(_blackboard.DestinationSpatialNodeId);
-            }
-
-            _navigation?.Stop();
-            _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
-            ClearDynamicPatrolDestination();
-            if (SetDynamicSpatialPatrolDestination())
-            {
-                _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
-                return;
-            }
-
-            ActivateDynamicPatrolFallback();
-        }
-
-        private void HandleConfidenceSpatialNavigationFailure(NavigationFailureReason failureReason)
-        {
-            if (IsNavigationAgentUnavailableFailure(failureReason))
-            {
-                return;
-            }
-
-            if (IsNavigationExecutionRetryableFailure(failureReason)
-                && HasRecoveryBudgetForCurrentObjective()
-                && TryIssueNavigationRecoveryRepath(ToSameObjectiveRecoveryReason(failureReason)))
-            {
-                return;
-            }
-
-            if (_blackboard.DestinationSpatialNodeId >= 0)
-            {
-                _rejectedCanonicalLocalNodeIds.Add(_blackboard.DestinationSpatialNodeId);
-            }
-
-            _navigation?.Stop();
-            _navigation?.RecordRecoveryReason(NavigationRecoveryReason.AlternateLocalCandidate);
-            ClearDynamicPatrolDestination();
-            if (TrySetCanonicalPatrolDestinationWithGlobalAlternates(
-                    ToGlobalInvalidationReason(failureReason),
-                    out var recoveryReason))
-            {
-                _navigation?.RecordRecoveryReason(recoveryReason == NavigationRecoveryReason.None
-                    ? NavigationRecoveryReason.AlternateLocalCandidate
-                    : recoveryReason);
-                return;
-            }
-
-            ActivateCanonicalPatrolFallback();
+            HandleRoomSweepNavigationFailure(failureReason);
         }
 
         private void HandleRoomSweepNavigationFailure(NavigationFailureReason failureReason)
@@ -4732,42 +4376,6 @@ namespace EchoProtocol.AI.Stalker
                 : NavigationFailureReason.NoProgress;
         }
 
-        private static GlobalPatrolObjectiveInvalidationReason ToGlobalInvalidationReason(NavigationFailureReason failureReason)
-        {
-            return failureReason == NavigationFailureReason.DoorBlocked
-                || failureReason == NavigationFailureReason.PathStale
-                    ? GlobalPatrolObjectiveInvalidationReason.TopologyChanged
-                    : GlobalPatrolObjectiveInvalidationReason.NavigationRecoveryFailed;
-        }
-
-        private void TickNavigationFallback()
-        {
-            if (_navigation == null
-                || currentState != StalkerState.PATROL
-                || patrolMode != StalkerPatrolMode.FixedWaypoint)
-            {
-                return;
-            }
-
-            if (patrolRoute == null || patrolRoute.PointCount == 0)
-            {
-                return;
-            }
-
-            var executionStatus = _navigation.GetExecutionStatus();
-            var pathStatus = _navigation.GetPathStatus();
-            var shouldFallback = pathStatus == NavigationPathStatus.Partial
-                || (executionStatus == NavigationExecutionStatus.Stuck && _navigationRecoveryAttemptUsed)
-                || (pathStatus == NavigationPathStatus.Stale && _navigationRecoveryAttemptUsed);
-
-            if (!shouldFallback)
-            {
-                return;
-            }
-
-            AdvanceFixedPatrolFallbackDestination();
-        }
-
         private bool IsLocomotionState()
         {
             return currentState == StalkerState.PATROL
@@ -4812,23 +4420,14 @@ namespace EchoProtocol.AI.Stalker
         private bool TryGetCurrentPatrolRecoveryDestination(out Vector3 destination)
         {
             destination = default;
-            if ((patrolMode == StalkerPatrolMode.DynamicSpatial
-                    || patrolMode == StalkerPatrolMode.ConfidenceSpatial
-                    || patrolMode == StalkerPatrolMode.RoomSweepSpatial)
-                && _spatialPatrolGraph != null
+            if (_spatialPatrolGraph != null
                 && _spatialPatrolGraph.TryGetNode(_blackboard.DestinationSpatialNodeId, out var node))
             {
                 destination = node.Position;
                 return true;
             }
 
-            if (patrolRoute == null || !patrolRoute.TryGetPoint(_currentPatrolIndex, out var point) || point == null)
-            {
-                return false;
-            }
-
-            destination = point.position;
-            return true;
+            return false;
         }
 
         private bool ShouldHoldChaseDuringTransientVisionLoss()
@@ -5198,175 +4797,22 @@ namespace EchoProtocol.AI.Stalker
             return !_navigationRecoveryAttemptUsed;
         }
 
-        private void ResetFixedPatrolFallbackState()
-        {
-            _fixedPatrolFallbackFailureCount = 0;
-        }
-
-        private void AdvancePatrolDestination()
-        {
-            ResetFixedPatrolFallbackState();
-            _currentPatrolIndex++;
-            SetCurrentFixedPatrolDestination();
-        }
-
-        private void AdvanceFixedPatrolFallbackDestination()
-        {
-            if (patrolRoute == null)
-            {
-                return;
-            }
-
-            var pointCount = patrolRoute.PointCount;
-            if (pointCount == 0 || _fixedPatrolFallbackFailureCount >= pointCount)
-            {
-                return;
-            }
-
-            _fixedPatrolFallbackFailureCount++;
-            if (_fixedPatrolFallbackFailureCount >= pointCount)
-            {
-                return;
-            }
-
-            _currentPatrolIndex++;
-            ResetNavigationRecoveryBudget();
-            _navigation?.Stop();
-        }
-
         private void SetCurrentPatrolDestination()
         {
-            if (patrolMode == StalkerPatrolMode.RoomSweepSpatial)
+            ResetRoomSweepFallbackState();
+            _roomSweepPlanner?.ClearRejectedProbes();
+            if (!SetRoomSweepPatrolDestination())
             {
-                ResetRoomSweepFallbackState();
-                _roomSweepPlanner?.ClearRejectedProbes();
-
-                if (SetRoomSweepPatrolDestination())
-                {
-                    return;
-                }
-
                 ActivateRoomSweepPatrolFallback();
-                return;
-            }
-
-            if (patrolMode == StalkerPatrolMode.DynamicSpatial)
-            {
-                _dynamicPatrolFallbackActive = false;
-
-                if (SetDynamicSpatialPatrolDestination())
-                {
-                    return;
-                }
-
-                ActivateDynamicPatrolFallback();
-                return;
-            }
-
-            if (patrolMode == StalkerPatrolMode.ConfidenceSpatial)
-            {
-                _canonicalPatrolFallbackActive = false;
-                regionGraphFallbackReason = RegionGraphFallbackReason.None;
-
-                if (SetCanonicalPatrolDestinationWithGlobalAlternates())
-                {
-                    return;
-                }
-
-                ActivateCanonicalPatrolFallback();
-                return;
-            }
-
-            SetCurrentFixedPatrolDestination();
-        }
-
-        private void SetCurrentFixedPatrolDestination()
-        {
-            if (!CanUseNavigation() || patrolRoute == null)
-            {
-                _navigation?.ClearDestinationCache();
-                return;
-            }
-
-            if (patrolMode == StalkerPatrolMode.FixedWaypoint
-                && patrolRoute.PointCount > 0
-                && _fixedPatrolFallbackFailureCount >= patrolRoute.PointCount)
-            {
-                return;
-            }
-
-            if (!patrolRoute.TryGetNextValidPoint(_currentPatrolIndex, out var pointIndex, out var point))
-            {
-                _navigation.ClearDestinationCache();
-                return;
-            }
-
-            _currentPatrolIndex = pointIndex;
-            var destination = point.position;
-
-            if (patrolMode == StalkerPatrolMode.FixedWaypoint)
-            {
-                var evaluation = _navigation.EvaluateDestination(destination);
-                if (evaluation.Status == NavigationEvaluationStatus.Partial
-                    || evaluation.Status == NavigationEvaluationStatus.Invalid
-                    || evaluation.Status == NavigationEvaluationStatus.DestinationInvalid)
-                {
-                    AdvanceFixedPatrolFallbackDestination();
-                    return;
-                }
-
-                if (!evaluation.IsComplete)
-                {
-                    return;
-                }
-            }
-
-            if (_navigation.TrySetDestination(destination))
-            {
-                SetNavigationObjective(new StalkerNavigationObjectiveKey(
-                    StalkerNavigationObjectiveKind.FixedWaypoint,
-                    pointIndex,
-                    -1,
-                    -1));
             }
         }
 
-        private bool EnsureSpatialPatrolInitialized()
+        private bool EnsureStalkerSpatialRuntimeInitialized()
         {
-            if (_spatialPatrolPlanner != null)
-            {
-                return true;
-            }
-
-            if (_spatialPatrolInitializationAttempted)
-            {
-                return false;
-            }
-
-            _spatialPatrolInitializationAttempted = true;
-            _spatialPatrolGraph = NavMeshSpatialGraphBuilder.Build();
-            if (_spatialPatrolGraph == null || _spatialPatrolGraph.IsEmpty)
-            {
-                return false;
-            }
-
-            _spatialPatrolMemory = new SpatialPatrolMemory(_spatialPatrolGraph.NodeCount);
-            _spatialPatrolPlanner = new SpatialPatrolPlanner(
-                _spatialPatrolGraph,
-                _spatialPatrolMemory,
-                candidateBfsDepth,
-                stalenessHorizon,
-                stalenessWeight,
-                connectivityWeight,
-                immediateBacktrackPenalty);
-
-            SyncDynamicPatrolDebugFields();
-            return _spatialPatrolPlanner.CanPlan;
-        }
-
-        private bool EnsureCanonicalPatrolInitialized()
-        {
-            if (_globalPatrolPlanner != null && _localPatrolSelector != null)
+            if (_regionGraph != null
+                && _coverageMemory != null
+                && _localPatrolSelector != null
+                && _searchPlanner != null)
             {
                 return true;
             }
@@ -5395,8 +4841,6 @@ namespace EchoProtocol.AI.Stalker
             }
 
             _coverageMemory = new CoverageMemory(_spatialPatrolGraph.NodeCount, _regionGraph);
-            _spatialPatrolMemory = new SpatialPatrolMemory(_coverageMemory);
-            _globalPatrolPlanner = new GlobalPatrolPlanner(_regionGraph, _coverageMemory);
             _localPatrolSelector = new LocalPatrolSelector(
                 _spatialPatrolGraph,
                 _regionGraph,
@@ -5421,7 +4865,7 @@ namespace EchoProtocol.AI.Stalker
                 return true;
             }
 
-            if (!EnsureCanonicalPatrolInitialized())
+            if (!EnsureStalkerSpatialRuntimeInitialized())
             {
                 return false;
             }
@@ -5501,123 +4945,6 @@ namespace EchoProtocol.AI.Stalker
             return _spatialPatrolGraph != null && !_spatialPatrolGraph.IsEmpty;
         }
 
-        private bool SetDynamicSpatialPatrolDestination()
-        {
-            if (!EnsureSpatialPatrolInitialized())
-            {
-                return false;
-            }
-
-            if (!_spatialPatrolPlanner.TryResolveNearestNode(transform.position, out var currentNodeId))
-            {
-                ClearDynamicPatrolDestination();
-                return false;
-            }
-
-            if (_blackboard.CurrentSpatialNodeId != currentNodeId)
-            {
-                if (_blackboard.CurrentSpatialNodeId >= 0)
-                {
-                    _blackboard.PreviousSpatialNodeId = _blackboard.CurrentSpatialNodeId;
-                }
-
-                _blackboard.CurrentSpatialNodeId = currentNodeId;
-                _rejectedDynamicPatrolNodeIds.Clear();
-            }
-
-            plannerRunCount++;
-            if (!_spatialPatrolPlanner.TrySelectDestination(
-                currentNodeId,
-                _blackboard.PreviousSpatialNodeId,
-                CurrentSimulationTimeSeconds,
-                _rejectedDynamicPatrolNodeIds,
-                out var plan))
-            {
-                ClearDynamicPatrolDestination();
-                return false;
-            }
-
-            if (!_navigation.TrySetDestination(plan.DestinationNode.Position))
-            {
-                ClearDynamicPatrolDestination();
-                return false;
-            }
-
-            SetNavigationObjective(new StalkerNavigationObjectiveKey(
-                StalkerNavigationObjectiveKind.DynamicSpatialNode,
-                plan.DestinationNode.Id,
-                -1,
-                -1));
-            _blackboard.DestinationSpatialNodeId = plan.DestinationNode.Id;
-            lastPatrolScore = plan.Score;
-            candidateCount = plan.CandidateCount;
-            SyncDynamicPatrolDebugFields();
-            return true;
-        }
-
-        private bool SetCanonicalPatrolDestination()
-        {
-            if (!EnsureCanonicalPatrolInitialized())
-            {
-                return false;
-            }
-
-            if (!TryResolveNearestSpatialNode(transform.position, out var currentNodeId)
-                || !_regionGraph.TryGetRegionForNode(currentNodeId, out var currentRegionId))
-            {
-                regionGraphFallbackReason = RegionGraphFallbackReason.InvalidNodeToRegionMap;
-                ClearDynamicPatrolDestination();
-                return false;
-            }
-
-            UpdateCurrentRegion(currentRegionId);
-            _blackboard.CurrentSpatialNodeId = currentNodeId;
-
-            if (!_globalPatrolPlanner.TryGetOrCreateObjective(
-                    currentRegionId,
-                    _previousRegionId,
-                    _rejectedCanonicalGlobalRegionIds,
-                    out var objective))
-            {
-                regionGraphFallbackReason = RegionGraphFallbackReason.NoReachableRegionObjective;
-                return false;
-            }
-
-            if (!_localPatrolSelector.TrySelect(
-                    currentNodeId,
-                    _blackboard.PreviousSpatialNodeId,
-                    objective.NextRegionId,
-                    _rejectedCanonicalLocalNodeIds,
-                    out var selection))
-            {
-                LogCanonicalLocalSelectionFailure(currentNodeId, objective);
-                regionGraphFallbackReason = RegionGraphFallbackReason.NoCompleteLocalPath;
-                return false;
-            }
-
-            var result = _navigation.RequestDestination(selection.DestinationNode.Position);
-            if (!result.IsAccepted)
-            {
-                regionGraphFallbackReason = RegionGraphFallbackReason.NoCompleteLocalPath;
-                return false;
-            }
-
-            SetNavigationObjective(new StalkerNavigationObjectiveKey(
-                StalkerNavigationObjectiveKind.ConfidenceSpatialNode,
-                selection.DestinationNode.Id,
-                objective.TargetRegionId.Value,
-                -1));
-            _blackboard.DestinationSpatialNodeId = selection.DestinationNode.Id;
-            lastPatrolScore = selection.Score;
-            candidateCount = selection.CandidateCount;
-            canonicalCurrentRegionId = currentRegionId.Value;
-            canonicalObjectiveRegionId = objective.TargetRegionId.Value;
-            canonicalNextRegionId = objective.NextRegionId.Value;
-            regionGraphFallbackReason = RegionGraphFallbackReason.None;
-            SyncDynamicPatrolDebugFields();
-            return true;
-        }
-
         private bool SetRoomSweepPatrolDestination()
         {
             if (!EnsureRoomSweepPatrolInitialized())
@@ -5671,8 +4998,7 @@ namespace EchoProtocol.AI.Stalker
                 + $"SuppressLegacyUpdateSimulation={SuppressLegacyUpdateSimulation} "
                 + $"enabled={enabled} "
                 + $"gameObject.activeInHierarchy={(gameObject != null && gameObject.activeInHierarchy)} "
-                + $"currentState={currentState} "
-                + $"patrolMode={patrolMode}");
+                + $"currentState={currentState}");
         }
 
         private void LogRoomSweepNavigationGateOnce()
@@ -5708,8 +5034,7 @@ namespace EchoProtocol.AI.Stalker
                 + $"agentIsOnNavMesh={(agentExists && agent.isOnNavMesh)} "
                 + $"agentIsActiveAndEnabled={(agentExists && agent.isActiveAndEnabled)} "
                 + $"transformPosition={transform.position} "
-                + $"currentState={currentState} "
-                + $"patrolMode={patrolMode}");
+                + $"currentState={currentState}");
         }
 
         private bool TryCancelCompletedActiveRoomSweepProbe()
@@ -5871,13 +5196,7 @@ namespace EchoProtocol.AI.Stalker
                     currentRoomRegionId.Value,
                     -1));
                 _blackboard.DestinationSpatialNodeId = probeNodeId;
-                lastPatrolScore = 0f;
-                candidateCount = 1;
-                canonicalCurrentRegionId = currentRoomRegionId.Value;
-                canonicalObjectiveRegionId = currentRoomRegionId.Value;
-                canonicalNextRegionId = currentRoomRegionId.Value;
                 regionGraphFallbackReason = RegionGraphFallbackReason.None;
-                SyncDynamicPatrolDebugFields();
                 LogRoomSweepRequestDestinationResult(result.IsAccepted);
                 return true;
             }
@@ -6114,13 +5433,7 @@ namespace EchoProtocol.AI.Stalker
                     objective.TargetRoomRegionId.Value,
                     -1));
                 _blackboard.DestinationSpatialNodeId = selection.DestinationNode.Id;
-                lastPatrolScore = selection.Score;
-                candidateCount = selection.CandidateCount;
-                canonicalCurrentRegionId = currentRegionId.Value;
-                canonicalObjectiveRegionId = objective.TargetRoomRegionId.Value;
-                canonicalNextRegionId = objective.NextRegionId.Value;
                 regionGraphFallbackReason = RegionGraphFallbackReason.None;
-                SyncDynamicPatrolDebugFields();
                 LogRoomSweepRequestDestinationResult(result.IsAccepted);
                 return true;
             }
@@ -6350,24 +5663,6 @@ namespace EchoProtocol.AI.Stalker
                 + $"currentRegionId={currentRegionId.Value}");
         }
 
-        private void LogRoomSweepFallbackActivated()
-        {
-            var currentNodeId = -1;
-            var currentRegionId = RegionId.Invalid;
-            if (TryResolveNearestSpatialNode(transform.position, out currentNodeId)
-                && _regionGraph != null)
-            {
-                _regionGraph.TryGetRegionForNode(currentNodeId, out currentRegionId);
-            }
-
-            LogDiagnosticWarning(
-                "[STK ROOM SWEEP DIAG] fallback-activated "
-                + $"currentNode={currentNodeId} "
-                + $"currentRegion={currentRegionId.Value} "
-                + $"objectiveKind={_navigationObjectiveKey.Kind} "
-                + $"destinationSpatialNodeId={_blackboard.DestinationSpatialNodeId}");
-        }
-
         private void GetRoomSweepCoverageSnapshot(
             RegionId regionId,
             out bool coverageKnown,
@@ -6381,181 +5676,6 @@ namespace EchoProtocol.AI.Stalker
             remaining = _roomSweepCoverageMemory?.GetRemainingProbeCount(regionId) ?? 0;
             isCleared = _roomSweepCoverageMemory != null && _roomSweepCoverageMemory.IsRegionCleared(regionId);
             coverageKnown = observed > 0 || total > 0 || remaining > 0 || isCleared;
-        }
-
-        private void LogCanonicalLocalSelectionFailure(
-            int currentNodeId,
-            GlobalPatrolObjective objective)
-        {
-            var currentRegion = RegionId.Invalid;
-            var previousRegion = RegionId.Invalid;
-            var previousNodeId = _blackboard.PreviousSpatialNodeId;
-            if (_regionGraph != null)
-            {
-                _regionGraph.TryGetRegionForNode(currentNodeId, out currentRegion);
-                if (previousNodeId >= 0)
-                {
-                    _regionGraph.TryGetRegionForNode(previousNodeId, out previousRegion);
-                }
-            }
-
-            var totalNextRegionNodes = 0;
-            var minHopToNextRegion = -1;
-            var withinDepth = 0;
-            var unrejectedWithinDepth = 0;
-            var graph = _spatialPatrolGraph;
-            if (graph != null && _regionGraph != null && currentNodeId >= 0 && currentNodeId < graph.NodeCount)
-            {
-                var distances = new int[graph.NodeCount];
-                for (var i = 0; i < distances.Length; i++)
-                {
-                    distances[i] = -1;
-                }
-
-                var queue = new Queue<int>();
-                distances[currentNodeId] = 0;
-                queue.Enqueue(currentNodeId);
-                while (queue.Count > 0)
-                {
-                    var nodeId = queue.Dequeue();
-                    if (!graph.TryGetNode(nodeId, out var node))
-                    {
-                        continue;
-                    }
-
-                    for (var neighborIndex = 0; neighborIndex < node.NeighborIds.Count; neighborIndex++)
-                    {
-                        var neighborId = node.NeighborIds[neighborIndex];
-                        if (neighborId < 0 || neighborId >= distances.Length || distances[neighborId] >= 0)
-                        {
-                            continue;
-                        }
-
-                        distances[neighborId] = distances[nodeId] + 1;
-                        queue.Enqueue(neighborId);
-                    }
-                }
-
-                for (var i = 0; i < graph.Nodes.Count; i++)
-                {
-                    var node = graph.Nodes[i];
-                    if (!_regionGraph.TryGetRegionForNode(node.Id, out var nodeRegion)
-                        || nodeRegion != objective.NextRegionId)
-                    {
-                        continue;
-                    }
-
-                    totalNextRegionNodes++;
-                    var distance = node.Id >= 0 && node.Id < distances.Length ? distances[node.Id] : -1;
-                    if (distance < 0)
-                    {
-                        continue;
-                    }
-
-                    if (minHopToNextRegion < 0 || distance < minHopToNextRegion)
-                    {
-                        minHopToNextRegion = distance;
-                    }
-
-                    if (distance <= candidateBfsDepth)
-                    {
-                        withinDepth++;
-                        if (!_rejectedCanonicalLocalNodeIds.Contains(node.Id))
-                        {
-                            unrejectedWithinDepth++;
-                        }
-                    }
-                }
-            }
-
-            var inferredPathRejectedWithinDepth = unrejectedWithinDepth;
-            LogDiagnosticWarning(
-                "[STK LOCAL SELECT DIAG] "
-                + $"currentRegion={currentRegion.Value} previousRegion={previousRegion.Value} "
-                + $"targetRegion={objective.TargetRegionId.Value} nextRegion={objective.NextRegionId.Value} "
-                + $"currentNode={currentNodeId} previousNode={previousNodeId} "
-                + $"bfsDepth={candidateBfsDepth} totalNextRegionNodes={totalNextRegionNodes} "
-                + $"minHopToNextRegion={minHopToNextRegion} withinDepth={withinDepth} "
-                + $"unrejectedWithinDepth={unrejectedWithinDepth} "
-                + $"inferredPathRejectedWithinDepth={inferredPathRejectedWithinDepth} "
-                + $"rejectedLocal={_rejectedCanonicalLocalNodeIds.Count}");
-        }
-
-        private bool SetCanonicalPatrolDestinationWithGlobalAlternates()
-        {
-            return TrySetCanonicalPatrolDestinationWithGlobalAlternates(out _);
-        }
-
-        private bool TrySetCanonicalPatrolDestinationWithGlobalAlternates(out NavigationRecoveryReason recoveryReason)
-        {
-            return TrySetCanonicalPatrolDestinationWithGlobalAlternates(
-                GlobalPatrolObjectiveInvalidationReason.NavigationRecoveryFailed,
-                out recoveryReason);
-        }
-
-        private bool TrySetCanonicalPatrolDestinationWithGlobalAlternates(
-            GlobalPatrolObjectiveInvalidationReason invalidationReason,
-            out NavigationRecoveryReason recoveryReason)
-        {
-            recoveryReason = NavigationRecoveryReason.None;
-            if (SetCanonicalPatrolDestination())
-            {
-                return true;
-            }
-
-            if (regionGraphFallbackReason != RegionGraphFallbackReason.NoCompleteLocalPath)
-            {
-                return false;
-            }
-
-            var maxGlobalAttempts = _regionGraph?.Regions?.Count ?? 0;
-            for (var attempt = 0; attempt < maxGlobalAttempts; attempt++)
-            {
-                var objective = _globalPatrolPlanner?.CurrentObjective ?? GlobalPatrolObjective.Invalid;
-                if (!objective.TargetRegionId.IsValid)
-                {
-                    return false;
-                }
-
-                _rejectedCanonicalGlobalRegionIds.Add(objective.TargetRegionId);
-                _globalPatrolPlanner?.Invalidate(invalidationReason);
-                _rejectedCanonicalLocalNodeIds.Clear();
-                recoveryReason = NavigationRecoveryReason.AlternateGlobalObjective;
-
-                if (SetCanonicalPatrolDestination())
-                {
-                    return true;
-                }
-
-                if (regionGraphFallbackReason != RegionGraphFallbackReason.NoCompleteLocalPath)
-                {
-                    return false;
-                }
-            }
-
-            return false;
-        }
-
-        private void MarkCanonicalDestinationReached()
-        {
-            var destinationNodeId = _blackboard.DestinationSpatialNodeId;
-            if (destinationNodeId < 0)
-            {
-                return;
-            }
-
-            _blackboard.PreviousSpatialNodeId = _blackboard.CurrentSpatialNodeId;
-            _blackboard.CurrentSpatialNodeId = destinationNodeId;
-            _blackboard.DestinationSpatialNodeId = -1;
-            _coverageMemory?.RecordPhysicalNodeArrival(destinationNodeId, CurrentSimulationTimeSeconds);
-            _rejectedCanonicalLocalNodeIds.Clear();
-            _rejectedCanonicalGlobalRegionIds.Clear();
-            if (_regionGraph != null && _regionGraph.TryGetRegionForNode(destinationNodeId, out var regionId))
-            {
-                UpdateCurrentRegion(regionId);
-            }
-
-            SyncDynamicPatrolDebugFields();
         }
 
         private void MarkRoomSweepDestinationReached()
@@ -6578,120 +5698,34 @@ namespace EchoProtocol.AI.Stalker
             }
 
             ClearNavigationObjective();
-            SyncDynamicPatrolDebugFields();
-        }
-
-        private void MarkDynamicSpatialDestinationReached()
-        {
-            var destinationNodeId = _blackboard.DestinationSpatialNodeId;
-            if (destinationNodeId < 0)
-            {
-                return;
-            }
-
-            _blackboard.PreviousSpatialNodeId = _blackboard.CurrentSpatialNodeId;
-            _blackboard.CurrentSpatialNodeId = destinationNodeId;
-            _blackboard.DestinationSpatialNodeId = -1;
-            _spatialPatrolMemory?.MarkVisited(destinationNodeId, CurrentSimulationTimeSeconds);
-            _rejectedDynamicPatrolNodeIds.Clear();
-            ClearNavigationObjective();
-            SyncDynamicPatrolDebugFields();
-        }
-
-        private void ClearDynamicPatrolDestination()
-        {
-            _blackboard.DestinationSpatialNodeId = -1;
-            lastPatrolScore = 0f;
-            candidateCount = 0;
-            SyncDynamicPatrolDebugFields();
         }
 
         private void ClearRoomSweepDestination()
         {
             _blackboard.DestinationSpatialNodeId = -1;
-            lastPatrolScore = 0f;
-            candidateCount = 0;
             ClearNavigationObjective();
-            SyncDynamicPatrolDebugFields();
         }
 
-        private void ActivateDynamicPatrolFallback()
-        {
-            _dynamicPatrolFallbackActive = true;
-            ClearDynamicPatrolDestination();
-            TickFixedWaypointPatrol();
-            _navigation?.RecordRecoveryReason(NavigationRecoveryReason.FixedPatrolFallback);
-        }
-
-        private void ActivateCanonicalPatrolFallback()
+        private void ActivateRoomSweepPatrolFallback()
         {
             if (regionGraphFallbackReason == RegionGraphFallbackReason.None)
             {
                 regionGraphFallbackReason = RegionGraphFallbackReason.MalformedRegionGraph;
             }
 
-            _canonicalPatrolFallbackActive = true;
-            _globalPatrolPlanner?.Invalidate(GlobalPatrolObjectiveInvalidationReason.NavigationRecoveryFailed);
-            var recoveryReason = regionGraphFallbackReason == RegionGraphFallbackReason.SpatialGraphCompatibilityMismatch
-                ? NavigationRecoveryReason.RegionGraphCompatibilityFallback
-                : NavigationRecoveryReason.FixedPatrolFallback;
-            ClearDynamicPatrolDestination();
-            TickFixedWaypointPatrol();
-            _navigation?.RecordRecoveryReason(recoveryReason);
-        }
-
-        private void ActivateRoomSweepPatrolFallback()
-        {
-            if (regionGraphFallbackReason
-                == RegionGraphFallbackReason.None)
-            {
-                regionGraphFallbackReason =
-                    RegionGraphFallbackReason.MalformedRegionGraph;
-            }
-
             _roomSweepGlobalPlanner?.Invalidate(
-                RoomSweepGlobalObjectiveInvalidationReason
-                    .NavigationRecoveryFailed);
-
+                RoomSweepGlobalObjectiveInvalidationReason.NavigationRecoveryFailed);
             _rejectedRoomSweepTransitNodeIds.Clear();
-
             _navigation?.Stop();
             ClearRoomSweepDestination();
+            _rejectedRoomSweepGlobalRegionIds.Clear();
 
-            // Production RoomSweep has no FixedWaypoint route. Use a
-            // reachable node in this Stalker's zone when graph metadata exists.
-            if (patrolRoute == null
-                || patrolRoute.PointCount == 0
-                || _patrolZone != RegionSemanticZone.Unknown)
+            if (CurrentSimulationTimeSeconds >= _nextRoomSweepFallbackAttemptSeconds
+                && !TrySetRoomSweepLocalFallbackDestination())
             {
-                _roomSweepPatrolFallbackActive = false;
-                _rejectedRoomSweepGlobalRegionIds.Clear();
-                if (CurrentSimulationTimeSeconds >= _nextRoomSweepFallbackAttemptSeconds
-                    && !TrySetRoomSweepLocalFallbackDestination())
-                {
-                    _rejectedRoomSweepFallbackNodeIds.Clear();
-                    _nextRoomSweepFallbackAttemptSeconds = CurrentSimulationTimeSeconds + 2.5f;
-                }
-                return;
+                _rejectedRoomSweepFallbackNodeIds.Clear();
+                _nextRoomSweepFallbackAttemptSeconds = CurrentSimulationTimeSeconds + 2.5f;
             }
-
-            LogRoomSweepFallbackActivated();
-
-            _roomSweepPatrolFallbackActive = true;
-
-            var recoveryReason =
-                regionGraphFallbackReason
-                    == RegionGraphFallbackReason
-                        .SpatialGraphCompatibilityMismatch
-                    ? NavigationRecoveryReason
-                        .RegionGraphCompatibilityFallback
-                    : NavigationRecoveryReason
-                        .FixedPatrolFallback;
-
-            TickFixedWaypointPatrol();
-
-            _navigation?.RecordRecoveryReason(
-                recoveryReason);
         }
 
         private bool TrySetRoomSweepLocalFallbackDestination()
@@ -6793,7 +5827,6 @@ namespace EchoProtocol.AI.Stalker
 
         private void ResetRoomSweepFallbackState()
         {
-            _roomSweepPatrolFallbackActive = false;
             _roomSweepFallbackNodeId = -1;
             _nextRoomSweepFallbackAttemptSeconds = 0f;
             _rejectedRoomSweepFallbackNodeIds.Clear();
@@ -6890,7 +5923,6 @@ namespace EchoProtocol.AI.Stalker
             }
 
             _currentRegionId = nextRegionId;
-            canonicalCurrentRegionId = nextRegionId.Value;
         }
 
         private bool HasCompletePathTo(Vector3 destination)
@@ -6903,13 +5935,6 @@ namespace EchoProtocol.AI.Stalker
             return _navigation != null
                 ? _navigation.EvaluateDestination(destination).Status
                 : NavigationEvaluationStatus.AgentUnavailable;
-        }
-
-        private void SyncDynamicPatrolDebugFields()
-        {
-            dynamicCurrentSpatialNodeId = _blackboard.CurrentSpatialNodeId;
-            dynamicDestinationSpatialNodeId = _blackboard.DestinationSpatialNodeId;
-            dynamicPreviousSpatialNodeId = _blackboard.PreviousSpatialNodeId;
         }
 
         private void InitializeNavigation()
