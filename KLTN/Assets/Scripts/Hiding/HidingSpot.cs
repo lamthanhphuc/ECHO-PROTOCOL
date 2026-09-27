@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using Fusion;
 using UnityEngine;
 
 public class HidingSpot : MonoBehaviour, IInteractable
@@ -12,6 +14,8 @@ public class HidingSpot : MonoBehaviour, IInteractable
     private PlayerHidingController _occupant;
     private ulong _stableId;
     private float _lockoutUntilTime;
+    private static readonly Dictionary<NetworkRunner, Dictionary<ulong, PlayerRef>>
+        NetworkReservations = new();
 
     public Transform HidePoint => hidePoint != null ? hidePoint : transform;
     public Transform ExitPoint => exitPoint;
@@ -60,6 +64,11 @@ public class HidingSpot : MonoBehaviour, IInteractable
             return true;
         }
 
+        if (IsOccupiedByAnotherNetworkPlayer(hidingController))
+        {
+            return false;
+        }
+
         if (IsTemporarilyLockedOut())
         {
             return false;
@@ -89,11 +98,26 @@ public class HidingSpot : MonoBehaviour, IInteractable
             return;
         }
 
+        if (IsOccupiedByAnotherNetworkPlayer(hidingController))
+        {
+            return;
+        }
+
         hidingController.EnterHiding(this);
     }
 
     public bool TryOccupy(PlayerHidingController hidingController)
     {
+        if (hidingController == null)
+        {
+            return false;
+        }
+
+        if (IsOccupiedByAnotherNetworkPlayer(hidingController))
+        {
+            return false;
+        }
+
         if (IsTemporarilyLockedOut())
         {
             return false;
@@ -204,18 +228,179 @@ public class HidingSpot : MonoBehaviour, IInteractable
         return false;
     }
 
+    public static bool TryResolveByStableId(
+        ulong stableId,
+        out HidingSpot spot)
+    {
+        spot = null;
+
+        if (stableId == 0UL)
+        {
+            return false;
+        }
+
+        var spots =
+            Object.FindObjectsByType<HidingSpot>(
+                FindObjectsInactive.Exclude);
+
+        for (int i = 0; i < spots.Length; i++)
+        {
+            HidingSpot candidate = spots[i];
+
+            if (candidate == null ||
+                candidate.StableId != stableId)
+            {
+                continue;
+            }
+
+            spot = candidate;
+            return true;
+        }
+
+        return false;
+    }
+
+    public static bool TryReserveNetworkSpot(
+        NetworkRunner runner,
+        ulong stableId,
+        PlayerRef player)
+    {
+        Debug.Log(
+            $"[HIDE_RESERVE] request spot={stableId} player={player}");
+
+        if (runner == null ||
+            stableId == 0UL ||
+            !player.IsRealPlayer)
+        {
+            return false;
+        }
+
+        if (!NetworkReservations.TryGetValue(
+                runner,
+                out var reservations))
+        {
+            reservations = new Dictionary<ulong, PlayerRef>();
+            NetworkReservations.Add(runner, reservations);
+        }
+
+        if (reservations.TryGetValue(
+                stableId,
+                out PlayerRef currentOccupant))
+        {
+            if (currentOccupant == player)
+            {
+                return true;
+            }
+
+            if (IsPlayerActive(runner, currentOccupant))
+            {
+                Debug.Log(
+                    $"[HIDE_RESERVE] REJECT spot={stableId} owner={currentOccupant} requester={player}");
+                return false;
+            }
+
+            reservations.Remove(stableId);
+        }
+
+        reservations[stableId] = player;
+        Debug.Log(
+            $"[HIDE_RESERVE] CLAIM spot={stableId} player={player}");
+        return true;
+    }
+
+    public static void ReleaseNetworkSpot(
+        NetworkRunner runner,
+        ulong stableId,
+        PlayerRef player)
+    {
+        if (runner == null ||
+            stableId == 0UL ||
+            !NetworkReservations.TryGetValue(
+                runner,
+                out var reservations))
+        {
+            return;
+        }
+
+        if (!reservations.TryGetValue(
+                stableId,
+                out PlayerRef occupant) ||
+            occupant != player)
+        {
+            return;
+        }
+
+        reservations.Remove(stableId);
+
+        if (reservations.Count == 0)
+        {
+            NetworkReservations.Remove(runner);
+        }
+    }
+
+    public static void ReleaseAllNetworkSpots(
+        NetworkRunner runner,
+        PlayerRef player)
+    {
+        if (runner == null ||
+            !player.IsRealPlayer ||
+            !NetworkReservations.TryGetValue(
+                runner,
+                out var reservations))
+        {
+            return;
+        }
+
+        var spotsToRelease = new List<ulong>();
+
+        foreach (var pair in reservations)
+        {
+            if (pair.Value == player)
+            {
+                spotsToRelease.Add(pair.Key);
+            }
+        }
+
+        for (int i = 0; i < spotsToRelease.Count; i++)
+        {
+            reservations.Remove(spotsToRelease[i]);
+        }
+
+        if (reservations.Count == 0)
+        {
+            NetworkReservations.Remove(runner);
+        }
+    }
+
+    private static bool IsPlayerActive(
+        NetworkRunner runner,
+        PlayerRef player)
+    {
+        if (runner == null ||
+            !player.IsRealPlayer)
+        {
+            return false;
+        }
+
+        foreach (PlayerRef activePlayer in runner.ActivePlayers)
+        {
+            if (activePlayer == player)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private ulong ComputeStableId()
     {
         const ulong offsetBasis = 14695981039346656037UL;
 
         ulong hash = offsetBasis;
 
-        string sceneIdentity = !string.IsNullOrEmpty(gameObject.scene.path)
-            ? gameObject.scene.path
-            : gameObject.scene.name;
-
-        hash = HashString(hash, sceneIdentity);
-        hash = HashTransformHierarchy(hash, transform);
+        hash = HashString(hash, gameObject.scene.name);
+        hash = HashTransformHierarchyStable(hash, transform);
 
         var hidingSpots = GetComponents<HidingSpot>();
         int componentIndex = 0;
@@ -234,7 +419,7 @@ public class HidingSpot : MonoBehaviour, IInteractable
         return hash == 0UL ? 1UL : hash;
     }
 
-    private static ulong HashTransformHierarchy(
+    private static ulong HashTransformHierarchyStable(
         ulong hash,
         Transform current)
     {
@@ -245,13 +430,59 @@ public class HidingSpot : MonoBehaviour, IInteractable
 
         if (current.parent != null)
         {
-            hash = HashTransformHierarchy(hash, current.parent);
+            hash = HashTransformHierarchyStable(hash, current.parent);
         }
 
-        hash = HashInt(hash, current.GetSiblingIndex());
         hash = HashString(hash, current.name);
 
+        Vector3 position = current.localPosition;
+
+        hash = HashInt(
+            hash,
+            Mathf.RoundToInt(position.x * 100f));
+        hash = HashInt(
+            hash,
+            Mathf.RoundToInt(position.y * 100f));
+        hash = HashInt(
+            hash,
+            Mathf.RoundToInt(position.z * 100f));
+
         return hash;
+    }
+
+    private bool IsOccupiedByAnotherNetworkPlayer(
+        PlayerHidingController requester)
+    {
+        var requesterMovement =
+            requester != null
+                ? requester.GetComponent<EchoProtocol.Networking.NetworkPlayerMovement>()
+                : null;
+
+        var players =
+            Object.FindObjectsByType<EchoProtocol.Networking.NetworkPlayerMovement>(
+                FindObjectsInactive.Exclude);
+
+        for (int i = 0; i < players.Length; i++)
+        {
+            var movement = players[i];
+
+            if (movement == null || movement == requesterMovement)
+            {
+                continue;
+            }
+
+            if (movement.Object == null || !movement.Object.IsValid)
+            {
+                continue;
+            }
+
+            if (movement.IsHidden && movement.CurrentHideSpotId == StableId)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static ulong HashString(

@@ -289,6 +289,15 @@ namespace EchoProtocol.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            if (runner != null
+                && Object != null
+                && Object.InputAuthority.IsRealPlayer)
+            {
+                global::HidingSpot.ReleaseAllNetworkSpots(
+                    runner,
+                    Object.InputAuthority);
+            }
+
             if (_bootstrap != null && _isSceneLoadDoneSubscribed)
             {
                 _bootstrap.NetworkSceneLoadDone -= HandleNetworkSceneLoadDone;
@@ -535,11 +544,56 @@ namespace EchoProtocol.Networking
             Vector3 position,
             Quaternion rotation)
         {
-            if (isHidden
-                && global::HidingSpot.IsTemporarilyLockedOut(
-                    hideSpotId))
+            ulong previousSpotId = CurrentHideSpotId;
+
+            if (isHidden)
             {
-                return;
+                if (hideSpotId == 0UL)
+                {
+                    RejectHideEnter(hideSpotId);
+                    return;
+                }
+
+                if (!global::HidingSpot.TryResolveByStableId(
+                        hideSpotId,
+                        out var authoritativeSpot))
+                {
+                    RejectHideEnter(hideSpotId);
+                    return;
+                }
+
+                ulong authoritativeSpotId = authoritativeSpot.StableId;
+
+                if (authoritativeSpot.IsTemporarilyLockedOut())
+                {
+                    RejectHideEnter(hideSpotId);
+                    return;
+                }
+
+                if (!global::HidingSpot.TryReserveNetworkSpot(
+                        Runner,
+                        authoritativeSpotId,
+                        Object.InputAuthority))
+                {
+                    RejectHideEnter(hideSpotId);
+                    return;
+                }
+
+                hideSpotId = authoritativeSpotId;
+
+                Transform hidePoint = authoritativeSpot.HidePoint;
+                position = hidePoint.position;
+                rotation = Quaternion.Euler(
+                    0f,
+                    hidePoint.eulerAngles.y,
+                    0f);
+            }
+            else if (previousSpotId != 0UL)
+            {
+                global::HidingSpot.ReleaseNetworkSpot(
+                    Runner,
+                    previousSpotId,
+                    Object.InputAuthority);
             }
 
             IsHidden = isHidden;
@@ -558,6 +612,31 @@ namespace EchoProtocol.Networking
             Physics.SyncTransforms();
         }
 
+        private void RejectHideEnter(
+            ulong hideSpotId)
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || !Object.InputAuthority.IsValid)
+            {
+                return;
+            }
+
+            RpcRejectHideEnterLocal(
+                Object.InputAuthority,
+                hideSpotId);
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+        private void RpcRejectHideEnterLocal(
+            [RpcTarget] PlayerRef targetPlayer,
+            ulong hideSpotId)
+        {
+            var hiding = GetComponent<PlayerHidingController>();
+            hiding?.CancelRejectedEnter(hideSpotId);
+        }
+
         public bool TryForceExitHidingAuthoritative(
             Vector3 position,
             Quaternion rotation)
@@ -570,8 +649,18 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            ulong previousSpotId = CurrentHideSpotId;
+
             IsHidden = false;
             CurrentHideSpotId = 0UL;
+
+            if (previousSpotId != 0UL)
+            {
+                global::HidingSpot.ReleaseNetworkSpot(
+                    Runner,
+                    previousSpotId,
+                    Object.InputAuthority);
+            }
 
             if (_controller != null)
             {
