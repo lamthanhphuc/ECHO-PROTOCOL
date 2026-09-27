@@ -36,6 +36,7 @@ namespace EchoProtocol.UI.HUD
         [SerializeField] private CanvasGroup noiseCanvasGroup;
 
         private float _displayStamina = 1f;
+        private Image _healthBarFill;
         private float _noiseIntensity;
         private float _flashTimer;
 
@@ -53,6 +54,7 @@ namespace EchoProtocol.UI.HUD
                     : null;
             downState = down;
             carrier = coreCarrier;
+            if (down == null && _healthBarFill != null) _healthBarFill.gameObject.SetActive(false);
 
             if (carrier != null)
             {
@@ -71,6 +73,7 @@ namespace EchoProtocol.UI.HUD
         private void Start()
         {
             ResolveReferences();
+            EnsureHealthBar();
             if (noiseCanvasGroup != null)
             {
                 noiseCanvasGroup.alpha = 0f;
@@ -137,6 +140,8 @@ namespace EchoProtocol.UI.HUD
             if (downState == null) return;
 
             PlayerLifeState life = downState.State;
+            EnsureHealthBar();
+            if (_healthBarFill != null) _healthBarFill.gameObject.SetActive(life == PlayerLifeState.Active);
             _flashTimer += Time.deltaTime * 5f;
             float flashAlpha = (Mathf.Sin(_flashTimer) + 1f) * 0.5f;
 
@@ -185,24 +190,66 @@ namespace EchoProtocol.UI.HUD
                     SetText(bleedoutTimerTmp, bleedoutTimerText, $"HẾT MÁU SAU: {bleedout:F1}s");
                 }
             }
+            else if (life == PlayerLifeState.Caught)
+            {
+                SetStatusBadge("BỊ BẮT", "#FF1744", new Color(0.8f, 0.1f, 0.1f, 0.4f));
+                if (bleedoutContainer != null)
+                {
+                    bleedoutContainer.SetActive(false);
+                    bleedoutContainer.transform.localScale = Vector3.one;
+                }
+            }
             else
             {
-                // Active: check health
                 if (bleedoutContainer != null)
                 {
                     bleedoutContainer.SetActive(false);
                     bleedoutContainer.transform.localScale = Vector3.one;
                 }
 
-                if (downState.Health < 75f)
-                {
-                    SetStatusBadge("BỊ THƯƠNG", "#FFB300", new Color(1f, 0.7f, 0f, 0.25f));
-                }
-                else
-                {
-                    SetStatusBadge("BÌNH THƯỜNG", "#00E676", new Color(0f, 0.9f, 0.4f, 0.2f));
-                }
+                UpdateHealthBar();
             }
+        }
+
+        private void EnsureHealthBar()
+        {
+            if (_healthBarFill != null || statusBadgeBg == null) return;
+
+            var existing = statusBadgeBg.transform.Find("HealthFill");
+            var fillObject = existing != null ? existing.gameObject : new GameObject("HealthFill", typeof(RectTransform), typeof(Image));
+            if (existing == null) fillObject.transform.SetParent(statusBadgeBg.transform, false);
+
+            var rect = fillObject.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0f, 0.5f);
+            rect.offsetMin = new Vector2(4f, 4f);
+            rect.offsetMax = new Vector2(-4f, -4f);
+            fillObject.transform.SetAsFirstSibling();
+
+            _healthBarFill = fillObject.GetComponent<Image>();
+            _healthBarFill.raycastTarget = false;
+        }
+
+        private void UpdateHealthBar()
+        {
+            float maxHealth = Mathf.Max(1f, downState.MaxHealth);
+            float health = Mathf.Clamp(downState.Health, 0f, maxHealth);
+            float amount = health / maxHealth;
+            Color barColor = amount < 0.3f
+                ? new Color(0.95f, 0.15f, 0.15f, 0.9f)
+                : amount < 0.6f
+                    ? new Color(1f, 0.65f, 0.1f, 0.9f)
+                    : new Color(0f, 0.85f, 0.4f, 0.9f);
+
+            if (_healthBarFill != null)
+            {
+                _healthBarFill.rectTransform.localScale = new Vector3(amount, 1f, 1f);
+                _healthBarFill.color = barColor;
+            }
+            if (statusBadgeBg != null) statusBadgeBg.color = new Color(0.06f, 0.1f, 0.11f, 0.95f);
+            SetText(statusLabelTmp, statusLabelText,
+                $"<color=#FFFFFF><b>HP {Mathf.CeilToInt(health)}/{Mathf.CeilToInt(maxHealth)}</b></color>");
         }
 
         private void SetStatusBadge(string label, string hexColor, Color bgColor)
