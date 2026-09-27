@@ -127,10 +127,17 @@ namespace EchoProtocol.Voice
         private void Connect()
         {
             var settings = new AppSettings();
-            PhotonAppSettings.Instance.AppSettings.CopyTo(settings);
+            if (!Fusion.Photon.Realtime.PhotonAppSettings.TryGetGlobal(out var fusionSettings)
+                || fusionSettings == null)
+            {
+                Status = "Photon settings are unavailable.";
+                _attempts = 3;
+                return;
+            }
+            fusionSettings.AppSettings.CopyTo(settings);
             if (!Guid.TryParse(settings.AppIdVoice, out _))
             {
-                Status = "Voice App ID is missing. Configure Photon App Settings.";
+                Status = "Voice App ID is missing. Configure AppIdVoice in Fusion PhotonAppSettings.";
                 _attempts = 3;
                 return;
             }
