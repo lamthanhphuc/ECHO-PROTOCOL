@@ -18,10 +18,12 @@ public class PlayerInteractionControlLock
     private NetworkPlayerInteractor _networkInteractor;
     private bool _promptWasSuppressed;
     private bool _networkPromptWasSuppressed;
+    private bool _unlockCursor = true;
 
     public GameObject Player => _player;
     public bool IsLocked => Locks.Contains(this);
     public static bool HasModal => Locks.Count > 0;
+    public static bool ShouldUnlockCursor => Locks.Exists(entry => entry._unlockCursor);
     public static bool EscapeConsumedThisFrame => _consumedEscapeFrame == Time.frameCount;
     public bool IsTopmost => IsLocked && Locks[Locks.Count - 1] == this;
 
@@ -42,7 +44,7 @@ public class PlayerInteractionControlLock
         return false;
     }
 
-    public void Acquire(GameObject player, Action onInterrupted = null)
+    public void Acquire(GameObject player, Action onInterrupted = null, bool unlockCursor = true)
     {
         Release();
         if (player == null) return;
@@ -51,6 +53,7 @@ public class PlayerInteractionControlLock
 
         _player = player;
         _onInterrupted = onInterrupted;
+        _unlockCursor = unlockCursor;
         _interaction = player.GetComponentInParent<PlayerInteraction>();
         _networkInteractor = player.GetComponentInParent<NetworkPlayerInteractor>();
         _promptWasSuppressed = _interaction != null && _interaction.IsInteractionPromptSuppressed;
@@ -70,8 +73,11 @@ public class PlayerInteractionControlLock
         Locks.Add(this);
         _interaction?.SetInteractionPromptSuppressed(true);
         _networkInteractor?.SetInteractionPromptSuppressed(true);
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
+        if (ShouldUnlockCursor)
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
         PlayerInputStateDriver.EnsureExists();
     }
 
@@ -110,6 +116,7 @@ public class PlayerInteractionControlLock
         _player = null;
         _interaction = null;
         _networkInteractor = null;
+        _unlockCursor = true;
         _onInterrupted = null;
     }
 
@@ -117,7 +124,7 @@ public class PlayerInteractionControlLock
     {
         foreach (var entry in Locks.ToArray())
             if (entry.ShouldAutoRelease()) entry.Interrupt();
-        if (Locks.Count > 0)
+        if (ShouldUnlockCursor)
         {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;

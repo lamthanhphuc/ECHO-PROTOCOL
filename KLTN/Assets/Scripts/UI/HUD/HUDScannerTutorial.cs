@@ -106,7 +106,7 @@ namespace EchoProtocol.UI.HUD
             _isOpen = true;
             _releaseWhenInputClears = false;
             SetVisual(true);
-            _controlLock.Acquire(_playerRoot, Hide);
+            _controlLock.Acquire(_playerRoot, Hide, unlockCursor: false);
             _dismissAllowedAt = Time.unscaledTime + dismissInputDelay;
         }
 

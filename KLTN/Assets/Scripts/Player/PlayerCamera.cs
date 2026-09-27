@@ -173,7 +173,7 @@ public class PlayerCamera : MonoBehaviour
 
         _lookAction?.Enable();
 
-        if (lockCursorOnEnable && !PlayerInteractionControlLock.HasModal)
+        if (lockCursorOnEnable && !PlayerInteractionControlLock.ShouldUnlockCursor)
         {
             LockCursor();
         }
@@ -187,8 +187,16 @@ public class PlayerCamera : MonoBehaviour
 
     private void Update()
     {
-        if (PlayerInteractionControlLock.HasModal) { UnlockCursor(); return; }
-        if (PlayerInteractionControlLock.IsGameplayInputBlocked()) return;
+        if (PlayerInteractionControlLock.ShouldUnlockCursor)
+        {
+            UnlockCursor();
+            return;
+        }
+
+        if (PlayerInteractionControlLock.IsGameplayInputBlocked())
+        {
+            return;
+        }
 
         if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
         {
