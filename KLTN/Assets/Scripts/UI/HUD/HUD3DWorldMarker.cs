@@ -177,10 +177,6 @@ namespace EchoProtocol.UI.HUD
         {
             bool zone2Active = EchoProtocol.Networking.StalkerZone2EntryTrigger.Zone2Triggered;
             var director = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance;
-            if (director != null && director.CurrentStage >= EchoProtocol.MatchFlow.Zone2MissionStage.FindSecurityTerminal)
-            {
-                zone2Active = true;
-            }
 
             if (!zone2Active) return;
 

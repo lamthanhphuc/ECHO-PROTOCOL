@@ -266,10 +266,6 @@ namespace EchoProtocol.Visuals
 
             bool zone2Active = StalkerZone2EntryTrigger.Zone2Triggered;
             var director = Zone2MissionDirector.Instance;
-            if (director != null && director.CurrentStage >= Zone2MissionStage.FindSecurityTerminal)
-            {
-                zone2Active = true;
-            }
 
             // Before entering Zone 2, or once terminal download is complete: outline is OFF
             if (!zone2Active || isComplete)

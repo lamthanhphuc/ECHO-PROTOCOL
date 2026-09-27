@@ -338,8 +338,7 @@ namespace EchoProtocol.Networking
                 && Object.IsValid
                 && Object.HasStateAuthority
                 && state != null
-                && state.ToolId == LobbyPlayerState.FirstAidKitToolId
-                && FirstAidRevivesUsedThisMatch < MaximumFirstAidRevivesPerMatch;
+                && state.ToolId == LobbyPlayerState.FirstAidKitToolId;
         }
 
         public bool ConsumeFirstAidReviveAuthoritative(LobbyPlayerState state)
