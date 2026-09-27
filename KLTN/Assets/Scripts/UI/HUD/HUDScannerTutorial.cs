@@ -13,13 +13,13 @@ namespace EchoProtocol.UI.HUD
         [Header("Behaviour")]
         [SerializeField, Min(0f)] private float dismissInputDelay = 0.2f;
 
-        private static bool s_shownThisSession;
+        private static int s_shownToolMask;
         private readonly PlayerInteractionControlLock _controlLock = new PlayerInteractionControlLock();
 
         private PlayerInventory _inventory;
         private GameObject _playerRoot;
-        private bool _hadScanner;
-        private bool _shownThisMatch;
+        private int _lastToolId;
+        private int _activeToolId;
         private bool _isOpen;
         private bool _releaseWhenInputClears;
         private float _dismissAllowedAt;
@@ -27,13 +27,12 @@ namespace EchoProtocol.UI.HUD
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetSessionState()
         {
-            s_shownThisSession = false;
+            s_shownToolMask = 0;
         }
 
         private void Awake()
         {
             if (canvasGroup == null) canvasGroup = GetComponent<CanvasGroup>();
-            ConfigureLayout();
             SetVisual(false);
         }
 
@@ -68,7 +67,7 @@ namespace EchoProtocol.UI.HUD
 
             if (_inventory == null) return;
 
-            _hadScanner = HasScanner();
+            _lastToolId = GetCurrentToolId();
             _inventory.InventoryChanged += HandleInventoryChanged;
         }
 
@@ -82,29 +81,46 @@ namespace EchoProtocol.UI.HUD
             Hide();
             _inventory = null;
             _playerRoot = null;
-            _hadScanner = false;
+            _lastToolId = 0;
+            _activeToolId = 0;
         }
 
         private void HandleInventoryChanged()
         {
-            bool hasScanner = HasScanner();
-            if (hasScanner && !_hadScanner && !_shownThisMatch && !s_shownThisSession) Show();
-            _hadScanner = hasScanner;
+            int toolId = GetCurrentToolId();
+            if (toolId > 0 && toolId != _lastToolId && IsSupportedTool(toolId) && !WasShown(toolId)) Show(toolId);
+            _lastToolId = toolId;
         }
 
-        private bool HasScanner()
+        private int GetCurrentToolId()
         {
-            return _inventory != null && PlayerInventory.ResolveToolId(_inventory.TeamToolSlot) == 1;
+            return _inventory == null ? 0 : PlayerInventory.ResolveToolId(_inventory.TeamToolSlot);
         }
 
-        private void Show()
+        private static bool IsSupportedTool(int toolId)
         {
-            if (_isOpen || _shownThisMatch || s_shownThisSession || _playerRoot == null) return;
+            return toolId == 1 || toolId == 2 || toolId == 3 || toolId == 4 || toolId == 6;
+        }
 
-            s_shownThisSession = true;
-            _shownThisMatch = true;
+        private static bool WasShown(int toolId)
+        {
+            return toolId > 0 && (s_shownToolMask & (1 << toolId)) != 0;
+        }
+
+        private static void MarkShown(int toolId)
+        {
+            if (toolId > 0) s_shownToolMask |= 1 << toolId;
+        }
+
+        private void Show(int toolId)
+        {
+            if (_isOpen || _playerRoot == null || !IsSupportedTool(toolId) || WasShown(toolId)) return;
+
+            MarkShown(toolId);
+            _activeToolId = toolId;
             _isOpen = true;
             _releaseWhenInputClears = false;
+            ConfigureLayout(toolId);
             SetVisual(true);
             _controlLock.Acquire(_playerRoot, Hide, unlockCursor: false);
             _dismissAllowedAt = Time.unscaledTime + dismissInputDelay;
@@ -146,7 +162,7 @@ namespace EchoProtocol.UI.HUD
             canvasGroup.blocksRaycasts = visible;
         }
 
-        private void ConfigureLayout()
+        private void ConfigureLayout(int toolId)
         {
             for (int i = transform.childCount - 1; i >= 0; i--) Destroy(transform.GetChild(i).gameObject);
 
@@ -159,13 +175,38 @@ namespace EchoProtocol.UI.HUD
             Stretch(background.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
             var panel = Image("Panel", transform, new Color(0.025f, 0.035f, 0.038f, 0.96f));
-            panel.gameObject.AddComponent<Outline>().effectColor = new Color(0.25f, 0.55f, 0.55f, 0.55f);
             var panelRect = panel.rectTransform;
             panelRect.anchorMin = panelRect.anchorMax = panelRect.pivot = new Vector2(0.5f, 0.5f);
             panelRect.anchoredPosition = Vector2.zero;
+
+            switch (toolId)
+            {
+                case 1:
+                    ConfigureScannerTutorial(panel, panelRect);
+                    break;
+                case 2:
+                    ConfigureNoiseMakerTutorial(panel, panelRect);
+                    break;
+                case 3:
+                    ConfigureFirstAidTutorial(panel, panelRect);
+                    break;
+                case 4:
+                    ConfigurePlankTutorial(panel, panelRect);
+                    break;
+                case 6:
+                    ConfigureCoreStabilizerTutorial(panel, panelRect);
+                    break;
+            }
+        }
+
+        private void ConfigureScannerTutorial(Image panel, RectTransform panelRect)
+        {
+            Color accent = new Color(0.58f, 0.95f, 0.92f);
+
+            panel.gameObject.AddComponent<Outline>().effectColor = new Color(accent.r, accent.g, accent.b, 0.55f);
             panelRect.sizeDelta = new Vector2(820f, 480f);
 
-            TextLabel("Title", panelRect, "MÁY QUÉT HIỆN TRƯỜNG", 31, TextAnchor.MiddleCenter, FontStyle.Bold, new Color(0.58f, 0.95f, 0.92f), 28, 48);
+            TextLabel("Title", panelRect, "MÁY QUÉT HIỆN TRƯỜNG", 31, TextAnchor.MiddleCenter, FontStyle.Bold, accent, 28, 48);
 
             var controls = Row("ControlsRow", panelRect, 88, 112);
             ControlBlock("ScanControl", controls, "[CHUỘT TRÁI]\n<size=27>QUÉT</size>\n<size=20>Quét khu vực trong 10 giây.</size>");
@@ -176,7 +217,75 @@ namespace EchoProtocol.UI.HUD
             InfoBlock("StalkerMode", modes, "⚠ STALKER\n<size=21>Phát hiện Stalker đang di chuyển</size>", new Color(0.94f, 0.43f, 0.29f));
 
             TextLabel("RadarHint", panelRect, "▲ BẠN LUÔN Ở GIỮA RA-ĐA", 23, TextAnchor.MiddleCenter, FontStyle.Bold, new Color(0.78f, 0.84f, 0.84f), 342, 34);
-            TextLabel("ContinueText", panelRect, "NHẤN PHÍM BẤT KỲ ĐỂ TIẾP TỤC", 21, TextAnchor.MiddleCenter, FontStyle.Bold, new Color(0.95f, 0.86f, 0.52f), 414, 32);
+            AddContinueText(panelRect, 414f);
+        }
+
+        private void ConfigureSimpleTutorial(Image panel, RectTransform panelRect, string title, string controlText, string infoText, string hintText, Color accent)
+        {
+            panel.gameObject.AddComponent<Outline>().effectColor = new Color(accent.r, accent.g, accent.b, 0.55f);
+            panelRect.sizeDelta = new Vector2(820f, 400f);
+
+            TextLabel("Title", panelRect, title, 31, TextAnchor.MiddleCenter, FontStyle.Bold, accent, 30f, 50f);
+
+            var row = Row("TutorialRow", panelRect, 105f, 130f);
+            InfoBlock("Control", row, controlText, accent);
+            InfoBlock("Info", row, infoText, new Color(0.78f, 0.84f, 0.84f));
+
+            TextLabel("Hint", panelRect, hintText, 21, TextAnchor.MiddleCenter, FontStyle.Bold, new Color(0.78f, 0.84f, 0.84f), 265f, 42f);
+            AddContinueText(panelRect, 335f);
+        }
+
+        private void AddContinueText(RectTransform panelRect, float top)
+        {
+            TextLabel("ContinueText", panelRect, "NHẤN PHÍM BẤT KỲ ĐỂ TIẾP TỤC", 21, TextAnchor.MiddleCenter, FontStyle.Bold, new Color(0.95f, 0.86f, 0.52f), top, 32f);
+        }
+
+        private void ConfigureNoiseMakerTutorial(Image panel, RectTransform panelRect)
+        {
+            ConfigureSimpleTutorial(
+                panel,
+                panelRect,
+                "MÁY TẠO TIẾNG ĐỘNG",
+                "[CHUỘT TRÁI]\n<size=27>ĐẶT THIẾT BỊ</size>\n<size=20>Thiết bị được đặt phía trước bạn.</size>",
+                "ĐÁNH LẠC HƯỚNG\n<size=21>Tạo tiếng động để thu hút Stalker đến vị trí khác.</size>",
+                "Thiết bị sẽ bị tiêu hao sau khi sử dụng.",
+                new Color(0.95f, 0.67f, 0.30f));
+        }
+
+        private void ConfigureFirstAidTutorial(Image panel, RectTransform panelRect)
+        {
+            ConfigureSimpleTutorial(
+                panel,
+                panelRect,
+                "BỘ SƠ CỨU",
+                "[GIỮ E / CHUỘT TRÁI]\n<size=27>CỨU ĐỒNG ĐỘI</size>\n<size=20>Nhắm vào đồng đội đang bị gục.</size>",
+                "CỨU NGƯỜI BỊ GỤC\n<size=21>Không dùng để hồi máu cho người vẫn còn đứng.</size>",
+                "Giữ nút cho đến khi quá trình cứu hoàn tất.",
+                new Color(0.48f, 0.92f, 0.58f));
+        }
+
+        private void ConfigurePlankTutorial(Image panel, RectTransform panelRect)
+        {
+            ConfigureSimpleTutorial(
+                panel,
+                panelRect,
+                "VÁN CHÈN CỬA",
+                "[E / CHUỘT TRÁI]\n<size=27>CHÈN CỬA</size>\n<size=20>Chỉ gắn vào cửa đã bị phá.</size>",
+                "CHẶN STALKER\n<size=21>Stalker có thể phá ván để đi qua.</size>",
+                "Ván chỉ chặn Stalker trong thời gian ngắn, không khóa chết.",
+                new Color(0.82f, 0.63f, 0.38f));
+        }
+
+        private void ConfigureCoreStabilizerTutorial(Image panel, RectTransform panelRect)
+        {
+            ConfigureSimpleTutorial(
+                panel,
+                panelRect,
+                "BỘ ỔN ĐỊNH LÕI",
+                "Ở GẦN ĐỒNG ĐỘI\n<size=27>ỔN ĐỊNH LÕI</size>\n<size=20>Giữ khoảng cách trong phạm vi 2,5 m.</size>",
+                "[CHUỘT TRÁI]\n<size=27>PHÁT XUNG</size>\n<size=20>Kích hoạt phản hồi của thiết bị.</size>",
+                "Ưu tiên đi cùng người đang mang Lõi năng lượng.",
+                new Color(0.42f, 0.82f, 1f));
         }
 
         private static RectTransform Row(string name, Transform parent, float top, float height)
