@@ -16,6 +16,7 @@ namespace EchoProtocol.UI.HUD
         [SerializeField] private HUDTeammateStatus teammateStatus;
         [SerializeField] private HUD3DWorldMarker worldMarker;
         [SerializeField] private HUDFieldScanner fieldScannerHUD;
+        [SerializeField] private HUDScannerTutorial scannerTutorial;
 
         [Header("Runtime Auto-Find")]
         [SerializeField] private bool autoFindLocalPlayerOnStart = true;
@@ -29,6 +30,7 @@ namespace EchoProtocol.UI.HUD
         public HUDTeammateStatus TeammateStatus => teammateStatus;
         public HUD3DWorldMarker WorldMarker => worldMarker;
         public HUDFieldScanner FieldScannerHUD => fieldScannerHUD;
+        public HUDScannerTutorial ScannerTutorial => scannerTutorial;
 
         private void Awake()
         {
@@ -65,6 +67,7 @@ namespace EchoProtocol.UI.HUD
             if (teammateStatus == null) teammateStatus = GetComponentInChildren<HUDTeammateStatus>(true);
             if (worldMarker == null) worldMarker = GetComponentInChildren<HUD3DWorldMarker>(true);
             if (fieldScannerHUD == null) fieldScannerHUD = GetComponentInChildren<HUDFieldScanner>(true);
+            if (scannerTutorial == null) scannerTutorial = GetComponentInChildren<HUDScannerTutorial>(true);
         }
 
         public void FindAndBindLocalPlayer()
@@ -116,6 +119,11 @@ namespace EchoProtocol.UI.HUD
             if (fieldScannerHUD != null)
             {
                 fieldScannerHUD.UnbindScanner();
+            }
+
+            if (scannerTutorial != null)
+            {
+                scannerTutorial.Unbind();
             }
         }
 
@@ -174,6 +182,11 @@ namespace EchoProtocol.UI.HUD
             if (fieldScannerHUD != null)
             {
                 fieldScannerHUD.BindScanner(fieldScanner);
+            }
+
+            if (scannerTutorial != null)
+            {
+                scannerTutorial.BindPlayer(inventory, playerRoot);
             }
 
             if (teammateStatus != null)
