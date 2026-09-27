@@ -29,8 +29,10 @@ namespace EchoProtocol.Tools.Scanner
             Vector3 origin,
             Vector3 forward,
             IEnumerable<IMotionScannable> targets,
-            FieldScannerTuning tuning = null)
+            FieldScannerTuning tuning = null,
+            List<Vector3> radarOffsets = null)
         {
+            radarOffsets?.Clear();
             tuning = tuning ?? FieldScannerTuning.Default;
             forward = Vector3.ProjectOnPlane(forward, Vector3.up).normalized;
             if (forward == Vector3.zero) forward = Vector3.forward;
@@ -88,6 +90,7 @@ namespace EchoProtocol.Tools.Scanner
             for (int i = 0; i < result.BlipCount; i++)
             {
                 var match = validMatches[i];
+                radarOffsets?.Add(match.Target.WorldPosition - origin);
                 result.SetBlip(i, new MotionBlip
                 {
                     IsValid = true,

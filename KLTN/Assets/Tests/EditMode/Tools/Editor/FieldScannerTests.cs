@@ -10,6 +10,103 @@ namespace EchoProtocol.Tests.EditMode.Tools
 {
     public sealed class FieldScannerTests
     {
+        [Test]
+        public void RadarHUD_PrefabsKeepReferences_AndRenderReadyScanDetectedEmptyCooldown()
+        {
+            foreach (string path in new[] { "Assets/Resources/PF_FieldScanner_HUD.prefab", "Assets/Resources/PF_GameplayHUD_Canvas.prefab", "Assets/Prefabs/UI/PF_GameplayHUD_Canvas.prefab" })
+            {
+                var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                var view = prefab.GetComponentInChildren<EchoProtocol.UI.HUD.HUDFieldScanner>(true);
+                var serialized = new UnityEditor.SerializedObject(view);
+                foreach (string field in new[] { "canvasGroup", "titleText", "modeBadgeText", "radarText", "signalBarsText", "signalDetailText", "statusText", "controlsText", "detectedText", "radarGraphic" })
+                    Assert.That(serialized.FindProperty(field).objectReferenceValue, Is.Not.Null, path + ": " + field);
+                Assert.That(view.GetComponentInChildren<EchoProtocol.UI.HUD.ScannerRadarGraphic>(true).GetComponent<CanvasRenderer>(), Is.Not.Null);
+                var rect = (RectTransform)view.transform;
+                Assert.That(rect.anchorMin, Is.EqualTo(Vector2.one));
+                Assert.That(rect.anchorMax, Is.EqualTo(Vector2.one));
+                Assert.That(rect.pivot, Is.EqualTo(Vector2.one));
+            }
+            var source = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/PF_FieldScanner_HUD.prefab");
+            var root = UnityEngine.Object.Instantiate(source);
+            var player = new GameObject("ScannerHudTestPlayer");
+            try
+            {
+                var scanner = player.AddComponent<NetworkFieldScanner>();
+                var hud = root.GetComponent<EchoProtocol.UI.HUD.HUDFieldScanner>();
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                var render = hud.GetType().GetMethod("RenderScannerState", flags);
+                var status = (UnityEngine.UI.Text)hud.GetType().GetField("statusText", flags).GetValue(hud);
+                hud.BindScanner(scanner);
+                render.Invoke(hud, null);
+                Assert.That(status.text, Does.StartWith("SẴN SÀNG"));
+                var hintUntil = hud.GetType().GetField("_modeHintUntil", flags);
+                hintUntil.SetValue(hud, Time.unscaledTime + 6f);
+                render.Invoke(hud, null);
+                Assert.That(status.text, Does.Contain("[Chuột phải] Đổi chế độ"));
+                Assert.That(status.text, Does.Contain("[Chuột trái] Quét"));
+                hud.GetType().GetMethod("HandleModeChanged", flags).Invoke(hud, new object[] { FieldScannerMode.Motion });
+                Assert.That(status.text, Does.Contain("[Chuột trái] Quét"));
+                hintUntil.SetValue(hud, Time.unscaledTime - 1f);
+                render.Invoke(hud, null);
+                Assert.That(status.text, Does.Contain("[Chuột trái] Quét"));
+                typeof(NetworkFieldScanner).GetField("_localActiveScanTimer", flags).SetValue(scanner, 8f);
+                render.Invoke(hud, null);
+                Assert.That(status.text, Is.EqualTo("ĐANG QUÉT..."));
+                typeof(NetworkFieldScanner).GetField("_hasLocalActiveResult", flags).SetValue(scanner, true);
+                typeof(NetworkFieldScanner).GetField("_localResultTimer", flags).SetValue(scanner, 1f);
+                render.Invoke(hud, null);
+                Assert.That(status.text, Is.EqualTo("KHÔNG CÓ TÍN HIỆU"));
+                var offsets = (List<Vector3>)typeof(NetworkFieldScanner).GetField("_radarOffsets", flags).GetValue(scanner);
+                offsets.Add(Vector3.forward * 18);
+                render.Invoke(hud, null);
+                Assert.That(status.text, Is.EqualTo("PHÁT HIỆN TÍN HIỆU"));
+                typeof(NetworkFieldScanner).GetField("_localActiveScanTimer", flags).SetValue(scanner, 0f);
+                typeof(NetworkFieldScanner).GetField("_localCooldownTimer", flags).SetValue(scanner, 10f);
+                render.Invoke(hud, null);
+                Assert.That(status.text, Does.StartWith("ĐANG HỒI..."));
+                hud.UnbindScanner();
+                render.Invoke(hud, null);
+                Assert.That(status.text, Is.EqualTo("ĐANG CHỜ KẾT NỐI"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+                UnityEngine.Object.DestroyImmediate(player);
+            }
+        }
+
+        [Test]
+        public void RadarPresentation_UsesAcceptedTargetsWithoutChangingDetection_AndClearsOldSamples()
+        {
+            var offsets = new List<Vector3>();
+            var origin = new Vector3(10, 0, 10);
+            var cores = new ICoreScanCandidate[]
+            {
+                new MockCoreCandidate { TargetId = 1, WorldPosition = origin + Vector3.right * 4, IsAvailableInWorld = true },
+                new MockCoreCandidate { TargetId = 2, WorldPosition = origin + Vector3.forward * 8, IsAvailableInWorld = true },
+                new MockCoreCandidate { TargetId = 3, WorldPosition = origin, IsAvailableInWorld = false },
+                new MockCoreCandidate { TargetId = 4, WorldPosition = origin + Vector3.forward * 30, IsAvailableInWorld = true }
+            };
+            var expected = FieldScannerCoreDetector.Evaluate(origin, Vector3.forward, cores, isOccludedFunc: (a, b) => false);
+            var actual = FieldScannerCoreDetector.Evaluate(origin, Vector3.forward, cores, isOccludedFunc: (a, b) => false, radarOffsets: offsets);
+            Assert.That(actual, Is.EqualTo(expected));
+            Assert.That(offsets, Is.EqualTo(new[] { Vector3.right * 4, Vector3.forward * 8 }));
+            var monsters = new IMotionScannable[]
+            {
+                new MockMotionTarget { TargetId = 1, WorldPosition = origin + Vector3.left * 9, CurrentSpeed = 1 },
+                new MockMotionTarget { TargetId = 2, WorldPosition = origin + Vector3.forward * 2, CurrentSpeed = 0 },
+                new MockMotionTarget { TargetId = 3, WorldPosition = origin + Vector3.back * 3, CurrentSpeed = 1 }
+            };
+            var motion = FieldScannerMotionDetector.Evaluate(origin, Vector3.forward, monsters, radarOffsets: offsets);
+            Assert.That(motion, Is.EqualTo(FieldScannerMotionDetector.Evaluate(origin, Vector3.forward, monsters)));
+            Assert.That(offsets, Is.EqualTo(new[] { Vector3.back * 3, Vector3.left * 9 }));
+            FieldScannerMotionDetector.Evaluate(origin, Vector3.forward, null, radarOffsets: offsets);
+            Assert.That(offsets, Is.Empty);
+            offsets.Add(Vector3.one);
+            FieldScannerCoreDetector.Evaluate(origin, Vector3.forward, null, radarOffsets: offsets);
+            Assert.That(offsets, Is.Empty);
+        }
+
         private sealed class MockCoreCandidate : ICoreScanCandidate
         {
             public int TargetId { get; set; }

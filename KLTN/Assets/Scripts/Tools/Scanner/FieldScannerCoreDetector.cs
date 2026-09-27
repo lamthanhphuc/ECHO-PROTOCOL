@@ -18,8 +18,10 @@ namespace EchoProtocol.Tools.Scanner
             Vector3 forward,
             IEnumerable<ICoreScanCandidate> candidates,
             FieldScannerTuning tuning = null,
-            Func<Vector3, Vector3, bool> isOccludedFunc = null)
+            Func<Vector3, Vector3, bool> isOccludedFunc = null,
+            List<Vector3> radarOffsets = null)
         {
+            radarOffsets?.Clear();
             tuning = tuning ?? FieldScannerTuning.Default;
             forward = Vector3.ProjectOnPlane(forward, Vector3.up).normalized;
             if (forward == Vector3.zero) forward = Vector3.forward;
@@ -45,6 +47,9 @@ namespace EchoProtocol.Tools.Scanner
                 {
                     continue;
                 }
+
+                // Presentation only: reuse the candidates accepted by this scan.
+                radarOffsets?.Add(diff);
 
                 bool isOccluded = false;
                 if (isOccludedFunc != null)

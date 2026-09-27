@@ -1,4 +1,3 @@
-using System.Text;
 using EchoProtocol.Networking;
 using EchoProtocol.Tools.Scanner;
 using UnityEngine;
@@ -38,6 +37,13 @@ namespace EchoProtocol.UI.HUD
 
         private NetworkFieldScanner _boundScanner;
         private float _targetAlpha;
+        [SerializeField] private Text detectedText;
+        [SerializeField] private ScannerRadarGraphic radarGraphic;
+        private float _nextRenderTime;
+        private float _emptySince = -1f;
+        private Camera _viewCamera;
+        private bool _wasEquipped;
+        private float _modeHintUntil;
 
         private void Awake()
         {
@@ -61,6 +67,7 @@ namespace EchoProtocol.UI.HUD
             canvasGroup.interactable = false;
             canvasGroup.blocksRaycasts = false;
             _targetAlpha = 0f;
+            if (radarBoxBackground != null) ConfigureLayout();
 
             if (scannerAudio == null)
             {
@@ -101,17 +108,9 @@ namespace EchoProtocol.UI.HUD
             {
                 isEquipped = _boundScanner.IsScannerEquipped() && !_boundScanner.IsCarryingCore();
             }
-            else
-            {
-                var inv = FindAnyObjectByType<PlayerInventory>();
-                if (inv != null && inv.TeamToolSlot != null)
-                {
-                    string id = (inv.TeamToolSlot.ItemId ?? string.Empty).ToLowerInvariant();
-                    string name = (inv.TeamToolSlot.DisplayName ?? string.Empty).ToLowerInvariant();
-                    isEquipped = id.Contains("scan") || name.Contains("scan");
-                }
-            }
 
+            if (isEquipped && !_wasEquipped) _modeHintUntil = Time.unscaledTime + 6f;
+            _wasEquipped = isEquipped;
             _targetAlpha = isEquipped ? 1f : 0f;
 
             if (canvasGroup != null)
@@ -128,7 +127,11 @@ namespace EchoProtocol.UI.HUD
                 }
             }
 
-            RenderScannerState();
+            if (Time.unscaledTime >= _nextRenderTime)
+            {
+                _nextRenderTime = Time.unscaledTime + 0.05f;
+                RenderScannerState();
+            }
         }
 
         public void BindScanner(NetworkFieldScanner scanner)
@@ -240,552 +243,233 @@ namespace EchoProtocol.UI.HUD
 
         private void HandleModeChanged(FieldScannerMode mode)
         {
+            _modeHintUntil = 0f;
             RenderScannerState();
         }
 
         private void RenderScannerState()
         {
-            if (_boundScanner == null)
+            bool connected = _boundScanner != null;
+            bool motion = connected && _boundScanner.CurrentMode == FieldScannerMode.Motion;
+            bool active = connected && _boundScanner.IsScanActive;
+            bool hasResult = active && _boundScanner.HasActiveResult;
+            float cooldown = connected ? _boundScanner.LocalCooldownRemaining : 0f;
+            var offsets = hasResult ? _boundScanner.RadarOffsets : null;
+            int count = offsets != null ? offsets.Count : 0;
+            float nearest = float.PositiveInfinity;
+            for (int i = 0; i < count; i++) nearest = Mathf.Min(nearest, offsets[i].magnitude);
+            Color accent = motion ? new Color(0.94f, 0.43f, 0.29f) : new Color(0.35f, 0.78f, 0.76f);
+
+            SetText(titleText, motion ? "!  STALKER" : "◈  LÕI NĂNG LƯỢNG");
+            SetText(modeBadgeText, "Chuột phải");
+            SetText(controlsText, "Đổi chế độ");
+            SetText(detectedText, motion ? $"<size=23>{count}</size>\nPHÁT HIỆN" : $"<size=23>{count}</size>  LÕI");
+            SetText(signalDetailText, "GẦN NHẤT\n<size=21>" + (count > 0 ? $"{nearest:F0}m" : "—") + "</size>");
+            int bars = connected && count > 0 ? (int)FieldScannerCoreDetector.ResolveSignalBars(nearest, _boundScanner.Tuning) : 0;
+            if (motion)
             {
-                RenderIdleState();
-                return;
+                float age = connected && hasResult ? Mathf.Max(0f, Time.time - _boundScanner.LastRadarSampleTime) : 0f;
+                SetText(signalBarsText, "LẦN QUÉT\n<size=21>" + (hasResult ? $"{age:F1}s" : "—") + "</size>");
+            }
+            else
+            {
+                string signal = "";
+                const string glyphs = "▂▄▆█";
+                for (int i = 0; i < 4; i++) signal += (i < bars ? glyphs[i].ToString() : $"<color=#3E5050>{glyphs[i]}</color>") + " ";
+                SetText(signalBarsText, "TÍN HIỆU\n<size=21>" + signal + "</size>");
             }
 
-            FieldScannerMode mode = _boundScanner.CurrentMode;
-            bool isActive = _boundScanner.IsScanActive;
-            float activeRemaining = _boundScanner.ActiveRemainingTime;
-            float cooldown = _boundScanner.LocalCooldownRemaining;
-            bool hasResult = isActive && _boundScanner.HasActiveResult;
+            if (!active || !hasResult || count > 0) _emptySince = -1f;
+            else if (_emptySince < 0f) _emptySince = Time.unscaledTime;
+            string status = !connected ? "ĐANG CHỜ KẾT NỐI" : active
+                ? count > 0 ? "PHÁT HIỆN TÍN HIỆU"
+                    : _emptySince >= 0f && Time.unscaledTime - _emptySince < 1.2f ? "KHÔNG CÓ TÍN HIỆU" : "ĐANG QUÉT..."
+                : cooldown > 0.05f ? $"ĐANG HỒI... {cooldown:F0}s"
+                : Time.unscaledTime < _modeHintUntil ? "[Chuột trái] Quét · [Chuột phải] Đổi chế độ"
+                : "SẴN SÀNG   ·   [Chuột trái] Quét";
+            SetText(statusText, status);
+            if (titleText != null) titleText.color = accent;
+            if (detectedText != null) detectedText.color = accent;
+            if (signalBarsText != null) signalBarsText.color = accent;
+            if (signalDetailText != null) signalDetailText.color = accent;
+            if (panelOutline != null) panelOutline.effectColor = new Color(accent.r * 0.15f, accent.g * 0.15f, accent.b * 0.15f, 0.65f);
 
-            // 1. Header & Mode
-            if (mode == FieldScannerMode.Core)
+            if (_viewCamera == null) _viewCamera = Camera.main;
+            float heading = _viewCamera != null ? _viewCamera.transform.eulerAngles.y : connected ? _boundScanner.transform.eulerAngles.y : 0f;
+            if (radarGraphic != null)
+                radarGraphic.Present(offsets, connected ? (motion ? _boundScanner.Tuning.MotionRange : _boundScanner.Tuning.CoreRange) : 1f, heading, motion, active);
+            if (scannerAudio != null)
             {
-                if (titleText != null) titleText.text = "FIELD SCANNER";
-                if (modeBadgeText != null)
-                {
-                    modeBadgeText.text = "[ CHẾ ĐỘ NÕI NĂNG LƯỢNG ]";
-                    modeBadgeText.color = new Color(0.15f, 0.95f, 0.85f, 1f); // Turquoise
-                }
-                if (panelOutline != null) panelOutline.effectColor = new Color(0f, 0.85f, 1f, 0.65f);
-            }
-            else // Motion Mode
-            {
-                if (titleText != null) titleText.text = "FIELD SCANNER";
-                if (modeBadgeText != null)
-                {
-                    modeBadgeText.text = "[ QUÉT MONSTER ]";
-                    modeBadgeText.color = new Color(1f, 0.45f, 0.2f, 1f); // Coral
-                }
-                if (panelOutline != null) panelOutline.effectColor = new Color(1f, 0.45f, 0.2f, 0.65f);
-            }
-
-            // 2. Radar View
-            if (!isActive)
-            {
-                if (scannerAudio != null)
-                {
-                    scannerAudio.StopFeedback();
-                }
-
-                if (cooldown > 0.05f)
-                {
-                    if (radarText != null)
-                    {
-                        radarText.text = "\n<color=#555555>●</color> <color=#888888>▲</color> <color=#555555>●</color>\n";
-                        radarText.color = new Color(0.6f, 0.6f, 0.6f, 0.6f);
-                    }
-                    if (signalBarsText != null)
-                    {
-                        signalBarsText.text = $"<color=#FFA500>● ĐANG HỒI NĂNG LƯỢNG ({cooldown:F0}s)</color>";
-                    }
-                    if (signalDetailText != null)
-                    {
-                        signalDetailText.text = $"HẾT THỜI GIAN QUÉT (10s)\nCHỜ TÁI KÍCH HOẠT: {cooldown:F0}s";
-                        signalDetailText.color = new Color(0.75f, 0.7f, 0.6f, 0.8f);
-                    }
-                }
-                else
-                {
-                    float maxRange = mode == FieldScannerMode.Core ? _boundScanner.Tuning.CoreRange : _boundScanner.Tuning.MotionRange;
-                    if (radarText != null)
-                    {
-                        radarText.text = (mode == FieldScannerMode.Core)
-                            ? "\n<color=#00E5FF>●</color> <color=#FFFFFF>▲</color> <color=#00E5FF>●</color>\n"
-                            : "\n<color=#FF5522>●</color> <color=#FFFFFF>▲</color> <color=#FF5522>●</color>\n";
-                        radarText.color = (mode == FieldScannerMode.Core)
-                            ? new Color(0.4f, 0.7f, 0.8f, 0.8f)
-                            : new Color(0.8f, 0.5f, 0.4f, 0.8f);
-                    }
-                    if (signalBarsText != null)
-                    {
-                        signalBarsText.text = "<color=#00FF7F>● SẴN SÀNG KÍCH HOẠT</color>";
-                    }
-                    if (signalDetailText != null)
-                    {
-                        signalDetailText.text = "[CHUỘT TRÁI] QUÉT  •  [CHUỘT PHẢI] ĐỔI CHẾ ĐỘ\nHỆ THỐNG SẴN SÀNG";
-                        signalDetailText.color = (mode == FieldScannerMode.Core)
-                            ? new Color(0.15f, 0.95f, 0.85f, 1f)
-                            : new Color(1f, 0.5f, 0.2f, 1f);
-                    }
-                }
-            }
-            else if (mode == FieldScannerMode.Core)
-            {
-                if (hasResult && _boundScanner.CurrentCoreResult.HasTarget)
-                {
-                    var res = _boundScanner.CurrentCoreResult;
-                    string arrow = GetDirectionArrow(res.Direction);
-                    if (radarText != null)
-                    {
-                        radarText.text = BuildRealtimeCoreRadarString(res.Direction, res.SignalBars);
-                        radarText.color = Color.white;
-                    }
-
-                    if (signalBarsText != null)
-                    {
-                        signalBarsText.text = GetColoredBarsString(res.SignalBars);
-                    }
-                    if (signalDetailText != null)
-                    {
-                        string strength = GetSignalStrengthVietnamese(res.SignalBars);
-                        signalDetailText.text = $"TÍN HIỆU NÕI: {strength}  •  {res.RawDistance:F1} m\nHƯỚNG: {GetSectorVietnamese(res.Direction)} [{arrow}]";
-                        signalDetailText.color = new Color(0f, 0.95f, 1f, 1f);
-                    }
-
-                    if (scannerAudio != null)
-                    {
-                        scannerAudio.SetFeedbackSignal((int)res.SignalBars);
-                    }
-                }
-                else
-                {
-                    if (radarText != null)
-                    {
-                        radarText.text = "\n<color=#00E5FF>●</color> <color=#FFFFFF>▲</color> <color=#00E5FF>●</color>\n";
-                        radarText.color = new Color(0.4f, 0.7f, 0.8f, 0.8f);
-                    }
-                    if (signalBarsText != null)
-                    {
-                        signalBarsText.text = "<color=#666666>SIGNAL  □ □ □ □</color>";
-                    }
-                    if (signalDetailText != null)
-                    {
-                        signalDetailText.text = "ĐANG QUÉT TRỰC TIẾP\nKHÔNG PHÁT HIỆN TÍN HIỆU NÕI";
-                        signalDetailText.color = new Color(0.6f, 0.75f, 0.85f, 0.9f);
-                    }
-
-                    if (scannerAudio != null)
-                    {
-                        scannerAudio.StopFeedback();
-                    }
-                }
-            }
-            else // Motion Mode
-            {
-                if (hasResult && _boundScanner.CurrentMotionResult.HasMotion)
-                {
-                    var res = _boundScanner.CurrentMotionResult;
-                    if (radarText != null)
-                    {
-                        radarText.text = BuildMotionRadarString(res);
-                        radarText.color = new Color(1f, 0.35f, 0.15f, 1f);
-                    }
-                    if (signalBarsText != null)
-                    {
-                        signalBarsText.text = "<color=#FF3300>● CẢNH BÁO MONSTER DI CHUYỂN</color>";
-                    }
-                    if (signalDetailText != null)
-                    {
-                        var b0 = res.GetBlip(0);
-                        string arrow = GetDirectionArrow(b0.Direction);
-                        string intensity = GetMotionIntensityVietnamese(b0.Intensity);
-                        signalDetailText.text = $"PHÁT HIỆN {res.BlipCount} MỤC TIÊU [{intensity}]\nHƯỚNG: {GetSectorVietnamese(b0.Direction)} [{arrow}]";
-                        signalDetailText.color = new Color(1f, 0.5f, 0.2f, 1f);
-                    }
-
-                    if (scannerAudio != null)
-                    {
-                        scannerAudio.SetFeedbackSignal((int)res.GetBlip(0).Intensity);
-                    }
-                }
-                else
-                {
-                    if (radarText != null)
-                    {
-                        radarText.text = "\n<color=#FF5522>●</color> <color=#FFFFFF>▲</color> <color=#FF5522>●</color>\n";
-                        radarText.color = new Color(0.8f, 0.5f, 0.4f, 0.8f);
-                    }
-                    if (signalBarsText != null)
-                    {
-                        signalBarsText.text = "<color=#666666>SIGNAL  □ □ □ □</color>";
-                    }
-                    if (signalDetailText != null)
-                    {
-                        signalDetailText.text = "QUÉT MONSTER\nKHÔNG CÓ TÍN HIỆU DI CHUYỂN";
-                        signalDetailText.color = new Color(0.75f, 0.7f, 0.65f, 0.9f);
-                    }
-
-                    if (scannerAudio != null)
-                    {
-                        scannerAudio.StopFeedback();
-                    }
-                }
-            }
-
-            // 3. Cooldown & Active Status
-            if (statusText != null)
-            {
-                if (isActive)
-                {
-                    statusText.text = $"<color=#00FF7F>● ĐANG QUÉT TRỰC TIẾP ({activeRemaining:F1}s)</color>";
-                }
-                else if (cooldown > 0.05f)
-                {
-                    statusText.text = $"<color=#FFA500>● ĐANG HỒI NĂNG LƯỢNG ({cooldown:F0}s)</color>";
-                }
-                else
-                {
-                    statusText.text = "<color=#00FF7F>● SẴN SÀNG KÍCH HOẠT (10s)</color>";
-                }
-            }
-
-            // 4. Controls Hint
-            if (controlsText != null)
-            {
-                if (isActive)
-                {
-                    controlsText.text = $"[Đang Quét {activeRemaining:F1}s]  •  [Chuột Phải] Đổi Chế Độ";
-                }
-                else if (cooldown > 0.05f)
-                {
-                    controlsText.text = $"[Chuột Phải] Đổi Chế Độ  •  Chờ hồi chiêu ({cooldown:F0}s)";
-                }
-                else
-                {
-                    controlsText.text = "[Chuột Trái] Kích Hoạt Quét 10s  •  [Chuột Phải] Đổi Chế Độ";
-                }
+                if (count == 0) scannerAudio.StopFeedback();
+                else scannerAudio.SetFeedbackSignal(motion ? (int)_boundScanner.CurrentMotionResult.Blip0.Intensity : (int)_boundScanner.CurrentCoreResult.SignalBars);
             }
         }
 
-        private void RenderIdleState()
+        private static void SetText(Text label, string value)
         {
-            if (titleText != null) titleText.text = "FIELD SCANNER";
-            if (modeBadgeText != null) modeBadgeText.text = "[ NGOẠI TUYẾN ]";
-            if (radarText != null) radarText.text = "\n▲\n";
-            if (signalBarsText != null) signalBarsText.text = "<color=#666666>SIGNAL  □ □ □ □</color>";
-            if (signalDetailText != null) signalDetailText.text = "CHƯA KẾT NỐI";
-            if (statusText != null) statusText.text = "<color=#888888>ĐANG CHỜ...</color>";
-        }
-
-        private static string BuildRealtimeCoreRadarString(RelativeDirectionSector sector, ScannerSignalStrength bars)
-        {
-            string arrow = GetDirectionArrow(sector);
-            string barColor = "#00FFFF";
-            if (bars == ScannerSignalStrength.Bar4) barColor = "#00FF7F";
-            else if (bars == ScannerSignalStrength.Bar3) barColor = "#00E5FF";
-            else if (bars == ScannerSignalStrength.Bar2) barColor = "#FFD700";
-
-            return $"<color={barColor}>[ MỤC TIÊU NÕI ]</color>\n<size=34>{arrow}</size>\n<color=#FFFFFF>▲ (BẠN)</color>";
-        }
-
-        private static string GetSectorVietnamese(RelativeDirectionSector sector)
-        {
-            switch (sector)
-            {
-                case RelativeDirectionSector.Front: return "Trước Mặt";
-                case RelativeDirectionSector.FrontRight: return "Trước Phải";
-                case RelativeDirectionSector.Right: return "Bên Phải";
-                case RelativeDirectionSector.BackRight: return "Sau Phải";
-                case RelativeDirectionSector.Back: return "Phía Sau";
-                case RelativeDirectionSector.BackLeft: return "Sau Trái";
-                case RelativeDirectionSector.Left: return "Bên Trái";
-                case RelativeDirectionSector.FrontLeft: return "Trước Trái";
-                default: return "Trước Mặt";
-            }
-        }
-
-        private static string GetSignalStrengthVietnamese(ScannerSignalStrength bars)
-        {
-            switch (bars)
-            {
-                case ScannerSignalStrength.Bar4: return "CỰC MẠNH (RẤT GẦN)";
-                case ScannerSignalStrength.Bar3: return "MẠNH (GẦN)";
-                case ScannerSignalStrength.Bar2: return "TRUNG BÌNH";
-                case ScannerSignalStrength.Bar1: return "YẾU (XA)";
-                default: return "KHÔNG CÓ TÍN HIỆU";
-            }
-        }
-
-        private static string GetMotionIntensityVietnamese(MotionBlipIntensity intensity)
-        {
-            switch (intensity)
-            {
-                case MotionBlipIntensity.Critical: return "CỰC GẦN";
-                case MotionBlipIntensity.Strong: return "GẦN";
-                case MotionBlipIntensity.Medium: return "TRUNG BÌNH";
-                case MotionBlipIntensity.Weak: return "XA";
-                default: return "KHÔNG RÕ";
-            }
-        }
-
-        private static string GetDirectionArrow(RelativeDirectionSector sector)
-        {
-            switch (sector)
-            {
-                case RelativeDirectionSector.Front: return "↑";
-                case RelativeDirectionSector.FrontRight: return "↗";
-                case RelativeDirectionSector.Right: return "→";
-                case RelativeDirectionSector.BackRight: return "↘";
-                case RelativeDirectionSector.Back: return "↓";
-                case RelativeDirectionSector.BackLeft: return "↙";
-                case RelativeDirectionSector.Left: return "←";
-                case RelativeDirectionSector.FrontLeft: return "↖";
-                default: return "↑";
-            }
-        }
-
-        private static string GetColoredBarsString(ScannerSignalStrength bars)
-        {
-            switch (bars)
-            {
-                case ScannerSignalStrength.Bar4:
-                    return "<color=#00FF7F>SIGNAL  ▮ ▮ ▮ ▮</color>";
-                case ScannerSignalStrength.Bar3:
-                    return "<color=#00E5FF>SIGNAL  ▮ ▮ ▮ <color=#444444>□</color></color>";
-                case ScannerSignalStrength.Bar2:
-                    return "<color=#FFD700>SIGNAL  ▮ ▮ <color=#444444>□ □</color></color>";
-                case ScannerSignalStrength.Bar1:
-                    return "<color=#FF8C00>SIGNAL  ▮ <color=#444444>□ □ □</color></color>";
-                default:
-                    return "<color=#666666>SIGNAL  □ □ □ □</color>";
-            }
-        }
-
-        private static string BuildMotionRadarString(MotionScanResult result)
-        {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < result.BlipCount; i++)
-            {
-                var blip = result.GetBlip(i);
-                if (blip.IsValid)
-                {
-                    sb.Append("<color=#FF3300>●</color> ");
-                    sb.Append(GetDirectionArrow(blip.Direction));
-                    sb.Append("  ");
-                }
-            }
-            return $"{sb}\n<color=#FFFFFF>▲</color>";
+            if (label != null && label.text != value) label.text = value;
         }
 
         public static HUDFieldScanner EnsureInstance()
         {
             if (Instance != null) return Instance;
-
             Instance = FindAnyObjectByType<HUDFieldScanner>();
             if (Instance != null) return Instance;
-
-            // Look for existing GameplayHUD_Canvas
-            GameObject hudCanvas = GameObject.Find("GameplayHUD_Canvas");
-            Transform parentTransform = hudCanvas != null ? hudCanvas.transform : null;
-
-            // Load prefab if present
-            GameObject prefab = Resources.Load<GameObject>("PF_FieldScanner_HUD");
-            if (prefab != null)
-            {
-                GameObject go = Instantiate(prefab, parentTransform);
-                Instance = go.GetComponent<HUDFieldScanner>();
-                if (Instance != null) return Instance;
-            }
-
-            // Fallback: build ScreenSpace Overlay dynamically
-            Instance = CreateDefaultScreenHUD(parentTransform);
+            var manager = FindAnyObjectByType<GameplayHUDManager>();
+            Canvas canvas = manager != null ? manager.GetComponentInParent<Canvas>() : null;
+            Transform parent = canvas != null ? canvas.transform : CreateCanvas();
+            var prefab = Resources.Load<GameObject>("PF_FieldScanner_HUD");
+            Instance = prefab != null ? Instantiate(prefab, parent).GetComponent<HUDFieldScanner>() : CreateDefaultScreenHUD(parent);
             return Instance;
+        }
+
+        private static Transform CreateCanvas()
+        {
+            var go = new GameObject("FieldScanner_ScreenHUD_Canvas", typeof(Canvas), typeof(CanvasScaler));
+            var canvas = go.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 95;
+            var scaler = go.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920, 1080);
+            scaler.matchWidthOrHeight = 0.5f;
+            return go.transform;
         }
 
         public static HUDFieldScanner CreateDefaultScreenHUD(Transform parent)
         {
-            Transform hudParent = parent;
-            if (hudParent == null)
-            {
-                GameObject canvasGo = new GameObject("FieldScanner_ScreenHUD_Canvas");
-                Canvas canvas = canvasGo.AddComponent<Canvas>();
-                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                canvas.sortingOrder = 95;
-
-                CanvasScaler scaler = canvasGo.AddComponent<CanvasScaler>();
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1920, 1080);
-                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-                scaler.matchWidthOrHeight = 0.5f;
-
-                canvasGo.AddComponent<GraphicRaycaster>();
-                hudParent = canvasGo.transform;
-            }
-
-            // Main Panel (Middle-Right of screen)
-            GameObject panelGo = new GameObject("FieldScanner_HUD_Panel");
-            panelGo.transform.SetParent(hudParent, false);
-
-            RectTransform rt = panelGo.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(1f, 0.5f);
-            rt.anchorMax = new Vector2(1f, 0.5f);
-            rt.pivot = new Vector2(1f, 0.5f);
-            rt.anchoredPosition = new Vector2(-35f, 0f);
-            rt.sizeDelta = new Vector2(320f, 430f);
-
-            CanvasGroup cg = panelGo.AddComponent<CanvasGroup>();
-            cg.alpha = 0f;
-
-            Image bg = panelGo.AddComponent<Image>();
-            bg.sprite = HUDTextureUtility.RoundedBox;
-            bg.type = Image.Type.Sliced;
-            bg.color = new Color(0.02f, 0.05f, 0.09f, 0.90f);
-
-            Outline outline = panelGo.AddComponent<Outline>();
-            outline.effectColor = new Color(0f, 0.85f, 1f, 0.65f);
-            outline.effectDistance = new Vector2(1.5f, -1.5f);
-
-            Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-
-            // 1. Header (Top)
-            Text title = CreateText("Title", panelGo.transform, "FIELD SCANNER", font, 18, FontStyle.Bold, new Color(0f, 0.95f, 1f, 1f));
-            RectTransform titleRt = title.GetComponent<RectTransform>();
-            titleRt.anchorMin = new Vector2(0f, 1f);
-            titleRt.anchorMax = new Vector2(1f, 1f);
-            titleRt.pivot = new Vector2(0.5f, 1f);
-            titleRt.anchoredPosition = new Vector2(0f, -16f);
-            titleRt.sizeDelta = new Vector2(-20f, 26f);
-            title.alignment = TextAnchor.MiddleCenter;
-
-            Text mode = CreateText("ModeBadge", panelGo.transform, "[ CHẾ ĐỘ NÕI NĂNG LƯỢNG ]", font, 14, FontStyle.Bold, new Color(0.15f, 0.95f, 0.85f, 1f));
-            RectTransform modeRt = mode.GetComponent<RectTransform>();
-            modeRt.anchorMin = new Vector2(0f, 1f);
-            modeRt.anchorMax = new Vector2(1f, 1f);
-            modeRt.pivot = new Vector2(0.5f, 1f);
-            modeRt.anchoredPosition = new Vector2(0f, -44f);
-            modeRt.sizeDelta = new Vector2(-20f, 22f);
-            mode.alignment = TextAnchor.MiddleCenter;
-
-            // Divider 1
-            CreateDivider("Divider1", panelGo.transform, new Vector2(0f, -72f), new Color(0f, 0.85f, 1f, 0.35f));
-
-            // 2. Radar Box (Center)
-            GameObject radarBox = new GameObject("RadarBox");
-            radarBox.transform.SetParent(panelGo.transform, false);
-            RectTransform radarBoxRt = radarBox.AddComponent<RectTransform>();
-            radarBoxRt.anchorMin = new Vector2(0.5f, 1f);
-            radarBoxRt.anchorMax = new Vector2(0.5f, 1f);
-            radarBoxRt.pivot = new Vector2(0.5f, 1f);
-            radarBoxRt.anchoredPosition = new Vector2(0f, -82f);
-            radarBoxRt.sizeDelta = new Vector2(270f, 140f);
-
-            Image radarBoxBg = radarBox.AddComponent<Image>();
-            radarBoxBg.sprite = HUDTextureUtility.RoundedBox;
-            radarBoxBg.type = Image.Type.Sliced;
-            radarBoxBg.color = new Color(0.01f, 0.02f, 0.05f, 0.95f);
-
-            Outline radarOutline = radarBox.AddComponent<Outline>();
-            radarOutline.effectColor = new Color(0f, 0.8f, 1f, 0.35f);
-            radarOutline.effectDistance = new Vector2(1f, -1f);
-
-            Text radar = CreateText("RadarText", radarBox.transform, "\n▲\n", font, 24, FontStyle.Bold, Color.white);
-            RectTransform radarRt = radar.GetComponent<RectTransform>();
-            radarRt.anchorMin = Vector2.zero;
-            radarRt.anchorMax = Vector2.one;
-            radarRt.sizeDelta = Vector2.zero;
-            radar.alignment = TextAnchor.MiddleCenter;
-
-            // 3. Signal Strength & Detail
-            Text signalBars = CreateText("SignalBars", panelGo.transform, "SIGNAL  □ □ □ □", font, 20, FontStyle.Bold, Color.white);
-            RectTransform signalBarsRt = signalBars.GetComponent<RectTransform>();
-            signalBarsRt.anchorMin = new Vector2(0f, 1f);
-            signalBarsRt.anchorMax = new Vector2(1f, 1f);
-            signalBarsRt.pivot = new Vector2(0.5f, 1f);
-            signalBarsRt.anchoredPosition = new Vector2(0f, -232f);
-            signalBarsRt.sizeDelta = new Vector2(-20f, 26f);
-            signalBars.alignment = TextAnchor.MiddleCenter;
-
-            Text signalDetail = CreateText("SignalDetail", panelGo.transform, "CHỜ PHÁT XUNG QUÉT", font, 14, FontStyle.Normal, new Color(0.6f, 0.75f, 0.85f, 0.9f));
-            RectTransform signalDetailRt = signalDetail.GetComponent<RectTransform>();
-            signalDetailRt.anchorMin = new Vector2(0f, 1f);
-            signalDetailRt.anchorMax = new Vector2(1f, 1f);
-            signalDetailRt.pivot = new Vector2(0.5f, 1f);
-            signalDetailRt.anchoredPosition = new Vector2(0f, -260f);
-            signalDetailRt.sizeDelta = new Vector2(-20f, 22f);
-            signalDetail.alignment = TextAnchor.MiddleCenter;
-
-            // Divider 2
-            CreateDivider("Divider2", panelGo.transform, new Vector2(0f, -292f), new Color(0f, 0.85f, 1f, 0.25f));
-
-            // 4. Status (Cooldown) & Controls
-            Text status = CreateText("Status", panelGo.transform, "<color=#00FF7F>● SẴN SÀNG QUÉT</color>", font, 16, FontStyle.Bold, Color.white);
-            RectTransform statusRt = status.GetComponent<RectTransform>();
-            statusRt.anchorMin = new Vector2(0f, 1f);
-            statusRt.anchorMax = new Vector2(1f, 1f);
-            statusRt.pivot = new Vector2(0.5f, 1f);
-            statusRt.anchoredPosition = new Vector2(0f, -304f);
-            statusRt.sizeDelta = new Vector2(-20f, 24f);
-            status.alignment = TextAnchor.MiddleCenter;
-
-            Text controls = CreateText("Controls", panelGo.transform, "[Chuột Trái] Quét\n[Chuột Phải] Đổi Chế Độ", font, 12, FontStyle.Normal, new Color(0.65f, 0.75f, 0.85f, 0.8f));
-            RectTransform controlsRt = controls.GetComponent<RectTransform>();
-            controlsRt.anchorMin = new Vector2(0f, 1f);
-            controlsRt.anchorMax = new Vector2(1f, 1f);
-            controlsRt.pivot = new Vector2(0.5f, 1f);
-            controlsRt.anchoredPosition = new Vector2(0f, -336f);
-            controlsRt.sizeDelta = new Vector2(-20f, 36f);
-            controls.alignment = TextAnchor.MiddleCenter;
-
-            // Add and bind script
-            HUDFieldScanner hud = panelGo.AddComponent<HUDFieldScanner>();
-            hud.canvasGroup = cg;
-            hud.titleText = title;
-            hud.modeBadgeText = mode;
-            hud.radarText = radar;
-            hud.signalBarsText = signalBars;
-            hud.signalDetailText = signalDetail;
-            hud.statusText = status;
-            hud.controlsText = controls;
-            hud.panelBackground = bg;
-            hud.panelOutline = outline;
-            hud.radarBoxBackground = radarBoxBg;
-            hud.radarBoxOutline = radarOutline;
-
+            var go = new GameObject("FieldScanner_HUD_Panel", typeof(RectTransform), typeof(CanvasGroup), typeof(Image), typeof(Outline));
+            go.transform.SetParent(parent != null ? parent : CreateCanvas(), false);
+            var hud = go.AddComponent<HUDFieldScanner>();
+            hud.canvasGroup = go.GetComponent<CanvasGroup>();
+            hud.panelBackground = go.GetComponent<Image>();
+            hud.panelOutline = go.GetComponent<Outline>();
+            hud.ConfigureLayout();
             return hud;
         }
 
-        private static Text CreateText(string name, Transform parent, string defaultContent, Font font, int fontSize, FontStyle fontStyle, Color color)
+        // Also used to migrate existing prefab children in place: preserve object IDs and references.
+        public void ConfigureLayout()
         {
-            GameObject go = new GameObject(name);
-            go.transform.SetParent(parent, false);
-            Text t = go.AddComponent<Text>();
-            t.text = defaultContent;
-            if (font != null) t.font = font;
-            t.fontSize = fontSize;
-            t.fontStyle = fontStyle;
-            t.color = color;
-            t.supportRichText = true;
-            t.raycastTarget = false;
-            return t;
+            var root = (RectTransform)transform;
+            root.anchorMin = root.anchorMax = root.pivot = Vector2.one;
+            root.anchoredPosition = new Vector2(-32f, -100f);
+            root.sizeDelta = new Vector2(330f, 350f);
+            parentCanvas = GetComponentInParent<Canvas>();
+            if (panelBackground != null)
+            {
+                panelBackground.sprite = null;
+                panelBackground.color = new Color(0.025f, 0.035f, 0.037f, 0.88f);
+                panelBackground.raycastTarget = false;
+            }
+            if (panelOutline != null) panelOutline.effectDistance = new Vector2(1f, -1f);
+            titleText = Label(titleText, "Title", transform, 14, TextAnchor.MiddleLeft);
+            modeBadgeText = Label(modeBadgeText, "ModeBadge", transform, 11, TextAnchor.MiddleCenter);
+            controlsText = Label(controlsText, "Controls", transform, 10, TextAnchor.MiddleRight);
+            Place(titleText.rectTransform, 0f, 0.54f, 7, 28, 10, 0);
+            Place(modeBadgeText.rectTransform, 0.55f, 0.77f, 9, 22, 0, 0);
+            Place(controlsText.rectTransform, 0.77f, 1f, 7, 28, 3, 10);
+            var badge = modeBadgeText.transform.Find("KeyBadge");
+            if (badge == null)
+            {
+                var go = new GameObject("KeyBadge", typeof(RectTransform), typeof(Image));
+                go.transform.SetParent(modeBadgeText.transform, false);
+                badge = go.transform;
+            }
+            var badgeImage = badge.GetComponent<Image>();
+            badgeImage.color = new Color(0.65f, 0.73f, 0.72f, 0.15f);
+            badgeImage.raycastTarget = false;
+            var badgeRect = (RectTransform)badge;
+            badgeRect.anchorMin = Vector2.zero; badgeRect.anchorMax = Vector2.one;
+            badgeRect.offsetMin = badgeRect.offsetMax = Vector2.zero;
+
+            if (radarBoxBackground == null)
+            {
+                var go = new GameObject("RadarBox", typeof(RectTransform), typeof(Image), typeof(Outline));
+                go.transform.SetParent(transform, false);
+                radarBoxBackground = go.GetComponent<Image>();
+                radarBoxOutline = go.GetComponent<Outline>();
+            }
+            RectTransform radar = radarBoxBackground.rectTransform;
+            if (radar.GetComponent<Canvas>() == null) radar.gameObject.AddComponent<Canvas>();
+            radar.anchorMin = radar.anchorMax = new Vector2(0.5f, 1f);
+            radar.pivot = new Vector2(0.5f, 1f);
+            radar.anchoredPosition = new Vector2(0, -36);
+            radar.sizeDelta = new Vector2(250, 250);
+            radarBoxBackground.sprite = null;
+            radarBoxBackground.color = new Color(0.02f, 0.035f, 0.038f, 0.85f);
+            radarBoxBackground.raycastTarget = false;
+            if (radarBoxOutline != null) radarBoxOutline.effectColor = new Color(0.05f, 0.08f, 0.08f, 0.3f);
+            if (radarGraphic == null)
+            {
+                var go = new GameObject("RadarGraphic", typeof(RectTransform), typeof(ScannerRadarGraphic));
+                go.transform.SetParent(radar, false);
+                radarGraphic = go.GetComponent<ScannerRadarGraphic>();
+            }
+            radarGraphic.raycastTarget = false;
+            if (radarGraphic.GetComponent<CanvasRenderer>() == null) radarGraphic.gameObject.AddComponent<CanvasRenderer>();
+            radarGraphic.rectTransform.anchorMin = Vector2.zero;
+            radarGraphic.rectTransform.anchorMax = Vector2.one;
+            radarGraphic.rectTransform.offsetMin = radarGraphic.rectTransform.offsetMax = Vector2.zero;
+            radarText = Label(radarText, "RadarText", radar, 11, TextAnchor.MiddleCenter);
+            Place(radarText.rectTransform, 0, 1, 0, 16, 0, 0);
+            SetText(radarText, "N");
+            statusText = Label(statusText, "Status", transform, 11, TextAnchor.MiddleCenter);
+            Place(statusText.rectTransform, 0, 1, 284, 20, 8, 8);
+            detectedText = Label(detectedText, "DetectedCount", transform, 11, TextAnchor.MiddleCenter);
+            signalDetailText = Label(signalDetailText, "SignalDetail", transform, 11, TextAnchor.MiddleCenter);
+            signalBarsText = Label(signalBarsText, "SignalBars", transform, 11, TextAnchor.MiddleCenter);
+            Place(detectedText.rectTransform, 0, 1f / 3, 306, 42, 4, 4);
+            Place(signalDetailText.rectTransform, 1f / 3, 2f / 3, 306, 42, 4, 4);
+            Place(signalBarsText.rectTransform, 2f / 3, 1, 306, 42, 4, 4);
+            Divider("Divider1", 0, 1, 35, 1);
+            Divider("Divider2", 0, 1, 304, 1);
+            Divider("FooterSeparator1", 1f / 3, 1f / 3, 312, 30);
+            Divider("FooterSeparator2", 2f / 3, 2f / 3, 312, 30);
+            RenderScannerState();
         }
 
-        private static GameObject CreateDivider(string name, Transform parent, Vector2 anchoredPos, Color color)
+        private static Text Label(Text existing, string name, Transform parent, int size, TextAnchor alignment)
         {
-            GameObject div = new GameObject(name);
-            div.transform.SetParent(parent, false);
-            RectTransform rt = div.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0.5f, 1f);
-            rt.anchorMax = new Vector2(0.5f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
-            rt.anchoredPosition = anchoredPos;
-            rt.sizeDelta = new Vector2(270f, 1.5f);
+            if (existing == null)
+            {
+                var go = new GameObject(name, typeof(RectTransform), typeof(Text));
+                go.transform.SetParent(parent, false);
+                existing = go.GetComponent<Text>();
+            }
+            if (existing.font == null) existing.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            existing.fontSize = size;
+            existing.fontStyle = FontStyle.Normal;
+            existing.alignment = alignment;
+            existing.supportRichText = true;
+            existing.horizontalOverflow = HorizontalWrapMode.Overflow;
+            existing.verticalOverflow = VerticalWrapMode.Truncate;
+            existing.color = new Color(0.76f, 0.82f, 0.82f);
+            existing.raycastTarget = false;
+            return existing;
+        }
 
-            Image img = div.AddComponent<Image>();
-            img.color = color;
-            img.raycastTarget = false;
-            return div;
+        private static void Place(RectTransform rt, float left, float right, float top, float height, float insetLeft, float insetRight)
+        {
+            rt.anchorMin = new Vector2(left, 1); rt.anchorMax = new Vector2(right, 1);
+            rt.pivot = new Vector2(0.5f, 1);
+            rt.offsetMin = new Vector2(insetLeft, -top - height);
+            rt.offsetMax = new Vector2(-insetRight, -top);
+        }
+
+        private void Divider(string name, float left, float right, float top, float height)
+        {
+            var child = transform.Find(name);
+            if (child == null)
+            {
+                var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+                go.transform.SetParent(transform, false);
+                child = go.transform;
+            }
+            Place((RectTransform)child, left, right, top, height, left == right ? -0.5f : 8, left == right ? -0.5f : 8);
+            var image = child.GetComponent<Image>();
+            image.color = new Color(0.5f, 0.65f, 0.65f, 0.25f);
+            image.raycastTarget = false;
         }
     }
 }
-

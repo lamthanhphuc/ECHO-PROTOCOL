@@ -85,6 +85,10 @@ namespace EchoProtocol.Tools.Scanner
         private CoreScanResult _lastLocalCoreResult = CoreScanResult.Empty;
         private MotionScanResult _lastLocalMotionResult = MotionScanResult.Empty;
 
+        private readonly List<Vector3> _radarOffsets = new List<Vector3>();
+        public System.Collections.Generic.IReadOnlyList<Vector3> RadarOffsets => _radarOffsets;
+        public float LastRadarSampleTime { get; private set; }
+
         public FieldScannerTuning Tuning => _tuning;
         public bool HasActiveResult => _hasLocalActiveResult && _localResultTimer > 0f;
         public float ResultRemainingTime => Mathf.Max(0f, _localResultTimer);
@@ -308,6 +312,7 @@ namespace EchoProtocol.Tools.Scanner
 
         private void PerformRealtimeScan()
         {
+            LastRadarSampleTime = Time.time;
             Vector3 origin = transform.position;
             Vector3 forward = transform.forward;
             Camera mainCam = Camera.main;
@@ -324,7 +329,7 @@ namespace EchoProtocol.Tools.Scanner
                     origin,
                     forward,
                     coreCandidates,
-                    _tuning);
+                    _tuning, radarOffsets: _radarOffsets);
 
                 _lastLocalCoreResult = result;
                 _lastLocalMotionResult = MotionScanResult.Empty;
@@ -338,7 +343,7 @@ namespace EchoProtocol.Tools.Scanner
                     origin,
                     forward,
                     motionTargets,
-                    _tuning);
+                    _tuning, _radarOffsets);
 
                 _lastLocalMotionResult = result;
                 _lastLocalCoreResult = CoreScanResult.Empty;
@@ -652,6 +657,7 @@ namespace EchoProtocol.Tools.Scanner
 
         private void ClearLocalResult()
         {
+            _radarOffsets.Clear();
             _hasLocalActiveResult = false;
             _localResultTimer = 0f;
             _lastLocalCoreResult = CoreScanResult.Empty;
