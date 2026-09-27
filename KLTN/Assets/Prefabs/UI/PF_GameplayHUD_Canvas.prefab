@@ -56,7 +56,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
-  m_Name: 
+  m_Name: ''
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Text
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 0.35, b: 0.35, a: 1}
@@ -4612,6 +4612,7 @@ RectTransform:
   - {fileID: 4721083582950642534}
   - {fileID: 3986367478347732447}
   - {fileID: 6527159403695965389}
+  - {fileID: 7972653754923654979}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -4703,6 +4704,7 @@ MonoBehaviour:
   worldMarker: {fileID: 3348295750280338321}
   fieldScannerHUD: {fileID: 5614147048704344625}
   scannerTutorial: {fileID: 8548936545879380439}
+  noiseMakerPlacement: {fileID: 8934535177762917528}
   autoFindLocalPlayerOnStart: 1
 --- !u!1 &3901681434386653789
 GameObject:
@@ -7406,7 +7408,7 @@ MonoBehaviour:
   canvasGroup: {fileID: 5157952850528470541}
   titleText: {fileID: 3097844720643089327}
   modeBadgeText: {fileID: 6368394405305471498}
-  radarText: {fileID: 2457692020375545761}
+  scanTimerText: {fileID: 2457692020375545761}
   signalBarsText: {fileID: 4122052911896260962}
   signalDetailText: {fileID: 6159082961795221867}
   statusText: {fileID: 7224982650689588345}
@@ -7576,6 +7578,55 @@ MonoBehaviour:
 
     Kich
     hoat may quet trong pham vi.        Chuyen giua Loi Nang Luong va Stalker.'
+--- !u!1 &6249244212460535927
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7972653754923654979}
+  - component: {fileID: 8934535177762917528}
+  m_Layer: 0
+  m_Name: NoiseMakerPlacementHUD
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &7972653754923654979
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6249244212460535927}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 4496959851185329169}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &8934535177762917528
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6249244212460535927}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8fd15b29a875f64aae6d3d1eb69c403, type: 3}
+  m_Name: ''
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.UI.HUD.HUDNoiseMakerPlacement
+  markerText: {fileID: 0}
 --- !u!1 &6316174607418858066
 GameObject:
   m_ObjectHideFlags: 0

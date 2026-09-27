@@ -242,14 +242,22 @@ namespace EchoProtocol.UI.HUD
 
         private void ConfigureNoiseMakerTutorial(Image panel, RectTransform panelRect)
         {
-            ConfigureSimpleTutorial(
-                panel,
-                panelRect,
-                "MÁY TẠO TIẾNG ĐỘNG",
-                "[CHUỘT TRÁI]\n<size=27>ĐẶT THIẾT BỊ</size>\n<size=20>Thiết bị được đặt phía trước bạn.</size>",
-                "ĐÁNH LẠC HƯỚNG\n<size=21>Tạo tiếng động để thu hút Stalker đến vị trí khác.</size>",
-                "Thiết bị sẽ bị tiêu hao sau khi sử dụng.",
-                new Color(0.95f, 0.67f, 0.30f));
+            Color accent = new Color(0.95f, 0.67f, 0.30f);
+
+            panel.gameObject.AddComponent<Outline>().effectColor = new Color(accent.r, accent.g, accent.b, 0.55f);
+            panelRect.sizeDelta = new Vector2(820f, 520f);
+
+            TextLabel("Title", panelRect, "MÁY TẠO TIẾNG ĐỘNG", 31, TextAnchor.MiddleCenter, FontStyle.Bold, accent, 28f, 48f);
+
+            var row = Row("NoiseMakerRow", panelRect, 92f, 128f);
+            InfoBlock("Control", row, "[CHUỘT TRÁI]\n<size=27>ĐẶT THIẾT BỊ</size>", accent);
+            InfoBlock("Marker", row, "◎ DẤU TRÊN MÀN HÌNH\n<size=21>Cho biết thiết bị sẽ được đặt ở đâu.</size>", new Color(0.78f, 0.84f, 0.84f));
+
+            var warningRow = Row("NoiseMakerWarningRow", panelRect, 238f, 112f);
+            InfoBlock("Light", warningRow, "ĐÈN ĐỎ NHẤP NHÁY\n<size=21>Báo khu vực đang thu hút Stalker.</size>", new Color(1f, 0.35f, 0.24f));
+            InfoBlock("Leave", warningRow, "⚠ RỜI KHỎI KHU VỰC SAU KHI ĐẶT", new Color(0.95f, 0.86f, 0.52f));
+
+            AddContinueText(panelRect, 438f);
         }
 
         private void ConfigureFirstAidTutorial(Image panel, RectTransform panelRect)
