@@ -1,6 +1,7 @@
 using EchoProtocol.Networking;
 using EchoProtocol.Tools.Scanner;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace EchoProtocol.UI.HUD
@@ -17,7 +18,8 @@ namespace EchoProtocol.UI.HUD
         [Header("UI Text References")]
         [SerializeField] private Text titleText;
         [SerializeField] private Text modeBadgeText;
-        [SerializeField] private Text radarText;
+        [FormerlySerializedAs("radarText")]
+        [SerializeField] private Text scanTimerText;
         [SerializeField] private Text signalBarsText;
         [SerializeField] private Text signalDetailText;
         [SerializeField] private Text statusText;
@@ -254,22 +256,26 @@ namespace EchoProtocol.UI.HUD
             bool active = connected && _boundScanner.IsScanActive;
             bool hasResult = active && _boundScanner.HasActiveResult;
             float cooldown = connected ? _boundScanner.LocalCooldownRemaining : 0f;
+            float activeRemaining = connected ? _boundScanner.ActiveRemainingTime : 0f;
             var offsets = hasResult ? _boundScanner.RadarOffsets : null;
             int count = offsets != null ? offsets.Count : 0;
             float nearest = float.PositiveInfinity;
             for (int i = 0; i < count; i++) nearest = Mathf.Min(nearest, offsets[i].magnitude);
             Color accent = motion ? new Color(0.94f, 0.43f, 0.29f) : new Color(0.35f, 0.78f, 0.76f);
 
-            SetText(titleText, motion ? "!  STALKER" : "◈  LÕI NĂNG LƯỢNG");
-            SetText(modeBadgeText, "Chuột phải");
-            SetText(controlsText, "Đổi chế độ");
+            SetText(titleText, motion ? "⚠  STALKER" : "◈  LÕI NĂNG LƯỢNG");
+            SetText(modeBadgeText, "[Chuột phải] Đổi chế độ");
+            SetText(controlsText, "");
             SetText(detectedText, motion ? $"<size=23>{count}</size>\nPHÁT HIỆN" : $"<size=23>{count}</size>  LÕI");
             SetText(signalDetailText, "GẦN NHẤT\n<size=21>" + (count > 0 ? $"{nearest:F0}m" : "—") + "</size>");
             int bars = connected && count > 0 ? (int)FieldScannerCoreDetector.ResolveSignalBars(nearest, _boundScanner.Tuning) : 0;
             if (motion)
             {
-                float age = connected && hasResult ? Mathf.Max(0f, Time.time - _boundScanner.LastRadarSampleTime) : 0f;
-                SetText(signalBarsText, "LẦN QUÉT\n<size=21>" + (hasResult ? $"{age:F1}s" : "—") + "</size>");
+                int intensity = count > 0 ? (int)_boundScanner.CurrentMotionResult.Blip0.Intensity : 0;
+                string signal = "";
+                const string glyphs = "▂▄▆█";
+                for (int i = 0; i < 4; i++) signal += (i < intensity ? glyphs[i].ToString() : $"<color=#503E3A>{glyphs[i]}</color>") + " ";
+                SetText(signalBarsText, "CƯỜNG ĐỘ\n<size=21>" + (count > 0 ? signal : "—") + "</size>");
             }
             else
             {
@@ -281,12 +287,20 @@ namespace EchoProtocol.UI.HUD
 
             if (!active || !hasResult || count > 0) _emptySince = -1f;
             else if (_emptySince < 0f) _emptySince = Time.unscaledTime;
+            if (scanTimerText != null)
+            {
+                if (!connected) SetText(scanTimerText, "MẤT KẾT NỐI");
+                else if (active) SetText(scanTimerText, $"ĐANG QUÉT  {Mathf.Max(1, Mathf.CeilToInt(activeRemaining)):00}s");
+                else if (cooldown > 0.05f) SetText(scanTimerText, $"HỒI  {Mathf.CeilToInt(cooldown):00}s");
+                else SetText(scanTimerText, "SẴN SÀNG");
+            }
+
             string status = !connected ? "ĐANG CHỜ KẾT NỐI" : active
                 ? count > 0 ? "PHÁT HIỆN TÍN HIỆU"
                     : _emptySince >= 0f && Time.unscaledTime - _emptySince < 1.2f ? "KHÔNG CÓ TÍN HIỆU" : "ĐANG QUÉT..."
-                : cooldown > 0.05f ? $"ĐANG HỒI... {cooldown:F0}s"
+                : cooldown > 0.05f ? "MÁY QUÉT ĐANG HỒI"
                 : Time.unscaledTime < _modeHintUntil ? "[Chuột trái] Quét · [Chuột phải] Đổi chế độ"
-                : "SẴN SÀNG   ·   [Chuột trái] Quét";
+                : "[Chuột trái] Quét";
             SetText(statusText, status);
             if (titleText != null) titleText.color = accent;
             if (detectedText != null) detectedText.color = accent;
@@ -354,7 +368,7 @@ namespace EchoProtocol.UI.HUD
             var root = (RectTransform)transform;
             root.anchorMin = root.anchorMax = root.pivot = Vector2.one;
             root.anchoredPosition = new Vector2(-32f, -100f);
-            root.sizeDelta = new Vector2(330f, 350f);
+            root.sizeDelta = new Vector2(380f, 390f);
             parentCanvas = GetComponentInParent<Canvas>();
             if (panelBackground != null)
             {
@@ -366,9 +380,9 @@ namespace EchoProtocol.UI.HUD
             titleText = Label(titleText, "Title", transform, 14, TextAnchor.MiddleLeft);
             modeBadgeText = Label(modeBadgeText, "ModeBadge", transform, 11, TextAnchor.MiddleCenter);
             controlsText = Label(controlsText, "Controls", transform, 10, TextAnchor.MiddleRight);
-            Place(titleText.rectTransform, 0f, 0.54f, 7, 28, 10, 0);
-            Place(modeBadgeText.rectTransform, 0.55f, 0.77f, 9, 22, 0, 0);
-            Place(controlsText.rectTransform, 0.77f, 1f, 7, 28, 3, 10);
+            Place(titleText.rectTransform, 0f, 0.45f, 7, 28, 10, 0);
+            Place(modeBadgeText.rectTransform, 0.45f, 1f, 9, 22, 0, 10);
+            Place(controlsText.rectTransform, 1f, 1f, 7, 28, 0, 0);
             var badge = modeBadgeText.transform.Find("KeyBadge");
             if (badge == null)
             {
@@ -395,7 +409,7 @@ namespace EchoProtocol.UI.HUD
             radar.anchorMin = radar.anchorMax = new Vector2(0.5f, 1f);
             radar.pivot = new Vector2(0.5f, 1f);
             radar.anchoredPosition = new Vector2(0, -36);
-            radar.sizeDelta = new Vector2(250, 250);
+            radar.sizeDelta = new Vector2(292, 292);
             radarBoxBackground.sprite = null;
             radarBoxBackground.color = new Color(0.02f, 0.035f, 0.038f, 0.85f);
             radarBoxBackground.raycastTarget = false;
@@ -411,21 +425,20 @@ namespace EchoProtocol.UI.HUD
             radarGraphic.rectTransform.anchorMin = Vector2.zero;
             radarGraphic.rectTransform.anchorMax = Vector2.one;
             radarGraphic.rectTransform.offsetMin = radarGraphic.rectTransform.offsetMax = Vector2.zero;
-            radarText = Label(radarText, "RadarText", radar, 11, TextAnchor.MiddleCenter);
-            Place(radarText.rectTransform, 0, 1, 0, 16, 0, 0);
-            SetText(radarText, "N");
+            scanTimerText = Label(scanTimerText, "ScanTimer", radar, 11, TextAnchor.MiddleLeft);
+            Place(scanTimerText.rectTransform, 0f, 0.45f, 8f, 22f, 10f, 0f);
             statusText = Label(statusText, "Status", transform, 11, TextAnchor.MiddleCenter);
-            Place(statusText.rectTransform, 0, 1, 284, 20, 8, 8);
+            Place(statusText.rectTransform, 0, 1, 326, 20, 8, 8);
             detectedText = Label(detectedText, "DetectedCount", transform, 11, TextAnchor.MiddleCenter);
             signalDetailText = Label(signalDetailText, "SignalDetail", transform, 11, TextAnchor.MiddleCenter);
             signalBarsText = Label(signalBarsText, "SignalBars", transform, 11, TextAnchor.MiddleCenter);
-            Place(detectedText.rectTransform, 0, 1f / 3, 306, 42, 4, 4);
-            Place(signalDetailText.rectTransform, 1f / 3, 2f / 3, 306, 42, 4, 4);
-            Place(signalBarsText.rectTransform, 2f / 3, 1, 306, 42, 4, 4);
+            Place(detectedText.rectTransform, 0, 1f / 3, 348, 42, 4, 4);
+            Place(signalDetailText.rectTransform, 1f / 3, 2f / 3, 348, 42, 4, 4);
+            Place(signalBarsText.rectTransform, 2f / 3, 1, 348, 42, 4, 4);
             Divider("Divider1", 0, 1, 35, 1);
-            Divider("Divider2", 0, 1, 304, 1);
-            Divider("FooterSeparator1", 1f / 3, 1f / 3, 312, 30);
-            Divider("FooterSeparator2", 2f / 3, 2f / 3, 312, 30);
+            Divider("Divider2", 0, 1, 346, 1);
+            Divider("FooterSeparator1", 1f / 3, 1f / 3, 354, 30);
+            Divider("FooterSeparator2", 2f / 3, 2f / 3, 354, 30);
             RenderScannerState();
         }
 

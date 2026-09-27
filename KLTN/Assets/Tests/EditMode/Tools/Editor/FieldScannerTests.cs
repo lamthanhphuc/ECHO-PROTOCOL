@@ -18,7 +18,7 @@ namespace EchoProtocol.Tests.EditMode.Tools
                 var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path);
                 var view = prefab.GetComponentInChildren<EchoProtocol.UI.HUD.HUDFieldScanner>(true);
                 var serialized = new UnityEditor.SerializedObject(view);
-                foreach (string field in new[] { "canvasGroup", "titleText", "modeBadgeText", "radarText", "signalBarsText", "signalDetailText", "statusText", "controlsText", "detectedText", "radarGraphic" })
+                foreach (string field in new[] { "canvasGroup", "titleText", "modeBadgeText", "scanTimerText", "signalBarsText", "signalDetailText", "statusText", "controlsText", "detectedText", "radarGraphic" })
                     Assert.That(serialized.FindProperty(field).objectReferenceValue, Is.Not.Null, path + ": " + field);
                 Assert.That(view.GetComponentInChildren<EchoProtocol.UI.HUD.ScannerRadarGraphic>(true).GetComponent<CanvasRenderer>(), Is.Not.Null);
                 var rect = (RectTransform)view.transform;
@@ -36,9 +36,11 @@ namespace EchoProtocol.Tests.EditMode.Tools
                 var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
                 var render = hud.GetType().GetMethod("RenderScannerState", flags);
                 var status = (UnityEngine.UI.Text)hud.GetType().GetField("statusText", flags).GetValue(hud);
+                var timer = (UnityEngine.UI.Text)hud.GetType().GetField("scanTimerText", flags).GetValue(hud);
                 hud.BindScanner(scanner);
                 render.Invoke(hud, null);
-                Assert.That(status.text, Does.StartWith("SẴN SÀNG"));
+                Assert.That(timer.text, Is.EqualTo("SẴN SÀNG"));
+                Assert.That(status.text, Is.EqualTo("[Chuột trái] Quét"));
                 var hintUntil = hud.GetType().GetField("_modeHintUntil", flags);
                 hintUntil.SetValue(hud, Time.unscaledTime + 6f);
                 render.Invoke(hud, null);
@@ -51,6 +53,7 @@ namespace EchoProtocol.Tests.EditMode.Tools
                 Assert.That(status.text, Does.Contain("[Chuột trái] Quét"));
                 typeof(NetworkFieldScanner).GetField("_localActiveScanTimer", flags).SetValue(scanner, 8f);
                 render.Invoke(hud, null);
+                Assert.That(timer.text, Is.EqualTo("ĐANG QUÉT  08s"));
                 Assert.That(status.text, Is.EqualTo("ĐANG QUÉT..."));
                 typeof(NetworkFieldScanner).GetField("_hasLocalActiveResult", flags).SetValue(scanner, true);
                 typeof(NetworkFieldScanner).GetField("_localResultTimer", flags).SetValue(scanner, 1f);
@@ -63,9 +66,11 @@ namespace EchoProtocol.Tests.EditMode.Tools
                 typeof(NetworkFieldScanner).GetField("_localActiveScanTimer", flags).SetValue(scanner, 0f);
                 typeof(NetworkFieldScanner).GetField("_localCooldownTimer", flags).SetValue(scanner, 10f);
                 render.Invoke(hud, null);
-                Assert.That(status.text, Does.StartWith("ĐANG HỒI..."));
+                Assert.That(timer.text, Is.EqualTo("HỒI  10s"));
+                Assert.That(status.text, Is.EqualTo("MÁY QUÉT ĐANG HỒI"));
                 hud.UnbindScanner();
                 render.Invoke(hud, null);
+                Assert.That(timer.text, Is.EqualTo("MẤT KẾT NỐI"));
                 Assert.That(status.text, Is.EqualTo("ĐANG CHỜ KẾT NỐI"));
             }
             finally
