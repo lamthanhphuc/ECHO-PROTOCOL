@@ -360,7 +360,6 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            Reviver = reviver;
             var reviverState = reviverObject.GetComponent<LobbyPlayerState>();
             var reviverInteractor = reviverObject.GetComponent<NetworkPlayerInteractor>();
             if (reviverInteractor == null || !reviverInteractor.CanStartFirstAidReviveAuthoritative(reviverState))
@@ -368,6 +367,7 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            Reviver = reviver;
             ActiveReviveUsedFirstAidKit = true;
             ActiveReviveDurationSeconds = _reviveDurationSeconds;
             PausedBleedoutRemainingSeconds = BleedoutRemaining;

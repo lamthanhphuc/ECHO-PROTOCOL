@@ -18,7 +18,6 @@ namespace EchoProtocol.Networking
         [SerializeField] private InputActionAsset _inputActions;
         [SerializeField] private Transform _rayOrigin;
         [SerializeField, Min(0.1f)] private float _localDetectionDistance = 3f;
-        public const int MaximumFirstAidRevivesPerMatch = 2;
         [Networked] public int FirstAidRevivesUsedThisMatch { get; private set; }
         private NetworkPlayerLifeState _currentReviveTarget;
         public NetworkPlayerLifeState CurrentReviveTarget => _currentReviveTarget;
@@ -358,12 +357,18 @@ namespace EchoProtocol.Networking
 
         public bool CanStartFirstAidReviveAuthoritative(LobbyPlayerState state)
         {
-            return Object != null
-                && Object.IsValid
-                && Object.HasStateAuthority
-                && state != null
-                && state.ToolId == LobbyPlayerState.FirstAidKitToolId
-                && FirstAidRevivesUsedThisMatch < MaximumFirstAidRevivesPerMatch;
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || state == null
+                || state.ToolId != LobbyPlayerState.FirstAidKitToolId)
+            {
+                return false;
+            }
+
+            var lifeState = GetComponent<NetworkPlayerLifeState>();
+            return lifeState != null
+                && NetworkPlayerLifeStateRules.CanInitiateAction(lifeState.Status);
         }
 
         public bool ConsumeFirstAidReviveAuthoritative(LobbyPlayerState state)
