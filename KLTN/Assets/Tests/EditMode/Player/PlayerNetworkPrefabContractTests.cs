@@ -190,6 +190,24 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains("state.IsGameplayPlayer", hud);
         }
 
+        [Test]
+        public void HIDE_NetworkFlow_UsesAuthoritativeReservationAndRollback()
+        {
+            var movement = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Player/NetworkPlayerMovement.cs");
+            var hidingSpot = File.ReadAllText(
+                "Assets/Scripts/Hiding/HidingSpot.cs");
+
+            StringAssert.Contains("TryReserveNetworkSpot", movement);
+            StringAssert.Contains("RejectHideEnter", movement);
+            StringAssert.Contains("ReleaseNetworkSpot", movement);
+            StringAssert.Contains("ReleaseAllNetworkSpots", movement);
+            StringAssert.Contains("CurrentHideSpotId", movement);
+            StringAssert.Contains("NetworkReservations", hidingSpot);
+            StringAssert.Contains("RuntimeLogCategory.StalkerHideFlow", hidingSpot);
+            StringAssert.DoesNotContain("Debug.Log(", hidingSpot);
+        }
+
         private static GameObject LoadPrefab()
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);

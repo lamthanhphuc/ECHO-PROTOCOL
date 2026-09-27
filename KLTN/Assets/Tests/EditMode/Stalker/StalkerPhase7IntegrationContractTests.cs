@@ -372,6 +372,19 @@ namespace EchoProtocol.AI.Stalker.Tests
             StringAssert.Contains("ToUpperInvariant", producerSource);
         }
 
+        [Test]
+        public void STK_AUDIO_WalkAndChaseUseIndependentVolumeTuning()
+        {
+            var source = File.ReadAllText(
+                "Assets/Scripts/AI/Stalker/Presentation/StalkerAudioController.cs");
+
+            StringAssert.Contains("walkFootstepVolume", source);
+            StringAssert.Contains("chaseFootstepVolume", source);
+            StringAssert.Contains("_chaseActive", source);
+            StringAssert.Contains("detectVolume", source);
+            StringAssert.DoesNotContain("voiceSource.volume = 0.1f", source);
+        }
+
         private static object CreatePresentationState(
             long episodeId,
             string phase,

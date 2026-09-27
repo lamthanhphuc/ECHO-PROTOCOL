@@ -98,9 +98,17 @@ namespace EchoProtocol.UI.HUD
                 return;
             }
 
-            if (TryGetNetworkPrompt(out var networkPrompt, out var networkIsHold, out var networkProgress01))
+            if (TryGetNetworkPrompt(
+                    out var networkPrompt,
+                    out var networkIsHold,
+                    out var networkProgress01,
+                    out var showInteractKey))
             {
-                ShowPrompt(networkPrompt, networkIsHold, networkProgress01);
+                ShowPrompt(
+                    networkPrompt,
+                    networkIsHold,
+                    networkProgress01,
+                    showInteractKey);
                 return;
             }
 
@@ -146,11 +154,16 @@ namespace EchoProtocol.UI.HUD
             ShowPrompt(prompt, isHold, progress01);
         }
 
-        private bool TryGetNetworkPrompt(out string prompt, out bool isHold, out float progress01)
+        private bool TryGetNetworkPrompt(
+            out string prompt,
+            out bool isHold,
+            out float progress01,
+            out bool showInteractKey)
         {
             prompt = null;
             isHold = false;
             progress01 = 0f;
+            showInteractKey = true;
             if (networkPlayerInteractor == null
                 || networkPlayerInteractor.Object == null
                 || !networkPlayerInteractor.Object.HasInputAuthority)
@@ -182,6 +195,15 @@ namespace EchoProtocol.UI.HUD
                 return false;
             }
 
+            if (networkPlayerInteractor.IsTeamToolPickupBlocked)
+            {
+                prompt =
+                    "CHỈ CÓ THỂ MANG 1 TEAM TOOL\n"
+                    + "<size=18>[G] THẢ TEAM TOOL ĐANG CẦM</size>";
+                showInteractKey = false;
+                return true;
+            }
+
             prompt = candidate.InteractionPrompt;
             return !string.IsNullOrWhiteSpace(prompt);
         }
@@ -200,7 +222,7 @@ namespace EchoProtocol.UI.HUD
             return null;
         }
 
-        private void ShowPrompt(string prompt, bool isHold, float progress01)
+        private void ShowPrompt(string prompt, bool isHold, float progress01, bool showInteractKey = true)
         {
             _targetAlpha = 1f;
             if (promptCanvasGroup != null)
@@ -219,6 +241,11 @@ namespace EchoProtocol.UI.HUD
             string formattedText = isHold
                 ? $"<color={keyColorHex}><b>{keyLabel}</b></color>  {cleanPrompt} <color=#FFB300>(Giữ)</color>"
                 : $"<color={keyColorHex}><b>{keyLabel}</b></color>  {cleanPrompt}";
+
+            if (!showInteractKey)
+            {
+                formattedText = $"<color=#FFB300><b>{prompt}</b></color>";
+            }
 
             SetText(promptTmp, promptText, formattedText);
 

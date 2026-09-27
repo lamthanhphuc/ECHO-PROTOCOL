@@ -49,10 +49,6 @@ namespace EchoProtocol.AI.Stalker.Presentation
             Animator.StringToHash(
                 "Base Layer.JumpIn");
 
-        private static readonly int DeathStateHash =
-            Animator.StringToHash(
-                "Base Layer.Death");
-
         [Header("Dependencies")]
         [SerializeField]
         private Animator animator;

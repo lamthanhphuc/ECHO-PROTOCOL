@@ -75,8 +75,12 @@ namespace EchoProtocol.AI.Stalker.Presentation
         // Serialised – Tuning
         // ──────────────────────────────────────────────────────────────────────
 
+        [Header("Voice Tuning")]
+        [SerializeField, Range(0f, 1f)]     private float detectVolume       = 1.00f;
+
         [Header("Footstep Tuning")]
-        [SerializeField, Range(0f, 1f)]     private float footstepVolume     = 1.00f;
+        [SerializeField, Range(0f, 1f)]     private float walkFootstepVolume = 0.55f;
+        [SerializeField, Range(0f, 1f)]     private float chaseFootstepVolume = 1.00f;
 
         [Header("JumpOut Tuning (monster leaps off metal)")]
         [SerializeField, Range(0f, 1f)]     private float jumpOutVolume      = 0.85f;
@@ -355,7 +359,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             voiceSource.clip   = detectClip;
             voiceSource.pitch  = 1f;
-            voiceSource.volume = 0.1f;
+            voiceSource.volume = detectVolume;
             voiceSource.Play();
         }
 
@@ -387,8 +391,10 @@ namespace EchoProtocol.AI.Stalker.Presentation
             var clip = _chaseActive ? chaseFootstepClip : walkClip;
             if (!ClipAndSourceReady(movementSource, clip)) return;
 
-            movementSource.pitch  = 1f;
-            movementSource.volume = footstepVolume;
+            movementSource.pitch = 1f;
+            movementSource.volume = _chaseActive
+                ? chaseFootstepVolume
+                : walkFootstepVolume;
             movementSource.PlayOneShot(clip);
         }
 
@@ -447,7 +453,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
         /// <summary>
         /// Triggered by Animation Event on the JumpOut frame where the monster
         /// pushes off the metal surface.
-        /// Uses a separate push-off clip from the landing impact.
+        /// Uses the JumpOut clip and its own volume.
+        /// The clip may be shared with JumpIn when no dedicated asset is available.
         /// </summary>
         public void PlayJumpOut()
         {
@@ -461,7 +468,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
         /// <summary>
         /// Triggered by Animation Event on the JumpIn frame where the monster
         /// lands on the metal surface with full weight.
-        /// Uses the dedicated landing clip.
+        /// Uses the landing clip and its own volume.
+        /// A dedicated clip can be assigned later without changing runtime logic.
         /// </summary>
         public void PlayJumpIn()
         {

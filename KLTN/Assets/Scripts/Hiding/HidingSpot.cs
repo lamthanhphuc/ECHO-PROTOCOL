@@ -265,8 +265,9 @@ public class HidingSpot : MonoBehaviour, IInteractable
         ulong stableId,
         PlayerRef player)
     {
-        Debug.Log(
-            $"[HIDE_RESERVE] request spot={stableId} player={player}");
+        EchoProtocol.Diagnostics.RuntimeLog.Log(
+            EchoProtocol.Diagnostics.RuntimeLogCategory.StalkerHideFlow,
+            $"[HIDE_RESERVE][REQUEST] spot={stableId} player={player}");
 
         if (runner == null ||
             stableId == 0UL ||
@@ -294,8 +295,9 @@ public class HidingSpot : MonoBehaviour, IInteractable
 
             if (IsPlayerActive(runner, currentOccupant))
             {
-                Debug.Log(
-                    $"[HIDE_RESERVE] REJECT spot={stableId} owner={currentOccupant} requester={player}");
+                EchoProtocol.Diagnostics.RuntimeLog.Log(
+                    EchoProtocol.Diagnostics.RuntimeLogCategory.StalkerHideFlow,
+                    $"[HIDE_RESERVE][REJECT] spot={stableId} owner={currentOccupant} requester={player}");
                 return false;
             }
 
@@ -303,8 +305,9 @@ public class HidingSpot : MonoBehaviour, IInteractable
         }
 
         reservations[stableId] = player;
-        Debug.Log(
-            $"[HIDE_RESERVE] CLAIM spot={stableId} player={player}");
+        EchoProtocol.Diagnostics.RuntimeLog.Log(
+            EchoProtocol.Diagnostics.RuntimeLogCategory.StalkerHideFlow,
+            $"[HIDE_RESERVE][CLAIM] spot={stableId} player={player}");
         return true;
     }
 

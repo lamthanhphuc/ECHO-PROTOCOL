@@ -22,6 +22,7 @@ namespace EchoProtocol.Networking
         [Networked] public int FirstAidRevivesUsedThisMatch { get; private set; }
         private NetworkPlayerLifeState _currentReviveTarget;
         public NetworkPlayerLifeState CurrentReviveTarget => _currentReviveTarget;
+        public bool IsTeamToolPickupBlocked { get; private set; }
 
         [SerializeField] private LayerMask _interactionLayers = ~0;
         [SerializeField] private NetworkObject _fieldScannerPickupPrefab;
@@ -69,6 +70,7 @@ namespace EchoProtocol.Networking
             {
                 if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
                 CurrentCandidate = null;
+                IsTeamToolPickupBlocked = false;
                 _currentReviveTarget = null;
             }
         }
@@ -120,6 +122,7 @@ namespace EchoProtocol.Networking
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             CurrentCandidate = null;
+            IsTeamToolPickupBlocked = false;
             _interactAction?.Disable();
             _dropCoreAction?.Disable();
             _teamToolAction?.Disable();
@@ -149,6 +152,7 @@ namespace EchoProtocol.Networking
             {
                 if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
                 CurrentCandidate = null;
+                IsTeamToolPickupBlocked = false;
                 _currentReviveTarget = null;
                 return;
             }
@@ -157,6 +161,7 @@ namespace EchoProtocol.Networking
             {
                 if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
                 CurrentCandidate = null;
+                IsTeamToolPickupBlocked = false;
                 return;
             }
             bool isOnline = Runner != null && Runner.IsRunning && Object != null && Object.IsValid;
@@ -164,6 +169,7 @@ namespace EchoProtocol.Networking
             if (isOnline && (!Object.HasInputAuthority || (playerState != null && playerState.Object != null && playerState.Object.IsValid && !playerState.IsGameplayPlayer)))
             {
                 CurrentCandidate = null;
+                IsTeamToolPickupBlocked = false;
                 return;
             }
 
@@ -179,10 +185,17 @@ namespace EchoProtocol.Networking
             if (lifeState != null && !lifeState.CanInitiateAction)
             {
                 CurrentCandidate = null;
+                IsTeamToolPickupBlocked = false;
                 return;
             }
 
+            IsTeamToolPickupBlocked = false;
             CurrentCandidate = TryDetectCandidate(out var candidate) ? candidate : null;
+            IsTeamToolPickupBlocked =
+                CurrentCandidate != null
+                && IsTeamToolPickup(CurrentCandidate)
+                && playerState != null
+                && playerState.ToolId > 0;
             if (_currentReviveTarget == null || !_currentReviveTarget.IsReviveInProgress)
             {
                 _currentReviveTarget = TryDetectReviveCandidate(out var reviveCandidate)
@@ -200,6 +213,11 @@ namespace EchoProtocol.Networking
 
             if (CurrentCandidate != null)
             {
+                if (IsTeamToolPickupBlocked)
+                {
+                    return;
+                }
+
                 if (CurrentCandidate is NetworkSlidingDoor brokenDoor && brokenDoor.CanAcceptJammer())
                 {
                     if (playerState != null && playerState.Object != null && playerState.Object.IsValid && playerState.Object.Id.IsValid && playerState.Runner != null && playerState.Runner.IsRunning && playerState.ToolId == 4)
@@ -227,6 +245,12 @@ namespace EchoProtocol.Networking
                 if (ps != null && ps.ToolId == 3)
                     RequestRevive(targetLifeState);
             }
+        }
+
+        private static bool IsTeamToolPickup(NetworkInteractable candidate)
+        {
+            return candidate is NetworkTeamToolPickup
+                || candidate is NetworkToolPickup;
         }
 
         public bool RequestRevive(NetworkPlayerLifeState target)
