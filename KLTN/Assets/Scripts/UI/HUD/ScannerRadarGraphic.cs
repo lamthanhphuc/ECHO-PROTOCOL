@@ -11,16 +11,21 @@ namespace EchoProtocol.UI.HUD
         private readonly List<Vector2> _points = new List<Vector2>();
         private Color _accent = new Color(0.35f, 0.78f, 0.76f);
         private bool _motion, _scanning;
-        private float _heading, _pulse;
+        private float _pulse;
         private static readonly Vector2[] Corners = { Vector2.up, Vector2.right, Vector2.down, Vector2.left };
 
         public void Present(IReadOnlyList<Vector3> offsets, float range, float heading, bool motion, bool scanning)
         {
             _points.Clear();
             if (offsets != null && range > 0f)
+            {
+                Quaternion worldToRadar = Quaternion.Euler(0f, -heading, 0f);
                 for (int i = 0; i < offsets.Count; i++)
-                    _points.Add(Vector2.ClampMagnitude(new Vector2(offsets[i].x, offsets[i].z) / range, 1f));
-            _heading = heading;
+                {
+                    Vector3 localOffset = worldToRadar * offsets[i];
+                    _points.Add(Vector2.ClampMagnitude(new Vector2(localOffset.x, localOffset.z) / range, 1f));
+                }
+            }
             _motion = motion;
             _scanning = scanning;
             _accent = motion ? new Color(0.94f, 0.43f, 0.29f) : new Color(0.35f, 0.78f, 0.76f);
@@ -70,15 +75,14 @@ namespace EchoProtocol.UI.HUD
                     Ring(vh, p, 2.1f, 1.6f, ink);
                 }
             }
-            float a = (_heading + 180f) * Mathf.Deg2Rad;
-            Vector2 forward = new Vector2(Mathf.Sin(a), Mathf.Cos(a));
-            Vector2 side = new Vector2(forward.y, -forward.x);
-            Vector2 tip = center + forward * 10;
-            Vector2 left = center - forward * 6 - side * 6;
-            Vector2 right = center - forward * 6 + side * 6;
+            Vector2 forward = Vector2.up;
+            Vector2 side = Vector2.right;
+            Vector2 tip = center + forward * 10f;
+            Vector2 left = center - forward * 6f - side * 6f;
+            Vector2 right = center - forward * 6f + side * 6f;
             Line(vh, tip, left, 2f, Color.white);
-            Line(vh, left, center - forward * 2, 2f, Color.white);
-            Line(vh, center - forward * 2, right, 2f, Color.white);
+            Line(vh, left, center - forward * 2f, 2f, Color.white);
+            Line(vh, center - forward * 2f, right, 2f, Color.white);
             Line(vh, right, tip, 2f, Color.white);
         }
 
