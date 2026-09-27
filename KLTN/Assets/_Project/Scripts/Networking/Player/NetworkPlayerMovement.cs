@@ -723,11 +723,7 @@ namespace EchoProtocol.Networking
         private void RpcForceExitHidingLocal(
             [RpcTarget] PlayerRef targetPlayer)
         {
-            var hiding = GetComponent<PlayerHidingController>();
-            if (hiding != null && hiding.IsHidden)
-            {
-                hiding.ExitHiding();
-            }
+            GetComponent<PlayerHidingController>()?.ApplyAuthoritativeExitLocal();
         }
 
         public void TeleportAuthoritative(Vector3 position, Quaternion rotation)
