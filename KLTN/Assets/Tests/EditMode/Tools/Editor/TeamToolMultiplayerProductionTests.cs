@@ -131,6 +131,18 @@ namespace EchoProtocol.Player.Tests
         }
 
         [Test]
+        public void CORE_STABILIZER_GameplayPickup_UsesTeamToolPickup()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(CoreStabilizerPickupPath);
+            Assert.That(prefab, Is.Not.Null);
+            Assert.That(prefab.GetComponent<NetworkToolPickup>(), Is.Null);
+
+            var pickup = prefab.GetComponent<NetworkTeamToolPickup>();
+            Assert.That(pickup, Is.Not.Null);
+            Assert.That(pickup.ToolId, Is.EqualTo(LobbyPlayerState.CoreStabilizerToolId));
+        }
+
+        [Test]
         public void INTERACTOR_ToolTypeFor_MapsCoreStabilizerAndRejectsDecoy()
         {
             var method = typeof(NetworkPlayerInteractor).GetMethod("ToolTypeFor",
