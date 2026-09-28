@@ -1,6 +1,7 @@
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 namespace EchoProtocol.Networking
 {
@@ -299,7 +300,8 @@ namespace EchoProtocol.Networking
         private bool CanUseFlashlight()
         {
             ResolveLifeState();
-            return _lifeState == null || !_lifeState.IsEliminated;
+            return SceneManager.GetActiveScene().name != "Lobby"
+                && (_lifeState == null || !_lifeState.IsEliminated);
         }
 
         private void ApplyBeamTuning()
