@@ -85,8 +85,10 @@ namespace EchoProtocol.Networking
 
         [Header("Team Tool World Spawn")]
         [SerializeField] private TeamToolPickupCatalog _teamToolPickupCatalog;
-        [SerializeField, Min(0)] private int _zone1TeamToolSpawnCount = 3;
-        [SerializeField, Min(0)] private int _zone2TeamToolSpawnCount = 3;
+        [SerializeField, Min(TeamToolWorldSpawn.RequiredToolCountPerZone)]
+        private int _zone1TeamToolSpawnCount = TeamToolWorldSpawn.RequiredToolCountPerZone;
+        [SerializeField, Min(TeamToolWorldSpawn.RequiredToolCountPerZone)]
+        private int _zone2TeamToolSpawnCount = TeamToolWorldSpawn.RequiredToolCountPerZone;
         [SerializeField, Min(0f)] private float _teamToolSpawnMinimumSpacing = 6f;
 
         [Networked] private NetworkBool TeamToolWorldSpawnInitialized { get; set; }

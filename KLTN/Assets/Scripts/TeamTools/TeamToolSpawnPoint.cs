@@ -23,11 +23,13 @@ namespace EchoProtocol.TeamTools
     public sealed class TeamToolSpawnPoint : MonoBehaviour
     {
         [SerializeField] private TeamToolSpawnZone zone = TeamToolSpawnZone.Zone1;
+        [SerializeField, Min(1)] private int roomId = 1;
         [SerializeField] private TeamToolSpawnMask allowedTools = TeamToolSpawnMask.All;
         [SerializeField] private bool requireNavMeshAccess = true;
         [SerializeField, Min(0.1f)] private float navMeshAccessRadius = 1.5f;
 
         public TeamToolSpawnZone Zone => zone;
+        public int RoomId => roomId;
 
         public bool Allows(int toolId)
         {

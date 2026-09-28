@@ -1,12 +1,15 @@
 using System;
 using System.IO;
+using System.Linq;
 using EchoProtocol.Networking;
 using EchoProtocol.Tools.Scanner;
 using EchoProtocol.TeamTools;
 using Fusion;
 using NUnit.Framework;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using Assert = NUnit.Framework.Assert;
 
 namespace EchoProtocol.Player.Tests
@@ -16,6 +19,58 @@ namespace EchoProtocol.Player.Tests
         private const string PlayerNetworkPath = "Assets/Prefabs/PlayerNetwork.prefab";
         private const string MotionDecoyPickupPath = "Assets/Prefabs/Tools/PF_MotionDecoy_NetworkPickup.prefab";
         private const string CoreStabilizerPickupPath = "Assets/Prefabs/Tools/PF_CoreStabilizer_NetworkPickup.prefab";
+
+        [Test]
+        public void TEAM_TOOL_SciFiSpawnPoints_HaveValidRoomCoverage()
+        {
+            const string scenePath = "Assets/Scenes/SciFi.unity";
+            Scene scene = SceneManager.GetSceneByPath(scenePath);
+            bool opened = !scene.IsValid() || !scene.isLoaded;
+            if (opened) scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+            try
+            {
+                var points = scene.GetRootGameObjects()
+                    .SelectMany(root => root.GetComponentsInChildren<TeamToolSpawnPoint>(true))
+                    .ToArray();
+                ValidateZone(points, TeamToolSpawnZone.Zone1);
+                ValidateZone(points, TeamToolSpawnZone.Zone2);
+            }
+            finally
+            {
+                if (opened) EditorSceneManager.CloseScene(scene, true);
+            }
+        }
+
+        private static void ValidateZone(TeamToolSpawnPoint[] points, TeamToolSpawnZone zone)
+        {
+            var zonePoints = points.Where(point => point.Zone == zone).ToArray();
+            Assert.That(zonePoints.Length, Is.GreaterThanOrEqualTo(TeamToolWorldSpawn.RequiredToolCountPerZone));
+            foreach (var point in zonePoints)
+            {
+                Assert.That(point.transform.parent.name, Is.EqualTo($"Room{point.RoomId:00}"));
+                Assert.That(point.transform.parent.parent.name, Is.EqualTo(zone.ToString()));
+            }
+
+            var rooms = zonePoints.GroupBy(point => point.RoomId).ToArray();
+            Assert.That(rooms.Length, Is.GreaterThanOrEqualTo(3), $"{zone} needs multiple rooms.");
+            foreach (var room in rooms)
+            {
+                Assert.That(room.Key, Is.GreaterThan(0));
+                Assert.That(room.Count(), Is.InRange(2, 3), $"{zone} Room {room.Key} needs 2-3 points.");
+            }
+
+            int[] requiredTools =
+            {
+                LobbyPlayerState.FieldScannerToolId,
+                LobbyPlayerState.NoiseMakerToolId,
+                LobbyPlayerState.FirstAidKitToolId,
+                LobbyPlayerState.DoorJammerToolId,
+                LobbyPlayerState.CoreStabilizerToolId,
+            };
+            foreach (int toolId in requiredTools)
+                Assert.That(zonePoints.Any(point => point.Allows(toolId)), Is.True,
+                    $"{zone} has no point for Team Tool {toolId}.");
+        }
 
         [Test]
         public void TEAM_TOOL_Catalog_IsSharedBySpawnAndDrop_AndMapsCorrectPickups()
