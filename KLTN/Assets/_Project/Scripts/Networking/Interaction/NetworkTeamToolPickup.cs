@@ -57,6 +57,11 @@ namespace EchoProtocol.Networking
             {
                 r.enabled = active;
             }
+
+            foreach (var light in GetComponentsInChildren<Light>(true))
+            {
+                light.enabled = active;
+            }
         }
 
         protected override InteractionValidationResult ValidateCurrentState(
