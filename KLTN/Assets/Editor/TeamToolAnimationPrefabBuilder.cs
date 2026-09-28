@@ -136,8 +136,13 @@ public static class TeamToolAnimationPrefabBuilder
         if (visualPrefab == null) throw new FileNotFoundException("Missing Core Stabilizer visual prefab", CoreVisualPath);
 
         GameObject root = CreateAnimatedRoot("PF_CoreStabilizer_Device_Animated", controller);
-        InstantiateVisual(visualPrefab, root.transform);
+        GameObject visual = InstantiateVisual(visualPrefab, root.transform);
+        visual.transform.Find("DeviceVFXOrigin/StatusLight").localPosition = new Vector3(0.158f, 0.341f, 0.01f);
+        Transform mesh = visual.transform.Find("GripPivot/DeviceModel/RandomSciFiDevice/default");
+        mesh.localPosition = new Vector3(15.2f, 39.1f, -10.3f);
+        mesh.localRotation = Quaternion.Euler(90f, 0f, 0f);
         CreateSupportFieldVfx(root.transform, fieldMaterial);
+        root.transform.Find("SupportFieldVFX/GroundRing_2_5m").localPosition = new Vector3(13.4f, 36.3f, -4.8f);
         SaveWrapper(root, CorePrefabPath);
     }
 

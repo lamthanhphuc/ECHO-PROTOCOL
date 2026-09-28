@@ -957,6 +957,9 @@ namespace EchoProtocol.Networking.Authority
             string toolType,
             string targetId = null)
         {
+            // ponytail: Telemetry 1.1 rejects Core Stabilizer; emit it after the schema and backend catalog support it.
+            if (toolType == "CORE_STABILIZER") return false;
+
             if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
             {
                 return false;
