@@ -1253,6 +1253,42 @@ namespace EchoProtocol.Networking
             return TryEndMatch(NetworkMatchResult.Win, NetworkMatchEndReason.PlayerEscaped, player);
         }
 
+        private static bool IsZoneBoundary(NetworkMatchPhase previous, NetworkMatchPhase next)
+        {
+            return previous == NetworkMatchPhase.CoreObjective
+                       && next == NetworkMatchPhase.Zone2Objective
+                   || previous == NetworkMatchPhase.Zone2Objective
+                       && next == NetworkMatchPhase.FinalHunt;
+        }
+
+        private void ResetPlayerReviveBudgetsAuthoritative()
+        {
+            if (Runner == null)
+            {
+                return;
+            }
+
+            foreach (var player in Runner.ActivePlayers)
+            {
+                if (!Runner.TryGetPlayerObject(player, out var playerObject)
+                    || playerObject == null)
+                {
+                    continue;
+                }
+
+                if (!playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyState)
+                    || !lobbyState.IsGameplayPlayer)
+                {
+                    continue;
+                }
+
+                if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState))
+                {
+                    lifeState.ResetZoneReviveBudgetAuthoritative();
+                }
+            }
+        }
+
         private bool TryAdvancePhase(
             NetworkMatchPhase expected,
             NetworkMatchPhase next,
@@ -1264,6 +1300,7 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            NetworkMatchPhase previousPhase = CurrentPhase;
             var runtime = MatchAuthorityRuntime.Instance;
             runtime?.RecordPhaseCompleted(
                 BuildKey("phase-completed-" + completedPhase.ToLowerInvariant()),
@@ -1271,6 +1308,11 @@ namespace EchoProtocol.Networking
                 "OBJECTIVE_COMPLETED");
             CurrentPhase = next;
             AdvancePhaseOrdinal();
+
+            if (IsZoneBoundary(previousPhase, next))
+            {
+                ResetPlayerReviveBudgetsAuthoritative();
+            }
 
             if (next != NetworkMatchPhase.Escape
                 && next != NetworkMatchPhase.MatchEnded)

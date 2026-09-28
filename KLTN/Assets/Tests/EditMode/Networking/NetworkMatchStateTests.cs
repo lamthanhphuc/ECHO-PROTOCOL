@@ -114,6 +114,19 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
+        public void MATCH_NET_ZoneBoundaryResetsReviveBudget()
+        {
+            var source = LoadNetworkMatchStateSource();
+
+            StringAssert.Contains("ResetPlayerReviveBudgetsAuthoritative", source);
+            StringAssert.Contains("previous == NetworkMatchPhase.CoreObjective", source);
+            StringAssert.Contains("next == NetworkMatchPhase.Zone2Objective", source);
+            StringAssert.Contains("previous == NetworkMatchPhase.Zone2Objective", source);
+            StringAssert.Contains("next == NetworkMatchPhase.FinalHunt", source);
+            StringAssert.Contains("ResetZoneReviveBudgetAuthoritative", source);
+        }
+
+        [Test]
         public void MATCH_NET_SecurityHoldAccumulatesAcrossUpToFourValidParticipants()
         {
             var source = LoadNetworkMatchStateSource();

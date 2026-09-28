@@ -270,6 +270,24 @@ namespace EchoProtocol.Networking
             StateChanged?.Invoke(this);
         }
 
+        public bool ResetZoneReviveBudgetAuthoritative()
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority)
+            {
+                return false;
+            }
+
+            if (Status == NetworkPlayerLifeStatus.Eliminated
+                || Status == NetworkPlayerLifeStatus.Escaped)
+            {
+                return false;
+            }
+
+            DownCount = 0;
+            ReviveCount = 0;
+            return true;
+        }
+
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             GetComponent<PlayerJumpscareController>()?.StopJumpscare();
