@@ -48,7 +48,11 @@ namespace EchoProtocol.TeamTools
         public bool TryGetSpawnPosition(out Vector3 position)
         {
             position = transform.position;
-            return !requireNavMeshAccess || NavMesh.SamplePosition(position, out _, navMeshAccessRadius, NavMesh.AllAreas);
+            if (!requireNavMeshAccess) return true;
+            if (!NavMesh.SamplePosition(position, out var hit, navMeshAccessRadius, NavMesh.AllAreas)) return false;
+
+            var horizontalOffset = Vector3.ProjectOnPlane(hit.position - position, Vector3.up);
+            return horizontalOffset.sqrMagnitude <= 0.5f * 0.5f;
         }
 
 #if UNITY_EDITOR

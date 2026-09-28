@@ -19,6 +19,22 @@ namespace EchoProtocol.TeamTools
 
         public const int RequiredToolCountPerZone = 5;
 
+        private readonly struct SpawnPlan
+        {
+            public SpawnPlan(TeamToolSpawnPoint point, Vector3 position, NetworkObject prefab, int toolId)
+            {
+                Point = point;
+                Position = position;
+                Prefab = prefab;
+                ToolId = toolId;
+            }
+
+            public TeamToolSpawnPoint Point { get; }
+            public Vector3 Position { get; }
+            public NetworkObject Prefab { get; }
+            public int ToolId { get; }
+        }
+
         public static int SpawnInitial(NetworkRunner runner, TeamToolPickupCatalog catalog,
             int zone1Count, int zone2Count, float minimumSpacing)
         {
@@ -39,14 +55,34 @@ namespace EchoProtocol.TeamTools
             var positions = new List<Vector3>();
             var roomUseCount = new Dictionary<int, int>();
             var required = new List<int>(RequiredToolIds);
+            var requiredPlans = new List<SpawnPlan>(RequiredToolCountPerZone);
             Shuffle(required);
 
-            int spawned = 0;
             foreach (int toolId in required)
             {
-                if (TrySpawnTool(runner, catalog, points, zone, toolId, used, positions,
-                        roomUseCount, spacing)) spawned++;
-                else Debug.LogError($"[TeamToolWorldSpawn] Zone {zone} could not spawn required Team Tool id={toolId}. Check room spawn points.");
+                if (TryPlanTool(catalog, points, zone, toolId, used, positions,
+                        roomUseCount, spacing, out var plan)) requiredPlans.Add(plan);
+                else
+                {
+                    Debug.LogError($"[TeamToolWorldSpawn] Zone {zone} could not plan all required Team Tools. Missing id={toolId}. Check room spawn points.");
+                    return 0;
+                }
+            }
+
+            int spawned = 0;
+            var requiredObjects = new List<NetworkObject>(requiredPlans.Count);
+            foreach (var plan in requiredPlans)
+            {
+                var spawnedObject = SpawnPlannedTool(runner, plan);
+                if (spawnedObject == null)
+                {
+                    foreach (var requiredObject in requiredObjects)
+                        if (requiredObject != null) runner.Despawn(requiredObject);
+                    Debug.LogError($"[TeamToolWorldSpawn] Zone {zone} failed to spawn required Team Tool id={plan.ToolId}. Required batch rolled back.");
+                    return 0;
+                }
+                requiredObjects.Add(spawnedObject);
+                spawned++;
             }
 
             for (int extra = RequiredToolCountPerZone; extra < targetCount; extra++)
@@ -56,8 +92,9 @@ namespace EchoProtocol.TeamTools
                 bool added = false;
                 foreach (int toolId in extras)
                 {
-                    if (!TrySpawnTool(runner, catalog, points, zone, toolId, used, positions,
-                            roomUseCount, spacing)) continue;
+                    if (!TryPlanTool(catalog, points, zone, toolId, used, positions,
+                            roomUseCount, spacing, out var plan)) continue;
+                    if (SpawnPlannedTool(runner, plan) == null) continue;
                     spawned++;
                     added = true;
                     break;
@@ -67,11 +104,12 @@ namespace EchoProtocol.TeamTools
             return spawned;
         }
 
-        private static bool TrySpawnTool(NetworkRunner runner, TeamToolPickupCatalog catalog,
+        private static bool TryPlanTool(TeamToolPickupCatalog catalog,
             TeamToolSpawnPoint[] points, TeamToolSpawnZone zone, int toolId,
             HashSet<TeamToolSpawnPoint> used, List<Vector3> positions,
-            Dictionary<int, int> roomUseCount, float spacing)
+            Dictionary<int, int> roomUseCount, float spacing, out SpawnPlan plan)
         {
+            plan = default;
             var prefab = catalog.GetPrefab(toolId);
             if (!IsCorrectTool(prefab, toolId)) return false;
 
@@ -100,24 +138,27 @@ namespace EchoProtocol.TeamTools
                 candidates.RemoveAt(index);
                 if (!point.TryGetSpawnPosition(out var position)) continue;
 
-                var rotation = toolId == LobbyPlayerState.FieldScannerToolId
-                    ? Quaternion.Euler(90f, point.transform.eulerAngles.y, 0f)
-                    : point.transform.rotation;
-                var spawned = runner.Spawn(prefab, position, rotation);
-                if (spawned == null) continue;
-                if (!IsCorrectTool(spawned, toolId))
-                {
-                    runner.Despawn(spawned);
-                    continue;
-                }
-
                 used.Add(point);
                 positions.Add(position);
                 roomUseCount.TryGetValue(point.RoomId, out int roomCount);
                 roomUseCount[point.RoomId] = roomCount + 1;
+                plan = new SpawnPlan(point, position, prefab, toolId);
                 return true;
             }
             return false;
+        }
+
+        private static NetworkObject SpawnPlannedTool(NetworkRunner runner, SpawnPlan plan)
+        {
+            var rotation = plan.ToolId == LobbyPlayerState.FieldScannerToolId
+                ? Quaternion.Euler(90f, plan.Point.transform.eulerAngles.y, 0f)
+                : plan.Point.transform.rotation;
+            var spawned = runner.Spawn(plan.Prefab, plan.Position, rotation);
+            if (spawned == null) return null;
+            if (IsCorrectTool(spawned, plan.ToolId)) return spawned;
+
+            runner.Despawn(spawned);
+            return null;
         }
 
         private static bool IsCorrectTool(NetworkObject prefab, int toolId)
