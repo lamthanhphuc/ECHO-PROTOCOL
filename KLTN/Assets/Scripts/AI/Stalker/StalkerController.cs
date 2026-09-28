@@ -1861,9 +1861,7 @@ namespace EchoProtocol.AI.Stalker
                     continue;
                 }
 
-                Vector3 visibleLeakPoint = visionSensor.GetObservationPointForGroundPoint(
-                    candidate.InspectPosition);
-                if (!visionSensor.CanSeePoint(visibleLeakPoint))
+                if (!visionSensor.CanSeePoint(clue.CluePosition))
                 {
                     return false;
                 }

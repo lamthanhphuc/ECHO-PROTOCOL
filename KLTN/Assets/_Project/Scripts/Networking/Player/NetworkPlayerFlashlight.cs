@@ -43,6 +43,8 @@ namespace EchoProtocol.Networking
             }
         }
 
+        public bool IsEmittingLight => IsOn && CanUseFlashlight();
+
         public Transform BeamTransform
         {
             get

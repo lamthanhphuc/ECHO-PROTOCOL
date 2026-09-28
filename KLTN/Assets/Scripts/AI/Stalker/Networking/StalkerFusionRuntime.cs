@@ -1317,21 +1317,18 @@ namespace EchoProtocol.AI.Stalker.Networking
                 }
 
                 NetworkPlayerFlashlight flashlight = playerRoot.GetComponent<NetworkPlayerFlashlight>();
-                if (flashlight == null || !flashlight.IsOn)
+                if (flashlight == null || !flashlight.IsEmittingLight)
                 {
                     continue;
                 }
 
                 NetworkPlayerMovement movement = playerRoot.GetComponent<NetworkPlayerMovement>();
                 bool hidden = movement != null && movement.IsHidden;
-                if (hidden)
+                ulong hideSpotId = hidden && movement != null
+                    ? movement.CurrentHideSpotId
+                    : 0UL;
+                if (hidden && hideSpotId == 0UL)
                 {
-                    ulong hideSpotId = movement.CurrentHideSpotId;
-                    if (hideSpotId != 0UL)
-                    {
-                        _flashlightObservations.Add(new StalkerFlashlightObservation(
-                            playerRoot.position, flashlight.BeamTransform.forward, true, hideSpotId));
-                    }
                     continue;
                 }
 
@@ -1340,7 +1337,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                         flashlight.BeamSpotAngle, out Vector3 cluePosition))
                 {
                     _flashlightObservations.Add(new StalkerFlashlightObservation(
-                        cluePosition, flashlight.BeamTransform.forward, false, 0UL));
+                        cluePosition, flashlight.BeamTransform.forward, hidden, hideSpotId));
                 }
             }
         }

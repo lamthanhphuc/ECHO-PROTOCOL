@@ -65,6 +65,37 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
+        public IEnumerator HiddenBeam_BlockedInsideLocker_DoesNotCreateClue()
+        {
+            var fixture = CreateFixture(Vector3.zero);
+            Transform player = Create("Hidden player", new Vector3(0f, 0f, 5f)).transform;
+            Transform beam = Create("Beam", new Vector3(0f, 1f, 5f)).transform;
+            beam.SetParent(player, true);
+            beam.forward = Vector3.forward;
+            Cube("Locker front", new Vector3(0f, 1f, 5.5f), new Vector3(2f, 2f, 0.2f));
+            Physics.SyncTransforms();
+
+            Assert.That(TryClue(fixture.Sensor, beam, player, out _), Is.False);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator HiddenBeam_EscapesOpening_VisibleSurfaceCreatesClue()
+        {
+            var fixture = CreateFixture(Vector3.zero);
+            Transform player = Create("Hidden player", new Vector3(2f, 0f, 5f)).transform;
+            Transform beam = Create("Beam", new Vector3(2f, 1f, 5f)).transform;
+            beam.SetParent(player, true);
+            beam.forward = new Vector3(-0.4f, 0f, -1f);
+            Cube("Visible illuminated surface", new Vector3(0f, 1f, 2f), new Vector3(2f, 2f, 0.2f));
+            Physics.SyncTransforms();
+
+            Assert.That(TryClue(fixture.Sensor, beam, player, out Vector3 clue), Is.True);
+            Assert.That(CanSeePoint(fixture.Sensor, clue), Is.True);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator VisibleBody_WithFlashlight_UsesNormalDetection()
         {
             var fixture = CreateFixture(Vector3.zero);
@@ -237,6 +268,9 @@ namespace EchoProtocol.AI.Stalker.Tests
             point = (Vector3)args[4];
             return visible;
         }
+
+        private static bool CanSeePoint(Component sensor, Vector3 point) =>
+            (bool)sensor.GetType().GetMethod("CanSeePoint").Invoke(sensor, new object[] { point });
 
         private static object Observation(Vector3 position, Vector3? direction = null,
             bool hidden = false, ulong spotId = 0UL) => Activator.CreateInstance(
