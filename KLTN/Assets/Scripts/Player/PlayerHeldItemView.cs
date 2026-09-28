@@ -1,3 +1,4 @@
+using EchoProtocol.Networking;
 using UnityEngine;
 
 [DisallowMultipleComponent]
@@ -6,6 +7,7 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     [SerializeField] private PlayerInventory inventory;
     [SerializeField] private PlayerEnergyCoreCarrier coreCarrier;
     [SerializeField] private PlayerHeldItemAnchor heldItemAnchor;
+    [SerializeField] private LobbyPlayerState lobbyState;
     [SerializeField] private Vector3 energyCoreLocalPosition = Vector3.zero;
     [SerializeField] private Vector3 energyCoreLocalEulerAngles = Vector3.zero;
     [SerializeField] private Vector3 energyCoreLocalScale = new Vector3(25f, 25f, 25f);
@@ -56,6 +58,7 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         if (inventory == null) inventory = GetComponentInParent<PlayerInventory>();
         if (coreCarrier == null) coreCarrier = GetComponentInParent<PlayerEnergyCoreCarrier>();
         if (heldItemAnchor == null) heldItemAnchor = GetComponentInParent<PlayerHeldItemAnchor>();
+        if (lobbyState == null) lobbyState = GetComponentInParent<LobbyPlayerState>();
         if (heldItemAnchor == null) heldItemAnchor = gameObject.AddComponent<PlayerHeldItemAnchor>();
     }
 
@@ -63,6 +66,7 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     {
         if (inventory != null) inventory.InventoryChanged += RefreshVisual;
         if (coreCarrier != null) coreCarrier.CarryStateChanged += HandleCarryStateChanged;
+        LobbyPlayerState.AnyStateChanged += RefreshVisual;
         RefreshVisual();
     }
 
@@ -70,6 +74,7 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     {
         if (inventory != null) inventory.InventoryChanged -= RefreshVisual;
         if (coreCarrier != null) coreCarrier.CarryStateChanged -= HandleCarryStateChanged;
+        LobbyPlayerState.AnyStateChanged -= RefreshVisual;
     }
 
     private void HandleCarryStateChanged(PlayerEnergyCoreCarrier carrier)
@@ -177,6 +182,14 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
     private InventoryItemDefinition ResolveDesiredHeldItem()
     {
+        if (lobbyState != null
+            && lobbyState.Object != null
+            && lobbyState.Object.IsValid
+            && lobbyState.CarriedCoreId.IsValid)
+        {
+            return null;
+        }
+
         if (coreCarrier != null && coreCarrier.IsCarrying && coreCarrier.CarriedCoreItem != null)
         {
             return coreCarrier.CarriedCoreItem;
