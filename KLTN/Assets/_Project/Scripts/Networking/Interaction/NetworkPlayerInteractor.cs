@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Tools.Scanner;
+using EchoProtocol.TeamTools;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -24,11 +25,7 @@ namespace EchoProtocol.Networking
         public bool IsTeamToolPickupBlocked { get; private set; }
 
         [SerializeField] private LayerMask _interactionLayers = ~0;
-        [SerializeField] private NetworkObject _fieldScannerPickupPrefab;
-        [SerializeField] private NetworkObject _noiseMakerPickupPrefab;
-        [SerializeField] private NetworkObject _firstAidPickupPrefab;
-        [SerializeField] private NetworkObject _doorJammerPickupPrefab;
-        [SerializeField] private NetworkObject _coreStabilizerPickupPrefab;
+        [SerializeField] private TeamToolPickupCatalog _teamToolPickupCatalog;
         [SerializeField] private GameObject _noiseMakerBeaconPrefab; // Gán DistressBeaconDeployed prefab trong Inspector
         [SerializeField, Min(0.5f)] private float _noiseMakerThrowForwardDistance = 15f;
         [SerializeField, Min(0.01f)]
@@ -790,15 +787,7 @@ namespace EchoProtocol.Networking
 
         private NetworkObject TeamToolPickupPrefabFor(int toolId)
         {
-            switch (toolId)
-            {
-                case 1: return _fieldScannerPickupPrefab;
-                case 2: return _noiseMakerPickupPrefab;
-                case 3: return _firstAidPickupPrefab;
-                case 4: return _doorJammerPickupPrefab;
-                case 6: return _coreStabilizerPickupPrefab;
-                default: return null;
-            }
+            return _teamToolPickupCatalog != null ? _teamToolPickupCatalog.GetPrefab(toolId) : null;
         }
 
         private void GetAuthoritativeDropPose(out Vector3 position, out Quaternion rotation)

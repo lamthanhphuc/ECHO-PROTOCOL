@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using EchoProtocol.Networking;
 using EchoProtocol.Tools.Scanner;
+using EchoProtocol.TeamTools;
 using Fusion;
 using NUnit.Framework;
 using UnityEditor;
@@ -15,6 +16,40 @@ namespace EchoProtocol.Player.Tests
         private const string PlayerNetworkPath = "Assets/Prefabs/PlayerNetwork.prefab";
         private const string MotionDecoyPickupPath = "Assets/Prefabs/Tools/PF_MotionDecoy_NetworkPickup.prefab";
         private const string CoreStabilizerPickupPath = "Assets/Prefabs/Tools/PF_CoreStabilizer_NetworkPickup.prefab";
+
+        [Test]
+        public void TEAM_TOOL_Catalog_IsSharedBySpawnAndDrop_AndMapsCorrectPickups()
+        {
+            var catalog = AssetDatabase.LoadAssetAtPath<TeamToolPickupCatalog>(
+                "Assets/ScriptableObjects/TeamTools/SO_TeamToolPickupCatalog.asset");
+            Assert.That(catalog, Is.Not.Null);
+
+            var expected = new (int id, string path)[]
+            {
+                (LobbyPlayerState.FieldScannerToolId, "Assets/Prefabs/Tools/PF_FieldScanner_Pickup.prefab"),
+                (LobbyPlayerState.NoiseMakerToolId, "Assets/Prefabs/Gameplay/Imported/PF_TeamToolPickup_NoiseMaker.prefab"),
+                (LobbyPlayerState.FirstAidKitToolId, "Assets/Prefabs/Gameplay/Imported/PF_TeamToolPickup_FirstAid.prefab"),
+                (LobbyPlayerState.DoorJammerToolId, "Assets/Prefabs/Gameplay/Imported/PF_Plank_Imported.prefab"),
+                (LobbyPlayerState.CoreStabilizerToolId, CoreStabilizerPickupPath),
+            };
+            foreach (var (id, path) in expected)
+            {
+                var prefab = catalog.GetPrefab(id);
+                Assert.That(prefab, Is.SameAs(AssetDatabase.LoadAssetAtPath<NetworkObject>(path)));
+                var pickup = prefab.GetComponent<NetworkTeamToolPickup>();
+                Assert.That(pickup != null ? pickup.ToolId : prefab.GetComponent<NetworkToolPickup>().ToolId,
+                    Is.EqualTo(id));
+            }
+
+            var player = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerNetworkPath)
+                .GetComponentInChildren<NetworkPlayerInteractor>(true);
+            var match = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Resources/Network/NetworkMatchState.prefab").GetComponent<NetworkMatchState>();
+            Assert.That(new SerializedObject(player).FindProperty("_teamToolPickupCatalog").objectReferenceValue,
+                Is.SameAs(catalog));
+            Assert.That(new SerializedObject(match).FindProperty("_teamToolPickupCatalog").objectReferenceValue,
+                Is.SameAs(catalog));
+        }
 
         [Test]
         public void TOOL_ID_Constants_AreCanonical()

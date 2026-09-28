@@ -7,6 +7,7 @@ using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.Networking.Authority;
 using EchoProtocol.RelayA;
 using EchoProtocol.RelayB;
+using EchoProtocol.TeamTools;
 using Fusion;
 using UnityEngine;
 
@@ -81,6 +82,14 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(0.1f)] private float _zoneAccessCooldownSeconds = 5f;
         [SerializeField, Min(1)] private int _zoneAccessFailuresBeforeCooldown = 3;
         [SerializeField, Min(1f)] private float _securityHoldRelayRetryWindowSeconds = 300f;
+
+        [Header("Team Tool World Spawn")]
+        [SerializeField] private TeamToolPickupCatalog _teamToolPickupCatalog;
+        [SerializeField, Min(0)] private int _zone1TeamToolSpawnCount = 3;
+        [SerializeField, Min(0)] private int _zone2TeamToolSpawnCount = 3;
+        [SerializeField, Min(0f)] private float _teamToolSpawnMinimumSpacing = 6f;
+
+        [Networked] private NetworkBool TeamToolWorldSpawnInitialized { get; set; }
 
         [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
         public NetworkMatchPhase CurrentPhase { get; private set; }
@@ -347,6 +356,14 @@ namespace EchoProtocol.Networking
                 finally
                 {
                     CloseScenarioDecisionWindow();
+                }
+
+                if (!TeamToolWorldSpawnInitialized)
+                {
+                    TeamToolWorldSpawn.SpawnInitial(Runner, _teamToolPickupCatalog,
+                        _zone1TeamToolSpawnCount, _zone2TeamToolSpawnCount,
+                        _teamToolSpawnMinimumSpacing);
+                    TeamToolWorldSpawnInitialized = true;
                 }
             }
 
