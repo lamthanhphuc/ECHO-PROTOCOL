@@ -74,7 +74,7 @@ namespace EchoProtocol.Player.Tests
             foreach (var room in rooms)
             {
                 Assert.That(room.Key, Is.GreaterThan(0));
-                Assert.That(room.Count(), Is.InRange(2, 3), $"{zone} Room {room.Key} needs 2-3 points.");
+                Assert.That(room.Count(), Is.EqualTo(8), $"{zone} Room {room.Key:00} needs exactly 8 Team Tool spawn points.");
             }
 
             int[] requiredTools =
