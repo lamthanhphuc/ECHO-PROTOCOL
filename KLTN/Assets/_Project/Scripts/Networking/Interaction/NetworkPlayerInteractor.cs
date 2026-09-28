@@ -808,29 +808,19 @@ namespace EchoProtocol.Networking
 
         private void GetAuthoritativeDropPose(int toolId, out Vector3 position, out Quaternion rotation)
         {
-            Vector3 flatForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
-            if (flatForward == Vector3.zero) flatForward = transform.forward;
-            var candidate = transform.position + flatForward * 1.25f;
-            var rayOrigin = candidate + Vector3.up * 1.5f;
-            var layerMask = ~(1 << LayerMask.NameToLayer("Ignore Raycast"));
-            if (Physics.Raycast(
-                    rayOrigin,
-                    Vector3.down,
-                    out var hit,
-                    4f,
-                    layerMask,
-                    QueryTriggerInteraction.Ignore)
-                && !IsSelfCollider(hit.collider))
+            Transform directionSource = _rayOrigin != null ? _rayOrigin : transform;
+            ItemDropPlacementUtility.GetFloorSnappedPose(
+                transform,
+                directionSource,
+                1.25f,
+                0.05f,
+                out position,
+                out rotation);
+
+            if (toolId == LobbyPlayerState.FieldScannerToolId)
             {
-                position = hit.point + Vector3.up * 0.05f;
+                rotation = Quaternion.Euler(90f, rotation.eulerAngles.y, 0f);
             }
-            else
-            {
-                position = candidate;
-            }
-            rotation = toolId == 1
-                ? Quaternion.Euler(90f, transform.eulerAngles.y + 180f, 0f)
-                : Quaternion.Euler(0f, transform.eulerAngles.y + 180f, 0f);
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
