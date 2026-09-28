@@ -14,6 +14,7 @@ namespace EchoProtocol.AI.Stalker
         private bool _pathPendingTimedOut;
         private NavigationFailureReason _currentFailureReason;
         private NavigationRecoveryReason _currentRecoveryReason;
+        private bool _authoritativeLocomotion;
 
         public StalkerNavigationController(NavMeshAgent agent)
             : this(agent, NavigationProgressSettings.Default)
@@ -38,6 +39,71 @@ namespace EchoProtocol.AI.Stalker
         public bool IsUsable => _agent != null
             && _agent.enabled
             && _agent.isOnNavMesh;
+
+        public bool HasAuthoritativeLocomotion => _authoritativeLocomotion;
+        public float AuthoritativeMoveSpeed { get; private set; }
+
+        public void SetAuthoritativeLocomotion(bool enabled)
+        {
+            if (_agent == null || _authoritativeLocomotion == enabled)
+            {
+                return;
+            }
+
+            _authoritativeLocomotion = enabled;
+            AuthoritativeMoveSpeed = 0f;
+            if (_agent.enabled && _agent.isOnNavMesh)
+            {
+                _agent.nextPosition = _agent.transform.position;
+            }
+
+            _agent.updatePosition = !enabled;
+            if (_agent.enabled && _agent.isOnNavMesh)
+            {
+                _agent.isStopped = enabled;
+            }
+        }
+
+        public void TickAuthoritativeLocomotion(float deltaSeconds)
+        {
+            AuthoritativeMoveSpeed = 0f;
+            if (!_authoritativeLocomotion || !IsUsable || deltaSeconds <= 0f
+                || !_agent.hasPath || _agent.pathPending
+                || _agent.pathStatus != NavMeshPathStatus.PathComplete)
+            {
+                return;
+            }
+
+            if (!_agent.isStopped)
+            {
+                _agent.isStopped = true;
+            }
+
+            var position = _agent.transform.position;
+            var toCorner = _agent.steeringTarget - position;
+            toCorner.y = 0f;
+            var distance = Mathf.Min(
+                Mathf.Min(toCorner.magnitude,
+                    Mathf.Max(0f, _agent.remainingDistance - _agent.stoppingDistance)),
+                _agent.speed * deltaSeconds);
+            if (distance <= 0f)
+            {
+                return;
+            }
+
+            var direction = toCorner.normalized;
+            _agent.nextPosition = position;
+            _agent.Move(direction * distance);
+            _agent.transform.position = _agent.nextPosition;
+            AuthoritativeMoveSpeed = Vector3.Distance(position, _agent.transform.position) / deltaSeconds;
+            if (_agent.updateRotation)
+            {
+                _agent.transform.rotation = Quaternion.RotateTowards(
+                    _agent.transform.rotation,
+                    Quaternion.LookRotation(direction, Vector3.up),
+                    _agent.angularSpeed * deltaSeconds);
+            }
+        }
 
         // This is the controller's accepted destination cache, not proof of a complete Unity path.
         public bool HasActiveDestination => _activeDestination.HasValue;
@@ -104,6 +170,12 @@ namespace EchoProtocol.AI.Stalker
             {
                 _currentFailureReason = NavigationFailureReason.AgentNotOnNavMesh;
                 return false;
+            }
+
+            if (_authoritativeLocomotion)
+            {
+                _agent.transform.position = _agent.nextPosition;
+                _agent.isStopped = true;
             }
 
             _pathPendingElapsedSeconds = 0f;

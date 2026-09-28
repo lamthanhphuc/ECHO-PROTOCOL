@@ -104,6 +104,7 @@ namespace EchoProtocol.Networking
 
         private void HandlePlayerLeft(PlayerRef player)
         {
+            if (_bootstrap != null && _bootstrap.State == NetworkSessionState.InMatch) return;
             _spawnSlots.Remove(player);
         }
 
@@ -776,6 +777,9 @@ namespace EchoProtocol.Networking
                 Debug.LogError("[PlayerSpawner] Cannot place an invalid lifecycle-owned player object.");
                 return;
             }
+
+            if (gameplay && playerObject.TryGetComponent<LobbyPlayerState>(out var existingState)
+                && existingState.IsGameplayPlayer) return;
 
             var slot = GetOrAssignSlot(player);
             var pose = gameplay ? GetGameplaySpawnPose(slot) : GetLobbySpawnPose(slot);

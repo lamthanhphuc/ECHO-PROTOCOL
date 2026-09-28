@@ -113,6 +113,50 @@ namespace EchoProtocol.AI.Stalker.Tests
             AssertPlanResult(RequestDestination(fixture.Controller, Destination, true), "Accepted", Destination, true);
         }
 
+        [UnityTest]
+        public IEnumerator NAV_AuthoritativeLocomotion_UsesSimulationTimeAcrossRenderRates()
+        {
+            BuildRuntimeNavMesh();
+            var slow = CreateInactiveConfiguredAgent(new Vector3(-3f, 0f, -1f));
+            var fast = CreateInactiveConfiguredAgent(new Vector3(-3f, 0f, 1f));
+            slow.gameObject.SetActive(true);
+            fast.gameObject.SetActive(true);
+            yield return null;
+
+            var slowNavigation = CreateController(slow);
+            var fastNavigation = CreateController(fast);
+            InvokeMethod(slowNavigation, "SetAuthoritativeLocomotion", new[] { typeof(bool) }, new object[] { true });
+            InvokeMethod(fastNavigation, "SetAuthoritativeLocomotion", new[] { typeof(bool) }, new object[] { true });
+            Assert.That(slow.updatePosition, Is.False);
+            Assert.That(slow.isStopped, Is.True);
+            RequestDestination(slowNavigation, new Vector3(3f, 0f, -1f));
+            RequestDestination(fastNavigation, new Vector3(3f, 0f, 1f));
+            yield return WaitUntilPathSettled(slow, slowNavigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
+            yield return WaitUntilPathSettled(fast, fastNavigation, PathSettleTimeoutSeconds, PathSettleFrameCap);
+
+            var slowStart = slow.transform.position;
+            var fastStart = fast.transform.position;
+            yield return null;
+            Assert.That(Vector3.Distance(slow.transform.position, slowStart), Is.LessThan(0.01f));
+            Assert.That(Vector3.Distance(fast.transform.position, fastStart), Is.LessThan(0.01f));
+
+            for (var frame = 0; frame < 30; frame++)
+            {
+                InvokeMethod(slowNavigation, "TickAuthoritativeLocomotion", new[] { typeof(float) }, new object[] { 1f / 30f });
+                for (var tick = 0; tick < 4; tick++)
+                {
+                    InvokeMethod(fastNavigation, "TickAuthoritativeLocomotion", new[] { typeof(float) }, new object[] { 1f / 120f });
+                }
+
+                yield return null;
+            }
+
+            var slowDistance = Vector3.Distance(slow.transform.position, slowStart);
+            var fastDistance = Vector3.Distance(fast.transform.position, fastStart);
+            Assert.That(slowDistance, Is.EqualTo(1f).Within(0.15f));
+            Assert.That(fastDistance, Is.EqualTo(slowDistance).Within(0.1f));
+        }
+
         private void BuildRuntimeNavMesh()
         {
             var buildSettings = NavMesh.GetSettingsByID(0);

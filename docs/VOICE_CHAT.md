@@ -74,7 +74,7 @@ Các lớp ứng dụng đã có trong `Assets/Scripts/Voice/`; `EchoVoiceClient
 | `Recorder` | Một recorder hoạt động trên mỗi client; chỉ input owner được thu/phát |
 | `VoicePlayerBinding` | Ánh xạ metadata session + NetworkObject ID sang player hiện hành; chờ tối đa 10 giây nếu player chưa xuất hiện |
 | `Speaker` + `AudioSource` | Trên player đại diện người nói ở client nhận, gần vị trí đầu/miệng |
-| `VoiceSettingsPanel` | Chọn mic, mức tín hiệu local, mute mic, âm lượng voice, chế độ nói, trạng thái kết nối |
+| `VoiceSettingsPanel` + `VoiceSettingsCanvas` | Canvas theo 3 bước: bật/tắt mic, chọn thiết bị, nghe đồng đội; có mức tín hiệu local, âm lượng voice, phím tắt và trạng thái kết nối |
 
 `UnityVoiceClient` dùng `PrimaryRecorder` và `SpeakerPrefab`; game bổ sung logic join room và ánh xạ speaker sang nhân vật. Recorder phải khởi tạo ở trạng thái không thu/không truyền cho đến khi đủ điều kiện. Không chạy đồng thời hai bộ điều khiển kết nối Voice. [Thiết lập client độc lập](https://doc.photonengine.com/voice/v2/getting-started/voice-intro).
 
@@ -114,7 +114,7 @@ Lưu tên/ID lựa chọn thay vì vị trí trong danh sách. Khi thiết bị 
 
 ## 5. Chính sách thu và trạng thái UI
 
-Đề xuất mặc định **push-to-talk**, phím cấu hình được qua Unity Input System. Có thể bổ sung chế độ open mic với phát hiện giọng nói; không đồng nhất VAD với mute do người dùng.
+Mặc định mic tắt khi khởi động ứng dụng. Bấm **V** một lần để bật mic (đồng thời bỏ self-mute nếu đã bật), bấm lần nữa để tắt; không cần giữ phím. Có thể đổi phím trong Voice settings. Khi bật, mic truyền liên tục trong session đang kết nối nếu đủ điều kiện dưới đây. Trạng thái bật/tắt được giữ khi chuyển từ Lobby vào trận; ra khỏi session thì ngừng thu và truyền.
 
 Điều kiện gửi đề xuất:
 
@@ -125,10 +125,12 @@ CanTransmit = LocalOwner
            && MicrophoneReady
            && UserEnabledMicrophone
            && !SelfMuted
-           && (OpenMicEnabled || PushToTalkHeld)
+           && ApplicationFocused
+           && !ApplicationPaused
+           && !VoiceSettingsOpen
 ```
 
-Nhả PTT hoặc mất focus phải đóng cổng truyền. Mute mic dừng thu/phát; muốn giữ meter khi mute phải là chế độ kiểm tra local rõ ràng. Không bật local audio loopback mặc định.
+Nhả V không thay đổi trạng thái mic. Mất focus hoặc tạm dừng ứng dụng đóng cổng truyền; khi quay lại, mic tiếp tục theo trạng thái đã bật/tắt. Mute mic dừng thu/phát; muốn giữ meter khi mute phải là chế độ kiểm tra local rõ ràng. Không bật local audio loopback mặc định.
 
 Hiển thị riêng hai nhóm trạng thái để lỗi mic không bị hiểu nhầm là mất mạng:
 
@@ -137,7 +139,7 @@ Hiển thị riêng hai nhóm trạng thái để lỗi mic không bị hiểu n
 | Kết nối | Disabled, WaitingForSession, Connecting, Joined, Reconnecting, Error |
 | Microphone | Unavailable, PermissionRequired, Ready, Muted, Testing |
 
-Biểu tượng “đang nói” của local dựa trên recorder đang truyền; phía remote dựa trên speaker nhận/phát. Không chỉ kiểm tra phím PTT. Nút mute từng đồng đội chỉ ảnh hưởng việc nghe trên client đang thao tác.
+Biểu tượng “đang nói” của local dựa trên recorder đang truyền; phía remote dựa trên speaker nhận/phát. Không chỉ kiểm tra trạng thái phím V. Nút mute từng đồng đội chỉ ảnh hưởng việc nghe trên client đang thao tác.
 
 ## 6. Âm thanh 3D và khoảng cách
 
@@ -177,14 +179,14 @@ Không tự chuyển âm lượng mic thành `RuntimeNoiseCatalog` để AI nghe
 
 ## 8. Điều kiện triển khai và tiêu chí nghiệm thu
 
-Trước khi viết tích hợp: cài Photon Voice 2 và cấu hình Voice App ID; kiểm tra tương thích thư viện dùng chung với Fusion. Chốt hợp đồng định danh player/stream, cấu hình room/region, PTT/open mic, 2D trong Lobby, bán kính nghe và chính sách chết/spectate. Khi đó cập nhật SRS bằng một thay đổi phạm vi rõ ràng.
+Trước khi viết tích hợp: cài Photon Voice 2 và cấu hình Voice App ID; kiểm tra tương thích thư viện dùng chung với Fusion. Chốt hợp đồng định danh player/stream, cấu hình room/region, phím bật/tắt mic, 2D trong Lobby, bán kính nghe và chính sách chết/spectate. Khi đó cập nhật SRS bằng một thay đổi phạm vi rõ ràng.
 
 Kiểm thử trên ít nhất hai client/build và hai thiết bị âm thanh:
 
 1. Host và client cùng session nghe nhau; người ở session khác không nghe được.
 2. Host/client đều chỉ thu mic thuộc local owner; không tự nghe bản thân khi loopback tắt.
 3. Từ chối quyền hoặc không có mic vẫn vào Lobby, ready, chơi và nghe được.
-4. PTT, nhả phím, mất focus, self-mute và mute đồng đội đúng hành vi đã mô tả.
+4. Bấm V bật mic, nhả phím vẫn truyền, bấm V lần nữa tắt mic; mất focus, self-mute và mute đồng đội đúng hành vi đã mô tả.
 5. Chọn/đổi/rút mic không nhân đôi recorder hoặc tự bật mic đang mute.
 6. Lobby → SciFi không nhân đôi stream/listener; định vị trái/phải theo người nói.
 7. Kiểm tra gần 2 m, giữa khoảng cách và ngoài 15 m với cấu hình đề xuất; ngoài phạm vi im lặng.
@@ -197,10 +199,11 @@ Kiểm thử trên ít nhất hai client/build và hai thiết bị âm thanh:
 ## 9. Triển khai và cách sử dụng
 
 - SDK: `com.photonengine.voice-fusion` 2.63.0, repository chính thức `Photon-Server/Photon-UPM`, commit cố định trong manifest và lockfile. SDK có adapter Fusion nhưng runtime dùng client độc lập. SDK tự thêm assembly `PhotonVoice.Fusion` vào danh sách weaving.
-- Mở **Voice settings [F8]**, chọn mic, bật **Enable microphone** rồi đóng bảng. Mặc định PTT là **V**; có thể đổi phím hoặc bật Open mic. Mic mặc định tắt mỗi khi khởi động ứng dụng, không tự bật khi vào phòng.
-- Bảng voice dùng IMGUI runtime. Khi mở bảng, movement, camera look, interaction và chiều gửi voice tạm khóa. Âm thanh nhận vẫn tiếp tục.
+- Bấm **F8** để mở Canvas voice. Bảng đi theo thứ tự: **bật/tắt mic → chọn mic → chỉnh âm lượng người khác**. Bấm **V** để bật mic, bấm lần nữa để tắt; có thể đổi phím trong bảng. Nút góc trên trái hiển thị **MIC OFF**, **MIC ON**, **MIC NEEDS SETUP** hoặc **VOICE WAITING** theo tình trạng thực tế. Không còn nút self-mute riêng trên Canvas; bật mic sẽ bỏ self-mute cũ nếu đã lưu. Mic mặc định tắt mỗi khi khởi động ứng dụng, không tự bật khi vào phòng.
+- Giao diện dùng prefab `Assets/Resources/Voice/VoiceSettingsCanvas.prefab` để chỉnh sửa trong Unity. Có thể sửa màu, chữ, kích thước và vị trí; giữ tên các object và cấu trúc cha/con vì `VoiceSettingsPanel` liên kết các nút theo đường dẫn trong prefab. Nếu prefab chưa có, runtime dựng cùng bố cục bằng `VoiceSettingsCanvasFactory`; menu **ECHO Protocol > Setup > Create Voice Settings Canvas** tạo prefab khi Editor ở Edit mode. Menu **Redesign Voice Settings Canvas** ghi đè prefab bằng bố cục mặc định mới.
+- Khi mở bảng, movement, camera look, interaction và chiều gửi voice tạm khóa. Âm thanh nhận vẫn tiếp tục.
 - **Test microphone locally** thu tối đa 10 giây và chỉ hiển thị meter; không gửi lên Photon hoặc bật loopback. Mute, mất focus, pause, leave và mic không khả dụng đều dừng chiều thu/phát.
-- Lựa chọn mic, mute, PTT/open mic và âm lượng được lưu trong PlayerPrefs. Rút mic không tự đổi thiết bị; chọn lại để thử lại.
+- Lựa chọn mic, self-mute, phím bật/tắt và âm lượng được lưu trong PlayerPrefs. Trạng thái bật mic chỉ giữ trong lần chạy ứng dụng hiện tại. Rút mic không tự đổi thiết bị; chọn lại để thử lại.
 - Voice room trùng `Runner.SessionInfo.Name`, vùng lấy từ session Fusion, AppVersion riêng `EchoProtocol.Voice.1`, tối đa 4 người. Timeout kết nối là 20 giây, tối đa 3 lần thử; UI có nút Retry.
 - Metadata gồm tên session mã hóa Base64 và `NetworkObject.Id.Raw`. Đây là liên kết presentation, không phải xác thực chống giả mạo. Phòng cần bảo vệ phải bổ sung xác thực riêng.
 - Speaker theo player cộng offset đầu 1.6 m; Lobby 2D, gameplay 3D, Linear 2–15 m, Doppler 0. Stream mới thay stream cũ cùng player. Mixer riêng tải từ `Resources/Voice/VoiceMixer`.
@@ -218,7 +221,7 @@ Khi cầu nối MCP không hoạt động, công cụ Editor hỗ trợ request 
 
 ### Xác minh
 
-SDK được Package Manager resolve thành công; Unity 6000.5.8f1 biên dịch được code ứng dụng, Editor và test assemblies. Mixer riêng đã được tạo và xác nhận bằng Unity API. **10/10 EditMode và 2/2 PlayMode đạt, không có test bỏ qua.** Test Runner đã khôi phục scene sau khi chạy.
+Sau thay đổi phím bật/tắt mic và Canvas voice, Unity 6000.5.8f1 đã biên dịch code ứng dụng, Editor và test assemblies. Prefab `VoiceSettingsCanvas` đã được tạo trong Unity. **9/9 EditMode và 3/3 PlayMode đạt, không có test bỏ qua.** Chưa kiểm tra bố cục ở mọi độ phân giải hoặc nghe mic thực tế trên hai máy.
 
 Chưa chạy Windows player build, kiểm thử hai máy, xác thực phòng hoặc nghe mic thực tế. Voice App ID chưa được cấu hình tại thời điểm kiểm tra; cần hoàn tất bước này rồi thực hiện các kịch bản ở mục 8. Kết quả tự động không chứng minh chất lượng âm thanh hoặc kết nối Photon Cloud thực tế.
-Cách dùng: F8 → chọn mic → Enable microphone → đóng bảng → giữ V để nói.
+Cách dùng: F8 → chọn mic → đóng bảng → bấm V để bật mic và nói suốt trận → bấm V lần nữa để tắt.

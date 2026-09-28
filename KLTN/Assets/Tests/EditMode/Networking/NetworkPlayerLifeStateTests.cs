@@ -72,5 +72,26 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("CommitEliminated(NetworkPlayerLifeTransitionCause.Bleedout", lifeSource);
             StringAssert.Contains("DropHeldItemsAuthoritative(Object.InputAuthority)", lifeSource);
         }
+
+        [Test]
+        public void LIFE_NET_FirstAidReviveCounterIsMetricNotGameplayGate()
+        {
+            var lifeSource = File.ReadAllText(LifeStateSourcePath);
+            var interactorSource = File.ReadAllText(InteractorSourcePath);
+
+            StringAssert.DoesNotContain("MaximumFirstAidRevivesPerMatch", interactorSource);
+            StringAssert.DoesNotContain(
+                "FirstAidRevivesUsedThisMatch <",
+                interactorSource);
+            StringAssert.Contains("FirstAidRevivesUsedThisMatch++", interactorSource);
+            StringAssert.Contains(
+                "NetworkPlayerLifeStateRules.CanInitiateAction(lifeState.Status)",
+                interactorSource);
+
+            Assert.That(
+                lifeSource.IndexOf("Reviver = reviver", System.StringComparison.Ordinal),
+                Is.GreaterThan(
+                    lifeSource.IndexOf("CanStartFirstAidReviveAuthoritative", System.StringComparison.Ordinal)));
+        }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Fusion;
 using EchoProtocol.Networking.Authority;
 using UnityEngine;
@@ -151,7 +152,13 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            var runner = _bootstrap?.Runner;
+            if (_bootstrap == null || _bootstrap.State != NetworkSessionState.InLobby)
+            {
+                ReportError("Start rejected: session is not in the lobby.");
+                return false;
+            }
+
+            var runner = _bootstrap.Runner;
             if (runner == null || !runner.IsRunning || !runner.IsServer || !runner.IsSceneAuthority)
             {
                 ReportError("Only the authoritative host can start the match.");
@@ -171,51 +178,60 @@ namespace EchoProtocol.Networking
                 RuntimeLogCategory.Lobby,
                 $"[LobbyManager] Host validated {state.CurrentPlayers} ready players. Confirming backend authority.");
 
-            MatchAuthorityRuntime.EnsureExists(_bootstrap).StartMatch((accepted, error) =>
+            _ = StartMatchAsync(runner);
+            return true;
+        }
+
+        private async Task StartMatchAsync(NetworkRunner runner)
+        {
+            try
             {
+                var (accepted, error) = await MatchAuthorityRuntime.EnsureExists(_bootstrap).StartMatchAsync();
                 if (!accepted)
                 {
-                    _matchStartInProgress = false;
                     ReportError($"Backend rejected match start: {error}");
                     return;
                 }
 
-                if (runner == null || !runner.IsRunning || !runner.IsServer || !runner.IsSceneAuthority)
+                if (runner == null || runner != _bootstrap?.Runner || !runner.IsRunning
+                    || !runner.IsServer || !runner.IsSceneAuthority
+                    || _bootstrap.State != NetworkSessionState.InLobby)
                 {
-                    _matchStartInProgress = false;
                     ReportError("Match start aborted: authoritative runner is no longer available.");
+                    if (_bootstrap != null) await _bootstrap.ShutdownRunnerAsync();
                     return;
                 }
 
                 if (!_bootstrap.CloseRoomForMatchStart())
                 {
-                    _matchStartInProgress = false;
                     ReportError("Could not close the Fusion room before match start.");
+                    await _bootstrap.ShutdownRunnerAsync();
                     return;
                 }
 
                 RuntimeLog.Log(
                 RuntimeLogCategory.Lobby,
                 $"[LobbyManager] Backend confirmed match. Loading '{GameSceneName}'.");
-                _ = runner.LoadScene(
+                await runner.LoadScene(
                     GameSceneName,
                     UnityEngine.SceneManagement.LoadSceneMode.Single);
-            });
-
-            return true;
+            }
+            catch (Exception exception)
+            {
+                ReportError($"Match scene load failed: {exception.Message}");
+                Debug.LogException(exception);
+                if (_bootstrap != null) await _bootstrap.ShutdownRunnerAsync();
+            }
+            finally
+            {
+                _matchStartInProgress = false;
+            }
         }
 
         /// <summary>Rebuilds the display snapshot exclusively from Fusion ActivePlayers.</summary>
         public void RefreshFromRunner()
         {
             CurrentState = BuildStateFromRunner();
-            if (_matchStartInProgress
-                && _bootstrap != null
-                && _bootstrap.HasRunningRunner
-                && UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != GameSceneName)
-            {
-                _matchStartInProgress = false;
-            }
             OnRoomUpdated?.Invoke(CurrentState);
         }
 

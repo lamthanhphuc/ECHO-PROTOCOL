@@ -18,10 +18,10 @@ namespace EchoProtocol.Networking
         [SerializeField] private InputActionAsset _inputActions;
         [SerializeField] private Transform _rayOrigin;
         [SerializeField, Min(0.1f)] private float _localDetectionDistance = 3f;
-        public const int MaximumFirstAidRevivesPerMatch = 2;
         [Networked] public int FirstAidRevivesUsedThisMatch { get; private set; }
         private NetworkPlayerLifeState _currentReviveTarget;
         public NetworkPlayerLifeState CurrentReviveTarget => _currentReviveTarget;
+        public bool IsTeamToolPickupBlocked { get; private set; }
 
         [SerializeField] private LayerMask _interactionLayers = ~0;
         [SerializeField] private NetworkObject _fieldScannerPickupPrefab;
@@ -69,6 +69,7 @@ namespace EchoProtocol.Networking
             {
                 if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
                 CurrentCandidate = null;
+                IsTeamToolPickupBlocked = false;
                 _currentReviveTarget = null;
             }
         }
@@ -120,6 +121,7 @@ namespace EchoProtocol.Networking
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             CurrentCandidate = null;
+            IsTeamToolPickupBlocked = false;
             _interactAction?.Disable();
             _dropCoreAction?.Disable();
             _teamToolAction?.Disable();
@@ -149,6 +151,7 @@ namespace EchoProtocol.Networking
             {
                 if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
                 CurrentCandidate = null;
+                IsTeamToolPickupBlocked = false;
                 _currentReviveTarget = null;
                 return;
             }
@@ -157,6 +160,7 @@ namespace EchoProtocol.Networking
             {
                 if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
                 CurrentCandidate = null;
+                IsTeamToolPickupBlocked = false;
                 return;
             }
             bool isOnline = Runner != null && Runner.IsRunning && Object != null && Object.IsValid;
@@ -164,6 +168,7 @@ namespace EchoProtocol.Networking
             if (isOnline && (!Object.HasInputAuthority || (playerState != null && playerState.Object != null && playerState.Object.IsValid && !playerState.IsGameplayPlayer)))
             {
                 CurrentCandidate = null;
+                IsTeamToolPickupBlocked = false;
                 return;
             }
 
@@ -179,10 +184,17 @@ namespace EchoProtocol.Networking
             if (lifeState != null && !lifeState.CanInitiateAction)
             {
                 CurrentCandidate = null;
+                IsTeamToolPickupBlocked = false;
                 return;
             }
 
+            IsTeamToolPickupBlocked = false;
             CurrentCandidate = TryDetectCandidate(out var candidate) ? candidate : null;
+            IsTeamToolPickupBlocked =
+                CurrentCandidate != null
+                && IsTeamToolPickup(CurrentCandidate)
+                && playerState != null
+                && playerState.ToolId > 0;
             if (_currentReviveTarget == null || !_currentReviveTarget.IsReviveInProgress)
             {
                 _currentReviveTarget = TryDetectReviveCandidate(out var reviveCandidate)
@@ -200,6 +212,11 @@ namespace EchoProtocol.Networking
 
             if (CurrentCandidate != null)
             {
+                if (IsTeamToolPickupBlocked)
+                {
+                    return;
+                }
+
                 if (CurrentCandidate is NetworkSlidingDoor brokenDoor && brokenDoor.CanAcceptJammer())
                 {
                     if (playerState != null && playerState.Object != null && playerState.Object.IsValid && playerState.Object.Id.IsValid && playerState.Runner != null && playerState.Runner.IsRunning && playerState.ToolId == 4)
@@ -227,6 +244,12 @@ namespace EchoProtocol.Networking
                 if (ps != null && ps.ToolId == 3)
                     RequestRevive(targetLifeState);
             }
+        }
+
+        private static bool IsTeamToolPickup(NetworkInteractable candidate)
+        {
+            return candidate is NetworkTeamToolPickup
+                || candidate is NetworkToolPickup;
         }
 
         public bool RequestRevive(NetworkPlayerLifeState target)
@@ -334,11 +357,18 @@ namespace EchoProtocol.Networking
 
         public bool CanStartFirstAidReviveAuthoritative(LobbyPlayerState state)
         {
-            return Object != null
-                && Object.IsValid
-                && Object.HasStateAuthority
-                && state != null
-                && state.ToolId == LobbyPlayerState.FirstAidKitToolId;
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || state == null
+                || state.ToolId != LobbyPlayerState.FirstAidKitToolId)
+            {
+                return false;
+            }
+
+            var lifeState = GetComponent<NetworkPlayerLifeState>();
+            return lifeState != null
+                && NetworkPlayerLifeStateRules.CanInitiateAction(lifeState.Status);
         }
 
         public bool ConsumeFirstAidReviveAuthoritative(LobbyPlayerState state)
@@ -953,134 +983,9 @@ namespace EchoProtocol.Networking
                 return InteractionValidationResult.InvalidTarget;
             }
 
-            var flatForward =
-                Vector3.ProjectOnPlane(
-                    transform.forward,
-                    Vector3.up).normalized;
-
-            if (flatForward == Vector3.zero)
+            if (!TryResolveNoiseMakerPlacement(out var beaconPos))
             {
-                flatForward =
-                    transform.forward.normalized;
-            }
-
-            var castOrigin =
-                _rayOrigin != null
-                    ? _rayOrigin.position
-                    : transform.position
-                      + Vector3.up * 1.2f;
-
-            var beaconPos =
-                transform.position
-                + flatForward
-                * _noiseMakerThrowForwardDistance;
-
-            var blockerMask =
-                ~(1 << LayerMask.NameToLayer(
-                    "Ignore Raycast"));
-
-            var obstacleHits =
-                Physics.SphereCastAll(
-                    castOrigin,
-                    _noiseMakerObstacleProbeRadius,
-                    flatForward,
-                    _noiseMakerThrowForwardDistance,
-                    blockerMask,
-                    QueryTriggerInteraction.Ignore);
-
-            Array.Sort(
-                obstacleHits,
-                (left, right) =>
-                    left.distance.CompareTo(
-                        right.distance));
-
-            Collider blockingCollider = null;
-
-            foreach (var hit in obstacleHits)
-            {
-                if (hit.collider == null
-                    || IsSelfCollider(hit.collider))
-                {
-                    continue;
-                }
-
-                blockingCollider = hit.collider;
-
-                var safeDistance =
-                    Mathf.Max(
-                        0.5f,
-                        hit.distance
-                        - _noiseMakerObstacleProbeRadius
-                        - 0.25f);
-
-                beaconPos =
-                    castOrigin
-                    + flatForward * safeDistance;
-
-                break;
-            }
-
-            var floorProbeOrigin =
-                new Vector3(
-                    beaconPos.x,
-                    transform.position.y + 2f,
-                    beaconPos.z);
-
-            var floorHits =
-                Physics.RaycastAll(
-                    floorProbeOrigin,
-                    Vector3.down,
-                    6f,
-                    blockerMask,
-                    QueryTriggerInteraction.Ignore);
-
-            Array.Sort(
-                floorHits,
-                (left, right) =>
-                    left.distance.CompareTo(
-                        right.distance));
-
-            var foundFloor = false;
-
-            foreach (var floorHit in floorHits)
-            {
-                if (floorHit.collider == null
-                    || IsSelfCollider(floorHit.collider))
-                {
-                    continue;
-                }
-
-                if (blockingCollider != null
-                    && (floorHit.collider == blockingCollider
-                        || floorHit.collider.transform.IsChildOf(
-                            blockingCollider.transform)
-                        || blockingCollider.transform.IsChildOf(
-                            floorHit.collider.transform)))
-                {
-                    continue;
-                }
-
-                // Chỉ nhận mặt đủ nằm ngang.
-                if (Vector3.Dot(
-                        floorHit.normal,
-                        Vector3.up) < 0.7f)
-                {
-                    continue;
-                }
-
-                beaconPos =
-                    floorHit.point
-                    + Vector3.up * 0.05f;
-
-                foundFloor = true;
-                break;
-            }
-
-            if (!foundFloor)
-            {
-                GetAuthoritativeDropPose(
-                    out beaconPos,
-                    out _);
+                return InteractionValidationResult.InvalidTarget;
             }
 
             var networkPrefab = _noiseMakerBeaconPrefab != null
@@ -1118,6 +1023,173 @@ namespace EchoProtocol.Networking
             TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 5f);
             ConsumeGameplayTeamTool(state);
             return InteractionValidationResult.Accepted;
+        }
+
+        public bool TryGetNoiseMakerPlacementPreview(out Vector3 position)
+        {
+            position = default;
+
+            if (Object != null
+                && Object.IsValid
+                && !Object.HasInputAuthority)
+            {
+                return false;
+            }
+
+            if (PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject))
+            {
+                return false;
+            }
+
+            var state = GetComponent<LobbyPlayerState>();
+            var inventory = GetComponent<PlayerInventory>();
+            int toolId =
+                state != null && state.ToolId > 0
+                    ? state.ToolId
+                    : inventory != null
+                        ? PlayerInventory.ResolveToolId(inventory.TeamToolSlot)
+                        : 0;
+
+            if (toolId != LobbyPlayerState.NoiseMakerToolId)
+            {
+                return false;
+            }
+
+            if (state != null && state.CarriedCoreId.IsValid)
+            {
+                return false;
+            }
+
+            return TryResolveNoiseMakerPlacement(out position);
+        }
+
+        private bool TryResolveNoiseMakerPlacement(out Vector3 beaconPos)
+        {
+            var flatForward =
+                Vector3.ProjectOnPlane(
+                    transform.forward,
+                    Vector3.up).normalized;
+
+            if (flatForward == Vector3.zero)
+            {
+                flatForward =
+                    transform.forward.normalized;
+            }
+
+            var castOrigin =
+                _rayOrigin != null
+                    ? _rayOrigin.position
+                    : transform.position
+                      + Vector3.up * 1.2f;
+
+            beaconPos =
+                transform.position
+                + flatForward
+                * _noiseMakerThrowForwardDistance;
+
+            var blockerMask =
+                ~(1 << LayerMask.NameToLayer(
+                    "Ignore Raycast"));
+
+            var obstacleHits =
+                Physics.SphereCastAll(
+                    castOrigin,
+                    _noiseMakerObstacleProbeRadius,
+                    flatForward,
+                    _noiseMakerThrowForwardDistance,
+                    blockerMask,
+                    QueryTriggerInteraction.Ignore);
+
+            Array.Sort(
+                obstacleHits,
+                (left, right) =>
+                    left.distance.CompareTo(
+                        right.distance));
+
+            Collider blockingCollider = null;
+
+            foreach (var hit in obstacleHits)
+            {
+                if (hit.collider == null
+                    || IsSelfCollider(hit.collider))
+                {
+                    continue;
+                }
+
+                blockingCollider = hit.collider;
+
+                float safeDistance =
+                    Mathf.Max(
+                        0.5f,
+                        hit.distance
+                        - _noiseMakerObstacleProbeRadius
+                        - 0.25f);
+
+                beaconPos =
+                    castOrigin
+                    + flatForward * safeDistance;
+
+                break;
+            }
+
+            var floorProbeOrigin =
+                new Vector3(
+                    beaconPos.x,
+                    transform.position.y + 2f,
+                    beaconPos.z);
+
+            var floorHits =
+                Physics.RaycastAll(
+                    floorProbeOrigin,
+                    Vector3.down,
+                    6f,
+                    blockerMask,
+                    QueryTriggerInteraction.Ignore);
+
+            Array.Sort(
+                floorHits,
+                (left, right) =>
+                    left.distance.CompareTo(
+                        right.distance));
+
+            foreach (var floorHit in floorHits)
+            {
+                if (floorHit.collider == null
+                    || IsSelfCollider(floorHit.collider))
+                {
+                    continue;
+                }
+
+                if (blockingCollider != null
+                    && (floorHit.collider == blockingCollider
+                        || floorHit.collider.transform.IsChildOf(
+                            blockingCollider.transform)
+                        || blockingCollider.transform.IsChildOf(
+                            floorHit.collider.transform)))
+                {
+                    continue;
+                }
+
+                // Chỉ nhận mặt đủ nằm ngang.
+                if (Vector3.Dot(
+                        floorHit.normal,
+                        Vector3.up) < 0.7f)
+                {
+                    continue;
+                }
+
+                beaconPos =
+                    floorHit.point
+                    + Vector3.up * 0.05f;
+
+                return true;
+            }
+
+            GetAuthoritativeDropPose(
+                out beaconPos,
+                out _);
+
+            return true;
         }
 
         private InteractionValidationResult TryDeployDoorJammerAuthoritative(

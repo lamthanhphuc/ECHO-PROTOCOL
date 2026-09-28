@@ -107,7 +107,14 @@ public class PlayerHidingController : MonoBehaviour
             networkMovement = GetComponent<EchoProtocol.Networking.NetworkPlayerMovement>();
         }
 
-        if (networkMovement != null)
+        bool networked =
+            networkMovement != null
+            && networkMovement.Object != null
+            && networkMovement.Object.IsValid
+            && networkMovement.Runner != null
+            && networkMovement.Runner.IsRunning;
+
+        if (networked)
         {
             Quaternion targetRot = Quaternion.Euler(0f, spot.HidePoint.eulerAngles.y, 0f);
             networkMovement.RpcRequestSetHiding(
@@ -116,17 +123,32 @@ public class PlayerHidingController : MonoBehaviour
                 spot.HidePoint.position,
                 targetRot);
         }
-
-        MoveToHidingPoint(spot.HidePoint);
+        else
+        {
+            MoveToHidingPoint(spot.HidePoint);
+        }
 
         if (_playerCameraController != null)
         {
+            _playerCameraController.SetRotation(spot.HidePoint.eulerAngles.y, 0f);
             float limit = spot.YawLimitDegrees > 0f ? spot.YawLimitDegrees : hidingYawLimitDegrees;
             _playerCameraController.SetYawLimit(spot.HidePoint.eulerAngles.y, limit);
             _playerCameraController.LockPitch(0f);
         }
 
         return true;
+    }
+
+    public void CancelRejectedEnter(
+        ulong hideSpotId)
+    {
+        if (_currentSpot == null ||
+            _currentSpot.StableId != hideSpotId)
+        {
+            return;
+        }
+
+        ApplyAuthoritativeExitLocal();
     }
 
     public void ExitHiding()
@@ -152,7 +174,14 @@ public class PlayerHidingController : MonoBehaviour
             networkMovement = GetComponent<EchoProtocol.Networking.NetworkPlayerMovement>();
         }
 
-        if (networkMovement != null && exitPoint != null)
+        bool networked =
+            networkMovement != null
+            && networkMovement.Object != null
+            && networkMovement.Object.IsValid
+            && networkMovement.Runner != null
+            && networkMovement.Runner.IsRunning;
+
+        if (networked && exitPoint != null)
         {
             Quaternion exitRot = Quaternion.Euler(0f, exitPoint.eulerAngles.y, 0f);
             networkMovement.RpcRequestSetHiding(
@@ -162,10 +191,36 @@ public class PlayerHidingController : MonoBehaviour
                 exitRot);
         }
 
-        if (exitPoint != null)
+        else if (exitPoint != null)
         {
             MoveToHidingPoint(exitPoint);
         }
+
+        if (movement != null)
+        {
+            movement.enabled = true;
+        }
+
+        if (_playerCameraController != null)
+        {
+            _playerCameraController.SetTarget(transform);
+            _playerCameraController.enabled = true;
+            _playerCameraController.ClearYawLimit();
+            _playerCameraController.UnlockPitch();
+        }
+    }
+
+    public void ApplyAuthoritativeExitLocal()
+    {
+        if (_currentSpot == null)
+        {
+            return;
+        }
+
+        HidingSpot spot = _currentSpot;
+        _currentSpot = null;
+        _enteredFrame = -1;
+        spot.Release(this);
 
         if (movement != null)
         {

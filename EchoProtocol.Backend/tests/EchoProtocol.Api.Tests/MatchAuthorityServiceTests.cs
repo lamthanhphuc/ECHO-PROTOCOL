@@ -108,6 +108,41 @@ public sealed class MatchAuthorityServiceTests
         Assert.Equal("JOIN_PROOF_INVALID", binding.ErrorCode);
     }
 
+    [Fact]
+    public async Task InMatch_OnlyDisconnectedRosterMemberGetsReconnectProof()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+        var playerId = Guid.NewGuid();
+        var created = await service.CreateAsync(hostId, new CreateMatchAuthorityRequest
+        {
+            FusionSessionName = "reconnect-room", MaxPlayers = 4
+        }, CancellationToken.None);
+        var matchId = created.Data!.MatchId;
+        await BindAsync(service, hostId, hostId, matchId, "reconnect-room", 1);
+        await BindAsync(service, hostId, playerId, matchId, "reconnect-room", 2);
+        Assert.True((await service.StartAsync(hostId, matchId, CancellationToken.None)).IsSuccess);
+
+        var request = new IssueJoinProofRequest
+        {
+            FusionSessionName = "reconnect-room", FusionActorNumber = 2
+        };
+        Assert.False((await service.IssueJoinProofAsync(playerId, matchId, request, CancellationToken.None)).IsSuccess);
+        Assert.False((await service.IssueJoinProofAsync(Guid.NewGuid(), matchId, request, CancellationToken.None)).IsSuccess);
+
+        var boundPlayer = await db.MatchPlayerBindings.SingleAsync(item => item.UserId == playerId);
+        boundPlayer.DisconnectedAtUtc = Now.UtcDateTime;
+        await db.SaveChangesAsync();
+        var reconnectProof = await service.IssueJoinProofAsync(playerId, matchId, request, CancellationToken.None);
+        Assert.True(reconnectProof.IsSuccess);
+        Assert.False((await service.IssueJoinProofAsync(Guid.NewGuid(), matchId, request, CancellationToken.None)).IsSuccess);
+        Assert.True((await service.BindPlayerAsync(hostId, matchId,
+            new BindMatchPlayerRequest { FusionActorNumber = 2, JoinProof = reconnectProof.Data!.Proof },
+            CancellationToken.None)).IsSuccess);
+        Assert.Null((await db.MatchPlayerBindings.SingleAsync(item => item.UserId == playerId)).DisconnectedAtUtc);
+    }
+
     private static async Task BindAsync(
         MatchAuthorityService service,
         Guid hostId,

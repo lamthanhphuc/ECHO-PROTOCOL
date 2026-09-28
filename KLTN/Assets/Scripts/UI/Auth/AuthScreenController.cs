@@ -20,6 +20,7 @@ namespace EchoProtocol.UI.Auth
     [SerializeField] private InputField loginPasswordInput;
     [SerializeField] private Button loginButton;
     [SerializeField] private Button goToRegisterButton;
+    [SerializeField] private Button quitButton;
 
     [Header("Register")]
     [SerializeField] private InputField registerEmailInput;
@@ -60,6 +61,7 @@ namespace EchoProtocol.UI.Auth
       ResetInputFields();
       if (loginButton != null) loginButton.onClick.AddListener(OnLoginClicked);
       if (goToRegisterButton != null) goToRegisterButton.onClick.AddListener(ShowRegisterPanel);
+      if (quitButton != null) quitButton.onClick.AddListener(QuitGame);
       if (registerButton != null) registerButton.onClick.AddListener(OnRegisterClicked);
       if (backToLoginButton != null) backToLoginButton.onClick.AddListener(ShowLoginPanel);
     }
@@ -68,6 +70,7 @@ namespace EchoProtocol.UI.Auth
     {
       if (loginButton != null) loginButton.onClick.RemoveListener(OnLoginClicked);
       if (goToRegisterButton != null) goToRegisterButton.onClick.RemoveListener(ShowRegisterPanel);
+      if (quitButton != null) quitButton.onClick.RemoveListener(QuitGame);
       if (registerButton != null) registerButton.onClick.RemoveListener(OnRegisterClicked);
       if (backToLoginButton != null) backToLoginButton.onClick.RemoveListener(ShowLoginPanel);
     }
@@ -318,6 +321,15 @@ namespace EchoProtocol.UI.Auth
       SetStatus(string.Empty);
     }
 
+    private void QuitGame()
+    {
+#if UNITY_EDITOR
+      UnityEditor.EditorApplication.isPlaying = false;
+#else
+      Application.Quit();
+#endif
+    }
+
     private void ClearPasswordFields()
     {
       if (loginPasswordInput != null) loginPasswordInput.text = string.Empty;
@@ -404,6 +416,7 @@ namespace EchoProtocol.UI.Auth
       if (loginButton != null) loginButton.interactable = !busy;
       if (registerButton != null) registerButton.interactable = !busy;
       if (goToRegisterButton != null) goToRegisterButton.interactable = !busy;
+      if (quitButton != null) quitButton.interactable = !busy;
       if (backToLoginButton != null) backToLoginButton.interactable = !busy;
     }
 

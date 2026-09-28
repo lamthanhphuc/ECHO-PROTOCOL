@@ -36,6 +36,14 @@ namespace EchoProtocol.UI.HUD
         private float _lastRelayRemaining = -1f;
         private int _lastRelayWarningThreshold = -1;
         private float _localRelayResetNoticeUntil = -1f;
+        private CanvasGroup _visibilityGroup;
+        private bool _hideZone1Objective;
+
+        public void HideZone1Objective()
+        {
+            _hideZone1Objective = true;
+            RefreshVisibility();
+        }
 
         public void BindMatchFlow(
             MatchFlowController flow,
@@ -75,6 +83,11 @@ namespace EchoProtocol.UI.HUD
             if (objectiveTitleTmp == null && objectiveTitleText != null) objectiveTitleTmp = objectiveTitleText.GetComponent<TMP_Text>();
             if (objectiveDetailTmp == null && objectiveDetailText != null) objectiveDetailTmp = objectiveDetailText.GetComponent<TMP_Text>();
             if (containerRect == null) containerRect = GetComponent<RectTransform>();
+            if (_visibilityGroup == null)
+            {
+                _visibilityGroup = GetComponent<CanvasGroup>();
+                if (_visibilityGroup == null) _visibilityGroup = gameObject.AddComponent<CanvasGroup>();
+            }
         }
 
         private void Update()
@@ -82,10 +95,15 @@ namespace EchoProtocol.UI.HUD
             if (matchFlow == null)
             {
                 ResolveReferences();
-                if (matchFlow == null) return;
+                if (matchFlow == null)
+                {
+                    RefreshVisibility();
+                    return;
+                }
             }
 
             MatchPhase currentPhase = matchFlow.Phase;
+            RefreshVisibility();
             int z2Stage = -1;
             if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
             {
@@ -103,6 +121,19 @@ namespace EchoProtocol.UI.HUD
             UpdateRelayWarning();
             ShowRelayResetNotice();
             UpdatePulseAnimation();
+        }
+
+        private void RefreshVisibility()
+        {
+            if (_visibilityGroup == null) return;
+
+            var director = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance;
+            bool isZone1 = director != null
+                ? director.CurrentStage == EchoProtocol.MatchFlow.Zone2MissionStage.Zone1CoreObjective
+                : matchFlow == null || matchFlow.Phase == MatchPhase.ExploreCore;
+            bool visible = !_hideZone1Objective || !isZone1;
+            _visibilityGroup.alpha = visible ? 1f : 0f;
+            _visibilityGroup.blocksRaycasts = visible;
         }
 
         private void ResolveReferences()

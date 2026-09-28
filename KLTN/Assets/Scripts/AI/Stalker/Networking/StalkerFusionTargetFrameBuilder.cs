@@ -56,13 +56,23 @@ namespace EchoProtocol.AI.Stalker.Networking
                     return false;
                 }
 
+                if (identity.TryGetComponent<LobbyPlayerState>(out var disconnectedState)
+                    && disconnectedState.Disconnected)
+                {
+                    var disconnected = new StalkerTargetEligibilitySnapshot(false, false, false, false, false);
+                    InsertStatusSortedUnique(targetStatuses, new StalkerTargetStatus(
+                        playerId, StalkerTargetEligibility.Evaluate(disconnected)));
+                    continue;
+                }
+
                 var isDowned = (identity.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && lifeState.IsDowned)
                     || (identity.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned);
                 var isEliminated = lifeState != null && lifeState.IsEliminated;
                 var isHidden = (identity.TryGetComponent<PlayerHidingController>(out var hiding) && hiding.IsHidden)
                     || (identity.TryGetComponent<NetworkPlayerMovement>(out var netMove) && netMove.IsHidden);
-                var eligibilitySnapshot = StalkerFusionTargetEligibilityAdapter.CreateActive(
-                    playerId,
+                var eligibilitySnapshot = new StalkerTargetEligibilitySnapshot(
+                    true,
+                    true,
                     isDowned,
                     isEliminated,
                     isHidden || (lifeState != null && lifeState.IsCaught));
@@ -99,7 +109,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return;
             }
 
-            var snapshot = StalkerFusionTargetEligibilityAdapter.CreateDisconnected(playerId);
+            var snapshot = new StalkerTargetEligibilitySnapshot(false, false, false, false, false);
             InsertStatusSortedUnique(targetStatuses, new StalkerTargetStatus(
                 playerId,
                 StalkerTargetEligibility.Evaluate(snapshot)));

@@ -133,6 +133,7 @@ namespace EchoProtocol.Networking
         public override void Render()
         {
             ApplyReplicatedPose();
+            ApplyPresentationVisibility();
         }
 
         private void LateUpdate()
@@ -146,6 +147,8 @@ namespace EchoProtocol.Networking
             {
                 ApplyReplicatedPose();
             }
+
+            ApplyPresentationVisibility();
         }
 
         protected override InteractionValidationResult ValidateCurrentState(in InteractionContext context)
@@ -277,14 +280,52 @@ namespace EchoProtocol.Networking
 
         private void ApplyReplicatedState()
         {
-            // Once placed, the SectorBox socket visual represents the inserted core.
-            if (_availableVisual != null) _availableVisual.enabled = State != NetworkItemState.Placed;
+            ApplyPresentationVisibility();
             if (_pickupCollider != null)
             {
                 _pickupCollider.enabled = State == NetworkItemState.Available || State == NetworkItemState.Dropped;
             }
             ApplyReplicatedPose();
             StateChanged?.Invoke(this, State, Holder);
+        }
+
+        private void ApplyPresentationVisibility()
+        {
+            if (_availableVisual == null)
+            {
+                return;
+            }
+
+            bool visible = State != NetworkItemState.Placed;
+            if (visible && State == NetworkItemState.Carried && IsHolderHidden())
+            {
+                visible = false;
+            }
+
+            if (_availableVisual.enabled != visible)
+            {
+                _availableVisual.enabled = visible;
+            }
+        }
+
+        private bool IsHolderHidden()
+        {
+            if (!Holder.IsRealPlayer
+                || Runner == null
+                || !Runner.TryGetPlayerObject(Holder, out var playerObject)
+                || playerObject == null)
+            {
+                return false;
+            }
+
+            if (playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement)
+                && movement.IsHidden)
+            {
+                return true;
+            }
+
+            var hiding = playerObject.GetComponentInChildren<global::PlayerHidingController>(true);
+            return hiding != null && hiding.IsHidden;
         }
 
         private void ApplyReplicatedPose()

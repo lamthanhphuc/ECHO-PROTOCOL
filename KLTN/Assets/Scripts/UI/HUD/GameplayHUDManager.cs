@@ -16,6 +16,8 @@ namespace EchoProtocol.UI.HUD
         [SerializeField] private HUDTeammateStatus teammateStatus;
         [SerializeField] private HUD3DWorldMarker worldMarker;
         [SerializeField] private HUDFieldScanner fieldScannerHUD;
+        [SerializeField] private HUDScannerTutorial scannerTutorial;
+        [SerializeField] private HUDNoiseMakerPlacement noiseMakerPlacement;
 
         [Header("Runtime Auto-Find")]
         [SerializeField] private bool autoFindLocalPlayerOnStart = true;
@@ -29,6 +31,8 @@ namespace EchoProtocol.UI.HUD
         public HUDTeammateStatus TeammateStatus => teammateStatus;
         public HUD3DWorldMarker WorldMarker => worldMarker;
         public HUDFieldScanner FieldScannerHUD => fieldScannerHUD;
+        public HUDScannerTutorial ScannerTutorial => scannerTutorial;
+        public HUDNoiseMakerPlacement NoiseMakerPlacement => noiseMakerPlacement;
 
         private void Awake()
         {
@@ -65,6 +69,8 @@ namespace EchoProtocol.UI.HUD
             if (teammateStatus == null) teammateStatus = GetComponentInChildren<HUDTeammateStatus>(true);
             if (worldMarker == null) worldMarker = GetComponentInChildren<HUD3DWorldMarker>(true);
             if (fieldScannerHUD == null) fieldScannerHUD = GetComponentInChildren<HUDFieldScanner>(true);
+            if (scannerTutorial == null) scannerTutorial = GetComponentInChildren<HUDScannerTutorial>(true);
+            if (noiseMakerPlacement == null) noiseMakerPlacement = GetComponentInChildren<HUDNoiseMakerPlacement>(true);
         }
 
         public void FindAndBindLocalPlayer()
@@ -117,6 +123,16 @@ namespace EchoProtocol.UI.HUD
             {
                 fieldScannerHUD.UnbindScanner();
             }
+
+            if (scannerTutorial != null)
+            {
+                scannerTutorial.Unbind();
+            }
+
+            if (noiseMakerPlacement != null)
+            {
+                noiseMakerPlacement.Unbind();
+            }
         }
 
         private static bool IsValidLocalNetworkPlayer(LobbyPlayerState state)
@@ -154,6 +170,7 @@ namespace EchoProtocol.UI.HUD
             var carrier = playerRoot.GetComponentInChildren<PlayerEnergyCoreCarrier>(true);
             var interaction = playerRoot.GetComponentInChildren<PlayerInteraction>(true);
             var inventory = playerRoot.GetComponentInChildren<PlayerInventory>(true);
+            var networkInteractor = playerRoot.GetComponentInChildren<NetworkPlayerInteractor>(true);
             var fieldScanner = playerRoot.GetComponent<NetworkFieldScanner>();
 
             if (playerVitals != null)
@@ -174,6 +191,16 @@ namespace EchoProtocol.UI.HUD
             if (fieldScannerHUD != null)
             {
                 fieldScannerHUD.BindScanner(fieldScanner);
+            }
+
+            if (scannerTutorial != null)
+            {
+                scannerTutorial.BindPlayer(inventory, playerRoot);
+            }
+
+            if (noiseMakerPlacement != null)
+            {
+                noiseMakerPlacement.BindPlayer(networkInteractor);
             }
 
             if (teammateStatus != null)

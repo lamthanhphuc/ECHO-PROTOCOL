@@ -105,6 +105,15 @@ namespace EchoProtocol.Networking
         [Networked]
         public NetworkBool IsGameplayPlayer { get; private set; }
 
+        [Networked]
+        public NetworkBool Disconnected { get; private set; }
+
+        public void SetDisconnectedAuthoritative(bool disconnected)
+        {
+            if (Object != null && Object.IsValid && Object.HasStateAuthority)
+                Disconnected = disconnected;
+        }
+
         public const int FieldScannerToolId = 1;
         public const int NoiseMakerToolId = 2;
         public const int FirstAidKitToolId = 3;
@@ -185,7 +194,8 @@ namespace EchoProtocol.Networking
             AnyStateChanged?.Invoke();
             if (Object.HasInputAuthority)
             {
-                MatchAuthorityRuntime.EnsureExists(NetworkBootstrap.Instance).TrySubmitLocalIdentity(this);
+                MatchAuthorityRuntime.EnsureExists(NetworkBootstrap.Instance)
+                    .TrySubmitLocalIdentity(this, NetworkBootstrap.Instance?.ReconnectIdentityPending == true);
             }
         }
 
@@ -301,6 +311,11 @@ namespace EchoProtocol.Networking
 
             if (!HasVerifiedBackendIdentity)
             {
+                if (!Debug.isDebugBuild)
+                {
+                    Debug.LogWarning($"[LobbyPlayerState] Ready rejected: player {requester} has no verified backend identity.");
+                    return;
+                }
                 var fallbackId = Guid.NewGuid().ToString("D");
                 BackendUserId = fallbackId;
                 Debug.LogWarning(

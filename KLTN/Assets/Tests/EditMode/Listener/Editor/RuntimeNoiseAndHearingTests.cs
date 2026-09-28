@@ -605,6 +605,8 @@ namespace EchoProtocol.AI.Listener.Tests
             StringAssert.Contains("relay-repair:", matchState);
             StringAssert.Contains("RuntimeNoiseType.MACHINE_REPAIR", matchState);
             StringAssert.Contains("RuntimeNoiseType.INTERACTION", matchState);
+            StringAssert.Contains("pulseTimer.ExpiredOrNotRunning(Runner)", matchState);
+            StringAssert.DoesNotContain("!pulseTimer.Expired(Runner)", matchState);
         }
 
         [Test]

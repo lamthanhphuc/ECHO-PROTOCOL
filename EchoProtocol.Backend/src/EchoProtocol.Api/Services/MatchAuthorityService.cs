@@ -78,6 +78,15 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             return Failure<JoinProofResponse>(stateFailure.Value.Message, stateFailure.Value.Code);
         }
 
+        if (match!.Status == MatchAuthorityStatus.InMatch)
+        {
+            var disconnectedMember = await _db.MatchPlayerBindings.AsNoTracking()
+                .AnyAsync(item => item.MatchId == matchId && item.UserId == userId
+                    && item.DisconnectedAtUtc != null, cancellationToken);
+            if (!disconnectedMember)
+                return Failure<JoinProofResponse>("Only disconnected roster members may reconnect", ErrorCodes.MatchAlreadyEnded);
+        }
+
         var expiresAt = UtcNow().AddSeconds(_settings.JoinProofLifetimeSeconds);
         var payload = new MatchJoinProofPayload(
             Guid.NewGuid(), matchId, userId, request.FusionActorNumber,
@@ -305,7 +314,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             return ("Fusion session does not match", ErrorCodes.JoinProofInvalid);
         }
 
-        if (match.Status != MatchAuthorityStatus.Lobby)
+        if (match.Status != MatchAuthorityStatus.Lobby
+            && match.Status != MatchAuthorityStatus.InMatch)
         {
             return ("Match no longer accepts join proofs", ErrorCodes.MatchAlreadyEnded);
         }

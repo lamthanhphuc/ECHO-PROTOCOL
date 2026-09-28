@@ -210,6 +210,11 @@ namespace EchoProtocol.Networking.Authority
             }
             else
             {
+                if (!Debug.isDebugBuild)
+                {
+                    Debug.LogError("[MatchAuthority] Session has no backend match binding.");
+                    return false;
+                }
                 matchId = Guid.NewGuid();
                 Debug.LogWarning($"[MatchAuthority] Session has no backend match binding. Generated dev fallback MatchId={matchId:D}.");
             }
@@ -257,7 +262,7 @@ namespace EchoProtocol.Networking.Authority
             return success;
         }
 
-        public async void TrySubmitLocalIdentity(LobbyPlayerState knownState = null)
+        public async void TrySubmitLocalIdentity(LobbyPlayerState knownState = null, bool force = false)
         {
             if (!HasBinding || _identityRequestInProgress || _bootstrap?.Runner == null
                 || string.IsNullOrWhiteSpace(_bootstrap.CurrentSessionName))
@@ -270,7 +275,8 @@ namespace EchoProtocol.Networking.Authority
             {
                 playerObject.TryGetComponent(out state);
             }
-            if (state == null || !state.Object.HasInputAuthority || state.HasVerifiedBackendIdentity) return;
+            if (state == null || !state.Object.HasInputAuthority
+                || (state.HasVerifiedBackendIdentity && !force)) return;
 
             var actorNumber = runner.GetPlayerActorId(runner.LocalPlayer) ?? runner.LocalPlayer.PlayerId;
             _identityRequestInProgress = true;
@@ -278,11 +284,12 @@ namespace EchoProtocol.Networking.Authority
             _identityRequestInProgress = false;
             if (!IsSuccessful(result))
             {
-                Debug.LogWarning($"[MatchAuthority] Join proof failed: {Describe(result)}. Running in dev/fallback mode.");
+                Debug.LogWarning($"[MatchAuthority] Join proof failed: {Describe(result)}.");
                 return;
             }
 
             state.SubmitJoinProof(result.Data.data.proof, actorNumber);
+            _bootstrap?.MarkReconnectProofSubmitted();
         }
 
         public async void BindPlayerFromProof(
@@ -297,8 +304,11 @@ namespace EchoProtocol.Networking.Authority
             var result = await _api.BindPlayerAsync(MatchId, actorNumber, proof);
             if (!IsSuccessful(result))
             {
-                Debug.LogWarning($"[MatchAuthority] Player bind rejected: {Describe(result)}. Applying dev fallback identity.");
-                playerState.ApplyVerifiedBackendIdentity(Guid.NewGuid().ToString("D"));
+                Debug.LogWarning($"[MatchAuthority] Player bind rejected: {Describe(result)}.");
+                if (Debug.isDebugBuild)
+                    playerState.ApplyVerifiedBackendIdentity(Guid.NewGuid().ToString("D"));
+                else if (_bootstrap?.Runner != null)
+                    _bootstrap.Runner.Disconnect(playerState.Object.InputAuthority);
                 return;
             }
 
@@ -320,13 +330,17 @@ namespace EchoProtocol.Networking.Authority
             }
         }
 
-        public async void StartMatch(Action<bool, string> completed)
+        public async Task<(bool Accepted, string Error)> StartMatchAsync()
         {
             if (!IsHostBinding || !HasBinding)
             {
-                Debug.LogWarning("[MatchAuthority] Backend Host binding is not available. Dev bypass: starting match anyway.");
-                completed?.Invoke(true, string.Empty);
-                return;
+                const string error = "Backend Host binding is not available.";
+                if (Debug.isDebugBuild)
+                {
+                    Debug.LogWarning($"[MatchAuthority] {error} Dev bypass: starting match anyway.");
+                    return (true, string.Empty);
+                }
+                return (false, error);
             }
 
             var result = await _api.StartAsync(MatchId);
@@ -336,13 +350,15 @@ namespace EchoProtocol.Networking.Authority
                 RuntimeLog.Log(
                 RuntimeLogCategory.MatchAuthority,
                 $"[MatchAuthority] Backend confirmed match start. Match={MatchId:D}.");
-                completed?.Invoke(true, string.Empty);
+                return (true, string.Empty);
             }
-            else
+            var failure = Describe(result);
+            if (Debug.isDebugBuild)
             {
-                Debug.LogWarning($"[MatchAuthority] Backend rejected match start: {Describe(result)}. Dev bypass: starting match anyway.");
-                completed?.Invoke(true, string.Empty);
+                Debug.LogWarning($"[MatchAuthority] Backend rejected match start: {failure}. Dev bypass: starting match anyway.");
+                return (true, string.Empty);
             }
+            return (false, failure);
         }
 
         public void ResetBinding()

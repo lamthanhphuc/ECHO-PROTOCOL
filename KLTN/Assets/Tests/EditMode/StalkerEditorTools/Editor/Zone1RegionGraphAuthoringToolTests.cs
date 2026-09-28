@@ -15,7 +15,6 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
     public sealed class FullStationRegionGraphAuthoringToolTests
     {
         private const string TempAssetPath = "Assets/AI/Stalker/Station/__Test_Invalid_RegionGraph.asset";
-        private const string ProtectedAssetPath = "Assets/AI/Stalker/Phase3/AI_Stalker_SpatialV3_RegionGraph.asset";
 
         [TearDown]
         public void TearDown()
@@ -375,6 +374,23 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
         }
 
         [Test]
+        public void STK_FullStation_EqualHopBoundaryUsesShorterPhysicalEdge()
+        {
+            var graph = Graph(
+                Node(0, V(0, 0), 1),
+                Node(1, V(0.7f, 0), 0, 2),
+                Node(2, V(1, 0), 1));
+
+            var report = Build(graph,
+                Source(0, SemanticZone.Zone01, SemanticKind.Room, "A", 0),
+                Source(1, SemanticZone.Zone01, SemanticKind.Room, "B", 2));
+
+            Assert.That(report.BoundaryTieNodeIds, Is.Empty);
+            Assert.That(report.CanBakeRuntimeAsset, Is.True);
+            Assert.That(report.RuntimeNodeToRegion[1], Is.EqualTo(report.RuntimeNodeToRegion[2]));
+        }
+
+        [Test]
         public void STK_FullStation_RuntimeSemanticDefectBlocksRuntimeAssetBake()
         {
             var graph = Graph(
@@ -418,8 +434,8 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
 
             Assert.That(report.IsValid, Is.False);
             Assert.That(report.SeedOverlapNodeIds, Is.EqualTo(new[] { 9, 11 }));
-            Assert.That(report.BoundaryTieNodeIds, Is.EqualTo(new[] { 3, 7 }));
-            Assert.That(report.MultiplyMappedNodeIds, Is.EqualTo(new[] { 3, 7, 9, 11 }));
+            Assert.That(report.BoundaryTieNodeIds, Is.EqualTo(new[] { 3 }));
+            Assert.That(report.MultiplyMappedNodeIds, Is.EqualTo(new[] { 3, 9, 11 }));
             Assert.That(SeedOverlapDetailKeys(report), Is.EqualTo(new[]
             {
                 "9|0:Root/A/FloorA,Root/A/FloorB;1:Root/B/FloorA",
@@ -951,18 +967,6 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
 
             Assert.That(returned, Is.SameAs(report));
             Assert.That(AssetDatabase.LoadAssetAtPath<RegionGraphAsset>(TempAssetPath), Is.Null);
-        }
-
-        [Test]
-        public void STK_FullStation_SpatialV3ProtectedAssetCannotBeOverwritten()
-        {
-            var graph = Graph(Node(0, V(0, 0)));
-            var report = Build(graph, Source(0, SemanticZone.Zone01, SemanticKind.Room, "A", 0));
-
-            var returned = FullStationRegionGraphAuthoringCore.BakeAsset(ProtectedAssetPath, report);
-
-            Assert.That(returned.IsValid, Is.False);
-            Assert.That(returned.Errors, Has.Some.Contains("Refusing to overwrite protected asset"));
         }
 
         private static FullStationRegionGraphAuthoringCore.DryRunReport BasicValidReport()

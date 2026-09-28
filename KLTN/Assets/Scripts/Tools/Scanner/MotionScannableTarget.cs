@@ -13,6 +13,7 @@ namespace EchoProtocol.Tools.Scanner
         [SerializeField] private float manualSpeedThreshold = 0.2f;
 
         private NavMeshAgent _navMeshAgent;
+        private EchoProtocol.AI.Stalker.StalkerController _stalker;
         private Rigidbody _rigidbody;
         private Vector3 _lastPosition;
         private float _estimatedSpeed;
@@ -24,6 +25,11 @@ namespace EchoProtocol.Tools.Scanner
         {
             get
             {
+                if (_stalker != null && _stalker.HasAuthoritativeLocomotion)
+                {
+                    return _stalker.AuthoritativeMoveSpeed;
+                }
+
                 if (_navMeshAgent != null && _navMeshAgent.enabled && _navMeshAgent.isOnNavMesh)
                 {
                     return _navMeshAgent.velocity.magnitude;
@@ -44,6 +50,7 @@ namespace EchoProtocol.Tools.Scanner
         private void Awake()
         {
             _navMeshAgent = GetComponent<NavMeshAgent>();
+            _stalker = GetComponent<EchoProtocol.AI.Stalker.StalkerController>();
             _rigidbody = GetComponent<Rigidbody>();
             _lastPosition = transform.position;
         }

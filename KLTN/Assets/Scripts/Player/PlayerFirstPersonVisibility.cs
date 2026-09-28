@@ -13,10 +13,14 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
 
     private readonly Dictionary<Renderer, bool> _originalRendererStates = new Dictionary<Renderer, bool>();
     private NetworkObject _networkObject;
+    private EchoProtocol.Networking.NetworkPlayerMovement _networkMovement;
+    private PlayerHidingController _hidingController;
 
     private void Awake()
     {
         _networkObject = GetComponentInParent<NetworkObject>();
+        _networkMovement = GetComponentInParent<EchoProtocol.Networking.NetworkPlayerMovement>();
+        _hidingController = GetComponentInParent<PlayerHidingController>();
         CaptureRenderers();
     }
 
@@ -63,6 +67,7 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
 
     private void ApplyVisibility(bool isLocalView)
     {
+        bool isHidden = IsPlayerHidden();
         bool hasFirstPersonOnlyRenderer = false;
         if (isLocalView)
         {
@@ -85,6 +90,16 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
             }
 
             bool shouldShow = pair.Value;
+            if (isHidden)
+            {
+                if (renderer.enabled)
+                {
+                    renderer.enabled = false;
+                }
+
+                continue;
+            }
+
             if (IsFirstPersonOnlyRenderer(renderer))
             {
                 shouldShow = isLocalView;
@@ -191,6 +206,28 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
     private bool IsFirstPersonRenderer(Renderer renderer)
     {
         return NameContainsToken(renderer.transform, firstPersonRendererNameTokens);
+    }
+
+    private bool IsPlayerHidden()
+    {
+        if (_networkMovement == null)
+        {
+            _networkMovement = GetComponentInParent<EchoProtocol.Networking.NetworkPlayerMovement>();
+        }
+
+        if (_networkMovement != null
+            && _networkMovement.Object != null
+            && _networkMovement.Object.IsValid)
+        {
+            return _networkMovement.IsHidden;
+        }
+
+        if (_hidingController == null)
+        {
+            _hidingController = GetComponentInParent<PlayerHidingController>();
+        }
+
+        return _hidingController != null && _hidingController.IsHidden;
     }
 
     private static bool NameContainsToken(Transform source, string[] tokens)

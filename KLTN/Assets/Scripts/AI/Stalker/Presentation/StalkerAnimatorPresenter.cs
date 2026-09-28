@@ -49,10 +49,6 @@ namespace EchoProtocol.AI.Stalker.Presentation
             Animator.StringToHash(
                 "Base Layer.JumpIn");
 
-        private static readonly int DeathStateHash =
-            Animator.StringToHash(
-                "Base Layer.Death");
-
         [Header("Dependencies")]
         [SerializeField]
         private Animator animator;
@@ -735,7 +731,9 @@ namespace EchoProtocol.AI.Stalker.Presentation
                     BiteStateHash,
 
                 StalkerState.SEARCH =>
-                    CrouchStateHash,
+                    moving
+                        ? Walk2StateHash
+                        : CrouchStateHash,
 
                 StalkerState.RECOVER =>
                     presentation.HasAttackEpisode
@@ -823,7 +821,11 @@ namespace EchoProtocol.AI.Stalker.Presentation
         {
             var agentSpeed = 0f;
 
-            if (navMeshAgent != null
+            if (controller != null && controller.HasAuthoritativeLocomotion)
+            {
+                agentSpeed = controller.AuthoritativeMoveSpeed;
+            }
+            else if (navMeshAgent != null
                 && navMeshAgent.enabled)
             {
                 agentSpeed =

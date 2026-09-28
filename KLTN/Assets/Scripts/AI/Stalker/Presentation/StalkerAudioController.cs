@@ -77,12 +77,12 @@ namespace EchoProtocol.AI.Stalker.Presentation
         // ──────────────────────────────────────────────────────────────────────
         // Serialised – Tuning
         // ──────────────────────────────────────────────────────────────────────
-
         [Header("Detect Voice Tuning")]
         [SerializeField, Range(0f, 1f)]     private float detectVolume       = 1.00f;
 
         [Header("Footstep Tuning")]
-        [SerializeField, Range(0f, 2f)]     private float footstepVolume     = 1.25f;
+        [SerializeField, Range(0f, 2f)]     private float walkFootstepVolume = 0.85f;
+        [SerializeField, Range(0f, 2f)]     private float chaseFootstepVolume = 1.25f;
 
         [Header("JumpOut Tuning (monster leaps off metal)")]
         [SerializeField, Range(0f, 1f)]     private float jumpOutVolume      = 0.85f;
@@ -399,9 +399,10 @@ namespace EchoProtocol.AI.Stalker.Presentation
             var clip = _chaseActive ? chaseFootstepClip : walkClip;
             if (!ClipAndSourceReady(movementSource, clip)) return;
 
-            movementSource.pitch  = 1f;
-            movementSource.volume = Mathf.Clamp01(footstepVolume);
-            movementSource.PlayOneShot(clip, footstepVolume);
+            float vol = _chaseActive ? chaseFootstepVolume : walkFootstepVolume;
+            movementSource.pitch = 1f;
+            movementSource.volume = Mathf.Clamp01(vol);
+            movementSource.PlayOneShot(clip, vol);
         }
 
         /// <summary>
@@ -459,7 +460,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
         /// <summary>
         /// Triggered by Animation Event on the JumpOut frame where the monster
         /// pushes off the metal surface.
-        /// Uses a separate push-off clip from the landing impact.
+        /// Uses the JumpOut clip and its own volume.
+        /// The clip may be shared with JumpIn when no dedicated asset is available.
         /// </summary>
         public void PlayJumpOut()
         {
@@ -473,7 +475,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
         /// <summary>
         /// Triggered by Animation Event on the JumpIn frame where the monster
         /// lands on the metal surface with full weight.
-        /// Uses the dedicated landing clip.
+        /// Uses the landing clip and its own volume.
+        /// A dedicated clip can be assigned later without changing runtime logic.
         /// </summary>
         public void PlayJumpIn()
         {

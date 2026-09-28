@@ -36,7 +36,8 @@ namespace EchoProtocol.Voice
             _player = player;
             _bound = true;
             transform.position = _player.transform.position + Vector3.up * 1.6f;
-            _source.spatialBlend = SceneManager.GetActiveScene().name == "Lobby" ? 0 : 1;
+            bool isLobby = SceneManager.GetActiveScene().name == "Lobby";
+            _source.spatialBlend = isLobby ? 0f : 1f;
             _source.volume = _manager.OutputVolume;
             _source.outputAudioMixerGroup = _manager.OutputMixer;
             _source.mute = _player.HasInputAuthority || _manager.IsPlayerMuted(_key);

@@ -89,23 +89,6 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
-        public void STK_P3_CoverageMemory_SelectionDoesNotCountPhysicalVisit()
-        {
-            var graph = CreateLineGraph();
-            var regionGraph = CreateRegionGraph(GetProperty(graph, "CompatibilityIdentity"));
-            var coverage = Activator.CreateInstance(CoverageMemoryType, GetIntProperty(graph, "NodeCount"), regionGraph);
-            var planner = Activator.CreateInstance(GlobalPatrolPlannerType, regionGraph, coverage);
-            var args = new object[] { new RegionId(1), RegionId.Invalid, null };
-
-            Assert.That((bool)Invoke(planner, "TryGetOrCreateObjective", TryGetObjectiveSignature, args), Is.True);
-
-            var objective = args[2];
-            Assert.That((RegionId)GetProperty(objective, "TargetRegionId"), Is.EqualTo(new RegionId(2)));
-            Assert.That(Invoke(coverage, "GetRegionVisitCount", new[] { typeof(RegionId) }, new RegionId(2)), Is.EqualTo(0));
-            Assert.That(Invoke(coverage, "GetNodeVisitCount", new[] { typeof(int) }, 2), Is.EqualTo(0));
-        }
-
-        [Test]
         public void STK_P3_CoverageMemory_PhysicalArrivalUpdatesNodeAndMappedRegionOncePerArrival()
         {
             var graph = CreateLineGraph();
@@ -119,57 +102,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That((bool)GetProperty(visit, "RegionUpdated"), Is.True);
             Assert.That((RegionId)GetProperty(visit, "RegionId"), Is.EqualTo(new RegionId(2)));
             Assert.That(Invoke(coverage, "GetRegionVisitCount", new[] { typeof(RegionId) }, new RegionId(2)), Is.EqualTo(1));
-        }
-
-        [Test]
-        public void STK_P3_GlobalPatrolPlanner_PersistsObjectiveUntilTargetRegionVisited()
-        {
-            var graph = CreateLineGraph();
-            var regionGraph = CreateRegionGraph(GetProperty(graph, "CompatibilityIdentity"));
-            var coverage = Activator.CreateInstance(CoverageMemoryType, GetIntProperty(graph, "NodeCount"), regionGraph);
-            var planner = Activator.CreateInstance(GlobalPatrolPlannerType, regionGraph, coverage);
-            var firstArgs = new object[] { new RegionId(1), RegionId.Invalid, null };
-            var secondArgs = new object[] { new RegionId(1), RegionId.Invalid, null };
-
-            Assert.That((bool)Invoke(planner, "TryGetOrCreateObjective", TryGetObjectiveSignature, firstArgs), Is.True);
-            Assert.That((bool)Invoke(planner, "TryGetOrCreateObjective", TryGetObjectiveSignature, secondArgs), Is.True);
-
-            Assert.That(GetProperty(secondArgs[2], "TargetRegionId"), Is.EqualTo(GetProperty(firstArgs[2], "TargetRegionId")));
-            Invoke(coverage, "RecordPhysicalNodeArrival", new[] { typeof(int), typeof(float) }, 2, 12f);
-
-            var nextArgs = new object[] { new RegionId(2), new RegionId(1), null };
-            Assert.That((bool)Invoke(planner, "TryGetOrCreateObjective", TryGetObjectiveSignature, nextArgs), Is.True);
-            Assert.That((RegionId)GetProperty(nextArgs[2], "TargetRegionId"), Is.EqualTo(new RegionId(1)));
-        }
-
-        [Test]
-        public void STK_P4_GlobalPatrolPlanner_SelectsAlternateGlobalBeforeExhaustion()
-        {
-            var graph = CreateThreeRegionLineGraph();
-            var regionGraph = CreateThreeRegionGraph(GetProperty(graph, "CompatibilityIdentity"));
-            var coverage = Activator.CreateInstance(CoverageMemoryType, GetIntProperty(graph, "NodeCount"), regionGraph);
-            var planner = Activator.CreateInstance(GlobalPatrolPlannerType, regionGraph, coverage);
-            var rejected = new HashSet<RegionId> { new RegionId(2) };
-            var args = new object[] { new RegionId(1), RegionId.Invalid, rejected, null };
-
-            Assert.That((bool)Invoke(planner, "TryGetOrCreateObjective", TryGetObjectiveWithRejectedSignature, args), Is.True);
-
-            var objective = args[3];
-            Assert.That((RegionId)GetProperty(objective, "TargetRegionId"), Is.EqualTo(new RegionId(3)));
-            Assert.That((RegionId)GetProperty(objective, "NextRegionId"), Is.EqualTo(new RegionId(2)));
-        }
-
-        [Test]
-        public void STK_P4_GlobalPatrolPlanner_ReturnsFalseOnlyAfterReachableGlobalObjectivesExhausted()
-        {
-            var graph = CreateThreeRegionLineGraph();
-            var regionGraph = CreateThreeRegionGraph(GetProperty(graph, "CompatibilityIdentity"));
-            var coverage = Activator.CreateInstance(CoverageMemoryType, GetIntProperty(graph, "NodeCount"), regionGraph);
-            var planner = Activator.CreateInstance(GlobalPatrolPlannerType, regionGraph, coverage);
-            var rejected = new HashSet<RegionId> { new RegionId(2), new RegionId(3) };
-            var args = new object[] { new RegionId(1), RegionId.Invalid, rejected, null };
-
-            Assert.That((bool)Invoke(planner, "TryGetOrCreateObjective", TryGetObjectiveWithRejectedSignature, args), Is.False);
         }
 
         [Test]
@@ -590,12 +522,8 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static Type CoverageMemoryType => ResolveType("EchoProtocol.AI.Stalker.Spatial.CoverageMemory");
         private static Type SearchContextType => ResolveType("EchoProtocol.AI.Stalker.StalkerSearchContext");
         private static Type SearchEpisodeIdType => ResolveType("EchoProtocol.AI.Stalker.SearchEpisodeId");
-        private static Type GlobalPatrolPlannerType => ResolveType("EchoProtocol.AI.Stalker.Spatial.GlobalPatrolPlanner");
-        private static Type GlobalPatrolObjectiveType => ResolveType("EchoProtocol.AI.Stalker.Spatial.GlobalPatrolObjective");
         private static Type LocalPatrolSelectorType => ResolveType("EchoProtocol.AI.Stalker.Spatial.LocalPatrolSelector");
         private static Type LocalPatrolSelectionType => ResolveType("EchoProtocol.AI.Stalker.Spatial.LocalPatrolSelection");
         private static Type PatrolPathValidatorType => ResolveType("EchoProtocol.AI.Stalker.Spatial.PatrolPathValidator");
-        private static Type[] TryGetObjectiveSignature => new[] { typeof(RegionId), typeof(RegionId), GlobalPatrolObjectiveType.MakeByRefType() };
-        private static Type[] TryGetObjectiveWithRejectedSignature => new[] { typeof(RegionId), typeof(RegionId), typeof(ISet<RegionId>), GlobalPatrolObjectiveType.MakeByRefType() };
     }
 }

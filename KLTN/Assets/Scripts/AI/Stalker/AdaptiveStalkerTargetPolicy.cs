@@ -3,112 +3,40 @@ using System.Collections.Generic;
 
 namespace EchoProtocol.AI.Stalker
 {
-    public readonly struct StalkerTargetScoreBreakdown
+    public static class AdaptiveStalkerTargetPolicy
     {
-        public StalkerTargetScoreBreakdown(
-            float distanceContribution,
-            float isolationContribution,
-            float objectiveCarrierContribution,
-            float recentDetectionContribution,
-            float confirmedNoiseContribution,
-            float targetHistoryContribution)
+        private const float DistanceWeight = 1.00f;
+        private const float IsolationWeight = 0.65f;
+        private const float ObjectiveCarrierWeight = 0.90f;
+        private const float RecentDetectionWeight = 0.60f;
+        private const float TargetHistoryWeight = 0.35f;
+        private const float ScoreTieEpsilon = 0.0001f;
+
+        private static float CalculateScore(StalkerTargetPolicyCandidate candidate)
         {
-            DistanceContribution = distanceContribution;
-            IsolationContribution = isolationContribution;
-            ObjectiveCarrierContribution = objectiveCarrierContribution;
-            RecentDetectionContribution = recentDetectionContribution;
-            ConfirmedNoiseContribution = confirmedNoiseContribution;
-            TargetHistoryContribution = targetHistoryContribution;
-            TotalScore = distanceContribution
-                + isolationContribution
-                + objectiveCarrierContribution
-                + recentDetectionContribution
-                + confirmedNoiseContribution
-                + targetHistoryContribution;
-        }
-
-        public float DistanceContribution { get; }
-
-        public float IsolationContribution { get; }
-
-        public float ObjectiveCarrierContribution { get; }
-
-        public float RecentDetectionContribution { get; }
-
-        public float ConfirmedNoiseContribution { get; }
-
-        public float TargetHistoryContribution { get; }
-
-        public float TotalScore { get; }
-    }
-
-    public sealed class AdaptiveStalkerTargetPolicy
-        : IStalkerTargetPolicy
-    {
-        private readonly StalkerTargetPolicyWeights _weights;
-
-        public AdaptiveStalkerTargetPolicy()
-            : this(StalkerTargetPolicyWeights.Default)
-        {
-        }
-
-        public AdaptiveStalkerTargetPolicy(
-            StalkerTargetPolicyWeights weights)
-        {
-            _weights = weights;
-        }
-
-        public StalkerTargetPolicyWeights Weights => _weights;
-
-        public StalkerTargetScoreBreakdown CalculateScore(
-            StalkerTargetPolicyCandidate candidate)
-        {
-            var distanceScore01 = 1f / (1f + candidate.Distance);
             var signals = candidate.Signals;
-
-            return new StalkerTargetScoreBreakdown(
-                _weights.DistanceWeight * distanceScore01,
-                _weights.IsolationWeight * signals.VisibleIsolation01,
-                _weights.ObjectiveCarrierWeight
-                    * (signals.IsObjectiveCarrier ? 1f : 0f),
-                _weights.RecentDetectionWeight
-                    * signals.RecentDetection01,
-                _weights.ConfirmedNoiseWeight
-                    * signals.ConfirmedNoisyBehavior01,
-                -_weights.TargetHistoryWeight
-                    * signals.TargetHistory01);
+            var distanceScore = 1f / (1f + candidate.Distance);
+            return DistanceWeight * distanceScore
+                + IsolationWeight * signals.VisibleIsolation01
+                + ObjectiveCarrierWeight * (signals.IsObjectiveCarrier ? 1f : 0f)
+                + RecentDetectionWeight * signals.RecentDetection01
+                - TargetHistoryWeight * signals.TargetHistory01;
         }
 
-        public bool TrySelectTarget(
+        public static bool TrySelectTarget(
             IReadOnlyList<StalkerTargetPolicyCandidate> candidates,
-            StalkerTargetPolicyContext context,
             out VisionObservation selectedObservation)
         {
-            if (candidates == null)
-            {
-                throw new ArgumentNullException(nameof(candidates));
-            }
-
-            if (!context.SimulationTime.IsValid)
-            {
-                throw new ArgumentException(
-                    "Target-policy context requires valid simulation time.",
-                    nameof(context));
-            }
+            if (candidates == null) throw new ArgumentNullException(nameof(candidates));
 
             selectedObservation = default;
             var bestScore = 0f;
             var hasEligibleCandidate = false;
-
             for (var i = 0; i < candidates.Count; i++)
             {
                 var candidate = candidates[i];
-                if (!candidate.Eligible || !candidate.PlayerId.IsValid)
-                {
-                    continue;
-                }
-
-                var score = CalculateScore(candidate).TotalScore;
+                if (!candidate.Eligible || !candidate.PlayerId.IsValid) continue;
+                var score = CalculateScore(candidate);
                 if (!hasEligibleCandidate || score > bestScore)
                 {
                     bestScore = score;
@@ -116,26 +44,20 @@ namespace EchoProtocol.AI.Stalker
                 }
             }
 
-            if (!hasEligibleCandidate)
-            {
-                return false;
-            }
+            if (!hasEligibleCandidate) return false;
 
-            var minimumTieScore = bestScore - _weights.ScoreTieEpsilon;
+            var minimumTieScore = bestScore - ScoreTieEpsilon;
             var hasSelected = false;
             for (var i = 0; i < candidates.Count; i++)
             {
                 var candidate = candidates[i];
                 if (!candidate.Eligible
                     || !candidate.PlayerId.IsValid
-                    || CalculateScore(candidate).TotalScore < minimumTieScore)
-                {
+                    || CalculateScore(candidate) < minimumTieScore)
                     continue;
-                }
 
                 if (!hasSelected
-                    || candidate.PlayerId.CompareTo(
-                        selectedObservation.PlayerId) < 0)
+                    || candidate.PlayerId.CompareTo(selectedObservation.PlayerId) < 0)
                 {
                     selectedObservation = candidate.Target.Observation;
                     hasSelected = true;
