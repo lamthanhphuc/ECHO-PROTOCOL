@@ -21,6 +21,24 @@ namespace EchoProtocol.Player.Tests
         private const string CoreStabilizerPickupPath = "Assets/Prefabs/Tools/PF_CoreStabilizer_NetworkPickup.prefab";
 
         [Test]
+        public void TEAM_TOOL_WorldSpawn_IsTransactional()
+        {
+            const string spawnSourcePath = "Assets/Scripts/TeamTools/TeamToolWorldSpawn.cs";
+            const string matchSourcePath = "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs";
+
+            string spawnSource = File.ReadAllText(spawnSourcePath);
+            string matchSource = File.ReadAllText(matchSourcePath);
+
+            StringAssert.Contains("public static bool TrySpawnInitial", spawnSource);
+            StringAssert.Contains("TryBuildZonePlan", spawnSource);
+            StringAssert.Contains("RollbackSpawned", spawnSource);
+            StringAssert.Contains("zone1Plans", spawnSource);
+            StringAssert.Contains("zone2Plans", spawnSource);
+            StringAssert.Contains("TeamToolWorldSpawnInitialized =", matchSource);
+            StringAssert.Contains("TeamToolWorldSpawn.TrySpawnInitial", matchSource);
+        }
+
+        [Test]
         public void TEAM_TOOL_SciFiSpawnPoints_HaveValidRoomCoverage()
         {
             const string scenePath = "Assets/Scenes/SciFi.unity";

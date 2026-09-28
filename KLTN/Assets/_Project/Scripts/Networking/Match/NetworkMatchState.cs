@@ -362,10 +362,9 @@ namespace EchoProtocol.Networking
 
                 if (!TeamToolWorldSpawnInitialized)
                 {
-                    TeamToolWorldSpawn.SpawnInitial(Runner, _teamToolPickupCatalog,
-                        _zone1TeamToolSpawnCount, _zone2TeamToolSpawnCount,
-                        _teamToolSpawnMinimumSpacing);
-                    TeamToolWorldSpawnInitialized = true;
+                    TeamToolWorldSpawnInitialized = TeamToolWorldSpawn.TrySpawnInitial(
+                        Runner, _teamToolPickupCatalog, _zone1TeamToolSpawnCount,
+                        _zone2TeamToolSpawnCount, _teamToolSpawnMinimumSpacing);
                 }
             }
 
