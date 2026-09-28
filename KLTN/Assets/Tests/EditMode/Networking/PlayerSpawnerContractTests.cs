@@ -10,6 +10,7 @@ namespace EchoProtocol.Networking.Tests
     public sealed class PlayerSpawnerContractTests
     {
         private const string BootstrapScenePath = "Assets/Scenes/Bootstrap.unity";
+        private const string SciFiScenePath = "Assets/Scenes/SciFi.unity";
         private const string LobbyPlayerStateScriptPath = "Assets/_Project/Scripts/Networking/Player/LobbyPlayerState.cs";
         private const string PlayerSpawnerScriptPath = "Assets/_Project/Scripts/Networking/Player/PlayerSpawner.cs";
         private const string PlayerSpawnerTypeName = "EchoProtocol.Networking.PlayerSpawner";
@@ -110,6 +111,34 @@ namespace EchoProtocol.Networking.Tests
                 Assert.That(serializedSpawner.FindProperty("_playerPrefab"), Is.Null);
                 Assert.That(serializedSpawner.FindProperty("_doorPrefab"), Is.Not.Null);
                 Assert.That(serializedSpawner.FindProperty("_pickupItemPrefab"), Is.Not.Null);
+            }
+            finally
+            {
+                EditorSceneManager.CloseScene(scene, true);
+            }
+        }
+
+        [Test]
+        public void SCIFI_PlayerSpawns_AllFaceStartRoomExit()
+        {
+            var scene = EditorSceneManager.OpenScene(SciFiScenePath, OpenSceneMode.Additive);
+            try
+            {
+                var points = System.Array.FindAll(
+                    Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include),
+                    point => point.gameObject.scene == scene
+                        && point.GetType().FullName == "EchoProtocol.Networking.NetworkPlayerSpawnPoint"
+                        && point.name.StartsWith("PlayerStart_"));
+                Assert.That(points.Length, Is.EqualTo(4));
+                System.Array.Sort(points, (a, b) =>
+                    new SerializedObject(a).FindProperty("_order").intValue.CompareTo(
+                        new SerializedObject(b).FindProperty("_order").intValue));
+                for (var i = 0; i < points.Length; i++)
+                {
+                    Assert.That(new SerializedObject(points[i]).FindProperty("_order").intValue, Is.EqualTo(i));
+                    Assert.That(Vector3.Dot(points[i].transform.forward, Vector3.back),
+                        Is.GreaterThan(0.98f), $"{points[i].name} must face the start room's south exit.");
+                }
             }
             finally
             {

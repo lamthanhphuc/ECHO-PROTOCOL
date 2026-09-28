@@ -37,6 +37,7 @@ namespace EchoProtocol.Networking
         private InputAction _sprintAction;
         private InputAction _crouchAction;
         private PlayerCamera _playerCamera;
+        private float? _pendingGameplaySpawnYaw;
         private PlayerUpperBodyAim _upperBodyAim;
         private NetworkBootstrap _bootstrap;
         private bool _isSceneLoadDoneSubscribed;
@@ -637,6 +638,27 @@ namespace EchoProtocol.Networking
             hiding?.CancelRejectedEnter(hideSpotId);
         }
 
+        public void ApplyGameplaySpawnViewAuthoritative(Quaternion spawnRotation)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
+            RpcApplyGameplaySpawnView(spawnRotation.eulerAngles.y);
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+        private void RpcApplyGameplaySpawnView(float yaw)
+        {
+            _pendingGameplaySpawnYaw = Mathf.Repeat(yaw, 360f);
+            BindLocalPlayerCameraIfNeeded();
+            ApplyPendingGameplaySpawnView();
+        }
+
+        private void ApplyPendingGameplaySpawnView()
+        {
+            if (!_pendingGameplaySpawnYaw.HasValue || _playerCamera == null) return;
+            _playerCamera.SetRotation(_pendingGameplaySpawnYaw.Value, 0f);
+            _pendingGameplaySpawnYaw = null;
+        }
+
         public bool TryForceExitHidingAuthoritative(
             Vector3 position,
             Quaternion rotation)
@@ -830,6 +852,7 @@ namespace EchoProtocol.Networking
             _playerCamera = playerCamera;
 
             playerCamera.SetTarget(transform);
+            ApplyPendingGameplaySpawnView();
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerMovement,
                 $"[NetworkMovement] Bound local PlayerCamera to player.");

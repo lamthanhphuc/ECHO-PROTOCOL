@@ -802,7 +802,8 @@ namespace EchoProtocol.Networking
                 interactor.ResetForMatchAuthoritative();
             }
 
-            if (playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement) && playerObject.HasStateAuthority)
+            playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement);
+            if (movement != null && playerObject.HasStateAuthority)
             {
                 movement.IsHidden = false;
                 movement.CurrentHideSpotId = 0UL;
@@ -816,6 +817,10 @@ namespace EchoProtocol.Networking
             if (!TryTeleportExistingPlayer(playerObject, pose, gameplay))
             {
                 Debug.LogWarning($"[PlayerSpawner] Could not teleport lifecycle-owned player object for {player}; object={playerObject.Id}.");
+            }
+            else if (gameplay && movement != null && playerObject.HasStateAuthority)
+            {
+                movement.ApplyGameplaySpawnViewAuthoritative(pose.Rotation);
             }
 
             RuntimeLog.Log(
