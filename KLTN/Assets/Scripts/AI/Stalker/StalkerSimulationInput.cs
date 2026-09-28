@@ -2,9 +2,29 @@ using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Listener.Perception;
+using UnityEngine;
 
 namespace EchoProtocol.AI.Stalker
 {
+    public readonly struct StalkerFlashlightObservation
+    {
+        public StalkerFlashlightObservation(Vector3 cluePosition, Vector3 beamDirection,
+            bool isHidden, ulong hideSpotId)
+        {
+            CluePosition = cluePosition;
+            BeamDirection = beamDirection.sqrMagnitude > 0f
+                ? beamDirection.normalized : Vector3.forward;
+            IsHidden = isHidden;
+            HideSpotId = hideSpotId;
+        }
+
+        public Vector3 CluePosition { get; }
+        public Vector3 BeamDirection { get; }
+        public bool IsHidden { get; }
+        public ulong HideSpotId { get; }
+        public bool HasHideSpot => IsHidden && HideSpotId != 0UL;
+    }
+
     public readonly struct StalkerSimulationInput
     {
         public StalkerSimulationInput(
@@ -107,6 +127,22 @@ namespace EchoProtocol.AI.Stalker
             DateTime hearingEvaluationTimeUtc,
             IReadOnlyList<PlayerId> visibleObjectiveCarrierIds,
             StalkerPerceptionTargetSnapshot? sustainedCoreCarrier)
+            : this(step, visibleTargetCandidates, targetStatuses, currentAttackTargetSnapshot,
+                hearingObservations, hearingEvaluationTimeUtc, visibleObjectiveCarrierIds,
+                sustainedCoreCarrier, null)
+        {
+        }
+
+        public StalkerSimulationInput(
+            AiSimulationStep step,
+            IReadOnlyList<StalkerTargetCandidate> visibleTargetCandidates,
+            IReadOnlyList<StalkerTargetStatus> targetStatuses,
+            StalkerAttackTargetSnapshot? currentAttackTargetSnapshot,
+            IReadOnlyList<HearingObservation> hearingObservations,
+            DateTime hearingEvaluationTimeUtc,
+            IReadOnlyList<PlayerId> visibleObjectiveCarrierIds,
+            StalkerPerceptionTargetSnapshot? sustainedCoreCarrier,
+            IReadOnlyList<StalkerFlashlightObservation> flashlightObservations)
         {
             if (hearingEvaluationTimeUtc != default
                 && hearingEvaluationTimeUtc.Kind
@@ -131,6 +167,7 @@ namespace EchoProtocol.AI.Stalker
             VisibleObjectiveCarrierIds =
                 visibleObjectiveCarrierIds;
             SustainedCoreCarrier = sustainedCoreCarrier;
+            FlashlightObservations = flashlightObservations;
         }
 
         public AiSimulationStep Step { get; }
@@ -170,6 +207,8 @@ namespace EchoProtocol.AI.Stalker
             VisibleObjectiveCarrierIds { get; }
 
         public StalkerPerceptionTargetSnapshot? SustainedCoreCarrier { get; }
+
+        public IReadOnlyList<StalkerFlashlightObservation> FlashlightObservations { get; }
 
         public bool HasHearingEvaluationTimeUtc =>
             HearingEvaluationTimeUtc != default

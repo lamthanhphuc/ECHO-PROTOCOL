@@ -43,6 +43,18 @@ namespace EchoProtocol.Networking
             }
         }
 
+        public Transform BeamTransform
+        {
+            get
+            {
+                ResolveLight();
+                return _flashlight != null ? _flashlight.transform : transform;
+            }
+        }
+
+        public float BeamRange => Mathf.Max(0f, _beamRange);
+        public float BeamSpotAngle => Mathf.Clamp(_beamSpotAngle, 1f, 179f);
+
         private bool HasLocalControl()
         {
             if (Runner == null || Object == null || !Object.IsValid)

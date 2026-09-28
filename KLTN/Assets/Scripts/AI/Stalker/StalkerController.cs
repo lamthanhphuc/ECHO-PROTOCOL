@@ -294,6 +294,7 @@ namespace EchoProtocol.AI.Stalker
         private IReadOnlyList<StalkerTargetStatus> _currentTargetStatuses;
         private IReadOnlyList<HearingObservation>
             _currentHearingObservations;
+        private IReadOnlyList<StalkerFlashlightObservation> _currentFlashlightObservations;
         private System.DateTime
             _currentHearingEvaluationTimeUtc;
         private bool _roomSweepSuppressLegacyGateLogged;
@@ -878,6 +879,7 @@ namespace EchoProtocol.AI.Stalker
 
             _currentHearingObservations =
                 input.HearingObservations;
+            _currentFlashlightObservations = input.FlashlightObservations;
 
             _currentHearingEvaluationTimeUtc =
                 input.HearingEvaluationTimeUtc;
@@ -899,6 +901,7 @@ namespace EchoProtocol.AI.Stalker
                 else
                 {
                     TickCurrentState();
+                    TryBeginFlashlightInvestigationFromCurrentFrame();
                     TryBeginHeardNoiseSearchFromCurrentFrame();
                     TryUpdateHeardNoiseSearchFromCurrentFrame();
                     _navigation?.TickProgress(
@@ -930,6 +933,7 @@ namespace EchoProtocol.AI.Stalker
                 _currentTargetStatuses = null;
                 _currentAttackTargetSnapshot = null;
                 _currentHearingObservations = null;
+                _currentFlashlightObservations = null;
                 _currentHearingEvaluationTimeUtc =
                     default;
                 _currentSimulationStep = AiSimulationStep.Invalid;
@@ -1785,6 +1789,132 @@ namespace EchoProtocol.AI.Stalker
             SetCurrentPatrolDestination();
         }
 
+        private void TryBeginFlashlightInvestigationFromCurrentFrame()
+        {
+            if (_currentFlashlightObservations == null
+                || _currentFlashlightObservations.Count == 0
+                || _worldInteractionDriver.HasActiveInteraction)
+            {
+                return;
+            }
+
+            bool canStart = currentState == StalkerState.PATROL
+                || (currentState == StalkerState.SEARCH
+                    && _searchContext != null
+                    && _searchContext.Source == StalkerSearchSource.HeardNoise);
+            if (!canStart)
+            {
+                return;
+            }
+
+            foreach (StalkerFlashlightObservation clue in _currentFlashlightObservations)
+            {
+                if (clue.HasHideSpot && TryBeginKnownHideSpotFlashlightInvestigation(clue))
+                {
+                    return;
+                }
+            }
+
+            bool hasBest = false;
+            StalkerFlashlightObservation best = default;
+            float bestDistance = float.PositiveInfinity;
+            foreach (StalkerFlashlightObservation clue in _currentFlashlightObservations)
+            {
+                if (clue.IsHidden)
+                {
+                    continue;
+                }
+
+                float distance = (clue.CluePosition - transform.position).sqrMagnitude;
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = clue;
+                    hasBest = true;
+                }
+            }
+
+            if (hasBest)
+            {
+                EnterFlashlightClueSearch(best);
+            }
+        }
+
+        private bool TryBeginKnownHideSpotFlashlightInvestigation(StalkerFlashlightObservation clue)
+        {
+            if (!clue.HasHideSpot || visionSensor == null)
+            {
+                return false;
+            }
+
+            InitializeHidingInvestigation();
+            if (_hidingInvestigation == null
+                || _hideSpotAdapter.CollectCandidates(_hideSpotCandidates) <= 0)
+            {
+                return false;
+            }
+
+            foreach (StalkerHideSpotCandidate candidate in _hideSpotCandidates)
+            {
+                if (!candidate.IsValid || candidate.StableId != clue.HideSpotId)
+                {
+                    continue;
+                }
+
+                Vector3 visibleLeakPoint = visionSensor.GetObservationPointForGroundPoint(
+                    candidate.InspectPosition);
+                if (!visionSensor.CanSeePoint(visibleLeakPoint))
+                {
+                    return false;
+                }
+
+                if (TryRequestSearchDestination(candidate.InspectPosition)
+                    != NavigationEvaluationStatus.Complete)
+                {
+                    return false;
+                }
+
+                _hearingMemory.ClearNoiseInvestigation();
+                ClearSearchRuntimeContext();
+                ResetChaseDestinationTracking();
+                ResetNavigationRecoveryBudget();
+                currentState = StalkerState.SEARCH;
+                searchElapsedTime = 0f;
+                EnsureSearchContext(StalkerSearchSource.FlashlightClue,
+                    candidate.Position, clue.BeamDirection);
+                _hidingInvestigation.Begin(candidate);
+                _hideSpotInspectionLogged = false;
+                searchCandidateNodeId = -1;
+                _blackboard.DestinationSpatialNodeId = -1;
+                SetNavigationObjective(new StalkerNavigationObjectiveKey(
+                    StalkerNavigationObjectiveKind.HideSpotInspection, -1,
+                    _searchContext != null && _searchContext.SearchOriginRegionId.IsValid
+                        ? _searchContext.SearchOriginRegionId.Value : -1,
+                    -1, candidate.StableId));
+                return true;
+            }
+
+            return false;
+        }
+
+        private void EnterFlashlightClueSearch(StalkerFlashlightObservation clue)
+        {
+            ResetChaseDestinationTracking();
+            ResetNavigationRecoveryBudget();
+            _hearingMemory.ClearNoiseInvestigation();
+            ClearSearchRuntimeContext();
+            currentState = StalkerState.SEARCH;
+            searchElapsedTime = 0f;
+            Vector3 direction = clue.BeamDirection.sqrMagnitude > 0f
+                ? clue.BeamDirection : clue.CluePosition - transform.position;
+            EnsureSearchContext(StalkerSearchSource.FlashlightClue,
+                clue.CluePosition, direction);
+            if (!TrySetSearchOriginDestination(clue.CluePosition))
+            {
+                TryPlanNextSearchCandidate();
+            }
+        }
+
         private void TryBeginHeardNoiseSearchFromCurrentFrame()
         {
             //
@@ -2011,6 +2141,13 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            if (_searchContext != null
+                && _searchContext.Source == StalkerSearchSource.FlashlightClue)
+            {
+                TickFlashlightClueSearch();
+                return;
+            }
+
             if (HasTypedTargetFrame)
             {
                 TickSearchTyped();
@@ -2104,6 +2241,52 @@ namespace EchoProtocol.AI.Stalker
             SetCurrentPatrolDestination();
 
             return;
+        }
+
+        private void TickFlashlightClueSearch()
+        {
+            if (TryAcquireDifferentVisibleTargetDuringSearch(PlayerId.Invalid))
+            {
+                return;
+            }
+
+            if (TickHidingInvestigationIfActive() || TickSearchPointHold())
+            {
+                return;
+            }
+
+            if (_navigationObjectiveKey.Kind == StalkerNavigationObjectiveKind.SearchOriginLkp
+                && _navigation != null
+                && _navigation.HasActiveDestination
+                && (_navigation.GetExecutionStatus() == NavigationExecutionStatus.Moving
+                    || _navigation.GetExecutionStatus() == NavigationExecutionStatus.RepathPending))
+            {
+                return;
+            }
+
+            searchElapsedTime += CurrentSimulationDeltaSeconds;
+            if (searchElapsedTime < GetSearchDuration())
+            {
+                if (_navigation != null && _navigation.HasActiveDestination && _navigation.HasArrived())
+                {
+                    MarkSearchCandidateReached();
+                }
+
+                if (_navigation == null || !_navigation.HasActiveDestination)
+                {
+                    if (!TryBeginHideSpotInvestigationFromSearch())
+                    {
+                        TryPlanNextSearchCandidateIfNotHolding();
+                    }
+                }
+                return;
+            }
+
+            CommitSearchEnded(StalkerSearchTerminalOutcome.TIMEOUT);
+            ClearSearchContext();
+            currentState = StalkerState.PATROL;
+            StopAgentPath();
+            SetCurrentPatrolDestination();
         }
 
         private void TickHeardNoiseSearch()

@@ -94,6 +94,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             new List<StalkerTargetStatus>();
         private readonly List<StalkerTargetCandidate> _visibleCandidates =
             new List<StalkerTargetCandidate>();
+        private readonly List<StalkerFlashlightObservation> _flashlightObservations =
+            new List<StalkerFlashlightObservation>();
         private readonly List<PlayerId> _visibleObjectiveCarrierIds =
             new List<PlayerId>();
         private readonly Dictionary<PlayerId, double> _coreCarryStartedAt =
@@ -525,6 +527,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 _perceptionSnapshots,
                 step.Time,
                 _visibleCandidates);
+            BuildAuthoritativeFlashlightFrame();
             CollectVisibleObjectiveCarrierIds();
             var sustainedCoreCarrier = SelectSustainedCoreCarrier(step.Time.Seconds);
 
@@ -585,7 +588,8 @@ namespace EchoProtocol.AI.Stalker.Networking
                     _hearingObservations,
                     hearingEvaluationTimeUtc,
                     _visibleObjectiveCarrierIds,
-                    sustainedCoreCarrier);
+                    sustainedCoreCarrier,
+                    _flashlightObservations);
 
             if (!controller.Simulate(input))
             {
@@ -1300,12 +1304,54 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
         }
 
+        private void BuildAuthoritativeFlashlightFrame()
+        {
+            _flashlightObservations.Clear();
+
+            foreach (StalkerPerceptionTargetSnapshot snapshot in _perceptionSnapshots)
+            {
+                Transform playerRoot = snapshot.TargetHierarchyRoot;
+                if (playerRoot == null)
+                {
+                    continue;
+                }
+
+                NetworkPlayerFlashlight flashlight = playerRoot.GetComponent<NetworkPlayerFlashlight>();
+                if (flashlight == null || !flashlight.IsOn)
+                {
+                    continue;
+                }
+
+                NetworkPlayerMovement movement = playerRoot.GetComponent<NetworkPlayerMovement>();
+                bool hidden = movement != null && movement.IsHidden;
+                if (hidden)
+                {
+                    ulong hideSpotId = movement.CurrentHideSpotId;
+                    if (hideSpotId != 0UL)
+                    {
+                        _flashlightObservations.Add(new StalkerFlashlightObservation(
+                            playerRoot.position, flashlight.BeamTransform.forward, true, hideSpotId));
+                    }
+                    continue;
+                }
+
+                if (visionSensor.TryGetVisibleFlashlightClue(
+                        flashlight.BeamTransform, playerRoot, flashlight.BeamRange,
+                        flashlight.BeamSpotAngle, out Vector3 cluePosition))
+                {
+                    _flashlightObservations.Add(new StalkerFlashlightObservation(
+                        cluePosition, flashlight.BeamTransform.forward, false, 0UL));
+                }
+            }
+        }
+
         private void ClearFrameBuffers()
         {
             _coreCarryStartedAt.Clear();
             _perceptionSnapshots.Clear();
             _targetStatuses.Clear();
             _visibleCandidates.Clear();
+            _flashlightObservations.Clear();
             _visibleObjectiveCarrierIds.Clear();
             _hearingObservations.Clear();
             _activeNoiseEvents.Clear();

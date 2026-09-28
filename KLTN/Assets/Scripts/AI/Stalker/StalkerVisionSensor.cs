@@ -179,6 +179,72 @@ namespace EchoProtocol.AI.Stalker
             return distance <= Mathf.Epsilon || !HasLineOfSightBlocker(null, originPosition, direction, distance);
         }
 
+        public bool TryGetVisibleFlashlightClue(
+            Transform beamTransform,
+            Transform beamOwnerRoot,
+            float beamRange,
+            float beamSpotAngle,
+            out Vector3 cluePosition)
+        {
+            cluePosition = default;
+            if (beamTransform == null || beamOwnerRoot == null || beamRange <= 0f)
+            {
+                return false;
+            }
+
+            float sampleAngle = Mathf.Clamp(beamSpotAngle * 0.3f, 3f, 18f);
+            Vector3 forward = beamTransform.forward.normalized;
+            return TryGetVisibleFlashlightSurface(beamTransform.position, forward, beamOwnerRoot, beamRange, out cluePosition)
+                || TryGetVisibleFlashlightSurface(beamTransform.position,
+                    Quaternion.AngleAxis(-sampleAngle, beamTransform.up) * forward,
+                    beamOwnerRoot, beamRange, out cluePosition)
+                || TryGetVisibleFlashlightSurface(beamTransform.position,
+                    Quaternion.AngleAxis(sampleAngle, beamTransform.up) * forward,
+                    beamOwnerRoot, beamRange, out cluePosition)
+                || TryGetVisibleFlashlightSurface(beamTransform.position,
+                    Quaternion.AngleAxis(-sampleAngle, beamTransform.right) * forward,
+                    beamOwnerRoot, beamRange, out cluePosition)
+                || TryGetVisibleFlashlightSurface(beamTransform.position,
+                    Quaternion.AngleAxis(sampleAngle, beamTransform.right) * forward,
+                    beamOwnerRoot, beamRange, out cluePosition);
+        }
+
+        private bool TryGetVisibleFlashlightSurface(
+            Vector3 beamOrigin,
+            Vector3 beamDirection,
+            Transform beamOwnerRoot,
+            float beamRange,
+            out Vector3 cluePosition)
+        {
+            cluePosition = default;
+            RaycastHit[] hits = Physics.RaycastAll(beamOrigin, beamDirection.normalized,
+                beamRange, losBlockerMask, QueryTriggerInteraction.Ignore);
+            if (hits.Length == 0)
+            {
+                return false;
+            }
+
+            Array.Sort(hits, CompareHitDistance);
+            foreach (RaycastHit hit in hits)
+            {
+                if (ShouldIgnoreHit(hit.transform, beamOwnerRoot))
+                {
+                    continue;
+                }
+
+                Vector3 surfacePoint = hit.point + hit.normal * 0.03f;
+                if (!CanSeePoint(surfacePoint))
+                {
+                    return false;
+                }
+
+                cluePosition = surfacePoint;
+                return true;
+            }
+
+            return false;
+        }
+
         public Vector3 GetObservationPointForGroundPoint(Vector3 groundPoint)
         {
             if (visionOrigin == null)
