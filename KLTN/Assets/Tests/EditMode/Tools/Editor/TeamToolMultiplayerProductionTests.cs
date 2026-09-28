@@ -209,7 +209,7 @@ namespace EchoProtocol.Player.Tests
             Assert.That(prefab, Is.Not.Null, $"Missing prefab at {CoreStabilizerPickupPath}");
 
             var netObj = prefab.GetComponent<NetworkObject>();
-            var toolPickup = prefab.GetComponent<NetworkToolPickup>();
+            var toolPickup = prefab.GetComponent<NetworkTeamToolPickup>();
             var col = prefab.GetComponent<BoxCollider>();
 
             Assert.That(netObj, Is.Not.Null, "Must have NetworkObject.");
@@ -218,13 +218,28 @@ namespace EchoProtocol.Player.Tests
 
             var so = new SerializedObject(toolPickup);
             Assert.That(so.FindProperty("_toolId").intValue, Is.EqualTo(6));
-            Assert.That(so.FindProperty("_toolItemDefinition").objectReferenceValue, Is.Not.Null);
+            Assert.That(so.FindProperty("_toolDisplayName").stringValue, Is.EqualTo("Core Stabilizer"));
 
             var netSo = new SerializedObject(netObj);
             var behaviours = netSo.FindProperty("NetworkedBehaviours");
             Assert.That(behaviours, Is.Not.Null);
             Assert.That(behaviours.arraySize, Is.GreaterThanOrEqualTo(1));
             Assert.That(behaviours.GetArrayElementAtIndex(0).objectReferenceValue, Is.SameAs(toolPickup));
+        }
+
+        [Test]
+        public void PLAYER_NETWORK_Prefab_HasCoreStabilizerInventoryDefinition()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerNetworkPath);
+            var inventory = prefab.GetComponentInChildren<PlayerInventory>(true);
+            Assert.That(inventory, Is.Not.Null);
+
+            var definition = new SerializedObject(inventory)
+                .FindProperty("coreStabilizerDefinition").objectReferenceValue;
+            var expected = AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(
+                "Assets/ScriptableObjects/Inventory/TeamTools/SO_CoreStabilizer_TeamTool.asset");
+            Assert.That(expected, Is.Not.Null);
+            Assert.That(definition, Is.SameAs(expected));
         }
 
         [Test]
