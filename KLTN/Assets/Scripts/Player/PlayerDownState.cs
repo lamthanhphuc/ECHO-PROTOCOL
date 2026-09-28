@@ -54,6 +54,7 @@ public class PlayerDownState : MonoBehaviour
         ? _authoritativeProtectionRemaining
         : Mathf.Max(0f, _protectionUntil - Time.time);
     public float Health => _health;
+    public float MaxHealth => maxHealth;
     public float BleedoutRemaining => _bleedoutRemaining;
     public float Bleedout01 => bleedoutSeconds <= 0f ? 0f : Mathf.Clamp01(_bleedoutRemaining / bleedoutSeconds);
 

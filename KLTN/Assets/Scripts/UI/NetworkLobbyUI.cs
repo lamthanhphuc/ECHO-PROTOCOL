@@ -47,6 +47,8 @@ namespace EchoProtocol.UI
 
         private void OnEnable()
         {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
             _configured = playerNameInput != null && sessionNameInput != null && hostButton != null
                 && joinButton != null && statusText != null && memberCountText != null && memberListText != null;
             if (!_configured) Debug.LogError("[NetworkLobbyUI] Assign all Input, Host/Join and text references.", this);
