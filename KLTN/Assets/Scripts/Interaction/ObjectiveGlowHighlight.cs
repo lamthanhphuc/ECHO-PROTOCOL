@@ -32,6 +32,10 @@ namespace EchoProtocol.Visuals
 
         [SerializeField, Range(0.5f, 10.0f)] private float outlineWidth = 2.0f;
 
+        [Header("Distance Visibility Tuning")]
+        [Tooltip("Max distance (in meters) within which the outline is visible. Beyond this distance, outline is hidden.")]
+        [SerializeField, Min(1f)] private float maxVisibleDistance = 30f;
+
         private Outline _outline;
         private bool _isHighlighted = true;
 
@@ -217,23 +221,26 @@ namespace EchoProtocol.Visuals
         private void CheckRelayState()
         {
             bool isOnline = (_relayA != null && _relayA.IsOnline) || (_relayB != null && _relayB.IsOnline);
-            SetHighlightActive(!isOnline);
+            bool inRange = IsWithinDistance(maxVisibleDistance);
+            SetHighlightActive(!isOnline && inRange);
         }
 
         private void CheckEnergyCoreState()
         {
+            bool inRange = IsWithinDistance(maxVisibleDistance);
+
             if (_networkPickup != null)
             {
                 bool carried = _networkPickup.IsCarried;
                 bool active = _networkPickup.gameObject.activeInHierarchy;
-                SetHighlightActive(!carried && active);
+                SetHighlightActive(!carried && active && inRange);
                 return;
             }
 
             if (_energyCore != null)
             {
                 bool active = _energyCore.gameObject.activeInHierarchy && _energyCore.transform.parent == null;
-                SetHighlightActive(active);
+                SetHighlightActive(active && inRange);
             }
         }
 
@@ -259,10 +266,6 @@ namespace EchoProtocol.Visuals
 
             bool zone2Active = StalkerZone2EntryTrigger.Zone2Triggered;
             var director = Zone2MissionDirector.Instance;
-            if (director != null && director.CurrentStage >= Zone2MissionStage.FindSecurityTerminal)
-            {
-                zone2Active = true;
-            }
 
             // Before entering Zone 2, or once terminal download is complete: outline is OFF
             if (!zone2Active || isComplete)
@@ -303,14 +306,24 @@ namespace EchoProtocol.Visuals
             }
 
             // Before touch: OutlineAll (xuyên tường để dẫn đường).
-            // After first touch: OutlineVisible (không cho nhìn xuyên tường, chỉ thấy khi nhìn trực tiếp).
+            // After first touch: OutlineVisible (không cho nhìn xuyên tường, chỉ thấy khi nhìn trực tiếp và trong phạm vi maxVisibleDistance).
             Outline.Mode targetMode = alreadyTouched ? Outline.Mode.OutlineVisible : Outline.Mode.OutlineAll;
             if (outlineMode != targetMode)
             {
                 OutlineMode = targetMode;
             }
 
-            SetHighlightActive(true);
+            bool inRange = !alreadyTouched || IsWithinDistance(maxVisibleDistance);
+            SetHighlightActive(inRange);
+        }
+
+        private bool IsWithinDistance(float maxDist)
+        {
+            Transform viewer = Camera.main != null ? Camera.main.transform : GetLocalPlayerTransform();
+            if (viewer == null) return true;
+
+            float sqrDist = (viewer.position - transform.position).sqrMagnitude;
+            return sqrDist <= (maxDist * maxDist);
         }
 
         private static Transform _cachedLocalPlayerTransform;

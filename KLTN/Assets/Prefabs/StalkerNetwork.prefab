@@ -409,6 +409,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b2a7426b5497ab64b9fd5fdee08edacb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Presentation.StalkerAudioController
+  detectSource: {fileID: 0}
   voiceSource: {fileID: 2044346233572654410}
   movementSource: {fileID: 4982250986504419632}
   breathingSource: {fileID: 5209900262359411746}
@@ -425,8 +426,8 @@ MonoBehaviour:
   idleBreathingClip: {fileID: 8300000, guid: 619f95311fb502d49bf2a6f94b0c0561, type: 3}
   conveyorLoopedClip: {fileID: 8300000, guid: 69a3fea5520c00149b9c021e5670e08f, type: 3}
   detectVolume: 1
-  walkFootstepVolume: 0.55
-  chaseFootstepVolume: 1
+  walkFootstepVolume: 0.85
+  chaseFootstepVolume: 1.25
   jumpOutVolume: 0.85
   jumpInVolume: 1
   breathingFullVolume: 1
@@ -436,14 +437,16 @@ MonoBehaviour:
   chaseFadeOutSeconds: 5
   searchCooldownSeconds: 4
   autoConfigure3D: 1
-  voiceMinDistance: 3
-  voiceMaxDistance: 45
-  movementMinDistance: 1.5
-  movementMaxDistance: 25
+  detectMinDistance: 30
+  detectMaxDistance: 60
+  voiceMinDistance: 10
+  voiceMaxDistance: 25
+  movementMinDistance: 15
+  movementMaxDistance: 40
   breathingMinDistance: 0.8
   breathingMaxDistance: 6
-  chaseMinDistance: 2
-  chaseMaxDistance: 30
+  chaseMinDistance: 40
+  chaseMaxDistance: 80
 --- !u!1 &100010
 GameObject:
   m_ObjectHideFlags: 0

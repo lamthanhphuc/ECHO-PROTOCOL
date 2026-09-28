@@ -10,6 +10,7 @@ namespace EchoProtocol.Networking
 
         private void Awake()
         {
+            Zone2Triggered = false;
             if (_spawner == null) _spawner = FindAnyObjectByType<PlayerSpawner>();
             if (_spawner == null)
             {
@@ -25,6 +26,11 @@ namespace EchoProtocol.Networking
 
         public static bool Zone2Triggered { get; private set; }
         public static event System.Action OnZone2Triggered;
+
+        public static void ResetTrigger()
+        {
+            Zone2Triggered = false;
+        }
 
         private void OnDestroy()
         {
