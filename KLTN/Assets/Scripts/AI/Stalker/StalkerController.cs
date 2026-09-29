@@ -2027,7 +2027,7 @@ namespace EchoProtocol.AI.Stalker
                 noisePosition,
                 direction);
 
-            if (!TrySetSearchOriginDestination(
+            if (!TrySetHeardNoiseOriginDestination(
                     noisePosition))
             {
                 TryPlanNextSearchCandidate();
@@ -2083,7 +2083,7 @@ namespace EchoProtocol.AI.Stalker
                 noisePosition,
                 direction);
 
-            if (!TrySetSearchOriginDestination(
+            if (!TrySetHeardNoiseOriginDestination(
                     noisePosition))
             {
                 TryPlanNextSearchCandidate();
@@ -2322,12 +2322,16 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            // Reach the heard source before spending the search timer.
-            if (_navigationObjectiveKey.Kind == StalkerNavigationObjectiveKind.SearchOriginLkp
+            //
+            // The heard source owns SEARCH until Stalker physically reaches it.
+            // Do not spend the SEARCH budget while travelling or recovering
+            // navigation toward the source.
+            //
+            if (_navigationObjectiveKey.Kind
+                    == StalkerNavigationObjectiveKind.SearchOriginLkp
                 && _navigation != null
                 && _navigation.HasActiveDestination
-                && (_navigation.GetExecutionStatus() == NavigationExecutionStatus.Moving
-                    || _navigation.GetExecutionStatus() == NavigationExecutionStatus.RepathPending))
+                && !_navigation.HasArrived())
             {
                 return;
             }
@@ -3536,6 +3540,49 @@ namespace EchoProtocol.AI.Stalker
                     : -1,
                 _memory.CurrentTargetId.IsValid ? _memory.CurrentTargetId.Value : -1));
             return true;
+        }
+
+        private bool TrySetHeardNoiseOriginDestination(
+            Vector3 noisePosition)
+        {
+            //
+            // Prefer the exact noise position when it is already
+            // a complete reachable NavMesh destination.
+            //
+            if (TrySetSearchOriginDestination(
+                    noisePosition))
+            {
+                return true;
+            }
+
+            //
+            // Noise Maker is floor-snapped by Physics, not NavMesh.
+            // Resolve the nearest reachable NavMesh point instead of
+            // abandoning the heard source and starting a generic search.
+            //
+            var agent =
+                GetComponent<NavMeshAgent>();
+
+            if (agent == null
+                || !agent.enabled
+                || !agent.isOnNavMesh)
+            {
+                return false;
+            }
+
+            const float sampleRadius = 1.5f;
+
+            if (!NavMesh.SamplePosition(
+                    noisePosition,
+                    out var hit,
+                    sampleRadius,
+                    agent.areaMask))
+            {
+                return false;
+            }
+
+            return TrySetSearchOriginDestination(
+                hit.position);
         }
 
         private bool IsWithinAttackRange(Vector3 targetPosition)
