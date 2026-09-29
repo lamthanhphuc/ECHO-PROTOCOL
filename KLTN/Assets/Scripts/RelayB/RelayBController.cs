@@ -48,6 +48,7 @@ namespace EchoProtocol.RelayB
                 audioSource = GetComponent<AudioSource>();
             }
             EchoProtocol.Audio.GameAudioRuntime.EnsureInitialized();
+            EchoProtocol.Audio.GameAudioSettings.RouteEffects(audioSource);
             if (audioSource != null) audioSource.spatialBlend = 1f;
             _statusLoop = EchoProtocol.Audio.GameAudioRuntime.CreateSource(gameObject, true);
             _statusLoop.maxDistance = 28f;

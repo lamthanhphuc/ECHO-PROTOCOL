@@ -1,4 +1,5 @@
 using EchoProtocol.Networking;
+using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.InputSystem;
 #if UNITY_EDITOR
@@ -88,11 +89,11 @@ public class PlayerAnimatorDriver : MonoBehaviour
             : networkMovement != null
                 ? networkMovement.IsAnimationSprinting
                 : (Keyboard.current != null
-                && Keyboard.current.leftShiftKey.isPressed
-                && !Keyboard.current.sKey.isPressed
-                && (Keyboard.current.wKey.isPressed
-                    || Keyboard.current.aKey.isPressed
-                    || Keyboard.current.dKey.isPressed));
+                && GameplayInputSettings.IsPressed(GameplayAction.Sprint)
+                && !GameplayInputSettings.IsPressed(GameplayAction.MoveBackward)
+                && (GameplayInputSettings.IsPressed(GameplayAction.MoveForward)
+                    || GameplayInputSettings.IsPressed(GameplayAction.MoveLeft)
+                    || GameplayInputSettings.IsPressed(GameplayAction.MoveRight)));
         bool isDowned = (downState != null && downState.IsDowned)
             || (networkLifeState != null && networkLifeState.Object != null && networkLifeState.Object.IsValid && networkLifeState.IsDowned);
         Vector2 moveDirection = GetMoveDirection(isSprinting, isCarrying, isDowned);
@@ -209,10 +210,10 @@ public class PlayerAnimatorDriver : MonoBehaviour
         {
             float x = 0f;
             float y = 0f;
-            if (Keyboard.current.wKey.isPressed) y += 1f;
-            if (Keyboard.current.sKey.isPressed) y -= 1f;
-            if (Keyboard.current.aKey.isPressed) x -= 1f;
-            if (Keyboard.current.dKey.isPressed) x += 1f;
+            if (GameplayInputSettings.IsPressed(GameplayAction.MoveForward)) y += 1f;
+            if (GameplayInputSettings.IsPressed(GameplayAction.MoveBackward)) y -= 1f;
+            if (GameplayInputSettings.IsPressed(GameplayAction.MoveLeft)) x -= 1f;
+            if (GameplayInputSettings.IsPressed(GameplayAction.MoveRight)) x += 1f;
             input = new Vector2(x, y);
         }
 

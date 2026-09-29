@@ -1,3 +1,4 @@
+using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -245,7 +246,10 @@ public class PlayerHidingController : MonoBehaviour
 
         InputActionMap playerMap = inputActions.FindActionMap("Player", false);
         _interactAction = playerMap?.FindAction("Interact", false);
+        GameplayInputSettings.RegisterAction(_interactAction);
     }
+
+    private void OnDestroy() => GameplayInputSettings.UnregisterAction(_interactAction);
 
     private void MoveToHidingPoint(Transform point)
     {

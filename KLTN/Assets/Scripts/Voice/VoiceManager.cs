@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using EchoProtocol.Networking;
+using EchoProtocol.Settings;
 using Fusion;
 using Photon.Realtime;
 using Photon.Voice;
@@ -22,6 +23,7 @@ namespace EchoProtocol.Voice
         public string Status { get; private set; } = "Waiting for a Fusion session";
         public bool MicrophoneEnabled { get; private set; }
         public bool SelfMuted { get; private set; }
+        public bool PushToTalk { get; private set; }
         public Key ToggleMicrophoneKey { get; private set; } = Key.V;
         public float OutputVolume { get; private set; } = 1;
         public bool Speaking => _recorder != null && _recorder.IsCurrentlyTransmitting;
@@ -35,6 +37,7 @@ namespace EchoProtocol.Voice
         private float _deadline, _nextAttempt, _captureStarted;
         private int _attempts;
         private bool _connecting, _joinRequested, _focused = true, _paused;
+        private bool _pushToTalkHeld;
 
         public static void EnsureExists()
         {
@@ -67,15 +70,32 @@ namespace EchoProtocol.Voice
                 if (groups.Length > 0) _outputMixer = groups[0];
             }
             SelfMuted = PlayerPrefs.GetInt("Echo.Voice.Muted", 0) != 0;
+            PushToTalk = PlayerPrefs.GetInt("Echo.Voice.PushToTalk", 0) != 0;
             OutputVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("Echo.Voice.Volume", 1));
-            if (Enum.TryParse(PlayerPrefs.GetString("Echo.Voice.ToggleKey", "V"), out Key key) && key != Key.None) ToggleMicrophoneKey = key;
+            RestoreMicrophoneKey();
             gameObject.AddComponent<VoiceSettingsPanel>();
         }
 
+        private void RestoreMicrophoneKey()
+        {
+            if (Enum.TryParse(PlayerPrefs.GetString("Echo.Voice.ToggleKey", "V"), out Key saved)
+                && IsMicrophoneKeyAvailable(saved)) ToggleMicrophoneKey = saved;
+            else if (IsMicrophoneKeyAvailable(Key.V)) ToggleMicrophoneKey = Key.V;
+            else
+                foreach (Key candidate in Enum.GetValues(typeof(Key)))
+                    if (IsMicrophoneKeyAvailable(candidate)) { ToggleMicrophoneKey = candidate; break; }
+            PlayerPrefs.SetString("Echo.Voice.ToggleKey", ToggleMicrophoneKey.ToString());
+        }
+
+        private static bool IsMicrophoneKeyAvailable(Key key) => key != Key.None && key != Key.Escape
+            && Enum.IsDefined(typeof(Key), key) && !GameplayInputSettings.IsKeyBound(key);
+
         private void Update()
         {
-            if (_focused && !_paused && !VoiceSettingsPanel.IsOpen && !PlayerInteractionControlLock.HasModal
-                && Keyboard.current != null && Keyboard.current[ToggleMicrophoneKey].wasPressedThisFrame)
+            bool canReadShortcut = _focused && !_paused && !VoiceSettingsPanel.IsOpen
+                && !PlayerInteractionControlLock.HasModal && Keyboard.current != null;
+            _pushToTalkHeld = canReadShortcut && PushToTalk && Keyboard.current[ToggleMicrophoneKey].isPressed;
+            if (canReadShortcut && !PushToTalk && Keyboard.current[ToggleMicrophoneKey].wasPressedThisFrame)
                 ToggleMicrophone();
 
             var bootstrap = NetworkBootstrap.Instance;
@@ -170,7 +190,8 @@ namespace EchoProtocol.Voice
         private void UpdateCapture(bool connected)
         {
             bool canCapture = VoiceTransmissionRules.CanCapture(connected, MicrophoneEnabled, SelfMuted,
-                Devices.Ready, Devices.Testing, _focused, _paused, VoiceSettingsPanel.IsOpen);
+                Devices.Ready, Devices.Testing, _focused, _paused, VoiceSettingsPanel.IsOpen,
+                PushToTalk, _pushToTalkHeld);
             if (!canCapture) { StopCapture(); return; }
             if (!_recorder.RecordingEnabled)
             {
@@ -232,7 +253,19 @@ namespace EchoProtocol.Voice
         public void EnableMicrophone(bool enabled) { MicrophoneEnabled = enabled; if (!enabled) { StopCapture(); StopTest(); } }
         public void SetMuted(bool muted) { SelfMuted = muted; PlayerPrefs.SetInt("Echo.Voice.Muted", muted ? 1 : 0); if (muted) StopCapture(); }
         public void SetVolume(float volume) { OutputVolume = Mathf.Clamp01(volume); PlayerPrefs.SetFloat("Echo.Voice.Volume", OutputVolume); }
-        public void SetToggleMicrophoneKey(Key key) { if (key == Key.None) return; ToggleMicrophoneKey = key; PlayerPrefs.SetString("Echo.Voice.ToggleKey", key.ToString()); }
+        public void SetPushToTalk(bool enabled)
+        {
+            PushToTalk = enabled;
+            _pushToTalkHeld = false;
+            PlayerPrefs.SetInt("Echo.Voice.PushToTalk", enabled ? 1 : 0);
+            StopCapture();
+        }
+        public void SetToggleMicrophoneKey(Key key)
+        {
+            if (!IsMicrophoneKeyAvailable(key)) return;
+            ToggleMicrophoneKey = key;
+            PlayerPrefs.SetString("Echo.Voice.ToggleKey", key.ToString());
+        }
         public void SelectDevice(string device) { StopCapture(); Devices.Select(device); }
         public void StartTest() { StopCapture(); Devices.StartTest(); }
         public void StopTest() => Devices.StopTest();

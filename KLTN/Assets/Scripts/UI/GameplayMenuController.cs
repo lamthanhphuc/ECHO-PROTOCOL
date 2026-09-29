@@ -1,5 +1,7 @@
 using System.Collections;
 using EchoProtocol.Networking;
+using EchoProtocol.Settings;
+using EchoProtocol.Voice;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -21,8 +23,6 @@ namespace EchoProtocol.UI
         private Text _teamTool;
         private GameObject _inventoryContent;
         private Button _resumeButton;
-        private Button _inventoryButton;
-        private Button _leaveButton;
         private PlayerInventoryDropInput _dropInput;
         private PlayerInventory _inventory;
         private bool _showingInventory;
@@ -61,8 +61,10 @@ namespace EchoProtocol.UI
             if (keyboard == null) return;
             if (_lock.IsLocked)
             {
-                if (_lock.ShouldAutoRelease() || _lock.ConsumeEscape()) Close();
-                else if (keyboard.tabKey.wasPressedThisFrame) Open(!_showingInventory);
+                if (_lock.ShouldAutoRelease()) Close();
+                else if (!_lock.IsTopmost) return;
+                else if (_lock.ConsumeEscape()) Close();
+                else if (GameplayInputSettings.WasPressedThisFrame(GameplayAction.Inventory)) Open(!_showingInventory);
                 else if (_showingInventory) RefreshInventory();
                 return;
             }
@@ -70,7 +72,7 @@ namespace EchoProtocol.UI
             if (PlayerInteractionControlLock.HasModal || PlayerInteractionControlLock.EscapeConsumedThisFrame
                 || PlayerInteractionControlLock.IsGameplayInputBlocked()) return;
             if (keyboard.escapeKey.wasPressedThisFrame) Open(false);
-            else if (keyboard.tabKey.wasPressedThisFrame) Open(true);
+            else if (GameplayInputSettings.WasPressedThisFrame(GameplayAction.Inventory)) Open(true);
         }
 
         private void Open(bool inventory)
@@ -85,12 +87,18 @@ namespace EchoProtocol.UI
             _inventory = player.GetComponentInParent<PlayerInventory>();
             _dropInput = player.GetComponentInParent<PlayerInventoryDropInput>();
             _showingInventory = inventory;
-            _windowRect.sizeDelta = inventory ? new Vector2(490f, 510f) : new Vector2(470f, 315f);
-            _title.text = inventory ? "INVENTORY" : "PAUSED";
-            _inventoryContent.SetActive(inventory);
-            _inventoryButton.gameObject.SetActive(!inventory);
-            _leaveButton.gameObject.SetActive(!inventory);
-            _resumeButton.GetComponentInChildren<Text>().text = inventory ? "Back" : "Resume";
+            if (!inventory)
+            {
+                _root.SetActive(false);
+                VoiceManager.EnsureExists();
+                var settings = VoiceManager.Instance.GetComponent<VoiceSettingsPanel>();
+                if (!settings.OpenFromGameplayMenu(_lock, Close, () => Open(true))) Close();
+                return;
+            }
+            _windowRect.sizeDelta = new Vector2(490f, 510f);
+            _title.text = "TÚI ĐỒ";
+            _inventoryContent.SetActive(true);
+            _resumeButton.GetComponentInChildren<Text>().text = "Tiếp tục";
             _root.SetActive(true);
             RefreshInventory();
         }
@@ -113,17 +121,13 @@ namespace EchoProtocol.UI
 
         private void Close()
         {
-            _root.SetActive(false);
+            var voicePanel = VoiceManager.Instance != null
+                ? VoiceManager.Instance.GetComponent<VoiceSettingsPanel>() : null;
+            voicePanel?.CloseFromGameplayMenu(_lock);
+            if (_root != null) _root.SetActive(false);
             _lock.Release();
             _inventory = null;
             _dropInput = null;
-        }
-
-        private void LeaveRoom()
-        {
-            Close();
-            var bootstrap = NetworkBootstrap.Instance;
-            if (bootstrap != null) _ = bootstrap.Shutdown();
         }
 
         private void SelectSlot(int slot)
@@ -184,8 +188,6 @@ namespace EchoProtocol.UI
             _slotTwo = Label("Slot 2", _inventoryContent.transform, 19, FontStyle.Normal);
             _teamTool = Label("Team Tool", _inventoryContent.transform, 19, FontStyle.Normal);
             _resumeButton = ActionButton("Resume", window.transform, Close);
-            _inventoryButton = ActionButton("Inventory", window.transform, () => Open(true));
-            _leaveButton = ActionButton("Leave Room", window.transform, LeaveRoom);
             ActionButton("Select Slot 1", _inventoryContent.transform, () => SelectSlot(0));
             ActionButton("Select Slot 2", _inventoryContent.transform, () => SelectSlot(1));
             ActionButton("Drop Selected", _inventoryContent.transform, DropSelected);

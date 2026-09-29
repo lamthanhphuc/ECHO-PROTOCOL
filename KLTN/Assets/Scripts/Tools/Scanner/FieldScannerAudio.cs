@@ -17,6 +17,7 @@ namespace EchoProtocol.Tools.Scanner
         private void Awake()
         {
             if (audioSource == null) audioSource = GetComponent<AudioSource>();
+            EchoProtocol.Audio.GameAudioSettings.RouteEffects(audioSource);
             audioSource.playOnAwake = false;
             audioSource.spatialBlend = 0.5f; // half 2D / 3D so owner hears clearly and nearby players hear locally
             audioSource.volume = volume;

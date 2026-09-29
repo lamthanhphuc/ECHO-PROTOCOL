@@ -42,6 +42,7 @@ namespace EchoProtocol.Audio
             _instance._roomCurrent = CreateSource(root, false);
             _instance._roomNext = CreateSource(root, false);
             _instance._dangerMusic = CreateSource(root, false);
+            GameAudioSettings.RouteMusic(_instance._dangerMusic);
             SceneManager.activeSceneChanged += _instance.OnSceneChanged;
             NetworkPlayerInteractor.LocalRequestCompleted += _instance.OnInteractionCompleted;
             EchoProtocol.Tools.Scanner.NetworkToolPickup.ToolPickedUp += _instance.OnToolPickedUp;
@@ -58,6 +59,7 @@ namespace EchoProtocol.Audio
             source.minDistance = 2f;
             source.maxDistance = 25f;
             source.dopplerLevel = 0f;
+            GameAudioSettings.RouteEffects(source);
             return source;
         }
 

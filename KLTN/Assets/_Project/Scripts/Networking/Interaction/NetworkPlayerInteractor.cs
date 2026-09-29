@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.Diagnostics;
+using EchoProtocol.Settings;
 using EchoProtocol.Tools.Scanner;
 using Fusion;
 using UnityEngine;
@@ -77,6 +78,7 @@ namespace EchoProtocol.Networking
         private void Awake()
         {
             _interactAction = _inputActions?.FindActionMap("Player", false)?.FindAction("Interact", false);
+            GameplayInputSettings.RegisterAction(_interactAction);
             _dropCoreAction = new InputAction("DropCore", InputActionType.Button, "<Keyboard>/g");
             _teamToolAction = new InputAction("UseTeamTool", InputActionType.Button);
             _teamToolAction.AddBinding("<Mouse>/leftButton");
@@ -131,6 +133,7 @@ namespace EchoProtocol.Networking
 
         private void OnDestroy()
         {
+            GameplayInputSettings.UnregisterAction(_interactAction);
             _dropCoreAction?.Dispose();
             _teamToolAction?.Dispose();
             _helpPingAction?.Dispose();
