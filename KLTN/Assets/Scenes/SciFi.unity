@@ -358839,7 +358839,8 @@ MonoBehaviour:
   minPitch: -45
   maxPitch: 45
   cameraForwardOffset: 0.13
-  crouchCameraRightOffset: 0.2
+  crouchCameraForwardOffset: 0.25
+  crouchCameraRightOffset: 0.1
   downedCameraRightOffset: 0.1
   downedCameraForwardOffset: 0.4
   downedLockedPitch: 0

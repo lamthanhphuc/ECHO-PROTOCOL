@@ -15,6 +15,9 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     [SerializeField] private float lookAtDistance = 12f;
     [SerializeField] private bool driveRightHandWhenHolding = true;
 
+    [Header("Crouch Pose")]
+    [SerializeField] private Vector3 crouchLeftHandLocalPosition = new Vector3(-0.22f, 0.62f, 0.04f);
+
     [Header("Carry (Two-Hand) Pose")]
     [SerializeField] private float carryForwardOffset = 0.30f;
     [SerializeField] private float carryLateralOffset = 0.30f;
@@ -39,6 +42,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
     private static readonly int IsRevivingHash = Animator.StringToHash("IsReviving");
     private static readonly int IsDownedHash = Animator.StringToHash("IsDowned");
+    private static readonly int IsCrouchingHash = Animator.StringToHash("IsCrouching");
 
     private PlayerInventory _inventory;
     private PlayerEnergyCoreCarrier _coreCarrier;
@@ -151,6 +155,14 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
             UpdateCoreAnchorPose(aimForward, aimUp, aimRight, rightHandBone, leftHandBone, rightHandPos, leftHandPos);
             return;
+        }
+
+        if (animator.GetBool(IsCrouchingHash) && leftUpperArm != null && leftForeArm != null && leftHandBone != null)
+        {
+            Transform root = playerRoot != null ? playerRoot : transform;
+            Vector3 leftHandTarget = root.TransformPoint(crouchLeftHandLocalPosition);
+            Vector3 leftElbowPole = leftUpperArm.position - root.right * 0.35f + root.forward * 0.12f;
+            SolveTwoBoneIK(leftUpperArm, leftForeArm, leftHandBone, leftHandTarget, leftElbowPole, 1f);
         }
 
 

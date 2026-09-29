@@ -191,6 +191,18 @@ namespace EchoProtocol.Player.Tests
         }
 
         [Test]
+        public void PLAYER_CROUCH_CameraMovesForwardAndLeftHandStaysDown()
+        {
+            var camera = File.ReadAllText("Assets/Scripts/Player/PlayerCamera.cs");
+            var upperBodyAim = File.ReadAllText("Assets/Scripts/Player/PlayerUpperBodyAim.cs");
+
+            StringAssert.Contains("crouchCameraForwardOffset = 0.25f", camera);
+            StringAssert.Contains("? crouchCameraForwardOffset", camera);
+            StringAssert.Contains("animator.GetBool(IsCrouchingHash)", upperBodyAim);
+            StringAssert.Contains("crouchLeftHandLocalPosition", upperBodyAim);
+        }
+
+        [Test]
         public void HIDE_NetworkFlow_UsesAuthoritativeReservationAndRollback()
         {
             var movement = File.ReadAllText(
