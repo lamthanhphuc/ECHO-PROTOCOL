@@ -1,3 +1,4 @@
+using EchoProtocol.Networking;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -42,6 +43,7 @@ public class PlayerMovement : MonoBehaviour
     private bool _isSprintBlocked;
     private Vector2 _moveInput;
     private PlayerEnergyCoreCarrier _coreCarrier;
+    private PlayerInventory _inventory;
 
     public float CurrentStamina => _currentStamina;
     public float MaxStamina => maxStamina;
@@ -56,6 +58,7 @@ public class PlayerMovement : MonoBehaviour
     {
         _controller = GetComponent<CharacterController>();
         _coreCarrier = GetComponent<PlayerEnergyCoreCarrier>() ?? GetComponentInParent<PlayerEnergyCoreCarrier>();
+        _inventory = GetComponent<PlayerInventory>() ?? GetComponentInParent<PlayerInventory>();
         _currentStamina = maxStamina;
         ApplyControllerDimensions(standingHeight, standingRadius, immediate: true);
 
@@ -102,9 +105,11 @@ public class PlayerMovement : MonoBehaviour
 
         bool wantsSprint = !blocked && _sprintAction != null && _sprintAction.IsPressed();
         bool isCarryingCore = _coreCarrier != null && _coreCarrier.IsCarrying;
-        bool wantsCrouch = blocked ? _isCrouching : !isCarryingCore && IsCrouchPressed();
+        bool allowsCrouch = CoreStabilizerRules.AllowsCrouch(isCarryingCore,
+            _inventory != null && PlayerInventory.ResolveToolId(_inventory.TeamToolSlot) == LobbyPlayerState.CoreStabilizerToolId);
+        bool wantsCrouch = blocked ? _isCrouching : allowsCrouch && IsCrouchPressed();
         _isCrouching = wantsCrouch || (_isCrouching && !CanStandUp());
-        if (isCarryingCore && CanStandUp())
+        if (!allowsCrouch && CanStandUp())
         {
             _isCrouching = false;
         }

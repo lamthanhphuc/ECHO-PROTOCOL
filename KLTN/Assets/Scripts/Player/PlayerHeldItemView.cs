@@ -40,8 +40,8 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     [SerializeField] private Vector3 plankChildLocalEulerAngles = Vector3.zero;
     [SerializeField] private Vector3 plankChildLocalScale = Vector3.one;
     [Header("Core Stabilizer Transform")]
-    [SerializeField] private Vector3 coreStabilizerLocalPosition = new Vector3(0.035f, 0.02f, 0.12f);
-    [SerializeField] private Vector3 coreStabilizerLocalEulerAngles = new Vector3(10f, 90f, -15f);
+    [SerializeField] private Vector3 coreStabilizerLocalPosition = Vector3.zero;
+    [SerializeField] private Vector3 coreStabilizerLocalEulerAngles = new Vector3(0f, 90f, 0f);
     [SerializeField] private Vector3 coreStabilizerLocalScale = new Vector3(0.45f, 0.45f, 0.45f);
 
     private GameObject _currentVisual;
@@ -122,7 +122,7 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             return;
         }
 
-        Transform anchor = ResolveAnchor(_currentItem.ItemType);
+        Transform anchor = ResolveAnchor(_currentItem);
         if (anchor == null)
         {
             return;
@@ -314,7 +314,7 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         return false;
     }
 
-    private Transform ResolveAnchor(InventoryItemType itemType)
+    private Transform ResolveAnchor(InventoryItemDefinition item)
     {
         if (heldItemAnchor == null)
         {
@@ -326,7 +326,8 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             heldItemAnchor = gameObject.AddComponent<PlayerHeldItemAnchor>();
         }
 
-        return itemType == InventoryItemType.EnergyCore
+        return item != null
+            && (item.ItemType == InventoryItemType.EnergyCore || IsItem(item, "core_stabilizer", "stabilizer"))
             ? heldItemAnchor.CoreCarryAnchor
             : heldItemAnchor.RightHandAnchor;
     }

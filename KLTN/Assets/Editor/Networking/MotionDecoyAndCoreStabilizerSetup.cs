@@ -223,8 +223,8 @@ namespace EchoProtocol.Editor
                         var pos6Prop = toolSo.FindProperty("coreStabilizerLocalPosition");
                         var rot6Prop = toolSo.FindProperty("coreStabilizerLocalEulerAngles");
                         var scale6Prop = toolSo.FindProperty("coreStabilizerLocalScale");
-                        if (pos6Prop != null) pos6Prop.vector3Value = new Vector3(0.035f, 0.02f, 0.12f);
-                        if (rot6Prop != null) rot6Prop.vector3Value = new Vector3(10f, 90f, -15f);
+                        if (pos6Prop != null) pos6Prop.vector3Value = Vector3.zero;
+                        if (rot6Prop != null) rot6Prop.vector3Value = new Vector3(0f, 90f, 0f);
                         if (scale6Prop != null) scale6Prop.vector3Value = new Vector3(0.45f, 0.45f, 0.45f);
 
                         toolSo.ApplyModifiedPropertiesWithoutUndo();

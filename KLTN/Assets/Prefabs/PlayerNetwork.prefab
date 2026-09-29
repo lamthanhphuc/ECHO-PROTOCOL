@@ -572,8 +572,8 @@ MonoBehaviour:
   plankChildLocalPosition: {x: 0, y: 0, z: 0}
   plankChildLocalEulerAngles: {x: 0, y: 0, z: 0}
   plankChildLocalScale: {x: 1, y: 1, z: 1}
-  coreStabilizerLocalPosition: {x: 0.035, y: 0.02, z: 0.12}
-  coreStabilizerLocalEulerAngles: {x: 10, y: 90, z: -15}
+  coreStabilizerLocalPosition: {x: 0, y: 0, z: 0}
+  coreStabilizerLocalEulerAngles: {x: 0, y: 90, z: 0}
   coreStabilizerLocalScale: {x: 0.45, y: 0.45, z: 0.45}
 --- !u!114 &3015891846550289329
 MonoBehaviour:
@@ -787,7 +787,7 @@ MonoBehaviour:
   carryNoiseInterval: 2.5
   carryNoiseMoveThreshold: 0.05
   stabilizedNoiseMultiplier: 0.35
-  stabilizedCarrySpeedMultiplier: 0.9
+  stabilizedCarrySpeedMultiplier: 1
   carryNoiseEmitted:
     m_PersistentCalls:
       m_Calls: []
@@ -856,8 +856,8 @@ MonoBehaviour:
   plankChildLocalPosition: {x: 0, y: 0, z: 0}
   plankChildLocalEulerAngles: {x: 0, y: 0, z: 0}
   plankChildLocalScale: {x: 1, y: 1, z: 1}
-  coreStabilizerLocalPosition: {x: 0.035, y: 0.02, z: 0.12}
-  coreStabilizerLocalEulerAngles: {x: 10, y: 90, z: -15}
+  coreStabilizerLocalPosition: {x: 0, y: 0, z: 0}
+  coreStabilizerLocalEulerAngles: {x: 0, y: 90, z: 0}
   coreStabilizerLocalScale: {x: 0.45, y: 0.45, z: 0.45}
 --- !u!114 &7312325081617675025
 MonoBehaviour:

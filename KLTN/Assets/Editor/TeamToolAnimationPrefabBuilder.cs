@@ -75,7 +75,6 @@ public static class TeamToolAnimationPrefabBuilder
             SmoothCurve(Key(0f, -0.5f), Key(1f, 0.5f), Key(2f, -0.5f)));
         SetLightIntensity(clip, "Visual/DeviceVFXOrigin/StatusLight",
             Key(0f, 0.4f), Key(1f, 0.8f), Key(2f, 0.4f));
-        SetUniformScale(clip, "SupportFieldVFX", Key(0f, 0.01f), Key(2f, 0.01f));
         FinishClip(clip);
         return clip;
     }
@@ -91,8 +90,6 @@ public static class TeamToolAnimationPrefabBuilder
             LinearCurve(Key(0f, 0f), Key(0.2f, -2f), Key(0.3f, 2f), Key(0.4f, -1f), Key(0.6f, 0f)));
         SetLightIntensity(clip, "Visual/DeviceVFXOrigin/StatusLight",
             Key(0f, 0.5f), Key(0.2f, 1f), Key(0.45f, 3f), Key(0.6f, 1.5f));
-        SetUniformScale(clip, "SupportFieldVFX",
-            Key(0f, 0.01f), Key(0.18f, 0.15f), Key(0.45f, 1.08f), Key(0.6f, 1f));
         FinishClip(clip);
         return clip;
     }
@@ -108,7 +105,6 @@ public static class TeamToolAnimationPrefabBuilder
             SmoothCurve(Key(0f, 0f), Key(0.5f, 3f), Key(1f, 0f)));
         SetLightIntensity(clip, "Visual/DeviceVFXOrigin/StatusLight",
             Key(0f, 1.4f), Key(0.5f, 2.2f), Key(1f, 1.4f));
-        SetUniformScale(clip, "SupportFieldVFX", Key(0f, 1f), Key(0.5f, 1.04f), Key(1f, 1f));
         FinishClip(clip);
         return clip;
     }
@@ -124,8 +120,6 @@ public static class TeamToolAnimationPrefabBuilder
             SmoothCurve(Key(0f, 0f), Key(0.2f, -1f), Key(0.4f, 0f)));
         SetLightIntensity(clip, "Visual/DeviceVFXOrigin/StatusLight",
             Key(0f, 1.5f), Key(0.2f, 0.2f), Key(0.4f, 0.4f));
-        SetUniformScale(clip, "SupportFieldVFX",
-            Key(0f, 1f), Key(0.2f, 0.65f), Key(0.4f, 0.01f));
         FinishClip(clip);
         return clip;
     }
@@ -137,12 +131,11 @@ public static class TeamToolAnimationPrefabBuilder
 
         GameObject root = CreateAnimatedRoot("PF_CoreStabilizer_Device_Animated", controller);
         GameObject visual = InstantiateVisual(visualPrefab, root.transform);
-        visual.transform.Find("DeviceVFXOrigin/StatusLight").localPosition = new Vector3(0.158f, 0.341f, 0.01f);
+        visual.transform.Find("DeviceVFXOrigin/StatusLight").localPosition = new Vector3(0.158f, 0.3239f, 0.01f);
         Transform mesh = visual.transform.Find("GripPivot/DeviceModel/RandomSciFiDevice/default");
         mesh.localPosition = new Vector3(15.2f, 39.1f, -10.3f);
         mesh.localRotation = Quaternion.Euler(90f, 0f, 0f);
         CreateSupportFieldVfx(root.transform, fieldMaterial);
-        root.transform.Find("SupportFieldVFX/GroundRing_2_5m").localPosition = new Vector3(13.4f, 36.3f, -4.8f);
         SaveWrapper(root, CorePrefabPath);
     }
 
@@ -156,7 +149,7 @@ public static class TeamToolAnimationPrefabBuilder
             AssetDatabase.CreateAsset(material, FieldMaterialPath);
         }
 
-        Color color = new Color(0.08f, 0.8f, 1f, 0.24f);
+        Color color = new Color(0.05f, 0.85f, 1f, 0.7f);
         if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
         if (material.HasProperty("_Color")) material.SetColor("_Color", color);
         if (material.HasProperty("_Surface")) material.SetFloat("_Surface", 1f);
@@ -174,24 +167,25 @@ public static class TeamToolAnimationPrefabBuilder
 
     private static void CreateSupportFieldVfx(Transform parent, Material material)
     {
-        const float radius = 2.5f;
-        const int segments = 96;
+        const float radius = 5f;
+        const int segments = 128;
 
         var field = new GameObject("SupportFieldVFX");
         field.transform.SetParent(parent, false);
-        field.transform.localPosition = new Vector3(0f, 0.025f, 0f);
+        field.transform.localPosition = new Vector3(0f, -0.396f, 0f);
         field.transform.localScale = Vector3.one * 0.01f;
 
-        var ringObject = new GameObject("GroundRing_2_5m");
+        var ringObject = new GameObject("GroundRing");
         ringObject.transform.SetParent(field.transform, false);
+        ringObject.transform.localPosition = new Vector3(0.165f, -0.46f, -0.78f);
         LineRenderer ring = ringObject.AddComponent<LineRenderer>();
         ring.sharedMaterial = material;
         ring.useWorldSpace = false;
         ring.loop = true;
         ring.positionCount = segments;
-        ring.startWidth = 0.035f;
-        ring.endWidth = 0.035f;
-        ring.startColor = new Color(0.08f, 0.8f, 1f, 0.24f);
+        ring.startWidth = 0.12f;
+        ring.endWidth = 0.12f;
+        ring.startColor = new Color(0.08f, 0.85f, 1f, 0.7f);
         ring.endColor = ring.startColor;
         ring.numCornerVertices = 2;
         ring.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -202,30 +196,6 @@ public static class TeamToolAnimationPrefabBuilder
             ring.SetPosition(i, new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius));
         }
 
-        var particlesObject = new GameObject("FieldBoundaryParticles");
-        particlesObject.transform.SetParent(field.transform, false);
-        particlesObject.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-        ParticleSystem particles = particlesObject.AddComponent<ParticleSystem>();
-        var main = particles.main;
-        main.duration = 1.5f;
-        main.loop = true;
-        main.startLifetime = 1.1f;
-        main.startSpeed = 0.025f;
-        main.startSize = 0.035f;
-        main.startColor = new Color(0.1f, 0.85f, 1f, 0.35f);
-        main.maxParticles = 80;
-        main.simulationSpace = ParticleSystemSimulationSpace.Local;
-        var emission = particles.emission;
-        emission.rateOverTime = 14f;
-        var shape = particles.shape;
-        shape.shapeType = ParticleSystemShapeType.Circle;
-        shape.radius = radius;
-        shape.radiusThickness = 0.03f;
-        ParticleSystemRenderer renderer = particles.GetComponent<ParticleSystemRenderer>();
-        renderer.sharedMaterial = material;
-        renderer.renderMode = ParticleSystemRenderMode.Billboard;
-        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        renderer.receiveShadows = false;
     }
 
     private static GameObject CreateAnimatedRoot(string name, RuntimeAnimatorController controller)

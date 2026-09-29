@@ -326,9 +326,9 @@ namespace EchoProtocol.UI.HUD
                 panel,
                 panelRect,
                 "BỘ ỔN ĐỊNH LÕI",
-                "Ở GẦN ĐỒNG ĐỘI\n<size=27>ỔN ĐỊNH LÕI</size>\n<size=20>Giữ khoảng cách trong phạm vi 2,5 m.</size>",
-                "[CHUỘT TRÁI]\n<size=27>PHÁT XUNG</size>\n<size=20>Kích hoạt phản hồi của thiết bị.</size>",
-                "Ưu tiên đi cùng người đang mang Lõi năng lượng.",
+                "[CHUỘT TRÁI]\n<size=27>KÍCH HOẠT</size>\n<size=20>Tạo vùng ổn định bán kính 5 m trong 15 giây.</size>",
+                "HỖ TRỢ NGƯỜI MANG LÕI\n<size=21>Cho phép đồng đội chạy nước rút bình thường.</size>",
+                "Hồi chiêu 45 giây. Theo dõi thời gian còn lại trên ô trang bị.",
                 new Color(0.42f, 0.82f, 1f));
         }
 

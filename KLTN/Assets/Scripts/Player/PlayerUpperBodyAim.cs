@@ -135,7 +135,9 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             aimRight = transform.right;
         }
 
-        if (IsCarryingCore())
+        bool isCarryingCore = IsCarryingCore();
+        bool isHoldingCoreStabilizer = IsHoldingCoreStabilizer();
+        if (isCarryingCore || isHoldingCoreStabilizer)
         {
             Vector3 rightHandPos = chestOrigin + aimForward * carryForwardOffset + aimRight * carryLateralOffset + aimUp * carryVerticalOffset;
             Vector3 leftHandPos  = chestOrigin + aimForward * carryForwardOffset - aimRight * carryLateralOffset + aimUp * carryVerticalOffset;
@@ -150,8 +152,9 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             Vector3 rightElbowPole = rightArmRoot + aimRight * rightElbowPoleOffset.x + aimUp * rightElbowPoleOffset.y - aimForward * Mathf.Abs(rightElbowPoleOffset.z);
             Vector3 leftElbowPole  = leftArmRoot  + aimRight * leftElbowPoleOffset.x  + aimUp * leftElbowPoleOffset.y  - aimForward * Mathf.Abs(leftElbowPoleOffset.z);
 
-            SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, rightHandPos, rightElbowPole, carryIKWeight);
-            SolveTwoBoneIK(leftUpperArm,  leftForeArm,  leftHandBone,  leftHandPos,  leftElbowPole,  carryIKWeight);
+            float twoHandIKWeight = isHoldingCoreStabilizer ? 1f : carryIKWeight;
+            SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, rightHandPos, rightElbowPole, twoHandIKWeight);
+            SolveTwoBoneIK(leftUpperArm,  leftForeArm,  leftHandBone,  leftHandPos,  leftElbowPole,  twoHandIKWeight);
 
             UpdateCoreAnchorPose(aimForward, aimUp, aimRight, rightHandBone, leftHandBone, rightHandPos, leftHandPos);
             return;
@@ -346,6 +349,20 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
         return (_inventory != null && _inventory.TeamToolSlot != null)
             || (_lobbyState != null && _lobbyState.Object != null && _lobbyState.Object.IsValid && _lobbyState.ToolId != 0);
+    }
+
+    private bool IsHoldingCoreStabilizer()
+    {
+        if (_lobbyState != null
+            && _lobbyState.Object != null
+            && _lobbyState.Object.IsValid
+            && _lobbyState.ToolId == LobbyPlayerState.CoreStabilizerToolId)
+        {
+            return true;
+        }
+
+        InventoryItemDefinition tool = _inventory != null ? _inventory.TeamToolSlot : null;
+        return tool != null && tool.ItemId == "core_stabilizer";
     }
 
     private bool IsCarryingCore()

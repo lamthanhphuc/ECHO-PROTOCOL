@@ -55,6 +55,23 @@ namespace EchoProtocol.Networking
         }
     }
 
+    public static class CoreStabilizerRules
+    {
+        public const float SupportRadius = 5f;
+        public const float DurationSeconds = 15f;
+        public const float CooldownSeconds = 45f;
+
+        public static bool AllowsSprint(bool isCarryingCore, bool isCoreStabilized)
+        {
+            return !isCarryingCore || isCoreStabilized;
+        }
+
+        public static bool AllowsCrouch(bool isCarryingCore, bool isHoldingCoreStabilizer)
+        {
+            return !isCarryingCore && !isHoldingCoreStabilizer;
+        }
+    }
+
     public static class EnergyCoreObjectiveRules
     {
         public static bool CanRegisterPlacement(int placedCoreCount, int requiredCoreCount)

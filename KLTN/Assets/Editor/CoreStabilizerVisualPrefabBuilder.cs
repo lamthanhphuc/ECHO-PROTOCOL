@@ -89,14 +89,14 @@ public static class CoreStabilizerVisualPrefabBuilder
         }
 
         var supportFieldOrigin = CreateChild(root.transform, "SupportFieldOrigin");
-        supportFieldOrigin.transform.localPosition = Vector3.zero;
+        supportFieldOrigin.transform.localPosition = new Vector3(0f, 0.283f, 0f);
         CreateCoveragePreview(supportFieldOrigin.transform, particleMaterial);
 
         var deviceVfxOrigin = CreateChild(root.transform, "DeviceVFXOrigin");
-        deviceVfxOrigin.transform.localPosition = root.transform.InverseTransformPoint(
-            bounds.center + Vector3.up * bounds.extents.y);
+        deviceVfxOrigin.transform.localPosition = new Vector3(-0.0349f, 0.071f, -0.038f);
 
         var lightObject = CreateChild(deviceVfxOrigin.transform, "StatusLight");
+        lightObject.transform.localPosition = new Vector3(0.158f, 0.3239f, 0.01f);
         var energyLight = lightObject.AddComponent<Light>();
         energyLight.type = LightType.Point;
         energyLight.color = new Color(0.1f, 0.8f, 1f);
@@ -105,6 +105,7 @@ public static class CoreStabilizerVisualPrefabBuilder
         energyLight.shadows = LightShadows.None;
 
         var particlesObject = CreateChild(deviceVfxOrigin.transform, "FieldStatusParticles");
+        particlesObject.transform.localPosition = new Vector3(0f, 0.416f, 0f);
         ConfigureStatusParticles(particlesObject.AddComponent<ParticleSystem>(), particleMaterial);
 
         var prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
@@ -172,6 +173,7 @@ public static class CoreStabilizerVisualPrefabBuilder
         var main = particles.main;
         main.duration = 1f;
         main.loop = true;
+        main.playOnAwake = false;
         main.startLifetime = 0.4f;
         main.startSpeed = 0.05f;
         main.startSize = 0.025f;
@@ -211,10 +213,10 @@ public static class CoreStabilizerVisualPrefabBuilder
 
     private static void CreateCoveragePreview(Transform parent, Material material)
     {
-        const float radius = 2.5f;
+        const float radius = 5f;
         const int segments = 72;
 
-        var preview = CreateChild(parent, "CoveragePreview_2_5m");
+        var preview = CreateChild(parent, "CoveragePreview");
         var line = preview.AddComponent<LineRenderer>();
         line.sharedMaterial = material;
         line.useWorldSpace = false;

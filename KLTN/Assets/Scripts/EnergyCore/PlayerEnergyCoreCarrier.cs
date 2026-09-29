@@ -27,7 +27,7 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
     [SerializeField] private float carryNoiseInterval = 2.5f;
     [SerializeField] private float carryNoiseMoveThreshold = 0.05f;
     [SerializeField, Range(0.05f, 1f)] private float stabilizedNoiseMultiplier = 0.35f;
-    [SerializeField, Range(0.01f, 1f)] private float stabilizedCarrySpeedMultiplier = 0.9f;
+    [SerializeField, Range(0.01f, 1f)] private float stabilizedCarrySpeedMultiplier = 1f;
     [SerializeField] private UnityEvent carryNoiseEmitted;
 
     private InputAction _dropAction;

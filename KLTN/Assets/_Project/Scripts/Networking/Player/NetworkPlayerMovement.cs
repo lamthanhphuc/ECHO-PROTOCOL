@@ -202,7 +202,9 @@ namespace EchoProtocol.Networking
             bool sprintHeld = !blocked && (_sprintAction?.IsPressed() ?? false);
             bool jumpPressed = !blocked && (_jumpAction?.WasPressedThisFrame() ?? false);
             bool isCarryingCoreOffline = IsCarryingCore();
-            if (!blocked) _offlineAnimationCrouching = !isCarryingCoreOffline && IsCrouchPressed();
+            bool allowsCrouchOffline = CoreStabilizerRules.AllowsCrouch(
+                isCarryingCoreOffline, IsHoldingCoreStabilizer());
+            if (!blocked) _offlineAnimationCrouching = allowsCrouchOffline && IsCrouchPressed();
 
             Vector3 localDirection = new Vector3(moveInput.x, 0f, moveInput.y);
             if (localDirection.sqrMagnitude > 1f)
@@ -361,7 +363,10 @@ namespace EchoProtocol.Networking
 
             bool isCarryingCore = lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid;
             bool canInitiateAction = lifeState == null || lifeState.CanInitiateAction;
-            bool wantsCrouch = input.CrouchHeld && canInitiateAction && !isCarryingCore;
+            bool wantsCrouch = input.CrouchHeld
+                && canInitiateAction
+                && CoreStabilizerRules.AllowsCrouch(isCarryingCore,
+                    lobbyState != null && lobbyState.ToolId == LobbyPlayerState.CoreStabilizerToolId);
             if (Object.HasStateAuthority)
             {
                 IsCrouching = wantsCrouch;
@@ -369,10 +374,12 @@ namespace EchoProtocol.Networking
 
             bool effectiveCrouch = Object.HasStateAuthority ? wantsCrouch : IsCrouching;
 
+            bool coreAllowsSprint = CoreStabilizerRules.AllowsSprint(isCarryingCore,
+                lobbyState != null && lobbyState.IsCoreStabilized);
             var isSprintMoving =
                 canInitiateAction &&
                 !effectiveCrouch &&
-                !isCarryingCore &&
+                coreAllowsSprint &&
                 input.SprintHeld &&
                 NetworkCurrentStamina > _minStaminaToSprint &&
                 CanSprintInDirection(input.Move) &&
@@ -389,7 +396,7 @@ namespace EchoProtocol.Networking
             var coreCarryMultiplier = 1f;
             if (isCarryingCore)
             {
-                coreCarryMultiplier = lobbyPlayer.IsCoreStabilized ? 0.9f : 0.72f;
+                coreCarryMultiplier = lobbyPlayer.IsCoreStabilized ? 1f : 0.72f;
             }
             _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f) * coreCarryMultiplier;
 
@@ -938,7 +945,8 @@ namespace EchoProtocol.Networking
                     : 0f,
                 JumpPressed = _allowJump && (_jumpAction?.WasPressedThisFrame() ?? false),
                 SprintHeld = _sprintAction?.IsPressed() ?? false,
-                CrouchHeld = !IsCarryingCore() && IsCrouchPressed(),
+                CrouchHeld = CoreStabilizerRules.AllowsCrouch(
+                    IsCarryingCore(), IsHoldingCoreStabilizer()) && IsCrouchPressed(),
             };
         }
 
@@ -952,6 +960,19 @@ namespace EchoProtocol.Networking
 
             var legacyCarrier = GetComponent<PlayerEnergyCoreCarrier>() ?? GetComponentInParent<PlayerEnergyCoreCarrier>();
             return legacyCarrier != null && legacyCarrier.IsCarrying;
+        }
+
+        private bool IsHoldingCoreStabilizer()
+        {
+            var lobbyState = GetComponent<LobbyPlayerState>();
+            if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid)
+            {
+                return lobbyState.ToolId == LobbyPlayerState.CoreStabilizerToolId;
+            }
+
+            var inventory = GetComponent<PlayerInventory>() ?? GetComponentInParent<PlayerInventory>();
+            return inventory != null
+                && PlayerInventory.ResolveToolId(inventory.TeamToolSlot) == LobbyPlayerState.CoreStabilizerToolId;
         }
 
         private bool IsCrouchPressed()

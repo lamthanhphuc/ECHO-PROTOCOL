@@ -78,9 +78,10 @@ public class PlayerAnimatorDriver : MonoBehaviour
         if (networkLifeState == null) networkLifeState = GetComponent<NetworkPlayerLifeState>() ?? GetComponentInParent<NetworkPlayerLifeState>();
         if (downState == null) downState = GetComponent<PlayerDownState>() ?? GetComponentInParent<PlayerDownState>();
 
-        bool isCarrying = (coreCarrier != null && coreCarrier.IsCarrying)
+        bool isCarryingCore = (coreCarrier != null && coreCarrier.IsCarrying)
             || (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid);
-        bool isCrouching = !isCarrying && (movement != null
+        bool useCarryPose = isCarryingCore || IsHoldingCoreStabilizer();
+        bool isCrouching = !useCarryPose && (movement != null
             ? movement.IsCrouching
             : networkMovement != null && networkMovement.IsAnimationCrouching);
         bool isSprinting = movement != null
@@ -95,14 +96,14 @@ public class PlayerAnimatorDriver : MonoBehaviour
                     || Keyboard.current.dKey.isPressed));
         bool isDowned = (downState != null && downState.IsDowned)
             || (networkLifeState != null && networkLifeState.Object != null && networkLifeState.Object.IsValid && networkLifeState.IsDowned);
-        Vector2 moveDirection = GetMoveDirection(isSprinting, isCarrying, isDowned);
+        Vector2 moveDirection = GetMoveDirection(isSprinting, isCarryingCore, isDowned);
         float movingThreshold = isDowned ? 0.08f : 0.01f;
         bool isMoving = moveDirection.sqrMagnitude > movingThreshold;
         if (!isMoving)
         {
             moveDirection = Vector2.zero;
         }
-        float normalizedSpeed = isMoving ? GetNormalizedSpeed(isSprinting, isCrouching, isCarrying, isDowned) : 0f;
+        float normalizedSpeed = isMoving ? GetNormalizedSpeed(isSprinting, isCrouching, isCarryingCore, isDowned) : 0f;
 
         _smoothedSpeed = isMoving
             ? Mathf.Lerp(_smoothedSpeed, normalizedSpeed, 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(0.001f, speedDampTime)))
@@ -121,13 +122,27 @@ public class PlayerAnimatorDriver : MonoBehaviour
         animator.SetBool(IsMovingHash, isMoving);
         animator.SetBool(IsSprintingHash, isSprinting);
         animator.SetBool(IsCrouchingHash, isCrouching);
-        animator.SetBool(IsCarryingHash, isCarrying);
+        animator.SetBool(IsCarryingHash, useCarryPose);
         animator.SetBool(IsDownedHash, isDowned);
         if (isDowned && !isMoving && !_wasDowned)
         {
             animator.Play(DownedCrawlStateHash, 0, 0f);
         }
         _wasDowned = isDowned;
+    }
+
+    private bool IsHoldingCoreStabilizer()
+    {
+        if (lobbyState != null
+            && lobbyState.Object != null
+            && lobbyState.Object.IsValid
+            && lobbyState.ToolId == LobbyPlayerState.CoreStabilizerToolId)
+        {
+            return true;
+        }
+
+        InventoryItemDefinition tool = inventory != null ? inventory.TeamToolSlot : null;
+        return tool != null && tool.ItemId == "core_stabilizer";
     }
 
     public void TriggerRevive()

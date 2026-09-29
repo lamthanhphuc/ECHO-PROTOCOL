@@ -38,9 +38,13 @@ namespace EchoProtocol.Networking
         [Networked] private TickTimer HelpPingCooldown { get; set; }
         [Networked] private uint TeamToolOrdinal { get; set; }
         [Networked] private uint HelpPingOrdinal { get; set; }
+        [Networked] private TickTimer CoreStabilizerActiveTimer { get; set; }
 
         private TickTimer _stabilizerScanTimer;
         private readonly List<LobbyPlayerState> _stabilizedAllies = new List<LobbyPlayerState>();
+        private Animator _coreStabilizerAnimator;
+        private bool _coreStabilizerVisualActive;
+        private float _offlineCoreStabilizerCooldownUntil;
 
         private InputAction _interactAction;
         private InputAction _dropCoreAction;
@@ -140,6 +144,56 @@ namespace EchoProtocol.Networking
             {
                 UpdateCoreStabilizerAuthoritative();
             }
+        }
+
+        public override void Render()
+        {
+            var state = GetComponent<LobbyPlayerState>();
+            bool active = state != null
+                && state.ToolId == LobbyPlayerState.CoreStabilizerToolId
+                && !CoreStabilizerActiveTimer.ExpiredOrNotRunning(Runner);
+            Animator animator = FindCoreStabilizerAnimator();
+            if (animator == null) return;
+
+            bool changed = animator != _coreStabilizerAnimator || active != _coreStabilizerVisualActive;
+            if (changed)
+            {
+                _coreStabilizerAnimator = animator;
+                _coreStabilizerVisualActive = active;
+                animator.SetBool("IsActive", active);
+            }
+            Transform field = animator.transform.Find("SupportFieldVFX");
+            if (field != null)
+            {
+                field.gameObject.SetActive(active);
+                if (active)
+                {
+                    field.position = transform.position + Vector3.up * 0.08f;
+                    field.rotation = Quaternion.identity;
+                    Vector3 parentScale = field.parent.lossyScale;
+                    field.localScale = new Vector3(
+                        1f / Mathf.Abs(parentScale.x),
+                        1f / Mathf.Abs(parentScale.y),
+                        1f / Mathf.Abs(parentScale.z));
+                }
+            }
+            if (!changed) return;
+            Transform origin = animator.transform.Find("Visual/DeviceVFXOrigin");
+            if (origin == null) return;
+            foreach (ParticleSystem particles in origin.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                if (active) particles.Play(true);
+                else particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            }
+        }
+
+        private Animator FindCoreStabilizerAnimator()
+        {
+            foreach (Animator candidate in GetComponentsInChildren<Animator>(true))
+            {
+                if (candidate.transform.Find("SupportFieldVFX") != null) return candidate;
+            }
+            return null;
         }
 
         private void Update()
@@ -405,6 +459,9 @@ namespace EchoProtocol.Networking
                 return scanner.RequestScan();
             }
 
+            if (toolId == LobbyPlayerState.CoreStabilizerToolId
+                && GetCoreStabilizerCooldownRemaining() > 0f) return false;
+
             if (!isOnline)
             {
                 return ExecuteTeamToolOffline(toolId, inv, playerState);
@@ -454,6 +511,7 @@ namespace EchoProtocol.Networking
             }
             else if (toolType == "CORE_STABILIZER")
             {
+                _offlineCoreStabilizerCooldownUntil = Time.time + CoreStabilizerRules.CooldownSeconds;
                 if (_coreStabilizerPulseClip != null)
                 {
                     AudioSource.PlayClipAtPoint(_coreStabilizerPulseClip, transform.position);
@@ -874,21 +932,12 @@ namespace EchoProtocol.Networking
                             requester,
                             $"player:{Object.Id}:tool:{TeamToolOrdinal}",
                             toolType);
-                        TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 5f);
-                        float radius = 2.5f;
-                        var hits = Physics.OverlapSphere(transform.position, radius, ~0, QueryTriggerInteraction.Collide);
-                        bool stabilizedAny = false;
-                        for (int i = 0; i < hits.Length; i++)
-                        {
-                            var h = hits[i];
-                            if (h == null || h.transform == transform || h.transform.IsChildOf(transform)) continue;
-                            var carrierState = h.GetComponentInParent<LobbyPlayerState>();
-                            if (carrierState != null && carrierState.Object != null && carrierState.Object.IsValid && carrierState.CarriedCoreId.IsValid)
-                            {
-                                carrierState.SetCoreStabilizedAuthoritative(true);
-                                stabilizedAny = true;
-                            }
-                        }
+                        TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, CoreStabilizerRules.CooldownSeconds);
+                        CoreStabilizerActiveTimer = TickTimer.CreateFromSeconds(
+                            Runner, CoreStabilizerRules.DurationSeconds);
+                        _stabilizerScanTimer = TickTimer.None;
+                        UpdateCoreStabilizerAuthoritative();
+                        bool stabilizedAny = _stabilizedAllies.Count > 0;
 
                         if (_coreStabilizerPulseClip != null)
                         {
@@ -1379,6 +1428,13 @@ namespace EchoProtocol.Networking
             }
         }
 
+        public float GetCoreStabilizerCooldownRemaining()
+        {
+            if (Runner != null && Runner.IsRunning)
+                return TeamToolCooldown.RemainingTime(Runner) ?? 0f;
+            return Mathf.Max(0f, _offlineCoreStabilizerCooldownUntil - Time.time);
+        }
+
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
         private void RpcPlayCoreStabilizerFeedback(Vector3 position, NetworkBool stabilizedAny)
         {
@@ -1391,7 +1447,10 @@ namespace EchoProtocol.Networking
         private void UpdateCoreStabilizerAuthoritative()
         {
             var state = GetComponent<LobbyPlayerState>();
-            bool hasStabilizer = state != null && state.IsGameplayPlayer && state.ToolId == 6;
+            bool hasStabilizer = state != null
+                && state.IsGameplayPlayer
+                && state.ToolId == LobbyPlayerState.CoreStabilizerToolId
+                && !CoreStabilizerActiveTimer.ExpiredOrNotRunning(Runner);
 
             if (!hasStabilizer)
             {
@@ -1402,8 +1461,8 @@ namespace EchoProtocol.Networking
             if (!_stabilizerScanTimer.ExpiredOrNotRunning(Runner)) return;
             _stabilizerScanTimer = TickTimer.CreateFromSeconds(Runner, 0.25f);
 
-            float radius = 2.5f;
-            var hits = Physics.OverlapSphere(transform.position, radius, ~0, QueryTriggerInteraction.Collide);
+            var hits = Physics.OverlapSphere(transform.position, CoreStabilizerRules.SupportRadius,
+                ~0, QueryTriggerInteraction.Collide);
             var currentAllies = new HashSet<LobbyPlayerState>();
 
             for (int i = 0; i < hits.Length; i++)

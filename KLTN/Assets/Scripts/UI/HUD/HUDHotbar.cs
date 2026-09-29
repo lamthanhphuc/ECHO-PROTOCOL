@@ -160,6 +160,13 @@ namespace EchoProtocol.UI.HUD
 
         private void UpdateCooldown()
         {
+            var interactor = inventory != null ? inventory.GetComponent<NetworkPlayerInteractor>() : null;
+            if (interactor != null && PlayerInventory.ResolveToolId(inventory.TeamToolSlot) == LobbyPlayerState.CoreStabilizerToolId)
+            {
+                _cooldownDuration = CoreStabilizerRules.CooldownSeconds;
+                _cooldownTimer = interactor.GetCoreStabilizerCooldownRemaining();
+            }
+
             if (_cooldownTimer > 0f)
             {
                 _cooldownTimer = Mathf.Max(0f, _cooldownTimer - Time.deltaTime);
