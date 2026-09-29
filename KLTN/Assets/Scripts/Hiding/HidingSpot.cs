@@ -20,6 +20,32 @@ public class HidingSpot : MonoBehaviour, IInteractable
     public Transform HidePoint => hidePoint != null ? hidePoint : transform;
     public Transform ExitPoint => exitPoint;
     public Transform InspectPoint => inspectPoint;
+    public Quaternion FacingRotation
+    {
+        get
+        {
+            Transform hide = HidePoint;
+            Transform exit = ExitPoint;
+
+            if (hide != null && exit != null)
+            {
+                Vector3 forward = exit.position - hide.position;
+                forward.y = 0f;
+
+                if (forward.sqrMagnitude > 0.0001f)
+                {
+                    return Quaternion.LookRotation(forward.normalized, Vector3.up);
+                }
+            }
+
+            float yaw = hide != null
+                ? hide.eulerAngles.y
+                : transform.eulerAngles.y;
+
+            return Quaternion.Euler(0f, yaw, 0f);
+        }
+    }
+
     public ulong StableId
     {
         get

@@ -584,17 +584,33 @@ namespace EchoProtocol.Networking
 
                 Transform hidePoint = authoritativeSpot.HidePoint;
                 position = hidePoint.position;
-                rotation = Quaternion.Euler(
-                    0f,
-                    hidePoint.eulerAngles.y,
-                    0f);
+                rotation = authoritativeSpot.FacingRotation;
             }
-            else if (previousSpotId != 0UL)
+            else
             {
-                global::HidingSpot.ReleaseNetworkSpot(
-                    Runner,
-                    previousSpotId,
-                    Object.InputAuthority);
+                position = transform.position;
+                rotation = transform.rotation;
+
+                if (previousSpotId != 0UL)
+                {
+                    if (global::HidingSpot.TryResolveByStableId(
+                            previousSpotId,
+                            out var authoritativeSpot))
+                    {
+                        Transform exitPoint = authoritativeSpot.ExitPoint;
+
+                        if (exitPoint != null)
+                        {
+                            position = exitPoint.position;
+                            rotation = authoritativeSpot.FacingRotation;
+                        }
+                    }
+
+                    global::HidingSpot.ReleaseNetworkSpot(
+                        Runner,
+                        previousSpotId,
+                        Object.InputAuthority);
+                }
             }
 
             IsHidden = isHidden;

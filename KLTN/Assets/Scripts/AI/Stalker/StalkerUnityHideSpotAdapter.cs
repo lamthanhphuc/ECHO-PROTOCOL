@@ -161,10 +161,7 @@ namespace EchoProtocol.AI.Stalker
                     ? spot.ExitPoint
                     : spot.transform;
 
-                var exitRotation = Quaternion.Euler(
-                    0f,
-                    exitPoint.eulerAngles.y,
-                    0f);
+                var exitRotation = spot.FacingRotation;
 
                 var preExitPosition =
                     movement.transform.position;

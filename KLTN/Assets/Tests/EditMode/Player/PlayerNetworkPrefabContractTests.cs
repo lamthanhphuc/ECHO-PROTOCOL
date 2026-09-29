@@ -209,14 +209,23 @@ namespace EchoProtocol.Player.Tests
                 "Assets/_Project/Scripts/Networking/Player/NetworkPlayerMovement.cs");
             var hidingSpot = File.ReadAllText(
                 "Assets/Scripts/Hiding/HidingSpot.cs");
+            var hidingController = File.ReadAllText(
+                "Assets/Scripts/Hiding/PlayerHidingController.cs");
+            var stalkerHideAdapter = File.ReadAllText(
+                "Assets/Scripts/AI/Stalker/StalkerUnityHideSpotAdapter.cs");
 
             StringAssert.Contains("TryReserveNetworkSpot", movement);
             StringAssert.Contains("RejectHideEnter", movement);
             StringAssert.Contains("ReleaseNetworkSpot", movement);
             StringAssert.Contains("ReleaseAllNetworkSpots", movement);
             StringAssert.Contains("CurrentHideSpotId", movement);
+            StringAssert.Contains("authoritativeSpot.FacingRotation", movement);
             StringAssert.Contains("NetworkReservations", hidingSpot);
+            StringAssert.Contains("public Quaternion FacingRotation", hidingSpot);
             StringAssert.Contains("RuntimeLogCategory.StalkerHideFlow", hidingSpot);
+            StringAssert.Contains("Time.frameCount == _lastExitFrame", hidingController);
+            StringAssert.Contains("EnsurePlayerCameraController", hidingController);
+            StringAssert.Contains("spot.FacingRotation", stalkerHideAdapter);
             StringAssert.DoesNotContain("Debug.Log(", hidingSpot);
         }
 
