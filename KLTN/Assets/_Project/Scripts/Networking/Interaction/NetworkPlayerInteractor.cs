@@ -1040,10 +1040,12 @@ namespace EchoProtocol.Networking
             }
 
             TeamToolOrdinal++;
+
             beacon.Initialize(
                 requester,
-                Object.Id.ToString(),
-                (long)TeamToolOrdinal);
+                $"{Object.Id}:noise-maker:{TeamToolOrdinal}",
+                0L);
+
             MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
                 requester,
                 $"player:{Object.Id}:tool:{TeamToolOrdinal}",

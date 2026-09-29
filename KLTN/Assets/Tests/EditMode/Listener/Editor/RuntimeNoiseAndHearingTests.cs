@@ -1454,5 +1454,57 @@ namespace EchoProtocol.AI.Listener.Tests
                 return OcclusionClass;
             }
         }
+            [Test]
+        public void LIS001_NoiseMakerDeploymentsHaveIndependentDedupStreams()
+        {
+            var system =
+                new RuntimeNoiseSystem();
+
+            var matchId =
+                Guid.NewGuid();
+
+            var now =
+                DateTime.UtcNow;
+
+            var firstStatus =
+                system.TryAccept(
+                    matchId,
+                    new RuntimeNoiseEmissionRequest(
+                        RuntimeNoiseSourceOccurrenceKey
+                            .ForTeamTool(
+                                "player:1:noise-maker:1",
+                                "NOISE_MAKER",
+                                1),
+                        RuntimeNoiseType.NOISE_MAKER,
+                        Vector3.zero,
+                        now,
+                        1),
+                    out _);
+
+            var secondStatus =
+                system.TryAccept(
+                    matchId,
+                    new RuntimeNoiseEmissionRequest(
+                        RuntimeNoiseSourceOccurrenceKey
+                            .ForTeamTool(
+                                "player:1:noise-maker:2",
+                                "NOISE_MAKER",
+                                1),
+                        RuntimeNoiseType.NOISE_MAKER,
+                        Vector3.zero,
+                        now.AddMilliseconds(1),
+                        2),
+                    out _);
+
+            Assert.That(
+                firstStatus,
+                Is.EqualTo(
+                    RuntimeNoiseAcceptStatus.Accepted));
+
+            Assert.That(
+                secondStatus,
+                Is.EqualTo(
+                    RuntimeNoiseAcceptStatus.Accepted));
+        }
     }
 }

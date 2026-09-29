@@ -587,19 +587,29 @@ namespace EchoProtocol.Player.Tests
                 File.ReadAllText(
                     NetworkPlayerInteractorScriptPath);
 
+            var placementMethod =
+                MethodBody(
+                    interactorSource,
+                    "private bool TryResolveNoiseMakerPlacement");
+
             var useMethod =
                 MethodBody(
                     interactorSource,
                     "private InteractionValidationResult TryUseNoiseMakerAuthoritative");
 
             var sphereCastIndex =
-                useMethod.IndexOf(
+                placementMethod.IndexOf(
                     "Physics.SphereCastAll",
                     StringComparison.Ordinal);
 
             var selfFilterIndex =
-                useMethod.IndexOf(
+                placementMethod.IndexOf(
                     "IsSelfCollider",
+                    StringComparison.Ordinal);
+
+            var placementCallIndex =
+                useMethod.IndexOf(
+                    "TryResolveNoiseMakerPlacement",
                     StringComparison.Ordinal);
 
             var spawnIndex =
@@ -617,9 +627,34 @@ namespace EchoProtocol.Player.Tests
                     sphereCastIndex));
 
             Assert.That(
+                placementCallIndex,
+                Is.GreaterThanOrEqualTo(0));
+
+            Assert.That(
                 spawnIndex,
                 Is.GreaterThan(
-                    selfFilterIndex));
+                    placementCallIndex));
+        }
+
+        [Test]
+        public void TEAM_TOOL_NoiseMakerUsesUniqueStreamPerDeployment()
+        {
+            var interactorSource =
+                File.ReadAllText(
+                    NetworkPlayerInteractorScriptPath);
+
+            var useMethod =
+                MethodBody(
+                    interactorSource,
+                    "private InteractionValidationResult TryUseNoiseMakerAuthoritative");
+
+            StringAssert.Contains(
+                "$\"{Object.Id}:noise-maker:{TeamToolOrdinal}\"",
+                useMethod);
+
+            StringAssert.Contains(
+                "0L",
+                useMethod);
         }
 
         private static Type ResolveProductionType(string fullName)
