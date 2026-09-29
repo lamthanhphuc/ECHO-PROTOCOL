@@ -873,9 +873,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Tools.Scanner.NetworkFieldScanner
   _tuning:
     CoreRange: 50
-    MotionRange: 100
+    MotionRange: 35
     ActiveDuration: 10
-    ScanCooldown: 30
+    ScanCooldown: 60
     ResultLifetime: 10
     MovingSpeedThreshold: 0.15
     OccludedSignalMultiplier: 0.6

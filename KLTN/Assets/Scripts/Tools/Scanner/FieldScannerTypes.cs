@@ -144,25 +144,8 @@ namespace EchoProtocol.Tools.Scanner
         public float MotionMediumMaxDistance = 25f;
         public float MotionWeakMaxDistance = 35f;
 
-        public static FieldScannerTuning Default => new FieldScannerTuning
-        {
-            CoreRange = 20f,
-            MotionRange = 15f,
-            ActiveDuration = 10.0f,
-            ScanCooldown = 4f,
-            ResultLifetime = 2.5f,
-            MovingSpeedThreshold = 0.2f,
-            OccludedSignalMultiplier = 0.6f,
-            MaxMotionTargets = 3,
-            CoreBand4MaxDistance = 4f,
-            CoreBand3MaxDistance = 8f,
-            CoreBand2MaxDistance = 12f,
-            CoreBand1MaxDistance = 20f,
-            MotionCriticalMaxDistance = 3f,
-            MotionStrongMaxDistance = 7f,
-            MotionMediumMaxDistance = 12f,
-            MotionWeakMaxDistance = 15f
-        };
+        public static FieldScannerTuning Default =>
+            new FieldScannerTuning();
     }
 }
 

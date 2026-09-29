@@ -90,7 +90,7 @@ namespace EchoProtocol.Tests.EditMode.Tools
                 new MockCoreCandidate { TargetId = 1, WorldPosition = origin + Vector3.right * 4, IsAvailableInWorld = true },
                 new MockCoreCandidate { TargetId = 2, WorldPosition = origin + Vector3.forward * 8, IsAvailableInWorld = true },
                 new MockCoreCandidate { TargetId = 3, WorldPosition = origin, IsAvailableInWorld = false },
-                new MockCoreCandidate { TargetId = 4, WorldPosition = origin + Vector3.forward * 30, IsAvailableInWorld = true }
+                new MockCoreCandidate { TargetId = 4, WorldPosition = origin + Vector3.forward * 60, IsAvailableInWorld = true }
             };
             var expected = FieldScannerCoreDetector.Evaluate(origin, Vector3.forward, cores, isOccludedFunc: (a, b) => false);
             var actual = FieldScannerCoreDetector.Evaluate(origin, Vector3.forward, cores, isOccludedFunc: (a, b) => false, radarOffsets: offsets);
@@ -195,17 +195,20 @@ namespace EchoProtocol.Tests.EditMode.Tools
 
             Assert.That(result.HasTarget, Is.True);
             Assert.That(result.TargetId, Is.EqualTo(101));
-            Assert.That(result.SignalBars, Is.EqualTo(ScannerSignalStrength.Bar2)); // 8-12m is Bar2
+            Assert.That(
+                result.SignalBars,
+                Is.EqualTo(ScannerSignalStrength.Bar3));
             Assert.That(result.Direction, Is.EqualTo(RelativeDirectionSector.Front));
         }
 
         [Test]
-        public void Test02_CoreMode_CoreBeyond20m_NotDetected()
+        public void Test02_CoreMode_CoreBeyond50m_NotDetected()
         {
             var tuning = FieldScannerTuning.Default;
             var candidates = new List<ICoreScanCandidate>
             {
-                new MockCoreCandidate { TargetId = 102, WorldPosition = new Vector3(0f, 0f, 25f), IsAvailableInWorld = true }
+                new MockCoreCandidate { TargetId = 102, WorldPosition =
+                    new Vector3(0f, 0f, 55f), IsAvailableInWorld = true }
             };
 
             var result = FieldScannerCoreDetector.Evaluate(Vector3.zero, Vector3.forward, candidates, tuning);
@@ -256,7 +259,9 @@ namespace EchoProtocol.Tests.EditMode.Tools
 
             Assert.That(result.HasTarget, Is.True);
             Assert.That(result.TargetId, Is.EqualTo(2)); // Core 2 is stronger
-            Assert.That(result.SignalBars, Is.EqualTo(ScannerSignalStrength.Bar3)); // 4-8m is Bar3
+            Assert.That(
+                result.SignalBars,
+                Is.EqualTo(ScannerSignalStrength.Bar4));
         }
 
         [Test]
@@ -328,7 +333,9 @@ namespace EchoProtocol.Tests.EditMode.Tools
             var blip = result.GetBlip(0);
             Assert.That(blip.IsValid, Is.True);
             Assert.That(blip.TargetId, Is.EqualTo(501));
-            Assert.That(blip.Intensity, Is.EqualTo(MotionBlipIntensity.Medium)); // 7-12m is Medium
+            Assert.That(
+                blip.Intensity,
+                Is.EqualTo(MotionBlipIntensity.Strong));
             Assert.That(blip.Direction, Is.EqualTo(RelativeDirectionSector.Front));
         }
 
@@ -348,12 +355,13 @@ namespace EchoProtocol.Tests.EditMode.Tools
         }
 
         [Test]
-        public void Test11_MotionMode_MonsterBeyond15m_NotDetected()
+        public void Test11_MotionMode_MonsterBeyond35m_NotDetected()
         {
             var tuning = FieldScannerTuning.Default;
             var targets = new List<IMotionScannable>
             {
-                new MockMotionTarget { TargetId = 503, WorldPosition = new Vector3(0f, 0f, 18f), CurrentSpeed = 2.0f } // Beyond 15m
+                new MockMotionTarget { TargetId = 503, WorldPosition =
+                    new Vector3(0f, 0f, 40f), CurrentSpeed = 2.0f }
             };
 
             var result = FieldScannerMotionDetector.Evaluate(Vector3.zero, Vector3.forward, targets, tuning);
