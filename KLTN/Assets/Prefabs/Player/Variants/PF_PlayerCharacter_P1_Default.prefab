@@ -74,7 +74,6 @@ GameObject:
   - component: {fileID: 8906635475374834695}
   - component: {fileID: 3171485417002021005}
   - component: {fileID: 6072667132663953446}
-  - component: {fileID: 2326322902841275640}
   m_Layer: 0
   m_Name: PF_PlayerCharacter_P1_Default
   m_TagString: Untagged
@@ -116,6 +115,7 @@ MonoBehaviour:
   coreCarrier: {fileID: 0}
   networkMovement: {fileID: 0}
   lobbyState: {fileID: 0}
+  networkLifeState: {fileID: 0}
   downState: {fileID: 0}
   speedDampTime: 0.16
   directionDampTime: 0.12
@@ -155,6 +155,7 @@ MonoBehaviour:
   inventory: {fileID: 0}
   coreCarrier: {fileID: 0}
   heldItemAnchor: {fileID: 3171485417002021005}
+  lobbyState: {fileID: 0}
   energyCoreLocalPosition: {x: 0, y: 0, z: 0}
   energyCoreLocalEulerAngles: {x: 0, y: 0, z: 0}
   energyCoreLocalScale: {x: 25, y: 25, z: 25}
@@ -189,35 +190,6 @@ MonoBehaviour:
   coreStabilizerLocalPosition: {x: 0, y: 0, z: 0}
   coreStabilizerLocalEulerAngles: {x: 0, y: 90, z: 0}
   coreStabilizerLocalScale: {x: 0.45, y: 0.45, z: 0.45}
---- !u!114 &2326322902841275640
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 155859974579163634}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6a7646ffb4ea84248965ff892dcccada, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Tools.Scanner.NetworkFieldScanner
-  _tuning:
-    CoreRange: 50
-    MotionRange: 35
-    ActiveDuration: 10
-    ScanCooldown: 60
-    ResultLifetime: 10
-    MovingSpeedThreshold: 0.15
-    OccludedSignalMultiplier: 0.6
-    MaxMotionTargets: 3
-    CoreBand4MaxDistance: 8
-    CoreBand3MaxDistance: 18
-    CoreBand2MaxDistance: 32
-    CoreBand1MaxDistance: 50
-    MotionCriticalMaxDistance: 6
-    MotionStrongMaxDistance: 15
-    MotionMediumMaxDistance: 25
-    MotionWeakMaxDistance: 35
 --- !u!1 &427054846388909687
 GameObject:
   m_ObjectHideFlags: 0
@@ -971,10 +943,21 @@ MonoBehaviour:
   clampWeight: 0.42
   lookAtDistance: 12
   driveRightHandWhenHolding: 1
+  crouchLeftHandLocalPosition: {x: -0.22, y: 0.62, z: 0.04}
+  carryForwardOffset: 0.3
+  carryLateralOffset: 0.3
+  carryVerticalOffset: 0.08
+  carryChestHeight: 1.38
+  carryMinHandY: 1.18
+  carryMaxHandY: 1.62
+  carryIKWeight: 0.88
+  rightElbowPoleOffset: {x: 0.4, y: -0.25, z: -0.1}
+  leftElbowPoleOffset: {x: -0.4, y: -0.25, z: -0.1}
+  coreHandOffset: {x: 0, y: 0, z: 0.2}
   handForwardOffset: {x: 0.2, y: 0.12, z: 0.36}
   handEulerOffset: {x: 0, y: 0, z: -75}
-  rightHandPosWeight: 0.82
   rightHandRotWeight: 0.8
+  rightHandPosWeight: 0.82
 --- !u!1 &1149854871394924118
 GameObject:
   m_ObjectHideFlags: 0

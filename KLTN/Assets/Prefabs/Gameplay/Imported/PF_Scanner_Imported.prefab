@@ -50,7 +50,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -100,6 +100,8 @@ MonoBehaviour:
   _pickupPrompt: "Nh\u1EB7t Field Scanner [E]"
   _pickupCollider: {fileID: 8191313744851435574}
   _visualRenderer: {fileID: 1748908435344998145}
+  _WorldPosition: {x: 0, y: 0, z: 0}
+  _WorldRotation: {x: 0, y: 0, z: 0, w: 0}
 --- !u!1001 &1118242175101870981
 PrefabInstance:
   m_ObjectHideFlags: 0

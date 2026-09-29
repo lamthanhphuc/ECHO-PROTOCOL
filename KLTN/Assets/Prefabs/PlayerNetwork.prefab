@@ -329,7 +329,6 @@ MonoBehaviour:
   - {fileID: 559300001}
   - {fileID: 2990993374567826271}
   - {fileID: 7312325081617675025}
-  - {fileID: 7160392989894792156}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &640100000000000001
 MonoBehaviour:
@@ -369,6 +368,8 @@ MonoBehaviour:
   _TeamId: 0
   _ToolId: 0
   _IsGameplayPlayer:
+    RawValue: 0
+  _Disconnected:
     RawValue: 0
   _BackendUserId:
     _length: 0
@@ -825,6 +826,7 @@ MonoBehaviour:
   inventory: {fileID: 5945652346287358367}
   coreCarrier: {fileID: 5286019399313537006}
   heldItemAnchor: {fileID: 5130164143195792974}
+  lobbyState: {fileID: 0}
   energyCoreLocalPosition: {x: 0, y: 0, z: 0}
   energyCoreLocalEulerAngles: {x: 0, y: 0, z: 0}
   energyCoreLocalScale: {x: 25, y: 25, z: 25}
@@ -918,6 +920,19 @@ MonoBehaviour:
     helmetBackpackMaterial: {fileID: 2100000, guid: 3447bf75c91ab8b499abe55ed82c2be5, type: 2}
     visorMaterial: {fileID: 2100000, guid: 73765654b5804c248acc1fff72ae328b, type: 2}
   lobbyState: {fileID: 640100000000000001}
+--- !u!114 &740100000000000005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6628407516427798355}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9c32bdfda35a4f0fade806e3aaa8e7d0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.UI.LobbyPlayerNameplate
+  heightAbovePlayer: 1.35
 --- !u!114 &8700373143392243168
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1617,17 +1632,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 2509715124861951039, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
   m_PrefabInstance: {fileID: 4834070106920576804}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &7160392989894792156 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 2326322902841275640, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
-  m_PrefabInstance: {fileID: 4834070106920576804}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6a7646ffb4ea84248965ff892dcccada, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Tools.Scanner.NetworkFieldScanner
 --- !u!4 &7374077509492896360 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 2685250707439785292, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
@@ -1743,16 +1747,3 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4522221755889430589, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
   m_PrefabInstance: {fileID: 4834070106920576804}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &740100000000000005
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6628407516427798355}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9c32bdfda35a4f0fade806e3aaa8e7d0, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.UI.LobbyPlayerNameplate
-  heightAbovePlayer: 1.35
