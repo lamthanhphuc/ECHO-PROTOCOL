@@ -14,6 +14,10 @@ namespace EchoProtocol.Tools.Scanner
 
         private NavMeshAgent _navMeshAgent;
         private EchoProtocol.AI.Stalker.StalkerController _stalker;
+
+        private EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime
+            _fusionRuntime;
+
         private Rigidbody _rigidbody;
         private Vector3 _lastPosition;
         private float _estimatedSpeed;
@@ -44,15 +48,29 @@ namespace EchoProtocol.Tools.Scanner
             }
         }
 
-        public bool IsMoving => CurrentSpeed >= manualSpeedThreshold;
+        public bool IsMoving =>
+            IsThreatMotionState()
+            || CurrentSpeed >= manualSpeedThreshold;
         public bool IsActiveTarget => gameObject.activeInHierarchy && enabled;
 
         private void Awake()
         {
-            _navMeshAgent = GetComponent<NavMeshAgent>();
-            _stalker = GetComponent<EchoProtocol.AI.Stalker.StalkerController>();
-            _rigidbody = GetComponent<Rigidbody>();
-            _lastPosition = transform.position;
+            _navMeshAgent =
+                GetComponent<NavMeshAgent>();
+
+            _stalker =
+                GetComponent<
+                    EchoProtocol.AI.Stalker.StalkerController>();
+
+            _fusionRuntime =
+                GetComponent<
+                    EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
+
+            _rigidbody =
+                GetComponent<Rigidbody>();
+
+            _lastPosition =
+                transform.position;
         }
 
         private void OnEnable()
@@ -78,6 +96,37 @@ namespace EchoProtocol.Tools.Scanner
                 _estimatedSpeed = Vector3.Distance(currentPos, _lastPosition) / dt;
                 _lastPosition = currentPos;
             }
+        }
+
+        private bool IsThreatMotionState()
+        {
+            if (_stalker == null)
+            {
+                return false;
+            }
+
+            EchoProtocol.AI.Stalker.StalkerState state;
+
+            if (_fusionRuntime != null
+                && _fusionRuntime.Object != null
+                && _fusionRuntime.Object.IsValid)
+            {
+                state =
+                    _fusionRuntime.Object.HasStateAuthority
+                        ? _stalker.CurrentState
+                        : _fusionRuntime
+                            .GetReplicatedPresentationState()
+                            .SemanticState;
+            }
+            else
+            {
+                state = _stalker.CurrentState;
+            }
+
+            return state
+                    == EchoProtocol.AI.Stalker.StalkerState.CHASE
+                || state
+                    == EchoProtocol.AI.Stalker.StalkerState.ATTACK;
         }
 
         public static void RegisterManualTarget(IMotionScannable target)

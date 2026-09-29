@@ -51,9 +51,16 @@ namespace EchoProtocol.Tools.Scanner
                     continue;
                 }
 
-                if (target.CurrentSpeed < tuning.MovingSpeedThreshold)
+                float currentSpeed =
+                    target.CurrentSpeed;
+
+                bool hasMotion =
+                    target.IsMoving
+                    || currentSpeed
+                        >= tuning.MovingSpeedThreshold;
+
+                if (!hasMotion)
                 {
-                    // Stationary or nearly stationary - ignore
                     continue;
                 }
 

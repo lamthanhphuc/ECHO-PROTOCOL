@@ -122,10 +122,60 @@ namespace EchoProtocol.Tests.EditMode.Tools
         private sealed class MockMotionTarget : IMotionScannable
         {
             public int TargetId { get; set; }
+
             public Vector3 WorldPosition { get; set; }
-            public bool IsMoving => CurrentSpeed >= 0.2f;
+
             public float CurrentSpeed { get; set; }
+
             public bool IsActiveTarget { get; set; } = true;
+
+            public bool? IsMovingOverride { get; set; }
+
+            public bool IsMoving =>
+                IsMovingOverride
+                ?? CurrentSpeed >= 0.2f;
+        }
+
+        [Test]
+        public void MotionMode_ThreatState_WithZeroSpeed_IsDetected()
+        {
+            var tuning =
+                FieldScannerTuning.Default;
+
+            var targets =
+                new List<IMotionScannable>
+                {
+                    new MockMotionTarget
+                    {
+                        TargetId = 901,
+
+                        WorldPosition =
+                            Vector3.forward * 5f,
+
+                        CurrentSpeed = 0f,
+
+                        IsMovingOverride = true
+                    }
+                };
+
+            MotionScanResult result =
+                FieldScannerMotionDetector.Evaluate(
+                    Vector3.zero,
+                    Vector3.forward,
+                    targets,
+                    tuning);
+
+            Assert.That(
+                result.HasMotion,
+                Is.True);
+
+            Assert.That(
+                result.BlipCount,
+                Is.EqualTo(1));
+
+            Assert.That(
+                result.GetBlip(0).TargetId,
+                Is.EqualTo(901));
         }
 
         // ==========================================

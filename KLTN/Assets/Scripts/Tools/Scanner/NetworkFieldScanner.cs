@@ -812,13 +812,33 @@ namespace EchoProtocol.Tools.Scanner
 
         private sealed class StalkerMotionScannableAdapter : IMotionScannable
         {
-            private readonly EchoProtocol.AI.Stalker.StalkerController _stalker;
-            private readonly UnityEngine.AI.NavMeshAgent _agent;
+            private readonly EchoProtocol.AI.Stalker.StalkerController
+                _stalker;
 
-            public StalkerMotionScannableAdapter(EchoProtocol.AI.Stalker.StalkerController stalker)
+            private readonly UnityEngine.AI.NavMeshAgent
+                _agent;
+
+            private readonly
+                EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime
+                _fusionRuntime;
+
+            public StalkerMotionScannableAdapter(
+                EchoProtocol.AI.Stalker.StalkerController stalker)
             {
                 _stalker = stalker;
-                _agent = stalker != null ? stalker.GetComponent<UnityEngine.AI.NavMeshAgent>() : null;
+
+                _agent =
+                    stalker != null
+                        ? stalker.GetComponent<
+                            UnityEngine.AI.NavMeshAgent>()
+                        : null;
+
+                _fusionRuntime =
+                    stalker != null
+                        ? stalker.GetComponent<
+                            EchoProtocol.AI.Stalker.Networking
+                                .StalkerFusionRuntime>()
+                        : null;
             }
 
             public int TargetId => _stalker != null ? _stalker.gameObject.GetHashCode() : 0;
@@ -826,7 +846,40 @@ namespace EchoProtocol.Tools.Scanner
             public float CurrentSpeed => _stalker != null && _stalker.HasAuthoritativeLocomotion
                 ? _stalker.AuthoritativeMoveSpeed
                 : _agent != null && _agent.enabled && _agent.isOnNavMesh ? _agent.velocity.magnitude : 0f;
-            public bool IsMoving => CurrentSpeed >= 0.2f;
+            public bool IsMoving =>
+                IsThreatMotionState()
+                || CurrentSpeed >= 0.2f;
+
+            private bool IsThreatMotionState()
+            {
+                if (_stalker == null)
+                {
+                    return false;
+                }
+
+                EchoProtocol.AI.Stalker.StalkerState state;
+
+                if (_fusionRuntime != null
+                    && _fusionRuntime.Object != null
+                    && _fusionRuntime.Object.IsValid)
+                {
+                    state =
+                        _fusionRuntime.Object.HasStateAuthority
+                            ? _stalker.CurrentState
+                            : _fusionRuntime
+                                .GetReplicatedPresentationState()
+                                .SemanticState;
+                }
+                else
+                {
+                    state = _stalker.CurrentState;
+                }
+
+                return state
+                        == EchoProtocol.AI.Stalker.StalkerState.CHASE
+                    || state
+                        == EchoProtocol.AI.Stalker.StalkerState.ATTACK;
+            }
             public bool IsActiveTarget => _stalker != null && _stalker.gameObject.activeInHierarchy;
         }
     }
