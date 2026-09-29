@@ -61,6 +61,12 @@ namespace EchoProtocol.AI.Stalker.Special
             jumpEntryRegistry?.ResetForMatch();
         }
 
+        public void SetCooldownSeconds(float seconds)
+        {
+            settings ??= new StalkerSpecialEncounterSettings();
+            settings.SetCooldownSeconds(seconds);
+        }
+
         private void Awake()
         {
             ResolveDependencies();

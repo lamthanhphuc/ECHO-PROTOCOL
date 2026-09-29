@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Auth;
+using EchoProtocol.Gameplay;
 using Fusion;
 using EchoProtocol.Telemetry;
 using EchoProtocol.Telemetry.Unity;
@@ -30,6 +31,7 @@ namespace EchoProtocol.Networking.Authority
     {
         public const string MatchIdSessionProperty = "matchId";
         public const string ScenarioResolutionModeSessionProperty = "scenarioResolutionMode";
+        public const string MatchDifficultySessionProperty = "difficulty";
         private const float LeaseRenewIntervalSeconds = 15f;
 
         private static MatchAuthorityRuntime _instance;
@@ -58,6 +60,7 @@ namespace EchoProtocol.Networking.Authority
         private bool _runtimeNoiseTelemetryInactiveWarningLogged;
         [SerializeField] private bool _researchCaptureEnabled;
         [SerializeField] private ScenarioResolutionMode requestedScenarioResolutionMode = ScenarioResolutionMode.Fixed;
+        [SerializeField] private MatchDifficulty requestedDifficulty = MatchDifficulty.Normal;
         [SerializeField] private string experimentCondition;
         [SerializeField]
         private string experimentProtocolVersion;
@@ -67,6 +70,7 @@ namespace EchoProtocol.Networking.Authority
         public static MatchAuthorityRuntime Instance => _instance;
         public Guid MatchId { get; private set; }
         public ScenarioResolutionMode RequestedScenarioResolutionMode => requestedScenarioResolutionMode;
+        public MatchDifficulty Difficulty => requestedDifficulty;
         public string ExperimentCondition => experimentCondition ?? string.Empty;
         public string ExperimentProtocolVersion =>
             experimentProtocolVersion ?? string.Empty;
@@ -190,7 +194,8 @@ namespace EchoProtocol.Networking.Authority
                 [ScenarioResolutionModeSessionProperty] =
                     requestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive
                         ? "ADAPTIVE"
-                        : "FIXED"
+                        : "FIXED",
+                [MatchDifficultySessionProperty] = requestedDifficulty.ToString().ToUpperInvariant()
             };
 
         public bool AttachJoinedSession(NetworkRunner runner)
@@ -222,6 +227,7 @@ namespace EchoProtocol.Networking.Authority
             MatchId = matchId;
             IsHostBinding = runner.IsServer;
             requestedScenarioResolutionMode = ReadScenarioResolutionMode(runner);
+            requestedDifficulty = ReadMatchDifficulty(runner);
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchAuthority,
 
@@ -244,6 +250,12 @@ namespace EchoProtocol.Networking.Authority
 
             experimentProtocolVersion =
                 protocolVersion ?? string.Empty;
+        }
+
+        public void RequestDifficulty(MatchDifficulty difficulty)
+        {
+            requestedDifficulty = Enum.IsDefined(typeof(MatchDifficulty), difficulty)
+                ? difficulty : MatchDifficulty.Normal;
         }
 
         public async Task<bool> EndAsync(string reason)
@@ -367,6 +379,7 @@ namespace EchoProtocol.Networking.Authority
             MatchId = Guid.Empty;
             IsHostBinding = false;
             requestedScenarioResolutionMode = ScenarioResolutionMode.Fixed;
+            requestedDifficulty = MatchDifficulty.Normal;
             experimentCondition = string.Empty;
             experimentProtocolVersion =
                 string.Empty;
@@ -646,6 +659,20 @@ namespace EchoProtocol.Networking.Authority
             }
 
             return ScenarioResolutionMode.Fixed;
+        }
+
+        private static MatchDifficulty ReadMatchDifficulty(NetworkRunner runner)
+        {
+            if (runner != null && runner.SessionInfo.IsValid
+                && runner.SessionInfo.Properties != null
+                && runner.SessionInfo.Properties.TryGetValue(MatchDifficultySessionProperty, out var property)
+                && Enum.TryParse(((string)property) ?? string.Empty, true, out MatchDifficulty difficulty)
+                && Enum.IsDefined(typeof(MatchDifficulty), difficulty))
+            {
+                return difficulty;
+            }
+
+            return MatchDifficulty.Normal;
         }
 
         private void HandlePickupStateCommitted(NetworkItemTransition transition)

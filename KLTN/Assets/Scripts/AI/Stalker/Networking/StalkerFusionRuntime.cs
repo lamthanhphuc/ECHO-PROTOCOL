@@ -10,6 +10,7 @@ using EchoProtocol.AI.Stalker.Special;
 using EchoProtocol.AI.Stalker.Spatial.Strategic;
 using EchoProtocol.AI.Stalker.Telemetry;
 using EchoProtocol.Diagnostics;
+using EchoProtocol.Gameplay;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
 using EchoProtocol.Player;
@@ -43,6 +44,9 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         [SerializeField, Range(0.5f, 2f)]
         private float hearingRangeMultiplier = 1.25f;
+
+        [SerializeField, Min(0f)]
+        private float coreCarrierPursuitDelaySeconds = 15f;
 
         [SerializeField, Range(0.01f, 0.99f)]
         private float closedDoorMultiplier = 0.5f;
@@ -209,6 +213,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             _coreCarryStartedAt.Clear();
             _networkSimulationOwned = true;
             ResolveLocalDependencies();
+            if (Object != null && Object.HasStateAuthority)
+                ApplyMatchDifficulty();
             specialEncounterRuntime?.ResetForMatch();
             ResolveLifecycle();
             BindProductionConsequenceSink();
@@ -1082,6 +1088,19 @@ namespace EchoProtocol.AI.Stalker.Networking
             return true;
         }
 
+        private void ApplyMatchDifficulty()
+        {
+            var difficulty = MatchAuthorityRuntime.Instance != null
+                ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
+            var profile = MatchDifficultyProfiles.Get(difficulty);
+            controller?.ApplyMatchDifficulty(profile);
+            coreCarrierPursuitDelaySeconds = profile.CoreCarrierPursuitDelaySeconds;
+            hearingRangeMultiplier = profile.HearingRangeMultiplier;
+            specialEncounterRuntime?.SetCooldownSeconds(profile.SpecialEncounterCooldownSeconds);
+            _hearingSensor = null;
+            ResolveLocalDependencies();
+        }
+
         private void ResolveLocalDependencies()
         {
             if (controller == null)
@@ -1377,7 +1396,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                     continue;
                 }
 
-                if (nowSeconds - startedAt < 15d
+                if (nowSeconds - startedAt < coreCarrierPursuitDelaySeconds
                     || !controller.CanPursueCoreCarrierAt(snapshot.TargetSample.position))
                 {
                     continue;

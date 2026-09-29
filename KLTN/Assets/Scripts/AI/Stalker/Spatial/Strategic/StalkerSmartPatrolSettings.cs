@@ -88,5 +88,8 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
         public float PostAttackCooldownSeconds => Mathf.Max(0f, postAttackCooldownSeconds);
         public float SameRoomPressureCooldownSeconds => Mathf.Max(0.01f, sameRoomPressureCooldownSeconds);
         public float SeekPlayersAfterSeconds => seekPlayersAfterSeconds > 0f ? seekPlayersAfterSeconds : 180f;
+
+        public void SetSeekPlayersAfterSeconds(float seconds) =>
+            seekPlayersAfterSeconds = Mathf.Max(1f, seconds);
     }
 }

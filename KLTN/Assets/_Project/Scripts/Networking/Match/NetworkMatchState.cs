@@ -1,6 +1,7 @@
 using System;
 using EchoProtocol.MatchFlow;
 using EchoProtocol.Diagnostics;
+using EchoProtocol.Gameplay;
 using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Listener.Noise;
@@ -85,10 +86,6 @@ namespace EchoProtocol.Networking
 
         [Header("Team Tool World Spawn")]
         [SerializeField] private TeamToolPickupCatalog _teamToolPickupCatalog;
-        [SerializeField, Min(TeamToolWorldSpawn.RequiredToolCountPerZone)]
-        private int _zone1TeamToolSpawnCount = TeamToolWorldSpawn.RequiredToolCountPerZone;
-        [SerializeField, Min(TeamToolWorldSpawn.RequiredToolCountPerZone)]
-        private int _zone2TeamToolSpawnCount = TeamToolWorldSpawn.RequiredToolCountPerZone;
         [SerializeField, Min(0f)] private float _teamToolSpawnMinimumSpacing = 6f;
 
         [Networked] private NetworkBool TeamToolWorldSpawnInitialized { get; set; }
@@ -362,9 +359,12 @@ namespace EchoProtocol.Networking
 
                 if (!TeamToolWorldSpawnInitialized)
                 {
+                    var difficulty = MatchAuthorityRuntime.Instance != null
+                        ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
+                    var toolsPerZone = MatchDifficultyProfiles.Get(difficulty).TeamToolsPerZone;
                     TeamToolWorldSpawnInitialized = TeamToolWorldSpawn.TrySpawnInitial(
-                        Runner, _teamToolPickupCatalog, _zone1TeamToolSpawnCount,
-                        _zone2TeamToolSpawnCount, _teamToolSpawnMinimumSpacing);
+                        Runner, _teamToolPickupCatalog, toolsPerZone,
+                        toolsPerZone, _teamToolSpawnMinimumSpacing);
                 }
             }
 

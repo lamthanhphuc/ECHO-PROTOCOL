@@ -9,6 +9,7 @@ using EchoProtocol.AI.Stalker.Spatial;
 using EchoProtocol.AI.Stalker.Spatial.Strategic;
 using EchoProtocol.AI.Stalker.Telemetry;
 using EchoProtocol.Diagnostics;
+using EchoProtocol.Gameplay;
 using EchoProtocol.Networking;
 using EchoProtocol.Player;
 using Fusion;
@@ -774,6 +775,23 @@ namespace EchoProtocol.AI.Stalker
             _scenarioMonsterParameters = null;
             _hasScenarioMonsterParameters = false;
 
+            ApplyMovementSpeedForCurrentState();
+        }
+
+        public void ApplyMatchDifficulty(MatchDifficultyProfile profile)
+        {
+            patrolSpeed = Mathf.Max(0f, profile.PatrolSpeed);
+            chaseSpeed = Mathf.Max(0f, profile.ChaseSpeed);
+            detectionDurationSeconds = Mathf.Max(0.05f, profile.DetectionDurationSeconds);
+            detectionDecayDurationSeconds = Mathf.Max(0.05f, profile.DetectionDecayDurationSeconds);
+            searchDuration = Mathf.Max(0f, profile.SearchDurationSeconds);
+            attackRange = Mathf.Max(0f, profile.AttackRange);
+            attackWindup = Mathf.Max(0f, profile.AttackWindupSeconds);
+            attackRecovery = Mathf.Max(0f, profile.AttackRecoverySeconds);
+            stalkerDoorBreakDurationSeconds = Mathf.Max(0.01f, profile.DoorBreakDurationSeconds);
+            smartPatrolSettings ??= new StalkerSmartPatrolSettings();
+            smartPatrolSettings.SetSeekPlayersAfterSeconds(profile.SeekPlayersAfterSeconds);
+            SyncDetectionRatesFromDurations();
             ApplyMovementSpeedForCurrentState();
         }
 

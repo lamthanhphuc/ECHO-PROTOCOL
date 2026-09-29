@@ -3,6 +3,7 @@ using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using EchoProtocol.Auth;
+using EchoProtocol.Gameplay;
 using Fusion;
 using Fusion.Sockets;
 using EchoProtocol.Networking.Authority;
@@ -88,11 +89,16 @@ namespace EchoProtocol.Networking
         internal Task<bool> StartHost(string sessionName, int maxPlayers) => CreateRoomAsync(sessionName, maxPlayers);
         public Task<bool> JoinGame(string sessionName) => JoinRoomAsync(sessionName);
 
-        public Task<bool> CreateRoomAsync(string sessionName, int maxPlayers = 4)
+        public Task<bool> CreateRoomAsync(
+            string sessionName, int maxPlayers = 4,
+            MatchDifficulty difficulty = MatchDifficulty.Normal)
         {
-            return maxPlayers is < 2 or > 4
-                ? FailWithoutStarting("A room must allow between 2 and 4 players.")
-                : StartSessionAsync(GameMode.Host, sessionName, maxPlayers);
+            if (maxPlayers is < 2 or > 4)
+                return FailWithoutStarting("A room must allow between 2 and 4 players.");
+
+            _matchAuthority ??= MatchAuthorityRuntime.EnsureExists(this);
+            _matchAuthority.RequestDifficulty(difficulty);
+            return StartSessionAsync(GameMode.Host, sessionName, maxPlayers);
         }
 
         public Task<bool> JoinRoomAsync(string sessionName) => StartSessionAsync(GameMode.Client, sessionName, null);
