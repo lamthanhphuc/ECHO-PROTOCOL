@@ -125,8 +125,8 @@ namespace EchoProtocol.Networking
             }
 
             var runner = Runner;
+            UnregisterCallbacks(runner);
             Runner = null;
-            _callbacksRegistered = false;
 
             try
             {
@@ -181,27 +181,21 @@ namespace EchoProtocol.Networking
 
         public NetworkRunner EnsureRunner()
         {
-            if (Runner != null && !Runner.IsShutdown)
+            if (Runner != null)
             {
-                RegisterCallbacks();
-                return Runner;
-            }
-
-            foreach (var existing in FindObjectsByType<NetworkRunner>(FindObjectsInactive.Include))
-            {
-                if (existing != null && !existing.IsShutdown)
+                if (!Runner.IsShutdown)
                 {
-                    Runner = existing;
-                    break;
+                    RegisterCallbacks();
+                    return Runner;
                 }
+
+                Runner = null;
+                _callbacksRegistered = false;
             }
 
-            if (Runner == null)
-            {
-                Runner = _runnerPrefab != null
-                    ? Instantiate(_runnerPrefab)
-                    : new GameObject(RunnerObjectName).AddComponent<NetworkRunner>();
-            }
+            Runner = _runnerPrefab != null
+                ? Instantiate(_runnerPrefab)
+                : new GameObject(RunnerObjectName).AddComponent<NetworkRunner>();
 
             Runner.name = RunnerObjectName;
             DontDestroyOnLoad(Runner.gameObject);
@@ -318,8 +312,8 @@ namespace EchoProtocol.Networking
             LastError = message;
             Debug.LogError($"[NetworkSession] {message}");
             var failedRunner = Runner;
+            UnregisterCallbacks(failedRunner);
             Runner = null;
-            _callbacksRegistered = false;
 
             if (failedRunner != null)
             {
@@ -378,7 +372,12 @@ namespace EchoProtocol.Networking
 
         private void UnregisterCallbacks()
         {
-            if (Runner != null && _callbacksRegistered) Runner.RemoveCallbacks(this);
+            UnregisterCallbacks(Runner);
+        }
+
+        private void UnregisterCallbacks(NetworkRunner runner)
+        {
+            if (runner != null && _callbacksRegistered) runner.RemoveCallbacks(this);
             _callbacksRegistered = false;
         }
 
@@ -493,14 +492,14 @@ namespace EchoProtocol.Networking
             {
                 _ = _matchAuthority.EndAsync("UNEXPECTED_FUSION_SHUTDOWN");
             }
-            Runner = null;
-            _callbacksRegistered = false;
-            _sessionOperationInProgress = false;
+            UnregisterCallbacks(runner);
+            _sessionOperationInProgress = true;
             CurrentSessionName = string.Empty;
             _reconnectSessionName = reconnectName;
             _reconnectIdentityPending = reconnect;
             LastError = message;
-            SetState(NetworkSessionState.Failed, message);
+            SetState(NetworkSessionState.ShuttingDown,
+                matchFinished ? "Closing finished match..." : "Cleaning up disconnected session...");
             var graceSeconds = runner.GetComponent<FusionPlayerLifecycle>()?.ReconnectGraceSeconds ?? 60f;
             _ = FinishUnexpectedTerminationAsync(runner, message, graceSeconds);
         }
@@ -517,8 +516,11 @@ namespace EchoProtocol.Networking
                 {
                     Debug.LogWarning($"[NetworkSession] Unexpected shutdown cleanup failed: {exception.Message}");
                 }
+                if (Runner == runner) Runner = null;
                 if (runner != null) Destroy(runner.gameObject);
             }
+            _callbacksRegistered = false;
+            _sessionOperationInProgress = false;
             if (!string.IsNullOrEmpty(_reconnectSessionName))
             {
                 var sessionName = _reconnectSessionName;
@@ -532,10 +534,20 @@ namespace EchoProtocol.Networking
                 _reconnectSessionName = null;
             }
             _reconnectIdentityPending = false;
-            if (message.StartsWith("Host disconnected", StringComparison.Ordinal))
+            if (message.StartsWith("Match finished", StringComparison.Ordinal))
+            {
+                LastError = string.Empty;
+                SetState(NetworkSessionState.Disconnected, "Previous match closed. Ready for a new room.");
+            }
+            else if (message.StartsWith("Host disconnected", StringComparison.Ordinal))
             {
                 LastError = "Host disconnected – Match aborted.";
                 SetState(NetworkSessionState.Failed, LastError);
+            }
+            else
+            {
+                LastError = message;
+                SetState(NetworkSessionState.Failed, message);
             }
             RestoreLobbyCursor();
         }
@@ -543,8 +555,8 @@ namespace EchoProtocol.Networking
         private void CleanupTermination(NetworkRunner runner)
         {
             ClearLocalInputProvider();
+            UnregisterCallbacks(runner);
             Runner = null;
-            _callbacksRegistered = false;
             _sessionOperationInProgress = false;
             CurrentSessionName = string.Empty;
             LastError = string.Empty;
