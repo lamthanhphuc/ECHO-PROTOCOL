@@ -204,18 +204,24 @@ namespace EchoProtocol.Networking
                             pickup.InitializeAuthoritativePose(pose.Position, pose.Rotation);
                         }
                     });
-                if (core != null)
+                if (core == null)
                 {
-                    core.name = $"EnergyCore_Network_{index + 1:00}";
-                    if (core.TryGetComponent<NetworkPickupItem>(out var pickup))
-                    {
-                        pickup.InitializeAuthoritativePose(pose.Position, pose.Rotation);
-                    }
+                    Debug.LogError(
+                        $"[PlayerSpawner] Failed to spawn Energy Core " +
+                        $"{index + 1}/{_energyCoreCount} at {pose.Position}.");
+                    break;
                 }
+
+                core.name = $"EnergyCore_Network_{index + 1:00}";
+                if (core.TryGetComponent<NetworkPickupItem>(out var pickup))
+                {
+                    pickup.InitializeAuthoritativePose(pose.Position, pose.Rotation);
+                }
+
                 _energyCoreInstances.Add(core);
                 RuntimeLog.Log(
                 RuntimeLogCategory.PlayerSpawner,
-                $"[PlayerSpawner] Spawned authoritative Energy Core {index + 1}/{_energyCoreCount}: {(core != null ? core.Id.ToString() : "null")} at {pose.Position}.");
+                $"[PlayerSpawner] Spawned authoritative Energy Core {index + 1}/{_energyCoreCount}: {core.Id} at {pose.Position}.");
             }
             if (_sectorBoxPrefab != null && _sectorBoxInstances.Count == 0)
             {
