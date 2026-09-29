@@ -545,29 +545,97 @@ namespace EchoProtocol.Networking
             var candidates = GetOrderedEnergyCoreSpawnCandidates();
             if (candidates.Count == 0)
             {
-                Debug.LogWarning("[PlayerSpawner] No EnergyCore_C* spawn candidates found; using fallback Energy Core line spawn.");
+                Debug.LogWarning(
+                    "[PlayerSpawner] No CoreSpawn_C* Energy Core spawn candidates found; " +
+                    "using fallback Energy Core line spawn.");
                 return;
             }
 
-            for (int i = candidates.Count - 1; i > 0; i--)
-            {
-                int swapIndex = Random.Range(0, i + 1);
-                (candidates[i], candidates[swapIndex]) = (candidates[swapIndex], candidates[i]);
-            }
+            var candidatesByRoom =
+                new Dictionary<string, List<Transform>>(
+                    System.StringComparer.OrdinalIgnoreCase);
 
-            var selectedCount = Mathf.Min(_energyCoreCount, candidates.Count);
-            for (int i = 0; i < selectedCount; i++)
+            for (int i = 0; i < candidates.Count; i++)
             {
                 var candidate = candidates[i];
-                _selectedEnergyCoreSpawnPoses.Add(new SpawnPose(candidate.position, candidate.rotation));
+                if (!TryGetEnergyCoreRoomKey(
+                        candidate,
+                        out var roomKey))
+                {
+                    continue;
+                }
+
+                if (!candidatesByRoom.TryGetValue(
+                        roomKey,
+                        out var roomCandidates))
+                {
+                    roomCandidates =
+                        new List<Transform>();
+                    candidatesByRoom.Add(
+                        roomKey,
+                        roomCandidates);
+                }
+
+                roomCandidates.Add(candidate);
+            }
+
+            if (candidatesByRoom.Count == 0)
+            {
+                Debug.LogWarning(
+                    "[PlayerSpawner] Energy Core candidates exist but no valid room key was found; " +
+                    "using fallback Energy Core line spawn.");
+                return;
+            }
+
+            var roomKeys =
+                new List<string>(
+                    candidatesByRoom.Keys);
+            roomKeys.Sort(
+                System.StringComparer.Ordinal);
+
+            for (int i = roomKeys.Count - 1; i > 0; i--)
+            {
+                int swapIndex =
+                    Random.Range(
+                        0,
+                        i + 1);
+                (roomKeys[i], roomKeys[swapIndex]) =
+                    (roomKeys[swapIndex], roomKeys[i]);
+            }
+
+            int selectedRoomCount =
+                Mathf.Min(
+                    _energyCoreCount,
+                    roomKeys.Count);
+
+            for (int i = 0; i < selectedRoomCount; i++)
+            {
+                string roomKey =
+                    roomKeys[i];
+                var roomCandidates =
+                    candidatesByRoom[roomKey];
+                int pointIndex =
+                    Random.Range(
+                        0,
+                        roomCandidates.Count);
+                var candidate =
+                    roomCandidates[pointIndex];
+
+                _selectedEnergyCoreSpawnPoses.Add(
+                    new SpawnPose(
+                        candidate.position,
+                        candidate.rotation));
                 RuntimeLog.Log(
-                RuntimeLogCategory.PlayerSpawner,
-                $"[PlayerSpawner] Selected Energy Core spawn candidate '{candidate.name}' at {candidate.position}.");
+                    RuntimeLogCategory.PlayerSpawner,
+                    $"[PlayerSpawner] Selected Energy Core room={roomKey} " +
+                    $"point='{candidate.name}' at {candidate.position}.");
             }
 
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerSpawner,
-                $"[PlayerSpawner] Selected {_selectedEnergyCoreSpawnPoses.Count}/{candidates.Count} Energy Core spawn candidates.");
+                $"[PlayerSpawner] Selected " +
+                $"{_selectedEnergyCoreSpawnPoses.Count}/{candidatesByRoom.Count} " +
+                $"Energy Core rooms from {candidates.Count} authored points.");
         }
 
         private static List<Transform> GetOrderedEnergyCoreSpawnCandidates()
@@ -598,11 +666,66 @@ namespace EchoProtocol.Networking
             return candidates;
         }
 
-        private static bool IsEnergyCoreSpawnCandidate(Transform candidate)
+        private static bool IsEnergyCoreSpawnCandidate(
+            Transform candidate)
         {
-            return candidate != null
-                && candidate.name.StartsWith("CoreSpawn_C", System.StringComparison.OrdinalIgnoreCase)
-                && candidate.name.EndsWith("_EMPTY", System.StringComparison.OrdinalIgnoreCase);
+            if (candidate == null)
+            {
+                return false;
+            }
+
+            string name =
+                candidate.name;
+
+            return name.StartsWith(
+                    "CoreSpawn_C",
+                    System.StringComparison.OrdinalIgnoreCase)
+                && name.IndexOf(
+                    "_EMPTY",
+                    System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool TryGetEnergyCoreRoomKey(
+            Transform candidate,
+            out string roomKey)
+        {
+            roomKey = null;
+
+            if (!IsEnergyCoreSpawnCandidate(
+                    candidate))
+            {
+                return false;
+            }
+
+            const string prefix =
+                "CoreSpawn_C";
+            string name =
+                candidate.name;
+            int roomNumberStart =
+                prefix.Length;
+            int roomNumberEnd =
+                name.IndexOf(
+                    '_',
+                    roomNumberStart);
+
+            if (roomNumberEnd <= roomNumberStart)
+            {
+                return false;
+            }
+
+            for (int i = roomNumberStart; i < roomNumberEnd; i++)
+            {
+                if (!char.IsDigit(name[i]))
+                {
+                    return false;
+                }
+            }
+
+            roomKey =
+                "C" + name.Substring(
+                    roomNumberStart,
+                    roomNumberEnd - roomNumberStart);
+            return true;
         }
 
         private static SpawnPose GetSectorBoxPose()
