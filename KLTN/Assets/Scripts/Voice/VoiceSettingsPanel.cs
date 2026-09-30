@@ -39,6 +39,8 @@ namespace EchoProtocol.Voice
         private int _tab;
         public static bool IsOpen { get; private set; }
         private bool IsRebinding => _micRebinding || _rebindAction.HasValue;
+        private bool CanOpenInventory => _openInventory != null && _parentMenuLock != null
+            && PlayerInteractionControlLock.IsPlayerStateValid(_parentMenuLock.Player);
 
         private void Awake()
         {
@@ -75,6 +77,7 @@ namespace EchoProtocol.Voice
             Click(Footer + "Resume", Close);
             Click(Footer + "Inventory", () =>
             {
+                if (!CanOpenInventory) return;
                 var action = _openInventory;
                 Close();
                 action?.Invoke();
@@ -239,7 +242,7 @@ namespace EchoProtocol.Voice
         private bool Open(GameObject player)
         {
             EnsureEventSystem();
-            _controlLock.Acquire(player, Close);
+            _controlLock.Acquire(player, Close, allowWhileDowned: true);
             if (!_controlLock.IsLocked) return false;
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
             _open = IsOpen = true;
@@ -317,6 +320,7 @@ namespace EchoProtocol.Voice
         private void RefreshVisuals()
         {
             if (!_open) return;
+            Find<Button>(Footer + "Inventory").interactable = CanOpenInventory;
             SetToggle("Voice/MicToggle", _voice.MicrophoneEnabled && !_voice.SelfMuted);
             SetToggle("Voice/PushToTalkToggle", _voice.PushToTalk);
             TextAt(Body + "Voice/KeyTitle").text = _voice.PushToTalk ? "Phím nhấn giữ để nói" : "Phím bật / tắt mic";

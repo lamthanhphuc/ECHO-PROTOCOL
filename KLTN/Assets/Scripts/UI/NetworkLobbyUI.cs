@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using EchoProtocol.Auth;
 using EchoProtocol.Networking;
 using TMPro;
 using UnityEngine;
@@ -40,6 +41,7 @@ namespace EchoProtocol.UI
         private LobbyManager _subscribedLobby;
         private bool _busy;
         private bool _configured;
+        private bool _inputsInitialized;
         private float _nextResolve;
         private RoomInfoViewModel _room = new RoomInfoViewModel();
         private bool Connected => bootstrap != null && bootstrap.HasRunningRunner;
@@ -52,6 +54,16 @@ namespace EchoProtocol.UI
             if (!_configured) Debug.LogError("[NetworkLobbyUI] Assign all Input, Host/Join and text references.", this);
             if (playerNameInput != null) playerNameInput.characterLimit = 32;
             if (sessionNameInput != null) sessionNameInput.characterLimit = 32;
+            if (!_inputsInitialized)
+            {
+                var loginName = string.IsNullOrWhiteSpace(AuthSession.DisplayName)
+                    ? AuthSession.Username : AuthSession.DisplayName;
+                if (playerNameInput != null && !string.IsNullOrWhiteSpace(loginName))
+                    playerNameInput.SetTextWithoutNotify(loginName.Trim());
+                if (sessionNameInput != null)
+                    sessionNameInput.SetTextWithoutNotify(string.Empty);
+                _inputsInitialized = true;
+            }
             if (statusText != null) statusText.richText = false;
             if (memberListText != null) memberListText.richText = false;
             if (hostButton != null) hostButton.onClick.AddListener(OnHostClicked);
@@ -122,7 +134,8 @@ namespace EchoProtocol.UI
             {
                 _subscribedLobby.OnRoomUpdated += OnRoomUpdated;
                 _subscribedLobby.OnLobbyError += ReportError;
-                if (playerNameInput != null && !string.IsNullOrEmpty(lobbyManager.LocalOperatorName))
+                if (playerNameInput != null && string.IsNullOrWhiteSpace(playerNameInput.text)
+                    && !string.IsNullOrEmpty(lobbyManager.LocalOperatorName))
                     playerNameInput.SetTextWithoutNotify(lobbyManager.LocalOperatorName);
             }
             if (Connected && sessionNameInput != null)
