@@ -121,14 +121,34 @@ namespace EchoProtocol.AI.Minions
             FleeTimer = TickTimer.None;
             _noiseService = HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance);
             _noiseService.RuntimeNoiseAccepted += HandleRuntimeNoiseAccepted;
-            _agent.enabled = true;
+            _agent.enabled = false;
             _agent.updatePosition = true;
             _agent.updateRotation = true;
             _agent.angularSpeed = 720f;
             _agent.acceleration = 24f;
             _agent.stoppingDistance = 0.6f;
-            _navigation = new StalkerNavigationController(_agent);
+            if (!TryActivateAgent())
+                Debug.LogWarning($"[CREEP_SPAWN][NO_NAVMESH] id={Object.Id} position={transform.position}; retrying", this);
+        }
+
+        private bool TryActivateAgent()
+        {
+            if (_agent.enabled) return _agent.isOnNavMesh;
+            if (!NavMesh.SamplePosition(transform.position, out var hit, 2f, _agent.areaMask)) return false;
+            transform.position = hit.position;
+            _agent.enabled = true;
+            if (!_agent.isOnNavMesh)
+            {
+                _agent.enabled = false;
+                return false;
+            }
+
+            _navigation ??= new StalkerNavigationController(_agent);
             _navigation.SetAuthoritativeLocomotion(true);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"[CREEP_SPAWN][READY] id={Object.Id} zone={Zone} position={transform.position}", this);
+#endif
+            return true;
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -154,7 +174,12 @@ namespace EchoProtocol.AI.Minions
 
         public override void FixedUpdateNetwork()
         {
-            if (!Object.HasStateAuthority || _agent == null || !_agent.enabled) return;
+            if (!Object.HasStateAuthority || _agent == null) return;
+            if (!_agent.enabled && !TryActivateAgent())
+            {
+                IsMoving = false;
+                return;
+            }
             if (!_agent.isOnNavMesh
                 && (_navigation == null || !_navigation.TryReattachToNearestNavMesh(2f)))
             {
@@ -362,13 +387,16 @@ namespace EchoProtocol.AI.Minions
             _trackSeconds = 0f;
             StateValue = (int)CreepMinionState.Harass;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log($"[CREEP_ALERT] target={TargetPlayer} accepted={alertAccepted} zone={Zone} position={_lastKnownTargetPosition}", this);
+            Debug.Log($"[CREEP_ALERT] target={TargetPlayer} accepted={alertAccepted} nextState={State} zone={Zone} position={_lastKnownTargetPosition}", this);
 #endif
         }
 
         private void AttackPlayer(NetworkObject playerObject, NetworkPlayerLifeState life)
         {
             if (playerObject == null || life == null) return;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"[CREEP_ATTACK][ENTER] target={TargetPlayer} health={life.Health}", this);
+#endif
             if (!life.TryApplyAuthoritativeNonLethalDamage(nonLethalDamage, "CREEP_MINION", transform.position))
             {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD

@@ -75,6 +75,7 @@ public static class CreepMinionProductionSetup
                 agent = root.AddComponent<NavMeshAgent>();
             }
 
+            agent.enabled = false;
             agent.speed = 3.5f;
             agent.angularSpeed = 720f;
             agent.acceleration = 24f;

@@ -38,8 +38,8 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _monsterPrefab;
         [SerializeField] private NetworkObject _creepMinionPrefab;
         [SerializeField, Min(1f)] private float _minionSpawnCheckInterval = 5f;
-        [SerializeField, Min(2f)] private float _minionSpawnMinDistance = 12f;
-        [SerializeField, Min(3f)] private float _minionSpawnMaxDistance = 20f;
+        [SerializeField, Min(2f)] private float _minionSpawnMinDistance = 2f;
+        [SerializeField, Min(3f)] private float _minionSpawnMaxDistance = 4f;
 
         private readonly Dictionary<PlayerRef, int> _spawnSlots = new Dictionary<PlayerRef, int>();
         private FusionPlayerLifecycle _subscribedLifecycle;
@@ -57,7 +57,6 @@ namespace EchoProtocol.Networking
         private readonly List<NetworkObject> _creepMinionInstances = new List<NetworkObject>();
         private float _nextMinionSpawnCheckAt;
         private bool _zone2MinionsActive;
-        private PlayerRef _zone2AnchorPlayer = PlayerRef.None;
         private bool _missingMinionPrefabLogged;
 
         private void Update()
@@ -400,7 +399,6 @@ namespace EchoProtocol.Networking
             _zone2MonsterInstance = spawned;
             _zone2MonsterSpawned = true;
             _zone2MinionsActive = true;
-            _zone2AnchorPlayer = playerState.Object.InputAuthority;
             DespawnCreepMinionsForZone(runner, RegionSemanticZone.Zone01);
             _nextMinionSpawnCheckAt = Time.time;
         }
@@ -437,51 +435,25 @@ namespace EchoProtocol.Networking
             int count = 0;
             foreach (var obj in _creepMinionInstances)
                 if (obj.TryGetComponent<CreepMinionRuntime>(out var minion) && minion.Zone == zone) count++;
-            if (count >= cap || !TryGetCreepMinionAnchor(runner, zone, out var anchor)
-                || !TryFindCreepMinionSpawnPosition(anchor, out var position)) return;
+            var stalker = zone == RegionSemanticZone.Zone02 ? _zone2MonsterInstance : _monsterInstance;
+            if (count >= cap || !IsValidNetworkObject(stalker)
+                || !TryFindCreepMinionSpawnPosition(stalker.transform.position, out var position)) return;
             SpawnCreepMinion(runner, position, zone);
-        }
-
-        private bool TryGetCreepMinionAnchor(NetworkRunner runner, RegionSemanticZone zone, out Vector3 anchor)
-        {
-            anchor = default;
-            if (zone == RegionSemanticZone.Zone02)
-            {
-                if (_zone2AnchorPlayer.IsRealPlayer
-                    && runner.TryGetPlayerObject(_zone2AnchorPlayer, out var playerObject)
-                    && IsValidNetworkObject(playerObject))
-                {
-                    anchor = playerObject.transform.position;
-                    return true;
-                }
-                if (!IsValidNetworkObject(_zone2MonsterInstance)) return false;
-                anchor = _zone2MonsterInstance.transform.position;
-                return true;
-            }
-
-            int eligible = 0;
-            foreach (var player in runner.ActivePlayers)
-            {
-                if (!runner.TryGetPlayerObject(player, out var obj) || !IsValidNetworkObject(obj)
-                    || !obj.TryGetComponent<LobbyPlayerState>(out var lobby) || !lobby.IsGameplayPlayer
-                    || !obj.TryGetComponent<NetworkPlayerLifeState>(out var life)
-                    || life.Status != NetworkPlayerLifeStatus.Alive) continue;
-                if (Random.Range(0, ++eligible) == 0) anchor = obj.transform.position;
-            }
-            return eligible > 0;
         }
 
         private bool TryFindCreepMinionSpawnPosition(Vector3 anchor, out Vector3 position)
         {
             position = default;
+            float maxDistance = Mathf.Max(_minionSpawnMinDistance + 1f, _minionSpawnMaxDistance);
             for (int i = 0; i < 12; i++)
             {
                 float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
-                float distance = Random.Range(_minionSpawnMinDistance,
-                    Mathf.Max(_minionSpawnMinDistance + 1f, _minionSpawnMaxDistance));
+                float distance = Random.Range(_minionSpawnMinDistance, maxDistance);
                 var candidate = anchor + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * distance;
-                if (!NavMesh.SamplePosition(candidate, out var hit, 3f, NavMesh.AllAreas)
-                    || Vector3.Distance(anchor, hit.position) < _minionSpawnMinDistance) continue;
+                if (!NavMesh.SamplePosition(candidate, out var hit, 1f, NavMesh.AllAreas)) continue;
+                float actualDistance = Vector3.Distance(anchor, hit.position);
+                if (actualDistance < _minionSpawnMinDistance || actualDistance > maxDistance
+                    || NavMesh.Raycast(anchor, hit.position, out _, NavMesh.AllAreas)) continue;
                 position = hit.position;
                 return true;
             }
@@ -1255,7 +1227,6 @@ namespace EchoProtocol.Networking
         {
             _creepMinionInstances.Clear();
             _zone2MinionsActive = false;
-            _zone2AnchorPlayer = PlayerRef.None;
             _nextMinionSpawnCheckAt = 0f;
             _missingMinionPrefabLogged = false;
             _doorInstance = null;

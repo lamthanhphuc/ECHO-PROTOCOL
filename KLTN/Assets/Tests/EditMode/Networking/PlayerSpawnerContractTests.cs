@@ -3,12 +3,22 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.SceneManagement;
 
 namespace EchoProtocol.Networking.Tests
 {
     public sealed class PlayerSpawnerContractTests
     {
+        [Test]
+        public void CreepMinionPrefab_DoesNotAttachNavMeshAgentAtPrefabOrigin()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/PF_CreepMinionNetwork.prefab");
+            Assert.That(prefab, Is.Not.Null);
+            Assert.That(prefab.GetComponent<NavMeshAgent>(), Is.Not.Null);
+            Assert.That(prefab.GetComponent<NavMeshAgent>().enabled, Is.False);
+        }
+
         private const string BootstrapScenePath = "Assets/Scenes/Bootstrap.unity";
         private const string SciFiScenePath = "Assets/Scenes/SciFi.unity";
         private const string LobbyPlayerStateScriptPath = "Assets/_Project/Scripts/Networking/Player/LobbyPlayerState.cs";

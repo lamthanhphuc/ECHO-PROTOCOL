@@ -1032,6 +1032,9 @@ namespace EchoProtocol.Networking.Authority
             Vector3 position,
             double hearingRadius)
         {
+            // ponytail: Telemetry 1.1 has no MINION_ALERT token; gameplay hearing owns it until the schema supports it.
+            if (string.Equals(noiseType, "MINION_ALERT", StringComparison.Ordinal)) return false;
+
             if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
             {
                 return false;
