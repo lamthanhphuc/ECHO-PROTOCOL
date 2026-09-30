@@ -157,7 +157,13 @@ public class PlayerInventoryDropInput : MonoBehaviour
         if (toolId.Contains("noise") || toolId.Contains("beacon") || toolName.Contains("noise") || toolName.Contains("beacon"))
         {
             Transform origin = dropOrigin != null ? dropOrigin : transform;
-            ItemDropPlacementUtility.GetFloorSnappedPose(origin, throwForwardDistance, out Vector3 spawnPos, out _);
+            ItemDropPlacementUtility.GetFloorSnappedPose(
+                transform,
+                origin,
+                throwForwardDistance,
+                0.05f,
+                out Vector3 spawnPos,
+                out _);
 
             GameObject prefabToSpawn = noiseMakerDeployedPrefab;
             if (prefabToSpawn == null)
@@ -226,8 +232,14 @@ public class PlayerInventoryDropInput : MonoBehaviour
 
     private void GetDropPose(out Vector3 position, out Quaternion rotation)
     {
-        Transform origin = dropOrigin != null ? dropOrigin : transform;
-        ItemDropPlacementUtility.GetFloorSnappedPose(origin, dropForwardDistance, out position, out rotation);
+        Transform directionSource = dropOrigin != null ? dropOrigin : transform;
+        ItemDropPlacementUtility.GetFloorSnappedPose(
+            transform,
+            directionSource,
+            dropForwardDistance,
+            0.05f,
+            out position,
+            out rotation);
     }
 
     private bool HasLocalControl()

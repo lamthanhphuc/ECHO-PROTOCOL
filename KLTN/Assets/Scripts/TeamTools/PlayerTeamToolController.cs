@@ -38,6 +38,7 @@ public sealed class PlayerTeamToolController : MonoBehaviour
 
     private void Update()
     {
+        if (PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return;
         if (Keyboard.current != null && Keyboard.current[fallbackUseKey].wasPressedThisFrame)
         {
             UseEquippedTool();
@@ -60,10 +61,14 @@ public sealed class PlayerTeamToolController : MonoBehaviour
 
         if (definition == null || definition.TeamToolGameplayPrefab == null) return;
         equippedDefinition = definition;
-        equippedObject = Instantiate(definition.TeamToolGameplayPrefab, handSocket, false);
+        PlayerHeldItemAnchor anchor = GetComponent<PlayerHeldItemAnchor>();
+        Transform socket = definition.ItemId == "core_stabilizer" && anchor != null
+            ? anchor.CoreCarryAnchor
+            : handSocket;
+        equippedObject = Instantiate(definition.TeamToolGameplayPrefab, socket, false);
         equippedObject.name = definition.TeamToolGameplayPrefab.name;
-        equippedObject.transform.localPosition = heldLocalPosition;
-        equippedObject.transform.localRotation = Quaternion.Euler(heldLocalEulerAngles);
+        equippedObject.transform.localPosition = definition.ItemId == "core_stabilizer" ? Vector3.zero : heldLocalPosition;
+        equippedObject.transform.localRotation = Quaternion.Euler(definition.ItemId == "core_stabilizer" ? new Vector3(0f, 90f, 0f) : heldLocalEulerAngles);
         equippedTool = FindGameplay(equippedObject);
         equippedTool?.Equip(gameObject, aimOrigin != null ? aimOrigin : transform);
     }

@@ -422,9 +422,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: '500
-
-    CREDITS'
+  m_Text: Loading...
 --- !u!222 &78614566
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -1119,9 +1117,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: '5,500
-
-    CREDITS'
+  m_Text: Loading...
 --- !u!222 &234523101
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -1354,9 +1350,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: '1,200
-
-    CREDITS'
+  m_Text: Loading...
 --- !u!222 &263663386
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -3432,9 +3426,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: '2,500
-
-    CREDITS'
+  m_Text: Loading...
 --- !u!222 &578490421
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -5362,6 +5354,8 @@ MonoBehaviour:
   welcomeText: {fileID: 172135596}
   roleText: {fileID: 1712103233}
   walletText: {fileID: 1114651141}
+  coinAmountText: {fileID: 2011768834}
+  topUpBalanceText: {fileID: 1524679124}
   playerNameText: {fileID: 1337892653}
   playButton: {fileID: 1160678370}
   logoutButton: {fileID: 1515329316}
@@ -6762,7 +6756,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: CURRENT BALANCE IS SHOWN IN ACCOUNT
+  m_Text: CURRENT BALANCE: -- COINS
 --- !u!222 &1524679125
 CanvasRenderer:
   m_ObjectHideFlags: 0

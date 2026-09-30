@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Settings;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -113,7 +114,10 @@ public class PlayerInteraction : MonoBehaviour
 
         InputActionMap playerMap = inputActions.FindActionMap("Player", false);
         _interactAction = playerMap?.FindAction("Interact", false);
+        GameplayInputSettings.RegisterAction(_interactAction);
     }
+
+    private void OnDestroy() => GameplayInputSettings.UnregisterAction(_interactAction);
 
     private Camera GetRaycastCamera()
     {

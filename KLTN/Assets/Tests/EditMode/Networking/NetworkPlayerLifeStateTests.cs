@@ -93,5 +93,17 @@ namespace EchoProtocol.Networking.Tests
                 Is.GreaterThan(
                     lifeSource.IndexOf("CanStartFirstAidReviveAuthoritative", System.StringComparison.Ordinal)));
         }
+
+        [Test]
+        public void LIFE_NET_ZoneReviveBudgetResetsBothCounters()
+        {
+            var source = File.ReadAllText(LifeStateSourcePath);
+
+            StringAssert.Contains("ResetZoneReviveBudgetAuthoritative", source);
+            StringAssert.Contains("DownCount = 0", source);
+            StringAssert.Contains("ReviveCount = 0", source);
+            StringAssert.Contains("Status == NetworkPlayerLifeStatus.Eliminated", source);
+            StringAssert.Contains("Status == NetworkPlayerLifeStatus.Escaped", source);
+        }
     }
 }

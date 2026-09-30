@@ -1,3 +1,4 @@
+using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -234,7 +235,7 @@ namespace EchoProtocol.UI.HUD
             }
 
             string keyColorHex = isHold ? "#FFB300" : "#00E5FF";
-            string keyLabel = "[E]";
+            string keyLabel = "[" + GameplayInputSettings.GetKeyLabel(GameplayAction.Interact) + "]";
 
             // Clean existing [E] or [E GIỮ] if present in source prompt
             string cleanPrompt = prompt.Replace("[E GIỮ]", "").Replace("[E]", "").Replace("[E ]", "").Trim();

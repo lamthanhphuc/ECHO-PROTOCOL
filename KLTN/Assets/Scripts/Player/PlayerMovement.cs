@@ -1,3 +1,5 @@
+using EchoProtocol.Networking;
+using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -42,6 +44,7 @@ public class PlayerMovement : MonoBehaviour
     private bool _isSprintBlocked;
     private Vector2 _moveInput;
     private PlayerEnergyCoreCarrier _coreCarrier;
+    private PlayerInventory _inventory;
 
     public float CurrentStamina => _currentStamina;
     public float MaxStamina => maxStamina;
@@ -56,6 +59,7 @@ public class PlayerMovement : MonoBehaviour
     {
         _controller = GetComponent<CharacterController>();
         _coreCarrier = GetComponent<PlayerEnergyCoreCarrier>() ?? GetComponentInParent<PlayerEnergyCoreCarrier>();
+        _inventory = GetComponent<PlayerInventory>() ?? GetComponentInParent<PlayerInventory>();
         _currentStamina = maxStamina;
         ApplyControllerDimensions(standingHeight, standingRadius, immediate: true);
 
@@ -66,6 +70,16 @@ public class PlayerMovement : MonoBehaviour
             _sprintAction = playerMap?.FindAction("Sprint", false);
             _crouchAction = playerMap?.FindAction("Crouch", false);
         }
+        GameplayInputSettings.RegisterAction(_moveAction);
+        GameplayInputSettings.RegisterAction(_sprintAction);
+        GameplayInputSettings.RegisterAction(_crouchAction);
+    }
+
+    private void OnDestroy()
+    {
+        GameplayInputSettings.UnregisterAction(_moveAction);
+        GameplayInputSettings.UnregisterAction(_sprintAction);
+        GameplayInputSettings.UnregisterAction(_crouchAction);
     }
 
     private void OnEnable()
@@ -102,9 +116,11 @@ public class PlayerMovement : MonoBehaviour
 
         bool wantsSprint = !blocked && _sprintAction != null && _sprintAction.IsPressed();
         bool isCarryingCore = _coreCarrier != null && _coreCarrier.IsCarrying;
-        bool wantsCrouch = blocked ? _isCrouching : !isCarryingCore && IsCrouchPressed();
+        bool allowsCrouch = CoreStabilizerRules.AllowsCrouch(isCarryingCore,
+            _inventory != null && PlayerInventory.ResolveToolId(_inventory.TeamToolSlot) == LobbyPlayerState.CoreStabilizerToolId);
+        bool wantsCrouch = blocked ? _isCrouching : allowsCrouch && IsCrouchPressed();
         _isCrouching = wantsCrouch || (_isCrouching && !CanStandUp());
-        if (isCarryingCore && CanStandUp())
+        if (!allowsCrouch && CanStandUp())
         {
             _isCrouching = false;
         }
@@ -217,11 +233,7 @@ public class PlayerMovement : MonoBehaviour
             return true;
         }
 
-        var keyboard = Keyboard.current;
-        return keyboard != null
-            && (keyboard.cKey.isPressed
-                || keyboard.leftCtrlKey.isPressed
-                || keyboard.rightCtrlKey.isPressed);
+        return GameplayInputSettings.IsPressed(GameplayAction.Crouch);
     }
 
     public void SetExternalSpeedMultiplier(float multiplier)

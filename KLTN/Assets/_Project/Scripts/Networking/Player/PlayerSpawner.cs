@@ -1,7 +1,10 @@
 using System.Collections.Generic;
+using EchoProtocol.AI.Minions;
 using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Spatial;
 using EchoProtocol.Diagnostics;
+using EchoProtocol.Gameplay;
+using EchoProtocol.Networking.Authority;
 using Fusion;
 using UnityEngine;
 using UnityEngine.AI;
@@ -33,6 +36,10 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _powerPuzzlePrefab;
         [SerializeField] private NetworkObject _powerPuzzleStationPrefab;
         [SerializeField] private NetworkObject _monsterPrefab;
+        [SerializeField] private NetworkObject _creepMinionPrefab;
+        [SerializeField, Min(1f)] private float _minionSpawnCheckInterval = 5f;
+        [SerializeField, Min(2f)] private float _minionSpawnMinDistance = 12f;
+        [SerializeField, Min(3f)] private float _minionSpawnMaxDistance = 20f;
 
         private readonly Dictionary<PlayerRef, int> _spawnSlots = new Dictionary<PlayerRef, int>();
         private FusionPlayerLifecycle _subscribedLifecycle;
@@ -47,18 +54,35 @@ namespace EchoProtocol.Networking
         private NetworkObject _monsterInstance;
         private NetworkObject _zone2MonsterInstance;
         private bool _zone2MonsterSpawned;
+        private readonly List<NetworkObject> _creepMinionInstances = new List<NetworkObject>();
+        private float _nextMinionSpawnCheckAt;
+        private bool _zone2MinionsActive;
+        private PlayerRef _zone2AnchorPlayer = PlayerRef.None;
+        private bool _missingMinionPrefabLogged;
 
         private void Update()
         {
             var runner = _bootstrap != null ? _bootstrap.Runner : null;
-            if (runner != null && runner.IsServer && IsValidNetworkObject(_zone2MonsterInstance)
-                && _matchStateInstance != null
-                && _matchStateInstance.TryGetComponent<NetworkMatchState>(out var matchState)
-                && matchState.IsEnded)
+            if (runner == null || !runner.IsServer || !runner.IsRunning
+                || _matchStateInstance == null
+                || !_matchStateInstance.TryGetComponent<NetworkMatchState>(out var matchState)) return;
+
+            if (matchState.IsEnded)
             {
-                runner.Despawn(_zone2MonsterInstance);
-                _zone2MonsterInstance = null;
+                if (IsValidNetworkObject(_zone2MonsterInstance))
+                {
+                    runner.Despawn(_zone2MonsterInstance);
+                    _zone2MonsterInstance = null;
+                }
+                DespawnAllCreepMinions(runner);
+                return;
             }
+
+            if (_bootstrap.State != NetworkSessionState.InMatch
+                || SceneManager.GetActiveScene().name != LobbyManager.GameSceneName
+                || Time.time < _nextMinionSpawnCheckAt) return;
+            _nextMinionSpawnCheckAt = Time.time + _minionSpawnCheckInterval;
+            MaintainCreepMinionPopulation(runner);
         }
 
         private void Awake()
@@ -204,18 +228,24 @@ namespace EchoProtocol.Networking
                             pickup.InitializeAuthoritativePose(pose.Position, pose.Rotation);
                         }
                     });
-                if (core != null)
+                if (core == null)
                 {
-                    core.name = $"EnergyCore_Network_{index + 1:00}";
-                    if (core.TryGetComponent<NetworkPickupItem>(out var pickup))
-                    {
-                        pickup.InitializeAuthoritativePose(pose.Position, pose.Rotation);
-                    }
+                    Debug.LogError(
+                        $"[PlayerSpawner] Failed to spawn Energy Core " +
+                        $"{index + 1}/{_energyCoreCount} at {pose.Position}.");
+                    break;
                 }
+
+                core.name = $"EnergyCore_Network_{index + 1:00}";
+                if (core.TryGetComponent<NetworkPickupItem>(out var pickup))
+                {
+                    pickup.InitializeAuthoritativePose(pose.Position, pose.Rotation);
+                }
+
                 _energyCoreInstances.Add(core);
                 RuntimeLog.Log(
                 RuntimeLogCategory.PlayerSpawner,
-                $"[PlayerSpawner] Spawned authoritative Energy Core {index + 1}/{_energyCoreCount}: {(core != null ? core.Id.ToString() : "null")} at {pose.Position}.");
+                $"[PlayerSpawner] Spawned authoritative Energy Core {index + 1}/{_energyCoreCount}: {core.Id} at {pose.Position}.");
             }
             if (_sectorBoxPrefab != null && _sectorBoxInstances.Count == 0)
             {
@@ -369,6 +399,10 @@ namespace EchoProtocol.Networking
 
             _zone2MonsterInstance = spawned;
             _zone2MonsterSpawned = true;
+            _zone2MinionsActive = true;
+            _zone2AnchorPlayer = playerState.Object.InputAuthority;
+            DespawnCreepMinionsForZone(runner, RegionSemanticZone.Zone01);
+            _nextMinionSpawnCheckAt = Time.time;
         }
 
         private static void RejectZone2Spawn(LobbyPlayerState playerState, string reason)
@@ -377,6 +411,124 @@ namespace EchoProtocol.Networking
                 $"[STK_ZONE2][REJECT] reason={reason} player={playerState.name} " +
                 $"inputAuthority={playerState.Object?.InputAuthority}.",
                 playerState);
+        }
+
+        private NetworkObject ResolveCreepMinionPrefab()
+        {
+            if (_creepMinionPrefab != null) return _creepMinionPrefab;
+            var asset = Resources.Load<GameObject>("PF_CreepMinionNetwork");
+            if (asset != null) _creepMinionPrefab = asset.GetComponent<NetworkObject>();
+            if (_creepMinionPrefab == null && !_missingMinionPrefabLogged)
+            {
+                _missingMinionPrefabLogged = true;
+                Debug.LogWarning("[PlayerSpawner] PF_CreepMinionNetwork is missing; run the Creep Minion production setup menu.");
+            }
+            return _creepMinionPrefab;
+        }
+
+        private void MaintainCreepMinionPopulation(NetworkRunner runner)
+        {
+            PruneInvalidAuthoritativeWorldStateReferences();
+            var difficulty = MatchAuthorityRuntime.Instance != null
+                ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
+            var profile = MatchDifficultyProfiles.Get(difficulty);
+            var zone = _zone2MinionsActive ? RegionSemanticZone.Zone02 : RegionSemanticZone.Zone01;
+            int cap = zone == RegionSemanticZone.Zone02 ? profile.Zone2MinionCap : profile.Zone1MinionCap;
+            int count = 0;
+            foreach (var obj in _creepMinionInstances)
+                if (obj.TryGetComponent<CreepMinionRuntime>(out var minion) && minion.Zone == zone) count++;
+            if (count >= cap || !TryGetCreepMinionAnchor(runner, zone, out var anchor)
+                || !TryFindCreepMinionSpawnPosition(anchor, out var position)) return;
+            SpawnCreepMinion(runner, position, zone);
+        }
+
+        private bool TryGetCreepMinionAnchor(NetworkRunner runner, RegionSemanticZone zone, out Vector3 anchor)
+        {
+            anchor = default;
+            if (zone == RegionSemanticZone.Zone02)
+            {
+                if (_zone2AnchorPlayer.IsRealPlayer
+                    && runner.TryGetPlayerObject(_zone2AnchorPlayer, out var playerObject)
+                    && IsValidNetworkObject(playerObject))
+                {
+                    anchor = playerObject.transform.position;
+                    return true;
+                }
+                if (!IsValidNetworkObject(_zone2MonsterInstance)) return false;
+                anchor = _zone2MonsterInstance.transform.position;
+                return true;
+            }
+
+            int eligible = 0;
+            foreach (var player in runner.ActivePlayers)
+            {
+                if (!runner.TryGetPlayerObject(player, out var obj) || !IsValidNetworkObject(obj)
+                    || !obj.TryGetComponent<LobbyPlayerState>(out var lobby) || !lobby.IsGameplayPlayer
+                    || !obj.TryGetComponent<NetworkPlayerLifeState>(out var life)
+                    || life.Status != NetworkPlayerLifeStatus.Alive) continue;
+                if (Random.Range(0, ++eligible) == 0) anchor = obj.transform.position;
+            }
+            return eligible > 0;
+        }
+
+        private bool TryFindCreepMinionSpawnPosition(Vector3 anchor, out Vector3 position)
+        {
+            position = default;
+            for (int i = 0; i < 12; i++)
+            {
+                float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+                float distance = Random.Range(_minionSpawnMinDistance,
+                    Mathf.Max(_minionSpawnMinDistance + 1f, _minionSpawnMaxDistance));
+                var candidate = anchor + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * distance;
+                if (!NavMesh.SamplePosition(candidate, out var hit, 3f, NavMesh.AllAreas)
+                    || Vector3.Distance(anchor, hit.position) < _minionSpawnMinDistance) continue;
+                position = hit.position;
+                return true;
+            }
+            return false;
+        }
+
+        private NetworkObject SpawnCreepMinion(NetworkRunner runner, Vector3 position, RegionSemanticZone zone)
+        {
+            var prefab = ResolveCreepMinionPrefab();
+            if (prefab == null) return null;
+            var spawned = runner.Spawn(prefab, position, Quaternion.identity, PlayerRef.None,
+                (_, obj) => obj.GetComponent<CreepMinionRuntime>()?.ConfigureBeforeSpawn(zone));
+            if (!IsValidNetworkObject(spawned)) return null;
+            if (!spawned.TryGetComponent<CreepMinionRuntime>(out _))
+            {
+                Debug.LogError("[PlayerSpawner] Creep Minion prefab has no CreepMinionRuntime.");
+                runner.Despawn(spawned);
+                return null;
+            }
+            _creepMinionInstances.Add(spawned);
+            Debug.Log($"[PlayerSpawner] Spawned {zone} Creep Minion {spawned.Id} at {position}.");
+            return spawned;
+        }
+
+        private void DespawnCreepMinionsForZone(NetworkRunner runner, RegionSemanticZone zone)
+        {
+            for (int i = _creepMinionInstances.Count - 1; i >= 0; i--)
+            {
+                var obj = _creepMinionInstances[i];
+                if (!IsValidNetworkObject(obj)) { _creepMinionInstances.RemoveAt(i); continue; }
+                var runtime = obj.GetComponent<CreepMinionRuntime>();
+                if (runtime == null || runtime.Zone != zone) continue;
+                runtime.ReleaseStolenCoreAuthoritative();
+                runner.Despawn(obj);
+                _creepMinionInstances.RemoveAt(i);
+            }
+        }
+
+        private void DespawnAllCreepMinions(NetworkRunner runner)
+        {
+            foreach (var obj in _creepMinionInstances)
+            {
+                if (!IsValidNetworkObject(obj)) continue;
+                obj.GetComponent<CreepMinionRuntime>()?.ReleaseStolenCoreAuthoritative();
+                runner.Despawn(obj);
+            }
+            _creepMinionInstances.Clear();
         }
 
         private NetworkObject SpawnStalker(NetworkRunner runner, Vector3 position, Quaternion rotation, RegionSemanticZone zone)
@@ -545,29 +697,97 @@ namespace EchoProtocol.Networking
             var candidates = GetOrderedEnergyCoreSpawnCandidates();
             if (candidates.Count == 0)
             {
-                Debug.LogWarning("[PlayerSpawner] No EnergyCore_C* spawn candidates found; using fallback Energy Core line spawn.");
+                Debug.LogWarning(
+                    "[PlayerSpawner] No CoreSpawn_C* Energy Core spawn candidates found; " +
+                    "using fallback Energy Core line spawn.");
                 return;
             }
 
-            for (int i = candidates.Count - 1; i > 0; i--)
-            {
-                int swapIndex = Random.Range(0, i + 1);
-                (candidates[i], candidates[swapIndex]) = (candidates[swapIndex], candidates[i]);
-            }
+            var candidatesByRoom =
+                new Dictionary<string, List<Transform>>(
+                    System.StringComparer.OrdinalIgnoreCase);
 
-            var selectedCount = Mathf.Min(_energyCoreCount, candidates.Count);
-            for (int i = 0; i < selectedCount; i++)
+            for (int i = 0; i < candidates.Count; i++)
             {
                 var candidate = candidates[i];
-                _selectedEnergyCoreSpawnPoses.Add(new SpawnPose(candidate.position, candidate.rotation));
+                if (!TryGetEnergyCoreRoomKey(
+                        candidate,
+                        out var roomKey))
+                {
+                    continue;
+                }
+
+                if (!candidatesByRoom.TryGetValue(
+                        roomKey,
+                        out var roomCandidates))
+                {
+                    roomCandidates =
+                        new List<Transform>();
+                    candidatesByRoom.Add(
+                        roomKey,
+                        roomCandidates);
+                }
+
+                roomCandidates.Add(candidate);
+            }
+
+            if (candidatesByRoom.Count == 0)
+            {
+                Debug.LogWarning(
+                    "[PlayerSpawner] Energy Core candidates exist but no valid room key was found; " +
+                    "using fallback Energy Core line spawn.");
+                return;
+            }
+
+            var roomKeys =
+                new List<string>(
+                    candidatesByRoom.Keys);
+            roomKeys.Sort(
+                System.StringComparer.Ordinal);
+
+            for (int i = roomKeys.Count - 1; i > 0; i--)
+            {
+                int swapIndex =
+                    Random.Range(
+                        0,
+                        i + 1);
+                (roomKeys[i], roomKeys[swapIndex]) =
+                    (roomKeys[swapIndex], roomKeys[i]);
+            }
+
+            int selectedRoomCount =
+                Mathf.Min(
+                    _energyCoreCount,
+                    roomKeys.Count);
+
+            for (int i = 0; i < selectedRoomCount; i++)
+            {
+                string roomKey =
+                    roomKeys[i];
+                var roomCandidates =
+                    candidatesByRoom[roomKey];
+                int pointIndex =
+                    Random.Range(
+                        0,
+                        roomCandidates.Count);
+                var candidate =
+                    roomCandidates[pointIndex];
+
+                _selectedEnergyCoreSpawnPoses.Add(
+                    new SpawnPose(
+                        candidate.position,
+                        candidate.rotation));
                 RuntimeLog.Log(
-                RuntimeLogCategory.PlayerSpawner,
-                $"[PlayerSpawner] Selected Energy Core spawn candidate '{candidate.name}' at {candidate.position}.");
+                    RuntimeLogCategory.PlayerSpawner,
+                    $"[PlayerSpawner] Selected Energy Core room={roomKey} " +
+                    $"point='{candidate.name}' at {candidate.position}.");
             }
 
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerSpawner,
-                $"[PlayerSpawner] Selected {_selectedEnergyCoreSpawnPoses.Count}/{candidates.Count} Energy Core spawn candidates.");
+                $"[PlayerSpawner] Selected " +
+                $"{_selectedEnergyCoreSpawnPoses.Count}/{candidatesByRoom.Count} " +
+                $"Energy Core rooms from {candidates.Count} authored points.");
         }
 
         private static List<Transform> GetOrderedEnergyCoreSpawnCandidates()
@@ -598,11 +818,66 @@ namespace EchoProtocol.Networking
             return candidates;
         }
 
-        private static bool IsEnergyCoreSpawnCandidate(Transform candidate)
+        private static bool IsEnergyCoreSpawnCandidate(
+            Transform candidate)
         {
-            return candidate != null
-                && candidate.name.StartsWith("CoreSpawn_C", System.StringComparison.OrdinalIgnoreCase)
-                && candidate.name.EndsWith("_EMPTY", System.StringComparison.OrdinalIgnoreCase);
+            if (candidate == null)
+            {
+                return false;
+            }
+
+            string name =
+                candidate.name;
+
+            return name.StartsWith(
+                    "CoreSpawn_C",
+                    System.StringComparison.OrdinalIgnoreCase)
+                && name.IndexOf(
+                    "_EMPTY",
+                    System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool TryGetEnergyCoreRoomKey(
+            Transform candidate,
+            out string roomKey)
+        {
+            roomKey = null;
+
+            if (!IsEnergyCoreSpawnCandidate(
+                    candidate))
+            {
+                return false;
+            }
+
+            const string prefix =
+                "CoreSpawn_C";
+            string name =
+                candidate.name;
+            int roomNumberStart =
+                prefix.Length;
+            int roomNumberEnd =
+                name.IndexOf(
+                    '_',
+                    roomNumberStart);
+
+            if (roomNumberEnd <= roomNumberStart)
+            {
+                return false;
+            }
+
+            for (int i = roomNumberStart; i < roomNumberEnd; i++)
+            {
+                if (!char.IsDigit(name[i]))
+                {
+                    return false;
+                }
+            }
+
+            roomKey =
+                "C" + name.Substring(
+                    roomNumberStart,
+                    roomNumberEnd - roomNumberStart);
+            return true;
         }
 
         private static SpawnPose GetSectorBoxPose()
@@ -802,7 +1077,8 @@ namespace EchoProtocol.Networking
                 interactor.ResetForMatchAuthoritative();
             }
 
-            if (playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement) && playerObject.HasStateAuthority)
+            playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement);
+            if (movement != null && playerObject.HasStateAuthority)
             {
                 movement.IsHidden = false;
                 movement.CurrentHideSpotId = 0UL;
@@ -816,6 +1092,10 @@ namespace EchoProtocol.Networking
             if (!TryTeleportExistingPlayer(playerObject, pose, gameplay))
             {
                 Debug.LogWarning($"[PlayerSpawner] Could not teleport lifecycle-owned player object for {player}; object={playerObject.Id}.");
+            }
+            else if (gameplay && movement != null && playerObject.HasStateAuthority)
+            {
+                movement.ApplyGameplaySpawnViewAuthoritative(pose.Rotation);
             }
 
             RuntimeLog.Log(
@@ -973,6 +1253,11 @@ namespace EchoProtocol.Networking
 
         private void ClearAuthoritativeWorldStateReferences()
         {
+            _creepMinionInstances.Clear();
+            _zone2MinionsActive = false;
+            _zone2AnchorPlayer = PlayerRef.None;
+            _nextMinionSpawnCheckAt = 0f;
+            _missingMinionPrefabLogged = false;
             _doorInstance = null;
             _energyCoreInstances.Clear();
             _selectedEnergyCoreSpawnPoses.Clear();
@@ -998,6 +1283,7 @@ namespace EchoProtocol.Networking
             _energyCoreInstances.RemoveAll(core => !IsValidNetworkObject(core));
             _sectorBoxInstances.RemoveAll(box => !IsValidNetworkObject(box));
             _powerPuzzleStationInstances.RemoveAll(station => !IsValidNetworkObject(station));
+            _creepMinionInstances.RemoveAll(obj => !IsValidNetworkObject(obj));
         }
 
         private static bool IsValidNetworkObject(NetworkObject obj)

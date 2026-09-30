@@ -191,20 +191,41 @@ namespace EchoProtocol.Player.Tests
         }
 
         [Test]
+        public void PLAYER_CROUCH_CameraMovesForwardAndLeftHandStaysDown()
+        {
+            var camera = File.ReadAllText("Assets/Scripts/Player/PlayerCamera.cs");
+            var upperBodyAim = File.ReadAllText("Assets/Scripts/Player/PlayerUpperBodyAim.cs");
+
+            StringAssert.Contains("crouchCameraForwardOffset = 0.25f", camera);
+            StringAssert.Contains("? crouchCameraForwardOffset", camera);
+            StringAssert.Contains("animator.GetBool(IsCrouchingHash)", upperBodyAim);
+            StringAssert.Contains("crouchLeftHandLocalPosition", upperBodyAim);
+        }
+
+        [Test]
         public void HIDE_NetworkFlow_UsesAuthoritativeReservationAndRollback()
         {
             var movement = File.ReadAllText(
                 "Assets/_Project/Scripts/Networking/Player/NetworkPlayerMovement.cs");
             var hidingSpot = File.ReadAllText(
                 "Assets/Scripts/Hiding/HidingSpot.cs");
+            var hidingController = File.ReadAllText(
+                "Assets/Scripts/Hiding/PlayerHidingController.cs");
+            var stalkerHideAdapter = File.ReadAllText(
+                "Assets/Scripts/AI/Stalker/StalkerUnityHideSpotAdapter.cs");
 
             StringAssert.Contains("TryReserveNetworkSpot", movement);
             StringAssert.Contains("RejectHideEnter", movement);
             StringAssert.Contains("ReleaseNetworkSpot", movement);
             StringAssert.Contains("ReleaseAllNetworkSpots", movement);
             StringAssert.Contains("CurrentHideSpotId", movement);
+            StringAssert.Contains("authoritativeSpot.FacingRotation", movement);
             StringAssert.Contains("NetworkReservations", hidingSpot);
+            StringAssert.Contains("public Quaternion FacingRotation", hidingSpot);
             StringAssert.Contains("RuntimeLogCategory.StalkerHideFlow", hidingSpot);
+            StringAssert.Contains("Time.frameCount == _lastExitFrame", hidingController);
+            StringAssert.Contains("EnsurePlayerCameraController", hidingController);
+            StringAssert.Contains("spot.FacingRotation", stalkerHideAdapter);
             StringAssert.DoesNotContain("Debug.Log(", hidingSpot);
         }
 

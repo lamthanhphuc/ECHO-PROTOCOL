@@ -47,7 +47,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CoreStabilizerTeamTool
   animator: {fileID: 5214828573221947394}
   supportFieldVfx: {fileID: 3210492956992394529}
-  supportRadius: 2.5
+  supportRing: {fileID: 8098363916478875095}
+  supportRadius: 5
+  ringWidth: 0.12
+  ringAlpha: 0.7
+  ringSegments: 128
   scanInterval: 0.2
   playerMask:
     serializedVersion: 2
@@ -123,5 +127,10 @@ Transform:
 --- !u!95 &5214828573221947394 stripped
 Animator:
   m_CorrespondingSourceObject: {fileID: 8813570037939223652, guid: 6015a547e18400c42aae8c415323205b, type: 3}
+  m_PrefabInstance: {fileID: 3607064125006885990}
+  m_PrefabAsset: {fileID: 0}
+--- !u!120 &8098363916478875095 stripped
+LineRenderer:
+  m_CorrespondingSourceObject: {fileID: 4786753175456035249, guid: 6015a547e18400c42aae8c415323205b, type: 3}
   m_PrefabInstance: {fileID: 3607064125006885990}
   m_PrefabAsset: {fileID: 0}

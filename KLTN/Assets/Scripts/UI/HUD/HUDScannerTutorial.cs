@@ -1,3 +1,7 @@
+using System;
+using System.Runtime.CompilerServices;
+using EchoProtocol.Networking;
+using EchoProtocol.Networking.Authority;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
@@ -13,22 +17,17 @@ namespace EchoProtocol.UI.HUD
         [Header("Behaviour")]
         [SerializeField, Min(0f)] private float dismissInputDelay = 0.2f;
 
-        private static int s_shownToolMask;
         private readonly PlayerInteractionControlLock _controlLock = new PlayerInteractionControlLock();
 
         private PlayerInventory _inventory;
         private GameObject _playerRoot;
+        private int _shownToolMask;
+        private string _tutorialScopeKey = string.Empty;
         private int _lastToolId;
         private int _activeToolId;
         private bool _isOpen;
         private bool _releaseWhenInputClears;
         private float _dismissAllowedAt;
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetSessionState()
-        {
-            s_shownToolMask = 0;
-        }
 
         private void Awake()
         {
@@ -58,6 +57,8 @@ namespace EchoProtocol.UI.HUD
 
         public void BindPlayer(PlayerInventory inventory, GameObject playerRoot)
         {
+            RefreshTutorialScope(playerRoot);
+
             if (_inventory == inventory && _playerRoot == playerRoot) return;
 
             Unbind();
@@ -67,8 +68,12 @@ namespace EchoProtocol.UI.HUD
 
             if (_inventory == null) return;
 
-            _lastToolId = GetCurrentToolId();
             _inventory.InventoryChanged += HandleInventoryChanged;
+
+            int currentToolId = GetCurrentToolId();
+            _lastToolId = currentToolId;
+
+            if (currentToolId > 0 && IsSupportedTool(currentToolId) && !WasShown(currentToolId)) Show(currentToolId);
         }
 
         public void Unbind()
@@ -102,14 +107,45 @@ namespace EchoProtocol.UI.HUD
             return toolId == 1 || toolId == 2 || toolId == 3 || toolId == 4 || toolId == 6;
         }
 
-        private static bool WasShown(int toolId)
+        private static string ResolveTutorialScopeKey(GameObject playerRoot)
         {
-            return toolId > 0 && (s_shownToolMask & (1 << toolId)) != 0;
+            if (playerRoot == null) return string.Empty;
+
+            LobbyPlayerState lobbyState = playerRoot.GetComponent<LobbyPlayerState>();
+            if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid)
+            {
+                int playerId = lobbyState.Object.InputAuthority.PlayerId;
+                MatchAuthorityRuntime authority = MatchAuthorityRuntime.Instance;
+
+                if (authority != null && authority.TryGetMatchId(out Guid matchId)) return $"{matchId:D}:{playerId}";
+                if (lobbyState.Runner != null && lobbyState.Runner.SessionInfo.IsValid) return $"{lobbyState.Runner.SessionInfo.Name}:{playerId}";
+
+                return $"network:{playerId}";
+            }
+
+            return $"offline:{RuntimeHelpers.GetHashCode(playerRoot)}";
         }
 
-        private static void MarkShown(int toolId)
+        private void RefreshTutorialScope(GameObject playerRoot)
         {
-            if (toolId > 0) s_shownToolMask |= 1 << toolId;
+            string nextScope = ResolveTutorialScopeKey(playerRoot);
+            if (string.Equals(_tutorialScopeKey, nextScope, StringComparison.Ordinal)) return;
+
+            Hide();
+            _tutorialScopeKey = nextScope;
+            _shownToolMask = 0;
+            _lastToolId = 0;
+            _activeToolId = 0;
+        }
+
+        private bool WasShown(int toolId)
+        {
+            return toolId > 0 && (_shownToolMask & (1 << toolId)) != 0;
+        }
+
+        private void MarkShown(int toolId)
+        {
+            if (toolId > 0) _shownToolMask |= 1 << toolId;
         }
 
         private void Show(int toolId)
@@ -278,7 +314,7 @@ namespace EchoProtocol.UI.HUD
                 panel,
                 panelRect,
                 "VÁN CHÈN CỬA",
-                "[E / CHUỘT TRÁI]\n<size=27>CHÈN CỬA</size>\n<size=20>Chỉ gắn vào cửa đã bị phá.</size>",
+                $"[{EchoProtocol.Settings.GameplayInputSettings.GetKeyLabel(EchoProtocol.Settings.GameplayAction.Interact)} / CHUỘT TRÁI]\n<size=27>CHÈN CỬA</size>\n<size=20>Chỉ gắn vào cửa đã bị phá.</size>",
                 "CHẶN STALKER\n<size=21>Stalker có thể phá ván để đi qua.</size>",
                 "Ván chỉ chặn Stalker trong thời gian ngắn, không khóa chết.",
                 new Color(0.82f, 0.63f, 0.38f));
@@ -290,9 +326,9 @@ namespace EchoProtocol.UI.HUD
                 panel,
                 panelRect,
                 "BỘ ỔN ĐỊNH LÕI",
-                "Ở GẦN ĐỒNG ĐỘI\n<size=27>ỔN ĐỊNH LÕI</size>\n<size=20>Giữ khoảng cách trong phạm vi 2,5 m.</size>",
-                "[CHUỘT TRÁI]\n<size=27>PHÁT XUNG</size>\n<size=20>Kích hoạt phản hồi của thiết bị.</size>",
-                "Ưu tiên đi cùng người đang mang Lõi năng lượng.",
+                "[CHUỘT TRÁI]\n<size=27>KÍCH HOẠT</size>\n<size=20>Tạo vùng ổn định bán kính 5 m trong 15 giây.</size>",
+                "HỖ TRỢ NGƯỜI MANG LÕI\n<size=21>Cho phép đồng đội chạy nước rút bình thường.</size>",
+                "Hồi chiêu 45 giây. Theo dõi thời gian còn lại trên ô trang bị.",
                 new Color(0.42f, 0.82f, 1f));
         }
 

@@ -1,3 +1,4 @@
+using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
@@ -14,6 +15,7 @@ public class PlayerCamera : MonoBehaviour
     [SerializeField] private float minPitch = -45f;
     [SerializeField] private float maxPitch = 45f;
     [SerializeField] private float cameraForwardOffset = 0.13f;
+    [SerializeField] private float crouchCameraForwardOffset = 0.25f;
     [SerializeField] private float crouchCameraRightOffset = 0.2f;
     [SerializeField] private float downedCameraRightOffset = 0.1f;
     [SerializeField] private float downedCameraForwardOffset = 0.4f;
@@ -223,6 +225,8 @@ public class PlayerCamera : MonoBehaviour
         if (_networkLifeState != null && (_networkLifeState.IsCaught || _networkLifeState.IsEliminated))
             lookInput = Vector2.zero;
 
+        if (_lookAction?.activeControl?.device is Pointer)
+            lookInput = GameplayInputSettings.ApplyLookSettings(lookInput, Time.unscaledDeltaTime);
         float yawDelta = lookInput.x * mouseSensitivity;
         float pitchDelta = lookInput.y * mouseSensitivity;
 
@@ -293,7 +297,9 @@ public class PlayerCamera : MonoBehaviour
                 : 0f;
         float targetForwardOffset = isDowned
             ? downedCameraForwardOffset
-            : cameraForwardOffset;
+            : isCrouching
+                ? crouchCameraForwardOffset
+                : cameraForwardOffset;
 
         _currentEyeHeight = Mathf.Lerp(
             _currentEyeHeight,

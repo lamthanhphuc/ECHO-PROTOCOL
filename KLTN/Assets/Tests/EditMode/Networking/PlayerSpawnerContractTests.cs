@@ -10,6 +10,7 @@ namespace EchoProtocol.Networking.Tests
     public sealed class PlayerSpawnerContractTests
     {
         private const string BootstrapScenePath = "Assets/Scenes/Bootstrap.unity";
+        private const string SciFiScenePath = "Assets/Scenes/SciFi.unity";
         private const string LobbyPlayerStateScriptPath = "Assets/_Project/Scripts/Networking/Player/LobbyPlayerState.cs";
         private const string PlayerSpawnerScriptPath = "Assets/_Project/Scripts/Networking/Player/PlayerSpawner.cs";
         private const string PlayerSpawnerTypeName = "EchoProtocol.Networking.PlayerSpawner";
@@ -114,6 +115,123 @@ namespace EchoProtocol.Networking.Tests
             finally
             {
                 EditorSceneManager.CloseScene(scene, true);
+            }
+        }
+
+        [Test]
+        public void SCIFI_PlayerSpawns_AllFaceStartRoomExit()
+        {
+            var scene = EditorSceneManager.OpenScene(SciFiScenePath, OpenSceneMode.Additive);
+            try
+            {
+                var points = System.Array.FindAll(
+                    Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include),
+                    point => point.gameObject.scene == scene
+                        && point.GetType().FullName == "EchoProtocol.Networking.NetworkPlayerSpawnPoint"
+                        && point.name.StartsWith("PlayerStart_"));
+                Assert.That(points.Length, Is.EqualTo(4));
+                System.Array.Sort(points, (a, b) =>
+                    new SerializedObject(a).FindProperty("_order").intValue.CompareTo(
+                        new SerializedObject(b).FindProperty("_order").intValue));
+                for (var i = 0; i < points.Length; i++)
+                {
+                    Assert.That(new SerializedObject(points[i]).FindProperty("_order").intValue, Is.EqualTo(i));
+                    Assert.That(Vector3.Dot(points[i].transform.forward, Vector3.back),
+                        Is.GreaterThan(0.98f), $"{points[i].name} must face the start room's south exit.");
+                }
+            }
+            finally
+            {
+                EditorSceneManager.CloseScene(scene, true);
+            }
+        }
+
+        [Test]
+        public void SCIFI_EnergyCoreSpawnCandidates_HaveThreePointsPerRoom()
+        {
+            var scene =
+                EditorSceneManager.OpenScene(
+                    SciFiScenePath,
+                    OpenSceneMode.Additive);
+
+            try
+            {
+                var rooms =
+                    new System.Collections.Generic.Dictionary<string, int>();
+                var roots =
+                    scene.GetRootGameObjects();
+
+                for (int i = 0; i < roots.Length; i++)
+                {
+                    var transforms =
+                        roots[i].GetComponentsInChildren<Transform>(true);
+
+                    for (int j = 0; j < transforms.Length; j++)
+                    {
+                        string name =
+                            transforms[j].name;
+
+                        if (!name.StartsWith(
+                                "CoreSpawn_C",
+                                System.StringComparison.OrdinalIgnoreCase)
+                            || name.IndexOf(
+                                "_EMPTY",
+                                System.StringComparison.OrdinalIgnoreCase) < 0)
+                        {
+                            continue;
+                        }
+
+                        const string prefix =
+                            "CoreSpawn_C";
+                        int start =
+                            prefix.Length;
+                        int end =
+                            name.IndexOf(
+                                '_',
+                                start);
+
+                        Assert.That(
+                            end,
+                            Is.GreaterThan(start),
+                            name);
+
+                        string room =
+                            "C" + name.Substring(
+                                start,
+                                end - start);
+
+                        rooms.TryGetValue(
+                            room,
+                            out int count);
+                        rooms[room] =
+                            count + 1;
+                    }
+                }
+
+                Assert.That(
+                    rooms.Count,
+                    Is.EqualTo(6));
+
+                for (int room = 1; room <= 6; room++)
+                {
+                    string key =
+                        $"C{room}";
+
+                    Assert.That(
+                        rooms.ContainsKey(key),
+                        Is.True,
+                        $"Missing {key}.");
+                    Assert.That(
+                        rooms[key],
+                        Is.EqualTo(3),
+                        $"{key} must have exactly 3 Energy Core spawn points.");
+                }
+            }
+            finally
+            {
+                EditorSceneManager.CloseScene(
+                    scene,
+                    true);
             }
         }
 

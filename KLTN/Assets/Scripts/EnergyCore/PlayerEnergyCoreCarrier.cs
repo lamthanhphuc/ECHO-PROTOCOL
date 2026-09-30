@@ -27,7 +27,7 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
     [SerializeField] private float carryNoiseInterval = 2.5f;
     [SerializeField] private float carryNoiseMoveThreshold = 0.05f;
     [SerializeField, Range(0.05f, 1f)] private float stabilizedNoiseMultiplier = 0.35f;
-    [SerializeField, Range(0.01f, 1f)] private float stabilizedCarrySpeedMultiplier = 0.9f;
+    [SerializeField, Range(0.01f, 1f)] private float stabilizedCarrySpeedMultiplier = 1f;
     [SerializeField] private UnityEvent carryNoiseEmitted;
 
     private InputAction _dropAction;
@@ -154,8 +154,10 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
         EnergyCorePickup droppedCore = _carriedCore;
         InventoryItemDefinition droppedItem = _carriedCoreItem;
 
+        GetDropPose(out var dropPosition, out var dropRotation);
+
         ClearCarriedCoreState(removeFromInventory: true);
-        droppedCore.PlaceInWorld(GetDropPosition(), GetDropRotation());
+        droppedCore.PlaceInWorld(dropPosition, dropRotation);
 
         if (inventory != null && droppedItem != null && inventory.Contains(droppedItem))
         {
@@ -288,21 +290,16 @@ public class PlayerEnergyCoreCarrier : MonoBehaviour
         DropCore();
     }
 
-    private Vector3 GetDropPosition()
+    private void GetDropPose(out Vector3 position, out Quaternion rotation)
     {
+        Transform directionSource = dropOrigin != null ? dropOrigin : transform;
         ItemDropPlacementUtility.GetFloorSnappedPose(
-            dropOrigin != null ? dropOrigin : transform,
+            transform,
+            directionSource,
             dropForwardDistance,
             0.1f,
-            out var pos,
-            out _);
-        return pos;
-    }
-
-    private Quaternion GetDropRotation()
-    {
-        Transform origin = dropOrigin != null ? dropOrigin : transform;
-        return Quaternion.Euler(0f, origin.eulerAngles.y, 0f);
+            out position,
+            out rotation);
     }
 
     private bool HasLocalControl()

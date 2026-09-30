@@ -10,6 +10,7 @@ namespace EchoProtocol.AI.Stalker
     public enum StalkerSearchSource
     {
         VisualTargetLoss = 0,
-        HeardNoise = 1
+        HeardNoise = 1,
+        FlashlightClue = 2,
     }
 }

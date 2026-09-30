@@ -1,3 +1,4 @@
+using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -22,6 +23,7 @@ public class PlayerHidingController : MonoBehaviour
     private PlayerCamera _playerCameraController;
     private HidingSpot _currentSpot;
     private int _enteredFrame = -1;
+    private int _lastExitFrame = -1;
 
     public bool IsHidden => _currentSpot != null;
     public HidingSpot CurrentSpot => _currentSpot;
@@ -89,7 +91,7 @@ public class PlayerHidingController : MonoBehaviour
 
     public bool EnterHiding(HidingSpot spot)
     {
-        if (spot == null || IsHidden || !spot.TryOccupy(this))
+        if (spot == null || IsHidden || Time.frameCount == _lastExitFrame || !spot.TryOccupy(this))
         {
             return false;
         }
@@ -116,7 +118,7 @@ public class PlayerHidingController : MonoBehaviour
 
         if (networked)
         {
-            Quaternion targetRot = Quaternion.Euler(0f, spot.HidePoint.eulerAngles.y, 0f);
+            Quaternion targetRot = spot.FacingRotation;
             networkMovement.RpcRequestSetHiding(
                 true,
                 spot.StableId,
@@ -125,15 +127,17 @@ public class PlayerHidingController : MonoBehaviour
         }
         else
         {
-            MoveToHidingPoint(spot.HidePoint);
+            MoveToHidingPoint(spot.HidePoint, spot.FacingRotation);
         }
 
-        if (_playerCameraController != null)
+        PlayerCamera cameraController = EnsurePlayerCameraController();
+        if (cameraController != null)
         {
-            _playerCameraController.SetRotation(spot.HidePoint.eulerAngles.y, 0f);
+            float yaw = spot.FacingRotation.eulerAngles.y;
+            cameraController.SetRotation(yaw, 0f);
             float limit = spot.YawLimitDegrees > 0f ? spot.YawLimitDegrees : hidingYawLimitDegrees;
-            _playerCameraController.SetYawLimit(spot.HidePoint.eulerAngles.y, limit);
-            _playerCameraController.LockPitch(0f);
+            cameraController.SetYawLimit(yaw, limit);
+            cameraController.LockPitch(0f);
         }
 
         return true;
@@ -158,6 +162,7 @@ public class PlayerHidingController : MonoBehaviour
             return;
         }
 
+        _lastExitFrame = Time.frameCount;
         HidingSpot exitingSpot = _currentSpot;
         Transform exitPoint = exitingSpot.ExitPoint;
         _currentSpot = null;
@@ -183,7 +188,7 @@ public class PlayerHidingController : MonoBehaviour
 
         if (networked && exitPoint != null)
         {
-            Quaternion exitRot = Quaternion.Euler(0f, exitPoint.eulerAngles.y, 0f);
+            Quaternion exitRot = exitingSpot.FacingRotation;
             networkMovement.RpcRequestSetHiding(
                 false,
                 0UL,
@@ -193,7 +198,7 @@ public class PlayerHidingController : MonoBehaviour
 
         else if (exitPoint != null)
         {
-            MoveToHidingPoint(exitPoint);
+            MoveToHidingPoint(exitPoint, exitingSpot.FacingRotation);
         }
 
         if (movement != null)
@@ -217,6 +222,7 @@ public class PlayerHidingController : MonoBehaviour
             return;
         }
 
+        _lastExitFrame = Time.frameCount;
         HidingSpot spot = _currentSpot;
         _currentSpot = null;
         _enteredFrame = -1;
@@ -245,16 +251,39 @@ public class PlayerHidingController : MonoBehaviour
 
         InputActionMap playerMap = inputActions.FindActionMap("Player", false);
         _interactAction = playerMap?.FindAction("Interact", false);
+        GameplayInputSettings.RegisterAction(_interactAction);
     }
 
-    private void MoveToHidingPoint(Transform point)
+    private PlayerCamera EnsurePlayerCameraController()
+    {
+        if (_playerCameraController != null)
+        {
+            return _playerCameraController;
+        }
+
+        if (playerCamera == null)
+        {
+            playerCamera = Camera.main;
+        }
+
+        if (playerCamera != null)
+        {
+            _playerCameraController = playerCamera.GetComponent<PlayerCamera>();
+        }
+
+        return _playerCameraController;
+    }
+
+    private void OnDestroy() => GameplayInputSettings.UnregisterAction(_interactAction);
+
+    private void MoveToHidingPoint(Transform point, Quaternion? rotation = null)
     {
         if (point == null)
         {
             return;
         }
 
-        Quaternion targetRot = Quaternion.Euler(0f, point.eulerAngles.y, 0f);
+        Quaternion targetRot = rotation ?? Quaternion.Euler(0f, point.eulerAngles.y, 0f);
 
         if (networkMovement != null)
         {
@@ -304,15 +333,7 @@ public class PlayerHidingController : MonoBehaviour
 
     private void UpdateCameraPose(Transform point)
     {
-        if (playerCamera == null)
-        {
-            playerCamera = Camera.main;
-        }
-
-        if (playerCamera != null && _playerCameraController == null)
-        {
-            _playerCameraController = playerCamera.GetComponent<PlayerCamera>();
-        }
+        EnsurePlayerCameraController();
 
         if (_playerCameraController != null)
         {

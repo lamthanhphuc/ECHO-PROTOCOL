@@ -10,6 +10,7 @@ using EchoProtocol.AI.Stalker.Special;
 using EchoProtocol.AI.Stalker.Spatial.Strategic;
 using EchoProtocol.AI.Stalker.Telemetry;
 using EchoProtocol.Diagnostics;
+using EchoProtocol.Gameplay;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
 using EchoProtocol.Player;
@@ -43,6 +44,9 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         [SerializeField, Range(0.5f, 2f)]
         private float hearingRangeMultiplier = 1.25f;
+
+        [SerializeField, Min(0f)]
+        private float coreCarrierPursuitDelaySeconds = 15f;
 
         [SerializeField, Range(0.01f, 0.99f)]
         private float closedDoorMultiplier = 0.5f;
@@ -94,6 +98,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             new List<StalkerTargetStatus>();
         private readonly List<StalkerTargetCandidate> _visibleCandidates =
             new List<StalkerTargetCandidate>();
+        private readonly List<StalkerFlashlightObservation> _flashlightObservations =
+            new List<StalkerFlashlightObservation>();
         private readonly List<PlayerId> _visibleObjectiveCarrierIds =
             new List<PlayerId>();
         private readonly Dictionary<PlayerId, double> _coreCarryStartedAt =
@@ -207,6 +213,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             _coreCarryStartedAt.Clear();
             _networkSimulationOwned = true;
             ResolveLocalDependencies();
+            if (Object != null && Object.HasStateAuthority)
+                ApplyMatchDifficulty();
             specialEncounterRuntime?.ResetForMatch();
             ResolveLifecycle();
             BindProductionConsequenceSink();
@@ -525,6 +533,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 _perceptionSnapshots,
                 step.Time,
                 _visibleCandidates);
+            BuildAuthoritativeFlashlightFrame();
             CollectVisibleObjectiveCarrierIds();
             var sustainedCoreCarrier = SelectSustainedCoreCarrier(step.Time.Seconds);
 
@@ -585,7 +594,8 @@ namespace EchoProtocol.AI.Stalker.Networking
                     _hearingObservations,
                     hearingEvaluationTimeUtc,
                     _visibleObjectiveCarrierIds,
-                    sustainedCoreCarrier);
+                    sustainedCoreCarrier,
+                    _flashlightObservations);
 
             if (!controller.Simulate(input))
             {
@@ -1078,6 +1088,19 @@ namespace EchoProtocol.AI.Stalker.Networking
             return true;
         }
 
+        private void ApplyMatchDifficulty()
+        {
+            var difficulty = MatchAuthorityRuntime.Instance != null
+                ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
+            var profile = MatchDifficultyProfiles.Get(difficulty);
+            controller?.ApplyMatchDifficulty(profile);
+            coreCarrierPursuitDelaySeconds = profile.CoreCarrierPursuitDelaySeconds;
+            hearingRangeMultiplier = profile.HearingRangeMultiplier;
+            specialEncounterRuntime?.SetCooldownSeconds(profile.SpecialEncounterCooldownSeconds);
+            _hearingSensor = null;
+            ResolveLocalDependencies();
+        }
+
         private void ResolveLocalDependencies()
         {
             if (controller == null)
@@ -1300,12 +1323,51 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
         }
 
+        private void BuildAuthoritativeFlashlightFrame()
+        {
+            _flashlightObservations.Clear();
+
+            foreach (StalkerPerceptionTargetSnapshot snapshot in _perceptionSnapshots)
+            {
+                Transform playerRoot = snapshot.TargetHierarchyRoot;
+                if (playerRoot == null)
+                {
+                    continue;
+                }
+
+                NetworkPlayerFlashlight flashlight = playerRoot.GetComponent<NetworkPlayerFlashlight>();
+                if (flashlight == null || !flashlight.IsEmittingLight)
+                {
+                    continue;
+                }
+
+                NetworkPlayerMovement movement = playerRoot.GetComponent<NetworkPlayerMovement>();
+                bool hidden = movement != null && movement.IsHidden;
+                ulong hideSpotId = hidden && movement != null
+                    ? movement.CurrentHideSpotId
+                    : 0UL;
+                if (hidden && hideSpotId == 0UL)
+                {
+                    continue;
+                }
+
+                if (visionSensor.TryGetVisibleFlashlightClue(
+                        flashlight.BeamTransform, playerRoot, flashlight.BeamRange,
+                        flashlight.BeamSpotAngle, out Vector3 cluePosition))
+                {
+                    _flashlightObservations.Add(new StalkerFlashlightObservation(
+                        cluePosition, flashlight.BeamTransform.forward, hidden, hideSpotId));
+                }
+            }
+        }
+
         private void ClearFrameBuffers()
         {
             _coreCarryStartedAt.Clear();
             _perceptionSnapshots.Clear();
             _targetStatuses.Clear();
             _visibleCandidates.Clear();
+            _flashlightObservations.Clear();
             _visibleObjectiveCarrierIds.Clear();
             _hearingObservations.Clear();
             _activeNoiseEvents.Clear();
@@ -1334,7 +1396,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                     continue;
                 }
 
-                if (nowSeconds - startedAt < 15d
+                if (nowSeconds - startedAt < coreCarrierPursuitDelaySeconds
                     || !controller.CanPursueCoreCarrierAt(snapshot.TargetSample.position))
                 {
                     continue;

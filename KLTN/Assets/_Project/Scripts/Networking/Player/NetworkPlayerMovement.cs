@@ -1,5 +1,6 @@
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.Diagnostics;
+using EchoProtocol.Settings;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -37,6 +38,7 @@ namespace EchoProtocol.Networking
         private InputAction _sprintAction;
         private InputAction _crouchAction;
         private PlayerCamera _playerCamera;
+        private float? _pendingGameplaySpawnYaw;
         private PlayerUpperBodyAim _upperBodyAim;
         private NetworkBootstrap _bootstrap;
         private bool _isSceneLoadDoneSubscribed;
@@ -63,6 +65,8 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkBool IsHidden { get; set; }
         [Networked] public ulong CurrentHideSpotId { get; set; }
         [Networked] public NetworkBool IsCrouching { get; set; }
+        [Networked] private TickTimer ExternalSlowTimer { get; set; }
+        [Networked] private float ExternalSlowMultiplier { get; set; }
 
         public float CurrentPitch => LookPitch;
         public float MaxStamina => _maxStamina;
@@ -124,6 +128,34 @@ namespace EchoProtocol.Networking
             return moveInput.y >= -0.01f;
         }
 
+        public bool TryApplySlowAuthoritative(float multiplier, float durationSeconds)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || durationSeconds <= 0f || multiplier <= 0f || multiplier >= 1f)
+            {
+                return false;
+            }
+
+            ExternalSlowMultiplier = Mathf.Clamp(multiplier, 0.1f, 1f);
+            ExternalSlowTimer = TickTimer.CreateFromSeconds(Runner, durationSeconds);
+            return true;
+        }
+
+        private float GetExternalSlowMultiplier()
+        {
+            if (!ExternalSlowTimer.IsRunning) return 1f;
+            if (ExternalSlowTimer.Expired(Runner))
+            {
+                if (Object.HasStateAuthority)
+                {
+                    ExternalSlowTimer = TickTimer.None;
+                    ExternalSlowMultiplier = 1f;
+                }
+                return 1f;
+            }
+            return Mathf.Clamp(ExternalSlowMultiplier, 0.1f, 1f);
+        }
+
         private void Awake()
         {
             _controller = GetComponent<NetworkCharacterController>();
@@ -161,6 +193,16 @@ namespace EchoProtocol.Networking
             {
                 _crouchAction = new InputAction("Crouch", InputActionType.Button, "<Keyboard>/c");
             }
+            GameplayInputSettings.RegisterAction(_moveAction);
+            GameplayInputSettings.RegisterAction(_sprintAction);
+            GameplayInputSettings.RegisterAction(_crouchAction);
+        }
+
+        private void OnDestroy()
+        {
+            GameplayInputSettings.UnregisterAction(_moveAction);
+            GameplayInputSettings.UnregisterAction(_sprintAction);
+            GameplayInputSettings.UnregisterAction(_crouchAction);
         }
 
         private void Start()
@@ -201,7 +243,9 @@ namespace EchoProtocol.Networking
             bool sprintHeld = !blocked && (_sprintAction?.IsPressed() ?? false);
             bool jumpPressed = !blocked && (_jumpAction?.WasPressedThisFrame() ?? false);
             bool isCarryingCoreOffline = IsCarryingCore();
-            if (!blocked) _offlineAnimationCrouching = !isCarryingCoreOffline && IsCrouchPressed();
+            bool allowsCrouchOffline = CoreStabilizerRules.AllowsCrouch(
+                isCarryingCoreOffline, IsHoldingCoreStabilizer());
+            if (!blocked) _offlineAnimationCrouching = allowsCrouchOffline && IsCrouchPressed();
 
             Vector3 localDirection = new Vector3(moveInput.x, 0f, moveInput.y);
             if (localDirection.sqrMagnitude > 1f)
@@ -258,6 +302,8 @@ namespace EchoProtocol.Networking
                 IsHidden = false;
                 CurrentHideSpotId = 0UL;
                 NetworkCurrentStamina = _maxStamina;
+                ExternalSlowTimer = TickTimer.None;
+                ExternalSlowMultiplier = 1f;
             }
 
             if (!Object.HasInputAuthority) return;
@@ -360,7 +406,10 @@ namespace EchoProtocol.Networking
 
             bool isCarryingCore = lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid;
             bool canInitiateAction = lifeState == null || lifeState.CanInitiateAction;
-            bool wantsCrouch = input.CrouchHeld && canInitiateAction && !isCarryingCore;
+            bool wantsCrouch = input.CrouchHeld
+                && canInitiateAction
+                && CoreStabilizerRules.AllowsCrouch(isCarryingCore,
+                    lobbyState != null && lobbyState.ToolId == LobbyPlayerState.CoreStabilizerToolId);
             if (Object.HasStateAuthority)
             {
                 IsCrouching = wantsCrouch;
@@ -368,10 +417,12 @@ namespace EchoProtocol.Networking
 
             bool effectiveCrouch = Object.HasStateAuthority ? wantsCrouch : IsCrouching;
 
+            bool coreAllowsSprint = CoreStabilizerRules.AllowsSprint(isCarryingCore,
+                lobbyState != null && lobbyState.IsCoreStabilized);
             var isSprintMoving =
                 canInitiateAction &&
                 !effectiveCrouch &&
-                !isCarryingCore &&
+                coreAllowsSprint &&
                 input.SprintHeld &&
                 NetworkCurrentStamina > _minStaminaToSprint &&
                 CanSprintInDirection(input.Move) &&
@@ -388,9 +439,10 @@ namespace EchoProtocol.Networking
             var coreCarryMultiplier = 1f;
             if (isCarryingCore)
             {
-                coreCarryMultiplier = lobbyPlayer.IsCoreStabilized ? 0.9f : 0.72f;
+                coreCarryMultiplier = lobbyPlayer.IsCoreStabilized ? 1f : 0.72f;
             }
-            _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f) * coreCarryMultiplier;
+            _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f)
+                * coreCarryMultiplier * GetExternalSlowMultiplier();
 
             _controller.Move(direction);
 
@@ -583,17 +635,33 @@ namespace EchoProtocol.Networking
 
                 Transform hidePoint = authoritativeSpot.HidePoint;
                 position = hidePoint.position;
-                rotation = Quaternion.Euler(
-                    0f,
-                    hidePoint.eulerAngles.y,
-                    0f);
+                rotation = authoritativeSpot.FacingRotation;
             }
-            else if (previousSpotId != 0UL)
+            else
             {
-                global::HidingSpot.ReleaseNetworkSpot(
-                    Runner,
-                    previousSpotId,
-                    Object.InputAuthority);
+                position = transform.position;
+                rotation = transform.rotation;
+
+                if (previousSpotId != 0UL)
+                {
+                    if (global::HidingSpot.TryResolveByStableId(
+                            previousSpotId,
+                            out var authoritativeSpot))
+                    {
+                        Transform exitPoint = authoritativeSpot.ExitPoint;
+
+                        if (exitPoint != null)
+                        {
+                            position = exitPoint.position;
+                            rotation = authoritativeSpot.FacingRotation;
+                        }
+                    }
+
+                    global::HidingSpot.ReleaseNetworkSpot(
+                        Runner,
+                        previousSpotId,
+                        Object.InputAuthority);
+                }
             }
 
             IsHidden = isHidden;
@@ -635,6 +703,27 @@ namespace EchoProtocol.Networking
         {
             var hiding = GetComponent<PlayerHidingController>();
             hiding?.CancelRejectedEnter(hideSpotId);
+        }
+
+        public void ApplyGameplaySpawnViewAuthoritative(Quaternion spawnRotation)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
+            RpcApplyGameplaySpawnView(spawnRotation.eulerAngles.y);
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+        private void RpcApplyGameplaySpawnView(float yaw)
+        {
+            _pendingGameplaySpawnYaw = Mathf.Repeat(yaw, 360f);
+            BindLocalPlayerCameraIfNeeded();
+            ApplyPendingGameplaySpawnView();
+        }
+
+        private void ApplyPendingGameplaySpawnView()
+        {
+            if (!_pendingGameplaySpawnYaw.HasValue || _playerCamera == null) return;
+            _playerCamera.SetRotation(_pendingGameplaySpawnYaw.Value, 0f);
+            _pendingGameplaySpawnYaw = null;
         }
 
         public bool TryForceExitHidingAuthoritative(
@@ -830,6 +919,7 @@ namespace EchoProtocol.Networking
             _playerCamera = playerCamera;
 
             playerCamera.SetTarget(transform);
+            ApplyPendingGameplaySpawnView();
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerMovement,
                 $"[NetworkMovement] Bound local PlayerCamera to player.");
@@ -899,7 +989,8 @@ namespace EchoProtocol.Networking
                     : 0f,
                 JumpPressed = _allowJump && (_jumpAction?.WasPressedThisFrame() ?? false),
                 SprintHeld = _sprintAction?.IsPressed() ?? false,
-                CrouchHeld = !IsCarryingCore() && IsCrouchPressed(),
+                CrouchHeld = CoreStabilizerRules.AllowsCrouch(
+                    IsCarryingCore(), IsHoldingCoreStabilizer()) && IsCrouchPressed(),
             };
         }
 
@@ -915,6 +1006,19 @@ namespace EchoProtocol.Networking
             return legacyCarrier != null && legacyCarrier.IsCarrying;
         }
 
+        private bool IsHoldingCoreStabilizer()
+        {
+            var lobbyState = GetComponent<LobbyPlayerState>();
+            if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid)
+            {
+                return lobbyState.ToolId == LobbyPlayerState.CoreStabilizerToolId;
+            }
+
+            var inventory = GetComponent<PlayerInventory>() ?? GetComponentInParent<PlayerInventory>();
+            return inventory != null
+                && PlayerInventory.ResolveToolId(inventory.TeamToolSlot) == LobbyPlayerState.CoreStabilizerToolId;
+        }
+
         private bool IsCrouchPressed()
         {
             if (_crouchAction != null && _crouchAction.IsPressed())
@@ -922,11 +1026,7 @@ namespace EchoProtocol.Networking
                 return true;
             }
 
-            var keyboard = Keyboard.current;
-            return keyboard != null
-                && (keyboard.cKey.isPressed
-                    || keyboard.leftCtrlKey.isPressed
-                    || keyboard.rightCtrlKey.isPressed);
+            return GameplayInputSettings.IsPressed(GameplayAction.Crouch);
         }
     }
 }

@@ -15,6 +15,9 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     [SerializeField] private float lookAtDistance = 12f;
     [SerializeField] private bool driveRightHandWhenHolding = true;
 
+    [Header("Crouch Pose")]
+    [SerializeField] private Vector3 crouchLeftHandLocalPosition = new Vector3(-0.22f, 0.62f, 0.04f);
+
     [Header("Carry (Two-Hand) Pose")]
     [SerializeField] private float carryForwardOffset = 0.30f;
     [SerializeField] private float carryLateralOffset = 0.30f;
@@ -39,6 +42,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
     private static readonly int IsRevivingHash = Animator.StringToHash("IsReviving");
     private static readonly int IsDownedHash = Animator.StringToHash("IsDowned");
+    private static readonly int IsCrouchingHash = Animator.StringToHash("IsCrouching");
 
     private PlayerInventory _inventory;
     private PlayerEnergyCoreCarrier _coreCarrier;
@@ -131,7 +135,9 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             aimRight = transform.right;
         }
 
-        if (IsCarryingCore())
+        bool isCarryingCore = IsCarryingCore();
+        bool isHoldingCoreStabilizer = IsHoldingCoreStabilizer();
+        if (isCarryingCore || isHoldingCoreStabilizer)
         {
             Vector3 rightHandPos = chestOrigin + aimForward * carryForwardOffset + aimRight * carryLateralOffset + aimUp * carryVerticalOffset;
             Vector3 leftHandPos  = chestOrigin + aimForward * carryForwardOffset - aimRight * carryLateralOffset + aimUp * carryVerticalOffset;
@@ -146,11 +152,20 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             Vector3 rightElbowPole = rightArmRoot + aimRight * rightElbowPoleOffset.x + aimUp * rightElbowPoleOffset.y - aimForward * Mathf.Abs(rightElbowPoleOffset.z);
             Vector3 leftElbowPole  = leftArmRoot  + aimRight * leftElbowPoleOffset.x  + aimUp * leftElbowPoleOffset.y  - aimForward * Mathf.Abs(leftElbowPoleOffset.z);
 
-            SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, rightHandPos, rightElbowPole, carryIKWeight);
-            SolveTwoBoneIK(leftUpperArm,  leftForeArm,  leftHandBone,  leftHandPos,  leftElbowPole,  carryIKWeight);
+            float twoHandIKWeight = isHoldingCoreStabilizer ? 1f : carryIKWeight;
+            SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, rightHandPos, rightElbowPole, twoHandIKWeight);
+            SolveTwoBoneIK(leftUpperArm,  leftForeArm,  leftHandBone,  leftHandPos,  leftElbowPole,  twoHandIKWeight);
 
             UpdateCoreAnchorPose(aimForward, aimUp, aimRight, rightHandBone, leftHandBone, rightHandPos, leftHandPos);
             return;
+        }
+
+        if (animator.GetBool(IsCrouchingHash) && leftUpperArm != null && leftForeArm != null && leftHandBone != null)
+        {
+            Transform root = playerRoot != null ? playerRoot : transform;
+            Vector3 leftHandTarget = root.TransformPoint(crouchLeftHandLocalPosition);
+            Vector3 leftElbowPole = leftUpperArm.position - root.right * 0.35f + root.forward * 0.12f;
+            SolveTwoBoneIK(leftUpperArm, leftForeArm, leftHandBone, leftHandTarget, leftElbowPole, 1f);
         }
 
 
@@ -334,6 +349,20 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
         return (_inventory != null && _inventory.TeamToolSlot != null)
             || (_lobbyState != null && _lobbyState.Object != null && _lobbyState.Object.IsValid && _lobbyState.ToolId != 0);
+    }
+
+    private bool IsHoldingCoreStabilizer()
+    {
+        if (_lobbyState != null
+            && _lobbyState.Object != null
+            && _lobbyState.Object.IsValid
+            && _lobbyState.ToolId == LobbyPlayerState.CoreStabilizerToolId)
+        {
+            return true;
+        }
+
+        InventoryItemDefinition tool = _inventory != null ? _inventory.TeamToolSlot : null;
+        return tool != null && tool.ItemId == "core_stabilizer";
     }
 
     private bool IsCarryingCore()

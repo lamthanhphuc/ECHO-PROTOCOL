@@ -60,27 +60,16 @@ namespace EchoProtocol.AI.Stalker.Networking
             var previousStatus =
                 lifeState.Status;
 
-            bool consequenceApplied;
-
-            switch (previousStatus)
+            if (previousStatus !=
+                NetworkPlayerLifeStatus.Alive)
             {
-                case NetworkPlayerLifeStatus.Alive:
-                    consequenceApplied =
-                        lifeState.TryApplyMonsterDown(
-                            "STALKER",
-                            authoritativeHitPosition);
-
-                    break;
-
-                case NetworkPlayerLifeStatus.Downed:
-                    consequenceApplied =
-                        lifeState.TryEliminateForReviveLimit();
-
-                    break;
-
-                default:
-                    return false;
+                return false;
             }
+
+            bool consequenceApplied =
+                lifeState.TryApplyMonsterDown(
+                    "STALKER",
+                    authoritativeHitPosition);
 
             if (consequenceApplied)
             {

@@ -63,6 +63,11 @@ namespace EchoProtocol.AI.Listener.Noise
                     RuntimeNoiseType.MACHINE_REPAIR,
                     new RuntimeNoiseDefinition(RuntimeNoiseType.MACHINE_REPAIR, 1.5d, 200d, TimeSpan.FromSeconds(3d),
                         RuntimeNoiseEmissionMode.RecurringMovement, 2.5d)
+                },
+                {
+                    RuntimeNoiseType.MINION_ALERT,
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.MINION_ALERT, 1d, 55d, TimeSpan.FromSeconds(4d),
+                        RuntimeNoiseEmissionMode.DiscreteAction)
                 }
             };
 

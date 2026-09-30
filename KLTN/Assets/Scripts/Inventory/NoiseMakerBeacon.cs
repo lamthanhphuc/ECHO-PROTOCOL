@@ -87,16 +87,24 @@ public sealed class NoiseMakerBeacon : MonoBehaviour
     {
         yield return new WaitForSeconds(activationDelay);
 
-        var noiseService = FindAnyObjectByType<HostRuntimeNoiseService>();
-
         for (int i = 0; i < totalPulses; i++)
         {
+            var authority =
+                MatchAuthorityRuntime.Instance;
+
+            var noiseService =
+                authority != null
+                    ? HostRuntimeNoiseService.EnsureExists(
+                        authority)
+                    : null;
+
             if (noiseService != null)
             {
-                var key = RuntimeNoiseSourceOccurrenceKey.ForTeamTool(
-                    _streamKey,
-                    "NOISE_MAKER",
-                    (uint)(_baseSequence + i + 1));
+                var key =
+                    RuntimeNoiseSourceOccurrenceKey.ForTeamTool(
+                        _streamKey,
+                        "NOISE_MAKER",
+                        (uint)(_baseSequence + i + 1));
 
                 noiseService.TryAccept(
                     _actor,
@@ -108,7 +116,8 @@ public sealed class NoiseMakerBeacon : MonoBehaviour
 
             if (i < totalPulses - 1)
             {
-                yield return new WaitForSeconds(pulseInterval);
+                yield return new WaitForSeconds(
+                    pulseInterval);
             }
         }
 

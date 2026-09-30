@@ -1,20 +1,14 @@
+using EchoProtocol.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using static EchoProtocol.UI.SettingsMenuWidgets;
 
 namespace EchoProtocol.Voice
 {
-    /// <summary>Builds the editable voice settings canvas used by the runtime and prefab builder.</summary>
+    /// <summary>Editable ESC settings canvas, bound by VoiceSettingsPanel.</summary>
     public static class VoiceSettingsCanvasFactory
     {
-        private static readonly Color Background = Hex("080C10");
-        private static readonly Color Surface = Hex("111A20");
-        private static readonly Color Raised = Hex("1B2A31");
-        private static readonly Color Border = Hex("43545A");
-        private static readonly Color Accent = Hex("C34243");
-        private static readonly Color Text = Hex("ECF2F1");
-        private static readonly Color Muted = Hex("9BAAAC");
-
         public static GameObject Create()
         {
             var root = new GameObject("VoiceSettingsCanvas", typeof(RectTransform), typeof(Canvas),
@@ -25,216 +19,189 @@ namespace EchoProtocol.Voice
             var scaler = root.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
-            scaler.matchWidthOrHeight = 0.5f;
-
-            var hud = Panel("HudButton", root.transform, 32, 30, 230, 44, Surface);
-            Stroke("HudAccent", hud, 0, 0, 4, 44, Accent);
-            Button(hud, "MIC OFF  ·  SETTINGS F8", 16);
-
-            var overlay = Panel("Overlay", root.transform, 0, 0, 0, 0, new Color(0, 0, 0, 0.78f));
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+            var overlay = Panel("Overlay", root.transform, 0, 0, 0, 0, new Color(0.012f, 0.012f, 0.015f, 0.78f));
             Stretch(overlay);
-            var card = Panel("Window", overlay, 0, 0, 800, 930, Background);
-            Center(card);
-            card.GetComponent<Image>().raycastTarget = true;
-            Outline(card.gameObject);
-            Stroke("TopRule", card, 0, 0, 800, 5, Accent);
-            Label("Eyebrow", card, 32, 18, 500, 22, "ECHO PROTOCOL  /  AUDIO", 14, Accent, FontStyles.Bold);
-            Label("Title", card, 32, 43, 600, 48, "VOICE CHAT", 34, Text, FontStyles.Bold);
-            Label("Subtitle", card, 32, 91, 680, 24, "Talk to players in your room", 16, Muted);
-            var close = Panel("CloseButton", card, 730, 38, 38, 38, Raised);
-            Button(close, "X", 20);
-            Stroke("HeaderRule", card, 32, 124, 736, 1, Border);
-
-            var statusCard = Panel("StatusCard", card, 32, 140, 736, 62, Surface);
-            Stroke("StatusAccent", statusCard, 0, 0, 4, 62, Accent);
-            Label("StatusTitle", statusCard, 16, 8, 180, 20, "VOICE CONNECTION", 12, Muted, FontStyles.Bold);
-            Label("StatusText", statusCard, 16, 29, 542, 25, "Waiting to join a room", 16, Text);
-            var retry = Panel("RetryButton", statusCard, 580, 13, 140, 36, Raised);
-            Button(retry, "RECONNECT", 13);
-
-            Label("InputTitle", card, 32, 222, 736, 29, "1.  TURN YOUR MICROPHONE ON OR OFF", 20, Text, FontStyles.Bold);
-            Label("InputHint", card, 32, 252, 736, 22, "Press V once to talk. Press it again to mute.", 16, Muted);
-            var mic = Panel("MicButton", card, 32, 284, 736, 65, Raised);
-            Stroke("Accent", mic, 0, 0, 6, 65, Accent);
-            Button(mic, "TURN MICROPHONE ON", 22);
-            var key = Panel("KeyButton", card, 32, 360, 736, 38, Surface);
-            Button(key, "CHANGE MIC SHORTCUT  ·  V", 14);
-
-            Stroke("InputRule", card, 32, 418, 736, 1, Border);
-            Label("DeviceTitle", card, 32, 435, 570, 29, "2.  CHOOSE YOUR MICROPHONE", 20, Text, FontStyles.Bold);
-            var refresh = Panel("RefreshButton", card, 640, 434, 128, 32, Surface);
-            Button(refresh, "REFRESH LIST", 13);
-            Label("DeviceText", card, 32, 472, 736, 28, "No microphone selected", 16, Muted);
-            ScrollArea("Devices", card, 32, 508, 736, 107);
-            Label("MicLevelTitle", card, 32, 625, 132, 25, "INPUT LEVEL", 13, Muted, FontStyles.Bold);
-            var level = Panel("MicLevelTrack", card, 166, 632, 410, 12, Surface);
-            StretchFill("MicLevelFill", level, Accent);
-            Label("MicLevelText", card, 586, 622, 62, 28, "0%", 15, Text, FontStyles.Bold, TextAlignmentOptions.Right);
-            var test = Panel("TestButton", card, 658, 620, 110, 35, Surface);
-            Button(test, "TEST MIC", 13);
-
-            Stroke("OutputRule", card, 32, 677, 736, 1, Border);
-            Label("OutputTitle", card, 32, 695, 736, 29, "3.  HEAR OTHER PLAYERS", 20, Text, FontStyles.Bold);
-            Label("VolumeTitle", card, 32, 728, 570, 25, "Voice volume", 16, Muted);
-            Label("VolumeText", card, 688, 728, 80, 25, "100%", 16, Text, FontStyles.Bold, TextAlignmentOptions.Right);
-            VolumeSlider("VolumeSlider", card, 32, 760, 736, 22);
-            Label("TeamTitle", card, 32, 793, 736, 22, "Click a player below to mute or unmute them", 14, Muted);
-            ScrollArea("TeamList", card, 32, 821, 736, 74);
-
-            Stroke("FooterRule", card, 32, 908, 736, 1, Border);
-            Label("Footer", card, 32, 910, 736, 18, "F8 / ESC  CLOSE     ·     YOUR MIC DOES NOT TURN ON AUTOMATICALLY", 12, Muted);
+            var window = Rect("Window", overlay, 0, 0, 1480, 982);
+            window.anchorMin = window.anchorMax = window.pivot = new Vector2(0.5f, 0.5f);
+            window.anchoredPosition = Vector2.zero;
+            Label("Title", window, 380, 0, 720, 76, "CÀI ĐẶT", 52, Foreground, TextAlignmentOptions.Center, true).characterSpacing = 7;
+            Icon("SettingsIcon", window, 510, 17, 48, 48, SettingsIcon.Gear, Foreground);
+            Label("Subtitle", window, 400, 76, 680, 22, "E C H O   P R O T O C O L", 12, Muted, TextAlignmentOptions.Center);
+            Button("CloseButton", window, 1438, 15, 42, 42, "×", false, 28);
+            Line("TopRule", window, 0, 110, 1480);
+            Line("BottomRule", window, 0, 161, 1480);
+            var tabs = Rect("SettingsTabs", window, 250, 111, 980, 50);
+            string[] names = { "General", "Graphics", "Audio", "Controls" };
+            string[] labels = { "CHUNG", "ĐỒ HỌA", "ÂM THANH", "ĐIỀU KHIỂN" };
+            SettingsIcon[] tabIcons = { SettingsIcon.Gear, SettingsIcon.Monitor, SettingsIcon.Audio, SettingsIcon.Keyboard };
+            for (int i = 0; i < names.Length; i++)
+            {
+                var tab = Button(names[i], tabs, i * 245, 0, 245, 50, labels[i], i == 0, 18);
+                Icon("Icon", tab.transform, 27, 13, 25, 25, tabIcons[i]);
+                tab.GetComponentInChildren<TMP_Text>().rectTransform.anchoredPosition = new Vector2(32, 0);
+                tab.GetComponentInChildren<TMP_Text>().rectTransform.sizeDelta = new Vector2(205, 50);
+                var line = Panel("Active", tab.transform, 0, 48, 245, 2, Accent);
+                line.GetComponent<Image>().raycastTarget = false;
+                line.gameObject.SetActive(i == 0);
+            }
+            var body = Rect("Body", window, 0, 171, 1480, 738);
+            BuildVoice(body);
+            BuildMouse(body);
+            BuildAudio(body);
+            BuildControls(body);
+            BuildDevices(body);
+            BuildGraphics(body);
+            BuildControlsNote(body);
+            var footer = Rect("Footer", window, 0, 929, 1480, 53);
+            Button("Leave", footer, 0, 5, 170, 43, "RỜI PHÒNG", false, 16);
+            Button("Inventory", footer, 184, 5, 165, 43, "TÚI ĐỒ", false, 16);
+            var quit = Button("Quit", footer, 418, 0, 304, 53, "THOÁT GAME", true, 23);
+            Icon("Icon", quit.transform, 22, 12, 29, 29, SettingsIcon.Exit, Accent);
+            var resume = Button("Resume", footer, 744, 0, 304, 53, "TIẾP TỤC", false, 23);
+            Icon("Icon", resume.transform, 29, 13, 27, 27, SettingsIcon.Play, Foreground);
+            Label("Saved", footer, 1090, 0, 390, 53, "ESC  ·  QUAY LẠI GAME", 14, Muted, TextAlignmentOptions.Right);
+            var confirm = Panel("Confirm", overlay, 0, 0, 0, 0, new Color(0, 0, 0, 0.88f));
+            Stretch(confirm);
+            var prompt = Frame("Prompt", confirm, 0, 0, 630, 240, true);
+            prompt.anchorMin = prompt.anchorMax = prompt.pivot = new Vector2(0.5f, 0.5f);
+            prompt.anchoredPosition = Vector2.zero;
+            Label("Title", prompt, 30, 25, 570, 48, "THOÁT GAME?", 30, Foreground, TextAlignmentOptions.Center, true);
+            Label("Message", prompt, 30, 81, 570, 43, "Bạn sẽ rời phiên chơi hiện tại.", 21, Muted, TextAlignmentOptions.Center);
+            Button("Cancel", prompt, 40, 155, 260, 51, "QUAY LẠI");
+            Button("Accept", prompt, 330, 155, 260, 51, "THOÁT GAME", true);
+            confirm.gameObject.SetActive(false);
             overlay.gameObject.SetActive(false);
             return root;
         }
 
+        private static void BuildVoice(Transform body)
+        {
+            var card = Card("Voice", body, 0, 0, 780, 330, "Voice Chat", "◉");
+            Label("MicTitle", card, 34, 62, 400, 32, "Microphone");
+            Toggle("MicToggle", card, 520, 61);
+            Label("InputTitle", card, 34, 103, 390, 30, "Microphone (đầu vào)");
+            var meter = Rect("Meter", card, 443, 113, 285, 13);
+            for (int i = 0; i < 24; i++)
+                Panel("Bar" + i, meter, i * 12, 0, 7, 13, new Color(0.19f, 0.21f, 0.20f)).GetComponent<Image>().raycastTarget = false;
+            Label("VolumeTitle", card, 34, 144, 390, 30, "Âm lượng đầu ra");
+            Slider("VolumeSlider", card, 443, 144, 240);
+            Label("VolumeText", card, 697, 144, 55, 30, "100%", 18, Foreground, TextAlignmentOptions.Right);
+            Label("PushToTalkTitle", card, 34, 185, 460, 30, "Nhấn giữ để nói");
+            Toggle("PushToTalkToggle", card, 520, 183);
+            Label("KeyTitle", card, 34, 226, 395, 30, "Phím bật / tắt mic");
+            Button("KeyButton", card, 520, 222, 210, 35, "V", false, 18);
+            Button("DeviceButton", card, 34, 276, 422, 33, "Chọn microphone", false, 15);
+            Button("AdvancedButton", card, 475, 276, 255, 33, "THIẾT BỊ & ĐỒNG ĐỘI", false, 14);
+        }
+
+        private static void BuildMouse(Transform body)
+        {
+            var card = Card("Mouse", body, 0, 342, 780, 180, "Tốc độ chuột", "◐");
+            Label("SensitivityTitle", card, 34, 60, 350, 30, "Độ nhạy chuột");
+            Slider("Sensitivity", card, 405, 60, 278, 0.1f, 3);
+            Label("SensitivityText", card, 695, 60, 57, 30, "1.00", 18, Foreground, TextAlignmentOptions.Right);
+            Label("InvertTitle", card, 34, 98, 410, 30, "Đảo trục Y");
+            Toggle("Invert", card, 520, 96);
+            Label("AccelerationTitle", card, 34, 136, 410, 30, "Tăng tốc chuột");
+            Toggle("Acceleration", card, 520, 134);
+        }
+
+        private static void BuildAudio(Transform body)
+        {
+            var card = Card("Audio", body, 0, 534, 780, 204, "Âm thanh", "♪");
+            string[] names = { "Master", "Music", "Effects", "Voice" };
+            string[] titles = { "Tổng âm lượng", "Nhạc nền", "Hiệu ứng", "Voice Chat" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                float y = 58 + i * 33;
+                Label(names[i] + "Title", card, 34, y, 355, 28, titles[i], 20);
+                Slider(names[i], card, 405, y, 278);
+                Label(names[i] + "Value", card, 693, y, 59, 28, "100%", 18, Foreground, TextAlignmentOptions.Right);
+            }
+        }
+
+        private static void BuildControls(Transform body)
+        {
+            var card = Card("Controls", body, 800, 0, 680, 738, "Phím điều khiển", "⌨");
+            string[] names = { "MoveForward", "MoveBackward", "MoveLeft", "MoveRight", "Interact", "Sprint", "Crouch", "Flashlight", "Inventory" };
+            string[] titles = { "Di chuyển tiến", "Lùi", "Sang trái", "Sang phải", "Tương tác", "Chạy", "Cúi", "Bật đèn pin", "Túi đồ" };
+            SettingsIcon[] icons = { SettingsIcon.Up, SettingsIcon.Down, SettingsIcon.Left, SettingsIcon.Right,
+                SettingsIcon.Interact, SettingsIcon.Run, SettingsIcon.Crouch, SettingsIcon.Flashlight, SettingsIcon.Inventory };
+            string[] keys = { "W", "S", "A", "D", "E", "Shift", "Ctrl / C", "F", "Tab" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                float y = 70 + i * 66;
+                Icon(names[i] + "Icon", card, 39, y + 6, 32, 32, icons[i]);
+                Label(names[i] + "Title", card, 106, y, 352, 44, titles[i], 22);
+                Button(names[i], card, 478, y, 173, 44, keys[i], false, 20);
+                Line(names[i] + "Rule", card, 25, y + 55, 630);
+            }
+            Label("Hint", card, 28, 680, 624, 40, "Chọn một phím để thay đổi  ·  ESC để hủy", 16, Muted, TextAlignmentOptions.Center);
+        }
+
+        private static void BuildDevices(Transform body)
+        {
+            var devices = Card("Devices", body, 800, 0, 680, 350, "Thiết bị thu âm", "◉");
+            Button("Refresh", devices, 493, 12, 161, 31, "LÀM MỚI", false, 14);
+            Label("DeviceText", devices, 27, 61, 626, 32, "Chọn microphone để bắt đầu nói", 18, Muted);
+            ScrollArea("List", devices, 23, 102, 634, 166);
+            Button("Test", devices, 28, 284, 225, 42, "THỬ MICROPHONE", false, 16);
+            Label("LevelText", devices, 272, 283, 380, 42, "Mức đầu vào: 0%", 18, Muted, TextAlignmentOptions.Right);
+            var team = Card("Team", body, 800, 362, 680, 376, "Đồng đội", "◌");
+            Label("Status", team, 27, 62, 626, 31, "Vào phòng để kết nối voice", 18, Muted);
+            Label("Hint", team, 27, 99, 626, 28, "Chọn một người để tắt / bật tiếng.", 18, Muted);
+            ScrollArea("List", team, 23, 141, 634, 151);
+            Button("Retry", team, 424, 314, 228, 37, "KẾT NỐI LẠI", false, 15);
+            devices.gameObject.SetActive(false);
+            team.gameObject.SetActive(false);
+        }
+
+        private static void BuildGraphics(Transform body)
+        {
+            var card = Card("Graphics", body, 0, 0, 780, 390, "Đồ họa & hiển thị", "▣");
+            Label("QualityTitle", card, 34, 77, 370, 39, "Chất lượng");
+            Button("Quality", card, 425, 76, 302, 41, "Hiện tại", false, 18);
+            Label("ResolutionTitle", card, 34, 140, 370, 39, "Độ phân giải");
+            Button("Resolution", card, 425, 139, 302, 41, "1920 × 1080", false, 18);
+            Label("FullscreenTitle", card, 34, 209, 370, 34, "Toàn màn hình");
+            Toggle("Fullscreen", card, 520, 209);
+            Label("VSyncTitle", card, 34, 268, 420, 34, "Đồng bộ khung hình (VSync)");
+            Toggle("VSync", card, 520, 268);
+            Label("Hint", card, 34, 330, 700, 29, "Chọn giá trị để chuyển sang tùy chọn tiếp theo.", 17, Muted);
+            var display = Card("Display", body, 800, 0, 680, 738, "Hiển thị hiện tại", "▣");
+            var monitor = Frame("Monitor", display, 89, 146, 502, 284);
+            Label("Resolution", monitor, 20, 60, 462, 90, "1920 × 1080", 39, Foreground, TextAlignmentOptions.Center, true);
+            Label("Quality", monitor, 20, 156, 462, 55, "CHẤT LƯỢNG", 19, Accent, TextAlignmentOptions.Center);
+            Panel("Stand", display, 319, 430, 42, 55, Rule);
+            Panel("Base", display, 244, 485, 192, 4, Muted);
+            Label("Description", display, 50, 548, 580, 70, "Điều chỉnh chất lượng phù hợp với máy của bạn.", 19, Muted, TextAlignmentOptions.Center)
+                .textWrappingMode = TextWrappingModes.Normal;
+            Label("SaveHint", display, 50, 643, 580, 32, "Thay đổi được áp dụng và lưu tự động.", 17, Muted, TextAlignmentOptions.Center);
+            card.gameObject.SetActive(false);
+            display.gameObject.SetActive(false);
+        }
+
+        private static void BuildControlsNote(Transform body)
+        {
+            var note = Card("ControlsNote", body, 0, 196, 780, 280, "Tùy chỉnh điều khiển", "⌨");
+            Label("Body", note, 34, 77, 705, 160,
+                "Chọn ô phím bên phải, sau đó nhấn phím mới.\n\nESC hủy thao tác đổi phím.\nPhím đã dùng cho hành động khác sẽ được giữ nguyên.",
+                21, Muted).textWrappingMode = TextWrappingModes.Normal;
+            note.gameObject.SetActive(false);
+        }
+
         public static Button AddListButton(Transform parent, string name, string title, bool selected)
         {
-            var row = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
-            row.transform.SetParent(parent, false);
-            row.GetComponent<Image>().color = selected ? Accent : Raised;
-            row.GetComponent<LayoutElement>().preferredHeight = 34;
-            var button = row.GetComponent<Button>();
-            button.targetGraphic = row.GetComponent<Image>();
-            var label = Label("Label", row.transform, 12, 0, 350, 34, title, 14, Text);
-            label.anchorMin = new Vector2(0, 0.5f);
-            label.anchorMax = new Vector2(1, 0.5f);
-            label.sizeDelta = new Vector2(-24, 34);
+            var button = Button(name, parent, 0, 0, 570, 40, title, selected, 17);
+            button.gameObject.AddComponent<LayoutElement>().preferredHeight = 40;
+            var label = button.GetComponentInChildren<TMP_Text>();
+            Stretch(label.rectTransform);
+            label.rectTransform.offsetMin = new Vector2(13, 0);
+            label.rectTransform.offsetMax = new Vector2(-13, 0);
+            label.alignment = TextAlignmentOptions.Left;
+            label.fontStyle = FontStyles.Normal;
             return button;
-        }
-
-        private static RectTransform Panel(string name, Transform parent, float x, float y, float w, float h, Color color)
-        {
-            var rect = Rect(name, parent, x, y, w, h);
-            rect.gameObject.AddComponent<Image>().color = color;
-            return rect;
-        }
-
-        private static RectTransform Stroke(string name, Transform parent, float x, float y, float w, float h, Color color)
-        {
-            var rect = Panel(name, parent, x, y, w, h, color);
-            rect.GetComponent<Image>().raycastTarget = false;
-            return rect;
-        }
-
-        private static RectTransform Label(string name, Transform parent, float x, float y, float w, float h,
-            string content, int size, Color color, FontStyles style = FontStyles.Normal,
-            TextAlignmentOptions align = TextAlignmentOptions.Left)
-        {
-            var rect = Rect(name, parent, x, y, w, h);
-            var label = rect.gameObject.AddComponent<TextMeshProUGUI>();
-            label.font = TMP_Settings.defaultFontAsset;
-            label.text = content;
-            label.fontSize = size;
-            label.fontStyle = style;
-            label.color = color;
-            label.alignment = align;
-            label.verticalAlignment = VerticalAlignmentOptions.Middle;
-            label.textWrappingMode = TextWrappingModes.NoWrap;
-            label.overflowMode = TextOverflowModes.Ellipsis;
-            label.raycastTarget = false;
-            return rect;
-        }
-
-        private static RectTransform Rect(string name, Transform parent, float x, float y, float w, float h)
-        {
-            var owner = new GameObject(name, typeof(RectTransform));
-            var rect = owner.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
-            rect.anchoredPosition = new Vector2(x, -y);
-            rect.sizeDelta = new Vector2(w, h);
-            return rect;
-        }
-
-        private static void Center(RectTransform rect)
-        {
-            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.anchoredPosition = Vector2.zero;
-        }
-
-        private static void Stretch(RectTransform rect)
-        {
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = rect.offsetMax = Vector2.zero;
-        }
-
-        private static void Button(RectTransform rect, string title, int size)
-        {
-            var button = rect.gameObject.AddComponent<Button>();
-            button.targetGraphic = rect.GetComponent<Image>();
-            var colors = button.colors;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(0.85f, 0.9f, 0.9f);
-            colors.pressedColor = new Color(0.7f, 0.7f, 0.7f);
-            button.colors = colors;
-            var label = Label("Label", rect, 0, 0, 0, 0, title, size, Text, FontStyles.Bold, TextAlignmentOptions.Center);
-            Stretch(label);
-        }
-
-        private static void Outline(GameObject owner)
-        {
-            var outline = owner.AddComponent<Outline>();
-            outline.effectColor = Border;
-            outline.effectDistance = new Vector2(1, -1);
-        }
-
-        private static void ScrollArea(string name, Transform parent, float x, float y, float w, float h)
-        {
-            var area = Panel(name, parent, x, y, w, h, Surface);
-            var viewport = Rect("Viewport", area, 8, 8, w - 16, h - 16);
-            viewport.gameObject.AddComponent<RectMask2D>();
-            var content = Rect("Content", viewport, 0, 0, w - 16, 0);
-            content.anchorMin = new Vector2(0, 1);
-            content.anchorMax = new Vector2(1, 1);
-            content.sizeDelta = new Vector2(0, 0);
-            var layout = content.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 4;
-            layout.childControlHeight = true;
-            layout.childForceExpandHeight = false;
-            layout.childControlWidth = true;
-            layout.childForceExpandWidth = true;
-            var fitter = content.gameObject.AddComponent<ContentSizeFitter>();
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            var scroll = area.gameObject.AddComponent<ScrollRect>();
-            scroll.viewport = viewport;
-            scroll.content = content;
-            scroll.horizontal = false;
-            scroll.vertical = true;
-            scroll.movementType = ScrollRect.MovementType.Clamped;
-        }
-
-        private static void StretchFill(string name, Transform parent, Color color)
-        {
-            var rect = Stroke(name, parent, 0, 0, 0, 0, color);
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = rect.offsetMax = Vector2.zero;
-            rect.GetComponent<Image>().type = Image.Type.Filled;
-            rect.GetComponent<Image>().fillMethod = Image.FillMethod.Horizontal;
-            rect.GetComponent<Image>().fillAmount = 0;
-        }
-
-        private static void VolumeSlider(string name, Transform parent, float x, float y, float w, float h)
-        {
-            var track = Panel(name, parent, x, y, w, h, Surface);
-            var fill = Stroke("Fill", track, 0, 0, 0, 0, Accent);
-            Stretch(fill);
-            var handle = Panel("Handle", track, 0, 0, 14, h, Text);
-            var slider = track.gameObject.AddComponent<Slider>();
-            slider.targetGraphic = handle.GetComponent<Image>();
-            slider.fillRect = fill;
-            slider.handleRect = handle;
-            slider.direction = Slider.Direction.LeftToRight;
-            slider.minValue = 0;
-            slider.maxValue = 1;
-            slider.value = 1;
-        }
-
-        private static Color Hex(string value)
-        {
-            ColorUtility.TryParseHtmlString("#" + value, out var result);
-            return result;
         }
     }
 }

@@ -270,6 +270,24 @@ namespace EchoProtocol.Networking
             StateChanged?.Invoke(this);
         }
 
+        public bool ResetZoneReviveBudgetAuthoritative()
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority)
+            {
+                return false;
+            }
+
+            if (Status == NetworkPlayerLifeStatus.Eliminated
+                || Status == NetworkPlayerLifeStatus.Escaped)
+            {
+                return false;
+            }
+
+            DownCount = 0;
+            ReviveCount = 0;
+            return true;
+        }
+
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             GetComponent<PlayerJumpscareController>()?.StopJumpscare();
@@ -294,6 +312,19 @@ namespace EchoProtocol.Networking
                 HandleReplicatedStateChanged();
             }
 
+            return true;
+        }
+
+        public bool TryApplyAuthoritativeNonLethalDamage(float damage, string sourceType, Vector3 hitPosition)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || damage <= 0f || Status != NetworkPlayerLifeStatus.Alive || HasReviveProtection)
+            {
+                return false;
+            }
+
+            Health = Mathf.Max(1f, Health - damage);
+            HandleReplicatedStateChanged();
             return true;
         }
 

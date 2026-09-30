@@ -146,7 +146,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f4e5c97bedfb1814f9122481941d5997, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMovement
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   walkSpeed: 4
@@ -267,7 +267,7 @@ MonoBehaviour:
   carryNoiseInterval: 2.5
   carryNoiseMoveThreshold: 0.05
   stabilizedNoiseMultiplier: 0.35
-  stabilizedCarrySpeedMultiplier: 0.9
+  stabilizedCarrySpeedMultiplier: 1
   carryNoiseEmitted:
     m_PersistentCalls:
       m_Calls: []
@@ -384,6 +384,7 @@ MonoBehaviour:
   coreCarrier: {fileID: 3626915244988454067}
   networkMovement: {fileID: 0}
   lobbyState: {fileID: 0}
+  networkLifeState: {fileID: 0}
   downState: {fileID: 8098713353635554193}
   speedDampTime: 0.16
   directionDampTime: 0.12
@@ -399,12 +400,15 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2dd8ad9b5bd34f44aaf05df8da0f0f29, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCrawlPoseCorrector
   animator: {fileID: 1535689403677083624}
   downState: {fileID: 8098713353635554193}
   networkLifeState: {fileID: 0}
+  characterController: {fileID: 0}
   correctWhileDowned: 1
+  groundOffset: 0.02
+  targetHipsHeight: 0.24
   handContactBias: 0
   rearFootLiftOffset: 0.03
   rearLowerLegLiftOffset: 0.06
@@ -464,6 +468,7 @@ MonoBehaviour:
   inventory: {fileID: 3095192988049785345}
   coreCarrier: {fileID: 3626915244988454067}
   heldItemAnchor: {fileID: 810580752424859207}
+  lobbyState: {fileID: 0}
   energyCoreLocalPosition: {x: 0, y: 0, z: 0}
   energyCoreLocalEulerAngles: {x: 0, y: 0, z: 0}
   energyCoreLocalScale: {x: 25, y: 25, z: 25}
@@ -479,7 +484,7 @@ MonoBehaviour:
   fieldScannerChildLocalPosition: {x: 0, y: 0.04, z: 0}
   fieldScannerChildLocalEulerAngles: {x: 0, y: 0, z: 0}
   fieldScannerChildLocalScale: {x: 1, y: 1, z: 1}
-  fieldScannerHeldPrefab: {fileID: 0}
+  fieldScannerHeldPrefab: {fileID: 6917847998477345115, guid: 42eed1ef7003d124d93c210c5b5cff43, type: 3}
   firstAidLocalPosition: {x: 0.035, y: -0.015, z: 0.155}
   firstAidLocalEulerAngles: {x: 8, y: 92, z: 170}
   firstAidLocalScale: {x: 0.15, y: 0.15, z: 0.3}
@@ -495,8 +500,8 @@ MonoBehaviour:
   plankChildLocalPosition: {x: 0, y: 0, z: 0}
   plankChildLocalEulerAngles: {x: 0, y: 0, z: 0}
   plankChildLocalScale: {x: 1, y: 1, z: 1}
-  coreStabilizerLocalPosition: {x: 0.035, y: 0.18, z: 0.12}
-  coreStabilizerLocalEulerAngles: {x: 10, y: 90, z: -15}
+  coreStabilizerLocalPosition: {x: 0, y: 0, z: 0}
+  coreStabilizerLocalEulerAngles: {x: 0, y: 90, z: 0}
   coreStabilizerLocalScale: {x: 0.45, y: 0.45, z: 0.45}
 --- !u!114 &4947418910250719404
 MonoBehaviour:
@@ -1512,6 +1517,7 @@ MonoBehaviour:
   clampWeight: 0.42
   lookAtDistance: 12
   driveRightHandWhenHolding: 1
+  crouchLeftHandLocalPosition: {x: -0.22, y: 0.62, z: 0.04}
   carryForwardOffset: 0.3
   carryLateralOffset: 0.3
   carryVerticalOffset: 0.08

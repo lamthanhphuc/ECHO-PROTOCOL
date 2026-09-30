@@ -67,14 +67,45 @@ namespace EchoProtocol.EditorTools
             GameObject primaryPickup = pickupPrefab ?? AssetDatabase.LoadAssetAtPath<GameObject>(ScannerModelPrefabPath);
             BuildItemDefinition(primaryPickup, scannerPrefab);
 
-            // 4. Upgrade Player Prefabs
-            UpgradePlayerPrefab(PlayerNetworkPrefabPath, scannerPrefab);
-            UpgradePlayerPrefab(TestPlayerPrefabPath, scannerPrefab);
-            UpgradePlayerPrefab("Assets/Prefabs/Player.prefab", scannerPrefab);
-            UpgradePlayerPrefab("Assets/Prefabs/Player/Variants/PF_PlayerCharacter_P1_Default.prefab", scannerPrefab);
-            UpgradePlayerPrefab("Assets/Prefabs/Player/Variants/PF_PlayerCharacter_P2_Orange.prefab", scannerPrefab);
-            UpgradePlayerPrefab("Assets/Prefabs/Player/Variants/PF_PlayerCharacter_P3_Green.prefab", scannerPrefab);
-            UpgradePlayerPrefab("Assets/Prefabs/Player/Variants/PF_PlayerCharacter_P4_Purple.prefab", scannerPrefab);
+            // 4. Visual character prefabs must NOT own gameplay scanner logic.
+            UpgradePlayerPrefab(
+                "Assets/Prefabs/Player/Variants/PF_PlayerCharacter_P1_Default.prefab",
+                scannerPrefab,
+                false);
+
+            UpgradePlayerPrefab(
+                "Assets/Prefabs/Player/Variants/PF_PlayerCharacter_P2_Orange.prefab",
+                scannerPrefab,
+                false);
+
+            UpgradePlayerPrefab(
+                "Assets/Prefabs/Player/Variants/PF_PlayerCharacter_P3_Green.prefab",
+                scannerPrefab,
+                false);
+
+            UpgradePlayerPrefab(
+                "Assets/Prefabs/Player/Variants/PF_PlayerCharacter_P4_Purple.prefab",
+                scannerPrefab,
+                false);
+
+            // Refresh nested prefab references before upgrading gameplay player prefabs.
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            UpgradePlayerPrefab(
+                PlayerNetworkPrefabPath,
+                scannerPrefab,
+                true);
+
+            UpgradePlayerPrefab(
+                TestPlayerPrefabPath,
+                scannerPrefab,
+                true);
+
+            UpgradePlayerPrefab(
+                "Assets/Prefabs/Player.prefab",
+                scannerPrefab,
+                true);
 
             // 5. Upgrade Stalker Monster Prefab
             UpgradeMonsterPrefab(StalkerPrefabPath);
@@ -255,7 +286,10 @@ namespace EchoProtocol.EditorTools
             return itemDef;
         }
 
-        private static void UpgradePlayerPrefab(string prefabPath, GameObject scannerPrefab)
+        private static void UpgradePlayerPrefab(
+            string prefabPath,
+            GameObject scannerPrefab,
+            bool keepScanner)
         {
             if (!File.Exists(prefabPath))
             {
@@ -268,11 +302,24 @@ namespace EchoProtocol.EditorTools
             {
                 bool changed = false;
 
-                // 1. Ensure NetworkFieldScanner component
-                NetworkFieldScanner scannerComp = root.GetComponent<NetworkFieldScanner>();
-                if (scannerComp == null)
+                // 1. Scanner gameplay logic belongs only on gameplay player roots.
+                NetworkFieldScanner scannerComp =
+                    root.GetComponent<NetworkFieldScanner>();
+
+                if (keepScanner)
                 {
-                    root.AddComponent<NetworkFieldScanner>();
+                    if (scannerComp == null)
+                    {
+                        scannerComp =
+                            root.AddComponent<NetworkFieldScanner>();
+
+                        changed = true;
+                    }
+                }
+                else if (scannerComp != null)
+                {
+                    Object.DestroyImmediate(scannerComp);
+                    scannerComp = null;
                     changed = true;
                 }
 

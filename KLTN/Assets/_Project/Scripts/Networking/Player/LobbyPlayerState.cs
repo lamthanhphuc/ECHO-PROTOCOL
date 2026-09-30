@@ -123,7 +123,7 @@ namespace EchoProtocol.Networking
         [Networked]
         public NetworkString<_64> BackendUserId { get; private set; }
 
-        [Networked]
+        [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
         public NetworkId CarriedCoreId { get; private set; }
 
         [Networked]

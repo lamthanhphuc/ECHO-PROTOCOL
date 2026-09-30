@@ -77,6 +77,9 @@ namespace EchoProtocol.AI.Stalker.Special
                 300f,
                 cooldownSeconds);
 
+        public void SetCooldownSeconds(float seconds) =>
+            cooldownSeconds = Mathf.Max(300f, seconds);
+
         public float FailedAttemptBackoffSeconds =>
             Mathf.Max(
                 0f,

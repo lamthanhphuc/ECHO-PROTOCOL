@@ -1,6 +1,8 @@
+using EchoProtocol.Settings;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 namespace EchoProtocol.Networking
 {
@@ -43,6 +45,20 @@ namespace EchoProtocol.Networking
             }
         }
 
+        public bool IsEmittingLight => IsOn && CanUseFlashlight();
+
+        public Transform BeamTransform
+        {
+            get
+            {
+                ResolveLight();
+                return _flashlight != null ? _flashlight.transform : transform;
+            }
+        }
+
+        public float BeamRange => Mathf.Max(0f, _beamRange);
+        public float BeamSpotAngle => Mathf.Clamp(_beamSpotAngle, 1f, 179f);
+
         private bool HasLocalControl()
         {
             if (Runner == null || Object == null || !Object.IsValid)
@@ -78,6 +94,7 @@ namespace EchoProtocol.Networking
             {
                 _flashlightAction = new InputAction("Flashlight", InputActionType.Button, "<Keyboard>/f");
             }
+            GameplayInputSettings.RegisterAction(_flashlightAction);
         }
 
         private void Start()
@@ -128,6 +145,7 @@ namespace EchoProtocol.Networking
 
         private void OnDestroy()
         {
+            GameplayInputSettings.UnregisterAction(_flashlightAction);
             _flashlightAction?.Dispose();
         }
 
@@ -188,14 +206,14 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            if (Time.time < _cooldownUntil) return;
+            if (Time.time < _cooldownUntil || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return;
 
             bool pressed = false;
             if (_flashlightAction != null && _flashlightAction.enabled && _flashlightAction.WasPressedThisFrame())
             {
                 pressed = true;
             }
-            else if (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame)
+            else if (GameplayInputSettings.WasPressedThisFrame(GameplayAction.Flashlight))
             {
                 pressed = true;
             }
@@ -285,7 +303,8 @@ namespace EchoProtocol.Networking
         private bool CanUseFlashlight()
         {
             ResolveLifeState();
-            return _lifeState == null || !_lifeState.IsEliminated;
+            return SceneManager.GetActiveScene().name != "Lobby"
+                && (_lifeState == null || !_lifeState.IsEliminated);
         }
 
         private void ApplyBeamTuning()

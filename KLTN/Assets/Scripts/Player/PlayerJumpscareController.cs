@@ -239,6 +239,7 @@ public sealed class PlayerJumpscareController : MonoBehaviour
                 AudioSource>();
 
         _audio.playOnAwake = false;
+        EchoProtocol.Audio.GameAudioSettings.RouteEffects(_audio);
         _audio.spatialBlend = 0f;
 
         var overlay =

@@ -1,12 +1,14 @@
 using System;
 using EchoProtocol.MatchFlow;
 using EchoProtocol.Diagnostics;
+using EchoProtocol.Gameplay;
 using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.Networking.Authority;
 using EchoProtocol.RelayA;
 using EchoProtocol.RelayB;
+using EchoProtocol.TeamTools;
 using Fusion;
 using UnityEngine;
 
@@ -83,6 +85,12 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(0.1f)] private float _zoneAccessCooldownSeconds = 5f;
         [SerializeField, Min(1)] private int _zoneAccessFailuresBeforeCooldown = 3;
         [SerializeField, Min(1f)] private float _securityHoldRelayRetryWindowSeconds = 300f;
+
+        [Header("Team Tool World Spawn")]
+        [SerializeField] private TeamToolPickupCatalog _teamToolPickupCatalog;
+        [SerializeField, Min(0f)] private float _teamToolSpawnMinimumSpacing = 6f;
+
+        [Networked] private NetworkBool TeamToolWorldSpawnInitialized { get; set; }
 
         [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
         public NetworkMatchPhase CurrentPhase { get; private set; }
@@ -353,6 +361,16 @@ namespace EchoProtocol.Networking
                 finally
                 {
                     CloseScenarioDecisionWindow();
+                }
+
+                if (!TeamToolWorldSpawnInitialized)
+                {
+                    var difficulty = MatchAuthorityRuntime.Instance != null
+                        ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
+                    var toolsPerZone = MatchDifficultyProfiles.Get(difficulty).TeamToolsPerZone;
+                    TeamToolWorldSpawnInitialized = TeamToolWorldSpawn.TrySpawnInitial(
+                        Runner, _teamToolPickupCatalog, toolsPerZone,
+                        toolsPerZone, _teamToolSpawnMinimumSpacing);
                 }
             }
 
@@ -1383,6 +1401,42 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        private static bool IsZoneBoundary(NetworkMatchPhase previous, NetworkMatchPhase next)
+        {
+            return previous == NetworkMatchPhase.CoreObjective
+                       && next == NetworkMatchPhase.Zone2Objective
+                   || previous == NetworkMatchPhase.Zone2Objective
+                       && next == NetworkMatchPhase.FinalHunt;
+        }
+
+        private void ResetPlayerReviveBudgetsAuthoritative()
+        {
+            if (Runner == null)
+            {
+                return;
+            }
+
+            foreach (var player in Runner.ActivePlayers)
+            {
+                if (!Runner.TryGetPlayerObject(player, out var playerObject)
+                    || playerObject == null)
+                {
+                    continue;
+                }
+
+                if (!playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyState)
+                    || !lobbyState.IsGameplayPlayer)
+                {
+                    continue;
+                }
+
+                if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState))
+                {
+                    lifeState.ResetZoneReviveBudgetAuthoritative();
+                }
+            }
+        }
+
         private bool TryAdvancePhase(
             NetworkMatchPhase expected,
             NetworkMatchPhase next,
@@ -1394,6 +1448,7 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            NetworkMatchPhase previousPhase = CurrentPhase;
             var runtime = MatchAuthorityRuntime.Instance;
             runtime?.RecordPhaseCompleted(
                 BuildKey("phase-completed-" + completedPhase.ToLowerInvariant()),
@@ -1401,6 +1456,11 @@ namespace EchoProtocol.Networking
                 "OBJECTIVE_COMPLETED");
             CurrentPhase = next;
             AdvancePhaseOrdinal();
+
+            if (IsZoneBoundary(previousPhase, next))
+            {
+                ResetPlayerReviveBudgetsAuthoritative();
+            }
 
             if (next != NetworkMatchPhase.Escape
                 && next != NetworkMatchPhase.MatchEnded)

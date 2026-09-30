@@ -75,9 +75,9 @@ namespace EchoProtocol.Editor
             // 2. Ensure Core Stabilizer Network Pickup is in scene
             var stabilizerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(CoreStabilizerNetworkPickupPath);
             bool hasStabilizer = false;
-            foreach (var pickup in Object.FindObjectsByType<NetworkToolPickup>(FindObjectsInactive.Include))
+            foreach (var pickup in Object.FindObjectsByType<NetworkTeamToolPickup>(FindObjectsInactive.Include))
             {
-                if (pickup != null && pickup.name.Contains("CoreStabilizer"))
+                if (pickup != null && pickup.ToolId == LobbyPlayerState.CoreStabilizerToolId)
                 {
                     hasStabilizer = true;
                     break;
@@ -122,7 +122,6 @@ namespace EchoProtocol.Editor
 
         public static void SetupCoreStabilizerNetworkPickup()
         {
-            var itemDef = AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(CoreStabilizerItemPath);
             var visualModel = AssetDatabase.LoadAssetAtPath<GameObject>(CoreStabilizerAnimatedDevicePath);
 
             string dir = Path.GetDirectoryName(CoreStabilizerNetworkPickupPath);
@@ -155,17 +154,12 @@ namespace EchoProtocol.Editor
                     Object.DestroyImmediate(c);
                 }
 
-                Renderer visualRenderer = visual.GetComponentInChildren<Renderer>(true);
-
                 var netObj = root.AddComponent<NetworkObject>();
-                var toolPickup = root.AddComponent<NetworkToolPickup>();
+                var toolPickup = root.AddComponent<NetworkTeamToolPickup>();
 
                 SerializedObject so = new SerializedObject(toolPickup);
-                so.FindProperty("_toolItemDefinition").objectReferenceValue = itemDef;
                 so.FindProperty("_toolId").intValue = LobbyPlayerState.CoreStabilizerToolId;
-                so.FindProperty("_pickupPrompt").stringValue = "Nhặt Core Stabilizer [E]";
-                so.FindProperty("_pickupCollider").objectReferenceValue = boxCol;
-                so.FindProperty("_visualRenderer").objectReferenceValue = visualRenderer;
+                so.FindProperty("_toolDisplayName").stringValue = "Core Stabilizer";
                 so.FindProperty("_interactionDistance").floatValue = 3f;
                 so.ApplyModifiedPropertiesWithoutUndo();
 
@@ -192,6 +186,7 @@ namespace EchoProtocol.Editor
         {
             var coreStabilizerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(CoreStabilizerAnimatedDevicePath);
             var coreStabilizerClip = AssetDatabase.LoadAssetAtPath<AudioClip>(CoreStabilizerPulseAudioPath);
+            var coreStabilizerItem = AssetDatabase.LoadAssetAtPath<InventoryItemDefinition>(CoreStabilizerItemPath);
 
             string[] playerPrefabPaths = new[]
             {
@@ -228,11 +223,24 @@ namespace EchoProtocol.Editor
                         var pos6Prop = toolSo.FindProperty("coreStabilizerLocalPosition");
                         var rot6Prop = toolSo.FindProperty("coreStabilizerLocalEulerAngles");
                         var scale6Prop = toolSo.FindProperty("coreStabilizerLocalScale");
-                        if (pos6Prop != null) pos6Prop.vector3Value = new Vector3(0.035f, 0.02f, 0.12f);
-                        if (rot6Prop != null) rot6Prop.vector3Value = new Vector3(10f, 90f, -15f);
+                        if (pos6Prop != null) pos6Prop.vector3Value = Vector3.zero;
+                        if (rot6Prop != null) rot6Prop.vector3Value = new Vector3(0f, 90f, 0f);
                         if (scale6Prop != null) scale6Prop.vector3Value = new Vector3(0.45f, 0.45f, 0.45f);
 
                         toolSo.ApplyModifiedPropertiesWithoutUndo();
+                    }
+
+                    PlayerInventory inventory = root.GetComponentInChildren<PlayerInventory>(true);
+                    if (inventory != null && coreStabilizerItem != null)
+                    {
+                        SerializedObject inventorySo = new SerializedObject(inventory);
+                        var definition = inventorySo.FindProperty("coreStabilizerDefinition");
+                        if (definition != null && definition.objectReferenceValue != coreStabilizerItem)
+                        {
+                            definition.objectReferenceValue = coreStabilizerItem;
+                            inventorySo.ApplyModifiedPropertiesWithoutUndo();
+                            changed = true;
+                        }
                     }
 
                     // 2. Assign clips on NetworkPlayerInteractor
