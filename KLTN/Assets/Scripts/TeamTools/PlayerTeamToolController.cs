@@ -38,6 +38,7 @@ public sealed class PlayerTeamToolController : MonoBehaviour
 
     private void Update()
     {
+        if (PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return;
         if (Keyboard.current != null && Keyboard.current[fallbackUseKey].wasPressedThisFrame)
         {
             UseEquippedTool();

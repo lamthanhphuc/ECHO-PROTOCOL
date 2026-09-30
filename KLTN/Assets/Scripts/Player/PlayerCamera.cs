@@ -1,3 +1,4 @@
+using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
@@ -224,6 +225,8 @@ public class PlayerCamera : MonoBehaviour
         if (_networkLifeState != null && (_networkLifeState.IsCaught || _networkLifeState.IsEliminated))
             lookInput = Vector2.zero;
 
+        if (_lookAction?.activeControl?.device is Pointer)
+            lookInput = GameplayInputSettings.ApplyLookSettings(lookInput, Time.unscaledDeltaTime);
         float yawDelta = lookInput.x * mouseSensitivity;
         float pitchDelta = lookInput.y * mouseSensitivity;
 

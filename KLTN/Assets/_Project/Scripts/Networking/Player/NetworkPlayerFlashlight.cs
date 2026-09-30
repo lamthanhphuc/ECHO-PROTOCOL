@@ -1,3 +1,4 @@
+using EchoProtocol.Settings;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -93,6 +94,7 @@ namespace EchoProtocol.Networking
             {
                 _flashlightAction = new InputAction("Flashlight", InputActionType.Button, "<Keyboard>/f");
             }
+            GameplayInputSettings.RegisterAction(_flashlightAction);
         }
 
         private void Start()
@@ -143,6 +145,7 @@ namespace EchoProtocol.Networking
 
         private void OnDestroy()
         {
+            GameplayInputSettings.UnregisterAction(_flashlightAction);
             _flashlightAction?.Dispose();
         }
 
@@ -203,14 +206,14 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            if (Time.time < _cooldownUntil) return;
+            if (Time.time < _cooldownUntil || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return;
 
             bool pressed = false;
             if (_flashlightAction != null && _flashlightAction.enabled && _flashlightAction.WasPressedThisFrame())
             {
                 pressed = true;
             }
-            else if (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame)
+            else if (GameplayInputSettings.WasPressedThisFrame(GameplayAction.Flashlight))
             {
                 pressed = true;
             }

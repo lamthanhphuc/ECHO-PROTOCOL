@@ -185,6 +185,12 @@ namespace EchoProtocol.AI.Stalker.Presentation
             breathingSource = ResolveAudioChild(breathingSource, "Audio_Breathing");
             chaseSource     = ResolveAudioChild(chaseSource,     "Audio_Chase");
 
+            EchoProtocol.Audio.GameAudioSettings.RouteEffects(detectSource);
+            EchoProtocol.Audio.GameAudioSettings.RouteEffects(voiceSource);
+            EchoProtocol.Audio.GameAudioSettings.RouteEffects(movementSource);
+            EchoProtocol.Audio.GameAudioSettings.RouteEffects(breathingSource);
+            EchoProtocol.Audio.GameAudioSettings.RouteMusic(chaseSource);
+
             if (detectSource    == null) Debug.LogError("[StalkerAudio] detectSource is not assigned.",    this);
             if (voiceSource     == null) Debug.LogError("[StalkerAudio] voiceSource is not assigned.",     this);
             if (movementSource  == null) Debug.LogError("[StalkerAudio] movementSource is not assigned.",  this);

@@ -1,4 +1,5 @@
 using EchoProtocol.Networking;
+using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -69,6 +70,16 @@ public class PlayerMovement : MonoBehaviour
             _sprintAction = playerMap?.FindAction("Sprint", false);
             _crouchAction = playerMap?.FindAction("Crouch", false);
         }
+        GameplayInputSettings.RegisterAction(_moveAction);
+        GameplayInputSettings.RegisterAction(_sprintAction);
+        GameplayInputSettings.RegisterAction(_crouchAction);
+    }
+
+    private void OnDestroy()
+    {
+        GameplayInputSettings.UnregisterAction(_moveAction);
+        GameplayInputSettings.UnregisterAction(_sprintAction);
+        GameplayInputSettings.UnregisterAction(_crouchAction);
     }
 
     private void OnEnable()
@@ -222,11 +233,7 @@ public class PlayerMovement : MonoBehaviour
             return true;
         }
 
-        var keyboard = Keyboard.current;
-        return keyboard != null
-            && (keyboard.cKey.isPressed
-                || keyboard.leftCtrlKey.isPressed
-                || keyboard.rightCtrlKey.isPressed);
+        return GameplayInputSettings.IsPressed(GameplayAction.Crouch);
     }
 
     public void SetExternalSpeedMultiplier(float multiplier)

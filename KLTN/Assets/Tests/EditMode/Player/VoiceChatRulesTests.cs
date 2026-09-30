@@ -8,8 +8,14 @@ namespace EchoProtocol.Player.Tests
     {
         private static Type Resolve(string name) => AppDomain.CurrentDomain.GetAssemblies()
             .Select(a => a.GetType("EchoProtocol.Voice." + name)).First(t => t != null);
-        private static bool Capture(params object[] flags) => (bool)Resolve("VoiceTransmissionRules")
-            .GetMethod("CanCapture").Invoke(null, flags);
+        private static bool Capture(params object[] flags)
+        {
+            var method = Resolve("VoiceTransmissionRules").GetMethod("CanCapture");
+            var arguments = new object[method.GetParameters().Length];
+            Array.Copy(flags, arguments, flags.Length);
+            for (int i = flags.Length; i < arguments.Length; i++) arguments[i] = Type.Missing;
+            return (bool)method.Invoke(null, arguments);
+        }
 
         [TestCase(0)] // room left
         [TestCase(1)] // user disabled mic
@@ -25,6 +31,29 @@ namespace EchoProtocol.Player.Tests
             Assert.That(Capture(flags), Is.True);
             flags[changed] = !(bool)flags[changed];
             Assert.That(Capture(flags), Is.False);
+        }
+
+        [TestCase(false, false, true)]
+        [TestCase(false, true, true)]
+        [TestCase(true, false, false)]
+        [TestCase(true, true, true)]
+        public void PushToTalkRequiresHeldKeyOnlyWhenEnabled(bool pushToTalk, bool held, bool expected)
+        {
+            Assert.That(Capture(true, true, false, true, false, true, false, false, pushToTalk, held),
+                Is.EqualTo(expected));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void PushToTalkNeverEnablesDisabledMicrophone(bool held)
+        {
+            Assert.That(Capture(true, false, false, true, false, true, false, false, true, held), Is.False);
+        }
+
+        [Test]
+        public void HeldPushToTalkDoesNotOverrideMute()
+        {
+            Assert.That(Capture(true, true, true, true, false, true, false, false, true, true), Is.False);
         }
 
         [Test]

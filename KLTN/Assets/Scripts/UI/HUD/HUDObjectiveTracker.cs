@@ -1,3 +1,4 @@
+using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -202,7 +203,7 @@ namespace EchoProtocol.UI.HUD
                             ? matchState.SecurityHoldParticipantCount : 1;
                         SetObjective(
                             "SECURITY AUTHENTICATION",
-                            $"Hold E {secPercent}% | {holders}/4 | ETA {SecurityHoldEtaText(matchState)} | Reset {RelayTimeText(z2)}",
+                            $"Hold {GameplayInputSettings.GetKeyLabel(GameplayAction.Interact)} {secPercent}% | {holders}/4 | ETA {SecurityHoldEtaText(matchState)} | Reset {RelayTimeText(z2)}",
                             secProgress,
                             new Color(1f, 0.3f, 0.1f, 1f));
                         return;

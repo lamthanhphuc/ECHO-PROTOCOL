@@ -1,5 +1,6 @@
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.Diagnostics;
+using EchoProtocol.Settings;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -162,6 +163,16 @@ namespace EchoProtocol.Networking
             {
                 _crouchAction = new InputAction("Crouch", InputActionType.Button, "<Keyboard>/c");
             }
+            GameplayInputSettings.RegisterAction(_moveAction);
+            GameplayInputSettings.RegisterAction(_sprintAction);
+            GameplayInputSettings.RegisterAction(_crouchAction);
+        }
+
+        private void OnDestroy()
+        {
+            GameplayInputSettings.UnregisterAction(_moveAction);
+            GameplayInputSettings.UnregisterAction(_sprintAction);
+            GameplayInputSettings.UnregisterAction(_crouchAction);
         }
 
         private void Start()
@@ -982,11 +993,7 @@ namespace EchoProtocol.Networking
                 return true;
             }
 
-            var keyboard = Keyboard.current;
-            return keyboard != null
-                && (keyboard.cKey.isPressed
-                    || keyboard.leftCtrlKey.isPressed
-                    || keyboard.rightCtrlKey.isPressed);
+            return GameplayInputSettings.IsPressed(GameplayAction.Crouch);
         }
     }
 }

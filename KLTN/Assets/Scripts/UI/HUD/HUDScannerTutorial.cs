@@ -314,7 +314,7 @@ namespace EchoProtocol.UI.HUD
                 panel,
                 panelRect,
                 "VÁN CHÈN CỬA",
-                "[E / CHUỘT TRÁI]\n<size=27>CHÈN CỬA</size>\n<size=20>Chỉ gắn vào cửa đã bị phá.</size>",
+                $"[{EchoProtocol.Settings.GameplayInputSettings.GetKeyLabel(EchoProtocol.Settings.GameplayAction.Interact)} / CHUỘT TRÁI]\n<size=27>CHÈN CỬA</size>\n<size=20>Chỉ gắn vào cửa đã bị phá.</size>",
                 "CHẶN STALKER\n<size=21>Stalker có thể phá ván để đi qua.</size>",
                 "Ván chỉ chặn Stalker trong thời gian ngắn, không khóa chết.",
                 new Color(0.82f, 0.63f, 0.38f));
