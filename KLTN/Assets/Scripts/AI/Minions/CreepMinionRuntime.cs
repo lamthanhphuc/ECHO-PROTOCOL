@@ -1,5 +1,6 @@
 using System;
 using EchoProtocol.AI.Listener.Noise;
+using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Spatial;
 using EchoProtocol.MatchFlow;
 using EchoProtocol.Networking;
@@ -77,6 +78,7 @@ namespace EchoProtocol.AI.Minions
             ? (RegionSemanticZone)ZoneValue : RegionSemanticZone.Unknown;
 
         private NavMeshAgent _agent;
+        private StalkerNavigationController _navigation;
         private Animator[] _animators;
         private HostRuntimeNoiseService _noiseService;
         private float _trackSeconds;
@@ -123,10 +125,14 @@ namespace EchoProtocol.AI.Minions
             _agent.angularSpeed = 720f;
             _agent.acceleration = 24f;
             _agent.stoppingDistance = 0.6f;
+            _navigation = new StalkerNavigationController(_agent);
+            _navigation.SetAuthoritativeLocomotion(true);
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            _navigation?.SetAuthoritativeLocomotion(false);
+            _navigation = null;
             if (_noiseService != null) _noiseService.RuntimeNoiseAccepted -= HandleRuntimeNoiseAccepted;
             if (hasState && Object.HasStateAuthority) ReleaseStolenCoreAuthoritative();
         }
@@ -146,7 +152,13 @@ namespace EchoProtocol.AI.Minions
 
         public override void FixedUpdateNetwork()
         {
-            if (!Object.HasStateAuthority || _agent == null || !_agent.enabled || !_agent.isOnNavMesh) return;
+            if (!Object.HasStateAuthority || _agent == null || !_agent.enabled) return;
+            if (!_agent.isOnNavMesh
+                && (_navigation == null || !_navigation.TryReattachToNearestNavMesh(2f)))
+            {
+                IsMoving = false;
+                return;
+            }
 
             Vector3 flashlightSource = default;
             if ((State != CreepMinionState.Flee || (StolenCoreId.IsValid && !_flashlightRepelledDuringFlee))
@@ -186,7 +198,8 @@ namespace EchoProtocol.AI.Minions
                 _distractionUntil = 0f;
                 UpdateTargetAndMovement();
             }
-            IsMoving = _agent.velocity.sqrMagnitude > 0.04f;
+            _navigation.TickAuthoritativeLocomotion(Runner.DeltaTime);
+            IsMoving = _navigation.AuthoritativeMoveSpeed > 0.2f;
         }
 
         private void UpdateTargetAndMovement()
