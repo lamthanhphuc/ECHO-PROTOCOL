@@ -1867,11 +1867,13 @@ namespace EchoProtocol.Networking
             return target != null;
         }
 
-        private bool TryGetDistributionPanelTarget(int panelIndex, out PowerControlUIController panel)
+        private bool TryGetDistributionPanelTarget(int panelIndex, out Component panel)
         {
             panel = null;
             if ((panelIndex != 0 && panelIndex != 1) || !TryGetZone2Director(out var director)) return false;
-            panel = panelIndex == 0 ? director.DistributionPanel1 : director.DistributionPanel2;
+            var panelUi = panelIndex == 0 ? director.DistributionPanel1 : director.DistributionPanel2;
+            if (panelUi == null) return false;
+            panel = panelUi.GetComponentInParent<PowerPuzzleStation>() ?? (Component)panelUi;
             return panel != null;
         }
 

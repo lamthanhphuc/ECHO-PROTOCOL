@@ -59,9 +59,22 @@ public static class CreepMinionProductionSetup
             : new GameObject("PF_CreepMinionNetwork");
         try
         {
-            if (root.GetComponent<NetworkObject>() == null) root.AddComponent<NetworkObject>();
-            if (root.GetComponent<NetworkTransform>() == null) root.AddComponent<NetworkTransform>();
-            var agent = root.GetComponent<NavMeshAgent>() ?? root.AddComponent<NavMeshAgent>();
+            if (root.GetComponent<NetworkObject>() == null)
+            {
+                root.AddComponent<NetworkObject>();
+            }
+
+            if (root.GetComponent<NetworkTransform>() == null)
+            {
+                root.AddComponent<NetworkTransform>();
+            }
+
+            var agent = root.GetComponent<NavMeshAgent>();
+            if (agent == null)
+            {
+                agent = root.AddComponent<NavMeshAgent>();
+            }
+
             agent.speed = 3.5f;
             agent.angularSpeed = 720f;
             agent.acceleration = 24f;
@@ -69,11 +82,21 @@ public static class CreepMinionProductionSetup
             agent.radius = 0.35f;
             agent.height = 1.2f;
             agent.baseOffset = 0f;
-            var collider = root.GetComponent<CapsuleCollider>() ?? root.AddComponent<CapsuleCollider>();
+
+            var collider = root.GetComponent<CapsuleCollider>();
+            if (collider == null)
+            {
+                collider = root.AddComponent<CapsuleCollider>();
+            }
+
             collider.radius = 0.35f;
             collider.height = 1.2f;
             collider.center = new Vector3(0f, 0.6f, 0f);
-            if (root.GetComponent<CreepMinionRuntime>() == null) root.AddComponent<CreepMinionRuntime>();
+
+            if (root.GetComponent<CreepMinionRuntime>() == null)
+            {
+                root.AddComponent<CreepMinionRuntime>();
+            }
 
             var oldVisual = root.transform.Find("Visual");
             if (oldVisual != null) UnityEngine.Object.DestroyImmediate(oldVisual.gameObject);

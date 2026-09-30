@@ -1477,6 +1477,13 @@ namespace EchoProtocol.AI.Stalker
                 if (_memory.HasLastKnownPosition)
                 {
                     EnterSearch();
+
+                    if (status.HideSpotId != 0UL)
+                    {
+                        TryBeginHideSpotInvestigationFromSearch(
+                            status.HideSpotId);
+                    }
+
                     return;
                 }
 
@@ -3006,7 +3013,8 @@ namespace EchoProtocol.AI.Stalker
             return !_searchCandidatePlanningExhausted && TryPlanNextSearchCandidate();
         }
 
-        private bool TryBeginHideSpotInvestigationFromSearch()
+        private bool TryBeginHideSpotInvestigationFromSearch(
+            ulong preferredHideSpotId = 0UL)
         {
             InitializeHidingInvestigation();
             if (_hidingInvestigation == null
@@ -3030,44 +3038,73 @@ namespace EchoProtocol.AI.Stalker
                 $"stalker={transform.position}",
                 this);
 
-            var selectorConfig = GetHideSpotSelectorConfig();
-            if (!_hideSpotSelector.TrySelect(
-                    _searchContext.SearchOriginPosition,
-                    _hideSpotCandidates,
-                    _hideSpotMemory,
-                    CurrentSimulationTimeSeconds,
-                    selectorConfig,
-                    out var selection))
-            {
-                RuntimeLog.Log(
-                    RuntimeLogCategory.StalkerHideFlow,
-                    $"[STK_HIDE_FLOW][NO_HIDE_SPOT_SELECTED] " +
-                    $"count={_hideSpotCandidates.Count} " +
-                    $"origin={_searchContext.SearchOriginPosition} " +
-                    $"stalker={transform.position}",
-                    this);
+            StalkerHideSpotCandidate selectedCandidate = default;
 
-                return false;
+            if (preferredHideSpotId != 0UL)
+            {
+                for (int i = 0; i < _hideSpotCandidates.Count; i++)
+                {
+                    var candidate = _hideSpotCandidates[i];
+
+                    if (candidate.IsValid
+                        && candidate.StableId == preferredHideSpotId)
+                    {
+                        selectedCandidate = candidate;
+                        break;
+                    }
+                }
+
+                if (!selectedCandidate.IsValid)
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                var selectorConfig =
+                    GetHideSpotSelectorConfig();
+
+                if (!_hideSpotSelector.TrySelect(
+                        _searchContext.SearchOriginPosition,
+                        _hideSpotCandidates,
+                        _hideSpotMemory,
+                        CurrentSimulationTimeSeconds,
+                        selectorConfig,
+                        out var selection))
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.StalkerHideFlow,
+                        $"[STK_HIDE_FLOW][NO_HIDE_SPOT_SELECTED] " +
+                        $"count={_hideSpotCandidates.Count} " +
+                        $"origin={_searchContext.SearchOriginPosition} " +
+                        $"stalker={transform.position}",
+                        this);
+
+                    return false;
+                }
+
+                selectedCandidate =
+                    selection.Candidate;
             }
 
             RuntimeLog.Log(
                 RuntimeLogCategory.StalkerHideFlow,
                 $"[STK_HIDE_FLOW][SELECTED] " +
-                $"stableId={selection.Candidate.StableId} " +
-                $"inspect={selection.Candidate.InspectPosition} " +
+                $"stableId={selectedCandidate.StableId} " +
+                $"inspect={selectedCandidate.InspectPosition} " +
                 $"origin={_searchContext.SearchOriginPosition} " +
                 $"stalker={transform.position}",
                 this);
 
             var inspectNavigationStatus =
                 TryRequestSearchDestination(
-                    selection.Candidate.InspectPosition);
+                    selectedCandidate.InspectPosition);
 
             RuntimeLog.Log(
                 RuntimeLogCategory.StalkerHideFlow,
                 $"[STK_HIDE_FLOW][NAV_REQUEST] " +
-                $"stableId={selection.Candidate.StableId} " +
-                $"inspect={selection.Candidate.InspectPosition} " +
+                $"stableId={selectedCandidate.StableId} " +
+                $"inspect={selectedCandidate.InspectPosition} " +
                 $"status={inspectNavigationStatus} " +
                 $"pathStatus={_navigation?.GetPathStatus()} " +
                 $"execution={_navigation?.GetExecutionStatus()} " +
@@ -3081,21 +3118,21 @@ namespace EchoProtocol.AI.Stalker
                 RuntimeLog.Log(
                     RuntimeLogCategory.StalkerHideFlow,
                     $"[STK_HIDE_FLOW][NAV_REJECT] " +
-                    $"stableId={selection.Candidate.StableId} " +
-                    $"inspect={selection.Candidate.InspectPosition} " +
+                    $"stableId={selectedCandidate.StableId} " +
+                    $"inspect={selectedCandidate.InspectPosition} " +
                     $"status={inspectNavigationStatus}",
                     this);
 
                 return false;
             }
 
-            _hidingInvestigation.Begin(selection.Candidate);
+            _hidingInvestigation.Begin(selectedCandidate);
 
             RuntimeLog.Log(
                 RuntimeLogCategory.StalkerHideFlow,
                 $"[STK_HIDE_FLOW][INVESTIGATION_BEGIN] " +
-                $"stableId={selection.Candidate.StableId} " +
-                $"inspect={selection.Candidate.InspectPosition}",
+                $"stableId={selectedCandidate.StableId} " +
+                $"inspect={selectedCandidate.InspectPosition}",
                 this);
 
             _hideSpotInspectionLogged = false;
@@ -3111,7 +3148,7 @@ namespace EchoProtocol.AI.Stalker
                 _memory.CurrentTargetId.IsValid
                     ? _memory.CurrentTargetId.Value
                     : -1,
-                selection.Candidate.StableId));
+                selectedCandidate.StableId));
             return true;
         }
 

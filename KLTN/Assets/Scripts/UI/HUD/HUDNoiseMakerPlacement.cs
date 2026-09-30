@@ -16,7 +16,12 @@ namespace EchoProtocol.UI.HUD
         private NetworkPlayerInteractor _interactor;
         private GameObject _previewRoot;
         private GameObject _previewVisual;
-        private readonly MaterialPropertyBlock _propertyBlock = new MaterialPropertyBlock();
+        private MaterialPropertyBlock _propertyBlock;
+
+        private void Awake()
+        {
+            _propertyBlock = new MaterialPropertyBlock();
+        }
 
         public void BindPlayer(NetworkPlayerInteractor interactor)
         {
