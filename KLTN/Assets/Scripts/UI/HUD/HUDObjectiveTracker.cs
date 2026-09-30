@@ -106,7 +106,13 @@ namespace EchoProtocol.UI.HUD
             MatchPhase currentPhase = matchFlow.Phase;
             RefreshVisibility();
             int z2Stage = -1;
-            if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
+            if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null
+                && currentPhase != MatchPhase.Zone3FindFrigate
+                && currentPhase != MatchPhase.Zone3PushFrigate
+                && currentPhase != MatchPhase.FinalHunt
+                && currentPhase != MatchPhase.ExitCountdown
+                && currentPhase != MatchPhase.Win
+                && currentPhase != MatchPhase.Lose)
             {
                 z2Stage = (int)EchoProtocol.MatchFlow.Zone2MissionDirector.Instance.CurrentStage;
             }
@@ -149,7 +155,13 @@ namespace EchoProtocol.UI.HUD
 
         private void UpdateUI(MatchPhase phase)
         {
-            if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null)
+            if (EchoProtocol.MatchFlow.Zone2MissionDirector.Instance != null
+                && phase != MatchPhase.Zone3FindFrigate
+                && phase != MatchPhase.Zone3PushFrigate
+                && phase != MatchPhase.FinalHunt
+                && phase != MatchPhase.ExitCountdown
+                && phase != MatchPhase.Win
+                && phase != MatchPhase.Lose)
             {
                 var z2 = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance;
                 switch (z2.CurrentStage)
@@ -231,6 +243,21 @@ namespace EchoProtocol.UI.HUD
 
             switch (phase)
             {
+                case MatchPhase.Zone3FindFrigate:
+                    SetPhaseBadge("ZONE 3 // FIND SPACEFRIGATE", "#00E5FF");
+                    SetObjective("FIND SPACEFRIGATE", "Follow the outline and hold E to begin pushing", 0f,
+                        new Color(0f, 0.85f, 1f, 1f));
+                    break;
+
+                case MatchPhase.Zone3PushFrigate:
+                    bool docked = EchoProtocol.Networking.Zone3MissionDirector.Instance?.IsFrigateAtDestination == true;
+                    SetPhaseBadge(docked ? "ZONE 3 // ACTIVATE CHARGE" : "ZONE 3 // MOVE SPACEFRIGATE", "#00E5FF");
+                    SetObjective(docked ? "ACTIVATE SCIFI CHARGE" : "MOVE SPACEFRIGATE",
+                        docked ? "Interact with Scifi Charge to start Final Hunt"
+                            : "Fit the entire Spacefrigate inside the outline in 06_Covey",
+                        0f, new Color(0f, 0.85f, 1f, 1f));
+                    break;
+
                 case MatchPhase.ExploreCore:
                     SetPhaseBadge("PHASE 1 // COLLECT ENERGY CORES", "#00E5FF");
                     int placed = coreProgress != null ? coreProgress.PlacedCoreCount : 0;
@@ -272,8 +299,8 @@ namespace EchoProtocol.UI.HUD
                     string timeFormatted = string.Format("{0:00}:{1:00}", mins, secs);
 
                     string statusMsg = (escapeDoor != null && escapeDoor.IsCountingDown)
-                        ? $"Sprint to Evacuation Airlock and survive lockdown ({timeFormatted})"
-                        : "Sprint to Evacuation Airlock and survive lockdown (00:45)";
+                        ? $"Reach Doorexit and escape ({timeFormatted})"
+                        : "Return to ExitRoom and interact with Doorexit. All living players must exit.";
 
                     SetObjective(
                         "FACILITY LOCKDOWN",

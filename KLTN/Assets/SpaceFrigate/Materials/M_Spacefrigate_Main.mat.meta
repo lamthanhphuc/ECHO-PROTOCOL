@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: e2ca814af61251744b144291f5631964
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 130351
+  packageName: Spacefrigate
+  packageVersion: 1.0
+  assetPath: Assets/SpaceFrigate/Materials/M_Spacefrigate_Main.mat
+  uploadId: 271856

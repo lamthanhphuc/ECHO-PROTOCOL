@@ -165,6 +165,17 @@ public class PlayerInteraction : MonoBehaviour
 
     private void UpdateCurrentInteractable()
     {
+        if (_heldInteractable != null)
+        {
+            if (_heldInteractable.CanInteract(gameObject))
+            {
+                SetCurrentInteractable(_heldInteractable);
+                return;
+            }
+
+            CancelHeldInteractable();
+        }
+
         Camera cam = GetRaycastCamera();
         if (cam == null)
         {

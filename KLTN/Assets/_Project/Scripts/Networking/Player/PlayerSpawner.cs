@@ -179,7 +179,7 @@ namespace EchoProtocol.Networking
             {
                 _powerPuzzleStationPrefab = Resources.Load<NetworkObject>("Network/NetworkPowerPuzzleStation");
             }
-            if (_doorInstance == null && _doorPrefab != null)
+            if (_doorInstance == null && _doorPrefab != null && Zone3MissionDirector.Instance == null)
             {
                 _doorInstance = runner.Spawn(_doorPrefab, new Vector3(0f, 1f, 2.5f), Quaternion.identity);
                 RuntimeLog.Log(

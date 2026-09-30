@@ -424,7 +424,7 @@ namespace EchoProtocol.Tests.MatchFlow
         }
 
         [Test]
-        public void TEST_19_Offline_Director_Bridges_MatchFlow_To_FinalHunt()
+        public void TEST_19_Offline_Director_Bridges_MatchFlow_To_Zone3()
         {
             var flow = _holder.AddComponent<MatchFlowController>();
 
@@ -473,9 +473,9 @@ namespace EchoProtocol.Tests.MatchFlow
                 _director.CurrentStage);
 
             Assert.AreEqual(
-                MatchPhase.FinalHunt,
+                MatchPhase.Zone3FindFrigate,
                 flow.Phase,
-                "Correct Zone 2 authorization code must advance offline MatchFlow to FinalHunt.");
+                "Correct Zone 2 authorization code must reveal the Zone 3 Spacefrigate objective.");
 
             Assert.IsTrue(
                 flow.IsRestoreMainPowerComplete);
