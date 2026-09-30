@@ -1,102 +1,106 @@
 using EchoProtocol.Networking;
 using UnityEngine;
-using UnityEngine.UI;
+using UnityEngine.Rendering;
 
 namespace EchoProtocol.UI.HUD
 {
     [DisallowMultipleComponent]
     public sealed class HUDNoiseMakerPlacement : MonoBehaviour
     {
-        [SerializeField] private Text markerText;
+        [SerializeField]
+        private Color previewColor = new Color(1f, 0.55f, 0.12f, 0.8f);
+
+        [SerializeField, Min(0f)]
+        private float previewLift = 0.03f;
 
         private NetworkPlayerInteractor _interactor;
-        private Camera _camera;
-
-        private void Awake()
-        {
-            if (markerText == null)
-            {
-                CreateMarker();
-            }
-
-            SetVisible(false);
-        }
+        private GameObject _previewRoot;
+        private GameObject _previewVisual;
+        private readonly MaterialPropertyBlock _propertyBlock = new MaterialPropertyBlock();
 
         public void BindPlayer(NetworkPlayerInteractor interactor)
         {
+            if (_interactor == interactor) return;
             _interactor = interactor;
+            DestroyPreview();
         }
 
         public void Unbind()
         {
             _interactor = null;
-            SetVisible(false);
+            DestroyPreview();
         }
 
         private void LateUpdate()
         {
             if (_interactor == null
-                || !_interactor.TryGetNoiseMakerPlacementPreview(out var worldPosition))
+                || !_interactor.TryGetNoiseMakerPlacementPreview(out var position))
             {
                 SetVisible(false);
                 return;
             }
 
-            if (_camera == null)
-            {
-                _camera = Camera.main;
-            }
+            EnsurePreview();
+            if (_previewRoot == null) return;
 
-            if (_camera == null)
-            {
-                SetVisible(false);
-                return;
-            }
-
-            Vector3 screen = _camera.WorldToScreenPoint(worldPosition + Vector3.up * 0.12f);
-            if (screen.z <= 0f)
-            {
-                SetVisible(false);
-                return;
-            }
-
-            markerText.rectTransform.position = screen;
+            _previewRoot.transform.SetPositionAndRotation(
+                position + Vector3.up * previewLift, Quaternion.identity);
             SetVisible(true);
         }
 
-        private void CreateMarker()
+        private void EnsurePreview()
         {
-            var go = new GameObject(
-                "NoiseMakerPlacementMarker",
-                typeof(RectTransform),
-                typeof(CanvasRenderer),
-                typeof(Text));
+            if (_previewRoot != null) return;
 
-            go.transform.SetParent(transform, false);
+            var source = _interactor != null ? _interactor.NoiseMakerPreviewPrefab : null;
+            if (source == null) return;
 
-            markerText = go.GetComponent<Text>();
-            markerText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            markerText.text = "◎\n<size=16>ĐẶT TẠI ĐÂY</size>";
-            markerText.fontSize = 38;
-            markerText.fontStyle = FontStyle.Bold;
-            markerText.alignment = TextAnchor.MiddleCenter;
-            markerText.supportRichText = true;
-            markerText.color = new Color(1f, 0.65f, 0.2f, 0.95f);
-            markerText.raycastTarget = false;
-            markerText.rectTransform.sizeDelta = new Vector2(180f, 80f);
+            _previewRoot = new GameObject("NoiseMakerPlacementPreview");
+            _previewVisual = NetworkTeamToolHeldView.InstantiateHeldVisualSafely(
+                source, _previewRoot.transform);
+            if (_previewVisual == null)
+            {
+                DestroyPreview();
+                return;
+            }
+
+            ConfigurePreviewRenderers();
+            SetVisible(false);
+        }
+
+        private void ConfigurePreviewRenderers()
+        {
+            foreach (var renderer in _previewVisual.GetComponentsInChildren<Renderer>(true))
+            {
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+
+                var material = renderer.sharedMaterial;
+                if (material == null) continue;
+
+                _propertyBlock.Clear();
+                if (material.HasProperty("_BaseColor"))
+                    _propertyBlock.SetColor("_BaseColor", previewColor);
+                if (material.HasProperty("_Color"))
+                    _propertyBlock.SetColor("_Color", previewColor);
+                renderer.SetPropertyBlock(_propertyBlock);
+            }
         }
 
         private void SetVisible(bool visible)
         {
-            if (markerText != null && markerText.gameObject.activeSelf != visible)
-            {
-                markerText.gameObject.SetActive(visible);
-            }
+            if (_previewRoot != null && _previewRoot.activeSelf != visible)
+                _previewRoot.SetActive(visible);
         }
 
-        private void OnDisable()
+        private void DestroyPreview()
         {
-            SetVisible(false);
+            if (_previewRoot != null) Destroy(_previewRoot);
+            _previewRoot = null;
+            _previewVisual = null;
         }
+
+        private void OnDisable() => SetVisible(false);
+        private void OnDestroy() => DestroyPreview();
     }
 }

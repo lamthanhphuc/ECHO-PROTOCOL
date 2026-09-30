@@ -336,5 +336,33 @@ namespace EchoProtocol.Player.Tests
             var col = prefab.GetComponentInChildren<Collider>(true);
             Assert.That(col, Is.Null, "PF_Plank_HeldVisual must NOT contain colliders.");
         }
+
+        [Test]
+        public void NOISE_MAKER_PreviewUsesDeployedPrefabWithoutGameplayComponents()
+        {
+            var player = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerNetworkPath);
+            var source = player.GetComponentInChildren<NetworkPlayerInteractor>(true)
+                .NoiseMakerPreviewPrefab;
+            Assert.That(source, Is.EqualTo(AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Prefabs/Gameplay/Imported/DistressBeaconDeployed.prefab")));
+
+            var anchor = new GameObject("Preview test anchor");
+            try
+            {
+                var visual = NetworkTeamToolHeldView.InstantiateHeldVisualSafely(
+                    source, anchor.transform);
+                Assert.That(visual, Is.Not.Null);
+                Assert.That(visual.GetComponentsInChildren<Renderer>(true).Length,
+                    Is.GreaterThan(0));
+                Assert.That(visual.GetComponentInChildren<NetworkObject>(true), Is.Null);
+                Assert.That(visual.GetComponentInChildren<Collider>(true), Is.Null);
+                Assert.That(visual.GetComponentInChildren<AudioSource>(true), Is.Null);
+                Assert.That(visual.GetComponentInChildren<NoiseMakerBeacon>(true), Is.Null);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(anchor);
+            }
+        }
     }
 }

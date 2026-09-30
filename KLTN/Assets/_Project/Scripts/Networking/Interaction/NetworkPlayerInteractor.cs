@@ -22,6 +22,7 @@ namespace EchoProtocol.Networking
         [Networked] public int FirstAidRevivesUsedThisMatch { get; private set; }
         private NetworkPlayerLifeState _currentReviveTarget;
         public NetworkPlayerLifeState CurrentReviveTarget => _currentReviveTarget;
+        public GameObject NoiseMakerPreviewPrefab => _noiseMakerBeaconPrefab;
         public bool IsTeamToolPickupBlocked { get; private set; }
 
         [SerializeField] private LayerMask _interactionLayers = ~0;
