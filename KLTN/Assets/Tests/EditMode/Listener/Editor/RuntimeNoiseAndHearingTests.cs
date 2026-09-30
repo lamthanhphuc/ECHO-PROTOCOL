@@ -789,14 +789,17 @@ namespace EchoProtocol.AI.Listener.Tests
                     .Within(0.0001d));
         }
 
-        [TestCase(ListenerOcclusionClass.SOLID_WALL)]
-        [TestCase(ListenerOcclusionClass.CLOSED_DOOR)]
-        public void Hearing_MachineRepair_IgnoresOcclusionResolver(
+        [TestCase(RuntimeNoiseType.MACHINE_REPAIR, ListenerOcclusionClass.SOLID_WALL)]
+        [TestCase(RuntimeNoiseType.MACHINE_REPAIR, ListenerOcclusionClass.CLOSED_DOOR)]
+        [TestCase(RuntimeNoiseType.MINION_ALERT, ListenerOcclusionClass.SOLID_WALL)]
+        [TestCase(RuntimeNoiseType.MINION_ALERT, ListenerOcclusionClass.CLOSED_DOOR)]
+        public void Hearing_SignalsIgnoreOcclusionResolver(
+            RuntimeNoiseType noiseType,
             ListenerOcclusionClass occlusionClass)
         {
             var now = Now();
             var noise = CreateNoise(
-                RuntimeNoiseType.MACHINE_REPAIR,
+                noiseType,
                 "relay-repair:match:RelayA_1:1",
                 1,
                 Vector3.zero,
@@ -811,7 +814,7 @@ namespace EchoProtocol.AI.Listener.Tests
 
             Assert.That(sensor.TryEvaluate(
                 noise,
-                new Vector3(0f, 0f, 70f),
+                new Vector3(0f, 0f, 30f),
                 now,
                 out _,
                 out var rejectReason), Is.True);

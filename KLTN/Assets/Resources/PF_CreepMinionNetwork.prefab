@@ -166,18 +166,20 @@ MonoBehaviour:
   trackRequiredSeconds: 5
   zone2SecurityTrackRequiredSeconds: 3
   lostSightGraceSeconds: 2.5
-  shadowStopDistance: 7
+  trackStandOffDistance: 2.5
+  roamArrivalSlack: 0.25
   attackRange: 1.6
   attackCooldownSeconds: 2.2
   nonLethalDamage: 8
-  slowChance: 0.5
-  slowMultiplier: 0.75
-  slowDurationSeconds: 2.5
+  slowMultiplier: 0.65
+  slowDurationSeconds: 3
   teamToolDropChance: 0.25
-  coreStealChance: 0.35
-  coreCarryDistance: 7
-  coreCarryTimeoutSeconds: 5
+  coreStealChance: 1
+  coreCarryDistance: 10
+  coreCarryTimeoutSeconds: 6
   coreCarryHeight: 0.65
+  stolenToolDropMinDistance: 6
+  stolenToolDropMaxDistance: 10
   alertCooldownSeconds: 20
   flashlightRepelRange: 12
   flashlightExposureRequiredSeconds: 0.75

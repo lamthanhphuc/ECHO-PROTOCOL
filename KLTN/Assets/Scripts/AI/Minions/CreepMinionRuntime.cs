@@ -8,6 +8,7 @@ using EchoProtocol.Networking.Authority;
 using Fusion;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.Serialization;
 
 namespace EchoProtocol.AI.Minions
 {
@@ -33,7 +34,9 @@ namespace EchoProtocol.AI.Minions
         [SerializeField] private float trackRequiredSeconds = 5f;
         [SerializeField] private float zone2SecurityTrackRequiredSeconds = 3f;
         [SerializeField] private float lostSightGraceSeconds = 2.5f;
-        [SerializeField] private float shadowStopDistance = 7f;
+        [FormerlySerializedAs("shadowStopDistance")]
+        [SerializeField, Min(0.5f)] private float trackStandOffDistance = 2.5f;
+        [SerializeField, Min(0f)] private float roamArrivalSlack = 0.25f;
 
         [Header("Combat")]
         [SerializeField] private float attackRange = 1.6f;
@@ -41,14 +44,15 @@ namespace EchoProtocol.AI.Minions
         [SerializeField] private float nonLethalDamage = 8f;
 
         [Header("Hit Effects")]
-        [SerializeField] private float slowChance = 0.50f;
-        [SerializeField] private float slowMultiplier = 0.75f;
-        [SerializeField] private float slowDurationSeconds = 2.5f;
+        [SerializeField] private float slowMultiplier = 0.65f;
+        [SerializeField] private float slowDurationSeconds = 3f;
         [SerializeField] private float teamToolDropChance = 0.25f;
-        [SerializeField] private float coreStealChance = 0.35f;
-        [SerializeField] private float coreCarryDistance = 7f;
-        [SerializeField] private float coreCarryTimeoutSeconds = 5f;
+        [SerializeField] private float coreStealChance = 1f;
+        [SerializeField] private float coreCarryDistance = 10f;
+        [SerializeField] private float coreCarryTimeoutSeconds = 6f;
         [SerializeField] private float coreCarryHeight = 0.65f;
+        [SerializeField, Min(1f)] private float stolenToolDropMinDistance = 6f;
+        [SerializeField, Min(1f)] private float stolenToolDropMaxDistance = 10f;
 
         [Header("Alert")]
         [SerializeField] private float alertCooldownSeconds = 20f;
@@ -247,9 +251,9 @@ namespace EchoProtocol.AI.Minions
                 StateValue = (int)CreepMinionState.Track;
                 _trackSeconds += Runner.DeltaTime;
                 _agent.speed = trackSpeed;
-                if (Vector3.Distance(transform.position, _lastKnownTargetPosition) > shadowStopDistance)
+                if (Vector3.Distance(transform.position, _lastKnownTargetPosition) > trackStandOffDistance)
                     _agent.SetDestination(_lastKnownTargetPosition);
-                else
+                else if (_agent.hasPath)
                     _agent.ResetPath();
 
                 var stage = NetworkMatchState.Instance != null ? NetworkMatchState.Instance.Zone2Stage : default;
@@ -273,7 +277,10 @@ namespace EchoProtocol.AI.Minions
         {
             StateValue = (int)CreepMinionState.Roam;
             _agent.speed = roamSpeed;
-            if (Time.time < _nextRoamRetargetAt) return;
+            bool stillTravelling = _agent.pathPending
+                || (_agent.hasPath
+                    && _agent.remainingDistance > _agent.stoppingDistance + roamArrivalSlack);
+            if (stillTravelling && Time.time < _nextRoamRetargetAt) return;
             _nextRoamRetargetAt = Time.time + UnityEngine.Random.Range(3f, 6f);
             var offset = UnityEngine.Random.insideUnitSphere * roamRadius;
             offset.y = 0f;
@@ -340,21 +347,24 @@ namespace EchoProtocol.AI.Minions
 
         private void EmitStalkerAlert()
         {
-            _noiseService?.TryAccept(TargetPlayer, RuntimeNoiseType.MINION_ALERT,
-                new RuntimeNoiseSourceOccurrenceKey($"minion-alert:{Object.Id}", ++_alertOrdinal),
-                _lastKnownTargetPosition, out _);
+            if (_noiseService == null || !_noiseService.TryAccept(
+                    TargetPlayer,
+                    RuntimeNoiseType.MINION_ALERT,
+                    new RuntimeNoiseSourceOccurrenceKey($"minion-alert:{Object.Id}", ++_alertOrdinal),
+                    _lastKnownTargetPosition,
+                    out _))
+            {
+                return;
+            }
+
             AlertSequence++;
             AlertCooldown = TickTimer.CreateFromSeconds(Runner, alertCooldownSeconds);
             _trackSeconds = 0f;
-            StateValue = Zone == RegionSemanticZone.Zone02 && NetworkMatchState.Instance != null
-                && NetworkMatchState.Instance.Zone2Stage == Zone2MissionStage.FindSecurityTerminal
-                ? (int)CreepMinionState.Track : (int)CreepMinionState.Harass;
+            StateValue = (int)CreepMinionState.Harass;
         }
 
         private void AttackPlayer(NetworkObject playerObject, NetworkPlayerLifeState life)
         {
-            if (Zone == RegionSemanticZone.Zone02 && NetworkMatchState.Instance != null
-                && NetworkMatchState.Instance.Zone2Stage == Zone2MissionStage.FindSecurityTerminal) return;
             if (!life.TryApplyAuthoritativeNonLethalDamage(nonLethalDamage, "CREEP_MINION", transform.position)) return;
             AttackSequence++;
             AttackCooldown = TickTimer.CreateFromSeconds(Runner, attackCooldownSeconds);
@@ -364,9 +374,40 @@ namespace EchoProtocol.AI.Minions
                 && UnityEngine.Random.value <= coreStealChance && TryStealCore(playerObject, lobby, interactor)) return;
             if (lobby != null && lobby.ToolId >= 1 && lobby.ToolId <= 6
                 && UnityEngine.Random.value <= teamToolDropChance && interactor != null
-                && interactor.DropTeamToolAuthoritative(TargetPlayer)) return;
-            if (UnityEngine.Random.value <= slowChance)
-                playerObject.GetComponent<NetworkPlayerMovement>()?.TryApplySlowAuthoritative(slowMultiplier, slowDurationSeconds);
+                && TryRelocateTeamTool(playerObject, interactor)) return;
+            playerObject.GetComponent<NetworkPlayerMovement>()
+                ?.TryApplySlowAuthoritative(slowMultiplier, slowDurationSeconds);
+        }
+
+        private bool TryRelocateTeamTool(NetworkObject playerObject, NetworkPlayerInteractor interactor)
+        {
+            return TryFindSabotageDropPosition(playerObject.transform.position, out var dropPosition)
+                && interactor.DropTeamToolAuthoritative(TargetPlayer, dropPosition);
+        }
+
+        private bool TryFindSabotageDropPosition(Vector3 playerPosition, out Vector3 position)
+        {
+            position = default;
+            var away = Vector3.ProjectOnPlane(transform.position - playerPosition, Vector3.up);
+            if (away.sqrMagnitude < 0.01f)
+                away = Vector3.ProjectOnPlane(UnityEngine.Random.insideUnitSphere, Vector3.up);
+            away.Normalize();
+
+            for (int i = 0; i < 8; i++)
+            {
+                var direction = Quaternion.Euler(0f, UnityEngine.Random.Range(-60f, 60f), 0f) * away;
+                float distance = UnityEngine.Random.Range(
+                    stolenToolDropMinDistance,
+                    Mathf.Max(stolenToolDropMinDistance + 0.5f, stolenToolDropMaxDistance));
+                if (!NavMesh.SamplePosition(transform.position + direction * distance, out var hit, 3f, NavMesh.AllAreas)
+                    || Vector3.Distance(playerPosition, hit.position) < stolenToolDropMinDistance)
+                    continue;
+
+                position = hit.position + Vector3.up * 0.05f;
+                return true;
+            }
+
+            return false;
         }
 
         private bool TryStealCore(NetworkObject playerObject, LobbyPlayerState lobby, NetworkPlayerInteractor interactor)
