@@ -315,6 +315,19 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public bool TryApplyAuthoritativeNonLethalDamage(float damage, string sourceType, Vector3 hitPosition)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || damage <= 0f || Status != NetworkPlayerLifeStatus.Alive || HasReviveProtection)
+            {
+                return false;
+            }
+
+            Health = Mathf.Max(1f, Health - damage);
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
         public bool TryHeal(float amount)
         {
             if (!Object.HasStateAuthority || Status != NetworkPlayerLifeStatus.Alive || Health >= _maximumHealth)

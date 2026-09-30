@@ -375,6 +375,13 @@ namespace EchoProtocol.Networking
 
         public bool DropHeldItemsAuthoritative(PlayerRef actor)
         {
+            bool droppedCore = DropCarriedCoreAuthoritative(actor);
+            bool droppedTool = DropTeamToolAuthoritative(actor);
+            return droppedCore || droppedTool;
+        }
+
+        public bool DropCarriedCoreAuthoritative(PlayerRef actor)
+        {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority || !actor.IsValid)
             {
                 return false;
@@ -386,7 +393,6 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            bool droppedAny = false;
             if (state.CarriedCoreId.IsValid
                 && Runner != null
                 && Runner.TryFindObject(state.CarriedCoreId, out var coreObject)
@@ -394,8 +400,21 @@ namespace EchoProtocol.Networking
                 && coreObject.TryGetComponent<NetworkPickupItem>(out var core))
             {
                 GetAuthoritativeDropPose(out var dropPosition, out var dropRotation);
-                droppedAny |= core.TryDrop(actor, dropPosition, dropRotation, state);
+                return core.TryDrop(actor, dropPosition, dropRotation, state);
             }
+
+            return false;
+        }
+
+        public bool DropTeamToolAuthoritative(PlayerRef actor)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority || !actor.IsValid)
+            {
+                return false;
+            }
+
+            var state = GetComponent<LobbyPlayerState>();
+            if (state == null) return false;
 
             if (state.ToolId >= 1 && state.ToolId <= 6)
             {
@@ -403,11 +422,11 @@ namespace EchoProtocol.Networking
                 if (TrySpawnDroppedTeamToolAuthoritative(toolId, out _))
                 {
                     state.SetGameplayToolId(0);
-                    droppedAny = true;
+                    return true;
                 }
             }
 
-            return droppedAny;
+            return false;
         }
 
         public bool CanStartFirstAidReviveAuthoritative(LobbyPlayerState state)

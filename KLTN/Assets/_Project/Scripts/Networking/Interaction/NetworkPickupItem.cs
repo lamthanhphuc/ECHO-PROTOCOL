@@ -50,6 +50,11 @@ namespace EchoProtocol.Networking
         [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
         public PlayerRef Holder { get; private set; }
 
+        [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
+        public NetworkId MonsterCarrierId { get; private set; }
+
+        public bool IsMonsterCarried => MonsterCarrierId.IsValid;
+
         [Networked] public uint TransitionOrdinal { get; private set; }
 
         [Networked] public NetworkId PlacedSectorId { get; private set; }
@@ -88,6 +93,7 @@ namespace EchoProtocol.Networking
 
             State = NetworkItemState.Available;
             Holder = PlayerRef.None;
+            MonsterCarrierId = default;
             TransitionOrdinal = 0;
             PlacedSectorId = default;
             PlacementSlot = -1;
@@ -123,6 +129,7 @@ namespace EchoProtocol.Networking
             WorldRotation = transform.rotation;
             State = NetworkItemState.Dropped;
             Holder = PlayerRef.None;
+            MonsterCarrierId = default;
             PlacedSectorId = default;
             PlacementSlot = -1;
             AdvanceTransition();
@@ -153,6 +160,7 @@ namespace EchoProtocol.Networking
 
         protected override InteractionValidationResult ValidateCurrentState(in InteractionContext context)
         {
+            if (MonsterCarrierId.IsValid) return InteractionValidationResult.InvalidTargetState;
             return EnergyCoreAuthorityRules.CanPickup(
                     State,
                     Holder,
@@ -167,6 +175,7 @@ namespace EchoProtocol.Networking
             if (!context.PlayerState.TryBeginCarryingCore(Object.Id)) return;
             State = NetworkItemState.Carried;
             Holder = context.Player;
+            MonsterCarrierId = default;
             PlacedSectorId = default;
             PlacementSlot = -1;
             AdvanceTransition();
@@ -200,6 +209,7 @@ namespace EchoProtocol.Networking
 
             State = NetworkItemState.Dropped;
             Holder = PlayerRef.None;
+            MonsterCarrierId = default;
             PlacedSectorId = default;
             PlacementSlot = -1;
             WorldPosition = position;
@@ -256,6 +266,7 @@ namespace EchoProtocol.Networking
 
             State = NetworkItemState.Placed;
             Holder = PlayerRef.None;
+            MonsterCarrierId = default;
             PlacedSectorId = sectorId;
             PlacementSlot = placementSlot;
             WorldPosition = position;
@@ -278,12 +289,53 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public bool TryBeginMonsterCarryAuthoritative(NetworkId monsterId, Vector3 position, Quaternion rotation)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority || !monsterId.IsValid
+                || MonsterCarrierId.IsValid || Holder != PlayerRef.None || State != NetworkItemState.Dropped)
+            {
+                return false;
+            }
+
+            MonsterCarrierId = monsterId;
+            WorldPosition = position;
+            WorldRotation = rotation;
+            transform.SetPositionAndRotation(position, rotation);
+            ApplyReplicatedState();
+            return true;
+        }
+
+        public bool TryUpdateMonsterCarryPoseAuthoritative(NetworkId monsterId, Vector3 position, Quaternion rotation)
+        {
+            if (!CanUpdateMonsterCarry(monsterId)) return false;
+            WorldPosition = position;
+            WorldRotation = rotation;
+            transform.SetPositionAndRotation(position, rotation);
+            return true;
+        }
+
+        public bool TryEndMonsterCarryAuthoritative(NetworkId monsterId, Vector3 position, Quaternion rotation)
+        {
+            if (!CanUpdateMonsterCarry(monsterId)) return false;
+            MonsterCarrierId = default;
+            WorldPosition = position;
+            WorldRotation = rotation;
+            transform.SetPositionAndRotation(position, rotation);
+            ApplyReplicatedState();
+            return true;
+        }
+
+        private bool CanUpdateMonsterCarry(NetworkId monsterId) =>
+            Object != null && Object.IsValid && Object.HasStateAuthority && monsterId.IsValid
+            && MonsterCarrierId == monsterId && State == NetworkItemState.Dropped && Holder == PlayerRef.None;
+
         private void ApplyReplicatedState()
         {
             ApplyPresentationVisibility();
             if (_pickupCollider != null)
             {
-                _pickupCollider.enabled = State == NetworkItemState.Available || State == NetworkItemState.Dropped;
+                _pickupCollider.enabled = !MonsterCarrierId.IsValid
+                    && (State == NetworkItemState.Available || State == NetworkItemState.Dropped);
             }
             ApplyReplicatedPose();
             StateChanged?.Invoke(this, State, Holder);

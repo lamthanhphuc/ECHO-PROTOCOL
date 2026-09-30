@@ -65,6 +65,8 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkBool IsHidden { get; set; }
         [Networked] public ulong CurrentHideSpotId { get; set; }
         [Networked] public NetworkBool IsCrouching { get; set; }
+        [Networked] private TickTimer ExternalSlowTimer { get; set; }
+        [Networked] private float ExternalSlowMultiplier { get; set; }
 
         public float CurrentPitch => LookPitch;
         public float MaxStamina => _maxStamina;
@@ -124,6 +126,34 @@ namespace EchoProtocol.Networking
         {
             // Backward movement (pressing S, moveInput.y < -0.01f) does not allow sprint and stays at normal walk speed
             return moveInput.y >= -0.01f;
+        }
+
+        public bool TryApplySlowAuthoritative(float multiplier, float durationSeconds)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || durationSeconds <= 0f || multiplier <= 0f || multiplier >= 1f)
+            {
+                return false;
+            }
+
+            ExternalSlowMultiplier = Mathf.Clamp(multiplier, 0.1f, 1f);
+            ExternalSlowTimer = TickTimer.CreateFromSeconds(Runner, durationSeconds);
+            return true;
+        }
+
+        private float GetExternalSlowMultiplier()
+        {
+            if (!ExternalSlowTimer.IsRunning) return 1f;
+            if (ExternalSlowTimer.Expired(Runner))
+            {
+                if (Object.HasStateAuthority)
+                {
+                    ExternalSlowTimer = TickTimer.None;
+                    ExternalSlowMultiplier = 1f;
+                }
+                return 1f;
+            }
+            return Mathf.Clamp(ExternalSlowMultiplier, 0.1f, 1f);
         }
 
         private void Awake()
@@ -272,6 +302,8 @@ namespace EchoProtocol.Networking
                 IsHidden = false;
                 CurrentHideSpotId = 0UL;
                 NetworkCurrentStamina = _maxStamina;
+                ExternalSlowTimer = TickTimer.None;
+                ExternalSlowMultiplier = 1f;
             }
 
             if (!Object.HasInputAuthority) return;
@@ -409,7 +441,8 @@ namespace EchoProtocol.Networking
             {
                 coreCarryMultiplier = lobbyPlayer.IsCoreStabilized ? 1f : 0.72f;
             }
-            _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f) * coreCarryMultiplier;
+            _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f)
+                * coreCarryMultiplier * GetExternalSlowMultiplier();
 
             _controller.Move(direction);
 

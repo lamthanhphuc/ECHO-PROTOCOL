@@ -1,7 +1,10 @@
 using System.Collections.Generic;
+using EchoProtocol.AI.Minions;
 using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Spatial;
 using EchoProtocol.Diagnostics;
+using EchoProtocol.Gameplay;
+using EchoProtocol.Networking.Authority;
 using Fusion;
 using UnityEngine;
 using UnityEngine.AI;
@@ -33,6 +36,10 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _powerPuzzlePrefab;
         [SerializeField] private NetworkObject _powerPuzzleStationPrefab;
         [SerializeField] private NetworkObject _monsterPrefab;
+        [SerializeField] private NetworkObject _creepMinionPrefab;
+        [SerializeField, Min(1f)] private float _minionSpawnCheckInterval = 5f;
+        [SerializeField, Min(2f)] private float _minionSpawnMinDistance = 12f;
+        [SerializeField, Min(3f)] private float _minionSpawnMaxDistance = 20f;
 
         private readonly Dictionary<PlayerRef, int> _spawnSlots = new Dictionary<PlayerRef, int>();
         private FusionPlayerLifecycle _subscribedLifecycle;
@@ -47,18 +54,35 @@ namespace EchoProtocol.Networking
         private NetworkObject _monsterInstance;
         private NetworkObject _zone2MonsterInstance;
         private bool _zone2MonsterSpawned;
+        private readonly List<NetworkObject> _creepMinionInstances = new List<NetworkObject>();
+        private float _nextMinionSpawnCheckAt;
+        private bool _zone2MinionsActive;
+        private PlayerRef _zone2AnchorPlayer = PlayerRef.None;
+        private bool _missingMinionPrefabLogged;
 
         private void Update()
         {
             var runner = _bootstrap != null ? _bootstrap.Runner : null;
-            if (runner != null && runner.IsServer && IsValidNetworkObject(_zone2MonsterInstance)
-                && _matchStateInstance != null
-                && _matchStateInstance.TryGetComponent<NetworkMatchState>(out var matchState)
-                && matchState.IsEnded)
+            if (runner == null || !runner.IsServer || !runner.IsRunning
+                || _matchStateInstance == null
+                || !_matchStateInstance.TryGetComponent<NetworkMatchState>(out var matchState)) return;
+
+            if (matchState.IsEnded)
             {
-                runner.Despawn(_zone2MonsterInstance);
-                _zone2MonsterInstance = null;
+                if (IsValidNetworkObject(_zone2MonsterInstance))
+                {
+                    runner.Despawn(_zone2MonsterInstance);
+                    _zone2MonsterInstance = null;
+                }
+                DespawnAllCreepMinions(runner);
+                return;
             }
+
+            if (_bootstrap.State != NetworkSessionState.InMatch
+                || SceneManager.GetActiveScene().name != LobbyManager.GameSceneName
+                || Time.time < _nextMinionSpawnCheckAt) return;
+            _nextMinionSpawnCheckAt = Time.time + _minionSpawnCheckInterval;
+            MaintainCreepMinionPopulation(runner);
         }
 
         private void Awake()
@@ -375,6 +399,10 @@ namespace EchoProtocol.Networking
 
             _zone2MonsterInstance = spawned;
             _zone2MonsterSpawned = true;
+            _zone2MinionsActive = true;
+            _zone2AnchorPlayer = playerState.Object.InputAuthority;
+            DespawnCreepMinionsForZone(runner, RegionSemanticZone.Zone01);
+            _nextMinionSpawnCheckAt = Time.time;
         }
 
         private static void RejectZone2Spawn(LobbyPlayerState playerState, string reason)
@@ -383,6 +411,124 @@ namespace EchoProtocol.Networking
                 $"[STK_ZONE2][REJECT] reason={reason} player={playerState.name} " +
                 $"inputAuthority={playerState.Object?.InputAuthority}.",
                 playerState);
+        }
+
+        private NetworkObject ResolveCreepMinionPrefab()
+        {
+            if (_creepMinionPrefab != null) return _creepMinionPrefab;
+            var asset = Resources.Load<GameObject>("PF_CreepMinionNetwork");
+            if (asset != null) _creepMinionPrefab = asset.GetComponent<NetworkObject>();
+            if (_creepMinionPrefab == null && !_missingMinionPrefabLogged)
+            {
+                _missingMinionPrefabLogged = true;
+                Debug.LogWarning("[PlayerSpawner] PF_CreepMinionNetwork is missing; run the Creep Minion production setup menu.");
+            }
+            return _creepMinionPrefab;
+        }
+
+        private void MaintainCreepMinionPopulation(NetworkRunner runner)
+        {
+            PruneInvalidAuthoritativeWorldStateReferences();
+            var difficulty = MatchAuthorityRuntime.Instance != null
+                ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
+            var profile = MatchDifficultyProfiles.Get(difficulty);
+            var zone = _zone2MinionsActive ? RegionSemanticZone.Zone02 : RegionSemanticZone.Zone01;
+            int cap = zone == RegionSemanticZone.Zone02 ? profile.Zone2MinionCap : profile.Zone1MinionCap;
+            int count = 0;
+            foreach (var obj in _creepMinionInstances)
+                if (obj.TryGetComponent<CreepMinionRuntime>(out var minion) && minion.Zone == zone) count++;
+            if (count >= cap || !TryGetCreepMinionAnchor(runner, zone, out var anchor)
+                || !TryFindCreepMinionSpawnPosition(anchor, out var position)) return;
+            SpawnCreepMinion(runner, position, zone);
+        }
+
+        private bool TryGetCreepMinionAnchor(NetworkRunner runner, RegionSemanticZone zone, out Vector3 anchor)
+        {
+            anchor = default;
+            if (zone == RegionSemanticZone.Zone02)
+            {
+                if (_zone2AnchorPlayer.IsRealPlayer
+                    && runner.TryGetPlayerObject(_zone2AnchorPlayer, out var playerObject)
+                    && IsValidNetworkObject(playerObject))
+                {
+                    anchor = playerObject.transform.position;
+                    return true;
+                }
+                if (!IsValidNetworkObject(_zone2MonsterInstance)) return false;
+                anchor = _zone2MonsterInstance.transform.position;
+                return true;
+            }
+
+            int eligible = 0;
+            foreach (var player in runner.ActivePlayers)
+            {
+                if (!runner.TryGetPlayerObject(player, out var obj) || !IsValidNetworkObject(obj)
+                    || !obj.TryGetComponent<LobbyPlayerState>(out var lobby) || !lobby.IsGameplayPlayer
+                    || !obj.TryGetComponent<NetworkPlayerLifeState>(out var life)
+                    || life.Status != NetworkPlayerLifeStatus.Alive) continue;
+                if (Random.Range(0, ++eligible) == 0) anchor = obj.transform.position;
+            }
+            return eligible > 0;
+        }
+
+        private bool TryFindCreepMinionSpawnPosition(Vector3 anchor, out Vector3 position)
+        {
+            position = default;
+            for (int i = 0; i < 12; i++)
+            {
+                float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+                float distance = Random.Range(_minionSpawnMinDistance,
+                    Mathf.Max(_minionSpawnMinDistance + 1f, _minionSpawnMaxDistance));
+                var candidate = anchor + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * distance;
+                if (!NavMesh.SamplePosition(candidate, out var hit, 3f, NavMesh.AllAreas)
+                    || Vector3.Distance(anchor, hit.position) < _minionSpawnMinDistance) continue;
+                position = hit.position;
+                return true;
+            }
+            return false;
+        }
+
+        private NetworkObject SpawnCreepMinion(NetworkRunner runner, Vector3 position, RegionSemanticZone zone)
+        {
+            var prefab = ResolveCreepMinionPrefab();
+            if (prefab == null) return null;
+            var spawned = runner.Spawn(prefab, position, Quaternion.identity, PlayerRef.None,
+                (_, obj) => obj.GetComponent<CreepMinionRuntime>()?.ConfigureBeforeSpawn(zone));
+            if (!IsValidNetworkObject(spawned)) return null;
+            if (!spawned.TryGetComponent<CreepMinionRuntime>(out _))
+            {
+                Debug.LogError("[PlayerSpawner] Creep Minion prefab has no CreepMinionRuntime.");
+                runner.Despawn(spawned);
+                return null;
+            }
+            _creepMinionInstances.Add(spawned);
+            Debug.Log($"[PlayerSpawner] Spawned {zone} Creep Minion {spawned.Id} at {position}.");
+            return spawned;
+        }
+
+        private void DespawnCreepMinionsForZone(NetworkRunner runner, RegionSemanticZone zone)
+        {
+            for (int i = _creepMinionInstances.Count - 1; i >= 0; i--)
+            {
+                var obj = _creepMinionInstances[i];
+                if (!IsValidNetworkObject(obj)) { _creepMinionInstances.RemoveAt(i); continue; }
+                var runtime = obj.GetComponent<CreepMinionRuntime>();
+                if (runtime == null || runtime.Zone != zone) continue;
+                runtime.ReleaseStolenCoreAuthoritative();
+                runner.Despawn(obj);
+                _creepMinionInstances.RemoveAt(i);
+            }
+        }
+
+        private void DespawnAllCreepMinions(NetworkRunner runner)
+        {
+            foreach (var obj in _creepMinionInstances)
+            {
+                if (!IsValidNetworkObject(obj)) continue;
+                obj.GetComponent<CreepMinionRuntime>()?.ReleaseStolenCoreAuthoritative();
+                runner.Despawn(obj);
+            }
+            _creepMinionInstances.Clear();
         }
 
         private NetworkObject SpawnStalker(NetworkRunner runner, Vector3 position, Quaternion rotation, RegionSemanticZone zone)
@@ -1107,6 +1253,11 @@ namespace EchoProtocol.Networking
 
         private void ClearAuthoritativeWorldStateReferences()
         {
+            _creepMinionInstances.Clear();
+            _zone2MinionsActive = false;
+            _zone2AnchorPlayer = PlayerRef.None;
+            _nextMinionSpawnCheckAt = 0f;
+            _missingMinionPrefabLogged = false;
             _doorInstance = null;
             _energyCoreInstances.Clear();
             _selectedEnergyCoreSpawnPoses.Clear();
@@ -1132,6 +1283,7 @@ namespace EchoProtocol.Networking
             _energyCoreInstances.RemoveAll(core => !IsValidNetworkObject(core));
             _sectorBoxInstances.RemoveAll(box => !IsValidNetworkObject(box));
             _powerPuzzleStationInstances.RemoveAll(station => !IsValidNetworkObject(station));
+            _creepMinionInstances.RemoveAll(obj => !IsValidNetworkObject(obj));
         }
 
         private static bool IsValidNetworkObject(NetworkObject obj)
