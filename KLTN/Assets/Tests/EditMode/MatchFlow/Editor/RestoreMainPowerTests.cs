@@ -118,7 +118,7 @@ namespace EchoProtocol.Tests.MatchFlow
         }
 
         [Test]
-        public void TEST_07_PowerControl_CorrectCode_Completes_And_Transitions_To_FinalHunt()
+        public void TEST_07_PowerControl_CorrectCode_Completes_And_Transitions_To_Zone3()
         {
             _flow.NotifyCoreObjectiveComplete();
             _flow.NotifySecurityHoldComplete();
@@ -129,7 +129,7 @@ namespace EchoProtocol.Tests.MatchFlow
             bool success = _powerPuzzle.SubmitAuthorizationCode(validCode, _holder);
             Assert.IsTrue(success, "Correct 4-digit code must be accepted.");
             Assert.IsTrue(_powerPuzzle.IsComplete);
-            Assert.AreEqual(MatchPhase.FinalHunt, _flow.Phase, "Correct code must advance MatchPhase to FinalHunt!");
+            Assert.AreEqual(MatchPhase.Zone3FindFrigate, _flow.Phase);
             Assert.IsTrue(_flow.IsRestoreMainPowerComplete);
         }
 
@@ -147,6 +147,23 @@ namespace EchoProtocol.Tests.MatchFlow
 
             Assert.IsTrue(first);
             Assert.IsFalse(second, "Subsequent submissions after completion must return false without state corruption.");
+            Assert.AreEqual(MatchPhase.Zone3FindFrigate, _flow.Phase);
+        }
+
+        [Test]
+        public void Zone3_Requires_First_Push_And_Destination_Before_Final_Hunt()
+        {
+            _flow.NotifyCoreObjectiveComplete();
+            _flow.NotifySecurityHoldComplete();
+            _flow.NotifyPowerPuzzleComplete();
+
+            Assert.AreEqual(MatchPhase.Zone3FindFrigate, _flow.Phase);
+            _flow.NotifyZone3Complete();
+            Assert.AreEqual(MatchPhase.Zone3FindFrigate, _flow.Phase);
+
+            _flow.NotifyZone3PushStarted();
+            Assert.AreEqual(MatchPhase.Zone3PushFrigate, _flow.Phase);
+            _flow.NotifyZone3Complete();
             Assert.AreEqual(MatchPhase.FinalHunt, _flow.Phase);
         }
 

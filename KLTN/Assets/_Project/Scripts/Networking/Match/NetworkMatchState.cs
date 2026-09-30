@@ -21,6 +21,8 @@ namespace EchoProtocol.Networking
         Escape = 4,
         MatchEnded = 5,
         Zone2Objective = 6,
+        Zone3FindFrigate = 7,
+        Zone3PushFrigate = 8,
     }
 
     public enum NetworkMatchStatus
@@ -170,6 +172,9 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkId EscapeDoorId { get; private set; }
         [Networked] public PlayerRef LastActor { get; private set; }
         [Networked] public int FinalSurvivorCount { get; private set; }
+        [Networked] public Vector3 Zone3FrigatePosition { get; private set; }
+        [Networked] public Quaternion Zone3FrigateRotation { get; private set; }
+        [Networked] public PlayerRef Zone3Pusher { get; private set; }
         [Networked] public uint PhaseOrdinal { get; private set; }
         [Networked] public uint EndOrdinal { get; private set; }
         [Networked] private TickTimer EscapeTimer { get; set; }
@@ -306,6 +311,7 @@ namespace EchoProtocol.Networking
                 EscapeDoorId = default;
                 LastActor = PlayerRef.None;
                 FinalSurvivorCount = 0;
+                Zone3Pusher = PlayerRef.None;
                 PhaseOrdinal = 0;
                 EndOrdinal = 0;
                 EscapeTimer = TickTimer.None;
@@ -408,6 +414,19 @@ namespace EchoProtocol.Networking
                 }
                 EmitRelayRepairNoiseAuthoritative();
                 AdvanceSecurityHoldAuthoritative();
+            }
+
+            var zone3 = Zone3MissionDirector.Instance;
+            if (zone3 != null && (CurrentPhase == NetworkMatchPhase.Zone3FindFrigate
+                || CurrentPhase == NetworkMatchPhase.Zone3PushFrigate))
+            {
+                if (Zone3Pusher.IsRealPlayer && !TryResolveActivePlayer(Zone3Pusher, out _))
+                {
+                    zone3.StopAuthoritativePush(Zone3Pusher);
+                    Zone3Pusher = PlayerRef.None;
+                }
+                UpdateZone3FrigatePoseAuthoritative(zone3.FrigatePosition,
+                    zone3.Frigate != null ? zone3.Frigate.transform.rotation : Quaternion.identity);
             }
 
             if (CurrentPhase == NetworkMatchPhase.Escape && EscapeTimer.Expired(Runner))
@@ -1189,7 +1208,7 @@ namespace EchoProtocol.Networking
                 return false;
             }
             if (!NetworkMatchStateRules.CanAdvance(
-                    Status, CurrentPhase, NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.FinalHunt)) return false;
+                    Status, CurrentPhase, NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.Zone3FindFrigate)) return false;
 
             int previousFailureCount = ZoneAccessFailureCount;
             TickTimer previousCooldown = ZoneAccessCooldown;
@@ -1199,7 +1218,7 @@ namespace EchoProtocol.Networking
             PowerPuzzleCompleted = true;
             RestoreMainPowerCompleted = true;
             Zone2Stage = Zone2MissionStage.Zone2Completed;
-            if (!TryAdvancePhase(NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.FinalHunt, "ZONE2_OBJECTIVE"))
+            if (!TryAdvancePhase(NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.Zone3FindFrigate, "ZONE2_OBJECTIVE"))
             {
                 ZoneDoorsUnlocked = false;
                 PowerPuzzleCompleted = false;
@@ -1215,6 +1234,111 @@ namespace EchoProtocol.Networking
         }
 
         private enum RelayBAction { Scan, StartSync, CancelSync }
+
+        public void RequestZone3Push(bool active)
+        {
+            if (!HasValidNetworkObject()) return;
+            if (Object.HasStateAuthority)
+            {
+                if (TryGetLocalRequester(out var requester)) SetZone3PushAuthoritative(requester, active);
+            }
+            else RpcZone3Push(active);
+        }
+
+        public void ReleaseZone3PushAuthoritative(PlayerRef actor)
+        {
+            if (HasValidNetworkObject() && Object.HasStateAuthority)
+                SetZone3PushAuthoritative(actor, false);
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcZone3Push(bool active, RpcInfo info = default) =>
+            SetZone3PushAuthoritative(info.Source, active);
+
+        private void SetZone3PushAuthoritative(PlayerRef actor, bool active)
+        {
+            var zone3 = Zone3MissionDirector.Instance;
+            if (!Object.HasStateAuthority || zone3 == null) return;
+            if (!active)
+            {
+                zone3.StopAuthoritativePush(actor);
+                if (Zone3Pusher == actor) Zone3Pusher = PlayerRef.None;
+                return;
+            }
+            if (Zone3Pusher.IsRealPlayer && Zone3Pusher != actor) return;
+            if ((CurrentPhase != NetworkMatchPhase.Zone3FindFrigate
+                 && CurrentPhase != NetworkMatchPhase.Zone3PushFrigate)
+                || !TryResolveActivePlayer(actor, out var lifeState)
+                || Vector3.Distance(lifeState.transform.position, zone3.FrigatePosition) > zone3.PushInteractionDistance)
+                return;
+
+            if (CurrentPhase == NetworkMatchPhase.Zone3FindFrigate
+                && !TryAdvancePhase(NetworkMatchPhase.Zone3FindFrigate,
+                    NetworkMatchPhase.Zone3PushFrigate, "ZONE3_FIND_FRIGATE")) return;
+            zone3.StartAuthoritativePush(actor, lifeState.gameObject);
+            Zone3Pusher = actor;
+        }
+
+        public void UpdateZone3FrigatePoseAuthoritative(Vector3 position, Quaternion rotation)
+        {
+            if (!HasValidNetworkObject() || !Object.HasStateAuthority) return;
+            Zone3FrigatePosition = position;
+            Zone3FrigateRotation = rotation;
+        }
+
+        public void RequestZone3Charge()
+        {
+            if (!HasValidNetworkObject()) return;
+            if (Object.HasStateAuthority)
+            {
+                if (TryGetLocalRequester(out var requester)) TryCompleteZone3Authoritative(requester);
+            }
+            else RpcZone3Charge();
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcZone3Charge(RpcInfo info = default) => TryCompleteZone3Authoritative(info.Source);
+
+        private bool TryCompleteZone3Authoritative(PlayerRef actor)
+        {
+            var zone3 = Zone3MissionDirector.Instance;
+            if (!Object.HasStateAuthority || zone3 == null || !zone3.IsFrigateAtDestination
+                || !TryResolveActivePlayer(actor, out var lifeState)
+                || !zone3.IsPlayerNearCharge(lifeState.transform.position)
+                || !TryAdvancePhase(NetworkMatchPhase.Zone3PushFrigate,
+                    NetworkMatchPhase.FinalHunt, "ZONE3_CHARGE_ACTIVATED")) return false;
+            if (Zone3Pusher.IsRealPlayer) zone3.StopAuthoritativePush(Zone3Pusher);
+            Zone3Pusher = PlayerRef.None;
+            return true;
+        }
+
+        public void RequestZone3Exit()
+        {
+            if (!HasValidNetworkObject()) return;
+            if (Object.HasStateAuthority)
+            {
+                if (TryGetLocalRequester(out var requester)) TryZone3ExitAuthoritative(requester);
+            }
+            else RpcZone3Exit();
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcZone3Exit(RpcInfo info = default) => TryZone3ExitAuthoritative(info.Source);
+
+        private bool TryZone3ExitAuthoritative(PlayerRef actor)
+        {
+            var zone3 = Zone3MissionDirector.Instance;
+            if (!Object.HasStateAuthority || zone3 == null
+                || (CurrentPhase != NetworkMatchPhase.FinalHunt && CurrentPhase != NetworkMatchPhase.Escape)
+                || !TryResolveActivePlayer(actor, out var lifeState)
+                || Vector3.Distance(lifeState.transform.position, zone3.ExitPosition) > zone3.ExitInteractionDistance)
+                return false;
+
+            if (CurrentPhase == NetworkMatchPhase.FinalHunt
+                && !TryAdvancePhase(NetworkMatchPhase.FinalHunt, NetworkMatchPhase.Escape, "FINAL_HUNT"))
+                return false;
+            return TryCommitPlayerEscaped(actor);
+        }
 
         public bool TryEnterEscape(NetworkId doorId, PlayerRef actor)
         {
@@ -1241,16 +1365,22 @@ namespace EchoProtocol.Networking
 
         public bool TryCommitPlayerEscaped(PlayerRef player)
         {
+            var zone3 = Zone3MissionDirector.Instance;
             if (!Object.HasStateAuthority
                 || IsEnded
                 || CurrentPhase != NetworkMatchPhase.Escape
                 || !TryResolveActivePlayer(player, out var lifeState)
+                || (zone3 != null && Vector3.Distance(lifeState.transform.position,
+                    zone3.ExitPosition) > zone3.ExitInteractionDistance)
                 || !lifeState.TryEscape())
             {
                 return false;
             }
 
-            return TryEndMatch(NetworkMatchResult.Win, NetworkMatchEndReason.PlayerEscaped, player);
+            CountFinalPlayers(out var escapedCount, out _, out _, out _, out var ableToExitCount);
+            if (ableToExitCount == 0 && escapedCount > 0)
+                TryEndMatch(NetworkMatchResult.Win, NetworkMatchEndReason.PlayerEscaped, player);
+            return true;
         }
 
         private bool TryAdvancePhase(
@@ -1359,6 +1489,14 @@ namespace EchoProtocol.Networking
                 out var trackedCount,
                 out var downedCount,
                 out var nonDownedMatchActiveCount);
+
+            if (_.Status != NetworkPlayerLifeStatus.Escaped
+                && CurrentPhase == NetworkMatchPhase.Escape
+                && survivorCount > 0 && nonDownedMatchActiveCount == 0)
+            {
+                TryEndMatch(NetworkMatchResult.Win, NetworkMatchEndReason.PlayerEscaped, LastActor);
+                return;
+            }
 
             if (trackedCount > 0
                 && survivorCount == 0
@@ -2064,6 +2202,8 @@ namespace EchoProtocol.Networking
                 NetworkMatchPhase.Puzzle => "POWER_PUZZLE",
                 NetworkMatchPhase.SecurityHold => "SECURITY_HOLD",
                 NetworkMatchPhase.FinalHunt => "FINAL_HUNT",
+                NetworkMatchPhase.Zone3FindFrigate => "ZONE_3_FIND_FRIGATE",
+                NetworkMatchPhase.Zone3PushFrigate => "ZONE_3_PUSH_FRIGATE",
                 NetworkMatchPhase.Escape => "ESCAPE",
                 _ => "MATCH_ENDED",
             };

@@ -137,7 +137,7 @@ public class MatchFlowController : MonoBehaviour
     {
         if (_networkAuthorityPresentationOnly) return;
 
-        bool enteringFinalHunt =
+        bool enteringZone3 =
             _phase == MatchPhase.PowerPuzzle
             && !IsMatchEnded;
 
@@ -151,15 +151,23 @@ public class MatchFlowController : MonoBehaviour
                 EchoProtocol.MatchFlow.Zone2MissionStage.Zone2Completed);
         }
 
-        if (enteringFinalHunt)
+        if (enteringZone3)
         {
-            SetPhase(MatchPhase.FinalHunt);
-
-            if (_phase == MatchPhase.FinalHunt)
-            {
-                finalHuntStarted?.Invoke();
-            }
+            SetPhase(MatchPhase.Zone3FindFrigate);
         }
+    }
+
+    public void NotifyZone3PushStarted()
+    {
+        if (!_networkAuthorityPresentationOnly && _phase == MatchPhase.Zone3FindFrigate)
+            SetPhase(MatchPhase.Zone3PushFrigate);
+    }
+
+    public void NotifyZone3Complete()
+    {
+        if (_networkAuthorityPresentationOnly || _phase != MatchPhase.Zone3PushFrigate) return;
+        SetPhase(MatchPhase.FinalHunt);
+        finalHuntStarted?.Invoke();
     }
 
     public bool VerifyPowerCode(string code)
@@ -483,6 +491,8 @@ public class MatchFlowController : MonoBehaviour
                 NetworkMatchPhase.Zone2Objective => MatchPhase.SecurityHold,
                 NetworkMatchPhase.SecurityHold => MatchPhase.SecurityHold,
                 NetworkMatchPhase.Puzzle => MatchPhase.PowerPuzzle,
+                NetworkMatchPhase.Zone3FindFrigate => MatchPhase.Zone3FindFrigate,
+                NetworkMatchPhase.Zone3PushFrigate => MatchPhase.Zone3PushFrigate,
                 NetworkMatchPhase.FinalHunt => MatchPhase.FinalHunt,
                 NetworkMatchPhase.Escape => MatchPhase.ExitCountdown,
                 _ => _phase,
