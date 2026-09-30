@@ -46,8 +46,6 @@ namespace EchoProtocol.AI.Minions
         [Header("Hit Effects")]
         [SerializeField] private float slowMultiplier = 0.65f;
         [SerializeField] private float slowDurationSeconds = 3f;
-        [SerializeField] private float teamToolDropChance = 0.25f;
-        [SerializeField] private float coreStealChance = 1f;
         [SerializeField] private float coreCarryDistance = 10f;
         [SerializeField] private float coreCarryTimeoutSeconds = 6f;
         [SerializeField] private float coreCarryHeight = 0.65f;
@@ -267,8 +265,13 @@ namespace EchoProtocol.AI.Minions
             {
                 _agent.speed = harassSpeed;
                 _agent.SetDestination(_lastKnownTargetPosition);
-                if (Vector3.Distance(transform.position, _lastKnownTargetPosition) <= attackRange
-                    && AttackCooldown.ExpiredOrNotRunning(Runner))
+                float distance = Vector3.Distance(transform.position, targetObject.transform.position);
+                bool attackReady = AttackCooldown.ExpiredOrNotRunning(Runner);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (distance <= attackRange + 0.25f)
+                    Debug.Log($"[CREEP_HARASS] target={TargetPlayer} distance={distance:F2} range={attackRange:F2} ready={attackReady}", this);
+#endif
+                if (distance <= attackRange && attackReady)
                     AttackPlayer(targetObject, lifeState);
             }
         }
@@ -347,61 +350,76 @@ namespace EchoProtocol.AI.Minions
 
         private void EmitStalkerAlert()
         {
-            if (_noiseService == null || !_noiseService.TryAccept(
-                    TargetPlayer,
-                    RuntimeNoiseType.MINION_ALERT,
-                    new RuntimeNoiseSourceOccurrenceKey($"minion-alert:{Object.Id}", ++_alertOrdinal),
-                    _lastKnownTargetPosition,
-                    out _))
-            {
-                return;
-            }
+            bool alertAccepted = _noiseService != null && _noiseService.TryAccept(
+                TargetPlayer,
+                RuntimeNoiseType.MINION_ALERT,
+                new RuntimeNoiseSourceOccurrenceKey($"minion-alert:{Object.Id}", ++_alertOrdinal),
+                _lastKnownTargetPosition,
+                out _);
 
             AlertSequence++;
             AlertCooldown = TickTimer.CreateFromSeconds(Runner, alertCooldownSeconds);
             _trackSeconds = 0f;
             StateValue = (int)CreepMinionState.Harass;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"[CREEP_ALERT] target={TargetPlayer} accepted={alertAccepted} zone={Zone} position={_lastKnownTargetPosition}", this);
+#endif
         }
 
         private void AttackPlayer(NetworkObject playerObject, NetworkPlayerLifeState life)
         {
-            if (!life.TryApplyAuthoritativeNonLethalDamage(nonLethalDamage, "CREEP_MINION", transform.position)) return;
+            if (playerObject == null || life == null) return;
+            if (!life.TryApplyAuthoritativeNonLethalDamage(nonLethalDamage, "CREEP_MINION", transform.position))
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.LogWarning($"[CREEP_ATTACK][REJECTED] target={TargetPlayer} status={life.Status} reviveProtection={life.HasReviveProtection}", this);
+#endif
+                return;
+            }
             AttackSequence++;
             AttackCooldown = TickTimer.CreateFromSeconds(Runner, attackCooldownSeconds);
             var lobby = playerObject.GetComponent<LobbyPlayerState>();
             var interactor = playerObject.GetComponent<NetworkPlayerInteractor>();
-            if (Zone == RegionSemanticZone.Zone01 && lobby != null && lobby.CarriedCoreId.IsValid
-                && UnityEngine.Random.value <= coreStealChance && TryStealCore(playerObject, lobby, interactor)) return;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"[CREEP_ATTACK][HIT] target={TargetPlayer} zone={Zone} core={lobby != null && lobby.CarriedCoreId.IsValid} tool={(lobby != null ? lobby.ToolId : 0)}", this);
+#endif
+            if (lobby != null && lobby.CarriedCoreId.IsValid
+                && TryStealCore(playerObject, lobby, interactor)) return;
             if (lobby != null && lobby.ToolId >= 1 && lobby.ToolId <= 6
-                && UnityEngine.Random.value <= teamToolDropChance && interactor != null
+                && interactor != null
                 && TryRelocateTeamTool(playerObject, interactor)) return;
-            playerObject.GetComponent<NetworkPlayerMovement>()
-                ?.TryApplySlowAuthoritative(slowMultiplier, slowDurationSeconds);
+            var movement = playerObject.GetComponent<NetworkPlayerMovement>();
+            if (movement != null && movement.TryApplySlowAuthoritative(slowMultiplier, slowDurationSeconds))
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log($"[CREEP_ATTACK][SLOW] target={TargetPlayer} multiplier={slowMultiplier:F2} duration={slowDurationSeconds:F1}", this);
+#endif
+            }
         }
 
         private bool TryRelocateTeamTool(NetworkObject playerObject, NetworkPlayerInteractor interactor)
         {
-            return TryFindSabotageDropPosition(playerObject.transform.position, out var dropPosition)
-                && interactor.DropTeamToolAuthoritative(TargetPlayer, dropPosition);
+            if (!TryFindSabotageDropPosition(playerObject.transform.position, out var dropPosition)) return false;
+            bool success = interactor.DropTeamToolAuthoritative(TargetPlayer, dropPosition);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"[CREEP_STEAL_TOOL] target={TargetPlayer} success={success} drop={dropPosition}", this);
+#endif
+            return success;
         }
 
         private bool TryFindSabotageDropPosition(Vector3 playerPosition, out Vector3 position)
         {
             position = default;
-            var away = Vector3.ProjectOnPlane(transform.position - playerPosition, Vector3.up);
-            if (away.sqrMagnitude < 0.01f)
-                away = Vector3.ProjectOnPlane(UnityEngine.Random.insideUnitSphere, Vector3.up);
-            away.Normalize();
-
             for (int i = 0; i < 8; i++)
             {
-                var direction = Quaternion.Euler(0f, UnityEngine.Random.Range(-60f, 60f), 0f) * away;
-                float distance = UnityEngine.Random.Range(
-                    stolenToolDropMinDistance,
-                    Mathf.Max(stolenToolDropMinDistance + 0.5f, stolenToolDropMaxDistance));
-                if (!NavMesh.SamplePosition(transform.position + direction * distance, out var hit, 3f, NavMesh.AllAreas)
-                    || Vector3.Distance(playerPosition, hit.position) < stolenToolDropMinDistance)
-                    continue;
+                Vector2 direction = UnityEngine.Random.insideUnitCircle;
+                if (direction.sqrMagnitude < 0.01f) continue;
+                direction.Normalize();
+                float distance = UnityEngine.Random.Range(stolenToolDropMinDistance, stolenToolDropMaxDistance);
+                var candidate = playerPosition + new Vector3(direction.x, 0f, direction.y) * distance;
+                if (!NavMesh.SamplePosition(candidate, out var hit, 2.5f, NavMesh.AllAreas)) continue;
+                float actualDistance = Vector3.Distance(playerPosition, hit.position);
+                if (actualDistance < stolenToolDropMinDistance || actualDistance > stolenToolDropMaxDistance) continue;
 
                 position = hit.position + Vector3.up * 0.05f;
                 return true;
@@ -413,13 +431,35 @@ namespace EchoProtocol.AI.Minions
         private bool TryStealCore(NetworkObject playerObject, LobbyPlayerState lobby, NetworkPlayerInteractor interactor)
         {
             var coreId = lobby.CarriedCoreId;
-            if (interactor == null || !coreId.IsValid || !Runner.TryFindObject(coreId, out var obj)
-                || obj == null || !obj.TryGetComponent<NetworkPickupItem>(out var core)
-                || !interactor.DropCarriedCoreAuthoritative(TargetPlayer)) return false;
+            if (interactor == null || !coreId.IsValid) return false;
+            if (!Runner.TryFindObject(coreId, out var obj)
+                || obj == null || !obj.TryGetComponent<NetworkPickupItem>(out var core))
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.LogWarning($"[CREEP_STEAL_CORE][NO_OBJECT] id={coreId}", this);
+#endif
+                return false;
+            }
+            if (!interactor.DropCarriedCoreAuthoritative(TargetPlayer))
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.LogWarning($"[CREEP_STEAL_CORE][DROP_FAILED] target={TargetPlayer} id={coreId}", this);
+#endif
+                return false;
+            }
             // A successful forced drop consumes this hit's one side effect even if carry cannot begin.
-            if (!core.TryBeginMonsterCarryAuthoritative(Object.Id, CarryPosition(), transform.rotation)) return true;
+            if (!core.TryBeginMonsterCarryAuthoritative(Object.Id, CarryPosition(), transform.rotation))
+            {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.LogWarning($"[CREEP_STEAL_CORE][CARRY_FAILED] core={coreId} monster={Object.Id}", this);
+#endif
+                return true;
+            }
             StolenCoreId = coreId;
             BeginFlee(playerObject.transform.position, coreCarryTimeoutSeconds);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log($"[CREEP_STEAL_CORE][SUCCESS] core={coreId} destination={_fleeDestination}", this);
+#endif
             return true;
         }
 
