@@ -453,18 +453,19 @@ namespace EchoProtocol.Networking
 
             if (zone == RegionSemanticZone.Zone02)
             {
+                if (!IsValidNetworkObject(_zone2MonsterInstance)) return false;
+
+                Vector3 zone2Origin = _zone2MonsterInstance.transform.position;
+                float maxDistanceSqr = _zone2MinionAnchorFallbackRadius * _zone2MinionAnchorFallbackRadius;
                 if (_zone2AnchorPlayer.IsRealPlayer
                     && runner.TryGetPlayerObject(_zone2AnchorPlayer, out var zone2Player)
-                    && IsEligibleMinionAnchor(zone2Player))
+                    && IsEligibleMinionAnchor(zone2Player)
+                    && (zone2Player.transform.position - zone2Origin).sqrMagnitude <= maxDistanceSqr)
                 {
                     anchor = zone2Player;
                     return true;
                 }
 
-                if (!IsValidNetworkObject(_zone2MonsterInstance)) return false;
-
-                Vector3 zone2Origin = _zone2MonsterInstance.transform.position;
-                float maxDistanceSqr = _zone2MinionAnchorFallbackRadius * _zone2MinionAnchorFallbackRadius;
                 float bestDistanceSqr = float.PositiveInfinity;
                 foreach (var player in runner.ActivePlayers)
                 {

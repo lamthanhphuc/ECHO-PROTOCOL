@@ -21,8 +21,17 @@ namespace EchoProtocol.Networking.Tests
         public void CreepToolRelocation_RequiresCompletePath()
         {
             string source = File.ReadAllText(MinionSource);
-            StringAssert.Contains("NavMesh.CalculatePath", source);
-            StringAssert.Contains("NavMeshPathStatus.PathComplete", source);
+            string toolRelocation = ExtractMethod(source,
+                "private bool TryFindSabotageDropPosition",
+                "private bool TryStealCore");
+            string coreFlee = ExtractMethod(source,
+                "private bool TryFindFleeDestination",
+                "public void ReleaseStolenCoreAuthoritative");
+
+            StringAssert.Contains("NavMesh.CalculatePath", toolRelocation);
+            StringAssert.Contains("NavMeshPathStatus.PathComplete", toolRelocation);
+            StringAssert.Contains("NavMesh.CalculatePath", coreFlee);
+            StringAssert.Contains("NavMeshPathStatus.PathComplete", coreFlee);
         }
 
         [Test]
@@ -32,6 +41,16 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("_zone2AnchorPlayer", source);
             StringAssert.Contains("_zone2MonsterInstance", source);
             StringAssert.Contains("_zone2MinionAnchorFallbackRadius", source);
+            StringAssert.Contains("zone2Player.transform.position - zone2Origin", source);
+        }
+
+        private static string ExtractMethod(string source, string signature, string nextSignature)
+        {
+            int start = source.IndexOf(signature, System.StringComparison.Ordinal);
+            Assert.That(start, Is.GreaterThanOrEqualTo(0), $"Missing method: {signature}");
+            int end = source.IndexOf(nextSignature, start, System.StringComparison.Ordinal);
+            Assert.That(end, Is.GreaterThan(start), $"Missing method boundary: {nextSignature}");
+            return source.Substring(start, end - start);
         }
     }
 }
