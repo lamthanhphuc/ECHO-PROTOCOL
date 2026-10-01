@@ -159,7 +159,9 @@ MonoBehaviour:
   trackSpeed: 4.5
   harassSpeed: 6
   fleeSpeed: 7
-  roamRadius: 8
+  roamRadius: 28
+  roamMinPathDistance: 12
+  roamDestinationAttempts: 12
   targetRefreshSeconds: 0.35
   visionRange: 16
   visionHalfAngle: 80

@@ -25,7 +25,16 @@ namespace EchoProtocol.AI.Minions
         [SerializeField] private float trackSpeed = 4.5f;
         [SerializeField] private float harassSpeed = 6f;
         [SerializeField] private float fleeSpeed = 7f;
-        [SerializeField] private float roamRadius = 8f;
+
+        [SerializeField, Min(5f)]
+        private float roamRadius = 28f;
+
+        [SerializeField, Min(2f)]
+        private float roamMinPathDistance = 12f;
+
+        [SerializeField, Range(4, 24)]
+        private int roamDestinationAttempts = 12;
+
         [SerializeField] private float targetRefreshSeconds = 0.35f;
 
         [Header("Perception")]
@@ -200,6 +209,19 @@ namespace EchoProtocol.AI.Minions
         public override void FixedUpdateNetwork()
         {
             if (!Object.HasStateAuthority || _agent == null) return;
+
+            // Dying thực sự phải đứng trước
+            // mọi NavMesh/AI activation.
+            if (IsDying)
+            {
+                IsMoving = false;
+                if (DeathTimer.Expired(Runner))
+                {
+                    Runner.Despawn(Object);
+                }
+                return;
+            }
+
             if (!_agent.enabled && !TryActivateAgent())
             {
                 IsMoving = false;
@@ -209,15 +231,6 @@ namespace EchoProtocol.AI.Minions
                 && (_navigation == null || !_navigation.TryReattachToNearestNavMesh(2f)))
             {
                 IsMoving = false;
-                return;
-            }
-
-            // Dying guard: phải check trước mọi AI logic.
-            if (IsDying)
-            {
-                IsMoving = false;
-                if (DeathTimer.Expired(Runner))
-                    Runner.Despawn(Object);
                 return;
             }
 
@@ -345,15 +358,120 @@ namespace EchoProtocol.AI.Minions
         {
             StateValue = (int)CreepMinionState.Roam;
             _agent.speed = roamSpeed;
+
             bool stillTravelling = _agent.pathPending
                 || (_agent.hasPath
                     && _agent.remainingDistance > _agent.stoppingDistance + roamArrivalSlack);
-            if (stillTravelling && Time.time < _nextRoamRetargetAt) return;
-            _nextRoamRetargetAt = Time.time + UnityEngine.Random.Range(3f, 6f);
-            var offset = UnityEngine.Random.insideUnitSphere * roamRadius;
-            offset.y = 0f;
-            if (NavMesh.SamplePosition(transform.position + offset, out var hit, 3f, NavMesh.AllAreas))
+
+            // Ponytail:
+            // đã có destination hợp lệ thì đi hết.
+            // Không đổi target sau 3–6 giây giữa đường.
+            if (stillTravelling)
+            {
+                return;
+            }
+
+            // Chỉ dùng timer như retry delay
+            // nếu chưa tìm được destination.
+            if (Time.time < _nextRoamRetargetAt)
+            {
+                return;
+            }
+
+            if (TrySetLongRangeRoamDestination())
+            {
+                return;
+            }
+
+            // Không tìm được đường thì thử lại sau 1 giây.
+            _nextRoamRetargetAt = Time.time + 1f;
+        }
+
+        private bool TrySetLongRangeRoamDestination()
+        {
+            if (!NavMesh.SamplePosition(transform.position, out var originHit, 2f, _agent.areaMask))
+            {
+                return false;
+            }
+
+            var path = new NavMeshPath();
+
+            for (int attempt = 0; attempt < roamDestinationAttempts; attempt++)
+            {
+                Vector2 direction = UnityEngine.Random.insideUnitCircle;
+                if (direction.sqrMagnitude < 0.01f)
+                {
+                    continue;
+                }
+
+                direction.Normalize();
+
+                float distance = UnityEngine.Random.Range(roamMinPathDistance, roamRadius);
+
+                Vector3 candidate = transform.position
+                    + new Vector3(direction.x, 0f, direction.y) * distance;
+
+                if (!NavMesh.SamplePosition(candidate, out var hit, 3f, _agent.areaMask))
+                {
+                    continue;
+                }
+
+                if (!NavMesh.CalculatePath(originHit.position, hit.position, _agent.areaMask, path)
+                    || path.status != NavMeshPathStatus.PathComplete)
+                {
+                    continue;
+                }
+
+                // Candidate có thể nhìn xa nhưng NavMesh
+                // thực tế chỉ dẫn Minion đi vài mét.
+                // Kiểm tra chiều dài route thật.
+                float pathLength = CalculatePathLength(path);
+
+                if (pathLength < roamMinPathDistance)
+                {
+                    continue;
+                }
+
                 _agent.SetDestination(hit.position);
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log(
+                    $"[CREEP_ROAM][DESTINATION] " +
+                    $"id={Object.Id} " +
+                    $"pathLength={pathLength:F1} " +
+                    $"destination={hit.position}",
+                    this);
+#endif
+
+                return true;
+            }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.LogWarning(
+                $"[CREEP_ROAM][NO_LONG_PATH] " +
+                $"id={Object.Id} " +
+                $"position={transform.position}",
+                this);
+#endif
+
+            return false;
+        }
+
+        private static float CalculatePathLength(NavMeshPath path)
+        {
+            if (path == null || path.corners == null || path.corners.Length < 2)
+            {
+                return 0f;
+            }
+
+            float length = 0f;
+
+            for (int i = 1; i < path.corners.Length; i++)
+            {
+                length += Vector3.Distance(path.corners[i - 1], path.corners[i]);
+            }
+
+            return length;
         }
 
         private PlayerRef FindBestVisibleTarget()

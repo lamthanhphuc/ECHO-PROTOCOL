@@ -38,7 +38,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _monsterPrefab;
         [SerializeField] private NetworkObject _creepMinionPrefab;
         [Header("Creep Minion Spawn")]
-        [SerializeField, Min(1f)] private float _minionSpawnCheckInterval = 12f;
+        [SerializeField, Min(1f)] private float _minionSpawnCheckInterval = 3f;
 
         // Minion xuất hiện tương đối gần Stalker.
         [SerializeField, Min(1f)] private float _minionSpawnMinDistanceFromStalker = 4f;
@@ -441,7 +441,17 @@ namespace EchoProtocol.Networking
             int cap = zone == RegionSemanticZone.Zone02 ? profile.Zone2MinionCap : profile.Zone1MinionCap;
             int count = 0;
             foreach (var obj in _creepMinionInstances)
-                if (obj.TryGetComponent<CreepMinionRuntime>(out var minion) && minion.Zone == zone) count++;
+            {
+                if (!IsValidNetworkObject(obj)
+                    || !obj.TryGetComponent<CreepMinionRuntime>(out var minion)
+                    || minion.Zone != zone
+                    || minion.IsDying)
+                {
+                    continue;
+                }
+
+                count++;
+            }
             if (count >= cap
                 || !TryGetCreepMinionSpawnAnchor(zone, out var stalker)
                 || !TryFindCreepMinionSpawnPosition(runner, stalker, out var position)) return;
