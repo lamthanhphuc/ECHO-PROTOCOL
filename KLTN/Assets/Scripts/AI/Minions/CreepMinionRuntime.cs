@@ -563,10 +563,10 @@ namespace EchoProtocol.AI.Minions
             for (int attempt = 0; attempt < 8; attempt++)
             {
                 Vector3 direction = Quaternion.Euler(0f, UnityEngine.Random.Range(-40f, 40f), 0f) * away;
-                float distance = UnityEngine.Random.Range(coreCarryDistance * 0.8f, coreCarryDistance);
+                float distance = UnityEngine.Random.Range(coreCarryDistance * 0.9f, coreCarryDistance * 1.1f);
                 Vector3 candidate = transform.position + direction * distance;
                 if (!NavMesh.SamplePosition(candidate, out var hit, 2.5f, NavMesh.AllAreas)) continue;
-                if (Vector3.Distance(originHit.position, hit.position) < coreCarryDistance * 0.65f) continue;
+                if (Vector3.Distance(originHit.position, hit.position) < coreCarryDistance * 0.85f) continue;
                 if (!NavMesh.CalculatePath(originHit.position, hit.position, NavMesh.AllAreas, path)
                     || path.status != NavMeshPathStatus.PathComplete) continue;
 

@@ -1,5 +1,7 @@
 using System.IO;
 using NUnit.Framework;
+using UnityEditor;
+using UnityEngine;
 
 namespace EchoProtocol.Networking.Tests
 {
@@ -18,7 +20,7 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
-        public void CreepToolRelocation_RequiresCompletePath()
+        public void CreepSabotageMovement_RequiresCompletePaths()
         {
             string source = File.ReadAllText(MinionSource);
             string toolRelocation = ExtractMethod(source,
@@ -42,6 +44,21 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("_zone2MonsterInstance", source);
             StringAssert.Contains("_zone2MinionAnchorFallbackRadius", source);
             StringAssert.Contains("zone2Player.transform.position - zone2Origin", source);
+        }
+
+        [Test]
+        public void CreepPrefab_SerializesAlertRetrySeconds()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Resources/PF_CreepMinionNetwork.prefab");
+            Assert.That(prefab, Is.Not.Null);
+
+            var minion = prefab.GetComponent<EchoProtocol.AI.Minions.CreepMinionRuntime>();
+            Assert.That(minion, Is.Not.Null);
+
+            var retry = new SerializedObject(minion).FindProperty("alertRetrySeconds");
+            Assert.That(retry, Is.Not.Null);
+            Assert.That(retry.floatValue, Is.EqualTo(1f).Within(0.001f));
         }
 
         private static string ExtractMethod(string source, string signature, string nextSignature)
