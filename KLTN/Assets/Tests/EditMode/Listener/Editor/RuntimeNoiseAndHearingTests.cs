@@ -306,7 +306,7 @@ namespace EchoProtocol.AI.Listener.Tests
 
             var policy =
                 new ListenerHearingPolicy(
-                    0.1d,
+                    0.01d,
                     0.5d,
                     0.25d,
                     1.25d);
@@ -326,7 +326,7 @@ namespace EchoProtocol.AI.Listener.Tests
             Assert.That(
                 insideSensor.TryEvaluate(
                     noise,
-                    new Vector3(14.99f, 0f, 0f),
+                    new Vector3(13f, 0f, 0f),
                     now,
                     out _,
                     out var insideReject),
@@ -905,7 +905,7 @@ namespace EchoProtocol.AI.Listener.Tests
         }
 
         [Test]
-        public void Hearing_InsideConfiguredRadius_IsAlwaysHeard()
+        public void Hearing_InsideConfiguredRadiusButBelowThreshold_IsRejected()
         {
             var sensor =
                 new ListenerHearingSensor(
@@ -934,12 +934,12 @@ namespace EchoProtocol.AI.Listener.Tests
                     Now(),
                     out _,
                     out var reject),
-                Is.True);
+                Is.False);
 
             Assert.That(
                 reject,
                 Is.EqualTo(
-                    ListenerHearingRejectReason.None));
+                    ListenerHearingRejectReason.BelowThreshold));
         }
 
         [Test]
@@ -988,7 +988,7 @@ namespace EchoProtocol.AI.Listener.Tests
 
             var clearSensor = new ListenerHearingSensor(
                 new StaticListenerOcclusionResolver(ListenerOcclusionClass.CLEAR),
-                new ListenerHearingPolicy(0.99d, 0.5d, 0.25d));
+                new ListenerHearingPolicy(0.2d, 0.5d, 0.25d));
             clearSensor.BeginMatch(Guid.NewGuid());
             Assert.That(clearSensor.TryEvaluate(
                 noiseEvent,

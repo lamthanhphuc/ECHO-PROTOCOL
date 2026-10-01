@@ -170,7 +170,7 @@ MonoBehaviour:
   roamArrivalSlack: 0.25
   attackRange: 1.6
   attackCooldownSeconds: 2.2
-  nonLethalDamage: 8
+  nonLethalDamage: 1
   slowMultiplier: 0.65
   slowDurationSeconds: 3
   coreCarryDistance: 10
@@ -179,6 +179,7 @@ MonoBehaviour:
   stolenToolDropMinDistance: 6
   stolenToolDropMaxDistance: 10
   alertCooldownSeconds: 20
+  alertRetrySeconds: 1
   flashlightRepelRange: 12
   flashlightExposureRequiredSeconds: 0.75
   flashlightFleeSeconds: 4

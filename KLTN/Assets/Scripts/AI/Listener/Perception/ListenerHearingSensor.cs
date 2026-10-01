@@ -164,6 +164,16 @@ namespace EchoProtocol.AI.Listener.Perception
                 * distanceAttenuation
                 * occlusionMultiplier;
 
+            if (effectiveIntensity < _policy.HearingThreshold)
+            {
+                bool wasOccluded = occlusionClass != ListenerOcclusionClass.CLEAR
+                    && occlusionClass != ListenerOcclusionClass.OPEN_DOOR;
+                rejectReason = wasOccluded
+                    ? ListenerHearingRejectReason.OccludedBelowThreshold
+                    : ListenerHearingRejectReason.BelowThreshold;
+                return false;
+            }
+
             observation = new HearingObservation(
                 noiseEvent.NoiseEventId,
                 noiseEvent.EventOrderKey,

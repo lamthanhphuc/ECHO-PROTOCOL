@@ -750,8 +750,15 @@ namespace EchoProtocol.AI.Stalker
                 return true;
             }
 
-            return EnsureStalkerSpatialRuntimeInitialized()
-                && TryResolveNearestSpatialNode(position, out var nodeId)
+            if ((_spatialPatrolGraph == null
+                    || _spatialPatrolGraph.IsEmpty
+                    || _regionGraph == null)
+                && !EnsureStalkerSpatialRuntimeInitialized())
+            {
+                return false;
+            }
+
+            return TryResolveNearestSpatialNode(position, out var nodeId)
                 && _regionGraph != null
                 && _regionGraph.TryGetNodeSemanticMetadata(nodeId, out var metadata)
                 && metadata.Zone == _patrolZone;

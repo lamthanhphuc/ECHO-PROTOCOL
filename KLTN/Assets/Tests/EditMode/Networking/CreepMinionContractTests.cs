@@ -53,12 +53,26 @@ namespace EchoProtocol.Networking.Tests
                 "Assets/Resources/PF_CreepMinionNetwork.prefab");
             Assert.That(prefab, Is.Not.Null);
 
-            var minion = prefab.GetComponent<EchoProtocol.AI.Minions.CreepMinionRuntime>();
+            var minion = FindComponentByTypeName(
+                prefab,
+                "EchoProtocol.AI.Minions.CreepMinionRuntime");
             Assert.That(minion, Is.Not.Null);
 
             var retry = new SerializedObject(minion).FindProperty("alertRetrySeconds");
             Assert.That(retry, Is.Not.Null);
             Assert.That(retry.floatValue, Is.EqualTo(1f).Within(0.001f));
+        }
+
+        private static Component FindComponentByTypeName(GameObject root, string fullTypeName)
+        {
+            var components = root.GetComponents<Component>();
+            for (int i = 0; i < components.Length; i++)
+            {
+                var component = components[i];
+                if (component != null && component.GetType().FullName == fullTypeName) return component;
+            }
+
+            return null;
         }
 
         private static string ExtractMethod(string source, string signature, string nextSignature)

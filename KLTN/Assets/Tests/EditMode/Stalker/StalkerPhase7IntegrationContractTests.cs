@@ -304,25 +304,36 @@ namespace EchoProtocol.AI.Stalker.Tests
         [Test]
         public void STK_TEL_005_LifeStateConsequenceSinkDoesNotOwnResearchTelemetry()
         {
-            var source =
+            var sinkSource =
                 File.ReadAllText(
                     LifeStateConsequenceSinkPath);
+            var lifeStateSource =
+                File.ReadAllText(
+                    "Assets/_Project/Scripts/Networking/Player/NetworkPlayerLifeState.cs");
 
             StringAssert.DoesNotContain(
                 "RecordStalkerAttackResolved",
-                source);
+                sinkSource);
 
             StringAssert.DoesNotContain(
                 "MatchAuthorityRuntime",
-                source);
+                sinkSource);
 
-            StringAssert.Contains(
+            StringAssert.DoesNotContain(
                 "lifeState.TryEliminateForReviveLimit()",
-                source);
+                sinkSource);
 
             StringAssert.Contains(
                 "lifeState.TryApplyMonsterDown(",
-                source);
+                sinkSource);
+
+            StringAssert.Contains(
+                "if (nextDownCount >= 3)",
+                lifeStateSource);
+
+            StringAssert.Contains(
+                "CommitEliminated(NetworkPlayerLifeTransitionCause.ReviveLimit, \"THIRD_DOWN\")",
+                lifeStateSource);
         }
 
         [Test]

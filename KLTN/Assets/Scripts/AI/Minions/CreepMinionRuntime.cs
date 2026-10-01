@@ -40,8 +40,11 @@ namespace EchoProtocol.AI.Minions
 
         [Header("Combat")]
         [SerializeField] private float attackRange = 1.6f;
-        [SerializeField] private float attackCooldownSeconds = 2.2f;
-        [SerializeField] private float nonLethalDamage = 8f;
+        [SerializeField, Min(0.1f)]
+        private float attackCooldownSeconds = 2.2f;
+
+        [SerializeField, Min(0.1f)]
+        private float nonLethalDamage = 1f;
 
         [Header("Hit Effects")]
         [SerializeField] private float slowMultiplier = 0.65f;
@@ -58,8 +61,9 @@ namespace EchoProtocol.AI.Minions
 
         [Header("Counterplay")]
         [SerializeField] private float flashlightRepelRange = 12f;
-        [SerializeField] private float flashlightExposureRequiredSeconds = 0.75f;
-        [SerializeField] private float flashlightFleeSeconds = 4f;
+        [FormerlySerializedAs("flashlightExposureRequiredSeconds")]
+        [SerializeField, Min(0.1f)] private float flashlightKillExposureSeconds = 0.75f;
+        [SerializeField, Min(0.1f)] private float deathVanishSeconds = 0.5f;
         [SerializeField] private float noiseMakerDistractionSeconds = 6f;
         [SerializeField] private float noiseMakerArrivalDistance = 1.5f;
 
@@ -74,6 +78,9 @@ namespace EchoProtocol.AI.Minions
         [Networked] private TickTimer AlertCooldown { get; set; }
         [Networked] private TickTimer FleeTimer { get; set; }
 
+        [Networked] public NetworkBool IsDying { get; private set; }
+        [Networked] private TickTimer DeathTimer { get; set; }
+
         public CreepMinionState State => StateValue >= 0 && StateValue <= 3
             ? (CreepMinionState)StateValue : CreepMinionState.Roam;
         public RegionSemanticZone Zone => ZoneValue == (int)RegionSemanticZone.Zone01
@@ -87,7 +94,6 @@ namespace EchoProtocol.AI.Minions
         private float _trackSeconds;
         private float _lostSightSeconds;
         private float _flashlightExposureSeconds;
-        private bool _flashlightRepelledDuringFlee;
         private float _nextTargetRefreshAt;
         private float _nextRoamRetargetAt;
         private float _distractionUntil;
@@ -100,6 +106,9 @@ namespace EchoProtocol.AI.Minions
         private float _actionAnimationUntil;
         private string _currentLocomotionAnimation;
         private bool _stalkerAlertDeliveredForTarget;
+        private Transform _visualRoot;
+        private Vector3 _visualInitialScale;
+        private Collider _bodyCollider;
 
         public void ConfigureBeforeSpawn(RegionSemanticZone zone) => ZoneValue = (int)zone;
 
@@ -107,14 +116,21 @@ namespace EchoProtocol.AI.Minions
         {
             _agent = GetComponent<NavMeshAgent>();
             _animators = GetComponentsInChildren<Animator>(true);
+            _bodyCollider = GetComponent<Collider>();
             _renderedAttackSequence = AttackSequence;
             _renderedAlertSequence = AlertSequence;
+
+            _visualRoot = transform.Find("Visual");
+            if (_visualRoot != null) _visualInitialScale = _visualRoot.localScale;
+
             if (!Object.HasStateAuthority)
             {
                 _agent.enabled = false;
                 return;
             }
 
+            IsDying = false;
+            DeathTimer = TickTimer.None;
             StateValue = (int)CreepMinionState.Roam;
             TargetPlayer = PlayerRef.None;
             StolenCoreId = default;
@@ -196,18 +212,24 @@ namespace EchoProtocol.AI.Minions
                 return;
             }
 
-            Vector3 flashlightSource = default;
-            if ((State != CreepMinionState.Flee || (StolenCoreId.IsValid && !_flashlightRepelledDuringFlee))
-                && TryGetFlashlightSource(out flashlightSource))
+            // Dying guard: phải check trước mọi AI logic.
+            if (IsDying)
+            {
+                IsMoving = false;
+                if (DeathTimer.Expired(Runner))
+                    Runner.Despawn(Object);
+                return;
+            }
+
+            if (TryGetFlashlightSource(out _))
                 _flashlightExposureSeconds += Runner.DeltaTime;
             else
                 _flashlightExposureSeconds = 0f;
-            if (_flashlightExposureSeconds >= flashlightExposureRequiredSeconds)
+
+            if (_flashlightExposureSeconds >= flashlightKillExposureSeconds)
             {
-                _flashlightExposureSeconds = 0f;
-                ResetTracking();
-                BeginFlee(flashlightSource, flashlightFleeSeconds);
-                _flashlightRepelledDuringFlee = true;
+                BeginFlashlightDeath();
+                return;
             }
 
             if (State == CreepMinionState.Flee)
@@ -420,36 +442,137 @@ namespace EchoProtocol.AI.Minions
             return accepted;
         }
 
-        private void AttackPlayer(NetworkObject playerObject, NetworkPlayerLifeState life)
+        private void AttackPlayer(
+            NetworkObject playerObject,
+            NetworkPlayerLifeState life)
         {
-            if (playerObject == null || life == null) return;
+            if (playerObject == null
+                || life == null
+                || Runner == null
+                || !Runner.IsRunning)
+            {
+                return;
+            }
+
+            // Ponytail:
+            // AttackPlayer tự bảo vệ cooldown,
+            // không phụ thuộc hoàn toàn vào caller.
+            if (!AttackCooldown
+                .ExpiredOrNotRunning(Runner))
+            {
+                return;
+            }
+
+            // Commit cooldown ngay khi một attack attempt
+            // hợp lệ bắt đầu.
+            //
+            // Nếu life-state thay đổi trong cùng tick
+            // và damage bị reject, minion cũng không spam
+            // attack lại mỗi network tick.
+            AttackCooldown =
+                TickTimer.CreateFromSeconds(
+                    Runner,
+                    Mathf.Max(
+                        0.1f,
+                        attackCooldownSeconds));
+
+            float healthBefore =
+                life.Health;
+
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log($"[CREEP_ATTACK][ENTER] target={TargetPlayer} health={life.Health}", this);
+            Debug.Log(
+                $"[CREEP_ATTACK][ENTER] " +
+                $"target={TargetPlayer} " +
+                $"health={healthBefore:F1}",
+                this);
 #endif
-            if (!life.TryApplyAuthoritativeNonLethalDamage(nonLethalDamage, "CREEP_MINION", transform.position))
+
+            if (!life.TryApplyAuthoritativeNonLethalDamage(
+                    nonLethalDamage,
+                    "CREEP_MINION",
+                    transform.position))
             {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.LogWarning($"[CREEP_ATTACK][REJECTED] target={TargetPlayer} status={life.Status} reviveProtection={life.HasReviveProtection}", this);
+                Debug.LogWarning(
+                    $"[CREEP_ATTACK][REJECTED] " +
+                    $"target={TargetPlayer} " +
+                    $"status={life.Status} " +
+                    $"reviveProtection={life.HasReviveProtection} " +
+                    $"cooldown={attackCooldownSeconds:F2}s",
+                    this);
 #endif
                 return;
             }
+
             AttackSequence++;
-            AttackCooldown = TickTimer.CreateFromSeconds(Runner, attackCooldownSeconds);
-            var lobby = playerObject.GetComponent<LobbyPlayerState>();
-            var interactor = playerObject.GetComponent<NetworkPlayerInteractor>();
+
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log($"[CREEP_ATTACK][HIT] target={TargetPlayer} zone={Zone} core={lobby != null && lobby.CarriedCoreId.IsValid} tool={(lobby != null ? lobby.ToolId : 0)}", this);
+            Debug.Log(
+                $"[CREEP_ATTACK][DAMAGE] " +
+                $"target={TargetPlayer} " +
+                $"health={healthBefore:F1}->{life.Health:F1} " +
+                $"damage={nonLethalDamage:F1} " +
+                $"cooldown={attackCooldownSeconds:F2}s",
+                this);
 #endif
-            if (lobby != null && lobby.CarriedCoreId.IsValid
-                && TryStealCore(playerObject, lobby, interactor)) return;
-            if (lobby != null && lobby.ToolId >= 1 && lobby.ToolId <= 6
+
+            var lobby =
+                playerObject.GetComponent<
+                    LobbyPlayerState>();
+
+            var interactor =
+                playerObject.GetComponent<
+                    NetworkPlayerInteractor>();
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            bool _hasCore = lobby != null && lobby.CarriedCoreId.IsValid;
+            int  _toolId  = lobby != null ? lobby.ToolId : 0;
+            Debug.Log(
+                $"[CREEP_ATTACK][HIT] " +
+                $"target={TargetPlayer} " +
+                $"zone={Zone} " +
+                $"core={_hasCore} " +
+                $"tool={_toolId}",
+                this);
+#endif
+
+            if (lobby != null
+                && lobby.CarriedCoreId.IsValid
+                && TryStealCore(
+                    playerObject,
+                    lobby,
+                    interactor))
+            {
+                return;
+            }
+
+            if (lobby != null
+                && lobby.ToolId >= 1
+                && lobby.ToolId <= 6
                 && interactor != null
-                && TryRelocateTeamTool(playerObject, interactor)) return;
-            var movement = playerObject.GetComponent<NetworkPlayerMovement>();
-            if (movement != null && movement.TryApplySlowAuthoritative(slowMultiplier, slowDurationSeconds))
+                && TryRelocateTeamTool(
+                    playerObject,
+                    interactor))
+            {
+                return;
+            }
+
+            var movement =
+                playerObject.GetComponent<
+                    NetworkPlayerMovement>();
+
+            if (movement != null
+                && movement.TryApplySlowAuthoritative(
+                    slowMultiplier,
+                    slowDurationSeconds))
             {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.Log($"[CREEP_ATTACK][SLOW] target={TargetPlayer} multiplier={slowMultiplier:F2} duration={slowDurationSeconds:F1}", this);
+                Debug.Log(
+                    $"[CREEP_ATTACK][SLOW] " +
+                    $"target={TargetPlayer} " +
+                    $"multiplier={slowMultiplier:F2} " +
+                    $"duration={slowDurationSeconds:F1}",
+                    this);
 #endif
             }
         }
@@ -527,6 +650,48 @@ namespace EchoProtocol.AI.Minions
 
         private Vector3 CarryPosition() => transform.position + Vector3.up * coreCarryHeight + transform.forward * 0.2f;
 
+        private void BeginFlashlightDeath()
+        {
+            if (!Object.HasStateAuthority || IsDying) return;
+
+            // Nếu đang giữ Core thì trả Core trước,
+            // không để Core biến mất cùng Minion.
+            if (StolenCoreId.IsValid)
+                ReleaseStolenCoreAuthoritative();
+
+            IsDying = true;
+            ResetTracking();
+
+            _distractionUntil = 0f;
+            _flashlightExposureSeconds = 0f;
+
+            AttackCooldown = TickTimer.None;
+            AlertCooldown = TickTimer.None;
+            FleeTimer = TickTimer.None;
+            IsMoving = false;
+
+            if (_bodyCollider != null)
+                _bodyCollider.enabled = false;
+
+            if (_agent != null && _agent.enabled)
+            {
+                if (_agent.isOnNavMesh) _agent.ResetPath();
+                _agent.enabled = false;
+            }
+
+            DeathTimer = TickTimer.CreateFromSeconds(
+                Runner,
+                Mathf.Max(0.1f, deathVanishSeconds));
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            Debug.Log(
+                $"[CREEP_FLASHLIGHT][DEATH] " +
+                $"id={Object.Id} " +
+                $"zone={Zone}",
+                this);
+#endif
+        }
+
         private void BeginFlee(Vector3 threatPosition, float seconds)
         {
             if (!TryFindFleeDestination(threatPosition, out _fleeDestination))
@@ -540,7 +705,6 @@ namespace EchoProtocol.AI.Minions
             _agent.speed = fleeSpeed;
             StateValue = (int)CreepMinionState.Flee;
             FleeTimer = TickTimer.CreateFromSeconds(Runner, seconds);
-            _flashlightRepelledDuringFlee = false;
         }
 
         private bool TryFindFleeDestination(Vector3 threatPosition, out Vector3 destination)
@@ -589,7 +753,6 @@ namespace EchoProtocol.AI.Minions
             }
             StolenCoreId = default;
             FleeTimer = TickTimer.None;
-            _flashlightRepelledDuringFlee = false;
             ResetTracking();
             StateValue = (int)CreepMinionState.Roam;
         }
@@ -633,6 +796,26 @@ namespace EchoProtocol.AI.Minions
 
         public override void Render()
         {
+            // Lazy-init visual root.
+            if (_visualRoot == null)
+            {
+                _visualRoot = transform.Find("Visual");
+                if (_visualRoot != null) _visualInitialScale = _visualRoot.localScale;
+            }
+
+            if (IsDying)
+            {
+                float remaining = DeathTimer.RemainingTime(Runner) ?? 0f;
+                float duration = Mathf.Max(0.1f, deathVanishSeconds);
+                float normalized = 1f - Mathf.Clamp01(remaining / duration);
+                float scale = 1f - normalized; // 1 → 0
+
+                if (_visualRoot != null)
+                    _visualRoot.localScale = _visualInitialScale * scale;
+
+                return;
+            }
+
             if (_animators == null || _animators.Length == 0) _animators = GetComponentsInChildren<Animator>(true);
             if (AlertSequence != _renderedAlertSequence)
             {

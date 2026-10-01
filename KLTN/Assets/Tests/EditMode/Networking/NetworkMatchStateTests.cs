@@ -19,14 +19,26 @@ namespace EchoProtocol.Networking.Tests
                 "Assets/Resources/Network/NetworkMatchState.prefab");
             Assert.That(prefab, Is.Not.Null);
 
-            var state = prefab.GetComponent<NetworkMatchState>();
+            var state = FindComponentByTypeName(
+                prefab,
+                "EchoProtocol.Networking.NetworkMatchState");
             Assert.That(state, Is.Not.Null);
 
             var serializedState = new SerializedObject(state);
-            Assert.That(serializedState.FindProperty("_matchDurationSeconds").floatValue,
-                Is.EqualTo(NetworkMatchState.DefaultMatchDurationSeconds));
-            Assert.That(serializedState.FindProperty("_escapeDurationSeconds").floatValue,
-                Is.EqualTo(NetworkMatchState.DefaultEscapeDurationSeconds));
+            var matchDuration = serializedState.FindProperty("_matchDurationSeconds");
+            var escapeDuration = serializedState.FindProperty("_escapeDurationSeconds");
+            Assert.That(matchDuration, Is.Not.Null);
+            Assert.That(escapeDuration, Is.Not.Null);
+            Assert.That(matchDuration.floatValue, Is.EqualTo(900f).Within(0.001f));
+            Assert.That(escapeDuration.floatValue, Is.EqualTo(45f).Within(0.001f));
+        }
+
+        [Test]
+        public void NetworkMatchSource_DeclaresCanonicalTiming()
+        {
+            string source = File.ReadAllText(MatchSourcePath);
+            StringAssert.Contains("public const float DefaultMatchDurationSeconds = 900f;", source);
+            StringAssert.Contains("public const float DefaultEscapeDurationSeconds = 45f;", source);
         }
 
         [Test]
@@ -190,6 +202,18 @@ namespace EchoProtocol.Networking.Tests
         private static string LoadNetworkMatchStateSource()
         {
             return File.ReadAllText(MatchSourcePath);
+        }
+
+        private static Component FindComponentByTypeName(GameObject root, string fullTypeName)
+        {
+            var components = root.GetComponents<Component>();
+            for (int i = 0; i < components.Length; i++)
+            {
+                var component = components[i];
+                if (component != null && component.GetType().FullName == fullTypeName) return component;
+            }
+
+            return null;
         }
     }
 }
