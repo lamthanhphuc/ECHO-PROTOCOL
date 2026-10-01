@@ -133,7 +133,14 @@ namespace EchoProtocol.AI.Minions
 
         private bool TryActivateAgent()
         {
-            if (_agent.enabled) return _agent.isOnNavMesh;
+            if (_agent.enabled && _agent.isOnNavMesh)
+            {
+                _navigation ??= new StalkerNavigationController(_agent);
+                _navigation.SetAuthoritativeLocomotion(true);
+                return true;
+            }
+
+            if (_agent.enabled) _agent.enabled = false;
             if (!NavMesh.SamplePosition(transform.position, out var hit, 2f, _agent.areaMask)) return false;
             transform.position = hit.position;
             _agent.enabled = true;

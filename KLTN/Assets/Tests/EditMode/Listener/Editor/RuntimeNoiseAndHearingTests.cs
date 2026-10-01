@@ -32,7 +32,8 @@ namespace EchoProtocol.AI.Listener.Tests
                     "WALK",
                     "DOOR",
                     "CORE_INSERT",
-                    "MACHINE_REPAIR"
+                    "MACHINE_REPAIR",
+                    "MINION_ALERT"
                 }));
         }
 
@@ -78,6 +79,8 @@ namespace EchoProtocol.AI.Listener.Tests
                 RuntimeNoiseEmissionMode.DiscreteAction);
             AssertDefinition(catalog, RuntimeNoiseType.MACHINE_REPAIR, 1.5d, 200d, 3d,
                 RuntimeNoiseEmissionMode.RecurringMovement);
+            AssertDefinition(catalog, RuntimeNoiseType.MINION_ALERT, 1d, 55d, 4d,
+                RuntimeNoiseEmissionMode.DiscreteAction);
             catalog.TryGetDefinition(RuntimeNoiseType.MACHINE_REPAIR, out var machineRepair);
             Assert.That(machineRepair.PulseInterval.TotalSeconds, Is.EqualTo(2.5d));
 
