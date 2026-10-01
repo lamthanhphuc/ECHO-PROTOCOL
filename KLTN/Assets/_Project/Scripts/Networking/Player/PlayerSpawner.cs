@@ -58,6 +58,7 @@ namespace EchoProtocol.Networking
         private readonly List<NetworkObject> _creepMinionInstances = new List<NetworkObject>();
         private float _nextMinionSpawnCheckAt;
         private bool _zone2MinionsActive;
+        private PlayerRef _zone2AnchorPlayer = PlayerRef.None;
         private bool _missingMinionPrefabLogged;
 
         private void Update()
@@ -400,6 +401,7 @@ namespace EchoProtocol.Networking
             _zone2MonsterInstance = spawned;
             _zone2MonsterSpawned = true;
             _zone2MinionsActive = true;
+            _zone2AnchorPlayer = playerState.Object.InputAuthority;
             DespawnCreepMinionsForZone(runner, RegionSemanticZone.Zone01);
             _nextMinionSpawnCheckAt = Time.time;
         }
@@ -436,30 +438,49 @@ namespace EchoProtocol.Networking
             int count = 0;
             foreach (var obj in _creepMinionInstances)
                 if (obj.TryGetComponent<CreepMinionRuntime>(out var minion) && minion.Zone == zone) count++;
-            if (count >= cap || !TryGetCreepMinionAnchor(runner, out var anchorPlayer)
+            if (count >= cap || !TryGetCreepMinionAnchor(runner, zone, out var anchorPlayer)
                 || !TryFindCreepMinionSpawnPosition(anchorPlayer, out var position)) return;
             SpawnCreepMinion(runner, position, zone);
         }
 
-        private static bool TryGetCreepMinionAnchor(NetworkRunner runner, out NetworkObject anchor)
+        private bool TryGetCreepMinionAnchor(
+            NetworkRunner runner,
+            RegionSemanticZone zone,
+            out NetworkObject anchor)
         {
             anchor = null;
+
+            if (zone == RegionSemanticZone.Zone02)
+            {
+                if (!_zone2AnchorPlayer.IsRealPlayer
+                    || !runner.TryGetPlayerObject(_zone2AnchorPlayer, out var zone2Player)
+                    || !IsEligibleMinionAnchor(zone2Player)) return false;
+
+                anchor = zone2Player;
+                return true;
+            }
+
             int eligibleCount = 0;
             foreach (var player in runner.ActivePlayers)
             {
                 if (!runner.TryGetPlayerObject(player, out var playerObject)
-                    || !IsValidNetworkObject(playerObject)
-                    || !playerObject.TryGetComponent<LobbyPlayerState>(out var lobby)
-                    || !lobby.IsGameplayPlayer
-                    || !playerObject.TryGetComponent<NetworkPlayerLifeState>(out var life)
-                    || life.Status != NetworkPlayerLifeStatus.Alive
-                    || (playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement)
-                        && movement.IsHidden)) continue;
+                    || !IsEligibleMinionAnchor(playerObject)) continue;
 
                 if (Random.Range(0, ++eligibleCount) == 0) anchor = playerObject;
             }
 
             return anchor != null;
+        }
+
+        private static bool IsEligibleMinionAnchor(NetworkObject playerObject)
+        {
+            return IsValidNetworkObject(playerObject)
+                && playerObject.TryGetComponent<LobbyPlayerState>(out var lobby)
+                && lobby.IsGameplayPlayer
+                && playerObject.TryGetComponent<NetworkPlayerLifeState>(out var life)
+                && life.Status == NetworkPlayerLifeStatus.Alive
+                && (!playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement)
+                    || !movement.IsHidden);
         }
 
         private bool TryFindCreepMinionSpawnPosition(NetworkObject player, out Vector3 position)
@@ -1271,6 +1292,7 @@ namespace EchoProtocol.Networking
         {
             _creepMinionInstances.Clear();
             _zone2MinionsActive = false;
+            _zone2AnchorPlayer = PlayerRef.None;
             _nextMinionSpawnCheckAt = 0f;
             _missingMinionPrefabLogged = false;
             _doorInstance = null;

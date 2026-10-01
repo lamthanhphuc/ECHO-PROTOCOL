@@ -390,10 +390,14 @@ namespace EchoProtocol.AI.Minions
                 out _);
 
             AlertSequence++;
-            AlertCooldown = TickTimer.CreateFromSeconds(Runner, alertCooldownSeconds);
             _trackSeconds = 0f;
             StateValue = (int)CreepMinionState.Harass;
+            AlertCooldown = alertAccepted
+                ? TickTimer.CreateFromSeconds(Runner, alertCooldownSeconds)
+                : TickTimer.None;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (!alertAccepted)
+                Debug.LogWarning($"[CREEP_ALERT][REJECTED] target={TargetPlayer} zone={Zone} position={_lastKnownTargetPosition}", this);
             Debug.Log($"[CREEP_ALERT] target={TargetPlayer} accepted={alertAccepted} nextState={State} zone={Zone} position={_lastKnownTargetPosition}", this);
 #endif
         }
@@ -445,6 +449,9 @@ namespace EchoProtocol.AI.Minions
         private bool TryFindSabotageDropPosition(Vector3 playerPosition, out Vector3 position)
         {
             position = default;
+            if (!NavMesh.SamplePosition(playerPosition, out var playerHit, 2f, NavMesh.AllAreas)) return false;
+
+            var path = new NavMeshPath();
             for (int i = 0; i < 8; i++)
             {
                 Vector2 direction = UnityEngine.Random.insideUnitCircle;
@@ -455,6 +462,8 @@ namespace EchoProtocol.AI.Minions
                 if (!NavMesh.SamplePosition(candidate, out var hit, 2.5f, NavMesh.AllAreas)) continue;
                 float actualDistance = Vector3.Distance(playerPosition, hit.position);
                 if (actualDistance < stolenToolDropMinDistance || actualDistance > stolenToolDropMaxDistance) continue;
+                if (!NavMesh.CalculatePath(playerHit.position, hit.position, NavMesh.AllAreas, path)
+                    || path.status != NavMeshPathStatus.PathComplete) continue;
 
                 position = hit.position + Vector3.up * 0.05f;
                 return true;
