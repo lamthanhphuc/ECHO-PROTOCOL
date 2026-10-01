@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Networking;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -6,7 +7,7 @@ using UnityEngine.Events;
 public class EscapeDoorCountdown : MonoBehaviour, IInteractable
 {
     [SerializeField] private MatchFlowController matchFlow;
-    [SerializeField] private float countdownSeconds = 8f;
+    [SerializeField] private float countdownSeconds = NetworkMatchState.DefaultEscapeDurationSeconds;
     [SerializeField] private string lockedPrompt = "Cửa thoát hiểm đang khóa";
     [SerializeField] private string startPrompt = "Mở Cửa Thoát Hiểm";
     [SerializeField] private string countingPrompt = "Đang mở cửa";

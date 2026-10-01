@@ -38,8 +38,9 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _monsterPrefab;
         [SerializeField] private NetworkObject _creepMinionPrefab;
         [SerializeField, Min(1f)] private float _minionSpawnCheckInterval = 5f;
-        [SerializeField, Min(2f)] private float _minionSpawnMinDistance = 2f;
-        [SerializeField, Min(3f)] private float _minionSpawnMaxDistance = 4f;
+        [SerializeField, Min(2f)] private float _minionSpawnMinDistance = 8f;
+        [SerializeField, Min(3f)] private float _minionSpawnMaxDistance = 12f;
+        [SerializeField, Range(30f, 120f)] private float _minionSpawnPlayerHalfFov = 70f;
 
         private readonly Dictionary<PlayerRef, int> _spawnSlots = new Dictionary<PlayerRef, int>();
         private FusionPlayerLifecycle _subscribedLifecycle;
@@ -435,25 +436,68 @@ namespace EchoProtocol.Networking
             int count = 0;
             foreach (var obj in _creepMinionInstances)
                 if (obj.TryGetComponent<CreepMinionRuntime>(out var minion) && minion.Zone == zone) count++;
-            var stalker = zone == RegionSemanticZone.Zone02 ? _zone2MonsterInstance : _monsterInstance;
-            if (count >= cap || !IsValidNetworkObject(stalker)
-                || !TryFindCreepMinionSpawnPosition(stalker.transform.position, out var position)) return;
+            if (count >= cap || !TryGetCreepMinionAnchor(runner, out var anchorPlayer)
+                || !TryFindCreepMinionSpawnPosition(anchorPlayer, out var position)) return;
             SpawnCreepMinion(runner, position, zone);
         }
 
-        private bool TryFindCreepMinionSpawnPosition(Vector3 anchor, out Vector3 position)
+        private static bool TryGetCreepMinionAnchor(NetworkRunner runner, out NetworkObject anchor)
+        {
+            anchor = null;
+            int eligibleCount = 0;
+            foreach (var player in runner.ActivePlayers)
+            {
+                if (!runner.TryGetPlayerObject(player, out var playerObject)
+                    || !IsValidNetworkObject(playerObject)
+                    || !playerObject.TryGetComponent<LobbyPlayerState>(out var lobby)
+                    || !lobby.IsGameplayPlayer
+                    || !playerObject.TryGetComponent<NetworkPlayerLifeState>(out var life)
+                    || life.Status != NetworkPlayerLifeStatus.Alive
+                    || (playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement)
+                        && movement.IsHidden)) continue;
+
+                if (Random.Range(0, ++eligibleCount) == 0) anchor = playerObject;
+            }
+
+            return anchor != null;
+        }
+
+        private bool TryFindCreepMinionSpawnPosition(NetworkObject player, out Vector3 position)
         {
             position = default;
-            float maxDistance = Mathf.Max(_minionSpawnMinDistance + 1f, _minionSpawnMaxDistance);
-            for (int i = 0; i < 12; i++)
+            if (player == null
+                || !NavMesh.SamplePosition(player.transform.position, out var anchorHit, 1.5f, NavMesh.AllAreas))
+                return false;
+
+            Vector3 forward = Vector3.ProjectOnPlane(player.transform.forward, Vector3.up);
+            if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward;
+            forward.Normalize();
+            var path = new NavMeshPath();
+
+            for (int i = 0; i < 16; i++)
             {
-                float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
-                float distance = Random.Range(_minionSpawnMinDistance, maxDistance);
-                var candidate = anchor + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * distance;
-                if (!NavMesh.SamplePosition(candidate, out var hit, 1f, NavMesh.AllAreas)) continue;
-                float actualDistance = Vector3.Distance(anchor, hit.position);
-                if (actualDistance < _minionSpawnMinDistance || actualDistance > maxDistance
-                    || NavMesh.Raycast(anchor, hit.position, out _, NavMesh.AllAreas)) continue;
+                Vector2 direction = Random.insideUnitCircle;
+                if (direction.sqrMagnitude < 0.01f) continue;
+                direction.Normalize();
+                float distance = Random.Range(_minionSpawnMinDistance, _minionSpawnMaxDistance);
+                Vector3 candidate = player.transform.position
+                    + new Vector3(direction.x, 0f, direction.y) * distance;
+                if (!NavMesh.SamplePosition(candidate, out var hit, 1.5f, NavMesh.AllAreas)) continue;
+
+                float actualDistance = Vector3.Distance(player.transform.position, hit.position);
+                Vector3 toSpawn = Vector3.ProjectOnPlane(hit.position - player.transform.position, Vector3.up);
+                if (actualDistance < _minionSpawnMinDistance
+                    || actualDistance > _minionSpawnMaxDistance
+                    || toSpawn.sqrMagnitude < 0.01f
+                    || Vector3.Angle(forward, toSpawn) <= _minionSpawnPlayerHalfFov
+                    || !NavMesh.CalculatePath(anchorHit.position, hit.position, NavMesh.AllAreas, path)
+                    || path.status != NavMeshPathStatus.PathComplete
+                    || !Physics.Linecast(
+                        player.transform.position + Vector3.up * 1.4f,
+                        hit.position + Vector3.up * 0.7f,
+                        ~0,
+                        QueryTriggerInteraction.Ignore)) continue;
+
                 position = hit.position;
                 return true;
             }

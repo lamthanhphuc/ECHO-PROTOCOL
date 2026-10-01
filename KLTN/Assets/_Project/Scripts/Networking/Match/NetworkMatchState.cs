@@ -76,10 +76,13 @@ namespace EchoProtocol.Networking
     [DisallowMultipleComponent]
     public sealed class NetworkMatchState : NetworkBehaviour
     {
+        public const float DefaultMatchDurationSeconds = 900f;
+        public const float DefaultEscapeDurationSeconds = 45f;
+
         public static event Action<NetworkMatchState> StateChanged;
 
-        [SerializeField, Min(1f)] private float _escapeDurationSeconds = 45f;
-        [SerializeField, Min(1f)] private float _matchDurationSeconds = 9000f;
+        [SerializeField, Min(1f)] private float _escapeDurationSeconds = DefaultEscapeDurationSeconds;
+        [SerializeField, Min(1f)] private float _matchDurationSeconds = DefaultMatchDurationSeconds;
         [SerializeField, Min(0.1f)] private float _returnToLobbyDelaySeconds = 4f;
         [SerializeField, Min(0.1f)] private float _zone2InteractionDistance = 3f;
         [SerializeField, Min(0.1f)] private float _zoneAccessCooldownSeconds = 5f;

@@ -1,5 +1,7 @@
 using System.IO;
 using NUnit.Framework;
+using UnityEditor;
+using UnityEngine;
 
 namespace EchoProtocol.Networking.Tests
 {
@@ -9,6 +11,23 @@ namespace EchoProtocol.Networking.Tests
             "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs";
         private const string ObjectiveSourcePath =
             "Assets/_Project/Scripts/Networking/Interaction/NetworkSectorBox.cs";
+
+        [Test]
+        public void NetworkMatchPrefab_UsesCanonicalTiming()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Resources/Network/NetworkMatchState.prefab");
+            Assert.That(prefab, Is.Not.Null);
+
+            var state = prefab.GetComponent<NetworkMatchState>();
+            Assert.That(state, Is.Not.Null);
+
+            var serializedState = new SerializedObject(state);
+            Assert.That(serializedState.FindProperty("_matchDurationSeconds").floatValue,
+                Is.EqualTo(NetworkMatchState.DefaultMatchDurationSeconds));
+            Assert.That(serializedState.FindProperty("_escapeDurationSeconds").floatValue,
+                Is.EqualTo(NetworkMatchState.DefaultEscapeDurationSeconds));
+        }
 
         [Test]
         public void MATCH_NET_FsmOnlyAdvancesFromExpectedRunningPhase()

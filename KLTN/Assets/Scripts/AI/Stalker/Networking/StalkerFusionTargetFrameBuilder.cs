@@ -82,11 +82,6 @@ namespace EchoProtocol.AI.Stalker.Networking
                         out var hiding) && hiding.IsHidden)
                     || (netMove != null && netMove.IsHidden);
 
-                var hideSpotId =
-                    isHidden && netMove != null
-                        ? netMove.CurrentHideSpotId
-                        : 0UL;
-
                 var eligibilitySnapshot =
                     new StalkerTargetEligibilitySnapshot(
                         true,
@@ -105,8 +100,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                     new StalkerTargetStatus(
                         playerId,
                         eligibility,
-                        isHidden,
-                        hideSpotId));
+                        isHidden));
                 var isObjectiveCarrier =
                     identity.TryGetComponent<LobbyPlayerState>(
                         out var lobbyState)

@@ -1477,13 +1477,6 @@ namespace EchoProtocol.AI.Stalker
                 if (_memory.HasLastKnownPosition)
                 {
                     EnterSearch();
-
-                    if (status.HideSpotId != 0UL)
-                    {
-                        TryBeginHideSpotInvestigationFromSearch(
-                            status.HideSpotId);
-                    }
-
                     return;
                 }
 

@@ -37,6 +37,14 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
+        public void STK_TARGET_STATUS_DoesNotExposeHideSpotKnowledge()
+        {
+            Assert.That(
+                ResolveType(StalkerTargetStatusTypeName).GetProperty("HideSpotId"),
+                Is.Null);
+        }
+
+        [Test]
         public void STK_CHASE_HiddenCurrentTarget_EntersSearchAndPreservesLastKnownPosition()
         {
             var controller = CreateController();
