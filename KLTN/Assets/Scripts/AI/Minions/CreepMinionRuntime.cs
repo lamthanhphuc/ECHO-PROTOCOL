@@ -54,6 +54,7 @@ namespace EchoProtocol.AI.Minions
 
         [Header("Alert")]
         [SerializeField] private float alertCooldownSeconds = 20f;
+        [SerializeField, Min(0.1f)] private float alertRetrySeconds = 1f;
 
         [Header("Counterplay")]
         [SerializeField] private float flashlightRepelRange = 12f;
@@ -98,6 +99,7 @@ namespace EchoProtocol.AI.Minions
         private uint _renderedAlertSequence;
         private float _actionAnimationUntil;
         private string _currentLocomotionAnimation;
+        private bool _stalkerAlertDeliveredForTarget;
 
         public void ConfigureBeforeSpawn(RegionSemanticZone zone) => ZoneValue = (int)zone;
 
@@ -245,6 +247,7 @@ namespace EchoProtocol.AI.Minions
                 if (best.IsRealPlayer && best != TargetPlayer)
                 {
                     TargetPlayer = best;
+                    _stalkerAlertDeliveredForTarget = false;
                     _trackSeconds = 0f;
                     _lostSightSeconds = 0f;
                     StateValue = (int)CreepMinionState.Track;
@@ -295,6 +298,14 @@ namespace EchoProtocol.AI.Minions
 
             if (State == CreepMinionState.Harass)
             {
+                if (!_stalkerAlertDeliveredForTarget && AlertCooldown.ExpiredOrNotRunning(Runner))
+                {
+                    _stalkerAlertDeliveredForTarget = TrySendStalkerAlert();
+                    AlertCooldown = TickTimer.CreateFromSeconds(
+                        Runner,
+                        _stalkerAlertDeliveredForTarget ? alertCooldownSeconds : alertRetrySeconds);
+                }
+
                 _agent.speed = harassSpeed;
                 _agent.SetDestination(_lastKnownTargetPosition);
                 float distance = Vector3.Distance(transform.position, targetObject.transform.position);
@@ -382,24 +393,31 @@ namespace EchoProtocol.AI.Minions
 
         private void EmitStalkerAlert()
         {
-            bool alertAccepted = _noiseService != null && _noiseService.TryAccept(
+            _stalkerAlertDeliveredForTarget = TrySendStalkerAlert();
+            _trackSeconds = 0f;
+            StateValue = (int)CreepMinionState.Harass;
+            AlertCooldown = TickTimer.CreateFromSeconds(
+                Runner,
+                _stalkerAlertDeliveredForTarget ? alertCooldownSeconds : alertRetrySeconds);
+        }
+
+        private bool TrySendStalkerAlert()
+        {
+            bool accepted = _noiseService != null && _noiseService.TryAccept(
                 TargetPlayer,
                 RuntimeNoiseType.MINION_ALERT,
                 new RuntimeNoiseSourceOccurrenceKey($"minion-alert:{Object.Id}", ++_alertOrdinal),
                 _lastKnownTargetPosition,
                 out _);
 
-            AlertSequence++;
-            _trackSeconds = 0f;
-            StateValue = (int)CreepMinionState.Harass;
-            AlertCooldown = alertAccepted
-                ? TickTimer.CreateFromSeconds(Runner, alertCooldownSeconds)
-                : TickTimer.None;
+            if (accepted) AlertSequence++;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (!alertAccepted)
+            if (!accepted)
                 Debug.LogWarning($"[CREEP_ALERT][REJECTED] target={TargetPlayer} zone={Zone} position={_lastKnownTargetPosition}", this);
-            Debug.Log($"[CREEP_ALERT] target={TargetPlayer} accepted={alertAccepted} nextState={State} zone={Zone} position={_lastKnownTargetPosition}", this);
+            else
+                Debug.Log($"[CREEP_ALERT][ACCEPTED] target={TargetPlayer} zone={Zone} position={_lastKnownTargetPosition}", this);
 #endif
+            return accepted;
         }
 
         private void AttackPlayer(NetworkObject playerObject, NetworkPlayerLifeState life)
@@ -511,20 +529,52 @@ namespace EchoProtocol.AI.Minions
 
         private void BeginFlee(Vector3 threatPosition, float seconds)
         {
-            var away = Vector3.ProjectOnPlane(transform.position - threatPosition, Vector3.up).normalized;
-            if (away.sqrMagnitude < 0.01f) away = UnityEngine.Random.insideUnitSphere.normalized;
-            var candidate = transform.position + away * coreCarryDistance
-                + new Vector3(UnityEngine.Random.Range(-2f, 2f), 0f, UnityEngine.Random.Range(-2f, 2f));
-            if (NavMesh.SamplePosition(candidate, out var hit, 4f, NavMesh.AllAreas)
-                || NavMesh.SamplePosition(transform.position + UnityEngine.Random.insideUnitSphere * roamRadius,
-                    out hit, 4f, NavMesh.AllAreas))
-                _fleeDestination = hit.position;
-            else
+            if (!TryFindFleeDestination(threatPosition, out _fleeDestination))
+            {
                 _fleeDestination = transform.position;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.LogWarning($"[CREEP_FLEE][NO_DESTINATION] id={Object.Id} position={transform.position}", this);
+#endif
+            }
+
             _agent.speed = fleeSpeed;
             StateValue = (int)CreepMinionState.Flee;
             FleeTimer = TickTimer.CreateFromSeconds(Runner, seconds);
             _flashlightRepelledDuringFlee = false;
+        }
+
+        private bool TryFindFleeDestination(Vector3 threatPosition, out Vector3 destination)
+        {
+            destination = transform.position;
+            if (!NavMesh.SamplePosition(transform.position, out var originHit, 2f, NavMesh.AllAreas)) return false;
+
+            var away = Vector3.ProjectOnPlane(transform.position - threatPosition, Vector3.up);
+            if (away.sqrMagnitude < 0.01f)
+            {
+                Vector2 random = UnityEngine.Random.insideUnitCircle.normalized;
+                away = new Vector3(random.x, 0f, random.y);
+            }
+            else
+            {
+                away.Normalize();
+            }
+
+            var path = new NavMeshPath();
+            for (int attempt = 0; attempt < 8; attempt++)
+            {
+                Vector3 direction = Quaternion.Euler(0f, UnityEngine.Random.Range(-40f, 40f), 0f) * away;
+                float distance = UnityEngine.Random.Range(coreCarryDistance * 0.8f, coreCarryDistance);
+                Vector3 candidate = transform.position + direction * distance;
+                if (!NavMesh.SamplePosition(candidate, out var hit, 2.5f, NavMesh.AllAreas)) continue;
+                if (Vector3.Distance(originHit.position, hit.position) < coreCarryDistance * 0.65f) continue;
+                if (!NavMesh.CalculatePath(originHit.position, hit.position, NavMesh.AllAreas, path)
+                    || path.status != NavMeshPathStatus.PathComplete) continue;
+
+                destination = hit.position;
+                return true;
+            }
+
+            return false;
         }
 
         public void ReleaseStolenCoreAuthoritative()
@@ -549,6 +599,7 @@ namespace EchoProtocol.AI.Minions
             TargetPlayer = PlayerRef.None;
             _trackSeconds = 0f;
             _lostSightSeconds = 0f;
+            _stalkerAlertDeliveredForTarget = false;
         }
 
         private bool TryGetFlashlightSource(out Vector3 source)

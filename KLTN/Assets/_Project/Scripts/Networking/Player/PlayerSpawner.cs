@@ -41,6 +41,7 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(2f)] private float _minionSpawnMinDistance = 8f;
         [SerializeField, Min(3f)] private float _minionSpawnMaxDistance = 12f;
         [SerializeField, Range(30f, 120f)] private float _minionSpawnPlayerHalfFov = 70f;
+        [SerializeField, Min(5f)] private float _zone2MinionAnchorFallbackRadius = 35f;
 
         private readonly Dictionary<PlayerRef, int> _spawnSlots = new Dictionary<PlayerRef, int>();
         private FusionPlayerLifecycle _subscribedLifecycle;
@@ -452,12 +453,32 @@ namespace EchoProtocol.Networking
 
             if (zone == RegionSemanticZone.Zone02)
             {
-                if (!_zone2AnchorPlayer.IsRealPlayer
-                    || !runner.TryGetPlayerObject(_zone2AnchorPlayer, out var zone2Player)
-                    || !IsEligibleMinionAnchor(zone2Player)) return false;
+                if (_zone2AnchorPlayer.IsRealPlayer
+                    && runner.TryGetPlayerObject(_zone2AnchorPlayer, out var zone2Player)
+                    && IsEligibleMinionAnchor(zone2Player))
+                {
+                    anchor = zone2Player;
+                    return true;
+                }
 
-                anchor = zone2Player;
-                return true;
+                if (!IsValidNetworkObject(_zone2MonsterInstance)) return false;
+
+                Vector3 zone2Origin = _zone2MonsterInstance.transform.position;
+                float maxDistanceSqr = _zone2MinionAnchorFallbackRadius * _zone2MinionAnchorFallbackRadius;
+                float bestDistanceSqr = float.PositiveInfinity;
+                foreach (var player in runner.ActivePlayers)
+                {
+                    if (!runner.TryGetPlayerObject(player, out var candidate)
+                        || !IsEligibleMinionAnchor(candidate)) continue;
+
+                    float distanceSqr = (candidate.transform.position - zone2Origin).sqrMagnitude;
+                    if (distanceSqr > maxDistanceSqr || distanceSqr >= bestDistanceSqr) continue;
+
+                    bestDistanceSqr = distanceSqr;
+                    anchor = candidate;
+                }
+
+                return anchor != null;
             }
 
             int eligibleCount = 0;
