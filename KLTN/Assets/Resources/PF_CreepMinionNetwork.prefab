@@ -183,7 +183,7 @@ MonoBehaviour:
   alertCooldownSeconds: 20
   alertRetrySeconds: 1
   flashlightKillRange: 15
-  flashlightKillExposureSeconds: 0.5
+  flashlightKillExposureSeconds: 0.75
   flashlightExposureDecayPerSecond: 2
   deathVanishSeconds: 0.5
   noiseMakerDistractionSeconds: 6
@@ -196,6 +196,8 @@ MonoBehaviour:
     RawValue: 0
   _AttackSequence: 0
   _AlertSequence: 0
+  _IsDying:
+    RawValue: 0
 --- !u!1001 &3951387051583101182
 PrefabInstance:
   m_ObjectHideFlags: 0

@@ -71,7 +71,7 @@ namespace EchoProtocol.AI.Minions
         [Header("Counterplay")]
         [FormerlySerializedAs("flashlightRepelRange")]
         [SerializeField, Min(1f)]
-        private float flashlightKillRange = 15f;
+        private float flashlightKillRange = 25f;
 
         [FormerlySerializedAs("flashlightExposureRequiredSeconds")]
         [SerializeField, Min(0.1f)]
@@ -949,14 +949,37 @@ namespace EchoProtocol.AI.Minions
                     continue;
                 }
 
-                // Aim vào giữa thân Minion,
-                // không aim sát chân/root.
+                // Ponytail:
+                // vị trí đèn có thể reuse từ child hiện tại,
+                // nhưng hướng gameplay phải lấy từ state authoritative,
+                // không lấy rotation do Render/LateUpdate điều khiển.
+                Vector3 beamOrigin =
+                    beam.position;
+
+                Vector3 beamForward =
+                    beam.forward;
+
+                if (playerObject.TryGetComponent<
+                        NetworkPlayerMovement>(
+                        out var movement))
+                {
+                    beamForward =
+                        Quaternion.Euler(
+                            movement.CurrentPitch,
+                            playerObject.transform.eulerAngles.y,
+                            0f)
+                        * Vector3.forward;
+                }
+
+                // Aim vào chính giữa collider Minion.
                 Vector3 targetPoint =
-                    transform.position
-                    + Vector3.up * 0.7f;
+                    _bodyCollider != null
+                        ? _bodyCollider.bounds.center
+                        : transform.position
+                          + Vector3.up * 0.6f;
 
                 Vector3 ray =
-                    targetPoint - beam.position;
+                    targetPoint - beamOrigin;
 
                 float distance =
                     ray.magnitude;
@@ -978,7 +1001,7 @@ namespace EchoProtocol.AI.Minions
 
                 float angle =
                     Vector3.Angle(
-                        beam.forward,
+                        beamForward,
                         ray);
 
                 float halfAngle =
@@ -992,7 +1015,7 @@ namespace EchoProtocol.AI.Minions
 
                 var hits =
                     Physics.RaycastAll(
-                        beam.position,
+                        beamOrigin,
                         ray.normalized,
                         distance + 0.5f,
                         ~0,
@@ -1031,6 +1054,8 @@ namespace EchoProtocol.AI.Minions
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                         Debug.Log(
                             $"[CREEP_FLASHLIGHT][HIT] " +
+                            $"id={Object.Id} " +
+                            $"state={State} " +
                             $"player={player} " +
                             $"distance={distance:F1}/" +
                             $"{maxRange:F1} " +
