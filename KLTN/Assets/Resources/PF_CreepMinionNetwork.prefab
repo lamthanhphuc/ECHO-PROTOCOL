@@ -182,9 +182,10 @@ MonoBehaviour:
   stolenToolDropMaxDistance: 10
   alertCooldownSeconds: 20
   alertRetrySeconds: 1
-  flashlightRepelRange: 12
-  flashlightExposureRequiredSeconds: 0.75
-  flashlightFleeSeconds: 4
+  flashlightKillRange: 15
+  flashlightKillExposureSeconds: 0.5
+  flashlightExposureDecayPerSecond: 2
+  deathVanishSeconds: 0.5
   noiseMakerDistractionSeconds: 6
   noiseMakerArrivalDistance: 1.5
   _StateValue: 0

@@ -69,10 +69,19 @@ namespace EchoProtocol.AI.Minions
         [SerializeField, Min(0.1f)] private float alertRetrySeconds = 1f;
 
         [Header("Counterplay")]
-        [SerializeField] private float flashlightRepelRange = 12f;
+        [FormerlySerializedAs("flashlightRepelRange")]
+        [SerializeField, Min(1f)]
+        private float flashlightKillRange = 15f;
+
         [FormerlySerializedAs("flashlightExposureRequiredSeconds")]
-        [SerializeField, Min(0.1f)] private float flashlightKillExposureSeconds = 0.75f;
-        [SerializeField, Min(0.1f)] private float deathVanishSeconds = 0.5f;
+        [SerializeField, Min(0.1f)]
+        private float flashlightKillExposureSeconds = 0.4f;
+
+        [SerializeField, Min(0f)]
+        private float flashlightExposureDecayPerSecond = 2f;
+
+        [SerializeField, Min(0.1f)]
+        private float deathVanishSeconds = 0.5f;
         [SerializeField] private float noiseMakerDistractionSeconds = 6f;
         [SerializeField] private float noiseMakerArrivalDistance = 1.5f;
 
@@ -234,12 +243,41 @@ namespace EchoProtocol.AI.Minions
                 return;
             }
 
-            if (TryGetFlashlightSource(out _))
-                _flashlightExposureSeconds += Runner.DeltaTime;
-            else
-                _flashlightExposureSeconds = 0f;
+            bool illuminated =
+                TryGetFlashlightSource(out _);
 
-            if (_flashlightExposureSeconds >= flashlightKillExposureSeconds)
+            if (illuminated)
+            {
+                _flashlightExposureSeconds =
+                    Mathf.Min(
+                        flashlightKillExposureSeconds,
+                        _flashlightExposureSeconds
+                        + Runner.DeltaTime);
+            }
+            else
+            {
+                _flashlightExposureSeconds =
+                    Mathf.Max(
+                        0f,
+                        _flashlightExposureSeconds
+                        - Runner.DeltaTime
+                          * flashlightExposureDecayPerSecond);
+            }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (illuminated)
+            {
+                Debug.Log(
+                    $"[CREEP_FLASHLIGHT][EXPOSURE] " +
+                    $"id={Object.Id} " +
+                    $"exposure={_flashlightExposureSeconds:F2}/" +
+                    $"{flashlightKillExposureSeconds:F2}",
+                    this);
+            }
+#endif
+
+            if (_flashlightExposureSeconds
+                >= flashlightKillExposureSeconds)
             {
                 BeginFlashlightDeath();
                 return;
@@ -883,32 +921,132 @@ namespace EchoProtocol.AI.Minions
             _stalkerAlertDeliveredForTarget = false;
         }
 
-        private bool TryGetFlashlightSource(out Vector3 source)
+        private bool TryGetFlashlightSource(
+            out Vector3 source)
         {
             source = default;
-            foreach (var player in Runner.ActivePlayers)
+
+            foreach (var player
+                     in Runner.ActivePlayers)
             {
-                if (!Runner.TryGetPlayerObject(player, out var obj) || obj == null
-                    || !obj.TryGetComponent<NetworkPlayerFlashlight>(out var light) || !light.IsEmittingLight) continue;
-                var beam = light.BeamTransform;
-                if (beam == null) continue;
-                var ray = transform.position + Vector3.up * 0.6f - beam.position;
-                if (ray.magnitude > Mathf.Min(light.BeamRange, flashlightRepelRange)
-                    || Vector3.Angle(beam.forward, ray) > light.BeamSpotAngle * 0.5f) continue;
-                var hits = Physics.RaycastAll(beam.position, ray.normalized, ray.magnitude + 0.5f,
-                    ~0, QueryTriggerInteraction.Ignore);
-                Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+                if (!Runner.TryGetPlayerObject(
+                        player,
+                        out var playerObject)
+                    || playerObject == null
+                    || !playerObject.TryGetComponent<
+                        NetworkPlayerFlashlight>(
+                        out var flashlight)
+                    || !flashlight.IsEmittingLight)
+                {
+                    continue;
+                }
+
+                Transform beam =
+                    flashlight.BeamTransform;
+
+                if (beam == null)
+                {
+                    continue;
+                }
+
+                // Aim vào giữa thân Minion,
+                // không aim sát chân/root.
+                Vector3 targetPoint =
+                    transform.position
+                    + Vector3.up * 0.7f;
+
+                Vector3 ray =
+                    targetPoint - beam.position;
+
+                float distance =
+                    ray.magnitude;
+
+                if (distance <= 0.01f)
+                {
+                    continue;
+                }
+
+                float maxRange =
+                    Mathf.Min(
+                        flashlight.BeamRange,
+                        flashlightKillRange);
+
+                if (distance > maxRange)
+                {
+                    continue;
+                }
+
+                float angle =
+                    Vector3.Angle(
+                        beam.forward,
+                        ray);
+
+                float halfAngle =
+                    flashlight.BeamSpotAngle
+                    * 0.5f;
+
+                if (angle > halfAngle)
+                {
+                    continue;
+                }
+
+                var hits =
+                    Physics.RaycastAll(
+                        beam.position,
+                        ray.normalized,
+                        distance + 0.5f,
+                        ~0,
+                        QueryTriggerInteraction.Ignore);
+
+                Array.Sort(
+                    hits,
+                    (left, right) =>
+                        left.distance.CompareTo(
+                            right.distance));
+
                 foreach (var hit in hits)
                 {
-                    if (hit.collider.transform.IsChildOf(obj.transform)) continue;
-                    if (hit.collider.transform.IsChildOf(transform))
+                    // Bỏ collider của chính Player
+                    // đang cầm flashlight.
+                    if (hit.collider.transform
+                        .IsChildOf(
+                            playerObject.transform))
                     {
-                        source = obj.transform.position;
+                        continue;
+                    }
+
+                    // Collider đầu tiên sau Player là Minion
+                    // => flashlight thực sự có line of sight.
+                    var hitMinion =
+                        hit.collider
+                            .GetComponentInParent<
+                                CreepMinionRuntime>();
+
+                    if (hitMinion == this)
+                    {
+                        source =
+                            playerObject
+                                .transform.position;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                        Debug.Log(
+                            $"[CREEP_FLASHLIGHT][HIT] " +
+                            $"player={player} " +
+                            $"distance={distance:F1}/" +
+                            $"{maxRange:F1} " +
+                            $"angle={angle:F1}/" +
+                            $"{halfAngle:F1}",
+                            this);
+#endif
+
                         return true;
                     }
+
+                    // Vật khác chắn beam.
                     break;
                 }
             }
+
             return false;
         }
 
