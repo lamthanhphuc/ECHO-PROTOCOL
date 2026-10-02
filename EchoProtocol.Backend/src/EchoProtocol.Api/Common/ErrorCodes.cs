@@ -15,6 +15,9 @@ public static class ErrorCodes
     public const string PasswordConfirmationMismatch = "PASSWORD_CONFIRMATION_MISMATCH";
     public const string PasswordTooLong = "PASSWORD_TOO_LONG";
     public const string TokenInvalid = "TOKEN_INVALID";
+    public const string RefreshTokenInvalid = "REFRESH_TOKEN_INVALID";
+    public const string RefreshTokenExpired = "REFRESH_TOKEN_EXPIRED";
+    public const string RefreshTokenReused = "REFRESH_TOKEN_REUSED";
     public const string TelemetrySchemaUnsupported = "TELEMETRY_SCHEMA_UNSUPPORTED";
     public const string TelemetryUserMismatch = "TELEMETRY_USER_MISMATCH";
     public const string TelemetryUnavailable = "TELEMETRY_UNAVAILABLE";

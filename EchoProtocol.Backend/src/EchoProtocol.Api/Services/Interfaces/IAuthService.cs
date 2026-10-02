@@ -13,6 +13,14 @@ public interface IAuthService
         LoginRequest request,
         CancellationToken cancellationToken = default);
 
+    Task<ServiceResult<AuthResponse>> RefreshAsync(
+        RefreshTokenRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<bool>> LogoutAsync(
+        RefreshTokenRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<ServiceResult<MeResponse>> GetCurrentUserAsync(
         Guid userId,
         CancellationToken cancellationToken = default);

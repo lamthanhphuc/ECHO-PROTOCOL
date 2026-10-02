@@ -386,6 +386,12 @@ static void ValidateJwtSettings(JwtSettings settings)
     {
         throw new InvalidOperationException("JWT ExpiryMinutes must be greater than zero.");
     }
+
+    if (settings.RefreshTokenExpiryDays is < 1 or > 90)
+    {
+        throw new InvalidOperationException(
+            "JWT RefreshTokenExpiryDays must be between 1 and 90.");
+    }
 }
 
 static void ValidateMongoDbSettings(MongoDbSettings settings)

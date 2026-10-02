@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     }
 
     public DbSet<User> Users => Set<User>();
+    public DbSet<RefreshSession> RefreshSessions => Set<RefreshSession>();
     public DbSet<PlayerProfile> PlayerProfiles => Set<PlayerProfile>();
     public DbSet<Wallet> Wallets => Set<Wallet>();
     public DbSet<MatchAuthorityBinding> MatchAuthorityBindings => Set<MatchAuthorityBinding>();
@@ -89,6 +90,42 @@ public class AppDbContext : DbContext
                 .WithOne(e => e.User)
                 .HasForeignKey<PlayerAIProfile>(e => e.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RefreshSession>(entity =>
+        {
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint(
+                    "CK_RefreshSessions_ExpiryAfterCreated",
+                    "\"ExpiresAtUtc\" > \"CreatedAtUtc\"");
+            });
+
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.TokenHash)
+                .IsRequired()
+                .HasMaxLength(64)
+                .IsFixedLength();
+
+            entity.Property(e => e.ConcurrencyToken)
+                .IsRequired()
+                .IsConcurrencyToken();
+
+            entity.Property(e => e.CreatedAtUtc).IsRequired();
+            entity.Property(e => e.ExpiresAtUtc).IsRequired();
+
+            entity.HasIndex(e => e.TokenHash)
+                .IsUnique()
+                .HasDatabaseName("IX_RefreshSessions_TokenHash");
+
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.FamilyId);
+
+            entity.HasOne(e => e.User)
+                .WithMany(e => e.RefreshSessions)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PlayerProfile>(entity =>
