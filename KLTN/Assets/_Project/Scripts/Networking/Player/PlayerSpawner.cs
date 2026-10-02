@@ -551,9 +551,6 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            // Ponytail:
-            // trước tiên giữ behavior hiện tại:
-            // cố spawn gần Stalker.
             if (TryFindCreepMinionSpawnPositionInRing(
                     runner,
                     stalkerHit.position,
@@ -565,20 +562,12 @@ namespace EchoProtocol.Networking
                 return true;
             }
 
-            // Nếu Stalker đang sát Player thì vòng 4–10m
-            // thường không thể thỏa khoảng cách an toàn 18m.
-            // Chỉ lúc đó mới nới vùng tìm kiếm.
-            float fallbackMinDistance =
-                Mathf.Max(
-                    _minionSpawnMaxDistanceFromStalker,
-                    _minionSpawnMinDistanceFromPlayer);
-
             return TryFindCreepMinionSpawnPositionInRing(
                 runner,
                 stalkerHit.position,
-                fallbackMinDistance,
+                _minionSpawnMaxDistanceFromStalker,
                 _minionSpawnFallbackMaxDistanceFromStalker,
-                24,
+                48,
                 out position);
         }
 
