@@ -20,7 +20,8 @@ namespace EchoProtocol.AI.Listener.Noise
         MACHINE_OVERLOAD,
         TERMINAL_DOWNLOAD,
         VEHICLE_PUSH,
-        CHARGE_TRANSFER
+        CHARGE_TRANSFER,
+        POWER_SURGE
     }
 
     public enum RuntimeNoiseEmissionMode

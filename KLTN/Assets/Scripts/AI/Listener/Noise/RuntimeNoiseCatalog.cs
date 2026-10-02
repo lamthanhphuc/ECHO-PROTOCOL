@@ -88,6 +88,11 @@ namespace EchoProtocol.AI.Listener.Noise
                     RuntimeNoiseType.CHARGE_TRANSFER,
                     new RuntimeNoiseDefinition(RuntimeNoiseType.CHARGE_TRANSFER, 1.8d, 90d, TimeSpan.FromSeconds(2d),
                         RuntimeNoiseEmissionMode.RecurringMovement, 1.5d)
+                },
+                {
+                    RuntimeNoiseType.POWER_SURGE,
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.POWER_SURGE, 2.3d, 140d, TimeSpan.FromSeconds(6d),
+                        RuntimeNoiseEmissionMode.DiscreteAction)
                 }
             };
 
