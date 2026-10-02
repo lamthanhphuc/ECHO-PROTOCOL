@@ -159,6 +159,8 @@ namespace EchoProtocol.Networking
         [Networked] public PlayerRef SecurityHoldOperator3 { get; private set; }
         [Networked] public PlayerRef SecurityHoldOperator4 { get; private set; }
         private readonly TickTimer[] _securityHoldLeases = new TickTimer[4];
+        private const float FrigateNoiseLinearMotionThreshold = 0.005f;
+        private const float FrigateNoiseAngularMotionThreshold = 0.25f;
         private static readonly RuntimeNoiseCatalog RelayNoiseCatalog = RuntimeNoiseCatalog.CreateDefault();
         private TickTimer _relayA1NoiseTimer;
         private TickTimer _relayA2NoiseTimer;
@@ -174,6 +176,9 @@ namespace EchoProtocol.Networking
         private TickTimer _securityHoldNoiseTimer;
         private TickTimer _frigateNoiseTimer;
         private long _frigateNoiseSequence;
+        private bool _hasFrigateNoisePose;
+        private Vector3 _lastFrigateNoisePosition;
+        private Quaternion _lastFrigateNoiseRotation;
         private TickTimer _zone3ChargeLease;
         private TickTimer _zone3ChargeNoiseTimer;
         private long _zone3ChargeNoiseSequence;
@@ -1884,6 +1889,9 @@ namespace EchoProtocol.Networking
             _securityHoldNoiseTimer = TickTimer.None;
             _frigateNoiseTimer = TickTimer.None;
             _frigateNoiseSequence = 0;
+            _hasFrigateNoisePose = false;
+            _lastFrigateNoisePosition = Vector3.zero;
+            _lastFrigateNoiseRotation = Quaternion.identity;
             _relayA1NoiseSequence = 0;
             _relayA2NoiseSequence = 0;
             _relayB1NoiseSequence = 0;
@@ -2418,7 +2426,29 @@ namespace EchoProtocol.Networking
         private void EmitFrigatePushNoiseAuthoritative(Zone3MissionDirector zone3)
         {
             if (CurrentPhase != NetworkMatchPhase.Zone3PushFrigate || zone3.Frigate == null
-                || !zone3.Frigate.IsBeingPushed || zone3.Frigate.CurrentSpeed < 0.05f)
+                || !zone3.Frigate.IsBeingPushed)
+            {
+                _frigateNoiseTimer = TickTimer.None;
+                _hasFrigateNoisePose = false;
+                return;
+            }
+
+            Vector3 position = zone3.FrigatePosition;
+            Quaternion rotation = zone3.Frigate.transform.rotation;
+            bool hasMotion = false;
+            if (_hasFrigateNoisePose)
+            {
+                float linearDeltaSqr = (position - _lastFrigateNoisePosition).sqrMagnitude;
+                float angularDelta = Quaternion.Angle(rotation, _lastFrigateNoiseRotation);
+                hasMotion = linearDeltaSqr >= FrigateNoiseLinearMotionThreshold * FrigateNoiseLinearMotionThreshold
+                    || angularDelta >= FrigateNoiseAngularMotionThreshold;
+            }
+
+            _lastFrigateNoisePosition = position;
+            _lastFrigateNoiseRotation = rotation;
+            _hasFrigateNoisePose = true;
+
+            if (!hasMotion)
             {
                 _frigateNoiseTimer = TickTimer.None;
                 return;
@@ -2428,7 +2458,7 @@ namespace EchoProtocol.Networking
             var playerObject = pusher != null ? pusher.GetComponentInParent<NetworkObject>() : null;
             if (playerObject == null) return;
             EmitObjectiveNoisePulse(RuntimeNoiseType.VEHICLE_PUSH, playerObject.InputAuthority,
-                zone3.FrigatePosition, "frigate-push", ref _frigateNoiseTimer,
+                position, "frigate-push", ref _frigateNoiseTimer,
                 ref _frigateNoiseSequence);
         }
 
