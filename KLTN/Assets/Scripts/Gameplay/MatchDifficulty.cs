@@ -75,13 +75,13 @@ namespace EchoProtocol.Gameplay
                         1);     // Zone2MinionCap
                 case MatchDifficulty.Hard:
                     return new MatchDifficultyProfile(
-                        5, 9f, 10f, 0.5f, 1.5f, 5f, 3.2f, 0.25f,
-                        0.75f, 2f, 45f, 8f, 1.5f, 300f, 3, 4);
-                default:
-                    // Current serialized values in StalkerNetwork.prefab.
-                    return new MatchDifficultyProfile(
                         5, 8f, 9f, 0.75f, 1f, 3f, 3f, 0.35f,
                         1f, 3f, 75f, 15f, 1.25f, 300f, 2, 3);
+                default:
+                    // Between Easy and the old baseline, now used as Hard.
+                    return new MatchDifficultyProfile(
+                        5, 6.5f, 8f, 1.25f, 0.65f, 2.25f, 2.7f, 0.6f,
+                        1.4f, 4.5f, 120f, 25f, 1f, 420f, 1, 2);
             }
         }
     }
