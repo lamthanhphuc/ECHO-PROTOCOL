@@ -244,18 +244,19 @@ namespace EchoProtocol.UI.HUD
             switch (phase)
             {
                 case MatchPhase.Zone3FindFrigate:
-                    SetPhaseBadge("ZONE 3 // FIND SPACEFRIGATE", "#00E5FF");
-                    SetObjective("FIND SPACEFRIGATE", "Follow the outline and hold E to begin pushing", 0f,
+                    SetPhaseBadge("ZONE 3 // EMERGENCY POWER", "#00E5FF");
+                    SetObjective("FIND SPACEFRIGATE", "Locate the Spacefrigate reserve core and prepare transport.", 0f,
                         new Color(0f, 0.85f, 1f, 1f));
                     break;
 
                 case MatchPhase.Zone3PushFrigate:
                     bool docked = EchoProtocol.Networking.Zone3MissionDirector.Instance?.IsFrigateAtDestination == true;
-                    SetPhaseBadge(docked ? "ZONE 3 // ACTIVATE CHARGE" : "ZONE 3 // MOVE SPACEFRIGATE", "#00E5FF");
-                    SetObjective(docked ? "ACTIVATE SCIFI CHARGE" : "MOVE SPACEFRIGATE",
-                        docked ? "Interact with Scifi Charge to start Final Hunt"
-                            : "Fit the entire Spacefrigate inside the outline in 06_Covey",
-                        0f, new Color(0f, 0.85f, 1f, 1f));
+                    float chargeProgress = EchoProtocol.Networking.Zone3MissionDirector.Instance?.ChargeStation?.Progress01 ?? 0f;
+                    SetPhaseBadge(docked ? "ZONE 3 // POWER DOCK" : "ZONE 3 // EMERGENCY POWER", "#00E5FF");
+                    SetObjective(docked ? "INITIATE POWER TRANSFER" : "MOVE SPACEFRIGATE TO POWER DOCK",
+                        docked ? $"Transfer Spacefrigate reserve power to the evacuation system ({Mathf.RoundToInt(chargeProgress * 100f)}%). Releasing slowly drains progress."
+                            : "Transport the Spacefrigate fully inside the Power Dock at 06_Covey.",
+                        docked ? chargeProgress : 0f, new Color(0f, 0.85f, 1f, 1f));
                     break;
 
                 case MatchPhase.ExploreCore:
@@ -292,20 +293,19 @@ namespace EchoProtocol.UI.HUD
 
                 case MatchPhase.FinalHunt:
                 case MatchPhase.ExitCountdown:
-                    SetPhaseBadge("CRITICAL ALERT // EMERGENCY EVACUATION", "#FF1744");
-                    float secondsRemaining = escapeDoor != null ? escapeDoor.RemainingSeconds : 45f;
-                    int mins = Mathf.FloorToInt(secondsRemaining / 60f);
-                    int secs = Mathf.FloorToInt(secondsRemaining % 60f);
-                    string timeFormatted = string.Format("{0:00}:{1:00}", mins, secs);
-
-                    string statusMsg = (escapeDoor != null && escapeDoor.IsCountingDown)
-                        ? $"Reach Doorexit and escape ({timeFormatted})"
-                        : "Return to ExitRoom and interact with Doorexit. All living players must exit.";
+                    bool escapePhase = phase == MatchPhase.ExitCountdown;
+                    SetPhaseBadge(escapePhase ? "ESCAPE // EXIT ONLINE" : "FINAL HUNT // EMERGENCY POWER ACTIVE", "#FF1744");
+                    float secondsRemaining = GetEmergencyPowerRemainingSeconds();
+                    bool timerRunning = IsEmergencyPowerTimerRunning();
+                    string timeFormatted = FormatTime(secondsRemaining);
+                    string statusMsg = timerRunning
+                        ? $"Emergency power remaining: {timeFormatted}. Return to Doorexit and escape."
+                        : "Exit system online. Return to Doorexit and escape.";
 
                     SetObjective(
-                        "FACILITY LOCKDOWN",
+                        escapePhase ? "ESCAPE" : "RETURN TO EXIT",
                         statusMsg,
-                        escapeDoor != null && escapeDoor.IsCountingDown ? (secondsRemaining / 45f) : 1f,
+                        timerRunning ? Mathf.Clamp01(secondsRemaining / 60f) : 1f,
                         new Color(1f, 0.15f, 0.25f, 1f));
                     break;
 
@@ -353,6 +353,22 @@ namespace EchoProtocol.UI.HUD
         {
             int remaining = Mathf.CeilToInt(Mathf.Max(0f, seconds));
             return $"{remaining / 60:00}:{remaining % 60:00}";
+        }
+
+        private float GetEmergencyPowerRemainingSeconds()
+        {
+            var match = EchoProtocol.Networking.NetworkMatchState.Instance;
+            if (match != null && match.Object != null && match.Object.IsValid)
+                return match.EscapeRemainingSeconds;
+            return escapeDoor != null ? escapeDoor.RemainingSeconds : 45f;
+        }
+
+        private bool IsEmergencyPowerTimerRunning()
+        {
+            var match = EchoProtocol.Networking.NetworkMatchState.Instance;
+            if (match != null && match.Object != null && match.Object.IsValid)
+                return match.IsEscapeTimerRunning;
+            return escapeDoor != null && escapeDoor.IsCountingDown;
         }
 
         private void UpdateRelayWarning()

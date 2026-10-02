@@ -17,6 +17,7 @@ namespace EchoProtocol.RelayB
         private bool _isSyncing;
         private bool _online;
         private bool _isScanning;
+        private bool _hasScanned;
         private float _scanningTimeRemaining;
 
         private bool _driftTriggered;
@@ -59,6 +60,7 @@ namespace EchoProtocol.RelayB
             _isSyncing = false;
             _online = false;
             _isScanning = false;
+            _hasScanned = false;
             _scanningTimeRemaining = 0f;
 
             _driftTriggered = false;
@@ -183,6 +185,7 @@ namespace EchoProtocol.RelayB
                 if (_scanningTimeRemaining <= 0f)
                 {
                     _isScanning = false;
+                    _hasScanned = true;
                     NotifyChanged();
                 }
             }
@@ -399,6 +402,9 @@ namespace EchoProtocol.RelayB
             float phaseError = CalculatePhaseErrorDegrees(_currentPhase, effectiveTargetPhase);
             float signalMatch = EvaluateSignalMatch(freqError, phaseError);
             bool isSync = CheckIsSynchronized(out _, out _);
+            bool selectedChannelCorrect = preset != null
+                && _selectedChannelIndex >= 0
+                && _selectedChannelIndex == preset.CorrectChannelIndex;
 
             float graceLimit = _config != null ? _config.InstabilityGraceSeconds : 0.5f;
             float graceRemaining = Mathf.Max(0f, graceLimit - _instabilityGraceTimer);
@@ -425,7 +431,9 @@ namespace EchoProtocol.RelayB
                 _isDriftActive,
                 _isDriftWarning,
                 _online,
-                _isScanning);
+                _isScanning,
+                _hasScanned,
+                selectedChannelCorrect);
         }
 
         private RelayBStatus DetermineStatus(bool isSync)

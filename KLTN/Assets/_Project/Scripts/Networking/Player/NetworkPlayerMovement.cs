@@ -50,6 +50,7 @@ namespace EchoProtocol.Networking
         private Vector2 _offlineAnimationMoveInput;
         private bool _offlineAnimationSprinting;
         private bool _offlineAnimationCrouching;
+        private bool _offlineAnimationPushing;
         private float _offlineCurrentStamina;
 
         [SerializeField, Min(0f)] private float _standingHeight = 2f;
@@ -62,6 +63,7 @@ namespace EchoProtocol.Networking
         [Networked] private float AnimationMoveX { get; set; }
         [Networked] private float AnimationMoveY { get; set; }
         [Networked] private NetworkBool AnimationSprintHeld { get; set; }
+        [Networked] private NetworkBool AnimationPushHeld { get; set; }
         [Networked] public NetworkBool IsHidden { get; set; }
         [Networked] public ulong CurrentHideSpotId { get; set; }
         [Networked] public NetworkBool IsCrouching { get; set; }
@@ -119,6 +121,39 @@ namespace EchoProtocol.Networking
                 }
 
                 return IsCrouching;
+            }
+        }
+
+        public bool IsAnimationPushing
+        {
+            get
+            {
+                if (Runner == null || Object == null || !Object.IsValid)
+                {
+                    return _offlineAnimationPushing;
+                }
+
+                return AnimationPushHeld;
+            }
+        }
+
+        public void SetAnimationPushing(bool active)
+        {
+            if (Runner == null || Object == null || !Object.IsValid)
+            {
+                _offlineAnimationPushing = active;
+                return;
+            }
+
+            if (Object.HasStateAuthority)
+            {
+                AnimationPushHeld = active;
+                return;
+            }
+
+            if (Object.HasInputAuthority)
+            {
+                RpcSetAnimationPushing(active);
             }
         }
 
@@ -373,6 +408,7 @@ namespace EchoProtocol.Networking
             {
                 AnimationMoveX = AnimationMoveY = 0f;
                 AnimationSprintHeld = false;
+                AnimationPushHeld = false;
                 UpdateStaminaAuthoritative(false);
                 return;
             }
@@ -383,6 +419,7 @@ namespace EchoProtocol.Networking
                 AnimationMoveX = 0f;
                 AnimationMoveY = 0f;
                 AnimationSprintHeld = false;
+                AnimationPushHeld = false;
                 UpdateStaminaAuthoritative(false);
                 return;
             }
@@ -573,6 +610,12 @@ namespace EchoProtocol.Networking
                 default:
                     return 0.50f;
             }
+        }
+
+        [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]
+        private void RpcSetAnimationPushing(NetworkBool active)
+        {
+            AnimationPushHeld = active;
         }
 
         [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]

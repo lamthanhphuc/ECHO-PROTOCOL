@@ -114,8 +114,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
         [SerializeField, Min(5f)] private float movementMaxDistance = 40f;
         [SerializeField, Min(0.2f)] private float breathingMinDistance = 0.8f;
         [SerializeField, Min(2f)] private float breathingMaxDistance = 6f;
-        [SerializeField, Min(0.5f)] private float chaseMinDistance = 40f;
-        [SerializeField, Min(5f)] private float chaseMaxDistance = 80f;
+        [SerializeField, Min(0.5f)] private float chaseMinDistance = 80f;
+        [SerializeField, Min(5f)] private float chaseMaxDistance = 150f;
 
         // ──────────────────────────────────────────────────────────────────────
         // Private runtime state

@@ -168,6 +168,11 @@ namespace EchoProtocol.RelayB
 
         public void ApplyAuthoritativeControls(int channelIndex, float frequency, float phase)
         {
+            if (channelIndex < 0)
+            {
+                return;
+            }
+
             if (channelIndex != _simulation.SelectedChannelIndex)
             {
                 _simulation.SelectChannel(channelIndex);
@@ -265,13 +270,13 @@ namespace EchoProtocol.RelayB
 
         private void HandleSimulationChanged(RelayBSnapshot snapshot)
         {
-            string loop = snapshot.Status == RelayBStatus.Online ? "map_ambience/fluorescent_buzz_loop"
-                : snapshot.Status == RelayBStatus.DriftWarning || snapshot.Status == RelayBStatus.ConnectionLost
-                    || snapshot.Status == RelayBStatus.SignalMismatch ? "map_ambience/alarm_ambience_loop"
-                : snapshot.Status == RelayBStatus.Synchronizing || snapshot.Status == RelayBStatus.Scanning
-                    ? "map_ambience/hvac_loop" : "map_ambience/server_room_loop";
-            bool repairing = snapshot.Status == RelayBStatus.Synchronizing;
-            EchoProtocol.Audio.GameAudioRuntime.Loop(_statusLoop, loop, repairing ? 0.72f : 0.1f);
+            bool repairing = snapshot.Status == RelayBStatus.Scanning
+                || snapshot.Status == RelayBStatus.Synchronizing
+                || snapshot.Status == RelayBStatus.SignalMismatch
+                || snapshot.Status == RelayBStatus.ConnectionLost
+                || snapshot.Status == RelayBStatus.DriftWarning;
+            EchoProtocol.Audio.GameAudioRuntime.Loop(_statusLoop,
+                repairing ? "objectives/relay_b_signal_loop" : null, 0.68f);
             ui?.Refresh(snapshot);
             StateChanged?.Invoke(snapshot);
         }
@@ -285,12 +290,12 @@ namespace EchoProtocol.RelayB
 
         private void HandleDriftWarning()
         {
-            PlayOneShot(warningClip, 0.8f, "map_ambience/electrical_flicker");
+            PlayOneShot(warningClip, 0.8f, "objectives/relay_b_desync");
         }
 
         private void HandleDriftTriggered()
         {
-            PlayOneShot(warningClip, 0.9f, "security_terminal/download_pause");
+            PlayOneShot(warningClip, 0.9f, "objectives/relay_b_desync");
         }
 
         private void HandleSignalMismatch()
@@ -298,14 +303,14 @@ namespace EchoProtocol.RelayB
             if (Time.unscaledTime >= _nextMismatchSoundAt)
             {
                 _nextMismatchSoundAt = Time.unscaledTime + mismatchSoundCooldown;
-                PlayOneShot(mismatchClip, 0.75f, "security_terminal/access_denied");
+                PlayOneShot(mismatchClip, 0.75f, "objectives/relay_b_desync");
             }
 
         }
 
         private void HandleInstabilityReset()
         {
-            PlayOneShot(warningClip, 0.8f, "security_terminal/download_pause");
+            PlayOneShot(warningClip, 0.8f, "objectives/relay_b_desync");
         }
 
         private void PlayAdjustSound()

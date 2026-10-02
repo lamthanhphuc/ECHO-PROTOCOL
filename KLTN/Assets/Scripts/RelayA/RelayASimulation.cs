@@ -16,9 +16,9 @@ namespace EchoProtocol.RelayA
         private float _faultWarningRemaining;
         private float _faultActiveRemaining;
         private float _faultTriggerAtSeconds;
+        private System.Random _attemptRandom;
         private bool _running;
         private bool _online;
-        private bool _faultConsumed;
         private bool _randomizeAttempt;
         private RelayAFaultType _warningFault;
         private RelayAFaultType _activeFault;
@@ -35,11 +35,11 @@ namespace EchoProtocol.RelayA
         public void Initialize(RelayAConfig config, bool randomizeAttempt = false, int attemptSeed = 0)
         {
             _config = config;
-            System.Random attemptRandom = randomizeAttempt
+            _attemptRandom = randomizeAttempt
                 ? new System.Random(attemptSeed != 0 ? attemptSeed : Environment.TickCount)
                 : null;
             _controls = config != null && randomizeAttempt
-                ? RandomizeControls(config.InitialControls, attemptRandom)
+                ? RandomizeControls(config.InitialControls, _attemptRandom)
                 : config != null ? config.InitialControls : new Vector3(50f, 50f, 50f);
             _outputs = config != null
                 ? config.EvaluateTarget(_controls, RelayAFaultType.None, 0f)
@@ -50,16 +50,15 @@ namespace EchoProtocol.RelayA
             _instabilitySeconds = 0f;
             _faultWarningRemaining = 0f;
             _faultActiveRemaining = 0f;
-            _faultTriggerAtSeconds = config != null
-                ? config.EarliestFaultAtSeconds + (randomizeAttempt ? Range(attemptRandom, 0f, 7f) : 0f)
-                : 8f;
+            _randomizeAttempt = randomizeAttempt;
+            _faultTriggerAtSeconds = BuildNextFaultTime(
+                config != null ? config.EarliestFaultAtSeconds : 8f,
+                config != null ? 7f : 0f);
             _running = false;
             _online = false;
-            _faultConsumed = false;
-            _randomizeAttempt = randomizeAttempt;
             _warningFault = RelayAFaultType.None;
             _activeFault = RelayAFaultType.None;
-            _scheduledFault = randomizeAttempt ? SelectRandomFault(attemptRandom) : RelayAFaultType.None;
+            _scheduledFault = randomizeAttempt ? SelectRandomFault(_attemptRandom) : RelayAFaultType.None;
             NotifyChanged();
         }
 
@@ -173,7 +172,7 @@ namespace EchoProtocol.RelayA
 
         private void UpdateFault(float deltaTime)
         {
-            if (!_config.EnableFault || _faultConsumed)
+            if (!_config.EnableFault)
             {
                 return;
             }
@@ -184,7 +183,10 @@ namespace EchoProtocol.RelayA
                 if (_faultActiveRemaining <= 0f)
                 {
                     _activeFault = RelayAFaultType.None;
-                    _faultConsumed = true;
+                    _scheduledFault = SelectRandomFault(_attemptRandom);
+                    _faultTriggerAtSeconds = BuildNextFaultTime(
+                        _elapsedRunningSeconds + _config.RepeatFaultMinDelaySeconds,
+                        Mathf.Max(0f, _config.RepeatFaultMaxDelaySeconds - _config.RepeatFaultMinDelaySeconds));
                 }
 
                 return;
@@ -212,6 +214,21 @@ namespace EchoProtocol.RelayA
             }
         }
 
+        private float BuildNextFaultTime(float baseTime, float randomWindow)
+        {
+            if (_config == null || !_config.EnableFault)
+            {
+                return float.PositiveInfinity;
+            }
+
+            if (_randomizeAttempt && _attemptRandom != null && _attemptRandom.NextDouble() > _config.FaultChance)
+            {
+                return float.PositiveInfinity;
+            }
+
+            return baseTime + (_randomizeAttempt ? Range(_attemptRandom, 0f, randomWindow) : 0f);
+        }
+
         private RelayAFaultType SelectFaultType(bool randomizeAttempt)
         {
             int choice = randomizeAttempt
@@ -231,13 +248,18 @@ namespace EchoProtocol.RelayA
         private static Vector3 RandomizeControls(Vector3 baseControls, System.Random random)
         {
             return new Vector3(
-                Mathf.Clamp(baseControls.x + Range(random, -10f, 10f), 0f, 100f),
-                Mathf.Clamp(baseControls.y + Range(random, -10f, 10f), 0f, 100f),
-                Mathf.Clamp(baseControls.z + Range(random, -10f, 10f), 0f, 100f));
+                Mathf.Clamp(baseControls.x + Range(random, -22f, 22f), 0f, 100f),
+                Mathf.Clamp(baseControls.y + Range(random, -22f, 22f), 0f, 100f),
+                Mathf.Clamp(baseControls.z + Range(random, -22f, 22f), 0f, 100f));
         }
 
         private static RelayAFaultType SelectRandomFault(System.Random random)
         {
+            if (random == null)
+            {
+                random = new System.Random(Environment.TickCount);
+            }
+
             switch (random.Next(0, 3))
             {
                 case 0:

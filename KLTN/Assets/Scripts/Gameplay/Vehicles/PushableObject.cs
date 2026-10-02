@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace EchoProtocol.Gameplay
@@ -46,9 +47,16 @@ namespace EchoProtocol.Gameplay
         [Tooltip("Distance for downward ground check.")]
         [SerializeField] private float groundCheckDistance = 4.0f;
 
+        [Header("Co-op Push")]
+        [Tooltip("Extra push speed multiplier per additional pusher.")]
+        [SerializeField, Range(0f, 0.5f)] private float extraPusherSpeedBonus = 0.15f;
+
+        [Tooltip("Maximum total push speed multiplier when multiple players push together.")]
+        [SerializeField, Min(1f)] private float maxCoopSpeedMultiplier = 1.45f;
+
         private Rigidbody _rigidbody;
-        private GameObject _currentPusher;
-        private PlayerMovement _pusherMovement;
+        private readonly List<GameObject> _currentPushers = new List<GameObject>();
+        private readonly Dictionary<GameObject, PlayerMovement> _pusherMovements = new Dictionary<GameObject, PlayerMovement>();
         private bool _isBeingPushed;
         private float _currentSpeed;
         private float _currentTurnSpeed;
@@ -57,7 +65,7 @@ namespace EchoProtocol.Gameplay
         private Vector3 _lastPushPoint;
 
         public bool IsBeingPushed => _isBeingPushed;
-        public GameObject CurrentPusher => _currentPusher;
+        public GameObject CurrentPusher => _currentPushers.Count > 0 ? _currentPushers[0] : null;
         public float CurrentSpeed => _currentSpeed;
         public float CurrentTurnSpeed => _currentTurnSpeed;
         public Vector3 LastPushDirection => _lastPushDirection;
@@ -67,7 +75,7 @@ namespace EchoProtocol.Gameplay
         // IHoldInteractable
         // ──────────────────────────────────────────────────────────────────────
 
-        public string InteractionPrompt => _isBeingPushed ? string.Empty : "Hold [E] to Push";
+        public string InteractionPrompt => _isBeingPushed ? "Hold [E] to Assist Push" : "Hold [E] to Push";
         public bool RequiresHold => true;
 
         public bool CanInteract(GameObject interactor)
@@ -75,16 +83,6 @@ namespace EchoProtocol.Gameplay
             if (!isActiveAndEnabled || interactor == null) return false;
             var zone3 = EchoProtocol.Networking.Zone3MissionDirector.Instance;
             if (zone3 != null && zone3.Frigate == this && !zone3.IsPushAvailable) return false;
-            var matchState = EchoProtocol.Networking.NetworkMatchState.Instance;
-            if (zone3 != null && zone3.Frigate == this
-                && matchState != null && matchState.Object != null && matchState.Object.IsValid
-                && matchState.Zone3Pusher.IsRealPlayer)
-            {
-                var playerObject = interactor.GetComponentInParent<Fusion.NetworkObject>();
-                if (playerObject == null || playerObject.InputAuthority != matchState.Zone3Pusher) return false;
-            }
-            if (_currentPusher != null && _currentPusher != interactor) return false;
-
             float dist = GetDistanceToPusher(interactor.transform.position);
             return dist <= maxInteractionDistance;
         }
@@ -107,8 +105,7 @@ namespace EchoProtocol.Gameplay
                     matchState.RequestZone3Push(true);
                     if (!matchState.Object.HasStateAuthority)
                     {
-                        _currentPusher = interactor;
-                        _isBeingPushed = true;
+                        AddPusher(interactor);
                     }
                     return;
                 }
@@ -122,10 +119,7 @@ namespace EchoProtocol.Gameplay
         {
             if (interactor == null) return;
 
-            _currentPusher = interactor;
-            _isBeingPushed = true;
-            _pusherMovement = interactor.GetComponent<PlayerMovement>()
-                           ?? interactor.GetComponentInParent<PlayerMovement>();
+            AddPusher(interactor);
 
             Debug.Log($"[PushableObject] BeginPush by '{interactor.name}'. Starting active push.");
         }
@@ -151,12 +145,15 @@ namespace EchoProtocol.Gameplay
 
         public void EndAuthoritativePush(GameObject interactor)
         {
-            if (_currentPusher == interactor || interactor == null)
+            if (interactor == null)
             {
-                Debug.Log($"[PushableObject] EndPush by '{interactor?.name}'.");
-                _isBeingPushed = false;
-                _currentPusher = null;
-                _pusherMovement = null;
+                ClearPushers();
+                return;
+            }
+
+            if (RemovePusher(interactor))
+            {
+                Debug.Log($"[PushableObject] EndPush by '{interactor.name}'.");
             }
         }
 
@@ -178,7 +175,11 @@ namespace EchoProtocol.Gameplay
 
         private void OnDisable()
         {
-            EndHoldInteract(_currentPusher);
+            var pushers = _currentPushers.ToArray();
+            for (int i = 0; i < pushers.Length; i++)
+            {
+                EndHoldInteract(pushers[i]);
+            }
             _currentSpeed = 0f;
             _currentTurnSpeed = 0f;
         }
@@ -195,28 +196,39 @@ namespace EchoProtocol.Gameplay
 
             if (_isBeingPushed)
             {
-                if (!ValidatePusherLifecycle())
+                ReleaseInvalidPushers();
+                if (_currentPushers.Count > 0)
                 {
-                    EndHoldInteract(_currentPusher);
-                }
-                else
-                {
-                    Vector3 pusherPos = _currentPusher.transform.position;
-                    Vector3 contactPoint = GetPushPoint(pusherPos);
                     Vector3 com = GetCenterOfMass();
                     float maxLever = GetMaxLeverArm();
+                    Vector3 combinedDirection = Vector3.zero;
+                    Vector3 combinedPushPoint = Vector3.zero;
+                    float combinedTorque = 0f;
+                    int activePushers = 0;
 
-                    var calc = PushablePhysics.Calculate(pusherPos, contactPoint, com, maxLever, rotationDeadZone);
-                    _lastPushPoint = contactPoint;
-
-                    if (calc.PushDirection.sqrMagnitude > 0.001f)
+                    for (int i = 0; i < _currentPushers.Count; i++)
                     {
-                        _lastPushDirection = calc.PushDirection;
+                        var pusher = _currentPushers[i];
+                        Vector3 pusherPos = pusher.transform.position;
+                        Vector3 contactPoint = GetPushPoint(pusherPos);
+                        var calc = PushablePhysics.Calculate(pusherPos, contactPoint, com, maxLever, rotationDeadZone);
+                        if (calc.PushDirection.sqrMagnitude <= 0.001f) continue;
+
+                        combinedDirection += calc.PushDirection;
+                        combinedPushPoint += contactPoint;
+                        combinedTorque += calc.EffectiveTorque;
+                        activePushers++;
                     }
 
-                    // Holding E actively applies push speed in calculated direction
-                    targetSpeed = pushSpeed;
-                    targetTurnSpeed = maxTurnSpeed * calc.EffectiveTorque;
+                    if (activePushers > 0)
+                    {
+                        _lastPushDirection = combinedDirection.normalized;
+                        _lastPushPoint = combinedPushPoint / activePushers;
+                        float speedMultiplier = Mathf.Min(maxCoopSpeedMultiplier,
+                            1f + extraPusherSpeedBonus * (activePushers - 1));
+                        targetSpeed = pushSpeed * speedMultiplier;
+                        targetTurnSpeed = maxTurnSpeed * Mathf.Clamp(combinedTorque / activePushers, -1f, 1f);
+                    }
                 }
             }
 
@@ -275,7 +287,7 @@ namespace EchoProtocol.Gameplay
                 var h = hits[i];
                 if (h.collider == pushCollider || h.collider.transform.IsChildOf(transform))
                     continue;
-                if (_currentPusher != null && (h.collider.gameObject == _currentPusher || h.collider.transform.IsChildOf(_currentPusher.transform)))
+                if (IsPusherCollider(h.collider))
                     continue;
 
                 if (h.distance < closestDist)
@@ -301,22 +313,22 @@ namespace EchoProtocol.Gameplay
             }
         }
 
-        private bool ValidatePusherLifecycle()
+        private bool ValidatePusherLifecycle(GameObject pusher)
         {
-            if (_currentPusher == null || !_currentPusher.activeInHierarchy)
+            if (pusher == null || !pusher.activeInHierarchy)
             {
                 return false;
             }
 
-            float dist = GetDistanceToPusher(_currentPusher.transform.position);
+            float dist = GetDistanceToPusher(pusher.transform.position);
             if (dist > maxInteractionDistance)
             {
                 return false;
             }
 
             // Check if player is downed or eliminated in multiplayer
-            var lifeState = _currentPusher.GetComponent<EchoProtocol.Networking.NetworkPlayerLifeState>()
-                         ?? _currentPusher.GetComponentInParent<EchoProtocol.Networking.NetworkPlayerLifeState>();
+            var lifeState = pusher.GetComponent<EchoProtocol.Networking.NetworkPlayerLifeState>()
+                         ?? pusher.GetComponentInParent<EchoProtocol.Networking.NetworkPlayerLifeState>();
             if (lifeState != null && lifeState.Status != EchoProtocol.Networking.NetworkPlayerLifeStatus.Alive)
             {
                 return false;
@@ -373,21 +385,24 @@ namespace EchoProtocol.Gameplay
             return Vector3.Distance(pusherPos, transform.position);
         }
 
-        private Vector3 GetPusherMoveDirection()
+        private Vector3 GetPusherMoveDirection(GameObject pusher)
         {
-            if (_pusherMovement != null)
+            if (pusher == null) return Vector3.zero;
+
+            _pusherMovements.TryGetValue(pusher, out var movement);
+            if (movement != null)
             {
-                Vector2 input = _pusherMovement.MoveInput;
+                Vector2 input = movement.MoveInput;
                 if (input.sqrMagnitude > 0.01f)
                 {
-                    Vector3 world = _currentPusher.transform.forward * input.y + _currentPusher.transform.right * input.x;
+                    Vector3 world = pusher.transform.forward * input.y + pusher.transform.right * input.x;
                     world.y = 0f;
                     return world.normalized;
                 }
             }
-            else if (_currentPusher != null)
+            else
             {
-                var cc = _currentPusher.GetComponent<CharacterController>();
+                var cc = pusher.GetComponent<CharacterController>();
                 if (cc != null && cc.velocity.sqrMagnitude > 0.01f)
                 {
                     Vector3 vel = cc.velocity;
@@ -417,7 +432,7 @@ namespace EchoProtocol.Gameplay
 
                 if (Physics.BoxCast(castCenter, castExtents, dir, out RaycastHit hit, transform.rotation, dist + 0.05f, obstacleMask, QueryTriggerInteraction.Ignore))
                 {
-                    if (hit.collider != pushCollider && !hit.collider.transform.IsChildOf(transform) && (_currentPusher == null || hit.collider.gameObject != _currentPusher))
+                    if (hit.collider != pushCollider && !hit.collider.transform.IsChildOf(transform) && !IsPusherCollider(hit.collider))
                     {
                         // Ignore floors/slopes with upward normals
                         if (hit.normal.y > 0.6f)
@@ -436,6 +451,73 @@ namespace EchoProtocol.Gameplay
                 }
             }
             return moveStep;
+        }
+
+        private void AddPusher(GameObject pusher)
+        {
+            if (pusher == null || _currentPushers.Contains(pusher)) return;
+            _currentPushers.Add(pusher);
+            _pusherMovements[pusher] = pusher.GetComponent<PlayerMovement>()
+                                      ?? pusher.GetComponentInParent<PlayerMovement>();
+            SetPusherAnimation(pusher, true);
+            _isBeingPushed = _currentPushers.Count > 0;
+        }
+
+        private bool RemovePusher(GameObject pusher)
+        {
+            if (pusher == null) return false;
+            bool removed = _currentPushers.Remove(pusher);
+            _pusherMovements.Remove(pusher);
+            if (removed) SetPusherAnimation(pusher, false);
+            _isBeingPushed = _currentPushers.Count > 0;
+            return removed;
+        }
+
+        private void ClearPushers()
+        {
+            for (int i = 0; i < _currentPushers.Count; i++)
+            {
+                SetPusherAnimation(_currentPushers[i], false);
+            }
+            _currentPushers.Clear();
+            _pusherMovements.Clear();
+            _isBeingPushed = false;
+        }
+
+        private static void SetPusherAnimation(GameObject pusher, bool active)
+        {
+            if (pusher == null) return;
+            var networkMovement = pusher.GetComponent<EchoProtocol.Networking.NetworkPlayerMovement>()
+                               ?? pusher.GetComponentInParent<EchoProtocol.Networking.NetworkPlayerMovement>();
+            networkMovement?.SetAnimationPushing(active);
+
+            var animatorDriver = pusher.GetComponent<PlayerAnimatorDriver>()
+                              ?? pusher.GetComponentInParent<PlayerAnimatorDriver>();
+            animatorDriver?.SetPushing(active);
+        }
+
+        private void ReleaseInvalidPushers()
+        {
+            for (int i = _currentPushers.Count - 1; i >= 0; i--)
+            {
+                var pusher = _currentPushers[i];
+                if (!ValidatePusherLifecycle(pusher))
+                {
+                    EndHoldInteract(pusher);
+                }
+            }
+        }
+
+        private bool IsPusherCollider(Collider candidate)
+        {
+            if (candidate == null) return false;
+            for (int i = 0; i < _currentPushers.Count; i++)
+            {
+                var pusher = _currentPushers[i];
+                if (pusher != null && (candidate.gameObject == pusher || candidate.transform.IsChildOf(pusher.transform)))
+                    return true;
+            }
+            return false;
         }
 
         private void ApplyGroundedMovement(Vector3 moveStep)
@@ -480,17 +562,22 @@ namespace EchoProtocol.Gameplay
             Gizmos.color = Color.yellow;
             Gizmos.DrawSphere(com, 0.25f);
 
-            if (_isBeingPushed && _currentPusher != null)
+            if (_isBeingPushed)
             {
-                Vector3 pushPoint = GetPushPoint(_currentPusher.transform.position);
-                Gizmos.color = Color.cyan;
-                Gizmos.DrawSphere(pushPoint, 0.2f);
+                for (int i = 0; i < _currentPushers.Count; i++)
+                {
+                    var pusher = _currentPushers[i];
+                    if (pusher == null) continue;
+                    Vector3 pushPoint = GetPushPoint(pusher.transform.position);
+                    Gizmos.color = Color.cyan;
+                    Gizmos.DrawSphere(pushPoint, 0.2f);
+
+                    Gizmos.color = Color.green;
+                    Gizmos.DrawLine(com, pushPoint);
+                }
 
                 Gizmos.color = Color.magenta;
-                Gizmos.DrawRay(pushPoint, _lastPushDirection * 2f);
-
-                Gizmos.color = Color.green;
-                Gizmos.DrawLine(com, pushPoint);
+                Gizmos.DrawRay(_lastPushPoint, _lastPushDirection * 2f);
             }
         }
 #endif

@@ -400,6 +400,11 @@ namespace EchoProtocol.Visuals
 
         public void SetHighlightActive(bool active)
         {
+            if (active && outlineMode != Outline.Mode.OutlineAll)
+            {
+                active = IsWithinDistance(maxVisibleDistance);
+            }
+
             if (_isHighlighted == active && _outline != null && _outline.enabled == active) return;
             _isHighlighted = active;
             if (_outline != null)

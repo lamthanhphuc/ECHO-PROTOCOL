@@ -23,7 +23,9 @@ namespace EchoProtocol.RelayB
             bool isDriftActive,
             bool isDriftWarning,
             bool isOnline,
-            bool isScanning)
+            bool isScanning,
+            bool hasScanned,
+            bool isSelectedChannelCorrect)
         {
             Status = status;
             SelectedChannelIndex = selectedChannelIndex;
@@ -44,6 +46,8 @@ namespace EchoProtocol.RelayB
             IsDriftWarning = isDriftWarning;
             IsOnline = isOnline;
             IsScanning = isScanning;
+            HasScanned = hasScanned;
+            IsSelectedChannelCorrect = isSelectedChannelCorrect;
         }
 
         public RelayBStatus Status { get; }
@@ -65,6 +69,8 @@ namespace EchoProtocol.RelayB
         public bool IsDriftWarning { get; }
         public bool IsOnline { get; }
         public bool IsScanning { get; }
+        public bool HasScanned { get; }
+        public bool IsSelectedChannelCorrect { get; }
 
         public float Progress01 => HoldRequiredSeconds <= 0f
             ? (IsOnline ? 1f : 0f)

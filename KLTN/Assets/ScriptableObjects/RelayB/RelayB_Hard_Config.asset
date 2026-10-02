@@ -14,15 +14,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.RelayB.RelayBConfig
   frequencyTolerancePercent: 3
   phaseToleranceDegrees: 12
-  holdRequiredSeconds: 8
+  holdRequiredSeconds: 14
   instabilityGraceSeconds: 0.5
   minFrequency: 10
   maxFrequency: 100
   enableDrift: 1
   driftWarningSeconds: 3
-  driftTriggerHoldSeconds: 3.5
-  driftPhaseOffset: 22
-  driftFrequencyOffsetPercent: 0
+  driftTriggerHoldSeconds: 4.5
+  driftPhaseOffset: 28
+  driftFrequencyOffsetPercent: 1.5
   presets:
   - presetName: Carrier Alpha (Echo-01)
     correctChannelIndex: 1

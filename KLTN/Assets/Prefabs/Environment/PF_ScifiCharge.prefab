@@ -49,12 +49,12 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 2.8112235, y: 0.7953874, z: 1.0618501}
-  m_Center: {x: 0.00000009536743, y: 0.39769366, z: -0.00000009536743}
+  m_Size: {x: 0.73080486, y: 0.7953874, z: 0.92106104}
+  m_Center: {x: 1.0402104, y: 0.3976937, z: 0.070394576}
 --- !u!114 &4931441652991321010
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -67,6 +67,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac701ad978ad4435ada07f5b20832eb7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.Zone3ChargeStation
+  chargeDurationSeconds: 25
+  decaySecondsPerSecond: 0.2
 --- !u!1001 &7213624604512475754
 PrefabInstance:
   m_ObjectHideFlags: 0

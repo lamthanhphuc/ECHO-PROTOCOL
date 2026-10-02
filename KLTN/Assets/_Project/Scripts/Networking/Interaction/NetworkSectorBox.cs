@@ -101,8 +101,11 @@ namespace EchoProtocol.Networking
 
                     return InteractionValidationResult.Accepted;
                 case NetworkMatchPhase.SecurityHold:
-                case NetworkMatchPhase.Escape:
                     return InteractionValidationResult.Accepted;
+                case NetworkMatchPhase.Escape:
+                    return !Zone3MissionDirector.IsSciFiSceneLoaded
+                        ? InteractionValidationResult.Accepted
+                        : InteractionValidationResult.InvalidTargetState;
                 default:
                     return InteractionValidationResult.InvalidTargetState;
             }

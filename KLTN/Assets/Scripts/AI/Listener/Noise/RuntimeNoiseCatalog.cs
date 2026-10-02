@@ -68,6 +68,26 @@ namespace EchoProtocol.AI.Listener.Noise
                     RuntimeNoiseType.MINION_ALERT,
                     new RuntimeNoiseDefinition(RuntimeNoiseType.MINION_ALERT, 1d, 55d, TimeSpan.FromSeconds(4d),
                         RuntimeNoiseEmissionMode.DiscreteAction)
+                },
+                {
+                    RuntimeNoiseType.MACHINE_OVERLOAD,
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.MACHINE_OVERLOAD, 1.8d, 70d, TimeSpan.FromSeconds(3d),
+                        RuntimeNoiseEmissionMode.RecurringMovement, 1.5d)
+                },
+                {
+                    RuntimeNoiseType.TERMINAL_DOWNLOAD,
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.TERMINAL_DOWNLOAD, 0.95d, 40d, TimeSpan.FromSeconds(3d),
+                        RuntimeNoiseEmissionMode.RecurringMovement, 2.5d)
+                },
+                {
+                    RuntimeNoiseType.VEHICLE_PUSH,
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.VEHICLE_PUSH, 1.25d, 55d, TimeSpan.FromSeconds(3d),
+                        RuntimeNoiseEmissionMode.RecurringMovement, 2d)
+                },
+                {
+                    RuntimeNoiseType.CHARGE_TRANSFER,
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.CHARGE_TRANSFER, 1.8d, 90d, TimeSpan.FromSeconds(2d),
+                        RuntimeNoiseEmissionMode.RecurringMovement, 1.5d)
                 }
             };
 

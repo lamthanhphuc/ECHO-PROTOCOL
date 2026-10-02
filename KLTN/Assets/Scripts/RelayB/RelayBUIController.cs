@@ -163,6 +163,20 @@ namespace EchoProtocol.RelayB
         public void Close()
         {
             if (!_controlLock.IsLocked && !IsOpen) return;
+            if (_controller != null)
+            {
+                var snapshot = _controller.Snapshot;
+                bool syncing = snapshot.Status == RelayBStatus.Synchronizing
+                    || snapshot.Status == RelayBStatus.DriftWarning
+                    || snapshot.Status == RelayBStatus.ConnectionLost
+                    || snapshot.Status == RelayBStatus.SignalMismatch;
+                if (syncing)
+                {
+                    if (TryGetNetworkDirector(out var cancelDirector)) cancelDirector.RequestRelayBCancelSync(_controller);
+                    else _controller.CancelSynchronization();
+                }
+            }
+
             if (TryGetNetworkDirector(out var director)) director.RequestRelayRelease(_controller);
             SetVisible(false);
             _controlLock.Release();
@@ -209,8 +223,8 @@ namespace EchoProtocol.RelayB
             }
 
             // Slider readouts
-            SetText(frequencyValueText, $"{snapshot.CurrentFrequency:0.0} kHz");
-            SetText(phaseValueText, $"{snapshot.CurrentPhase:0}°");
+            SetText(frequencyValueText, snapshot.HasScanned ? FormatFrequency(snapshot.CurrentFrequency) : "-- kHz");
+            SetText(phaseValueText, snapshot.HasScanned ? FormatPhase(snapshot.CurrentPhase) : "-- deg");
 
             // Waveform visualizers
             if (referenceWaveformRenderer != null)
@@ -221,30 +235,35 @@ namespace EchoProtocol.RelayB
                     snapshot.TargetPhase,
                     1f);
                 referenceWaveformRenderer.SetWaveformColor(referenceColor);
+                referenceWaveformRenderer.SetNoise(snapshot.HasScanned || snapshot.IsOnline ? 0.08f : 0.85f);
             }
 
             if (currentWaveformRenderer != null)
             {
+                bool showCurrentSignal = snapshot.HasScanned && snapshot.SelectedChannelIndex >= 0;
                 currentWaveformRenderer.SetWaveParameters(
-                    snapshot.CurrentWaveform,
-                    snapshot.CurrentFrequency,
-                    snapshot.CurrentPhase,
+                    showCurrentSignal ? snapshot.CurrentWaveform : WaveformType.CompositeHarmonic,
+                    showCurrentSignal ? snapshot.CurrentFrequency : 37f,
+                    showCurrentSignal ? snapshot.CurrentPhase : 0f,
                     1f);
 
                 Color curWaveColor = snapshot.IsOnline || snapshot.IsSynchronized
                     ? safeColor
-                    : (snapshot.SelectedChannelIndex >= 0 ? warningColor : offlineColor);
+                    : (showCurrentSignal ? warningColor : offlineColor);
                 currentWaveformRenderer.SetWaveformColor(curWaveColor);
 
-                // Add slight noise if signal mismatch or scanning
-                float noise = snapshot.IsScanning ? 0.65f : (snapshot.IsSynchronized ? 0f : 0.18f);
+                float noise = !snapshot.HasScanned ? 0.9f
+                    : snapshot.IsScanning ? 0.7f
+                    : snapshot.IsSynchronized ? 0.05f : 0.35f;
                 currentWaveformRenderer.SetNoise(noise);
             }
 
-            SetText(referenceSignalLabel, $"REF: {snapshot.ReferenceWaveform.ToString().ToUpper()} | {snapshot.TargetFrequency:0.0} kHz | {snapshot.TargetPhase:0}°");
-            SetText(currentSignalLabel, snapshot.SelectedChannelIndex >= 0
-                ? $"CUR: {snapshot.CurrentWaveform.ToString().ToUpper()} | {snapshot.CurrentFrequency:0.0} kHz | {snapshot.CurrentPhase:0}°"
-                : "NO CHANNEL SELECTED");
+            SetText(referenceSignalLabel, snapshot.HasScanned || snapshot.IsOnline
+                ? $"REF: {snapshot.ReferenceWaveform.ToString().ToUpper()} | CARRIER TRACE LOCKED"
+                : "REF: ENCRYPTED - SCAN REQUIRED");
+            SetText(currentSignalLabel, snapshot.HasScanned && snapshot.SelectedChannelIndex >= 0
+                ? $"CUR: {snapshot.CurrentWaveform.ToString().ToUpper()} | {FormatFrequency(snapshot.CurrentFrequency)} | PHASE {FormatPhase(snapshot.CurrentPhase)}"
+                : snapshot.HasScanned ? "NO CHANNEL SELECTED" : "CURRENT SIGNAL MASKED");
 
             // Channel highlight indicators
             for (int i = 0; i < channelHighlights.Length; i++)
@@ -259,11 +278,11 @@ namespace EchoProtocol.RelayB
             // Synchronization Monitor
             if (snapshot.IsSynchronized && !snapshot.IsOnline)
             {
-                SetText(signalMatchText, $"SIGNAL MATCH: {snapshot.SignalMatchPercent:0.0}% [CONDITIONS SATISFIED]");
+                SetText(signalMatchText, "SIGNAL COHERENCE: LOCKABLE");
             }
             else
             {
-                SetText(signalMatchText, $"SIGNAL MATCH: {snapshot.SignalMatchPercent:0.0}%");
+                SetText(signalMatchText, $"SIGNAL COHERENCE: {CoherenceText(snapshot.SignalMatchPercent)}");
             }
 
             if (signalMatchText != null)
@@ -273,7 +292,7 @@ namespace EchoProtocol.RelayB
 
             float freqTol = _controller != null && _controller.Config != null ? _controller.Config.FrequencyTolerancePercent : 3f;
             bool freqPass = snapshot.FrequencyErrorPercent <= freqTol;
-            SetText(frequencyErrorText, $"FREQ ERROR: {snapshot.FrequencyErrorPercent:0.00}% ({(freqPass ? "PASS" : "OUT OF BAND")})");
+            SetText(frequencyErrorText, $"CARRIER LOCK: {(freqPass ? "STABLE" : "UNSTABLE")}");
             if (frequencyErrorText != null)
             {
                 frequencyErrorText.color = freqPass ? safeColor : warningColor;
@@ -281,7 +300,7 @@ namespace EchoProtocol.RelayB
 
             float phaseTol = _controller != null && _controller.Config != null ? _controller.Config.PhaseToleranceDegrees : 12f;
             bool phasePass = snapshot.PhaseErrorDegrees <= phaseTol;
-            SetText(phaseErrorText, $"PHASE ERROR: {snapshot.PhaseErrorDegrees:0.0}° ({(phasePass ? "PASS" : "DESYNC")})");
+            SetText(phaseErrorText, $"PHASE NOISE: {(phasePass ? "LOW" : "HIGH")}");
             if (phaseErrorText != null)
             {
                 phaseErrorText.color = phasePass ? safeColor : warningColor;
@@ -338,7 +357,10 @@ namespace EchoProtocol.RelayB
                 }
                 else
                 {
-                    warningBannerText.text = "SCAN CHANNELS, THEN ALIGN FREQUENCY AND PHASE";
+                    warningBannerText.text = !snapshot.HasScanned ? "SCAN REQUIRED BEFORE CHANNEL ROUTING"
+                        : !snapshot.IsSelectedChannelCorrect && snapshot.SelectedChannelIndex >= 0
+                            ? "CHANNEL TRACE REJECTED - SELECT ANOTHER CHANNEL"
+                            : "SCAN CHANNELS, THEN ALIGN FREQUENCY AND PHASE";
                     warningBannerText.color = offlineColor;
                     warningBannerText.gameObject.SetActive(true);
                 }
@@ -347,13 +369,14 @@ namespace EchoProtocol.RelayB
             // Interactability
             for (int i = 0; i < channelButtons.Length; i++)
             {
-                SetInteractable(channelButtons[i], !readOnly && canOperate);
+                SetInteractable(channelButtons[i], !readOnly && canOperate && snapshot.HasScanned && !snapshot.IsScanning);
             }
 
-            SetInteractable(frequencySlider, !readOnly && canOperate);
-            SetInteractable(phaseSlider, !readOnly && canOperate);
+            bool channelUnlocked = snapshot.HasScanned && snapshot.IsSelectedChannelCorrect;
+            SetInteractable(frequencySlider, !readOnly && canOperate && channelUnlocked);
+            SetInteractable(phaseSlider, !readOnly && canOperate && channelUnlocked);
             SetInteractable(scanButton, !readOnly && canOperate);
-            SetInteractable(startSyncButton, !readOnly && canOperate && snapshot.SelectedChannelIndex >= 0 && snapshot.Status != RelayBStatus.Synchronizing);
+            SetInteractable(startSyncButton, !readOnly && canOperate && channelUnlocked && snapshot.Status != RelayBStatus.Synchronizing);
             SetInteractable(cancelSyncButton, !readOnly && canOperate && snapshot.Status == RelayBStatus.Synchronizing);
             SetInteractable(closeButton, true);
 
@@ -369,6 +392,22 @@ namespace EchoProtocol.RelayB
                 _lastLoggedChannel = snapshot.SelectedChannelIndex;
                 AddLog($"ROUTING: CHANNEL {snapshot.SelectedChannelIndex + 1:00} ACTIVE");
             }
+        }
+
+        private static string FormatFrequency(float value) => $"{Mathf.Round(value)} kHz";
+
+        private static string FormatPhase(float value)
+        {
+            float stepped = Mathf.Round(value / 5f) * 5f;
+            return $"{stepped:0} deg";
+        }
+
+        private static string CoherenceText(float percent)
+        {
+            if (percent >= 95f) return "LOCKABLE";
+            if (percent >= 70f) return "STRONG";
+            if (percent >= 45f) return "WEAK";
+            return "NOISY";
         }
 
         private void HookControls()
@@ -457,7 +496,11 @@ namespace EchoProtocol.RelayB
 
         private void HandleScanClicked()
         {
-            if (TryGetNetworkDirector(out var director)) director.RequestRelayBScan(_controller);
+            if (TryGetNetworkDirector(out var director))
+            {
+                director.RequestRelayBScan(_controller);
+                _controller?.ScanChannels();
+            }
             else _controller?.ScanChannels();
         }
 
