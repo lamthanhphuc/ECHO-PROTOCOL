@@ -70,9 +70,6 @@ namespace EchoProtocol.RelayA
         private readonly RelayAPlayerControlLock _controlLock = new RelayAPlayerControlLock();
         private RelayAController _controller;
         private bool _suppressSliderEvents;
-        private bool _generatorAdjusted;
-        private bool _frequencyAdjusted;
-        private bool _loadAdjusted;
 
         private void Awake()
         {
@@ -129,9 +126,6 @@ namespace EchoProtocol.RelayA
 
             _controlLock.Acquire(interactor, Close);
             if (!_controlLock.IsLocked) return;
-            _generatorAdjusted = false;
-            _frequencyAdjusted = false;
-            _loadAdjusted = false;
             SetVisible(true);
         }
 
@@ -199,9 +193,9 @@ namespace EchoProtocol.RelayA
             RefreshWarning(snapshot);
 
             SetInteractable(generatorSlider, !readOnly && canOperate);
-            SetInteractable(frequencySlider, !readOnly && canOperate && _generatorAdjusted);
-            SetInteractable(loadSlider, !readOnly && canOperate && _generatorAdjusted && _frequencyAdjusted);
-            SetInteractable(startButton, !readOnly && canOperate && !snapshot.IsRunning && _generatorAdjusted && _frequencyAdjusted && _loadAdjusted);
+            SetInteractable(frequencySlider, !readOnly && canOperate);
+            SetInteractable(loadSlider, !readOnly && canOperate);
+            SetInteractable(startButton, !readOnly && canOperate && !snapshot.IsRunning);
             SetInteractable(emergencyStopButton, !readOnly && canOperate && snapshot.IsRunning);
         }
 
@@ -284,12 +278,12 @@ namespace EchoProtocol.RelayA
             if (snapshot.IsDangerous)
             {
                 if (config != null && config.IsVoltageDangerous(snapshot.Outputs.Voltage))
-                    return "Voltage exceeded danger range. Stability reset.";
+                    return "Voltage exceeded danger range. Stability dropping.";
                 if (config != null && config.IsFrequencyDangerous(snapshot.Outputs.Frequency))
-                    return "Frequency exceeded danger range. Stability reset.";
+                    return "Frequency exceeded danger range. Stability dropping.";
                 if (config != null && config.IsLoadDangerous(snapshot.Outputs.LoadBalance))
-                    return "Load exceeded danger range. Stability reset.";
-                return "Danger threshold exceeded. Stability reset.";
+                    return "Load exceeded danger range. Stability dropping.";
+                return "Danger threshold exceeded. Stability dropping.";
             }
             if (snapshot.IsStable)
                 return $"Readings stable. Hold for {Mathf.Max(0f, snapshot.StabilityRequiredSeconds - snapshot.StabilitySeconds):0.0}s.";
@@ -370,20 +364,6 @@ namespace EchoProtocol.RelayA
             if (_suppressSliderEvents || _controller == null || generatorSlider == null || frequencySlider == null || loadSlider == null)
             {
                 return;
-            }
-
-            GameObject selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
-            if (selected == generatorSlider.gameObject)
-            {
-                _generatorAdjusted = true;
-            }
-            else if (_generatorAdjusted && selected == frequencySlider.gameObject)
-            {
-                _frequencyAdjusted = true;
-            }
-            else if (_generatorAdjusted && _frequencyAdjusted && selected == loadSlider.gameObject)
-            {
-                _loadAdjusted = true;
             }
 
             if (TryGetNetworkDirector(out var director))

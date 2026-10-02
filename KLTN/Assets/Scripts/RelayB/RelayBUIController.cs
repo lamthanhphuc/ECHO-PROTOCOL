@@ -357,7 +357,7 @@ namespace EchoProtocol.RelayB
                 }
                 else
                 {
-                    warningBannerText.text = !snapshot.HasScanned ? "SCAN REQUIRED BEFORE CHANNEL ROUTING"
+                    warningBannerText.text = !snapshot.HasScanned ? "SCAN OPTIONAL - TUNE CHANNEL, FREQUENCY AND PHASE"
                         : !snapshot.IsSelectedChannelCorrect && snapshot.SelectedChannelIndex >= 0
                             ? "CHANNEL TRACE REJECTED - SELECT ANOTHER CHANNEL"
                             : "SCAN CHANNELS, THEN ALIGN FREQUENCY AND PHASE";
@@ -369,12 +369,12 @@ namespace EchoProtocol.RelayB
             // Interactability
             for (int i = 0; i < channelButtons.Length; i++)
             {
-                SetInteractable(channelButtons[i], !readOnly && canOperate && snapshot.HasScanned && !snapshot.IsScanning);
+                SetInteractable(channelButtons[i], !readOnly && canOperate && !snapshot.IsScanning);
             }
 
-            bool channelUnlocked = snapshot.HasScanned && snapshot.IsSelectedChannelCorrect;
-            SetInteractable(frequencySlider, !readOnly && canOperate && channelUnlocked);
-            SetInteractable(phaseSlider, !readOnly && canOperate && channelUnlocked);
+            bool channelUnlocked = snapshot.SelectedChannelIndex >= 0 && snapshot.IsSelectedChannelCorrect;
+            SetInteractable(frequencySlider, !readOnly && canOperate);
+            SetInteractable(phaseSlider, !readOnly && canOperate);
             SetInteractable(scanButton, !readOnly && canOperate);
             SetInteractable(startSyncButton, !readOnly && canOperate && channelUnlocked && snapshot.Status != RelayBStatus.Synchronizing);
             SetInteractable(cancelSyncButton, !readOnly && canOperate && snapshot.Status == RelayBStatus.Synchronizing);
