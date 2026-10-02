@@ -163,6 +163,27 @@ public class MatchFlowController : MonoBehaviour
             SetPhase(MatchPhase.Zone3PushFrigate);
     }
 
+    public void DebugSkipToZone3()
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (_networkAuthorityPresentationOnly || IsMatchEnded) return;
+
+        _securityHoldCompleted = true;
+        _powerPuzzleCompleted = true;
+        _restoreMainPowerCompleted = true;
+        SetZone1DoorToZone2Unlocked(true);
+
+        var zone2Director = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance;
+        if (zone2Director != null)
+        {
+            zone2Director.ApplyDoorState(true);
+            zone2Director.SetOfflineStage(EchoProtocol.MatchFlow.Zone2MissionStage.Zone2Completed);
+        }
+
+        SetPhase(MatchPhase.Zone3FindFrigate);
+#endif
+    }
+
     public void NotifyZone3Complete()
     {
         if (_networkAuthorityPresentationOnly || _phase != MatchPhase.Zone3PushFrigate) return;

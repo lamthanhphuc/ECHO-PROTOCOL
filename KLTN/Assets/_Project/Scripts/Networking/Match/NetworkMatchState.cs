@@ -465,8 +465,11 @@ namespace EchoProtocol.Networking
                 || CurrentPhase == NetworkMatchPhase.Zone3PushFrigate))
             {
                 zone3.ReleaseInvalidAuthoritativePushers(IsZone3PusherValid);
+                if (CurrentPhase == NetworkMatchPhase.Zone3PushFrigate)
+                    zone3.TickConvoyAuthoritative(Runner.DeltaTime);
                 UpdateZone3FrigatePoseAuthoritative(zone3.FrigatePosition,
-                    zone3.Frigate != null ? zone3.Frigate.transform.rotation : Quaternion.identity);
+                    zone3.Convoy != null ? zone3.Convoy.transform.rotation
+                    : (zone3.Frigate != null ? zone3.Frigate.transform.rotation : Quaternion.identity));
                 EmitFrigatePushNoiseAuthoritative(zone3);
             }
             if (CurrentPhase == NetworkMatchPhase.Zone3PushFrigate)
@@ -1309,9 +1312,96 @@ namespace EchoProtocol.Networking
                 SetZone3PushAuthoritative(actor, false);
         }
 
+        public void RequestZone3ConvoyRouteChoice(Zone3ConvoyRoutePoint nextPoint)
+        {
+            if (!HasValidNetworkObject()) return;
+            if (Object.HasStateAuthority)
+            {
+                if (TryGetLocalRequester(out var requester))
+                    TrySelectZone3ConvoyRouteAuthoritative(requester, nextPoint);
+            }
+            else RpcZone3ConvoyRouteChoice((int)nextPoint);
+        }
+
+        public void RequestZone3ConvoyRefuel()
+        {
+            if (!HasValidNetworkObject()) return;
+            if (Object.HasStateAuthority)
+            {
+                if (TryGetLocalRequester(out var requester))
+                    TryRefuelZone3ConvoyAuthoritative(requester);
+            }
+            else RpcZone3ConvoyRefuel();
+        }
+
+        public bool DebugSkipToZone3()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (!HasValidNetworkObject() || !Object.HasStateAuthority || IsEnded) return false;
+
+            ResetZone2AuthoritativeState();
+            SecurityTerminalDiscovered = true;
+            SecurityHoldCompleted = true;
+            PowerAuthorizationAvailable = true;
+            ZoneDoorsUnlocked = true;
+            PowerPuzzleCompleted = true;
+            RestoreMainPowerCompleted = true;
+            Zone2Stage = Zone2MissionStage.Zone2Completed;
+            Zone3Pusher = PlayerRef.None;
+            Zone3ChargeOperator = PlayerRef.None;
+            Zone3ChargeDurationSeconds = 0f;
+            Zone3ChargeAccumulatedSeconds = 0f;
+            _zone3ChargeLease = TickTimer.None;
+            _zone3ChargeNoiseTimer = TickTimer.None;
+            _zone3ChargeNoiseSequence = 0;
+            CurrentPhase = NetworkMatchPhase.Zone3FindFrigate;
+            LastActor = Runner != null ? Runner.LocalPlayer : PlayerRef.None;
+            AdvancePhaseOrdinal();
+            HandleReplicatedStateChanged();
+            RuntimeLog.Log(RuntimeLogCategory.MatchState, "[MatchState] Debug skipped to Zone3FindFrigate.");
+            return true;
+#else
+            return false;
+#endif
+        }
+
+        public void RequestDebugSkipToZone3()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (!HasValidNetworkObject()) return;
+            if (Object.HasStateAuthority)
+            {
+                DebugSkipToZone3();
+            }
+            else
+            {
+                RpcDebugSkipToZone3();
+            }
+#endif
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcDebugSkipToZone3(RpcInfo info = default)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            DebugSkipToZone3();
+#endif
+        }
+
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         private void RpcZone3Push(bool active, RpcInfo info = default) =>
             SetZone3PushAuthoritative(info.Source, active);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcZone3ConvoyRouteChoice(int nextPoint, RpcInfo info = default)
+        {
+            if (!System.Enum.IsDefined(typeof(Zone3ConvoyRoutePoint), nextPoint)) return;
+            TrySelectZone3ConvoyRouteAuthoritative(info.Source, (Zone3ConvoyRoutePoint)nextPoint);
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcZone3ConvoyRefuel(RpcInfo info = default) =>
+            TryRefuelZone3ConvoyAuthoritative(info.Source);
 
         private void SetZone3PushAuthoritative(PlayerRef actor, bool active)
         {
@@ -1344,6 +1434,43 @@ namespace EchoProtocol.Networking
             if (!HasValidNetworkObject() || !Object.HasStateAuthority) return;
             Zone3FrigatePosition = position;
             Zone3FrigateRotation = rotation;
+        }
+
+        private bool TrySelectZone3ConvoyRouteAuthoritative(PlayerRef actor, Zone3ConvoyRoutePoint nextPoint)
+        {
+            var zone3 = Zone3MissionDirector.Instance;
+            if (!Object.HasStateAuthority
+                || IsEnded
+                || CurrentPhase != NetworkMatchPhase.Zone3PushFrigate
+                || zone3?.Convoy == null
+                || !TryResolveActivePlayer(actor, out var lifeState)
+                || !zone3.Convoy.CanSelectRoute(lifeState.gameObject, nextPoint))
+            {
+                return false;
+            }
+
+            bool selected = zone3.SelectConvoyRoute(nextPoint);
+            if (selected) HandleReplicatedStateChanged();
+            return selected;
+        }
+
+        private bool TryRefuelZone3ConvoyAuthoritative(PlayerRef actor)
+        {
+            var zone3 = Zone3MissionDirector.Instance;
+            if (!Object.HasStateAuthority
+                || IsEnded
+                || CurrentPhase != NetworkMatchPhase.Zone3PushFrigate
+                || zone3?.Convoy == null
+                || !zone3.Convoy.IsFuelEmpty
+                || !TryResolveActivePlayer(actor, out var lifeState)
+                || Vector3.Distance(lifeState.transform.position, zone3.FrigatePosition) > zone3.PushInteractionDistance + 1f)
+            {
+                return false;
+            }
+
+            zone3.Convoy.Refuel();
+            HandleReplicatedStateChanged();
+            return true;
         }
 
         public bool RequestStartZone3Charge()
@@ -1590,6 +1717,8 @@ namespace EchoProtocol.Networking
         {
             return previous == NetworkMatchPhase.CoreObjective
                        && next == NetworkMatchPhase.Zone2Objective
+                   || previous == NetworkMatchPhase.Zone2Objective
+                       && next == NetworkMatchPhase.Zone3FindFrigate
                    || previous == NetworkMatchPhase.Zone2Objective
                        && next == NetworkMatchPhase.FinalHunt;
         }
@@ -2424,8 +2553,10 @@ namespace EchoProtocol.Networking
 
         private void EmitFrigatePushNoiseAuthoritative(Zone3MissionDirector zone3)
         {
-            if (CurrentPhase != NetworkMatchPhase.Zone3PushFrigate || zone3.Frigate == null
-                || !zone3.Frigate.IsBeingPushed)
+            // Convoy mode: emit noise while convoy is actually moving, not just when physically pushed.
+            bool convoyMoving = zone3.Convoy != null && zone3.Convoy.IsMoving;
+            bool legacyPushing = zone3.Convoy == null && zone3.Frigate != null && zone3.Frigate.IsBeingPushed;
+            if (CurrentPhase != NetworkMatchPhase.Zone3PushFrigate || (!convoyMoving && !legacyPushing))
             {
                 _frigateNoiseTimer = TickTimer.None;
                 _hasFrigateNoisePose = false;
@@ -2433,7 +2564,9 @@ namespace EchoProtocol.Networking
             }
 
             Vector3 position = zone3.FrigatePosition;
-            Quaternion rotation = zone3.Frigate.transform.rotation;
+            Quaternion rotation = zone3.Convoy != null
+                ? zone3.Convoy.transform.rotation
+                : (zone3.Frigate != null ? zone3.Frigate.transform.rotation : Quaternion.identity);
             bool hasMotion = false;
             if (_hasFrigateNoisePose)
             {
@@ -2453,10 +2586,17 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            var pusher = zone3.Frigate.CurrentPusher;
-            var playerObject = pusher != null ? pusher.GetComponentInParent<NetworkObject>() : null;
-            if (playerObject == null) return;
-            EmitObjectiveNoisePulse(RuntimeNoiseType.VEHICLE_PUSH, playerObject.InputAuthority,
+            // Use Zone3Pusher or first available real player as convoy noise actor.
+            PlayerRef actor = Zone3Pusher.IsRealPlayer ? Zone3Pusher : PlayerRef.None;
+            if (!actor.IsRealPlayer && Runner != null)
+            {
+                foreach (var p in Runner.ActivePlayers)
+                {
+                    if (p.IsRealPlayer) { actor = p; break; }
+                }
+            }
+            if (!actor.IsRealPlayer) return;
+            EmitObjectiveNoisePulse(RuntimeNoiseType.VEHICLE_PUSH, actor,
                 position, "frigate-push", ref _frigateNoiseTimer,
                 ref _frigateNoiseSequence);
         }

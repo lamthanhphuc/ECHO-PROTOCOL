@@ -30,8 +30,9 @@ namespace EchoProtocol.Networking
         public static Zone3MissionDirector Instance { get; private set; }
         public static bool IsSciFiSceneLoaded => SceneManager.GetSceneByName(SceneName).isLoaded;
         public PushableObject Frigate { get; private set; }
+        public Zone3ConvoyController Convoy { get; private set; }
         public Zone3ChargeStation ChargeStation => _chargeStation;
-        public Vector3 FrigatePosition => Frigate != null ? Frigate.transform.position : Vector3.zero;
+        public Vector3 FrigatePosition => Convoy != null ? Convoy.transform.position : Frigate != null ? Frigate.transform.position : Vector3.zero;
         public Vector3 ExitPosition => _exit != null ? _exit.position : Vector3.zero;
         public Transform ExitTransform => _exit;
         public float PushInteractionDistance => pushInteractionDistance;
@@ -40,8 +41,9 @@ namespace EchoProtocol.Networking
         {
             get
             {
-                return Frigate != null && _dockArea != null
-                    && _dockArea.FullyContains(Frigate.GetComponent<Collider>());
+                if (Frigate == null || _dockArea == null) return false;
+                if (Convoy != null && Convoy.CurrentPoint == Zone3ConvoyRoutePoint.Final) return true;
+                return _dockArea.FullyContains(Frigate.GetComponent<Collider>());
             }
         }
 
@@ -96,6 +98,9 @@ namespace EchoProtocol.Networking
         private void Bind(GameObject frigate, Transform covey, Transform exit)
         {
             Frigate = frigate.GetComponent<PushableObject>();
+            Convoy = frigate.GetComponent<Zone3ConvoyController>();
+            if (Convoy == null) Convoy = frigate.AddComponent<Zone3ConvoyController>();
+            Convoy.BindForZone3();
             _exit = exit;
             _dockArea = covey.GetComponentInChildren<Zone3DockArea>(true)
                 ?? GameObject.Find("Zone3_DockArea")?.GetComponent<Zone3DockArea>();
@@ -107,7 +112,6 @@ namespace EchoProtocol.Networking
             if (Frigate == null)
             {
                 Debug.LogError("[Zone3] Scene Spacefrigate has no PushableObject.", frigate);
-                return;
             }
             _dockArea?.MatchShipFootprint(frigate.GetComponent<Collider>());
             _frigateOutline = GetOrAddOutline(frigate);
@@ -156,8 +160,10 @@ namespace EchoProtocol.Networking
             if (online && !match.Object.HasStateAuthority
                 && match.Zone3FrigatePosition.sqrMagnitude > 1f)
             {
-                Frigate.transform.SetPositionAndRotation(match.Zone3FrigatePosition, match.Zone3FrigateRotation);
+                if (Convoy != null) Convoy.ApplyReplicatedPose(match.Zone3FrigatePosition, match.Zone3FrigateRotation);
+                else Frigate.transform.SetPositionAndRotation(match.Zone3FrigatePosition, match.Zone3FrigateRotation);
             }
+            if (!online && push) Convoy?.TickAuthoritative(Time.deltaTime);
             if (!online && _offlineEscaped.Count > 0 && _offlineFlow != null
                 && _offlineFlow.Phase == MatchPhase.FinalHunt)
                 CheckOfflineExitCompletion();
@@ -210,10 +216,8 @@ namespace EchoProtocol.Networking
 
         public void StartAuthoritativePush(PlayerRef actor, GameObject player)
         {
-            if (Frigate == null || player == null) return;
-            if (_authoritativePushers.TryGetValue(actor, out var existing) && existing == player) return;
-            _authoritativePushers[actor] = player;
-            Frigate.BeginAuthoritativePush(player);
+            if (player == null) return;
+            Convoy?.Activate();
         }
 
         public void StopAuthoritativePush(PlayerRef actor)
@@ -231,6 +235,12 @@ namespace EchoProtocol.Networking
             }
             _authoritativePushers.Clear();
         }
+
+        public bool SelectConvoyRoute(Zone3ConvoyRoutePoint nextPoint) =>
+            Convoy != null && Convoy.SelectNextPoint(nextPoint);
+
+        public void TickConvoyAuthoritative(float deltaTime) =>
+            Convoy?.TickAuthoritative(deltaTime);
 
         public void ReleaseInvalidAuthoritativePushers(System.Func<PlayerRef, bool> isValid)
         {

@@ -75,13 +75,32 @@ namespace EchoProtocol.Gameplay
         // IHoldInteractable
         // ──────────────────────────────────────────────────────────────────────
 
-        public string InteractionPrompt => _isBeingPushed ? "Hold [E] to Assist Push" : "Hold [E] to Push";
-        public bool RequiresHold => true;
+        public string InteractionPrompt
+        {
+            get
+            {
+                var zone3 = EchoProtocol.Networking.Zone3MissionDirector.Instance;
+                if (zone3 != null && zone3.Frigate == this && zone3.Convoy != null)
+                    return zone3.Convoy.InteractionPrompt;
+                return _isBeingPushed ? "Hold [E] to Assist Push" : "Hold [E] to Push";
+            }
+        }
+
+        public bool RequiresHold
+        {
+            get
+            {
+                var zone3 = EchoProtocol.Networking.Zone3MissionDirector.Instance;
+                return !(zone3 != null && zone3.Frigate == this && zone3.Convoy != null);
+            }
+        }
 
         public bool CanInteract(GameObject interactor)
         {
             if (!isActiveAndEnabled || interactor == null) return false;
             var zone3 = EchoProtocol.Networking.Zone3MissionDirector.Instance;
+            if (zone3 != null && zone3.Frigate == this && zone3.Convoy != null)
+                return zone3.Convoy.CanInteract(interactor);
             if (zone3 != null && zone3.Frigate == this && !zone3.IsPushAvailable) return false;
             float dist = GetDistanceToPusher(interactor.transform.position);
             return dist <= maxInteractionDistance;
@@ -89,7 +108,9 @@ namespace EchoProtocol.Gameplay
 
         public void Interact(GameObject interactor)
         {
-            // Hold interaction handled by Begin/End
+            var zone3 = EchoProtocol.Networking.Zone3MissionDirector.Instance;
+            if (zone3 != null && zone3.Frigate == this && zone3.Convoy != null)
+                zone3.Convoy.Interact(interactor);
         }
 
         public void BeginHoldInteract(GameObject interactor)
@@ -97,6 +118,11 @@ namespace EchoProtocol.Gameplay
             if (!CanInteract(interactor)) return;
 
             var zone3 = EchoProtocol.Networking.Zone3MissionDirector.Instance;
+            if (zone3 != null && zone3.Frigate == this && zone3.Convoy != null)
+            {
+                zone3.Convoy.Interact(interactor);
+                return;
+            }
             if (zone3 != null && zone3.Frigate == this)
             {
                 var matchState = EchoProtocol.Networking.NetworkMatchState.Instance;

@@ -244,13 +244,16 @@ namespace EchoProtocol.UI.HUD
 
             // Clean existing [E] or [E GIỮ] if present in source prompt
             string cleanPrompt = prompt.Replace("[E GIỮ]", "").Replace("[E]", "").Replace("[E ]", "").Trim();
+            bool isSpacefrigateRouteChoice = cleanPrompt.StartsWith("SPACEFRIGATE:", System.StringComparison.Ordinal);
             string formattedText = isHold
                 ? $"<color={keyColorHex}><b>{keyLabel}</b></color>  {cleanPrompt} <color=#FFB300>(Giữ)</color>"
                 : $"<color={keyColorHex}><b>{keyLabel}</b></color>  {cleanPrompt}";
 
-            if (!showInteractKey)
+            if (!showInteractKey || isSpacefrigateRouteChoice)
             {
-                formattedText = $"<color=#FFB300><b>{prompt}</b></color>";
+                formattedText = isSpacefrigateRouteChoice
+                    ? $"<color=#00E5FF><b>{cleanPrompt}</b></color>"
+                    : $"<color=#FFB300><b>{prompt}</b></color>";
             }
 
             SetText(promptTmp, promptText, formattedText);
