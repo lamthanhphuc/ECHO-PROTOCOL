@@ -437,16 +437,17 @@ MonoBehaviour:
   chaseFadeOutSeconds: 5
   searchCooldownSeconds: 4
   autoConfigure3D: 1
-  detectMinDistance: 30
-  detectMaxDistance: 60
+  detectMinDistance: 15
+  detectMaxDistance: 50
   voiceMinDistance: 10
   voiceMaxDistance: 25
-  movementMinDistance: 15
+  movementMinDistance: 2
   movementMaxDistance: 40
   breathingMinDistance: 0.8
   breathingMaxDistance: 6
-  chaseMinDistance: 40
-  chaseMaxDistance: 80
+  chaseMinDistance: 80
+  chaseMaxDistance: 150
+  distanceRolloffPower: 2.4
 --- !u!1 &100010
 GameObject:
   m_ObjectHideFlags: 0
