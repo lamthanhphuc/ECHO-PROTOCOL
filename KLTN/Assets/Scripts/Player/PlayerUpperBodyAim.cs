@@ -43,10 +43,12 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     private static readonly int IsRevivingHash = Animator.StringToHash("IsReviving");
     private static readonly int IsDownedHash = Animator.StringToHash("IsDowned");
     private static readonly int IsCrouchingHash = Animator.StringToHash("IsCrouching");
+    private static readonly int IsPushingHash = Animator.StringToHash("IsPushing");
 
     private PlayerInventory _inventory;
     private PlayerEnergyCoreCarrier _coreCarrier;
     private LobbyPlayerState _lobbyState;
+    private NetworkPlayerMovement _networkMovement;
     private PlayerHeldItemAnchor _heldItemAnchor;
     private bool _hasExternalAim;
     private Vector3 _externalAimOrigin;
@@ -59,6 +61,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         _inventory = GetComponentInParent<PlayerInventory>();
         _coreCarrier = GetComponentInParent<PlayerEnergyCoreCarrier>();
         _lobbyState = GetComponentInParent<LobbyPlayerState>();
+        _networkMovement = GetComponentInParent<NetworkPlayerMovement>();
         _heldItemAnchor = GetComponentInParent<PlayerHeldItemAnchor>();
     }
 
@@ -75,7 +78,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
     private void OnAnimatorIK(int layerIndex)
     {
-        if (IsReviving() || IsDowned())
+        if (IsReviving() || IsDowned() || IsPushing())
         {
             if (animator != null && animator.isHuman) animator.SetLookAtWeight(0f);
             return;
@@ -110,7 +113,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             return;
         }
 
-        if (IsReviving() || IsDowned())
+        if (IsReviving() || IsDowned() || IsPushing())
         {
             return;
         }
@@ -342,7 +345,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
     private bool IsHoldingTeamTool()
     {
-        if (IsCarryingCore())
+        if (IsCarryingCore() || IsPushing())
         {
             return false;
         }
@@ -369,6 +372,20 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     {
         return (_coreCarrier != null && _coreCarrier.IsCarrying)
             || (_lobbyState != null && _lobbyState.Object != null && _lobbyState.Object.IsValid && _lobbyState.CarriedCoreId.IsValid);
+    }
+
+    private bool IsPushing()
+    {
+        if (_networkMovement == null) _networkMovement = GetComponentInParent<NetworkPlayerMovement>();
+        if (_networkMovement != null && _networkMovement.IsAnimationPushing)
+        {
+            return true;
+        }
+
+        return animator != null
+            && animator.isActiveAndEnabled
+            && animator.runtimeAnimatorController != null
+            && animator.GetBool(IsPushingHash);
     }
 
     private PlayerCamera FindBoundCamera()

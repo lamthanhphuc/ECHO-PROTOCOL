@@ -7,6 +7,8 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
 {
     [SerializeField] private LobbyPlayerState lobbyState;
     [SerializeField] private PlayerHeldItemAnchor heldItemAnchor;
+    [SerializeField] private NetworkPlayerMovement networkMovement;
+    [SerializeField] private Animator animator;
 
     [Header("Tool Visuals (gán prefab trong Inspector)")]
     [SerializeField] private GameObject toolVisual_1; // FIELD_SCANNER – giữ placeholder nếu chưa có prefab
@@ -51,12 +53,16 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
     private NetworkObject _networkObject;
     private PlayerInventory _localInventory;
     private PlayerHeldItemView _localHeldItemView;
+    private bool _wasPushing;
+    private static readonly int IsPushingHash = Animator.StringToHash("IsPushing");
 
     private void Awake()
     {
         if (lobbyState == null) lobbyState = GetComponentInParent<LobbyPlayerState>();
         if (heldItemAnchor == null) heldItemAnchor = GetComponentInParent<PlayerHeldItemAnchor>();
         if (heldItemAnchor == null) heldItemAnchor = gameObject.AddComponent<PlayerHeldItemAnchor>();
+        if (networkMovement == null) networkMovement = GetComponentInParent<NetworkPlayerMovement>();
+        if (animator == null) animator = GetComponentInChildren<Animator>(true);
         _networkObject = GetComponentInParent<NetworkObject>();
         _localInventory = GetComponentInParent<PlayerInventory>();
         _localHeldItemView = GetComponentInParent<PlayerHeldItemView>();
@@ -77,6 +83,18 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         Clear();
     }
 
+    private void Update()
+    {
+        bool pushing = IsPushing();
+        if (pushing == _wasPushing)
+        {
+            return;
+        }
+
+        _wasPushing = pushing;
+        Refresh();
+    }
+
     private void Refresh()
     {
         if (lobbyState == null) lobbyState = GetComponentInParent<LobbyPlayerState>();
@@ -92,7 +110,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             return;
         }
 
-        int toolId = lobbyState.CarriedCoreId.IsValid ? 0 : lobbyState.ToolId;
+        int toolId = lobbyState.CarriedCoreId.IsValid || IsPushing() ? 0 : lobbyState.ToolId;
         if (ShouldSuppressLocalNetworkToolView(toolId))
         {
             toolId = 0;
@@ -284,6 +302,21 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         return _networkObject != null
             && _networkObject.IsValid
             && _networkObject.HasInputAuthority;
+    }
+
+    private bool IsPushing()
+    {
+        if (networkMovement == null) networkMovement = GetComponentInParent<NetworkPlayerMovement>();
+        if (networkMovement != null && networkMovement.IsAnimationPushing)
+        {
+            return true;
+        }
+
+        if (animator == null) animator = GetComponentInChildren<Animator>(true);
+        return animator != null
+            && animator.isActiveAndEnabled
+            && animator.runtimeAnimatorController != null
+            && animator.GetBool(IsPushingHash);
     }
 
     private static Color ResolveToolColor(int toolId)

@@ -8,6 +8,8 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     [SerializeField] private PlayerEnergyCoreCarrier coreCarrier;
     [SerializeField] private PlayerHeldItemAnchor heldItemAnchor;
     [SerializeField] private LobbyPlayerState lobbyState;
+    [SerializeField] private NetworkPlayerMovement networkMovement;
+    [SerializeField] private Animator animator;
     [SerializeField] private Vector3 energyCoreLocalPosition = Vector3.zero;
     [SerializeField] private Vector3 energyCoreLocalEulerAngles = Vector3.zero;
     [SerializeField] private Vector3 energyCoreLocalScale = new Vector3(25f, 25f, 25f);
@@ -46,6 +48,8 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
     private GameObject _currentVisual;
     private InventoryItemDefinition _currentItem;
+    private bool _wasPushing;
+    private static readonly int IsPushingHash = Animator.StringToHash("IsPushing");
 
     public bool IsShowingTeamTool => _currentVisual != null
         && _currentItem != null
@@ -59,6 +63,8 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         if (coreCarrier == null) coreCarrier = GetComponentInParent<PlayerEnergyCoreCarrier>();
         if (heldItemAnchor == null) heldItemAnchor = GetComponentInParent<PlayerHeldItemAnchor>();
         if (lobbyState == null) lobbyState = GetComponentInParent<LobbyPlayerState>();
+        if (networkMovement == null) networkMovement = GetComponentInParent<NetworkPlayerMovement>();
+        if (animator == null) animator = GetComponentInChildren<Animator>(true);
         if (heldItemAnchor == null) heldItemAnchor = gameObject.AddComponent<PlayerHeldItemAnchor>();
     }
 
@@ -67,6 +73,18 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         if (inventory != null) inventory.InventoryChanged += RefreshVisual;
         if (coreCarrier != null) coreCarrier.CarryStateChanged += HandleCarryStateChanged;
         LobbyPlayerState.AnyStateChanged += RefreshVisual;
+        RefreshVisual();
+    }
+
+    private void Update()
+    {
+        bool pushing = IsPushing();
+        if (pushing == _wasPushing)
+        {
+            return;
+        }
+
+        _wasPushing = pushing;
         RefreshVisual();
     }
 
@@ -182,6 +200,11 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
     private InventoryItemDefinition ResolveDesiredHeldItem()
     {
+        if (IsPushing())
+        {
+            return null;
+        }
+
         if (lobbyState != null
             && lobbyState.Object != null
             && lobbyState.Object.IsValid
@@ -196,6 +219,21 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         }
 
         return inventory != null ? inventory.TeamToolSlot : null;
+    }
+
+    private bool IsPushing()
+    {
+        if (networkMovement == null) networkMovement = GetComponentInParent<NetworkPlayerMovement>();
+        if (networkMovement != null && networkMovement.IsAnimationPushing)
+        {
+            return true;
+        }
+
+        if (animator == null) animator = GetComponentInChildren<Animator>(true);
+        return animator != null
+            && animator.isActiveAndEnabled
+            && animator.runtimeAnimatorController != null
+            && animator.GetBool(IsPushingHash);
     }
 
     private void ApplyLocalPose(Transform visual, InventoryItemDefinition item)
