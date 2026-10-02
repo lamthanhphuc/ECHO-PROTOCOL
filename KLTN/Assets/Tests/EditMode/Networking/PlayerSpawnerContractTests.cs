@@ -109,6 +109,26 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
+        public void SCIFI_Zone3PhaseSpawnsZone3StalkerFromSceneMarker()
+        {
+            var source = LoadSpawnerSource();
+            StringAssert.Contains("EnsureZone3Stalker(runner, matchState)", source);
+            StringAssert.Contains("RegionSemanticZone.Zone03", source);
+
+            var scene = EditorSceneManager.OpenScene(SciFiScenePath, OpenSceneMode.Additive);
+            try
+            {
+                Assert.That(System.Array.Exists(scene.GetRootGameObjects(), root =>
+                    System.Array.Exists(root.GetComponentsInChildren<Transform>(true), child =>
+                        child.name == "MonsterSpawn_Stalker_Zone3_EMPTY")), Is.True);
+            }
+            finally
+            {
+                EditorSceneManager.CloseScene(scene, true);
+            }
+        }
+
+        [Test]
         public void FND_NET_PLAYER_SPAWNER_BootstrapSceneHasNoObsoletePlayerPrefabReference()
         {
             var scene = EditorSceneManager.OpenScene(BootstrapScenePath, OpenSceneMode.Additive);

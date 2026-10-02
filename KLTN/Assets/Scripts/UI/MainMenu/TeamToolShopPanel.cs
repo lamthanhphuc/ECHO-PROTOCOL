@@ -263,7 +263,7 @@ namespace EchoProtocol.UI.MainMenu
                     if (button != null) button.GetComponentInChildren<Text>().text = "OWNED";
                     _owned.Add(item.itemId);
                     _status.text = item.name + " purchased.";
-                    runtime.AuthService.GetCurrentUser(_ => { if (_profile != null) _profile.LoadCredits(); });
+                    runtime.AuthService.GetCurrentUser(_ => { if (_profile != null) _profile.UpdateCreditsUI(); });
                 });
         }
 

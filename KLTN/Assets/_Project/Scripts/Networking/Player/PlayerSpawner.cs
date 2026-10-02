@@ -43,6 +43,7 @@ namespace EchoProtocol.Networking
         // Minion xuất hiện tương đối gần Stalker.
         [SerializeField, Min(1f)] private float _minionSpawnMinDistanceFromStalker = 4f;
         [SerializeField, Min(2f)] private float _minionSpawnMaxDistanceFromStalker = 10f;
+        [SerializeField, Min(5f)] private float _minionSpawnFallbackMaxDistanceFromStalker = 28f;
 
         // Nhưng không được xuất hiện sát Player.
         [SerializeField, Min(5f)] private float _minionSpawnMinDistanceFromPlayer = 18f;
@@ -60,6 +61,9 @@ namespace EchoProtocol.Networking
         private NetworkObject _monsterInstance;
         private NetworkObject _zone2MonsterInstance;
         private bool _zone2MonsterSpawned;
+        private NetworkObject _zone3MonsterInstance;
+        private bool _zone3MonsterSpawned;
+        private bool _zone3SpawnFailureLogged;
         private readonly List<NetworkObject> _creepMinionInstances = new List<NetworkObject>();
         private float _nextMinionSpawnCheckAt;
         private bool _zone2MinionsActive;
@@ -80,13 +84,21 @@ namespace EchoProtocol.Networking
                     runner.Despawn(_zone2MonsterInstance);
                     _zone2MonsterInstance = null;
                 }
+                if (IsValidNetworkObject(_zone3MonsterInstance))
+                {
+                    runner.Despawn(_zone3MonsterInstance);
+                    _zone3MonsterInstance = null;
+                }
                 DespawnAllCreepMinions(runner);
                 return;
             }
 
             if (_bootstrap.State != NetworkSessionState.InMatch
-                || SceneManager.GetActiveScene().name != LobbyManager.GameSceneName
-                || Time.time < _nextMinionSpawnCheckAt) return;
+                || SceneManager.GetActiveScene().name != LobbyManager.GameSceneName) return;
+
+            EnsureZone3Stalker(runner, matchState);
+
+            if (Time.time < _nextMinionSpawnCheckAt) return;
             _nextMinionSpawnCheckAt = Time.time + _minionSpawnCheckInterval;
             MaintainCreepMinionPopulation(runner);
         }
@@ -160,6 +172,7 @@ namespace EchoProtocol.Networking
 
             PruneInvalidAuthoritativeWorldStateReferences();
             if (_zone2MonsterInstance == null) _zone2MonsterSpawned = false;
+            if (_zone3MonsterInstance == null) _zone3MonsterSpawned = false;
             DisableLegacyObjectiveMutators();
             EnsureGameplayHUD();
             if (!runner.IsServer) return;
@@ -418,6 +431,57 @@ namespace EchoProtocol.Networking
                 playerState);
         }
 
+        private void EnsureZone3Stalker(NetworkRunner runner, NetworkMatchState matchState)
+        {
+            if (runner == null || !runner.IsServer || !runner.IsRunning || matchState == null
+                || matchState.IsEnded || _zone3MonsterSpawned || IsValidNetworkObject(_zone3MonsterInstance)) return;
+
+            var phase = matchState.CurrentPhase;
+            if (phase != NetworkMatchPhase.Zone3FindFrigate
+                && phase != NetworkMatchPhase.Zone3PushFrigate
+                && phase != NetworkMatchPhase.FinalHunt
+                && phase != NetworkMatchPhase.Escape) return;
+
+            if (_monsterPrefab == null)
+            {
+                LogZone3SpawnFailureOnce("monster-prefab-missing");
+                return;
+            }
+
+            var marker = GameObject.Find("MonsterSpawn_Stalker_Zone3_EMPTY");
+            if (marker == null)
+            {
+                LogZone3SpawnFailureOnce("spawn-marker-missing");
+                return;
+            }
+
+            if (!TryGetStalkerSpawnPosition(marker.transform, out var position))
+            {
+                LogZone3SpawnFailureOnce("spawn-marker-not-on-navmesh");
+                return;
+            }
+
+            var spawned = SpawnStalker(runner, position, marker.transform.rotation, RegionSemanticZone.Zone03);
+            if (!IsValidNetworkObject(spawned))
+            {
+                LogZone3SpawnFailureOnce("runner-spawn-returned-invalid-object");
+                return;
+            }
+
+            _zone3MonsterInstance = spawned;
+            _zone3MonsterSpawned = true;
+            _zone3SpawnFailureLogged = false;
+            RuntimeLog.Log(RuntimeLogCategory.PlayerSpawner,
+                $"[STK_ZONE3][SPAWN] id={spawned.Id} position={position}.");
+        }
+
+        private void LogZone3SpawnFailureOnce(string reason)
+        {
+            if (_zone3SpawnFailureLogged) return;
+            _zone3SpawnFailureLogged = true;
+            Debug.LogWarning($"[STK_ZONE3][SPAWN_REJECT] reason={reason}");
+        }
+
         private NetworkObject ResolveCreepMinionPrefab()
         {
             if (_creepMinionPrefab != null) return _creepMinionPrefab;
@@ -487,37 +551,89 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            // Ponytail:
+            // trước tiên giữ behavior hiện tại:
+            // cố spawn gần Stalker.
+            if (TryFindCreepMinionSpawnPositionInRing(
+                    runner,
+                    stalkerHit.position,
+                    _minionSpawnMinDistanceFromStalker,
+                    _minionSpawnMaxDistanceFromStalker,
+                    24,
+                    out position))
+            {
+                return true;
+            }
+
+            // Nếu Stalker đang sát Player thì vòng 4–10m
+            // thường không thể thỏa khoảng cách an toàn 18m.
+            // Chỉ lúc đó mới nới vùng tìm kiếm.
+            float fallbackMinDistance =
+                Mathf.Max(
+                    _minionSpawnMaxDistanceFromStalker,
+                    _minionSpawnMinDistanceFromPlayer);
+
+            return TryFindCreepMinionSpawnPositionInRing(
+                runner,
+                stalkerHit.position,
+                fallbackMinDistance,
+                _minionSpawnFallbackMaxDistanceFromStalker,
+                24,
+                out position);
+        }
+
+        private bool TryFindCreepMinionSpawnPositionInRing(
+            NetworkRunner runner,
+            Vector3 stalkerPosition,
+            float minDistance,
+            float maxDistance,
+            int attempts,
+            out Vector3 position)
+        {
+            position = default;
+
             var path = new NavMeshPath();
 
-            for (int attempt = 0; attempt < 24; attempt++)
+            for (int attempt = 0; attempt < attempts; attempt++)
             {
                 Vector2 direction = Random.insideUnitCircle;
-                if (direction.sqrMagnitude < 0.01f) continue;
+
+                if (direction.sqrMagnitude < 0.01f)
+                {
+                    continue;
+                }
+
                 direction.Normalize();
 
-                float distance = Random.Range(
-                    _minionSpawnMinDistanceFromStalker,
-                    _minionSpawnMaxDistanceFromStalker);
+                float distance = Random.Range(minDistance, maxDistance);
 
-                Vector3 candidate = stalker.transform.position
-                    + new Vector3(direction.x, 0f, direction.y) * distance;
+                Vector3 candidate =
+                    stalkerPosition
+                    + new Vector3(direction.x, 0f, direction.y)
+                    * distance;
 
-                if (!NavMesh.SamplePosition(candidate, out var hit, 2.5f, NavMesh.AllAreas)) continue;
+                if (!NavMesh.SamplePosition(candidate, out var hit, 2.5f, NavMesh.AllAreas))
+                {
+                    continue;
+                }
 
-                float stalkerDistance = Vector3.Distance(stalkerHit.position, hit.position);
-                if (stalkerDistance < _minionSpawnMinDistanceFromStalker
-                    || stalkerDistance > _minionSpawnMaxDistanceFromStalker) continue;
+                float actualDistance = Vector3.Distance(stalkerPosition, hit.position);
 
-                // Phải thật sự reachable từ Stalker.
-                if (!NavMesh.CalculatePath(
-                        stalkerHit.position,
-                        hit.position,
-                        NavMesh.AllAreas,
-                        path)
-                    || path.status != NavMeshPathStatus.PathComplete) continue;
+                if (actualDistance < minDistance || actualDistance > maxDistance)
+                {
+                    continue;
+                }
 
-                // Không spawn sát bất kỳ Player nào.
-                if (!IsCreepMinionSpawnFarFromPlayers(runner, hit.position)) continue;
+                if (!NavMesh.CalculatePath(stalkerPosition, hit.position, NavMesh.AllAreas, path)
+                    || path.status != NavMeshPathStatus.PathComplete)
+                {
+                    continue;
+                }
+
+                if (!IsCreepMinionSpawnFarFromPlayers(runner, hit.position))
+                {
+                    continue;
+                }
 
                 position = hit.position;
                 return true;
@@ -1335,6 +1451,9 @@ namespace EchoProtocol.Networking
             _monsterInstance = null;
             _zone2MonsterInstance = null;
             _zone2MonsterSpawned = false;
+            _zone3MonsterInstance = null;
+            _zone3MonsterSpawned = false;
+            _zone3SpawnFailureLogged = false;
         }
 
         private void PruneInvalidAuthoritativeWorldStateReferences()
@@ -1345,6 +1464,7 @@ namespace EchoProtocol.Networking
             if (!IsValidNetworkObject(_powerPuzzleInstance)) _powerPuzzleInstance = null;
             if (!IsValidNetworkObject(_monsterInstance)) _monsterInstance = null;
             if (!IsValidNetworkObject(_zone2MonsterInstance)) _zone2MonsterInstance = null;
+            if (!IsValidNetworkObject(_zone3MonsterInstance)) _zone3MonsterInstance = null;
 
             _energyCoreInstances.RemoveAll(core => !IsValidNetworkObject(core));
             _sectorBoxInstances.RemoveAll(box => !IsValidNetworkObject(box));

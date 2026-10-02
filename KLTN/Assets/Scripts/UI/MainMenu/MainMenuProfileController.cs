@@ -198,7 +198,7 @@ namespace EchoProtocol.UI.MainMenu
       if (topUpPopup != null) topUpPopup.SetActive(false);
     }
 
-    private void UpdateCreditsUI()
+    public void UpdateCreditsUI()
     {
       string amount = AuthSession.IsAuthenticated ? $"{AuthSession.WalletBalance:N0}" : "--";
       if (walletText != null) walletText.text = $"{amount}\nECHO CREDITS";
