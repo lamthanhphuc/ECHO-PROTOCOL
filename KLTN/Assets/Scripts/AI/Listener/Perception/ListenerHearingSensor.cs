@@ -112,6 +112,7 @@ namespace EchoProtocol.AI.Listener.Perception
                 noiseEvent.NoiseType ==
                 RuntimeNoiseType.NOISE_MAKER
                 || noiseEvent.NoiseType == RuntimeNoiseType.MACHINE_REPAIR
+                || noiseEvent.NoiseType == RuntimeNoiseType.MINION_ALERT
                 || noiseEvent.NoiseType == RuntimeNoiseType.MACHINE_OVERLOAD
                 || noiseEvent.NoiseType == RuntimeNoiseType.TERMINAL_DOWNLOAD
                 || noiseEvent.NoiseType == RuntimeNoiseType.VEHICLE_PUSH
@@ -167,6 +168,16 @@ namespace EchoProtocol.AI.Listener.Perception
                 noiseEvent.Loudness
                 * distanceAttenuation
                 * occlusionMultiplier;
+
+            if (effectiveIntensity < _policy.HearingThreshold)
+            {
+                bool wasOccluded = occlusionClass != ListenerOcclusionClass.CLEAR
+                    && occlusionClass != ListenerOcclusionClass.OPEN_DOOR;
+                rejectReason = wasOccluded
+                    ? ListenerHearingRejectReason.OccludedBelowThreshold
+                    : ListenerHearingRejectReason.BelowThreshold;
+                return false;
+            }
 
             observation = new HearingObservation(
                 noiseEvent.NoiseEventId,

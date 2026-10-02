@@ -65,22 +65,42 @@ namespace EchoProtocol.AI.Stalker.Networking
                     continue;
                 }
 
-                var isDowned = (identity.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && lifeState.IsDowned)
-                    || (identity.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned);
-                var isEliminated = lifeState != null && lifeState.IsEliminated;
-                var isHidden = (identity.TryGetComponent<PlayerHidingController>(out var hiding) && hiding.IsHidden)
-                    || (identity.TryGetComponent<NetworkPlayerMovement>(out var netMove) && netMove.IsHidden);
-                var eligibilitySnapshot = new StalkerTargetEligibilitySnapshot(
-                    true,
-                    true,
-                    isDowned,
-                    isEliminated,
-                    isHidden || (lifeState != null && lifeState.IsCaught));
-                var eligibility = StalkerTargetEligibility.Evaluate(eligibilitySnapshot);
-                InsertStatusSortedUnique(targetStatuses, new StalkerTargetStatus(
-                    playerId,
-                    eligibility,
-                    isHidden));
+                var isDowned =
+                    (identity.TryGetComponent<NetworkPlayerLifeState>(
+                        out var lifeState) && lifeState.IsDowned)
+                    || (identity.TryGetComponent<NetworkPlayerHealth>(
+                        out var health) && health.IsDowned);
+
+                var isEliminated =
+                    lifeState != null && lifeState.IsEliminated;
+
+                identity.TryGetComponent<NetworkPlayerMovement>(
+                    out var netMove);
+
+                var isHidden =
+                    (identity.TryGetComponent<PlayerHidingController>(
+                        out var hiding) && hiding.IsHidden)
+                    || (netMove != null && netMove.IsHidden);
+
+                var eligibilitySnapshot =
+                    new StalkerTargetEligibilitySnapshot(
+                        true,
+                        true,
+                        isDowned,
+                        isEliminated,
+                        isHidden
+                            || (lifeState != null && lifeState.IsCaught));
+
+                var eligibility =
+                    StalkerTargetEligibility.Evaluate(
+                        eligibilitySnapshot);
+
+                InsertStatusSortedUnique(
+                    targetStatuses,
+                    new StalkerTargetStatus(
+                        playerId,
+                        eligibility,
+                        isHidden));
                 var isObjectiveCarrier =
                     identity.TryGetComponent<LobbyPlayerState>(
                         out var lobbyState)

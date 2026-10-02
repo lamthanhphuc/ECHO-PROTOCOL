@@ -19,6 +19,7 @@ public class PlayerInteractionControlLock
     private bool _promptWasSuppressed;
     private bool _networkPromptWasSuppressed;
     private bool _unlockCursor = true;
+    private bool _allowWhileDowned;
 
     public GameObject Player => _player;
     public bool IsLocked => Locks.Contains(this);
@@ -44,7 +45,8 @@ public class PlayerInteractionControlLock
         return false;
     }
 
-    public void Acquire(GameObject player, Action onInterrupted = null, bool unlockCursor = true)
+    public void Acquire(GameObject player, Action onInterrupted = null, bool unlockCursor = true,
+        bool allowWhileDowned = false)
     {
         Release();
         if (player == null) return;
@@ -54,6 +56,7 @@ public class PlayerInteractionControlLock
         _player = player;
         _onInterrupted = onInterrupted;
         _unlockCursor = unlockCursor;
+        _allowWhileDowned = allowWhileDowned;
         _interaction = player.GetComponentInParent<PlayerInteraction>();
         _networkInteractor = player.GetComponentInParent<NetworkPlayerInteractor>();
         _promptWasSuppressed = _interaction != null && _interaction.IsInteractionPromptSuppressed;
@@ -91,11 +94,18 @@ public class PlayerInteractionControlLock
 
     public bool ShouldAutoRelease()
     {
-        if (!IsLocked || _player == null || !_player.activeInHierarchy) return true;
-        var life = _player.GetComponentInParent<NetworkPlayerLifeState>();
-        if (life != null && life.Object != null && life.Object.IsValid && !life.CanInitiateAction) return true;
-        var down = _player.GetComponentInParent<PlayerDownState>();
-        return down != null && (down.IsDowned || down.IsEliminated);
+        return !IsLocked || !IsPlayerStateValid(_player, _allowWhileDowned);
+    }
+
+    // Settings may stay open while downed; inventory and interactions still require an active player.
+    public static bool IsPlayerStateValid(GameObject player, bool allowWhileDowned = false)
+    {
+        if (player == null || !player.activeInHierarchy) return false;
+        var life = player.GetComponentInParent<NetworkPlayerLifeState>();
+        if (life != null && life.Object != null && life.Object.IsValid && !life.CanInitiateAction
+            && !(allowWhileDowned && life.IsDowned)) return false;
+        var down = player.GetComponentInParent<PlayerDownState>();
+        return down == null || (!down.IsEliminated && (!down.IsDowned || allowWhileDowned));
     }
 
     public void Release()
@@ -117,6 +127,7 @@ public class PlayerInteractionControlLock
         _interaction = null;
         _networkInteractor = null;
         _unlockCursor = true;
+        _allowWhileDowned = false;
         _onInterrupted = null;
     }
 

@@ -449,21 +449,18 @@ namespace EchoProtocol.Telemetry
 
     public sealed class NoiseTelemetryAdapter
     {
-        private static readonly Dictionary<string, string> ReasonByType =
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                { "SPRINT", "PLAYER_SPRINT" },
-                { "INTERACTION", "OBJECT_INTERACTION" },
-                { "CORE_CARRY", "CORE_CARRY_MOVEMENT" },
-                { "CORE_DROP", "CORE_DROP" },
-                { "NOISE_MAKER", "NOISE_MAKER_USED" },
-                { "FIELD_SCANNER", "FIELD_SCANNER_USED" },
-                { "CROUCH", "PLAYER_CROUCH" },
-                { "WALK", "PLAYER_WALK" },
-                { "DOOR", "DOOR_INTERACTION" },
-                { "CORE_INSERT", "CORE_INSERT" },
-                { "MACHINE_REPAIR", "MACHINE_REPAIR" }
-            };
+        private static readonly Dictionary<string, string> ReasonByType = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            { "SPRINT", "PLAYER_SPRINT" },
+            { "INTERACTION", "OBJECT_INTERACTION" },
+            { "CORE_CARRY", "CORE_CARRY_MOVEMENT" },
+            { "CORE_DROP", "CORE_DROP" },
+            { "NOISE_MAKER", "NOISE_MAKER_USED" }
+        };
+
+        public static bool SupportsNoiseType(string noiseType) =>
+            !string.IsNullOrWhiteSpace(noiseType) && ReasonByType.ContainsKey(noiseType);
+
 
         private readonly TelemetryEmitter _emitter;
 

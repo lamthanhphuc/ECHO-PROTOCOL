@@ -59,8 +59,7 @@ namespace EchoProtocol.TeamTools
             TeamToolSpawnPoint[] points =
                 Object.FindObjectsByType<
                     TeamToolSpawnPoint>(
-                    FindObjectsInactive.Exclude,
-                    FindObjectsSortMode.None);
+                    FindObjectsInactive.Exclude);
 
             int resolvedZone1Count =
                 Mathf.Max(

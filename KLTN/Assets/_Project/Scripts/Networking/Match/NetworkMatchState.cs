@@ -76,10 +76,13 @@ namespace EchoProtocol.Networking
     [DisallowMultipleComponent]
     public sealed class NetworkMatchState : NetworkBehaviour
     {
+        public const float DefaultMatchDurationSeconds = 2700f;
+        public const float DefaultEscapeDurationSeconds = 45f;
+
         public static event Action<NetworkMatchState> StateChanged;
 
-        [SerializeField, Min(1f)] private float _escapeDurationSeconds = 45f;
-        [SerializeField, Min(1f)] private float _matchDurationSeconds = 9000f;
+        [SerializeField, Min(1f)] private float _escapeDurationSeconds = DefaultEscapeDurationSeconds;
+        [SerializeField, Min(1f)] private float _matchDurationSeconds = DefaultMatchDurationSeconds;
         [SerializeField, Min(0.1f)] private float _returnToLobbyDelaySeconds = 4f;
         [SerializeField, Min(0.1f)] private float _zone2InteractionDistance = 3f;
         [SerializeField, Min(0.1f)] private float _zoneAccessCooldownSeconds = 5f;
@@ -2074,11 +2077,13 @@ namespace EchoProtocol.Networking
             return target != null;
         }
 
-        private bool TryGetDistributionPanelTarget(int panelIndex, out PowerControlUIController panel)
+        private bool TryGetDistributionPanelTarget(int panelIndex, out Component panel)
         {
             panel = null;
             if ((panelIndex != 0 && panelIndex != 1) || !TryGetZone2Director(out var director)) return false;
-            panel = panelIndex == 0 ? director.DistributionPanel1 : director.DistributionPanel2;
+            var panelUi = panelIndex == 0 ? director.DistributionPanel1 : director.DistributionPanel2;
+            if (panelUi == null) return false;
+            panel = panelUi.GetComponentInParent<PowerPuzzleStation>() ?? (Component)panelUi;
             return panel != null;
         }
 

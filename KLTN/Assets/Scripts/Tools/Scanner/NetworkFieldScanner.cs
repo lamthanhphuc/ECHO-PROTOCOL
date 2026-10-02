@@ -147,7 +147,7 @@ namespace EchoProtocol.Tools.Scanner
             }
             if (_tuning.ScanCooldown < 10.0f)
             {
-                _tuning.ScanCooldown = 60.0f;
+                _tuning.ScanCooldown = 30.0f;
             }
             if (_tuning.CoreRange < 30.0f)
             {

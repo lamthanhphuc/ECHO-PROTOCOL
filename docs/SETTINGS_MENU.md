@@ -5,6 +5,7 @@ Menu lấy bố cục từ ảnh tham chiếu: nền game được làm tối, b
 ## Cách dùng
 
 - **ESC** mở cài đặt trực tiếp trong trận hoặc Lobby. **ESC / Tiếp tục** đóng và trả điều khiển cho người chơi.
+- Khi đang **Downed**, ESC vẫn mở/đóng cài đặt. Túi đồ bị khóa cho đến khi được hồi sinh; đóng cài đặt vẫn giữ các giới hạn điều khiển của trạng thái Downed.
 - **Chung**: microphone, âm lượng voice, nhấn giữ để nói, phím mic, độ nhạy chuột, đảo Y, tăng tốc chuột, âm lượng và bảng phím.
 - **Đồ họa**: chất lượng Unity, độ phân giải được màn hình hỗ trợ, toàn màn hình, VSync. Độ phân giải/toàn màn hình dùng trong bản build; hai điều khiển này được vô hiệu hóa trong Unity Editor.
 - **Âm thanh**: các mức âm lượng, danh sách microphone, thử mic cục bộ, làm mới thiết bị, trạng thái kết nối, mute/unmute đồng đội và thử kết nối lại.
@@ -32,3 +33,4 @@ Trong Edit mode, menu **ECHO Protocol > Setup > Redesign Voice Settings Canvas**
 3. Chỉnh chuột và âm lượng khi âm thanh đang phát; nhạc nền, hiệu ứng và voice thay đổi đúng nhóm. Khởi động lại để kiểm tra thiết lập đã lưu.
 4. Hai client chọn mic: thử chế độ bật/tắt và nhấn giữ để nói, thả phím phải dừng truyền; thử mute đồng đội. Thử mic trong menu chỉ hiển thị mức đầu vào.
 5. Kiểm tra chất lượng/VSync; kiểm tra độ phân giải và toàn màn hình trong bản build. Thử Rời phòng/Thoát game rồi Hủy để bảo đảm phiên chơi vẫn tiếp tục.
+6. Trên cả host và client, để nhân vật bị Downed rồi mở/đóng ESC vài lần; các tab vẫn dùng được, túi đồ bị vô hiệu hóa. Thử bị Downed khi menu đã mở và được đồng đội hồi sinh khi menu vẫn mở; túi đồ chỉ dùng lại sau hồi sinh, nhân vật chỉ nhận điều khiển sau khi đóng menu.

@@ -304,7 +304,7 @@ namespace EchoProtocol.Networking
         {
             ResolveLifeState();
             return SceneManager.GetActiveScene().name != "Lobby"
-                && (_lifeState == null || !_lifeState.IsEliminated);
+                && (_lifeState == null || _lifeState.CanInitiateAction);
         }
 
         private void ApplyBeamTuning()

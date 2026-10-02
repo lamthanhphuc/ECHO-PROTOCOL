@@ -132,13 +132,17 @@ namespace EchoProtocol.Player.Tests
         {
             var source = File.ReadAllText(
                 "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
+            var catalog = File.ReadAllText(
+                "Assets/Scripts/TeamTools/TeamToolPickupCatalog.cs");
 
             StringAssert.Contains("RpcSources.InputAuthority, RpcTargets.StateAuthority", source);
             StringAssert.Contains("Runner.Spawn(prefab, dropPosition, dropRotation)", source);
-            StringAssert.Contains("case 1: return _fieldScannerPickupPrefab", source);
-            StringAssert.Contains("case 2: return _noiseMakerPickupPrefab", source);
-            StringAssert.Contains("case 3: return _firstAidPickupPrefab", source);
-            StringAssert.Contains("case 4: return _doorJammerPickupPrefab", source);
+            StringAssert.Contains("_teamToolPickupCatalog.GetPrefab(toolId)", source);
+            StringAssert.Contains("LobbyPlayerState.FieldScannerToolId => fieldScannerPrefab", catalog);
+            StringAssert.Contains("LobbyPlayerState.NoiseMakerToolId => noiseMakerPrefab", catalog);
+            StringAssert.Contains("LobbyPlayerState.FirstAidKitToolId => firstAidPrefab", catalog);
+            StringAssert.Contains("LobbyPlayerState.DoorJammerToolId => doorJammerPrefab", catalog);
+            StringAssert.Contains("LobbyPlayerState.CoreStabilizerToolId => coreStabilizerPrefab", catalog);
             Assert.That(
                 source.IndexOf("TrySpawnDroppedTeamToolAuthoritative", StringComparison.Ordinal),
                 Is.LessThan(source.IndexOf("state.SetGameplayToolId(0)", StringComparison.Ordinal)));
@@ -158,16 +162,16 @@ namespace EchoProtocol.Player.Tests
         }
 
         [Test]
-        public void TEAM_TOOL_MainScannerOwnsScanAndUsesBOnlyForModeSwitch()
+        public void TEAM_TOOL_MainScannerOwnsScanAndUsesRightMouseOnlyForModeSwitch()
         {
             var interactor = File.ReadAllText(
                 "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
             var scanner = File.ReadAllText("Assets/Scripts/Tools/Scanner/NetworkFieldScanner.cs");
 
             StringAssert.Contains("scanner.RequestScan()", interactor);
-            StringAssert.Contains("_switchModeAction.AddBinding(\"<Keyboard>/b\")", scanner);
+            StringAssert.Contains("_switchModeAction.AddBinding(\"<Mouse>/rightButton\")", scanner);
+            StringAssert.DoesNotContain("_switchModeAction.AddBinding(\"<Keyboard>/b\")", scanner);
             StringAssert.DoesNotContain("_switchModeAction.AddBinding(\"<Keyboard>/t\")", scanner);
-            StringAssert.DoesNotContain("_switchModeAction.AddBinding(\"<Mouse>/rightButton\")", scanner);
             StringAssert.DoesNotContain("_scanAction.AddBinding(\"<Mouse>/leftButton\")", scanner);
             Assert.That(File.Exists("Assets/Scripts/UI/HUD/HUDFieldScannerResult.cs"), Is.False);
         }

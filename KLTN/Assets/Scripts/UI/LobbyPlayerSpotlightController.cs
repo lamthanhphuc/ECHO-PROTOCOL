@@ -46,8 +46,7 @@ namespace EchoProtocol.UI
             }
 
             LobbyPlayerState[] players = FindObjectsByType<LobbyPlayerState>(
-                FindObjectsInactive.Exclude,
-                FindObjectsSortMode.None);
+                FindObjectsInactive.Exclude);
 
             for (int i = 0; i < spotlights.Length; i++)
             {

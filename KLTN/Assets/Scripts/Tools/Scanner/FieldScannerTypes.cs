@@ -126,7 +126,7 @@ namespace EchoProtocol.Tools.Scanner
         public float CoreRange = 50f;
         public float MotionRange = 35f;
         public float ActiveDuration = 10.0f; // 10s active realtime scan upon activation
-        public float ScanCooldown = 60.0f; // 1 minute reactivation cooldown
+        public float ScanCooldown = 30.0f; // 30-second reactivation cooldown
         public float ResultLifetime = 10.0f;
         public float MovingSpeedThreshold = 0.15f;
         public float OccludedSignalMultiplier = 0.6f;

@@ -20,7 +20,15 @@ public static class ShopCatalogSeeder
             "TEAM_TOOL",
             75,
             "Test-only permanent TeamTool unlock.",
-            "test://team-tools/signal-scanner")
+            "test://team-tools/signal-scanner"),
+        new(Guid.Parse("12000000-0000-0000-0000-000000000001"), "Field Scanner", "TEAM_TOOL", 300,
+            "Scan Energy Cores and moving threats.", "Assets/Prefabs/Gameplay/Imported/PF_Scanner_Imported.prefab"),
+        new(Guid.Parse("12000000-0000-0000-0000-000000000002"), "Noise Maker", "TEAM_TOOL", 250,
+            "Place a beacon that draws the Stalker.", "Assets/Prefabs/Gameplay/Imported/PF_TeamToolPickup_NoiseMaker.prefab"),
+        new(Guid.Parse("12000000-0000-0000-0000-000000000003"), "First Aid", "TEAM_TOOL", 250,
+            "Revive a downed teammate.", "Assets/Prefabs/Gameplay/Imported/PF_TeamToolPickup_FirstAid.prefab"),
+        new(Guid.Parse("12000000-0000-0000-0000-000000000005"), "Distress Beacon", "TEAM_TOOL", 200,
+            "Distress Beacon device for the Noise Maker.", "Assets/Prefabs/Gameplay/Imported/DistressBeaconClosed.prefab")
     ];
 
     public static async Task SeedTestCatalogAsync(
@@ -61,7 +69,7 @@ public static class ShopCatalogSeeder
         db.ShopItems.AddRange(missing);
         await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation(
-            "Seeded {Count} test-only cosmetic shop items.",
+            "Seeded {Count} development shop items.",
             missing.Length);
     }
 

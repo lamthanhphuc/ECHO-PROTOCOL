@@ -118,10 +118,10 @@ public sealed class ShopCatalogServiceTests
         await ShopCatalogSeeder.SeedTestCatalogAsync(
             harness.Db, timeProvider, NullLogger.Instance);
 
-        Assert.Equal(2, await harness.Db.ShopItems.CountAsync());
-        Assert.Equal(2, await harness.Db.ShopItems.Select(item => item.ItemId).Distinct().CountAsync());
-        Assert.All(await harness.Db.ShopItems.ToListAsync(), item =>
-            Assert.StartsWith("Test ", item.ItemName));
+        Assert.Equal(6, await harness.Db.ShopItems.CountAsync());
+        Assert.Equal(6, await harness.Db.ShopItems.Select(item => item.ItemId).Distinct().CountAsync());
+        Assert.Equal(4, await harness.Db.ShopItems.CountAsync(item =>
+            item.AssetReference.StartsWith("Assets/Prefabs/Gameplay/Imported/")));
     }
 
     [Fact, Trait("Category", "M4ShopUnit")]

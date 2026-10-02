@@ -877,7 +877,7 @@ MonoBehaviour:
     CoreRange: 50
     MotionRange: 35
     ActiveDuration: 10
-    ScanCooldown: 60
+    ScanCooldown: 30
     ResultLifetime: 10
     MovingSpeedThreshold: 0.15
     OccludedSignalMultiplier: 0.6
