@@ -117,6 +117,9 @@ namespace EchoProtocol.Networking
                 doorRoot.AddComponent<Zone3ExitDoor>();
             _frigateOutline.enabled = false;
             _exitOutline.enabled = false;
+            var presentation = GetComponent<Zone3FacilityPresentation>();
+            if (presentation == null) presentation = gameObject.AddComponent<Zone3FacilityPresentation>();
+            presentation.Bind(covey, exit);
         }
 
         private static Outline GetOrAddOutline(GameObject target)
