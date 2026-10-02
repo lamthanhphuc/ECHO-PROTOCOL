@@ -57,8 +57,22 @@ namespace EchoProtocol.Gameplay
             {
                 case MatchDifficulty.Easy:
                     return new MatchDifficultyProfile(
-                        6, 7f, 8f, 1.25f, 0.6f, 2f, 2.8f, 0.55f,
-                        1.4f, 4f, 120f, 25f, 1f, 420f, 1, 2);
+                        6,      // TeamToolsPerZone
+                        5.5f,   // PatrolSpeed
+                        6.5f,   // ChaseSpeed
+                        2.0f,   // DetectionDurationSeconds
+                        0.35f,  // DetectionDecayDurationSeconds
+                        1.5f,   // SearchDurationSeconds
+                        2.4f,   // AttackRange
+                        0.9f,   // AttackWindupSeconds
+                        1.8f,   // AttackRecoverySeconds
+                        6f,     // DoorBreakDurationSeconds
+                        180f,   // SeekPlayersAfterSeconds
+                        35f,    // CoreCarrierPursuitDelaySeconds
+                        0.75f,  // HearingRangeMultiplier
+                        600f,   // SpecialEncounterCooldownSeconds
+                        1,      // Zone1MinionCap
+                        1);     // Zone2MinionCap
                 case MatchDifficulty.Hard:
                     return new MatchDifficultyProfile(
                         5, 9f, 10f, 0.5f, 1.5f, 5f, 3.2f, 0.25f,
