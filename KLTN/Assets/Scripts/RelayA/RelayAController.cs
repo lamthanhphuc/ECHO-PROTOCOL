@@ -20,6 +20,7 @@ namespace EchoProtocol.RelayA
         private readonly RelayASimulation _simulation = new RelayASimulation();
         private AudioSource _statusLoop;
         private float _nextAdjustSoundAt;
+        private float _nextOverloadSoundAt;
         private int _attemptSeed;
 
         public event Action<RelayASnapshot> StateChanged;
@@ -187,12 +188,9 @@ namespace EchoProtocol.RelayA
 
         private void HandleSimulationChanged(RelayASnapshot snapshot)
         {
-            string loop = snapshot.Status == RelayAStatus.Online ? "sector_box_power_hub/idle_machinery_loop"
-                : snapshot.Status == RelayAStatus.FaultWarning || snapshot.Status == RelayAStatus.Overload
-                    ? "map_ambience/alarm_ambience_loop"
-                : snapshot.IsRunning ? "map_ambience/generator_loop"
-                : "map_ambience/electrical_room_loop";
-            float volume = snapshot.IsRunning && !snapshot.IsOnline ? 0.72f : 0.1f;
+            string loop = snapshot.IsRunning && !snapshot.IsOnline
+                ? "objectives/relay_a_motor_loop" : null;
+            float volume = 0.72f;
             EchoProtocol.Audio.GameAudioRuntime.Loop(_statusLoop, loop, volume);
             ui?.Refresh(snapshot);
             StateChanged?.Invoke(snapshot);
@@ -212,12 +210,19 @@ namespace EchoProtocol.RelayA
 
         private void HandleFaultActivated(RelayAFaultType faultType)
         {
-            PlayOneShot(overloadClip, 0.85f, "power_puzzle/electrical_sparks");
+            PlayOverloadSound();
         }
 
         private void HandleOverloadStarted()
         {
-            PlayOneShot(overloadClip, 0.85f, "power_puzzle/electrical_sparks");
+            PlayOverloadSound();
+        }
+
+        private void PlayOverloadSound()
+        {
+            if (Time.unscaledTime < _nextOverloadSoundAt) return;
+            _nextOverloadSoundAt = Time.unscaledTime + 0.45f;
+            PlayOneShot(overloadClip, 0.85f, "objectives/relay_overload");
         }
 
         private void PlayOneShot(AudioClip clip, float volume, string fallbackKey)

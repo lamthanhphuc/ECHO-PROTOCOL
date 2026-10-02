@@ -70,6 +70,9 @@ namespace EchoProtocol.RelayA
         private readonly RelayAPlayerControlLock _controlLock = new RelayAPlayerControlLock();
         private RelayAController _controller;
         private bool _suppressSliderEvents;
+        private bool _generatorAdjusted;
+        private bool _frequencyAdjusted;
+        private bool _loadAdjusted;
 
         private void Awake()
         {
@@ -126,6 +129,9 @@ namespace EchoProtocol.RelayA
 
             _controlLock.Acquire(interactor, Close);
             if (!_controlLock.IsLocked) return;
+            _generatorAdjusted = false;
+            _frequencyAdjusted = false;
+            _loadAdjusted = false;
             SetVisible(true);
         }
 
@@ -166,9 +172,10 @@ namespace EchoProtocol.RelayA
                 statusLabel.color = StatusColor(snapshot.Status);
             }
 
-            string vStatus = GetParameterStatus(snapshot.Outputs.Voltage, _controller != null && _controller.Config != null ? _controller.Config.VoltageSafeRange : new Vector2(220f, 230f), "VOLT");
-            string fStatus = GetParameterStatus(snapshot.Outputs.Frequency, _controller != null && _controller.Config != null ? _controller.Config.FrequencySafeRange : new Vector2(49f, 51f), "FREQ");
-            string lStatus = GetParameterStatus(snapshot.Outputs.LoadBalance, _controller != null && _controller.Config != null ? _controller.Config.LoadSafeRange : new Vector2(47f, 53f), "LOAD");
+            bool revealStatus = snapshot.IsRunning || snapshot.IsOnline;
+            string vStatus = GetParameterStatus(snapshot.Outputs.Voltage, _controller != null && _controller.Config != null ? _controller.Config.VoltageSafeRange : new Vector2(220f, 230f), "VOLT", revealStatus);
+            string fStatus = GetParameterStatus(snapshot.Outputs.Frequency, _controller != null && _controller.Config != null ? _controller.Config.FrequencySafeRange : new Vector2(49f, 51f), "FREQ", revealStatus);
+            string lStatus = GetParameterStatus(snapshot.Outputs.LoadBalance, _controller != null && _controller.Config != null ? _controller.Config.LoadSafeRange : new Vector2(47f, 53f), "LOAD", revealStatus);
 
             RefreshGauge(voltageValue, voltageStatus, voltageTrend, voltageGauge, snapshot.Outputs.Voltage, "V", vStatus, 200f, 250f, snapshot.VoltageTrend, InRange(snapshot.Outputs.Voltage, _controller != null && _controller.Config != null ? _controller.Config.VoltageSafeRange : new Vector2(220f, 230f)), snapshot.IsDangerous);
             RefreshGauge(frequencyValue, frequencyStatus, frequencyTrend, frequencyGauge, snapshot.Outputs.Frequency, "Hz", fStatus, 45f, 55f, snapshot.FrequencyTrend, InRange(snapshot.Outputs.Frequency, _controller != null && _controller.Config != null ? _controller.Config.FrequencySafeRange : new Vector2(49f, 51f)), snapshot.IsDangerous);
@@ -192,17 +199,22 @@ namespace EchoProtocol.RelayA
             RefreshWarning(snapshot);
 
             SetInteractable(generatorSlider, !readOnly && canOperate);
-            SetInteractable(frequencySlider, !readOnly && canOperate);
-            SetInteractable(loadSlider, !readOnly && canOperate);
-            SetInteractable(startButton, !readOnly && canOperate && !snapshot.IsRunning);
+            SetInteractable(frequencySlider, !readOnly && canOperate && _generatorAdjusted);
+            SetInteractable(loadSlider, !readOnly && canOperate && _generatorAdjusted && _frequencyAdjusted);
+            SetInteractable(startButton, !readOnly && canOperate && !snapshot.IsRunning && _generatorAdjusted && _frequencyAdjusted && _loadAdjusted);
             SetInteractable(emergencyStopButton, !readOnly && canOperate && snapshot.IsRunning);
         }
 
-        private static string GetParameterStatus(float value, Vector2 safeRange, string paramName)
+        private static string GetParameterStatus(float value, Vector2 safeRange, string paramName, bool revealStatus)
         {
-            if (value < safeRange.x) return $"LOW {paramName}";
-            if (value > safeRange.y) return $"HIGH {paramName}";
-            return "OPTIMAL";
+            if (!revealStatus)
+            {
+                return InRange(value, safeRange) ? "NOMINAL RANGE" : "BALANCING";
+            }
+
+            if (value < safeRange.x) return $"{paramName} BELOW BAND";
+            if (value > safeRange.y) return $"{paramName} ABOVE BAND";
+            return "NOMINAL";
         }
 
         private void RefreshGauge(
@@ -267,7 +279,7 @@ namespace EchoProtocol.RelayA
 
         private string BuildInstabilityReason(RelayASnapshot snapshot)
         {
-            if (!snapshot.IsRunning) return snapshot.IsOnline ? "Relay A online." : "Keep all three readings inside their safe bands, then start.";
+            if (!snapshot.IsRunning) return snapshot.IsOnline ? "Relay A online." : "Tune generator, then regulator, then load distribution before startup.";
             var config = _controller != null ? _controller.Config : null;
             if (snapshot.IsDangerous)
             {
@@ -283,9 +295,9 @@ namespace EchoProtocol.RelayA
                 return $"Readings stable. Hold for {Mathf.Max(0f, snapshot.StabilityRequiredSeconds - snapshot.StabilitySeconds):0.0}s.";
             if (config != null)
             {
-                if (!config.IsVoltageSafe(snapshot.Outputs.Voltage)) return "Voltage outside safe band; adjust generator.";
-                if (!config.IsFrequencySafe(snapshot.Outputs.Frequency)) return "Frequency outside safe band; adjust regulator.";
-                if (!config.IsLoadSafe(snapshot.Outputs.LoadBalance)) return "Load outside safe band; adjust distribution.";
+                if (!config.IsVoltageSafe(snapshot.Outputs.Voltage)) return "Voltage drifting; adjust generator output.";
+                if (!config.IsFrequencySafe(snapshot.Outputs.Frequency)) return "Carrier wobble detected; adjust frequency regulator.";
+                if (!config.IsLoadSafe(snapshot.Outputs.LoadBalance)) return "Load imbalance detected; adjust distribution.";
             }
             return $"Unstable output. Grace: {snapshot.InstabilityGraceRemaining:0.0}s.";
         }
@@ -358,6 +370,20 @@ namespace EchoProtocol.RelayA
             if (_suppressSliderEvents || _controller == null || generatorSlider == null || frequencySlider == null || loadSlider == null)
             {
                 return;
+            }
+
+            GameObject selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+            if (selected == generatorSlider.gameObject)
+            {
+                _generatorAdjusted = true;
+            }
+            else if (_generatorAdjusted && selected == frequencySlider.gameObject)
+            {
+                _frequencyAdjusted = true;
+            }
+            else if (_generatorAdjusted && _frequencyAdjusted && selected == loadSlider.gameObject)
+            {
+                _loadAdjusted = true;
             }
 
             if (TryGetNetworkDirector(out var director))

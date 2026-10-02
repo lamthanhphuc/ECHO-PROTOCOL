@@ -37,6 +37,9 @@ namespace EchoProtocol.RelayA
         [SerializeField, Min(0f)] private float earliestFaultAtSeconds = 8f;
         [SerializeField, Min(0f)] private float faultWarningSeconds = 4f;
         [SerializeField, Min(0.1f)] private float faultDurationSeconds = 6f;
+        [SerializeField, Range(0f, 1f)] private float faultChance = 0.55f;
+        [SerializeField, Min(0f)] private float repeatFaultMinDelaySeconds = 6f;
+        [SerializeField, Min(0f)] private float repeatFaultMaxDelaySeconds = 14f;
         [SerializeField] private Vector3 overvoltageFaultOffset = new Vector3(9f, -0.35f, -2.2f);
         [SerializeField] private Vector3 frequencyFaultOffset = new Vector3(-2f, 2.2f, 1.1f);
         [SerializeField] private Vector3 loadFaultOffset = new Vector3(3f, -0.35f, 8.5f);
@@ -56,6 +59,9 @@ namespace EchoProtocol.RelayA
         public float EarliestFaultAtSeconds => earliestFaultAtSeconds;
         public float FaultWarningSeconds => faultWarningSeconds;
         public float FaultDurationSeconds => faultDurationSeconds;
+        public float FaultChance => faultChance;
+        public float RepeatFaultMinDelaySeconds => repeatFaultMinDelaySeconds;
+        public float RepeatFaultMaxDelaySeconds => repeatFaultMaxDelaySeconds;
 
         public RelayAOutputs EvaluateTarget(Vector3 controls, RelayAFaultType activeFault, float elapsedSeconds)
         {
@@ -137,6 +143,8 @@ namespace EchoProtocol.RelayA
             instabilityToleranceSeconds = Mathf.Max(0f, instabilityToleranceSeconds);
             faultWarningSeconds = Mathf.Max(0f, faultWarningSeconds);
             faultDurationSeconds = Mathf.Max(0.1f, faultDurationSeconds);
+            repeatFaultMinDelaySeconds = Mathf.Max(0f, repeatFaultMinDelaySeconds);
+            repeatFaultMaxDelaySeconds = Mathf.Max(repeatFaultMinDelaySeconds, repeatFaultMaxDelaySeconds);
             initialControls = ClampControls(initialControls);
             solvedControls = ClampControls(solvedControls);
         }
