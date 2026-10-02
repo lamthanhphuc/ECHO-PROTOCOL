@@ -79,7 +79,7 @@ namespace EchoProtocol.Networking
         public static event Action<NetworkMatchState> StateChanged;
 
         [SerializeField, Min(1f)] private float _escapeDurationSeconds = 45f;
-        [SerializeField, Min(1f)] private float _matchDurationSeconds = 9000f;
+        [SerializeField, Min(1f)] private float _matchDurationSeconds = 2700f;
         [SerializeField, Min(0.1f)] private float _returnToLobbyDelaySeconds = 4f;
         [SerializeField, Min(0.1f)] private float _zone2InteractionDistance = 3f;
         [SerializeField, Min(0.1f)] private float _zoneAccessCooldownSeconds = 5f;
@@ -590,6 +590,7 @@ namespace EchoProtocol.Networking
                 actor,
                 director.SecurityTerminal);
             SecurityTerminalDiscovered = true;
+            MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
             Zone2Stage = Zone2MissionStage.RepairRelays;
             HandleReplicatedStateChanged();
             return true;
@@ -624,6 +625,8 @@ namespace EchoProtocol.Networking
             if ((RelayCompletionMask & bit) != 0) return false;
 
             RelayCompletionMask |= bit;
+            var relayOperator = GetRelayOperator(slot);
+            MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(relayOperator);
             SetRelayOperator(slot, PlayerRef.None);
             SetRelayActiveState(slot, false);
             Debug.Log($"[MatchState] Relay {slot} repaired. Online mask: {RelayCompletionMask} ({CompletedRelayCount}/4).");
@@ -1035,6 +1038,7 @@ namespace EchoProtocol.Networking
             {
                 if (!GetSecurityHoldParticipant(index).IsNone) continue;
                 SetSecurityHoldParticipant(index, requester);
+                MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(requester);
                 _securityHoldLeases[index] = TickTimer.CreateFromSeconds(Runner, 1.25f);
                 EmitSecurityTerminalInteractionNoiseAuthoritative(requester, director.SecurityTerminal);
                 break;
@@ -1289,6 +1293,7 @@ namespace EchoProtocol.Networking
                 HandleReplicatedStateChanged();
                 return false;
             }
+            MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(requester);
             result = Zone2NetworkCommandResult.Accepted;
             return true;
         }
@@ -1335,6 +1340,7 @@ namespace EchoProtocol.Networking
                 && !TryAdvancePhase(NetworkMatchPhase.Zone3FindFrigate,
                     NetworkMatchPhase.Zone3PushFrigate, "ZONE3_FIND_FRIGATE")) return;
             zone3.StartAuthoritativePush(actor, lifeState.gameObject);
+            MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
             Zone3Pusher = actor;
         }
 
@@ -1403,6 +1409,7 @@ namespace EchoProtocol.Networking
                 || !zone3.IsPlayerNearCharge(lifeState.transform.position)) return false;
 
             Zone3ChargeDurationSeconds = zone3.ChargeStation.ChargeDurationSeconds;
+            MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
             Zone3ChargeOperator = actor;
             _zone3ChargeLease = TickTimer.CreateFromSeconds(Runner, 1.25f);
             HandleReplicatedStateChanged();
@@ -1580,6 +1587,7 @@ namespace EchoProtocol.Networking
 
             LastActor = player;
             if (!lifeState.TryEscape()) return false;
+            MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(player);
 
             CountFinalPlayers(out var escapedCount, out _, out _, out _, out var ableToExitCount);
             if (ableToExitCount == 0 && escapedCount > 0)
@@ -1696,6 +1704,7 @@ namespace EchoProtocol.Networking
             }
 
             CountFinalPlayers(out var survivorCount, out _, out _);
+            var objectiveCompletion = CalculateObjectiveCompletion(CurrentPhase, result);
             if (result == NetworkMatchResult.Win
                 && CurrentPhase == NetworkMatchPhase.FinalHunt
                 && Zone3MissionDirector.IsSciFiSceneLoaded)
@@ -1721,7 +1730,11 @@ namespace EchoProtocol.Networking
             if (EndOrdinal == 0) EndOrdinal = 1;
             AdvancePhaseOrdinal();
 
-            MatchAuthorityRuntime.Instance?.RecordMatchEnded(
+            var authorityRuntime = MatchAuthorityRuntime.Instance;
+            authorityRuntime?.QueueMatchResult(
+                result == NetworkMatchResult.Win ? "WIN" : "LOSE",
+                objectiveCompletion);
+            authorityRuntime?.RecordMatchEnded(
                 BuildKey("match-ended"),
                 result == NetworkMatchResult.Win ? "SUCCESS" : "FAILURE",
                 survivorCount,
@@ -2575,6 +2588,29 @@ namespace EchoProtocol.Networking
                 NetworkMatchPhase.Zone3PushFrigate => "ZONE_3_PUSH_FRIGATE",
                 NetworkMatchPhase.Escape => "ESCAPE",
                 _ => "MATCH_ENDED",
+            };
+        }
+
+        private static float CalculateObjectiveCompletion(
+            NetworkMatchPhase phase,
+            NetworkMatchResult result)
+        {
+            if (result == NetworkMatchResult.Win)
+            {
+                return 1f;
+            }
+
+            return phase switch
+            {
+                NetworkMatchPhase.CoreObjective => 0f,
+                NetworkMatchPhase.Zone2Objective => 0.25f,
+                NetworkMatchPhase.Puzzle => 0.25f,
+                NetworkMatchPhase.SecurityHold => 0.25f,
+                NetworkMatchPhase.Zone3FindFrigate => 0.5f,
+                NetworkMatchPhase.Zone3PushFrigate => 0.5f,
+                NetworkMatchPhase.FinalHunt => 0.75f,
+                NetworkMatchPhase.Escape => 0.75f,
+                _ => 0f,
             };
         }
 

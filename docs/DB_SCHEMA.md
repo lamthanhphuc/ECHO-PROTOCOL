@@ -51,6 +51,8 @@ Wallets 1──* WalletTransactions
 | DisplayName | VARCHAR(100) | |
 | TotalMatches | INT | Default 0, CHECK >= 0 |
 | TotalWins | INT | Default 0, CHECK >= 0, CHECK <= TotalMatches |
+| ExperiencePoints | BIGINT | Default 0, CHECK >= 0 |
+| Level | INT | Default 1, CHECK >= 1 |
 | CreatedAt | TIMESTAMPTZ | UTC |
 | UpdatedAt | TIMESTAMPTZ | UTC |
 
@@ -146,6 +148,24 @@ InventoryItem and ShopItem records.
 | ReferenceId | UUID | MatchId or PurchaseId |
 | Description | VARCHAR(255) | Audit description |
 | CreatedAtUtc | TIMESTAMPTZ | UTC |
+
+---
+
+## MatchRewardGrants
+
+| Column | Type | Notes |
+|---|---|---|
+| Id | UUID PK | |
+| MatchId + UserId | UNIQUE / FK -> MatchResultPlayers | One immutable reward grant per result player |
+| WalletId | UUID FK -> Wallets | Wallet credited by backend |
+| CurrencyAmount | INT | Calculated by `REWARD_V1`, never client supplied |
+| PolicyVersion | VARCHAR(50) | `REWARD_V1` |
+| ExperiencePointsAwarded | BIGINT | Calculated by `PROGRESSION_V1` |
+| ProgressionPolicyVersion | VARCHAR(50) | `PROGRESSION_V1` |
+| ProcessedAtUtc | TIMESTAMPTZ | UTC |
+
+Reward and progression are processed in the existing idempotent reward transaction. A completed
+match cannot receive a second grant for the same player.
 
 ---
 
@@ -245,11 +265,11 @@ The M4-009 migration promotes `(MatchId, UserId)` to an alternate unique key so
 | SubmittedByUserId | UUID FK -> Users | Authenticated bound Host; ON DELETE RESTRICT |
 | Outcome | VARCHAR(20) | Normal Host flow accepts `WIN`, `LOSE` |
 | StartedAtUtc / EndedAtUtc | TIMESTAMPTZ | Server timestamps; Ended >= Started |
-| DurationSeconds | INT | Server-derived, CHECK 60-900 |
+| DurationSeconds | INT | Server-derived, CHECK 60-2760; 2700s gameplay timer + 60s submit grace |
 | ObjectiveCompletion | NUMERIC(5,4) | CHECK 0-1 |
 | PlayerCount | INT | CHECK 1-4; retains the current M2 minimum-player behavior |
 | PayloadHash | CHAR(64) | Canonical SHA-256 used for retry/conflict detection |
-| RewardStatus | VARCHAR(20) | `Pending` in M4-009 |
+| RewardStatus | VARCHAR(20) | `Pending` until idempotent reward processing completes, then `Completed` |
 | SubmittedAtUtc | TIMESTAMPTZ | Server audit timestamp |
 
 `MatchAuthorityBindings.StartedAtUtc` is nullable for compatibility with existing rows and is set
@@ -267,7 +287,10 @@ once by `StartAsync`. A new result requires this value.
 | ObjectiveContribution | INT | CHECK >= 0 |
 
 The Result transaction inserts both tables and transitions the authority binding to `Ended`.
-M4-009 creates no wallet ledger and does not update wallet/profile/progression values.
+After that transaction commits, the Match Result API invokes the idempotent reward pipeline.
+Successful processing creates `MatchRewardGrants` + `WalletTransactions`, updates Wallet/Profile,
+and changes `RewardStatus` to `Completed`. A failure leaves the accepted Result at `Pending` so an
+identical result replay can retry without duplicating the match or the reward.
 
 ---
 

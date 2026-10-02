@@ -382,7 +382,7 @@ namespace EchoProtocol.Api.Migrations
 
                     b.ToTable("MatchResults", t =>
                         {
-                            t.HasCheckConstraint("CK_MatchResults_DurationSeconds_Range", "\"DurationSeconds\" >= 60 AND \"DurationSeconds\" <= 900");
+                            t.HasCheckConstraint("CK_MatchResults_DurationSeconds_Range", "\"DurationSeconds\" >= 60 AND \"DurationSeconds\" <= 2760");
 
                             t.HasCheckConstraint("CK_MatchResults_ObjectiveCompletion_Range", "CAST(\"ObjectiveCompletion\" AS NUMERIC) >= 0 AND CAST(\"ObjectiveCompletion\" AS NUMERIC) <= 1");
 

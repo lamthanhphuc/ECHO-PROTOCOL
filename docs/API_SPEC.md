@@ -477,7 +477,7 @@ TeamTool unequip is idempotent. M4-052 rejects Character unequip with
 ### `PUT /api/matches/{matchId}/result`
 
 **Auth:** Bearer JWT of the bound Host
-**Status:** Implemented for M4-009
+**Status:** Implemented for M4-009/M4-010/M4-011
 
 **Request body:**
 
@@ -505,7 +505,8 @@ TeamTool unequip is idempotent. M4-052 rejects Character unequip with
 - Only the persisted Host may submit. The match must be `InMatch`, started, and have a valid lease.
 - Request players must exactly match all persisted bindings, including disconnected bindings.
 - Allowed normal Host outcomes are `WIN` and `LOSE`. M4-009 does not synthesize `HOST_DISCONNECTED`.
-- Start/end timestamps and duration are server-derived. Duration must be 60-900 seconds and
+- Start/end timestamps and duration are server-derived. The authoritative gameplay timer is 45 minutes (2700 seconds). The backend accepts a
+  server-derived duration of 60-2760 seconds, where the extra 60 seconds is result-submission grace.
   `objectiveCompletion` must be 0-1. Counts must be non-negative.
 - Unknown request fields are rejected. The contract has no reward, XP, wallet, Host identity,
   client timestamps, or AI-log field.
@@ -515,7 +516,20 @@ TeamTool unequip is idempotent. M4-052 rejects Character unequip with
   `isReplay: true`. Different content for the same match returns HTTP 409
   `MATCH_RESULT_CONFLICT`.
 - A match already ended through `/end` without a Result cannot accept a late Result.
-- `rewardStatus` is always `Pending` in M4-009. No wallet/profile/progression mutation occurs.
+- Reward policy `REWARD_V1`: connected player receives `20` participation +
+  `floor(objectiveCompletion * 30)` objective progress + `50` on team WIN + `20` if survived +
+  `10` when `objectiveContribution > 0`, capped at `130`. A disconnected player receives exactly `10`.
+  `DetectionCount`, `DownedCount`, and current `ReviveCount` do not affect V1 reward.
+- Progression policy `PROGRESSION_V1`: connected player receives `50` participation XP +
+  `floor(objectiveCompletion * 50)` + `75` on team WIN + `25` if survived + `25` when
+  `objectiveContribution > 0`, capped at `225`. A disconnected player receives exactly `20 XP` and
+  cannot count the match as a win. Level is `floor(totalXP / 500) + 1`.
+- The game has 3 gameplay zones and 4 macro progression phases. `objectiveCompletion` remains the
+  normalized 0-1 backend contract instead of duplicating Unity's finer technical FSM states.
+- After the Result transaction commits, the API invokes the idempotent reward pipeline. Successful
+  processing changes `rewardStatus` to `Completed` and atomically writes wallet ledger + progression.
+  A post-commit reward failure leaves the accepted Result at `Pending`; an identical Result replay
+  retries reward processing without creating another Result or double-granting.
 
 **Success data:**
 
@@ -524,12 +538,12 @@ TeamTool unequip is idempotent. M4-052 rejects Character unequip with
   "matchId": "uuid",
   "outcome": "WIN",
   "startedAtUtc": "2026-09-20T10:00:00Z",
-  "endedAtUtc": "2026-09-20T10:12:00Z",
-  "durationSeconds": 720,
+  "endedAtUtc": "2026-09-20T10:45:00Z",
+  "durationSeconds": 2700,
   "objectiveCompletion": 1.0,
   "playerCount": 2,
-  "rewardStatus": "Pending",
-  "submittedAtUtc": "2026-09-20T10:12:00Z",
+  "rewardStatus": "Completed",
+  "submittedAtUtc": "2026-09-20T10:45:00Z",
   "isReplay": false,
   "players": []
 }
@@ -540,7 +554,7 @@ TeamTool unequip is idempotent. M4-052 rejects Character unequip with
 | 400 | `MATCH_RESULT_INVALID_PAYLOAD` | Unsupported field, outcome, objective value, or player stat |
 | 400 | `MATCH_RESULT_INVALID_ROSTER` | Request roster/disconnect state does not match bindings |
 | 400 | `MATCH_RESULT_DUPLICATE_PLAYER` | A user appears more than once |
-| 400 | `MATCH_RESULT_INVALID_DURATION` | Server-derived duration is outside 60-900 seconds |
+| 400 | `MATCH_RESULT_INVALID_DURATION` | Server-derived duration is outside 60-2760 seconds |
 | 403 | `MATCH_AUTHORITY_FORBIDDEN` | Caller is not the bound Host |
 | 404 | `MATCH_NOT_FOUND` | Match binding does not exist |
 | 409 | `MATCH_RESULT_INVALID_STATE` | Match is not an eligible `InMatch` match |

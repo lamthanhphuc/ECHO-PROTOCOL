@@ -38,6 +38,8 @@ public static class ErrorCodes
     public const string RewardPolicyInvalid = "REWARD_POLICY_INVALID";
     public const string RewardWalletNotFound = "REWARD_WALLET_NOT_FOUND";
     public const string RewardConflict = "REWARD_CONFLICT";
+    public const string RewardPending = "REWARD_PENDING";
+    public const string RewardGrantNotFound = "REWARD_GRANT_NOT_FOUND";
     public const string PlayerProfileNotFound = "PLAYER_PROFILE_NOT_FOUND";
     public const string ProgressionPolicyNotConfigured = "PROGRESSION_POLICY_NOT_CONFIGURED";
     public const string ProgressionPolicyInvalid = "PROGRESSION_POLICY_INVALID";

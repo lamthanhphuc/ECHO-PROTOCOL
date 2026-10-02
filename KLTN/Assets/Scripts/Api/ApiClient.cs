@@ -57,6 +57,21 @@ namespace EchoProtocol.Api
         callback));
     }
 
+    public void PutJson<TRequest, TResponse>(
+      string endpoint,
+      TRequest body,
+      bool attachBearer,
+      Action<ApiResult<TResponse>> callback)
+    {
+      var json = JsonUtility.ToJson(body);
+      StartCoroutine(SendJsonCoroutine(
+        UnityWebRequest.kHttpVerbPUT,
+        endpoint,
+        json,
+        attachBearer,
+        callback));
+    }
+
     public void PostRawJson<TResponse>(
       string endpoint,
       string jsonBody,

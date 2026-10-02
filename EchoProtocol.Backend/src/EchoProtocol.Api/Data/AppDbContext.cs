@@ -190,7 +190,7 @@ public class AppDbContext : DbContext
             {
                 t.HasCheckConstraint(
                     "CK_MatchResults_DurationSeconds_Range",
-                    "\"DurationSeconds\" >= 60 AND \"DurationSeconds\" <= 900");
+                    "\"DurationSeconds\" >= 60 AND \"DurationSeconds\" <= 2760");
                 t.HasCheckConstraint(
                     "CK_MatchResults_Outcome_Allowed",
                     "\"Outcome\" IN ('WIN', 'LOSE')");
