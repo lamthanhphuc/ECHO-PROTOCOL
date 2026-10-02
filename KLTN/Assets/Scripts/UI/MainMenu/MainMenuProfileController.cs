@@ -156,7 +156,13 @@ namespace EchoProtocol.UI.MainMenu
 
     public void OnClickShop()
     {
-      if (shopPopup != null) shopPopup.SetActive(true);
+      if (shopPopup != null)
+      {
+        shopPopup.SetActive(true);
+        var teamTools = shopPopup.GetComponent<TeamToolShopPanel>();
+        if (teamTools == null) teamTools = shopPopup.AddComponent<TeamToolShopPanel>();
+        teamTools.Open(this);
+      }
       if (topUpPopup != null) topUpPopup.SetActive(false);
       Debug.Log("[MainMenu] Shop opened.");
     }
