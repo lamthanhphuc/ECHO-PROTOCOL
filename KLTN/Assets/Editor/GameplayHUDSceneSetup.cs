@@ -107,13 +107,10 @@ namespace EchoProtocol.EditorTools
             // 4. Hotbar (Bottom-Right, 3 Slots Centered)
             HUDHotbar hotbar = CreateHotbar(canvasGo.transform);
 
-            // 5. Teammate Status (Top-Left)
-            HUDTeammateStatus teammates = CreateTeammateStatus(canvasGo.transform);
-
-            // 6. 3D World Markers (Full Screen Overlay)
+            // 5. 3D World Markers (Full Screen Overlay)
             HUD3DWorldMarker markers = Create3DWorldMarkers(canvasGo.transform);
 
-            // 7. Field Scanner Tactical HUD (Middle-Right)
+            // 6. Field Scanner Tactical HUD (Middle-Right)
             HUDFieldScanner scannerHud = HUDFieldScanner.CreateDefaultScreenHUD(canvasGo.transform);
 
             // Wire up manager
@@ -122,7 +119,6 @@ namespace EchoProtocol.EditorTools
             managerSo.FindProperty("objectiveTracker").objectReferenceValue = objective;
             managerSo.FindProperty("playerVitals").objectReferenceValue = vitals;
             managerSo.FindProperty("hotbar").objectReferenceValue = hotbar;
-            managerSo.FindProperty("teammateStatus").objectReferenceValue = teammates;
             managerSo.FindProperty("worldMarker").objectReferenceValue = markers;
             managerSo.FindProperty("fieldScannerHUD").objectReferenceValue = scannerHud;
             managerSo.ApplyModifiedProperties();

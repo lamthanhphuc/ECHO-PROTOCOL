@@ -56,9 +56,9 @@ namespace EchoProtocol.UI
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
             _configured = playerNameInput != null && sessionNameInput != null && hostButton != null
-                && joinButton != null && statusText != null && memberCountText != null && memberListText != null
-                && difficultyDropdown != null;
+                && joinButton != null && statusText != null && memberCountText != null && memberListText != null;
             if (!_configured) Debug.LogError("[NetworkLobbyUI] Assign all Input, Host/Join and text references.", this);
+            if (difficultyDropdown != null) difficultyDropdown.gameObject.SetActive(false);
             if (playerNameInput != null) playerNameInput.characterLimit = 32;
             if (sessionNameInput != null) sessionNameInput.characterLimit = 32;
             if (!_inputsInitialized)
@@ -187,7 +187,6 @@ namespace EchoProtocol.UI
             }
             playerNameInput.SetTextWithoutNotify(lobbyManager.LocalOperatorName);
             sessionNameInput.SetTextWithoutNotify(session);
-            var difficulty = (MatchDifficulty)Mathf.Clamp(difficultyDropdown.value, 0, 2);
             _busy = true;
             SetStatus(host ? "> CREATING ROOM..." : "> JOINING ROOM...");
             RefreshControls();
@@ -195,7 +194,7 @@ namespace EchoProtocol.UI
             try
             {
                 var success = host
-                    ? await service.CreateRoomAsync(session, maxPlayers, difficulty)
+                    ? await service.CreateRoomAsync(session, maxPlayers, MatchDifficulty.Normal)
                     : await service.JoinRoomAsync(session);
                 if (this == null || !isActiveAndEnabled) return;
                 if (success) OnSessionStateChanged(service.State, string.Empty);
@@ -254,10 +253,6 @@ namespace EchoProtocol.UI
 
         private void OnSessionStateChanged(NetworkSessionState state, string message)
         {
-            if ((state == NetworkSessionState.InLobby || state == NetworkSessionState.InMatch)
-                && difficultyDropdown != null && MatchAuthorityRuntime.Instance != null)
-                difficultyDropdown.SetValueWithoutNotify((int)MatchAuthorityRuntime.Instance.Difficulty);
-
             _blinkSignal = state != NetworkSessionState.InLobby && state != NetworkSessionState.InMatch;
             if (statusIndicator != null) statusIndicator.color =
                 state == NetworkSessionState.InLobby || state == NetworkSessionState.InMatch ? Online :
@@ -292,7 +287,6 @@ namespace EchoProtocol.UI
             if (joinButton != null) joinButton.interactable = canConnect;
             if (playerNameInput != null) playerNameInput.interactable = canConnect;
             if (sessionNameInput != null) sessionNameInput.interactable = canConnect;
-            if (difficultyDropdown != null) difficultyDropdown.interactable = canConnect;
             var inLobby = Connected && !Busy && lobbyManager != null && bootstrap.State == NetworkSessionState.InLobby;
             if (readyButton != null)
             {
