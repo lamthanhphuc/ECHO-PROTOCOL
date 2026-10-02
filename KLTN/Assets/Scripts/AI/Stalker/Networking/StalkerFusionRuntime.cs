@@ -533,7 +533,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 _perceptionSnapshots,
                 step.Time,
                 _visibleCandidates);
-            BuildAuthoritativeFlashlightFrame();
+            BuildAuthoritativeFlashlightFrame(step.Time);
             CollectVisibleObjectiveCarrierIds();
             var sustainedCoreCarrier = SelectSustainedCoreCarrier(step.Time.Seconds);
 
@@ -1323,7 +1323,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
         }
 
-        private void BuildAuthoritativeFlashlightFrame()
+        private void BuildAuthoritativeFlashlightFrame(AiSimulationTime observedAt)
         {
             _flashlightObservations.Clear();
 
@@ -1351,6 +1351,17 @@ namespace EchoProtocol.AI.Stalker.Networking
                     continue;
                 }
 
+                if (!hidden
+                    && visionSensor.IsIlluminatedByFlashlight(
+                        flashlight.BeamTransform,
+                        playerRoot,
+                        flashlight.BeamRange,
+                        flashlight.BeamSpotAngle))
+                {
+                    TryAddFlashlightExposedCandidate(snapshot, observedAt);
+                    continue;
+                }
+
                 if (visionSensor.TryGetVisibleFlashlightClue(
                         flashlight.BeamTransform, playerRoot, flashlight.BeamRange,
                         flashlight.BeamSpotAngle, out Vector3 cluePosition))
@@ -1359,6 +1370,45 @@ namespace EchoProtocol.AI.Stalker.Networking
                         cluePosition, flashlight.BeamTransform.forward, hidden, hideSpotId));
                 }
             }
+        }
+
+        private void TryAddFlashlightExposedCandidate(
+            StalkerPerceptionTargetSnapshot snapshot,
+            AiSimulationTime observedAt)
+        {
+            if (!snapshot.PlayerId.IsValid || snapshot.TargetSample == null)
+            {
+                return;
+            }
+
+            for (var i = 0; i < _visibleCandidates.Count; i++)
+            {
+                if (_visibleCandidates[i].Observation.PlayerId == snapshot.PlayerId)
+                {
+                    return;
+                }
+            }
+
+            var eligibility = StalkerTargetEligibility.Evaluate(snapshot.EligibilitySnapshot);
+            if (!eligibility.Eligible)
+            {
+                return;
+            }
+
+            Vector3 observedPosition = snapshot.TargetSample.position;
+            Vector3 toPlayer = observedPosition - transform.position;
+            float distance = toPlayer.magnitude;
+            Vector3 observedDirection = distance > Mathf.Epsilon
+                ? toPlayer / distance
+                : transform.forward;
+            var observation = new VisionObservation(
+                snapshot.PlayerId,
+                observedPosition,
+                observedDirection,
+                observedAt,
+                distance);
+
+            _visibleCandidates.Add(new StalkerTargetCandidate(observation, eligibility));
         }
 
         private void ClearFrameBuffers()

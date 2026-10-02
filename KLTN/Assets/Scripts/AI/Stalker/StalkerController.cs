@@ -131,6 +131,8 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField, Min(0.02f)]
         private float chaseRuntimeDiagnosticInterval = 0.10f;
 
+        private const float AttackCommitWindowSeconds = 0.25f;
+
         [Header("Attack Spike Defaults")]
         [SerializeField] private float attackRange = 2.8f;
         [SerializeField] private float attackWindup = 0.75f;
@@ -1656,6 +1658,8 @@ namespace EchoProtocol.AI.Stalker
                 _memory.ClearCurrentTarget();
             }
 
+            TrackAttackTargetDuringWindup(targetId);
+
             _attackController.AdvanceWindup(CurrentSimulationDeltaSeconds);
             attackElapsedTime = _attackController.ActiveEpisode.WindupElapsedSeconds;
             if (attackElapsedTime < GetAttackWindup())
@@ -1665,6 +1669,54 @@ namespace EchoProtocol.AI.Stalker
 
             ResolveAttackHitMomentTyped();
             EnterRecover();
+        }
+
+        private void TrackAttackTargetDuringWindup(
+            PlayerId targetId)
+        {
+            if (!targetId.IsValid)
+            {
+                return;
+            }
+
+            var remainingWindup =
+                GetAttackWindup()
+                - _attackController.ActiveEpisode
+                    .WindupElapsedSeconds;
+
+            if (remainingWindup
+                <= AttackCommitWindowSeconds)
+            {
+                return;
+            }
+
+            if (!TryGetUniqueVisibleTargetCandidate(
+                    targetId,
+                    out var candidate,
+                    out var hasDuplicate)
+                || hasDuplicate
+                || !candidate.Eligibility.Eligible)
+            {
+                return;
+            }
+
+            var observation =
+                candidate.Observation;
+
+            if (!_memory.TryAcceptCurrentTargetObservation(
+                    observation))
+            {
+                return;
+            }
+
+            lastKnownPosition =
+                _memory.LastKnownPosition;
+
+            SetChaseDestination(
+                observation.ObservedPosition);
+
+            FaceDetectObservedPosition(
+                observation.ObservedPosition);
         }
 
         private void ResolveAttackHitMoment()
@@ -1940,11 +1992,14 @@ namespace EchoProtocol.AI.Stalker
 
         private void TryBeginHeardNoiseSearchFromCurrentFrame()
         {
-            //
-            // Hearing currently starts a new investigation only from PATROL.
-            // Visual DETECT/CHASE/ATTACK/RECOVER and visual SEARCH keep priority.
-            //
-            if (currentState != StalkerState.PATROL
+            var canBeginHearingSearch =
+                currentState == StalkerState.PATROL
+                || (currentState == StalkerState.SEARCH
+                    && _searchContext != null
+                    && _searchContext.Source
+                        != StalkerSearchSource.HeardNoise);
+
+            if (!canBeginHearingSearch
                 || _worldInteractionDriver.HasActiveInteraction
                 || _currentHearingObservations == null
                 || _currentHearingObservations.Count == 0

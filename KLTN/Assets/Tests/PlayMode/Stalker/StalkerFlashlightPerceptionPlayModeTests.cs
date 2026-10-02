@@ -25,6 +25,36 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
+        public IEnumerator PlayerBehindStalker_DirectFlashlightIlluminatesStalker()
+        {
+            var fixture = CreateFixture(Vector3.zero);
+            Transform player = Create("Player", new Vector3(0f, 0f, -4f)).transform;
+            Transform beam = Create("Beam", new Vector3(0f, 1f, -4f)).transform;
+            beam.SetParent(player, true);
+            beam.forward = Vector3.forward;
+            Physics.SyncTransforms();
+
+            Assert.That(BodyVisible(fixture.Sensor, player), Is.False);
+            Assert.That(Illuminated(fixture.Sensor, beam, player), Is.True);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator WallBlocksDirectFlashlightExposure()
+        {
+            var fixture = CreateFixture(Vector3.zero);
+            Transform player = Create("Player", new Vector3(0f, 0f, -5f)).transform;
+            Transform beam = Create("Beam", new Vector3(0f, 1f, -5f)).transform;
+            beam.SetParent(player, true);
+            beam.forward = Vector3.forward;
+            Cube("Wall", new Vector3(0f, 1f, -2f), new Vector3(3f, 3f, 0.2f));
+            Physics.SyncTransforms();
+
+            Assert.That(Illuminated(fixture.Sensor, beam, player), Is.False);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator HiddenBody_VisibleLitSurface_StartsAnonymousSearch()
         {
             var fixture = CreateFixture(new Vector3(2f, 0f, 0f));
@@ -271,6 +301,10 @@ namespace EchoProtocol.AI.Stalker.Tests
 
         private static bool CanSeePoint(Component sensor, Vector3 point) =>
             (bool)sensor.GetType().GetMethod("CanSeePoint").Invoke(sensor, new object[] { point });
+
+        private static bool Illuminated(Component sensor, Transform beam, Transform owner) =>
+            (bool)sensor.GetType().GetMethod("IsIlluminatedByFlashlight")
+                .Invoke(sensor, new object[] { beam, owner, 15f, 66f });
 
         private static object Observation(Vector3 position, Vector3? direction = null,
             bool hidden = false, ulong spotId = 0UL) => Activator.CreateInstance(

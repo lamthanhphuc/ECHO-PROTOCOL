@@ -63,9 +63,9 @@ namespace EchoProtocol.Gameplay
                         2.0f,   // DetectionDurationSeconds
                         0.35f,  // DetectionDecayDurationSeconds
                         1.5f,   // SearchDurationSeconds
-                        2.4f,   // AttackRange
-                        0.9f,   // AttackWindupSeconds
-                        1.8f,   // AttackRecoverySeconds
+                        2.5f,   // AttackRange
+                        0.75f,  // AttackWindupSeconds
+                        1.6f,   // AttackRecoverySeconds
                         6f,     // DoorBreakDurationSeconds
                         180f,   // SeekPlayersAfterSeconds
                         35f,    // CoreCarrierPursuitDelaySeconds
