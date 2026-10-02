@@ -225,14 +225,14 @@ namespace EchoProtocol.AI.Stalker.Networking
             if (Object != null && Object.HasStateAuthority)
             {
                 controller?.SetAuthoritativeLocomotion(true);
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                _moveDiagStartRealTime = Time.realtimeSinceStartupAsDouble;
-                _moveDiagStartFrame = Time.frameCount;
-                _moveDiagLastPosition = transform.position;
-                _moveDiagTicks = 0;
-                _moveDiagSimulationSeconds = 0d;
-                _moveDiagDistance = 0f;
-#endif
+// #if UNITY_EDITOR || DEVELOPMENT_BUILD
+//                 _moveDiagStartRealTime = Time.realtimeSinceStartupAsDouble;
+//                 _moveDiagStartFrame = Time.frameCount;
+//                 _moveDiagLastPosition = transform.position;
+//                 _moveDiagTicks = 0;
+//                 _moveDiagSimulationSeconds = 0d;
+//                 _moveDiagDistance = 0f;
+// #endif
             }
 
             if (Object != null && Object.HasStateAuthority)
@@ -308,9 +308,9 @@ namespace EchoProtocol.AI.Stalker.Networking
             _lastAuthoritativeStep = step;
             var pipelineRan = RunAuthoritativePipeline(step);
             controller.TickAuthoritativeLocomotion(step.DeltaSeconds);
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            LogAuthoritativeMovementSample(step);
-#endif
+// #if UNITY_EDITOR || DEVELOPMENT_BUILD
+//             LogAuthoritativeMovementSample(step);
+// #endif
             if (!pipelineRan)
             {
                 return;
@@ -533,7 +533,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 _perceptionSnapshots,
                 step.Time,
                 _visibleCandidates);
-            BuildAuthoritativeFlashlightFrame();
+            BuildAuthoritativeFlashlightFrame(step.Time);
             CollectVisibleObjectiveCarrierIds();
             var sustainedCoreCarrier = SelectSustainedCoreCarrier(step.Time.Seconds);
 
@@ -1323,7 +1323,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
         }
 
-        private void BuildAuthoritativeFlashlightFrame()
+        private void BuildAuthoritativeFlashlightFrame(AiSimulationTime observedAt)
         {
             _flashlightObservations.Clear();
 
@@ -1351,6 +1351,17 @@ namespace EchoProtocol.AI.Stalker.Networking
                     continue;
                 }
 
+                if (!hidden
+                    && visionSensor.IsIlluminatedByFlashlight(
+                        flashlight.BeamTransform,
+                        playerRoot,
+                        flashlight.BeamRange,
+                        flashlight.BeamSpotAngle))
+                {
+                    TryAddFlashlightExposedCandidate(snapshot, observedAt);
+                    continue;
+                }
+
                 if (visionSensor.TryGetVisibleFlashlightClue(
                         flashlight.BeamTransform, playerRoot, flashlight.BeamRange,
                         flashlight.BeamSpotAngle, out Vector3 cluePosition))
@@ -1359,6 +1370,45 @@ namespace EchoProtocol.AI.Stalker.Networking
                         cluePosition, flashlight.BeamTransform.forward, hidden, hideSpotId));
                 }
             }
+        }
+
+        private void TryAddFlashlightExposedCandidate(
+            StalkerPerceptionTargetSnapshot snapshot,
+            AiSimulationTime observedAt)
+        {
+            if (!snapshot.PlayerId.IsValid || snapshot.TargetSample == null)
+            {
+                return;
+            }
+
+            for (var i = 0; i < _visibleCandidates.Count; i++)
+            {
+                if (_visibleCandidates[i].Observation.PlayerId == snapshot.PlayerId)
+                {
+                    return;
+                }
+            }
+
+            var eligibility = StalkerTargetEligibility.Evaluate(snapshot.EligibilitySnapshot);
+            if (!eligibility.Eligible)
+            {
+                return;
+            }
+
+            Vector3 observedPosition = snapshot.TargetSample.position;
+            Vector3 toPlayer = observedPosition - transform.position;
+            float distance = toPlayer.magnitude;
+            Vector3 observedDirection = distance > Mathf.Epsilon
+                ? toPlayer / distance
+                : transform.forward;
+            var observation = new VisionObservation(
+                snapshot.PlayerId,
+                observedPosition,
+                observedDirection,
+                observedAt,
+                distance);
+
+            _visibleCandidates.Add(new StalkerTargetCandidate(observation, eligibility));
         }
 
         private void ClearFrameBuffers()
@@ -1740,50 +1790,50 @@ namespace EchoProtocol.AI.Stalker.Networking
             return StalkerAttackTargetSnapshot.Missing(currentTargetId);
         }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        private void LogAuthoritativeMovementSample(AiSimulationStep step)
-        {
-            if (Object == null || !Object.HasStateAuthority)
-            {
-                return;
-            }
+// #if UNITY_EDITOR || DEVELOPMENT_BUILD
+//         private void LogAuthoritativeMovementSample(AiSimulationStep step)
+//         {
+//             if (Object == null || !Object.HasStateAuthority)
+//             {
+//                 return;
+//             }
 
-            var position = transform.position;
-            var tickDisplacement = position - _moveDiagLastPosition;
-            var moved = tickDisplacement.magnitude;
-            _moveDiagLastPosition = position;
-            _moveDiagDistance += moved;
-            _moveDiagSimulationSeconds += step.DeltaSeconds;
-            _moveDiagTicks++;
+//             var position = transform.position;
+//             var tickDisplacement = position - _moveDiagLastPosition;
+//             var moved = tickDisplacement.magnitude;
+//             _moveDiagLastPosition = position;
+//             _moveDiagDistance += moved;
+//             _moveDiagSimulationSeconds += step.DeltaSeconds;
+//             _moveDiagTicks++;
 
-            var now = Time.realtimeSinceStartupAsDouble;
-            var realSeconds = now - _moveDiagStartRealTime;
-            if (realSeconds < 1d)
-            {
-                return;
-            }
+//             var now = Time.realtimeSinceStartupAsDouble;
+//             var realSeconds = now - _moveDiagStartRealTime;
+//             if (realSeconds < 1d)
+//             {
+//                 return;
+//             }
 
-            var agent = _navigationAgent;
-            var agentReady = agent != null && agent.enabled && agent.isOnNavMesh;
-            var actualVelocity = step.DeltaSeconds > 0f
-                ? tickDisplacement / step.DeltaSeconds
-                : Vector3.zero;
-            Debug.Log(
-                $"[STK_MOVE_DIAG] id={Object.Id} tick={step.Time.Tick} fps={(Time.frameCount - _moveDiagStartFrame) / realSeconds:F1} " +
-                $"ticks1s={_moveDiagTicks} sim1s={_moveDiagSimulationSeconds:F3} dt={step.DeltaSeconds:F4} " +
-                $"state={controller.CurrentState} configuredSpeed={(agentReady ? agent.speed : 0f):F2} " +
-                $"actualVelocity={actualVelocity} actualSpeed={actualVelocity.magnitude:F2} distance1s={_moveDiagDistance:F2} " +
-                $"agentVelocity={(agentReady ? agent.velocity.magnitude : 0f):F2} " +
-                $"desiredVelocity={(agentReady ? agent.desiredVelocity.magnitude : 0f):F2} " +
-                $"authority={Object.HasStateAuthority}", this);
+//             var agent = _navigationAgent;
+//             var agentReady = agent != null && agent.enabled && agent.isOnNavMesh;
+//             var actualVelocity = step.DeltaSeconds > 0f
+//                 ? tickDisplacement / step.DeltaSeconds
+//                 : Vector3.zero;
+//             Debug.Log(
+//                 $"[STK_MOVE_DIAG] id={Object.Id} tick={step.Time.Tick} fps={(Time.frameCount - _moveDiagStartFrame) / realSeconds:F1} " +
+//                 $"ticks1s={_moveDiagTicks} sim1s={_moveDiagSimulationSeconds:F3} dt={step.DeltaSeconds:F4} " +
+//                 $"state={controller.CurrentState} configuredSpeed={(agentReady ? agent.speed : 0f):F2} " +
+//                 $"actualVelocity={actualVelocity} actualSpeed={actualVelocity.magnitude:F2} distance1s={_moveDiagDistance:F2} " +
+//                 $"agentVelocity={(agentReady ? agent.velocity.magnitude : 0f):F2} " +
+//                 $"desiredVelocity={(agentReady ? agent.desiredVelocity.magnitude : 0f):F2} " +
+//                 $"authority={Object.HasStateAuthority}", this);
 
-            _moveDiagStartRealTime = now;
-            _moveDiagStartFrame = Time.frameCount;
-            _moveDiagTicks = 0;
-            _moveDiagSimulationSeconds = 0d;
-            _moveDiagDistance = 0f;
-        }
-#endif
+//             _moveDiagStartRealTime = now;
+//             _moveDiagStartFrame = Time.frameCount;
+//             _moveDiagTicks = 0;
+//             _moveDiagSimulationSeconds = 0d;
+//             _moveDiagDistance = 0f;
+//         }
+// #endif
 
         private void ConfigureAuthorityOnlyComponents()
         {

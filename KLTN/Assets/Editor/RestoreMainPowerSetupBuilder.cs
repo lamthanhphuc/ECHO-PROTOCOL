@@ -621,7 +621,7 @@ public static class RestoreMainPowerSetupBuilder
         sb.AppendLine("=== DIAGNOSE SCIFI SCENE INTERACTIVITY ===");
 
         // 1. Search all relevant GameObjects
-        var allGos = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        var allGos = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include);
         sb.AppendLine($"Total GameObjects in scene: {allGos.Length}");
 
         var secHold = GameObject.Find("SecurityTerminal_Hold");

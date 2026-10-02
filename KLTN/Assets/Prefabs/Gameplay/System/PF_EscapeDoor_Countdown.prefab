@@ -68,7 +68,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EscapeDoorCountdown
   matchFlow: {fileID: 0}
-  countdownSeconds: 8
+  countdownSeconds: 45
   lockedPrompt: Escape locked
   startPrompt: Start escape countdown
   countingPrompt: Escape opening

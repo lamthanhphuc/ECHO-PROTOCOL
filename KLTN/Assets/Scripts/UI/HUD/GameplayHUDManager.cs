@@ -39,6 +39,8 @@ namespace EchoProtocol.UI.HUD
         private void Awake()
         {
             EnsureSubModuleReferences();
+            if (GetComponent<HUDZoneMissions>() == null)
+                gameObject.AddComponent<HUDZoneMissions>();
         }
 
         private void Start()

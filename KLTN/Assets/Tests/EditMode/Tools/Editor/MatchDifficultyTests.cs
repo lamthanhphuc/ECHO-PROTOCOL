@@ -29,12 +29,14 @@ public sealed class MatchDifficultyTests
                 "Assets/Prefabs/StalkerNetwork.prefab").GetComponent<StalkerController>();
             var serialized = new SerializedObject(stalker);
             var normal = MatchDifficultyProfiles.Get(MatchDifficulty.Normal);
-            Assert.That(normal.PatrolSpeed,
+            var hard = MatchDifficultyProfiles.Get(MatchDifficulty.Hard);
+            Assert.That(hard.PatrolSpeed,
                 Is.EqualTo(serialized.FindProperty("patrolSpeed").floatValue));
-            Assert.That(normal.ChaseSpeed,
+            Assert.That(hard.ChaseSpeed,
                 Is.EqualTo(serialized.FindProperty("chaseSpeed").floatValue));
-            Assert.That(normal.DetectionDurationSeconds,
+            Assert.That(hard.DetectionDurationSeconds,
                 Is.EqualTo(serialized.FindProperty("detectionDurationSeconds").floatValue));
+            Assert.That(normal.ChaseSpeed, Is.LessThan(hard.ChaseSpeed));
         }
         finally
         {

@@ -86,7 +86,7 @@ namespace EchoProtocol.UI
             _nameText.fontSizeMin = 10f;
             _nameText.fontSizeMax = 20f;
             _nameText.enableAutoSizing = true;
-            _nameText.enableWordWrapping = false;
+            _nameText.textWrappingMode = TextWrappingModes.NoWrap;
             _nameText.overflowMode = TextOverflowModes.Truncate;
             _nameText.richText = false;
             _nameText.raycastTarget = false;

@@ -429,6 +429,34 @@ namespace EchoProtocol.Networking
             return false;
         }
 
+        public bool DropTeamToolAuthoritative(PlayerRef actor, Vector3 forcedDropPosition)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority || !actor.IsValid)
+            {
+                return false;
+            }
+
+            var state = GetComponent<LobbyPlayerState>();
+            if (state == null || state.ToolId < 1 || state.ToolId > 6)
+            {
+                return false;
+            }
+
+            int toolId = state.ToolId;
+            GetAuthoritativeDropPose(toolId, out _, out var dropRotation);
+            if (!TrySpawnDroppedTeamToolAuthoritative(
+                    toolId,
+                    forcedDropPosition,
+                    dropRotation,
+                    out _))
+            {
+                return false;
+            }
+
+            state.SetGameplayToolId(0);
+            return true;
+        }
+
         public bool CanStartFirstAidReviveAuthoritative(LobbyPlayerState state)
         {
             if (Object == null
@@ -838,6 +866,20 @@ namespace EchoProtocol.Networking
 
         private bool TrySpawnDroppedTeamToolAuthoritative(int toolId, out NetworkId pickupId)
         {
+            GetAuthoritativeDropPose(toolId, out var dropPosition, out var dropRotation);
+            return TrySpawnDroppedTeamToolAuthoritative(
+                toolId,
+                dropPosition,
+                dropRotation,
+                out pickupId);
+        }
+
+        private bool TrySpawnDroppedTeamToolAuthoritative(
+            int toolId,
+            Vector3 dropPosition,
+            Quaternion dropRotation,
+            out NetworkId pickupId)
+        {
             pickupId = default;
             var prefab = TeamToolPickupPrefabFor(toolId);
             if (prefab == null || Runner == null)
@@ -845,7 +887,6 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            GetAuthoritativeDropPose(toolId, out var dropPosition, out var dropRotation);
             var pickupObject = Runner.Spawn(prefab, dropPosition, dropRotation);
             var validPickup = pickupObject != null
                 && ((pickupObject.TryGetComponent<NetworkTeamToolPickup>(out var teamToolPickup)

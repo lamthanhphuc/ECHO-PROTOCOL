@@ -131,6 +131,8 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField, Min(0.02f)]
         private float chaseRuntimeDiagnosticInterval = 0.10f;
 
+        private const float AttackCommitWindowSeconds = 0.25f;
+
         [Header("Attack Spike Defaults")]
         [SerializeField] private float attackRange = 2.8f;
         [SerializeField] private float attackWindup = 0.75f;
@@ -750,8 +752,15 @@ namespace EchoProtocol.AI.Stalker
                 return true;
             }
 
-            return EnsureStalkerSpatialRuntimeInitialized()
-                && TryResolveNearestSpatialNode(position, out var nodeId)
+            if ((_spatialPatrolGraph == null
+                    || _spatialPatrolGraph.IsEmpty
+                    || _regionGraph == null)
+                && !EnsureStalkerSpatialRuntimeInitialized())
+            {
+                return false;
+            }
+
+            return TryResolveNearestSpatialNode(position, out var nodeId)
                 && _regionGraph != null
                 && _regionGraph.TryGetNodeSemanticMetadata(nodeId, out var metadata)
                 && metadata.Zone == _patrolZone;
@@ -1649,6 +1658,8 @@ namespace EchoProtocol.AI.Stalker
                 _memory.ClearCurrentTarget();
             }
 
+            TrackAttackTargetDuringWindup(targetId);
+
             _attackController.AdvanceWindup(CurrentSimulationDeltaSeconds);
             attackElapsedTime = _attackController.ActiveEpisode.WindupElapsedSeconds;
             if (attackElapsedTime < GetAttackWindup())
@@ -1658,6 +1669,54 @@ namespace EchoProtocol.AI.Stalker
 
             ResolveAttackHitMomentTyped();
             EnterRecover();
+        }
+
+        private void TrackAttackTargetDuringWindup(
+            PlayerId targetId)
+        {
+            if (!targetId.IsValid)
+            {
+                return;
+            }
+
+            var remainingWindup =
+                GetAttackWindup()
+                - _attackController.ActiveEpisode
+                    .WindupElapsedSeconds;
+
+            if (remainingWindup
+                <= AttackCommitWindowSeconds)
+            {
+                return;
+            }
+
+            if (!TryGetUniqueVisibleTargetCandidate(
+                    targetId,
+                    out var candidate,
+                    out var hasDuplicate)
+                || hasDuplicate
+                || !candidate.Eligibility.Eligible)
+            {
+                return;
+            }
+
+            var observation =
+                candidate.Observation;
+
+            if (!_memory.TryAcceptCurrentTargetObservation(
+                    observation))
+            {
+                return;
+            }
+
+            lastKnownPosition =
+                _memory.LastKnownPosition;
+
+            SetChaseDestination(
+                observation.ObservedPosition);
+
+            FaceDetectObservedPosition(
+                observation.ObservedPosition);
         }
 
         private void ResolveAttackHitMoment()
@@ -1933,11 +1992,14 @@ namespace EchoProtocol.AI.Stalker
 
         private void TryBeginHeardNoiseSearchFromCurrentFrame()
         {
-            //
-            // Hearing currently starts a new investigation only from PATROL.
-            // Visual DETECT/CHASE/ATTACK/RECOVER and visual SEARCH keep priority.
-            //
-            if (currentState != StalkerState.PATROL
+            var canBeginHearingSearch =
+                currentState == StalkerState.PATROL
+                || (currentState == StalkerState.SEARCH
+                    && _searchContext != null
+                    && _searchContext.Source
+                        != StalkerSearchSource.HeardNoise);
+
+            if (!canBeginHearingSearch
                 || _worldInteractionDriver.HasActiveInteraction
                 || _currentHearingObservations == null
                 || _currentHearingObservations.Count == 0
@@ -3006,7 +3068,8 @@ namespace EchoProtocol.AI.Stalker
             return !_searchCandidatePlanningExhausted && TryPlanNextSearchCandidate();
         }
 
-        private bool TryBeginHideSpotInvestigationFromSearch()
+        private bool TryBeginHideSpotInvestigationFromSearch(
+            ulong preferredHideSpotId = 0UL)
         {
             InitializeHidingInvestigation();
             if (_hidingInvestigation == null
@@ -3030,44 +3093,73 @@ namespace EchoProtocol.AI.Stalker
                 $"stalker={transform.position}",
                 this);
 
-            var selectorConfig = GetHideSpotSelectorConfig();
-            if (!_hideSpotSelector.TrySelect(
-                    _searchContext.SearchOriginPosition,
-                    _hideSpotCandidates,
-                    _hideSpotMemory,
-                    CurrentSimulationTimeSeconds,
-                    selectorConfig,
-                    out var selection))
-            {
-                RuntimeLog.Log(
-                    RuntimeLogCategory.StalkerHideFlow,
-                    $"[STK_HIDE_FLOW][NO_HIDE_SPOT_SELECTED] " +
-                    $"count={_hideSpotCandidates.Count} " +
-                    $"origin={_searchContext.SearchOriginPosition} " +
-                    $"stalker={transform.position}",
-                    this);
+            StalkerHideSpotCandidate selectedCandidate = default;
 
-                return false;
+            if (preferredHideSpotId != 0UL)
+            {
+                for (int i = 0; i < _hideSpotCandidates.Count; i++)
+                {
+                    var candidate = _hideSpotCandidates[i];
+
+                    if (candidate.IsValid
+                        && candidate.StableId == preferredHideSpotId)
+                    {
+                        selectedCandidate = candidate;
+                        break;
+                    }
+                }
+
+                if (!selectedCandidate.IsValid)
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                var selectorConfig =
+                    GetHideSpotSelectorConfig();
+
+                if (!_hideSpotSelector.TrySelect(
+                        _searchContext.SearchOriginPosition,
+                        _hideSpotCandidates,
+                        _hideSpotMemory,
+                        CurrentSimulationTimeSeconds,
+                        selectorConfig,
+                        out var selection))
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.StalkerHideFlow,
+                        $"[STK_HIDE_FLOW][NO_HIDE_SPOT_SELECTED] " +
+                        $"count={_hideSpotCandidates.Count} " +
+                        $"origin={_searchContext.SearchOriginPosition} " +
+                        $"stalker={transform.position}",
+                        this);
+
+                    return false;
+                }
+
+                selectedCandidate =
+                    selection.Candidate;
             }
 
             RuntimeLog.Log(
                 RuntimeLogCategory.StalkerHideFlow,
                 $"[STK_HIDE_FLOW][SELECTED] " +
-                $"stableId={selection.Candidate.StableId} " +
-                $"inspect={selection.Candidate.InspectPosition} " +
+                $"stableId={selectedCandidate.StableId} " +
+                $"inspect={selectedCandidate.InspectPosition} " +
                 $"origin={_searchContext.SearchOriginPosition} " +
                 $"stalker={transform.position}",
                 this);
 
             var inspectNavigationStatus =
                 TryRequestSearchDestination(
-                    selection.Candidate.InspectPosition);
+                    selectedCandidate.InspectPosition);
 
             RuntimeLog.Log(
                 RuntimeLogCategory.StalkerHideFlow,
                 $"[STK_HIDE_FLOW][NAV_REQUEST] " +
-                $"stableId={selection.Candidate.StableId} " +
-                $"inspect={selection.Candidate.InspectPosition} " +
+                $"stableId={selectedCandidate.StableId} " +
+                $"inspect={selectedCandidate.InspectPosition} " +
                 $"status={inspectNavigationStatus} " +
                 $"pathStatus={_navigation?.GetPathStatus()} " +
                 $"execution={_navigation?.GetExecutionStatus()} " +
@@ -3081,21 +3173,21 @@ namespace EchoProtocol.AI.Stalker
                 RuntimeLog.Log(
                     RuntimeLogCategory.StalkerHideFlow,
                     $"[STK_HIDE_FLOW][NAV_REJECT] " +
-                    $"stableId={selection.Candidate.StableId} " +
-                    $"inspect={selection.Candidate.InspectPosition} " +
+                    $"stableId={selectedCandidate.StableId} " +
+                    $"inspect={selectedCandidate.InspectPosition} " +
                     $"status={inspectNavigationStatus}",
                     this);
 
                 return false;
             }
 
-            _hidingInvestigation.Begin(selection.Candidate);
+            _hidingInvestigation.Begin(selectedCandidate);
 
             RuntimeLog.Log(
                 RuntimeLogCategory.StalkerHideFlow,
                 $"[STK_HIDE_FLOW][INVESTIGATION_BEGIN] " +
-                $"stableId={selection.Candidate.StableId} " +
-                $"inspect={selection.Candidate.InspectPosition}",
+                $"stableId={selectedCandidate.StableId} " +
+                $"inspect={selectedCandidate.InspectPosition}",
                 this);
 
             _hideSpotInspectionLogged = false;
@@ -3111,7 +3203,7 @@ namespace EchoProtocol.AI.Stalker
                 _memory.CurrentTargetId.IsValid
                     ? _memory.CurrentTargetId.Value
                     : -1,
-                selection.Candidate.StableId));
+                selectedCandidate.StableId));
             return true;
         }
 

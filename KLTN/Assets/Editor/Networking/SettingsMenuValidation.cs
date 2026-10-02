@@ -44,7 +44,12 @@ namespace EchoProtocol.Editor.Networking
             api.Execute(new ExecutionSettings(new Filter
             {
                 testMode = TestMode.EditMode,
-                testNames = new[] { "EchoProtocol.Tests.EditMode.Controls.GameplayInputSettingsTests", "EchoProtocol.Player.Tests.VoiceChatRulesTests" }
+                testNames = new[]
+                {
+                    "EchoProtocol.Tests.EditMode.Controls.GameplayInputSettingsTests",
+                    "EchoProtocol.Tests.EditMode.Controls.PlayerMenuControlLockTests",
+                    "EchoProtocol.Player.Tests.VoiceChatRulesTests"
+                }
             }) { runSynchronously = true });
         }
 

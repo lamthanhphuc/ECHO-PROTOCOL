@@ -82,7 +82,9 @@ namespace EchoProtocol.UI
             var player = camera.Target.gameObject;
             var networkObject = player.GetComponentInParent<Fusion.NetworkObject>();
             if (networkObject != null && networkObject.IsValid && !networkObject.HasInputAuthority) return;
-            if (!_lock.IsLocked) _lock.Acquire(player, Close);
+            if (inventory && !PlayerInteractionControlLock.IsPlayerStateValid(player)) return;
+            if (!_lock.IsLocked || _showingInventory != inventory)
+                _lock.Acquire(player, Close, allowWhileDowned: !inventory);
             if (!_lock.IsLocked) return;
             _inventory = player.GetComponentInParent<PlayerInventory>();
             _dropInput = player.GetComponentInParent<PlayerInventoryDropInput>();
@@ -146,7 +148,8 @@ namespace EchoProtocol.UI
         private static IEnumerator DropNextFrame(PlayerInventoryDropInput input)
         {
             yield return null;
-            if (input != null) input.DropCurrentItem();
+            if (input != null && PlayerInteractionControlLock.IsPlayerStateValid(input.gameObject))
+                input.DropCurrentItem();
         }
 
         private void BuildCanvas()

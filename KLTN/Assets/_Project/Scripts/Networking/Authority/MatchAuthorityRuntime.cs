@@ -1032,6 +1032,10 @@ namespace EchoProtocol.Networking.Authority
             Vector3 position,
             double hearingRadius)
         {
+            // ponytail: gameplay noise is broader than Telemetry 1.1.
+            // Unsupported types remain gameplay-only until the telemetry contract expands.
+            if (!NoiseTelemetryAdapter.SupportsNoiseType(noiseType)) return false;
+
             if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
             {
                 return false;

@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using EchoProtocol.Gameplay;
+using EchoProtocol.Auth;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
 using TMPro;
@@ -44,6 +46,7 @@ namespace EchoProtocol.UI
         private LobbyManager _subscribedLobby;
         private bool _busy;
         private bool _configured;
+        private bool _inputsInitialized;
         private float _nextResolve;
         private RoomInfoViewModel _room = new RoomInfoViewModel();
         private bool Connected => bootstrap != null && bootstrap.HasRunningRunner;
@@ -56,9 +59,20 @@ namespace EchoProtocol.UI
             _configured = playerNameInput != null && sessionNameInput != null && hostButton != null
                 && joinButton != null && statusText != null && memberCountText != null && memberListText != null
                 && difficultyDropdown != null;
-            if (!_configured) Debug.LogError("[NetworkLobbyUI] Assign all Input, Host/Join and text references.", this);
+            if (!_configured) Debug.LogError("[NetworkLobbyUI] Assign all Input, Host/Join, difficulty and text references.", this);
+            ConfigureDifficultyDropdown();
             if (playerNameInput != null) playerNameInput.characterLimit = 32;
             if (sessionNameInput != null) sessionNameInput.characterLimit = 32;
+            if (!_inputsInitialized)
+            {
+                var loginName = string.IsNullOrWhiteSpace(AuthSession.DisplayName)
+                    ? AuthSession.Username : AuthSession.DisplayName;
+                if (playerNameInput != null && !string.IsNullOrWhiteSpace(loginName))
+                    playerNameInput.SetTextWithoutNotify(loginName.Trim());
+                if (sessionNameInput != null)
+                    sessionNameInput.SetTextWithoutNotify(string.Empty);
+                _inputsInitialized = true;
+            }
             if (statusText != null) statusText.richText = false;
             if (memberListText != null) memberListText.richText = false;
             if (hostButton != null) hostButton.onClick.AddListener(OnHostClicked);
@@ -70,6 +84,20 @@ namespace EchoProtocol.UI
             RefreshMemberList();
             RefreshControls();
             RefreshVisuals();
+        }
+
+        private void ConfigureDifficultyDropdown()
+        {
+            if (difficultyDropdown == null) return;
+
+            difficultyDropdown.gameObject.SetActive(true);
+            difficultyDropdown.ClearOptions();
+            difficultyDropdown.AddOptions(new List<string> { "EASY", "NORMAL", "HARD" });
+            var difficulty = MatchAuthorityRuntime.Instance != null
+                ? MatchAuthorityRuntime.Instance.Difficulty
+                : MatchDifficulty.Normal;
+            difficultyDropdown.SetValueWithoutNotify((int)difficulty);
+            difficultyDropdown.RefreshShownValue();
         }
 
         private void RefreshVisuals()
@@ -129,7 +157,8 @@ namespace EchoProtocol.UI
             {
                 _subscribedLobby.OnRoomUpdated += OnRoomUpdated;
                 _subscribedLobby.OnLobbyError += ReportError;
-                if (playerNameInput != null && !string.IsNullOrEmpty(lobbyManager.LocalOperatorName))
+                if (playerNameInput != null && string.IsNullOrWhiteSpace(playerNameInput.text)
+                    && !string.IsNullOrEmpty(lobbyManager.LocalOperatorName))
                     playerNameInput.SetTextWithoutNotify(lobbyManager.LocalOperatorName);
             }
             if (Connected && sessionNameInput != null)
@@ -243,7 +272,10 @@ namespace EchoProtocol.UI
         {
             if ((state == NetworkSessionState.InLobby || state == NetworkSessionState.InMatch)
                 && difficultyDropdown != null && MatchAuthorityRuntime.Instance != null)
+            {
                 difficultyDropdown.SetValueWithoutNotify((int)MatchAuthorityRuntime.Instance.Difficulty);
+                difficultyDropdown.RefreshShownValue();
+            }
 
             _blinkSignal = state != NetworkSessionState.InLobby && state != NetworkSessionState.InMatch;
             if (statusIndicator != null) statusIndicator.color =

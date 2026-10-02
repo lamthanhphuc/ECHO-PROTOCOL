@@ -6,6 +6,7 @@ using EchoProtocol.AI.Listener.Memory;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.AI.Listener.Perception;
 using EchoProtocol.Networking;
+using EchoProtocol.Telemetry;
 using PlayerRef = Fusion.PlayerRef;
 using Object = UnityEngine.Object;
 using NUnit.Framework;
@@ -32,8 +33,31 @@ namespace EchoProtocol.AI.Listener.Tests
                     "WALK",
                     "DOOR",
                     "CORE_INSERT",
-                    "MACHINE_REPAIR"
+                    "MACHINE_REPAIR",
+                    "MINION_ALERT",
+                    "MACHINE_OVERLOAD",
+                    "TERMINAL_DOWNLOAD",
+                    "VEHICLE_PUSH",
+                    "CHARGE_TRANSFER",
+                    "POWER_SURGE"
                 }));
+        }
+
+        [TestCase("SPRINT", true)]
+        [TestCase("INTERACTION", true)]
+        [TestCase("CORE_CARRY", true)]
+        [TestCase("CORE_DROP", true)]
+        [TestCase("NOISE_MAKER", true)]
+        [TestCase("MACHINE_REPAIR", false)]
+        [TestCase("MINION_ALERT", false)]
+        [TestCase("MACHINE_OVERLOAD", false)]
+        [TestCase("TERMINAL_DOWNLOAD", false)]
+        [TestCase("VEHICLE_PUSH", false)]
+        [TestCase("CHARGE_TRANSFER", false)]
+        [TestCase("POWER_SURGE", false)]
+        public void NoiseTelemetry_SupportsOnlyV11NoiseTypes(string noiseType, bool expected)
+        {
+            Assert.That(NoiseTelemetryAdapter.SupportsNoiseType(noiseType), Is.EqualTo(expected));
         }
 
         [Test]
@@ -78,6 +102,8 @@ namespace EchoProtocol.AI.Listener.Tests
                 RuntimeNoiseEmissionMode.DiscreteAction);
             AssertDefinition(catalog, RuntimeNoiseType.MACHINE_REPAIR, 1.5d, 200d, 3d,
                 RuntimeNoiseEmissionMode.RecurringMovement);
+            AssertDefinition(catalog, RuntimeNoiseType.MINION_ALERT, 1d, 55d, 4d,
+                RuntimeNoiseEmissionMode.DiscreteAction);
             catalog.TryGetDefinition(RuntimeNoiseType.MACHINE_REPAIR, out var machineRepair);
             Assert.That(machineRepair.PulseInterval.TotalSeconds, Is.EqualTo(2.5d));
 
@@ -303,7 +329,7 @@ namespace EchoProtocol.AI.Listener.Tests
 
             var policy =
                 new ListenerHearingPolicy(
-                    0.1d,
+                    0.01d,
                     0.5d,
                     0.25d,
                     1.25d);
@@ -323,7 +349,7 @@ namespace EchoProtocol.AI.Listener.Tests
             Assert.That(
                 insideSensor.TryEvaluate(
                     noise,
-                    new Vector3(14.99f, 0f, 0f),
+                    new Vector3(13f, 0f, 0f),
                     now,
                     out _,
                     out var insideReject),
@@ -789,14 +815,17 @@ namespace EchoProtocol.AI.Listener.Tests
                     .Within(0.0001d));
         }
 
-        [TestCase(ListenerOcclusionClass.SOLID_WALL)]
-        [TestCase(ListenerOcclusionClass.CLOSED_DOOR)]
-        public void Hearing_MachineRepair_IgnoresOcclusionResolver(
+        [TestCase(RuntimeNoiseType.MACHINE_REPAIR, ListenerOcclusionClass.SOLID_WALL)]
+        [TestCase(RuntimeNoiseType.MACHINE_REPAIR, ListenerOcclusionClass.CLOSED_DOOR)]
+        [TestCase(RuntimeNoiseType.MINION_ALERT, ListenerOcclusionClass.SOLID_WALL)]
+        [TestCase(RuntimeNoiseType.MINION_ALERT, ListenerOcclusionClass.CLOSED_DOOR)]
+        public void Hearing_SignalsIgnoreOcclusionResolver(
+            RuntimeNoiseType noiseType,
             ListenerOcclusionClass occlusionClass)
         {
             var now = Now();
             var noise = CreateNoise(
-                RuntimeNoiseType.MACHINE_REPAIR,
+                noiseType,
                 "relay-repair:match:RelayA_1:1",
                 1,
                 Vector3.zero,
@@ -811,7 +840,7 @@ namespace EchoProtocol.AI.Listener.Tests
 
             Assert.That(sensor.TryEvaluate(
                 noise,
-                new Vector3(0f, 0f, 70f),
+                new Vector3(0f, 0f, 30f),
                 now,
                 out _,
                 out var rejectReason), Is.True);
@@ -899,7 +928,7 @@ namespace EchoProtocol.AI.Listener.Tests
         }
 
         [Test]
-        public void Hearing_InsideConfiguredRadius_IsAlwaysHeard()
+        public void Hearing_InsideConfiguredRadiusButBelowThreshold_IsRejected()
         {
             var sensor =
                 new ListenerHearingSensor(
@@ -928,12 +957,12 @@ namespace EchoProtocol.AI.Listener.Tests
                     Now(),
                     out _,
                     out var reject),
-                Is.True);
+                Is.False);
 
             Assert.That(
                 reject,
                 Is.EqualTo(
-                    ListenerHearingRejectReason.None));
+                    ListenerHearingRejectReason.BelowThreshold));
         }
 
         [Test]
@@ -982,7 +1011,7 @@ namespace EchoProtocol.AI.Listener.Tests
 
             var clearSensor = new ListenerHearingSensor(
                 new StaticListenerOcclusionResolver(ListenerOcclusionClass.CLEAR),
-                new ListenerHearingPolicy(0.99d, 0.5d, 0.25d));
+                new ListenerHearingPolicy(0.2d, 0.5d, 0.25d));
             clearSensor.BeginMatch(Guid.NewGuid());
             Assert.That(clearSensor.TryEvaluate(
                 noiseEvent,

@@ -709,6 +709,11 @@ namespace EchoProtocol.Editor.Networking
                     root.AddComponent<Fusion.NetworkObject>();
                     changed = true;
                 }
+                if (root.GetComponent<Fusion.NetworkTransform>() == null)
+                {
+                    root.AddComponent<Fusion.NetworkTransform>();
+                    changed = true;
+                }
                 if (changed)
                 {
                     EditorUtility.SetDirty(root);

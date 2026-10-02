@@ -179,6 +179,7 @@ namespace EchoProtocol.Tests.MatchFlow
             StringAssert.Contains("public NetworkBool RestoreMainPowerCompleted", source);
             StringAssert.Contains("public bool TrySubmitPowerCode(PlayerRef requester, string code)", source);
             StringAssert.Contains("public bool TryCompleteSecurityHold(NetworkId sourceId)", source);
+            StringAssert.Contains("panelUi.GetComponentInParent<PowerPuzzleStation>()", source);
         }
 
         [Test]

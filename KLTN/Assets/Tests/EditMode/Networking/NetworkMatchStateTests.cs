@@ -1,5 +1,7 @@
 using System.IO;
 using NUnit.Framework;
+using UnityEditor;
+using UnityEngine;
 
 namespace EchoProtocol.Networking.Tests
 {
@@ -11,6 +13,37 @@ namespace EchoProtocol.Networking.Tests
             "Assets/_Project/Scripts/Networking/Interaction/NetworkSectorBox.cs";
         private const string HudObjectiveTrackerPath =
             "Assets/Scripts/UI/HUD/HUDObjectiveTracker.cs";
+        private const string ZoneMissionHudPath =
+            "Assets/Scripts/UI/HUD/HUDZoneMissions.cs";
+
+        [Test]
+        public void NetworkMatchPrefab_UsesCanonicalTiming()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Resources/Network/NetworkMatchState.prefab");
+            Assert.That(prefab, Is.Not.Null);
+
+            var state = FindComponentByTypeName(
+                prefab,
+                "EchoProtocol.Networking.NetworkMatchState");
+            Assert.That(state, Is.Not.Null);
+
+            var serializedState = new SerializedObject(state);
+            var matchDuration = serializedState.FindProperty("_matchDurationSeconds");
+            var escapeDuration = serializedState.FindProperty("_escapeDurationSeconds");
+            Assert.That(matchDuration, Is.Not.Null);
+            Assert.That(escapeDuration, Is.Not.Null);
+            Assert.That(matchDuration.floatValue, Is.EqualTo(2700f).Within(0.001f));
+            Assert.That(escapeDuration.floatValue, Is.EqualTo(45f).Within(0.001f));
+        }
+
+        [Test]
+        public void NetworkMatchSource_DeclaresCanonicalTiming()
+        {
+            string source = File.ReadAllText(MatchSourcePath);
+            StringAssert.Contains("public const float DefaultMatchDurationSeconds = 2700f;", source);
+            StringAssert.Contains("public const float DefaultEscapeDurationSeconds = 45f;", source);
+        }
 
         [Test]
         public void MATCH_NET_FsmOnlyAdvancesFromExpectedRunningPhase()
@@ -155,6 +188,17 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
+        public void ZoneMissionHud_UsesAuthoritativeNetworkProgress()
+        {
+            string source = File.ReadAllText(ZoneMissionHudPath);
+
+            StringAssert.Contains("NetworkMatchState.Instance", source);
+            StringAssert.Contains("TryGetObjectiveProgress", source);
+            StringAssert.Contains("CompletedRelayCount", source);
+            StringAssert.Contains("SecurityHoldProgress01", source);
+        }
+
+        [Test]
         public void MATCH_NET_ScenarioNumericStatePreservesDoublePrecision()
         {
             var source = LoadNetworkMatchStateSource();
@@ -263,6 +307,18 @@ namespace EchoProtocol.Networking.Tests
         private static string LoadNetworkMatchStateSource()
         {
             return File.ReadAllText(MatchSourcePath);
+        }
+
+        private static Component FindComponentByTypeName(GameObject root, string fullTypeName)
+        {
+            var components = root.GetComponents<Component>();
+            for (int i = 0; i < components.Length; i++)
+            {
+                var component = components[i];
+                if (component != null && component.GetType().FullName == fullTypeName) return component;
+            }
+
+            return null;
         }
     }
 }
