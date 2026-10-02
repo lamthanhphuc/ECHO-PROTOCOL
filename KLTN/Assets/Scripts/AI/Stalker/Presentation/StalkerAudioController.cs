@@ -103,8 +103,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
         [Tooltip("Minimum seconds between consecutive Search voice plays to avoid spam.")]
         [SerializeField, Min(0f)] private float searchCooldownSeconds = 4.0f;
 
-        [Header("3D Distance Audio Tuning (Realistic Logarithmic Rolloff)")]
-        [Tooltip("Ensure AudioSources use realistic 3D logarithmic rolloff with accurate distance perception.")]
+        [Header("3D Distance Audio Tuning")]
+        [Tooltip("Apply finite 3D attenuation so monster audio becomes silent at max distance.")]
         [SerializeField] private bool autoConfigure3D = true;
         [SerializeField, Min(0.5f)] private float detectMinDistance = 30f;
         [SerializeField, Min(5f)] private float detectMaxDistance = 60f;
@@ -112,7 +112,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
         [SerializeField, Min(5f)] private float voiceMaxDistance = 25f;
         [SerializeField, Min(0.5f)] private float movementMinDistance = 15f;
         [SerializeField, Min(5f)] private float movementMaxDistance = 40f;
-        [SerializeField, Min(0.2f)] private float breathingMinDistance = 0.8f;
+        [SerializeField, Min(0.2f)] private float breathingMinDistance   = 0.8f;
         [SerializeField, Min(2f)] private float breathingMaxDistance = 6f;
         [SerializeField, Min(0.5f)] private float chaseMinDistance = 80f;
         [SerializeField, Min(5f)] private float chaseMaxDistance = 150f;
@@ -126,6 +126,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private bool      _chaseActive;
         private bool      _chaseMusicActive;
         private bool      _isMoving;
+        private bool      _breathingRequested;
+        private float     _breathingTargetVolume;
         private bool      _suppressDetectAnimationEvent;
         private bool      _biteAudioPlayedForEpisode;
 
@@ -173,6 +175,11 @@ namespace EchoProtocol.AI.Stalker.Presentation
             }
         }
 
+        private void Update()
+        {
+            RefreshDistanceGates();
+        }
+
         // ──────────────────────────────────────────────────────────────────────
         // Initialisation helpers
         // ──────────────────────────────────────────────────────────────────────
@@ -217,20 +224,20 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         private void Configure3DSources()
         {
-            ConfigureSource3D(detectSource,    detectMinDistance,    detectMaxDistance,    AudioRolloffMode.Logarithmic);
-            ConfigureSource3D(voiceSource,     voiceMinDistance,     voiceMaxDistance,     AudioRolloffMode.Logarithmic);
-            ConfigureSource3D(chaseSource,     chaseMinDistance,     chaseMaxDistance,     AudioRolloffMode.Logarithmic);
-            ConfigureSource3D(movementSource,  movementMinDistance,  movementMaxDistance,  AudioRolloffMode.Logarithmic);
-            ConfigureSource3D(breathingSource, breathingMinDistance, breathingMaxDistance, AudioRolloffMode.Logarithmic);
+            ConfigureSource3D(detectSource,    detectMinDistance,    detectMaxDistance);
+            ConfigureSource3D(voiceSource,     voiceMinDistance,     voiceMaxDistance);
+            ConfigureSource3D(chaseSource,     chaseMinDistance,     chaseMaxDistance);
+            ConfigureSource3D(movementSource,  movementMinDistance,  movementMaxDistance);
+            ConfigureSource3D(breathingSource, breathingMinDistance, breathingMaxDistance);
         }
 
-        private static void ConfigureSource3D(AudioSource src, float minDist, float maxDist, AudioRolloffMode rolloff)
+        private static void ConfigureSource3D(AudioSource src, float minDist, float maxDist)
         {
             if (src == null) return;
             src.spatialBlend = 1f; // Full 3D
             src.minDistance  = minDist;
-            src.maxDistance  = maxDist;
-            src.rolloffMode  = rolloff;
+            src.maxDistance  = Mathf.Max(maxDist, minDist + 0.1f);
+            src.rolloffMode  = AudioRolloffMode.Linear;
             src.dopplerLevel = 0f;
             src.spread       = 0f; // Point source for accurate 3D spatial panning
         }
@@ -281,6 +288,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
             {
                 breathingSource.volume = moving ? breathingWalkVolume : breathingFullVolume;
             }
+
+            RefreshDistanceGates();
         }
 
         /// <summary>
@@ -320,6 +329,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 _chaseMusicActive = shouldPlayChaseMusic;
                 StartChaseFade(fadeIn: shouldPlayChaseMusic);
             }
+
+            RefreshDistanceGates();
         }
 
         /// <summary>
@@ -369,6 +380,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
         {
             var src = detectSource != null ? detectSource : voiceSource;
             if (!ClipAndSourceReady(src, detectClip)) return;
+            if (!IsSourceInRange(src, detectMaxDistance)) return;
             if (src.isPlaying && src.clip == detectClip) return;
 
             src.clip   = detectClip;
@@ -383,6 +395,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
         public void PlaySearch()
         {
             if (!ClipAndSourceReady(voiceSource, searchClip)) return;
+            if (!IsSourceInRange(voiceSource, voiceMaxDistance)) return;
             if (Time.time - _lastSearchPlayTime < searchCooldownSeconds) return;
 
             _lastSearchPlayTime = Time.time;
@@ -404,6 +417,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
         {
             var clip = _chaseActive ? chaseFootstepClip : walkClip;
             if (!ClipAndSourceReady(movementSource, clip)) return;
+            if (!IsSourceInRange(movementSource, movementMaxDistance)) return;
 
             float vol = _chaseActive ? chaseFootstepVolume : walkFootstepVolume;
             movementSource.pitch = 1f;
@@ -418,6 +432,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
         public void PlaySniff()
         {
             if (!ClipAndSourceReady(voiceSource, sniffClip)) return;
+            if (!IsSourceInRange(voiceSource, voiceMaxDistance)) return;
 
             voiceSource.pitch  = 1f;
             voiceSource.volume = 1f;
@@ -432,6 +447,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
         {
             if (_biteAudioPlayedForEpisode) return;
             if (!ClipAndSourceReady(voiceSource, biteClip)) return;
+            if (!IsSourceInRange(voiceSource, voiceMaxDistance)) return;
 
             _biteAudioPlayedForEpisode = true;
 
@@ -457,6 +473,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
         public void PlayPunch()
         {
             if (!ClipAndSourceReady(voiceSource, punchClip)) return;
+            if (!IsSourceInRange(voiceSource, voiceMaxDistance)) return;
 
             voiceSource.pitch  = 1f;
             voiceSource.volume = 1f;
@@ -472,6 +489,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
         public void PlayJumpOut()
         {
             if (!ClipAndSourceReady(movementSource, jumpOutClip)) return;
+            if (!IsSourceInRange(movementSource, movementMaxDistance)) return;
 
             movementSource.pitch  = 1f;
             movementSource.volume = jumpOutVolume;
@@ -487,6 +505,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
         public void PlayJumpIn()
         {
             if (!ClipAndSourceReady(movementSource, jumpClip)) return;
+            if (!IsSourceInRange(movementSource, movementMaxDistance)) return;
 
             movementSource.pitch  = 1f;
             movementSource.volume = jumpInVolume;
@@ -515,6 +534,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
             _chaseActive = false;
             _chaseMusicActive = false;
             _isMoving = false;
+            _breathingRequested = false;
             _suppressDetectAnimationEvent = false;
             _biteAudioPlayedForEpisode = false;
         }
@@ -526,6 +546,14 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private void StartBreathing(float targetVolume)
         {
             if (breathingSource == null || idleBreathingClip == null) return;
+
+            _breathingRequested = true;
+            _breathingTargetVolume = targetVolume;
+            if (!IsSourceInRange(breathingSource, breathingMaxDistance))
+            {
+                breathingSource.Stop();
+                return;
+            }
 
             breathingSource.volume = targetVolume;
 
@@ -555,6 +583,13 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private IEnumerator FadeChaseIn()
         {
             if (chaseSource == null) yield break;
+            if (!IsSourceInRange(chaseSource, chaseMaxDistance))
+            {
+                chaseSource.volume = 0f;
+                chaseSource.Stop();
+                _chaseFadeCoroutine = null;
+                yield break;
+            }
 
             if (!chaseSource.isPlaying)
             {
@@ -568,6 +603,14 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             while (elapsed < chaseFadeInSeconds)
             {
+                if (!IsSourceInRange(chaseSource, chaseMaxDistance))
+                {
+                    chaseSource.volume = 0f;
+                    chaseSource.Stop();
+                    _chaseFadeCoroutine = null;
+                    yield break;
+                }
+
                 elapsed           += Time.deltaTime;
                 chaseSource.volume = Mathf.Lerp(startVolume, chasePeakVolume,
                     elapsed / chaseFadeInSeconds);
@@ -612,6 +655,87 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 return false;
             }
             return true;
+        }
+
+        private void RefreshDistanceGates()
+        {
+            StopWhenOutOfRange(detectSource, detectMaxDistance);
+            StopWhenOutOfRange(voiceSource, voiceMaxDistance);
+            StopWhenOutOfRange(movementSource, movementMaxDistance);
+
+            if (breathingSource != null
+                && _breathingRequested
+                && breathingSource.clip == idleBreathingClip)
+            {
+                if (!IsSourceInRange(breathingSource, breathingMaxDistance))
+                {
+                    breathingSource.Stop();
+                }
+                else if (!breathingSource.isPlaying && idleBreathingClip != null)
+                {
+                    breathingSource.volume = _breathingTargetVolume;
+                    breathingSource.Play();
+                }
+            }
+
+            if (chaseSource != null
+                && _chaseMusicActive)
+            {
+                if (!IsSourceInRange(chaseSource, chaseMaxDistance))
+                {
+                    chaseSource.volume = 0f;
+                    chaseSource.Stop();
+                }
+                else if (!chaseSource.isPlaying && _chaseFadeCoroutine == null)
+                {
+                    StartChaseFade(fadeIn: true);
+                }
+            }
+        }
+
+        private void StopWhenOutOfRange(AudioSource source, float maxDistance)
+        {
+            if (source != null
+                && source.isPlaying
+                && !IsSourceInRange(source, maxDistance))
+            {
+                source.Stop();
+            }
+        }
+
+        private bool IsSourceInRange(AudioSource source, float maxDistance)
+        {
+            if (source == null) return false;
+            if (maxDistance <= 0f) return true;
+
+            if (!TryGetListenerPosition(out var listenerPosition))
+            {
+                return true;
+            }
+
+            float effectiveMaxDistance = Mathf.Max(0f, maxDistance);
+            return (source.transform.position - listenerPosition).sqrMagnitude
+                <= effectiveMaxDistance * effectiveMaxDistance;
+        }
+
+        private static bool TryGetListenerPosition(out Vector3 position)
+        {
+            var listener = FindAnyObjectByType<AudioListener>();
+            if (listener != null && listener.enabled && listener.gameObject.activeInHierarchy)
+            {
+                position = listener.transform.position;
+                return true;
+            }
+
+            var camera = Camera.main;
+            if (camera != null)
+            {
+                position = camera.transform.position;
+                return true;
+            }
+
+            position = default;
+            return false;
         }
     }
 }
