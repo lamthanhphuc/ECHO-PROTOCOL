@@ -19,6 +19,7 @@ GameObject:
   - component: {fileID: 3304601295473621463}
   - component: {fileID: 9127953891830777717}
   - component: {fileID: 7430091134983458005}
+  - component: {fileID: 7022898465282563116}
   m_Layer: 0
   m_Name: StalkerNetwork
   m_TagString: Untagged
@@ -449,6 +450,29 @@ MonoBehaviour:
   chaseMinDistance: 80
   chaseMaxDistance: 150
   distanceRolloffPower: 2.4
+--- !u!136 &7022898465282563116
+CapsuleCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Radius: 0.55
+  m_Height: 2
+  m_Direction: 1
+  m_Center: {x: 0, y: 1, z: 0}
 --- !u!1 &100010
 GameObject:
   m_ObjectHideFlags: 0

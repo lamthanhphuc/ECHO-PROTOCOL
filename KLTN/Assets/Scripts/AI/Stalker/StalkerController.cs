@@ -1940,11 +1940,14 @@ namespace EchoProtocol.AI.Stalker
 
         private void TryBeginHeardNoiseSearchFromCurrentFrame()
         {
-            //
-            // Hearing currently starts a new investigation only from PATROL.
-            // Visual DETECT/CHASE/ATTACK/RECOVER and visual SEARCH keep priority.
-            //
-            if (currentState != StalkerState.PATROL
+            var canBeginHearingSearch =
+                currentState == StalkerState.PATROL
+                || (currentState == StalkerState.SEARCH
+                    && _searchContext != null
+                    && _searchContext.Source
+                        != StalkerSearchSource.HeardNoise);
+
+            if (!canBeginHearingSearch
                 || _worldInteractionDriver.HasActiveInteraction
                 || _currentHearingObservations == null
                 || _currentHearingObservations.Count == 0
