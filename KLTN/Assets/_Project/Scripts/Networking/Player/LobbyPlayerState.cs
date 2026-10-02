@@ -114,6 +114,24 @@ namespace EchoProtocol.Networking
                 Disconnected = disconnected;
         }
 
+        public void ResetForLobbyAuthoritative()
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority)
+            {
+                return;
+            }
+
+            IsReady = false;
+            IsGameplayPlayer = false;
+            IsCoreStabilized = false;
+            CarriedCoreId = default;
+            Disconnected = false;
+
+            AnyStateChanged?.Invoke();
+        }
+
         public const int FieldScannerToolId = 1;
         public const int NoiseMakerToolId = 2;
         public const int FirstAidKitToolId = 3;

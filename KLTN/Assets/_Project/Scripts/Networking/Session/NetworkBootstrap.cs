@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using EchoProtocol.Auth;
 using EchoProtocol.Gameplay;
 using Fusion;
+using Fusion.Matchmaking;
 using Fusion.Sockets;
 using EchoProtocol.Networking.Authority;
 using UnityEngine;
@@ -30,6 +31,7 @@ namespace EchoProtocol.Networking
         private bool _callbacksRegistered;
         private NetworkObject _localInputOwner;
         private Func<NetworkPlayerInput> _localInputProvider;
+        private Photon.Realtime.RealtimeClient _realtimeClient;
         private MatchAuthorityRuntime _matchAuthority;
         private string _reconnectSessionName;
         private bool _reconnectIdentityPending;
@@ -236,6 +238,8 @@ namespace EchoProtocol.Networking
             var runner = EnsureRunner();
             try
             {
+                _realtimeClient =
+                    MatchmakingArgumentsExtensions.BuildRealtimeClient();
                 var args = new StartGameArgs
                 {
                     GameMode = gameMode,
@@ -243,6 +247,7 @@ namespace EchoProtocol.Networking
                     Scene = BuildSceneInfo(),
                     SceneManager = runner.GetComponent<INetworkSceneManager>(),
                     ObjectProvider = runner.GetComponent<INetworkObjectProvider>(),
+                    RealtimeClient = _realtimeClient,
                 };
                 var tokenKey = $"EchoProtocol.ConnectionToken.{userId:D}";
                 if (!Guid.TryParse(PlayerPrefs.GetString(tokenKey), out var connectionId))
@@ -367,6 +372,15 @@ namespace EchoProtocol.Networking
             Runner.SessionInfo.IsVisible = false;
             SetState(NetworkSessionState.InMatch, "Match started; new players blocked.");
             return true;
+        }
+
+        public bool UpdateRoomProperties(
+            Dictionary<string, SessionProperty> properties)
+        {
+            return Runner != null
+                && Runner.IsRunning
+                && Runner.SessionInfo.IsValid
+                && Runner.SessionInfo.UpdateCustomProperties(properties);
         }
 
         private void RegisterCallbacks()
@@ -618,12 +632,24 @@ namespace EchoProtocol.Networking
             RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
                 $"[NetworkSession] Scene load complete: {sceneName}.");
-            if (Runner == runner && sceneName == LobbySceneName && State == NetworkSessionState.InMatch)
+            if (Runner == runner
+                && sceneName == LobbySceneName
+                && State == NetworkSessionState.InMatch)
             {
-                RuntimeLog.Log(RuntimeLogCategory.NetworkSession,
-                    "[NetworkSession] Match finished; closing the old room before another match.");
-                _ = ShutdownAsync(returnToLobby: true);
-                return;
+                PlayerInteractionControlLock.ReleaseAll();
+                ClearLocalInputProvider();
+                _completedMatchObserved = false;
+                _reconnectIdentityPending = false;
+
+                if (runner.IsServer && runner.SessionInfo.IsValid)
+                {
+                    runner.SessionInfo.IsOpen = true;
+                    runner.SessionInfo.IsVisible = true;
+                }
+
+                SetState(
+                    NetworkSessionState.InLobby,
+                    "Match finished; room retained.");
             }
             if (Runner == runner && sceneName == LobbyManager.GameSceneName
                 && State == NetworkSessionState.InLobby)

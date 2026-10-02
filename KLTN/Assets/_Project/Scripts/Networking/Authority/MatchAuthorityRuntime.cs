@@ -76,6 +76,10 @@ namespace EchoProtocol.Networking.Authority
             experimentProtocolVersion ?? string.Empty;
         public bool IsHostBinding { get; private set; }
         public bool HasBinding => MatchId != Guid.Empty;
+        public bool RequiresFreshHostBinding =>
+            !HasBinding || !IsHostBinding;
+        public bool IsCompletingMatch =>
+            _backendEndRequestInProgress;
         public bool HasStateAuthority => IsHostBinding && _bootstrap?.Runner != null
             && _bootstrap.Runner.IsRunning && _bootstrap.Runner.IsServer;
         public long? AuthorityTick => HasStateAuthority ? _bootstrap.Runner.Tick.Raw : (long?)null;
@@ -185,6 +189,22 @@ namespace EchoProtocol.Networking.Authority
                 RuntimeLogCategory.MatchAuthority,
                 $"[MatchAuthority] Host binding created. Match={MatchId:D}, Session='{sessionName}'.");
             return true;
+        }
+
+        public async Task<bool> PrepareNextMatchAsync(
+            string sessionName,
+            int maxPlayers)
+        {
+            if (_backendEndRequestInProgress)
+            {
+                return false;
+            }
+
+            ResetBinding();
+
+            return await PrepareHostAsync(
+                sessionName,
+                maxPlayers);
         }
 
         public Dictionary<string, SessionProperty> BuildHostSessionProperties() =>
@@ -344,6 +364,16 @@ namespace EchoProtocol.Networking.Authority
 
         public async Task<(bool Accepted, string Error)> StartMatchAsync()
         {
+            if (_backendEndRequestInProgress)
+            {
+                return (false, "Previous match is still being finalized.");
+            }
+
+            if (HasBinding && !IsHostBinding)
+            {
+                return (false, "Backend match has already ended; prepare a new host binding.");
+            }
+
             if (!IsHostBinding || !HasBinding)
             {
                 const string error = "Backend Host binding is not available.";

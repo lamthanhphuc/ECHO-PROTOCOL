@@ -164,6 +164,11 @@ namespace EchoProtocol.Networking
                         if (runner.TryGetPlayerObject(player, out var playerObject) && playerObject != null)
                         {
                             ConfigureExistingPlayerObject(player, playerObject, gameplay: false);
+                            if (playerObject.TryGetComponent<LobbyPlayerState>(
+                                    out var lobbyState))
+                            {
+                                lobbyState.ResetForLobbyAuthoritative();
+                            }
                         }
                     }
                 }
