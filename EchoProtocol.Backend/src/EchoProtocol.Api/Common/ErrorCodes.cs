@@ -26,6 +26,7 @@ public static class ErrorCodes
     public const string MatchCapacityReached = "MATCH_CAPACITY_REACHED";
     public const string JoinProofInvalid = "JOIN_PROOF_INVALID";
     public const string MatchPlayerBindingConflict = "MATCH_PLAYER_BINDING_CONFLICT";
+    public const string AccountAlreadyInActiveMatch = "ACCOUNT_ALREADY_IN_ACTIVE_MATCH";
     public const string MatchResultConflict = "MATCH_RESULT_CONFLICT";
     public const string MatchResultInvalidState = "MATCH_RESULT_INVALID_STATE";
     public const string MatchResultInvalidRoster = "MATCH_RESULT_INVALID_ROSTER";

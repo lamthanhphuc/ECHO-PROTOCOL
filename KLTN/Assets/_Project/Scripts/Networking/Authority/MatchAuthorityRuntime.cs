@@ -255,13 +255,8 @@ namespace EchoProtocol.Networking.Authority
             }
             else
             {
-                if (!Debug.isDebugBuild)
-                {
-                    Debug.LogError("[MatchAuthority] Session has no backend match binding.");
-                    return false;
-                }
-                matchId = Guid.NewGuid();
-                Debug.LogWarning($"[MatchAuthority] Session has no backend match binding. Generated dev fallback MatchId={matchId:D}.");
+                Debug.LogError("[MatchAuthority] Session has no backend match binding.");
+                return false;
             }
 
             ResetLocalRewardTracking();
@@ -358,9 +353,7 @@ namespace EchoProtocol.Networking.Authority
             if (!IsSuccessful(result))
             {
                 Debug.LogWarning($"[MatchAuthority] Player bind rejected: {Describe(result)}.");
-                if (Debug.isDebugBuild)
-                    playerState.ApplyVerifiedBackendIdentity(Guid.NewGuid().ToString("D"));
-                else if (_bootstrap?.Runner != null)
+                if (_bootstrap?.Runner != null)
                     _bootstrap.Runner.Disconnect(playerState.Object.InputAuthority);
                 return;
             }
@@ -396,11 +389,7 @@ namespace EchoProtocol.Networking.Authority
             if (!IsHostBinding || !HasBinding)
             {
                 const string error = "Backend Host binding is not available.";
-                if (Debug.isDebugBuild)
-                {
-                    Debug.LogWarning($"[MatchAuthority] {error} Dev bypass: starting match anyway.");
-                    return (true, string.Empty);
-                }
+                Debug.LogWarning($"[MatchAuthority] {error}");
                 return (false, error);
             }
 
@@ -414,11 +403,7 @@ namespace EchoProtocol.Networking.Authority
                 return (true, string.Empty);
             }
             var failure = Describe(result);
-            if (Debug.isDebugBuild)
-            {
-                Debug.LogWarning($"[MatchAuthority] Backend rejected match start: {failure}. Dev bypass: starting match anyway.");
-                return (true, string.Empty);
-            }
+            Debug.LogWarning($"[MatchAuthority] Backend rejected match start: {failure}.");
             return (false, failure);
         }
 

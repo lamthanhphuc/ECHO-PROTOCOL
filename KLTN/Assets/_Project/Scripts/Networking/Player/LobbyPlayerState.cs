@@ -311,15 +311,9 @@ namespace EchoProtocol.Networking
 
             if (!HasVerifiedBackendIdentity)
             {
-                if (!Debug.isDebugBuild)
-                {
-                    Debug.LogWarning($"[LobbyPlayerState] Ready rejected: player {requester} has no verified backend identity.");
-                    return;
-                }
-                var fallbackId = Guid.NewGuid().ToString("D");
-                BackendUserId = fallbackId;
                 Debug.LogWarning(
-                    $"[LobbyPlayerState] Fallback/dev bypass: player {requester} had unverified backend identity. Assigned fallback BackendUserId={fallbackId}.");
+                    $"[LobbyPlayerState] Ready rejected: player {requester} has no verified backend identity.");
+                return;
             }
 
             if (!Runner.TryGetPlayerObject(requester, out var ownedObject) || ownedObject != Object)
