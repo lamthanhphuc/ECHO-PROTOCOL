@@ -2,6 +2,7 @@ using System;
 using EchoProtocol.Api;
 using EchoProtocol.Auth;
 using EchoProtocol.Core;
+using EchoProtocol.Profile;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -10,7 +11,7 @@ namespace EchoProtocol.UI.MainMenu
 {
   public class MainMenuProfileController : MonoBehaviour
   {
-    private const float WalletRefreshIntervalSeconds = 20f;
+    private const float ProfileRefreshIntervalSeconds = 20f;
 
     [SerializeField] private Text welcomeText;
     [SerializeField] private Text roleText;
@@ -18,6 +19,10 @@ namespace EchoProtocol.UI.MainMenu
     [SerializeField] private Text coinAmountText;
     [SerializeField] private Text topUpBalanceText;
     [SerializeField] private Text playerNameText;
+    [SerializeField] private Text levelText;
+    [SerializeField] private Text experienceText;
+    [SerializeField] private Text totalMatchesText;
+    [SerializeField] private Text totalWinsText;
     [SerializeField] private Button playButton;
     [SerializeField] private Button logoutButton;
     [SerializeField] private Button shopButton;
@@ -35,10 +40,10 @@ namespace EchoProtocol.UI.MainMenu
     [SerializeField] private string loginSceneName = GameConstants.SceneLogin;
     private readonly Button[] _packageButtons = new Button[4];
     private PaymentCatalogItemDto[] _packages = Array.Empty<PaymentCatalogItemDto>();
-    private bool _walletRefreshInProgress;
+    private bool _profileRefreshInProgress;
     private bool _catalogRequestInProgress;
     private bool _started;
-    private float _nextWalletRefreshAt;
+    private float _nextProfileRefreshAt;
 
     private void Start()
     {
@@ -59,7 +64,7 @@ namespace EchoProtocol.UI.MainMenu
       CloseShop();
       CloseTopUp();
       ShowPackageStatus("Đang tải gói...");
-      RefreshWallet();
+      RefreshPlayerProfile();
       RefreshPaymentCatalog();
     }
 
@@ -125,13 +130,69 @@ namespace EchoProtocol.UI.MainMenu
 
     private void RefreshProfile()
     {
-      var display = string.IsNullOrWhiteSpace(AuthSession.DisplayName)
-        ? AuthSession.Username
-        : AuthSession.DisplayName;
+      string display;
 
-      if (welcomeText != null) welcomeText.text = "WELCOME";
-      if (playerNameText != null) playerNameText.text = string.IsNullOrWhiteSpace(display) ? "PLAYER_01" : display;
-      if (roleText != null) roleText.text = string.IsNullOrWhiteSpace(AuthSession.Role) ? "OPERATOR" : AuthSession.Role.ToUpperInvariant();
+      if (PlayerProfileSession.HasProfile
+          && !string.IsNullOrWhiteSpace(PlayerProfileSession.DisplayName))
+      {
+        display = PlayerProfileSession.DisplayName;
+      }
+      else
+      {
+        display = string.IsNullOrWhiteSpace(AuthSession.DisplayName)
+          ? AuthSession.Username
+          : AuthSession.DisplayName;
+      }
+
+      if (welcomeText != null)
+      {
+        welcomeText.text = "WELCOME";
+      }
+
+      if (playerNameText != null)
+      {
+        playerNameText.text =
+          string.IsNullOrWhiteSpace(display)
+            ? "PLAYER_01"
+            : display;
+      }
+
+      if (roleText != null)
+      {
+        roleText.text =
+          string.IsNullOrWhiteSpace(AuthSession.Role)
+            ? "OPERATOR"
+            : AuthSession.Role.ToUpperInvariant();
+      }
+
+      if (levelText != null)
+      {
+        levelText.text = PlayerProfileSession.HasProfile
+          ? $"LEVEL {PlayerProfileSession.Level}"
+          : "LEVEL --";
+      }
+
+      if (experienceText != null)
+      {
+        experienceText.text = PlayerProfileSession.HasProfile
+          ? $"{PlayerProfileSession.ExperiencePoints:N0} XP"
+          : "-- XP";
+      }
+
+      if (totalMatchesText != null)
+      {
+        totalMatchesText.text = PlayerProfileSession.HasProfile
+          ? $"MATCHES {PlayerProfileSession.TotalMatches:N0}"
+          : "MATCHES --";
+      }
+
+      if (totalWinsText != null)
+      {
+        totalWinsText.text = PlayerProfileSession.HasProfile
+          ? $"WINS {PlayerProfileSession.TotalWins:N0}"
+          : "WINS --";
+      }
+
       UpdateCreditsUI();
     }
 
@@ -171,7 +232,7 @@ namespace EchoProtocol.UI.MainMenu
       if (topUpPopup != null) topUpPopup.SetActive(true);
       if (shopPopup != null) shopPopup.SetActive(false);
       UpdateCreditsUI();
-      RefreshWallet();
+      RefreshPlayerProfile();
       RefreshPaymentCatalog();
     }
 
@@ -199,45 +260,92 @@ namespace EchoProtocol.UI.MainMenu
 
     private void UpdateCreditsUI()
     {
-      string amount = AuthSession.IsAuthenticated ? $"{AuthSession.WalletBalance:N0}" : "--";
-      if (walletText != null) walletText.text = $"{amount}\nECHO CREDITS";
-      if (coinAmountText != null) coinAmountText.text = amount;
-      if (topUpBalanceText != null) topUpBalanceText.text = $"CURRENT BALANCE: {amount} COINS";
+      string amount;
+
+      if (PlayerProfileSession.HasProfile)
+      {
+        amount = $"{PlayerProfileSession.WalletBalance:N0}";
+      }
+      else if (AuthSession.IsAuthenticated)
+      {
+        // Temporary compatibility fallback until /api/player/me
+        // completes for the first time.
+        amount = $"{AuthSession.WalletBalance:N0}";
+      }
+      else
+      {
+        amount = "--";
+      }
+
+      if (walletText != null)
+      {
+        walletText.text = $"{amount}\nECHO CREDITS";
+      }
+
+      if (coinAmountText != null)
+      {
+        coinAmountText.text = amount;
+      }
+
+      if (topUpBalanceText != null)
+      {
+        topUpBalanceText.text =
+          $"CURRENT BALANCE: {amount} COINS";
+      }
     }
 
     private void Update()
     {
-      if (_started && AuthSession.IsAuthenticated && Time.unscaledTime >= _nextWalletRefreshAt)
-        RefreshWallet();
+      if (_started && AuthSession.IsAuthenticated && Time.unscaledTime >= _nextProfileRefreshAt)
+        RefreshPlayerProfile();
     }
 
     private void OnApplicationFocus(bool hasFocus)
     {
-      if (hasFocus && _started && AuthSession.IsAuthenticated) RefreshWallet();
+      if (hasFocus && _started && AuthSession.IsAuthenticated) RefreshPlayerProfile();
     }
 
-    private void RefreshWallet()
+    private void RefreshPlayerProfile()
     {
-      if (_walletRefreshInProgress || !AuthSession.IsAuthenticated) return;
-      _walletRefreshInProgress = true;
-      _nextWalletRefreshAt = Time.unscaledTime + WalletRefreshIntervalSeconds;
-      AuthRuntime.EnsureExists().AuthService.GetCurrentUser(result =>
+      if (_profileRefreshInProgress
+          || !AuthSession.IsAuthenticated)
       {
-        if (this == null) return;
-        _walletRefreshInProgress = false;
-        if (result.IsSuccess && result.Data != null && result.Data.success)
+        return;
+      }
+
+      _profileRefreshInProgress = true;
+      _nextProfileRefreshAt =
+        Time.unscaledTime + ProfileRefreshIntervalSeconds;
+
+      AuthRuntime.EnsureExists()
+        .PlayerProfileService
+        .GetCurrentProfile(result =>
         {
-          UpdateCreditsUI();
-        }
-        else if (!AuthSession.IsAuthenticated)
-        {
-          SceneManager.LoadScene(loginSceneName);
-        }
-        else
-        {
-          Debug.LogWarning($"[MainMenu] Wallet refresh failed: {result.Message}");
-        }
-      });
+          if (this == null)
+          {
+            return;
+          }
+
+          _profileRefreshInProgress = false;
+
+          if (result.IsSuccess
+              && result.Data != null
+              && result.Data.success
+              && PlayerProfileSession.HasProfile)
+          {
+            RefreshProfile();
+            return;
+          }
+
+          if (!AuthSession.IsAuthenticated)
+          {
+            SceneManager.LoadScene(loginSceneName);
+            return;
+          }
+
+          Debug.LogWarning(
+            $"[MainMenu] Player profile refresh failed: {result.Message}");
+        });
     }
 
     private void RefreshPaymentCatalog()

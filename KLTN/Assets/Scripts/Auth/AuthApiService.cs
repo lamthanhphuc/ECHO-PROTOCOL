@@ -1,5 +1,6 @@
 using System;
 using EchoProtocol.Api;
+using EchoProtocol.Profile;
 using UnityEngine;
 
 namespace EchoProtocol.Auth
@@ -169,6 +170,7 @@ namespace EchoProtocol.Auth
     {
       TokenStorage.Clear();
       AuthSession.Clear();
+      PlayerProfileSession.Clear();
     }
   }
 }

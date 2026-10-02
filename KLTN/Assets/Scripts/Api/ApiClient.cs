@@ -15,6 +15,7 @@ namespace EchoProtocol.Api
     public const string AuthRefresh = "/api/auth/refresh";
     public const string AuthLogout = "/api/auth/logout";
     public const string AuthMe = "/api/auth/me";
+    public const string PlayerMe = "/api/player/me";
     public const string PaymentsCatalog = "/api/payments/catalog";
     public const string TelemetryBatch = "/api/telemetry/batch";
   }
