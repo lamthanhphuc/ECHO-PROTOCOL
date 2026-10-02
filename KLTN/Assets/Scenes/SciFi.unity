@@ -46190,51 +46190,13 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 2702167651921923441, guid: d324de115c4dff845bee7b7f166883c4, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 195678240}
+    m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: d324de115c4dff845bee7b7f166883c4, type: 3}
 --- !u!4 &195678238 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1430841697005043554, guid: d324de115c4dff845bee7b7f166883c4, type: 3}
   m_PrefabInstance: {fileID: 195678237}
   m_PrefabAsset: {fileID: 0}
---- !u!1 &195678239 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 2702167651921923441, guid: d324de115c4dff845bee7b7f166883c4, type: 3}
-  m_PrefabInstance: {fileID: 195678237}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &195678240
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 195678239}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 50a20bf46c932444d842e6ce406c27d3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MatchFlowController
-  coreProgress: {fileID: 0}
-  powerPuzzle: {fileID: 0}
-  securityTerminal: {fileID: 0}
-  escapeDoor: {fileID: 0}
-  zone1DoorToZone2Blocker: {fileID: 0}
-  loseWhenAllPlayersEliminated: 1
-  phaseChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  finalHuntStarted:
-    m_PersistentCalls:
-      m_Calls: []
-  matchWon:
-    m_PersistentCalls:
-      m_Calls: []
-  matchLost:
-    m_PersistentCalls:
-      m_Calls: []
 --- !u!1001 &195984101
 PrefabInstance:
   m_ObjectHideFlags: 0

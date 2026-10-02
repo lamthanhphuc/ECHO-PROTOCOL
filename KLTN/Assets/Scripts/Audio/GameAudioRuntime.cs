@@ -160,6 +160,8 @@ namespace EchoProtocol.Audio
             Attach<NetworkPowerPuzzle>();
             Attach<NetworkMatchState>();
             Attach<SecurityTerminalDownload>();
+            Attach<Zone3ChargeStation>();
+            Attach<EchoProtocol.Gameplay.PushableObject>();
             Attach<NoiseMakerBeacon>();
             foreach (var button in FindObjectsByType<Button>())
                 if (button.GetComponent<GameAudioButton>() == null) button.gameObject.AddComponent<GameAudioButton>();

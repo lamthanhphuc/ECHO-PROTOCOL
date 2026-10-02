@@ -181,6 +181,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.Zone3DockArea
   containmentInset: 0.05
+  clearance: 1
   waitingColor: {r: 0.05, g: 0.8, b: 1, a: 1}
   readyColor: {r: 0.1, g: 1, b: 0.35, a: 1}
   lineWidth: 0.12

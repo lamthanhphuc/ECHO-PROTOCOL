@@ -168,7 +168,15 @@ namespace EchoProtocol.Networking
         private long _relayA2NoiseSequence;
         private long _relayB1NoiseSequence;
         private long _relayB2NoiseSequence;
+        private readonly TickTimer[] _relayOverloadNoiseTimers = new TickTimer[4];
+        private readonly long[] _relayOverloadNoiseSequences = new long[4];
         private long _securityHoldNoiseSequence;
+        private TickTimer _securityHoldNoiseTimer;
+        private TickTimer _frigateNoiseTimer;
+        private long _frigateNoiseSequence;
+        private TickTimer _zone3ChargeLease;
+        private TickTimer _zone3ChargeNoiseTimer;
+        private long _zone3ChargeNoiseSequence;
         [Networked] public float SecurityHoldDurationSeconds { get; private set; }
         [Networked] public float SecurityHoldAccumulatedSeconds { get; private set; }
         [Networked] private TickTimer RelayRepairWindowTimer { get; set; }
@@ -183,6 +191,9 @@ namespace EchoProtocol.Networking
         [Networked] public Vector3 Zone3FrigatePosition { get; private set; }
         [Networked] public Quaternion Zone3FrigateRotation { get; private set; }
         [Networked] public PlayerRef Zone3Pusher { get; private set; }
+        [Networked] public PlayerRef Zone3ChargeOperator { get; private set; }
+        [Networked] public float Zone3ChargeDurationSeconds { get; private set; }
+        [Networked] public float Zone3ChargeAccumulatedSeconds { get; private set; }
         [Networked] public uint PhaseOrdinal { get; private set; }
         [Networked] public uint EndOrdinal { get; private set; }
         [Networked] private TickTimer EscapeTimer { get; set; }
@@ -232,6 +243,10 @@ namespace EchoProtocol.Networking
             && CurrentPhase == NetworkMatchPhase.Zone2Objective
             && Zone2Stage == Zone2MissionStage.SecurityHold
             && SecurityHoldParticipantCount > 0;
+        public bool IsZone3Charging => CurrentPhase == NetworkMatchPhase.Zone3PushFrigate
+            && Zone3ChargeOperator.IsRealPlayer;
+        public float Zone3ChargeProgress01 => Zone3ChargeDurationSeconds > 0f
+            ? Mathf.Clamp01(Zone3ChargeAccumulatedSeconds / Zone3ChargeDurationSeconds) : 0f;
         public float SecurityHoldProgress01
         {
             get
@@ -270,8 +285,10 @@ namespace EchoProtocol.Networking
         private string _serverGeneratedAuthCode;
 
         public bool IsEnded => Status == NetworkMatchStatus.Ended;
-        public bool IsEscapeTimerRunning => CurrentPhase == NetworkMatchPhase.Escape
-                                            && EscapeTimer.IsRunning;
+        public bool IsEscapeTimerRunning =>
+            (CurrentPhase == NetworkMatchPhase.FinalHunt
+             || CurrentPhase == NetworkMatchPhase.Escape)
+            && EscapeTimer.IsRunning;
         public float EscapeRemainingSeconds => Remaining(EscapeTimer);
         public float MatchRemainingSeconds => Remaining(MatchTimer);
         public float CurrentScenarioEscapeDoorTimerSeconds =>
@@ -320,6 +337,9 @@ namespace EchoProtocol.Networking
                 LastActor = PlayerRef.None;
                 FinalSurvivorCount = 0;
                 Zone3Pusher = PlayerRef.None;
+                Zone3ChargeOperator = PlayerRef.None;
+                Zone3ChargeDurationSeconds = 0f;
+                Zone3ChargeAccumulatedSeconds = 0f;
                 PhaseOrdinal = 0;
                 EndOrdinal = 0;
                 EscapeTimer = TickTimer.None;
@@ -432,22 +452,32 @@ namespace EchoProtocol.Networking
                 }
                 EmitRelayRepairNoiseAuthoritative();
                 AdvanceSecurityHoldAuthoritative();
+                EmitSecurityHoldNoiseAuthoritative();
             }
 
             var zone3 = Zone3MissionDirector.Instance;
             if (zone3 != null && (CurrentPhase == NetworkMatchPhase.Zone3FindFrigate
                 || CurrentPhase == NetworkMatchPhase.Zone3PushFrigate))
             {
-                if (Zone3Pusher.IsRealPlayer && !TryResolveActivePlayer(Zone3Pusher, out _))
-                {
-                    zone3.StopAuthoritativePush(Zone3Pusher);
-                    Zone3Pusher = PlayerRef.None;
-                }
+                zone3.ReleaseInvalidAuthoritativePushers(IsZone3PusherValid);
                 UpdateZone3FrigatePoseAuthoritative(zone3.FrigatePosition,
                     zone3.Frigate != null ? zone3.Frigate.transform.rotation : Quaternion.identity);
+                EmitFrigatePushNoiseAuthoritative(zone3);
+            }
+            if (CurrentPhase == NetworkMatchPhase.Zone3PushFrigate)
+                AdvanceZone3ChargeAuthoritative();
+
+            if (CurrentPhase == NetworkMatchPhase.FinalHunt && Zone3MissionDirector.IsSciFiSceneLoaded)
+            {
+                CountFinalPlayers(out var escapedCount, out _, out _, out _, out var ableToExitCount);
+                if (escapedCount > 0 && ableToExitCount == 0)
+                {
+                    TryEndMatch(NetworkMatchResult.Win, NetworkMatchEndReason.PlayerEscaped, LastActor);
+                    return;
+                }
             }
 
-            if (CurrentPhase == NetworkMatchPhase.Escape && EscapeTimer.Expired(Runner))
+            if (IsEscapeTimerRunning && EscapeTimer.Expired(Runner))
             {
                 TryEndMatch(NetworkMatchResult.Lose, NetworkMatchEndReason.EscapeTimeout, PlayerRef.None);
             }
@@ -931,8 +961,12 @@ namespace EchoProtocol.Networking
             if (!IsRelayBSlot(slot) || channel < -1 || channel > 3
                 || !float.IsFinite(frequency) || !float.IsFinite(phase)
                 || !TryValidateRelayCommand(requester, slot, out var target)) return false;
-            if (!ClaimRelayOperator(requester, slot)) return false;
             var controller = (RelayBController)target;
+            var before = controller.Snapshot;
+            bool changingChannel = channel != before.SelectedChannelIndex;
+            if (channel >= 0 && !before.HasScanned) return false;
+            if (!changingChannel && channel >= 0 && !before.IsSelectedChannelCorrect) return false;
+            if (!ClaimRelayOperator(requester, slot)) return false;
             controller.ApplyAuthoritativeControls(channel, frequency, phase);
             var snapshot = controller.Snapshot;
             if (slot == RelaySlot.RelayB_1)
@@ -955,7 +989,10 @@ namespace EchoProtocol.Networking
         {
             if (!IsRelayBSlot(slot) || !TryValidateRelayCommand(requester, slot, out var target)) return false;
             var controller = (RelayBController)target;
-            if (action == RelayBAction.StartSync && controller.Snapshot.SelectedChannelIndex < 0) return false;
+            if (action == RelayBAction.StartSync
+                && (controller.Snapshot.SelectedChannelIndex < 0
+                    || !controller.Snapshot.HasScanned
+                    || !controller.Snapshot.IsSelectedChannelCorrect)) return false;
             if (!ClaimRelayOperator(requester, slot)) return false;
             switch (action)
             {
@@ -1283,7 +1320,6 @@ namespace EchoProtocol.Networking
                 if (Zone3Pusher == actor) Zone3Pusher = PlayerRef.None;
                 return;
             }
-            if (Zone3Pusher.IsRealPlayer && Zone3Pusher != actor) return;
             if ((CurrentPhase != NetworkMatchPhase.Zone3FindFrigate
                  && CurrentPhase != NetworkMatchPhase.Zone3PushFrigate)
                 || !TryResolveActivePlayer(actor, out var lifeState)
@@ -1297,6 +1333,9 @@ namespace EchoProtocol.Networking
             Zone3Pusher = actor;
         }
 
+        private bool IsZone3PusherValid(PlayerRef actor) =>
+            actor.IsRealPlayer && TryResolveActivePlayer(actor, out _);
+
         public void UpdateZone3FrigatePoseAuthoritative(Vector3 position, Quaternion rotation)
         {
             if (!HasValidNetworkObject() || !Object.HasStateAuthority) return;
@@ -1304,30 +1343,138 @@ namespace EchoProtocol.Networking
             Zone3FrigateRotation = rotation;
         }
 
-        public void RequestZone3Charge()
+        public bool RequestStartZone3Charge()
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+            {
+                return TryGetLocalRequester(out var requester)
+                    && TryStartZone3ChargeAuthoritative(requester);
+            }
+            RpcStartZone3Charge();
+            return true;
+        }
+
+        public void RequestCancelZone3Charge()
         {
             if (!HasValidNetworkObject()) return;
             if (Object.HasStateAuthority)
             {
-                if (TryGetLocalRequester(out var requester)) TryCompleteZone3Authoritative(requester);
+                if (TryGetLocalRequester(out var requester)) CancelZone3ChargeAuthoritative(requester);
             }
-            else RpcZone3Charge();
+            else RpcCancelZone3Charge();
+        }
+
+        public void RequestRefreshZone3Charge()
+        {
+            if (!HasValidNetworkObject()) return;
+            if (Object.HasStateAuthority)
+            {
+                if (TryGetLocalRequester(out var requester)) RefreshZone3ChargeAuthoritative(requester);
+            }
+            else RpcRefreshZone3Charge();
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        private void RpcZone3Charge(RpcInfo info = default) => TryCompleteZone3Authoritative(info.Source);
+        private void RpcStartZone3Charge(RpcInfo info = default) =>
+            TryStartZone3ChargeAuthoritative(info.Source);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcCancelZone3Charge(RpcInfo info = default) =>
+            CancelZone3ChargeAuthoritative(info.Source);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRefreshZone3Charge(RpcInfo info = default) =>
+            RefreshZone3ChargeAuthoritative(info.Source);
+
+        private bool TryStartZone3ChargeAuthoritative(PlayerRef actor)
+        {
+            var zone3 = Zone3MissionDirector.Instance;
+            if (!Object.HasStateAuthority || IsEnded
+                || CurrentPhase != NetworkMatchPhase.Zone3PushFrigate
+                || zone3?.ChargeStation == null || !zone3.IsFrigateAtDestination
+                || (!Zone3ChargeOperator.IsNone && Zone3ChargeOperator != actor)
+                || !TryResolveActivePlayer(actor, out var lifeState)
+                || !zone3.IsPlayerNearCharge(lifeState.transform.position)) return false;
+
+            Zone3ChargeDurationSeconds = zone3.ChargeStation.ChargeDurationSeconds;
+            Zone3ChargeOperator = actor;
+            _zone3ChargeLease = TickTimer.CreateFromSeconds(Runner, 1.25f);
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
+        private void CancelZone3ChargeAuthoritative(PlayerRef actor)
+        {
+            if (Zone3ChargeOperator != actor) return;
+            Zone3ChargeOperator = PlayerRef.None;
+            _zone3ChargeLease = TickTimer.None;
+            _zone3ChargeNoiseTimer = TickTimer.None;
+            HandleReplicatedStateChanged();
+        }
+
+        private void RefreshZone3ChargeAuthoritative(PlayerRef actor)
+        {
+            if (Zone3ChargeOperator != actor || CurrentPhase != NetworkMatchPhase.Zone3PushFrigate)
+                return;
+            _zone3ChargeLease = TickTimer.CreateFromSeconds(Runner, 1.25f);
+        }
+
+        private void AdvanceZone3ChargeAuthoritative()
+        {
+            var zone3 = Zone3MissionDirector.Instance;
+            if (zone3?.ChargeStation == null) return;
+            if (Zone3ChargeOperator.IsRealPlayer
+                && (_zone3ChargeLease.ExpiredOrNotRunning(Runner)
+                    || !zone3.IsFrigateAtDestination
+                    || !TryResolveActivePlayer(Zone3ChargeOperator, out var lifeState)
+                    || !zone3.IsPlayerNearCharge(lifeState.transform.position)))
+                CancelZone3ChargeAuthoritative(Zone3ChargeOperator);
+
+            if (!Zone3ChargeOperator.IsRealPlayer)
+            {
+                _zone3ChargeNoiseTimer = TickTimer.None;
+                Zone3ChargeAccumulatedSeconds = Mathf.Max(0f, Zone3ChargeAccumulatedSeconds
+                    - Runner.DeltaTime * zone3.ChargeStation.DecaySecondsPerSecond);
+                return;
+            }
+
+            Zone3ChargeAccumulatedSeconds = Mathf.Min(Zone3ChargeDurationSeconds,
+                Zone3ChargeAccumulatedSeconds + Runner.DeltaTime);
+            EmitObjectiveNoisePulse(RuntimeNoiseType.CHARGE_TRANSFER, Zone3ChargeOperator,
+                zone3.ChargeStation.transform.position, "zone3-charge",
+                ref _zone3ChargeNoiseTimer, ref _zone3ChargeNoiseSequence);
+            if (Zone3ChargeAccumulatedSeconds >= Zone3ChargeDurationSeconds)
+                TryCompleteZone3Authoritative(Zone3ChargeOperator);
+        }
 
         private bool TryCompleteZone3Authoritative(PlayerRef actor)
         {
             var zone3 = Zone3MissionDirector.Instance;
             if (!Object.HasStateAuthority || zone3 == null || !zone3.IsFrigateAtDestination
+                || Zone3ChargeOperator != actor || Zone3ChargeDurationSeconds <= 0f
+                || Zone3ChargeAccumulatedSeconds < Zone3ChargeDurationSeconds
                 || !TryResolveActivePlayer(actor, out var lifeState)
                 || !zone3.IsPlayerNearCharge(lifeState.transform.position)
                 || !TryAdvancePhase(NetworkMatchPhase.Zone3PushFrigate,
                     NetworkMatchPhase.FinalHunt, "ZONE3_CHARGE_ACTIVATED")) return false;
-            if (Zone3Pusher.IsRealPlayer) zone3.StopAuthoritativePush(Zone3Pusher);
+            zone3.StopAllAuthoritativePushers();
             Zone3Pusher = PlayerRef.None;
+            Zone3ChargeOperator = PlayerRef.None;
+            _zone3ChargeLease = TickTimer.None;
+            _zone3ChargeNoiseTimer = TickTimer.None;
+            StartEscapeDeadlineIfNeededAuthoritative("ZONE3_POWER_TRANSFER");
             return true;
+        }
+
+        private void StartEscapeDeadlineIfNeededAuthoritative(string reason)
+        {
+            if (!Object.HasStateAuthority || EscapeTimer.IsRunning) return;
+            EscapeTimer = TickTimer.CreateFromSeconds(Runner, CurrentScenarioEscapeDoorTimerSeconds);
+            HandleReplicatedStateChanged();
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchState,
+                $"[MatchState] Escape deadline started by {reason}; duration={CurrentScenarioEscapeDoorTimerSeconds:0.##}s.");
         }
 
         public void RequestZone3Exit()
@@ -1347,21 +1494,20 @@ namespace EchoProtocol.Networking
         {
             var zone3 = Zone3MissionDirector.Instance;
             if (!Object.HasStateAuthority || zone3 == null
-                || (CurrentPhase != NetworkMatchPhase.FinalHunt && CurrentPhase != NetworkMatchPhase.Escape)
+                || (CurrentPhase != NetworkMatchPhase.FinalHunt
+                    && CurrentPhase != NetworkMatchPhase.Escape)
                 || !TryResolveActivePlayer(actor, out var lifeState)
                 || Vector3.Distance(lifeState.transform.position, zone3.ExitPosition) > zone3.ExitInteractionDistance)
                 return false;
 
-            if (CurrentPhase == NetworkMatchPhase.FinalHunt
-                && !TryAdvancePhase(NetworkMatchPhase.FinalHunt, NetworkMatchPhase.Escape, "FINAL_HUNT"))
-                return false;
-            return TryCommitPlayerEscaped(actor);
+            return CommitPlayerEscapedAuthoritative(actor, fromDoorexit: true);
         }
 
         public bool TryEnterEscape(NetworkId doorId, PlayerRef actor)
         {
             if (!Object.HasStateAuthority
                 || IsEnded
+                || Zone3MissionDirector.IsSciFiSceneLoaded
                 || doorId != EscapeDoorId
                 || !TryResolveActivePlayer(actor, out _)
                 || !TryAdvancePhase(
@@ -1373,27 +1519,62 @@ namespace EchoProtocol.Networking
             }
 
             LastActor = actor;
-            EscapeTimer = TickTimer.CreateFromSeconds(Runner, CurrentScenarioEscapeDoorTimerSeconds);
+            StartEscapeDeadlineIfNeededAuthoritative("LEGACY_ESCAPE_DOOR");
             HandleReplicatedStateChanged();
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchState,
-                $"[MatchState] Escape started by {actor}; duration={CurrentScenarioEscapeDoorTimerSeconds:0.##}s.");
+                $"[MatchState] Escape started by {actor}; remaining={EscapeRemainingSeconds:0.##}s.");
             return true;
         }
 
         public bool TryCommitPlayerEscaped(PlayerRef player)
         {
+            // SciFi exits are committed only by the validated Doorexit interaction.
+            if (Zone3MissionDirector.IsSciFiSceneLoaded) return false;
+            return CommitPlayerEscapedAuthoritative(player);
+        }
+
+        private bool CommitPlayerEscapedAuthoritative(PlayerRef player, bool fromDoorexit = false)
+        {
             var zone3 = Zone3MissionDirector.Instance;
             if (!Object.HasStateAuthority
                 || IsEnded
-                || CurrentPhase != NetworkMatchPhase.Escape
-                || !TryResolveActivePlayer(player, out var lifeState)
-                || (zone3 != null && Vector3.Distance(lifeState.transform.position,
-                    zone3.ExitPosition) > zone3.ExitInteractionDistance)
-                || !lifeState.TryEscape())
+                || !TryResolveActivePlayer(player, out var lifeState))
             {
                 return false;
             }
+
+            if (fromDoorexit)
+            {
+                if (CurrentPhase != NetworkMatchPhase.FinalHunt
+                    && CurrentPhase != NetworkMatchPhase.Escape)
+                {
+                    return false;
+                }
+            }
+            else if (CurrentPhase != NetworkMatchPhase.Escape)
+            {
+                return false;
+            }
+
+            if (zone3 != null && Vector3.Distance(lifeState.transform.position,
+                    zone3.ExitPosition) > zone3.ExitInteractionDistance)
+            {
+                return false;
+            }
+
+            if (fromDoorexit
+                && CurrentPhase == NetworkMatchPhase.FinalHunt
+                && !TryAdvancePhase(
+                    NetworkMatchPhase.FinalHunt,
+                    NetworkMatchPhase.Escape,
+                    "FINAL_HUNT"))
+            {
+                return false;
+            }
+
+            LastActor = player;
+            if (!lifeState.TryEscape()) return false;
 
             CountFinalPlayers(out var escapedCount, out _, out _, out _, out var ableToExitCount);
             if (ableToExitCount == 0 && escapedCount > 0)
@@ -1510,6 +1691,15 @@ namespace EchoProtocol.Networking
             }
 
             CountFinalPlayers(out var survivorCount, out _, out _);
+            if (result == NetworkMatchResult.Win
+                && CurrentPhase == NetworkMatchPhase.FinalHunt
+                && Zone3MissionDirector.IsSciFiSceneLoaded)
+            {
+                MatchAuthorityRuntime.Instance?.RecordPhaseCompleted(
+                    BuildKey("phase-completed-final_hunt"),
+                    "FINAL_HUNT",
+                    "OBJECTIVE_COMPLETED");
+            }
             Status = NetworkMatchStatus.Ended;
             CurrentPhase = NetworkMatchPhase.MatchEnded;
             Result = result;
@@ -1551,7 +1741,9 @@ namespace EchoProtocol.Networking
                 out var nonDownedMatchActiveCount);
 
             if (_.Status != NetworkPlayerLifeStatus.Escaped
-                && CurrentPhase == NetworkMatchPhase.Escape
+                && (CurrentPhase == NetworkMatchPhase.Escape
+                    || (Zone3MissionDirector.IsSciFiSceneLoaded
+                        && CurrentPhase == NetworkMatchPhase.FinalHunt))
                 && survivorCount > 0 && nonDownedMatchActiveCount == 0)
             {
                 TryEndMatch(NetworkMatchResult.Win, NetworkMatchEndReason.PlayerEscaped, LastActor);
@@ -1684,6 +1876,14 @@ namespace EchoProtocol.Networking
             _relayA2NoiseTimer = TickTimer.None;
             _relayB1NoiseTimer = TickTimer.None;
             _relayB2NoiseTimer = TickTimer.None;
+            for (int index = 0; index < _relayOverloadNoiseTimers.Length; index++)
+            {
+                _relayOverloadNoiseTimers[index] = TickTimer.None;
+                _relayOverloadNoiseSequences[index] = 0;
+            }
+            _securityHoldNoiseTimer = TickTimer.None;
+            _frigateNoiseTimer = TickTimer.None;
+            _frigateNoiseSequence = 0;
             _relayA1NoiseSequence = 0;
             _relayA2NoiseSequence = 0;
             _relayB1NoiseSequence = 0;
@@ -1987,6 +2187,13 @@ namespace EchoProtocol.Networking
                 changed = true;
             }
             if (RemoveSecurityHoldParticipant(player)) changed = true;
+            if (Zone3ChargeOperator == player)
+            {
+                Zone3ChargeOperator = PlayerRef.None;
+                _zone3ChargeLease = TickTimer.None;
+                _zone3ChargeNoiseTimer = TickTimer.None;
+                changed = true;
+            }
             if (changed) HandleReplicatedStateChanged();
         }
 
@@ -2067,6 +2274,27 @@ namespace EchoProtocol.Networking
                 ref _relayB2NoiseTimer,
                 ref _relayB2NoiseSequence,
                 definition.PulseInterval);
+            for (int index = 0; index < 4; index++)
+            {
+                var slot = (RelaySlot)index;
+                var actor = GetRelayOperator(slot);
+                bool overloaded = TryGetRelayTarget(slot, out var target)
+                    && (target is RelayAController relayA
+                        && (relayA.Snapshot.Status == RelayAStatus.Overload
+                            || relayA.Snapshot.Status == RelayAStatus.FaultWarning)
+                        || target is RelayBController relayB
+                        && (relayB.Snapshot.Status == RelayBStatus.DriftWarning
+                            || relayB.Snapshot.Status == RelayBStatus.SignalMismatch
+                            || relayB.Snapshot.Status == RelayBStatus.ConnectionLost));
+                if (!overloaded || !actor.IsRealPlayer)
+                {
+                    _relayOverloadNoiseTimers[index] = TickTimer.None;
+                    continue;
+                }
+                EmitObjectiveNoisePulse(RuntimeNoiseType.MACHINE_OVERLOAD, actor,
+                    target.transform.position, $"relay-overload:{slot}",
+                    ref _relayOverloadNoiseTimers[index], ref _relayOverloadNoiseSequences[index]);
+            }
         }
 
         private void EmitRelayInteractionNoiseAuthoritative(
@@ -2167,6 +2395,57 @@ namespace EchoProtocol.Networking
             {
                 sequence = nextSequence;
             }
+        }
+
+        private void EmitSecurityHoldNoiseAuthoritative()
+        {
+            if (Zone2Stage != Zone2MissionStage.SecurityHold || SecurityHoldParticipantCount == 0
+                || !TryGetZone2Director(out var director) || director.SecurityTerminal == null)
+            {
+                _securityHoldNoiseTimer = TickTimer.None;
+                return;
+            }
+
+            var actor = SecurityHoldOperator;
+            if (actor.IsNone) actor = SecurityHoldOperator2;
+            if (actor.IsNone) actor = SecurityHoldOperator3;
+            if (actor.IsNone) actor = SecurityHoldOperator4;
+            EmitObjectiveNoisePulse(RuntimeNoiseType.TERMINAL_DOWNLOAD, actor,
+                director.SecurityTerminal.transform.position, "terminal-download",
+                ref _securityHoldNoiseTimer, ref _securityHoldNoiseSequence);
+        }
+
+        private void EmitFrigatePushNoiseAuthoritative(Zone3MissionDirector zone3)
+        {
+            if (CurrentPhase != NetworkMatchPhase.Zone3PushFrigate || zone3.Frigate == null
+                || !zone3.Frigate.IsBeingPushed || zone3.Frigate.CurrentSpeed < 0.05f)
+            {
+                _frigateNoiseTimer = TickTimer.None;
+                return;
+            }
+
+            var pusher = zone3.Frigate.CurrentPusher;
+            var playerObject = pusher != null ? pusher.GetComponentInParent<NetworkObject>() : null;
+            if (playerObject == null) return;
+            EmitObjectiveNoisePulse(RuntimeNoiseType.VEHICLE_PUSH, playerObject.InputAuthority,
+                zone3.FrigatePosition, "frigate-push", ref _frigateNoiseTimer,
+                ref _frigateNoiseSequence);
+        }
+
+        private void EmitObjectiveNoisePulse(RuntimeNoiseType type, PlayerRef actor,
+            Vector3 position, string stream, ref TickTimer timer, ref long sequence)
+        {
+            if (!actor.IsRealPlayer || !timer.ExpiredOrNotRunning(Runner)
+                || !RelayNoiseCatalog.TryGetDefinition(type, out var definition)) return;
+            var authority = MatchAuthorityRuntime.Instance;
+            if (authority == null || authority.MatchId == Guid.Empty) return;
+
+            timer = TickTimer.CreateFromSeconds(Runner, (float)definition.PulseInterval.TotalSeconds);
+            var nextSequence = sequence == long.MaxValue ? 1 : sequence + 1;
+            var key = new RuntimeNoiseSourceOccurrenceKey(
+                $"{stream}:{authority.MatchId:D}", nextSequence);
+            if (HostRuntimeNoiseService.EnsureExists(authority).TryAccept(actor, type, key,
+                    position, out _)) sequence = nextSequence;
         }
 
         private static bool IsValidRelaySlot(RelaySlot slot) => (int)slot >= 0 && (int)slot <= 3;

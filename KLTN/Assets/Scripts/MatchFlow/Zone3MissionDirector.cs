@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using EchoProtocol.Gameplay;
+using EchoProtocol.Visuals;
 using Fusion;
 using QuickOutline;
 using UnityEngine;
@@ -14,21 +15,25 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(1f)] private float pushInteractionDistance = 5f;
         [SerializeField, Min(1f)] private float chargeInteractionDistance = 4f;
         [SerializeField, Min(1f)] private float exitInteractionDistance = 4f;
+        [SerializeField, Min(1f)] private float outlineVisibleDistance = 30f;
 
         private Zone3DockArea _dockArea;
         private Zone3ChargeStation _chargeStation;
         private Transform _exit;
         private Outline _frigateOutline;
         private Outline _exitOutline;
-        private PlayerRef _authoritativePusher;
-        private GameObject _authoritativePusherObject;
+        private readonly Dictionary<PlayerRef, GameObject> _authoritativePushers = new Dictionary<PlayerRef, GameObject>();
+        private readonly List<PlayerRef> _invalidPusherBuffer = new List<PlayerRef>();
         private MatchFlowController _offlineFlow;
         private readonly HashSet<PlayerDownState> _offlineEscaped = new HashSet<PlayerDownState>();
 
         public static Zone3MissionDirector Instance { get; private set; }
+        public static bool IsSciFiSceneLoaded => SceneManager.GetSceneByName(SceneName).isLoaded;
         public PushableObject Frigate { get; private set; }
+        public Zone3ChargeStation ChargeStation => _chargeStation;
         public Vector3 FrigatePosition => Frigate != null ? Frigate.transform.position : Vector3.zero;
         public Vector3 ExitPosition => _exit != null ? _exit.position : Vector3.zero;
+        public Transform ExitTransform => _exit;
         public float PushInteractionDistance => pushInteractionDistance;
         public float ExitInteractionDistance => exitInteractionDistance;
         public bool IsFrigateAtDestination
@@ -134,12 +139,15 @@ namespace EchoProtocol.Networking
                 : offlinePhase == MatchPhase.Zone3FindFrigate;
             bool push = online ? networkPhase == NetworkMatchPhase.Zone3PushFrigate
                 : offlinePhase == MatchPhase.Zone3PushFrigate;
-            bool hunt = online ? networkPhase == NetworkMatchPhase.FinalHunt || networkPhase == NetworkMatchPhase.Escape
-                : offlinePhase == MatchPhase.FinalHunt || offlinePhase == MatchPhase.ExitCountdown;
+            bool hunt = online ? networkPhase == NetworkMatchPhase.FinalHunt
+                    || networkPhase == NetworkMatchPhase.Escape
+                : offlinePhase == MatchPhase.FinalHunt
+                    || offlinePhase == MatchPhase.ExitCountdown;
 
             SetOutline(_frigateOutline, find ? Outline.Mode.OutlineAll : Outline.Mode.OutlineVisible,
-                find || push);
-            SetOutline(_exitOutline, Outline.Mode.OutlineVisible, hunt);
+                find || (push && IsOutlineWithinDistance(Frigate.transform)));
+            SetOutline(_exitOutline, Outline.Mode.OutlineVisible,
+                hunt && IsOutlineWithinDistance(_exit));
             _dockArea.SetVisualState(push, push && IsFrigateAtDestination);
 
             if (online && !match.Object.HasStateAuthority
@@ -148,7 +156,7 @@ namespace EchoProtocol.Networking
                 Frigate.transform.SetPositionAndRotation(match.Zone3FrigatePosition, match.Zone3FrigateRotation);
             }
             if (!online && _offlineEscaped.Count > 0 && _offlineFlow != null
-                && _offlineFlow.Phase == MatchPhase.ExitCountdown)
+                && _offlineFlow.Phase == MatchPhase.FinalHunt)
                 CheckOfflineExitCompletion();
         }
 
@@ -177,9 +185,7 @@ namespace EchoProtocol.Networking
         {
             if (!CanActivateCharge(player)) return;
             var match = NetworkMatchState.Instance;
-            if (match != null && match.Object != null && match.Object.IsValid)
-                match.RequestZone3Charge();
-            else
+            if (match == null || match.Object == null || !match.Object.IsValid)
                 _offlineFlow?.NotifyZone3Complete();
         }
 
@@ -189,21 +195,53 @@ namespace EchoProtocol.Networking
             if (outline.enabled != visible) outline.enabled = visible;
         }
 
+        private bool IsOutlineWithinDistance(Transform target)
+        {
+            if (target == null) return false;
+            Transform viewer = Camera.main != null ? Camera.main.transform : ObjectiveGlowHighlight.GetLocalPlayerTransform();
+            if (viewer == null) return true;
+
+            float maxDistance = outlineVisibleDistance * outlineVisibleDistance;
+            return (viewer.position - target.position).sqrMagnitude <= maxDistance;
+        }
+
         public void StartAuthoritativePush(PlayerRef actor, GameObject player)
         {
             if (Frigate == null || player == null) return;
-            if (_authoritativePusherObject != null && _authoritativePusherObject != player) return;
-            _authoritativePusher = actor;
-            _authoritativePusherObject = player;
+            if (_authoritativePushers.TryGetValue(actor, out var existing) && existing == player) return;
+            _authoritativePushers[actor] = player;
             Frigate.BeginAuthoritativePush(player);
         }
 
         public void StopAuthoritativePush(PlayerRef actor)
         {
-            if (_authoritativePusher != actor) return;
-            Frigate?.EndAuthoritativePush(_authoritativePusherObject);
-            _authoritativePusher = PlayerRef.None;
-            _authoritativePusherObject = null;
+            if (!_authoritativePushers.TryGetValue(actor, out var player)) return;
+            Frigate?.EndAuthoritativePush(player);
+            _authoritativePushers.Remove(actor);
+        }
+
+        public void StopAllAuthoritativePushers()
+        {
+            foreach (var player in _authoritativePushers.Values)
+            {
+                Frigate?.EndAuthoritativePush(player);
+            }
+            _authoritativePushers.Clear();
+        }
+
+        public void ReleaseInvalidAuthoritativePushers(System.Func<PlayerRef, bool> isValid)
+        {
+            if (isValid == null || _authoritativePushers.Count == 0) return;
+            _invalidPusherBuffer.Clear();
+            foreach (var actor in _authoritativePushers.Keys)
+            {
+                if (!isValid(actor)) _invalidPusherBuffer.Add(actor);
+            }
+            for (int i = 0; i < _invalidPusherBuffer.Count; i++)
+            {
+                StopAuthoritativePush(_invalidPusherBuffer[i]);
+            }
+            _invalidPusherBuffer.Clear();
         }
 
         public bool CanExit(GameObject player)
@@ -232,7 +270,6 @@ namespace EchoProtocol.Networking
             }
             var state = player.GetComponentInParent<PlayerDownState>();
             if (state == null || !_offlineEscaped.Add(state)) return;
-            if (_offlineFlow.Phase == MatchPhase.FinalHunt) _offlineFlow.StartExitCountdown();
             CheckOfflineExitCompletion();
         }
 
@@ -248,7 +285,7 @@ namespace EchoProtocol.Networking
 
     public sealed class Zone3ExitDoor : MonoBehaviour, IInteractable
     {
-        public string InteractionPrompt => "Escape through Doorexit";
+        public string InteractionPrompt => "EXIT ONLINE - ESCAPE";
         public bool CanInteract(GameObject interactor) => Zone3MissionDirector.Instance?.CanExit(interactor) == true;
         public void Interact(GameObject interactor) => Zone3MissionDirector.Instance?.RegisterExit(interactor);
     }

@@ -16,7 +16,11 @@ namespace EchoProtocol.AI.Listener.Noise
         DOOR,
         CORE_INSERT,
         MACHINE_REPAIR,
-        MINION_ALERT
+        MINION_ALERT,
+        MACHINE_OVERLOAD,
+        TERMINAL_DOWNLOAD,
+        VEHICLE_PUSH,
+        CHARGE_TRANSFER
     }
 
     public enum RuntimeNoiseEmissionMode

@@ -28,6 +28,8 @@ namespace EchoProtocol.Audio
         private NetworkPowerPuzzle _puzzle;
         private NetworkMatchState _match;
         private SecurityTerminalDownload _terminal;
+        private Zone3ChargeStation _charge;
+        private EchoProtocol.Gameplay.PushableObject _frigate;
         private NoiseMakerBeacon _beacon;
         private Vector3 _lastPosition;
         private float _lastSample, _nextStep;
@@ -63,6 +65,17 @@ namespace EchoProtocol.Audio
             _puzzle = GetComponent<NetworkPowerPuzzle>();
             _match = GetComponent<NetworkMatchState>();
             _terminal = GetComponent<SecurityTerminalDownload>();
+            _charge = GetComponent<Zone3ChargeStation>();
+            _frigate = GetComponent<EchoProtocol.Gameplay.PushableObject>();
+            if (_charge != null)
+            {
+                _effects.rolloffMode = AudioRolloffMode.Linear;
+                _loop.rolloffMode = AudioRolloffMode.Linear;
+                _effects.minDistance = 8f;
+                _effects.maxDistance = 90f;
+                _loop.minDistance = 8f;
+                _loop.maxDistance = 90f;
+            }
             _beacon = GetComponent<NoiseMakerBeacon>();
             if (_stalker != null)
             {
@@ -170,7 +183,38 @@ namespace EchoProtocol.Audio
                 GameAudioRuntime.Loop(_loop, _terminal.IsDownloading ? "security_terminal/download_progress_loop" : null, 0.3f);
                 UpdateTerminalDeadlineWarning();
             }
+            if (_charge != null) UpdateCharge();
+            if (_frigate != null) UpdateFrigate(speed);
             if (_beacon != null) GameAudioRuntime.Loop(_loop, "noise_maker/beacon_loop_loop", 0.5f);
+        }
+
+        private void UpdateCharge()
+        {
+            bool charging = _charge.IsCharging;
+            if (Changed("zone3ChargeActive", charging))
+                Play(charging ? "objectives/charge_engage" : "objectives/charge_interrupt", 0.9f);
+            GameAudioRuntime.Loop(_loop,
+                charging ? "objectives/charge_transfer_loop" : null, 0.95f);
+            var match = NetworkMatchState.Instance;
+            bool completed = _charge.Progress01 >= 1f
+                && (match == null || match.Object == null || !match.Object.IsValid
+                    || match.CurrentPhase == NetworkMatchPhase.FinalHunt);
+            if (Changed("zone3ChargeComplete", completed) && completed)
+                Play("sector_box_power_hub/fully_powered", 0.9f);
+        }
+
+        private void UpdateFrigate(float speed)
+        {
+            var match = NetworkMatchState.Instance;
+            var zone3 = EchoProtocol.Networking.Zone3MissionDirector.Instance;
+            bool pushPhase = match != null && match.Object != null && match.Object.IsValid
+                ? match.CurrentPhase == NetworkMatchPhase.Zone3PushFrigate
+                : zone3 != null && zone3.IsPushAvailable;
+            bool moving = zone3 != null && zone3.Frigate == _frigate
+                && pushPhase && speed > 0.08f && speed < 4f;
+            if (Changed("frigateMoving", moving))
+                Play(moving ? "power_puzzle/breaker_toggle" : "map_ambience/pipe_creak", 0.55f);
+            GameAudioRuntime.Loop(_loop, moving ? "objectives/frigate_grind_loop" : null, 0.8f);
         }
 
         private void UpdateTerminalDeadlineWarning()
@@ -308,8 +352,11 @@ namespace EchoProtocol.Audio
                 switch (_match.CurrentPhase)
                 {
                     case NetworkMatchPhase.SecurityHold: GameAudioRuntime.UI("security_terminal/terminal_boot"); break;
-                    case NetworkMatchPhase.FinalHunt: GameAudioRuntime.UI("escape_endgame/final_hunt_start"); break;
-                    case NetworkMatchPhase.Escape: GameAudioRuntime.UI("escape_endgame/escape_unlocked"); break;
+                    case NetworkMatchPhase.FinalHunt:
+                        GameAudioRuntime.UI("escape_endgame/final_hunt_start");
+                        GameAudioRuntime.UI("escape_endgame/countdown_start");
+                        break;
+                    case NetworkMatchPhase.Escape: GameAudioRuntime.UI("ui/objective_update"); break;
                     case NetworkMatchPhase.MatchEnded:
                         GameAudioRuntime.UI(_match.Result == NetworkMatchResult.Win ? "escape_endgame/mission_success" : "escape_endgame/mission_failure"); break;
                     default: GameAudioRuntime.UI("ui/objective_update"); break;

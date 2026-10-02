@@ -314,9 +314,13 @@ public class PlayerInteraction : MonoBehaviour
 
     private void RefreshSecurityHold()
     {
-        if (!(_heldInteractable is SecurityTerminalDownload) || Time.unscaledTime < _nextSecurityHoldRefresh) return;
+        if (Time.unscaledTime < _nextSecurityHoldRefresh) return;
+        if (!(_heldInteractable is SecurityTerminalDownload)
+            && !(_heldInteractable is EchoProtocol.Networking.Zone3ChargeStation)) return;
         _nextSecurityHoldRefresh = Time.unscaledTime + 0.25f;
-        EchoProtocol.Networking.NetworkMatchState.Instance?.RequestRefreshSecurityHold();
+        var match = EchoProtocol.Networking.NetworkMatchState.Instance;
+        if (_heldInteractable is SecurityTerminalDownload) match?.RequestRefreshSecurityHold();
+        else match?.RequestRefreshZone3Charge();
     }
 
     private void CancelHeldInteractable()

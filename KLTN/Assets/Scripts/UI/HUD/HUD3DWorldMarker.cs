@@ -218,6 +218,16 @@ namespace EchoProtocol.UI.HUD
 
         private void CollectEscapeDoorTarget()
         {
+            var zone3Exit = Networking.Zone3MissionDirector.Instance?.ExitTransform;
+            if (zone3Exit != null && _matchFlow != null &&
+                (_matchFlow.Phase == MatchPhase.FinalHunt || _matchFlow.Phase == MatchPhase.ExitCountdown))
+            {
+                _targetTransforms.Add(zone3Exit);
+                _targetTitles.Add("DOOREXIT");
+                _targetColors.Add(escapeDoorColor);
+                return;
+            }
+
             if (_escapeDoor == null) _escapeDoor = FindAnyObjectByType<EscapeDoorCountdown>();
             if (_escapeDoor != null && _matchFlow != null &&
                 (_matchFlow.Phase == MatchPhase.FinalHunt || _matchFlow.Phase == MatchPhase.ExitCountdown))

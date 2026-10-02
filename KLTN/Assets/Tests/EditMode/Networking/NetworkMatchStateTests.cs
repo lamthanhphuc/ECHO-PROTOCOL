@@ -9,6 +9,8 @@ namespace EchoProtocol.Networking.Tests
             "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs";
         private const string ObjectiveSourcePath =
             "Assets/_Project/Scripts/Networking/Interaction/NetworkSectorBox.cs";
+        private const string HudObjectiveTrackerPath =
+            "Assets/Scripts/UI/HUD/HUDObjectiveTracker.cs";
 
         [Test]
         public void MATCH_NET_FsmOnlyAdvancesFromExpectedRunningPhase()
@@ -60,6 +62,96 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("TickTimer.CreateFromSeconds(Runner, CurrentScenarioEscapeDoorTimerSeconds)", source);
             StringAssert.Contains("EscapeTimer.Expired(Runner)", source);
             StringAssert.DoesNotContain("Time.deltaTime", source);
+        }
+
+        [Test]
+        public void MATCH_NET_Zone3PowerTransferStartsSingleEscapeDeadline()
+        {
+            var source = LoadNetworkMatchStateSource().Replace("\r\n", "\n");
+
+            StringAssert.Contains(
+                "TryAdvancePhase(NetworkMatchPhase.Zone3PushFrigate,\n" +
+                "                    NetworkMatchPhase.FinalHunt, \"ZONE3_CHARGE_ACTIVATED\")",
+                source);
+
+            StringAssert.Contains(
+                "StartEscapeDeadlineIfNeededAuthoritative(\"ZONE3_POWER_TRANSFER\")",
+                source);
+
+            StringAssert.Contains(
+                "if (!Object.HasStateAuthority || EscapeTimer.IsRunning) return;\n" +
+                "            EscapeTimer = TickTimer.CreateFromSeconds(Runner, CurrentScenarioEscapeDoorTimerSeconds);",
+                source);
+        }
+
+        [Test]
+        public void MATCH_NET_EscapeDeadlineRunsDuringFinalHuntAndEscape()
+        {
+            var source = LoadNetworkMatchStateSource().Replace("\r\n", "\n");
+
+            StringAssert.Contains(
+                "public bool IsEscapeTimerRunning =>\n" +
+                "            (CurrentPhase == NetworkMatchPhase.FinalHunt\n" +
+                "             || CurrentPhase == NetworkMatchPhase.Escape)\n" +
+                "            && EscapeTimer.IsRunning;",
+                source);
+
+            StringAssert.Contains(
+                "if (IsEscapeTimerRunning && EscapeTimer.Expired(Runner))",
+                source);
+        }
+
+        [Test]
+        public void MATCH_NET_Zone3DoorexitTransitionsToEscapeWithoutResettingDeadline()
+        {
+            var source = LoadNetworkMatchStateSource().Replace("\r\n", "\n");
+
+            StringAssert.Contains(
+                "if (CurrentPhase != NetworkMatchPhase.FinalHunt\n" +
+                "                    && CurrentPhase != NetworkMatchPhase.Escape)",
+                source);
+
+            StringAssert.Contains(
+                "fromDoorexit\n" +
+                "                    && CurrentPhase == NetworkMatchPhase.FinalHunt\n" +
+                "                    && !TryAdvancePhase(\n" +
+                "                        NetworkMatchPhase.FinalHunt,\n" +
+                "                        NetworkMatchPhase.Escape,\n" +
+                "                        \"FINAL_HUNT\")",
+                source);
+
+            StringAssert.Contains(
+                "StartEscapeDeadlineIfNeededAuthoritative(\"LEGACY_ESCAPE_DOOR\")",
+                source);
+        }
+
+        [Test]
+        public void MATCH_NET_ZoneBoundaryUsesZone3EntryAfterZone2()
+        {
+            var source = LoadNetworkMatchStateSource().Replace("\r\n", "\n");
+
+            StringAssert.Contains(
+                "Status, CurrentPhase, NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.Zone3FindFrigate",
+                source);
+
+            StringAssert.Contains(
+                "TryAdvancePhase(NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.Zone3FindFrigate, \"ZONE2_OBJECTIVE\")",
+                source);
+
+            StringAssert.DoesNotContain(
+                "TryAdvancePhase(NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.FinalHunt",
+                source);
+        }
+
+        [Test]
+        public void MATCH_NET_HudUsesEmergencyPowerTransferWording()
+        {
+            var source = File.ReadAllText(HudObjectiveTrackerPath);
+
+            StringAssert.Contains("INITIATE POWER TRANSFER", source);
+            StringAssert.Contains("Emergency power remaining", source);
+            StringAssert.DoesNotContain("CHARGE SPACEFRIGATE", source);
+            StringAssert.DoesNotContain("Scifi Charge", source);
         }
 
         [Test]

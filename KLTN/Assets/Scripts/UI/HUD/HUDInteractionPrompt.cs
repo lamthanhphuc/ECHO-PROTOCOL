@@ -146,6 +146,11 @@ namespace EchoProtocol.UI.HUD
                 isHold = true;
                 progress01 = terminal.Progress01;
             }
+            else if (interactable is EchoProtocol.Networking.Zone3ChargeStation charge)
+            {
+                isHold = true;
+                progress01 = charge.Progress01;
+            }
             else if (interactable is PlayerReviveInteractable revive)
             {
                 isHold = true;

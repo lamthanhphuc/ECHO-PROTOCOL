@@ -111,7 +111,11 @@ namespace EchoProtocol.AI.Listener.Perception
             var ignoresOcclusion =
                 noiseEvent.NoiseType ==
                 RuntimeNoiseType.NOISE_MAKER
-                || noiseEvent.NoiseType == RuntimeNoiseType.MACHINE_REPAIR;
+                || noiseEvent.NoiseType == RuntimeNoiseType.MACHINE_REPAIR
+                || noiseEvent.NoiseType == RuntimeNoiseType.MACHINE_OVERLOAD
+                || noiseEvent.NoiseType == RuntimeNoiseType.TERMINAL_DOWNLOAD
+                || noiseEvent.NoiseType == RuntimeNoiseType.VEHICLE_PUSH
+                || noiseEvent.NoiseType == RuntimeNoiseType.CHARGE_TRANSFER;
 
             var occlusionClass =
                 ignoresOcclusion

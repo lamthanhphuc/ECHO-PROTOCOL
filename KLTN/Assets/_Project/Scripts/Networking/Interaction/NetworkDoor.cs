@@ -91,7 +91,8 @@ namespace EchoProtocol.Networking
 
             if (TryGetMatchState(out var matchState))
             {
-                return !matchState.IsEnded && matchState.CurrentPhase == NetworkMatchPhase.FinalHunt
+                return !Zone3MissionDirector.IsSciFiSceneLoaded
+                    && !matchState.IsEnded && matchState.CurrentPhase == NetworkMatchPhase.FinalHunt
                     ? InteractionValidationResult.Accepted
                     : InteractionValidationResult.InvalidTargetState;
             }

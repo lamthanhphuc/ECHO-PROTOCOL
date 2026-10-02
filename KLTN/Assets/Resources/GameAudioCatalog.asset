@@ -233,3 +233,19 @@ MonoBehaviour:
     clip: {fileID: 8300000, guid: 9377bfb2bffef2e41bccbdaf0e76cca2, type: 3}
   - key: ui/objective_update
     clip: {fileID: 8300000, guid: 61cbe4927fc7b3c4f89d09d299e145e4, type: 3}
+  - key: objectives/relay_a_motor_loop
+    clip: {fileID: 8300000, guid: 84962bffdce0428cb11843386b97860a, type: 3}
+  - key: objectives/relay_b_signal_loop
+    clip: {fileID: 8300000, guid: 582072c87cd049d9bca95e930b7e3ef9, type: 3}
+  - key: objectives/frigate_grind_loop
+    clip: {fileID: 8300000, guid: d20a1a17bdea449e8332eee25117ac69, type: 3}
+  - key: objectives/relay_overload
+    clip: {fileID: 8300000, guid: d8257c64f6b441f795465cce5bbb082a, type: 3}
+  - key: objectives/relay_b_desync
+    clip: {fileID: 8300000, guid: f9fc34e099984fa086144f79bb3d1cf8, type: 3}
+  - key: objectives/charge_transfer_loop
+    clip: {fileID: 8300000, guid: 1536a48eff13496b8716b69539ddbb9c, type: 3}
+  - key: objectives/charge_engage
+    clip: {fileID: 8300000, guid: a04d0419e0354416888fd72c9c5d3170, type: 3}
+  - key: objectives/charge_interrupt
+    clip: {fileID: 8300000, guid: 6b402e39a942462eaa3e1a32e5c75265, type: 3}
