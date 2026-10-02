@@ -6,6 +6,7 @@ using EchoProtocol.AI.Listener.Memory;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.AI.Listener.Perception;
 using EchoProtocol.Networking;
+using EchoProtocol.Telemetry;
 using PlayerRef = Fusion.PlayerRef;
 using Object = UnityEngine.Object;
 using NUnit.Framework;
@@ -33,8 +34,30 @@ namespace EchoProtocol.AI.Listener.Tests
                     "DOOR",
                     "CORE_INSERT",
                     "MACHINE_REPAIR",
-                    "MINION_ALERT"
+                    "MINION_ALERT",
+                    "MACHINE_OVERLOAD",
+                    "TERMINAL_DOWNLOAD",
+                    "VEHICLE_PUSH",
+                    "CHARGE_TRANSFER",
+                    "POWER_SURGE"
                 }));
+        }
+
+        [TestCase("SPRINT", true)]
+        [TestCase("INTERACTION", true)]
+        [TestCase("CORE_CARRY", true)]
+        [TestCase("CORE_DROP", true)]
+        [TestCase("NOISE_MAKER", true)]
+        [TestCase("MACHINE_REPAIR", false)]
+        [TestCase("MINION_ALERT", false)]
+        [TestCase("MACHINE_OVERLOAD", false)]
+        [TestCase("TERMINAL_DOWNLOAD", false)]
+        [TestCase("VEHICLE_PUSH", false)]
+        [TestCase("CHARGE_TRANSFER", false)]
+        [TestCase("POWER_SURGE", false)]
+        public void NoiseTelemetry_SupportsOnlyV11NoiseTypes(string noiseType, bool expected)
+        {
+            Assert.That(NoiseTelemetryAdapter.SupportsNoiseType(noiseType), Is.EqualTo(expected));
         }
 
         [Test]

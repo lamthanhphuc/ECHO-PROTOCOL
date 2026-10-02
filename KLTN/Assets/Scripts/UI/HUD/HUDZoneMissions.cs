@@ -1,4 +1,5 @@
 using EchoProtocol.MatchFlow;
+using EchoProtocol.Networking;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
@@ -94,14 +95,44 @@ namespace EchoProtocol.UI.HUD
             if (_cores == null) _cores = FindAnyObjectByType<EnergyCoreObjectiveProgress>();
             if (_terminal == null) _terminal = FindAnyObjectByType<SecurityTerminalDownload>();
 
-            int placed = _cores != null ? _cores.PlacedCoreCount : 0;
-            int required = _cores != null && _cores.RequiredCoreCount > 0 ? _cores.RequiredCoreCount : 4;
+            var match = NetworkMatchState.Instance;
+            bool hasNetworkMatch = match != null
+                && match.Object != null
+                && match.Object.IsValid
+                && match.Runner != null
+                && match.Runner.IsRunning;
+
+            int placed = 0;
+            int required = 4;
+            if (hasNetworkMatch
+                && match.TryGetObjectiveProgress(out int networkPlaced, out int networkRequired))
+            {
+                placed = networkPlaced;
+                required = Mathf.Max(1, networkRequired);
+            }
+            else if (_cores != null)
+            {
+                placed = _cores.PlacedCoreCount;
+                required = Mathf.Max(1, _cores.RequiredCoreCount);
+            }
+
             var director = Zone2MissionDirector.Instance;
-            var stage = director != null ? director.CurrentStage : Zone2MissionStage.Zone1CoreObjective;
-            int relays = director != null ? director.CompletedRelayCount : 0;
-            int security = _terminal != null ? Mathf.RoundToInt(_terminal.Progress01 * 100f) : 0;
-            bool zone2Available = stage > Zone2MissionStage.Zone1CoreObjective
-                && (_cores == null || _cores.IsComplete);
+            var stage = hasNetworkMatch
+                ? match.Zone2Stage
+                : director != null
+                    ? director.CurrentStage
+                    : Zone2MissionStage.Zone1CoreObjective;
+            int relays = hasNetworkMatch
+                ? match.CompletedRelayCount
+                : director != null
+                    ? director.CompletedRelayCount
+                    : 0;
+            int security = hasNetworkMatch
+                ? Mathf.RoundToInt(match.SecurityHoldProgress01 * 100f)
+                : _terminal != null
+                    ? Mathf.RoundToInt(_terminal.Progress01 * 100f)
+                    : 0;
+            bool zone2Available = stage > Zone2MissionStage.Zone1CoreObjective;
 
             if (!zone2Available)
                 _compactText.text = $"<color=#00E5FF><b>ZONE 1</b></color>  [J] Nhiệm vụ\nCore {placed}/{required}";

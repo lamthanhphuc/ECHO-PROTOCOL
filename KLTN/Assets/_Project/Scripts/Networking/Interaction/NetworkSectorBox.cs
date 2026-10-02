@@ -307,7 +307,6 @@ namespace EchoProtocol.Networking
             foreach (var legacyProgress in FindObjectsByType<EnergyCoreObjectiveProgress>(FindObjectsInactive.Include))
             {
                 legacyProgress.SetNetworkAuthorityPresentationOnly(true);
-                legacyProgress.ApplyAuthoritativeSnapshot(PlacedCoreCount, _requiredCoreCount);
                 legacyProgress.ApplyAuthoritativeSnapshot(totalPlaced, totalRequired);
             }
 

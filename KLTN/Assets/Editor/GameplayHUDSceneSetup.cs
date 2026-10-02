@@ -783,160 +783,160 @@ namespace EchoProtocol.EditorTools
             return slotGo;
         }
 
-        private static HUDTeammateStatus CreateTeammateStatus(Transform parent)
-        {
-            GameObject teamGo = CreateUIObject("TeammateStatus_Panel", parent);
-            RectTransform rt = teamGo.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(0f, 1f);
-            rt.pivot = new Vector2(0f, 1f);
-            rt.anchoredPosition = new Vector2(30, -30);
-            rt.sizeDelta = new Vector2(300, 280);
+        // private static HUDTeammateStatus CreateTeammateStatus(Transform parent)
+        // {
+        //     GameObject teamGo = CreateUIObject("TeammateStatus_Panel", parent);
+        //     RectTransform rt = teamGo.GetComponent<RectTransform>();
+        //     rt.anchorMin = new Vector2(0f, 1f);
+        //     rt.anchorMax = new Vector2(0f, 1f);
+        //     rt.pivot = new Vector2(0f, 1f);
+        //     rt.anchoredPosition = new Vector2(30, -30);
+        //     rt.sizeDelta = new Vector2(300, 280);
 
-            CanvasGroup teamCg = teamGo.AddComponent<CanvasGroup>();
-            teamCg.alpha = 0f;
-            teamCg.interactable = false;
-            teamCg.blocksRaycasts = false;
+        //     CanvasGroup teamCg = teamGo.AddComponent<CanvasGroup>();
+        //     teamCg.alpha = 0f;
+        //     teamCg.interactable = false;
+        //     teamCg.blocksRaycasts = false;
 
-            Image bg = teamGo.AddComponent<Image>();
-            bg.sprite = HUDTextureUtility.RoundedBox;
-            bg.type = Image.Type.Sliced;
-            bg.color = new Color(0.04f, 0.07f, 0.12f, 0.85f);
+        //     Image bg = teamGo.AddComponent<Image>();
+        //     bg.sprite = HUDTextureUtility.RoundedBox;
+        //     bg.type = Image.Type.Sliced;
+        //     bg.color = new Color(0.04f, 0.07f, 0.12f, 0.85f);
 
-            // Header Title
-            Text header = CreateText("HeaderTitle", teamGo.transform, "DANH SÁCH ĐỒNG ĐỘI", 14, FontStyle.Bold, new Color(0f, 0.9f, 1f, 1f));
-            RectTransform hRt = header.GetComponent<RectTransform>();
-            hRt.anchorMin = new Vector2(0f, 1f);
-            hRt.anchorMax = new Vector2(1f, 1f);
-            hRt.pivot = new Vector2(0.5f, 1f);
-            hRt.anchoredPosition = new Vector2(0, -8);
-            hRt.sizeDelta = new Vector2(-20, 24);
-            header.alignment = TextAnchor.MiddleCenter;
+        //     // Header Title
+        //     Text header = CreateText("HeaderTitle", teamGo.transform, "DANH SÁCH ĐỒNG ĐỘI", 14, FontStyle.Bold, new Color(0f, 0.9f, 1f, 1f));
+        //     RectTransform hRt = header.GetComponent<RectTransform>();
+        //     hRt.anchorMin = new Vector2(0f, 1f);
+        //     hRt.anchorMax = new Vector2(1f, 1f);
+        //     hRt.pivot = new Vector2(0.5f, 1f);
+        //     hRt.anchoredPosition = new Vector2(0, -8);
+        //     hRt.sizeDelta = new Vector2(-20, 24);
+        //     header.alignment = TextAnchor.MiddleCenter;
 
-            HUDTeammateStatus comp = teamGo.AddComponent<HUDTeammateStatus>();
-            var so = new SerializedObject(comp);
-            so.FindProperty("panelCanvasGroup").objectReferenceValue = teamCg;
-            so.FindProperty("simulateTeammatesIfSolo").boolValue = false;
-            var slotsProp = so.FindProperty("slots");
+        //     HUDTeammateStatus comp = teamGo.AddComponent<HUDTeammateStatus>();
+        //     var so = new SerializedObject(comp);
+        //     so.FindProperty("panelCanvasGroup").objectReferenceValue = teamCg;
+        //     so.FindProperty("simulateTeammatesIfSolo").boolValue = false;
+        //     var slotsProp = so.FindProperty("slots");
 
-            for (int i = 0; i < 4; i++)
-            {
-                GameObject slotGo = CreateUIObject($"Slot_{i + 1}", teamGo.transform);
-                RectTransform sRt = slotGo.GetComponent<RectTransform>();
-                sRt.anchorMin = new Vector2(0f, 1f);
-                sRt.anchorMax = new Vector2(1f, 1f);
-                sRt.pivot = new Vector2(0.5f, 1f);
-                sRt.anchoredPosition = new Vector2(0, -36 - (i * 58));
-                sRt.sizeDelta = new Vector2(-16, 54);
+        //     for (int i = 0; i < 4; i++)
+        //     {
+        //         GameObject slotGo = CreateUIObject($"Slot_{i + 1}", teamGo.transform);
+        //         RectTransform sRt = slotGo.GetComponent<RectTransform>();
+        //         sRt.anchorMin = new Vector2(0f, 1f);
+        //         sRt.anchorMax = new Vector2(1f, 1f);
+        //         sRt.pivot = new Vector2(0.5f, 1f);
+        //         sRt.anchoredPosition = new Vector2(0, -36 - (i * 58));
+        //         sRt.sizeDelta = new Vector2(-16, 54);
 
-                Image slotBg = slotGo.AddComponent<Image>();
-                slotBg.sprite = HUDTextureUtility.RoundedBox;
-                slotBg.color = new Color(0.08f, 0.12f, 0.18f, 0.9f);
+        //         Image slotBg = slotGo.AddComponent<Image>();
+        //         slotBg.sprite = HUDTextureUtility.RoundedBox;
+        //         slotBg.color = new Color(0.08f, 0.12f, 0.18f, 0.9f);
 
-                // Left Accent Bar
-                GameObject accGo = CreateUIObject("Accent", slotGo.transform);
-                RectTransform accRt = accGo.GetComponent<RectTransform>();
-                accRt.anchorMin = new Vector2(0f, 0f);
-                accRt.anchorMax = new Vector2(0f, 1f);
-                accRt.pivot = new Vector2(0f, 0.5f);
-                accRt.anchoredPosition = new Vector2(3, 0);
-                accRt.sizeDelta = new Vector2(4, -6);
-                Image accImg = accGo.AddComponent<Image>();
-                accImg.sprite = HUDTextureUtility.WhitePixel;
-                accImg.color = new Color(0f, 0.9f, 0.45f, 1f);
+        //         // Left Accent Bar
+        //         GameObject accGo = CreateUIObject("Accent", slotGo.transform);
+        //         RectTransform accRt = accGo.GetComponent<RectTransform>();
+        //         accRt.anchorMin = new Vector2(0f, 0f);
+        //         accRt.anchorMax = new Vector2(0f, 1f);
+        //         accRt.pivot = new Vector2(0f, 0.5f);
+        //         accRt.anchoredPosition = new Vector2(3, 0);
+        //         accRt.sizeDelta = new Vector2(4, -6);
+        //         Image accImg = accGo.AddComponent<Image>();
+        //         accImg.sprite = HUDTextureUtility.WhitePixel;
+        //         accImg.color = new Color(0f, 0.9f, 0.45f, 1f);
 
-                // Name Text
-                Text nameTxt = CreateText("Name", slotGo.transform, $"Player {i + 1}", 15, FontStyle.Bold, Color.white);
-                RectTransform nRt = nameTxt.GetComponent<RectTransform>();
-                nRt.anchorMin = new Vector2(0f, 1f);
-                nRt.anchorMax = new Vector2(1f, 1f);
-                nRt.pivot = new Vector2(0f, 1f);
-                nRt.anchoredPosition = new Vector2(16, -6);
-                nRt.sizeDelta = new Vector2(-120, 20);
+        //         // Name Text
+        //         Text nameTxt = CreateText("Name", slotGo.transform, $"Player {i + 1}", 15, FontStyle.Bold, Color.white);
+        //         RectTransform nRt = nameTxt.GetComponent<RectTransform>();
+        //         nRt.anchorMin = new Vector2(0f, 1f);
+        //         nRt.anchorMax = new Vector2(1f, 1f);
+        //         nRt.pivot = new Vector2(0f, 1f);
+        //         nRt.anchoredPosition = new Vector2(16, -6);
+        //         nRt.sizeDelta = new Vector2(-120, 20);
 
-                // Status Badge BG
-                GameObject stBadgeGo = CreateUIObject("StatusBadge", slotGo.transform);
-                RectTransform stbRt = stBadgeGo.GetComponent<RectTransform>();
-                stbRt.anchorMin = new Vector2(1f, 1f);
-                stbRt.anchorMax = new Vector2(1f, 1f);
-                stbRt.pivot = new Vector2(1f, 1f);
-                stbRt.anchoredPosition = new Vector2(-8, -6);
-                stbRt.sizeDelta = new Vector2(95, 20);
-                Image stBadgeBg = stBadgeGo.AddComponent<Image>();
-                stBadgeBg.sprite = HUDTextureUtility.RoundedBox;
-                stBadgeBg.color = new Color(0f, 0.9f, 0.45f, 0.2f);
+        //         // Status Badge BG
+        //         GameObject stBadgeGo = CreateUIObject("StatusBadge", slotGo.transform);
+        //         RectTransform stbRt = stBadgeGo.GetComponent<RectTransform>();
+        //         stbRt.anchorMin = new Vector2(1f, 1f);
+        //         stbRt.anchorMax = new Vector2(1f, 1f);
+        //         stbRt.pivot = new Vector2(1f, 1f);
+        //         stbRt.anchoredPosition = new Vector2(-8, -6);
+        //         stbRt.sizeDelta = new Vector2(95, 20);
+        //         Image stBadgeBg = stBadgeGo.AddComponent<Image>();
+        //         stBadgeBg.sprite = HUDTextureUtility.RoundedBox;
+        //         stBadgeBg.color = new Color(0f, 0.9f, 0.45f, 0.2f);
 
-                Text stTxt = CreateText("StatusText", stBadgeGo.transform, "KHỎE MẠNH", 12, FontStyle.Bold, new Color(0f, 0.9f, 0.45f, 1f));
-                RectTransform sttRt = stTxt.GetComponent<RectTransform>();
-                sttRt.anchorMin = Vector2.zero;
-                sttRt.anchorMax = Vector2.one;
-                sttRt.sizeDelta = Vector2.zero;
-                stTxt.alignment = TextAnchor.MiddleCenter;
+        //         Text stTxt = CreateText("StatusText", stBadgeGo.transform, "KHỎE MẠNH", 12, FontStyle.Bold, new Color(0f, 0.9f, 0.45f, 1f));
+        //         RectTransform sttRt = stTxt.GetComponent<RectTransform>();
+        //         sttRt.anchorMin = Vector2.zero;
+        //         sttRt.anchorMax = Vector2.one;
+        //         sttRt.sizeDelta = Vector2.zero;
+        //         stTxt.alignment = TextAnchor.MiddleCenter;
 
-                // Core Carry Icon
-                GameObject carryGo = CreateUIObject("CoreCarryIcon", slotGo.transform);
-                RectTransform cRt = carryGo.GetComponent<RectTransform>();
-                cRt.anchorMin = new Vector2(1f, 0f);
-                cRt.anchorMax = new Vector2(1f, 0f);
-                cRt.pivot = new Vector2(1f, 0f);
-                cRt.anchoredPosition = new Vector2(-8, 6);
-                cRt.sizeDelta = new Vector2(16, 16);
-                Image carryImg = carryGo.AddComponent<Image>();
-                carryImg.sprite = HUDTextureUtility.CircleFilled;
-                carryImg.color = new Color(0f, 0.9f, 1f, 1f);
-                carryGo.SetActive(false);
+        //         // Core Carry Icon
+        //         GameObject carryGo = CreateUIObject("CoreCarryIcon", slotGo.transform);
+        //         RectTransform cRt = carryGo.GetComponent<RectTransform>();
+        //         cRt.anchorMin = new Vector2(1f, 0f);
+        //         cRt.anchorMax = new Vector2(1f, 0f);
+        //         cRt.pivot = new Vector2(1f, 0f);
+        //         cRt.anchoredPosition = new Vector2(-8, 6);
+        //         cRt.sizeDelta = new Vector2(16, 16);
+        //         Image carryImg = carryGo.AddComponent<Image>();
+        //         carryImg.sprite = HUDTextureUtility.CircleFilled;
+        //         carryImg.color = new Color(0f, 0.9f, 1f, 1f);
+        //         carryGo.SetActive(false);
 
-                // Distance Text
-                Text distTxt = CreateText("Distance", slotGo.transform, "0m", 13, FontStyle.Normal, new Color(0.7f, 0.8f, 0.9f, 0.9f));
-                RectTransform dRt = distTxt.GetComponent<RectTransform>();
-                dRt.anchorMin = new Vector2(0f, 0f);
-                dRt.anchorMax = new Vector2(0f, 0f);
-                dRt.pivot = new Vector2(0f, 0f);
-                dRt.anchoredPosition = new Vector2(16, 6);
-                dRt.sizeDelta = new Vector2(60, 18);
+        //         // Distance Text
+        //         Text distTxt = CreateText("Distance", slotGo.transform, "0m", 13, FontStyle.Normal, new Color(0.7f, 0.8f, 0.9f, 0.9f));
+        //         RectTransform dRt = distTxt.GetComponent<RectTransform>();
+        //         dRt.anchorMin = new Vector2(0f, 0f);
+        //         dRt.anchorMax = new Vector2(0f, 0f);
+        //         dRt.pivot = new Vector2(0f, 0f);
+        //         dRt.anchoredPosition = new Vector2(16, 6);
+        //         dRt.sizeDelta = new Vector2(60, 18);
 
-                // HP Mini Bar
-                GameObject hpBgGo = CreateUIObject("HPBarBG", slotGo.transform);
-                RectTransform hpBgRt = hpBgGo.GetComponent<RectTransform>();
-                hpBgRt.anchorMin = new Vector2(0f, 0f);
-                hpBgRt.anchorMax = new Vector2(1f, 0f);
-                hpBgRt.pivot = new Vector2(0.5f, 0f);
-                hpBgRt.anchoredPosition = new Vector2(25, 12);
-                hpBgRt.sizeDelta = new Vector2(-130, 5);
-                Image hpBg = hpBgGo.AddComponent<Image>();
-                hpBg.sprite = HUDTextureUtility.WhitePixel;
-                hpBg.color = new Color(0.15f, 0.2f, 0.25f, 0.8f);
+        //         // HP Mini Bar
+        //         GameObject hpBgGo = CreateUIObject("HPBarBG", slotGo.transform);
+        //         RectTransform hpBgRt = hpBgGo.GetComponent<RectTransform>();
+        //         hpBgRt.anchorMin = new Vector2(0f, 0f);
+        //         hpBgRt.anchorMax = new Vector2(1f, 0f);
+        //         hpBgRt.pivot = new Vector2(0.5f, 0f);
+        //         hpBgRt.anchoredPosition = new Vector2(25, 12);
+        //         hpBgRt.sizeDelta = new Vector2(-130, 5);
+        //         Image hpBg = hpBgGo.AddComponent<Image>();
+        //         hpBg.sprite = HUDTextureUtility.WhitePixel;
+        //         hpBg.color = new Color(0.15f, 0.2f, 0.25f, 0.8f);
 
-                GameObject hpFillGo = CreateUIObject("HPFill", hpBgGo.transform);
-                RectTransform hpFillRt = hpFillGo.GetComponent<RectTransform>();
-                hpFillRt.anchorMin = Vector2.zero;
-                hpFillRt.anchorMax = Vector2.one;
-                hpFillRt.sizeDelta = Vector2.zero;
-                Image hpFill = hpFillGo.AddComponent<Image>();
-                hpFill.sprite = HUDTextureUtility.WhitePixel;
-                hpFill.type = Image.Type.Filled;
-                hpFill.fillMethod = Image.FillMethod.Horizontal;
-                hpFill.fillAmount = 1f;
-                hpFill.color = new Color(0f, 0.9f, 0.45f, 1f);
+        //         GameObject hpFillGo = CreateUIObject("HPFill", hpBgGo.transform);
+        //         RectTransform hpFillRt = hpFillGo.GetComponent<RectTransform>();
+        //         hpFillRt.anchorMin = Vector2.zero;
+        //         hpFillRt.anchorMax = Vector2.one;
+        //         hpFillRt.sizeDelta = Vector2.zero;
+        //         Image hpFill = hpFillGo.AddComponent<Image>();
+        //         hpFill.sprite = HUDTextureUtility.WhitePixel;
+        //         hpFill.type = Image.Type.Filled;
+        //         hpFill.fillMethod = Image.FillMethod.Horizontal;
+        //         hpFill.fillAmount = 1f;
+        //         hpFill.color = new Color(0f, 0.9f, 0.45f, 1f);
 
-                slotGo.SetActive(false);
+        //         slotGo.SetActive(false);
 
-                // Serialize into slot
-                var element = slotsProp.GetArrayElementAtIndex(i);
-                element.FindPropertyRelative("root").objectReferenceValue = slotGo;
-                element.FindPropertyRelative("background").objectReferenceValue = slotBg;
-                element.FindPropertyRelative("accentBar").objectReferenceValue = accImg;
-                element.FindPropertyRelative("nameText").objectReferenceValue = nameTxt;
-                element.FindPropertyRelative("statusBadgeBg").objectReferenceValue = stBadgeBg;
-                element.FindPropertyRelative("statusText").objectReferenceValue = stTxt;
-                element.FindPropertyRelative("coreCarryIcon").objectReferenceValue = carryImg;
-                element.FindPropertyRelative("healthFill").objectReferenceValue = hpFill;
-                element.FindPropertyRelative("distanceText").objectReferenceValue = distTxt;
-            }
+        //         // Serialize into slot
+        //         var element = slotsProp.GetArrayElementAtIndex(i);
+        //         element.FindPropertyRelative("root").objectReferenceValue = slotGo;
+        //         element.FindPropertyRelative("background").objectReferenceValue = slotBg;
+        //         element.FindPropertyRelative("accentBar").objectReferenceValue = accImg;
+        //         element.FindPropertyRelative("nameText").objectReferenceValue = nameTxt;
+        //         element.FindPropertyRelative("statusBadgeBg").objectReferenceValue = stBadgeBg;
+        //         element.FindPropertyRelative("statusText").objectReferenceValue = stTxt;
+        //         element.FindPropertyRelative("coreCarryIcon").objectReferenceValue = carryImg;
+        //         element.FindPropertyRelative("healthFill").objectReferenceValue = hpFill;
+        //         element.FindPropertyRelative("distanceText").objectReferenceValue = distTxt;
+        //     }
 
-            so.ApplyModifiedProperties();
-            return comp;
-        }
+        //     so.ApplyModifiedProperties();
+        //     return comp;
+        // }
 
         private static HUD3DWorldMarker Create3DWorldMarkers(Transform parent)
         {

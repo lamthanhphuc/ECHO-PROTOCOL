@@ -13,6 +13,8 @@ namespace EchoProtocol.Networking.Tests
             "Assets/_Project/Scripts/Networking/Interaction/NetworkSectorBox.cs";
         private const string HudObjectiveTrackerPath =
             "Assets/Scripts/UI/HUD/HUDObjectiveTracker.cs";
+        private const string ZoneMissionHudPath =
+            "Assets/Scripts/UI/HUD/HUDZoneMissions.cs";
 
         [Test]
         public void NetworkMatchPrefab_UsesCanonicalTiming()
@@ -31,7 +33,7 @@ namespace EchoProtocol.Networking.Tests
             var escapeDuration = serializedState.FindProperty("_escapeDurationSeconds");
             Assert.That(matchDuration, Is.Not.Null);
             Assert.That(escapeDuration, Is.Not.Null);
-            Assert.That(matchDuration.floatValue, Is.EqualTo(900f).Within(0.001f));
+            Assert.That(matchDuration.floatValue, Is.EqualTo(2700f).Within(0.001f));
             Assert.That(escapeDuration.floatValue, Is.EqualTo(45f).Within(0.001f));
         }
 
@@ -39,7 +41,7 @@ namespace EchoProtocol.Networking.Tests
         public void NetworkMatchSource_DeclaresCanonicalTiming()
         {
             string source = File.ReadAllText(MatchSourcePath);
-            StringAssert.Contains("public const float DefaultMatchDurationSeconds = 900f;", source);
+            StringAssert.Contains("public const float DefaultMatchDurationSeconds = 2700f;", source);
             StringAssert.Contains("public const float DefaultEscapeDurationSeconds = 45f;", source);
         }
 
@@ -183,6 +185,17 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("Emergency power remaining", source);
             StringAssert.DoesNotContain("CHARGE SPACEFRIGATE", source);
             StringAssert.DoesNotContain("Scifi Charge", source);
+        }
+
+        [Test]
+        public void ZoneMissionHud_UsesAuthoritativeNetworkProgress()
+        {
+            string source = File.ReadAllText(ZoneMissionHudPath);
+
+            StringAssert.Contains("NetworkMatchState.Instance", source);
+            StringAssert.Contains("TryGetObjectiveProgress", source);
+            StringAssert.Contains("CompletedRelayCount", source);
+            StringAssert.Contains("SecurityHoldProgress01", source);
         }
 
         [Test]
