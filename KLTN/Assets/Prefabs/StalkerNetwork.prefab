@@ -278,6 +278,7 @@ MonoBehaviour:
     m_Bits: 1
   hearingThreshold: 0.1
   hearingRangeMultiplier: 1.25
+  coreCarrierPursuitDelaySeconds: 15
   closedDoorMultiplier: 0.75
   wallMultiplier: 0.35
   hearingDiagnosticIntervalSeconds: 0.5
