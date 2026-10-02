@@ -199,15 +199,28 @@ namespace EchoProtocol.Audio
                 _roomTransitioning = true;
             }
 
+            float nearestDangerDistance = 34f;
             bool danger = false;
             foreach (var stalker in FindObjectsByType<StalkerFusionRuntime>())
             {
-                if (Vector3.Distance(stalker.transform.position, camera.transform.position) > 34f) continue;
+                // StalkerAudioController already owns the spatial chase loop for this prefab.
+                // A second 2D drone makes the monster sound close regardless of its position.
+                if (stalker.GetComponent<EchoProtocol.AI.Stalker.Presentation.StalkerAudioController>() != null)
+                    continue;
+                float distance = Vector3.Distance(stalker.transform.position, camera.transform.position);
+                if (distance >= nearestDangerDistance) continue;
                 var state = stalker.GetReplicatedPresentationState();
                 if (state.PresentationVisible && (state.SemanticState == EchoProtocol.AI.Stalker.StalkerState.DETECT
-                    || state.SemanticState == EchoProtocol.AI.Stalker.StalkerState.CHASE)) { danger = true; break; }
+                    || state.SemanticState == EchoProtocol.AI.Stalker.StalkerState.CHASE))
+                {
+                    danger = true;
+                    nearestDangerDistance = distance;
+                }
             }
             Loop(_dangerMusic, danger ? "horror_ambience/tension_drone_loop" : null, 0.18f);
+            if (danger)
+                _dangerMusic.volume = 0.18f * _catalog.effectsVolume
+                    * Mathf.InverseLerp(34f, 6f, nearestDangerDistance);
         }
 
         private static void ConsiderRoom(Transform source, string key, Vector3 listener, ref float nearest, ref string room)

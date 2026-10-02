@@ -249,3 +249,5 @@ MonoBehaviour:
     clip: {fileID: 8300000, guid: a04d0419e0354416888fd72c9c5d3170, type: 3}
   - key: objectives/charge_interrupt
     clip: {fileID: 8300000, guid: 6b402e39a942462eaa3e1a32e5c75265, type: 3}
+  - key: objectives/emergency_grid_restored
+    clip: {fileID: 8300000, guid: 2019d0b27c3b445d81bb57bed86d0dd6, type: 3}

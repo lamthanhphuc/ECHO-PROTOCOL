@@ -1466,6 +1466,7 @@ namespace EchoProtocol.Networking
                 || !zone3.IsPlayerNearCharge(lifeState.transform.position)
                 || !TryAdvancePhase(NetworkMatchPhase.Zone3PushFrigate,
                     NetworkMatchPhase.FinalHunt, "ZONE3_CHARGE_ACTIVATED")) return false;
+            EmitZone3PowerSurgeNoiseAuthoritative(actor, zone3.ChargeStation.transform.position);
             zone3.StopAllAuthoritativePushers();
             Zone3Pusher = PlayerRef.None;
             Zone3ChargeOperator = PlayerRef.None;
@@ -2481,6 +2482,18 @@ namespace EchoProtocol.Networking
                 $"{stream}:{authority.MatchId:D}", nextSequence);
             if (HostRuntimeNoiseService.EnsureExists(authority).TryAccept(actor, type, key,
                     position, out _)) sequence = nextSequence;
+        }
+
+        private void EmitZone3PowerSurgeNoiseAuthoritative(PlayerRef actor, Vector3 position)
+        {
+            var authority = MatchAuthorityRuntime.Instance;
+            if (!actor.IsRealPlayer || authority == null || authority.MatchId == Guid.Empty) return;
+            long sequence = _zone3ChargeNoiseSequence == long.MaxValue ? 1 : _zone3ChargeNoiseSequence + 1;
+            var key = new RuntimeNoiseSourceOccurrenceKey(
+                $"zone3-power-surge:{authority.MatchId:D}", sequence);
+            if (HostRuntimeNoiseService.EnsureExists(authority).TryAccept(actor,
+                    RuntimeNoiseType.POWER_SURGE, key, position, out _))
+                _zone3ChargeNoiseSequence = sequence;
         }
 
         private static bool IsValidRelaySlot(RelaySlot slot) => (int)slot >= 0 && (int)slot <= 3;

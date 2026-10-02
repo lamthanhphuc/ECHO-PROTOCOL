@@ -299,8 +299,8 @@ namespace EchoProtocol.UI.HUD
                     bool timerRunning = IsEmergencyPowerTimerRunning();
                     string timeFormatted = FormatTime(secondsRemaining);
                     string statusMsg = timerRunning
-                        ? $"Emergency power remaining: {timeFormatted}. Return to Doorexit and escape."
-                        : "Exit system online. Return to Doorexit and escape.";
+                        ? $"EMERGENCY GRID RESTORED // Exit online. Alarm active. Return to Doorexit before power fails: {timeFormatted}."
+                        : "EMERGENCY GRID RESTORED // Exit online. Return to Doorexit and escape.";
 
                     SetObjective(
                         escapePhase ? "ESCAPE" : "RETURN TO EXIT",
