@@ -42,7 +42,8 @@ public class PlayerAnimatorDriver : MonoBehaviour
     [SerializeField] private float runSpeedReference = 6.2f;
 
     private float _smoothedSpeed;
-    private bool _wasDowned;
+    private bool _isHoldingDownedIdlePose;
+    private float _animatorSpeedBeforeDownedIdlePose = 1f;
     private bool _externalPushing;
 
     private void Awake()
@@ -130,11 +131,38 @@ public class PlayerAnimatorDriver : MonoBehaviour
         animator.SetBool(IsCarryingHash, useCarryPose);
         animator.SetBool(IsPushingHash, isPushing);
         animator.SetBool(IsDownedHash, isDowned);
-        if (isDowned && !isMoving && !_wasDowned)
+        SetDownedIdlePoseHold(isDowned && !isMoving && !IsReviving);
+    }
+
+    private void OnDisable()
+    {
+        SetDownedIdlePoseHold(false);
+    }
+
+    private void SetDownedIdlePoseHold(bool hold)
+    {
+        if (animator == null) return;
+
+        if (hold)
         {
-            animator.Play(DownedCrawlStateHash, 0, 0f);
+            if (!_isHoldingDownedIdlePose)
+            {
+                _animatorSpeedBeforeDownedIdlePose = animator.speed;
+                animator.speed = 1f;
+                animator.Play(DownedCrawlStateHash, 0, 0f);
+                animator.Update(0f);
+                _isHoldingDownedIdlePose = true;
+            }
+
+            animator.speed = 0f;
+            return;
         }
-        _wasDowned = isDowned;
+
+        if (!_isHoldingDownedIdlePose) return;
+        animator.speed = Mathf.Approximately(_animatorSpeedBeforeDownedIdlePose, 0f)
+            ? 1f
+            : _animatorSpeedBeforeDownedIdlePose;
+        _isHoldingDownedIdlePose = false;
     }
 
     private bool IsHoldingCoreStabilizer()
