@@ -19,6 +19,8 @@ namespace EchoProtocol.RelayA
         [SerializeField, Min(0.05f)] private float responseDelaySeconds = 1f;
         [SerializeField, Min(0.1f)] private float stabilityRequiredSeconds = 12f;
         [SerializeField, Min(0f)] private float instabilityToleranceSeconds = 0.5f;
+        [SerializeField, Min(0f)] private float instabilityDecaySecondsPerSecond = 1.5f;
+        [SerializeField, Min(0f)] private float dangerDecaySecondsPerSecond = 3f;
         [SerializeField] private Vector3 initialControls = new Vector3(34f, 66f, 38f);
         [SerializeField] private Vector3 solvedControls = new Vector3(58f, 42f, 54f);
 
@@ -53,6 +55,8 @@ namespace EchoProtocol.RelayA
         public float ResponseDelaySeconds => responseDelaySeconds;
         public float StabilityRequiredSeconds => stabilityRequiredSeconds;
         public float InstabilityToleranceSeconds => instabilityToleranceSeconds;
+        public float InstabilityDecaySecondsPerSecond => instabilityDecaySecondsPerSecond;
+        public float DangerDecaySecondsPerSecond => dangerDecaySecondsPerSecond;
         public Vector3 InitialControls => ClampControls(initialControls);
         public Vector3 SolvedControls => ClampControls(solvedControls);
         public bool EnableFault => enableFault;
@@ -141,6 +145,8 @@ namespace EchoProtocol.RelayA
             responseDelaySeconds = Mathf.Max(0.05f, responseDelaySeconds);
             stabilityRequiredSeconds = Mathf.Max(0.1f, stabilityRequiredSeconds);
             instabilityToleranceSeconds = Mathf.Max(0f, instabilityToleranceSeconds);
+            instabilityDecaySecondsPerSecond = Mathf.Max(0f, instabilityDecaySecondsPerSecond);
+            dangerDecaySecondsPerSecond = Mathf.Max(0f, dangerDecaySecondsPerSecond);
             faultWarningSeconds = Mathf.Max(0f, faultWarningSeconds);
             faultDurationSeconds = Mathf.Max(0.1f, faultDurationSeconds);
             repeatFaultMinDelaySeconds = Mathf.Max(0f, repeatFaultMinDelaySeconds);

@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.Events;
 
 public class PowerPuzzleController : MonoBehaviour
@@ -18,7 +19,8 @@ public class PowerPuzzleController : MonoBehaviour
     [SerializeField] private bool enableSoloFallback = true;
 
     [Header("Fail Penalty")]
-    [SerializeField] private int maxFailuresBeforeReset = 3;
+    [FormerlySerializedAs("maxFailuresBeforeReset")]
+    [SerializeField] private int maxFailuresBeforeProgressRegression = 3;
     [SerializeField] private float failLockoutSeconds = 4f;
 
     [Header("Events")]
@@ -396,9 +398,9 @@ public class PowerPuzzleController : MonoBehaviour
         _instructionReadForStep = false;
         _lockoutUntil = Time.time + failLockoutSeconds;
 
-        if (maxFailuresBeforeReset > 0 && _failureCount >= maxFailuresBeforeReset)
+        if (maxFailuresBeforeProgressRegression > 0 && _failureCount >= maxFailuresBeforeProgressRegression)
         {
-            _stepIndex = 0;
+            _stepIndex = Mathf.Max(0, _stepIndex - 1);
             _failureCount = 0;
         }
 

@@ -24,6 +24,7 @@ namespace EchoProtocol.RelayB
         private bool _isDriftActive;
         private bool _isDriftWarning;
         private bool _driftWarningFired;
+        private bool _mismatchPenaltyNotified;
         private float _driftTriggerHoldSeconds;
         private float _driftPhaseOffset;
         private float _driftFrequencyOffsetPercent;
@@ -67,6 +68,7 @@ namespace EchoProtocol.RelayB
             _isDriftActive = false;
             _isDriftWarning = false;
             _driftWarningFired = false;
+            _mismatchPenaltyNotified = false;
             _driftTriggerHoldSeconds = config != null
                 ? Mathf.Max(1f, config.DriftTriggerHoldSeconds + (randomizeAttempt ? Range(attemptRandom, -1f, 1.5f) : 0f))
                 : 3.5f;
@@ -95,8 +97,8 @@ namespace EchoProtocol.RelayB
                 if (_isSyncing)
                 {
                     _isSyncing = false;
-                    _syncTimer = 0f;
                     _instabilityGraceTimer = 0f;
+                    _mismatchPenaltyNotified = false;
                 }
 
                 NotifyChanged();
@@ -148,6 +150,7 @@ namespace EchoProtocol.RelayB
 
             _isSyncing = true;
             _instabilityGraceTimer = 0f;
+            _mismatchPenaltyNotified = false;
 
             bool isSync = CheckIsSynchronized(out _, out _);
             if (!isSync)
@@ -166,9 +169,9 @@ namespace EchoProtocol.RelayB
             }
 
             _isSyncing = false;
-            _syncTimer = 0f;
             _instabilityGraceTimer = 0f;
             _isDriftWarning = false;
+            _mismatchPenaltyNotified = false;
             NotifyChanged();
         }
 
@@ -200,6 +203,7 @@ namespace EchoProtocol.RelayB
             if (synchronized)
             {
                 _instabilityGraceTimer = 0f;
+                _mismatchPenaltyNotified = false;
                 _syncTimer += deltaTime;
 
                 UpdateDriftProgress();
@@ -222,10 +226,15 @@ namespace EchoProtocol.RelayB
                 {
                     if (_syncTimer > 0f)
                     {
-                        _syncTimer = 0f;
+                        float decayRate = _config != null ? _config.InstabilityDecaySecondsPerSecond : 2f;
+                        _syncTimer = Mathf.Max(0f, _syncTimer - deltaTime * decayRate);
                         _isDriftWarning = false;
-                        InstabilityReset?.Invoke();
-                        SignalMismatchOccurred?.Invoke();
+                        if (!_mismatchPenaltyNotified)
+                        {
+                            _mismatchPenaltyNotified = true;
+                            InstabilityReset?.Invoke();
+                            SignalMismatchOccurred?.Invoke();
+                        }
                     }
                 }
             }
@@ -239,6 +248,7 @@ namespace EchoProtocol.RelayB
             _isSyncing = false;
             _syncTimer = _config != null ? _config.HoldRequiredSeconds : 8f;
             _isDriftWarning = false;
+            _mismatchPenaltyNotified = false;
             NotifyChanged();
         }
 

@@ -168,12 +168,7 @@ namespace EchoProtocol.RelayB
 
         public void ApplyAuthoritativeControls(int channelIndex, float frequency, float phase)
         {
-            if (channelIndex < 0)
-            {
-                return;
-            }
-
-            if (channelIndex != _simulation.SelectedChannelIndex)
+            if (channelIndex >= 0 && channelIndex != _simulation.SelectedChannelIndex)
             {
                 _simulation.SelectChannel(channelIndex);
             }

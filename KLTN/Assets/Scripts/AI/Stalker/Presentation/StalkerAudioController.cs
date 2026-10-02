@@ -106,16 +106,18 @@ namespace EchoProtocol.AI.Stalker.Presentation
         [Header("3D Distance Audio Tuning")]
         [Tooltip("Apply finite 3D attenuation so monster audio becomes silent at max distance.")]
         [SerializeField] private bool autoConfigure3D = true;
-        [SerializeField, Min(0.5f)] private float detectMinDistance = 30f;
+        [SerializeField, Min(0.5f)] private float detectMinDistance = 20f;
         [SerializeField, Min(5f)] private float detectMaxDistance = 60f;
         [SerializeField, Min(0.5f)] private float voiceMinDistance = 10f;
         [SerializeField, Min(5f)] private float voiceMaxDistance = 25f;
-        [SerializeField, Min(0.5f)] private float movementMinDistance = 15f;
-        [SerializeField, Min(5f)] private float movementMaxDistance = 40f;
+        [SerializeField, Min(0.5f)] private float movementMinDistance = 10f;
+        [SerializeField, Min(5f)] private float movementMaxDistance = 50f;
         [SerializeField, Min(0.2f)] private float breathingMinDistance   = 0.8f;
         [SerializeField, Min(2f)] private float breathingMaxDistance = 6f;
         [SerializeField, Min(0.5f)] private float chaseMinDistance = 80f;
         [SerializeField, Min(5f)] private float chaseMaxDistance = 150f;
+        [Tooltip("Higher values make monster audio drop off faster between min and max distance.")]
+        [SerializeField, Range(1f, 4f)] private float distanceRolloffPower = 2.4f;
 
         // ──────────────────────────────────────────────────────────────────────
         // Private runtime state
@@ -224,22 +226,45 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         private void Configure3DSources()
         {
-            ConfigureSource3D(detectSource,    detectMinDistance,    detectMaxDistance);
-            ConfigureSource3D(voiceSource,     voiceMinDistance,     voiceMaxDistance);
-            ConfigureSource3D(chaseSource,     chaseMinDistance,     chaseMaxDistance);
-            ConfigureSource3D(movementSource,  movementMinDistance,  movementMaxDistance);
-            ConfigureSource3D(breathingSource, breathingMinDistance, breathingMaxDistance);
+            ConfigureSource3D(detectSource,    detectMinDistance,    detectMaxDistance,    distanceRolloffPower);
+            ConfigureSource3D(voiceSource,     voiceMinDistance,     voiceMaxDistance,     distanceRolloffPower);
+            ConfigureSource3D(chaseSource,     chaseMinDistance,     chaseMaxDistance,     distanceRolloffPower);
+            ConfigureSource3D(movementSource,  movementMinDistance,  movementMaxDistance,  distanceRolloffPower);
+            ConfigureSource3D(breathingSource, breathingMinDistance, breathingMaxDistance, distanceRolloffPower);
         }
 
-        private static void ConfigureSource3D(AudioSource src, float minDist, float maxDist)
+        private static void ConfigureSource3D(AudioSource src, float minDist, float maxDist, float rolloffPower)
         {
             if (src == null) return;
+            float effectiveMaxDistance = Mathf.Max(maxDist, minDist + 0.1f);
             src.spatialBlend = 1f; // Full 3D
             src.minDistance  = minDist;
-            src.maxDistance  = Mathf.Max(maxDist, minDist + 0.1f);
-            src.rolloffMode  = AudioRolloffMode.Linear;
+            src.maxDistance  = effectiveMaxDistance;
+            src.rolloffMode  = AudioRolloffMode.Custom;
             src.dopplerLevel = 0f;
             src.spread       = 0f; // Point source for accurate 3D spatial panning
+            src.SetCustomCurve(
+                AudioSourceCurveType.CustomRolloff,
+                BuildDistanceRolloffCurve(rolloffPower));
+        }
+
+        private static AnimationCurve BuildDistanceRolloffCurve(float rolloffPower)
+        {
+            rolloffPower = Mathf.Max(1f, rolloffPower);
+
+            var curve = new AnimationCurve(
+                new Keyframe(0f, 1f),
+                new Keyframe(0.25f, Mathf.Pow(0.75f, rolloffPower)),
+                new Keyframe(0.5f, Mathf.Pow(0.5f, rolloffPower)),
+                new Keyframe(0.75f, Mathf.Pow(0.25f, rolloffPower)),
+                new Keyframe(1f, 0f));
+
+            for (int i = 0; i < curve.length; i++)
+            {
+                curve.SmoothTangents(i, 0f);
+            }
+
+            return curve;
         }
 
         private void InitBreathing()

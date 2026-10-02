@@ -972,7 +972,6 @@ namespace EchoProtocol.Networking
             var controller = (RelayBController)target;
             var before = controller.Snapshot;
             bool changingChannel = channel != before.SelectedChannelIndex;
-            if (channel >= 0 && !before.HasScanned) return false;
             if (!changingChannel && channel >= 0 && !before.IsSelectedChannelCorrect) return false;
             if (!ClaimRelayOperator(requester, slot)) return false;
             controller.ApplyAuthoritativeControls(channel, frequency, phase);
@@ -999,7 +998,6 @@ namespace EchoProtocol.Networking
             var controller = (RelayBController)target;
             if (action == RelayBAction.StartSync
                 && (controller.Snapshot.SelectedChannelIndex < 0
-                    || !controller.Snapshot.HasScanned
                     || !controller.Snapshot.IsSelectedChannelCorrect)) return false;
             if (!ClaimRelayOperator(requester, slot)) return false;
             switch (action)

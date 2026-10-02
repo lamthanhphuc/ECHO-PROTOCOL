@@ -20,6 +20,7 @@ namespace EchoProtocol.RelayA
         private bool _running;
         private bool _online;
         private bool _randomizeAttempt;
+        private bool _dangerPenaltyNotified;
         private RelayAFaultType _warningFault;
         private RelayAFaultType _activeFault;
         private RelayAFaultType _scheduledFault;
@@ -56,6 +57,7 @@ namespace EchoProtocol.RelayA
                 config != null ? 7f : 0f);
             _running = false;
             _online = false;
+            _dangerPenaltyNotified = false;
             _warningFault = RelayAFaultType.None;
             _activeFault = RelayAFaultType.None;
             _scheduledFault = randomizeAttempt ? SelectRandomFault(_attemptRandom) : RelayAFaultType.None;
@@ -95,8 +97,8 @@ namespace EchoProtocol.RelayA
             }
 
             _running = false;
-            _stabilitySeconds = 0f;
             _instabilitySeconds = 0f;
+            _dangerPenaltyNotified = false;
             NotifyChanged();
         }
 
@@ -126,16 +128,19 @@ namespace EchoProtocol.RelayA
 
             if (_running && dangerous)
             {
-                if (_stabilitySeconds > 0f)
+                if (!_dangerPenaltyNotified && _stabilitySeconds > 0f)
                 {
                     OverloadStarted?.Invoke();
                 }
 
-                _stabilitySeconds = 0f;
+                _dangerPenaltyNotified = true;
+                float decayRate = _config.DangerDecaySecondsPerSecond;
+                _stabilitySeconds = Mathf.Max(0f, _stabilitySeconds - deltaTime * decayRate);
                 _instabilitySeconds = 0f;
             }
             else if (_running && stable)
             {
+                _dangerPenaltyNotified = false;
                 _instabilitySeconds = 0f;
                 _stabilitySeconds += deltaTime;
                 if (_stabilitySeconds >= _config.StabilityRequiredSeconds)
@@ -150,10 +155,12 @@ namespace EchoProtocol.RelayA
             }
             else if (_running)
             {
+                _dangerPenaltyNotified = false;
                 _instabilitySeconds += deltaTime;
                 if (_instabilitySeconds > _config.InstabilityToleranceSeconds)
                 {
-                    _stabilitySeconds = 0f;
+                    float decayRate = _config.InstabilityDecaySecondsPerSecond;
+                    _stabilitySeconds = Mathf.Max(0f, _stabilitySeconds - deltaTime * decayRate);
                 }
             }
 
@@ -165,6 +172,7 @@ namespace EchoProtocol.RelayA
             _online = true;
             _running = false;
             _stabilitySeconds = _config != null ? _config.StabilityRequiredSeconds : 12f;
+            _dangerPenaltyNotified = false;
             _warningFault = RelayAFaultType.None;
             _activeFault = RelayAFaultType.None;
             NotifyChanged();

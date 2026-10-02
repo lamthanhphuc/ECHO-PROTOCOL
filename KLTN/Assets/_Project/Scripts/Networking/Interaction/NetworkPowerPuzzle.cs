@@ -2,6 +2,7 @@ using System;
 using EchoProtocol.Diagnostics;
 using Fusion;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace EchoProtocol.Networking
 {
@@ -13,7 +14,8 @@ namespace EchoProtocol.Networking
 
         [SerializeField] private int[] _sequence = { 0, 1, 0, 1 };
         [SerializeField, Min(1)] private int _stationCount = 2;
-        [SerializeField, Min(1)] private int _maxFailuresBeforeProgressReset = 3;
+        [FormerlySerializedAs("_maxFailuresBeforeProgressReset")]
+        [SerializeField, Min(1)] private int _maxFailuresBeforeProgressRegression = 3;
         [SerializeField, Min(0.05f)] private float _failureLockoutSeconds = 4f;
         [SerializeField, Min(0.05f)] private float _resettingSeconds = 0.15f;
 
@@ -38,7 +40,7 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkId SectorBoxId { get; private set; }
         [Networked] public uint TransitionOrdinal { get; private set; }
         [Networked] private TickTimer StateTimer { get; set; }
-        [Networked] private NetworkBool ResetProgressAfterFailure { get; set; }
+        [Networked] private NetworkBool RegressProgressAfterFailure { get; set; }
 
         public int SequenceLength => _sequence != null ? _sequence.Length : 0;
         public int StationCount => _stationCount;
@@ -55,7 +57,7 @@ namespace EchoProtocol.Networking
                 LastInteractor = PlayerRef.None;
                 TransitionOrdinal = 0;
                 StateTimer = TickTimer.None;
-                ResetProgressAfterFailure = false;
+                RegressProgressAfterFailure = false;
             }
 
             // OnChangedRender is not guaranteed for a late joiner's initial snapshot.
@@ -84,13 +86,13 @@ namespace EchoProtocol.Networking
 
             if (State == NetworkPowerPuzzleState.Resetting && StateTimer.ExpiredOrNotRunning(Runner))
             {
-                if (ResetProgressAfterFailure)
+                if (RegressProgressAfterFailure)
                 {
-                    CurrentSequenceIndex = 0;
+                    CurrentSequenceIndex = Mathf.Max(0, CurrentSequenceIndex - 1);
                     FailureCount = 0;
                 }
 
-                ResetProgressAfterFailure = false;
+                RegressProgressAfterFailure = false;
                 LastInputWasCorrect = false;
                 StateTimer = TickTimer.None;
                 CommitState(NetworkPowerPuzzleState.InProgress);
@@ -146,8 +148,8 @@ namespace EchoProtocol.Networking
             if (result == PowerPuzzleInputResult.AcceptedIncorrect)
             {
                 FailureCount++;
-                ResetProgressAfterFailure = _maxFailuresBeforeProgressReset > 0
-                    && FailureCount >= _maxFailuresBeforeProgressReset;
+                RegressProgressAfterFailure = _maxFailuresBeforeProgressRegression > 0
+                    && FailureCount >= _maxFailuresBeforeProgressRegression;
                 StateTimer = TickTimer.CreateFromSeconds(Runner, _failureLockoutSeconds);
                 CommitState(NetworkPowerPuzzleState.Failed);
                 Debug.LogWarning(

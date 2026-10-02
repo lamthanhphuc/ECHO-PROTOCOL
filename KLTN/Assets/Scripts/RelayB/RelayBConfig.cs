@@ -11,6 +11,7 @@ namespace EchoProtocol.RelayB
         [SerializeField, Range(1f, 30f)] private float phaseToleranceDegrees = 12f;
         [SerializeField, Min(1f)] private float holdRequiredSeconds = 8f;
         [SerializeField, Min(0f)] private float instabilityGraceSeconds = 0.5f;
+        [SerializeField, Min(0f)] private float instabilityDecaySecondsPerSecond = 2f;
 
         [Header("Control Ranges")]
         [SerializeField, Min(1f)] private float minFrequency = 10f;
@@ -30,6 +31,7 @@ namespace EchoProtocol.RelayB
         public float PhaseToleranceDegrees => phaseToleranceDegrees;
         public float HoldRequiredSeconds => holdRequiredSeconds;
         public float InstabilityGraceSeconds => instabilityGraceSeconds;
+        public float InstabilityDecaySecondsPerSecond => instabilityDecaySecondsPerSecond;
         public float MinFrequency => minFrequency;
         public float MaxFrequency => maxFrequency;
         public bool EnableDrift => enableDrift;
@@ -137,6 +139,7 @@ namespace EchoProtocol.RelayB
             phaseToleranceDegrees = Mathf.Max(1f, phaseToleranceDegrees);
             holdRequiredSeconds = Mathf.Max(1f, holdRequiredSeconds);
             instabilityGraceSeconds = Mathf.Max(0f, instabilityGraceSeconds);
+            instabilityDecaySecondsPerSecond = Mathf.Max(0f, instabilityDecaySecondsPerSecond);
             minFrequency = Mathf.Max(1f, minFrequency);
             maxFrequency = Mathf.Max(minFrequency + 1f, maxFrequency);
             driftWarningSeconds = Mathf.Max(0.1f, driftWarningSeconds);
@@ -149,4 +152,3 @@ namespace EchoProtocol.RelayB
         }
     }
 }
-
