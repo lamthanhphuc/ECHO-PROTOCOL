@@ -149,9 +149,14 @@ namespace EchoProtocol.UI.MainMenu
     public void OnClickLogout()
     {
       var runtime = AuthRuntime.EnsureExists();
-      runtime.AuthService.LogoutLocal();
-      runtime.SetRestoreState(SessionRestoreState.None);
-      SceneManager.LoadScene(loginSceneName);
+
+      runtime.AuthService.Logout(_ =>
+      {
+        runtime.SetRestoreState(
+          SessionRestoreState.None);
+
+        SceneManager.LoadScene(loginSceneName);
+      });
     }
 
     public void OnClickShop()

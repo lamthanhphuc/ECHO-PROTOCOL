@@ -12,6 +12,8 @@ namespace EchoProtocol.Api
     public const string Health = "/api/health";
     public const string AuthRegister = "/api/auth/register";
     public const string AuthLogin = "/api/auth/login";
+    public const string AuthRefresh = "/api/auth/refresh";
+    public const string AuthLogout = "/api/auth/logout";
     public const string AuthMe = "/api/auth/me";
     public const string PaymentsCatalog = "/api/payments/catalog";
     public const string TelemetryBatch = "/api/telemetry/batch";
@@ -23,6 +25,10 @@ namespace EchoProtocol.Api
   public class ApiClient : MonoBehaviour
   {
     private ApiConfiguration _configuration;
+
+    // Only one refresh request may run at a time.
+    private bool _refreshInProgress;
+    private bool _lastRefreshSucceeded;
 
     public void Initialize(ApiConfiguration configuration)
     {
@@ -98,12 +104,166 @@ namespace EchoProtocol.Api
         || error.IndexOf("timed out", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
+    private IEnumerator EnsureFreshAccessTokenCoroutine(
+      Action<bool> completed)
+    {
+      if (!TokenStorage.CanRefreshSession())
+      {
+        completed?.Invoke(false);
+        yield break;
+      }
+
+      // Another authenticated request is already rotating the token.
+      // Wait for that request instead of sending another refresh.
+      if (_refreshInProgress)
+      {
+        while (_refreshInProgress)
+        {
+          yield return null;
+        }
+
+        completed?.Invoke(_lastRefreshSucceeded);
+        yield break;
+      }
+
+      _refreshInProgress = true;
+      _lastRefreshSucceeded = false;
+
+      try
+      {
+        var requestDto = new RefreshTokenRequestDto
+        {
+          refreshToken = TokenStorage.GetRefreshToken()
+        };
+
+        var json = JsonUtility.ToJson(requestDto);
+
+        var url = _configuration.BuildApiUrl(
+          ApiEndpoints.AuthRefresh);
+
+        using var request = new UnityWebRequest(
+          url,
+          UnityWebRequest.kHttpVerbPOST);
+
+        request.downloadHandler =
+          new DownloadHandlerBuffer();
+
+        request.uploadHandler =
+          new UploadHandlerRaw(
+            Encoding.UTF8.GetBytes(json));
+
+        request.timeout =
+          _configuration.RequestTimeoutSeconds;
+
+        request.SetRequestHeader(
+          "Accept",
+          "application/json");
+
+        request.SetRequestHeader(
+          "Content-Type",
+          "application/json; charset=utf-8");
+
+        yield return request.SendWebRequest();
+
+        if (request.result != UnityWebRequest.Result.Success
+            || request.responseCode < 200
+            || request.responseCode >= 300)
+        {
+          // 401 from /refresh means this refresh session can no
+          // longer be used: expired, invalid, revoked or replayed.
+          if (request.responseCode == 401)
+          {
+            ClearExpiredSession();
+          }
+
+          yield break;
+        }
+
+        LoginApiResponse response;
+
+        try
+        {
+          response =
+            JsonUtility.FromJson<LoginApiResponse>(
+              request.downloadHandler?.text
+              ?? string.Empty);
+        }
+        catch (Exception)
+        {
+          yield break;
+        }
+
+        if (response == null
+            || !response.success
+            || response.data == null)
+        {
+          yield break;
+        }
+
+        var data = response.data;
+
+        if (!TokenStorage.TrySave(
+              data.accessToken,
+              data.expiresAt,
+              data.refreshToken,
+              data.refreshExpiresAt))
+        {
+          ClearExpiredSession();
+          yield break;
+        }
+
+        _lastRefreshSucceeded = true;
+
+        Debug.Log(
+          "[Auth] Access token refreshed successfully.");
+      }
+      finally
+      {
+        _refreshInProgress = false;
+        completed?.Invoke(
+          _lastRefreshSucceeded);
+      }
+    }
+
+    private static ApiResult<TResponse>
+      CreateRefreshUnavailableResult<TResponse>()
+    {
+      return new ApiResult<TResponse>
+      {
+        IsSuccess = false,
+        StatusCode = 0,
+        FailureKind = ApiFailureKind.Network,
+        ErrorCode = string.Empty,
+        Message =
+          "Unable to refresh session. Check backend connection."
+      };
+    }
+    private static ApiResult<TResponse>
+      CreateUnauthorizedResult<TResponse>()
+    {
+      return new ApiResult<TResponse>
+      {
+        IsSuccess = false,
+        StatusCode = 401,
+        FailureKind = ApiFailureKind.Business,
+        ErrorCode = AuthErrorCodes.Unauthorized,
+        Message =
+          "Session expired. Please log in again."
+      };
+    }
+
+    private static void ClearExpiredSession()
+    {
+      TokenStorage.Clear();
+      AuthSession.Clear();
+    }
     private IEnumerator SendJsonCoroutine<TResponse>(
       string method,
       string endpoint,
       string jsonBody,
       bool attachBearer,
-      Action<ApiResult<TResponse>> callback)
+      Action<ApiResult<TResponse>> callback,
+      bool allowRefreshRetry = true)
     {
       if (_configuration == null)
       {
@@ -115,6 +275,38 @@ namespace EchoProtocol.Api
           ErrorCode = "INTERNAL_SERVER_ERROR"
         });
         yield break;
+      }
+
+      if (attachBearer
+          && TokenStorage.ShouldRefreshAccessToken())
+      {
+        var refreshCompleted = false;
+        var refreshSucceeded = false;
+
+        yield return EnsureFreshAccessTokenCoroutine(
+          success =>
+          {
+            refreshSucceeded = success;
+            refreshCompleted = true;
+          });
+
+        while (!refreshCompleted)
+        {
+          yield return null;
+        }
+
+        // If proactive refresh temporarily fails but the current
+        // access token is still valid, use it for this request.
+        if (!refreshSucceeded
+            && TokenStorage.IsExpired())
+        {
+          callback?.Invoke(
+            TokenStorage.CanRefreshSession()
+              ? CreateRefreshUnavailableResult<TResponse>()
+              : CreateUnauthorizedResult<TResponse>());
+
+          yield break;
+        }
       }
 
       var url = _configuration.BuildApiUrl(endpoint);
@@ -175,6 +367,54 @@ namespace EchoProtocol.Api
         yield break;
       }
 
+      // 401 refresh/retry must stay outside JSON parsing try/catch.
+      // C# iterators cannot yield inside a try block that has catch.
+      if (statusCode == 401
+          && attachBearer
+          && allowRefreshRetry
+          && TokenStorage.CanRefreshSession())
+      {
+        var refreshCompleted = false;
+        var refreshSucceeded = false;
+
+        yield return EnsureFreshAccessTokenCoroutine(
+          success =>
+          {
+            refreshSucceeded = success;
+            refreshCompleted = true;
+          });
+
+        while (!refreshCompleted)
+        {
+          yield return null;
+        }
+
+        if (refreshSucceeded)
+        {
+          yield return SendJsonCoroutine(
+            method,
+            endpoint,
+            jsonBody,
+            attachBearer,
+            callback,
+            allowRefreshRetry: false);
+
+          yield break;
+        }
+
+        // Temporary refresh/network failure must not destroy
+        // an otherwise usable refresh session.
+        if (TokenStorage.CanRefreshSession())
+        {
+          callback?.Invoke(
+            CreateRefreshUnavailableResult<TResponse>());
+
+          yield break;
+        }
+
+        // Otherwise the refresh endpoint rejected/cleared the
+        // refresh session. Continue into the normal 401 parser.
+      }
       try
       {
         if (statusCode >= 200 && statusCode < 300)
@@ -188,8 +428,7 @@ namespace EchoProtocol.Api
         }
 
         if (statusCode == 401)
-        {
-          result.IsSuccess = false;
+        {          result.IsSuccess = false;
           result.FailureKind = ApiFailureKind.Business;
           result.ErrorCode = AuthErrorCodes.Unauthorized;
           result.Message = "Session expired. Please log in again.";
