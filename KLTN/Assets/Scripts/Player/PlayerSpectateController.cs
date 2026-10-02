@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Fusion;
 
 [DefaultExecutionOrder(500)]
 public class PlayerSpectateController : MonoBehaviour
@@ -7,14 +8,19 @@ public class PlayerSpectateController : MonoBehaviour
     [SerializeField] private PlayerDownState downState;
     [SerializeField] private Camera playerCamera;
     [SerializeField] private bool autoSpectateWhenEliminated = true;
+    [SerializeField] private InputActionReference nextSpectateTargetAction;
 
     private Transform _spectateTarget;
     private EchoProtocol.Networking.NetworkPlayerLifeState _networkLife;
     private int _spectateTargetIndex = -1;
+    private int _spectateTargetCount;
     private bool _wasSpectating;
 
     public bool IsSpectating => downState != null && downState.IsSpectating;
     public Transform SpectateTarget => _spectateTarget;
+    public int SpectateTargetIndex => _spectateTargetIndex;
+    public int SpectateTargetCount => _spectateTargetCount;
+    public string SpectateTargetLabel => BuildSpectateTargetLabel(_spectateTarget, _spectateTargetIndex);
 
     private void Awake()
     {
@@ -30,10 +36,12 @@ public class PlayerSpectateController : MonoBehaviour
     private void OnEnable()
     {
         EnsureDownState();
+        nextSpectateTargetAction?.action?.Enable();
     }
 
     private void OnDisable()
     {
+        nextSpectateTargetAction?.action?.Disable();
         if (downState != null)
         {
             downState.StateChanged -= OnLifeStateChanged;
@@ -69,6 +77,7 @@ public class PlayerSpectateController : MonoBehaviour
             {
                 _wasSpectating = false;
                 _spectateTarget = null;
+                _spectateTargetCount = 0;
                 var ownCamera = Camera.main;
                 var ownController = ownCamera != null ? ownCamera.GetComponent<PlayerCamera>() : null;
                 if (ownController != null && ownController.Target != transform)
@@ -85,7 +94,7 @@ public class PlayerSpectateController : MonoBehaviour
                 _wasSpectating = true;
                 SelectNextSpectateTarget();
             }
-            else if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+            else if (WasNextSpectateTargetPressed())
             {
                 SelectNextSpectateTarget();
             }
@@ -134,6 +143,7 @@ public class PlayerSpectateController : MonoBehaviour
         if (_networkLife == null || _networkLife.Runner == null)
         {
             _spectateTarget = null;
+            _spectateTargetCount = 0;
             return;
         }
 
@@ -155,12 +165,44 @@ public class PlayerSpectateController : MonoBehaviour
         {
             _spectateTarget = null;
             _spectateTargetIndex = -1;
+            _spectateTargetCount = 0;
             return;
         }
 
+        _spectateTargetCount = candidates.Count;
         int currentIndex = _spectateTarget != null ? candidates.IndexOf(_spectateTarget) : _spectateTargetIndex;
         _spectateTargetIndex = (currentIndex + 1) % candidates.Count;
         _spectateTarget = candidates[_spectateTargetIndex];
+    }
+
+    private bool WasNextSpectateTargetPressed()
+    {
+        if (nextSpectateTargetAction != null && nextSpectateTargetAction.action != null)
+        {
+            return nextSpectateTargetAction.action.WasPressedThisFrame();
+        }
+
+        return Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
+    }
+
+    private static string BuildSpectateTargetLabel(Transform target, int index)
+    {
+        if (target == null) return "NO SIGNAL";
+
+        var lobbyState = target.GetComponent<EchoProtocol.Networking.LobbyPlayerState>();
+        if (lobbyState != null)
+        {
+            if (lobbyState.TeamId > 0) return $"PLAYER {lobbyState.TeamId}";
+
+            var operatorName = lobbyState.OperatorName.ToString();
+            if (!string.IsNullOrWhiteSpace(operatorName)) return operatorName.ToUpperInvariant();
+        }
+
+        var networkObject = target.GetComponent<NetworkObject>();
+        if (networkObject != null && networkObject.InputAuthority.IsRealPlayer)
+            return networkObject.InputAuthority.ToString().ToUpperInvariant();
+
+        return index >= 0 ? $"PLAYER {index + 1}" : target.name.ToUpperInvariant();
     }
 
     private static bool IsValidSpectateLife(EchoProtocol.Networking.NetworkPlayerLifeState life)

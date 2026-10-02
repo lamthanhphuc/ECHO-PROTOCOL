@@ -18,6 +18,7 @@ namespace EchoProtocol.UI.HUD
         [SerializeField] private HUDFieldScanner fieldScannerHUD;
         [SerializeField] private HUDScannerTutorial scannerTutorial;
         [SerializeField] private HUDNoiseMakerPlacement noiseMakerPlacement;
+        [SerializeField] private HUDSpectateOverlay spectateOverlay;
 
         [Header("Runtime Auto-Find")]
         [SerializeField] private bool autoFindLocalPlayerOnStart = true;
@@ -33,6 +34,7 @@ namespace EchoProtocol.UI.HUD
         public HUDFieldScanner FieldScannerHUD => fieldScannerHUD;
         public HUDScannerTutorial ScannerTutorial => scannerTutorial;
         public HUDNoiseMakerPlacement NoiseMakerPlacement => noiseMakerPlacement;
+        public HUDSpectateOverlay SpectateOverlay => spectateOverlay;
 
         private void Awake()
         {
@@ -71,6 +73,8 @@ namespace EchoProtocol.UI.HUD
             if (fieldScannerHUD == null) fieldScannerHUD = GetComponentInChildren<HUDFieldScanner>(true);
             if (scannerTutorial == null) scannerTutorial = GetComponentInChildren<HUDScannerTutorial>(true);
             if (noiseMakerPlacement == null) noiseMakerPlacement = GetComponentInChildren<HUDNoiseMakerPlacement>(true);
+            if (spectateOverlay == null) spectateOverlay = GetComponentInChildren<HUDSpectateOverlay>(true);
+            if (spectateOverlay == null) spectateOverlay = HUDSpectateOverlay.CreateDefault(transform);
         }
 
         public void FindAndBindLocalPlayer()
@@ -133,6 +137,11 @@ namespace EchoProtocol.UI.HUD
             {
                 noiseMakerPlacement.Unbind();
             }
+
+            if (spectateOverlay != null)
+            {
+                spectateOverlay.BindSpectateController(null);
+            }
         }
 
         private static bool IsValidLocalNetworkPlayer(LobbyPlayerState state)
@@ -172,6 +181,7 @@ namespace EchoProtocol.UI.HUD
             var inventory = playerRoot.GetComponentInChildren<PlayerInventory>(true);
             var networkInteractor = playerRoot.GetComponentInChildren<NetworkPlayerInteractor>(true);
             var fieldScanner = playerRoot.GetComponent<NetworkFieldScanner>();
+            var spectate = playerRoot.GetComponentInChildren<PlayerSpectateController>(true);
 
             if (playerVitals != null)
             {
@@ -201,6 +211,11 @@ namespace EchoProtocol.UI.HUD
             if (noiseMakerPlacement != null)
             {
                 noiseMakerPlacement.BindPlayer(networkInteractor);
+            }
+
+            if (spectateOverlay != null)
+            {
+                spectateOverlay.BindSpectateController(spectate);
             }
 
             if (teammateStatus != null)

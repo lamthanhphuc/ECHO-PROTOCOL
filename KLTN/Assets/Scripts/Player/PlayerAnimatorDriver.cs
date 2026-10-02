@@ -17,6 +17,7 @@ public class PlayerAnimatorDriver : MonoBehaviour
     private static readonly int IsSprintingHash = Animator.StringToHash("IsSprinting");
     private static readonly int IsCrouchingHash = Animator.StringToHash("IsCrouching");
     private static readonly int IsCarryingHash = Animator.StringToHash("IsCarrying");
+    private static readonly int IsPushingHash = Animator.StringToHash("IsPushing");
     private static readonly int IsDownedHash = Animator.StringToHash("IsDowned");
     private static readonly int IsRevivingHash = Animator.StringToHash("IsReviving");
     private static readonly int ReviveHash = Animator.StringToHash("Revive");
@@ -42,6 +43,7 @@ public class PlayerAnimatorDriver : MonoBehaviour
 
     private float _smoothedSpeed;
     private bool _wasDowned;
+    private bool _externalPushing;
 
     private void Awake()
     {
@@ -97,7 +99,9 @@ public class PlayerAnimatorDriver : MonoBehaviour
                     || GameplayInputSettings.IsPressed(GameplayAction.MoveRight)));
         bool isDowned = (downState != null && downState.IsDowned)
             || (networkLifeState != null && networkLifeState.Object != null && networkLifeState.Object.IsValid && networkLifeState.IsDowned);
-        Vector2 moveDirection = GetMoveDirection(isSprinting, isCarryingCore, isDowned);
+        bool isPushing = !isDowned && !IsReviving && (_externalPushing
+            || (networkMovement != null && networkMovement.IsAnimationPushing));
+        Vector2 moveDirection = GetMoveDirection(isSprinting, useCarryPose, isDowned);
         float movingThreshold = isDowned ? 0.08f : 0.01f;
         bool isMoving = moveDirection.sqrMagnitude > movingThreshold;
         if (!isMoving)
@@ -124,6 +128,7 @@ public class PlayerAnimatorDriver : MonoBehaviour
         animator.SetBool(IsSprintingHash, isSprinting);
         animator.SetBool(IsCrouchingHash, isCrouching);
         animator.SetBool(IsCarryingHash, useCarryPose);
+        animator.SetBool(IsPushingHash, isPushing);
         animator.SetBool(IsDownedHash, isDowned);
         if (isDowned && !isMoving && !_wasDowned)
         {
@@ -157,6 +162,17 @@ public class PlayerAnimatorDriver : MonoBehaviour
     }
 
     public bool IsReviving { get; private set; }
+
+    public void SetPushing(bool isPushing)
+    {
+        _externalPushing = isPushing;
+        if (animator == null || animator.runtimeAnimatorController == null)
+        {
+            animator = ResolvePlayableAnimator();
+        }
+
+        animator?.SetBool(IsPushingHash, isPushing);
+    }
 
     public void SetReviving(bool isReviving)
     {

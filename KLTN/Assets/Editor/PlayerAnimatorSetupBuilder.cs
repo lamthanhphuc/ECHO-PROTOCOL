@@ -27,6 +27,7 @@ public static class PlayerAnimatorSetupBuilder
     private const string CrawlIdleFbxPath = AnimationFolder + "/Player_Crawl.FBX";
     private const string CrawlForwardFbxPath = AnimationFolder + "/Crawl_Forward.fbx";
     private const string ReviveFbxPath = AnimationFolder + "/Reviving.FBX";
+    private const string PushFbxPath = AnimationFolder + "/Pushing.fbx";
 
     private static readonly string[] PrefabPaths =
     {
@@ -78,6 +79,7 @@ public static class PlayerAnimatorSetupBuilder
         EnsureHumanoidAnimationImport(CrawlIdleFbxPath, loop: true);
         EnsureHumanoidAnimationImport(CrawlForwardFbxPath, loop: true);
         EnsureHumanoidAnimationImport(ReviveFbxPath, loop: false);
+        EnsureHumanoidAnimationImport(PushFbxPath, loop: true);
 
         AnimationClip idle = LoadRequiredClip("Player_Idle", IdleFbxPath, "Idle");
         AnimationClip walkForward = LoadRequiredClip("Player_Walk_Forward", WalkForwardFbxPath, "Walking");
@@ -96,6 +98,7 @@ public static class PlayerAnimatorSetupBuilder
         AnimationClip downedIdle = LoadRequiredClip("Player_Downed_Idle", CrawlIdleFbxPath, "Player_Crawl");
         AnimationClip crawlForward = LoadRequiredClip("Player_Crawl_Forward", CrawlForwardFbxPath, "Crawl_Forward");
         AnimationClip revive = LoadRequiredClip("Player_Revive", ReviveFbxPath, "Reviving");
+        AnimationClip pushing = LoadRequiredClip("Player_Pushing", PushFbxPath, "Pushing");
 
         PlayerClips clips = new PlayerClips
         {
@@ -116,6 +119,7 @@ public static class PlayerAnimatorSetupBuilder
             DownedIdle = downedIdle,
             CrawlForward = crawlForward,
             Revive = revive,
+            Pushing = pushing,
         };
 
         if (clips.HasMissingClips)
@@ -162,6 +166,7 @@ public static class PlayerAnimatorSetupBuilder
         controller.AddParameter("IsSprinting", AnimatorControllerParameterType.Bool);
         controller.AddParameter("IsCrouching", AnimatorControllerParameterType.Bool);
         controller.AddParameter("IsCarrying", AnimatorControllerParameterType.Bool);
+        controller.AddParameter("IsPushing", AnimatorControllerParameterType.Bool);
         controller.AddParameter("IsDowned", AnimatorControllerParameterType.Bool);
         controller.AddParameter("IsReviving", AnimatorControllerParameterType.Bool);
         controller.AddParameter("Revive", AnimatorControllerParameterType.Trigger);
@@ -173,6 +178,7 @@ public static class PlayerAnimatorSetupBuilder
         AnimatorState carry = AddState(stateMachine, "Carry Locomotion", CreateCarryTree(controller, clips), new Vector3(260f, 260f, 0f));
         AnimatorState downed = AddState(stateMachine, "Downed Crawl", CreateDownedTree(controller, clips), new Vector3(560f, 260f, 0f));
         AnimatorState reviving = AddState(stateMachine, "Reviving", clips.Revive, new Vector3(860f, 260f, 0f));
+        AnimatorState pushing = AddState(stateMachine, "Pushing", clips.Pushing, new Vector3(560f, -90f, 0f));
 
         stateMachine.defaultState = locomotion;
 
@@ -196,6 +202,9 @@ public static class PlayerAnimatorSetupBuilder
         AddBoolTransition(reviving, locomotion, false, "IsReviving", waitForExit: true, exitTime: 0.92f);
 
         AddAnyTriggerTransition(stateMachine, reviving, "Revive");
+        AddAnyBoolTransition(stateMachine, pushing, true, "IsPushing");
+        AddBoolTransition(pushing, locomotion, false, "IsPushing");
+        AddBoolTransition(pushing, reviving, true, "IsReviving");
     }
 
     private static Motion CreateLocomotionTree(AnimatorController controller, PlayerClips clips)
@@ -707,12 +716,13 @@ public static class PlayerAnimatorSetupBuilder
         public AnimationClip DownedIdle;
         public AnimationClip CrawlForward;
         public AnimationClip Revive;
+        public AnimationClip Pushing;
 
         public bool HasMissingClips =>
             Idle == null || WalkForward == null || WalkBackward == null || WalkLeft == null || WalkRight == null ||
             RunForward == null ||
             CrouchIdle == null || CrouchWalkForward == null || CrouchWalkBackward == null || CrouchWalkLeft == null || CrouchWalkRight == null ||
             CarryIdle == null || CarryRun == null ||
-            DownedIdle == null || CrawlForward == null || Revive == null;
+            DownedIdle == null || CrawlForward == null || Revive == null || Pushing == null;
     }
 }
