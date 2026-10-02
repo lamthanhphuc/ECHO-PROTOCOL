@@ -209,6 +209,40 @@ namespace EchoProtocol.AI.Stalker
                     beamOwnerRoot, beamRange, out cluePosition);
         }
 
+        public bool IsIlluminatedByFlashlight(
+            Transform beamTransform,
+            Transform beamOwnerRoot,
+            float beamRange,
+            float beamSpotAngle)
+        {
+            if (beamTransform == null
+                || beamOwnerRoot == null
+                || beamRange <= 0f
+                || beamSpotAngle <= 0f)
+            {
+                return false;
+            }
+
+            Vector3 targetPosition = visionOrigin != null
+                ? visionOrigin.position
+                : transform.position;
+            Vector3 toStalker = targetPosition - beamTransform.position;
+            float distance = toStalker.magnitude;
+
+            if (distance <= Mathf.Epsilon || distance > beamRange)
+            {
+                return false;
+            }
+
+            Vector3 direction = toStalker / distance;
+            if (Vector3.Angle(beamTransform.forward, direction) > beamSpotAngle * 0.5f)
+            {
+                return false;
+            }
+
+            return !HasLineOfSightBlocker(beamOwnerRoot, beamTransform.position, direction, distance);
+        }
+
         private bool TryGetVisibleFlashlightSurface(
             Vector3 beamOrigin,
             Vector3 beamDirection,
