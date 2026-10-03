@@ -162,7 +162,7 @@ namespace EchoProtocol.Networking
                 _ = SceneManager.LoadSceneAsync(LobbySceneName, LoadSceneMode.Single);
         }
 
-        public Task ShutdownRunnerAsync() => Shutdown();
+        public Task ShutdownRunnerAsync() => ShutdownAsync(returnToLobby: true);
 
         public bool RegisterLocalInputProvider(NetworkObject owner, Func<NetworkPlayerInput> provider)
         {

@@ -97,11 +97,34 @@ public static partial class NetworkLobbyUIBuilder
         var content = members.Find("Viewport/Content").GetComponent<TMP_Text>(); content.text = string.Empty;
         var empty = TextAt(members, "EmptyState", 12, 10, 388, 146, "No players yet.\nCreate or join a room to begin.", 15, "8C9499", font);
         empty.alignment = TextAlignmentOptions.Center;
-        GetRect(root, "LobbyControls", 24, 907, 412, 80);
-        StyleButton(root.Find("LobbyControls/ReadyButton"), 0, 0, 200, 36);
-        StyleButton(root.Find("LobbyControls/StartButton"), 212, 0, 200, 36);
-        StyleButton(root.Find("LobbyControls/LeaveButton"), 0, 46, 412, 36);
+        var controls = GetRect(root, "LobbyControls", 24, 907, 412, 80);
+
+        StyleButton(controls.Find("ReadyButton"), 0, 0, 200, 36);
+        StyleButton(controls.Find("StartButton"), 212, 0, 200, 36);
+        StyleButton(controls.Find("LeaveButton"), 0, 46, 200, 36);
+
+        var exitButton = controls.Find("ExitButton")?.GetComponent<Button>();
+        if (exitButton == null)
+        {
+            exitButton = Button(
+                "ExitButton",
+                controls,
+                212,
+                46,
+                200,
+                36,
+                "EXIT",
+                font);
+
+            Undo.RegisterCreatedObjectUndo(
+                exitButton.gameObject,
+                "Add Lobby Exit Button");
+        }
+
+        StyleButton(exitButton.transform, 212, 46, 200, 36);
+
         var serialized = new SerializedObject(ui);
+        Assign(serialized, "exitButton", exitButton);
         Assign(serialized, "networkMessage", message); Assign(serialized, "emptyMemberText", empty);
         serialized.ApplyModifiedProperties();
     }
