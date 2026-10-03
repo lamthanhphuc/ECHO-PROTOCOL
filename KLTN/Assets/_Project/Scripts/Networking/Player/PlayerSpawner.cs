@@ -79,22 +79,36 @@ namespace EchoProtocol.Networking
 
             if (matchState.IsEnded)
             {
-                if (IsValidNetworkObject(_monsterInstance))
+                if (IsValidNetworkObject(
+                        _monsterInstance))
                 {
-                    runner.Despawn(_monsterInstance);
+                    runner.Despawn(
+                        _monsterInstance);
+
                     _monsterInstance = null;
                 }
-                if (IsValidNetworkObject(_zone2MonsterInstance))
+
+                if (IsValidNetworkObject(
+                        _zone2MonsterInstance))
                 {
-                    runner.Despawn(_zone2MonsterInstance);
+                    runner.Despawn(
+                        _zone2MonsterInstance);
+
                     _zone2MonsterInstance = null;
                 }
-                if (IsValidNetworkObject(_zone3MonsterInstance))
+
+                if (IsValidNetworkObject(
+                        _zone3MonsterInstance))
                 {
-                    runner.Despawn(_zone3MonsterInstance);
+                    runner.Despawn(
+                        _zone3MonsterInstance);
+
                     _zone3MonsterInstance = null;
                 }
-                DespawnAllCreepMinions(runner);
+
+                DespawnAllCreepMinions(
+                    runner);
+
                 return;
             }
 
@@ -107,11 +121,23 @@ namespace EchoProtocol.Networking
             if (phase == NetworkMatchPhase.Zone3FindFrigate
                 || phase == NetworkMatchPhase.Zone3PushFrigate
                 || phase == NetworkMatchPhase.FinalHunt
-                || phase == NetworkMatchPhase.Escape) return;
+                || phase == NetworkMatchPhase.Escape)
+            {
+                return;
+            }
 
-            if (Time.time < _nextMinionSpawnCheckAt) return;
-            _nextMinionSpawnCheckAt = Time.time + _minionSpawnCheckInterval;
-            MaintainCreepMinionPopulation(runner);
+            if (Time.time
+                < _nextMinionSpawnCheckAt)
+            {
+                return;
+            }
+
+            _nextMinionSpawnCheckAt =
+                Time.time
+                + _minionSpawnCheckInterval;
+
+            MaintainCreepMinionPopulation(
+                runner);
         }
 
         private void Awake()
@@ -435,15 +461,22 @@ namespace EchoProtocol.Networking
             _zone2MonsterInstance = spawned;
             _zone2MonsterSpawned = true;
             _zone2MinionsActive = true;
-            DespawnCreepMinionsForZone(runner, RegionSemanticZone.Zone01);
 
-            if (IsValidNetworkObject(_monsterInstance))
+            DespawnCreepMinionsForZone(
+                runner,
+                RegionSemanticZone.Zone01);
+
+            if (IsValidNetworkObject(
+                    _monsterInstance))
             {
-                runner.Despawn(_monsterInstance);
+                runner.Despawn(
+                    _monsterInstance);
+
                 _monsterInstance = null;
             }
 
-            _nextMinionSpawnCheckAt = Time.time;
+            _nextMinionSpawnCheckAt =
+                Time.time;
         }
 
         private static void RejectZone2Spawn(LobbyPlayerState playerState, string reason)
@@ -495,17 +528,26 @@ namespace EchoProtocol.Networking
             _zone3MonsterSpawned = true;
             _zone3SpawnFailureLogged = false;
 
-            if (IsValidNetworkObject(_zone2MonsterInstance))
+            if (IsValidNetworkObject(
+                    _zone2MonsterInstance))
             {
-                runner.Despawn(_zone2MonsterInstance);
+                runner.Despawn(
+                    _zone2MonsterInstance);
+
                 _zone2MonsterInstance = null;
             }
 
-            DespawnCreepMinionsForZone(runner, RegionSemanticZone.Zone02);
+            DespawnCreepMinionsForZone(
+                runner,
+                RegionSemanticZone.Zone02);
+
             _zone2MinionsActive = false;
 
-            RuntimeLog.Log(RuntimeLogCategory.PlayerSpawner,
-                $"[STK_ZONE3][SPAWN] id={spawned.Id} position={position}.");
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"[STK_ZONE3][SPAWN] " +
+                $"id={spawned.Id} " +
+                $"position={position}.");
         }
 
         private void LogZone3SpawnFailureOnce(string reason)
