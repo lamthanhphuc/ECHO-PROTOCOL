@@ -251,12 +251,28 @@ namespace EchoProtocol.UI.HUD
 
                 case MatchPhase.Zone3PushFrigate:
                     bool docked = EchoProtocol.Networking.Zone3MissionDirector.Instance?.IsFrigateAtDestination == true;
+                    var convoy = EchoProtocol.Networking.Zone3MissionDirector.Instance?.Convoy;
                     float chargeProgress = EchoProtocol.Networking.Zone3MissionDirector.Instance?.ChargeStation?.Progress01 ?? 0f;
                     SetPhaseBadge(docked ? "ZONE 3 // POWER DOCK" : "ZONE 3 // EMERGENCY POWER", "#00E5FF");
-                    SetObjective(docked ? "INITIATE POWER TRANSFER" : "MOVE SPACEFRIGATE TO POWER DOCK",
-                        docked ? $"Transfer Spacefrigate reserve power to the evacuation system ({Mathf.RoundToInt(chargeProgress * 100f)}%). Releasing slowly drains progress."
-                            : "Transport the Spacefrigate fully inside the Power Dock at 06_Covey.",
-                        docked ? chargeProgress : 0f, new Color(0f, 0.85f, 1f, 1f));
+                    if (docked)
+                    {
+                        SetObjective("INITIATE POWER TRANSFER",
+                            $"Transfer Spacefrigate reserve power to the evacuation system ({Mathf.RoundToInt(chargeProgress * 100f)}%). Releasing slowly drains progress.",
+                            chargeProgress, new Color(0f, 0.85f, 1f, 1f));
+                    }
+                    else if (convoy != null && convoy.IsWaitingForRouteChoice)
+                    {
+                        SetObjective("CHOOSE CONVOY ROUTE",
+                            "Stand near Spacefrigate and choose a valid direction: 1 Left, 2 Straight, 3 Right, 4 Back.",
+                            0.5f, new Color(0f, 0.85f, 1f, 1f));
+                    }
+                    else
+                    {
+                        SetObjective("ESCORT SPACEFRIGATE",
+                            "Stay near the convoy to keep the emergency transport moving.",
+                            0.35f,
+                            new Color(0f, 0.85f, 1f, 1f));
+                    }
                     break;
 
                 case MatchPhase.ExploreCore:
@@ -299,7 +315,7 @@ namespace EchoProtocol.UI.HUD
                     bool timerRunning = IsEmergencyPowerTimerRunning();
                     string timeFormatted = FormatTime(secondsRemaining);
                     string statusMsg = timerRunning
-                        ? $"EMERGENCY GRID RESTORED // Exit online. Alarm active. Return to Doorexit before power fails: {timeFormatted}."
+                        ? $"EMERGENCY GRID RESTORED // Exit online. Emergency power remaining: {timeFormatted}. Return to Doorexit."
                         : "EMERGENCY GRID RESTORED // Exit online. Return to Doorexit and escape.";
 
                     SetObjective(
