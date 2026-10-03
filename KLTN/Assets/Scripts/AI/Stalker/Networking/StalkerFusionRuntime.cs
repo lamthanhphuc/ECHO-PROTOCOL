@@ -692,7 +692,8 @@ namespace EchoProtocol.AI.Stalker.Networking
                     || (playerObject.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned);
                 var isEliminated = lifeState != null && lifeState.IsEliminated;
                 var isHidden = (playerObject.TryGetComponent<PlayerHidingController>(out var hiding) && hiding.IsHidden)
-                    || (playerObject.TryGetComponent<NetworkPlayerMovement>(out var netMove) && netMove.IsHidden);
+                    || (playerObject.TryGetComponent<NetworkPlayerMovement>(out var netMove) && netMove.IsHidden)
+                    || (playerObject.TryGetComponent<LobbyPlayerState>(out var stabilizerState) && stabilizerState.IsStabilizerBuffed);
                 var eligibilitySnapshot = new StalkerTargetEligibilitySnapshot(
                     isGameplayPlayer,
                     true,

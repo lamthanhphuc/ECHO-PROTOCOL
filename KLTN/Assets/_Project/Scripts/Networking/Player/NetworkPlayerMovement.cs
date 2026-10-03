@@ -526,7 +526,9 @@ namespace EchoProtocol.Networking
             var coreCarryMultiplier = 1f;
             if (isCarryingCore)
             {
-                coreCarryMultiplier = lobbyPlayer.IsCoreStabilized ? 1f : 0.72f;
+                coreCarryMultiplier = lobbyPlayer != null && lobbyPlayer.IsStabilizerBuffed
+                    ? CoreStabilizerRules.SpeedMultiplier
+                    : 0.72f;
             }
             _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f)
                 * coreCarryMultiplier * GetExternalSlowMultiplier();

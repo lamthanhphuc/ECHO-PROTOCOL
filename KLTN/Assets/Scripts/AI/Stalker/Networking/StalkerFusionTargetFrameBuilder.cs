@@ -80,7 +80,8 @@ namespace EchoProtocol.AI.Stalker.Networking
                 var isHidden =
                     (identity.TryGetComponent<PlayerHidingController>(
                         out var hiding) && hiding.IsHidden)
-                    || (netMove != null && netMove.IsHidden);
+                    || (netMove != null && netMove.IsHidden)
+                    || (identity.TryGetComponent<LobbyPlayerState>(out var stabilizerState) && stabilizerState.IsStabilizerBuffed);
 
                 var eligibilitySnapshot =
                     new StalkerTargetEligibilitySnapshot(

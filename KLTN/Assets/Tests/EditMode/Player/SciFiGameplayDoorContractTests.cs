@@ -281,8 +281,9 @@ namespace EchoProtocol.Player.Tests
             var interactorSource = File.ReadAllText(NetworkPlayerInteractorScriptPath);
 
             StringAssert.Contains("case 4: return \"DOOR_JAMMER\";", interactorSource);
-            StringAssert.Contains("RpcRequestUseTeamTool(NextSequence(), targetId)", interactorSource);
-            StringAssert.Contains("RpcRequestUseTeamTool(uint sequence, NetworkId targetId", interactorSource);
+            StringAssert.Contains("RpcRequestUseTeamTool(", interactorSource);
+            StringAssert.Contains("placementPosition", interactorSource);
+            StringAssert.Contains("Vector3 placementPosition", interactorSource);
             StringAssert.Contains("TryDeployDoorJammerAuthoritative", interactorSource);
             StringAssert.Contains("TryDetectLocalDoorJammerTargetIntent", interactorSource);
             StringAssert.Contains("TryResolveDoorJammerTargetAuthoritative", interactorSource);
@@ -368,8 +369,11 @@ namespace EchoProtocol.Player.Tests
 
             StringAssert.Contains("var targetId = default(NetworkId);", interactorSource);
             StringAssert.Contains("if (playerState != null", interactorSource);
-            StringAssert.Contains("playerState.ToolId == 4", interactorSource);
-            StringAssert.Contains("RpcRequestUseTeamTool(NextSequence(), targetId)", interactorSource);
+            StringAssert.Contains(
+                "playerState.ToolId == LobbyPlayerState.DoorJammerToolId",
+                interactorSource);
+            StringAssert.Contains("RpcRequestUseTeamTool(", interactorSource);
+            StringAssert.Contains("placementPosition", interactorSource);
             StringAssert.Contains("if (toolType == \"NOISE_MAKER\")", interactorSource);
         }
 

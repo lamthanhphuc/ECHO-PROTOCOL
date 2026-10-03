@@ -34,10 +34,6 @@ namespace EchoProtocol.Networking
         [SerializeField] private LayerMask _interactionLayers = ~0;
         [SerializeField] private TeamToolPickupCatalog _teamToolPickupCatalog;
         [SerializeField] private GameObject _noiseMakerBeaconPrefab; // Gán DistressBeaconDeployed prefab trong Inspector
-        [SerializeField, Min(0.5f)]
-        private float _noiseMakerPlacementDistance = 2f;
-        [SerializeField, Min(0.5f)]
-        private float _doorJammerFreePlacementDistance = 2f;
 
         private static readonly Vector3
             DoorJammerPlacementCheckHalfExtents =
@@ -620,13 +616,30 @@ namespace EchoProtocol.Networking
             }
 
             var targetId = default(NetworkId);
+            var placementPosition = default(Vector3);
+
             if (playerState != null
-                && playerState.ToolId == 4
-                && TryDetectLocalDoorJammerTargetIntent(out var doorTargetId))
+                && playerState.ToolId == LobbyPlayerState.DoorJammerToolId)
             {
-                targetId = doorTargetId;
+                if (TryDetectLocalDoorJammerTargetIntent(out var doorTargetId))
+                {
+                    targetId = doorTargetId;
+                }
+                else if (!TryResolveCameraPlacementSurface(out placementPosition))
+                {
+                    return false;
+                }
             }
-            else if (playerState != null && playerState.ToolId == 3)
+            else if (playerState != null
+                     && playerState.ToolId == LobbyPlayerState.NoiseMakerToolId)
+            {
+                if (!TryResolveCameraPlacementSurface(out placementPosition))
+                {
+                    return false;
+                }
+            }
+            else if (playerState != null
+                     && playerState.ToolId == LobbyPlayerState.FirstAidKitToolId)
             {
                 if (TryDetectReviveCandidate(out var allyLifeState) && allyLifeState != null && allyLifeState.Object != null)
                 {
@@ -640,7 +653,7 @@ namespace EchoProtocol.Networking
                 }
             }
 
-            RpcRequestUseTeamTool(NextSequence(), targetId);
+            RpcRequestUseTeamTool(NextSequence(), targetId, placementPosition);
             return true;
         }
 
@@ -896,6 +909,91 @@ namespace EchoProtocol.Networking
                 : new Ray(transform.position, transform.forward);
         }
 
+        private bool TryResolveCameraPlacementSurface(out Vector3 position)
+        {
+            position = default;
+
+            Ray ray = GetLocalDetectionRay();
+            RaycastHit[] hits = Physics.RaycastAll(
+                ray,
+                Mathf.Infinity,
+                _interactionLayers,
+                QueryTriggerInteraction.Ignore);
+
+            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                RaycastHit hit = hits[i];
+
+                if (hit.collider == null || IsSelfCollider(hit.collider))
+                {
+                    continue;
+                }
+
+                if (Vector3.Dot(hit.normal, Vector3.up) < 0.5f)
+                {
+                    return false;
+                }
+
+                position = hit.point;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool TryValidateRequestedPlacementSurface(
+            Vector3 requestedPosition,
+            out Vector3 validatedPosition)
+        {
+            validatedPosition = default;
+
+            Vector3 origin = GetAuthoritativeInteractionOrigin();
+            Vector3 delta = requestedPosition - origin;
+            float distance = delta.magnitude;
+
+            if (distance <= 0.01f)
+            {
+                return false;
+            }
+
+            Vector3 direction = delta / distance;
+            RaycastHit[] hits = Physics.RaycastAll(
+                origin,
+                direction,
+                distance + 0.5f,
+                _interactionLayers,
+                QueryTriggerInteraction.Ignore);
+
+            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                RaycastHit hit = hits[i];
+
+                if (hit.collider == null || IsSelfCollider(hit.collider))
+                {
+                    continue;
+                }
+
+                if (Vector3.Dot(hit.normal, Vector3.up) < 0.5f)
+                {
+                    return false;
+                }
+
+                if ((hit.point - requestedPosition).sqrMagnitude > 0.75f * 0.75f)
+                {
+                    return false;
+                }
+
+                validatedPosition = hit.point;
+                return true;
+            }
+
+            return false;
+        }
+
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestRevive(NetworkId targetId, uint sequence, RpcInfo info = default)
         {
@@ -1104,7 +1202,11 @@ namespace EchoProtocol.Networking
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-        private void RpcRequestUseTeamTool(uint sequence, NetworkId targetId, RpcInfo info = default)
+        private void RpcRequestUseTeamTool(
+            uint sequence,
+            NetworkId targetId,
+            Vector3 placementPosition,
+            RpcInfo info = default)
         {
             if (!TryResolveRequester(info.Source, out var requester)
                 || ValidateRequester(requester, sequence) != InteractionValidationResult.Accepted)
@@ -1144,7 +1246,10 @@ namespace EchoProtocol.Networking
 
                     if (toolType == "NOISE_MAKER")
                     {
-                        var noiseMakerResult = TryUseNoiseMakerAuthoritative(requester, state);
+                        var noiseMakerResult = TryUseNoiseMakerAuthoritative(
+                            requester,
+                            state,
+                            placementPosition);
                         if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
                         RpcInteractionResult(requester, targetId, sequence, (int)noiseMakerResult);
                         return;
@@ -1160,7 +1265,8 @@ namespace EchoProtocol.Networking
                                     targetId)
                                 : TryDeployFreeStandingDoorJammerAuthoritative(
                                     requester,
-                                    state);
+                                    state,
+                                    placementPosition);
                         if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
                         RpcInteractionResult(requester, targetId, sequence, (int)jammerResult);
                         return;
@@ -1240,7 +1346,8 @@ namespace EchoProtocol.Networking
 
         private InteractionValidationResult TryUseNoiseMakerAuthoritative(
             PlayerRef requester,
-            LobbyPlayerState state)
+            LobbyPlayerState state,
+            Vector3 requestedPlacementPosition)
         {
             if (!Object.HasStateAuthority || state == null || state.ToolId != 2)
             {
@@ -1252,7 +1359,9 @@ namespace EchoProtocol.Networking
                 return InteractionValidationResult.InvalidTarget;
             }
 
-            if (!TryResolveNoiseMakerPlacement(out var beaconPos))
+            if (!TryResolveNoiseMakerPlacement(
+                    requestedPlacementPosition,
+                    out var beaconPos))
             {
                 return InteractionValidationResult.InvalidTarget;
             }
@@ -1412,19 +1521,35 @@ namespace EchoProtocol.Networking
         {
             position = default;
 
-            Transform directionSource =
-                _rayOrigin != null
-                    ? _rayOrigin
-                    : transform;
+            if (!TryResolveCameraPlacementSurface(out Vector3 surfacePosition))
+            {
+                return false;
+            }
 
-            ItemDropPlacementUtility
-                .GetFloorSnappedPose(
-                    transform,
-                    directionSource,
-                    _noiseMakerPlacementDistance,
-                    0.05f,
-                    out position,
-                    out _);
+            return TryBuildNoiseMakerPlacement(surfacePosition, out position);
+        }
+
+        private bool TryResolveNoiseMakerPlacement(
+            Vector3 requestedPosition,
+            out Vector3 position)
+        {
+            position = default;
+
+            if (!TryValidateRequestedPlacementSurface(
+                    requestedPosition,
+                    out Vector3 surfacePosition))
+            {
+                return false;
+            }
+
+            return TryBuildNoiseMakerPlacement(surfacePosition, out position);
+        }
+
+        private bool TryBuildNoiseMakerPlacement(
+            Vector3 surfacePosition,
+            out Vector3 position)
+        {
+            position = surfacePosition + Vector3.up * 0.05f;
 
             Vector3 checkCenter =
                 position
@@ -1459,7 +1584,8 @@ namespace EchoProtocol.Networking
         private InteractionValidationResult
             TryDeployFreeStandingDoorJammerAuthoritative(
                 PlayerRef requester,
-                LobbyPlayerState state)
+                LobbyPlayerState state,
+                Vector3 requestedPlacementPosition)
         {
             if (!Object.HasStateAuthority
                 || state == null
@@ -1471,6 +1597,7 @@ namespace EchoProtocol.Networking
 
             if (Runner == null
                 || !TryResolveFreeStandingDoorJammerPlacement(
+                    requestedPlacementPosition,
                     out Vector3 position,
                     out Quaternion rotation))
             {
@@ -1536,22 +1663,49 @@ namespace EchoProtocol.Networking
             position = default;
             rotation = Quaternion.identity;
 
-            Transform directionSource =
-                _rayOrigin != null
-                    ? _rayOrigin
-                    : transform;
+            if (!TryResolveCameraPlacementSurface(out Vector3 surfacePosition))
+            {
+                return false;
+            }
 
-            ItemDropPlacementUtility.GetFloorSnappedPose(
-                transform,
-                directionSource,
-                _doorJammerFreePlacementDistance,
-                0.05f,
-                out Vector3 floorPosition,
-                out _);
+            return TryBuildFreeStandingDoorJammerPlacement(
+                surfacePosition,
+                out position,
+                out rotation);
+        }
+
+        private bool TryResolveFreeStandingDoorJammerPlacement(
+            Vector3 requestedPosition,
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            position = default;
+            rotation = Quaternion.identity;
+
+            if (!TryValidateRequestedPlacementSurface(
+                    requestedPosition,
+                    out Vector3 surfacePosition))
+            {
+                return false;
+            }
+
+            return TryBuildFreeStandingDoorJammerPlacement(
+                surfacePosition,
+                out position,
+                out rotation);
+        }
+
+        private bool TryBuildFreeStandingDoorJammerPlacement(
+            Vector3 surfacePosition,
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            position = default;
+            rotation = Quaternion.identity;
 
             Vector3 forward =
                 Vector3.ProjectOnPlane(
-                    directionSource.forward,
+                    surfacePosition - transform.position,
                     Vector3.up);
 
             if (forward.sqrMagnitude < 0.001f)
@@ -1579,7 +1733,7 @@ namespace EchoProtocol.Networking
                     0f);
 
             position =
-                floorPosition
+                surfacePosition
                 + Vector3.up * 1.75f;
 
             Collider[] overlaps =
@@ -1858,10 +2012,14 @@ namespace EchoProtocol.Networking
         private void UpdateCoreStabilizerAuthoritative()
         {
             var state = GetComponent<LobbyPlayerState>();
-            bool hasStabilizer = state != null
+
+            bool hasStabilizer =
+                state != null
                 && state.IsGameplayPlayer
-                && state.ToolId == LobbyPlayerState.CoreStabilizerToolId
-                && !CoreStabilizerActiveTimer.ExpiredOrNotRunning(Runner);
+                && state.ToolId
+                    == LobbyPlayerState.CoreStabilizerToolId
+                && !CoreStabilizerActiveTimer
+                    .ExpiredOrNotRunning(Runner);
 
             if (!hasStabilizer)
             {
@@ -1869,59 +2027,102 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            if (!_stabilizerScanTimer.ExpiredOrNotRunning(Runner)) return;
-            _stabilizerScanTimer = TickTimer.CreateFromSeconds(Runner, 0.25f);
-
-            var hits = Physics.OverlapSphere(
-                transform.position,
-                CoreStabilizerRules.SupportRadius,
-                ~0,
-                QueryTriggerInteraction.Collide);
-            var currentBuffedPlayers = new HashSet<LobbyPlayerState>();
-
-            for (int i = 0; i < hits.Length; i++)
+            if (!_stabilizerScanTimer
+                    .ExpiredOrNotRunning(Runner))
             {
-                var hit = hits[i];
-                if (hit == null
-                    || hit.transform == transform
-                    || hit.transform.IsChildOf(transform))
+                return;
+            }
+
+            _stabilizerScanTimer =
+                TickTimer.CreateFromSeconds(
+                    Runner,
+                    0.25f);
+
+            var currentBuffedPlayers =
+                new HashSet<LobbyPlayerState>();
+
+            float supportRadiusSqr =
+                CoreStabilizerRules.SupportRadius
+                * CoreStabilizerRules.SupportRadius;
+
+            foreach (var player in Runner.ActivePlayers)
+            {
+                if (!Runner.TryGetPlayerObject(
+                        player,
+                        out var playerObject)
+                    || playerObject == null
+                    || !playerObject.IsValid)
                 {
                     continue;
                 }
 
-                var carrierState = hit.GetComponentInParent<LobbyPlayerState>();
-                if (carrierState == null
-                    || carrierState.Object == null
-                    || !carrierState.Object.IsValid
-                    || !carrierState.CarriedCoreId.IsValid)
+                if (!playerObject.TryGetComponent<
+                        LobbyPlayerState>(
+                        out var playerState)
+                    || !playerState.IsGameplayPlayer
+                    || playerState.Disconnected)
                 {
                     continue;
                 }
 
-                currentBuffedPlayers.Add(carrierState);
-                carrierState.SetStabilizerBuffedAuthoritative(true);
+                if (!playerObject.TryGetComponent<
+                        NetworkPlayerLifeState>(
+                        out var lifeState)
+                    || lifeState.Status
+                        != NetworkPlayerLifeStatus.Alive)
+                {
+                    continue;
+                }
+
+                Vector3 delta =
+                    playerObject.transform.position
+                    - transform.position;
+
+                if (delta.sqrMagnitude
+                    > supportRadiusSqr)
+                {
+                    continue;
+                }
+
+                currentBuffedPlayers.Add(
+                    playerState);
+
+                playerState
+                    .SetStabilizerBuffedAuthoritative(
+                        true);
             }
 
             for (int i = _stabilizerBuffedPlayers.Count - 1; i >= 0; i--)
             {
-                var player = _stabilizerBuffedPlayers[i];
-                if (player == null || !currentBuffedPlayers.Contains(player))
+                var player =
+                    _stabilizerBuffedPlayers[i];
+
+                if (player == null
+                    || !currentBuffedPlayers.Contains(
+                        player))
                 {
                     if (player != null
                         && player.Object != null
                         && player.Object.IsValid)
                     {
-                        player.SetStabilizerBuffedAuthoritative(false);
+                        player
+                            .SetStabilizerBuffedAuthoritative(
+                                false);
                     }
-                    _stabilizerBuffedPlayers.RemoveAt(i);
+
+                    _stabilizerBuffedPlayers
+                        .RemoveAt(i);
                 }
             }
 
-            foreach (var player in currentBuffedPlayers)
+            foreach (var player
+                     in currentBuffedPlayers)
             {
-                if (!_stabilizerBuffedPlayers.Contains(player))
+                if (!_stabilizerBuffedPlayers
+                        .Contains(player))
                 {
-                    _stabilizerBuffedPlayers.Add(player);
+                    _stabilizerBuffedPlayers
+                        .Add(player);
                 }
             }
         }
