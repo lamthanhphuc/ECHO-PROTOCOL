@@ -34,7 +34,7 @@ namespace EchoProtocol.Networking
         private float StaminaResumeThreshold =>
             Mathf.Max(
                 _minStaminaToSprint,
-                _maxStamina * 0.25f);
+                _maxStamina * 0.3f);
 
         private NetworkCharacterController _controller;
         private CharacterController _unityCharacterController;
