@@ -93,6 +93,8 @@ namespace EchoProtocol.Networking.Authority
             experimentProtocolVersion ?? string.Empty;
         public bool IsHostBinding { get; private set; }
         public bool HasBinding => MatchId != Guid.Empty;
+        public int BoundPlayerCount =>
+            _boundPlayers.Count;
         public bool RequiresFreshHostBinding =>
             !HasBinding || !IsHostBinding;
         public bool IsCompletingMatch =>
@@ -290,6 +292,41 @@ namespace EchoProtocol.Networking.Authority
                 $"[MatchAuthority] Fusion session attached. Match={MatchId:D}, " +
                 $"Host={IsHostBinding}, Mode={requestedScenarioResolutionMode}, Session='{runner.SessionInfo.Name}'.");
             TrySubmitLocalIdentity();
+            return true;
+        }
+
+        public bool RefreshJoinedSessionBindingIfChanged(
+            NetworkRunner runner,
+            LobbyPlayerState localPlayerState)
+        {
+            if (runner == null
+                || !runner.IsRunning
+                || !runner.SessionInfo.IsValid
+                || runner.SessionInfo.Properties == null
+                || !runner.SessionInfo.Properties.TryGetValue(
+                    MatchIdSessionProperty,
+                    out var property)
+                || !Guid.TryParse(
+                    (string)property,
+                    out var sessionMatchId))
+            {
+                return false;
+            }
+
+            if (sessionMatchId == MatchId)
+            {
+                return false;
+            }
+
+            if (!AttachJoinedSession(runner))
+            {
+                return false;
+            }
+
+            TrySubmitLocalIdentity(
+                localPlayerState,
+                force: true);
+
             return true;
         }
 

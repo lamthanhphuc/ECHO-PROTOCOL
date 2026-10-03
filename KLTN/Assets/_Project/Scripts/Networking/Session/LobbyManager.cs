@@ -228,6 +228,48 @@ namespace EchoProtocol.Networking
                             "Could not publish next match properties to Fusion room.");
                         return;
                     }
+
+                    if (!TryGetLocalPlayerState(
+                            out var localPlayerState,
+                            false))
+                    {
+                        ReportError(
+                            "Local player is not available for backend binding.");
+                        return;
+                    }
+
+                    authority.TrySubmitLocalIdentity(
+                        localPlayerState,
+                        force: true);
+
+                    int expectedBoundPlayers = 0;
+
+                    foreach (var _ in runner.ActivePlayers)
+                    {
+                        expectedBoundPlayers++;
+                    }
+
+                    float bindingDeadline =
+                        Time.realtimeSinceStartup + 8f;
+
+                    while (authority.BoundPlayerCount
+                               < expectedBoundPlayers
+                           && Time.realtimeSinceStartup
+                               < bindingDeadline)
+                    {
+                        await Task.Delay(100);
+                    }
+
+                    if (authority.BoundPlayerCount
+                        < expectedBoundPlayers)
+                    {
+                        ReportError(
+                            $"Backend player binding timed out " +
+                            $"({authority.BoundPlayerCount}/" +
+                            $"{expectedBoundPlayers}).");
+
+                        return;
+                    }
                 }
 
                 var (accepted, error) =

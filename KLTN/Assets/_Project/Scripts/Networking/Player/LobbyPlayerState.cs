@@ -231,6 +231,24 @@ namespace EchoProtocol.Networking
             }
         }
 
+        private void Update()
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasInputAuthority
+                || Runner == null
+                || !Runner.IsRunning)
+            {
+                return;
+            }
+
+            MatchAuthorityRuntime
+                .EnsureExists(NetworkBootstrap.Instance)
+                .RefreshJoinedSessionBindingIfChanged(
+                    Runner,
+                    this);
+        }
+
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             AnyStateChanged?.Invoke();
