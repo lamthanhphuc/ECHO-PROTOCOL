@@ -50,7 +50,6 @@ namespace EchoProtocol.Networking
         [Networked] private uint HelpPingOrdinal { get; set; }
         [Networked] private TickTimer CoreStabilizerActiveTimer { get; set; }
 
-        private TickTimer _stabilizerScanTimer;
         private readonly List<LobbyPlayerState> _stabilizerBuffedPlayers = new List<LobbyPlayerState>();
         private Animator _coreStabilizerAnimator;
         private bool _coreStabilizerVisualActive;
@@ -1282,7 +1281,6 @@ namespace EchoProtocol.Networking
                         TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, CoreStabilizerRules.CooldownSeconds);
                         CoreStabilizerActiveTimer = TickTimer.CreateFromSeconds(
                             Runner, CoreStabilizerRules.DurationSeconds);
-                        _stabilizerScanTimer = TickTimer.None;
                         UpdateCoreStabilizerAuthoritative();
                         bool stabilizedAny = _stabilizerBuffedPlayers.Count > 0;
 
@@ -2026,17 +2024,6 @@ namespace EchoProtocol.Networking
                 ClearStabilizerBuffedPlayers();
                 return;
             }
-
-            if (!_stabilizerScanTimer
-                    .ExpiredOrNotRunning(Runner))
-            {
-                return;
-            }
-
-            _stabilizerScanTimer =
-                TickTimer.CreateFromSeconds(
-                    Runner,
-                    0.25f);
 
             var currentBuffedPlayers =
                 new HashSet<LobbyPlayerState>();

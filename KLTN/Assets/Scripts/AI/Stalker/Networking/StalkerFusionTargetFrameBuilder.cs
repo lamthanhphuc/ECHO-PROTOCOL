@@ -94,6 +94,31 @@ namespace EchoProtocol.AI.Stalker.Networking
                     lifeState != null
                     && lifeState.IsEliminated;
 
+                var isStabilizerProtected =
+                    lobbyState != null
+                    && lobbyState.IsStabilizerBuffed;
+
+                if (isStabilizerProtected)
+                {
+                    var protectedSnapshot =
+                        new StalkerTargetEligibilitySnapshot(
+                            true,
+                            true,
+                            isDowned,
+                            isEliminated,
+                            true);
+
+                    InsertStatusSortedUnique(
+                        targetStatuses,
+                        new StalkerTargetStatus(
+                            playerId,
+                            StalkerTargetEligibility.Evaluate(
+                                protectedSnapshot),
+                            false));
+
+                    continue;
+                }
+
                 identity.TryGetComponent<
                     NetworkPlayerMovement>(
                     out var netMove);
@@ -106,10 +131,6 @@ namespace EchoProtocol.AI.Stalker.Networking
                     || (netMove != null
                         && netMove.IsHidden);
 
-                var isStabilizerProtected =
-                    lobbyState != null
-                    && lobbyState.IsStabilizerBuffed;
-
                 var eligibilitySnapshot =
                     new StalkerTargetEligibilitySnapshot(
                         true,
@@ -117,7 +138,6 @@ namespace EchoProtocol.AI.Stalker.Networking
                         isDowned,
                         isEliminated,
                         isHidden
-                        || isStabilizerProtected
                         || (lifeState != null
                             && lifeState.IsCaught));
 

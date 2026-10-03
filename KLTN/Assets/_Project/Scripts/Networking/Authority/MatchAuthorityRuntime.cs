@@ -45,6 +45,9 @@ namespace EchoProtocol.Networking.Authority
         private bool _backendEndRequestInProgress;
         private bool _pendingBackendMatchResult;
         private float _nextBackendMatchResultRetryAt;
+        private const float MinimumBackendMatchResultAgeSeconds = 61f;
+
+        private float _backendMatchStartedAtRealtime = -1f;
         private bool _localRewardRequestInProgress;
         private bool _localRewardFetchQueued;
         private int _localRewardFetchAttempts;
@@ -98,7 +101,8 @@ namespace EchoProtocol.Networking.Authority
         public bool RequiresFreshHostBinding =>
             !HasBinding || !IsHostBinding;
         public bool IsCompletingMatch =>
-            _backendEndRequestInProgress;
+            _backendEndRequestInProgress
+            || _pendingBackendMatchResult;
         public bool HasStateAuthority => IsHostBinding && _bootstrap?.Runner != null
             && _bootstrap.Runner.IsRunning && _bootstrap.Runner.IsServer;
         public long? AuthorityTick => HasStateAuthority ? _bootstrap.Runner.Tick.Raw : (long?)null;
@@ -464,6 +468,9 @@ namespace EchoProtocol.Networking.Authority
             var success = IsSuccessful(result);
             if (success)
             {
+                _backendMatchStartedAtRealtime =
+                    Time.realtimeSinceStartup;
+
                 RuntimeLog.Log(
                 RuntimeLogCategory.MatchAuthority,
                 $"[MatchAuthority] Backend confirmed match start. Match={MatchId:D}.");
@@ -503,6 +510,7 @@ namespace EchoProtocol.Networking.Authority
             _nextBackendMatchResultRetryAt = 0f;
             _pendingBackendOutcome = null;
             _pendingObjectiveCompletion = 0f;
+            _backendMatchStartedAtRealtime = -1f;
             _boundPlayers.Clear();
             _disconnectedActors.Clear();
             _objectiveContributors.Clear();
@@ -1018,7 +1026,9 @@ namespace EchoProtocol.Networking.Authority
                 $"[MatchAuthority] Local reward could not be loaded: {Describe(result)}");
         }
 
-        public void QueueMatchResult(string outcome, float objectiveCompletion)
+        public void QueueMatchResult(
+            string outcome,
+            float objectiveCompletion)
         {
             if (!HasBinding || !IsHostBinding)
             {
@@ -1026,13 +1036,40 @@ namespace EchoProtocol.Networking.Authority
             }
 
             _pendingBackendOutcome =
-                string.Equals(outcome, "WIN", StringComparison.Ordinal)
+                string.Equals(
+                    outcome,
+                    "WIN",
+                    StringComparison.Ordinal)
                     ? "WIN"
                     : "LOSE";
-            _pendingObjectiveCompletion = Mathf.Clamp01(objectiveCompletion);
+
+            _pendingObjectiveCompletion =
+                Mathf.Clamp01(objectiveCompletion);
+
             _pendingBackendMatchResult = true;
-            _nextBackendMatchResultRetryAt = Time.unscaledTime;
-            TrySubmitPendingMatchResult();
+
+            float remainingDelay = 0f;
+
+            if (_backendMatchStartedAtRealtime >= 0f)
+            {
+                float matchAge =
+                    Time.realtimeSinceStartup
+                    - _backendMatchStartedAtRealtime;
+
+                remainingDelay =
+                    Mathf.Max(
+                        0f,
+                        MinimumBackendMatchResultAgeSeconds
+                        - matchAge);
+            }
+
+            _nextBackendMatchResultRetryAt =
+                Time.unscaledTime + remainingDelay;
+
+            if (remainingDelay <= 0f)
+            {
+                TrySubmitPendingMatchResult();
+            }
         }
 
         private async void TrySubmitPendingMatchResult()
@@ -1057,18 +1094,48 @@ namespace EchoProtocol.Networking.Authority
 
             if (!IsSuccessful(result))
             {
-                if (result != null
-                    && result.FailureKind == EchoProtocol.Api.ApiFailureKind.Business)
+                bool durationTooEarly =
+                    result != null
+                    && result.FailureKind ==
+                        EchoProtocol.Api.ApiFailureKind.Business
+                    && string.Equals(
+                        result.ErrorCode,
+                        "MATCH_RESULT_INVALID_DURATION",
+                        StringComparison.Ordinal)
+                    && _backendMatchStartedAtRealtime >= 0f
+                    && Time.realtimeSinceStartup
+                        - _backendMatchStartedAtRealtime
+                        < MinimumBackendMatchResultAgeSeconds;
+
+                if (durationTooEarly)
                 {
-                    _pendingBackendMatchResult = false;
-                    Debug.LogError(
-                        $"[MatchAuthority] Match result rejected and will not be retried: {Describe(result)}");
+                    _nextBackendMatchResultRetryAt =
+                        Time.unscaledTime + 1f;
+
+                    Debug.LogWarning(
+                        "[MatchAuthority] Match result is waiting for the backend minimum duration.");
+
                     return;
                 }
 
-                _nextBackendMatchResultRetryAt = Time.unscaledTime + 2f;
+                if (result != null
+                    && result.FailureKind ==
+                        EchoProtocol.Api.ApiFailureKind.Business)
+                {
+                    _pendingBackendMatchResult = false;
+
+                    Debug.LogError(
+                        $"[MatchAuthority] Match result rejected and will not be retried: {Describe(result)}");
+
+                    return;
+                }
+
+                _nextBackendMatchResultRetryAt =
+                    Time.unscaledTime + 2f;
+
                 Debug.LogWarning(
                     $"[MatchAuthority] Match result submission failed; retrying safely: {Describe(result)}");
+
                 return;
             }
 

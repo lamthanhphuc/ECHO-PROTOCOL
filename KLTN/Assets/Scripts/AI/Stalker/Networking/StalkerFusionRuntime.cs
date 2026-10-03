@@ -691,6 +691,31 @@ namespace EchoProtocol.AI.Stalker.Networking
                 var isDowned = (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && lifeState.IsDowned)
                     || (playerObject.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned);
                 var isEliminated = lifeState != null && lifeState.IsEliminated;
+
+                var isStabilizerProtected =
+                    lobbyState != null
+                    && lobbyState.IsStabilizerBuffed;
+
+                if (isStabilizerProtected)
+                {
+                    var protectedSnapshot =
+                        new StalkerTargetEligibilitySnapshot(
+                            isGameplayPlayer,
+                            true,
+                            isDowned,
+                            isEliminated,
+                            true);
+
+                    _targetStatuses.Add(
+                        new StalkerTargetStatus(
+                            playerId,
+                            StalkerTargetEligibility.Evaluate(
+                                protectedSnapshot),
+                            false));
+
+                    continue;
+                }
+
                 var isHidden =
                     (playerObject.TryGetComponent<
                         PlayerHidingController>(
@@ -701,10 +726,6 @@ namespace EchoProtocol.AI.Stalker.Networking
                         out var netMove)
                         && netMove.IsHidden);
 
-                var isStabilizerProtected =
-                    lobbyState != null
-                    && lobbyState.IsStabilizerBuffed;
-
                 var eligibilitySnapshot =
                     new StalkerTargetEligibilitySnapshot(
                         isGameplayPlayer,
@@ -712,7 +733,6 @@ namespace EchoProtocol.AI.Stalker.Networking
                         isDowned,
                         isEliminated,
                         isHidden
-                        || isStabilizerProtected
                         || (lifeState != null
                             && lifeState.IsCaught));
                 _targetStatuses.Add(new StalkerTargetStatus(

@@ -1707,8 +1707,7 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            if (!status.IsHidden
-                && !status.Eligibility.Eligible)
+            if (!status.Eligibility.Eligible)
             {
                 _attackController.ClearActiveEpisode();
 
