@@ -55,7 +55,7 @@ namespace EchoProtocol.Networking
         [Networked] private TickTimer CoreStabilizerActiveTimer { get; set; }
 
         private TickTimer _stabilizerScanTimer;
-        private readonly List<LobbyPlayerState> _stabilizedAllies = new List<LobbyPlayerState>();
+        private readonly List<LobbyPlayerState> _stabilizerBuffedPlayers = new List<LobbyPlayerState>();
         private Animator _coreStabilizerAnimator;
         private bool _coreStabilizerVisualActive;
         private float _offlineCoreStabilizerCooldownUntil;
@@ -156,7 +156,7 @@ namespace EchoProtocol.Networking
             _teamToolAction?.Disable();
             _placementPreviewAction?.Disable();
             _helpPingAction?.Disable();
-            ClearStabilizedAllies();
+            ClearStabilizerBuffedPlayers();
         }
 
         private void OnDestroy()
@@ -166,7 +166,7 @@ namespace EchoProtocol.Networking
             _teamToolAction?.Dispose();
             _placementPreviewAction?.Dispose();
             _helpPingAction?.Dispose();
-            ClearStabilizedAllies();
+            ClearStabilizerBuffedPlayers();
         }
 
         public override void FixedUpdateNetwork()
@@ -1178,7 +1178,7 @@ namespace EchoProtocol.Networking
                             Runner, CoreStabilizerRules.DurationSeconds);
                         _stabilizerScanTimer = TickTimer.None;
                         UpdateCoreStabilizerAuthoritative();
-                        bool stabilizedAny = _stabilizedAllies.Count > 0;
+                        bool stabilizedAny = _stabilizerBuffedPlayers.Count > 0;
 
                         if (_coreStabilizerPulseClip != null)
                         {
@@ -1865,62 +1865,86 @@ namespace EchoProtocol.Networking
 
             if (!hasStabilizer)
             {
-                ClearStabilizedAllies();
+                ClearStabilizerBuffedPlayers();
                 return;
             }
 
             if (!_stabilizerScanTimer.ExpiredOrNotRunning(Runner)) return;
             _stabilizerScanTimer = TickTimer.CreateFromSeconds(Runner, 0.25f);
 
-            var hits = Physics.OverlapSphere(transform.position, CoreStabilizerRules.SupportRadius,
-                ~0, QueryTriggerInteraction.Collide);
-            var currentAllies = new HashSet<LobbyPlayerState>();
+            var hits = Physics.OverlapSphere(
+                transform.position,
+                CoreStabilizerRules.SupportRadius,
+                ~0,
+                QueryTriggerInteraction.Collide);
+            var currentBuffedPlayers = new HashSet<LobbyPlayerState>();
 
             for (int i = 0; i < hits.Length; i++)
             {
-                var h = hits[i];
-                if (h == null || h.transform == transform || h.transform.IsChildOf(transform)) continue;
-                var carrierState = h.GetComponentInParent<LobbyPlayerState>();
-                if (carrierState != null && carrierState.Object != null && carrierState.Object.IsValid && carrierState.CarriedCoreId.IsValid)
+                var hit = hits[i];
+                if (hit == null
+                    || hit.transform == transform
+                    || hit.transform.IsChildOf(transform))
                 {
-                    currentAllies.Add(carrierState);
-                    carrierState.SetCoreStabilizedAuthoritative(true);
+                    continue;
                 }
+
+                var carrierState = hit.GetComponentInParent<LobbyPlayerState>();
+                if (carrierState == null
+                    || carrierState.Object == null
+                    || !carrierState.Object.IsValid
+                    || !carrierState.CarriedCoreId.IsValid)
+                {
+                    continue;
+                }
+
+                currentBuffedPlayers.Add(carrierState);
+                carrierState.SetStabilizerBuffedAuthoritative(true);
             }
 
-            for (int i = _stabilizedAllies.Count - 1; i >= 0; i--)
+            for (int i = _stabilizerBuffedPlayers.Count - 1; i >= 0; i--)
             {
-                var ally = _stabilizedAllies[i];
-                if (ally == null || !currentAllies.Contains(ally))
+                var player = _stabilizerBuffedPlayers[i];
+                if (player == null || !currentBuffedPlayers.Contains(player))
                 {
-                    if (ally != null && ally.Object != null && ally.Object.IsValid)
+                    if (player != null
+                        && player.Object != null
+                        && player.Object.IsValid)
                     {
-                        ally.SetCoreStabilizedAuthoritative(false);
+                        player.SetStabilizerBuffedAuthoritative(false);
                     }
-                    _stabilizedAllies.RemoveAt(i);
+                    _stabilizerBuffedPlayers.RemoveAt(i);
                 }
             }
 
-            foreach (var ally in currentAllies)
+            foreach (var player in currentBuffedPlayers)
             {
-                if (!_stabilizedAllies.Contains(ally))
+                if (!_stabilizerBuffedPlayers.Contains(player))
                 {
-                    _stabilizedAllies.Add(ally);
+                    _stabilizerBuffedPlayers.Add(player);
                 }
             }
         }
 
-        private void ClearStabilizedAllies()
+        private void ClearStabilizerBuffedPlayers()
         {
-            if (_stabilizedAllies == null || _stabilizedAllies.Count == 0) return;
-            for (int i = 0; i < _stabilizedAllies.Count; i++)
+            if (_stabilizerBuffedPlayers == null || _stabilizerBuffedPlayers.Count == 0)
             {
-                if (_stabilizedAllies[i] != null && _stabilizedAllies[i].Object != null && _stabilizedAllies[i].Object.IsValid)
+                return;
+            }
+
+            for (int i = 0; i < _stabilizerBuffedPlayers.Count; i++)
+            {
+                var player = _stabilizerBuffedPlayers[i];
+                if (player != null
+                    && player.Object != null
+                    && player.Object.IsValid)
                 {
-                    _stabilizedAllies[i].SetCoreStabilizedAuthoritative(false);
+                    player.SetStabilizerBuffedAuthoritative(false);
                 }
             }
-            _stabilizedAllies.Clear();
+
+            _stabilizerBuffedPlayers.Clear();
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]

@@ -1,6 +1,7 @@
 using Fusion;
 using QuickOutline;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace EchoProtocol.Networking
 {
@@ -32,6 +33,7 @@ namespace EchoProtocol.Networking
         public override void Spawned()
         {
             EnsureOutline();
+            ConfigureWorldPickupShadows();
 
             if (Object.HasStateAuthority)
             {
@@ -75,6 +77,23 @@ namespace EchoProtocol.Networking
             SetVisualsAndCollidersActive(!IsConsumed);
         }
 
+        private void ConfigureWorldPickupShadows()
+        {
+            Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+            }
+        }
+
         private void SetVisualsAndCollidersActive(bool active)
         {
             _visualsActive = active;
@@ -87,6 +106,8 @@ namespace EchoProtocol.Networking
             foreach (var r in GetComponentsInChildren<Renderer>(true))
             {
                 r.enabled = active;
+                r.shadowCastingMode = ShadowCastingMode.Off;
+                r.receiveShadows = false;
             }
 
             foreach (var light in GetComponentsInChildren<Light>(true))

@@ -139,6 +139,8 @@ namespace EchoProtocol.Tools.Scanner
 
         private void OnReplicatedStateChanged()
         {
+            ConfigureWorldPickupShadows();
+
             if (Runner != null && Object != null && Object.IsValid)
             {
                 _localPickedUp = _isPickedUp;

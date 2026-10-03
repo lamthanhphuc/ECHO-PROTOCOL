@@ -1,6 +1,7 @@
 using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 [DisallowMultipleComponent]
 public sealed class NetworkTeamToolHeldView : MonoBehaviour
@@ -140,7 +141,12 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         {
             // Instantiate visual an toàn (tuyệt đối không instantiate prefab có NetworkObject)
             _visual = InstantiateHeldVisualSafely(sourcePrefab, anchor);
-            if (_visual == null) return;
+            if (_visual == null)
+            {
+                return;
+            }
+
+            DisableToolShadows(_visual);
             _visual.name = "Held_TeamTool_" + _shownToolId;
             _visual.transform.localPosition = ResolveToolPosition(_shownToolId);
             _visual.transform.localRotation = Quaternion.Euler(ResolveToolEulerAngles(_shownToolId));
@@ -352,7 +358,9 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
 
         if (netObj == null && netBeh == null)
         {
-            return Instantiate(sourcePrefab, anchor);
+            GameObject instance = Instantiate(sourcePrefab, anchor);
+            DisableToolShadows(instance);
+            return instance;
         }
 
         Debug.LogWarning($"[NetworkTeamToolHeldView] Prefab '{sourcePrefab.name}' contains Fusion NetworkObject/NetworkBehaviour! Creating a sanitized visual-only clone to prevent native crash.");
@@ -364,7 +372,30 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         visualContainer.transform.localScale = sourcePrefab.transform.localScale;
 
         CopyVisualHierarchySafely(sourcePrefab.transform, visualContainer.transform);
+        DisableToolShadows(visualContainer);
         return visualContainer;
+    }
+
+    public static void DisableToolShadows(GameObject root)
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+            if (renderer == null)
+            {
+                continue;
+            }
+
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+        }
     }
 
     public static void CopyVisualHierarchySafely(Transform source, Transform target)
@@ -379,8 +410,8 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         {
             var targetMr = target.gameObject.AddComponent<MeshRenderer>();
             targetMr.sharedMaterials = mr.sharedMaterials;
-            targetMr.shadowCastingMode = mr.shadowCastingMode;
-            targetMr.receiveShadows = mr.receiveShadows;
+            targetMr.shadowCastingMode = ShadowCastingMode.Off;
+            targetMr.receiveShadows = false;
             targetMr.enabled = mr.enabled;
         }
 
@@ -389,8 +420,8 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             var targetSmr = target.gameObject.AddComponent<SkinnedMeshRenderer>();
             targetSmr.sharedMesh = smr.sharedMesh;
             targetSmr.sharedMaterials = smr.sharedMaterials;
-            targetSmr.shadowCastingMode = smr.shadowCastingMode;
-            targetSmr.receiveShadows = smr.receiveShadows;
+            targetSmr.shadowCastingMode = ShadowCastingMode.Off;
+            targetSmr.receiveShadows = false;
             targetSmr.enabled = smr.enabled;
         }
 

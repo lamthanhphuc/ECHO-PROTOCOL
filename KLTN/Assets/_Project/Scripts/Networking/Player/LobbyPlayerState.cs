@@ -147,6 +147,9 @@ namespace EchoProtocol.Networking
         [Networked]
         public NetworkBool IsCoreStabilized { get; private set; }
 
+        public bool IsStabilizerBuffed =>
+            IsCoreStabilized;
+
         public bool HasVerifiedBackendIdentity => BackendUserId.Length > 0;
 
         public int TeamCount => _teamCount;
@@ -162,12 +165,22 @@ namespace EchoProtocol.Networking
             if (!isGameplayPlayer) CarriedCoreId = default;
         }
 
-        public void SetCoreStabilizedAuthoritative(bool stabilized)
+        public void SetStabilizerBuffedAuthoritative(
+            bool buffed)
         {
-            if (Object != null && Object.IsValid && Object.HasStateAuthority)
+            if (Object != null
+                && Object.IsValid
+                && Object.HasStateAuthority)
             {
-                IsCoreStabilized = stabilized;
+                IsCoreStabilized = buffed;
             }
+        }
+
+        public void SetCoreStabilizedAuthoritative(
+            bool stabilized)
+        {
+            SetStabilizerBuffedAuthoritative(
+                stabilized);
         }
 
         public bool TryBeginCarryingCore(NetworkId coreId)
@@ -182,16 +195,17 @@ namespace EchoProtocol.Networking
             return true;
         }
 
-        public bool TryClearCarriedCore(NetworkId expectedCoreId)
+        public bool TryClearCarriedCore(
+            NetworkId expectedCoreId)
         {
-            if (!Object.HasStateAuthority || !CarriedCoreId.IsValid
+            if (!Object.HasStateAuthority
+                || !CarriedCoreId.IsValid
                 || CarriedCoreId != expectedCoreId)
             {
                 return false;
             }
 
             CarriedCoreId = default;
-            IsCoreStabilized = false;
             return true;
         }
 

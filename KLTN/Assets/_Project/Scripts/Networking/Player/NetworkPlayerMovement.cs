@@ -494,8 +494,7 @@ namespace EchoProtocol.Networking
 
             bool effectiveCrouch = Object.HasStateAuthority ? wantsCrouch : IsCrouching;
 
-            bool coreAllowsSprint = CoreStabilizerRules.AllowsSprint(isCarryingCore,
-                lobbyState != null && lobbyState.IsCoreStabilized);
+            bool coreAllowsSprint = CoreStabilizerRules.AllowsSprint(isCarryingCore);
             var isSprintMoving =
                 canInitiateAction
                 && !effectiveCrouch

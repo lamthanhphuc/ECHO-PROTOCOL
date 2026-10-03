@@ -81,6 +81,7 @@ public sealed class PlayerTeamToolController : MonoBehaviour
             ? anchor.CoreCarryAnchor
             : handSocket;
         equippedObject = Instantiate(definition.TeamToolGameplayPrefab, socket, false);
+        NetworkTeamToolHeldView.DisableToolShadows(equippedObject);
         equippedObject.name = definition.TeamToolGameplayPrefab.name;
         equippedObject.transform.localPosition = definition.ItemId == "core_stabilizer" ? Vector3.zero : heldLocalPosition;
         equippedObject.transform.localRotation = Quaternion.Euler(definition.ItemId == "core_stabilizer" ? new Vector3(0f, 90f, 0f) : heldLocalEulerAngles);
