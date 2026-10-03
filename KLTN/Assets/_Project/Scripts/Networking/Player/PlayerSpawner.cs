@@ -1313,7 +1313,7 @@ namespace EchoProtocol.Networking
                 state.InitializeAuthoritativeSelection(teamId, toolId, gameplay);
             }
 
-            if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && playerObject.HasStateAuthority && gameplay)
+            if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && playerObject.HasStateAuthority)
             {
                 lifeState.ResetForMatchAuthoritative();
             }
