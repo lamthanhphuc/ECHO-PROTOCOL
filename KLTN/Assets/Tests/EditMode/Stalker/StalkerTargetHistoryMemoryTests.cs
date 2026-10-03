@@ -79,6 +79,60 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
+        public void STK_HISTORY_PlayerPressure_AccumulatesAndDecaysBySimulationTime()
+        {
+            var history = CreateHistory();
+
+            Assert.That(
+                Invoke(
+                    history,
+                    "AddPressure01",
+                    CreatePlayerId(3),
+                    CreateTime(0L, 0d),
+                    0.6f,
+                    10f),
+                Is.EqualTo(0.6f).Within(0.0001f));
+
+            Assert.That(
+                GetSignal(
+                    history,
+                    "GetPressure01",
+                    3,
+                    5d,
+                    10f),
+                Is.EqualTo(0.1f).Within(0.0001f));
+
+            Assert.That(
+                Invoke(
+                    history,
+                    "AddPressure01",
+                    CreatePlayerId(3),
+                    CreateTime(5L, 5d),
+                    0.6f,
+                    10f),
+                Is.EqualTo(0.7f).Within(0.0001f));
+
+            Assert.That(
+                Invoke(
+                    history,
+                    "AddPressure01",
+                    CreatePlayerId(3),
+                    CreateTime(6L, 6d),
+                    0.5f,
+                    10f),
+                Is.EqualTo(1f).Within(0.0001f));
+
+            Assert.That(
+                GetSignal(
+                    history,
+                    "GetPressure01",
+                    3,
+                    11d,
+                    10f),
+                Is.EqualTo(0.5f).Within(0.0001f));
+        }
+
+        [Test]
         public void STK_HISTORY_Capacity_IsBounded()
         {
             var history = Activator.CreateInstance(

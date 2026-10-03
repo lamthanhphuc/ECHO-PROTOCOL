@@ -80,6 +80,8 @@ namespace EchoProtocol.UI
             if (readyButton != null) readyButton.onClick.AddListener(OnReadyClicked);
             if (startButton != null) startButton.onClick.AddListener(OnStartClicked);
             if (leaveButton != null) leaveButton.onClick.AddListener(OnLeaveClicked);
+            if (difficultyDropdown != null)
+                difficultyDropdown.onValueChanged.AddListener(OnDifficultyChanged);
             ResolveServices();
             RefreshMemberList();
             RefreshControls();
@@ -125,6 +127,8 @@ namespace EchoProtocol.UI
             if (readyButton != null) readyButton.onClick.RemoveListener(OnReadyClicked);
             if (startButton != null) startButton.onClick.RemoveListener(OnStartClicked);
             if (leaveButton != null) leaveButton.onClick.RemoveListener(OnLeaveClicked);
+            if (difficultyDropdown != null)
+                difficultyDropdown.onValueChanged.RemoveListener(OnDifficultyChanged);
             Unsubscribe();
         }
 
@@ -306,13 +310,37 @@ namespace EchoProtocol.UI
 
         private void RefreshControls()
         {
-            var canConnect = _configured && !Busy && !Connected;
-            if (hostButton != null) hostButton.interactable = canConnect;
-            if (joinButton != null) joinButton.interactable = canConnect;
-            if (playerNameInput != null) playerNameInput.interactable = canConnect;
-            if (sessionNameInput != null) sessionNameInput.interactable = canConnect;
-            if (difficultyDropdown != null) difficultyDropdown.interactable = canConnect;
-            var inLobby = Connected && !Busy && lobbyManager != null && bootstrap.State == NetworkSessionState.InLobby;
+            var canConnect =
+                _configured
+                && !Busy
+                && !Connected;
+
+            var inLobby =
+                Connected
+                && !Busy
+                && lobbyManager != null
+                && bootstrap != null
+                && bootstrap.State == NetworkSessionState.InLobby;
+
+            if (hostButton != null)
+                hostButton.interactable = canConnect;
+
+            if (joinButton != null)
+                joinButton.interactable = canConnect;
+
+            if (playerNameInput != null)
+                playerNameInput.interactable = canConnect;
+
+            if (sessionNameInput != null)
+                sessionNameInput.interactable = canConnect;
+
+            if (difficultyDropdown != null)
+            {
+                difficultyDropdown.interactable =
+                    canConnect
+                    || (inLobby && _room.IsHost);
+            }
+
             if (readyButton != null)
             {
                 readyButton.interactable = inLobby;
@@ -323,6 +351,47 @@ namespace EchoProtocol.UI
             if (leaveButton != null) leaveButton.interactable = Connected && !Busy;
             FadeDisabled(hostButton); FadeDisabled(joinButton); FadeDisabled(readyButton);
             FadeDisabled(startButton); FadeDisabled(leaveButton);
+        }
+
+        private void OnDifficultyChanged(int value)
+        {
+            if (difficultyDropdown == null || Busy)
+            {
+                return;
+            }
+
+            var difficulty =
+                (MatchDifficulty)Mathf.Clamp(
+                    value,
+                    (int)MatchDifficulty.Easy,
+                    (int)MatchDifficulty.Hard);
+
+            // Before room creation Connect() already reads the dropdown value.
+            if (!Connected)
+            {
+                return;
+            }
+
+            // Only the Host can change difficulty while waiting in Lobby.
+            if (bootstrap == null
+                || bootstrap.State != NetworkSessionState.InLobby
+                || !_room.IsHost)
+            {
+                var current =
+                    MatchAuthorityRuntime.Instance != null
+                        ? MatchAuthorityRuntime.Instance.Difficulty
+                        : MatchDifficulty.Normal;
+
+                difficultyDropdown.SetValueWithoutNotify(
+                    (int)current);
+
+                difficultyDropdown.RefreshShownValue();
+                return;
+            }
+
+            MatchAuthorityRuntime
+                .EnsureExists(bootstrap)
+                .RequestDifficulty(difficulty);
         }
 
         private static void FadeDisabled(Button button)

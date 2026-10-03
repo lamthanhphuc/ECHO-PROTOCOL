@@ -58,21 +58,21 @@ namespace EchoProtocol.Gameplay
                 case MatchDifficulty.Easy:
                     return new MatchDifficultyProfile(
                         6,      // TeamToolsPerZone
-                        5.5f,   // PatrolSpeed
-                        6.5f,   // ChaseSpeed
-                        2.0f,   // DetectionDurationSeconds
-                        0.35f,  // DetectionDecayDurationSeconds
-                        1.5f,   // SearchDurationSeconds
-                        2.5f,   // AttackRange
-                        0.75f,  // AttackWindupSeconds
-                        1.6f,   // AttackRecoverySeconds
-                        6f,     // DoorBreakDurationSeconds
-                        180f,   // SeekPlayersAfterSeconds
-                        35f,    // CoreCarrierPursuitDelaySeconds
-                        0.75f,  // HearingRangeMultiplier
-                        600f,   // SpecialEncounterCooldownSeconds
-                        1,      // Zone1MinionCap
-                        1);     // Zone2MinionCap
+                        5.0f,   // PatrolSpeed
+                        6.0f,   // ChaseSpeed
+                        2.5f,   // DetectionDurationSeconds
+                        0.25f,  // DetectionDecayDurationSeconds
+                        1.0f,   // SearchDurationSeconds
+                        2.2f,   // AttackRange
+                        0.85f,  // AttackWindupSeconds
+                        2.0f,   // AttackRecoverySeconds
+                        8f,     // DoorBreakDurationSeconds
+                        240f,   // SeekPlayersAfterSeconds
+                        45f,    // CoreCarrierPursuitDelaySeconds
+                        0.6f,   // HearingRangeMultiplier
+                        720f,   // SpecialEncounterCooldownSeconds
+                        0,      // Zone1MinionCap
+                        0);     // Zone2MinionCap
                 case MatchDifficulty.Hard:
                     return new MatchDifficultyProfile(
                         5, 8f, 9f, 0.75f, 1f, 3f, 3f, 0.35f,
@@ -81,7 +81,7 @@ namespace EchoProtocol.Gameplay
                     // Between Easy and the old baseline, now used as Hard.
                     return new MatchDifficultyProfile(
                         5, 6.5f, 8f, 1.25f, 0.65f, 2.25f, 2.7f, 0.6f,
-                        1.4f, 4.5f, 120f, 25f, 1f, 420f, 1, 2);
+                        1.4f, 4.5f, 120f, 25f, 1f, 420f, 1, 1);
             }
         }
     }

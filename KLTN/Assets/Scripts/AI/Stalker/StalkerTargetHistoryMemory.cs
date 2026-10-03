@@ -146,6 +146,85 @@ namespace EchoProtocol.AI.Stalker
                     decayWindowSeconds);
         }
 
+        public float AddPressure01(
+            PlayerId playerId,
+            AiSimulationTime now,
+            float amount,
+            float decayWindowSeconds)
+        {
+            ValidateQuery(
+                playerId,
+                now,
+                decayWindowSeconds);
+
+            if (float.IsNaN(amount)
+                || float.IsInfinity(amount)
+                || amount < 0f)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(amount));
+            }
+
+            var index =
+                GetOrCreateEntry(
+                    playerId,
+                    now);
+
+            var entry =
+                _entries[index];
+
+            var current =
+                CalculatePressure01(
+                    entry,
+                    now,
+                    decayWindowSeconds);
+
+            entry.Pressure01 =
+                Math.Min(
+                    1f,
+                    current + amount);
+
+            entry.PressureUpdatedAt =
+                now;
+
+            entry.HasPressure =
+                entry.Pressure01 > 0f;
+
+            entry.LastTouchedAt =
+                LaterOf(
+                    entry.LastTouchedAt,
+                    now);
+
+            _entries[index] =
+                entry;
+
+            return entry.Pressure01;
+        }
+
+        public float GetPressure01(
+            PlayerId playerId,
+            AiSimulationTime now,
+            float decayWindowSeconds)
+        {
+            ValidateQuery(
+                playerId,
+                now,
+                decayWindowSeconds);
+
+            var index =
+                FindEntry(playerId);
+
+            if (index < 0)
+            {
+                return 0f;
+            }
+
+            return CalculatePressure01(
+                _entries[index],
+                now,
+                decayWindowSeconds);
+        }
+
         private int GetOrCreateEntry(
             PlayerId playerId,
             AiSimulationTime eventTime)
@@ -219,6 +298,31 @@ namespace EchoProtocol.AI.Stalker
             return 1f - (float)(ageSeconds / decayWindowSeconds);
         }
 
+        private static float CalculatePressure01(
+            Entry entry,
+            AiSimulationTime now,
+            float decayWindowSeconds)
+        {
+            if (!entry.HasPressure
+                || !entry.PressureUpdatedAt.IsValid)
+            {
+                return 0f;
+            }
+
+            var elapsed =
+                Math.Max(
+                    0d,
+                    now.Seconds
+                    - entry.PressureUpdatedAt.Seconds);
+
+            return Math.Max(
+                0f,
+                entry.Pressure01
+                - (float)(
+                    elapsed
+                    / decayWindowSeconds));
+        }
+
         private static void ValidateEvent(
             PlayerId playerId,
             AiSimulationTime eventTime)
@@ -267,11 +371,18 @@ namespace EchoProtocol.AI.Stalker
         private struct Entry
         {
             public PlayerId PlayerId;
+
             public AiSimulationTime LastSeenAt;
             public bool HasLastSeen;
+
             public AiSimulationTime LastAcquiredAt;
             public bool HasLastAcquired;
+
             public AiSimulationTime LastTouchedAt;
+
+            public float Pressure01;
+            public AiSimulationTime PressureUpdatedAt;
+            public bool HasPressure;
         }
     }
 }
