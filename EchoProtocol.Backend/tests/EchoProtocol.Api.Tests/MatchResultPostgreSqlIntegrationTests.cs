@@ -23,6 +23,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using MongoDB.Bson;
 using Xunit;
@@ -58,6 +59,7 @@ public sealed class MatchResultPostgreSqlIntegrationTests
         Assert.Contains(applied, name => name.EndsWith("AddScenarioDecisionsM4051M4049"));
         Assert.Contains(applied, name => name.EndsWith("AddPaymentOrdersM4054"));
         Assert.Contains(applied, name => name.EndsWith("AddPayOSCheckoutWebhookFulfillmentM4055M4056M4057"));
+        Assert.Contains(applied, name => name.EndsWith("ExtendMatchDurationTo45Minutes"));
         Assert.Empty(pending);
     }
 
@@ -770,8 +772,46 @@ public sealed class MatchResultPostgreSqlIntegrationTests
         await using var scope = await PostgresScope.CreateAsync();
         var seed = await scope.SeedMatchAsync();
         await using var db = scope.CreateDbContext();
+        db.Wallets.AddRange(
+            new Wallet
+            {
+                Id = Guid.NewGuid(), UserId = seed.HostId, Balance = 100,
+                UpdatedAt = Now.UtcDateTime
+            },
+            new Wallet
+            {
+                Id = Guid.NewGuid(), UserId = seed.PlayerId, Balance = 100,
+                UpdatedAt = Now.UtcDateTime
+            });
+        db.PlayerProfiles.AddRange(
+            new PlayerProfile
+            {
+                Id = Guid.NewGuid(),
+                UserId = seed.HostId,
+                DisplayName = "Host",
+                Level = 1,
+                CreatedAt = Now.UtcDateTime,
+                UpdatedAt = Now.UtcDateTime
+            },
+            new PlayerProfile
+            {
+                Id = Guid.NewGuid(),
+                UserId = seed.PlayerId,
+                DisplayName = "Player",
+                Level = 1,
+                CreatedAt = Now.UtcDateTime,
+                UpdatedAt = Now.UtcDateTime
+            });
+        await db.SaveChangesAsync();
+
         var controller = new MatchResultsController(
-            new MatchResultService(db, new FixedTimeProvider(Now)))
+            new MatchResultService(db, new FixedTimeProvider(Now)),
+            new RewardService(
+                db,
+                new RewardPolicyV1(),
+                new ProgressionService(new ProgressionPolicyV1()),
+                new FixedTimeProvider(Now)),
+            NullLogger<MatchResultsController>.Instance)
         {
             ControllerContext = new ControllerContext
             {
@@ -793,8 +833,17 @@ public sealed class MatchResultPostgreSqlIntegrationTests
         var stored = await verify.MatchResults.AsNoTracking()
             .Include(item => item.Players)
             .SingleAsync(item => item.MatchId == seed.MatchId);
-        Assert.Equal(MatchRewardStatus.Pending, stored.RewardStatus);
+        Assert.Equal(MatchRewardStatus.Completed, stored.RewardStatus);
         Assert.Equal(2, stored.Players.Count);
+        Assert.All(await verify.Wallets.AsNoTracking().ToListAsync(), wallet =>
+            Assert.Equal(230, wallet.Balance));
+        Assert.All(await verify.PlayerProfiles.AsNoTracking().ToListAsync(), profile =>
+        {
+            Assert.Equal(1, profile.TotalMatches);
+            Assert.Equal(1, profile.TotalWins);
+            Assert.Equal(225, profile.ExperiencePoints);
+            Assert.Equal(1, profile.Level);
+        });
         Assert.Equal(MatchAuthorityStatus.Ended,
             (await verify.MatchAuthorityBindings.AsNoTracking().SingleAsync()).Status);
     }

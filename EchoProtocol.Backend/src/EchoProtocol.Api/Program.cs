@@ -209,10 +209,10 @@ builder.Services.AddScoped<ITelemetryService, TelemetryService>();
 builder.Services.AddScoped<IMatchAuthorityService, MatchAuthorityService>();
 builder.Services.AddScoped<IMatchResultService, MatchResultService>();
 builder.Services.AddScoped<IRewardService, RewardService>();
-builder.Services.AddSingleton<IRewardPolicy, UnconfiguredRewardPolicy>();
+builder.Services.AddSingleton<IRewardPolicy, RewardPolicyV1>();
 builder.Services.AddScoped<IPlayerProfileService, PlayerProfileService>();
 builder.Services.AddScoped<IProgressionService, ProgressionService>();
-builder.Services.AddSingleton<IProgressionPolicy, UnconfiguredProgressionPolicy>();
+builder.Services.AddSingleton<IProgressionPolicy, ProgressionPolicyV1>();
 builder.Services.AddScoped<IShopCatalogService, ShopCatalogService>();
 builder.Services.AddScoped<IPurchaseService, PurchaseService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
@@ -385,6 +385,12 @@ static void ValidateJwtSettings(JwtSettings settings)
     if (settings.ExpiryMinutes <= 0)
     {
         throw new InvalidOperationException("JWT ExpiryMinutes must be greater than zero.");
+    }
+
+    if (settings.RefreshTokenExpiryDays is < 1 or > 90)
+    {
+        throw new InvalidOperationException(
+            "JWT RefreshTokenExpiryDays must be between 1 and 90.");
     }
 }
 

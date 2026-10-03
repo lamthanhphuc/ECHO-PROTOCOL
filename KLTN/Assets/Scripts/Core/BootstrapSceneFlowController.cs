@@ -17,9 +17,11 @@ namespace EchoProtocol.Auth
 
     private IEnumerator RunBootstrapFlow(AuthRuntime runtime)
     {
-      if (!TokenStorage.HasToken() || TokenStorage.IsExpired())
+      if (!TokenStorage.HasUsableSession())
       {
-        if (TokenStorage.HasToken() || !string.IsNullOrEmpty(TokenStorage.GetExpiresAt()))
+        if (TokenStorage.HasToken()
+            || TokenStorage.HasRefreshToken()
+            || TokenStorage.HasStoredExpiry())
         {
           runtime.AuthService.LogoutLocal();
         }

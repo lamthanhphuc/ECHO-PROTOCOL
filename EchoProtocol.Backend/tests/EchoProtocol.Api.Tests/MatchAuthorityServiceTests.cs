@@ -143,6 +143,187 @@ public sealed class MatchAuthorityServiceTests
         Assert.Null((await db.MatchPlayerBindings.SingleAsync(item => item.UserId == playerId)).DisconnectedAtUtc);
     }
 
+    [Fact]
+    public async Task SameUser_CannotBindTwoActorsInSameMatch()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+
+        var hostId = Guid.NewGuid();
+        var playerId = Guid.NewGuid();
+
+        var created = await service.CreateAsync(
+            hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "duplicate-user-room",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        Assert.True(created.IsSuccess);
+
+        var matchId = created.Data!.MatchId;
+
+        await BindAsync(
+            service,
+            hostId,
+            playerId,
+            matchId,
+            "duplicate-user-room",
+            1);
+
+        var secondProof = await service.IssueJoinProofAsync(
+            playerId,
+            matchId,
+            new IssueJoinProofRequest
+            {
+                FusionActorNumber = 2,
+                FusionSessionName = "duplicate-user-room"
+            },
+            CancellationToken.None);
+
+        Assert.True(secondProof.IsSuccess);
+
+        var secondBind = await service.BindPlayerAsync(
+            hostId,
+            matchId,
+            new BindMatchPlayerRequest
+            {
+                FusionActorNumber = 2,
+                JoinProof = secondProof.Data!.Proof
+            },
+            CancellationToken.None);
+
+        Assert.False(secondBind.IsSuccess);
+        Assert.Equal("MATCH_PLAYER_BINDING_CONFLICT", secondBind.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ActivePlayer_CannotJoinAnotherActiveMatch()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+
+        var hostA = Guid.NewGuid();
+        var hostB = Guid.NewGuid();
+        var playerId = Guid.NewGuid();
+
+        var matchA = await service.CreateAsync(
+            hostA,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "active-room-a",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        var matchB = await service.CreateAsync(
+            hostB,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "active-room-b",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        Assert.True(matchA.IsSuccess);
+        Assert.True(matchB.IsSuccess);
+
+        await BindAsync(
+            service,
+            hostA,
+            playerId,
+            matchA.Data!.MatchId,
+            "active-room-a",
+            2);
+
+        var proof = await service.IssueJoinProofAsync(
+            playerId,
+            matchB.Data!.MatchId,
+            new IssueJoinProofRequest
+            {
+                FusionActorNumber = 3,
+                FusionSessionName = "active-room-b"
+            },
+            CancellationToken.None);
+
+        Assert.False(proof.IsSuccess);
+        Assert.Equal("ACCOUNT_ALREADY_IN_ACTIVE_MATCH", proof.ErrorCode);
+    }
+
+    [Fact]
+    public async Task DisconnectedPlayer_CanJoinAnotherActiveMatch()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+
+        var hostA = Guid.NewGuid();
+        var hostB = Guid.NewGuid();
+        var playerId = Guid.NewGuid();
+
+        var matchA = await service.CreateAsync(
+            hostA,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "leave-room-a",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        var matchB = await service.CreateAsync(
+            hostB,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "leave-room-b",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        Assert.True(matchA.IsSuccess);
+        Assert.True(matchB.IsSuccess);
+
+        await BindAsync(
+            service,
+            hostA,
+            playerId,
+            matchA.Data!.MatchId,
+            "leave-room-a",
+            2);
+
+        var disconnected = await service.MarkPlayerDisconnectedAsync(
+            hostA,
+            matchA.Data.MatchId,
+            2,
+            CancellationToken.None);
+
+        Assert.True(disconnected.IsSuccess);
+
+        var proof = await service.IssueJoinProofAsync(
+            playerId,
+            matchB.Data!.MatchId,
+            new IssueJoinProofRequest
+            {
+                FusionActorNumber = 3,
+                FusionSessionName = "leave-room-b"
+            },
+            CancellationToken.None);
+
+        Assert.True(proof.IsSuccess);
+
+        var binding = await service.BindPlayerAsync(
+            hostB,
+            matchB.Data.MatchId,
+            new BindMatchPlayerRequest
+            {
+                FusionActorNumber = 3,
+                JoinProof = proof.Data!.Proof
+            },
+            CancellationToken.None);
+
+        Assert.True(binding.IsSuccess);
+    }
+
     private static async Task BindAsync(
         MatchAuthorityService service,
         Guid hostId,

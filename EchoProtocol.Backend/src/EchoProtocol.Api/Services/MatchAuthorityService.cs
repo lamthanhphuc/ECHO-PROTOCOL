@@ -34,6 +34,16 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         CreateMatchAuthorityRequest request,
         CancellationToken cancellationToken)
     {
+        if (await HasOtherActiveMatchAsync(
+                hostUserId,
+                excludedMatchId: null,
+                cancellationToken))
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Account is already participating in another active match",
+                ErrorCodes.AccountAlreadyInActiveMatch);
+        }
+
         var sessionName = request.FusionSessionName.Trim();
         var now = UtcNow();
         var alreadyActive = await _db.MatchAuthorityBindings.AnyAsync(
@@ -78,6 +88,13 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             return Failure<JoinProofResponse>(stateFailure.Value.Message, stateFailure.Value.Code);
         }
 
+        if (await HasOtherActiveMatchAsync(userId, matchId, cancellationToken))
+        {
+            return Failure<JoinProofResponse>(
+                "Account is already participating in another active match",
+                ErrorCodes.AccountAlreadyInActiveMatch);
+        }
+
         if (match!.Status == MatchAuthorityStatus.InMatch)
         {
             var disconnectedMember = await _db.MatchPlayerBindings.AsNoTracking()
@@ -120,6 +137,13 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             || !string.Equals(proof.FusionSessionName, match!.FusionSessionName, StringComparison.Ordinal))
         {
             return Failure<MatchPlayerBindingResponse>("Join proof is invalid or expired", ErrorCodes.JoinProofInvalid);
+        }
+
+        if (await HasOtherActiveMatchAsync(proof.UserId, matchId, cancellationToken))
+        {
+            return Failure<MatchPlayerBindingResponse>(
+                "Account is already participating in another active match",
+                ErrorCodes.AccountAlreadyInActiveMatch);
         }
 
         var actorBinding = match.Players.SingleOrDefault(
@@ -347,6 +371,40 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         return match.LeaseExpiresAtUtc <= UtcNow()
             ? ("Match authority lease expired", ErrorCodes.MatchLeaseExpired)
             : null;
+    }
+
+    private async Task<bool> HasOtherActiveMatchAsync(
+        Guid userId,
+        Guid? excludedMatchId,
+        CancellationToken cancellationToken)
+    {
+        var now = UtcNow();
+
+        var activeMatches = _db.MatchAuthorityBindings
+            .AsNoTracking()
+            .Where(match =>
+                match.Status != MatchAuthorityStatus.Ended
+                && match.LeaseExpiresAtUtc > now
+                && (!excludedMatchId.HasValue
+                    || match.MatchId != excludedMatchId.Value));
+
+        if (await activeMatches.AnyAsync(
+                match => match.HostUserId == userId,
+                cancellationToken))
+        {
+            return true;
+        }
+
+        var activeMatchIds = activeMatches.Select(match => match.MatchId);
+
+        return await _db.MatchPlayerBindings
+            .AsNoTracking()
+            .AnyAsync(
+                player =>
+                    player.UserId == userId
+                    && player.DisconnectedAtUtc == null
+                    && activeMatchIds.Contains(player.MatchId),
+                cancellationToken);
     }
 
     private DateTime UtcNow() => _timeProvider.GetUtcNow().UtcDateTime;
