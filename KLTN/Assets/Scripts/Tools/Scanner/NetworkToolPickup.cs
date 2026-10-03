@@ -2,6 +2,7 @@ using System;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
 using Fusion;
+using QuickOutline;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -25,6 +26,11 @@ namespace EchoProtocol.Tools.Scanner
         [Header("Components")]
         [SerializeField] private Collider _pickupCollider;
         [SerializeField] private Renderer _visualRenderer;
+
+        private Outline _outline;
+
+        private static readonly Color TeamToolOutlineColor =
+            new Color(1f, 0.05f, 0.05f, 1f);
 
         [Networked, OnChangedRender(nameof(OnReplicatedStateChanged))]
         private NetworkBool _isPickedUp { get; set; }
@@ -83,9 +89,28 @@ namespace EchoProtocol.Tools.Scanner
                 _localPickedUp = _isPickedUp;
             }
 
+            EnsureOutline();
             ApplyReplicatedPose();
             ConfigureWorldPickupShadows();
             OnReplicatedStateChanged();
+        }
+
+        private void EnsureOutline()
+        {
+            if (_outline == null)
+            {
+                _outline = GetComponent<Outline>();
+
+                if (_outline == null)
+                {
+                    _outline = gameObject.AddComponent<Outline>();
+                }
+            }
+
+            _outline.OutlineMode = Outline.Mode.OutlineVisible;
+            _outline.OutlineColor = TeamToolOutlineColor;
+            _outline.OutlineWidth = 4f;
+            _outline.UpdateMaterialProperties();
         }
 
         private void ConfigureWorldPickupShadows()
@@ -142,6 +167,9 @@ namespace EchoProtocol.Tools.Scanner
             {
                 transform.GetChild(i).gameObject.SetActive(visible);
             }
+
+            EnsureOutline();
+            _outline.enabled = visible;
         }
 
         // ==========================================

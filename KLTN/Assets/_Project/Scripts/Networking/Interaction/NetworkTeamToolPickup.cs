@@ -1,6 +1,6 @@
 using Fusion;
+using QuickOutline;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace EchoProtocol.Networking
 {
@@ -9,6 +9,11 @@ namespace EchoProtocol.Networking
     {
         [SerializeField, Range(1, 6)] private int _toolId = 2;
         [SerializeField] private string _toolDisplayName = "Team Tool";
+
+        private Outline _outline;
+
+        private static readonly Color TeamToolOutlineColor =
+            new Color(1f, 0.05f, 0.05f, 1f);
 
         [Networked, OnChangedRender(nameof(OnConsumedChanged))] private NetworkBool IsConsumed { get; set; }
         [Networked, OnChangedRender(nameof(ApplyReplicatedPose))] public Vector3 WorldPosition { get; private set; }
@@ -23,6 +28,8 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            EnsureOutline();
+
             if (Object.HasStateAuthority)
             {
                 IsConsumed = false;
@@ -32,6 +39,24 @@ namespace EchoProtocol.Networking
 
             ApplyReplicatedPose();
             SetVisualsAndCollidersActive(!IsConsumed);
+        }
+
+        private void EnsureOutline()
+        {
+            if (_outline == null)
+            {
+                _outline = GetComponent<Outline>();
+
+                if (_outline == null)
+                {
+                    _outline = gameObject.AddComponent<Outline>();
+                }
+            }
+
+            _outline.OutlineMode = Outline.Mode.OutlineVisible;
+            _outline.OutlineColor = TeamToolOutlineColor;
+            _outline.OutlineWidth = 4f;
+            _outline.UpdateMaterialProperties();
         }
 
         private void ApplyReplicatedPose()
@@ -57,18 +82,15 @@ namespace EchoProtocol.Networking
             foreach (var r in GetComponentsInChildren<Renderer>(true))
             {
                 r.enabled = active;
-
-                if (active)
-                {
-                    r.shadowCastingMode = ShadowCastingMode.Off;
-                    r.receiveShadows = false;
-                }
             }
 
             foreach (var light in GetComponentsInChildren<Light>(true))
             {
                 light.enabled = active;
             }
+
+            EnsureOutline();
+            _outline.enabled = active;
         }
 
         protected override InteractionValidationResult ValidateCurrentState(
