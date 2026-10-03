@@ -1688,13 +1688,46 @@ namespace EchoProtocol.AI.Stalker
                 _attackController.BeginAttack(true, _memory.CurrentTargetId, _currentSimulationStep);
             }
 
-            var targetId = _attackController.AttackTargetId;
-            if (targetId.IsValid
-                && TryGetUniqueTargetStatusDetail(targetId, out var status)
-                && !status.IsHidden
+            var targetId =
+                _attackController.AttackTargetId;
+
+            if (!targetId.IsValid
+                || !TryGetUniqueTargetStatusDetail(
+                    targetId,
+                    out var status))
+            {
+                _attackController.ClearActiveEpisode();
+
+                lastAttackResult =
+                    StalkerAttackResult.Miss;
+
+                attackElapsedTime = 0f;
+
+                InvalidateCurrentTarget();
+                return;
+            }
+
+            if (!status.IsHidden
                 && !status.Eligibility.Eligible)
             {
-                _memory.ClearCurrentTarget();
+                _attackController.ClearActiveEpisode();
+
+                lastAttackResult =
+                    StalkerAttackResult.Miss;
+
+                attackElapsedTime = 0f;
+
+                ClearTargetContext();
+
+                if (!TryAcquireTypedDetectionTargetFromVisibleFrame())
+                {
+                    currentState =
+                        StalkerState.PATROL;
+
+                    SetCurrentPatrolDestination();
+                }
+
+                return;
             }
 
             TrackAttackTargetDuringWindup(targetId);

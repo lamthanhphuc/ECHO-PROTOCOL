@@ -691,15 +691,30 @@ namespace EchoProtocol.AI.Stalker.Networking
                 var isDowned = (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && lifeState.IsDowned)
                     || (playerObject.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned);
                 var isEliminated = lifeState != null && lifeState.IsEliminated;
-                var isHidden = (playerObject.TryGetComponent<PlayerHidingController>(out var hiding) && hiding.IsHidden)
-                    || (playerObject.TryGetComponent<NetworkPlayerMovement>(out var netMove) && netMove.IsHidden)
-                    || (playerObject.TryGetComponent<LobbyPlayerState>(out var stabilizerState) && stabilizerState.IsStabilizerBuffed);
-                var eligibilitySnapshot = new StalkerTargetEligibilitySnapshot(
-                    isGameplayPlayer,
-                    true,
-                    isDowned,
-                    isEliminated,
-                    isHidden || (lifeState != null && lifeState.IsCaught));
+                var isHidden =
+                    (playerObject.TryGetComponent<
+                        PlayerHidingController>(
+                        out var hiding)
+                     && hiding.IsHidden)
+                    || (playerObject.TryGetComponent<
+                        NetworkPlayerMovement>(
+                        out var netMove)
+                        && netMove.IsHidden);
+
+                var isStabilizerProtected =
+                    lobbyState != null
+                    && lobbyState.IsStabilizerBuffed;
+
+                var eligibilitySnapshot =
+                    new StalkerTargetEligibilitySnapshot(
+                        isGameplayPlayer,
+                        true,
+                        isDowned,
+                        isEliminated,
+                        isHidden
+                        || isStabilizerProtected
+                        || (lifeState != null
+                            && lifeState.IsCaught));
                 _targetStatuses.Add(new StalkerTargetStatus(
                     playerId,
                     StalkerTargetEligibility.Evaluate(eligibilitySnapshot),
