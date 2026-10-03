@@ -122,6 +122,7 @@ namespace EchoProtocol.Networking
         [Networked] public float CatchDuration { get; private set; }
         [Networked] private TickTimer CatchTimer { get; set; }
         [Networked] private NetworkBool CatchEndsInDeath { get; set; }
+        [Networked] public NetworkBool DebugGodMode { get; private set; }
 
         public bool IsCaught => Object != null && Object.IsValid && Status == NetworkPlayerLifeStatus.Caught;
         public bool IsEliminated => Object != null && Object.IsValid &&
@@ -173,6 +174,7 @@ namespace EchoProtocol.Networking
             EnsureLegacyPresentationComponents();
             if (Object.HasStateAuthority)
             {
+                DebugGodMode = false;
                 Status = NetworkPlayerLifeStatus.Alive;
                 Health = _maximumHealth;
                 Reviver = PlayerRef.None;
@@ -249,6 +251,7 @@ namespace EchoProtocol.Networking
         public void ResetForMatchAuthoritative()
         {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
+            DebugGodMode = false;
             Status = NetworkPlayerLifeStatus.Alive;
             Health = _maximumHealth;
             Reviver = PlayerRef.None;
@@ -296,6 +299,7 @@ namespace EchoProtocol.Networking
         public bool TryApplyAuthoritativeDamage(float damage, string sourceType, Vector3 hitPosition)
         {
             if (!Object.HasStateAuthority
+                || DebugGodMode
                 || damage <= 0f
                 || !NetworkPlayerLifeStateRules.CanReceiveDamage(Status, HasReviveProtection))
             {
@@ -318,7 +322,10 @@ namespace EchoProtocol.Networking
         public bool TryApplyAuthoritativeNonLethalDamage(float damage, string sourceType, Vector3 hitPosition)
         {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority
-                || damage <= 0f || Status != NetworkPlayerLifeStatus.Alive || HasReviveProtection)
+                || DebugGodMode
+                || damage <= 0f
+                || Status != NetworkPlayerLifeStatus.Alive
+                || HasReviveProtection)
             {
                 return false;
             }
@@ -343,6 +350,7 @@ namespace EchoProtocol.Networking
         public bool TryApplyMonsterDown(string monsterType, Vector3 hitPosition)
         {
             if (!Object.HasStateAuthority
+                || DebugGodMode
                 || HasReviveProtection
                 || !NetworkPlayerLifeStateRules.CanDown(Status))
             {
@@ -358,6 +366,7 @@ namespace EchoProtocol.Networking
         public bool TryCatchAuthoritative(NetworkObject ghost, float range, float duration, bool endsInDeath)
         {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || DebugGodMode
                 || ghost == null || !ghost.IsValid || !ghost.HasStateAuthority || ghost.Runner != Runner
                 || !NetworkPlayerLifeStateRules.CanReceiveDamage(Status, HasReviveProtection)
                 || !float.IsFinite(range) || range <= 0f || !float.IsFinite(duration) || duration < 0.2f
@@ -441,7 +450,10 @@ namespace EchoProtocol.Networking
 
         public bool ForceEliminateAuthoritative(NetworkPlayerLifeTransitionCause cause, string reason)
         {
-            if (Object == null || !Object.IsValid || !Object.HasStateAuthority)
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || DebugGodMode)
             {
                 return false;
             }
@@ -596,6 +608,11 @@ namespace EchoProtocol.Networking
 
         private bool CommitEliminated(NetworkPlayerLifeTransitionCause cause, string reason)
         {
+            if (DebugGodMode)
+            {
+                return false;
+            }
+
             if (Status == NetworkPlayerLifeStatus.Eliminated
                 || Status == NetworkPlayerLifeStatus.Escaped)
             {
@@ -647,6 +664,80 @@ namespace EchoProtocol.Networking
         private float Remaining(TickTimer timer)
         {
             return Runner == null ? 0f : Mathf.Max(0f, timer.RemainingTime(Runner) ?? 0f);
+        }
+
+        public void RequestDebugGodModeToggle()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasInputAuthority)
+            {
+                return;
+            }
+
+            if (Object.HasStateAuthority)
+            {
+                ToggleDebugGodModeAuthoritative();
+                return;
+            }
+
+            RpcRequestDebugGodModeToggle();
+#endif
+        }
+
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        private void RpcRequestDebugGodModeToggle(
+            RpcInfo info = default)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || info.Source != Object.InputAuthority)
+            {
+                return;
+            }
+
+            ToggleDebugGodModeAuthoritative();
+#endif
+        }
+
+        private void ToggleDebugGodModeAuthoritative()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority)
+            {
+                return;
+            }
+
+            DebugGodMode = !DebugGodMode;
+
+            if (DebugGodMode)
+            {
+                ClearSurvivalTimers();
+
+                CatchTimer = TickTimer.None;
+                CaughtByGhostId = default;
+                CatchDuration = 0f;
+                CatchEndsInDeath = false;
+
+                IsCrawling = false;
+                Health = _maximumHealth;
+
+                GetComponent<PlayerJumpscareController>()
+                    ?.StopJumpscare();
+
+                CommitStatus(
+                    NetworkPlayerLifeStatus.Alive,
+                    NetworkPlayerLifeTransitionCause.None);
+            }
+
+            Debug.Log(
+                $"[DebugGodMode] Player={Object.InputAuthority}, Enabled={DebugGodMode}.");
+#endif
         }
 
         private void CommitStatus(NetworkPlayerLifeStatus status, NetworkPlayerLifeTransitionCause cause)

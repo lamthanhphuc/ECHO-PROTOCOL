@@ -79,6 +79,11 @@ namespace EchoProtocol.Networking
 
             if (matchState.IsEnded)
             {
+                if (IsValidNetworkObject(_monsterInstance))
+                {
+                    runner.Despawn(_monsterInstance);
+                    _monsterInstance = null;
+                }
                 if (IsValidNetworkObject(_zone2MonsterInstance))
                 {
                     runner.Despawn(_zone2MonsterInstance);
@@ -97,6 +102,12 @@ namespace EchoProtocol.Networking
                 || SceneManager.GetActiveScene().name != LobbyManager.GameSceneName) return;
 
             EnsureZone3Stalker(runner, matchState);
+
+            var phase = matchState.CurrentPhase;
+            if (phase == NetworkMatchPhase.Zone3FindFrigate
+                || phase == NetworkMatchPhase.Zone3PushFrigate
+                || phase == NetworkMatchPhase.FinalHunt
+                || phase == NetworkMatchPhase.Escape) return;
 
             if (Time.time < _nextMinionSpawnCheckAt) return;
             _nextMinionSpawnCheckAt = Time.time + _minionSpawnCheckInterval;
@@ -425,6 +436,13 @@ namespace EchoProtocol.Networking
             _zone2MonsterSpawned = true;
             _zone2MinionsActive = true;
             DespawnCreepMinionsForZone(runner, RegionSemanticZone.Zone01);
+
+            if (IsValidNetworkObject(_monsterInstance))
+            {
+                runner.Despawn(_monsterInstance);
+                _monsterInstance = null;
+            }
+
             _nextMinionSpawnCheckAt = Time.time;
         }
 
@@ -476,6 +494,16 @@ namespace EchoProtocol.Networking
             _zone3MonsterInstance = spawned;
             _zone3MonsterSpawned = true;
             _zone3SpawnFailureLogged = false;
+
+            if (IsValidNetworkObject(_zone2MonsterInstance))
+            {
+                runner.Despawn(_zone2MonsterInstance);
+                _zone2MonsterInstance = null;
+            }
+
+            DespawnCreepMinionsForZone(runner, RegionSemanticZone.Zone02);
+            _zone2MinionsActive = false;
+
             RuntimeLog.Log(RuntimeLogCategory.PlayerSpawner,
                 $"[STK_ZONE3][SPAWN] id={spawned.Id} position={position}.");
         }
