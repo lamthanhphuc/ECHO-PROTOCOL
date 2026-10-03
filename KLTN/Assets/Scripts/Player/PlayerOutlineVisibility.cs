@@ -6,8 +6,10 @@ using UnityEngine;
 [RequireComponent(typeof(Outline))]
 public sealed class PlayerOutlineVisibility : MonoBehaviour
 {
+    private const float DefaultMaxVisibleDistance = 20f;
+
     [SerializeField, Min(1f)]
-    private float maxVisibleDistance = 20f;
+    private float maxVisibleDistance = DefaultMaxVisibleDistance;
 
     [SerializeField]
     private Color outlineColor =
@@ -17,7 +19,8 @@ public sealed class PlayerOutlineVisibility : MonoBehaviour
     private float outlineWidth = 4f;
 
     private Outline _outline;
-    private LobbyPlayerState _lobbyState;
+    private LobbyPlayerState _playerState;
+    private LobbyPlayerState _localPlayerState;
 
     private void Awake()
     {
@@ -41,44 +44,41 @@ public sealed class PlayerOutlineVisibility : MonoBehaviour
     {
         ResolveReferences();
 
-        if (_outline == null)
+        if (_outline == null
+            || _playerState == null
+            || _playerState.Object == null
+            || !_playerState.Object.IsValid)
         {
+            SetOutline(false);
             return;
         }
 
-        if (_lobbyState == null
-            || _lobbyState.Object == null
-            || !_lobbyState.Object.IsValid)
+        // Local player không tự thấy outline của chính mình.
+        if (_playerState.Object.HasInputAuthority)
         {
-            _outline.enabled = false;
+            SetOutline(false);
             return;
         }
 
-        // Không outline chính player local.
-        if (_lobbyState.Object.HasInputAuthority)
+        ResolveLocalPlayer();
+
+        if (_localPlayerState == null
+            || _localPlayerState.Object == null
+            || !_localPlayerState.Object.IsValid)
         {
-            _outline.enabled = false;
+            SetOutline(false);
             return;
         }
 
-        Camera viewer = Camera.main;
-        if (viewer == null)
-        {
-            _outline.enabled = false;
-            return;
-        }
+        float maxDistanceSqr =
+            maxVisibleDistance * maxVisibleDistance;
 
-        float maxSqr =
-            maxVisibleDistance
-            * maxVisibleDistance;
-
-        float sqrDistance =
-            (viewer.transform.position
-             - transform.position)
+        float distanceSqr =
+            (_localPlayerState.transform.position
+             - _playerState.transform.position)
             .sqrMagnitude;
 
-        _outline.enabled =
-            sqrDistance <= maxSqr;
+        SetOutline(distanceSqr <= maxDistanceSqr);
     }
 
     private void ResolveReferences()
@@ -88,11 +88,45 @@ public sealed class PlayerOutlineVisibility : MonoBehaviour
             _outline = GetComponent<Outline>();
         }
 
-        if (_lobbyState == null)
+        if (_playerState == null)
         {
-            _lobbyState =
+            _playerState =
                 GetComponent<LobbyPlayerState>()
                 ?? GetComponentInParent<LobbyPlayerState>();
+        }
+    }
+
+    private void ResolveLocalPlayer()
+    {
+        if (_localPlayerState != null
+            && _localPlayerState.gameObject.activeInHierarchy
+            && _localPlayerState.Object != null
+            && _localPlayerState.Object.IsValid
+            && _localPlayerState.Object.HasInputAuthority)
+        {
+            return;
+        }
+
+        _localPlayerState = null;
+
+        LobbyPlayerState[] players =
+            FindObjectsByType<LobbyPlayerState>(
+                FindObjectsInactive.Exclude);
+
+        for (int i = 0; i < players.Length; i++)
+        {
+            LobbyPlayerState player = players[i];
+
+            if (player == null
+                || player.Object == null
+                || !player.Object.IsValid
+                || !player.Object.HasInputAuthority)
+            {
+                continue;
+            }
+
+            _localPlayerState = player;
+            return;
         }
     }
 
@@ -103,15 +137,18 @@ public sealed class PlayerOutlineVisibility : MonoBehaviour
             return;
         }
 
-        _outline.OutlineMode =
-            Outline.Mode.OutlineAll;
-
-        _outline.OutlineColor =
-            outlineColor;
-
-        _outline.OutlineWidth =
-            outlineWidth;
-
+        _outline.OutlineMode = Outline.Mode.OutlineAll;
+        _outline.OutlineColor = outlineColor;
+        _outline.OutlineWidth = outlineWidth;
         _outline.UpdateMaterialProperties();
+    }
+
+    private void SetOutline(bool visible)
+    {
+        if (_outline != null
+            && _outline.enabled != visible)
+        {
+            _outline.enabled = visible;
+        }
     }
 }
