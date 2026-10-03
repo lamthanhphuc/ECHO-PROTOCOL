@@ -16,6 +16,8 @@ namespace EchoProtocol.Tools.Scanner
     [RequireComponent(typeof(Collider))]
     public class NetworkToolPickup : NetworkInteractable, IInteractable
     {
+        private const float MaxOutlineVisibleDistance = 20f;
+
         public static event Action<NetworkToolPickup, PlayerRef> ToolPickedUp;
 
         [Header("Tool Configuration")]
@@ -169,7 +171,32 @@ namespace EchoProtocol.Tools.Scanner
             }
 
             EnsureOutline();
-            _outline.enabled = visible;
+            RefreshOutlineVisibility();
+        }
+
+        private void Update()
+        {
+            RefreshOutlineVisibility();
+        }
+
+        private void RefreshOutlineVisibility()
+        {
+            EnsureOutline();
+
+            Camera viewer = Camera.main;
+            if (IsPickedUp || viewer == null)
+            {
+                _outline.enabled = false;
+                return;
+            }
+
+            float maxDistanceSqr =
+                MaxOutlineVisibleDistance
+                * MaxOutlineVisibleDistance;
+
+            _outline.enabled =
+                (viewer.transform.position - transform.position)
+                .sqrMagnitude <= maxDistanceSqr;
         }
 
         // ==========================================

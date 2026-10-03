@@ -15,6 +15,8 @@ namespace EchoProtocol.Networking
     /// <summary>Owned-player command gateway. All interaction RPCs pass through this behaviour.</summary>
     public sealed class NetworkPlayerInteractor : NetworkBehaviour
     {
+        private const float DoorJammerInteractionDistance = 4f;
+
         public static event Action<InteractionRequestResult> LocalRequestCompleted;
 
         [SerializeField] private InputActionAsset _inputActions;
@@ -24,6 +26,9 @@ namespace EchoProtocol.Networking
         private NetworkPlayerLifeState _currentReviveTarget;
         public NetworkPlayerLifeState CurrentReviveTarget => _currentReviveTarget;
         public GameObject NoiseMakerPreviewPrefab => _noiseMakerBeaconPrefab;
+        public GameObject DoorJammerPreviewPrefab =>
+            Resources.Load<GameObject>(
+                "Network/PF_DoorJammer");
         public bool IsTeamToolPickupBlocked { get; private set; }
 
         [SerializeField] private LayerMask _interactionLayers = ~0;
@@ -33,6 +38,15 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(0.01f)]
         private float _noiseMakerObstacleProbeRadius =
             0.2f;
+        [SerializeField, Min(0.5f)]
+        private float _doorJammerFreePlacementDistance = 2f;
+
+        private static readonly Vector3
+            DoorJammerPlacementCheckHalfExtents =
+                new Vector3(
+                    0.22f,
+                    1.55f,
+                    1.65f);
         [SerializeField] private AudioClip _coreStabilizerPulseClip;
 
         [Networked] private uint LastProcessedSequence { get; set; }
@@ -51,6 +65,7 @@ namespace EchoProtocol.Networking
         private InputAction _interactAction;
         private InputAction _dropCoreAction;
         private InputAction _teamToolAction;
+        private InputAction _doorJammerPreviewAction;
         private InputAction _helpPingAction;
         private uint _nextSequence;
         private NetworkId _lastRequestedTargetId;
@@ -59,6 +74,7 @@ namespace EchoProtocol.Networking
 
         public NetworkInteractable CurrentCandidate { get; private set; }
         public bool IsInteractionPromptSuppressed => _suppressInteractionPrompt;
+        public bool IsDoorJammerPreviewActive { get; private set; }
 
         public void SetInteractionPromptSuppressed(bool suppressed)
         {
@@ -74,6 +90,7 @@ namespace EchoProtocol.Networking
                 CurrentCandidate = null;
                 IsTeamToolPickupBlocked = false;
                 _currentReviveTarget = null;
+                IsDoorJammerPreviewActive = false;
             }
         }
 
@@ -84,6 +101,10 @@ namespace EchoProtocol.Networking
             _dropCoreAction = new InputAction("DropCore", InputActionType.Button, "<Keyboard>/g");
             _teamToolAction = new InputAction("UseTeamTool", InputActionType.Button);
             _teamToolAction.AddBinding("<Mouse>/leftButton");
+            _doorJammerPreviewAction = new InputAction(
+                "ToggleDoorJammerPreview",
+                InputActionType.Button,
+                "<Mouse>/rightButton");
             _helpPingAction = new InputAction("HelpPing", InputActionType.Button, "<Keyboard>/h");
         }
 
@@ -94,6 +115,7 @@ namespace EchoProtocol.Networking
                 _interactAction?.Enable();
                 _dropCoreAction?.Enable();
                 _teamToolAction?.Enable();
+                _doorJammerPreviewAction?.Enable();
                 _helpPingAction?.Enable();
             }
         }
@@ -109,6 +131,7 @@ namespace EchoProtocol.Networking
             _interactAction?.Enable();
             _dropCoreAction?.Enable();
             _teamToolAction?.Enable();
+            _doorJammerPreviewAction?.Enable();
             _helpPingAction?.Enable();
         }
 
@@ -126,9 +149,11 @@ namespace EchoProtocol.Networking
         {
             CurrentCandidate = null;
             IsTeamToolPickupBlocked = false;
+            IsDoorJammerPreviewActive = false;
             _interactAction?.Disable();
             _dropCoreAction?.Disable();
             _teamToolAction?.Disable();
+            _doorJammerPreviewAction?.Disable();
             _helpPingAction?.Disable();
             ClearStabilizedAllies();
         }
@@ -138,6 +163,7 @@ namespace EchoProtocol.Networking
             GameplayInputSettings.UnregisterAction(_interactAction);
             _dropCoreAction?.Dispose();
             _teamToolAction?.Dispose();
+            _doorJammerPreviewAction?.Dispose();
             _helpPingAction?.Dispose();
             ClearStabilizedAllies();
         }
@@ -208,6 +234,7 @@ namespace EchoProtocol.Networking
                 CurrentCandidate = null;
                 IsTeamToolPickupBlocked = false;
                 _currentReviveTarget = null;
+                IsDoorJammerPreviewActive = false;
                 return;
             }
 
@@ -216,6 +243,7 @@ namespace EchoProtocol.Networking
                 if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
                 CurrentCandidate = null;
                 IsTeamToolPickupBlocked = false;
+                IsDoorJammerPreviewActive = false;
                 return;
             }
             bool isOnline = Runner != null && Runner.IsRunning && Object != null && Object.IsValid;
@@ -224,6 +252,7 @@ namespace EchoProtocol.Networking
             {
                 CurrentCandidate = null;
                 IsTeamToolPickupBlocked = false;
+                IsDoorJammerPreviewActive = false;
                 return;
             }
 
@@ -240,6 +269,7 @@ namespace EchoProtocol.Networking
             {
                 CurrentCandidate = null;
                 IsTeamToolPickupBlocked = false;
+                IsDoorJammerPreviewActive = false;
                 return;
             }
 
@@ -250,6 +280,30 @@ namespace EchoProtocol.Networking
                 && IsTeamToolPickup(CurrentCandidate)
                 && playerState != null
                 && playerState.ToolId > 0;
+
+            var inventory = GetComponent<PlayerInventory>();
+            int equippedToolId =
+                playerState != null && playerState.ToolId > 0
+                    ? playerState.ToolId
+                    : inventory != null
+                        ? PlayerInventory.ResolveToolId(
+                            inventory.TeamToolSlot)
+                        : 0;
+
+            bool hasDoorJammer =
+                equippedToolId
+                == LobbyPlayerState.DoorJammerToolId;
+
+            if (!hasDoorJammer)
+            {
+                IsDoorJammerPreviewActive = false;
+            }
+            else if (_doorJammerPreviewAction
+                     ?.WasPerformedThisFrame() == true)
+            {
+                IsDoorJammerPreviewActive =
+                    !IsDoorJammerPreviewActive;
+            }
             if (_currentReviveTarget == null || !_currentReviveTarget.IsReviveInProgress)
             {
                 _currentReviveTarget = TryDetectReviveCandidate(out var reviveCandidate)
@@ -261,24 +315,36 @@ namespace EchoProtocol.Networking
             {
                 RequestDropCarriedItem();
             }
-            if (_teamToolAction?.WasPerformedThisFrame() == true) RequestUseTeamTool();
 
-            if (_interactAction?.WasPressedThisFrame() != true) return;
+            bool useTeamToolPressed =
+                _teamToolAction?.WasPerformedThisFrame() == true;
+            bool interactPressed =
+                _interactAction?.WasPressedThisFrame() == true;
+
+            if (hasDoorJammer
+                && IsDoorJammerPreviewActive
+                && (useTeamToolPressed || interactPressed))
+            {
+                if (RequestUseTeamTool())
+                {
+                    IsDoorJammerPreviewActive = false;
+                }
+
+                return;
+            }
+
+            if (useTeamToolPressed && !hasDoorJammer)
+            {
+                RequestUseTeamTool();
+            }
+
+            if (!interactPressed) return;
 
             if (CurrentCandidate != null)
             {
                 if (IsTeamToolPickupBlocked)
                 {
                     return;
-                }
-
-                if (CurrentCandidate is NetworkSlidingDoor brokenDoor && brokenDoor.CanAcceptJammer())
-                {
-                    if (playerState != null && playerState.Object != null && playerState.Object.IsValid && playerState.Object.Id.IsValid && playerState.Runner != null && playerState.Runner.IsRunning && playerState.ToolId == 4)
-                    {
-                        RequestUseTeamTool();
-                        return;
-                    }
                 }
 
                 RequestInteraction(CurrentCandidate);
@@ -571,13 +637,74 @@ namespace EchoProtocol.Networking
             }
             else if (toolType == "DOOR_JAMMER")
             {
-                if (CurrentCandidate is NetworkSlidingDoor door && door.CanAcceptJammer())
+                if (CurrentCandidate is NetworkSlidingDoor door
+                    && door.CanAcceptJammer())
                 {
-                    door.DeployJammerOffline(gameObject);
-                    if (playerState != null) playerState.SetGameplayToolId(0);
-                    if (inv != null && inv.TeamToolSlot != null) inv.TryRemove(inv.TeamToolSlot);
+                    door.DeployJammerOffline(
+                        gameObject);
+
+                    if (playerState != null)
+                    {
+                        playerState.SetGameplayToolId(0);
+                    }
+
+                    if (inv != null
+                        && inv.TeamToolSlot != null)
+                    {
+                        inv.TryRemove(
+                            inv.TeamToolSlot);
+                    }
+
                     return true;
                 }
+
+                if (!TryResolveFreeStandingDoorJammerPlacement(
+                        out Vector3 position,
+                        out Quaternion rotation))
+                {
+                    return false;
+                }
+
+                var prefab =
+                    Resources.Load<GameObject>(
+                        "Network/PF_DoorJammer");
+
+                if (prefab == null)
+                {
+                    return false;
+                }
+
+                var instance =
+                    Instantiate(
+                        prefab,
+                        position,
+                        rotation);
+
+                var jammer =
+                    instance.GetComponent<
+                        NetworkDoorJammer>();
+
+                if (jammer == null)
+                {
+                    Destroy(instance);
+                    return false;
+                }
+
+                jammer.InitializeOffline();
+
+                if (playerState != null)
+                {
+                    playerState.SetGameplayToolId(0);
+                }
+
+                if (inv != null
+                    && inv.TeamToolSlot != null)
+                {
+                    inv.TryRemove(
+                        inv.TeamToolSlot);
+                }
+
+                return true;
             }
             return false;
         }
@@ -619,11 +746,15 @@ namespace EchoProtocol.Networking
         private bool TryDetectCandidate(out NetworkInteractable candidate)
         {
             var ray = GetLocalDetectionRay();
+            float detectionDistance =
+                IsDoorJammerEquipped()
+                    ? GetDoorJammerInteractionDistance()
+                    : _localDetectionDistance;
 
             if (Physics.Raycast(
                     ray,
                     out var hit,
-                    _localDetectionDistance,
+                    detectionDistance,
                     _interactionLayers,
                     QueryTriggerInteraction.Collide))
             {
@@ -674,6 +805,9 @@ namespace EchoProtocol.Networking
 
         private bool TryDetectLocalDoorJammerTargetIntent(out NetworkId targetId)
         {
+            float detectionDistance =
+                GetDoorJammerInteractionDistance();
+
             if (CurrentCandidate is NetworkSlidingDoor candidateDoor
                 && candidateDoor.Object != null
                 && candidateDoor.Object.Id.IsValid
@@ -688,7 +822,7 @@ namespace EchoProtocol.Networking
             if (Physics.Raycast(
                     ray,
                     out var hit,
-                    _localDetectionDistance,
+                    detectionDistance,
                     _interactionLayers,
                     QueryTriggerInteraction.Collide))
             {
@@ -700,7 +834,7 @@ namespace EchoProtocol.Networking
                 }
             }
 
-            var hits = Physics.SphereCastAll(ray, 0.5f, _localDetectionDistance, _interactionLayers, QueryTriggerInteraction.Collide);
+            var hits = Physics.SphereCastAll(ray, 0.5f, detectionDistance, _interactionLayers, QueryTriggerInteraction.Collide);
             for (int i = 0; i < hits.Length; i++)
             {
                 var door = hits[i].collider.GetComponentInParent<NetworkSlidingDoor>();
@@ -983,7 +1117,15 @@ namespace EchoProtocol.Networking
 
                     if (toolType == "DOOR_JAMMER")
                     {
-                        var jammerResult = TryDeployDoorJammerAuthoritative(requester, state, targetId);
+                        var jammerResult =
+                            targetId.IsValid
+                                ? TryDeployDoorJammerAuthoritative(
+                                    requester,
+                                    state,
+                                    targetId)
+                                : TryDeployFreeStandingDoorJammerAuthoritative(
+                                    requester,
+                                    state);
                         if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
                         RpcInteractionResult(requester, targetId, sequence, (int)jammerResult);
                         return;
@@ -1157,6 +1299,74 @@ namespace EchoProtocol.Networking
             return TryResolveNoiseMakerPlacement(out position);
         }
 
+        public bool TryGetDoorJammerPlacementPreview(
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            position = default;
+            rotation = Quaternion.identity;
+
+            if (!IsDoorJammerPreviewActive)
+            {
+                return false;
+            }
+
+            if (Object != null
+                && Object.IsValid
+                && !Object.HasInputAuthority)
+            {
+                return false;
+            }
+
+            if (PlayerInteractionControlLock
+                .IsGameplayInputBlocked(gameObject))
+            {
+                return false;
+            }
+
+            var state =
+                GetComponent<LobbyPlayerState>();
+
+            var inventory =
+                GetComponent<PlayerInventory>();
+
+            int toolId =
+                state != null
+                && state.ToolId > 0
+                    ? state.ToolId
+                    : inventory != null
+                        ? PlayerInventory.ResolveToolId(
+                            inventory.TeamToolSlot)
+                        : 0;
+
+            if (toolId
+                != LobbyPlayerState.DoorJammerToolId)
+            {
+                return false;
+            }
+
+            if (state != null
+                && state.CarriedCoreId.IsValid)
+            {
+                return false;
+            }
+
+            if (CurrentCandidate
+                    is NetworkSlidingDoor door
+                && door.CanAcceptJammer())
+            {
+                door.TryGetJammerPlacement(
+                    out position,
+                    out rotation);
+
+                return true;
+            }
+
+            return TryResolveFreeStandingDoorJammerPlacement(
+                out position,
+                out rotation);
+        }
+
         private bool TryResolveNoiseMakerPlacement(out Vector3 beaconPos)
         {
             var flatForward =
@@ -1286,6 +1496,179 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        private InteractionValidationResult
+            TryDeployFreeStandingDoorJammerAuthoritative(
+                PlayerRef requester,
+                LobbyPlayerState state)
+        {
+            if (!Object.HasStateAuthority
+                || state == null
+                || state.ToolId
+                    != LobbyPlayerState.DoorJammerToolId)
+            {
+                return InteractionValidationResult.InvalidRequester;
+            }
+
+            if (Runner == null
+                || !TryResolveFreeStandingDoorJammerPlacement(
+                    out Vector3 position,
+                    out Quaternion rotation))
+            {
+                return InteractionValidationResult.InvalidTarget;
+            }
+
+            var prefab =
+                Resources.Load<NetworkObject>(
+                    "Network/PF_DoorJammer");
+
+            if (prefab == null)
+            {
+                return InteractionValidationResult.InvalidTarget;
+            }
+
+            var jammerObject =
+                Runner.Spawn(
+                    prefab,
+                    position,
+                    rotation);
+
+            if (jammerObject == null
+                || !jammerObject.TryGetComponent<
+                    NetworkDoorJammer>(
+                    out var jammer))
+            {
+                if (jammerObject != null)
+                {
+                    Runner.Despawn(jammerObject);
+                }
+
+                return InteractionValidationResult.InvalidTarget;
+            }
+
+            if (!jammer.InitializeFreeStandingAuthoritative())
+            {
+                Runner.Despawn(jammerObject);
+                return InteractionValidationResult.InvalidTargetState;
+            }
+
+            TeamToolOrdinal++;
+
+            MatchAuthorityRuntime.Instance
+                ?.RecordTeamToolUsed(
+                    requester,
+                    $"player:{Object.Id}:tool:{TeamToolOrdinal}",
+                    "DOOR_JAMMER");
+
+            TeamToolCooldown =
+                TickTimer.CreateFromSeconds(
+                    Runner,
+                    5f);
+
+            ConsumeGameplayTeamTool(state);
+
+            return InteractionValidationResult.Accepted;
+        }
+
+        private bool TryResolveFreeStandingDoorJammerPlacement(
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            position = default;
+            rotation = Quaternion.identity;
+
+            Transform directionSource =
+                _rayOrigin != null
+                    ? _rayOrigin
+                    : transform;
+
+            ItemDropPlacementUtility.GetFloorSnappedPose(
+                transform,
+                directionSource,
+                _doorJammerFreePlacementDistance,
+                0.05f,
+                out Vector3 floorPosition,
+                out _);
+
+            Vector3 forward =
+                Vector3.ProjectOnPlane(
+                    directionSource.forward,
+                    Vector3.up);
+
+            if (forward.sqrMagnitude < 0.001f)
+            {
+                forward =
+                    Vector3.ProjectOnPlane(
+                        transform.forward,
+                        Vector3.up);
+            }
+
+            if (forward.sqrMagnitude < 0.001f)
+            {
+                return false;
+            }
+
+            forward.Normalize();
+
+            rotation =
+                Quaternion.LookRotation(
+                    forward,
+                    Vector3.up)
+                * Quaternion.Euler(
+                    0f,
+                    90f,
+                    0f);
+
+            position =
+                floorPosition
+                + Vector3.up * 1.75f;
+
+            Collider[] overlaps =
+                Physics.OverlapBox(
+                    position,
+                    DoorJammerPlacementCheckHalfExtents,
+                    rotation,
+                    ~0,
+                    QueryTriggerInteraction.Ignore);
+
+            for (int i = 0; i < overlaps.Length; i++)
+            {
+                Collider overlap =
+                    overlaps[i];
+
+                if (overlap == null
+                    || overlap.transform == transform
+                    || overlap.transform.IsChildOf(transform))
+                {
+                    continue;
+                }
+
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool IsDoorJammerEquipped()
+        {
+            var state = GetComponent<LobbyPlayerState>();
+            if (state != null && state.ToolId > 0)
+            {
+                return state.ToolId == LobbyPlayerState.DoorJammerToolId;
+            }
+
+            var inventory = GetComponent<PlayerInventory>();
+            return inventory != null
+                && PlayerInventory.ResolveToolId(inventory.TeamToolSlot)
+                    == LobbyPlayerState.DoorJammerToolId;
+        }
+
+        private float GetDoorJammerInteractionDistance()
+        {
+            return Mathf.Max(
+                _localDetectionDistance,
+                DoorJammerInteractionDistance);
+        }
+
         private InteractionValidationResult TryDeployDoorJammerAuthoritative(
             PlayerRef requester,
             LobbyPlayerState state,
@@ -1371,8 +1754,10 @@ namespace EchoProtocol.Networking
         {
             var playerPosition = transform.position;
             var targetPoint = GetClosestDoorInteractionPoint(door, playerPosition);
+            float interactionDistance =
+                GetDoorJammerInteractionDistance();
             return Vector3.SqrMagnitude(targetPoint - playerPosition)
-                   <= _localDetectionDistance * _localDetectionDistance;
+                   <= interactionDistance * interactionDistance;
         }
 
         private bool HasUnobstructedDoorJammerInteraction(NetworkSlidingDoor door)

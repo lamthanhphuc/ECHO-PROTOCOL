@@ -7,10 +7,13 @@ namespace EchoProtocol.Networking
     [DisallowMultipleComponent]
     public sealed class NetworkTeamToolPickup : NetworkInteractable
     {
+        private const float MaxOutlineVisibleDistance = 20f;
+
         [SerializeField, Range(1, 6)] private int _toolId = 2;
         [SerializeField] private string _toolDisplayName = "Team Tool";
 
         private Outline _outline;
+        private bool _visualsActive;
 
         private static readonly Color TeamToolOutlineColor =
             new Color(1f, 0.05f, 0.05f, 1f);
@@ -74,6 +77,8 @@ namespace EchoProtocol.Networking
 
         private void SetVisualsAndCollidersActive(bool active)
         {
+            _visualsActive = active;
+
             foreach (var c in GetComponentsInChildren<Collider>(true))
             {
                 c.enabled = active;
@@ -90,7 +95,32 @@ namespace EchoProtocol.Networking
             }
 
             EnsureOutline();
-            _outline.enabled = active;
+            RefreshOutlineVisibility();
+        }
+
+        private void Update()
+        {
+            RefreshOutlineVisibility();
+        }
+
+        private void RefreshOutlineVisibility()
+        {
+            EnsureOutline();
+
+            Camera viewer = Camera.main;
+            if (!_visualsActive || viewer == null)
+            {
+                _outline.enabled = false;
+                return;
+            }
+
+            float maxDistanceSqr =
+                MaxOutlineVisibleDistance
+                * MaxOutlineVisibleDistance;
+
+            _outline.enabled =
+                (viewer.transform.position - transform.position)
+                .sqrMagnitude <= maxDistanceSqr;
         }
 
         protected override InteractionValidationResult ValidateCurrentState(

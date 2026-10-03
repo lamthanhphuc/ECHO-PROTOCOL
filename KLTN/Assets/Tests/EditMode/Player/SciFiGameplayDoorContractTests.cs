@@ -331,13 +331,17 @@ namespace EchoProtocol.Player.Tests
 
             StringAssert.Contains("return InteractionValidationResult.InvalidTarget;", resolverMethod);
             StringAssert.Contains("return InteractionValidationResult.OutOfRange;", resolverMethod);
-            StringAssert.Contains("_localDetectionDistance * _localDetectionDistance", rangeMethod);
+            StringAssert.Contains("GetDoorJammerInteractionDistance()", rangeMethod);
             StringAssert.Contains("GetClosestDoorInteractionPoint(door, playerPosition)", rangeMethod);
             StringAssert.Contains("GetAuthoritativeInteractionOrigin()", obstructionMethod);
             StringAssert.Contains("Physics.RaycastAll", obstructionMethod);
             StringAssert.Contains("Array.Sort", obstructionMethod);
             StringAssert.Contains("IsSelfCollider(hitCollider)", obstructionMethod);
             StringAssert.Contains("hitCollider.GetComponentInParent<NetworkSlidingDoor>() == door", obstructionMethod);
+
+            StringAssert.Contains("DoorJammerInteractionDistance = 4f", interactorSource);
+            StringAssert.Contains("&& IsDoorJammerPreviewActive", interactorSource);
+            StringAssert.Contains("useTeamToolPressed || interactPressed", interactorSource);
         }
 
         [Test]

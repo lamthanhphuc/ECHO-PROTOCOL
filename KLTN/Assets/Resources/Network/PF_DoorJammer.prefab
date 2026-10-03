@@ -99,7 +99,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9fd7e2825ed146c4a8f24cfcfb09a8c7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.NetworkDoorJammer
-  _breakDurationSeconds: 3
+  _breakDurationSeconds: 4.5
   _blockingCollider: {fileID: 1000000000000000005}
   _visualRoot: {fileID: 1000000000000000007}
   _breakClip: {fileID: 8300000, guid: b53fc737fe63f254e826cb9a5fe8610a, type: 3}
