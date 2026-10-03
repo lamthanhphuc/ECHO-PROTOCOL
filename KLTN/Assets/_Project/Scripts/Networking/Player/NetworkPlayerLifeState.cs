@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Gameplay;
 using EchoProtocol.Networking.Authority;
 using Fusion;
 using UnityEngine;
@@ -88,7 +89,6 @@ namespace EchoProtocol.Networking
         [SerializeField, Range(0.05f, 1f)] private float _crawlSpeedMultiplier = 0.32f;
 
         [Header("Revive")]
-        [SerializeField, Min(0)] private int _maximumRevives = 2;
         [SerializeField, Min(0.1f)] private float _reviveDurationSeconds = 3f;
         [SerializeField, Min(0.1f)] private float _reviveDistance = 3f;
         [SerializeField, Min(1f)] private float _revivedHealth = 35f;
@@ -143,10 +143,17 @@ namespace EchoProtocol.Networking
         private bool _characterVisualRootDefaultActive;
         private bool _hasCharacterVisualRootDefault;
 
+        private int MaximumRevivesPerZone =>
+            MatchDifficultyProfiles.Get(
+                MatchAuthorityRuntime.Instance != null
+                    ? MatchAuthorityRuntime.Instance.Difficulty
+                    : MatchDifficulty.Normal)
+                .MaximumRevivesPerZone;
+
         public bool CanBeRevived => (Object != null && Object.IsValid) && NetworkPlayerLifeStateRules.CanRevive(
             Status,
             ReviveCount,
-            _maximumRevives);
+            MaximumRevivesPerZone);
 
         public bool CanMove => (Object == null || !Object.IsValid) || NetworkPlayerLifeStateRules.CanMove(Status);
         public bool CanInitiateAction => (Object == null || !Object.IsValid) || NetworkPlayerLifeStateRules.CanInitiateAction(Status);
@@ -393,7 +400,7 @@ namespace EchoProtocol.Networking
                     reviver == Object.InputAuthority,
                     IsReviveInProgress,
                     ReviveCount,
-                    _maximumRevives)
+                    MaximumRevivesPerZone)
                 || Vector3.SqrMagnitude(reviverObject.transform.position - transform.position)
                     > _reviveDistance * _reviveDistance)
             {
@@ -440,7 +447,7 @@ namespace EchoProtocol.Networking
         public bool TryEliminateForReviveLimit()
         {
             if (!Object.HasStateAuthority
-                || !NetworkPlayerLifeStateRules.CanEliminate(Status, ReviveCount, _maximumRevives))
+                || !NetworkPlayerLifeStateRules.CanEliminate(Status, ReviveCount, MaximumRevivesPerZone))
             {
                 return false;
             }
@@ -482,7 +489,7 @@ namespace EchoProtocol.Networking
         private void CommitDown(string sourceType, Vector3 hitPosition)
         {
             var nextDownCount = DownCount + 1;
-            if (nextDownCount >= 3)
+            if (nextDownCount > MaximumRevivesPerZone)
             {
                 Reviver = PlayerRef.None;
                 ReviveTimer = TickTimer.None;
@@ -493,7 +500,7 @@ namespace EchoProtocol.Networking
                 IsCrawling = false;
                 DownCount = nextDownCount;
                 GetComponent<NetworkPlayerInteractor>()?.DropHeldItemsAuthoritative(Object.InputAuthority);
-                CommitEliminated(NetworkPlayerLifeTransitionCause.ReviveLimit, "THIRD_DOWN");
+                CommitEliminated(NetworkPlayerLifeTransitionCause.ReviveLimit, "REVIVE_LIMIT_REACHED");
                 return;
             }
 

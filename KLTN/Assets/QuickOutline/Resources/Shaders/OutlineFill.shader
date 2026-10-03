@@ -1,89 +1,108 @@
-//
-//  OutlineFill.shader
-//  QuickOutline (Universal Render Pipeline)
-//
-//  Created by Chris Nolet on 2/21/18.
-//  URP compatibility & Clip-Space offset by EchoProtocol
-//
+Shader "Custom/Outline Fill"
+{
+    Properties
+    {
+        [Enum(UnityEngine.Rendering.CompareFunction)]
+        _ZTest("ZTest", Float) = 0
 
-Shader "Custom/Outline Fill" {
-  Properties {
-    [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest("ZTest", Float) = 0
+        [HDR]
+        _OutlineColor("Outline Color", Color) = (0, 1, 1, 1)
 
-    [HDR] _OutlineColor("Outline Color", Color) = (1, 1, 1, 1)
-    _OutlineWidth("Outline Width", Range(0, 10)) = 2
-  }
-
-  SubShader {
-    Tags {
-      "Queue" = "Transparent+110"
-      "RenderType" = "Transparent"
-      "RenderPipeline" = "UniversalPipeline"
+        _OutlineWidth("Outline Width", Range(0, 10)) = 2
     }
 
-    Pass {
-      Name "Fill"
-      Cull Off
-      ZTest [_ZTest]
-      ZWrite Off
-      Blend SrcAlpha OneMinusSrcAlpha
-      ColorMask RGB
+    SubShader
+    {
+        Tags
+        {
+            "Queue" = "Transparent+110"
+            "RenderType" = "Transparent"
+            "RenderPipeline" = "UniversalPipeline"
+        }
 
-      Stencil {
-        Ref 1
-        Comp NotEqual
-      }
+        Pass
+        {
+            Name "OutlineFill"
 
-      HLSLPROGRAM
-      #pragma vertex vert
-      #pragma fragment frag
-      #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            Cull Off
+            ZTest [_ZTest]
+            ZWrite Off
 
-      struct Attributes {
-        float4 positionOS : POSITION;
-        float3 normalOS : NORMAL;
-        float3 smoothNormalOS : TEXCOORD3;
-      };
+            Blend SrcAlpha OneMinusSrcAlpha
 
-      struct Varyings {
-        float4 positionCS : SV_POSITION;
-        float4 color : COLOR;
-      };
+            Stencil
+            {
+                Ref 1
+                Comp NotEqual
+            }
 
-      CBUFFER_START(UnityPerMaterial)
-        float4 _OutlineColor;
-        float _OutlineWidth;
-        float _ZTest;
-      CBUFFER_END
+            HLSLPROGRAM
 
-      Varyings vert(Attributes input) {
-        Varyings output;
+            #pragma vertex Vert
+            #pragma fragment Frag
 
-        // 1. Transform vertex directly to clip space (guarantees 100% exact alignment with Mask pass)
-        float4 clipPos = TransformObjectToHClip(input.positionOS.xyz);
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-        // 2. Transform normal to clip space
-        float3 n = any(input.smoothNormalOS) ? input.smoothNormalOS : input.normalOS;
-        float3 normalWS = TransformObjectToWorldNormal(n, true);
-        float3 normalCS = TransformWorldToHClipDir(normalWS, true);
+            struct Attributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+                float3 smoothNormalOS : TEXCOORD3;
+            };
 
-        // 3. Screen-space pixel offset (constant thickness, centers perfectly around mesh without one-sided drift)
-        float len = length(normalCS.xy);
-        float2 screenNormal = len > 0.0001 ? (normalCS.xy / len) : float2(0.0, 0.0);
-        float2 offset = screenNormal * (2.0 / _ScreenParams.xy) * _OutlineWidth * clipPos.w;
-        clipPos.xy += offset;
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+            };
 
-        output.positionCS = clipPos;
-        output.color = _OutlineColor;
+            CBUFFER_START(UnityPerMaterial)
+                float4 _OutlineColor;
+                float _OutlineWidth;
+                float _ZTest;
+            CBUFFER_END
 
-        return output;
-      }
+            Varyings Vert(Attributes input)
+            {
+                Varyings output;
 
-      half4 frag(Varyings input) : SV_Target {
-        return input.color;
-      }
-      ENDHLSL
+                float3 normalOS =
+                    dot(
+                        input.smoothNormalOS,
+                        input.smoothNormalOS)
+                    > 0.0001
+                        ? input.smoothNormalOS
+                        : input.normalOS;
+
+                float3 positionWS =
+                    TransformObjectToWorld(
+                        input.positionOS.xyz);
+
+                float3 normalWS =
+                    TransformObjectToWorldNormal(
+                        normalOS);
+
+                normalWS =
+                    normalize(normalWS);
+
+                positionWS +=
+                    normalWS
+                    * (_OutlineWidth * 0.01);
+
+                output.positionCS =
+                    TransformWorldToHClip(
+                        positionWS);
+
+                return output;
+            }
+
+            half4 Frag(Varyings input) : SV_Target
+            {
+                return _OutlineColor;
+            }
+
+            ENDHLSL
+        }
     }
-  }
-  FallBack Off
+
+    FallBack Off
 }

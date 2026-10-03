@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 4253842779654547843}
   - component: {fileID: 3509804843153086840}
   - component: {fileID: 5014989140455279692}
+  - component: {fileID: 2211290027545146270}
   m_Layer: 0
   m_Name: PF_TeamToolPickup_NoiseMaker
   m_TagString: Untagged
@@ -97,6 +98,26 @@ MonoBehaviour:
   _runtimeInteractionNoiseOrigin: {fileID: 0}
   _toolId: 2
   _toolDisplayName: Noise Maker
+  _WorldPosition: {x: 0, y: 0, z: 0}
+  _WorldRotation: {x: 0, y: 0, z: 0, w: 0}
+--- !u!114 &2211290027545146270
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5202091299186551344}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5fea29bb7c508c244a1f805a5fd3fc4d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::QuickOutline.Outline
+  outlineMode: 1
+  outlineColor: {r: 0, g: 1, b: 1, a: 1}
+  outlineWidth: 4
+  precomputeOutline: 0
+  bakeKeys: []
+  bakeValues: []
 --- !u!1 &7444244680369540752
 GameObject:
   m_ObjectHideFlags: 0

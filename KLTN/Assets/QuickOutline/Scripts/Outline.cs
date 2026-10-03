@@ -84,6 +84,7 @@ public class Outline : MonoBehaviour {
   private bool needsUpdate;
 
   void Awake() {
+    if (!Application.IsPlaying(gameObject)) return;
     InitMaterials();
   }
 
@@ -118,6 +119,8 @@ public class Outline : MonoBehaviour {
   }
 
   void OnEnable() {
+    if (!Application.IsPlaying(gameObject)) return;
+
     if (outlineMaskMaterial == null || outlineFillMaterial == null) {
       InitMaterials();
     }

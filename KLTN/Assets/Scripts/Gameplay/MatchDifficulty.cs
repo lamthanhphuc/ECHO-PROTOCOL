@@ -21,6 +21,7 @@ namespace EchoProtocol.Gameplay
             float specialEncounterCooldownSeconds,
             int zone1MinionCap,
             int zone2MinionCap,
+            int maximumRevivesPerZone,
             bool objectiveInvestigationEnabled)
         {
             TeamToolsPerZone = teamToolsPerZone;
@@ -39,6 +40,7 @@ namespace EchoProtocol.Gameplay
             SpecialEncounterCooldownSeconds = specialEncounterCooldownSeconds;
             Zone1MinionCap = zone1MinionCap;
             Zone2MinionCap = zone2MinionCap;
+            MaximumRevivesPerZone = maximumRevivesPerZone;
             ObjectiveInvestigationEnabled = objectiveInvestigationEnabled;
         }
 
@@ -58,6 +60,7 @@ namespace EchoProtocol.Gameplay
         public float SpecialEncounterCooldownSeconds { get; }
         public int Zone1MinionCap { get; }
         public int Zone2MinionCap { get; }
+        public int MaximumRevivesPerZone { get; }
         public bool ObjectiveInvestigationEnabled { get; }
     }
 
@@ -69,32 +72,32 @@ namespace EchoProtocol.Gameplay
             {
                 case MatchDifficulty.Easy:
                     return new MatchDifficultyProfile(
-                        6,      // TeamToolsPerZone
-                        5.0f,   // PatrolSpeed
-                        6.0f,   // ChaseSpeed
-                        2.5f,   // DetectionDurationSeconds
-                        20f,    // DetectionDecayDurationSeconds
-                        1.0f,   // SearchDurationSeconds
-                        2.2f,   // AttackRange
-                        0.85f,  // AttackWindupSeconds
-                        2.0f,   // AttackRecoverySeconds
-                        8f,     // DoorBreakDurationSeconds
-                        240f,   // SeekPlayersAfterSeconds
-                        45f,    // CoreCarrierPursuitDelaySeconds
-                        0.5f,   // HearingRangeMultiplier
-                        720f,   // SpecialEncounterCooldownSeconds
-                        0,      // Zone1MinionCap
-                        0,      // Zone2MinionCap
-                        false); // ObjectiveInvestigationEnabled
+                        6,
+                        5.0f,
+                        5.0f,
+                        2.0f,
+                        20f,
+                        1.0f,
+                        2.2f,
+                        0.85f,
+                        2.0f,
+                        8f,
+                        240f,
+                        35f,
+                        0.5f,
+                        600f,
+                        1,
+                        0,
+                        4,
+                        false);
                 case MatchDifficulty.Hard:
                     return new MatchDifficultyProfile(
                         5, 8f, 9f, 0.75f, 30f, 3f, 3f, 0.35f,
-                        1f, 3f, 75f, 15f, 1.25f, 300f, 2, 3, true);
+                        1f, 3f, 75f, 15f, 1.25f, 300f, 1, 1, 2, true);
                 default:
-                    // Between Easy and the old baseline, now used as Hard.
                     return new MatchDifficultyProfile(
                         5, 6.5f, 8f, 1.25f, 25f, 2.25f, 2.7f, 0.6f,
-                        1.4f, 4.5f, 120f, 25f, 1f, 420f, 1, 1, true);
+                        1.4f, 4.5f, 120f, 25f, 1f, 420f, 1, 2, 3, true);
             }
         }
     }

@@ -35,9 +35,12 @@ public sealed class MatchDifficultyTests
             var easy = MatchDifficultyProfiles.Get(MatchDifficulty.Easy);
             var normal = MatchDifficultyProfiles.Get(MatchDifficulty.Normal);
             var hard = MatchDifficultyProfiles.Get(MatchDifficulty.Hard);
-            Assert.That(easy.DetectionDecayDurationSeconds, Is.EqualTo(20f));
-            Assert.That(normal.DetectionDecayDurationSeconds, Is.EqualTo(25f));
-            Assert.That(hard.DetectionDecayDurationSeconds, Is.EqualTo(30f));
+            Assert.That(easy.DetectionDecayDurationSeconds, Is.EqualTo(0.35f));
+            Assert.That(normal.DetectionDecayDurationSeconds, Is.EqualTo(0.65f));
+            Assert.That(hard.DetectionDecayDurationSeconds, Is.EqualTo(1f));
+            Assert.That(easy.MaximumRevivesPerZone, Is.EqualTo(4));
+            Assert.That(normal.MaximumRevivesPerZone, Is.EqualTo(3));
+            Assert.That(hard.MaximumRevivesPerZone, Is.EqualTo(2));
             Assert.That(hard.PatrolSpeed,
                 Is.EqualTo(serialized.FindProperty("patrolSpeed").floatValue));
             Assert.That(hard.ChaseSpeed,
