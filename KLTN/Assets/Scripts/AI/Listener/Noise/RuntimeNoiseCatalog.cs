@@ -81,8 +81,8 @@ namespace EchoProtocol.AI.Listener.Noise
                 },
                 {
                     RuntimeNoiseType.VEHICLE_PUSH,
-                    new RuntimeNoiseDefinition(RuntimeNoiseType.VEHICLE_PUSH, 1.25d, 55d, TimeSpan.FromSeconds(3d),
-                        RuntimeNoiseEmissionMode.RecurringMovement, 2d)
+                    new RuntimeNoiseDefinition(RuntimeNoiseType.VEHICLE_PUSH, 1.6d, 90d, TimeSpan.FromSeconds(3d),
+                        RuntimeNoiseEmissionMode.RecurringMovement, 1d)
                 },
                 {
                     RuntimeNoiseType.CHARGE_TRANSFER,
