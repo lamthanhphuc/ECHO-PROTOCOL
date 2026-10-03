@@ -162,25 +162,6 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
         if (animator.GetBool(IsCrouchingHash))
         {
-            Transform root =
-                playerRoot != null
-                    ? playerRoot
-                    : transform;
-
-            ApplyCrouchArmPose(
-                root,
-                leftUpperArm,
-                leftForeArm,
-                leftHandBone,
-                -1f);
-
-            ApplyCrouchArmPose(
-                root,
-                rightUpperArm,
-                rightForeArm,
-                rightHandBone,
-                1f);
-
             return;
         }
 
@@ -204,42 +185,6 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
             SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, handTarget, rightElbowPole, rightHandPosWeight);
         }
-    }
-
-    private static void ApplyCrouchArmPose(
-        Transform root,
-        Transform upperArm,
-        Transform foreArm,
-        Transform hand,
-        float side)
-    {
-        if (root == null
-            || upperArm == null
-            || foreArm == null
-            || hand == null)
-        {
-            return;
-        }
-
-        Vector3 handTarget =
-            upperArm.position
-            + root.right * (0.10f * side)
-            - root.up * 0.42f
-            + root.forward * 0.06f;
-
-        Vector3 elbowPole =
-            upperArm.position
-            + root.right * (0.32f * side)
-            - root.up * 0.18f
-            + root.forward * 0.14f;
-
-        SolveTwoBoneIK(
-            upperArm,
-            foreArm,
-            hand,
-            handTarget,
-            elbowPole,
-            1f);
     }
 
     private static void SolveTwoBoneIK(

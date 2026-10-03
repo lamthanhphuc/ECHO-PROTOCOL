@@ -141,9 +141,9 @@ namespace EchoProtocol.Tools.Scanner
             {
                 _tuning = new FieldScannerTuning();
             }
-            if (_tuning.ActiveDuration < 1.0f)
+            if (_tuning.ActiveDuration < 20.0f)
             {
-                _tuning.ActiveDuration = 10.0f;
+                _tuning.ActiveDuration = 20.0f;
             }
             if (_tuning.ScanCooldown < 10.0f)
             {
