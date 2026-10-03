@@ -38,7 +38,6 @@ public static partial class NetworkLobbyUIBuilder
         // Top-left keeps the design stable with CanvasScaler at 1920x1080.
         Place(root, 45, 35, 460, 1010);
         var panel = Ensure<Image>(root.gameObject); panel.color = Hex("080A0DEB"); panel.raycastTarget = false;
-        Ensure<CanvasGroup>(root.gameObject).alpha = 1;
         var background = root.Find("Background");
         if (background != null) background.gameObject.SetActive(false); // Avoid stacking two opaque fills.
         var border = GetRect(root, "Border", 0, 0, 460, 1010);
@@ -155,7 +154,6 @@ public static partial class NetworkLobbyUIBuilder
         colors.pressedColor = Hex("481216"); colors.disabledColor = Hex("111719");
         button.colors = colors;
         var outline = Ensure<Outline>(transform.gameObject); outline.effectColor = Hex("71807B"); outline.effectDistance = new Vector2(1, -1);
-        Ensure<CanvasGroup>(transform.gameObject).alpha = button.interactable ? 1 : 0.35f;
         GetRect(transform, "Label", w > 300 && h > 40 ? 48 : 8, 0, w > 300 && h > 40 ? w - 60 : w - 16, h);
     }
 

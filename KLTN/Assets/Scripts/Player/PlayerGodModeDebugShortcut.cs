@@ -50,8 +50,7 @@ public sealed class PlayerGodModeDebugShortcut : MonoBehaviour
 
         var lifeStates =
             FindObjectsByType<NetworkPlayerLifeState>(
-                FindObjectsInactive.Exclude,
-                FindObjectsSortMode.None);
+                FindObjectsInactive.Exclude);
 
         foreach (var lifeState in lifeStates)
         {
