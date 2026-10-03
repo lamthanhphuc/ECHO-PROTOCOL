@@ -15,9 +15,6 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     [SerializeField] private float lookAtDistance = 12f;
     [SerializeField] private bool driveRightHandWhenHolding = true;
 
-    [Header("Crouch Pose")]
-    [SerializeField] private Vector3 crouchLeftHandLocalPosition = new Vector3(-0.22f, 0.62f, 0.04f);
-
     [Header("Carry (Two-Hand) Pose")]
     [SerializeField] private float carryForwardOffset = 0.30f;
     [SerializeField] private float carryLateralOffset = 0.30f;
@@ -163,14 +160,29 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             return;
         }
 
-        if (animator.GetBool(IsCrouchingHash) && leftUpperArm != null && leftForeArm != null && leftHandBone != null)
+        if (animator.GetBool(IsCrouchingHash))
         {
-            Transform root = playerRoot != null ? playerRoot : transform;
-            Vector3 leftHandTarget = root.TransformPoint(crouchLeftHandLocalPosition);
-            Vector3 leftElbowPole = leftUpperArm.position - root.right * 0.35f + root.forward * 0.12f;
-            SolveTwoBoneIK(leftUpperArm, leftForeArm, leftHandBone, leftHandTarget, leftElbowPole, 1f);
-        }
+            Transform root =
+                playerRoot != null
+                    ? playerRoot
+                    : transform;
 
+            ApplyCrouchArmPose(
+                root,
+                leftUpperArm,
+                leftForeArm,
+                leftHandBone,
+                -1f);
+
+            ApplyCrouchArmPose(
+                root,
+                rightUpperArm,
+                rightForeArm,
+                rightHandBone,
+                1f);
+
+            return;
+        }
 
         if (IsHoldingTeamTool())
         {
@@ -192,6 +204,42 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
             SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, handTarget, rightElbowPole, rightHandPosWeight);
         }
+    }
+
+    private static void ApplyCrouchArmPose(
+        Transform root,
+        Transform upperArm,
+        Transform foreArm,
+        Transform hand,
+        float side)
+    {
+        if (root == null
+            || upperArm == null
+            || foreArm == null
+            || hand == null)
+        {
+            return;
+        }
+
+        Vector3 handTarget =
+            upperArm.position
+            + root.right * (0.10f * side)
+            - root.up * 0.42f
+            + root.forward * 0.06f;
+
+        Vector3 elbowPole =
+            upperArm.position
+            + root.right * (0.32f * side)
+            - root.up * 0.18f
+            + root.forward * 0.14f;
+
+        SolveTwoBoneIK(
+            upperArm,
+            foreArm,
+            hand,
+            handTarget,
+            elbowPole,
+            1f);
     }
 
     private static void SolveTwoBoneIK(

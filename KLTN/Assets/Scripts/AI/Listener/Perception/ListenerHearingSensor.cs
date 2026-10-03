@@ -97,8 +97,11 @@ namespace EchoProtocol.AI.Listener.Perception
                     noiseEvent.WorldPosition);
 
             var baseHearingRadius =
-                noiseEvent.HearingRadius
-                * _policy.HearingRangeMultiplier;
+                noiseEvent.NoiseType
+                    == RuntimeNoiseType.NOISE_MAKER
+                        ? noiseEvent.HearingRadius
+                        : noiseEvent.HearingRadius
+                            * _policy.HearingRangeMultiplier;
 
             if (distance > baseHearingRadius)
             {
@@ -169,7 +172,10 @@ namespace EchoProtocol.AI.Listener.Perception
                 * distanceAttenuation
                 * occlusionMultiplier;
 
-            if (effectiveIntensity < _policy.HearingThreshold)
+            if (noiseEvent.NoiseType
+                    != RuntimeNoiseType.NOISE_MAKER
+                && effectiveIntensity
+                    < _policy.HearingThreshold)
             {
                 bool wasOccluded = occlusionClass != ListenerOcclusionClass.CLEAR
                     && occlusionClass != ListenerOcclusionClass.OPEN_DOOR;

@@ -149,13 +149,13 @@ namespace EchoProtocol.Tools.Scanner
             {
                 _tuning.ScanCooldown = 30.0f;
             }
-            if (_tuning.CoreRange < 30.0f)
+            if (_tuning.CoreRange < 100.0f)
             {
-                _tuning.CoreRange = 50.0f;
+                _tuning.CoreRange = 100.0f;
             }
-            if (_tuning.MotionRange < 20.0f)
+            if (_tuning.MotionRange < 100.0f)
             {
-                _tuning.MotionRange = 35.0f;
+                _tuning.MotionRange = 100.0f;
             }
         }
 
