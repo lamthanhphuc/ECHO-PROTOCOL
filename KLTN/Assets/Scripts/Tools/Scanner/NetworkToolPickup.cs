@@ -3,6 +3,7 @@ using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace EchoProtocol.Tools.Scanner
 {
@@ -65,6 +66,7 @@ namespace EchoProtocol.Tools.Scanner
         {
             _pickupCollider = GetComponent<Collider>();
             _visualRenderer = GetComponentInChildren<Renderer>();
+            ConfigureWorldPickupShadows();
         }
 
         public override void Spawned()
@@ -82,7 +84,22 @@ namespace EchoProtocol.Tools.Scanner
             }
 
             ApplyReplicatedPose();
+            ConfigureWorldPickupShadows();
             OnReplicatedStateChanged();
+        }
+
+        private void ConfigureWorldPickupShadows()
+        {
+            Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null) continue;
+
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+            }
         }
 
         private void ApplyReplicatedPose()

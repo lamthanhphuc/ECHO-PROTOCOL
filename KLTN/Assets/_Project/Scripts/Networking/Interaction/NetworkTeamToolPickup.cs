@@ -1,5 +1,6 @@
 using Fusion;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace EchoProtocol.Networking
 {
@@ -56,6 +57,12 @@ namespace EchoProtocol.Networking
             foreach (var r in GetComponentsInChildren<Renderer>(true))
             {
                 r.enabled = active;
+
+                if (active)
+                {
+                    r.shadowCastingMode = ShadowCastingMode.Off;
+                    r.receiveShadows = false;
+                }
             }
 
             foreach (var light in GetComponentsInChildren<Light>(true))
