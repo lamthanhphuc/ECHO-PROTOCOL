@@ -188,9 +188,9 @@ namespace EchoProtocol.AI.Minions
 
             _navigation ??= new StalkerNavigationController(_agent);
             _navigation.SetAuthoritativeLocomotion(true);
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log($"[CREEP_SPAWN][READY] id={Object.Id} zone={Zone} position={transform.position}", this);
-#endif
+// #if UNITY_EDITOR || DEVELOPMENT_BUILD
+//             Debug.Log($"[CREEP_SPAWN][READY] id={Object.Id} zone={Zone} position={transform.position}", this);
+// #endif
             return true;
         }
 
