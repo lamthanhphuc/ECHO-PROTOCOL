@@ -1,4 +1,5 @@
 using Fusion;
+using EchoProtocol.Networking;
 using UnityEngine;
 
 namespace EchoProtocol.RelayA
@@ -35,6 +36,7 @@ namespace EchoProtocol.RelayA
 
         private void MarkOnlineAuthoritatively()
         {
+            if (HasCentralAuthority()) return;
             if (Object != null && Object.HasStateAuthority)
             {
                 RelayAOnline = true;
@@ -43,10 +45,17 @@ namespace EchoProtocol.RelayA
 
         private void ApplyOnlineState()
         {
+            if (HasCentralAuthority()) return;
             if (RelayAOnline && controller != null && !controller.IsOnline)
             {
                 controller.ApplyOnlineFromAuthority();
             }
+        }
+
+        private static bool HasCentralAuthority()
+        {
+            var match = NetworkMatchState.Instance;
+            return match != null && match.Object != null && match.Object.IsValid;
         }
     }
 }

@@ -1,158 +1,51 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace EchoProtocol.RelayA
 {
-    [CreateAssetMenu(menuName = "ECHO Protocol/Relay A/Voltage Stabilization Config", fileName = "RelayAConfig")]
-    public sealed class RelayAConfig : ScriptableObject
+    [CreateAssetMenu(menuName = "ECHO Protocol/Relay A/Power Routing Config", fileName = "RelayAConfig")]
+    public sealed partial class RelayAConfig : ScriptableObject
     {
-        [Header("Safe Ranges")]
-        [SerializeField] private Vector2 voltageSafeRange = new Vector2(220f, 230f);
-        [SerializeField] private Vector2 frequencySafeRange = new Vector2(49f, 51f);
-        [SerializeField] private Vector2 loadSafeRange = new Vector2(47f, 53f);
+        [SerializeField, Min(0.1f)] private float circuitTestSeconds = 1.2f;
+        [SerializeField, Min(0.1f)] private float circuitFaultDelaySeconds = 1.2f;
+        [SerializeField] private RelayACircuitScenario[] circuitScenarios;
+        [SerializeField] private int defaultBoardRevision;
+        private const int CurrentBoardRevision = 3;
 
-        [Header("Danger Ranges")]
-        [SerializeField] private Vector2 voltageDangerRange = new Vector2(210f, 240f);
-        [SerializeField] private Vector2 frequencyDangerRange = new Vector2(46.5f, 53.5f);
-        [SerializeField] private Vector2 loadDangerRange = new Vector2(38f, 62f);
-
-        [Header("Simulation")]
-        [SerializeField, Min(0.05f)] private float responseDelaySeconds = 1f;
-        [SerializeField, Min(0.1f)] private float stabilityRequiredSeconds = 12f;
-        [SerializeField, Min(0f)] private float instabilityToleranceSeconds = 0.5f;
-        [SerializeField, Min(0f)] private float instabilityDecaySecondsPerSecond = 1.5f;
-        [SerializeField, Min(0f)] private float dangerDecaySecondsPerSecond = 3f;
-        [SerializeField] private Vector3 initialControls = new Vector3(34f, 66f, 38f);
-        [SerializeField] private Vector3 solvedControls = new Vector3(58f, 42f, 54f);
-
-        [Header("Cross Coupling")]
-        [SerializeField] private Vector3 voltageWeights = new Vector3(0.72f, 0.18f, -0.26f);
-        [SerializeField] private Vector3 frequencyWeights = new Vector3(-0.08f, 0.56f, 0.12f);
-        [SerializeField] private Vector3 loadWeights = new Vector3(0.16f, -0.12f, 0.62f);
-        [SerializeField] private Vector3 neutralControls = new Vector3(50f, 50f, 50f);
-        [SerializeField] private Vector3 baselines = new Vector3(225f, 50f, 50f);
-        [SerializeField] private Vector3 outputScales = new Vector3(22f, 5.2f, 18f);
-        [SerializeField, Min(0f)] private float signalDriftAmplitude = 0.35f;
-        [SerializeField, Min(0.01f)] private float signalDriftFrequency = 0.43f;
-
-        [Header("Fault")]
-        [SerializeField] private bool enableFault = true;
-        [SerializeField, Min(0f)] private float earliestFaultAtSeconds = 8f;
-        [SerializeField, Min(0f)] private float faultWarningSeconds = 4f;
-        [SerializeField, Min(0.1f)] private float faultDurationSeconds = 6f;
-        [SerializeField, Range(0f, 1f)] private float faultChance = 0.55f;
-        [SerializeField, Min(0f)] private float repeatFaultMinDelaySeconds = 6f;
-        [SerializeField, Min(0f)] private float repeatFaultMaxDelaySeconds = 14f;
-        [SerializeField] private Vector3 overvoltageFaultOffset = new Vector3(9f, -0.35f, -2.2f);
-        [SerializeField] private Vector3 frequencyFaultOffset = new Vector3(-2f, 2.2f, 1.1f);
-        [SerializeField] private Vector3 loadFaultOffset = new Vector3(3f, -0.35f, 8.5f);
-
-        public Vector2 VoltageSafeRange => voltageSafeRange;
-        public Vector2 FrequencySafeRange => frequencySafeRange;
-        public Vector2 LoadSafeRange => loadSafeRange;
-        public Vector2 VoltageDangerRange => voltageDangerRange;
-        public Vector2 FrequencyDangerRange => frequencyDangerRange;
-        public Vector2 LoadDangerRange => loadDangerRange;
-        public float ResponseDelaySeconds => responseDelaySeconds;
-        public float StabilityRequiredSeconds => stabilityRequiredSeconds;
-        public float InstabilityToleranceSeconds => instabilityToleranceSeconds;
-        public float InstabilityDecaySecondsPerSecond => instabilityDecaySecondsPerSecond;
-        public float DangerDecaySecondsPerSecond => dangerDecaySecondsPerSecond;
-        public Vector3 InitialControls => ClampControls(initialControls);
-        public Vector3 SolvedControls => ClampControls(solvedControls);
-        public bool EnableFault => enableFault;
-        public float EarliestFaultAtSeconds => earliestFaultAtSeconds;
-        public float FaultWarningSeconds => faultWarningSeconds;
-        public float FaultDurationSeconds => faultDurationSeconds;
-        public float FaultChance => faultChance;
-        public float RepeatFaultMinDelaySeconds => repeatFaultMinDelaySeconds;
-        public float RepeatFaultMaxDelaySeconds => repeatFaultMaxDelaySeconds;
-
-        public RelayAOutputs EvaluateTarget(Vector3 controls, RelayAFaultType activeFault, float elapsedSeconds)
+        public float CircuitTestSeconds => circuitTestSeconds;
+        public float CircuitFaultDelaySeconds => circuitFaultDelaySeconds;
+        public IReadOnlyList<RelayACircuitScenario> CircuitScenarios
         {
-            Vector3 normalized = (ClampControls(controls) - neutralControls) / 50f;
-            Vector3 outputs = baselines;
-            outputs.x += Vector3.Dot(voltageWeights, normalized) * outputScales.x;
-            outputs.y += Vector3.Dot(frequencyWeights, normalized) * outputScales.y;
-            outputs.z += Vector3.Dot(loadWeights, normalized) * outputScales.z;
-
-            float drift = Mathf.Sin(elapsedSeconds * Mathf.PI * 2f * signalDriftFrequency) * signalDriftAmplitude;
-            outputs.x += drift;
-            outputs.y += drift * 0.035f;
-            outputs.z -= drift * 0.16f;
-            outputs += GetFaultOffset(activeFault);
-
-            return new RelayAOutputs(outputs.x, outputs.y, outputs.z);
+            get { InitializeDefaultCircuitScenariosIfEmpty(); return circuitScenarios; }
         }
 
-        public Vector3 GetFaultOffset(RelayAFaultType faultType)
+        public RelayACircuitScenario GetCircuitScenario(int index)
         {
-            switch (faultType)
+            InitializeDefaultCircuitScenariosIfEmpty();
+            return circuitScenarios[Mathf.Clamp(index, 0, circuitScenarios.Length - 1)];
+        }
+
+        public void InitializeDefaultCircuitScenariosIfEmpty()
+        {
+            bool legacyDefaults = circuitScenarios != null && circuitScenarios.Length == 4;
+            string[] names = { "A1 / Split Feed", "A1 / Return Feed", "A2 / Triple Feed", "A2 / Return Feed" };
+            if (legacyDefaults)
+                for (int i = 0; i < names.Length; i++)
+                    if (circuitScenarios[i] == null || circuitScenarios[i].Name != names[i]) legacyDefaults = false;
+            if (circuitScenarios == null || circuitScenarios.Length == 0
+                || (legacyDefaults && defaultBoardRevision < CurrentBoardRevision))
             {
-                case RelayAFaultType.Overvoltage:
-                    return overvoltageFaultOffset;
-                case RelayAFaultType.FrequencyDesynchronization:
-                    return frequencyFaultOffset;
-                case RelayAFaultType.LoadImbalance:
-                    return loadFaultOffset;
-                default:
-                    return Vector3.zero;
+                circuitScenarios = RelayACircuitScenarios.CreateDefaults();
+                defaultBoardRevision = CurrentBoardRevision;
             }
-        }
-
-        public bool HasValidSolution(out RelayAOutputs solvedOutputs)
-        {
-            solvedOutputs = EvaluateTarget(SolvedControls, RelayAFaultType.None, 0f);
-            return IsOutputStable(solvedOutputs);
-        }
-
-        public bool IsVoltageSafe(float voltage) => IsInRange(voltage, voltageSafeRange);
-        public bool IsFrequencySafe(float frequency) => IsInRange(frequency, frequencySafeRange);
-        public bool IsLoadSafe(float load) => IsInRange(load, loadSafeRange);
-
-        public bool IsVoltageDangerous(float voltage) => !IsInRange(voltage, voltageDangerRange);
-        public bool IsFrequencyDangerous(float frequency) => !IsInRange(frequency, frequencyDangerRange);
-        public bool IsLoadDangerous(float load) => !IsInRange(load, loadDangerRange);
-
-        public bool IsOutputStable(RelayAOutputs outputs)
-        {
-            return IsVoltageSafe(outputs.Voltage)
-                && IsFrequencySafe(outputs.Frequency)
-                && IsLoadSafe(outputs.LoadBalance);
-        }
-
-        public bool IsOutputDangerous(RelayAOutputs outputs)
-        {
-            return IsVoltageDangerous(outputs.Voltage)
-                || IsFrequencyDangerous(outputs.Frequency)
-                || IsLoadDangerous(outputs.LoadBalance);
-        }
-
-        private static bool IsInRange(float value, Vector2 range)
-        {
-            return value >= range.x && value <= range.y;
-        }
-
-        private static Vector3 ClampControls(Vector3 controls)
-        {
-            return new Vector3(
-                Mathf.Clamp(controls.x, 0f, 100f),
-                Mathf.Clamp(controls.y, 0f, 100f),
-                Mathf.Clamp(controls.z, 0f, 100f));
         }
 
         private void OnValidate()
         {
-            responseDelaySeconds = Mathf.Max(0.05f, responseDelaySeconds);
-            stabilityRequiredSeconds = Mathf.Max(0.1f, stabilityRequiredSeconds);
-            instabilityToleranceSeconds = Mathf.Max(0f, instabilityToleranceSeconds);
-            instabilityDecaySecondsPerSecond = Mathf.Max(0f, instabilityDecaySecondsPerSecond);
-            dangerDecaySecondsPerSecond = Mathf.Max(0f, dangerDecaySecondsPerSecond);
-            faultWarningSeconds = Mathf.Max(0f, faultWarningSeconds);
-            faultDurationSeconds = Mathf.Max(0.1f, faultDurationSeconds);
-            repeatFaultMinDelaySeconds = Mathf.Max(0f, repeatFaultMinDelaySeconds);
-            repeatFaultMaxDelaySeconds = Mathf.Max(repeatFaultMinDelaySeconds, repeatFaultMaxDelaySeconds);
-            initialControls = ClampControls(initialControls);
-            solvedControls = ClampControls(solvedControls);
+            ValidateStabilization();
+            circuitTestSeconds = Mathf.Max(0.1f, circuitTestSeconds);
+            circuitFaultDelaySeconds = Mathf.Max(0.1f, circuitFaultDelaySeconds);
+            InitializeDefaultCircuitScenariosIfEmpty();
         }
     }
 }

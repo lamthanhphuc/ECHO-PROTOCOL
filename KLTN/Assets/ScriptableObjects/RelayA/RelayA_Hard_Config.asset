@@ -18,21 +18,23 @@ MonoBehaviour:
   voltageDangerRange: {x: 210, y: 240}
   frequencyDangerRange: {x: 46.5, y: 53.5}
   loadDangerRange: {x: 38, y: 62}
-  responseDelaySeconds: 1.65
-  stabilityRequiredSeconds: 18
+  responseDelaySeconds: 1
+  stabilityRequiredSeconds: 12
   instabilityToleranceSeconds: 0.5
-  initialControls: {x: 20, y: 82, z: 24}
+  instabilityDecaySecondsPerSecond: 1.5
+  dangerDecaySecondsPerSecond: 3
+  initialControls: {x: 34, y: 66, z: 38}
   solvedControls: {x: 58, y: 42, z: 54}
-  voltageWeights: {x: 0.82, y: 0.28, z: -0.38}
-  frequencyWeights: {x: -0.18, y: 0.66, z: 0.22}
-  loadWeights: {x: 0.28, y: -0.2, z: 0.72}
+  voltageWeights: {x: 0.72, y: 0.18, z: -0.26}
+  frequencyWeights: {x: -0.08, y: 0.56, z: 0.12}
+  loadWeights: {x: 0.16, y: -0.12, z: 0.62}
   neutralControls: {x: 50, y: 50, z: 50}
   baselines: {x: 225, y: 50, z: 50}
   outputScales: {x: 22, y: 5.2, z: 18}
-  signalDriftAmplitude: 0.85
-  signalDriftFrequency: 0.58
+  signalDriftAmplitude: 0.35
+  signalDriftFrequency: 0.43
   enableFault: 1
-  earliestFaultAtSeconds: 6
+  earliestFaultAtSeconds: 8
   faultWarningSeconds: 4
   faultDurationSeconds: 6
   faultChance: 0.55
@@ -41,3 +43,515 @@ MonoBehaviour:
   overvoltageFaultOffset: {x: 9, y: -0.35, z: -2.2}
   frequencyFaultOffset: {x: -2, y: 2.2, z: 1.1}
   loadFaultOffset: {x: 3, y: -0.35, z: 8.5}
+  circuitTestSeconds: 1.2
+  circuitFaultDelaySeconds: 1.2
+  circuitScenarios:
+  - name: A1 / Split Feed
+    width: 6
+    height: 5
+    cells:
+    - type: 2
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 1
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 0
+      rotation: 0
+      locked: 1
+      label: 
+    - type: 7
+      rotation: 1
+      locked: 1
+      label: 
+    - type: 2
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 3
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 6
+      rotation: 3
+      locked: 1
+      label: COOLING
+    - type: 5
+      rotation: 1
+      locked: 1
+      label: 
+    - type: 3
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 7
+      rotation: 2
+      locked: 1
+      label: 
+    - type: 2
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 7
+      rotation: 3
+      locked: 1
+      label: 
+    - type: 2
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 7
+      rotation: 0
+      locked: 1
+      label: 
+    - type: 3
+      rotation: 3
+      locked: 0
+      label: 
+    - type: 6
+      rotation: 3
+      locked: 1
+      label: SECURITY
+    - type: 6
+      rotation: 1
+      locked: 1
+      label: LIFE SUPPORT
+    - type: 1
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 3
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 1
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 3
+      locked: 0
+      label: 
+    failedCell: 3
+    initialSolution: 010000000200000001000000010000000200000000000000010000000100000003000000030000000100000003000000010000000300000002000000020000000300000003000000010000000000000002000000000000000100000003000000010000000100000000000000010000000300000002000000
+    faultSolution: 010000000200000001000000010000000200000000000000010000000100000003000000010000000200000003000000010000000300000002000000000000000200000003000000010000000000000002000000000000000100000003000000010000000100000000000000010000000300000002000000
+  - name: A1 / Return Feed
+    width: 6
+    height: 5
+    cells:
+    - type: 0
+      rotation: 0
+      locked: 1
+      label: 
+    - type: 2
+      rotation: 3
+      locked: 0
+      label: 
+    - type: 1
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 3
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 3
+      locked: 0
+      label: 
+    - type: 6
+      rotation: 3
+      locked: 1
+      label: LIFE SUPPORT
+    - type: 6
+      rotation: 1
+      locked: 1
+      label: COOLING
+    - type: 3
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 3
+      locked: 0
+      label: 
+    - type: 3
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 7
+      rotation: 3
+      locked: 1
+      label: 
+    - type: 7
+      rotation: 1
+      locked: 1
+      label: 
+    - type: 2
+      rotation: 3
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 7
+      rotation: 2
+      locked: 1
+      label: 
+    - type: 3
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 5
+      rotation: 3
+      locked: 1
+      label: 
+    - type: 6
+      rotation: 1
+      locked: 1
+      label: SECURITY
+    - type: 3
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 7
+      rotation: 0
+      locked: 1
+      label: 
+    - type: 2
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 1
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 3
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 1
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 0
+      rotation: 0
+      locked: 1
+      label: 
+    failedCell: 2
+    initialSolution: 000000000100000001000000020000000100000003000000010000000300000000000000000000000300000003000000010000000000000001000000020000000100000003000000010000000300000000000000010000000300000002000000010000000000000001000000030000000100000000000000
+    faultSolution: 000000000100000001000000020000000100000003000000010000000200000002000000000000000300000003000000010000000100000003000000020000000100000003000000010000000300000000000000010000000300000002000000010000000000000001000000030000000100000000000000
+  - name: A2 / Triple Feed
+    width: 6
+    height: 5
+    cells:
+    - type: 2
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 1
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 0
+      rotation: 0
+      locked: 1
+      label: 
+    - type: 7
+      rotation: 1
+      locked: 1
+      label: 
+    - type: 2
+      rotation: 1
+      locked: 1
+      label: 
+    - type: 2
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 3
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 6
+      rotation: 3
+      locked: 1
+      label: COOLING
+    - type: 5
+      rotation: 1
+      locked: 1
+      label: 
+    - type: 3
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 7
+      rotation: 2
+      locked: 1
+      label: 
+    - type: 2
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 7
+      rotation: 3
+      locked: 1
+      label: 
+    - type: 2
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 7
+      rotation: 0
+      locked: 1
+      label: 
+    - type: 3
+      rotation: 1
+      locked: 1
+      label: 
+    - type: 6
+      rotation: 3
+      locked: 1
+      label: SECURITY
+    - type: 6
+      rotation: 1
+      locked: 1
+      label: LIFE SUPPORT
+    - type: 1
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 3
+      rotation: 0
+      locked: 1
+      label: 
+    - type: 1
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 3
+      rotation: 3
+      locked: 0
+      label: 
+    - type: 6
+      rotation: 3
+      locked: 1
+      label: AIR FILTER
+    failedCell: 3
+    initialSolution: 010000000200000001000000010000000200000000000000010000000100000003000000030000000100000003000000010000000300000002000000020000000300000003000000010000000000000002000000000000000100000003000000010000000100000000000000010000000000000003000000
+    faultSolution: 010000000200000001000000010000000200000000000000010000000100000003000000010000000200000003000000010000000300000002000000000000000200000003000000010000000000000002000000000000000100000003000000010000000100000000000000010000000000000003000000
+  - name: A2 / Return Feed
+    width: 6
+    height: 5
+    cells:
+    - type: 0
+      rotation: 0
+      locked: 1
+      label: 
+    - type: 2
+      rotation: 3
+      locked: 0
+      label: 
+    - type: 1
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 3
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 3
+      locked: 0
+      label: 
+    - type: 6
+      rotation: 3
+      locked: 1
+      label: LIFE SUPPORT
+    - type: 6
+      rotation: 1
+      locked: 1
+      label: COOLING
+    - type: 3
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 3
+      locked: 0
+      label: 
+    - type: 3
+      rotation: 3
+      locked: 1
+      label: 
+    - type: 7
+      rotation: 3
+      locked: 1
+      label: 
+    - type: 7
+      rotation: 1
+      locked: 1
+      label: 
+    - type: 2
+      rotation: 3
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 7
+      rotation: 2
+      locked: 1
+      label: 
+    - type: 3
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 5
+      rotation: 3
+      locked: 1
+      label: 
+    - type: 6
+      rotation: 1
+      locked: 1
+      label: SECURITY
+    - type: 3
+      rotation: 3
+      locked: 1
+      label: 
+    - type: 7
+      rotation: 0
+      locked: 1
+      label: 
+    - type: 2
+      rotation: 2
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 2
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 6
+      rotation: 1
+      locked: 1
+      label: AIR FILTER
+    - type: 3
+      rotation: 1
+      locked: 0
+      label: 
+    - type: 1
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 3
+      rotation: 3
+      locked: 1
+      label: 
+    - type: 1
+      rotation: 0
+      locked: 0
+      label: 
+    - type: 0
+      rotation: 0
+      locked: 1
+      label: 
+    failedCell: 2
+    initialSolution: 000000000100000001000000020000000100000003000000010000000300000000000000000000000300000003000000010000000000000001000000020000000100000003000000010000000300000000000000010000000300000002000000010000000000000001000000030000000100000000000000
+    faultSolution: 000000000100000001000000020000000100000003000000010000000200000002000000000000000300000003000000010000000100000003000000020000000100000003000000010000000300000000000000010000000300000002000000010000000000000001000000030000000100000000000000
+  defaultBoardRevision: 3

@@ -2,13 +2,30 @@ using UnityEngine;
 
 namespace EchoProtocol.RelayA
 {
-    public readonly struct RelayASnapshot
+    public readonly struct RelayAStabilizationOutputs
     {
-        public RelayASnapshot(
-            RelayAStatus status,
+        public RelayAStabilizationOutputs(float voltage, float frequency, float loadBalance)
+        {
+            Voltage = voltage;
+            Frequency = frequency;
+            LoadBalance = loadBalance;
+        }
+
+        public float Voltage { get; }
+        public float Frequency { get; }
+        public float LoadBalance { get; }
+    }
+}
+
+namespace EchoProtocol.RelayA
+{
+    public readonly struct RelayAStabilizationSnapshot
+    {
+        public RelayAStabilizationSnapshot(
+            RelayAStabilizationStatus status,
             Vector3 controls,
-            RelayAOutputs outputs,
-            RelayAOutputs targetOutputs,
+            RelayAStabilizationOutputs outputs,
+            RelayAStabilizationOutputs targetOutputs,
             RelayAReadingTrend voltageTrend,
             RelayAReadingTrend frequencyTrend,
             RelayAReadingTrend loadTrend,
@@ -22,7 +39,8 @@ namespace EchoProtocol.RelayA
             bool isStable,
             bool isDangerous,
             bool isRunning,
-            bool isOnline)
+            bool isOnline,
+            int recoveredFaults = 0)
         {
             Status = status;
             Controls = controls;
@@ -42,12 +60,13 @@ namespace EchoProtocol.RelayA
             IsDangerous = isDangerous;
             IsRunning = isRunning;
             IsOnline = isOnline;
+            RecoveredFaults = recoveredFaults;
         }
 
-        public RelayAStatus Status { get; }
+        public RelayAStabilizationStatus Status { get; }
         public Vector3 Controls { get; }
-        public RelayAOutputs Outputs { get; }
-        public RelayAOutputs TargetOutputs { get; }
+        public RelayAStabilizationOutputs Outputs { get; }
+        public RelayAStabilizationOutputs TargetOutputs { get; }
         public RelayAReadingTrend VoltageTrend { get; }
         public RelayAReadingTrend FrequencyTrend { get; }
         public RelayAReadingTrend LoadTrend { get; }
@@ -62,6 +81,36 @@ namespace EchoProtocol.RelayA
         public bool IsDangerous { get; }
         public bool IsRunning { get; }
         public bool IsOnline { get; }
+        public int RecoveredFaults { get; }
         public float Stability01 => StabilityRequiredSeconds <= 0f ? 1f : Mathf.Clamp01(StabilitySeconds / StabilityRequiredSeconds);
+    }
+}
+
+namespace EchoProtocol.RelayA
+{
+    public enum RelayAStabilizationStatus
+    {
+        Offline,
+        Calibrating,
+        Unstable = Calibrating,
+        Stabilizing,
+        FaultWarning,
+        Overload,
+        Online
+    }
+
+    public enum RelayAFaultType
+    {
+        None,
+        Overvoltage,
+        FrequencyDesynchronization,
+        LoadImbalance
+    }
+
+    public enum RelayAReadingTrend
+    {
+        Stable,
+        Rising,
+        Falling
     }
 }
