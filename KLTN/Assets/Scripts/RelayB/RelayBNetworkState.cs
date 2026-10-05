@@ -1,4 +1,5 @@
 using Fusion;
+using EchoProtocol.Networking;
 using UnityEngine;
 
 namespace EchoProtocol.RelayB
@@ -65,6 +66,7 @@ namespace EchoProtocol.RelayB
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         public void RpcRequestControl(PlayerRef player)
         {
+            if (MatchStateOwnsRelay()) return;
             if (CurrentOperator == PlayerRef.None || CurrentOperator == player)
             {
                 CurrentOperator = player;
@@ -74,6 +76,7 @@ namespace EchoProtocol.RelayB
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         public void RpcReleaseControl(PlayerRef player)
         {
+            if (MatchStateOwnsRelay()) return;
             if (CurrentOperator == player)
             {
                 CurrentOperator = PlayerRef.None;
@@ -83,6 +86,7 @@ namespace EchoProtocol.RelayB
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         public void RpcSubmitControls(PlayerRef sender, int channel, float freq, float phase)
         {
+            if (MatchStateOwnsRelay()) return;
             if (CurrentOperator == PlayerRef.None || CurrentOperator == sender)
             {
                 controller?.ApplyAuthoritativeControls(channel, freq, phase);
@@ -92,6 +96,7 @@ namespace EchoProtocol.RelayB
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         public void RpcStartSync(PlayerRef sender)
         {
+            if (MatchStateOwnsRelay()) return;
             if (CurrentOperator == PlayerRef.None || CurrentOperator == sender)
             {
                 controller?.StartSynchronization();
@@ -101,10 +106,17 @@ namespace EchoProtocol.RelayB
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         public void RpcCancelSync(PlayerRef sender)
         {
+            if (MatchStateOwnsRelay()) return;
             if (CurrentOperator == PlayerRef.None || CurrentOperator == sender)
             {
                 controller?.CancelSynchronization();
             }
+        }
+
+        private static bool MatchStateOwnsRelay()
+        {
+            var match = NetworkMatchState.Instance;
+            return match != null && match.Object != null && match.Object.IsValid;
         }
 
         private void MarkOnlineAuthoritatively()

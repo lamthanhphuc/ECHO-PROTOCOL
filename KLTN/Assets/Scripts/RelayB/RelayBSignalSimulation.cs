@@ -1,33 +1,44 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace EchoProtocol.RelayB
 {
-    [Serializable]
     public sealed class RelayBSignalSimulation
     {
+        private readonly List<string> _systemLog = new List<string>();
+        public RelayBDecoder Decoder { get; } = new RelayBDecoder();
         private RelayBConfig _config;
         private int _presetIndex;
+        private RelayBPreset _attemptPreset;
+        private int _cleanProblems;
+        private int _cleanScenarioSeed;
         private int _selectedChannelIndex = -1;
         private float _currentFrequency = 50f;
         private float _currentPhase = 0f;
+        private int _timingOffsetBaud = 0;
+        private int _activeTab = 0;
+
+        private RelayBModuleType[] _pipelineModules = new RelayBModuleType[4];
+        private RelayBOutputDiagnostic _outputDiagnostic;
+        private bool _falseLockDetected;
+
+        // Legacy compatibility fields
+        private RelayBFilterMode _filterMode = RelayBFilterMode.None;
+        private RelayBGainMode _gainMode = RelayBGainMode.Low;
+        private RelayBPilotMode _pilotMode = RelayBPilotMode.Unchecked;
 
         private float _syncTimer;
         private float _instabilityGraceTimer;
         private bool _isSyncing;
-        private bool _online;
+        private bool _isOnline;
         private bool _isScanning;
         private bool _hasScanned;
-        private float _scanningTimeRemaining;
 
         private bool _driftTriggered;
-        private bool _isDriftActive;
-        private bool _isDriftWarning;
-        private bool _driftWarningFired;
+        private bool _driftWarningTriggered;
         private bool _mismatchPenaltyNotified;
-        private float _driftTriggerHoldSeconds;
-        private float _driftPhaseOffset;
-        private float _driftFrequencyOffsetPercent;
+        private float _scanDurationRemaining;
 
         public event Action<RelayBSnapshot> Changed;
         public event Action Completed;
@@ -35,220 +46,451 @@ namespace EchoProtocol.RelayB
         public event Action DriftTriggered;
         public event Action SignalMismatchOccurred;
         public event Action InstabilityReset;
+        public event Action OutputAnalyzed;
 
-        public RelayBSnapshot Snapshot => BuildSnapshot();
-        public bool IsOnline => _online;
-        public int PresetIndex => _presetIndex;
+        public bool IsOnline => _isOnline;
+        public bool IsSynchronizing => _isSyncing;
         public int SelectedChannelIndex => _selectedChannelIndex;
         public float CurrentFrequency => _currentFrequency;
         public float CurrentPhase => _currentPhase;
+        public int TimingOffsetBaud => _timingOffsetBaud;
+        public int ActiveTab => _activeTab;
+        public RelayBModuleType[] PipelineModules => _pipelineModules;
+        public RelayBOutputDiagnostic OutputDiagnostic => _outputDiagnostic;
+        public bool IsSignalFound => _hasScanned && _selectedChannelIndex >= 0;
+        public bool IsSignalClean => IsSignalFound && Decoder.IsComplete;
+        public int CleanProblems => _cleanProblems;
+        public RelayBFilterMode FilterMode => _filterMode;
+        public RelayBGainMode GainMode => _gainMode;
+        public RelayBPilotMode PilotMode => _pilotMode;
+        public RelayBSnapshot Snapshot => BuildSnapshot();
 
         public void Initialize(RelayBConfig config, int presetIndex = 0, bool randomizeAttempt = false, int attemptSeed = 0)
         {
             _config = config;
-            System.Random attemptRandom = randomizeAttempt
-                ? new System.Random(attemptSeed != 0 ? attemptSeed : Environment.TickCount)
-                : null;
-            _presetIndex = Mathf.Max(0, presetIndex);
+            Decoder.Initialize(attemptSeed != 0 ? attemptSeed : 1337);
+            _presetIndex = presetIndex;
+            System.Random attemptRandom = new System.Random(attemptSeed != 0 ? attemptSeed : 1337);
+            _attemptPreset = randomizeAttempt && config != null
+                ? BuildAttemptPreset(config.GetPreset(presetIndex), attemptRandom) : null;
+            RelayBPreset preset = GetCurrentPreset();
+            RelayBCandidate correct = preset != null ? preset.GetCandidate(preset.CorrectChannelIndex) : null;
+            _cleanProblems = 1 | (correct != null && correct.HasSpur ? 2 : 0)
+                | (correct != null && correct.DistortionPercent > 15f ? 4 : 0);
+            _cleanScenarioSeed = 0;
+            bool harder = presetIndex >= 2;
+            float frequencyOffset = preset != null ? preset.TargetFrequency
+                * Range(attemptRandom, harder ? 0.18f : 0.08f, harder ? 0.25f : 0.14f) : 0f;
+            float phaseOffset = Range(attemptRandom, harder ? 85f : 35f, harder ? 130f : 65f);
+
             _selectedChannelIndex = -1;
-            _currentFrequency = randomizeAttempt && config != null
-                ? Range(attemptRandom, config.MinFrequency, config.MaxFrequency)
+            _currentFrequency = config != null && randomizeAttempt && preset != null
+                ? Mathf.Clamp(preset.TargetFrequency + (preset.TargetFrequency + frequencyOffset <= config.MaxFrequency
+                    && attemptRandom.Next(2) == 0 ? frequencyOffset : -frequencyOffset), config.MinFrequency, config.MaxFrequency)
                 : config != null ? (config.MinFrequency + config.MaxFrequency) * 0.5f : 50f;
-            _currentPhase = randomizeAttempt ? Range(attemptRandom, 0f, 360f) : 0f;
+            _currentPhase = randomizeAttempt && preset != null
+                ? (preset.TargetPhase + (attemptRandom.Next(2) == 0 ? phaseOffset : -phaseOffset) + 360f) % 360f : 0f;
+            _timingOffsetBaud = 0;
+            _activeTab = 0;
+
+            _pipelineModules = new RelayBModuleType[4];
+            _outputDiagnostic = default;
+            _falseLockDetected = false;
+
+            _filterMode = RelayBFilterMode.None;
+            _gainMode = RelayBGainMode.Low;
+            _pilotMode = RelayBPilotMode.Unchecked;
 
             _syncTimer = 0f;
             _instabilityGraceTimer = 0f;
             _isSyncing = false;
-            _online = false;
+            _isOnline = false;
             _isScanning = false;
             _hasScanned = false;
-            _scanningTimeRemaining = 0f;
-
             _driftTriggered = false;
-            _isDriftActive = false;
-            _isDriftWarning = false;
-            _driftWarningFired = false;
+            _driftWarningTriggered = false;
             _mismatchPenaltyNotified = false;
-            _driftTriggerHoldSeconds = config != null
-                ? Mathf.Max(1f, config.DriftTriggerHoldSeconds + (randomizeAttempt ? Range(attemptRandom, -1f, 1.5f) : 0f))
-                : 3.5f;
-            _driftPhaseOffset = config != null
-                ? config.DriftPhaseOffset + (randomizeAttempt ? Range(attemptRandom, -10f, 10f) : 0f)
-                : 22f;
-            _driftFrequencyOffsetPercent = config != null
-                ? config.DriftFrequencyOffsetPercent + (randomizeAttempt ? Range(attemptRandom, -1.5f, 1.5f) : 0f)
-                : 0f;
 
+            _systemLog.Clear();
+            AddSystemLog("RECEIVER INITIALIZED - READY FOR SPECTRUM SCAN");
+
+            NotifyChanged();
+        }
+
+        public void SetActiveTab(int tabIndex)
+        {
+            _activeTab = Mathf.Clamp(tabIndex, 0, IsSignalClean ? 2 : IsSignalFound ? 1 : 0);
+            NotifyChanged();
+        }
+
+        public void ScanSpectrum()
+        {
+            if (_isOnline || _hasScanned) return;
+            _isScanning = false;
+            _hasScanned = true;
+            AddSystemLog("SPECTRUM SCAN COMPLETE: CANDIDATES DETECTED");
             NotifyChanged();
         }
 
         public void SelectChannel(int channelIndex)
         {
-            if (_online)
+            RelayBPreset preset = GetCurrentPreset();
+            if (_isOnline || _isSyncing || _selectedChannelIndex >= 0 || !_hasScanned || preset == null || channelIndex < 0 || channelIndex >= preset.Candidates.Length) return;
+            RelayBCandidate candidate = preset.GetCandidate(channelIndex);
+            RelayBReferenceProfile profile = preset.ReferenceProfile;
+            if (candidate == null || candidate.Peaks.Length == 0) return;
+            bool matches = candidate.Peaks[0] >= profile.FundamentalMinKhz
+                && candidate.Peaks[0] <= profile.FundamentalMaxKhz
+                && candidate.Waveform == preset.ReferenceWaveform
+                && candidate.PilotFrame == profile.ExpectedPilot;
+            if (!matches)
             {
+                _falseLockDetected = _selectedChannelIndex < 0;
+                AddSystemLog("SIGNAL DOES NOT MATCH TARGET PROFILE. REVIEW FREQUENCY, WAVEFORM AND PILOT.");
+                SignalMismatchOccurred?.Invoke();
+                NotifyChanged();
                 return;
             }
+            _selectedChannelIndex = channelIndex;
+            _activeTab = 0;
+            _falseLockDetected = false;
+            _outputDiagnostic = default;
 
-            int clamped = Mathf.Clamp(channelIndex, 0, 3);
-            if (_selectedChannelIndex != clamped)
+            if (_isSyncing)
             {
-                _selectedChannelIndex = clamped;
-                // Changing channel cancels current ongoing sync run
-                if (_isSyncing)
-                {
-                    _isSyncing = false;
-                    _instabilityGraceTimer = 0f;
-                    _mismatchPenaltyNotified = false;
-                }
-
-                NotifyChanged();
+                CancelSynchronization();
             }
+
+            AddSystemLog($"CHANNEL {channelIndex + 1:00} ROUTED TO RECEIVER");
+            NotifyChanged();
+        }
+
+        public void SetPipelineSlot(int slotIndex, RelayBModuleType module)
+        {
+            if (_isOnline || _isSyncing || !IsSignalFound || slotIndex < 0 || slotIndex >= 2
+                || (module != RelayBModuleType.None && module != RelayBModuleType.NoiseSuppressor
+                    && module != RelayBModuleType.Notch && module != RelayBModuleType.Gain)) return;
+            _pipelineModules[slotIndex] = module;
+            _activeTab = 1;
+            _outputDiagnostic = default;
+            NotifyChanged();
+        }
+
+        public RelayBOutputDiagnostic AnalyzeOutput()
+        {
+            RelayBPreset preset = GetCurrentPreset();
+            RelayBCandidate candidate = IsSignalFound && preset != null ? preset.GetCandidate(_selectedChannelIndex) : null;
+
+            if (candidate == null)
+            {
+                _outputDiagnostic = new RelayBOutputDiagnostic(-40f, -40f, 0f, 0f, false, "NO CHANNEL SELECTED", 0f, "", false, "Select a channel before analyzing output.");
+                NotifyChanged();
+                return _outputDiagnostic;
+            }
+
+            // Active problems for this channel
+            bool hasNoiseProblem = (_cleanProblems & 1) != 0;
+            bool hasInterferenceProblem = (_cleanProblems & 2) != 0;
+            bool hasWeakSignal = (_cleanProblems & 4) != 0;
+
+            // Tools placed by player
+            bool hasNoiseFilter = false;
+            bool hasInterferenceFilter = false;
+            bool hasAmplifier = false;
+            int amplifierSlot = -1;
+            int noiseFilterSlot = -1;
+            int interferenceFilterSlot = -1;
+
+            for (int i = 0; i < 2; i++)
+            {
+                RelayBModuleType m = (i < _pipelineModules.Length) ? _pipelineModules[i] : RelayBModuleType.None;
+                if (m == RelayBModuleType.NoiseSuppressor)
+                {
+                    hasNoiseFilter = true;
+                    if (noiseFilterSlot < 0) noiseFilterSlot = i;
+                }
+                else if (m == RelayBModuleType.Notch)
+                {
+                    hasInterferenceFilter = true;
+                    if (interferenceFilterSlot < 0) interferenceFilterSlot = i;
+                }
+                else if (m == RelayBModuleType.Gain)
+                {
+                    hasAmplifier = true;
+                    if (amplifierSlot < 0) amplifierSlot = i;
+                }
+            }
+
+            // Clipping check: Gain amplifies unfiltered interference
+            bool clipping = hasAmplifier && ((hasNoiseProblem && (noiseFilterSlot < 0 || amplifierSlot < noiseFilterSlot))
+                || (hasInterferenceProblem && (interferenceFilterSlot < 0 || amplifierSlot < interferenceFilterSlot)));
+            string clippingMsg = "CLEAR";
+            if (clipping) clippingMsg = "FILTER BEFORE AMPLIFIER";
+
+            // Semantic validity: all active problems must be fixed, and no clipping
+            bool noiseFixed = !hasNoiseProblem || hasNoiseFilter;
+            bool interferenceFixed = !hasInterferenceProblem || hasInterferenceFilter;
+            bool strengthFixed = !hasWeakSignal || hasAmplifier;
+            int selectedTools = (_pipelineModules[0] != RelayBModuleType.None ? 1 : 0)
+                + (_pipelineModules[1] != RelayBModuleType.None ? 1 : 0);
+            int requiredTools = (hasNoiseProblem ? 1 : 0) + (hasInterferenceProblem ? 1 : 0)
+                + (hasWeakSignal ? 1 : 0);
+            bool semanticValid = noiseFixed && interferenceFixed && strengthFixed && !clipping
+                && selectedTools == requiredTools;
+
+            bool pilotMatch = candidate.PilotFrame == preset.ReferenceProfile.ExpectedPilot;
+            bool pilotVerified = semanticValid && pilotMatch && _selectedChannelIndex == preset.CorrectChannelIndex;
+
+            float snr = semanticValid ? 25f : 10f;
+            float thd = candidate.DistortionPercent <= 10f ? candidate.DistortionPercent : (semanticValid ? 5f : candidate.DistortionPercent);
+            float correlation = (semanticValid && pilotMatch) ? 0.98f : 0.35f;
+
+            string noiseStatus = noiseFixed ? "LOW" : "HIGH";
+            string intfStatus = hasInterferenceProblem ? (hasInterferenceFilter ? "CLEAR" : "DETECTED") : "CLEAR";
+            string strStatus = hasWeakSignal ? (hasAmplifier && !clipping ? "GOOD" : "WEAK") : "GOOD";
+
+            string summary = $"NOISE: {noiseStatus} | INTERFERENCE: {intfStatus} | STRENGTH: {strStatus}";
+
+            _outputDiagnostic = new RelayBOutputDiagnostic(
+                -12f,
+                -30f,
+                snr,
+                thd,
+                clipping,
+                clippingMsg,
+                correlation,
+                candidate.PilotFrame,
+                pilotVerified,
+                summary);
+
+            string resultLabel = semanticValid ? "SIGNAL CLEAN" : "SIGNAL NOT CLEAN";
+            AddSystemLog($"TEST SIGNAL: {resultLabel} | {summary}");
+            OutputAnalyzed?.Invoke();
+            NotifyChanged();
+            return _outputDiagnostic;
+        }
+
+        public void ClearOutputDiagnostic()
+        {
+            if (string.IsNullOrEmpty(_outputDiagnostic.Summary)) return;
+            _outputDiagnostic = default;
+            _activeTab = IsSignalFound ? 1 : 0;
+            NotifyChanged();
+        }
+
+        public void RerollCleanScenario(int seed)
+        {
+            if (seed == 0 || seed == _cleanScenarioSeed || !IsSignalFound || _isSyncing || _isOnline) return;
+            _cleanProblems = GetCleanProblemsForSeed(_presetIndex, seed);
+            _cleanScenarioSeed = seed;
+            _pipelineModules[0] = RelayBModuleType.None;
+            _pipelineModules[1] = RelayBModuleType.None;
+            _outputDiagnostic = default;
+            _activeTab = 1;
+            AddSystemLog("SIGNAL NOT CLEAN. NEW CONDITION GENERATED; CHECK IT BEFORE TESTING.");
+            NotifyChanged();
+        }
+
+        public static int GetCleanProblemsForSeed(int presetIndex, int seed)
+        {
+            int choice = (int)((uint)seed % 3u);
+            return presetIndex >= 2 ? new[] { 3, 5, 6 }[choice] : new[] { 1, 2, 4 }[choice];
+        }
+
+        public void MarkFindRerolled()
+        {
+            AddSystemLog("SIGNAL MISMATCH. NEW TARGET GENERATED; SCAN AGAIN.");
+            NotifyChanged();
+        }
+
+        public void ApplyPhaseCorrection(float deltaDegrees)
+        {
+            if (_isOnline) return;
+            SetPhase(_currentPhase + deltaDegrees);
+        }
+
+        public void ApplyTimingOffset(int deltaBaud)
+        {
+            if (_isOnline) return;
+            _timingOffsetBaud = Mathf.Clamp(_timingOffsetBaud + deltaBaud, -2, 2);
+            NotifyChanged();
+        }
+
+        public void ApplyPhaseTrim(float deltaDegrees)
+        {
+            ApplyPhaseCorrection(deltaDegrees);
+        }
+
+        public void ApplyClockTrim(int deltaBaud)
+        {
+            ApplyTimingOffset(deltaBaud);
         }
 
         public void SetFrequency(float frequency)
         {
-            if (_online)
-            {
-                return;
-            }
-
-            float min = _config != null ? _config.MinFrequency : 10f;
-            float max = _config != null ? _config.MaxFrequency : 100f;
-            _currentFrequency = Mathf.Clamp(frequency, min, max);
+            if (_isOnline) return;
+            _currentFrequency = Mathf.Clamp(frequency, _config != null ? _config.MinFrequency : 10f, _config != null ? _config.MaxFrequency : 100f);
             NotifyChanged();
         }
 
         public void SetPhase(float phaseDegrees)
         {
-            if (_online)
-            {
-                return;
-            }
-
-            _currentPhase = NormalizeAngle(phaseDegrees);
-            NotifyChanged();
-        }
-
-        public void ScanChannels(float scanDuration = 1.0f)
-        {
-            if (_online)
-            {
-                return;
-            }
-
-            _isScanning = true;
-            _scanningTimeRemaining = Mathf.Max(0.2f, scanDuration);
+            if (_isOnline) return;
+            _currentPhase = phaseDegrees % 360f;
+            if (_currentPhase < 0f) _currentPhase += 360f;
             NotifyChanged();
         }
 
         public void StartSynchronization()
         {
-            if (_online || _selectedChannelIndex < 0)
+            if (_isOnline || !IsSignalClean) return;
+
+            RelayBPreset preset = GetCurrentPreset();
+            if (preset == null || _selectedChannelIndex < 0) return;
+
+            RelayBCandidate candidate = preset.GetCandidate(_selectedChannelIndex);
+            if (candidate == null) return;
+
+            if (candidate.ChannelIndex != preset.CorrectChannelIndex)
             {
+                // Wrong candidate or false lock
+                _falseLockDetected = true;
+                _isSyncing = false;
+                _syncTimer = 0f;
+                AddSystemLog("LINK ACQUISITION FAILED: FALSE CARRIER LOCK / PILOT MISMATCH");
+                SignalMismatchOccurred?.Invoke();
+                NotifyChanged();
                 return;
             }
 
             _isSyncing = true;
+            _falseLockDetected = false;
+            _syncTimer = 0f;
             _instabilityGraceTimer = 0f;
-            _mismatchPenaltyNotified = false;
-
-            bool isSync = CheckIsSynchronized(out _, out _);
-            if (!isSync)
-            {
-                SignalMismatchOccurred?.Invoke();
-            }
-
+            AddSystemLog("LINK ACQUISITION INITIATED - SYNCHRONIZING");
             NotifyChanged();
         }
 
         public void CancelSynchronization()
         {
-            if (_online)
-            {
-                return;
-            }
-
+            if (_isOnline) return;
             _isSyncing = false;
+            _syncTimer = 0f;
             _instabilityGraceTimer = 0f;
-            _isDriftWarning = false;
             _mismatchPenaltyNotified = false;
-            NotifyChanged();
-        }
-
-        public void Tick(float deltaTime)
-        {
-            if (deltaTime <= 0f || _online)
-            {
-                return;
-            }
-
-            if (_isScanning)
-            {
-                _scanningTimeRemaining -= deltaTime;
-                if (_scanningTimeRemaining <= 0f)
-                {
-                    _isScanning = false;
-                    _hasScanned = true;
-                    NotifyChanged();
-                }
-            }
-
-            if (!_isSyncing)
-            {
-                return;
-            }
-
-            bool synchronized = CheckIsSynchronized(out _, out _);
-
-            if (synchronized)
-            {
-                _instabilityGraceTimer = 0f;
-                _mismatchPenaltyNotified = false;
-                _syncTimer += deltaTime;
-
-                UpdateDriftProgress();
-
-                float holdRequired = _config != null ? _config.HoldRequiredSeconds : 8f;
-                if (_syncTimer >= holdRequired)
-                {
-                    _syncTimer = holdRequired;
-                    _online = true;
-                    _isSyncing = false;
-                    _isDriftWarning = false;
-                    Completed?.Invoke();
-                }
-            }
-            else
-            {
-                _instabilityGraceTimer += deltaTime;
-                float graceLimit = _config != null ? _config.InstabilityGraceSeconds : 0.5f;
-                if (_instabilityGraceTimer > graceLimit)
-                {
-                    if (_syncTimer > 0f)
-                    {
-                        float decayRate = _config != null ? _config.InstabilityDecaySecondsPerSecond : 2f;
-                        _syncTimer = Mathf.Max(0f, _syncTimer - deltaTime * decayRate);
-                        _isDriftWarning = false;
-                        if (!_mismatchPenaltyNotified)
-                        {
-                            _mismatchPenaltyNotified = true;
-                            InstabilityReset?.Invoke();
-                            SignalMismatchOccurred?.Invoke();
-                        }
-                    }
-                }
-            }
-
+            AddSystemLog("SYNCHRONIZATION ABORTED");
             NotifyChanged();
         }
 
         public void ForceCompleteForAuthoritativeSync()
         {
-            _online = true;
+            _isOnline = true;
             _isSyncing = false;
             _syncTimer = _config != null ? _config.HoldRequiredSeconds : 8f;
-            _isDriftWarning = false;
-            _mismatchPenaltyNotified = false;
+            AddSystemLog("AUTHORITATIVE OVERRIDE: RELAY B ONLINE");
+            NotifyChanged();
+            Completed?.Invoke();
+        }
+
+        public void ApplyAuthoritativeSyncTelemetry(float progressSeconds, bool driftActive, bool driftWarning)
+        {
+            if (_isOnline) return;
+            float progress = Mathf.Clamp(progressSeconds, 0f, _config != null ? _config.HoldRequiredSeconds : 8f);
+            if (Mathf.Approximately(_syncTimer, progress) && _driftTriggered == driftActive
+                && _driftWarningTriggered == driftWarning) return;
+            _syncTimer = progress;
+            _driftTriggered = driftActive;
+            _driftWarningTriggered = driftWarning;
+            NotifyChanged();
+        }
+
+        public void Tick(float deltaTime)
+        {
+            if (_isOnline) return;
+            if (IsSignalFound && !Decoder.IsComplete && !Decoder.CanEdit)
+            {
+                Decoder.Tick(deltaTime);
+                NotifyChanged();
+            }
+
+            if (_isScanning)
+            {
+                _scanDurationRemaining -= deltaTime;
+                if (_scanDurationRemaining <= 0f)
+                {
+                    _isScanning = false;
+                    _hasScanned = true;
+                    AddSystemLog("SPECTRUM SCAN COMPLETE: CANDIDATES DETECTED");
+                    NotifyChanged();
+                }
+            }
+
+            if (_isSyncing)
+            {
+                UpdateSynchronization(deltaTime);
+            }
+        }
+
+        private void UpdateSynchronization(float deltaTime)
+        {
+            bool isSync = CheckIsSynchronized(out _, out _);
+
+            // Handle Ionospheric Drift during link acquisition
+            if (_config != null && _config.EnableDrift && !_driftTriggered)
+            {
+                float holdForDrift = _config.DriftTriggerHoldSeconds;
+                float warningTime = holdForDrift - _config.DriftWarningSeconds;
+
+                if (_syncTimer >= warningTime - 0.001f && !_driftWarningTriggered)
+                {
+                    _driftWarningTriggered = true;
+                    AddSystemLog("WARNING: SIGNAL DRIFT APPROACHING");
+                    DriftWarning?.Invoke();
+                }
+
+                if (_syncTimer >= holdForDrift - 0.001f)
+                {
+                    _driftTriggered = true;
+                    AddSystemLog("SIGNAL DRIFT DETECTED. RE-ALIGN PHASE.");
+                    DriftTriggered?.Invoke();
+                }
+            }
+
+            if (isSync)
+            {
+                _instabilityGraceTimer = 0f;
+                _mismatchPenaltyNotified = false;
+                _syncTimer += deltaTime;
+
+                float required = _config != null ? _config.HoldRequiredSeconds : 8f;
+                if (_syncTimer >= required)
+                {
+                    _syncTimer = required;
+                    _isOnline = true;
+                    _isSyncing = false;
+                    AddSystemLog("CARRIER LINK LOCKED - RELAY B ONLINE");
+                    NotifyChanged();
+                    Completed?.Invoke();
+                    return;
+                }
+            }
+            else
+            {
+                float grace = _config != null ? _config.InstabilityGraceSeconds : 0.5f;
+                _instabilityGraceTimer += deltaTime;
+                if (_instabilityGraceTimer > grace)
+                {
+                    float decay = _config != null ? _config.InstabilityDecaySecondsPerSecond : 2f;
+                    _syncTimer = Mathf.Max(0f, _syncTimer - deltaTime * decay);
+                    if (!_mismatchPenaltyNotified)
+                    {
+                        _mismatchPenaltyNotified = true;
+                        InstabilityReset?.Invoke();
+                        SignalMismatchOccurred?.Invoke();
+                    }
+                }
+            }
+
             NotifyChanged();
         }
 
@@ -262,217 +504,217 @@ namespace EchoProtocol.RelayB
                 return false;
             }
 
-            float effectiveTargetFreq = GetEffectiveTargetFrequency(preset);
-            float effectiveTargetPhase = GetEffectiveTargetPhase(preset);
+            float targetFreq = preset.TargetFrequency;
+            float targetPhase = GetEffectiveTargetPhase();
 
-            freqErrorPercent = CalculateFrequencyErrorPercent(_currentFrequency, effectiveTargetFreq);
-            phaseErrorDegrees = CalculatePhaseErrorDegrees(_currentPhase, effectiveTargetPhase);
+            freqErrorPercent = CalculateFrequencyErrorPercent(_currentFrequency, targetFreq);
+            phaseErrorDegrees = CalculatePhaseErrorDegrees(_currentPhase, targetPhase);
 
             float freqTol = _config != null ? _config.FrequencyTolerancePercent : 3f;
             float phaseTol = _config != null ? _config.PhaseToleranceDegrees : 12f;
 
-            bool isChannelCorrect = (_selectedChannelIndex == preset.CorrectChannelIndex);
-            RelayBChannelDef channelDef = preset.GetChannel(_selectedChannelIndex);
-            bool isWaveformCorrect = channelDef != null && channelDef.Waveform == preset.ReferenceWaveform;
+            bool isChannelCorrect = _selectedChannelIndex == preset.CorrectChannelIndex;
+            bool phaseAligned = phaseErrorDegrees <= phaseTol;
+            bool freqAligned = freqErrorPercent <= freqTol;
 
-            return isChannelCorrect && isWaveformCorrect && freqErrorPercent <= freqTol && phaseErrorDegrees <= phaseTol;
-        }
+            // Must also satisfy pipeline quality and pilot if analyzed
+            bool pipelineReady = IsSignalClean;
 
-        public static float CalculateFrequencyErrorPercent(float current, float target)
-        {
-            if (target <= 0.0001f)
-            {
-                return 100f;
-            }
-
-            return (Mathf.Abs(current - target) / target) * 100f;
-        }
-
-        public static float CalculatePhaseErrorDegrees(float current, float target)
-        {
-            float normCur = NormalizeAngle(current);
-            float normTarget = NormalizeAngle(target);
-            float delta = Mathf.Abs(normCur - normTarget);
-            return Mathf.Min(delta, 360f - delta);
-        }
-
-        public static float NormalizeAngle(float degrees)
-        {
-            float result = degrees % 360f;
-            if (result < 0f)
-            {
-                result += 360f;
-            }
-
-            return result;
+            return isChannelCorrect && phaseAligned && freqAligned && pipelineReady;
         }
 
         public float EvaluateSignalMatch(float freqErrorPercent, float phaseErrorDegrees)
         {
             RelayBPreset preset = GetCurrentPreset();
-            if (preset == null || _selectedChannelIndex < 0)
-            {
-                return 0f;
-            }
-
-            bool isChannelCorrect = (_selectedChannelIndex == preset.CorrectChannelIndex);
-            RelayBChannelDef channelDef = preset.GetChannel(_selectedChannelIndex);
-            bool isWaveformCorrect = channelDef != null && channelDef.Waveform == preset.ReferenceWaveform;
+            if (preset == null || _selectedChannelIndex < 0) return 0f;
 
             float freqScore = Mathf.Clamp01(1f - (freqErrorPercent / 20f));
             float phaseScore = Mathf.Clamp01(1f - (phaseErrorDegrees / 75f));
 
-            float waveShapeFactor;
-            if (isChannelCorrect && isWaveformCorrect)
+            if (_selectedChannelIndex != preset.CorrectChannelIndex)
             {
-                waveShapeFactor = 1.0f;
-            }
-            else
-            {
-                // Wrong channel waveforms never correlate above 65%
-                float distortion = channelDef != null ? channelDef.HarmonicDistortion : 0.3f;
-                waveShapeFactor = Mathf.Clamp(0.55f - distortion * 0.25f, 0.2f, 0.62f);
+                return Mathf.Min(65f, (freqScore * 0.5f + phaseScore * 0.5f) * 65f);
             }
 
-            float match = waveShapeFactor * freqScore * phaseScore * 100f;
-            return Mathf.Clamp(match, 0f, 100f);
+            return (freqScore * 0.5f + phaseScore * 0.5f) * 100f;
         }
 
-        private void UpdateDriftProgress()
+        public static float CalculateFrequencyErrorPercent(float current, float target)
         {
-            if (_config == null || !_config.EnableDrift || _driftTriggered)
-            {
-                return;
-            }
-
-            float triggerAt = _driftTriggerHoldSeconds;
-            float warnAt = Mathf.Max(0.5f, triggerAt - _config.DriftWarningSeconds);
-
-            if (_syncTimer >= warnAt && !_isDriftWarning && !_driftWarningFired)
-            {
-                _isDriftWarning = true;
-                _driftWarningFired = true;
-                DriftWarning?.Invoke();
-            }
-
-            if (_syncTimer >= triggerAt)
-            {
-                _isDriftWarning = false;
-                _isDriftActive = true;
-                _driftTriggered = true;
-                DriftTriggered?.Invoke();
-            }
+            if (target <= 0f) return 100f;
+            return Mathf.Abs(current - target) / target * 100f;
         }
 
-        private float GetEffectiveTargetPhase(RelayBPreset preset)
+        public static float CalculatePhaseErrorDegrees(float current, float target)
         {
-            float phase = preset.TargetPhase;
-            if (_isDriftActive && _config != null)
-            {
-                phase = NormalizeAngle(phase + _driftPhaseOffset);
-            }
-
-            return phase;
+            float diff = Mathf.Abs((current % 360f) - (target % 360f));
+            return diff > 180f ? 360f - diff : diff;
         }
 
-        private float GetEffectiveTargetFrequency(RelayBPreset preset)
+        public RelayBPreset GetCurrentPreset()
         {
-            float freq = preset.TargetFrequency;
-            if (_isDriftActive && _config != null)
-            {
-                freq *= (1f + _driftFrequencyOffsetPercent / 100f);
-            }
-
-            return freq;
+            return _attemptPreset ?? (_config != null ? _config.GetPreset(_presetIndex) : null);
         }
 
-        private RelayBPreset GetCurrentPreset()
+        private static RelayBPreset BuildAttemptPreset(RelayBPreset source, System.Random random)
         {
-            if (_config == null)
+            if (source == null || source.Candidates.Length != 4) return source;
+            float shift = (random.Next(-20, 21)) * 0.1f;
+            int pilotMask = random.Next(1, 256);
+            var order = new[] { 0, 1, 2, 3 };
+            for (int i = order.Length - 1; i > 0; i--)
             {
-                return null;
+                int other = random.Next(i + 1);
+                (order[i], order[other]) = (order[other], order[i]);
             }
 
-            return _config.GetPreset(_presetIndex);
+            RelayBReferenceProfile original = source.ReferenceProfile;
+            var profile = new RelayBReferenceProfile(
+                original.FundamentalMinKhz + shift, original.FundamentalMaxKhz + shift,
+                original.TargetFundamentalKhz + shift, original.TargetPhaseDegrees,
+                original.SecondHarmonicRequired, original.MaxDistortionPercent,
+                original.SymbolRateMin, original.SymbolRateMax,
+                MaskPilot(original.ExpectedPilot, pilotMask));
+            var candidates = new RelayBCandidate[4];
+            var channels = new RelayBChannelDef[4];
+            int correctIndex = -1;
+            for (int i = 0; i < order.Length; i++)
+            {
+                int sourceIndex = order[i];
+                RelayBCandidate candidate = source.GetCandidate(sourceIndex);
+                if (candidate == null) return source;
+                var peaks = new float[candidate.Peaks.Length];
+                for (int p = 0; p < peaks.Length; p++) peaks[p] = candidate.Peaks[p] + shift * (p + 1);
+                candidates[i] = new RelayBCandidate(i, peaks, candidate.DistortionPercent,
+                    candidate.SymbolRateKbaud, candidate.Waveform, MaskPilot(candidate.PilotFrame, pilotMask),
+                    candidate.HasSpur, candidate.SpurFrequencyKhz, candidate.Notes);
+                channels[i] = source.GetChannel(sourceIndex);
+                if (sourceIndex == source.CorrectChannelIndex) correctIndex = i;
+            }
+            return new RelayBPreset(source.PresetName, correctIndex, source.ReferenceWaveform,
+                source.TargetFrequency + shift, source.TargetPhase, channels, profile, candidates);
+        }
+
+        private static string MaskPilot(string pilot, int mask)
+        {
+            if (string.IsNullOrEmpty(pilot)) return pilot;
+            char[] bits = pilot.ToCharArray();
+            for (int i = 0; i < bits.Length && i < 8; i++)
+                if ((mask & (1 << i)) != 0) bits[i] = bits[i] == '1' ? '0' : '1';
+            return new string(bits);
+        }
+
+        public float GetEffectiveTargetPhase()
+        {
+            RelayBPreset preset = GetCurrentPreset();
+            return preset != null
+                ? (preset.TargetPhase + (_driftTriggered && _config != null ? _config.DriftPhaseOffset : 0f) + 360f) % 360f
+                : 0f;
+        }
+
+        // Backward compatibility methods
+        public void ApplyFrequencyCorrection(float deltaKhz) => SetFrequency(_currentFrequency + deltaKhz);
+        public void ScanChannels(float scanDuration = 1.0f)
+        {
+            _isScanning = true;
+            _scanDurationRemaining = scanDuration;
+            NotifyChanged();
+        }
+        public void SetProcessing(RelayBFilterMode filter, RelayBGainMode gain, RelayBPilotMode pilot)
+        {
+            _filterMode = filter;
+            _gainMode = gain;
+            _pilotMode = pilot;
+            NotifyChanged();
+        }
+        public RelayBChannelDiagnostic EvaluateSelectedChannel()
+        {
+            RelayBPreset preset = GetCurrentPreset();
+            bool valid = preset != null && _selectedChannelIndex == preset.CorrectChannelIndex;
+            return new RelayBChannelDiagnostic(valid, valid, valid, valid ? "NOMINAL" : "MISMATCH");
         }
 
         private RelayBSnapshot BuildSnapshot()
         {
             RelayBPreset preset = GetCurrentPreset();
-            float effectiveTargetFreq = preset != null ? GetEffectiveTargetFrequency(preset) : 50f;
-            float effectiveTargetPhase = preset != null ? GetEffectiveTargetPhase(preset) : 180f;
             WaveformType refWave = preset != null ? preset.ReferenceWaveform : WaveformType.Sine;
+            RelayBChannelDef chDef = preset != null && _selectedChannelIndex >= 0 ? preset.GetChannel(_selectedChannelIndex) : null;
+            WaveformType curWave = chDef != null ? chDef.Waveform : WaveformType.Sine;
 
-            RelayBChannelDef currentChannelDef = preset != null && _selectedChannelIndex >= 0
-                ? preset.GetChannel(_selectedChannelIndex)
-                : null;
-            WaveformType curWave = currentChannelDef != null ? currentChannelDef.Waveform : WaveformType.Sine;
-
-            float freqError = CalculateFrequencyErrorPercent(_currentFrequency, effectiveTargetFreq);
-            float phaseError = CalculatePhaseErrorDegrees(_currentPhase, effectiveTargetPhase);
-            float signalMatch = EvaluateSignalMatch(freqError, phaseError);
-            bool isSync = CheckIsSynchronized(out _, out _);
-            bool selectedChannelCorrect = preset != null
-                && _selectedChannelIndex >= 0
-                && _selectedChannelIndex == preset.CorrectChannelIndex;
-
-            float graceLimit = _config != null ? _config.InstabilityGraceSeconds : 0.5f;
-            float graceRemaining = Mathf.Max(0f, graceLimit - _instabilityGraceTimer);
-            float holdRequired = _config != null ? _config.HoldRequiredSeconds : 8f;
-
-            RelayBStatus status = DetermineStatus(isSync);
+            float targetFreq = preset != null ? preset.TargetFrequency : 50f;
+            float targetPhase = GetEffectiveTargetPhase();
+            bool isSync = CheckIsSynchronized(out float fErr, out float pErr);
+            float match = EvaluateSignalMatch(fErr, pErr);
+            bool correctChan = preset != null && _selectedChannelIndex == preset.CorrectChannelIndex;
 
             return new RelayBSnapshot(
-                status,
+                DetermineStatus(isSync),
                 _selectedChannelIndex,
                 _currentFrequency,
                 _currentPhase,
-                effectiveTargetFreq,
-                effectiveTargetPhase,
+                targetFreq,
+                targetPhase,
                 refWave,
                 curWave,
-                freqError,
-                phaseError,
-                signalMatch,
+                fErr,
+                pErr,
+                match,
                 _syncTimer,
-                holdRequired,
-                graceRemaining,
+                _config != null ? _config.HoldRequiredSeconds : 8f,
+                _instabilityGraceTimer,
                 isSync,
-                _isDriftActive,
-                _isDriftWarning,
-                _online,
+                _driftTriggered,
+                _driftWarningTriggered,
+                _isOnline,
                 _isScanning,
                 _hasScanned,
-                selectedChannelCorrect);
+                correctChan,
+                _filterMode,
+                _gainMode,
+                _pilotMode,
+                new RelayBChannelDiagnostic(correctChan, correctChan, correctChan, correctChan ? "OPTIMAL" : "DISTORTED"),
+                _outputDiagnostic,
+                preset != null ? preset.ReferenceProfile : null,
+                preset != null ? preset.Candidates : null,
+                _pipelineModules,
+                _activeTab,
+                _timingOffsetBaud,
+                _falseLockDetected,
+                _systemLog.ToArray(),
+                _cleanProblems,
+                Decoder.Snapshot);
         }
 
         private RelayBStatus DetermineStatus(bool isSync)
         {
-            if (_online) return RelayBStatus.Online;
+            if (_isOnline) return RelayBStatus.Online;
+            if (_falseLockDetected) return RelayBStatus.SignalMismatch;
             if (_isScanning) return RelayBStatus.Scanning;
             if (_isSyncing)
             {
-                if (_isDriftWarning) return RelayBStatus.DriftWarning;
-                if (isSync) return RelayBStatus.Synchronizing;
-                return RelayBStatus.ConnectionLost;
+                if (_driftWarningTriggered && !_driftTriggered) return RelayBStatus.DriftWarning;
+                if (!isSync) return RelayBStatus.ConnectionLost;
+                return RelayBStatus.Synchronizing;
             }
-
-            if (_selectedChannelIndex >= 0)
-            {
-                return RelayBStatus.ChannelSelected;
-            }
-
+            if (_selectedChannelIndex >= 0) return RelayBStatus.ChannelSelected;
             return RelayBStatus.Offline;
+        }
+
+        private void AddSystemLog(string msg)
+        {
+            string time = DateTime.Now.ToString("HH:mm:ss");
+            _systemLog.Add($"[{time}] {msg}");
+            if (_systemLog.Count > 10) _systemLog.RemoveAt(0);
+        }
+
+        private static float Range(System.Random rand, float min, float max)
+        {
+            return min + (float)rand.NextDouble() * (max - min);
         }
 
         private void NotifyChanged()
         {
             Changed?.Invoke(BuildSnapshot());
-        }
-
-        private static float Range(System.Random random, float min, float max)
-        {
-            return min + (float)random.NextDouble() * (max - min);
         }
     }
 }

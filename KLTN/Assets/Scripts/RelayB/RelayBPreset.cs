@@ -36,6 +36,8 @@ namespace EchoProtocol.RelayB
         [SerializeField, Range(10f, 100f)] private float targetFrequency = 50f;
         [SerializeField, Range(0f, 360f)] private float targetPhase = 180f;
         [SerializeField] private RelayBChannelDef[] channels = new RelayBChannelDef[4];
+        [SerializeField] private RelayBReferenceProfile referenceProfile;
+        [SerializeField] private RelayBCandidate[] candidates;
 
         public RelayBPreset() { }
 
@@ -45,7 +47,9 @@ namespace EchoProtocol.RelayB
             WaveformType wave,
             float freq,
             float phase,
-            RelayBChannelDef[] channelDefs)
+            RelayBChannelDef[] channelDefs,
+            RelayBReferenceProfile refProfile = null,
+            RelayBCandidate[] candDefs = null)
         {
             presetName = name;
             correctChannelIndex = Mathf.Clamp(correctIndex, 0, 3);
@@ -53,6 +57,8 @@ namespace EchoProtocol.RelayB
             targetFrequency = freq;
             targetPhase = phase;
             channels = channelDefs;
+            referenceProfile = refProfile;
+            candidates = candDefs;
         }
 
         public string PresetName => presetName;
@@ -61,6 +67,8 @@ namespace EchoProtocol.RelayB
         public float TargetFrequency => targetFrequency;
         public float TargetPhase => targetPhase;
         public RelayBChannelDef[] Channels => channels;
+        public RelayBReferenceProfile ReferenceProfile => referenceProfile ?? new RelayBReferenceProfile(targetFrequency - 5f, targetFrequency + 5f, targetFrequency, targetPhase, true, 10f, 8f, 10f, "10110100");
+        public RelayBCandidate[] Candidates => candidates ?? Array.Empty<RelayBCandidate>();
 
         public RelayBChannelDef GetChannel(int index)
         {
@@ -72,6 +80,16 @@ namespace EchoProtocol.RelayB
             int clamped = Mathf.Clamp(index, 0, channels.Length - 1);
             return channels[clamped];
         }
+
+        public RelayBCandidate GetCandidate(int index)
+        {
+            if (candidates == null || candidates.Length == 0)
+            {
+                return null;
+            }
+
+            int clamped = Mathf.Clamp(index, 0, candidates.Length - 1);
+            return candidates[clamped];
+        }
     }
 }
-

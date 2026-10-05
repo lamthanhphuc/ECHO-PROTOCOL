@@ -16,6 +16,7 @@ MonoBehaviour:
   phaseToleranceDegrees: 12
   holdRequiredSeconds: 14
   instabilityGraceSeconds: 0.5
+  instabilityDecaySecondsPerSecond: 2
   minFrequency: 10
   maxFrequency: 100
   enableDrift: 1
@@ -25,49 +26,160 @@ MonoBehaviour:
   driftFrequencyOffsetPercent: 1.5
   presets:
   - presetName: Carrier Alpha (Echo-01)
-    correctChannelIndex: 1
+    correctChannelIndex: 2
     referenceWaveform: 0
-    targetFrequency: 42
+    targetFrequency: 68
     targetPhase: 90
     channels:
     - channelLabel: CHANNEL 01
-      waveform: 2
-      harmonicDistortion: 0.2
+      waveform: 0
+      harmonicDistortion: 0.164
       frequencyMultiplier: 1
     - channelLabel: CHANNEL 02
       waveform: 0
-      harmonicDistortion: 0
+      harmonicDistortion: 0.058
       frequencyMultiplier: 1
     - channelLabel: CHANNEL 03
-      waveform: 1
-      harmonicDistortion: 0.15
+      waveform: 0
+      harmonicDistortion: 0.068
       frequencyMultiplier: 1
     - channelLabel: CHANNEL 04
-      waveform: 4
-      harmonicDistortion: 0.3
-      frequencyMultiplier: 1
+      waveform: 2
+      harmonicDistortion: 0.182
+      frequencyMultiplier: 0.985
+    referenceProfile:
+      fundamentalMinKhz: 65
+      fundamentalMaxKhz: 71
+      targetFundamentalKhz: 68
+      targetPhaseDegrees: 90
+      secondHarmonicRequired: 1
+      maxDistortionPercent: 10
+      symbolRateMin: 8
+      symbolRateMax: 10
+      expectedPilot: 10110100
+    candidates:
+    - channelIndex: 0
+      peaks:
+      - 73
+      - 146
+      - 102
+      distortionPercent: 16.4
+      symbolRateKbaud: 9.1
+      waveform: 0
+      pilotFrame: 10110100
+      hasSpur: 1
+      spurFrequencyKhz: 34
+      notes: Subharmonic spur at 34 kHz
+    - channelIndex: 1
+      peaks:
+      - 68
+      - 95
+      distortionPercent: 5.8
+      symbolRateKbaud: 5
+      waveform: 0
+      pilotFrame: 01010101
+      hasSpur: 0
+      spurFrequencyKhz: 0
+      notes: Symbol rate mismatch (5.0 kbaud)
+    - channelIndex: 2
+      peaks:
+      - 68
+      - 136
+      distortionPercent: 6.8
+      symbolRateKbaud: 9
+      waveform: 0
+      pilotFrame: 10110100
+      hasSpur: 0
+      spurFrequencyKhz: 0
+      notes: Nominal harmonic spacing (Target)
+    - channelIndex: 3
+      peaks:
+      - 67
+      - 134
+      distortionPercent: 18.2
+      symbolRateKbaud: 9.2
+      waveform: 2
+      pilotFrame: 10110100
+      hasSpur: 1
+      spurFrequencyKhz: 100
+      notes: High harmonic distortion & waveform mismatch
   - presetName: Pulse Beta (Echo-02)
-    correctChannelIndex: 2
-    referenceWaveform: 2
-    targetFrequency: 68
+    correctChannelIndex: 1
+    referenceWaveform: 0
+    targetFrequency: 42
     targetPhase: 240
     channels:
     - channelLabel: CHANNEL 01
-      waveform: 1
-      harmonicDistortion: 0.25
+      waveform: 0
+      harmonicDistortion: 0.22
       frequencyMultiplier: 1
     - channelLabel: CHANNEL 02
-      waveform: 4
-      harmonicDistortion: 0.2
+      waveform: 0
+      harmonicDistortion: 0.045
       frequencyMultiplier: 1
     - channelLabel: CHANNEL 03
-      waveform: 2
-      harmonicDistortion: 0
+      waveform: 4
+      harmonicDistortion: 0.05
       frequencyMultiplier: 1
     - channelLabel: CHANNEL 04
+      waveform: 1
+      harmonicDistortion: 0.06
+      frequencyMultiplier: 0.72
+    referenceProfile:
+      fundamentalMinKhz: 39
+      fundamentalMaxKhz: 45
+      targetFundamentalKhz: 42
+      targetPhaseDegrees: 240
+      secondHarmonicRequired: 1
+      maxDistortionPercent: 10
+      symbolRateMin: 8
+      symbolRateMax: 10
+      expectedPilot: 11001010
+    candidates:
+    - channelIndex: 0
+      peaks:
+      - 47
+      - 94
+      distortionPercent: 22
+      symbolRateKbaud: 9.2
       waveform: 0
-      harmonicDistortion: 0.1
-      frequencyMultiplier: 1
+      pilotFrame: 11001010
+      hasSpur: 1
+      spurFrequencyKhz: 84
+      notes: Severe 2nd harmonic overload (22% THD)
+    - channelIndex: 1
+      peaks:
+      - 42
+      - 84
+      distortionPercent: 4.5
+      symbolRateKbaud: 9
+      waveform: 0
+      pilotFrame: 11001010
+      hasSpur: 0
+      spurFrequencyKhz: 0
+      notes: Clean harmonic pilot lock (Target)
+    - channelIndex: 2
+      peaks:
+      - 42
+      - 63
+      distortionPercent: 5
+      symbolRateKbaud: 6.5
+      waveform: 4
+      pilotFrame: 11001010
+      hasSpur: 0
+      spurFrequencyKhz: 0
+      notes: Waveform & clock mismatch
+    - channelIndex: 3
+      peaks:
+      - 42
+      - 84
+      distortionPercent: 6
+      symbolRateKbaud: 9.1
+      waveform: 0
+      pilotFrame: 11001011
+      hasSpur: 0
+      spurFrequencyKhz: 0
+      notes: Carrier out of frequency band (30 kHz)
   - presetName: Sub-Harmonic Gamma (Echo-03)
     correctChannelIndex: 0
     referenceWaveform: 4
@@ -76,20 +188,75 @@ MonoBehaviour:
     channels:
     - channelLabel: CHANNEL 01
       waveform: 4
-      harmonicDistortion: 0
+      harmonicDistortion: 0.042
       frequencyMultiplier: 1
     - channelLabel: CHANNEL 02
-      waveform: 0
-      harmonicDistortion: 0.2
-      frequencyMultiplier: 1
+      waveform: 4
+      harmonicDistortion: 0.26
+      frequencyMultiplier: 1.01
     - channelLabel: CHANNEL 03
       waveform: 2
-      harmonicDistortion: 0.35
-      frequencyMultiplier: 1
+      harmonicDistortion: 0.06
+      frequencyMultiplier: 0.98
     - channelLabel: CHANNEL 04
       waveform: 1
-      harmonicDistortion: 0.4
-      frequencyMultiplier: 1
+      harmonicDistortion: 0.04
+      frequencyMultiplier: 0.74
+    referenceProfile:
+      fundamentalMinKhz: 25
+      fundamentalMaxKhz: 32
+      targetFundamentalKhz: 28.5
+      targetPhaseDegrees: 180
+      secondHarmonicRequired: 1
+      maxDistortionPercent: 10
+      symbolRateMin: 8.5
+      symbolRateMax: 10.5
+      expectedPilot: 10011101
+    candidates:
+    - channelIndex: 0
+      peaks:
+      - 28.5
+      - 57
+      distortionPercent: 4.2
+      symbolRateKbaud: 9.5
+      waveform: 4
+      pilotFrame: 10011101
+      hasSpur: 1
+      spurFrequencyKhz: 0
+      notes: Nominal composite carrier (Target)
+    - channelIndex: 1
+      peaks:
+      - 28.5
+      - 42
+      distortionPercent: 26
+      symbolRateKbaud: 9.6
+      waveform: 4
+      pilotFrame: 10011111
+      hasSpur: 1
+      spurFrequencyKhz: 42
+      notes: High intermodulation distortion (26% THD)
+    - channelIndex: 2
+      peaks:
+      - 28
+      - 56
+      distortionPercent: 6
+      symbolRateKbaud: 7.2
+      waveform: 2
+      pilotFrame: 10011101
+      hasSpur: 0
+      spurFrequencyKhz: 0
+      notes: Baud rate mismatch & triangle wave
+    - channelIndex: 3
+      peaks:
+      - 34
+      - 68
+      distortionPercent: 4
+      symbolRateKbaud: 9.5
+      waveform: 4
+      pilotFrame: 10011101
+      hasSpur: 0
+      spurFrequencyKhz: 0
+      notes: Out of band fundamental
   - presetName: Flux Delta (Echo-04)
     correctChannelIndex: 3
     referenceWaveform: 1
@@ -97,18 +264,73 @@ MonoBehaviour:
     targetPhase: 315
     channels:
     - channelLabel: CHANNEL 01
-      waveform: 0
-      harmonicDistortion: 0.3
-      frequencyMultiplier: 1
+      waveform: 1
+      harmonicDistortion: 0.28
+      frequencyMultiplier: 0.99
     - channelLabel: CHANNEL 02
       waveform: 2
-      harmonicDistortion: 0.15
-      frequencyMultiplier: 1
+      harmonicDistortion: 0.05
+      frequencyMultiplier: 1.01
     - channelLabel: CHANNEL 03
       waveform: 4
-      harmonicDistortion: 0.25
+      harmonicDistortion: 0.05
       frequencyMultiplier: 1
     - channelLabel: CHANNEL 04
       waveform: 1
-      harmonicDistortion: 0
+      harmonicDistortion: 0.035
       frequencyMultiplier: 1
+    referenceProfile:
+      fundamentalMinKhz: 80
+      fundamentalMaxKhz: 90
+      targetFundamentalKhz: 85
+      targetPhaseDegrees: 315
+      secondHarmonicRequired: 1
+      maxDistortionPercent: 10
+      symbolRateMin: 8
+      symbolRateMax: 10
+      expectedPilot: 11100100
+    candidates:
+    - channelIndex: 0
+      peaks:
+      - 92
+      - 184
+      distortionPercent: 28
+      symbolRateKbaud: 9.3
+      waveform: 1
+      pilotFrame: 11100100
+      hasSpur: 1
+      spurFrequencyKhz: 170
+      notes: Amplifier distortion saturated
+    - channelIndex: 1
+      peaks:
+      - 85
+      - 120
+      distortionPercent: 5
+      symbolRateKbaud: 5.5
+      waveform: 2
+      pilotFrame: 11100100
+      hasSpur: 0
+      spurFrequencyKhz: 0
+      notes: Waveform and baud rate mismatch
+    - channelIndex: 2
+      peaks:
+      - 85
+      - 170
+      distortionPercent: 5
+      symbolRateKbaud: 9.1
+      waveform: 1
+      pilotFrame: 01010101
+      hasSpur: 0
+      spurFrequencyKhz: 0
+      notes: False pilot key frame
+    - channelIndex: 3
+      peaks:
+      - 85
+      - 170
+      distortionPercent: 18
+      symbolRateKbaud: 9.2
+      waveform: 1
+      pilotFrame: 11100100
+      hasSpur: 0
+      spurFrequencyKhz: 0
+      notes: Nominal high-band square wave (Target)

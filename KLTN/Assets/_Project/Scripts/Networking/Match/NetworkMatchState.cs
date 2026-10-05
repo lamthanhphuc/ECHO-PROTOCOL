@@ -14,6 +14,28 @@ using UnityEngine;
 
 namespace EchoProtocol.Networking
 {
+    public struct RelayABreakerTelemetry : INetworkStruct
+    {
+        public uint Red;
+        public uint Pulse;
+        public int Pattern;
+        public int Moves;
+        public int Sequence;
+        public byte Phase;
+    }
+
+    public struct RelayAStabilizationTelemetry : INetworkStruct
+    {
+        public Vector3 Controls;
+        public Vector3 Readings;
+        public NetworkBool Running;
+        public float Progress;
+        public byte WarningFault;
+        public byte ActiveFault;
+        public Vector2 FaultTimers;
+        public int RecoveredFaults;
+    }
+
     public enum NetworkMatchPhase
     {
         CoreObjective = 0,
@@ -139,23 +161,57 @@ namespace EchoProtocol.Networking
         [Networked] public PlayerRef RelayB1Operator { get; private set; }
         [Networked] public PlayerRef RelayB2Operator { get; private set; }
         [Networked] public int RelayA1AttemptSeed { get; private set; }
-        [Networked] public Vector3 RelayA1Controls { get; private set; }
-        [Networked] public NetworkBool RelayA1Running { get; private set; }
+        [Networked] public int RelayA1CircuitScenario { get; private set; }
+        [Networked] public RelayAStabilizationTelemetry RelayA1Stabilization { get; private set; }
+        [Networked] public RelayAStabilizationTelemetry RelayA2Stabilization { get; private set; }
+        [Networked] public RelayABreakerTelemetry RelayA1Breakers { get; private set; }
+        [Networked] public RelayABreakerTelemetry RelayA2Breakers { get; private set; }
+        [Networked] public ulong RelayA1CircuitRotations { get; private set; }
+        [Networked] public byte RelayA1CircuitPhase { get; private set; }
+        [Networked] public ulong RelayA1CircuitPowered { get; private set; }
+        [Networked] public int RelayA1CircuitMissing { get; private set; }
+        [Networked] public NetworkBool RelayA1CircuitTrip { get; private set; }
+        [Networked] public NetworkBool RelayA1CircuitFaultActive { get; private set; }
+        [Networked] public int RelayA1CircuitTestSequence { get; private set; }
         [Networked] public int RelayA2AttemptSeed { get; private set; }
-        [Networked] public Vector3 RelayA2Controls { get; private set; }
-        [Networked] public NetworkBool RelayA2Running { get; private set; }
+        [Networked] public int RelayA2CircuitScenario { get; private set; }
+        [Networked] public ulong RelayA2CircuitRotations { get; private set; }
+        [Networked] public byte RelayA2CircuitPhase { get; private set; }
+        [Networked] public ulong RelayA2CircuitPowered { get; private set; }
+        [Networked] public int RelayA2CircuitMissing { get; private set; }
+        [Networked] public NetworkBool RelayA2CircuitTrip { get; private set; }
+        [Networked] public NetworkBool RelayA2CircuitFaultActive { get; private set; }
+        [Networked] public int RelayA2CircuitTestSequence { get; private set; }
         [Networked] public int RelayB1AttemptSeed { get; private set; }
         [Networked] public int RelayB1PresetIndex { get; private set; }
         [Networked] public int RelayB1Channel { get; private set; }
         [Networked] public float RelayB1Frequency { get; private set; }
         [Networked] public float RelayB1Phase { get; private set; }
         [Networked] public NetworkBool RelayB1Synchronizing { get; private set; }
+        [Networked] public NetworkBool RelayB1Scanned { get; private set; }
+        [Networked] public int RelayB1Slot1 { get; private set; }
+        [Networked] public int RelayB1Slot2 { get; private set; }
+        [Networked] public NetworkBool RelayB1Tested { get; private set; }
+        [Networked] public int RelayB1CleanSeed { get; private set; }
+        [Networked] public float RelayB1SyncProgress { get; private set; }
+        [Networked] public RelayBDecodeTelemetry RelayB1Decoder { get; private set; }
+        [Networked] public RelayBDecodeTelemetry RelayB2Decoder { get; private set; }
+        [Networked] public NetworkBool RelayB1DriftActive { get; private set; }
+        [Networked] public NetworkBool RelayB1DriftWarning { get; private set; }
         [Networked] public int RelayB2AttemptSeed { get; private set; }
         [Networked] public int RelayB2PresetIndex { get; private set; }
         [Networked] public int RelayB2Channel { get; private set; }
         [Networked] public float RelayB2Frequency { get; private set; }
         [Networked] public float RelayB2Phase { get; private set; }
         [Networked] public NetworkBool RelayB2Synchronizing { get; private set; }
+        [Networked] public NetworkBool RelayB2Scanned { get; private set; }
+        [Networked] public int RelayB2Slot1 { get; private set; }
+        [Networked] public int RelayB2Slot2 { get; private set; }
+        [Networked] public NetworkBool RelayB2Tested { get; private set; }
+        [Networked] public int RelayB2CleanSeed { get; private set; }
+        [Networked] public float RelayB2SyncProgress { get; private set; }
+        [Networked] public NetworkBool RelayB2DriftActive { get; private set; }
+        [Networked] public NetworkBool RelayB2DriftWarning { get; private set; }
         [Networked] private NetworkBool Zone2RelayRuntimeInitialized { get; set; }
         [Networked] public PlayerRef SecurityHoldOperator { get; private set; }
         [Networked] public PlayerRef SecurityHoldOperator2 { get; private set; }
@@ -461,6 +517,30 @@ namespace EchoProtocol.Networking
                 EmitRelayRepairNoiseAuthoritative();
                 AdvanceSecurityHoldAuthoritative();
                 EmitSecurityHoldNoiseAuthoritative();
+                var relayDirector = Zone2MissionDirector.Instance;
+                if (relayDirector != null)
+                {
+                    if (relayDirector.RelayA1 != null)
+                        CaptureRelayACircuitState(RelaySlot.RelayA_1, relayDirector.RelayA1);
+                    if (relayDirector.RelayA2 != null)
+                        CaptureRelayACircuitState(RelaySlot.RelayA_2, relayDirector.RelayA2);
+                    if (relayDirector.RelayB1 != null)
+                    {
+                        var b1Sync = relayDirector.RelayB1.Snapshot;
+                        RelayB1SyncProgress = b1Sync.SyncProgressSeconds;
+                        RelayB1Decoder = RelayBDecodeTelemetry.From(b1Sync.Decoder);
+                        RelayB1DriftActive = b1Sync.IsDriftActive;
+                        RelayB1DriftWarning = b1Sync.IsDriftWarning;
+                    }
+                    if (relayDirector.RelayB2 != null)
+                    {
+                        var b2Sync = relayDirector.RelayB2.Snapshot;
+                        RelayB2SyncProgress = b2Sync.SyncProgressSeconds;
+                        RelayB2Decoder = RelayBDecodeTelemetry.From(b2Sync.Decoder);
+                        RelayB2DriftActive = b2Sync.IsDriftActive;
+                        RelayB2DriftWarning = b2Sync.IsDriftWarning;
+                    }
+                }
             }
 
             var zone3 = Zone3MissionDirector.Instance;
@@ -705,40 +785,53 @@ namespace EchoProtocol.Networking
             else RpcReleaseRelay((int)slot);
         }
 
-        public bool RequestRelayAControls(RelaySlot slot, float generatorOutput, float frequencyRegulator, float loadDistribution)
+        public bool RequestRelayARotate(RelaySlot slot, int cellIndex)
         {
             if (!HasValidNetworkObject()) return false;
             if (Object.HasStateAuthority)
-            {
-                if (!TryGetLocalRequester(out var requester)) return false;
-                return TryApplyRelayAControlsAuthoritative(
-                    requester, slot, generatorOutput, frequencyRegulator, loadDistribution);
-            }
-            RpcRelayAControls((int)slot, generatorOutput, frequencyRegulator, loadDistribution);
+                return TryGetLocalRequester(out var requester)
+                    && TryRotateRelayACircuitAuthoritative(requester, slot, cellIndex);
+            RpcRelayARotate((int)slot, cellIndex);
             return true;
         }
 
-        public bool RequestRelayAStart(RelaySlot slot)
+        public bool RequestRelayATest(RelaySlot slot)
         {
             if (!HasValidNetworkObject()) return false;
             if (Object.HasStateAuthority)
-            {
                 return TryGetLocalRequester(out var requester)
-                    && TrySetRelayARunningAuthoritative(requester, slot, true);
-            }
-            RpcRelayAStart((int)slot);
+                    && TryTestRelayACircuitAuthoritative(requester, slot);
+            RpcRelayATest((int)slot);
             return true;
         }
 
-        public bool RequestRelayAEmergencyStop(RelaySlot slot)
+        public bool RequestRelayAStabilizationControls(RelaySlot slot, Vector3 controls)
         {
             if (!HasValidNetworkObject()) return false;
             if (Object.HasStateAuthority)
-            {
                 return TryGetLocalRequester(out var requester)
-                    && TrySetRelayARunningAuthoritative(requester, slot, false);
-            }
-            RpcRelayAEmergencyStop((int)slot);
+                    && TryRelayAStabilizationAuthoritative(requester, slot, controls, 0);
+            RpcRelayAStabilization((int)slot, controls, 0);
+            return true;
+        }
+
+        public bool RequestRelayABreaker(RelaySlot slot, int cell, bool reset)
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+                return TryGetLocalRequester(out var requester)
+                    && TryRelayABreakerAuthoritative(requester, slot, cell, reset);
+            RpcRelayABreaker((int)slot, cell, reset);
+            return true;
+        }
+
+        public bool RequestRelayAStabilizationRunning(RelaySlot slot, bool running)
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+                return TryGetLocalRequester(out var requester)
+                    && TryRelayAStabilizationAuthoritative(requester, slot, default, running ? 1 : 2);
+            RpcRelayAStabilization((int)slot, default, running ? 1 : 2);
             return true;
         }
 
@@ -763,6 +856,26 @@ namespace EchoProtocol.Networking
                     && TryRelayBActionAuthoritative(requester, slot, RelayBAction.Scan);
             }
             RpcRelayBScan((int)slot);
+            return true;
+        }
+
+        public bool RequestRelayBSlot(RelaySlot slot, int slotIndex, RelayBModuleType module)
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+                return TryGetLocalRequester(out var requester)
+                    && TrySetRelayBSlotAuthoritative(requester, slot, slotIndex, module);
+            RpcRelayBSlot((int)slot, slotIndex, (int)module);
+            return true;
+        }
+
+        public bool RequestRelayBTest(RelaySlot slot)
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+                return TryGetLocalRequester(out var requester)
+                    && TryTestRelayBAuthoritative(requester, slot);
+            RpcRelayBTest((int)slot);
             return true;
         }
 
@@ -856,24 +969,36 @@ namespace EchoProtocol.Networking
             ReleaseRelayAuthoritative(info.Source, (RelaySlot)relaySlot);
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        private void RpcRelayAControls(int relaySlot, float generatorOutput, float frequencyRegulator, float loadDistribution, RpcInfo info = default) =>
-            TryApplyRelayAControlsAuthoritative(info.Source, (RelaySlot)relaySlot, generatorOutput, frequencyRegulator, loadDistribution);
+        private void RpcRelayARotate(int relaySlot, int cellIndex, RpcInfo info = default) =>
+            TryRotateRelayACircuitAuthoritative(info.Source, (RelaySlot)relaySlot, cellIndex);
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        private void RpcRelayAStart(int relaySlot, RpcInfo info = default) =>
-            TrySetRelayARunningAuthoritative(info.Source, (RelaySlot)relaySlot, true);
+        private void RpcRelayATest(int relaySlot, RpcInfo info = default) =>
+            TryTestRelayACircuitAuthoritative(info.Source, (RelaySlot)relaySlot);
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        private void RpcRelayAEmergencyStop(int relaySlot, RpcInfo info = default) =>
-            TrySetRelayARunningAuthoritative(info.Source, (RelaySlot)relaySlot, false);
+        private void RpcRelayABreaker(int relaySlot, int cell, bool reset, RpcInfo info = default) =>
+            TryRelayABreakerAuthoritative(info.Source, (RelaySlot)relaySlot, cell, reset);
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         private void RpcRelayBControls(int relaySlot, int channel, float frequency, float phase, RpcInfo info = default) =>
             TryApplyRelayBControlsAuthoritative(info.Source, (RelaySlot)relaySlot, channel, frequency, phase);
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRelayAStabilization(int relaySlot, Vector3 controls, int action, RpcInfo info = default) =>
+            TryRelayAStabilizationAuthoritative(info.Source, (RelaySlot)relaySlot, controls, action);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         private void RpcRelayBScan(int relaySlot, RpcInfo info = default) =>
             TryRelayBActionAuthoritative(info.Source, (RelaySlot)relaySlot, RelayBAction.Scan);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRelayBSlot(int relaySlot, int slotIndex, int module, RpcInfo info = default) =>
+            TrySetRelayBSlotAuthoritative(info.Source, (RelaySlot)relaySlot, slotIndex, (RelayBModuleType)module);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRelayBTest(int relaySlot, RpcInfo info = default) =>
+            TryTestRelayBAuthoritative(info.Source, (RelaySlot)relaySlot);
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         private void RpcRelayBStartSync(int relaySlot, RpcInfo info = default) =>
@@ -942,29 +1067,130 @@ namespace EchoProtocol.Networking
             HandleReplicatedStateChanged();
         }
 
-        private bool TryApplyRelayAControlsAuthoritative(
-            PlayerRef requester, RelaySlot slot, float generatorOutput, float frequencyRegulator, float loadDistribution)
+        private bool TryRotateRelayACircuitAuthoritative(PlayerRef requester, RelaySlot slot, int cellIndex)
         {
-            if (!IsRelayASlot(slot) || !TryValidateRelayCommand(requester, slot, out var target)) return false;
-            if (!float.IsFinite(generatorOutput) || !float.IsFinite(frequencyRegulator) || !float.IsFinite(loadDistribution)) return false;
-            if (!ClaimRelayOperator(requester, slot)) return false;
+            if ((slot != RelaySlot.RelayA_1 && slot != RelaySlot.RelayA_2)
+                || !TryValidateRelayCommand(requester, slot, out var target)
+                || GetRelayOperator(slot) != requester) return false;
             var controller = (RelayAController)target;
-            controller.SetControls(generatorOutput, frequencyRegulator, loadDistribution);
-            var controls = controller.Snapshot.Controls;
-            if (slot == RelaySlot.RelayA_1) RelayA1Controls = controls;
-            else RelayA2Controls = controls;
+            if (!controller.RotateCircuitTile(cellIndex)) return false;
+            CaptureRelayACircuitState(slot, controller);
             HandleReplicatedStateChanged();
             return true;
         }
 
-        private bool TrySetRelayARunningAuthoritative(PlayerRef requester, RelaySlot slot, bool running)
+        private bool TryTestRelayACircuitAuthoritative(PlayerRef requester, RelaySlot slot)
         {
-            if (!IsRelayASlot(slot) || !TryValidateRelayCommand(requester, slot, out var target)) return false;
-            if (!ClaimRelayOperator(requester, slot)) return false;
-            if (slot == RelaySlot.RelayA_1) RelayA1Running = running;
-            else RelayA2Running = running;
-            if (running) ((RelayAController)target).StartStabilization();
-            else ((RelayAController)target).EmergencyStop();
+            if ((slot != RelaySlot.RelayA_1 && slot != RelaySlot.RelayA_2)
+                || !TryValidateRelayCommand(requester, slot, out var target)
+                || GetRelayOperator(slot) != requester) return false;
+            var controller = (RelayAController)target;
+            if (!controller.TestCircuit()) return false;
+            CaptureRelayACircuitState(slot, controller);
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
+        private void CaptureRelayACircuitState(RelaySlot slot, RelayAController controller)
+        {
+            var breakers = controller.Circuit.Breakers.Snapshot;
+            var breakerTelemetry = new RelayABreakerTelemetry
+            {
+                Red = breakers.Red, Pulse = breakers.Pulse, Pattern = breakers.PatternIndex,
+                Moves = breakers.Moves, Sequence = breakers.Sequence, Phase = (byte)breakers.Phase,
+            };
+            if (slot == RelaySlot.RelayA_1) RelayA1Breakers = breakerTelemetry;
+            else RelayA2Breakers = breakerTelemetry;
+            var stabilization = controller.Circuit.Stabilization.Snapshot;
+            var telemetry = new RelayAStabilizationTelemetry
+            {
+                Controls = stabilization.Controls,
+                Readings = new Vector3(stabilization.Outputs.Voltage, stabilization.Outputs.Frequency, stabilization.Outputs.LoadBalance),
+                Running = stabilization.IsRunning,
+                Progress = stabilization.StabilitySeconds,
+                WarningFault = (byte)stabilization.WarningFault,
+                ActiveFault = (byte)stabilization.ActiveFault,
+                FaultTimers = new Vector2(stabilization.FaultWarningRemaining, stabilization.FaultActiveRemaining),
+                RecoveredFaults = stabilization.RecoveredFaults,
+            };
+            if (slot == RelaySlot.RelayA_1) RelayA1Stabilization = telemetry;
+            else RelayA2Stabilization = telemetry;
+            var state = controller.CircuitSnapshot;
+            ulong rotations = controller.Circuit.PackedRotations;
+            if (slot == RelaySlot.RelayA_1)
+            {
+                RelayA1CircuitScenario = state.ScenarioIndex;
+                RelayA1CircuitRotations = rotations;
+                RelayA1CircuitPhase = (byte)state.Phase;
+                RelayA1CircuitPowered = state.Powered;
+                RelayA1CircuitMissing = state.MissingTargets;
+                RelayA1CircuitTrip = state.FaultPowered;
+                RelayA1CircuitFaultActive = state.FaultActive;
+                RelayA1CircuitTestSequence = state.TestSequence;
+            }
+            else
+            {
+                RelayA2CircuitScenario = state.ScenarioIndex;
+                RelayA2CircuitRotations = rotations;
+                RelayA2CircuitPhase = (byte)state.Phase;
+                RelayA2CircuitPowered = state.Powered;
+                RelayA2CircuitMissing = state.MissingTargets;
+                RelayA2CircuitTrip = state.FaultPowered;
+                RelayA2CircuitFaultActive = state.FaultActive;
+                RelayA2CircuitTestSequence = state.TestSequence;
+            }
+        }
+
+        private bool TryRelayABreakerAuthoritative(PlayerRef requester, RelaySlot slot, int cell, bool reset)
+        {
+            if ((slot != RelaySlot.RelayA_1 && slot != RelaySlot.RelayA_2)
+                || !TryValidateRelayCommand(requester, slot, out var target)
+                || GetRelayOperator(slot) != requester) return false;
+            var controller = (RelayAController)target;
+            if (!(reset ? controller.ResetBreakers() : controller.PressBreaker(cell))) return false;
+            CaptureRelayACircuitState(slot, controller);
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
+        public bool RequestRelayBTransmit(RelaySlot slot, int packed, int round, int attempt)
+        {
+            if (!HasValidNetworkObject()) return false;
+            if (Object.HasStateAuthority)
+                return TryGetLocalRequester(out var requester)
+                    && TryTransmitRelayBAuthoritative(requester, slot, packed, round, attempt);
+            RpcRelayBTransmit((int)slot, packed, round, attempt);
+            return true;
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRelayBTransmit(int relaySlot, int packed, int round, int attempt, RpcInfo info = default) =>
+            TryTransmitRelayBAuthoritative(info.Source, (RelaySlot)relaySlot, packed, round, attempt);
+
+        private bool TryTransmitRelayBAuthoritative(PlayerRef requester, RelaySlot slot, int packed, int round, int attempt)
+        {
+            if (!IsRelayBSlot(slot) || !RelayBDecoder.IsValidCode(packed)
+                || !TryValidateRelayCommand(requester, slot, out var target)) return false;
+            var controller = (RelayBController)target;
+            var state = controller.Snapshot.Decoder;
+            if (!controller.Simulation.IsSignalFound || !state.CanEdit || state.Round != round || state.Attempts != attempt
+                || !ClaimRelayOperator(requester, slot) || !controller.TransmitCode(packed)) return false;
+            if (slot == RelaySlot.RelayB_1) RelayB1Decoder = RelayBDecodeTelemetry.From(controller.Snapshot.Decoder);
+            else RelayB2Decoder = RelayBDecodeTelemetry.From(controller.Snapshot.Decoder);
+            HandleReplicatedStateChanged();
+            return true;
+        }
+
+        private bool TryRelayAStabilizationAuthoritative(PlayerRef requester, RelaySlot slot, Vector3 controls, int action)
+        {
+            if ((slot != RelaySlot.RelayA_1 && slot != RelaySlot.RelayA_2)
+                || !TryValidateRelayCommand(requester, slot, out var target)
+                || GetRelayOperator(slot) != requester) return false;
+            var controller = (RelayAController)target;
+            bool accepted = action == 0 ? controller.SetControls(controls.x, controls.y, controls.z)
+                : action == 1 ? controller.StartStabilization() : action == 2 && controller.EmergencyStop();
+            if (!accepted) return false;
+            CaptureRelayACircuitState(slot, controller);
             HandleReplicatedStateChanged();
             return true;
         }
@@ -976,12 +1202,19 @@ namespace EchoProtocol.Networking
                 || !float.IsFinite(frequency) || !float.IsFinite(phase)
                 || !TryValidateRelayCommand(requester, slot, out var target)) return false;
             var controller = (RelayBController)target;
-            var before = controller.Snapshot;
-            bool changingChannel = channel != before.SelectedChannelIndex;
-            if (!changingChannel && channel >= 0 && !before.IsSelectedChannelCorrect) return false;
+            if (controller.Simulation.IsSynchronizing && channel != controller.Snapshot.SelectedChannelIndex) return false;
             if (!ClaimRelayOperator(requester, slot)) return false;
+            var before = controller.Snapshot;
+            if (before.SelectedChannelIndex >= 0 && channel != before.SelectedChannelIndex) return false;
             controller.ApplyAuthoritativeControls(channel, frequency, phase);
             var snapshot = controller.Snapshot;
+            if (channel >= 0 && before.HasScanned && before.SelectedChannelIndex < 0
+                && snapshot.SelectedChannelIndex < 0)
+            {
+                RerollRelayBFindAuthoritative(slot, controller, channel);
+                HandleReplicatedStateChanged();
+                return true;
+            }
             if (slot == RelaySlot.RelayB_1)
             {
                 RelayB1Channel = snapshot.SelectedChannelIndex;
@@ -998,18 +1231,34 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        private bool TrySetRelayBSlotAuthoritative(PlayerRef requester, RelaySlot slot, int slotIndex, RelayBModuleType module)
+        {
+            // Retired DSP commands cannot modify the decoder or unlock synchronization.
+            return false;
+        }
+
+
+        private bool TryTestRelayBAuthoritative(PlayerRef requester, RelaySlot slot)
+        {
+            return false;
+        }
+
+
         private bool TryRelayBActionAuthoritative(PlayerRef requester, RelaySlot slot, RelayBAction action)
         {
             if (!IsRelayBSlot(slot) || !TryValidateRelayCommand(requester, slot, out var target)) return false;
             var controller = (RelayBController)target;
             if (action == RelayBAction.StartSync
                 && (controller.Snapshot.SelectedChannelIndex < 0
-                    || !controller.Snapshot.IsSelectedChannelCorrect)) return false;
+                    || !controller.Snapshot.HasScanned
+                    || !controller.Simulation.IsSignalClean)) return false;
             if (!ClaimRelayOperator(requester, slot)) return false;
             switch (action)
             {
                 case RelayBAction.Scan:
                     controller.ScanChannels();
+                    if (slot == RelaySlot.RelayB_1) RelayB1Scanned = true;
+                    else RelayB2Scanned = true;
                     break;
                 case RelayBAction.StartSync:
                     SetRelayActiveState(slot, true);
@@ -2090,10 +2339,6 @@ namespace EchoProtocol.Networking
             RelayA2AttemptSeed = 0;
             RelayB1AttemptSeed = 0;
             RelayB2AttemptSeed = 0;
-            RelayA1Controls = Vector3.zero;
-            RelayA2Controls = Vector3.zero;
-            RelayA1Running = false;
-            RelayA2Running = false;
             RelayB1PresetIndex = 0;
             RelayB2PresetIndex = 0;
             RelayB1Channel = -1;
@@ -2104,6 +2349,15 @@ namespace EchoProtocol.Networking
             RelayB2Phase = 0f;
             RelayB1Synchronizing = false;
             RelayB2Synchronizing = false;
+            RelayB1Scanned = false;
+            RelayB2Scanned = false;
+            RelayB1Slot1 = RelayB1Slot2 = RelayB2Slot1 = RelayB2Slot2 = 0;
+            RelayB1Tested = false;
+            RelayB2Tested = false;
+            RelayB1CleanSeed = RelayB2CleanSeed = 0;
+            RelayB1SyncProgress = RelayB2SyncProgress = 0f;
+            RelayB1DriftActive = RelayB2DriftActive = false;
+            RelayB1DriftWarning = RelayB2DriftWarning = false;
             ZoneAccessFailureCount = 0;
             ZoneAccessCooldown = TickTimer.None;
             Zone2RelayRuntimeInitialized = false;
@@ -2136,10 +2390,17 @@ namespace EchoProtocol.Networking
             RelayA2AttemptSeed = 0;
             RelayB1AttemptSeed = 0;
             RelayB2AttemptSeed = 0;
-            RelayA1Running = false;
-            RelayA2Running = false;
             RelayB1Synchronizing = false;
             RelayB2Synchronizing = false;
+            RelayB1Scanned = false;
+            RelayB2Scanned = false;
+            RelayB1Slot1 = RelayB1Slot2 = RelayB2Slot1 = RelayB2Slot2 = 0;
+            RelayB1Tested = false;
+            RelayB2Tested = false;
+            RelayB1CleanSeed = RelayB2CleanSeed = 0;
+            RelayB1SyncProgress = RelayB2SyncProgress = 0f;
+            RelayB1DriftActive = RelayB2DriftActive = false;
+            RelayB1DriftWarning = RelayB2DriftWarning = false;
 
             if (TryGetZone2Director(out var director))
             {
@@ -2151,21 +2412,31 @@ namespace EchoProtocol.Networking
 
                 director.RelayA1?.ResetForRetry(RelayA1AttemptSeed);
                 director.RelayA2?.ResetForRetry(RelayA2AttemptSeed);
+                if (director.RelayA1 != null)
+                {
+                    director.RelayA1.ApplyAuthoritativeCircuitScenario(UnityEngine.Random.Range(0, 2), RelayA1AttemptSeed);
+                    CaptureRelayACircuitState(RelaySlot.RelayA_1, director.RelayA1);
+                }
+                if (director.RelayA2 != null)
+                {
+                    director.RelayA2.ApplyAuthoritativeCircuitScenario(UnityEngine.Random.Range(2, 4), RelayA2AttemptSeed);
+                    CaptureRelayACircuitState(RelaySlot.RelayA_2, director.RelayA2);
+                }
 
                 RelayB1PresetIndex = ChooseRelayBPreset(director.RelayB1);
                 director.RelayB1?.ResetForRetry(RelayB1PresetIndex, RelayB1AttemptSeed);
                 RelayB1Channel = director.RelayB1 != null ? director.RelayB1.Snapshot.SelectedChannelIndex : -1;
+                RelayB1CleanSeed = 0;
                 RelayB1Frequency = director.RelayB1 != null ? director.RelayB1.Snapshot.CurrentFrequency : 0f;
                 RelayB1Phase = director.RelayB1 != null ? director.RelayB1.Snapshot.CurrentPhase : 0f;
 
-                RelayB2PresetIndex = ChooseRelayBPreset(director.RelayB2, director.RelayB1, RelayB1PresetIndex);
+                RelayB2PresetIndex = ChooseRelayBPreset(director.RelayB2, director.RelayB1, RelayB1PresetIndex, true);
                 director.RelayB2?.ResetForRetry(RelayB2PresetIndex, RelayB2AttemptSeed);
                 RelayB2Channel = director.RelayB2 != null ? director.RelayB2.Snapshot.SelectedChannelIndex : -1;
+                RelayB2CleanSeed = 0;
                 RelayB2Frequency = director.RelayB2 != null ? director.RelayB2.Snapshot.CurrentFrequency : 0f;
                 RelayB2Phase = director.RelayB2 != null ? director.RelayB2.Snapshot.CurrentPhase : 0f;
 
-                RelayA1Controls = director.RelayA1 != null ? director.RelayA1.Snapshot.Controls : Vector3.zero;
-                RelayA2Controls = director.RelayA2 != null ? director.RelayA2.Snapshot.Controls : Vector3.zero;
             }
 
             HandleReplicatedStateChanged();
@@ -2179,15 +2450,11 @@ namespace EchoProtocol.Networking
                 || director.RelayB1 == null || director.RelayB2 == null) return false;
 
             RelayA1AttemptSeed = NewRelayAttemptSeed();
-            director.RelayA1.ApplyAuthoritativeAttemptSeed(RelayA1AttemptSeed);
-            var a1 = director.RelayA1.Snapshot;
-            RelayA1Controls = a1.Controls;
-            RelayA1Running = a1.IsRunning;
+            director.RelayA1.ApplyAuthoritativeCircuitScenario(UnityEngine.Random.Range(0, 2), RelayA1AttemptSeed);
+            CaptureRelayACircuitState(RelaySlot.RelayA_1, director.RelayA1);
             RelayA2AttemptSeed = NewRelayAttemptSeed();
-            director.RelayA2.ApplyAuthoritativeAttemptSeed(RelayA2AttemptSeed);
-            var a2 = director.RelayA2.Snapshot;
-            RelayA2Controls = a2.Controls;
-            RelayA2Running = a2.IsRunning;
+            director.RelayA2.ApplyAuthoritativeCircuitScenario(UnityEngine.Random.Range(2, 4), RelayA2AttemptSeed);
+            CaptureRelayACircuitState(RelaySlot.RelayA_2, director.RelayA2);
 
             RelayB1PresetIndex = ChooseRelayBPreset(director.RelayB1);
             RelayB1AttemptSeed = NewRelayAttemptSeed();
@@ -2197,8 +2464,15 @@ namespace EchoProtocol.Networking
             RelayB1Frequency = b1.CurrentFrequency;
             RelayB1Phase = b1.CurrentPhase;
             RelayB1Synchronizing = false;
+            RelayB1Scanned = false;
+            RelayB1Slot1 = RelayB1Slot2 = 0;
+            RelayB1Tested = false;
+            RelayB1CleanSeed = 0;
+            RelayB1SyncProgress = 0f;
+            RelayB1DriftActive = false;
+            RelayB1DriftWarning = false;
 
-            RelayB2PresetIndex = ChooseRelayBPreset(director.RelayB2, director.RelayB1, RelayB1PresetIndex);
+            RelayB2PresetIndex = ChooseRelayBPreset(director.RelayB2, director.RelayB1, RelayB1PresetIndex, true);
             RelayB2AttemptSeed = NewRelayAttemptSeed();
             director.RelayB2.ApplyAuthoritativeAttempt(RelayB2PresetIndex, RelayB2AttemptSeed);
             var b2 = director.RelayB2.Snapshot;
@@ -2206,12 +2480,19 @@ namespace EchoProtocol.Networking
             RelayB2Frequency = b2.CurrentFrequency;
             RelayB2Phase = b2.CurrentPhase;
             RelayB2Synchronizing = false;
+            RelayB2Scanned = false;
+            RelayB2Slot1 = RelayB2Slot2 = 0;
+            RelayB2Tested = false;
+            RelayB2CleanSeed = 0;
+            RelayB2SyncProgress = 0f;
+            RelayB2DriftActive = false;
+            RelayB2DriftWarning = false;
             Zone2RelayRuntimeInitialized = true;
             return true;
         }
 
         private static int ChooseRelayBPreset(RelayBController controller,
-            RelayBController otherController = null, int otherPresetIndex = -1)
+            RelayBController otherController = null, int otherPresetIndex = -1, bool harder = false)
         {
             int count = controller != null && controller.Config != null && controller.Config.Presets != null
                 ? controller.Config.Presets.Count
@@ -2225,6 +2506,9 @@ namespace EchoProtocol.Networking
             for (int index = 0; index < count; index++)
             {
                 var preset = controller.Config.GetPreset(index);
+                if (preset == null || preset.Candidates.Length == 0) continue;
+                var correct = preset.GetCandidate(preset.CorrectChannelIndex);
+                if (correct == null || (correct.HasSpur || correct.DistortionPercent > 15f) != harder) continue;
                 if (other != null && preset != null
                     && preset.CorrectChannelIndex == other.CorrectChannelIndex
                     && preset.ReferenceWaveform == other.ReferenceWaveform
@@ -2239,6 +2523,52 @@ namespace EchoProtocol.Networking
         {
             int seed = UnityEngine.Random.Range(1, int.MaxValue);
             return seed == 0 ? 1 : seed;
+        }
+
+        private void RerollRelayBFindAuthoritative(RelaySlot slot, RelayBController controller, int failedChannel)
+        {
+            int oldPreset = slot == RelaySlot.RelayB_1 ? RelayB1PresetIndex : RelayB2PresetIndex;
+            int newPreset = ChooseRelayBPreset(controller, controller, oldPreset, slot == RelaySlot.RelayB_2);
+            int seed = 0;
+            var preview = new RelayBSignalSimulation();
+            for (int attempt = 0; attempt < 64; attempt++)
+            {
+                seed = NewRelayAttemptSeed();
+                preview.Initialize(controller.Config, newPreset, true, seed);
+                if (preview.GetCurrentPreset().CorrectChannelIndex != failedChannel) break;
+            }
+            controller.ApplyAuthoritativeAttempt(newPreset, seed);
+            var snapshot = controller.Snapshot;
+            if (slot == RelaySlot.RelayB_1)
+            {
+                RelayB1PresetIndex = newPreset;
+                RelayB1AttemptSeed = seed;
+                RelayB1Channel = -1;
+                RelayB1Frequency = snapshot.CurrentFrequency;
+                RelayB1Phase = snapshot.CurrentPhase;
+                RelayB1Scanned = false;
+                RelayB1Slot1 = RelayB1Slot2 = 0;
+                RelayB1Tested = false;
+                RelayB1CleanSeed = 0;
+                RelayB1Synchronizing = false;
+                RelayB1SyncProgress = 0f;
+                RelayB1DriftActive = RelayB1DriftWarning = false;
+            }
+            else
+            {
+                RelayB2PresetIndex = newPreset;
+                RelayB2AttemptSeed = seed;
+                RelayB2Channel = -1;
+                RelayB2Frequency = snapshot.CurrentFrequency;
+                RelayB2Phase = snapshot.CurrentPhase;
+                RelayB2Scanned = false;
+                RelayB2Slot1 = RelayB2Slot2 = 0;
+                RelayB2Tested = false;
+                RelayB2CleanSeed = 0;
+                RelayB2Synchronizing = false;
+                RelayB2SyncProgress = 0f;
+                RelayB2DriftActive = RelayB2DriftWarning = false;
+            }
         }
 
         private bool TryGetZone2Director(out Zone2MissionDirector director)
@@ -2428,8 +2758,14 @@ namespace EchoProtocol.Networking
         {
             switch (slot)
             {
-                case RelaySlot.RelayA_1: RelayA1Running = active; break;
-                case RelaySlot.RelayA_2: RelayA2Running = active; break;
+                case RelaySlot.RelayA_1:
+                case RelaySlot.RelayA_2:
+                    if (!active && TryGetRelayTarget(slot, out var target) && target is RelayAController relayA)
+                    {
+                        relayA.EmergencyStop();
+                        CaptureRelayACircuitState(slot, relayA);
+                    }
+                    break;
                 case RelaySlot.RelayB_1: RelayB1Synchronizing = active; break;
                 case RelaySlot.RelayB_2: RelayB2Synchronizing = active; break;
             }
@@ -2448,14 +2784,14 @@ namespace EchoProtocol.Networking
             EmitRelayRepairNoise(
                 RelaySlot.RelayA_1,
                 RelayA1Operator,
-                RelayA1Running,
+                RelayA1CircuitPhase == (byte)RelayACircuitPhase.Testing || RelayA1Stabilization.Running,
                 ref _relayA1NoiseTimer,
                 ref _relayA1NoiseSequence,
                 definition.PulseInterval);
             EmitRelayRepairNoise(
                 RelaySlot.RelayA_2,
                 RelayA2Operator,
-                RelayA2Running,
+                RelayA2CircuitPhase == (byte)RelayACircuitPhase.Testing || RelayA2Stabilization.Running,
                 ref _relayA2NoiseTimer,
                 ref _relayA2NoiseSequence,
                 definition.PulseInterval);
@@ -2479,8 +2815,8 @@ namespace EchoProtocol.Networking
                 var actor = GetRelayOperator(slot);
                 bool overloaded = TryGetRelayTarget(slot, out var target)
                     && (target is RelayAController relayA
-                        && (relayA.Snapshot.Status == RelayAStatus.Overload
-                            || relayA.Snapshot.Status == RelayAStatus.FaultWarning)
+                        && relayA.CircuitSnapshot.Phase == RelayACircuitPhase.Failed
+                        && relayA.CircuitSnapshot.FaultPowered
                         || target is RelayBController relayB
                         && (relayB.Snapshot.Status == RelayBStatus.DriftWarning
                             || relayB.Snapshot.Status == RelayBStatus.SignalMismatch

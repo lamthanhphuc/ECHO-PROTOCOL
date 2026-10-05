@@ -193,7 +193,22 @@ public class MatchFlowController : MonoBehaviour
         var player = FindAnyObjectByType<NetworkPlayerMovement>();
         if (entry == null || player == null) return false;
 
-        NotifyCoreObjectiveComplete();
+        _securityHoldCompleted = false;
+        _powerPuzzleCompleted = false;
+        _restoreMainPowerCompleted = false;
+        _powerAuthorizationCode = string.Empty;
+        _offlineAuthCode = string.Empty;
+        SetZone1DoorToZone2Unlocked(true);
+
+        var zone2Director = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance;
+        if (zone2Director != null)
+        {
+            zone2Director.ApplyDoorState(false);
+            zone2Director.ResetRelayRepairProgressForRetry();
+            zone2Director.SetOfflineStage(EchoProtocol.MatchFlow.Zone2MissionStage.FindSecurityTerminal);
+        }
+
+        SetPhase(MatchPhase.SecurityHold);
         player.TeleportAuthoritative(entry.transform.position, entry.transform.rotation);
         return true;
 #else

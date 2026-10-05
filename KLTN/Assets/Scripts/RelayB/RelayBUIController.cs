@@ -4,56 +4,54 @@ using EchoProtocol.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.UI;
 
 namespace EchoProtocol.RelayB
 {
     [DisallowMultipleComponent]
-    public sealed class RelayBUIController : MonoBehaviour
+    public sealed partial class RelayBUIController : MonoBehaviour
     {
         [Header("Root")]
         [SerializeField] private GameObject panelRoot;
         [SerializeField] private CanvasGroup canvasGroup;
 
         [Header("Header")]
-        [SerializeField] private TMP_Text facilityLabel;
         [SerializeField] private TMP_Text relayLabel;
-        [SerializeField] private TMP_Text modeLabel;
         [SerializeField] private TMP_Text statusLabel;
+        [SerializeField] private Button[] tabButtons = new Button[3];
+        [SerializeField] private Image[] tabHighlights = new Image[3];
 
-        [Header("Waveform Oscilloscope")]
+        [Header("Tab Panels")]
+        [SerializeField] private GameObject spectrumTabPanel;
+        [SerializeField] private GameObject processingTabPanel;
+        [SerializeField] private GameObject syncTabPanel;
+
+        [Header("Tab 1: Spectrum")]
+        [SerializeField] private TMP_Text referenceProfileText;
+        [SerializeField] private Button scanSpectrumButton;
+        [SerializeField] private Button[] candidateButtons = new Button[4];
+        [SerializeField] private Image[] candidateHighlights = new Image[4];
+        [SerializeField] private TMP_Text[] candidateTexts = new TMP_Text[4];
+
+
+        [Header("Tab 3: Carrier & Link Sync")]
         [SerializeField] private RelayBWaveformRenderer referenceWaveformRenderer;
         [SerializeField] private RelayBWaveformRenderer currentWaveformRenderer;
         [SerializeField] private TMP_Text referenceSignalLabel;
         [SerializeField] private TMP_Text currentSignalLabel;
-
-        [Header("Channel Selection")]
-        [SerializeField] private Button[] channelButtons = new Button[4];
-        [SerializeField] private Image[] channelHighlights = new Image[4];
-
-        [Header("Controls")]
-        [SerializeField] private Slider frequencySlider;
-        [SerializeField] private TMP_Text frequencyValueText;
-        [SerializeField] private Slider phaseSlider;
         [SerializeField] private TMP_Text phaseValueText;
-
-        [Header("Synchronization Monitor")]
-        [SerializeField] private TMP_Text signalMatchText;
-        [SerializeField] private TMP_Text frequencyErrorText;
-        [SerializeField] private TMP_Text phaseErrorText;
-        [SerializeField] private TMP_Text progressText;
-        [SerializeField] private Image progressFill;
+        [SerializeField] private Slider frequencySlider;
+        [SerializeField] private Slider phaseSlider;
+        [SerializeField] private TMP_Text frequencyValueText;
+        [SerializeField] private TMP_Text linkProgressText;
+        [SerializeField] private Image linkProgressFill;
         [SerializeField] private TMP_Text warningBannerText;
 
-        [Header("Action Buttons")]
-        [SerializeField] private Button scanButton;
-        [SerializeField] private Button startSyncButton;
-        [SerializeField] private Button cancelSyncButton;
+        [Header("Footer Actions & Log")]
+        [SerializeField] private Button startLinkButton;
+        [SerializeField] private Button abortLinkButton;
         [SerializeField] private Button closeButton;
-
-        [Header("System Log")]
         [SerializeField] private TMP_Text systemLogText;
 
         [Header("Colors")]
@@ -62,13 +60,13 @@ namespace EchoProtocol.RelayB
         [SerializeField] private Color dangerColor = new Color(1f, 0.2f, 0.14f, 1f);
         [SerializeField] private Color offlineColor = new Color(0.55f, 0.65f, 0.7f, 1f);
         [SerializeField] private Color referenceColor = new Color(0.2f, 0.9f, 1f, 1f);
+        [SerializeField] private Color activeTabColor = new Color(0.15f, 0.45f, 0.55f, 1f);
+        [SerializeField] private Color inactiveTabColor = new Color(0.06f, 0.14f, 0.18f, 0.9f);
 
         private readonly RelayBPlayerControlLock _controlLock = new RelayBPlayerControlLock();
-        private readonly System.Collections.Generic.List<string> _logEntries = new System.Collections.Generic.List<string>();
         private RelayBController _controller;
-        private bool _suppressSliderEvents;
-        private RelayBStatus _lastStatus = (RelayBStatus)(-1);
-        private int _lastLoggedChannel = -1;
+        private bool _sliderHooked;
+        private int _pendingChannelIndex = -1;
 
         public bool IsOpen => panelRoot != null && panelRoot.activeSelf;
 
@@ -77,52 +75,17 @@ namespace EchoProtocol.RelayB
             EnsureProgressFillSprite();
             HookControls();
             SetVisible(false);
-            AddLog("SYSTEM INITIALIZED. WAITING FOR OPERATOR.");
         }
 
-        private void EnsureProgressFillSprite()
-        {
-            if (progressFill != null)
-            {
-                progressFill.type = Image.Type.Filled;
-                progressFill.fillMethod = Image.FillMethod.Horizontal;
-                progressFill.fillOrigin = 0;
-                if (progressFill.sprite == null)
-                {
-                    progressFill.sprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
-                }
-            }
-        }
-
-        public void AddLog(string message)
-        {
-            if (string.IsNullOrEmpty(message)) return;
-            string entry = $"> {message}";
-            _logEntries.Add(entry);
-            if (_logEntries.Count > 3)
-            {
-                _logEntries.RemoveAt(0);
-            }
-
-            if (systemLogText != null)
-            {
-                systemLogText.text = string.Join("\n", _logEntries);
-            }
-        }
-
-        private void OnDestroy()
-        {
-            Close();
-        }
-
+        private void OnDestroy() => Close();
         private void OnDisable() => Close();
 
         private void Update()
         {
-            if (!IsOpen)
-            {
-                return;
-            }
+            if (!IsOpen) return;
+            FitTerminal();
+            if (_controller != null) RefreshDecoderPresentation(_controller.Snapshot);
+            HandleDecoderKeyboard();
 
             if (_controlLock.ShouldAutoRelease())
             {
@@ -139,11 +102,13 @@ namespace EchoProtocol.RelayB
         public void Bind(RelayBController controller)
         {
             _controller = controller;
+            EnsureProgressFillSprite();
             HookControls();
         }
 
         public void Open(GameObject interactor)
         {
+            _pendingChannelIndex = -1;
             EnsureEventSystem();
             Zone2MinigameUIFocus.CloseOthers(this);
             if (TryGetNetworkDirector(out var director))
@@ -184,6 +149,8 @@ namespace EchoProtocol.RelayB
 
         public void Refresh(RelayBSnapshot snapshot)
         {
+            if (snapshot.SelectedChannelIndex >= 0 || !snapshot.HasScanned)
+                _pendingChannelIndex = -1;
             bool readOnly = snapshot.IsOnline;
             bool canOperate = !TryGetNetworkDirector(out var director) || director.CanLocalPlayerOperateRelay(_controller);
             if (IsOpen && !readOnly && !canOperate)
@@ -192,266 +159,282 @@ namespace EchoProtocol.RelayB
                 return;
             }
 
-            _suppressSliderEvents = true;
+            // Header
+            FitTerminal();
+            SetText(relayLabel, snapshot.ActiveTab == 0 ? "FIND SIGNAL" : snapshot.ActiveTab == 1 ? "DECODE SIGNAL" : "SYNC SIGNAL");
+            SetText(stageLabel, $"RELAY B / STAGE {snapshot.ActiveTab + 1:00}");
+            SetText(statusLabel, StatusToDisplayString(snapshot.Status));
+            if (statusLabel != null) statusLabel.color = StatusToColor(snapshot.Status);
 
-            if (frequencySlider != null)
+            // Tab Switching
+            UpdateTabs(snapshot.ActiveTab, snapshot.HasScanned && snapshot.SelectedChannelIndex >= 0,
+                snapshot.Decoder.IsComplete || snapshot.IsOnline);
+
+            // 1. Spectrum Tab
+            RefreshSpectrumTab(snapshot, readOnly, canOperate);
+            if (snapshot.ActiveTab == 0)
+                SetText(statusLabel, snapshot.SelectedChannelIndex >= 0 ? "SIGNAL ROUTED" : snapshot.HasScanned ? "4 CHANNELS" : "AWAITING SCAN");
+
+            // 2. Processing Tab
+            RefreshProcessingTab(snapshot, readOnly, canOperate);
+
+            // 3. Sync Tab
+            RefreshSyncTab(snapshot, readOnly, canOperate);
+
+            // System Log
+            if (systemLogText != null && snapshot.SystemLog != null && snapshot.SystemLog.Length > 0)
+                systemLogText.gameObject.SetActive(false);
+
+            // Action Buttons
+            bool isStage3 = snapshot.ActiveTab == 2;
+            bool syncActive = snapshot.Status == RelayBStatus.Synchronizing
+                || snapshot.Status == RelayBStatus.DriftWarning || snapshot.Status == RelayBStatus.ConnectionLost;
+            bool canSync = !readOnly && canOperate && snapshot.HasScanned && snapshot.SelectedChannelIndex >= 0
+                && isStage3 && snapshot.Decoder.IsComplete && !syncActive;
+            bool canAbort = !readOnly && canOperate && syncActive;
+            if (startLinkButton != null)
             {
-                float minFreq = _controller != null && _controller.Config != null ? _controller.Config.MinFrequency : 10f;
-                float maxFreq = _controller != null && _controller.Config != null ? _controller.Config.MaxFrequency : 100f;
-                frequencySlider.minValue = minFreq;
-                frequencySlider.maxValue = maxFreq;
-                frequencySlider.SetValueWithoutNotify(snapshot.CurrentFrequency);
+                startLinkButton.gameObject.SetActive(isStage3);
+                SetInteractable(startLinkButton, canSync);
+                SetText(startLinkButton.GetComponentInChildren<TMP_Text>(), "START SYNC");
+            }
+            if (abortLinkButton != null)
+            {
+                abortLinkButton.gameObject.SetActive(isStage3);
+                SetInteractable(abortLinkButton, canAbort);
+                SetText(abortLinkButton.GetComponentInChildren<TMP_Text>(), "CANCEL SYNC");
+            }
+            SetInteractable(closeButton, true);
+        }
+
+        private void UpdateTabs(int activeTab, bool stage2Unlocked, bool stage3Unlocked)
+        {
+            if (spectrumTabPanel != null) spectrumTabPanel.SetActive(activeTab == 0);
+            if (processingTabPanel != null) processingTabPanel.SetActive(activeTab == 1);
+            if (syncTabPanel != null) syncTabPanel.SetActive(activeTab == 2);
+
+            for (int i = 0; i < tabHighlights.Length; i++)
+            {
+                if (tabHighlights[i] != null)
+                {
+                    tabHighlights[i].color = (i == activeTab) ? activeTabColor : inactiveTabColor;
+                }
             }
 
+            if (tabButtons != null)
+            {
+                if (tabButtons.Length > 0 && tabButtons[0] != null) SetInteractable(tabButtons[0], true);
+                if (tabButtons.Length > 1 && tabButtons[1] != null) SetInteractable(tabButtons[1], stage2Unlocked);
+                if (tabButtons.Length > 2 && tabButtons[2] != null) SetInteractable(tabButtons[2], stage3Unlocked);
+            }
+        }
+
+        private void RefreshSpectrumTab(RelayBSnapshot snapshot, bool readOnly, bool canOperate)
+        {
+            var targetTitle = spectrumTabPanel != null
+                ? spectrumTabPanel.transform.Find("ReferenceProfileCard/Title")?.GetComponent<TMP_Text>() : null;
+            SetText(targetTitle, "TARGET SIGNAL");
+            if (snapshot.ReferenceProfile != null)
+            {
+                var profile = snapshot.ReferenceProfile;
+                float drift = Mathf.Max(profile.TargetFundamentalKhz - profile.FundamentalMinKhz,
+                    profile.FundamentalMaxKhz - profile.TargetFundamentalKhz);
+                SetText(referenceProfileText,
+                    $"FREQUENCY\n{profile.FundamentalMinKhz:0.0} - {profile.FundamentalMaxKhz:0.0} kHz\n\n" +
+                    $"WAVEFORM\n{snapshot.ReferenceWaveform.ToString().ToUpper()}\n\n" +
+                    $"PILOT\n{profile.ExpectedPilot}");
+            }
+
+            if (scanSpectrumButton != null)
+            {
+                scanSpectrumButton.gameObject.SetActive(snapshot.SelectedChannelIndex < 0);
+                bool canScanOrRoute = !readOnly && canOperate && snapshot.SelectedChannelIndex < 0
+                    && (!snapshot.HasScanned || _pendingChannelIndex >= 0);
+                SetInteractable(scanSpectrumButton, canScanOrRoute);
+                SetText(scanSpectrumButton.GetComponentInChildren<TMP_Text>(),
+                    snapshot.SelectedChannelIndex >= 0 ? "SIGNAL ROUTED"
+                    : snapshot.HasScanned ? "ROUTE SIGNAL" : "SCAN SIGNALS");
+            }
+
+            for (int i = 0; i < candidateButtons.Length; i++)
+            {
+                bool hasCandidate = snapshot.Candidates != null && i < snapshot.Candidates.Length
+                    && snapshot.Candidates[i] != null && snapshot.Candidates[i].Peaks.Length > 0;
+                SetInteractable(candidateButtons[i], !readOnly && canOperate && snapshot.HasScanned && hasCandidate
+                    && snapshot.SelectedChannelIndex < 0
+                    && !(_controller != null && _controller.Simulation.IsSynchronizing));
+                if (candidateHighlights != null && i < candidateHighlights.Length && candidateHighlights[i] != null)
+                    candidateHighlights[i].color = snapshot.SelectedChannelIndex == i || _pendingChannelIndex == i
+                        ? (snapshot.SelectedChannelIndex == i ? new Color(0.08f, 0.28f, 0.18f) : new Color(0.08f, 0.29f, 0.32f))
+                        : new Color(0.07f, 0.1f, 0.115f, 1f);
+                if (candidateTexts == null || i >= candidateTexts.Length || candidateTexts[i] == null) continue;
+                if (!snapshot.HasScanned || !hasCandidate)
+                {
+                    SetText(candidateTexts[i], $"CH {i + 1:00}\nNO DATA");
+                    continue;
+                }
+
+                var candidate = snapshot.Candidates[i];
+                SetText(candidateTexts[i],
+                    $"CH {i + 1:00}\n{candidate.Peaks[0]:0.0} kHz  /  {candidate.Waveform.ToString().ToUpper()}\n{candidate.PilotFrame}");
+            }
+            SetText(findNotice, snapshot.SelectedChannelIndex >= 0 ? "SIGNAL ROUTED"
+                : snapshot.FalseLockDetected ? "PROFILE CHANGED - RESCAN"
+                : snapshot.HasScanned ? "MATCH ALL THREE SIGNATURES" : "AWAITING SCAN");
+            if (findNotice != null) findNotice.color = snapshot.SelectedChannelIndex >= 0 ? safeColor : offlineColor;
+            if (findContinue != null) findContinue.gameObject.SetActive(snapshot.SelectedChannelIndex >= 0);
+        }
+
+
+        private void RefreshSyncTab(RelayBSnapshot snapshot, bool readOnly, bool canOperate)
+        {
+            bool canAdjust = !readOnly && canOperate && snapshot.Decoder.IsComplete && !snapshot.IsOnline;
+            var holdRule = syncTabPanel != null
+                ? syncTabPanel.transform.Find("CalibrationSection/Rule3")?.GetComponent<TMP_Text>() : null;
+            SetText(holdRule, "3. START SYNC, hold the signal, then correct one drift.");
+            if (referenceWaveformRenderer != null)
+            {
+                referenceWaveformRenderer.SetWaveParameters(snapshot.ReferenceWaveform,
+                    snapshot.TargetFrequency, snapshot.TargetPhase, 1f);
+                referenceWaveformRenderer.SetWaveformColor(referenceColor);
+                referenceWaveformRenderer.SetNoise(0.06f);
+            }
+            if (currentWaveformRenderer != null)
+            {
+                currentWaveformRenderer.SetWaveParameters(snapshot.CurrentWaveform,
+                    snapshot.CurrentFrequency, snapshot.CurrentPhase, 1f);
+                currentWaveformRenderer.SetWaveformColor(snapshot.IsSynchronized ? safeColor : warningColor);
+                currentWaveformRenderer.SetNoise(snapshot.IsSynchronized ? 0.05f : 0.25f);
+            }
+
+            SetText(referenceSignalLabel, "REFERENCE WAVE");
+            SetText(currentSignalLabel, "CURRENT WAVE");
+            float frequencyTolerance = _controller != null && _controller.Config != null
+                ? _controller.Config.FrequencyTolerancePercent : 3f;
+            float phaseTolerance = _controller != null && _controller.Config != null
+                ? _controller.Config.PhaseToleranceDegrees : 12f;
+            string frequencyHint = snapshot.FrequencyErrorPercent <= frequencyTolerance ? "ALIGNED"
+                : snapshot.CurrentFrequency < snapshot.TargetFrequency ? "TUNE UP" : "TUNE DOWN";
+            float phaseDirection = Mathf.DeltaAngle(snapshot.CurrentPhase, snapshot.TargetPhase);
+            string phaseHint = snapshot.PhaseErrorDegrees <= phaseTolerance ? "ALIGNED"
+                : phaseDirection > 0f ? "TUNE UP" : "TUNE DOWN";
+            SetText(frequencyValueText,
+                $"FREQUENCY  {frequencyHint}");
+            SetText(phaseValueText,
+                $"PHASE  {phaseHint}");
+
+            if (frequencySlider != null && phaseSlider != null && !_sliderHooked)
+            {
+                _sliderHooked = true;
+                if (_controller != null && _controller.Config != null)
+                {
+                    frequencySlider.minValue = _controller.Config.MinFrequency;
+                    frequencySlider.maxValue = _controller.Config.MaxFrequency;
+                }
+                frequencySlider.onValueChanged.RemoveAllListeners();
+                frequencySlider.onValueChanged.AddListener(value =>
+                {
+                    if (_controller == null) return;
+                    var current = _controller.Snapshot;
+                    if (TryGetNetworkDirector(out var director))
+                        director.RequestRelayBControls(_controller, current.SelectedChannelIndex, value, current.CurrentPhase);
+                    else _controller.SetFrequency(value);
+                });
+                phaseSlider.onValueChanged.RemoveAllListeners();
+                phaseSlider.onValueChanged.AddListener(value =>
+                {
+                    if (_controller == null) return;
+                    var current = _controller.Snapshot;
+                    if (TryGetNetworkDirector(out var director))
+                        director.RequestRelayBControls(_controller, current.SelectedChannelIndex, current.CurrentFrequency, value);
+                    else _controller.SetPhase(value);
+                });
+            }
+            if (frequencySlider != null)
+            {
+                frequencySlider.interactable = canAdjust;
+                frequencySlider.SetValueWithoutNotify(snapshot.CurrentFrequency);
+            }
             if (phaseSlider != null)
             {
-                phaseSlider.minValue = 0f;
-                phaseSlider.maxValue = 360f;
+                phaseSlider.interactable = canAdjust;
                 phaseSlider.SetValueWithoutNotify(snapshot.CurrentPhase);
             }
 
-            _suppressSliderEvents = false;
-
-            // Header
-            SetText(facilityLabel, "ECHO FACILITY");
-            SetText(relayLabel, snapshot.IsOnline ? "DATA RELAY B – ONLINE" : "DATA RELAY B");
-            SetText(modeLabel, snapshot.IsOnline ? "SECURITY NETWORK CONNECTED" : "SCAN, MATCH CHANNEL, ALIGN FREQUENCY AND PHASE");
-            SetText(statusLabel, StatusToDisplayString(snapshot.Status));
-            if (statusLabel != null)
-            {
-                statusLabel.color = StatusToColor(snapshot.Status);
-            }
-
-            // Slider readouts
-            SetText(frequencyValueText, snapshot.HasScanned ? FormatFrequency(snapshot.CurrentFrequency) : "-- kHz");
-            SetText(phaseValueText, snapshot.HasScanned ? FormatPhase(snapshot.CurrentPhase) : "-- deg");
-
-            // Waveform visualizers
-            if (referenceWaveformRenderer != null)
-            {
-                referenceWaveformRenderer.SetWaveParameters(
-                    snapshot.ReferenceWaveform,
-                    snapshot.TargetFrequency,
-                    snapshot.TargetPhase,
-                    1f);
-                referenceWaveformRenderer.SetWaveformColor(referenceColor);
-                referenceWaveformRenderer.SetNoise(snapshot.HasScanned || snapshot.IsOnline ? 0.08f : 0.85f);
-            }
-
-            if (currentWaveformRenderer != null)
-            {
-                bool showCurrentSignal = snapshot.HasScanned && snapshot.SelectedChannelIndex >= 0;
-                currentWaveformRenderer.SetWaveParameters(
-                    showCurrentSignal ? snapshot.CurrentWaveform : WaveformType.CompositeHarmonic,
-                    showCurrentSignal ? snapshot.CurrentFrequency : 37f,
-                    showCurrentSignal ? snapshot.CurrentPhase : 0f,
-                    1f);
-
-                Color curWaveColor = snapshot.IsOnline || snapshot.IsSynchronized
-                    ? safeColor
-                    : (showCurrentSignal ? warningColor : offlineColor);
-                currentWaveformRenderer.SetWaveformColor(curWaveColor);
-
-                float noise = !snapshot.HasScanned ? 0.9f
-                    : snapshot.IsScanning ? 0.7f
-                    : snapshot.IsSynchronized ? 0.05f : 0.35f;
-                currentWaveformRenderer.SetNoise(noise);
-            }
-
-            SetText(referenceSignalLabel, snapshot.HasScanned || snapshot.IsOnline
-                ? $"REF: {snapshot.ReferenceWaveform.ToString().ToUpper()} | CARRIER TRACE LOCKED"
-                : "REF: ENCRYPTED - SCAN REQUIRED");
-            SetText(currentSignalLabel, snapshot.HasScanned && snapshot.SelectedChannelIndex >= 0
-                ? $"CUR: {snapshot.CurrentWaveform.ToString().ToUpper()} | {FormatFrequency(snapshot.CurrentFrequency)} | PHASE {FormatPhase(snapshot.CurrentPhase)}"
-                : snapshot.HasScanned ? "NO CHANNEL SELECTED" : "CURRENT SIGNAL MASKED");
-
-            // Channel highlight indicators
-            for (int i = 0; i < channelHighlights.Length; i++)
-            {
-                if (channelHighlights[i] != null)
-                {
-                    bool isSelected = (i == snapshot.SelectedChannelIndex);
-                    channelHighlights[i].color = isSelected ? safeColor : new Color(0.1f, 0.2f, 0.25f, 0.8f);
-                }
-            }
-
-            // Synchronization Monitor
-            if (snapshot.IsSynchronized && !snapshot.IsOnline)
-            {
-                SetText(signalMatchText, "SIGNAL COHERENCE: LOCKABLE");
-            }
-            else
-            {
-                SetText(signalMatchText, $"SIGNAL COHERENCE: {CoherenceText(snapshot.SignalMatchPercent)}");
-            }
-
-            if (signalMatchText != null)
-            {
-                signalMatchText.color = snapshot.SignalMatchPercent >= 95f ? safeColor : (snapshot.SignalMatchPercent >= 50f ? warningColor : dangerColor);
-            }
-
-            float freqTol = _controller != null && _controller.Config != null ? _controller.Config.FrequencyTolerancePercent : 3f;
-            bool freqPass = snapshot.FrequencyErrorPercent <= freqTol;
-            SetText(frequencyErrorText, $"CARRIER LOCK: {(freqPass ? "STABLE" : "UNSTABLE")}");
-            if (frequencyErrorText != null)
-            {
-                frequencyErrorText.color = freqPass ? safeColor : warningColor;
-            }
-
-            float phaseTol = _controller != null && _controller.Config != null ? _controller.Config.PhaseToleranceDegrees : 12f;
-            bool phasePass = snapshot.PhaseErrorDegrees <= phaseTol;
-            SetText(phaseErrorText, $"PHASE NOISE: {(phasePass ? "LOW" : "HIGH")}");
-            if (phaseErrorText != null)
-            {
-                phaseErrorText.color = phasePass ? safeColor : warningColor;
-            }
-
-            SetText(progressText, $"SYNCHRONIZATION PROGRESS\nProgress: {snapshot.SyncProgressSeconds:0.0} / {snapshot.HoldRequiredSeconds:0} seconds");
-            if (progressFill != null)
+            SetText(linkProgressText,
+                $"SYNC PROGRESS  {snapshot.SyncProgressSeconds:0.0} / {snapshot.HoldRequiredSeconds:0.0} sec");
+            if (linkProgressFill != null)
             {
                 EnsureProgressFillSprite();
-                progressFill.fillAmount = snapshot.Progress01;
-                progressFill.color = snapshot.IsOnline || snapshot.IsSynchronized ? safeColor : (snapshot.Status == RelayBStatus.DriftWarning ? warningColor : dangerColor);
+                linkProgressFill.fillAmount = snapshot.Progress01;
+                linkProgressFill.color = snapshot.IsOnline || snapshot.IsSynchronized ? safeColor : warningColor;
             }
-
-            // Warnings & Drift Banner
-            if (warningBannerText != null)
-            {
-                if (snapshot.IsOnline)
-                {
-                    warningBannerText.text = $"ACTIVE LINK: CHANNEL {snapshot.SelectedChannelIndex + 1:00} | CHANNEL LOCKED";
-                    warningBannerText.color = safeColor;
-                    warningBannerText.gameObject.SetActive(true);
-                }
-                else if (snapshot.IsDriftWarning)
-                {
-                    warningBannerText.text = "CAUTION: IONOSPHERIC DRIFT IMMINENT (3s)";
-                    warningBannerText.color = new Color(1f, 0.55f, 0.1f, 1f);
-                    warningBannerText.gameObject.SetActive(true);
-                }
-                else if (snapshot.IsDriftActive && !snapshot.IsSynchronized)
-                {
-                    warningBannerText.text = "DRIFT ACTIVE: COMPENSATE PHASE / FREQUENCY";
-                    warningBannerText.color = dangerColor;
-                    warningBannerText.gameObject.SetActive(true);
-                }
-                else if (snapshot.Status == RelayBStatus.ConnectionLost)
-                {
-                    warningBannerText.text = !freqPass ? "SIGNAL LOST: FREQUENCY OUT OF RANGE"
-                        : !phasePass ? "SIGNAL LOST: PHASE MISALIGNED"
-                        : "SIGNAL LOST: CHANNEL OR WAVEFORM MISMATCH";
-                    warningBannerText.color = dangerColor;
-                    warningBannerText.gameObject.SetActive(true);
-                }
-                else if (snapshot.Status == RelayBStatus.Synchronizing)
-                {
-                    warningBannerText.text = $"SYNC HOLD: {Mathf.Max(0f, snapshot.HoldRequiredSeconds - snapshot.SyncProgressSeconds):0.0}s REMAINING";
-                    warningBannerText.color = referenceColor;
-                    warningBannerText.gameObject.SetActive(true);
-                }
-                else if (snapshot.IsSynchronized && snapshot.Status != RelayBStatus.Synchronizing)
-                {
-                    warningBannerText.text = "SYNC CONDITIONS SATISFIED - PRESS START SYNC";
-                    warningBannerText.color = safeColor;
-                    warningBannerText.gameObject.SetActive(true);
-                }
-                else
-                {
-                    warningBannerText.text = !snapshot.HasScanned ? "SCAN OPTIONAL - TUNE CHANNEL, FREQUENCY AND PHASE"
-                        : !snapshot.IsSelectedChannelCorrect && snapshot.SelectedChannelIndex >= 0
-                            ? "CHANNEL TRACE REJECTED - SELECT ANOTHER CHANNEL"
-                            : "SCAN CHANNELS, THEN ALIGN FREQUENCY AND PHASE";
-                    warningBannerText.color = offlineColor;
-                    warningBannerText.gameObject.SetActive(true);
-                }
-            }
-
-            // Interactability
-            for (int i = 0; i < channelButtons.Length; i++)
-            {
-                SetInteractable(channelButtons[i], !readOnly && canOperate && !snapshot.IsScanning);
-            }
-
-            bool channelUnlocked = snapshot.SelectedChannelIndex >= 0 && snapshot.IsSelectedChannelCorrect;
-            SetInteractable(frequencySlider, !readOnly && canOperate);
-            SetInteractable(phaseSlider, !readOnly && canOperate);
-            SetInteractable(scanButton, !readOnly && canOperate);
-            SetInteractable(startSyncButton, !readOnly && canOperate && channelUnlocked && snapshot.Status != RelayBStatus.Synchronizing);
-            SetInteractable(cancelSyncButton, !readOnly && canOperate && snapshot.Status == RelayBStatus.Synchronizing);
-            SetInteractable(closeButton, true);
-
-            // Log transitions
-            if (snapshot.Status != _lastStatus)
-            {
-                _lastStatus = snapshot.Status;
-                AddLog($"STATUS: {StatusToDisplayString(snapshot.Status)}");
-            }
-
-            if (snapshot.SelectedChannelIndex != _lastLoggedChannel && snapshot.SelectedChannelIndex >= 0)
-            {
-                _lastLoggedChannel = snapshot.SelectedChannelIndex;
-                AddLog($"ROUTING: CHANNEL {snapshot.SelectedChannelIndex + 1:00} ACTIVE");
-            }
+            if (warningBannerText == null) return;
+            if (snapshot.IsOnline)
+                SetSyncNotice("RELAY ONLINE", safeColor);
+            else if (snapshot.IsDriftActive && !snapshot.IsSynchronized)
+                SetSyncNotice("DRIFT - REALIGN PHASE", dangerColor);
+            else if (snapshot.IsDriftWarning && !snapshot.IsDriftActive)
+                SetSyncNotice("SIGNAL DRIFT APPROACHING", warningColor);
+            else if (snapshot.Status == RelayBStatus.Synchronizing)
+                SetSyncNotice("HOLD SIGNAL", referenceColor);
+            else
+                SetSyncNotice("ALIGN CARRIERS", offlineColor);
         }
 
-        private static string FormatFrequency(float value) => $"{Mathf.Round(value)} kHz";
-
-        private static string FormatPhase(float value)
+        private void SetSyncNotice(string message, Color color)
         {
-            float stepped = Mathf.Round(value / 5f) * 5f;
-            return $"{stepped:0} deg";
+            SetText(warningBannerText, message);
+            warningBannerText.color = color;
         }
 
-        private static string CoherenceText(float percent)
-        {
-            if (percent >= 95f) return "LOCKABLE";
-            if (percent >= 70f) return "STRONG";
-            if (percent >= 45f) return "WEAK";
-            return "NOISY";
-        }
 
         private void HookControls()
         {
-            for (int i = 0; i < channelButtons.Length; i++)
+            HookDecoderControls();
+            // Tab Buttons
+            for (int i = 0; i < tabButtons.Length; i++)
             {
-                int channelIndex = i;
-                if (channelButtons[i] != null)
+                int tabIndex = i;
+                if (tabButtons[i] != null)
                 {
-                    channelButtons[i].onClick.RemoveAllListeners();
-                    channelButtons[i].onClick.AddListener(() => HandleChannelClicked(channelIndex));
+                    tabButtons[i].onClick.RemoveAllListeners();
+                    tabButtons[i].onClick.AddListener(() => _controller?.SetActiveTab(tabIndex));
                 }
             }
 
-            if (frequencySlider != null)
+            // Spectrum Tab
+            if (scanSpectrumButton != null)
             {
-                frequencySlider.onValueChanged.RemoveAllListeners();
-                frequencySlider.onValueChanged.AddListener(HandleFrequencyChanged);
+                scanSpectrumButton.onClick.RemoveAllListeners();
+                scanSpectrumButton.onClick.AddListener(HandleScanClicked);
             }
 
-            if (phaseSlider != null)
+            for (int i = 0; i < candidateButtons.Length; i++)
             {
-                phaseSlider.onValueChanged.RemoveAllListeners();
-                phaseSlider.onValueChanged.AddListener(HandlePhaseChanged);
+                int chIndex = i;
+                if (candidateButtons[i] != null)
+                {
+                    candidateButtons[i].onClick.RemoveAllListeners();
+                    candidateButtons[i].onClick.AddListener(() => HandleChannelSelected(chIndex));
+                }
             }
 
-            if (scanButton != null)
-            {
-                scanButton.onClick.RemoveAllListeners();
-                scanButton.onClick.AddListener(HandleScanClicked);
-            }
 
-            if (startSyncButton != null)
-            {
-                startSyncButton.onClick.RemoveAllListeners();
-                startSyncButton.onClick.AddListener(HandleStartSyncClicked);
-            }
+            // Sync Tab: sliders are wired lazily in RefreshSyncTab on first refresh.
+            // (Phase step buttons and timing buttons removed per redesign)
 
-            if (cancelSyncButton != null)
+            // Footer Actions
+            if (startLinkButton != null)
             {
-                cancelSyncButton.onClick.RemoveAllListeners();
-                cancelSyncButton.onClick.AddListener(HandleCancelSyncClicked);
+                startLinkButton.onClick.RemoveAllListeners();
+                startLinkButton.onClick.AddListener(HandleStartLink);
             }
-
+            if (abortLinkButton != null)
+            {
+                abortLinkButton.onClick.RemoveAllListeners();
+                abortLinkButton.onClick.AddListener(HandleAbortLink);
+            }
             if (closeButton != null)
             {
                 closeButton.onClick.RemoveAllListeners();
@@ -459,61 +442,84 @@ namespace EchoProtocol.RelayB
             }
         }
 
-        private void HandleChannelClicked(int channelIndex)
+        private void HandleScanClicked()
         {
             if (_controller == null) return;
             var snapshot = _controller.Snapshot;
-            if (TryGetNetworkDirector(out var director))
-                director.RequestRelayBControls(_controller, channelIndex, snapshot.CurrentFrequency, snapshot.CurrentPhase);
-            else _controller.SelectChannel(channelIndex);
-        }
-
-        private void HandleFrequencyChanged(float value)
-        {
-            if (_suppressSliderEvents || _controller == null)
+            if (snapshot.SelectedChannelIndex >= 0) return;
+            if (snapshot.HasScanned)
             {
+                if (_pendingChannelIndex >= 0) RouteSelectedChannel(_pendingChannelIndex);
                 return;
             }
-
-            var snapshot = _controller.Snapshot;
-            if (TryGetNetworkDirector(out var director))
-                director.RequestRelayBControls(_controller, snapshot.SelectedChannelIndex, value, snapshot.CurrentPhase);
-            else _controller.SetFrequency(value);
-        }
-
-        private void HandlePhaseChanged(float value)
-        {
-            if (_suppressSliderEvents || _controller == null)
-            {
-                return;
-            }
-
-            var snapshot = _controller.Snapshot;
-            if (TryGetNetworkDirector(out var director))
-                director.RequestRelayBControls(_controller, snapshot.SelectedChannelIndex, snapshot.CurrentFrequency, value);
-            else _controller.SetPhase(value);
-        }
-
-        private void HandleScanClicked()
-        {
             if (TryGetNetworkDirector(out var director))
             {
                 director.RequestRelayBScan(_controller);
-                _controller?.ScanChannels();
             }
-            else _controller?.ScanChannels();
+            else
+            {
+                _controller?.ScanSpectrum();
+            }
         }
 
-        private void HandleStartSyncClicked()
+        private void HandleChannelSelected(int channelIndex)
         {
-            if (TryGetNetworkDirector(out var director)) director.RequestRelayBStartSync(_controller);
-            else _controller?.StartSynchronization();
+            if (_controller == null) return;
+            var snapshot = _controller.Snapshot;
+            if (!snapshot.HasScanned || snapshot.ReferenceProfile == null || snapshot.Candidates == null
+                || channelIndex < 0 || channelIndex >= snapshot.Candidates.Length) return;
+            var candidate = snapshot.Candidates[channelIndex];
+            if (candidate == null || candidate.Peaks.Length == 0) return;
+            if (snapshot.SelectedChannelIndex >= 0) return;
+            _pendingChannelIndex = channelIndex;
+            Refresh(snapshot);
         }
 
-        private void HandleCancelSyncClicked()
+        private void RouteSelectedChannel(int channelIndex)
         {
-            if (TryGetNetworkDirector(out var director)) director.RequestRelayBCancelSync(_controller);
-            else _controller?.CancelSynchronization();
+            var snapshot = _controller.Snapshot;
+            _pendingChannelIndex = -1;
+            if (TryGetNetworkDirector(out var director))
+            {
+                director.RequestRelayBControls(_controller, channelIndex, snapshot.CurrentFrequency, snapshot.CurrentPhase);
+            }
+            else
+            {
+                _controller.SelectChannel(channelIndex);
+                if (_controller.Snapshot.SelectedChannelIndex < 0)
+                    _controller.RerollFindAfterMismatch(channelIndex);
+            }
+        }
+
+
+
+        private void HandleStartLink()
+        {
+            if (TryGetNetworkDirector(out var director))
+            {
+                director.RequestRelayBStartSync(_controller);
+            }
+            else
+            {
+                _controller?.StartSynchronization();
+            }
+        }
+
+        private void HandleAbortLink()
+        {
+            if (TryGetNetworkDirector(out var director))
+            {
+                director.RequestRelayBCancelSync(_controller);
+            }
+            else
+            {
+                _controller?.CancelSynchronization();
+            }
+        }
+
+        public void AddLog(string message)
+        {
+            // Maintained for backward compatibility
         }
 
         private static bool TryGetNetworkDirector(out Zone2MissionDirector director)
@@ -525,11 +531,7 @@ namespace EchoProtocol.RelayB
 
         private void SetVisible(bool visible)
         {
-            if (panelRoot != null)
-            {
-                panelRoot.SetActive(visible);
-            }
-
+            if (panelRoot != null) panelRoot.SetActive(visible);
             if (canvasGroup != null)
             {
                 canvasGroup.alpha = visible ? 1f : 0f;
@@ -538,14 +540,24 @@ namespace EchoProtocol.RelayB
             }
         }
 
+        private void EnsureProgressFillSprite()
+        {
+            if (linkProgressFill != null)
+            {
+                linkProgressFill.type = Image.Type.Filled;
+                linkProgressFill.fillMethod = Image.FillMethod.Horizontal;
+                linkProgressFill.fillOrigin = 0;
+                if (linkProgressFill.sprite == null)
+                {
+                    linkProgressFill.sprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
+                }
+            }
+        }
+
         private static void EnsureEventSystem()
         {
             EventSystem eventSystem = EventSystem.current;
-            if (eventSystem == null)
-            {
-                eventSystem = UnityEngine.Object.FindAnyObjectByType<EventSystem>();
-            }
-
+            if (eventSystem == null) eventSystem = FindAnyObjectByType<EventSystem>();
             if (eventSystem == null)
             {
                 GameObject eventSystemObject = new GameObject("RuntimeEventSystem");
@@ -555,14 +567,8 @@ namespace EchoProtocol.RelayB
             var standalone = eventSystem.GetComponent<StandaloneInputModule>();
             if (standalone != null)
             {
-                if (Application.isPlaying)
-                {
-                    UnityEngine.Object.Destroy(standalone);
-                }
-                else
-                {
-                    UnityEngine.Object.DestroyImmediate(standalone);
-                }
+                if (Application.isPlaying) Destroy(standalone);
+                else DestroyImmediate(standalone);
             }
 
             var inputModule = eventSystem.GetComponent<InputSystemUIInputModule>();
@@ -581,38 +587,28 @@ namespace EchoProtocol.RelayB
         {
             if (text != null)
             {
+                text.gameObject.SetActive(true);
                 text.text = value;
             }
         }
 
         private static void SetInteractable(Selectable selectable, bool interactable)
         {
-            if (selectable != null)
-            {
-                selectable.interactable = interactable;
-            }
+            if (selectable != null) selectable.interactable = interactable;
         }
 
         private static string StatusToDisplayString(RelayBStatus status)
         {
             switch (status)
             {
-                case RelayBStatus.Scanning:
-                    return "SCANNING...";
-                case RelayBStatus.ChannelSelected:
-                    return "CHANNEL SELECTED";
-                case RelayBStatus.SignalMismatch:
-                    return "SIGNAL MISMATCH";
-                case RelayBStatus.Synchronizing:
-                    return "SYNCHRONIZING";
-                case RelayBStatus.DriftWarning:
-                    return "DRIFT WARNING";
-                case RelayBStatus.ConnectionLost:
-                    return "CONNECTION LOST";
-                case RelayBStatus.Online:
-                    return "ONLINE";
-                default:
-                    return "OFFLINE";
+                case RelayBStatus.Scanning: return "SCANNING SPECTRUM...";
+                case RelayBStatus.ChannelSelected: return "CANDIDATE ROUTED";
+                case RelayBStatus.SignalMismatch: return "CARRIER MISMATCH / REJECTED";
+                case RelayBStatus.Synchronizing: return "SYNCHRONIZING LINK";
+                case RelayBStatus.DriftWarning: return "IONOSPHERIC DRIFT WARNING";
+                case RelayBStatus.ConnectionLost: return "LINK LOST";
+                case RelayBStatus.Online: return "ONLINE";
+                default: return "OFFLINE";
             }
         }
 
@@ -620,23 +616,15 @@ namespace EchoProtocol.RelayB
         {
             switch (status)
             {
-                case RelayBStatus.Online:
-                    return safeColor; // Green new Color(0.35f, 1f, 0.58f, 1f)
-                case RelayBStatus.Synchronizing:
-                    return referenceColor; // Cyan new Color(0.2f, 0.9f, 1f, 1f)
-                case RelayBStatus.DriftWarning:
-                    return new Color(1f, 0.55f, 0.1f, 1f); // Yellow/Orange
-                case RelayBStatus.ChannelSelected:
-                    return new Color(1f, 0.85f, 0.2f, 1f); // Yellow
-                case RelayBStatus.Scanning:
-                    return warningColor;
+                case RelayBStatus.Online: return safeColor;
+                case RelayBStatus.Synchronizing: return referenceColor;
+                case RelayBStatus.DriftWarning: return warningColor;
+                case RelayBStatus.ChannelSelected: return new Color(1f, 0.85f, 0.2f, 1f);
+                case RelayBStatus.Scanning: return warningColor;
                 case RelayBStatus.SignalMismatch:
-                case RelayBStatus.ConnectionLost:
-                    return dangerColor; // Red new Color(1f, 0.2f, 0.14f, 1f)
-                default:
-                    return offlineColor; // Grey new Color(0.55f, 0.65f, 0.7f, 1f)
+                case RelayBStatus.ConnectionLost: return dangerColor;
+                default: return offlineColor;
             }
         }
     }
 }
-

@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace EchoProtocol.RelayB
@@ -25,7 +26,21 @@ namespace EchoProtocol.RelayB
             bool isOnline,
             bool isScanning,
             bool hasScanned,
-            bool isSelectedChannelCorrect)
+            bool isSelectedChannelCorrect,
+            RelayBFilterMode filterMode,
+            RelayBGainMode gainMode,
+            RelayBPilotMode pilotMode,
+            RelayBChannelDiagnostic selectedChannelDiagnostic,
+            RelayBOutputDiagnostic outputDiagnostic = default,
+            RelayBReferenceProfile referenceProfile = null,
+            RelayBCandidate[] candidates = null,
+            RelayBModuleType[] pipelineModules = null,
+            int activeTab = 0,
+            int timingOffsetBaud = 0,
+            bool falseLockDetected = false,
+            string[] systemLog = null,
+            int cleanProblems = 0,
+            RelayBDecodeSnapshot decoder = default)
         {
             Status = status;
             SelectedChannelIndex = selectedChannelIndex;
@@ -48,6 +63,20 @@ namespace EchoProtocol.RelayB
             IsScanning = isScanning;
             HasScanned = hasScanned;
             IsSelectedChannelCorrect = isSelectedChannelCorrect;
+            FilterMode = filterMode;
+            GainMode = gainMode;
+            PilotMode = pilotMode;
+            SelectedChannelDiagnostic = selectedChannelDiagnostic;
+            OutputDiagnostic = outputDiagnostic;
+            ReferenceProfile = referenceProfile;
+            Candidates = candidates != null ? (RelayBCandidate[])candidates.Clone() : Array.Empty<RelayBCandidate>();
+            PipelineModules = pipelineModules != null ? (RelayBModuleType[])pipelineModules.Clone() : new RelayBModuleType[4];
+            ActiveTab = activeTab;
+            TimingOffsetBaud = timingOffsetBaud;
+            FalseLockDetected = falseLockDetected;
+            SystemLog = systemLog != null ? (string[])systemLog.Clone() : Array.Empty<string>();
+            CleanProblems = cleanProblems;
+            Decoder = decoder;
         }
 
         public RelayBStatus Status { get; }
@@ -71,10 +100,23 @@ namespace EchoProtocol.RelayB
         public bool IsScanning { get; }
         public bool HasScanned { get; }
         public bool IsSelectedChannelCorrect { get; }
+        public RelayBFilterMode FilterMode { get; }
+        public RelayBGainMode GainMode { get; }
+        public RelayBPilotMode PilotMode { get; }
+        public RelayBChannelDiagnostic SelectedChannelDiagnostic { get; }
+        public RelayBOutputDiagnostic OutputDiagnostic { get; }
+        public RelayBReferenceProfile ReferenceProfile { get; }
+        public RelayBCandidate[] Candidates { get; }
+        public RelayBModuleType[] PipelineModules { get; }
+        public int ActiveTab { get; }
+        public int TimingOffsetBaud { get; }
+        public bool FalseLockDetected { get; }
+        public string[] SystemLog { get; }
+        public int CleanProblems { get; }
+        public RelayBDecodeSnapshot Decoder { get; }
 
         public float Progress01 => HoldRequiredSeconds <= 0f
             ? (IsOnline ? 1f : 0f)
             : Mathf.Clamp01(SyncProgressSeconds / HoldRequiredSeconds);
     }
 }
-

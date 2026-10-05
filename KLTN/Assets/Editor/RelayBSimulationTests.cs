@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using UnityEngine;
+using UnityEditor;
 using EchoProtocol.RelayB;
 
 namespace EchoProtocol.RelayB.Tests
@@ -25,6 +26,238 @@ namespace EchoProtocol.RelayB.Tests
             }
         }
 
+        private void PrepareStage3(RelayBSignalSimulation sim)
+        {
+            sim.ScanSpectrum();
+            sim.SelectChannel(_config.Presets[0].CorrectChannelIndex);
+            sim.SetPipelineSlot(0, RelayBModuleType.NoiseSuppressor);
+            Assert.IsTrue(sim.AnalyzeOutput().IsValid);
+            SolveDecoder(sim);
+        }
+
+        private static void SolveDecoder(RelayBSignalSimulation sim)
+        {
+            int secret = (int)typeof(RelayBDecoder).GetField("_secret", System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.NonPublic).GetValue(sim.Decoder);
+            Assert.IsTrue(sim.Decoder.Transmit(secret));
+            sim.Tick(3.4f);
+            Assert.IsTrue(sim.Decoder.Snapshot.IsComplete);
+        }
+
+        [Test]
+        public void FindSignal_RequiresScanAndRejectsWrongCandidate()
+        {
+            var sim = new RelayBSignalSimulation();
+            sim.Initialize(_config, 0);
+            sim.SelectChannel(_config.Presets[0].CorrectChannelIndex);
+            Assert.That(sim.Snapshot.SelectedChannelIndex, Is.EqualTo(-1));
+            sim.SetActiveTab(1);
+            Assert.That(sim.Snapshot.ActiveTab, Is.EqualTo(0));
+
+            sim.ScanSpectrum();
+            sim.SelectChannel(0);
+            Assert.That(sim.Snapshot.SelectedChannelIndex, Is.EqualTo(-1));
+            sim.SetActiveTab(1);
+            Assert.That(sim.Snapshot.ActiveTab, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void FindSignal_RoutingCorrectCandidateKeepsFindTabUntilPlayerAdvances()
+        {
+            var sim = new RelayBSignalSimulation();
+            sim.Initialize(_config, 0);
+            sim.ScanSpectrum();
+            sim.SelectChannel(_config.Presets[0].CorrectChannelIndex);
+
+            Assert.That(sim.Snapshot.SelectedChannelIndex, Is.EqualTo(_config.Presets[0].CorrectChannelIndex));
+            Assert.That(sim.Snapshot.ActiveTab, Is.EqualTo(0));
+
+            sim.SetActiveTab(1);
+            Assert.That(sim.Snapshot.ActiveTab, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void FindSignal_NewAttemptShufflesCluesAndStillHasOneAnswer()
+        {
+            var signatures = new System.Collections.Generic.HashSet<string>();
+            var channels = new System.Collections.Generic.HashSet<int>();
+            for (int seed = 1; seed <= 12; seed++)
+            {
+                var sim = new RelayBSignalSimulation();
+                sim.Initialize(_config, 0, true, seed);
+                var preset = sim.GetCurrentPreset();
+                int matches = 0;
+                for (int i = 0; i < preset.Candidates.Length; i++)
+                {
+                    var candidate = preset.Candidates[i];
+                    if (candidate.Peaks[0] >= preset.ReferenceProfile.FundamentalMinKhz
+                        && candidate.Peaks[0] <= preset.ReferenceProfile.FundamentalMaxKhz
+                        && candidate.Waveform == preset.ReferenceWaveform
+                        && candidate.PilotFrame == preset.ReferenceProfile.ExpectedPilot) matches++;
+                }
+                Assert.That(matches, Is.EqualTo(1));
+                signatures.Add($"{preset.TargetFrequency:0.0}:{preset.ReferenceProfile.ExpectedPilot}:{preset.CorrectChannelIndex}");
+                channels.Add(preset.CorrectChannelIndex);
+            }
+            Assert.That(signatures.Count, Is.GreaterThan(2));
+            Assert.That(channels.Count, Is.GreaterThan(1));
+        }
+
+        [Test]
+        public void CleanSignal_FailedAttemptChangesProblemsButPreservesFind()
+        {
+            foreach (int presetIndex in new[] { 0, 2 })
+            {
+                var sim = new RelayBSignalSimulation();
+                sim.Initialize(_config, presetIndex, true, 123);
+                sim.ScanSpectrum();
+                sim.SelectChannel(sim.GetCurrentPreset().CorrectChannelIndex);
+                int selected = sim.SelectedChannelIndex;
+                int oldProblems = sim.Snapshot.CleanProblems;
+                sim.SetPipelineSlot(0, RelayBModuleType.Gain);
+                Assert.IsFalse(sim.AnalyzeOutput().IsValid);
+
+                sim.RerollCleanScenario(457);
+
+                Assert.That(sim.SelectedChannelIndex, Is.EqualTo(selected));
+                Assert.That(sim.Snapshot.HasScanned, Is.True);
+                Assert.That(sim.Snapshot.ActiveTab, Is.EqualTo(1));
+                Assert.That(sim.Snapshot.CleanProblems, Is.Not.EqualTo(oldProblems));
+                Assert.That(sim.Snapshot.PipelineModules[0], Is.EqualTo(RelayBModuleType.None));
+                Assert.That(sim.Snapshot.PipelineModules[1], Is.EqualTo(RelayBModuleType.None));
+                Assert.That(sim.Snapshot.OutputDiagnostic.Summary, Is.Null.Or.Empty);
+            }
+        }
+
+        [Test]
+        public void CleanSignal_RerolledConditionsRemainSolvable()
+        {
+            foreach (int presetIndex in new[] { 0, 2 })
+            {
+                var sim = new RelayBSignalSimulation();
+                sim.Initialize(_config, presetIndex, true, 123);
+                sim.ScanSpectrum();
+                sim.SelectChannel(sim.GetCurrentPreset().CorrectChannelIndex);
+                var seen = new System.Collections.Generic.HashSet<int>();
+                for (int seed = 100; seed < 112; seed++)
+                {
+                    sim.RerollCleanScenario(seed);
+                    int problems = sim.Snapshot.CleanProblems;
+                    seen.Add(problems);
+                    RelayBModuleType first = (problems & 1) != 0 ? RelayBModuleType.NoiseSuppressor
+                        : (problems & 2) != 0 ? RelayBModuleType.Notch : RelayBModuleType.Gain;
+                    RelayBModuleType second = (problems & 4) != 0 && first != RelayBModuleType.Gain
+                        ? RelayBModuleType.Gain : (problems & 2) != 0 && first != RelayBModuleType.Notch
+                        ? RelayBModuleType.Notch : RelayBModuleType.None;
+                    sim.SetPipelineSlot(0, first);
+                    sim.SetPipelineSlot(1, second);
+                    Assert.IsTrue(sim.AnalyzeOutput().IsValid, $"Preset {presetIndex}, problems {problems}");
+                }
+                Assert.That(seen.Count, Is.EqualTo(3));
+            }
+        }
+
+        [Test]
+        public void CleanSignal_LatestSeedIsEnoughToReconstructCondition()
+        {
+            var host = new RelayBSignalSimulation();
+            var client = new RelayBSignalSimulation();
+            host.Initialize(_config, 2, true, 123);
+            client.Initialize(_config, 2, true, 123);
+            host.ScanSpectrum();
+            client.ScanSpectrum();
+            int channel = host.GetCurrentPreset().CorrectChannelIndex;
+            host.SelectChannel(channel);
+            client.SelectChannel(channel);
+            host.RerollCleanScenario(101);
+            host.RerollCleanScenario(102);
+            client.RerollCleanScenario(102);
+
+            Assert.That(client.Snapshot.CleanProblems, Is.EqualTo(host.Snapshot.CleanProblems));
+        }
+
+        [Test]
+        public void FindSignal_EachPresetHasExactlyOneThreeClueMatch()
+        {
+            foreach (var preset in _config.Presets)
+            {
+                int matches = 0;
+                foreach (var candidate in preset.Candidates)
+                {
+                    if (candidate.Peaks.Length > 0
+                        && candidate.Peaks[0] >= preset.ReferenceProfile.FundamentalMinKhz
+                        && candidate.Peaks[0] <= preset.ReferenceProfile.FundamentalMaxKhz
+                        && candidate.Waveform == preset.ReferenceWaveform
+                        && candidate.PilotFrame == preset.ReferenceProfile.ExpectedPilot) matches++;
+                }
+                Assert.That(matches, Is.EqualTo(1), preset.PresetName);
+            }
+        }
+
+        [Test]
+        public void SerializedPresetAsset_HasOneAnswerAndExpectedCleanDifficulty()
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<RelayBConfig>(
+                "Assets/ScriptableObjects/RelayB/RelayB_Hard_Config.asset");
+            Assert.IsNotNull(asset);
+            Assert.IsTrue(asset.AreAllPresetsSolvable());
+            Assert.That(asset.Presets.Count, Is.EqualTo(4));
+
+            for (int i = 0; i < asset.Presets.Count; i++)
+            {
+                var preset = asset.Presets[i];
+                var candidate = preset.GetCandidate(preset.CorrectChannelIndex);
+                int problems = 1 + (candidate.HasSpur ? 1 : 0)
+                    + (candidate.DistortionPercent > 15f ? 1 : 0);
+                Assert.That(problems, Is.EqualTo(i < 2 ? 1 : 2), preset.PresetName);
+                Assert.That(preset.ReferenceProfile.TargetFundamentalKhz - preset.ReferenceProfile.FundamentalMinKhz,
+                    Is.EqualTo(preset.ReferenceProfile.FundamentalMaxKhz
+                        - preset.ReferenceProfile.TargetFundamentalKhz).Within(0.01f));
+            }
+        }
+
+        [Test]
+        public void CleanSignal_RequiresCorrectToolsAndOrder()
+        {
+            for (int presetIndex = 0; presetIndex < _config.Presets.Count; presetIndex++)
+            {
+                var preset = _config.Presets[presetIndex];
+                var signal = preset.GetCandidate(preset.CorrectChannelIndex);
+                var sim = new RelayBSignalSimulation();
+                sim.Initialize(_config, presetIndex);
+                sim.ScanSpectrum();
+                sim.SelectChannel(preset.CorrectChannelIndex);
+                sim.SetFrequency(preset.TargetFrequency);
+                sim.SetPhase(preset.TargetPhase);
+
+                sim.StartSynchronization();
+                Assert.That(sim.Snapshot.Status, Is.Not.EqualTo(RelayBStatus.Synchronizing));
+                sim.SetActiveTab(2);
+                Assert.That(sim.Snapshot.ActiveTab, Is.EqualTo(1));
+
+                sim.SetPipelineSlot(0, RelayBModuleType.NoiseSuppressor);
+                if (signal.HasSpur || signal.DistortionPercent > 15f)
+                {
+                    var second = signal.HasSpur ? RelayBModuleType.Notch : RelayBModuleType.Gain;
+                    sim.SetPipelineSlot(1, RelayBModuleType.None);
+                    Assert.IsFalse(sim.AnalyzeOutput().IsValid);
+                    sim.SetPipelineSlot(0, second);
+                    sim.SetPipelineSlot(1, RelayBModuleType.NoiseSuppressor);
+                    if (second == RelayBModuleType.Gain) Assert.IsFalse(sim.AnalyzeOutput().IsValid);
+                    sim.SetPipelineSlot(0, RelayBModuleType.NoiseSuppressor);
+                    sim.SetPipelineSlot(1, second);
+                }
+                Assert.IsTrue(sim.AnalyzeOutput().IsValid, $"Preset {presetIndex} should clean with required tools.");
+                sim.SetActiveTab(2);
+                Assert.That(sim.Snapshot.ActiveTab, Is.EqualTo(1), "Legacy DSP must not bypass decoding.");
+                SolveDecoder(sim);
+                sim.SetActiveTab(2);
+                Assert.That(sim.Snapshot.ActiveTab, Is.EqualTo(2));
+                sim.StartSynchronization();
+                Assert.That(sim.Snapshot.Status, Is.EqualTo(RelayBStatus.Synchronizing));
+            }
+        }
+
         [Test]
         public void Presets_AllFourPresetsHaveValidSolvableSolutions()
         {
@@ -36,7 +269,14 @@ namespace EchoProtocol.RelayB.Tests
                 RelayBSignalSimulation sim = new RelayBSignalSimulation();
                 sim.Initialize(_config, i);
 
+                sim.ScanSpectrum();
                 sim.SelectChannel(preset.CorrectChannelIndex);
+                sim.SetPipelineSlot(0, RelayBModuleType.NoiseSuppressor);
+                RelayBCandidate candidate = preset.GetCandidate(preset.CorrectChannelIndex);
+                if (candidate.HasSpur) sim.SetPipelineSlot(1, RelayBModuleType.Notch);
+                else if (candidate.DistortionPercent > 15f) sim.SetPipelineSlot(1, RelayBModuleType.Gain);
+                Assert.IsTrue(sim.AnalyzeOutput().IsValid);
+                SolveDecoder(sim);
                 sim.SetFrequency(preset.TargetFrequency);
                 sim.SetPhase(preset.TargetPhase);
 
@@ -101,6 +341,7 @@ namespace EchoProtocol.RelayB.Tests
                     RelayBSignalSimulation sim = new RelayBSignalSimulation();
                     sim.Initialize(_config, p);
 
+                    sim.ScanSpectrum();
                     sim.SelectChannel(c);
                     sim.SetFrequency(preset.TargetFrequency);
                     sim.SetPhase(preset.TargetPhase);
@@ -121,8 +362,9 @@ namespace EchoProtocol.RelayB.Tests
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
 
-            // Channel 0 has Triangle waveform, preset 0 expects Sine
-            sim.SelectChannel(0);
+            // Channel 3 has Triangle waveform, preset 0 expects Sine
+            sim.ScanSpectrum();
+            sim.SelectChannel(3);
             sim.SetFrequency(preset.TargetFrequency);
             sim.SetPhase(preset.TargetPhase);
 
@@ -140,7 +382,7 @@ namespace EchoProtocol.RelayB.Tests
             sim.Initialize(_config, 0);
 
             // Select correct channel but wrong frequency
-            sim.SelectChannel(1);
+            PrepareStage3(sim);
             sim.SetFrequency(15f);
             sim.StartSynchronization();
 
@@ -163,7 +405,7 @@ namespace EchoProtocol.RelayB.Tests
 
             Assert.That(sim.Snapshot.Progress01, Is.EqualTo(0f));
 
-            sim.SelectChannel(1);
+            PrepareStage3(sim);
             sim.SetFrequency(42f);
             sim.SetPhase(90f);
             sim.StartSynchronization();
@@ -205,7 +447,7 @@ namespace EchoProtocol.RelayB.Tests
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
 
-            sim.SelectChannel(1);
+            PrepareStage3(sim);
             sim.SetFrequency(42f);
             sim.SetPhase(90f);
             sim.StartSynchronization();
@@ -226,12 +468,12 @@ namespace EchoProtocol.RelayB.Tests
         }
 
         [Test]
-        public void InstabilityGrace_ExceedingGracePeriodResets()
+        public void InstabilityGrace_ExceedingGracePeriodDecaysProgress()
         {
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
 
-            sim.SelectChannel(1);
+            PrepareStage3(sim);
             sim.SetFrequency(42f);
             sim.SetPhase(90f);
             sim.StartSynchronization();
@@ -242,8 +484,7 @@ namespace EchoProtocol.RelayB.Tests
             sim.SetFrequency(20f);
             sim.Tick(0.6f);
 
-            Assert.That(sim.Snapshot.SyncProgressSeconds, Is.EqualTo(0f));
-            Assert.That(sim.Snapshot.Progress01, Is.EqualTo(0f));
+            Assert.That(sim.Snapshot.SyncProgressSeconds, Is.GreaterThan(0f).And.LessThan(2f));
         }
 
         [Test]
@@ -255,7 +496,7 @@ namespace EchoProtocol.RelayB.Tests
             bool warningFired = false;
             sim.DriftWarning += () => warningFired = true;
 
-            sim.SelectChannel(1);
+            PrepareStage3(sim);
             sim.SetFrequency(42f);
             sim.SetPhase(90f);
             sim.StartSynchronization();
@@ -276,7 +517,7 @@ namespace EchoProtocol.RelayB.Tests
             bool driftFired = false;
             sim.DriftTriggered += () => driftFired = true;
 
-            sim.SelectChannel(1);
+            PrepareStage3(sim);
             sim.SetFrequency(42f);
             sim.SetPhase(90f);
             sim.StartSynchronization();
@@ -298,7 +539,7 @@ namespace EchoProtocol.RelayB.Tests
             int count = 0;
             sim.DriftTriggered += () => count++;
 
-            sim.SelectChannel(1);
+            PrepareStage3(sim);
             sim.SetFrequency(42f);
             sim.SetPhase(90f);
             sim.StartSynchronization();
@@ -307,9 +548,9 @@ namespace EchoProtocol.RelayB.Tests
             for (int i = 0; i < 36; i++) sim.Tick(0.1f);
             Assert.That(count, Is.EqualTo(1));
 
-            // Cause a reset
+            // Progress decays after the grace window.
             sim.Tick(0.6f);
-            Assert.That(sim.Snapshot.SyncProgressSeconds, Is.EqualTo(0f));
+            Assert.That(sim.Snapshot.SyncProgressSeconds, Is.GreaterThan(0f));
 
             // Re-sync to shifted target
             sim.SetPhase(90f + _config.DriftPhaseOffset);
@@ -319,12 +560,12 @@ namespace EchoProtocol.RelayB.Tests
         }
 
         [Test]
-        public void ChannelSwitch_CancelsOngoingSyncAndResetsTimer()
+        public void WrongChannelSelection_DoesNotInterruptActiveSync()
         {
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
 
-            sim.SelectChannel(1);
+            PrepareStage3(sim);
             sim.SetFrequency(42f);
             sim.SetPhase(90f);
             sim.StartSynchronization();
@@ -332,11 +573,11 @@ namespace EchoProtocol.RelayB.Tests
             for (int i = 0; i < 20; i++) sim.Tick(0.1f);
             Assert.That(sim.Snapshot.SyncProgressSeconds, Is.GreaterThan(1.9f));
 
-            // Switch to Channel 0
+            float progress = sim.Snapshot.SyncProgressSeconds;
             sim.SelectChannel(0);
 
-            Assert.That(sim.Snapshot.Status, Is.Not.EqualTo(RelayBStatus.Synchronizing));
-            Assert.That(sim.Snapshot.SyncProgressSeconds, Is.EqualTo(0f));
+            Assert.That(sim.Snapshot.SelectedChannelIndex, Is.EqualTo(_config.Presets[0].CorrectChannelIndex));
+            Assert.That(sim.Snapshot.SyncProgressSeconds, Is.EqualTo(progress));
         }
 
         [Test]
@@ -348,7 +589,7 @@ namespace EchoProtocol.RelayB.Tests
             bool completed = false;
             sim.Completed += () => completed = true;
 
-            sim.SelectChannel(1);
+            PrepareStage3(sim);
             sim.SetFrequency(42f);
             sim.SetPhase(90f);
             sim.StartSynchronization();
