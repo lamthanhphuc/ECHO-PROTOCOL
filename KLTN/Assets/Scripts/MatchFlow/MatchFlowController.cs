@@ -184,6 +184,23 @@ public class MatchFlowController : MonoBehaviour
 #endif
     }
 
+    public bool DebugSkipToZone2()
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (_networkAuthorityPresentationOnly || IsMatchEnded) return false;
+
+        var entry = FindAnyObjectByType<StalkerZone2EntryTrigger>();
+        var player = FindAnyObjectByType<NetworkPlayerMovement>();
+        if (entry == null || player == null) return false;
+
+        NotifyCoreObjectiveComplete();
+        player.TeleportAuthoritative(entry.transform.position, entry.transform.rotation);
+        return true;
+#else
+        return false;
+#endif
+    }
+
     public void NotifyZone3Complete()
     {
         if (_networkAuthorityPresentationOnly || _phase != MatchPhase.Zone3PushFrigate) return;

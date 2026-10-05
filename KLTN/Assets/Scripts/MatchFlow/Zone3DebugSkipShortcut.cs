@@ -4,6 +4,7 @@ using UnityEngine.InputSystem;
 
 public sealed class Zone3DebugSkipShortcut : MonoBehaviour
 {
+    [SerializeField] private Key zone2SkipKey = Key.F8;
     [SerializeField] private Key skipKey = Key.F9;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -22,7 +23,19 @@ public sealed class Zone3DebugSkipShortcut : MonoBehaviour
     {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         var keyboard = Keyboard.current;
-        if (keyboard == null || !keyboard[skipKey].wasPressedThisFrame) return;
+        if (keyboard == null) return;
+
+        if (keyboard[zone2SkipKey].wasPressedThisFrame)
+        {
+            var match = NetworkMatchState.Instance;
+            if (match != null && match.Object != null)
+                match.RequestDebugSkipToZone2();
+            else
+                FindAnyObjectByType<MatchFlowController>()?.DebugSkipToZone2();
+            return;
+        }
+
+        if (!keyboard[skipKey].wasPressedThisFrame) return;
 
         var networkMatch = NetworkMatchState.Instance;
         if (networkMatch != null && networkMatch.Object != null)

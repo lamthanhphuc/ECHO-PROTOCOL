@@ -1,6 +1,7 @@
 using EchoProtocol.Networking;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace EchoProtocol.Tests.MatchFlow
 {
@@ -80,6 +81,24 @@ namespace EchoProtocol.Tests.MatchFlow
             Assert.IsTrue(_blocker.activeSelf);
             Assert.IsTrue(_passageCollider.enabled);
             Assert.IsTrue(_wallEdgeCollider.enabled);
+        }
+
+        [Test]
+        public void DebugSkipToZone2_CompletesZone1AndTeleportsPlayerToEntry()
+        {
+            var entry = new GameObject("Zone2Entry");
+            entry.transform.SetPositionAndRotation(new Vector3(4f, 2f, 8f), Quaternion.Euler(0f, 90f, 0f));
+            entry.AddComponent<BoxCollider>().isTrigger = true;
+            LogAssert.Expect(LogType.Error, "[STK_ZONE2][CONFIG] PlayerSpawner was not found for the Zone 2 entry trigger.");
+            entry.AddComponent<StalkerZone2EntryTrigger>();
+            var player = new GameObject("Player").AddComponent<NetworkPlayerMovement>();
+
+            Assert.IsTrue(_flow.DebugSkipToZone2());
+            Assert.AreEqual(MatchPhase.SecurityHold, _flow.Phase);
+            Assert.AreEqual(entry.transform.position, player.transform.position);
+
+            Object.DestroyImmediate(player.gameObject);
+            Object.DestroyImmediate(entry);
         }
     }
 }
