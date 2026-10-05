@@ -1,4 +1,8 @@
 using System;
+using EchoProtocol.AI.Listener.Noise;
+using EchoProtocol.Networking.Authority;
+using EchoProtocol.Networking;
+using Fusion;
 using UnityEngine;
 
 namespace EchoProtocol.RelayB
@@ -24,6 +28,7 @@ namespace EchoProtocol.RelayB
         private float _nextMismatchSoundAt;
         private int _presetIndex = 0;
         private int _attemptSeed;
+        private readonly AudioSource[] _decoderFeedbackSources = new AudioSource[3];
 
         public event Action<RelayBSnapshot> StateChanged;
         public event Action RelayBOnline;
@@ -69,10 +74,12 @@ namespace EchoProtocol.RelayB
             _simulation.DriftTriggered += HandleDriftTriggered;
             _simulation.SignalMismatchOccurred += HandleSignalMismatch;
             _simulation.InstabilityReset += HandleInstabilityReset;
+            _simulation.Decoder.Failed += HandleDecoderFailed;
+            _simulation.Decoder.Completed += HandleDecoderCompleted;
 
             RandomizePresetIndex();
             _attemptSeed = NewAttemptSeed();
-            _simulation.Initialize(config, _presetIndex, true, _attemptSeed);
+            InitializeAttempt();
         }
 
         private void OnDestroy()
@@ -84,10 +91,15 @@ namespace EchoProtocol.RelayB
             _simulation.DriftTriggered -= HandleDriftTriggered;
             _simulation.SignalMismatchOccurred -= HandleSignalMismatch;
             _simulation.InstabilityReset -= HandleInstabilityReset;
+            _simulation.Decoder.Failed -= HandleDecoderFailed;
+            _simulation.Decoder.Completed -= HandleDecoderCompleted;
         }
 
         private void Update()
         {
+            var matchState = NetworkMatchState.Instance;
+            if (matchState != null && matchState.Object != null && matchState.Object.IsValid
+                && !matchState.Object.HasStateAuthority) return;
             _simulation.Tick(Time.deltaTime);
         }
 
@@ -97,27 +109,68 @@ namespace EchoProtocol.RelayB
             if (!_simulation.IsOnline)
             {
                 _attemptSeed = NewAttemptSeed();
-                _simulation.Initialize(config, _presetIndex, true, _attemptSeed);
+                InitializeAttempt();
             }
         }
 
         public void OpenUI(GameObject interactor)
         {
-            if (ui == null)
-            {
-                return;
-            }
-
+            if (ui == null) return;
             ui.Open(interactor);
             ui.Refresh(_simulation.Snapshot);
         }
 
         public void CloseUI()
         {
-            if (ui != null)
-            {
-                ui.Close();
-            }
+            if (ui != null) ui.Close();
+        }
+
+        public void SetActiveTab(int tabIndex)
+        {
+            _simulation.SetActiveTab(tabIndex);
+            PlayAdjustSound();
+        }
+
+        public bool TransmitCode(int packed)
+        {
+            if (!_simulation.IsSignalFound || _simulation.IsOnline || _simulation.IsSynchronizing) return false;
+            if (!_simulation.Decoder.Transmit(packed)) return false;
+            PlayOneShot(startupClip, 0.65f, "security_terminal/terminal_boot");
+            HandleSimulationChanged(_simulation.Snapshot);
+            return true;
+        }
+
+        public void ApplyAuthoritativeDecoder(RelayBDecodeSnapshot state)
+        {
+            _simulation.Decoder.ApplyAuthoritative(state);
+            ui?.Refresh(_simulation.Snapshot);
+        }
+
+        public void PlayDecoderTick(int feedback = -1)
+        {
+            if (!Application.isPlaying) return;
+            if (audioSource == null) audioSource = GetComponent<AudioSource>();
+            int index = Mathf.Clamp(feedback, 0, 2);
+            var source = _decoderFeedbackSources[index];
+            if (source == null) source = _decoderFeedbackSources[index] = EchoProtocol.Audio.GameAudioRuntime.CreateSource(gameObject, false);
+            source.pitch = feedback == 2 ? 1.35f : feedback == 1 ? 1f : feedback == 0 ? 0.7f : 1.1f;
+            if (adjustClip != null) source.PlayOneShot(adjustClip, 0.3f);
+            else EchoProtocol.Audio.GameAudioRuntime.Play(source, "ui/click", 0.3f);
+        }
+
+        private void HandleDecoderFailed()
+        {
+            PlayOneShot(mismatchClip, 0.8f, "objectives/relay_b_desync");
+            EmitAuthoritativeNoise(RuntimeNoiseType.MACHINE_OVERLOAD);
+        }
+
+        private void HandleDecoderCompleted() => PlayOneShot(completeClip, 0.7f, "security_terminal/access_granted");
+
+        public void ScanSpectrum()
+        {
+            _simulation.ScanSpectrum();
+            PlayOneShot(startupClip, 0.85f, "security_terminal/terminal_boot");
+            EmitAuthoritativeNoise(RuntimeNoiseType.MACHINE_REPAIR);
         }
 
         public void SelectChannel(int channelIndex)
@@ -127,6 +180,68 @@ namespace EchoProtocol.RelayB
             ControlsChanged?.Invoke(_simulation.SelectedChannelIndex, _simulation.CurrentFrequency, _simulation.CurrentPhase);
         }
 
+        public void SetPipelineSlot(int slotIndex, RelayBModuleType module)
+        {
+            _simulation.SetPipelineSlot(slotIndex, module);
+            PlayAdjustSound();
+        }
+
+        public void AnalyzeOutput()
+        {
+            _simulation.AnalyzeOutput();
+            PlayOneShot(adjustClip, 0.75f, "security_terminal/terminal_boot");
+            EmitAuthoritativeNoise(RuntimeNoiseType.MACHINE_REPAIR);
+        }
+
+        public void ApplyPhaseShift(float deltaDegrees)
+        {
+            _simulation.ApplyPhaseCorrection(deltaDegrees);
+            PlayAdjustSound();
+            ControlsChanged?.Invoke(_simulation.SelectedChannelIndex, _simulation.CurrentFrequency, _simulation.CurrentPhase);
+        }
+
+        public void ApplyTimingOffset(int deltaBaud)
+        {
+            _simulation.ApplyTimingOffset(deltaBaud);
+            PlayAdjustSound();
+        }
+
+        public void ApplyPhaseTrim(float deltaDegrees)
+        {
+            _simulation.ApplyPhaseTrim(deltaDegrees);
+            PlayAdjustSound();
+        }
+
+        public void ApplyClockTrim(int deltaBaud)
+        {
+            _simulation.ApplyClockTrim(deltaBaud);
+            PlayAdjustSound();
+        }
+
+        public void StartSynchronization()
+        {
+            if (IsOnline) return;
+
+            _simulation.StartSynchronization();
+            if (_simulation.IsSynchronizing)
+            {
+                PlayOneShot(startupClip, 0.9f, "security_terminal/terminal_boot");
+                StartSyncRequested?.Invoke();
+            }
+            else
+            {
+                EmitAuthoritativeNoise(RuntimeNoiseType.MACHINE_OVERLOAD);
+            }
+        }
+
+        public void CancelSynchronization()
+        {
+            _simulation.CancelSynchronization();
+            PlayOneShot(warningClip, 0.5f, "security_terminal/download_pause");
+            CancelSyncRequested?.Invoke();
+        }
+
+        // Backward compatibility
         public void SetFrequency(float frequency)
         {
             _simulation.SetFrequency(frequency);
@@ -141,29 +256,12 @@ namespace EchoProtocol.RelayB
             ControlsChanged?.Invoke(_simulation.SelectedChannelIndex, _simulation.CurrentFrequency, _simulation.CurrentPhase);
         }
 
-        public void ScanChannels()
-        {
-            _simulation.ScanChannels(1.0f);
-            PlayOneShot(startupClip, 0.75f, "security_terminal/terminal_boot");
-        }
+        public void ScanChannels() => ScanSpectrum();
 
-        public void StartSynchronization()
+        public void SetProcessing(RelayBFilterMode filterMode, RelayBGainMode gainMode, RelayBPilotMode pilotMode)
         {
-            if (IsOnline)
-            {
-                return;
-            }
-
-            _simulation.StartSynchronization();
-            PlayOneShot(startupClip, 0.85f, "security_terminal/terminal_boot");
-            StartSyncRequested?.Invoke();
-        }
-
-        public void CancelSynchronization()
-        {
-            _simulation.CancelSynchronization();
-            PlayOneShot(warningClip, 0.5f, "security_terminal/download_pause");
-            CancelSyncRequested?.Invoke();
+            _simulation.SetProcessing(filterMode, gainMode, pilotMode);
+            PlayAdjustSound();
         }
 
         public void ApplyAuthoritativeControls(int channelIndex, float frequency, float phase)
@@ -183,33 +281,78 @@ namespace EchoProtocol.RelayB
             }
         }
 
+        public void ApplyAuthoritativeProcessing(bool scanned, int firstSlot, int secondSlot, bool tested, bool applySlots)
+        {
+            if (scanned && !_simulation.Snapshot.HasScanned) _simulation.ScanSpectrum();
+            if (!applySlots || !_simulation.IsSignalFound) return;
+
+            var modules = _simulation.PipelineModules;
+            if (modules[0] != (RelayBModuleType)firstSlot)
+                _simulation.SetPipelineSlot(0, (RelayBModuleType)firstSlot);
+            if (modules[1] != (RelayBModuleType)secondSlot)
+                _simulation.SetPipelineSlot(1, (RelayBModuleType)secondSlot);
+            if (tested && string.IsNullOrEmpty(_simulation.OutputDiagnostic.Summary))
+                _simulation.AnalyzeOutput();
+            else if (!tested)
+                _simulation.ClearOutputDiagnostic();
+        }
+
         public void ApplyAuthoritativePresetIndex(int presetIndex)
         {
             int normalized = Mathf.Max(0, presetIndex);
-            if (_simulation.IsOnline || _presetIndex == normalized)
-            {
-                return;
-            }
+            if (_simulation.IsOnline || _presetIndex == normalized) return;
 
             _presetIndex = normalized;
             _attemptSeed = NewAttemptSeed();
-            _simulation.Initialize(config, _presetIndex, true, _attemptSeed);
+            InitializeAttempt();
         }
 
         public void ApplyAuthoritativeSyncState(bool synchronizing)
         {
-            var snapshot = _simulation.Snapshot;
-            bool isSynchronizing = snapshot.Status == RelayBStatus.Synchronizing
-                || snapshot.Status == RelayBStatus.SignalMismatch
-                || snapshot.Status == RelayBStatus.ConnectionLost
-                || snapshot.Status == RelayBStatus.DriftWarning;
-            if (snapshot.IsOnline || isSynchronizing == synchronizing)
-            {
-                return;
-            }
+            if (_simulation.IsOnline || _simulation.IsSynchronizing == synchronizing) return;
 
             if (synchronizing) _simulation.StartSynchronization();
             else _simulation.CancelSynchronization();
+        }
+
+        public void ApplyAuthoritativeCleanScenario(int seed)
+        {
+            _simulation.RerollCleanScenario(seed);
+        }
+
+        public void RerollFindAfterMismatch(int failedChannel)
+        {
+            int count = config != null && config.Presets != null ? config.Presets.Count : 0;
+            if (count == 0) return;
+            int start = _presetIndex >= 2 ? 2 : 0;
+            int end = Mathf.Min(start + 2, count);
+            int next = end - start > 1 ? start + ((_presetIndex - start + 1) % (end - start)) : start;
+            int seed = 0;
+            var preview = new RelayBSignalSimulation();
+            for (int attempt = 0; attempt < 64; attempt++)
+            {
+                seed = NewAttemptSeed();
+                preview.Initialize(config, next, true, seed);
+                if (preview.GetCurrentPreset().CorrectChannelIndex != failedChannel) break;
+            }
+            ApplyAuthoritativeAttempt(next, seed);
+        }
+
+        public void RerollCleanAfterFailedTest()
+        {
+            if (!_simulation.IsSignalClean)
+            {
+                int seed;
+                do seed = NewAttemptSeed();
+                while (RelayBSignalSimulation.GetCleanProblemsForSeed(_presetIndex, seed)
+                    == _simulation.CleanProblems);
+                ApplyAuthoritativeCleanScenario(seed);
+            }
+        }
+
+        public void ApplyAuthoritativeSyncTelemetry(float progressSeconds, bool driftActive, bool driftWarning)
+        {
+            _simulation.ApplyAuthoritativeSyncTelemetry(progressSeconds, driftActive, driftWarning);
         }
 
         public void ApplyOnlineFromAuthority()
@@ -220,20 +363,16 @@ namespace EchoProtocol.RelayB
 
         public void ApplyAuthoritativeAttempt(int presetIndex, int attemptSeed)
         {
-            if (attemptSeed == 0 || _simulation.IsOnline)
-            {
-                return;
-            }
+            if (attemptSeed == 0 || _simulation.IsOnline) return;
 
             int normalizedPreset = Mathf.Max(0, presetIndex);
-            if (_presetIndex == normalizedPreset && _attemptSeed == attemptSeed)
-            {
-                return;
-            }
+            if (_presetIndex == normalizedPreset && _attemptSeed == attemptSeed) return;
 
+            bool rerolledFind = _simulation.Snapshot.HasScanned && !_simulation.IsSignalFound;
             _presetIndex = normalizedPreset;
             _attemptSeed = attemptSeed;
-            _simulation.Initialize(config, _presetIndex, true, _attemptSeed);
+            InitializeAttempt();
+            if (rerolledFind) _simulation.MarkFindRerolled();
             ui?.Refresh(_simulation.Snapshot);
         }
 
@@ -242,13 +381,17 @@ namespace EchoProtocol.RelayB
             ui?.Close();
             _presetIndex = presetIndex >= 0 ? presetIndex : ChooseRandomPresetIndex();
             _attemptSeed = attemptSeed != 0 ? attemptSeed : NewAttemptSeed();
-            _simulation.Initialize(config, _presetIndex, true, _attemptSeed);
+            InitializeAttempt();
             ui?.Refresh(_simulation.Snapshot);
         }
 
-        private void RandomizePresetIndex()
+        private void RandomizePresetIndex() => _presetIndex = ChooseRandomPresetIndex();
+
+        private void InitializeAttempt()
         {
-            _presetIndex = ChooseRandomPresetIndex();
+            _simulation.Initialize(config, _presetIndex, true, _attemptSeed);
+            // Spectrum seeds are replicated; decoder secrets must use an independent private seed.
+            _simulation.Decoder.Initialize(NewAttemptSeed());
         }
 
         private int ChooseRandomPresetIndex()
@@ -300,7 +443,6 @@ namespace EchoProtocol.RelayB
                 _nextMismatchSoundAt = Time.unscaledTime + mismatchSoundCooldown;
                 PlayOneShot(mismatchClip, 0.75f, "objectives/relay_b_desync");
             }
-
         }
 
         private void HandleInstabilityReset()
@@ -326,5 +468,22 @@ namespace EchoProtocol.RelayB
             else EchoProtocol.Audio.GameAudioRuntime.Play(audioSource, fallbackKey, volume);
         }
 
+        private void EmitAuthoritativeNoise(RuntimeNoiseType type)
+        {
+            try
+            {
+                var authority = MatchAuthorityRuntime.Instance;
+                if (authority != null && authority.HasStateAuthority)
+                {
+                    var key = new RuntimeNoiseSourceOccurrenceKey($"RelayB_{gameObject.name}", Time.frameCount);
+                    HostRuntimeNoiseService.EnsureExists(authority)
+                        .TryAccept(PlayerRef.None, type, key, transform.position, out _);
+                }
+            }
+            catch
+            {
+                // Fallback safe in non-networked unit tests
+            }
+        }
     }
 }
