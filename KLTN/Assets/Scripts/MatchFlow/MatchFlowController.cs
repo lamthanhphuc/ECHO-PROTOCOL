@@ -184,6 +184,30 @@ public class MatchFlowController : MonoBehaviour
 #endif
     }
 
+    public void DebugSkipToZone2()
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (_networkAuthorityPresentationOnly || IsMatchEnded) return;
+
+        _securityHoldCompleted = false;
+        _powerPuzzleCompleted = false;
+        _restoreMainPowerCompleted = false;
+        _powerAuthorizationCode = string.Empty;
+        _offlineAuthCode = string.Empty;
+        SetZone1DoorToZone2Unlocked(true);
+
+        var zone2Director = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance;
+        if (zone2Director != null)
+        {
+            zone2Director.ApplyDoorState(false);
+            zone2Director.ResetRelayRepairProgressForRetry();
+            zone2Director.SetOfflineStage(EchoProtocol.MatchFlow.Zone2MissionStage.FindSecurityTerminal);
+        }
+
+        SetPhase(MatchPhase.SecurityHold);
+#endif
+    }
+
     public void NotifyZone3Complete()
     {
         if (_networkAuthorityPresentationOnly || _phase != MatchPhase.Zone3PushFrigate) return;

@@ -1617,6 +1617,29 @@ namespace EchoProtocol.Networking
 #endif
         }
 
+        public bool DebugSkipToZone2()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (!HasValidNetworkObject() || !Object.HasStateAuthority || IsEnded) return false;
+
+            ResetZone2AuthoritativeState();
+            if (!InitializeZone2RelayRuntimeAuthoritative())
+            {
+                return false;
+            }
+
+            Zone2Stage = Zone2MissionStage.FindSecurityTerminal;
+            CurrentPhase = NetworkMatchPhase.Zone2Objective;
+            LastActor = Runner != null ? Runner.LocalPlayer : PlayerRef.None;
+            AdvancePhaseOrdinal();
+            HandleReplicatedStateChanged();
+            RuntimeLog.Log(RuntimeLogCategory.MatchState, "[MatchState] Debug skipped to Zone2Objective.");
+            return true;
+#else
+            return false;
+#endif
+        }
+
         public void RequestDebugSkipToZone3()
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -1632,11 +1655,34 @@ namespace EchoProtocol.Networking
 #endif
         }
 
+        public void RequestDebugSkipToZone2()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (!HasValidNetworkObject()) return;
+            if (Object.HasStateAuthority)
+            {
+                DebugSkipToZone2();
+            }
+            else
+            {
+                RpcDebugSkipToZone2();
+            }
+#endif
+        }
+
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         private void RpcDebugSkipToZone3(RpcInfo info = default)
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             DebugSkipToZone3();
+#endif
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcDebugSkipToZone2(RpcInfo info = default)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            DebugSkipToZone2();
 #endif
         }
 
