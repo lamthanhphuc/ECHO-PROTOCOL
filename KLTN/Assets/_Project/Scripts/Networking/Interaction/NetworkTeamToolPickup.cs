@@ -1,13 +1,23 @@
 using Fusion;
+using QuickOutline;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace EchoProtocol.Networking
 {
     [DisallowMultipleComponent]
     public sealed class NetworkTeamToolPickup : NetworkInteractable
     {
+        private const float MaxOutlineVisibleDistance = 20f;
+
         [SerializeField, Range(1, 6)] private int _toolId = 2;
         [SerializeField] private string _toolDisplayName = "Team Tool";
+
+        private Outline _outline;
+        private bool _visualsActive;
+
+        private static readonly Color TeamToolOutlineColor =
+            new Color(1f, 0.05f, 0.05f, 1f);
 
         [Networked, OnChangedRender(nameof(OnConsumedChanged))] private NetworkBool IsConsumed { get; set; }
         [Networked, OnChangedRender(nameof(ApplyReplicatedPose))] public Vector3 WorldPosition { get; private set; }
@@ -22,6 +32,9 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            EnsureOutline();
+            ConfigureWorldPickupShadows();
+
             if (Object.HasStateAuthority)
             {
                 IsConsumed = false;
@@ -31,6 +44,24 @@ namespace EchoProtocol.Networking
 
             ApplyReplicatedPose();
             SetVisualsAndCollidersActive(!IsConsumed);
+        }
+
+        private void EnsureOutline()
+        {
+            if (_outline == null)
+            {
+                _outline = GetComponent<Outline>();
+
+                if (_outline == null)
+                {
+                    _outline = gameObject.AddComponent<Outline>();
+                }
+            }
+
+            _outline.OutlineMode = Outline.Mode.OutlineVisible;
+            _outline.OutlineColor = TeamToolOutlineColor;
+            _outline.OutlineWidth = 4f;
+            _outline.UpdateMaterialProperties();
         }
 
         private void ApplyReplicatedPose()
@@ -46,8 +77,27 @@ namespace EchoProtocol.Networking
             SetVisualsAndCollidersActive(!IsConsumed);
         }
 
+        private void ConfigureWorldPickupShadows()
+        {
+            Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+            }
+        }
+
         private void SetVisualsAndCollidersActive(bool active)
         {
+            _visualsActive = active;
+
             foreach (var c in GetComponentsInChildren<Collider>(true))
             {
                 c.enabled = active;
@@ -56,12 +106,42 @@ namespace EchoProtocol.Networking
             foreach (var r in GetComponentsInChildren<Renderer>(true))
             {
                 r.enabled = active;
+                r.shadowCastingMode = ShadowCastingMode.Off;
+                r.receiveShadows = false;
             }
 
             foreach (var light in GetComponentsInChildren<Light>(true))
             {
                 light.enabled = active;
             }
+
+            EnsureOutline();
+            RefreshOutlineVisibility();
+        }
+
+        private void Update()
+        {
+            RefreshOutlineVisibility();
+        }
+
+        private void RefreshOutlineVisibility()
+        {
+            EnsureOutline();
+
+            Camera viewer = Camera.main;
+            if (!_visualsActive || viewer == null)
+            {
+                _outline.enabled = false;
+                return;
+            }
+
+            float maxDistanceSqr =
+                MaxOutlineVisibleDistance
+                * MaxOutlineVisibleDistance;
+
+            _outline.enabled =
+                (viewer.transform.position - transform.position)
+                .sqrMagnitude <= maxDistanceSqr;
         }
 
         protected override InteractionValidationResult ValidateCurrentState(

@@ -148,6 +148,24 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField, Min(0f)]
         private float hideSpotRevealTrackSeconds = 0.35f;
 
+        [Header("Player Pressure Fairness")]
+
+        [SerializeField, Range(0.1f, 1f)]
+        private float playerPressureStopThreshold =
+            0.85f;
+
+        [SerializeField, Min(1f)]
+        private float playerPressureDecayWindowSeconds =
+            120f;
+
+        [SerializeField, Range(0f, 1f)]
+        private float playerPressureAcquireGain =
+            0.15f;
+
+        [SerializeField, Range(0f, 1f)]
+        private float playerPressureHideRevealGain =
+            0.45f;
+
         [Header("World Interaction")]
         [SerializeField, Min(0.1f)] private float worldInteractionDistance = 1.15f;
         [SerializeField, Min(0.01f)] private float stalkerDoorBreakDurationSeconds = 3f;
@@ -1133,6 +1151,12 @@ namespace EchoProtocol.AI.Stalker
                 _targetHistoryMemory,
                 _targetPolicyCandidates);
 
+            _targetPolicyCandidates.RemoveAll(
+                candidate =>
+                    IsPlayerPressureBlocked(
+                        candidate.PlayerId,
+                        simulationTime));
+
             if (!AdaptiveStalkerTargetPolicy.TrySelectTarget(
                     _targetPolicyCandidates,
                     out var selectedObservation))
@@ -1157,6 +1181,21 @@ namespace EchoProtocol.AI.Stalker
             _targetHistoryMemory.RecordTargetAcquired(
                 selectedObservation.PlayerId,
                 simulationTime);
+
+            var pressure =
+                AddPlayerPressure(
+                    selectedObservation.PlayerId,
+                    playerPressureAcquireGain,
+                    "target-acquired");
+
+            if (pressure >= playerPressureStopThreshold)
+            {
+                DisengagePressuredPlayer(
+                    selectedObservation.PlayerId,
+                    "target-acquired");
+
+                return false;
+            }
 
             detectionTarget = null;
             currentTarget = null;
@@ -1649,13 +1688,45 @@ namespace EchoProtocol.AI.Stalker
                 _attackController.BeginAttack(true, _memory.CurrentTargetId, _currentSimulationStep);
             }
 
-            var targetId = _attackController.AttackTargetId;
-            if (targetId.IsValid
-                && TryGetUniqueTargetStatusDetail(targetId, out var status)
-                && !status.IsHidden
-                && !status.Eligibility.Eligible)
+            var targetId =
+                _attackController.AttackTargetId;
+
+            if (!targetId.IsValid
+                || !TryGetUniqueTargetStatusDetail(
+                    targetId,
+                    out var status))
             {
-                _memory.ClearCurrentTarget();
+                _attackController.ClearActiveEpisode();
+
+                lastAttackResult =
+                    StalkerAttackResult.Miss;
+
+                attackElapsedTime = 0f;
+
+                InvalidateCurrentTarget();
+                return;
+            }
+
+            if (!status.Eligibility.Eligible)
+            {
+                _attackController.ClearActiveEpisode();
+
+                lastAttackResult =
+                    StalkerAttackResult.Miss;
+
+                attackElapsedTime = 0f;
+
+                ClearTargetContext();
+
+                if (!TryAcquireTypedDetectionTargetFromVisibleFrame())
+                {
+                    currentState =
+                        StalkerState.PATROL;
+
+                    SetCurrentPatrolDestination();
+                }
+
+                return;
             }
 
             TrackAttackTargetDuringWindup(targetId);
@@ -2172,6 +2243,21 @@ namespace EchoProtocol.AI.Stalker
 
         private void EnterSearch()
         {
+            var pressuredPlayer =
+                _memory.CurrentTargetId;
+
+            if (pressuredPlayer.IsValid
+                && IsPlayerPressureBlocked(
+                    pressuredPlayer,
+                    GetCurrentSimulationTime()))
+            {
+                DisengagePressuredPlayer(
+                    pressuredPlayer,
+                    "search");
+
+                return;
+            }
+
             ResetChaseDestinationTracking();
             ResetNavigationRecoveryBudget();
             if (HasTypedTargetFrame && !_memory.HasLastKnownPosition)
@@ -3335,6 +3421,25 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            var pressure =
+                AddPlayerPressure(
+                    inspection.ConfirmedPlayerId,
+                    playerPressureHideRevealGain,
+                    "hide-reveal");
+
+            if (pressure >= playerPressureStopThreshold)
+            {
+                CommitSearchEnded(
+                    StalkerSearchTerminalOutcome
+                        .CURRENT_TARGET_INVALID_NO_REPLACEMENT);
+
+                DisengagePressuredPlayer(
+                    inspection.ConfirmedPlayerId,
+                    "hide-reveal");
+
+                return;
+            }
+
             var observedAt = GetCurrentSimulationTime();
             var distance = Vector3.Distance(
                 transform.position,
@@ -3410,6 +3515,82 @@ namespace EchoProtocol.AI.Stalker
                 : new AiSimulationTime(
                     _legacySimulationTick < 0 ? 0 : _legacySimulationTick,
                     System.Math.Max(0d, _currentSimulationSeconds));
+        }
+
+        private float AddPlayerPressure(
+            PlayerId playerId,
+            float amount,
+            string source)
+        {
+            if (!playerId.IsValid)
+            {
+                return 0f;
+            }
+
+            var pressure =
+                _targetHistoryMemory.AddPressure01(
+                    playerId,
+                    GetCurrentSimulationTime(),
+                    Mathf.Max(0f, amount),
+                    Mathf.Max(
+                        1f,
+                        playerPressureDecayWindowSeconds));
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerHideFlow,
+                $"[STK_PLAYER_PRESSURE] " +
+                $"player={playerId} " +
+                $"source={source} " +
+                $"pressure={pressure:F2}/" +
+                $"{playerPressureStopThreshold:F2}",
+                this);
+
+            return pressure;
+        }
+
+        private bool IsPlayerPressureBlocked(
+            PlayerId playerId,
+            AiSimulationTime now)
+        {
+            if (!playerId.IsValid)
+            {
+                return false;
+            }
+
+            return _targetHistoryMemory.GetPressure01(
+                    playerId,
+                    now,
+                    Mathf.Max(
+                        1f,
+                        playerPressureDecayWindowSeconds))
+                >= playerPressureStopThreshold;
+        }
+
+        private void DisengagePressuredPlayer(
+            PlayerId playerId,
+            string source)
+        {
+            RuntimeLog.Log(
+                RuntimeLogCategory.StalkerHideFlow,
+                $"[STK_PLAYER_PRESSURE][RELIEF] " +
+                $"player={playerId} " +
+                $"source={source}",
+                this);
+
+            ClearDetectionContext();
+            ClearTargetContext();
+            ClearSearchRuntimeContext();
+
+            ResetHideSpotRevealGrace();
+            ResetChaseDestinationTracking();
+            ResetNavigationRecoveryBudget();
+
+            _navigation?.Stop();
+
+            currentState =
+                StalkerState.PATROL;
+
+            SetCurrentPatrolDestination();
         }
 
         private bool TryPlanNextSearchCandidate()
@@ -3534,8 +3715,11 @@ namespace EchoProtocol.AI.Stalker
                 var candidate =
                     _targetPolicyCandidates[i];
 
-                if (currentTargetId.IsValid
-                    && candidate.PlayerId == currentTargetId)
+                if ((currentTargetId.IsValid
+                        && candidate.PlayerId == currentTargetId)
+                    || IsPlayerPressureBlocked(
+                        candidate.PlayerId,
+                        simulationTime))
                 {
                     continue;
                 }
@@ -3569,6 +3753,25 @@ namespace EchoProtocol.AI.Stalker
             _targetHistoryMemory.RecordTargetAcquired(
                 selectedObservation.PlayerId,
                 simulationTime);
+
+            var pressure =
+                AddPlayerPressure(
+                    selectedObservation.PlayerId,
+                    playerPressureAcquireGain,
+                    "search-acquired");
+
+            if (pressure >= playerPressureStopThreshold)
+            {
+                CommitSearchEnded(
+                    StalkerSearchTerminalOutcome
+                        .CURRENT_TARGET_INVALID_NO_REPLACEMENT);
+
+                DisengagePressuredPlayer(
+                    selectedObservation.PlayerId,
+                    "search-acquired");
+
+                return true;
+            }
 
             CommitSearchEnded(
                 StalkerSearchTerminalOutcome
@@ -4824,7 +5027,10 @@ namespace EchoProtocol.AI.Stalker
                     _currentVisibleTargetCandidates[i];
 
                 if (candidate.Observation.PlayerId == currentTargetId
-                    || !candidate.Eligibility.Eligible)
+                    || !candidate.Eligibility.Eligible
+                    || IsPlayerPressureBlocked(
+                        candidate.Observation.PlayerId,
+                        GetCurrentSimulationTime()))
                 {
                     continue;
                 }
@@ -4892,6 +5098,21 @@ namespace EchoProtocol.AI.Stalker
             _targetHistoryMemory.RecordTargetAcquired(
                 newObservation.PlayerId,
                 GetCurrentSimulationTime());
+
+            var pressure =
+                AddPlayerPressure(
+                    newObservation.PlayerId,
+                    playerPressureAcquireGain,
+                    "chase-retarget");
+
+            if (pressure >= playerPressureStopThreshold)
+            {
+                DisengagePressuredPlayer(
+                    newObservation.PlayerId,
+                    "chase-retarget");
+
+                return true;
+            }
 
             lastKnownPosition =
                 _memory.LastKnownPosition;

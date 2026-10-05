@@ -368,7 +368,10 @@ MonoBehaviour:
   clampWeight: 0.42
   lookAtDistance: 12
   driveRightHandWhenHolding: 1
-  crouchLeftHandLocalPosition: {x: -0.22, y: 0.62, z: 0.04}
+  sprintFootHalfSpacing: 0.09
+  sprintLegCorrectionWeight: 0.85
+  sprintKneePoleForwardOffset: 0.45
+  sprintKneePoleSideOffset: 0.12
   carryForwardOffset: 0.3
   carryLateralOffset: 0.3
   carryVerticalOffset: 0.08
@@ -5857,12 +5860,14 @@ MonoBehaviour:
   coreCarrier: {fileID: 0}
   heldItemAnchor: {fileID: 6515884220097172326}
   lobbyState: {fileID: 0}
+  networkMovement: {fileID: 0}
+  animator: {fileID: 0}
   energyCoreLocalPosition: {x: 0, y: 0, z: 0}
   energyCoreLocalEulerAngles: {x: 0, y: 0, z: 0}
   energyCoreLocalScale: {x: 25, y: 25, z: 25}
-  energyCoreChildLocalPosition: {x: 0.0007, y: -0.2462, z: -1.1115}
+  energyCoreChildLocalPosition: {x: 0.0012, y: -0.2456, z: -1.1109}
   energyCoreChildLocalEulerAngles: {x: -89.116, y: 77.236, z: -92.522}
-  energyCoreChildLocalScale: {x: 1.15, y: 1.15, z: 1.15}
+  energyCoreChildLocalScale: {x: 0.9, y: 0.9, z: 0.9}
   teamToolLocalPosition: {x: 0.04, y: 0.01, z: 0.11}
   teamToolLocalEulerAngles: {x: 12, y: 88, z: -18}
   teamToolLocalScale: {x: 0.45, y: 0.45, z: 0.45}

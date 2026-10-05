@@ -5,13 +5,24 @@ namespace EchoProtocol.Gameplay
     public readonly struct MatchDifficultyProfile
     {
         public MatchDifficultyProfile(
-            int teamToolsPerZone, float patrolSpeed, float chaseSpeed,
-            float detectionDurationSeconds, float detectionDecayDurationSeconds,
-            float searchDurationSeconds, float attackRange, float attackWindupSeconds,
-            float attackRecoverySeconds, float doorBreakDurationSeconds,
-            float seekPlayersAfterSeconds, float coreCarrierPursuitDelaySeconds,
-            float hearingRangeMultiplier, float specialEncounterCooldownSeconds,
-            int zone1MinionCap, int zone2MinionCap)
+            int teamToolsPerZone,
+            float patrolSpeed,
+            float chaseSpeed,
+            float detectionDurationSeconds,
+            float detectionDecayDurationSeconds,
+            float searchDurationSeconds,
+            float attackRange,
+            float attackWindupSeconds,
+            float attackRecoverySeconds,
+            float doorBreakDurationSeconds,
+            float seekPlayersAfterSeconds,
+            float coreCarrierPursuitDelaySeconds,
+            float hearingRangeMultiplier,
+            float specialEncounterCooldownSeconds,
+            int zone1MinionCap,
+            int zone2MinionCap,
+            int maximumRevivesPerZone,
+            bool objectiveInvestigationEnabled)
         {
             TeamToolsPerZone = teamToolsPerZone;
             PatrolSpeed = patrolSpeed;
@@ -29,6 +40,8 @@ namespace EchoProtocol.Gameplay
             SpecialEncounterCooldownSeconds = specialEncounterCooldownSeconds;
             Zone1MinionCap = zone1MinionCap;
             Zone2MinionCap = zone2MinionCap;
+            MaximumRevivesPerZone = maximumRevivesPerZone;
+            ObjectiveInvestigationEnabled = objectiveInvestigationEnabled;
         }
 
         public int TeamToolsPerZone { get; }
@@ -47,6 +60,8 @@ namespace EchoProtocol.Gameplay
         public float SpecialEncounterCooldownSeconds { get; }
         public int Zone1MinionCap { get; }
         public int Zone2MinionCap { get; }
+        public int MaximumRevivesPerZone { get; }
+        public bool ObjectiveInvestigationEnabled { get; }
     }
 
     public static class MatchDifficultyProfiles
@@ -57,31 +72,32 @@ namespace EchoProtocol.Gameplay
             {
                 case MatchDifficulty.Easy:
                     return new MatchDifficultyProfile(
-                        6,      // TeamToolsPerZone
-                        5.5f,   // PatrolSpeed
-                        6.5f,   // ChaseSpeed
-                        2.0f,   // DetectionDurationSeconds
-                        0.35f,  // DetectionDecayDurationSeconds
-                        1.5f,   // SearchDurationSeconds
-                        2.5f,   // AttackRange
-                        0.75f,  // AttackWindupSeconds
-                        1.6f,   // AttackRecoverySeconds
-                        6f,     // DoorBreakDurationSeconds
-                        180f,   // SeekPlayersAfterSeconds
-                        35f,    // CoreCarrierPursuitDelaySeconds
-                        0.75f,  // HearingRangeMultiplier
-                        600f,   // SpecialEncounterCooldownSeconds
-                        1,      // Zone1MinionCap
-                        1);     // Zone2MinionCap
+                        6,
+                        5.0f,
+                        5.0f,
+                        2.0f,
+                        20f,
+                        1.0f,
+                        2.2f,
+                        0.85f,
+                        2.0f,
+                        8f,
+                        240f,
+                        35f,
+                        0.5f,
+                        600f,
+                        1,
+                        0,
+                        4,
+                        false);
                 case MatchDifficulty.Hard:
                     return new MatchDifficultyProfile(
-                        5, 8f, 9f, 0.75f, 1f, 3f, 3f, 0.35f,
-                        1f, 3f, 75f, 15f, 1.25f, 300f, 2, 3);
+                        5, 8f, 9f, 0.75f, 30f, 3f, 3f, 0.35f,
+                        1f, 3f, 75f, 15f, 1.25f, 300f, 1, 1, 2, true);
                 default:
-                    // Between Easy and the old baseline, now used as Hard.
                     return new MatchDifficultyProfile(
-                        5, 6.5f, 8f, 1.25f, 0.65f, 2.25f, 2.7f, 0.6f,
-                        1.4f, 4.5f, 120f, 25f, 1f, 420f, 1, 2);
+                        5, 6.5f, 8f, 1.25f, 25f, 2.25f, 2.7f, 0.6f,
+                        1.4f, 4.5f, 120f, 25f, 1f, 420f, 1, 2, 3, true);
             }
         }
     }

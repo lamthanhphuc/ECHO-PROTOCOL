@@ -233,6 +233,78 @@ public sealed class RewardService : IRewardService
         }
     }
 
+    public async Task<ServiceResult<RewardMeResponse>> GetForUserAsync(
+        Guid matchId,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _db.MatchResults.AsNoTracking()
+            .Where(item => item.MatchId == matchId)
+            .Select(item => new { item.RewardStatus })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (result is null)
+        {
+            return ServiceResult<RewardMeResponse>.Failure(
+                "Finalized match result not found",
+                ErrorCodes.RewardResultNotFound);
+        }
+
+        if (result.RewardStatus != MatchRewardStatus.Completed)
+        {
+            return ServiceResult<RewardMeResponse>.Failure(
+                "Match reward is still pending",
+                ErrorCodes.RewardPending);
+        }
+
+        var grant = await _db.MatchRewardGrants.AsNoTracking()
+            .SingleOrDefaultAsync(
+                item => item.MatchId == matchId && item.UserId == userId,
+                cancellationToken);
+        if (grant is null)
+        {
+            return ServiceResult<RewardMeResponse>.Failure(
+                "Reward grant not found for current player",
+                ErrorCodes.RewardGrantNotFound);
+        }
+
+        var ledger = await _db.WalletTransactions.AsNoTracking()
+            .SingleOrDefaultAsync(
+                item => item.WalletId == grant.WalletId &&
+                        item.Type == WalletTransactionType.MATCH_REWARD &&
+                        item.ReferenceId == matchId,
+                cancellationToken);
+        if (ledger is null)
+        {
+            return ServiceResult<RewardMeResponse>.Failure(
+                "Completed reward ledger entry is missing",
+                ErrorCodes.RewardConflict);
+        }
+
+        var profile = await _db.PlayerProfiles.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.UserId == userId, cancellationToken);
+        if (profile is null)
+        {
+            return ServiceResult<RewardMeResponse>.Failure(
+                "Player profile not found",
+                ErrorCodes.ProgressionProfileNotFound);
+        }
+
+        return ServiceResult<RewardMeResponse>.Success(new RewardMeResponse
+        {
+            MatchId = matchId,
+            RewardStatus = MatchRewardStatus.Completed,
+            CurrencyAmount = grant.CurrencyAmount,
+            BalanceBefore = ledger.BalanceBefore,
+            BalanceAfter = ledger.BalanceAfter,
+            ExperiencePointsAwarded = grant.ExperiencePointsAwarded,
+            CurrentExperiencePoints = profile.ExperiencePoints,
+            CurrentLevel = profile.Level,
+            PolicyVersion = grant.PolicyVersion,
+            ProgressionPolicyVersion = grant.ProgressionPolicyVersion,
+            ProcessedAtUtc = grant.ProcessedAtUtc
+        }, "Match reward retrieved");
+    }
+
     private async Task<MatchResult?> LoadResultForUpdateAsync(
         Guid matchId,
         CancellationToken cancellationToken)

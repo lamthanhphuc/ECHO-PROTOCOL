@@ -34,6 +34,8 @@ namespace EchoProtocol.Networking
             : _offlineState == NetworkDoorJammerState.Active;
         public bool BlocksTraversal => IsActive;
         public float BreakDurationSeconds => _breakDurationSeconds;
+        public bool IsFreeStanding =>
+            IsActive && !DoorId.IsValid;
 
         public void InitializeOffline()
         {
@@ -101,6 +103,31 @@ namespace EchoProtocol.Networking
                 default:
                     return false;
             }
+        }
+
+        public bool InitializeFreeStandingAuthoritative()
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority)
+            {
+                return false;
+            }
+
+            if (State == NetworkDoorJammerState.Active)
+            {
+                return !DoorId.IsValid;
+            }
+
+            if (State != NetworkDoorJammerState.NotDeployed)
+            {
+                return false;
+            }
+
+            DoorId = default;
+            State = NetworkDoorJammerState.Active;
+            ApplyReplicatedState();
+            return true;
         }
 
         public bool CompleteBreakAuthoritative()

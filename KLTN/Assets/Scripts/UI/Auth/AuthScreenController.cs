@@ -118,28 +118,22 @@ namespace EchoProtocol.UI.Auth
 
       if (_runtime.RestoreState == AuthDomain.SessionRestoreState.None)
       {
-        if (AuthDomain.TokenStorage.HasToken() && AuthDomain.TokenStorage.IsExpired())
+        if (!AuthDomain.TokenStorage.HasUsableSession())
         {
-          _runtime.AuthService.LogoutLocal();
-          _runtime.SetRestoreState(AuthDomain.SessionRestoreState.FailedUnauthorized);
-          SetBusy(false);
-          SetStatus("Session expired. Please log in again.");
-          ShowLoginPanel();
-          yield break;
-        }
+          if (AuthDomain.TokenStorage.HasToken()
+              || AuthDomain.TokenStorage.HasRefreshToken()
+              || AuthDomain.TokenStorage.HasStoredExpiry())
+          {
+            _runtime.AuthService.LogoutLocal();
+          }
 
-        if (!AuthDomain.TokenStorage.HasToken() && AuthDomain.TokenStorage.HasStoredExpiry())
-        {
-          AuthDomain.TokenStorage.Clear();
           SetBusy(false);
           SetStatus(string.Empty);
           ShowLoginPanel();
           yield break;
         }
 
-        if (AuthDomain.TokenStorage.HasToken()
-            && !AuthDomain.TokenStorage.IsExpired()
-            && !_startupRestoreRunning)
+        if (!_startupRestoreRunning)
         {
           _startupRestoreRunning = true;
           SetBusy(true);

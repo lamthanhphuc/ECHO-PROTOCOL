@@ -114,6 +114,24 @@ namespace EchoProtocol.Networking
                 Disconnected = disconnected;
         }
 
+        public void ResetForLobbyAuthoritative()
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority)
+            {
+                return;
+            }
+
+            IsReady = false;
+            IsGameplayPlayer = false;
+            IsCoreStabilized = false;
+            CarriedCoreId = default;
+            Disconnected = false;
+
+            AnyStateChanged?.Invoke();
+        }
+
         public const int FieldScannerToolId = 1;
         public const int NoiseMakerToolId = 2;
         public const int FirstAidKitToolId = 3;
@@ -128,6 +146,9 @@ namespace EchoProtocol.Networking
 
         [Networked]
         public NetworkBool IsCoreStabilized { get; private set; }
+
+        public bool IsStabilizerBuffed =>
+            IsCoreStabilized;
 
         public bool HasVerifiedBackendIdentity => BackendUserId.Length > 0;
 
@@ -144,12 +165,22 @@ namespace EchoProtocol.Networking
             if (!isGameplayPlayer) CarriedCoreId = default;
         }
 
-        public void SetCoreStabilizedAuthoritative(bool stabilized)
+        public void SetStabilizerBuffedAuthoritative(
+            bool buffed)
         {
-            if (Object != null && Object.IsValid && Object.HasStateAuthority)
+            if (Object != null
+                && Object.IsValid
+                && Object.HasStateAuthority)
             {
-                IsCoreStabilized = stabilized;
+                IsCoreStabilized = buffed;
             }
+        }
+
+        public void SetCoreStabilizedAuthoritative(
+            bool stabilized)
+        {
+            SetStabilizerBuffedAuthoritative(
+                stabilized);
         }
 
         public bool TryBeginCarryingCore(NetworkId coreId)
@@ -164,16 +195,17 @@ namespace EchoProtocol.Networking
             return true;
         }
 
-        public bool TryClearCarriedCore(NetworkId expectedCoreId)
+        public bool TryClearCarriedCore(
+            NetworkId expectedCoreId)
         {
-            if (!Object.HasStateAuthority || !CarriedCoreId.IsValid
+            if (!Object.HasStateAuthority
+                || !CarriedCoreId.IsValid
                 || CarriedCoreId != expectedCoreId)
             {
                 return false;
             }
 
             CarriedCoreId = default;
-            IsCoreStabilized = false;
             return true;
         }
 
@@ -197,6 +229,24 @@ namespace EchoProtocol.Networking
                 MatchAuthorityRuntime.EnsureExists(NetworkBootstrap.Instance)
                     .TrySubmitLocalIdentity(this, NetworkBootstrap.Instance?.ReconnectIdentityPending == true);
             }
+        }
+
+        private void Update()
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasInputAuthority
+                || Runner == null
+                || !Runner.IsRunning)
+            {
+                return;
+            }
+
+            MatchAuthorityRuntime
+                .EnsureExists(NetworkBootstrap.Instance)
+                .RefreshJoinedSessionBindingIfChanged(
+                    Runner,
+                    this);
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -311,15 +361,9 @@ namespace EchoProtocol.Networking
 
             if (!HasVerifiedBackendIdentity)
             {
-                if (!Debug.isDebugBuild)
-                {
-                    Debug.LogWarning($"[LobbyPlayerState] Ready rejected: player {requester} has no verified backend identity.");
-                    return;
-                }
-                var fallbackId = Guid.NewGuid().ToString("D");
-                BackendUserId = fallbackId;
                 Debug.LogWarning(
-                    $"[LobbyPlayerState] Fallback/dev bypass: player {requester} had unverified backend identity. Assigned fallback BackendUserId={fallbackId}.");
+                    $"[LobbyPlayerState] Ready rejected: player {requester} has no verified backend identity.");
+                return;
             }
 
             if (!Runner.TryGetPlayerObject(requester, out var ownedObject) || ownedObject != Object)

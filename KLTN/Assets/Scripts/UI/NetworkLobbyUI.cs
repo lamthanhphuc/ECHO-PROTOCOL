@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using EchoProtocol.Core;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Auth;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace EchoProtocol.UI
@@ -25,6 +27,7 @@ namespace EchoProtocol.UI
         [SerializeField] private Button readyButton;
         [SerializeField] private Button startButton;
         [SerializeField] private Button leaveButton;
+        [SerializeField] private Button exitButton;
         [Header("Status")]
         [SerializeField] private TMP_Text statusText;
         [SerializeField] private TMP_Text memberCountText;
@@ -80,6 +83,9 @@ namespace EchoProtocol.UI
             if (readyButton != null) readyButton.onClick.AddListener(OnReadyClicked);
             if (startButton != null) startButton.onClick.AddListener(OnStartClicked);
             if (leaveButton != null) leaveButton.onClick.AddListener(OnLeaveClicked);
+            if (exitButton != null) exitButton.onClick.AddListener(OnExitClicked);
+            if (difficultyDropdown != null)
+                difficultyDropdown.onValueChanged.AddListener(OnDifficultyChanged);
             ResolveServices();
             RefreshMemberList();
             RefreshControls();
@@ -125,6 +131,9 @@ namespace EchoProtocol.UI
             if (readyButton != null) readyButton.onClick.RemoveListener(OnReadyClicked);
             if (startButton != null) startButton.onClick.RemoveListener(OnStartClicked);
             if (leaveButton != null) leaveButton.onClick.RemoveListener(OnLeaveClicked);
+            if (exitButton != null) exitButton.onClick.RemoveListener(OnExitClicked);
+            if (difficultyDropdown != null)
+                difficultyDropdown.onValueChanged.RemoveListener(OnDifficultyChanged);
             Unsubscribe();
         }
 
@@ -306,13 +315,37 @@ namespace EchoProtocol.UI
 
         private void RefreshControls()
         {
-            var canConnect = _configured && !Busy && !Connected;
-            if (hostButton != null) hostButton.interactable = canConnect;
-            if (joinButton != null) joinButton.interactable = canConnect;
-            if (playerNameInput != null) playerNameInput.interactable = canConnect;
-            if (sessionNameInput != null) sessionNameInput.interactable = canConnect;
-            if (difficultyDropdown != null) difficultyDropdown.interactable = canConnect;
-            var inLobby = Connected && !Busy && lobbyManager != null && bootstrap.State == NetworkSessionState.InLobby;
+            var canConnect =
+                _configured
+                && !Busy
+                && !Connected;
+
+            var inLobby =
+                Connected
+                && !Busy
+                && lobbyManager != null
+                && bootstrap != null
+                && bootstrap.State == NetworkSessionState.InLobby;
+
+            if (hostButton != null)
+                hostButton.interactable = canConnect;
+
+            if (joinButton != null)
+                joinButton.interactable = canConnect;
+
+            if (playerNameInput != null)
+                playerNameInput.interactable = canConnect;
+
+            if (sessionNameInput != null)
+                sessionNameInput.interactable = canConnect;
+
+            if (difficultyDropdown != null)
+            {
+                difficultyDropdown.interactable =
+                    canConnect
+                    || (inLobby && _room.IsHost);
+            }
+
             if (readyButton != null)
             {
                 readyButton.interactable = inLobby;
@@ -321,8 +354,50 @@ namespace EchoProtocol.UI
             }
             if (startButton != null) startButton.interactable = inLobby && _room.IsHost && _room.CanStartMatch;
             if (leaveButton != null) leaveButton.interactable = Connected && !Busy;
+            if (exitButton != null) exitButton.interactable = !Busy;
             FadeDisabled(hostButton); FadeDisabled(joinButton); FadeDisabled(readyButton);
-            FadeDisabled(startButton); FadeDisabled(leaveButton);
+            FadeDisabled(startButton); FadeDisabled(leaveButton); FadeDisabled(exitButton);
+        }
+
+        private void OnDifficultyChanged(int value)
+        {
+            if (difficultyDropdown == null || Busy)
+            {
+                return;
+            }
+
+            var difficulty =
+                (MatchDifficulty)Mathf.Clamp(
+                    value,
+                    (int)MatchDifficulty.Easy,
+                    (int)MatchDifficulty.Hard);
+
+            // Before room creation Connect() already reads the dropdown value.
+            if (!Connected)
+            {
+                return;
+            }
+
+            // Only the Host can change difficulty while waiting in Lobby.
+            if (bootstrap == null
+                || bootstrap.State != NetworkSessionState.InLobby
+                || !_room.IsHost)
+            {
+                var current =
+                    MatchAuthorityRuntime.Instance != null
+                        ? MatchAuthorityRuntime.Instance.Difficulty
+                        : MatchDifficulty.Normal;
+
+                difficultyDropdown.SetValueWithoutNotify(
+                    (int)current);
+
+                difficultyDropdown.RefreshShownValue();
+                return;
+            }
+
+            MatchAuthorityRuntime
+                .EnsureExists(bootstrap)
+                .RequestDifficulty(difficulty);
         }
 
         private static void FadeDisabled(Button button)
@@ -346,13 +421,44 @@ namespace EchoProtocol.UI
             if (Busy || !Connected) return;
             _busy = true;
             RefreshControls();
-            try { await bootstrap.Shutdown(); }
+            try { await bootstrap.ShutdownRunnerAsync(); }
             catch (Exception exception)
             {
                 Debug.LogError($"[NetworkLobbyUI] Leave failed: {exception}");
                 if (this != null && isActiveAndEnabled) ReportError(exception.Message);
             }
             finally { if (this != null) { _busy = false; if (isActiveAndEnabled) RefreshControls(); } }
+        }
+
+        private async void OnExitClicked()
+        {
+            if (Busy) return;
+
+            _busy = true;
+            RefreshControls();
+
+            try
+            {
+                if (bootstrap != null)
+                    await bootstrap.ShutdownRunnerAsync();
+
+                SceneManager.LoadScene(GameConstants.SceneMainMenu);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError($"[NetworkLobbyUI] Exit failed: {exception}");
+                if (this != null && isActiveAndEnabled)
+                    ReportError(exception.Message);
+            }
+            finally
+            {
+                if (this != null)
+                {
+                    _busy = false;
+                    if (isActiveAndEnabled)
+                        RefreshControls();
+                }
+            }
         }
     }
 }

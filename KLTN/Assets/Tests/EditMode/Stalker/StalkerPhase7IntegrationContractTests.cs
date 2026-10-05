@@ -328,11 +328,11 @@ namespace EchoProtocol.AI.Stalker.Tests
                 sinkSource);
 
             StringAssert.Contains(
-                "if (nextDownCount >= 3)",
+                "if (nextDownCount > MaximumRevivesPerZone)",
                 lifeStateSource);
 
             StringAssert.Contains(
-                "CommitEliminated(NetworkPlayerLifeTransitionCause.ReviveLimit, \"THIRD_DOWN\")",
+                "CommitEliminated(NetworkPlayerLifeTransitionCause.ReviveLimit, \"REVIVE_LIMIT_REACHED\")",
                 lifeStateSource);
         }
 

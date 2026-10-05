@@ -38,6 +38,35 @@ public sealed class RewardServiceTests
     }
 
     [Fact, Trait("Category", "M4RewardUnit")]
+    public async Task ProductionV1PoliciesUpdateWalletAndProgression()
+    {
+        await using var harness = await RewardHarness.CreateAsync(
+            policy: new RewardPolicyV1(),
+            progressionPolicy: new ProgressionPolicyV1());
+
+        var result = await harness.Service.ProcessAsync(harness.MatchId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(RewardPolicyV1.PolicyVersion, result.Data!.PolicyVersion);
+        Assert.All(result.Data.Grants, grant => Assert.Equal(120, grant.CurrencyAmount));
+        Assert.All(await harness.Db.Wallets.AsNoTracking().ToListAsync(), wallet =>
+            Assert.Equal(220, wallet.Balance));
+        Assert.All(await harness.Db.PlayerProfiles.AsNoTracking().ToListAsync(), profile =>
+        {
+            Assert.Equal(1, profile.TotalMatches);
+            Assert.Equal(1, profile.TotalWins);
+            Assert.Equal(200, profile.ExperiencePoints);
+            Assert.Equal(1, profile.Level);
+        });
+        Assert.All(await harness.Db.MatchRewardGrants.AsNoTracking().ToListAsync(), grant =>
+        {
+            Assert.Equal(120, grant.CurrencyAmount);
+            Assert.Equal(200, grant.ExperiencePointsAwarded);
+            Assert.Equal(ProgressionPolicyV1.PolicyVersion, grant.ProgressionPolicyVersion);
+        });
+    }
+
+    [Fact, Trait("Category", "M4RewardUnit")]
     public async Task DuplicateRewardReturnsReplayWithoutCreditingAgain()
     {
         await using var harness = await RewardHarness.CreateAsync();
@@ -57,6 +86,55 @@ public sealed class RewardServiceTests
             Assert.Equal(1, profile.TotalWins);
             Assert.Equal(10, profile.ExperiencePoints);
         });
+    }
+
+    [Fact, Trait("Category", "M4RewardUnit")]
+    public async Task GetForUserReturnsStoredCreditsXpAndCurrentProgression()
+    {
+        await using var harness = await RewardHarness.CreateAsync(
+            policy: new RewardPolicyV1(),
+            progressionPolicy: new ProgressionPolicyV1());
+        var processed = await harness.Service.ProcessAsync(harness.MatchId);
+        var userId = processed.Data!.Grants[0].UserId;
+
+        var result = await harness.Service.GetForUserAsync(harness.MatchId, userId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(MatchRewardStatus.Completed, result.Data!.RewardStatus);
+        Assert.Equal(120, result.Data.CurrencyAmount);
+        Assert.Equal(100, result.Data.BalanceBefore);
+        Assert.Equal(220, result.Data.BalanceAfter);
+        Assert.Equal(200, result.Data.ExperiencePointsAwarded);
+        Assert.Equal(200, result.Data.CurrentExperiencePoints);
+        Assert.Equal(1, result.Data.CurrentLevel);
+        Assert.Equal(RewardPolicyV1.PolicyVersion, result.Data.PolicyVersion);
+        Assert.Equal(ProgressionPolicyV1.PolicyVersion, result.Data.ProgressionPolicyVersion);
+    }
+
+    [Fact, Trait("Category", "M4RewardUnit")]
+    public async Task GetForUserReturnsPendingBeforeRewardCompletes()
+    {
+        await using var harness = await RewardHarness.CreateAsync();
+        var userId = (await harness.Db.MatchResults
+            .Include(item => item.Players)
+            .SingleAsync()).Players.First().UserId;
+
+        var result = await harness.Service.GetForUserAsync(harness.MatchId, userId);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.RewardPending, result.ErrorCode);
+    }
+
+    [Fact, Trait("Category", "M4RewardUnit")]
+    public async Task GetForUserDoesNotExposeAnotherUsersGrant()
+    {
+        await using var harness = await RewardHarness.CreateAsync();
+        await harness.Service.ProcessAsync(harness.MatchId);
+
+        var result = await harness.Service.GetForUserAsync(harness.MatchId, Guid.NewGuid());
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.RewardGrantNotFound, result.ErrorCode);
     }
 
     [Fact, Trait("Category", "M4RewardUnit")]

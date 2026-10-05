@@ -48,6 +48,8 @@ namespace EchoProtocol.AI.Stalker.Networking
         [SerializeField, Min(0f)]
         private float coreCarrierPursuitDelaySeconds = 15f;
 
+        private bool _objectiveInvestigationEnabled = true;
+
         [SerializeField, Range(0.01f, 0.99f)]
         private float closedDoorMultiplier = 0.5f;
 
@@ -534,8 +536,19 @@ namespace EchoProtocol.AI.Stalker.Networking
                 step.Time,
                 _visibleCandidates);
             BuildAuthoritativeFlashlightFrame(step.Time);
-            CollectVisibleObjectiveCarrierIds();
-            var sustainedCoreCarrier = SelectSustainedCoreCarrier(step.Time.Seconds);
+
+            StalkerPerceptionTargetSnapshot? sustainedCoreCarrier = null;
+
+            if (_objectiveInvestigationEnabled)
+            {
+                CollectVisibleObjectiveCarrierIds();
+                sustainedCoreCarrier = SelectSustainedCoreCarrier(step.Time.Seconds);
+            }
+            else
+            {
+                _visibleObjectiveCarrierIds.Clear();
+                _coreCarryStartedAt.Clear();
+            }
 
             var hearingEvaluationTimeUtc =
                 DateTime.UtcNow;
@@ -678,14 +691,50 @@ namespace EchoProtocol.AI.Stalker.Networking
                 var isDowned = (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && lifeState.IsDowned)
                     || (playerObject.TryGetComponent<NetworkPlayerHealth>(out var health) && health.IsDowned);
                 var isEliminated = lifeState != null && lifeState.IsEliminated;
-                var isHidden = (playerObject.TryGetComponent<PlayerHidingController>(out var hiding) && hiding.IsHidden)
-                    || (playerObject.TryGetComponent<NetworkPlayerMovement>(out var netMove) && netMove.IsHidden);
-                var eligibilitySnapshot = new StalkerTargetEligibilitySnapshot(
-                    isGameplayPlayer,
-                    true,
-                    isDowned,
-                    isEliminated,
-                    isHidden || (lifeState != null && lifeState.IsCaught));
+
+                var isStabilizerProtected =
+                    lobbyState != null
+                    && lobbyState.IsStabilizerBuffed;
+
+                if (isStabilizerProtected)
+                {
+                    var protectedSnapshot =
+                        new StalkerTargetEligibilitySnapshot(
+                            isGameplayPlayer,
+                            true,
+                            isDowned,
+                            isEliminated,
+                            true);
+
+                    _targetStatuses.Add(
+                        new StalkerTargetStatus(
+                            playerId,
+                            StalkerTargetEligibility.Evaluate(
+                                protectedSnapshot),
+                            false));
+
+                    continue;
+                }
+
+                var isHidden =
+                    (playerObject.TryGetComponent<
+                        PlayerHidingController>(
+                        out var hiding)
+                     && hiding.IsHidden)
+                    || (playerObject.TryGetComponent<
+                        NetworkPlayerMovement>(
+                        out var netMove)
+                        && netMove.IsHidden);
+
+                var eligibilitySnapshot =
+                    new StalkerTargetEligibilitySnapshot(
+                        isGameplayPlayer,
+                        true,
+                        isDowned,
+                        isEliminated,
+                        isHidden
+                        || (lifeState != null
+                            && lifeState.IsCaught));
                 _targetStatuses.Add(new StalkerTargetStatus(
                     playerId,
                     StalkerTargetEligibility.Evaluate(eligibilitySnapshot),
@@ -797,6 +846,12 @@ namespace EchoProtocol.AI.Stalker.Networking
             {
                 var noiseEvent =
                     _activeNoiseEvents[i];
+
+                if (!_objectiveInvestigationEnabled
+                    && IsEasyDisabledObjectiveNoise(noiseEvent))
+                {
+                    continue;
+                }
 
                 if (noiseEvent.NoiseType == RuntimeNoiseType.MACHINE_REPAIR
                     && !controller.IsPositionInsidePatrolZone(
@@ -1096,9 +1151,51 @@ namespace EchoProtocol.AI.Stalker.Networking
             controller?.ApplyMatchDifficulty(profile);
             coreCarrierPursuitDelaySeconds = profile.CoreCarrierPursuitDelaySeconds;
             hearingRangeMultiplier = profile.HearingRangeMultiplier;
+            _objectiveInvestigationEnabled = profile.ObjectiveInvestigationEnabled;
             specialEncounterRuntime?.SetCooldownSeconds(profile.SpecialEncounterCooldownSeconds);
             _hearingSensor = null;
             ResolveLocalDependencies();
+        }
+
+        private static bool IsEasyDisabledObjectiveNoise(
+            RuntimeNoiseEvent noiseEvent)
+        {
+            switch (noiseEvent.NoiseType)
+            {
+                case RuntimeNoiseType.MACHINE_REPAIR:
+                case RuntimeNoiseType.MACHINE_OVERLOAD:
+                case RuntimeNoiseType.TERMINAL_DOWNLOAD:
+                case RuntimeNoiseType.VEHICLE_PUSH:
+                case RuntimeNoiseType.CHARGE_TRANSFER:
+                case RuntimeNoiseType.POWER_SURGE:
+                    return true;
+
+                case RuntimeNoiseType.INTERACTION:
+                    return IsEasyDisabledObjectiveInteraction(
+                        noiseEvent.NoiseEventId);
+
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsEasyDisabledObjectiveInteraction(
+            string noiseEventId)
+        {
+            if (string.IsNullOrWhiteSpace(
+                    noiseEventId))
+            {
+                return false;
+            }
+
+            return noiseEventId.IndexOf(
+                       ":noise:relay-interaction:",
+                       StringComparison.Ordinal)
+                   >= 0
+                || noiseEventId.IndexOf(
+                       ":noise:security-terminal:",
+                       StringComparison.Ordinal)
+                   >= 0;
         }
 
         private void ResolveLocalDependencies()

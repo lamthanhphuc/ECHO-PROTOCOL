@@ -42,6 +42,7 @@ public class PlayerAnimatorDriver : MonoBehaviour
     [SerializeField] private float runSpeedReference = 6.2f;
 
     private float _smoothedSpeed;
+    private bool _wasSprinting;
     private bool _isHoldingDownedIdlePose;
     private float _animatorSpeedBeforeDownedIdlePose = 1f;
     private bool _externalPushing;
@@ -109,11 +110,35 @@ public class PlayerAnimatorDriver : MonoBehaviour
         {
             moveDirection = Vector2.zero;
         }
-        float normalizedSpeed = isMoving ? GetNormalizedSpeed(isSprinting, isCrouching, isCarryingCore, isDowned) : 0f;
+        float normalizedSpeed =
+            isMoving
+                ? GetNormalizedSpeed(
+                    isSprinting,
+                    isCrouching,
+                    isCarryingCore,
+                    isDowned)
+                : 0f;
 
-        _smoothedSpeed = isMoving
-            ? Mathf.Lerp(_smoothedSpeed, normalizedSpeed, 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(0.001f, speedDampTime)))
-            : 0f;
+        bool sprintJustEnded =
+            _wasSprinting
+            && !isSprinting;
+
+        _smoothedSpeed =
+            sprintJustEnded
+                ? normalizedSpeed
+                : isMoving
+                    ? Mathf.Lerp(
+                        _smoothedSpeed,
+                        normalizedSpeed,
+                        1f - Mathf.Exp(
+                            -Time.deltaTime
+                            / Mathf.Max(
+                                0.001f,
+                                speedDampTime)))
+                    : 0f;
+
+        _wasSprinting =
+            isSprinting;
         animator.SetFloat(SpeedHash, _smoothedSpeed);
         if (isMoving)
         {
@@ -136,6 +161,8 @@ public class PlayerAnimatorDriver : MonoBehaviour
 
     private void OnDisable()
     {
+        _wasSprinting = false;
+        _smoothedSpeed = 0f;
         SetDownedIdlePoseHold(false);
     }
 

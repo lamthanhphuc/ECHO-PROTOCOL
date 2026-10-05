@@ -339,11 +339,10 @@ Backend validate/tính reward + cập nhật wallet
 
 Match được tính là **WIN** nếu:
 
-* Đã thu thập đủ 3 fuse.
-* Đã restore power.
-* Đã lấy access card.
-* Đã mở escape door.
-* Ít nhất 1 player còn sống vào được escape zone.
+* Hoàn thành objective Zone 1: nạp đủ Energy Core vào Sector Box.
+* Hoàn thành objective Zone 2: kích hoạt Security Terminal, sửa đủ 2 Relay A + 2 Relay B, hoàn thành Security Hold và mở quyền truy cập Zone 3.
+* Hoàn thành objective Zone 3: đưa Spacefrigate/convoy tới Power Dock và hoàn tất Emergency Power Transfer.
+* Hoàn thành Final Hunt / Escape và ít nhất 1 player sống sót thoát ra.
 
 ---
 
@@ -352,7 +351,7 @@ Match được tính là **WIN** nếu:
 Match được tính là **LOSE** nếu một trong các điều kiện sau xảy ra:
 
 * Tất cả players bị eliminated.
-* Hết thời gian 15 phút.
+* Hết thời gian 45 phút.
 * Host disconnect trong match.
 
 Nếu host disconnect, result phải được ghi nhận là:
@@ -367,9 +366,9 @@ HOST_DISCONNECTED
 
 | Hạng mục                               | Giá trị                                        |
 | -------------------------------------- | ---------------------------------------------- |
-| Thời lượng match                       | 15 phút                                        |
+| Thời lượng match                       | 45 phút                                        |
 | Nếu hết giờ                            | Match lose                                     |
-| Nếu objective hoàn thành trước 15 phút | Match win khi ít nhất 1 player vào Escape Zone |
+| Nếu objective hoàn thành trước 45 phút | Match win khi ít nhất 1 player vào Escape Zone |
 | Nếu host disconnect                    | Match kết thúc với `HOST_DISCONNECTED`         |
 
 ---
@@ -378,47 +377,40 @@ HOST_DISCONNECTED
 
 ## 5.1 Quy mô map
 
-| Thành phần               |                 Số lượng |
-| ------------------------ | -----------------------: |
-| Số map                   |                        1 |
-| Số tầng                  |             1 tầng chính |
-| Khu vực chính            |                        4 |
-| Số phòng                 |                    10–14 |
-| Fuse cần thu thập        |                        3 |
-| Fuse spawn locations     |                        6 |
-| Door thường              |                      4–6 |
-| Locked door chính        |                        2 |
-| Escape door              |                        1 |
-| Hiding spots             |                      6–8 |
-| Monster patrol waypoints |                    10–14 |
-| Objective flow chính     |                        1 |
-| Puzzle phụ               | Dual-switch, Should Have |
+| Thành phần | Số lượng / phạm vi |
+| --- | ---: |
+| Số map | 1 |
+| Số tầng | 1 tầng chính |
+| Khu vực gameplay chính | 3 |
+| Macro phase dùng để mô tả tiến độ tổng | 4 |
+| Objective flow chính | 1 |
+| Escape / extraction | 1 |
+
+Bốn macro phase dùng cho mô tả tiến độ tổng gồm: **Zone 1 objective → Zone 2 objective → Zone 3 emergency power transfer → Final Hunt / Escape**. Unity vẫn có các technical sub-phase chi tiết hơn để vận hành gameplay; backend giữ `objectiveCompletion` chuẩn hóa trong khoảng `0..1` thay vì sao chép toàn bộ FSM.
 
 ---
 
 ## 5.2 Khu vực chính trong map
 
-| Khu vực                  | Vai trò                                                      |
-| ------------------------ | ------------------------------------------------------------ |
-| Entrance Zone            | Khu vực spawn của players, tương đối an toàn                 |
-| Lab Zone                 | Có fuse spawn, nhiều phòng nhỏ, dễ bị truy đuổi              |
-| Storage/Maintenance Zone | Có hiding spots, đường vòng, tạo áp lực khi bị monster đuổi  |
-| Power/Security Zone      | Có power box, security room, access card và đường tới escape |
+| Khu vực | Vai trò |
+| --- | --- |
+| Zone 1 | Khởi đầu trận; tìm/đưa Energy Core vào Sector Box để mở đường sang Zone 2 |
+| Zone 2 | Security Terminal, 2 Relay A + 2 Relay B, Security Hold và access code để mở đường sang Zone 3 |
+| Zone 3 | Emergency Power Transfer: tìm và đẩy Spacefrigate/convoy tới Power Dock, kích hoạt nguồn khẩn cấp rồi Final Hunt / Escape |
 
 ---
 
 ## 5.3 Objective placement
 
-| Object           | Vị trí đề xuất                             |
-| ---------------- | ------------------------------------------ |
-| Fuse             | Random 3 trong 6 vị trí spawn              |
-| Power Box        | Power Room                                 |
-| Security Room    | Power/Security Zone                        |
-| Access Card      | Trong Security Room                        |
-| Escape Door      | Gần cuối map                               |
-| Escape Zone      | Sau Escape Door                            |
-| Hiding Spots     | Rải ở Lab Zone và Storage/Maintenance Zone |
-| Patrol Waypoints | Đi qua các khu vực chính                   |
+| Object / objective | Khu vực |
+| --- | --- |
+| Energy Cores + Sector Box | Zone 1 |
+| Security Terminal | Zone 2 |
+| 2 Relay A + 2 Relay B | Zone 2 |
+| Security Hold + access panels | Zone 2 / cửa sang Zone 3 |
+| Spacefrigate / convoy + Power Dock | Zone 3 |
+| Final Hunt / Escape route | Zone 3 / extraction path |
+| Hiding spots / patrol routes | Xuyên suốt 3 Zone theo scene/navmesh |
 
 ---
 
@@ -1213,16 +1205,34 @@ Unity/host chỉ gửi raw match stats về backend, không tự quyết định
 **Mô tả:**
 Backend phải validate hoặc tính lại reward dựa trên raw match stats.
 
-**Reward đề xuất:**
+**Reward V1 đã chốt:**
 
-| Điều kiện                      |  Reward |
-| ------------------------------ | ------: |
-| Match win                      |    +100 |
-| Player survived                |     +50 |
-| Revive teammate                | +20/lần |
-| Objective contribution         |     +30 |
-| Match lose participation       |     +20 |
-| Reward tối đa mỗi player/match |     250 |
+| Điều kiện | ECHO Credits |
+| --- | ---: |
+| Tham gia match hợp lệ, không disconnect | +20 |
+| Tiến độ objective | `floor(objectiveCompletion × 30)`, tối đa +30 |
+| Team WIN | +50 |
+| Player survived | +20 |
+| Có objective contribution (`> 0`) | +10 |
+| Player disconnected | Cố định 10, không cộng bonus khác |
+| Reward tối đa mỗi player/match | 130 |
+
+`DetectionCount`, `DownedCount` và `ReviveCount` không tham gia Reward V1.
+`ReviveCount` hiện biểu diễn số lần player được revive, chưa phải số lần player revive đồng đội.
+
+**Progression V1:**
+
+| Điều kiện | XP |
+| --- | ---: |
+| Tham gia match hợp lệ, không disconnect | +50 |
+| Tiến độ objective | `floor(objectiveCompletion × 50)`, tối đa +50 |
+| Team WIN | +75 |
+| Player survived | +25 |
+| Có objective contribution (`> 0`) | +25 |
+| Player disconnected | Cố định 20 XP, không tính win |
+| XP tối đa mỗi player/match | 225 |
+
+Level V1 dùng công thức `floor(totalXP / 500) + 1`. Level hiện là progression/profile, không tăng sức mạnh gameplay.
 
 **Security rule:**
 
@@ -1242,7 +1252,7 @@ Backend phải chống gian lận reward ở mức server-side.
 
 | Validation       | Rule                                                          |
 | ---------------- | ------------------------------------------------------------- |
-| Match duration   | Không nhỏ hơn 1 phút hoặc lớn hơn 15 phút trong MVP           |
+| Match duration   | Gameplay timer 45 phút; backend cho tối đa 60 giây grace khi submit result |
 | Player count     | Phải từ 2 đến 4                                               |
 | Match result     | Chỉ nhận WIN / LOSE / HOST_DISCONNECTED                       |
 | Reward max       | Không vượt quá reward tối đa                                  |
@@ -1520,7 +1530,7 @@ Admin có thể filter/search logs theo player, match result, AI reason hoặc t
 | NFR-PERF-02 | Room hỗ trợ 2–4 players                             |
 | NFR-PERF-03 | Demo tối thiểu 2 players ổn định                    |
 | NFR-PERF-04 | Demo cuối dùng 3–4 laptop thật                      |
-| NFR-PERF-05 | Match timer mặc định 15 phút                        |
+| NFR-PERF-05 | Match timer mặc định 45 phút                        |
 | NFR-PERF-06 | Shop API response dưới 2 giây trong môi trường demo |
 | NFR-PERF-07 | Monster AI không gây tụt FPS nghiêm trọng           |
 | NFR-PERF-08 | Scene loading không quá 15 giây trên máy test       |
@@ -2302,7 +2312,7 @@ HUD cần hiển thị:
 * Interaction prompt.
 * Revive progress.
 * Escape progress.
-* Match timer 15 phút.
+* Match timer 45 phút.
 * Optional: noise indicator.
 
 ---
@@ -2425,7 +2435,7 @@ Nếu ảnh không load được:
 | Submit reward vượt giới hạn  | Backend reject hoặc clamp                |
 | Submit player không tồn tại  | Backend reject                           |
 | Submit playerCount ngoài 2–4 | Backend reject                           |
-| Submit duration >15 phút MVP | Backend reject hoặc normalize theo rule  |
+| Submit duration >46 phút | Backend reject; 45 phút gameplay + tối đa 60 giây submit grace |
 | Wallet update sau reward     | Có WalletTransaction                     |
 | Client tự gọi update wallet  | Không có API cho phép hoặc bị reject     |
 
@@ -2449,7 +2459,7 @@ Nếu ảnh không load được:
 | AC-12        | Player lấy Access Card và mở Escape Door                                                |
 | AC-13        | Match win nếu objective hoàn thành và ít nhất 1 player sống sót vào Escape Zone         |
 | AC-14        | Match lose nếu tất cả players bị eliminated                                             |
-| AC-15        | Match lose nếu hết timer 15 phút                                                        |
+| AC-15        | Match lose nếu hết timer 45 phút                                                        |
 | AC-16        | Host disconnect trong match làm match kết thúc với result `HOST_DISCONNECTED`           |
 | AC-17        | Monster chuyển Patrol → Investigate khi nhận noise event                                |
 | AC-18        | Monster chuyển Patrol/Investigate → Chase khi thấy player trong FOV                     |

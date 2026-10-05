@@ -12,12 +12,21 @@ namespace EchoProtocol.TeamTools
         {
             LobbyPlayerState.FieldScannerToolId,
             LobbyPlayerState.NoiseMakerToolId,
+
             LobbyPlayerState.FirstAidKitToolId,
+            LobbyPlayerState.FirstAidKitToolId,
+            LobbyPlayerState.FirstAidKitToolId,
+            LobbyPlayerState.FirstAidKitToolId,
+            LobbyPlayerState.FirstAidKitToolId,
+            LobbyPlayerState.FirstAidKitToolId,
+            LobbyPlayerState.FirstAidKitToolId,
+            LobbyPlayerState.FirstAidKitToolId,
+
             LobbyPlayerState.DoorJammerToolId,
             LobbyPlayerState.CoreStabilizerToolId,
         };
 
-        public const int RequiredToolCountPerZone = 5;
+        public const int RequiredToolCountPerZone = 12;
 
         private readonly struct SpawnPlan
         {

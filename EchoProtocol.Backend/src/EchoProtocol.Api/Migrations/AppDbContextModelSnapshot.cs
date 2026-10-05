@@ -228,8 +228,6 @@ namespace EchoProtocol.Api.Migrations
 
                     b.HasKey("InventoryItemId");
 
-                    b.HasAlternateKey("UserId", "InventoryItemId");
-
                     b.HasIndex("PurchaseId")
                         .IsUnique();
 
@@ -382,7 +380,7 @@ namespace EchoProtocol.Api.Migrations
 
                     b.ToTable("MatchResults", t =>
                         {
-                            t.HasCheckConstraint("CK_MatchResults_DurationSeconds_Range", "\"DurationSeconds\" >= 60 AND \"DurationSeconds\" <= 900");
+                            t.HasCheckConstraint("CK_MatchResults_DurationSeconds_Range", "\"DurationSeconds\" >= 60 AND \"DurationSeconds\" <= 2760");
 
                             t.HasCheckConstraint("CK_MatchResults_ObjectiveCompletion_Range", "CAST(\"ObjectiveCompletion\" AS NUMERIC) >= 0 AND CAST(\"ObjectiveCompletion\" AS NUMERIC) <= 1");
 
@@ -680,42 +678,6 @@ namespace EchoProtocol.Api.Migrations
                         });
                 });
 
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentCheckout", b =>
-                {
-                    b.HasOne("EchoProtocol.Api.Entities.PaymentOrder", "PaymentOrder")
-                        .WithOne("Checkout")
-                        .HasForeignKey("EchoProtocol.Api.Entities.PaymentCheckout", "PaymentOrderId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("PaymentOrder");
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentFulfillment", b =>
-                {
-                    b.HasOne("EchoProtocol.Api.Entities.InventoryItem", "InventoryItem")
-                        .WithMany()
-                        .HasForeignKey("InventoryItemId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("EchoProtocol.Api.Entities.PaymentOrder", "PaymentOrder")
-                        .WithOne("Fulfillment")
-                        .HasForeignKey("EchoProtocol.Api.Entities.PaymentFulfillment", "PaymentOrderId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EchoProtocol.Api.Entities.WalletTransaction", "WalletTransaction")
-                        .WithMany()
-                        .HasForeignKey("WalletTransactionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("InventoryItem");
-
-                    b.Navigation("PaymentOrder");
-
-                    b.Navigation("WalletTransaction");
-                });
-
             modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentOrder", b =>
                 {
                     b.Property<Guid>("PaymentOrderId")
@@ -795,24 +757,14 @@ namespace EchoProtocol.Api.Migrations
 
                     b.HasKey("PaymentOrderId");
 
-                    b.HasIndex("CreatedAtUtc", "PaymentOrderId")
-                        .IsDescending(true, true)
-                        .HasDatabaseName("IX_Admin_PaymentOrders_Created");
-
                     b.HasIndex("FulfillmentReference")
                         .IsUnique()
                         .HasDatabaseName("IX_PaymentOrders_FulfillmentReference")
                         .HasFilter("\"FulfillmentReference\" IS NOT NULL");
 
-                    b.HasIndex("UserId", "CreatedAtUtc");
-
-                    b.HasIndex("ProductReference", "CreatedAtUtc", "PaymentOrderId")
-                        .IsDescending(false, true, true)
-                        .HasDatabaseName("IX_Admin_PaymentOrders_Product_Created");
-
-                    b.HasIndex("Provider", "CreatedAtUtc", "PaymentOrderId")
-                        .IsDescending(false, true, true)
-                        .HasDatabaseName("IX_Admin_PaymentOrders_Provider_Created");
+                    b.HasIndex("CreatedAtUtc", "PaymentOrderId")
+                        .IsDescending()
+                        .HasDatabaseName("IX_Admin_PaymentOrders_Created");
 
                     b.HasIndex("Provider", "ProviderOrderId")
                         .IsUnique()
@@ -824,9 +776,19 @@ namespace EchoProtocol.Api.Migrations
                         .HasDatabaseName("IX_PaymentOrders_Provider_ProviderTransactionId")
                         .HasFilter("\"ProviderTransactionId\" IS NOT NULL");
 
+                    b.HasIndex("UserId", "CreatedAtUtc");
+
                     b.HasIndex("UserId", "IdempotencyKey")
                         .IsUnique()
                         .HasDatabaseName("IX_PaymentOrders_UserId_IdempotencyKey");
+
+                    b.HasIndex("ProductReference", "CreatedAtUtc", "PaymentOrderId")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_Admin_PaymentOrders_Product_Created");
+
+                    b.HasIndex("Provider", "CreatedAtUtc", "PaymentOrderId")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_Admin_PaymentOrders_Provider_Created");
 
                     b.HasIndex("Status", "CreatedAtUtc", "PaymentOrderId")
                         .IsDescending(false, true, true)
@@ -1167,22 +1129,22 @@ namespace EchoProtocol.Api.Migrations
 
                     b.HasKey("PurchaseId");
 
-                    b.HasIndex("CreatedAtUtc", "PurchaseId")
-                        .IsDescending(true, true)
-                        .HasDatabaseName("IX_Admin_Purchases_Created");
-
                     b.HasIndex("ShopItemId");
-
-                    b.HasIndex("ShopItemId", "CreatedAtUtc", "PurchaseId")
-                        .IsDescending(false, true, true)
-                        .HasDatabaseName("IX_Admin_Purchases_Item_Created");
 
                     b.HasIndex("WalletTransactionId")
                         .IsUnique();
 
+                    b.HasIndex("CreatedAtUtc", "PurchaseId")
+                        .IsDescending()
+                        .HasDatabaseName("IX_Admin_Purchases_Created");
+
                     b.HasIndex("UserId", "IdempotencyKey")
                         .IsUnique()
                         .HasDatabaseName("IX_PurchaseTransactions_UserId_IdempotencyKey");
+
+                    b.HasIndex("ShopItemId", "CreatedAtUtc", "PurchaseId")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_Admin_Purchases_Item_Created");
 
                     b.HasIndex("UserId", "CreatedAtUtc", "PurchaseId")
                         .IsDescending(false, true, true)
@@ -1193,6 +1155,59 @@ namespace EchoProtocol.Api.Migrations
                             t.HasCheckConstraint("CK_PurchaseTransactions_PriceAtPurchase_NonNegative", "\"PriceAtPurchase\" >= 0");
 
                             t.HasCheckConstraint("CK_PurchaseTransactions_Status_Completed", "\"Status\" = 'COMPLETED'");
+                        });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.RefreshSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FamilyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("LastUsedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReplacedBySessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FamilyId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RefreshSessions_TokenHash");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("RefreshSessions", t =>
+                        {
+                            t.HasCheckConstraint("CK_RefreshSessions_ExpiryAfterCreated", "\"ExpiresAtUtc\" > \"CreatedAtUtc\"");
                         });
                 });
 
@@ -1903,11 +1918,11 @@ namespace EchoProtocol.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CreatedAtUtc", "Id")
-                        .IsDescending(true, true)
-                        .HasDatabaseName("IX_Admin_WalletTransactions_Created");
-
                     b.HasIndex("ReferenceId");
+
+                    b.HasIndex("CreatedAtUtc", "Id")
+                        .IsDescending()
+                        .HasDatabaseName("IX_Admin_WalletTransactions_Created");
 
                     b.HasIndex("Type", "CreatedAtUtc", "Id")
                         .IsDescending(false, true, true)
@@ -2091,6 +2106,42 @@ namespace EchoProtocol.Api.Migrations
                     b.Navigation("ResultPlayer");
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentCheckout", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.PaymentOrder", "PaymentOrder")
+                        .WithOne("Checkout")
+                        .HasForeignKey("EchoProtocol.Api.Entities.PaymentCheckout", "PaymentOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PaymentOrder");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentFulfillment", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.InventoryItem", "InventoryItem")
+                        .WithMany()
+                        .HasForeignKey("InventoryItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EchoProtocol.Api.Entities.PaymentOrder", "PaymentOrder")
+                        .WithOne("Fulfillment")
+                        .HasForeignKey("EchoProtocol.Api.Entities.PaymentFulfillment", "PaymentOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.WalletTransaction", "WalletTransaction")
+                        .WithMany()
+                        .HasForeignKey("WalletTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("InventoryItem");
+
+                    b.Navigation("PaymentOrder");
+
+                    b.Navigation("WalletTransaction");
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentOrder", b =>
                 {
                     b.HasOne("EchoProtocol.Api.Entities.User", "User")
@@ -2125,16 +2176,16 @@ namespace EchoProtocol.Api.Migrations
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerLoadoutItem", b =>
                 {
+                    b.HasOne("EchoProtocol.Api.Entities.User", "User")
+                        .WithMany("LoadoutItems")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("EchoProtocol.Api.Entities.InventoryItem", "InventoryItem")
                         .WithMany("LoadoutItems")
                         .HasForeignKey("UserId", "InventoryItemId")
                         .HasPrincipalKey("UserId", "InventoryItemId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("EchoProtocol.Api.Entities.User", "User")
-                        .WithMany("LoadoutItems")
-                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -2181,13 +2232,15 @@ namespace EchoProtocol.Api.Migrations
                     b.Navigation("WalletTransaction");
                 });
 
-            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentOrder", b =>
+            modelBuilder.Entity("EchoProtocol.Api.Entities.RefreshSession", b =>
                 {
-                    b.Navigation("Checkout");
+                    b.HasOne("EchoProtocol.Api.Entities.User", "User")
+                        .WithMany("RefreshSessions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
-                    b.Navigation("Fulfillment");
-
-                    b.Navigation("ProviderEvents");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioApplyReceipt", b =>
@@ -2282,16 +2335,16 @@ namespace EchoProtocol.Api.Migrations
                     b.Navigation("Players");
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.InventoryItem", b =>
+                {
+                    b.Navigation("LoadoutItems");
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.MatchAuthorityBinding", b =>
                 {
                     b.Navigation("Players");
 
                     b.Navigation("Result");
-                });
-
-            modelBuilder.Entity("EchoProtocol.Api.Entities.InventoryItem", b =>
-                {
-                    b.Navigation("LoadoutItems");
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.MatchPlayerBinding", b =>
@@ -2311,6 +2364,15 @@ namespace EchoProtocol.Api.Migrations
                     b.Navigation("MatchScores");
 
                     b.Navigation("RewardGrant");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.PaymentOrder", b =>
+                {
+                    b.Navigation("Checkout");
+
+                    b.Navigation("Fulfillment");
+
+                    b.Navigation("ProviderEvents");
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.PlayerAIProfile", b =>
@@ -2349,6 +2411,8 @@ namespace EchoProtocol.Api.Migrations
                     b.Navigation("PlayerProfile");
 
                     b.Navigation("PurchaseTransactions");
+
+                    b.Navigation("RefreshSessions");
 
                     b.Navigation("Wallet");
                 });

@@ -15,8 +15,11 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     [SerializeField] private float lookAtDistance = 12f;
     [SerializeField] private bool driveRightHandWhenHolding = true;
 
-    [Header("Crouch Pose")]
-    [SerializeField] private Vector3 crouchLeftHandLocalPosition = new Vector3(-0.22f, 0.62f, 0.04f);
+    [Header("Sprint Leg Anti-Cross")]
+    [SerializeField, Min(0f)] private float sprintFootHalfSpacing = 0.09f;
+    [SerializeField, Range(0f, 1f)] private float sprintLegCorrectionWeight = 0.85f;
+    [SerializeField, Min(0f)] private float sprintKneePoleForwardOffset = 0.45f;
+    [SerializeField, Min(0f)] private float sprintKneePoleSideOffset = 0.12f;
 
     [Header("Carry (Two-Hand) Pose")]
     [SerializeField] private float carryForwardOffset = 0.30f;
@@ -44,6 +47,8 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     private static readonly int IsDownedHash = Animator.StringToHash("IsDowned");
     private static readonly int IsCrouchingHash = Animator.StringToHash("IsCrouching");
     private static readonly int IsPushingHash = Animator.StringToHash("IsPushing");
+    private static readonly int IsMovingHash = Animator.StringToHash("IsMoving");
+    private static readonly int IsSprintingHash = Animator.StringToHash("IsSprinting");
 
     private PlayerInventory _inventory;
     private PlayerEnergyCoreCarrier _coreCarrier;
@@ -74,6 +79,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         }
 
         ApplyArmPosingInLateUpdate();
+        ApplySprintLegSeparation();
     }
 
     private void OnAnimatorIK(int layerIndex)
@@ -163,14 +169,10 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             return;
         }
 
-        if (animator.GetBool(IsCrouchingHash) && leftUpperArm != null && leftForeArm != null && leftHandBone != null)
+        if (animator.GetBool(IsCrouchingHash))
         {
-            Transform root = playerRoot != null ? playerRoot : transform;
-            Vector3 leftHandTarget = root.TransformPoint(crouchLeftHandLocalPosition);
-            Vector3 leftElbowPole = leftUpperArm.position - root.right * 0.35f + root.forward * 0.12f;
-            SolveTwoBoneIK(leftUpperArm, leftForeArm, leftHandBone, leftHandTarget, leftElbowPole, 1f);
+            return;
         }
-
 
         if (IsHoldingTeamTool())
         {
@@ -191,6 +193,92 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             Vector3 rightElbowPole = rightUpperArm.position + aimRight * 0.35f - aimUp * 0.25f - aimForward * 0.10f;
 
             SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, handTarget, rightElbowPole, rightHandPosWeight);
+        }
+    }
+
+    private void ApplySprintLegSeparation()
+    {
+        if (animator == null
+            || !animator.isHuman
+            || animator.avatar == null
+            || !animator.avatar.isValid)
+        {
+            return;
+        }
+
+        if (IsReviving()
+            || IsDowned()
+            || IsPushing()
+            || animator.GetBool(IsCrouchingHash)
+            || !animator.GetBool(IsMovingHash)
+            || !animator.GetBool(IsSprintingHash))
+        {
+            return;
+        }
+
+        Transform root = playerRoot != null ? playerRoot : transform;
+
+        Transform leftUpper = animator.GetBoneTransform(HumanBodyBones.LeftUpperLeg);
+        Transform leftLower = animator.GetBoneTransform(HumanBodyBones.LeftLowerLeg);
+        Transform leftFoot = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
+
+        Transform rightUpper = animator.GetBoneTransform(HumanBodyBones.RightUpperLeg);
+        Transform rightLower = animator.GetBoneTransform(HumanBodyBones.RightLowerLeg);
+        Transform rightFoot = animator.GetBoneTransform(HumanBodyBones.RightFoot);
+
+        if (leftUpper == null || leftLower == null || leftFoot == null
+            || rightUpper == null || rightLower == null || rightFoot == null)
+        {
+            return;
+        }
+
+        Vector3 leftLocal = root.InverseTransformPoint(leftFoot.position);
+        Vector3 rightLocal = root.InverseTransformPoint(rightFoot.position);
+
+        bool fixLeft = leftLocal.x > -sprintFootHalfSpacing;
+        bool fixRight = rightLocal.x < sprintFootHalfSpacing;
+
+        if (!fixLeft && !fixRight)
+        {
+            return;
+        }
+
+        if (fixLeft)
+        {
+            leftLocal.x = -sprintFootHalfSpacing;
+
+            Vector3 leftTarget = root.TransformPoint(leftLocal);
+            Vector3 leftPole =
+                leftUpper.position
+                + root.forward * sprintKneePoleForwardOffset
+                - root.right * sprintKneePoleSideOffset;
+
+            SolveTwoBoneIK(
+                leftUpper,
+                leftLower,
+                leftFoot,
+                leftTarget,
+                leftPole,
+                sprintLegCorrectionWeight);
+        }
+
+        if (fixRight)
+        {
+            rightLocal.x = sprintFootHalfSpacing;
+
+            Vector3 rightTarget = root.TransformPoint(rightLocal);
+            Vector3 rightPole =
+                rightUpper.position
+                + root.forward * sprintKneePoleForwardOffset
+                + root.right * sprintKneePoleSideOffset;
+
+            SolveTwoBoneIK(
+                rightUpper,
+                rightLower,
+                rightFoot,
+                rightTarget,
+                rightPole,
+                sprintLegCorrectionWeight);
         }
     }
 

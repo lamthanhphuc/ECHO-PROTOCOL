@@ -1,4 +1,5 @@
 using EchoProtocol.Api;
+using EchoProtocol.Profile;
 using UnityEngine;
 
 namespace EchoProtocol.Auth
@@ -22,6 +23,7 @@ namespace EchoProtocol.Auth
 
     private ApiClient _apiClient;
     private AuthApiService _authService;
+    private PlayerProfileApiService _playerProfileService;
     private bool _initialized;
 
     public static AuthRuntime Instance => _instance;
@@ -29,6 +31,7 @@ namespace EchoProtocol.Auth
     public ApiConfiguration Configuration => configuration;
     public ApiClient Client => _apiClient;
     public AuthApiService AuthService => _authService;
+    public PlayerProfileApiService PlayerProfileService => _playerProfileService;
     public bool IsInitialized => _initialized;
 
     public static AuthRuntime EnsureExists()
@@ -104,6 +107,7 @@ namespace EchoProtocol.Auth
 
       _apiClient.Initialize(configuration);
       _authService.Initialize(_apiClient);
+      _playerProfileService = new PlayerProfileApiService(_apiClient);
       _initialized = true;
     }
 

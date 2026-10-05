@@ -2,7 +2,9 @@ using System;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
 using Fusion;
+using QuickOutline;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace EchoProtocol.Tools.Scanner
 {
@@ -14,6 +16,8 @@ namespace EchoProtocol.Tools.Scanner
     [RequireComponent(typeof(Collider))]
     public class NetworkToolPickup : NetworkInteractable, IInteractable
     {
+        private const float MaxOutlineVisibleDistance = 20f;
+
         public static event Action<NetworkToolPickup, PlayerRef> ToolPickedUp;
 
         [Header("Tool Configuration")]
@@ -24,6 +28,11 @@ namespace EchoProtocol.Tools.Scanner
         [Header("Components")]
         [SerializeField] private Collider _pickupCollider;
         [SerializeField] private Renderer _visualRenderer;
+
+        private Outline _outline;
+
+        private static readonly Color TeamToolOutlineColor =
+            new Color(1f, 0.05f, 0.05f, 1f);
 
         [Networked, OnChangedRender(nameof(OnReplicatedStateChanged))]
         private NetworkBool _isPickedUp { get; set; }
@@ -65,6 +74,7 @@ namespace EchoProtocol.Tools.Scanner
         {
             _pickupCollider = GetComponent<Collider>();
             _visualRenderer = GetComponentInChildren<Renderer>();
+            ConfigureWorldPickupShadows();
         }
 
         public override void Spawned()
@@ -81,8 +91,42 @@ namespace EchoProtocol.Tools.Scanner
                 _localPickedUp = _isPickedUp;
             }
 
+            EnsureOutline();
             ApplyReplicatedPose();
+            ConfigureWorldPickupShadows();
             OnReplicatedStateChanged();
+        }
+
+        private void EnsureOutline()
+        {
+            if (_outline == null)
+            {
+                _outline = GetComponent<Outline>();
+
+                if (_outline == null)
+                {
+                    _outline = gameObject.AddComponent<Outline>();
+                }
+            }
+
+            _outline.OutlineMode = Outline.Mode.OutlineVisible;
+            _outline.OutlineColor = TeamToolOutlineColor;
+            _outline.OutlineWidth = 4f;
+            _outline.UpdateMaterialProperties();
+        }
+
+        private void ConfigureWorldPickupShadows()
+        {
+            Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null) continue;
+
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+            }
         }
 
         private void ApplyReplicatedPose()
@@ -95,6 +139,8 @@ namespace EchoProtocol.Tools.Scanner
 
         private void OnReplicatedStateChanged()
         {
+            ConfigureWorldPickupShadows();
+
             if (Runner != null && Object != null && Object.IsValid)
             {
                 _localPickedUp = _isPickedUp;
@@ -125,6 +171,34 @@ namespace EchoProtocol.Tools.Scanner
             {
                 transform.GetChild(i).gameObject.SetActive(visible);
             }
+
+            EnsureOutline();
+            RefreshOutlineVisibility();
+        }
+
+        private void Update()
+        {
+            RefreshOutlineVisibility();
+        }
+
+        private void RefreshOutlineVisibility()
+        {
+            EnsureOutline();
+
+            Camera viewer = Camera.main;
+            if (IsPickedUp || viewer == null)
+            {
+                _outline.enabled = false;
+                return;
+            }
+
+            float maxDistanceSqr =
+                MaxOutlineVisibleDistance
+                * MaxOutlineVisibleDistance;
+
+            _outline.enabled =
+                (viewer.transform.position - transform.position)
+                .sqrMagnitude <= maxDistanceSqr;
         }
 
         // ==========================================

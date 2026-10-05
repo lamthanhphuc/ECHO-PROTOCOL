@@ -42,6 +42,14 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return false;
             }
 
+            if (playerObject.TryGetComponent<
+                    LobbyPlayerState>(
+                    out var lobbyState)
+                && lobbyState.IsStabilizerBuffed)
+            {
+                return false;
+            }
+
             if (playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement)
                 && movement.IsHidden)
             {

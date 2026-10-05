@@ -421,8 +421,15 @@ public static class PlayerAnimatorSetupBuilder
             viewSo.ApplyModifiedPropertiesWithoutUndo();
 
             SerializedObject aimSo = new SerializedObject(upperBodyAim);
+
             SetObject(aimSo, "animator", animator);
             SetObject(aimSo, "playerRoot", prefabRoot.transform);
+
+            SetFloat(aimSo, "sprintFootHalfSpacing", 0.09f);
+            SetFloat(aimSo, "sprintLegCorrectionWeight", 0.85f);
+            SetFloat(aimSo, "sprintKneePoleForwardOffset", 0.45f);
+            SetFloat(aimSo, "sprintKneePoleSideOffset", 0.12f);
+
             aimSo.ApplyModifiedPropertiesWithoutUndo();
 
             PrefabUtility.SaveAsPrefabAsset(prefabRoot, prefabPath);
@@ -482,18 +489,46 @@ public static class PlayerAnimatorSetupBuilder
         ModelImporter importer = AssetImporter.GetAtPath(BodyModelPath) as ModelImporter;
         if (importer == null)
         {
-            Debug.LogWarning("[PlayerAnimatorSetupBuilder] Could not find body model importer: " + BodyModelPath);
+            Debug.LogWarning(
+                "[PlayerAnimatorSetupBuilder] Could not find body model importer: "
+                + BodyModelPath);
             return;
         }
 
-        if (importer.animationType == ModelImporterAnimationType.Human &&
-            importer.avatarSetup == ModelImporterAvatarSetup.CreateFromThisModel)
+        bool changed = false;
+
+        if (importer.animationType != ModelImporterAnimationType.Human)
+        {
+            importer.animationType = ModelImporterAnimationType.Human;
+            changed = true;
+        }
+
+        if (importer.avatarSetup != ModelImporterAvatarSetup.CreateFromThisModel)
+        {
+            importer.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
+            changed = true;
+        }
+
+        HumanDescription human = importer.humanDescription;
+
+        if (!Mathf.Approximately(human.feetSpacing, 0.08f))
+        {
+            human.feetSpacing = 0.08f;
+            changed = true;
+        }
+
+        if (!Mathf.Approximately(human.legStretch, 0.02f))
+        {
+            human.legStretch = 0.02f;
+            changed = true;
+        }
+
+        if (!changed)
         {
             return;
         }
 
-        importer.animationType = ModelImporterAnimationType.Human;
-        importer.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
+        importer.humanDescription = human;
         importer.SaveAndReimport();
     }
 

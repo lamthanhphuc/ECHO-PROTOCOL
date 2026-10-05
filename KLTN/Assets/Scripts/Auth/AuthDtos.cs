@@ -73,8 +73,25 @@ namespace EchoProtocol.Auth
   {
     public string accessToken;
     public string expiresAt;
+    public string refreshToken;
+    public string refreshExpiresAt;
     public UserSummaryDto user;
     public WalletSummaryDto wallet;
+  }
+
+  [Serializable]
+  public class RefreshTokenRequestDto
+  {
+    public string refreshToken;
+  }
+
+  [Serializable]
+  public class LogoutApiResponse
+  {
+    public bool success;
+    public string message;
+    public bool data;
+    public string errorCode;
   }
 
   [Serializable]
