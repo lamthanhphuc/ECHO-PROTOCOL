@@ -31,6 +31,11 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(0f)] private float _staminaRegenPerSecond = 18f;
         [SerializeField, Min(0f)] private float _minStaminaToSprint = 5f;
 
+        private float StaminaResumeThreshold =>
+            Mathf.Max(
+                _minStaminaToSprint,
+                _maxStamina * 0.3f);
+
         private NetworkCharacterController _controller;
         private CharacterController _unityCharacterController;
         private InputAction _moveAction;
@@ -52,6 +57,7 @@ namespace EchoProtocol.Networking
         private bool _offlineAnimationCrouching;
         private bool _offlineAnimationPushing;
         private float _offlineCurrentStamina;
+        private bool _offlineStaminaExhausted;
 
         [SerializeField, Min(0f)] private float _standingHeight = 2f;
         [SerializeField, Min(0f)] private float _crouchHeight = 1.2f;
@@ -59,6 +65,7 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(0f)] private float _crouchTransitionSpeed = 10f;
 
         [Networked] private float NetworkCurrentStamina { get; set; }
+        [Networked] private NetworkBool StaminaExhausted { get; set; }
         [Networked] private float LookPitch { get; set; }
         [Networked] private float AnimationMoveX { get; set; }
         [Networked] private float AnimationMoveY { get; set; }
@@ -288,16 +295,40 @@ namespace EchoProtocol.Networking
                 localDirection.Normalize();
             }
 
-            bool isSprintMoving = !isCarryingCoreOffline
+            bool isSprintMoving =
+                !isCarryingCoreOffline
                 && !_offlineAnimationCrouching
+                && !_offlineStaminaExhausted
                 && sprintHeld
-                && _offlineCurrentStamina > _minStaminaToSprint
-                && CanSprintInDirection(moveInput)
-                && localDirection.sqrMagnitude > 0.01f;
-            float speed = _offlineAnimationCrouching ? _walkSpeed * 0.55f : isSprintMoving ? _sprintSpeed : _walkSpeed;
+                && _offlineCurrentStamina
+                    > _minStaminaToSprint
+                && CanSprintInDirection(
+                    moveInput)
+                && localDirection.sqrMagnitude
+                    > 0.01f;
 
-            _offlineAnimationMoveInput = new Vector2(localDirection.x, localDirection.z);
-            _offlineAnimationSprinting = isSprintMoving;
+            UpdateStaminaOffline(
+                isSprintMoving);
+
+            if (_offlineStaminaExhausted)
+            {
+                isSprintMoving = false;
+            }
+
+            float speed =
+                _offlineAnimationCrouching
+                    ? _walkSpeed * 0.55f
+                    : isSprintMoving
+                        ? _sprintSpeed
+                        : _walkSpeed;
+
+            _offlineAnimationMoveInput =
+                new Vector2(
+                    localDirection.x,
+                    localDirection.z);
+
+            _offlineAnimationSprinting =
+                isSprintMoving;
 
             var offlineLifeState = GetComponent<NetworkPlayerLifeState>();
             bool isOfflineDowned = offlineLifeState != null && offlineLifeState.IsDowned;
@@ -327,7 +358,6 @@ namespace EchoProtocol.Networking
             Vector3 finalMotion = (worldDirection + Vector3.up * _offlineVelocity.y) * Time.deltaTime;
             _unityCharacterController.Move(finalMotion);
 
-            UpdateStaminaOffline(isSprintMoving);
         }
 
         public override void Spawned()
@@ -336,9 +366,18 @@ namespace EchoProtocol.Networking
             {
                 IsHidden = false;
                 CurrentHideSpotId = 0UL;
-                NetworkCurrentStamina = _maxStamina;
-                ExternalSlowTimer = TickTimer.None;
-                ExternalSlowMultiplier = 1f;
+
+                NetworkCurrentStamina =
+                    _maxStamina;
+
+                StaminaExhausted =
+                    false;
+
+                ExternalSlowTimer =
+                    TickTimer.None;
+
+                ExternalSlowMultiplier =
+                    1f;
             }
 
             if (!Object.HasInputAuthority) return;
@@ -404,6 +443,7 @@ namespace EchoProtocol.Networking
             }
 
             var lifeState = GetComponent<NetworkPlayerLifeState>();
+
             if (lifeState != null && !lifeState.CanMove)
             {
                 AnimationMoveX = AnimationMoveY = 0f;
@@ -454,18 +494,28 @@ namespace EchoProtocol.Networking
 
             bool effectiveCrouch = Object.HasStateAuthority ? wantsCrouch : IsCrouching;
 
-            bool coreAllowsSprint = CoreStabilizerRules.AllowsSprint(isCarryingCore,
-                lobbyState != null && lobbyState.IsCoreStabilized);
+            bool coreAllowsSprint = CoreStabilizerRules.AllowsSprint(isCarryingCore);
             var isSprintMoving =
-                canInitiateAction &&
-                !effectiveCrouch &&
-                coreAllowsSprint &&
-                input.SprintHeld &&
-                NetworkCurrentStamina > _minStaminaToSprint &&
-                CanSprintInDirection(input.Move) &&
-                direction.sqrMagnitude > 0.01f;
-            AnimationSprintHeld = isSprintMoving;
+                canInitiateAction
+                && !effectiveCrouch
+                && coreAllowsSprint
+                && !StaminaExhausted
+                && input.SprintHeld
+                && NetworkCurrentStamina
+                    > _minStaminaToSprint
+                && CanSprintInDirection(
+                    input.Move)
+                && direction.sqrMagnitude
+                    > 0.01f;
+
             UpdateStaminaAuthoritative(isSprintMoving);
+
+            if (StaminaExhausted)
+            {
+                isSprintMoving = false;
+            }
+
+            AnimationSprintHeld = isSprintMoving;
 
             var baseSpeed = effectiveCrouch
                 ? _walkSpeed * 0.55f
@@ -476,7 +526,9 @@ namespace EchoProtocol.Networking
             var coreCarryMultiplier = 1f;
             if (isCarryingCore)
             {
-                coreCarryMultiplier = lobbyPlayer.IsCoreStabilized ? 1f : 0.72f;
+                coreCarryMultiplier = lobbyPlayer != null && lobbyPlayer.IsStabilizerBuffed
+                    ? CoreStabilizerRules.SpeedMultiplier
+                    : 0.72f;
             }
             _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f)
                 * coreCarryMultiplier * GetExternalSlowMultiplier();
@@ -490,12 +542,20 @@ namespace EchoProtocol.Networking
                 canInitiateAction
                 && direction.sqrMagnitude > 0.01f;
 
-            if (Object.HasStateAuthority && !isMoving)
+            var stabilizerProtected =
+                lobbyPlayer != null
+                && lobbyPlayer.IsStabilizerBuffed;
+
+            if (Object.HasStateAuthority
+                && (!isMoving || stabilizerProtected))
             {
                 _hasLastMovementNoiseType = false;
+                _nextMovementNoise = TickTimer.None;
             }
 
-            if (Object.HasStateAuthority && isMoving)
+            if (Object.HasStateAuthority
+                && isMoving
+                && !stabilizerProtected)
             {
                 var type = isCarryingCore
                     ? RuntimeNoiseType.CORE_CARRY
@@ -562,28 +622,157 @@ namespace EchoProtocol.Networking
 
         private void UpdateStaminaAuthoritative(bool isSprinting)
         {
-            if (!Object.HasStateAuthority) return;
-
-            float delta = Runner != null ? Runner.DeltaTime : Time.deltaTime;
-            float stamina = NetworkCurrentStamina <= 0f && !isSprinting
-                ? NetworkCurrentStamina
-                : Mathf.Clamp(NetworkCurrentStamina, 0f, _maxStamina);
-            stamina += (isSprinting ? -_sprintStaminaDrainPerSecond : _staminaRegenPerSecond) * delta;
-            NetworkCurrentStamina = Mathf.Clamp(stamina, 0f, _maxStamina);
-            if (NetworkCurrentStamina <= 0f)
+            if (!Object.HasStateAuthority)
             {
-                AnimationSprintHeld = false;
+                return;
+            }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            var lifeState =
+                GetComponent<NetworkPlayerLifeState>();
+
+            if (lifeState != null
+                && lifeState.DebugGodMode)
+            {
+                NetworkCurrentStamina =
+                    _maxStamina;
+
+                StaminaExhausted =
+                    false;
+
+                return;
+            }
+#endif
+
+            float delta =
+                Runner != null
+                    ? Runner.DeltaTime
+                    : Time.deltaTime;
+
+            if (!StaminaExhausted
+                && NetworkCurrentStamina
+                    <= _minStaminaToSprint)
+            {
+                StaminaExhausted =
+                    true;
+            }
+
+            if (StaminaExhausted)
+            {
+                NetworkCurrentStamina =
+                    Mathf.Clamp(
+                        NetworkCurrentStamina
+                        + _staminaRegenPerSecond
+                        * delta,
+                        0f,
+                        _maxStamina);
+
+                AnimationSprintHeld =
+                    false;
+
+                if (NetworkCurrentStamina
+                    >= StaminaResumeThreshold)
+                {
+                    StaminaExhausted =
+                        false;
+                }
+
+                return;
+            }
+
+            if (isSprinting)
+            {
+                NetworkCurrentStamina -=
+                    _sprintStaminaDrainPerSecond
+                    * delta;
+            }
+            else
+            {
+                NetworkCurrentStamina +=
+                    _staminaRegenPerSecond
+                    * delta;
+            }
+
+            NetworkCurrentStamina =
+                Mathf.Clamp(
+                    NetworkCurrentStamina,
+                    0f,
+                    _maxStamina);
+
+            if (NetworkCurrentStamina
+                <= _minStaminaToSprint)
+            {
+                StaminaExhausted =
+                    true;
+
+                AnimationSprintHeld =
+                    false;
             }
         }
 
         private void UpdateStaminaOffline(bool isSprinting)
         {
-            float delta = Time.deltaTime;
-            _offlineCurrentStamina += (isSprinting ? -_sprintStaminaDrainPerSecond : _staminaRegenPerSecond) * delta;
-            _offlineCurrentStamina = Mathf.Clamp(_offlineCurrentStamina, 0f, _maxStamina);
-            if (_offlineCurrentStamina <= 0f)
+            float delta =
+                Time.deltaTime;
+
+            if (!_offlineStaminaExhausted
+                && _offlineCurrentStamina
+                    <= _minStaminaToSprint)
             {
-                _offlineAnimationSprinting = false;
+                _offlineStaminaExhausted =
+                    true;
+            }
+
+            if (_offlineStaminaExhausted)
+            {
+                _offlineCurrentStamina =
+                    Mathf.Clamp(
+                        _offlineCurrentStamina
+                        + _staminaRegenPerSecond
+                        * delta,
+                        0f,
+                        _maxStamina);
+
+                _offlineAnimationSprinting =
+                    false;
+
+                if (_offlineCurrentStamina
+                    >= StaminaResumeThreshold)
+                {
+                    _offlineStaminaExhausted =
+                        false;
+                }
+
+                return;
+            }
+
+            if (isSprinting)
+            {
+                _offlineCurrentStamina -=
+                    _sprintStaminaDrainPerSecond
+                    * delta;
+            }
+            else
+            {
+                _offlineCurrentStamina +=
+                    _staminaRegenPerSecond
+                    * delta;
+            }
+
+            _offlineCurrentStamina =
+                Mathf.Clamp(
+                    _offlineCurrentStamina,
+                    0f,
+                    _maxStamina);
+
+            if (_offlineCurrentStamina
+                <= _minStaminaToSprint)
+            {
+                _offlineStaminaExhausted =
+                    true;
+
+                _offlineAnimationSprinting =
+                    false;
             }
         }
 

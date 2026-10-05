@@ -11,8 +11,8 @@ public sealed class CoreStabilizerRulesTests
         Assert.That(CoreStabilizerRules.SupportRadius, Is.EqualTo(5f));
         Assert.That(CoreStabilizerRules.DurationSeconds, Is.EqualTo(15f));
         Assert.That(CoreStabilizerRules.CooldownSeconds, Is.EqualTo(45f));
-        Assert.That(CoreStabilizerRules.AllowsSprint(true, false), Is.False);
-        Assert.That(CoreStabilizerRules.AllowsSprint(true, true), Is.True);
+        Assert.That(CoreStabilizerRules.AllowsSprint(true), Is.False);
+        Assert.That(CoreStabilizerRules.AllowsSprint(false), Is.True);
         Assert.That(CoreStabilizerRules.AllowsCrouch(false, true), Is.False);
     }
 

@@ -60,15 +60,19 @@ namespace EchoProtocol.Networking
         public const float SupportRadius = 5f;
         public const float DurationSeconds = 15f;
         public const float CooldownSeconds = 45f;
+        public const float SpeedMultiplier = 1.25f;
 
-        public static bool AllowsSprint(bool isCarryingCore, bool isCoreStabilized)
+        public static bool AllowsSprint(bool isCarryingCore)
         {
-            return !isCarryingCore || isCoreStabilized;
+            return !isCarryingCore;
         }
 
-        public static bool AllowsCrouch(bool isCarryingCore, bool isHoldingCoreStabilizer)
+        public static bool AllowsCrouch(
+            bool isCarryingCore,
+            bool isHoldingCoreStabilizer)
         {
-            return !isCarryingCore && !isHoldingCoreStabilizer;
+            return !isCarryingCore
+                && !isHoldingCoreStabilizer;
         }
     }
 

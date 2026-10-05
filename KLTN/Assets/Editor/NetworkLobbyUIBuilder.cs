@@ -99,7 +99,9 @@ public static partial class NetworkLobbyUIBuilder
         var controls = Rect("LobbyControls", terminal, 24, 908, 412, 84);
         var ready = Button("ReadyButton", controls, 0, 0, 200, 36, "READY", font);
         var start = Button("StartButton", controls, 212, 0, 200, 36, "START MISSION", font);
-        var leave = Button("LeaveButton", controls, 0, 46, 412, 36, "LEAVE ROOM", font);
+        var leave = Button("LeaveButton", controls, 0, 46, 200, 36, "LEAVE ROOM", font);
+        var exit = Button("ExitButton", controls, 212, 46, 200, 36, "EXIT", font);
+
         ready.interactable = start.interactable = leave.interactable = false;
 
         var controller = terminal.gameObject.AddComponent<NetworkLobbyUI>();
@@ -107,6 +109,7 @@ public static partial class NetworkLobbyUIBuilder
         Assign(serialized, "playerNameInput", player); Assign(serialized, "sessionNameInput", session);
         Assign(serialized, "hostButton", host); Assign(serialized, "joinButton", join);
         Assign(serialized, "readyButton", ready); Assign(serialized, "startButton", start); Assign(serialized, "leaveButton", leave);
+        Assign(serialized, "exitButton", exit);
         Assign(serialized, "statusText", statusText); Assign(serialized, "memberCountText", count);
         Assign(serialized, "memberListText", members); Assign(serialized, "statusIndicator", indicator);
         // Persistent Bootstrap services live in another scene and resolve at runtime.

@@ -152,6 +152,7 @@ namespace EchoProtocol.Networking
             }
 
             PlacedCoreCount = Mathf.Min(PlacedCoreCount + 1, _requiredCoreCount);
+            MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(context.Player);
             AdvanceObjectiveOrdinal();
             HandleObjectiveChanged();
             if (IsCoreObjectiveComplete)

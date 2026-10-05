@@ -20,4 +20,5 @@ public class User
     public ICollection<PlayerLoadoutItem> LoadoutItems { get; set; } = [];
     public ICollection<PurchaseTransaction> PurchaseTransactions { get; set; } = [];
     public ICollection<PaymentOrder> PaymentOrders { get; set; } = [];
+    public ICollection<RefreshSession> RefreshSessions { get; set; } = [];
 }

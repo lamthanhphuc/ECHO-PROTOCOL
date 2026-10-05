@@ -547,7 +547,8 @@ namespace EchoProtocol.AI.Minions
             return player.IsRealPlayer && Runner.TryGetPlayerObject(player, out obj) && obj != null && obj.IsValid
                 && obj.TryGetComponent(out lobby) && lobby.IsGameplayPlayer
                 && obj.TryGetComponent(out life) && life.Status == NetworkPlayerLifeStatus.Alive
-                && (!obj.TryGetComponent<NetworkPlayerMovement>(out var movement) || !movement.IsHidden);
+                && (!obj.TryGetComponent<NetworkPlayerMovement>(out var movement) || !movement.IsHidden)
+                && (!obj.TryGetComponent<LobbyPlayerState>(out var playerState) || !playerState.IsStabilizerBuffed);
         }
 
         private bool CanSeePlayer(NetworkObject playerObject)

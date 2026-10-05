@@ -33,6 +33,8 @@ namespace EchoProtocol.Networking.Authority
         public const string ScenarioResolutionModeSessionProperty = "scenarioResolutionMode";
         public const string MatchDifficultySessionProperty = "difficulty";
         private const float LeaseRenewIntervalSeconds = 15f;
+        private const float LocalRewardRetryIntervalSeconds = 1f;
+        private const int LocalRewardMaxAttempts = 8;
 
         private static MatchAuthorityRuntime _instance;
         private MatchAuthorityApiService _api;
@@ -41,6 +43,21 @@ namespace EchoProtocol.Networking.Authority
         private bool _leaseRequestInProgress;
         private bool _identityRequestInProgress;
         private bool _backendEndRequestInProgress;
+        private bool _pendingBackendMatchResult;
+        private float _nextBackendMatchResultRetryAt;
+        private const float MinimumBackendMatchResultAgeSeconds = 61f;
+
+        private float _backendMatchStartedAtRealtime = -1f;
+        private bool _localRewardRequestInProgress;
+        private bool _localRewardFetchQueued;
+        private int _localRewardFetchAttempts;
+        private float _nextLocalRewardFetchAt;
+        private Guid _localRewardMatchId;
+        private string _pendingBackendOutcome;
+        private float _pendingObjectiveCompletion;
+        private readonly Dictionary<int, Guid> _boundPlayers = new();
+        private readonly HashSet<int> _disconnectedActors = new();
+        private readonly HashSet<int> _objectiveContributors = new();
         private bool _eventsSubscribed;
         private TelemetryRuntimeBehaviour _telemetry;
         private DateTime _matchStartedAtUtc;
@@ -69,6 +86,9 @@ namespace EchoProtocol.Networking.Authority
             "M2-MAP-1";
         public static MatchAuthorityRuntime Instance => _instance;
         public Guid MatchId { get; private set; }
+        public RewardMeResponseDto LastLocalReward { get; private set; }
+        public bool HasLocalReward => LastLocalReward != null;
+        public event Action<RewardMeResponseDto> LocalRewardUpdated;
         public ScenarioResolutionMode RequestedScenarioResolutionMode => requestedScenarioResolutionMode;
         public MatchDifficulty Difficulty => requestedDifficulty;
         public string ExperimentCondition => experimentCondition ?? string.Empty;
@@ -76,6 +96,13 @@ namespace EchoProtocol.Networking.Authority
             experimentProtocolVersion ?? string.Empty;
         public bool IsHostBinding { get; private set; }
         public bool HasBinding => MatchId != Guid.Empty;
+        public int BoundPlayerCount =>
+            _boundPlayers.Count;
+        public bool RequiresFreshHostBinding =>
+            !HasBinding || !IsHostBinding;
+        public bool IsCompletingMatch =>
+            _backendEndRequestInProgress
+            || _pendingBackendMatchResult;
         public bool HasStateAuthority => IsHostBinding && _bootstrap?.Runner != null
             && _bootstrap.Runner.IsRunning && _bootstrap.Runner.IsServer;
         public long? AuthorityTick => HasStateAuthority ? _bootstrap.Runner.Tick.Raw : (long?)null;
@@ -140,10 +167,32 @@ namespace EchoProtocol.Networking.Authority
 
         private async void Update()
         {
+            var matchState = NetworkMatchState.Instance;
+            if (HasBinding
+                && matchState != null
+                && matchState.IsEnded
+                && _localRewardMatchId != MatchId)
+            {
+                QueueLocalRewardFetch(MatchId);
+            }
+
+            if (_localRewardFetchQueued
+                && !_localRewardRequestInProgress
+                && Time.unscaledTime >= _nextLocalRewardFetchAt)
+            {
+                TryFetchLocalReward();
+            }
+
             if (_pendingMatchEnd
                 && Time.unscaledTime >= _nextMatchEndRetryAt)
             {
                 TryEmitPendingMatchEnd();
+            }
+
+            if (_pendingBackendMatchResult
+                && Time.unscaledTime >= _nextBackendMatchResultRetryAt)
+            {
+                TrySubmitPendingMatchResult();
             }
 
             if (!IsHostBinding || !HasBinding || _leaseRequestInProgress
@@ -178,6 +227,7 @@ namespace EchoProtocol.Networking.Authority
                 return false;
             }
 
+            ResetLocalRewardTracking();
             MatchId = matchId;
             IsHostBinding = true;
             _nextLeaseRenewal = Time.unscaledTime + LeaseRenewIntervalSeconds;
@@ -185,6 +235,22 @@ namespace EchoProtocol.Networking.Authority
                 RuntimeLogCategory.MatchAuthority,
                 $"[MatchAuthority] Host binding created. Match={MatchId:D}, Session='{sessionName}'.");
             return true;
+        }
+
+        public async Task<bool> PrepareNextMatchAsync(
+            string sessionName,
+            int maxPlayers)
+        {
+            if (_backendEndRequestInProgress)
+            {
+                return false;
+            }
+
+            ResetBinding();
+
+            return await PrepareHostAsync(
+                sessionName,
+                maxPlayers);
         }
 
         public Dictionary<string, SessionProperty> BuildHostSessionProperties() =>
@@ -215,15 +281,11 @@ namespace EchoProtocol.Networking.Authority
             }
             else
             {
-                if (!Debug.isDebugBuild)
-                {
-                    Debug.LogError("[MatchAuthority] Session has no backend match binding.");
-                    return false;
-                }
-                matchId = Guid.NewGuid();
-                Debug.LogWarning($"[MatchAuthority] Session has no backend match binding. Generated dev fallback MatchId={matchId:D}.");
+                Debug.LogError("[MatchAuthority] Session has no backend match binding.");
+                return false;
             }
 
+            ResetLocalRewardTracking();
             MatchId = matchId;
             IsHostBinding = runner.IsServer;
             requestedScenarioResolutionMode = ReadScenarioResolutionMode(runner);
@@ -234,6 +296,41 @@ namespace EchoProtocol.Networking.Authority
                 $"[MatchAuthority] Fusion session attached. Match={MatchId:D}, " +
                 $"Host={IsHostBinding}, Mode={requestedScenarioResolutionMode}, Session='{runner.SessionInfo.Name}'.");
             TrySubmitLocalIdentity();
+            return true;
+        }
+
+        public bool RefreshJoinedSessionBindingIfChanged(
+            NetworkRunner runner,
+            LobbyPlayerState localPlayerState)
+        {
+            if (runner == null
+                || !runner.IsRunning
+                || !runner.SessionInfo.IsValid
+                || runner.SessionInfo.Properties == null
+                || !runner.SessionInfo.Properties.TryGetValue(
+                    MatchIdSessionProperty,
+                    out var property)
+                || !Guid.TryParse(
+                    (string)property,
+                    out var sessionMatchId))
+            {
+                return false;
+            }
+
+            if (sessionMatchId == MatchId)
+            {
+                return false;
+            }
+
+            if (!AttachJoinedSession(runner))
+            {
+                return false;
+            }
+
+            TrySubmitLocalIdentity(
+                localPlayerState,
+                force: true);
+
             return true;
         }
 
@@ -317,14 +414,17 @@ namespace EchoProtocol.Networking.Authority
             if (!IsSuccessful(result))
             {
                 Debug.LogWarning($"[MatchAuthority] Player bind rejected: {Describe(result)}.");
-                if (Debug.isDebugBuild)
-                    playerState.ApplyVerifiedBackendIdentity(Guid.NewGuid().ToString("D"));
-                else if (_bootstrap?.Runner != null)
+                if (_bootstrap?.Runner != null)
                     _bootstrap.Runner.Disconnect(playerState.Object.InputAuthority);
                 return;
             }
 
             playerState.ApplyVerifiedBackendIdentity(result.Data.data.userId);
+            if (Guid.TryParse(result.Data.data.userId, out var boundUserId))
+            {
+                _boundPlayers[actorNumber] = boundUserId;
+                _disconnectedActors.Remove(actorNumber);
+            }
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchAuthority,
 
@@ -339,19 +439,28 @@ namespace EchoProtocol.Networking.Authority
             if (!IsSuccessful(result))
             {
                 Debug.LogWarning($"[MatchAuthority] Disconnect binding failed: {Describe(result)}");
+                return;
             }
+
+            _disconnectedActors.Add(actorNumber);
         }
 
         public async Task<(bool Accepted, string Error)> StartMatchAsync()
         {
+            if (_backendEndRequestInProgress)
+            {
+                return (false, "Previous match is still being finalized.");
+            }
+
+            if (HasBinding && !IsHostBinding)
+            {
+                return (false, "Backend match has already ended; prepare a new host binding.");
+            }
+
             if (!IsHostBinding || !HasBinding)
             {
                 const string error = "Backend Host binding is not available.";
-                if (Debug.isDebugBuild)
-                {
-                    Debug.LogWarning($"[MatchAuthority] {error} Dev bypass: starting match anyway.");
-                    return (true, string.Empty);
-                }
+                Debug.LogWarning($"[MatchAuthority] {error}");
                 return (false, error);
             }
 
@@ -359,18 +468,29 @@ namespace EchoProtocol.Networking.Authority
             var success = IsSuccessful(result);
             if (success)
             {
+                _backendMatchStartedAtRealtime =
+                    Time.realtimeSinceStartup;
+
                 RuntimeLog.Log(
                 RuntimeLogCategory.MatchAuthority,
                 $"[MatchAuthority] Backend confirmed match start. Match={MatchId:D}.");
                 return (true, string.Empty);
             }
             var failure = Describe(result);
-            if (Debug.isDebugBuild)
-            {
-                Debug.LogWarning($"[MatchAuthority] Backend rejected match start: {failure}. Dev bypass: starting match anyway.");
-                return (true, string.Empty);
-            }
+            Debug.LogWarning($"[MatchAuthority] Backend rejected match start: {failure}.");
             return (false, failure);
+        }
+
+        public void RecordObjectiveContribution(PlayerRef actor)
+        {
+            var runner = _bootstrap?.Runner;
+            if (runner == null || !actor.IsRealPlayer) return;
+
+            var actorNumber = runner.GetPlayerActorId(actor) ?? actor.PlayerId;
+            if (_boundPlayers.ContainsKey(actorNumber))
+            {
+                _objectiveContributors.Add(actorNumber);
+            }
         }
 
         public void ResetBinding()
@@ -386,6 +506,14 @@ namespace EchoProtocol.Networking.Authority
             _leaseRequestInProgress = false;
             _identityRequestInProgress = false;
             _backendEndRequestInProgress = false;
+            _pendingBackendMatchResult = false;
+            _nextBackendMatchResultRetryAt = 0f;
+            _pendingBackendOutcome = null;
+            _pendingObjectiveCompletion = 0f;
+            _backendMatchStartedAtRealtime = -1f;
+            _boundPlayers.Clear();
+            _disconnectedActors.Clear();
+            _objectiveContributors.Clear();
             _matchStartedAtUtc = default;
             _telemetryMatchActive = false;
             _matchEndEmitted = false;
@@ -807,7 +935,6 @@ namespace EchoProtocol.Networking.Authority
                 _telemetryMatchActive = false;
                 _pendingMatchEnd = false;
                 _telemetry.TryFlushNow();
-                CompleteBackendMatch(_pendingMatchEndReasonCode);
                 return true;
             }
             catch (Exception exception)
@@ -821,23 +948,286 @@ namespace EchoProtocol.Networking.Authority
             }
         }
 
-        private async void CompleteBackendMatch(string reasonCode)
+        private void ResetLocalRewardTracking()
         {
-            if (_backendEndRequestInProgress || !HasBinding || !IsHostBinding) return;
+            _localRewardMatchId = Guid.Empty;
+            _localRewardFetchQueued = false;
+            _localRewardRequestInProgress = false;
+            _localRewardFetchAttempts = 0;
+            _nextLocalRewardFetchAt = 0f;
+            LastLocalReward = null;
+        }
 
-            _backendEndRequestInProgress = true;
-            var result = await _api.EndAsync(MatchId, reasonCode);
-            _backendEndRequestInProgress = false;
-            if (!IsSuccessful(result))
+        private void QueueLocalRewardFetch(Guid matchId)
+        {
+            if (matchId == Guid.Empty || _localRewardMatchId == matchId)
             {
-                Debug.LogWarning($"[MatchAuthority] Gameplay completion was not persisted: {Describe(result)}");
                 return;
             }
 
+            _localRewardMatchId = matchId;
+            _localRewardFetchQueued = true;
+            _localRewardFetchAttempts = 0;
+            _nextLocalRewardFetchAt = Time.unscaledTime;
+            LastLocalReward = null;
+        }
+
+        private async void TryFetchLocalReward()
+        {
+            if (!_localRewardFetchQueued
+                || _localRewardRequestInProgress
+                || _localRewardMatchId == Guid.Empty)
+            {
+                return;
+            }
+
+            var matchId = _localRewardMatchId;
+            _localRewardRequestInProgress = true;
+            _localRewardFetchAttempts++;
+            var result = await _api.GetMyRewardAsync(matchId);
+            _localRewardRequestInProgress = false;
+
+            if (_localRewardMatchId != matchId)
+            {
+                return;
+            }
+
+            if (IsSuccessful(result))
+            {
+                LastLocalReward = result.Data.data;
+                _localRewardFetchQueued = false;
+                LocalRewardUpdated?.Invoke(LastLocalReward);
+                RuntimeLog.Log(
+                    RuntimeLogCategory.MatchAuthority,
+                    $"[MatchAuthority] Local reward loaded. Match={matchId:D}, " +
+                    $"Credits=+{LastLocalReward.currencyAmount}, " +
+                    $"XP=+{LastLocalReward.experiencePointsAwarded}, " +
+                    $"Level={LastLocalReward.currentLevel}.");
+                return;
+            }
+
+            var retryableBusinessError = result != null
+                && result.FailureKind == EchoProtocol.Api.ApiFailureKind.Business
+                && (string.Equals(result.ErrorCode, "REWARD_PENDING", StringComparison.Ordinal)
+                    || string.Equals(result.ErrorCode, "REWARD_RESULT_NOT_FOUND", StringComparison.Ordinal));
+            var retryableTransportError = result == null
+                || result.FailureKind == EchoProtocol.Api.ApiFailureKind.Network
+                || result.FailureKind == EchoProtocol.Api.ApiFailureKind.Timeout;
+
+            if ((retryableBusinessError || retryableTransportError)
+                && _localRewardFetchAttempts < LocalRewardMaxAttempts)
+            {
+                _nextLocalRewardFetchAt = Time.unscaledTime + LocalRewardRetryIntervalSeconds;
+                return;
+            }
+
+            _localRewardFetchQueued = false;
+            Debug.LogWarning(
+                $"[MatchAuthority] Local reward could not be loaded: {Describe(result)}");
+        }
+
+        public void QueueMatchResult(
+            string outcome,
+            float objectiveCompletion)
+        {
+            if (!HasBinding || !IsHostBinding)
+            {
+                return;
+            }
+
+            _pendingBackendOutcome =
+                string.Equals(
+                    outcome,
+                    "WIN",
+                    StringComparison.Ordinal)
+                    ? "WIN"
+                    : "LOSE";
+
+            _pendingObjectiveCompletion =
+                Mathf.Clamp01(objectiveCompletion);
+
+            _pendingBackendMatchResult = true;
+
+            float remainingDelay = 0f;
+
+            if (_backendMatchStartedAtRealtime >= 0f)
+            {
+                float matchAge =
+                    Time.realtimeSinceStartup
+                    - _backendMatchStartedAtRealtime;
+
+                remainingDelay =
+                    Mathf.Max(
+                        0f,
+                        MinimumBackendMatchResultAgeSeconds
+                        - matchAge);
+            }
+
+            _nextBackendMatchResultRetryAt =
+                Time.unscaledTime + remainingDelay;
+
+            if (remainingDelay <= 0f)
+            {
+                TrySubmitPendingMatchResult();
+            }
+        }
+
+        private async void TrySubmitPendingMatchResult()
+        {
+            if (!_pendingBackendMatchResult
+                || _backendEndRequestInProgress
+                || !HasBinding
+                || !IsHostBinding)
+            {
+                return;
+            }
+
+            if (!TryBuildMatchResultRequest(out var request))
+            {
+                _nextBackendMatchResultRetryAt = Time.unscaledTime + 1f;
+                return;
+            }
+
+            _backendEndRequestInProgress = true;
+            var result = await _api.SubmitResultAsync(MatchId, request);
+            _backendEndRequestInProgress = false;
+
+            if (!IsSuccessful(result))
+            {
+                bool durationTooEarly =
+                    result != null
+                    && result.FailureKind ==
+                        EchoProtocol.Api.ApiFailureKind.Business
+                    && string.Equals(
+                        result.ErrorCode,
+                        "MATCH_RESULT_INVALID_DURATION",
+                        StringComparison.Ordinal)
+                    && _backendMatchStartedAtRealtime >= 0f
+                    && Time.realtimeSinceStartup
+                        - _backendMatchStartedAtRealtime
+                        < MinimumBackendMatchResultAgeSeconds;
+
+                if (durationTooEarly)
+                {
+                    _nextBackendMatchResultRetryAt =
+                        Time.unscaledTime + 1f;
+
+                    Debug.LogWarning(
+                        "[MatchAuthority] Match result is waiting for the backend minimum duration.");
+
+                    return;
+                }
+
+                if (result != null
+                    && result.FailureKind ==
+                        EchoProtocol.Api.ApiFailureKind.Business)
+                {
+                    _pendingBackendMatchResult = false;
+
+                    Debug.LogError(
+                        $"[MatchAuthority] Match result rejected and will not be retried: {Describe(result)}");
+
+                    return;
+                }
+
+                _nextBackendMatchResultRetryAt =
+                    Time.unscaledTime + 2f;
+
+                Debug.LogWarning(
+                    $"[MatchAuthority] Match result submission failed; retrying safely: {Describe(result)}");
+
+                return;
+            }
+
+            _pendingBackendMatchResult = false;
             IsHostBinding = false;
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchAuthority,
-                $"[MatchAuthority] Backend confirmed match end. Match={MatchId:D}, Reason={reasonCode}.");
+                $"[MatchAuthority] Backend confirmed match result. Match={MatchId:D}, " +
+                $"RewardStatus={result.Data.data.rewardStatus}, Replay={result.Data.data.isReplay}.");
+        }
+
+        private bool TryBuildMatchResultRequest(out SubmitMatchResultRequestDto request)
+        {
+            request = null;
+            var runner = _bootstrap?.Runner;
+            if (runner == null || _boundPlayers.Count == 0)
+            {
+                Debug.LogWarning(
+                    "[MatchAuthority] Match result deferred: authoritative backend roster is unavailable.");
+                return false;
+            }
+
+            var players = new List<SubmitMatchResultPlayerDto>(_boundPlayers.Count);
+            foreach (var binding in _boundPlayers)
+            {
+                var actorNumber = binding.Key;
+                var disconnected = _disconnectedActors.Contains(actorNumber);
+                var survived = false;
+                var downedCount = 0;
+                var reviveCount = 0;
+
+                if (!disconnected
+                    && TryFindActivePlayerByActorNumber(actorNumber, out var player)
+                    && runner.TryGetPlayerObject(player, out var playerObject)
+                    && playerObject != null
+                    && playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState))
+                {
+                    survived = lifeState.Status == NetworkPlayerLifeStatus.Escaped;
+                    downedCount = Mathf.Max(0, lifeState.DownCount);
+                    reviveCount = Mathf.Max(0, lifeState.ReviveCount);
+                }
+
+                players.Add(new SubmitMatchResultPlayerDto
+                {
+                    userId = binding.Value.ToString("D"),
+                    survived = survived,
+                    disconnected = disconnected,
+                    detectionCount = 0,
+                    downedCount = downedCount,
+                    reviveCount = reviveCount,
+                    objectiveContribution = _objectiveContributors.Contains(actorNumber) ? 1 : 0
+                });
+            }
+
+            players.Sort((left, right) =>
+                string.CompareOrdinal(left.userId, right.userId));
+
+            request = new SubmitMatchResultRequestDto
+            {
+                outcome = _pendingBackendOutcome,
+                objectiveCompletion = _pendingObjectiveCompletion,
+                players = players.ToArray()
+            };
+            return true;
+        }
+
+        private bool TryFindActivePlayerByActorNumber(
+            int actorNumber,
+            out PlayerRef player)
+        {
+            player = PlayerRef.None;
+            var runner = _bootstrap?.Runner;
+            if (runner == null)
+            {
+                return false;
+            }
+
+            foreach (var candidate in runner.ActivePlayers)
+            {
+                var candidateActor =
+                    runner.GetPlayerActorId(candidate)
+                    ?? candidate.PlayerId;
+                if (candidateActor != actorNumber)
+                {
+                    continue;
+                }
+
+                player = candidate;
+                return true;
+            }
+
+            return false;
         }
 
         public bool RecordPlayerDowned(

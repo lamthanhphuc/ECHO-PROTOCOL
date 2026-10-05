@@ -15,6 +15,8 @@ namespace EchoProtocol.Networking.Tests
             "Assets/Scripts/UI/HUD/HUDObjectiveTracker.cs";
         private const string ZoneMissionHudPath =
             "Assets/Scripts/UI/HUD/HUDZoneMissions.cs";
+        private const string MatchPrefabPath =
+            "Assets/Resources/Network/NetworkMatchState.prefab";
 
         [Test]
         public void NetworkMatchPrefab_UsesCanonicalTiming()
@@ -78,6 +80,16 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("public NetworkId ObjectiveSourceId", matchSource);
             StringAssert.Contains("current = source.PlacedCoreCount", matchSource);
             StringAssert.Contains("public int PlacedCoreCount", objectiveSource);
+        }
+
+        [Test]
+        public void MATCH_NET_AuthoritativeMatchTimerIsFortyFiveMinutes()
+        {
+            var source = LoadNetworkMatchStateSource();
+            var prefab = File.ReadAllText(MatchPrefabPath);
+
+            StringAssert.Contains("_matchDurationSeconds = 2700f", source);
+            StringAssert.Contains("_matchDurationSeconds: 2700", prefab);
         }
 
         [Test]

@@ -85,6 +85,35 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
+        public void TrySelectInitial_VehiclePushTakesPriorityOverStrongerNoise()
+        {
+            var selector = CreateSelector();
+            var now = DateTime.UtcNow;
+
+            var strongerNoise = Observation(
+                "stronger",
+                new Vector3(5f, 0f, 0f),
+                now,
+                0.9d);
+
+            var vehiclePush = Observation(
+                "vehicle-push",
+                new Vector3(1f, 0f, 0f),
+                now,
+                0.2d,
+                noiseTypeName: "VEHICLE_PUSH");
+
+            var selection = SelectInitial(
+                selector,
+                ObservationArray(strongerNoise, vehiclePush),
+                now);
+
+            Assert.That(
+                SelectionNoiseEventId(selection),
+                Is.EqualTo("vehicle-push"));
+        }
+
+        [Test]
         public void TrySelectInitial_RelayNoisePrefersNearestRelay()
         {
             var selector = CreateSelector();
@@ -183,6 +212,43 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(
                 SelectionNoiseEventId(selection),
                 Is.EqualTo("related"));
+
+            Assert.That(
+                SelectionReason(selection),
+                Is.EqualTo("RelatedSupport"));
+        }
+
+        [Test]
+        public void InvestigationUpdate_VehiclePushUsesExpandedMergeRadius()
+        {
+            var selector = CreateSelector();
+            var memory = CreateMemory();
+            var now = DateTime.UtcNow;
+
+            BeginInvestigation(
+                memory,
+                Observation(
+                    "root",
+                    Vector3.zero,
+                    now,
+                    0.9d));
+
+            var vehiclePush = Observation(
+                "vehicle-push",
+                new Vector3(7f, 0f, 0f),
+                now.AddMilliseconds(10),
+                0.1d,
+                noiseTypeName: "VEHICLE_PUSH");
+
+            var selection = SelectInvestigationUpdate(
+                selector,
+                memory,
+                ObservationArray(vehiclePush),
+                now.AddMilliseconds(20));
+
+            Assert.That(
+                SelectionNoiseEventId(selection),
+                Is.EqualTo("vehicle-push"));
 
             Assert.That(
                 SelectionReason(selection),
@@ -534,7 +600,8 @@ namespace EchoProtocol.AI.Stalker.Tests
             double effectiveIntensity,
             long authoritativeTick = 1,
             ulong ordinal = 1,
-            DateTime? expiresAtUtc = null)
+            DateTime? expiresAtUtc = null,
+            string noiseTypeName = "INTERACTION")
         {
             var orderKey =
                 Activator.CreateInstance(
@@ -550,7 +617,7 @@ namespace EchoProtocol.AI.Stalker.Tests
                 Enum.Parse(
                     ResolveType(
                         RuntimeNoiseTypeName),
-                    "INTERACTION");
+                    noiseTypeName);
 
             var occlusion =
                 Enum.Parse(

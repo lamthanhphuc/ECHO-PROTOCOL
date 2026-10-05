@@ -74,6 +74,94 @@ public class AuthController : ControllerBase
         }
     }
 
+    [AllowAnonymous]
+    [HttpPost("refresh")]
+    public async Task<ActionResult<ApiResponse<AuthResponse>>> Refresh(
+        [FromBody] RefreshTokenRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _authService.RefreshAsync(
+                request,
+                cancellationToken);
+
+            if (!result.IsSuccess)
+            {
+                var status = AuthHttpStatusMapper.ToStatusCode(
+                    result.ErrorCode!);
+
+                return StatusCode(
+                    status,
+                    ApiResponse<object>.Fail(
+                        result.Message,
+                        result.ErrorCode!));
+            }
+
+            return Ok(
+                ApiResponse<AuthResponse>.Ok(
+                    result.Data!,
+                    result.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Unexpected error in {Action}",
+                nameof(Refresh));
+
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                ApiResponse<object>.Fail(
+                    "Internal server error",
+                    ErrorCodes.InternalServerError));
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("logout")]
+    public async Task<ActionResult<ApiResponse<bool>>> Logout(
+        [FromBody] RefreshTokenRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _authService.LogoutAsync(
+                request,
+                cancellationToken);
+
+            if (!result.IsSuccess)
+            {
+                var status = AuthHttpStatusMapper.ToStatusCode(
+                    result.ErrorCode!);
+
+                return StatusCode(
+                    status,
+                    ApiResponse<object>.Fail(
+                        result.Message,
+                        result.ErrorCode!));
+            }
+
+            return Ok(
+                ApiResponse<bool>.Ok(
+                    true,
+                    result.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Unexpected error in {Action}",
+                nameof(Logout));
+
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                ApiResponse<object>.Fail(
+                    "Internal server error",
+                    ErrorCodes.InternalServerError));
+        }
+    }
+
     [Authorize]
     [HttpGet("me")]
     public async Task<ActionResult<ApiResponse<MeResponse>>> Me(CancellationToken cancellationToken)

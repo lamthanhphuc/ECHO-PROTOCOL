@@ -79,17 +79,36 @@ namespace EchoProtocol.Networking
 
             if (matchState.IsEnded)
             {
-                if (IsValidNetworkObject(_zone2MonsterInstance))
+                if (IsValidNetworkObject(
+                        _monsterInstance))
                 {
-                    runner.Despawn(_zone2MonsterInstance);
+                    runner.Despawn(
+                        _monsterInstance);
+
+                    _monsterInstance = null;
+                }
+
+                if (IsValidNetworkObject(
+                        _zone2MonsterInstance))
+                {
+                    runner.Despawn(
+                        _zone2MonsterInstance);
+
                     _zone2MonsterInstance = null;
                 }
-                if (IsValidNetworkObject(_zone3MonsterInstance))
+
+                if (IsValidNetworkObject(
+                        _zone3MonsterInstance))
                 {
-                    runner.Despawn(_zone3MonsterInstance);
+                    runner.Despawn(
+                        _zone3MonsterInstance);
+
                     _zone3MonsterInstance = null;
                 }
-                DespawnAllCreepMinions(runner);
+
+                DespawnAllCreepMinions(
+                    runner);
+
                 return;
             }
 
@@ -98,9 +117,27 @@ namespace EchoProtocol.Networking
 
             EnsureZone3Stalker(runner, matchState);
 
-            if (Time.time < _nextMinionSpawnCheckAt) return;
-            _nextMinionSpawnCheckAt = Time.time + _minionSpawnCheckInterval;
-            MaintainCreepMinionPopulation(runner);
+            var phase = matchState.CurrentPhase;
+            if (phase == NetworkMatchPhase.Zone3FindFrigate
+                || phase == NetworkMatchPhase.Zone3PushFrigate
+                || phase == NetworkMatchPhase.FinalHunt
+                || phase == NetworkMatchPhase.Escape)
+            {
+                return;
+            }
+
+            if (Time.time
+                < _nextMinionSpawnCheckAt)
+            {
+                return;
+            }
+
+            _nextMinionSpawnCheckAt =
+                Time.time
+                + _minionSpawnCheckInterval;
+
+            MaintainCreepMinionPopulation(
+                runner);
         }
 
         private void Awake()
@@ -164,6 +201,11 @@ namespace EchoProtocol.Networking
                         if (runner.TryGetPlayerObject(player, out var playerObject) && playerObject != null)
                         {
                             ConfigureExistingPlayerObject(player, playerObject, gameplay: false);
+                            if (playerObject.TryGetComponent<LobbyPlayerState>(
+                                    out var lobbyState))
+                            {
+                                lobbyState.ResetForLobbyAuthoritative();
+                            }
                         }
                     }
                 }
@@ -419,8 +461,22 @@ namespace EchoProtocol.Networking
             _zone2MonsterInstance = spawned;
             _zone2MonsterSpawned = true;
             _zone2MinionsActive = true;
-            DespawnCreepMinionsForZone(runner, RegionSemanticZone.Zone01);
-            _nextMinionSpawnCheckAt = Time.time;
+
+            DespawnCreepMinionsForZone(
+                runner,
+                RegionSemanticZone.Zone01);
+
+            if (IsValidNetworkObject(
+                    _monsterInstance))
+            {
+                runner.Despawn(
+                    _monsterInstance);
+
+                _monsterInstance = null;
+            }
+
+            _nextMinionSpawnCheckAt =
+                Time.time;
         }
 
         private static void RejectZone2Spawn(LobbyPlayerState playerState, string reason)
@@ -471,8 +527,27 @@ namespace EchoProtocol.Networking
             _zone3MonsterInstance = spawned;
             _zone3MonsterSpawned = true;
             _zone3SpawnFailureLogged = false;
-            RuntimeLog.Log(RuntimeLogCategory.PlayerSpawner,
-                $"[STK_ZONE3][SPAWN] id={spawned.Id} position={position}.");
+
+            if (IsValidNetworkObject(
+                    _zone2MonsterInstance))
+            {
+                runner.Despawn(
+                    _zone2MonsterInstance);
+
+                _zone2MonsterInstance = null;
+            }
+
+            DespawnCreepMinionsForZone(
+                runner,
+                RegionSemanticZone.Zone02);
+
+            _zone2MinionsActive = false;
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"[STK_ZONE3][SPAWN] " +
+                $"id={spawned.Id} " +
+                $"position={position}.");
         }
 
         private void LogZone3SpawnFailureOnce(string reason)
@@ -551,9 +626,6 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            // Ponytail:
-            // trước tiên giữ behavior hiện tại:
-            // cố spawn gần Stalker.
             if (TryFindCreepMinionSpawnPositionInRing(
                     runner,
                     stalkerHit.position,
@@ -565,20 +637,12 @@ namespace EchoProtocol.Networking
                 return true;
             }
 
-            // Nếu Stalker đang sát Player thì vòng 4–10m
-            // thường không thể thỏa khoảng cách an toàn 18m.
-            // Chỉ lúc đó mới nới vùng tìm kiếm.
-            float fallbackMinDistance =
-                Mathf.Max(
-                    _minionSpawnMaxDistanceFromStalker,
-                    _minionSpawnMinDistanceFromPlayer);
-
             return TryFindCreepMinionSpawnPositionInRing(
                 runner,
                 stalkerHit.position,
-                fallbackMinDistance,
+                _minionSpawnMaxDistanceFromStalker,
                 _minionSpawnFallbackMaxDistanceFromStalker,
-                24,
+                48,
                 out position);
         }
 
@@ -1249,7 +1313,7 @@ namespace EchoProtocol.Networking
                 state.InitializeAuthoritativeSelection(teamId, toolId, gameplay);
             }
 
-            if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && playerObject.HasStateAuthority && gameplay)
+            if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && playerObject.HasStateAuthority)
             {
                 lifeState.ResetForMatchAuthoritative();
             }

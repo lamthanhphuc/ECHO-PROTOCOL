@@ -61,11 +61,38 @@ namespace EchoProtocol.Networking.Authority
                 $"/api/matches/{matchId:D}/end",
                 new EndMatchAuthorityRequest { reason = reason });
 
+        public Task<ApiResult<ApiResponse<MatchResultResponseDto>>> SubmitResultAsync(
+            Guid matchId,
+            SubmitMatchResultRequestDto request) =>
+            PutAsync<SubmitMatchResultRequestDto, MatchResultResponseDto>(
+                $"/api/matches/{matchId:D}/result",
+                request);
+
+        public Task<ApiResult<ApiResponse<RewardMeResponseDto>>> GetMyRewardAsync(Guid matchId) =>
+            GetAsync<RewardMeResponseDto>($"/api/matches/{matchId:D}/reward/me");
+
+        private Task<ApiResult<ApiResponse<TResponse>>> GetAsync<TResponse>(string endpoint)
+        {
+            var completion = new TaskCompletionSource<ApiResult<ApiResponse<TResponse>>>();
+            _client.GetJson<ApiResponse<TResponse>>(
+                endpoint, true, result => completion.TrySetResult(result));
+            return completion.Task;
+        }
+
         private Task<ApiResult<ApiResponse<TResponse>>> PostAsync<TRequest, TResponse>(
             string endpoint, TRequest body)
         {
             var completion = new TaskCompletionSource<ApiResult<ApiResponse<TResponse>>>();
             _client.PostJson<TRequest, ApiResponse<TResponse>>(
+                endpoint, body, true, result => completion.TrySetResult(result));
+            return completion.Task;
+        }
+
+        private Task<ApiResult<ApiResponse<TResponse>>> PutAsync<TRequest, TResponse>(
+            string endpoint, TRequest body)
+        {
+            var completion = new TaskCompletionSource<ApiResult<ApiResponse<TResponse>>>();
+            _client.PutJson<TRequest, ApiResponse<TResponse>>(
                 endpoint, body, true, result => completion.TrySetResult(result));
             return completion.Task;
         }

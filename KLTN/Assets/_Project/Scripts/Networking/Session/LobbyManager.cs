@@ -186,7 +186,94 @@ namespace EchoProtocol.Networking
         {
             try
             {
-                var (accepted, error) = await MatchAuthorityRuntime.EnsureExists(_bootstrap).StartMatchAsync();
+                var authority =
+                    MatchAuthorityRuntime.EnsureExists(
+                        _bootstrap);
+
+                if (authority.IsCompletingMatch)
+                {
+                    ReportError(
+                        "Previous match is still being finalized.");
+                    return;
+                }
+
+                if (authority.RequiresFreshHostBinding)
+                {
+                    if (runner == null
+                        || !runner.IsRunning
+                        || !runner.IsServer
+                        || !runner.SessionInfo.IsValid)
+                    {
+                        ReportError(
+                            "Cannot prepare next match.");
+                        return;
+                    }
+
+                    bool prepared =
+                        await authority.PrepareNextMatchAsync(
+                            runner.SessionInfo.Name,
+                            runner.SessionInfo.MaxPlayers);
+
+                    if (!prepared)
+                    {
+                        ReportError(
+                            "Backend rejected next match.");
+                        return;
+                    }
+
+                    if (!_bootstrap.UpdateRoomProperties(
+                            authority.BuildHostSessionProperties()))
+                    {
+                        ReportError(
+                            "Could not publish next match properties to Fusion room.");
+                        return;
+                    }
+
+                    if (!TryGetLocalPlayerState(
+                            out var localPlayerState,
+                            false))
+                    {
+                        ReportError(
+                            "Local player is not available for backend binding.");
+                        return;
+                    }
+
+                    authority.TrySubmitLocalIdentity(
+                        localPlayerState,
+                        force: true);
+
+                    int expectedBoundPlayers = 0;
+
+                    foreach (var _ in runner.ActivePlayers)
+                    {
+                        expectedBoundPlayers++;
+                    }
+
+                    float bindingDeadline =
+                        Time.realtimeSinceStartup + 8f;
+
+                    while (authority.BoundPlayerCount
+                               < expectedBoundPlayers
+                           && Time.realtimeSinceStartup
+                               < bindingDeadline)
+                    {
+                        await Task.Delay(100);
+                    }
+
+                    if (authority.BoundPlayerCount
+                        < expectedBoundPlayers)
+                    {
+                        ReportError(
+                            $"Backend player binding timed out " +
+                            $"({authority.BoundPlayerCount}/" +
+                            $"{expectedBoundPlayers}).");
+
+                        return;
+                    }
+                }
+
+                var (accepted, error) =
+                    await authority.StartMatchAsync();
                 if (!accepted)
                 {
                     ReportError($"Backend rejected match start: {error}");

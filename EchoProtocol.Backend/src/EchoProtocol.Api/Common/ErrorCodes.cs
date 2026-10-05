@@ -15,6 +15,9 @@ public static class ErrorCodes
     public const string PasswordConfirmationMismatch = "PASSWORD_CONFIRMATION_MISMATCH";
     public const string PasswordTooLong = "PASSWORD_TOO_LONG";
     public const string TokenInvalid = "TOKEN_INVALID";
+    public const string RefreshTokenInvalid = "REFRESH_TOKEN_INVALID";
+    public const string RefreshTokenExpired = "REFRESH_TOKEN_EXPIRED";
+    public const string RefreshTokenReused = "REFRESH_TOKEN_REUSED";
     public const string TelemetrySchemaUnsupported = "TELEMETRY_SCHEMA_UNSUPPORTED";
     public const string TelemetryUserMismatch = "TELEMETRY_USER_MISMATCH";
     public const string TelemetryUnavailable = "TELEMETRY_UNAVAILABLE";
@@ -26,6 +29,7 @@ public static class ErrorCodes
     public const string MatchCapacityReached = "MATCH_CAPACITY_REACHED";
     public const string JoinProofInvalid = "JOIN_PROOF_INVALID";
     public const string MatchPlayerBindingConflict = "MATCH_PLAYER_BINDING_CONFLICT";
+    public const string AccountAlreadyInActiveMatch = "ACCOUNT_ALREADY_IN_ACTIVE_MATCH";
     public const string MatchResultConflict = "MATCH_RESULT_CONFLICT";
     public const string MatchResultInvalidState = "MATCH_RESULT_INVALID_STATE";
     public const string MatchResultInvalidRoster = "MATCH_RESULT_INVALID_ROSTER";
@@ -38,6 +42,8 @@ public static class ErrorCodes
     public const string RewardPolicyInvalid = "REWARD_POLICY_INVALID";
     public const string RewardWalletNotFound = "REWARD_WALLET_NOT_FOUND";
     public const string RewardConflict = "REWARD_CONFLICT";
+    public const string RewardPending = "REWARD_PENDING";
+    public const string RewardGrantNotFound = "REWARD_GRANT_NOT_FOUND";
     public const string PlayerProfileNotFound = "PLAYER_PROFILE_NOT_FOUND";
     public const string ProgressionPolicyNotConfigured = "PROGRESSION_POLICY_NOT_CONFIGURED";
     public const string ProgressionPolicyInvalid = "PROGRESSION_POLICY_INVALID";

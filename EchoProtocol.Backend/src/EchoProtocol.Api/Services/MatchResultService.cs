@@ -14,9 +14,6 @@ namespace EchoProtocol.Api.Services;
 
 public sealed class MatchResultService : IMatchResultService
 {
-    private const int MinimumDurationSeconds = 60;
-    private const int MaximumDurationSeconds = 15 * 60;
-
     private readonly AppDbContext _db;
     private readonly TimeProvider _timeProvider;
 
@@ -87,10 +84,10 @@ public sealed class MatchResultService : IMatchResultService
             }
 
             var durationSeconds = checked((int)Math.Floor((now - match.StartedAtUtc.Value).TotalSeconds));
-            if (durationSeconds is < MinimumDurationSeconds or > MaximumDurationSeconds)
+            if (durationSeconds is < GameConstants.MinimumMatchDurationSeconds or > GameConstants.MaximumAcceptedMatchDurationSeconds)
             {
                 return Failure(
-                    $"Match duration must be between {MinimumDurationSeconds} and {MaximumDurationSeconds} seconds",
+                    $"Match duration must be between {GameConstants.MinimumMatchDurationSeconds} and {GameConstants.MaximumAcceptedMatchDurationSeconds} seconds",
                     ErrorCodes.MatchResultInvalidDuration);
             }
 

@@ -219,6 +219,32 @@ public sealed class MatchResultServiceTests
         Assert.Empty(harness.Db.MatchResults);
     }
 
+
+    [Fact, Trait("Category", "M4Unit")]
+    public async Task FortyFiveMinuteMatchIsAccepted()
+    {
+        await using var harness = await UnitHarness.CreateAsync(matchAge: TimeSpan.FromMinutes(45));
+
+        var result = await harness.Service.SubmitAsync(
+            harness.HostId, harness.MatchId, harness.ValidRequest(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2700, result.Data!.DurationSeconds);
+    }
+
+    [Fact, Trait("Category", "M4Unit")]
+    public async Task MatchBeyondSubmissionGraceIsRejected()
+    {
+        await using var harness = await UnitHarness.CreateAsync(
+            matchAge: TimeSpan.FromMinutes(46).Add(TimeSpan.FromSeconds(1)));
+
+        var result = await harness.Service.SubmitAsync(
+            harness.HostId, harness.MatchId, harness.ValidRequest(), CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.MatchResultInvalidDuration, result.ErrorCode);
+    }
+
     [Fact, Trait("Category", "M4Unit")]
     public async Task ExpiredHostLeaseCannotSubmitResult()
     {
@@ -272,7 +298,8 @@ public sealed class MatchResultServiceTests
         public static async Task<UnitHarness> CreateAsync(
             MatchAuthorityStatus status = MatchAuthorityStatus.InMatch,
             bool secondPlayerDisconnected = false,
-            bool leaseExpired = false)
+            bool leaseExpired = false,
+            TimeSpan? matchAge = null)
         {
             var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
             await connection.OpenAsync();
@@ -296,9 +323,9 @@ public sealed class MatchResultServiceTests
                 LeaseExpiresAtUtc = leaseExpired
                     ? Now.AddSeconds(-1).UtcDateTime
                     : Now.AddMinutes(1).UtcDateTime,
-                CreatedAtUtc = Now.AddMinutes(-3).UtcDateTime,
-                UpdatedAtUtc = Now.AddMinutes(-2).UtcDateTime,
-                StartedAtUtc = Now.AddMinutes(-2).UtcDateTime,
+                CreatedAtUtc = Now.Subtract(matchAge ?? TimeSpan.FromMinutes(2)).AddMinutes(-1).UtcDateTime,
+                UpdatedAtUtc = Now.Subtract(matchAge ?? TimeSpan.FromMinutes(2)).UtcDateTime,
+                StartedAtUtc = Now.Subtract(matchAge ?? TimeSpan.FromMinutes(2)).UtcDateTime,
                 EndedAtUtc = status == MatchAuthorityStatus.Ended
                     ? Now.AddSeconds(-10).UtcDateTime
                     : null,

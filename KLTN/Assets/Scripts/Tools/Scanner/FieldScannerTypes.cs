@@ -122,10 +122,10 @@ namespace EchoProtocol.Tools.Scanner
     [Serializable]
     public sealed class FieldScannerTuning
     {
-        // Upgraded gameplay detection ranges: 50m for Core, 35m for Motion
-        public float CoreRange = 50f;
-        public float MotionRange = 35f;
-        public float ActiveDuration = 10.0f; // 10s active realtime scan upon activation
+        // Upgraded gameplay detection ranges: 100m for Core and Motion
+        public float CoreRange = 100f;
+        public float MotionRange = 100f;
+        public float ActiveDuration = 20.0f; // 20s active realtime scan upon activation
         public float ScanCooldown = 30.0f; // 30-second reactivation cooldown
         public float ResultLifetime = 10.0f;
         public float MovingSpeedThreshold = 0.15f;
@@ -148,4 +148,3 @@ namespace EchoProtocol.Tools.Scanner
             new FieldScannerTuning();
     }
 }
-

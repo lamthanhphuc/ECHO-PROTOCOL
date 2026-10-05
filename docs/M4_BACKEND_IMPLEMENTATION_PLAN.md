@@ -267,7 +267,7 @@ Create a pure, versioned `IRewardPolicy` and an orchestration `IRewardService`:
 - Policy inputs must only come from the stored result/roster and approved server/Host-authoritative fields.
 - The request must never contain final currency/XP amounts.
 
-Do not implement numbers yet. The SRS contains an older proposed currency table, while the implementation spec lists completion, survivors, difficulty modifier, rescue, and rating without exact weights. There is no approved XP curve or level threshold table. These are design inputs, not safe assumptions.
+Reward/Progression V1 is now approved for the prototype and implemented as versioned pure policies. `REWARD_V1` awards connected players 20 participation + `floor(objectiveCompletion × 30)` + 50 team-win + 20 survival + 10 when objective contribution is positive, capped at 130; disconnected players receive 10. `PROGRESSION_V1` awards 50 participation XP + `floor(objectiveCompletion × 50)` + 75 team-win + 25 survival + 25 positive contribution, capped at 225; disconnected players receive 20 XP and do not count a win. Level is `floor(totalXP / 500) + 1`. Detection/down/revive counts are not V1 reward inputs; current `ReviveCount` semantics are revives received, not revives performed.
 
 ### 5.2 Atomic processing algorithm
 
@@ -325,7 +325,7 @@ Proposed paths; split DTO files if that matches implementation size.
 - `src/EchoProtocol.Api/Services/Interfaces/IRewardPolicy.cs`
 - `src/EchoProtocol.Api/Services/Interfaces/IRewardService.cs`
 - `src/EchoProtocol.Api/Services/RewardService.cs`
-- a concrete versioned reward policy only after gameplay approval
+- `src/EchoProtocol.Api/Services/RewardPolicyV1.cs` (`REWARD_V1`)
 - `tests/EchoProtocol.Api.Tests/RewardServiceTests.cs`
 - PostgreSQL rollback/concurrency/idempotency integration tests
 - one generated EF migration, or combine with M4-009 only if both models ship atomically
@@ -336,7 +336,7 @@ Proposed paths; split DTO files if that matches implementation size.
 - `src/EchoProtocol.Api/Services/Interfaces/IPlayerProfileService.cs`
 - `src/EchoProtocol.Api/Services/PlayerProfileService.cs`
 - `src/EchoProtocol.Api/Controllers/PlayerController.cs`
-- progression policy/threshold type after design approval
+- `src/EchoProtocol.Api/Services/ProgressionPolicyV1.cs` (`PROGRESSION_V1`, 500 XP per level)
 - `tests/EchoProtocol.Api.Tests/PlayerProfileServiceTests.cs`
 - API integration tests for JWT ownership and response compatibility
 
@@ -405,7 +405,7 @@ M4 result validation cannot be stronger than these trust boundaries. At minimum 
 
 ## 10. Gameplay/product decisions requiring team confirmation
 
-No implementation should invent these values or rules:
+Reward/progression items 7-10 below are resolved by the approved prototype V1 policy. Remaining items still require explicit team decisions where not already fixed by the as-built source:
 
 1. Is authoritative `matchId` created by Unity or backend?
 2. Is the supported result roster minimum 1 or 2 players, and must it exactly equal all bound players or the roster frozen at start?
@@ -413,10 +413,10 @@ No implementation should invent these values or rules:
 4. Should an identical duplicate return replay-safe 200 or SRS `DUPLICATE_MATCH_SUBMISSION` 409?
 5. Exact terminal order between result submission, `/end`, and telemetry `MATCH_ENDED`.
 6. Approved outcome mapping among gameplay end reasons, telemetry reasons, and `WIN` / `LOSE` / `HOST_DISCONNECTED`.
-7. Reward currency formula, per-component bounds, maximum, rounding, difficulty/rating/rescue rules, and version identifier.
-8. Whether disconnected, eliminated, late-bound, or Host-disconnected players receive participation reward/XP and profile match credit.
-9. Whether `TotalWins` is team-win based or only counts individual survival/escape.
-10. XP formula, level thresholds, maximum level, overflow behavior, and whether level can ever decrease.
+7. **Resolved V1:** `REWARD_V1`, max 130 Credits; no difficulty/rating/rescue/revive multiplier in V1.
+8. **Resolved for normal result players:** disconnected = 10 Credits / 20 XP and no win; connected eliminated players can still receive team-win/progress reward. Host-disconnect synthesis remains unresolved under item 12.
+9. **Resolved V1:** `TotalWins` counts a team `WIN` for connected result players; survival is rewarded separately.
+10. **Resolved V1:** `PROGRESSION_V1`, max 225 XP/match; 500 XP/level; level never decreases; calculations avoid integer overflow and clamp beyond `int.MaxValue` level.
 11. Valid bounds and provenance for duration, objective completion, detections, downs, revives, and contribution.
 12. Host-loss timeout and whether backend may synthesize a `HOST_DISCONNECTED` result without a Host payload.
 13. Retention and privacy policy for detailed per-player match statistics.

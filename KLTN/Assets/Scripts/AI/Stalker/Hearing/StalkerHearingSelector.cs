@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.AI.Listener.Perception;
 using UnityEngine;
 
@@ -43,6 +44,8 @@ namespace EchoProtocol.AI.Stalker.Hearing
     {
         public const float DefaultHypothesisMergeRadius = 2.5f;
         public const double DefaultInterruptMargin = 0.2d;
+
+        private const float VehiclePushMergeRadius = 8f;
 
         private readonly float _hypothesisMergeRadius;
         private readonly double _interruptMargin;
@@ -98,9 +101,15 @@ namespace EchoProtocol.AI.Stalker.Hearing
                 return false;
             }
 
+            var selected =
+                TryGetVehiclePushCandidate(
+                    out var vehiclePush)
+                    ? vehiclePush
+                    : _scratch[0];
+
             selection =
                 new StalkerHearingSelection(
-                    _scratch[0],
+                    selected,
                     StalkerHearingSelectionReason
                         .InitialInvestigation);
 
@@ -135,6 +144,23 @@ namespace EchoProtocol.AI.Stalker.Hearing
                 observations,
                 nowUtc);
 
+            if (TryGetVehiclePushCandidate(
+                    out var vehiclePush))
+            {
+                selection =
+                    new StalkerHearingSelection(
+                        vehiclePush,
+                        IsRelated(
+                            memory.InvestigationPosition,
+                            vehiclePush)
+                            ? StalkerHearingSelectionReason
+                                .RelatedSupport
+                            : StalkerHearingSelectionReason
+                                .StrongerUnrelatedInterrupt);
+
+                return true;
+            }
+
             if (IsRelayNoise(memory.ActiveNoiseEventId))
             {
                 for (var i = 0; i < _scratch.Count; i++)
@@ -147,7 +173,7 @@ namespace EchoProtocol.AI.Stalker.Hearing
 
                     selection = new StalkerHearingSelection(
                         nearestRelay,
-                        IsRelated(memory.InvestigationPosition, nearestRelay.ObservedNoisePosition)
+                        IsRelated(memory.InvestigationPosition, nearestRelay)
                             ? StalkerHearingSelectionReason.RelatedSupport
                             : StalkerHearingSelectionReason.StrongerUnrelatedInterrupt);
                     return true;
@@ -165,7 +191,7 @@ namespace EchoProtocol.AI.Stalker.Hearing
 
                 if (IsRelated(
                         memory.InvestigationPosition,
-                        candidate.ObservedNoisePosition))
+                        candidate))
                 {
                     continue;
                 }
@@ -197,7 +223,7 @@ namespace EchoProtocol.AI.Stalker.Hearing
 
                 if (!IsRelated(
                         memory.InvestigationPosition,
-                        candidate.ObservedNoisePosition))
+                        candidate))
                 {
                     continue;
                 }
@@ -265,12 +291,39 @@ namespace EchoProtocol.AI.Stalker.Hearing
 
         private bool IsRelated(
             Vector3 currentPosition,
-            Vector3 candidatePosition)
+            HearingObservation candidate)
         {
+            var mergeRadius =
+                candidate.NoiseType
+                    == RuntimeNoiseType.VEHICLE_PUSH
+                    ? VehiclePushMergeRadius
+                    : _hypothesisMergeRadius;
+
             return Vector3.Distance(
                        currentPosition,
-                       candidatePosition)
-                   <= _hypothesisMergeRadius;
+                       candidate.ObservedNoisePosition)
+                   <= mergeRadius;
+        }
+
+        private bool TryGetVehiclePushCandidate(
+            out HearingObservation observation)
+        {
+            for (var i = 0; i < _scratch.Count; i++)
+            {
+                if (_scratch[i].NoiseType
+                    != RuntimeNoiseType.VEHICLE_PUSH)
+                {
+                    continue;
+                }
+
+                observation =
+                    _scratch[i];
+
+                return true;
+            }
+
+            observation = default;
+            return false;
         }
 
         private static void ValidateNow(

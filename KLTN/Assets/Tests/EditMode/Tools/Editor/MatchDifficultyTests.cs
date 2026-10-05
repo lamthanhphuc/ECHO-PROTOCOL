@@ -22,14 +22,25 @@ public sealed class MatchDifficultyTests
             Assert.That(authority.Difficulty, Is.EqualTo(MatchDifficulty.Normal));
             Assert.That(MatchDifficultyProfiles.Get(MatchDifficulty.Easy).TeamToolsPerZone,
                 Is.EqualTo(6));
+            Assert.That(MatchDifficultyProfiles.Get(MatchDifficulty.Easy).ObjectiveInvestigationEnabled,
+                Is.False);
             Assert.That(MatchDifficultyProfiles.Get(MatchDifficulty.Hard).TeamToolsPerZone,
                 Is.EqualTo(5));
+            Assert.That(MatchDifficultyProfiles.Get(MatchDifficulty.Hard).ObjectiveInvestigationEnabled,
+                Is.True);
 
             var stalker = AssetDatabase.LoadAssetAtPath<GameObject>(
                 "Assets/Prefabs/StalkerNetwork.prefab").GetComponent<StalkerController>();
             var serialized = new SerializedObject(stalker);
+            var easy = MatchDifficultyProfiles.Get(MatchDifficulty.Easy);
             var normal = MatchDifficultyProfiles.Get(MatchDifficulty.Normal);
             var hard = MatchDifficultyProfiles.Get(MatchDifficulty.Hard);
+            Assert.That(easy.DetectionDecayDurationSeconds, Is.EqualTo(0.35f));
+            Assert.That(normal.DetectionDecayDurationSeconds, Is.EqualTo(0.65f));
+            Assert.That(hard.DetectionDecayDurationSeconds, Is.EqualTo(1f));
+            Assert.That(easy.MaximumRevivesPerZone, Is.EqualTo(4));
+            Assert.That(normal.MaximumRevivesPerZone, Is.EqualTo(3));
+            Assert.That(hard.MaximumRevivesPerZone, Is.EqualTo(2));
             Assert.That(hard.PatrolSpeed,
                 Is.EqualTo(serialized.FindProperty("patrolSpeed").floatValue));
             Assert.That(hard.ChaseSpeed,

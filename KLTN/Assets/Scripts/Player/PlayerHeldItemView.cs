@@ -189,7 +189,16 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         }
 
         _currentVisual = NetworkTeamToolHeldView.InstantiateHeldVisualSafely(prefabToSpawn, anchor);
-        if (_currentVisual == null) return;
+        if (_currentVisual == null)
+        {
+            return;
+        }
+
+        if (_currentItem.ItemType == InventoryItemType.TeamTool)
+        {
+            NetworkTeamToolHeldView.DisableToolShadows(_currentVisual);
+        }
+
         _currentVisual.name = "Held_" + _currentItem.ItemId;
         ApplyLocalPose(_currentVisual.transform, _currentItem);
         StripWorldGameplayComponents(_currentVisual);

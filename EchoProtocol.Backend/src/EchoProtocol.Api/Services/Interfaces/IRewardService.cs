@@ -8,4 +8,9 @@ public interface IRewardService
     Task<ServiceResult<RewardProcessingResponse>> ProcessAsync(
         Guid matchId,
         CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<RewardMeResponse>> GetForUserAsync(
+        Guid matchId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
 }

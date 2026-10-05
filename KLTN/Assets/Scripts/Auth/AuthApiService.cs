@@ -1,5 +1,6 @@
 using System;
 using EchoProtocol.Api;
+using EchoProtocol.Profile;
 using UnityEngine;
 
 namespace EchoProtocol.Auth
@@ -49,7 +50,11 @@ namespace EchoProtocol.Auth
           if (result.IsSuccess && result.Data != null && result.Data.success && result.Data.data != null)
           {
             var loginData = result.Data.data;
-            if (!TokenStorage.TrySave(loginData.accessToken, loginData.expiresAt))
+            if (!TokenStorage.TrySave(
+                  loginData.accessToken,
+                  loginData.expiresAt,
+                  loginData.refreshToken,
+                  loginData.refreshExpiresAt))
             {
               callback?.Invoke(new ApiResult<LoginApiResponse>
               {
@@ -90,6 +95,44 @@ namespace EchoProtocol.Auth
         });
     }
 
+    public void Logout(
+      Action<ApiResult<LogoutApiResponse>> callback = null)
+    {
+      var refreshToken = TokenStorage.GetRefreshToken();
+
+      if (string.IsNullOrWhiteSpace(refreshToken))
+      {
+        ClearLocalAuth();
+
+        callback?.Invoke(
+          new ApiResult<LogoutApiResponse>
+          {
+            IsSuccess = true,
+            FailureKind = ApiFailureKind.None
+          });
+
+        return;
+      }
+
+      var request = new RefreshTokenRequestDto
+      {
+        refreshToken = refreshToken
+      };
+
+      _apiClient.PostJson<
+        RefreshTokenRequestDto,
+        LogoutApiResponse>(
+        ApiEndpoints.AuthLogout,
+        request,
+        attachBearer: false,
+        result =>
+        {
+          // Explicit logout always clears local auth.
+          // Server revocation is best-effort if connectivity fails.
+          ClearLocalAuth();
+          callback?.Invoke(result);
+        });
+    }
     public void LogoutLocal()
     {
       ClearLocalAuth();
@@ -97,12 +140,15 @@ namespace EchoProtocol.Auth
 
     public static bool ShouldClearToken<T>(ApiResult<T> result)
     {
-      if (TokenStorage.IsExpired())
+      if (result == null)
       {
-        return true;
+        return false;
       }
 
-      if (result == null)
+      // Temporary connectivity problems must not destroy a
+      // still-valid refresh session.
+      if (result.FailureKind == ApiFailureKind.Network
+          || result.FailureKind == ApiFailureKind.Timeout)
       {
         return false;
       }
@@ -114,13 +160,17 @@ namespace EchoProtocol.Auth
 
       return result.ErrorCode == AuthErrorCodes.TokenInvalid
         || result.ErrorCode == AuthErrorCodes.Unauthorized
-        || result.ErrorCode == AuthErrorCodes.AccountLocked;
+        || result.ErrorCode == AuthErrorCodes.AccountLocked
+        || result.ErrorCode == AuthErrorCodes.RefreshTokenInvalid
+        || result.ErrorCode == AuthErrorCodes.RefreshTokenExpired
+        || result.ErrorCode == AuthErrorCodes.RefreshTokenReused;
     }
 
     private static void ClearLocalAuth()
     {
       TokenStorage.Clear();
       AuthSession.Clear();
+      PlayerProfileSession.Clear();
     }
   }
 }
