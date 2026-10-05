@@ -251,6 +251,11 @@ namespace EchoProtocol.MatchFlow
 
         private void Start()
         {
+            if (!TryGetNetworkMatch(out _))
+            {
+                relayA1?.ApplyAuthoritativeCircuitScenario(UnityEngine.Random.Range(0, 2), 1);
+                relayA2?.ApplyAuthoritativeCircuitScenario(UnityEngine.Random.Range(2, 4), 1);
+            }
             // Initial sync of door presentation
             ApplyDoorState(AreZoneDoorsUnlocked);
         }
@@ -569,15 +574,25 @@ namespace EchoProtocol.MatchFlow
             if (TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot)) matchState.RequestReleaseRelay(slot);
         }
 
-        public bool RequestRelayAControls(RelayAController controller, float generatorOutput, float frequencyRegulator, float loadDistribution) =>
+        public bool RequestRelayARotate(RelayAController controller, int cellIndex) =>
             TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot)
-            && matchState.RequestRelayAControls(slot, generatorOutput, frequencyRegulator, loadDistribution);
+            && matchState.RequestRelayARotate(slot, cellIndex);
 
-        public bool RequestRelayAStart(RelayAController controller) =>
-            TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot) && matchState.RequestRelayAStart(slot);
+        public bool RequestRelayATest(RelayAController controller) =>
+            TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot)
+            && matchState.RequestRelayATest(slot);
 
-        public bool RequestRelayAEmergencyStop(RelayAController controller) =>
-            TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot) && matchState.RequestRelayAEmergencyStop(slot);
+        public bool RequestRelayABreaker(RelayAController controller, int cell, bool reset) =>
+            TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot)
+            && matchState.RequestRelayABreaker(slot, cell, reset);
+
+        public bool RequestRelayAStabilizationControls(RelayAController controller, float generator, float frequency, float load) =>
+            TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot)
+            && matchState.RequestRelayAStabilizationControls(slot, new Vector3(generator, frequency, load));
+
+        public bool RequestRelayAStabilizationRunning(RelayAController controller, bool running) =>
+            TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot)
+            && matchState.RequestRelayAStabilizationRunning(slot, running);
 
         public bool RequestRelayBControls(RelayBController controller, int channel, float frequency, float phase) =>
             TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot)
@@ -585,6 +600,18 @@ namespace EchoProtocol.MatchFlow
 
         public bool RequestRelayBScan(RelayBController controller) =>
             TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot) && matchState.RequestRelayBScan(slot);
+
+        public bool RequestRelayBSlot(RelayBController controller, int slotIndex, RelayBModuleType module) =>
+            TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot)
+            && matchState.RequestRelayBSlot(slot, slotIndex, module);
+
+        public bool RequestRelayBTest(RelayBController controller) =>
+            TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot)
+            && matchState.RequestRelayBTest(slot);
+
+        public bool RequestRelayBTransmit(RelayBController controller, int packed, int round, int attempt) =>
+            TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot)
+            && matchState.RequestRelayBTransmit(slot, packed, round, attempt);
 
         public bool RequestRelayBStartSync(RelayBController controller) =>
             TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot) && matchState.RequestRelayBStartSync(slot);
@@ -836,24 +863,55 @@ namespace EchoProtocol.MatchFlow
 
         private void ApplyRelayPresentation(NetworkMatchState matchState, int relayMask)
         {
-            relayA1?.ApplyAuthoritativeAttemptSeed(matchState.RelayA1AttemptSeed);
-            relayA1?.ApplyAuthoritativeControls(matchState.RelayA1Controls.x, matchState.RelayA1Controls.y, matchState.RelayA1Controls.z);
-            relayA1?.ApplyAuthoritativeRunningState(matchState.RelayA1Running);
-            relayA2?.ApplyAuthoritativeAttemptSeed(matchState.RelayA2AttemptSeed);
-            relayA2?.ApplyAuthoritativeControls(matchState.RelayA2Controls.x, matchState.RelayA2Controls.y, matchState.RelayA2Controls.z);
-            relayA2?.ApplyAuthoritativeRunningState(matchState.RelayA2Running);
+            if (!matchState.Object.HasStateAuthority)
+                relayA1?.ApplyAuthoritativeCircuitState(matchState.RelayA1CircuitScenario,
+                    matchState.RelayA1CircuitRotations, (RelayACircuitPhase)matchState.RelayA1CircuitPhase,
+                    matchState.RelayA1CircuitPowered, matchState.RelayA1CircuitMissing,
+                    matchState.RelayA1CircuitTrip, matchState.RelayA1CircuitTestSequence,
+                    matchState.RelayA1CircuitFaultActive);
+            if (!matchState.Object.HasStateAuthority)
+                relayA2?.ApplyAuthoritativeCircuitState(matchState.RelayA2CircuitScenario,
+                    matchState.RelayA2CircuitRotations, (RelayACircuitPhase)matchState.RelayA2CircuitPhase,
+                    matchState.RelayA2CircuitPowered, matchState.RelayA2CircuitMissing,
+                    matchState.RelayA2CircuitTrip, matchState.RelayA2CircuitTestSequence,
+                    matchState.RelayA2CircuitFaultActive);
+
+            if (!matchState.Object.HasStateAuthority)
+            {
+                ApplyBreakerTelemetry(relayA1, matchState.RelayA1Breakers);
+                ApplyBreakerTelemetry(relayA2, matchState.RelayA2Breakers);
+                ApplyStabilizationTelemetry(relayA1, matchState.RelayA1Stabilization);
+                ApplyStabilizationTelemetry(relayA2, matchState.RelayA2Stabilization);
+            }
 
             if (relayB1 != null)
             {
                 relayB1.ApplyAuthoritativeAttempt(matchState.RelayB1PresetIndex, matchState.RelayB1AttemptSeed);
+                relayB1.ApplyAuthoritativeProcessing(matchState.RelayB1Scanned, matchState.RelayB1Slot1,
+                    matchState.RelayB1Slot2, matchState.RelayB1Tested, false);
                 relayB1.ApplyAuthoritativeControls(matchState.RelayB1Channel, matchState.RelayB1Frequency, matchState.RelayB1Phase);
+                relayB1.ApplyAuthoritativeCleanScenario(matchState.RelayB1CleanSeed);
+                if (!matchState.Object.HasStateAuthority && matchState.RelayB1Decoder.Round > 0)
+                    relayB1.ApplyAuthoritativeDecoder(matchState.RelayB1Decoder.Snapshot);
                 relayB1.ApplyAuthoritativeSyncState(matchState.RelayB1Synchronizing);
+                // The host owns the running timer; only proxies consume replicated telemetry.
+                if (!matchState.Object.HasStateAuthority)
+                    relayB1.ApplyAuthoritativeSyncTelemetry(matchState.RelayB1SyncProgress,
+                        matchState.RelayB1DriftActive, matchState.RelayB1DriftWarning);
             }
             if (relayB2 != null)
             {
                 relayB2.ApplyAuthoritativeAttempt(matchState.RelayB2PresetIndex, matchState.RelayB2AttemptSeed);
+                relayB2.ApplyAuthoritativeProcessing(matchState.RelayB2Scanned, matchState.RelayB2Slot1,
+                    matchState.RelayB2Slot2, matchState.RelayB2Tested, false);
                 relayB2.ApplyAuthoritativeControls(matchState.RelayB2Channel, matchState.RelayB2Frequency, matchState.RelayB2Phase);
+                relayB2.ApplyAuthoritativeCleanScenario(matchState.RelayB2CleanSeed);
+                if (!matchState.Object.HasStateAuthority && matchState.RelayB2Decoder.Round > 0)
+                    relayB2.ApplyAuthoritativeDecoder(matchState.RelayB2Decoder.Snapshot);
                 relayB2.ApplyAuthoritativeSyncState(matchState.RelayB2Synchronizing);
+                if (!matchState.Object.HasStateAuthority)
+                    relayB2.ApplyAuthoritativeSyncTelemetry(matchState.RelayB2SyncProgress,
+                        matchState.RelayB2DriftActive, matchState.RelayB2DriftWarning);
             }
 
             if ((relayMask & (1 << (int)RelaySlot.RelayA_1)) != 0) relayA1?.ApplyOnlineFromAuthority();
@@ -862,8 +920,23 @@ namespace EchoProtocol.MatchFlow
             if ((relayMask & (1 << (int)RelaySlot.RelayB_2)) != 0) relayB2?.ApplyOnlineFromAuthority();
         }
 
+        private static void ApplyBreakerTelemetry(RelayAController controller, RelayABreakerTelemetry state)
+        {
+            if (controller == null) return;
+            controller.Circuit.Breakers.ApplyAuthoritative(controller.CircuitSnapshot.ScenarioIndex >= 2,
+                state.Pattern, state.Red, state.Moves, (RelayABreakerPhase)state.Phase, state.Pulse, state.Sequence);
+        }
+
         private static int CountRelays(int mask) =>
             (mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1) + ((mask >> 3) & 1);
+
+        private static void ApplyStabilizationTelemetry(RelayAController controller, RelayAStabilizationTelemetry state)
+        {
+            if (controller == null) return;
+            controller.Circuit.Stabilization.ApplyAuthoritative(state.Controls, state.Readings,
+                state.Running, state.Progress, (RelayAFaultType)state.WarningFault,
+                (RelayAFaultType)state.ActiveFault, state.FaultTimers, state.RecoveredFaults);
+        }
 
         private void OnValidate()
         {
