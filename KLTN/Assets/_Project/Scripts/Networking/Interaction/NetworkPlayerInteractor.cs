@@ -1219,7 +1219,10 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            if (state != null && state.ToolId > 0 && TeamToolCooldown.ExpiredOrNotRunning(Runner))
+            if (state != null
+                && state.ToolId > 0
+                && (IsDebugGodModeActive
+                    || TeamToolCooldown.ExpiredOrNotRunning(Runner)))
             {
                 var toolType = ToolTypeFor(state.ToolId);
                 if (toolType != null)
@@ -1278,7 +1281,7 @@ namespace EchoProtocol.Networking
                             requester,
                             $"player:{Object.Id}:tool:{TeamToolOrdinal}",
                             toolType);
-                        TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, CoreStabilizerRules.CooldownSeconds);
+                        SetTeamToolCooldown(CoreStabilizerRules.CooldownSeconds);
                         CoreStabilizerActiveTimer = TickTimer.CreateFromSeconds(
                             Runner, CoreStabilizerRules.DurationSeconds);
                         UpdateCoreStabilizerAuthoritative();
@@ -1331,7 +1334,7 @@ namespace EchoProtocol.Networking
                             requester,
                             $"player:{Object.Id}:tool:{TeamToolOrdinal}",
                             "FIRST_AID_KIT");
-                        TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 2f);
+                        SetTeamToolCooldown(2f);
                         return InteractionValidationResult.Accepted;
                     }
                 }
@@ -1398,7 +1401,7 @@ namespace EchoProtocol.Networking
                 requester,
                 $"player:{Object.Id}:tool:{TeamToolOrdinal}",
                 "NOISE_MAKER");
-            TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 5f);
+            SetTeamToolCooldown(5f);
             ConsumeGameplayTeamTool(state);
             return InteractionValidationResult.Accepted;
         }
@@ -1644,10 +1647,7 @@ namespace EchoProtocol.Networking
                     $"player:{Object.Id}:tool:{TeamToolOrdinal}",
                     "DOOR_JAMMER");
 
-            TeamToolCooldown =
-                TickTimer.CreateFromSeconds(
-                    Runner,
-                    5f);
+            SetTeamToolCooldown(5f);
 
             ConsumeGameplayTeamTool(state);
 
@@ -1833,7 +1833,7 @@ namespace EchoProtocol.Networking
                 requester,
                 $"player:{Object.Id}:tool:{TeamToolOrdinal}",
                 "DOOR_JAMMER");
-            TeamToolCooldown = TickTimer.CreateFromSeconds(Runner, 5f);
+            SetTeamToolCooldown(5f);
             ConsumeGameplayTeamTool(state);
             return InteractionValidationResult.Accepted;
         }
@@ -1996,6 +1996,18 @@ namespace EchoProtocol.Networking
             if (Runner != null && Runner.IsRunning)
                 return TeamToolCooldown.RemainingTime(Runner) ?? 0f;
             return Mathf.Max(0f, _offlineCoreStabilizerCooldownUntil - Time.time);
+        }
+
+        private bool IsDebugGodModeActive =>
+            GetComponent<NetworkPlayerLifeState>()?.DebugGodMode == true;
+
+        private void SetTeamToolCooldown(float seconds)
+        {
+            if (!IsDebugGodModeActive)
+            {
+                TeamToolCooldown =
+                    TickTimer.CreateFromSeconds(Runner, seconds);
+            }
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
