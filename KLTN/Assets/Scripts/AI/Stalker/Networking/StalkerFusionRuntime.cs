@@ -49,6 +49,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         private float coreCarrierPursuitDelaySeconds = 15f;
 
         private bool _objectiveInvestigationEnabled = true;
+        private bool _flashlightReactionEnabled = true;
 
         [SerializeField, Range(0.01f, 0.99f)]
         private float closedDoorMultiplier = 0.5f;
@@ -1146,13 +1147,25 @@ namespace EchoProtocol.AI.Stalker.Networking
         private void ApplyMatchDifficulty()
         {
             var difficulty = MatchAuthorityRuntime.Instance != null
-                ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
+                ? MatchAuthorityRuntime.Instance.Difficulty
+                : MatchDifficulty.Normal;
+
             var profile = MatchDifficultyProfiles.Get(difficulty);
+
             controller?.ApplyMatchDifficulty(profile);
-            coreCarrierPursuitDelaySeconds = profile.CoreCarrierPursuitDelaySeconds;
-            hearingRangeMultiplier = profile.HearingRangeMultiplier;
-            _objectiveInvestigationEnabled = profile.ObjectiveInvestigationEnabled;
-            specialEncounterRuntime?.SetCooldownSeconds(profile.SpecialEncounterCooldownSeconds);
+            coreCarrierPursuitDelaySeconds =
+                profile.CoreCarrierPursuitDelaySeconds;
+            hearingRangeMultiplier =
+                profile.HearingRangeMultiplier;
+            _objectiveInvestigationEnabled =
+                profile.ObjectiveInvestigationEnabled;
+
+            _flashlightReactionEnabled =
+                difficulty != MatchDifficulty.Easy;
+
+            specialEncounterRuntime?.SetCooldownSeconds(
+                profile.SpecialEncounterCooldownSeconds);
+
             _hearingSensor = null;
             ResolveLocalDependencies();
         }
@@ -1420,11 +1433,18 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
         }
 
-        private void BuildAuthoritativeFlashlightFrame(AiSimulationTime observedAt)
+        private void BuildAuthoritativeFlashlightFrame(
+            AiSimulationTime observedAt)
         {
             _flashlightObservations.Clear();
 
-            foreach (StalkerPerceptionTargetSnapshot snapshot in _perceptionSnapshots)
+            if (!_flashlightReactionEnabled)
+            {
+                return;
+            }
+
+            foreach (StalkerPerceptionTargetSnapshot snapshot
+                     in _perceptionSnapshots)
             {
                 Transform playerRoot = snapshot.TargetHierarchyRoot;
                 if (playerRoot == null)

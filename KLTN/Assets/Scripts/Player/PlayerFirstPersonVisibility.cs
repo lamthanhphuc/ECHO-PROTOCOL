@@ -51,6 +51,7 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
             {
                 if (k == null) deadKeys.Add(k);
             }
+
             for (int i = 0; i < deadKeys.Count; i++)
             {
                 _originalRendererStates.Remove(deadKeys[i]);
@@ -64,10 +65,14 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
                 continue;
             }
 
+            if (renderer is SkinnedMeshRenderer)
+            {
+                renderer.receiveShadows = false;
+            }
+
             if (IsFirstPersonOnlyRenderer(renderer))
             {
                 renderer.shadowCastingMode = ShadowCastingMode.Off;
-                renderer.receiveShadows = false;
             }
 
             if (!_originalRendererStates.ContainsKey(renderer))

@@ -1946,7 +1946,17 @@ namespace EchoProtocol.Networking
 
         private void ConsumeGameplayTeamTool(LobbyPlayerState state)
         {
-            state.SetGameplayToolId(0);
+            if (state == null
+                || !state.ConsumeTeamToolUseAuthoritative())
+            {
+                return;
+            }
+
+            if (state.ToolId != 0)
+            {
+                return;
+            }
+
             var inv = GetComponent<PlayerInventory>();
             if (inv != null && inv.TeamToolSlot != null)
             {

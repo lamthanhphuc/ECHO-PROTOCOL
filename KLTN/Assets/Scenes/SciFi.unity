@@ -45210,7 +45210,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 3
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &192333942
@@ -84304,7 +84304,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 3
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &378394165
@@ -104232,7 +104232,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 1
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1 &473860511
@@ -120862,7 +120862,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 1
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &565459563
@@ -140127,7 +140127,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 3
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &647727131
@@ -140761,7 +140761,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 2
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1 &651842948
@@ -141659,7 +141659,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 1
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &655256648
@@ -147610,7 +147610,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 2
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1 &683560814
@@ -158802,7 +158802,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 2
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &741196672
@@ -161842,7 +161842,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 2
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &754610449
@@ -165788,7 +165788,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 1
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &772181280
@@ -174244,7 +174244,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 3
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &821351476
@@ -192811,7 +192811,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 3
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &916984338
@@ -208555,7 +208555,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 2
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &1000954576
@@ -227990,7 +227990,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 1
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &1085173962
@@ -249833,7 +249833,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 3
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &1184546589
@@ -250591,7 +250591,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 2
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &1190154476
@@ -251099,7 +251099,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 3
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &1192961206
@@ -266609,7 +266609,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 3
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &1258601260
@@ -326743,6 +326743,7 @@ Transform:
   m_Children:
   - {fileID: 227949222}
   - {fileID: 570619692}
+  - {fileID: 2046923085}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1547269691
@@ -356111,7 +356112,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 1
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &1678950177
@@ -435465,7 +435466,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.TeamTools.TeamToolSpawnPoint
   zone: 3
   roomId: 1
-  allowedTools: 31
+  allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
 --- !u!1001 &2045809543
@@ -435765,7 +435766,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2046923084}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -435773,7 +435774,7 @@ Transform:
   - {fileID: 1731544163}
   - {fileID: 1243740195}
   - {fileID: 1700730489}
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1546953130}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2047285686
 GameObject:
@@ -456803,4 +456804,3 @@ SceneRoots:
   - {fileID: 985400000}
   - {fileID: 1218729504}
   - {fileID: 1351846005}
-  - {fileID: 2046923085}
