@@ -131,6 +131,7 @@ public static class PlayerAnimatorSetupBuilder
         AnimatorController controller = RecreateController();
         ConfigureController(controller, clips);
         ApplyControllerToPrefabs(controller);
+        JammoCharacterSetup.RefreshAnimationOverride();
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();

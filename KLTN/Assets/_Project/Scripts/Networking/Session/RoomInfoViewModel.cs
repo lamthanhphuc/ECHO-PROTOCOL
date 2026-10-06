@@ -24,6 +24,7 @@ namespace EchoProtocol.Networking
         public bool IsLocal;
         public bool IsReady;
         public int TeamId;
+        public int CharacterId;
         public int ToolId;
 
         public string OperatorName;

@@ -3,7 +3,7 @@ using Fusion;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-[DisallowMultipleComponent]
+[DisallowMultipleComponent, DefaultExecutionOrder(100)]
 public sealed class NetworkTeamToolHeldView : MonoBehaviour
 {
     [SerializeField] private LobbyPlayerState lobbyState;
@@ -11,12 +11,12 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
     [SerializeField] private NetworkPlayerMovement networkMovement;
     [SerializeField] private Animator animator;
 
-    [Header("Tool Visuals (gán prefab trong Inspector)")]
-    [SerializeField] private GameObject toolVisual_1; // FIELD_SCANNER – giữ placeholder nếu chưa có prefab
-    [SerializeField] private GameObject toolVisual_2; // NOISE_MAKER – DistressBeaconClosed
-    [SerializeField] private GameObject toolVisual_3; // FIRST_AID_KIT – FirstAidKit_Red
-    [SerializeField] private GameObject toolVisual_4; // DOOR_JAMMER – giữ placeholder
-    [SerializeField] private GameObject toolVisual_6; // CORE_STABILIZER – PF_CoreStabilizer_Device_Animated
+    [Header("Tool Visuals (gÃƒÆ’Ã‚Â¡n prefab trong Inspector)")]
+    [SerializeField] private GameObject toolVisual_1; // FIELD_SCANNER ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ giÃƒÂ¡Ã‚Â»Ã‚Â¯ placeholder nÃƒÂ¡Ã‚ÂºÃ‚Â¿u chÃƒâ€ Ã‚Â°a cÃƒÆ’Ã‚Â³ prefab
+    [SerializeField] private GameObject toolVisual_2; // NOISE_MAKER ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ DistressBeaconClosed
+    [SerializeField] private GameObject toolVisual_3; // FIRST_AID_KIT ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ FirstAidKit_Red
+    [SerializeField] private GameObject toolVisual_4; // DOOR_JAMMER ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ giÃƒÂ¡Ã‚Â»Ã‚Â¯ placeholder
+    [SerializeField] private GameObject toolVisual_6; // CORE_STABILIZER ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ PF_CoreStabilizer_Device_Animated
 
     [Header("Fallback Placeholder Size")]
     [SerializeField] private Vector3 localPosition = new Vector3(0.04f, 0.02f, 0.12f);
@@ -73,8 +73,8 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
     {
         LobbyPlayerState.AnyStateChanged += Refresh;
         if (_localInventory != null) _localInventory.InventoryChanged += Refresh;
-        // Không gọi Refresh() ngay ở đây — chờ AnyStateChanged từ Spawned()
-        // để tránh truy cập [Networked] property trước khi Fusion khởi tạo
+        // KhÃƒÆ’Ã‚Â´ng gÃƒÂ¡Ã‚Â»Ã‚Âi Refresh() ngay ÃƒÂ¡Ã‚Â»Ã…Â¸ Ãƒâ€žÃ¢â‚¬ËœÃƒÆ’Ã‚Â¢y ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â chÃƒÂ¡Ã‚Â»Ã‚Â AnyStateChanged tÃƒÂ¡Ã‚Â»Ã‚Â« Spawned()
+        // Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã†â€™ trÃƒÆ’Ã‚Â¡nh truy cÃƒÂ¡Ã‚ÂºÃ‚Â­p [Networked] property trÃƒâ€ Ã‚Â°ÃƒÂ¡Ã‚Â»Ã¢â‚¬Âºc khi Fusion khÃƒÂ¡Ã‚Â»Ã…Â¸i tÃƒÂ¡Ã‚ÂºÃ‚Â¡o
     }
 
     private void OnDisable()
@@ -84,8 +84,18 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         Clear();
     }
 
+    private void LateUpdate()
+    {
+        if (_visual == null) return;
+        var visual = _visual.transform;
+        var offset = GetComponentInParent<PlayerCharacterPresenter>()?.ToolHeldOffset(_shownToolId) ?? Vector3.zero;
+        visual.localPosition = ResolveToolPosition(_shownToolId) + (visual.parent != null
+            ? visual.parent.InverseTransformVector(offset) : Vector3.zero);
+    }
+
     private void Update()
     {
+        if (_visual != null) _visual.transform.localScale = ResolveToolScale(_shownToolId) * (GetComponentInParent<PlayerCharacterPresenter>()?.ToolHeldScale(_shownToolId) ?? 1f);
         bool pushing = IsPushing();
         if (pushing == _wasPushing)
         {
@@ -105,7 +115,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             return;
         }
 
-        // Guard: chỉ truy cập [Networked] property sau khi Fusion đã gọi Spawned()
+        // Guard: chÃƒÂ¡Ã‚Â»Ã¢â‚¬Â° truy cÃƒÂ¡Ã‚ÂºÃ‚Â­p [Networked] property sau khi Fusion Ãƒâ€žÃ¢â‚¬ËœÃƒÆ’Ã‚Â£ gÃƒÂ¡Ã‚Â»Ã‚Âi Spawned()
         if (lobbyState.Object == null || !lobbyState.Object.IsValid)
         {
             return;
@@ -139,7 +149,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         GameObject sourcePrefab = ResolveToolPrefab(_shownToolId);
         if (sourcePrefab != null)
         {
-            // Instantiate visual an toàn (tuyệt đối không instantiate prefab có NetworkObject)
+            // Instantiate visual an toÃƒÆ’Ã‚Â n (tuyÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡t Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœi khÃƒÆ’Ã‚Â´ng instantiate prefab cÃƒÆ’Ã‚Â³ NetworkObject)
             _visual = InstantiateHeldVisualSafely(sourcePrefab, anchor);
             if (_visual == null)
             {
@@ -150,9 +160,9 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             _visual.name = "Held_TeamTool_" + _shownToolId;
             _visual.transform.localPosition = ResolveToolPosition(_shownToolId);
             _visual.transform.localRotation = Quaternion.Euler(ResolveToolEulerAngles(_shownToolId));
-            _visual.transform.localScale = ResolveToolScale(_shownToolId);
+            _visual.transform.localScale = ResolveToolScale(_shownToolId) * (GetComponentInParent<PlayerCharacterPresenter>()?.HeldItemScale ?? 1f);
 
-            // Tắt tất cả collider, audio, physics, networking trên held visual để không ảnh hưởng gameplay
+            // TÃƒÂ¡Ã‚ÂºÃ‚Â¯t tÃƒÂ¡Ã‚ÂºÃ‚Â¥t cÃƒÂ¡Ã‚ÂºÃ‚Â£ collider, audio, physics, networking trÃƒÆ’Ã‚Âªn held visual Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã†â€™ khÃƒÆ’Ã‚Â´ng ÃƒÂ¡Ã‚ÂºÃ‚Â£nh hÃƒâ€ Ã‚Â°ÃƒÂ¡Ã‚Â»Ã…Â¸ng gameplay
             foreach (var c in _visual.GetComponentsInChildren<Collider>(true))
                 c.enabled = false;
             foreach (var audio in _visual.GetComponentsInChildren<AudioSource>(true))
@@ -443,3 +453,6 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         }
     }
 }
+
+
+

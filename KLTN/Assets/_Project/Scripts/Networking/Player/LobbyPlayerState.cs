@@ -39,7 +39,7 @@ namespace EchoProtocol.Networking
         }
     }
 
-    public enum LobbySelectionKind { Team = 1, Tool = 2 }
+    public enum LobbySelectionKind { Team = 1, Tool = 2, Character = 3 }
 
     public enum LobbySelectionError
     {
@@ -98,6 +98,9 @@ namespace EchoProtocol.Networking
 
         [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
         public int TeamId { get; private set; }
+
+        [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
+        public int CharacterId { get; private set; }
 
         [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
         public int ToolId { get; private set; }
@@ -338,6 +341,30 @@ namespace EchoProtocol.Networking
             if (!CanSendSelectionRequest(LobbySelectionKind.Tool, toolId)) return false;
             RpcRequestTool(toolId);
             return true;
+        }
+
+        public bool RequestCharacter(int characterId)
+        {
+            if (!CanSendSelectionRequest(LobbySelectionKind.Character, characterId)) return false;
+            RpcRequestCharacter(characterId);
+            return true;
+        }
+
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        private void RpcRequestCharacter(int characterId, RpcInfo info = default)
+        {
+            if (!TryResolveRequester(info.Source, out var requester)) return;
+            var error = ValidateOwnedRequest(requester);
+            if (error == LobbySelectionError.None && (IsReady || IsGameplayPlayer))
+                error = LobbySelectionError.SelectionLockedWhileReady;
+            if (error == LobbySelectionError.None && (characterId < 0 || characterId > 1))
+                error = LobbySelectionError.InvalidSelection;
+            if (error == LobbySelectionError.None)
+            {
+                CharacterId = characterId;
+                AnyStateChanged?.Invoke();
+            }
+            SendSelectionResult(requester, LobbySelectionKind.Character, characterId, error);
         }
 
         private bool CanSendSelectionRequest(LobbySelectionKind kind, int requestedId)
