@@ -13,7 +13,13 @@ using UnityEngine.Serialization;
 namespace EchoProtocol.AI.Minions
 {
     public enum CreepMinionState { Roam = 0, Track = 1, Harass = 2, Flee = 3 }
-    public enum CreepMinionAttackKind { None = 0, ShootSlow = 1, StealTool = 2 }
+    public enum CreepMinionAttackKind
+    {
+        None = 0,
+        ShootSlow = 1,
+        StealTool = 2,
+        StealCore = 3
+    }
 
     [DisallowMultipleComponent]
     [RequireComponent(typeof(NetworkObject))]
@@ -49,11 +55,11 @@ namespace EchoProtocol.AI.Minions
         [SerializeField, Min(0f)] private float roamArrivalSlack = 0.25f;
 
         [Header("Flying")]
-        [SerializeField] private float flightHeight = 1.6f;
-        [SerializeField] private float flightBobAmplitude = 0.12f;
+        [SerializeField] private float flightHeight = 3f;
+        [SerializeField] private float flightBobAmplitude = 0.08f;
         [SerializeField] private float flightBobSpeed = 2.5f;
-        [SerializeField, Min(0.1f)] private float ceilingClearance = 0.8f;
-        [SerializeField, Min(1f)] private float ceilingProbeDistance = 8f;
+        [SerializeField, Min(0f)] private float ceilingClearance = 0.05f;
+        [SerializeField, Min(1f)] private float ceilingProbeDistance = 20f;
         [SerializeField] private Color visualTint = new Color(0.42f, 0.42f, 0.42f, 1f);
 
         [Header("Combat")]
@@ -108,7 +114,7 @@ namespace EchoProtocol.AI.Minions
         [Networked] private TickTimer DeathTimer { get; set; }
 
         public CreepMinionAttackKind AttackKind =>
-            AttackKindValue >= 0 && AttackKindValue <= 2
+            AttackKindValue >= 0 && AttackKindValue <= 3
                 ? (CreepMinionAttackKind)AttackKindValue
                 : CreepMinionAttackKind.None;
 
@@ -174,6 +180,10 @@ namespace EchoProtocol.AI.Minions
                     var properties = new MaterialPropertyBlock();
                     renderer.GetPropertyBlock(properties);
                     properties.SetFloat("_OutlineWidth", 0f);
+                    properties.SetFloat("_RimIntensity", 0f);
+                    properties.SetColor("_RimColor", Color.black);
+                    properties.SetColor("_RimColor1", Color.black);
+                    properties.SetColor("_RimColor2", Color.black);
                     properties.SetColor("_Color", visualTint);
                     renderer.SetPropertyBlock(properties);
                 }
@@ -422,8 +432,12 @@ namespace EchoProtocol.AI.Minions
 
                 _agent.speed = harassSpeed;
                 float distance = Vector3.Distance(transform.position, targetObject.transform.position);
-                bool wantsTool = targetLobby != null && targetLobby.ToolId >= 1 && targetLobby.ToolId <= 6;
-                float actionRange = wantsTool ? stealToolRange : shootRange;
+                bool wantsCloseAttack =
+                    targetLobby != null
+                    && (targetLobby.CarriedCoreId.IsValid
+                        || (targetLobby.ToolId >= 1
+                            && targetLobby.ToolId <= 6));
+                float actionRange = wantsCloseAttack ? stealToolRange : shootRange;
                 if (distance > actionRange)
                     _agent.SetDestination(targetObject.transform.position);
                 else if (_agent.hasPath)
@@ -562,7 +576,10 @@ namespace EchoProtocol.AI.Minions
             {
                 if (!TryGetEligiblePlayer(player, out var obj, out var lobby, out _) || !CanSeePlayer(obj)) continue;
                 float score = -Vector3.Distance(transform.position, obj.transform.position);
-                if (Zone == RegionSemanticZone.Zone01 && lobby.CarriedCoreId.IsValid) score += 30f;
+                if (lobby.CarriedCoreId.IsValid)
+                    score += 100f;
+                else if (lobby.ToolId >= 1 && lobby.ToolId <= 6)
+                    score += 40f;
                 var match = NetworkMatchState.Instance;
                 if (Zone == RegionSemanticZone.Zone02 && match != null)
                 {
@@ -692,6 +709,16 @@ namespace EchoProtocol.AI.Minions
             float distance = Vector3.Distance(transform.position, playerObject.transform.position);
             if (distance <= stealToolRange
                 && lobby != null
+                && lobby.CarriedCoreId.IsValid
+                && interactor != null
+                && TryStealCore(playerObject, lobby, interactor))
+            {
+                CommitAttack(CreepMinionAttackKind.StealCore);
+                return;
+            }
+
+            if (distance <= stealToolRange
+                && lobby != null
                 && lobby.ToolId >= 1
                 && lobby.ToolId <= 6
                 && interactor != null
@@ -799,7 +826,17 @@ namespace EchoProtocol.AI.Minions
             return true;
         }
 
-        private Vector3 CarryPosition() => transform.position + Vector3.up * coreCarryHeight + transform.forward * 0.2f;
+        private Vector3 CarryPosition()
+        {
+            float height =
+                FlightHeightValue > 0f
+                    ? FlightHeightValue
+                    : flightHeight;
+
+            return transform.position
+                + Vector3.up * (height + coreCarryHeight)
+                + transform.forward * 0.2f;
+        }
 
         private void BeginFlashlightDeath()
         {
@@ -1111,8 +1148,9 @@ namespace EchoProtocol.AI.Minions
             if (AttackSequence != _renderedAttackSequence)
             {
                 _renderedAttackSequence = AttackSequence;
-                CrossFade(
-                    AttackKind == CreepMinionAttackKind.StealTool
+                    CrossFade(
+                        AttackKind == CreepMinionAttackKind.StealTool
+                        || AttackKind == CreepMinionAttackKind.StealCore
                         ? "Attack2"
                         : "Shoot");
                 _actionAnimationUntil = Time.time + 0.8f;
@@ -1143,15 +1181,25 @@ namespace EchoProtocol.AI.Minions
                 ~0,
                 QueryTriggerInteraction.Ignore);
 
-            Array.Sort(hits, (left, right) => left.distance.CompareTo(right.distance));
+            Array.Sort(
+                hits,
+                (left, right) =>
+                    left.distance.CompareTo(right.distance));
             foreach (var hit in hits)
             {
-                if (hit.collider == null || hit.collider.transform.IsChildOf(transform))
+                if (hit.collider == null
+                    || hit.collider.transform.IsChildOf(transform))
+                {
                     continue;
+                }
 
                 return Mathf.Max(
                     0.3f,
-                    0.1f + hit.distance - ceilingClearance - _visualTopOffset);
+                    0.1f
+                    + hit.distance
+                    - ceilingClearance
+                    - _visualTopOffset
+                    - flightBobAmplitude);
             }
 
             return flightHeight;

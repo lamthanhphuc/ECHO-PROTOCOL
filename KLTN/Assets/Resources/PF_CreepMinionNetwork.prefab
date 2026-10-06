@@ -31,7 +31,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 0.5, y: 0.5, z: 0.5}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 617468459091834393}
@@ -170,11 +170,11 @@ MonoBehaviour:
   lostSightGraceSeconds: 2.5
   trackStandOffDistance: 2.5
   roamArrivalSlack: 0.25
-  flightHeight: 1.6
-  flightBobAmplitude: 0.12
+  flightHeight: 3
+  flightBobAmplitude: 0.08
   flightBobSpeed: 2.5
-  ceilingClearance: 0.8
-  ceilingProbeDistance: 8
+  ceilingClearance: 0.05
+  ceilingProbeDistance: 20
   visualTint: {r: 0.42, g: 0.42, b: 0.42, a: 1}
   shootRange: 8
   stealToolRange: 1.8
