@@ -251,7 +251,7 @@ namespace EchoProtocol.UI
 
         public void SetMemberCount(int current, int max)
         {
-            if (memberCountText != null) memberCountText.text = $"PLAYERS IN ROOM: {current} / {max}";
+            if (memberCountText != null) memberCountText.text = $"{current} / {max}";
         }
 
         public void RefreshMemberList()
