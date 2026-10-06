@@ -11,8 +11,8 @@ using UnityEngine.AI;
 
 public static class CreepMinionProductionSetup
 {
-    private const string VisualPrefabPath = "Assets/Creep Horror Creature/Prefabs/Creep2.prefab";
-    private const string ModelPath = "Assets/Creep Horror Creature/Meshes/Creep_mesh.fbx";
+    private const string VisualPrefabPath = "Assets/Stylized3DMonster/Monster08/Prefab/Monster08_04.prefab";
+    private const string ModelPath = "Assets/Stylized3DMonster/Monster08/Monster08.fbx";
     private const string ControllerDirectory = "Assets/Animations/Minion";
     private const string ControllerPath = "Assets/Animations/Minion/AC_CreepMinion.controller";
     private const string NetworkPrefabPath = "Assets/Resources/PF_CreepMinionNetwork.prefab";
@@ -30,10 +30,14 @@ public static class CreepMinionProductionSetup
 
     private static AnimatorController BuildAnimatorController()
     {
-        var clips = AssetDatabase.LoadAllAssetsAtPath(ModelPath).OfType<AnimationClip>().ToArray();
-        var names = new[] { "Idle", "Walk", "Bite", "Roar" };
-        var sourceNames = new[] { "Creep|Idle1_Action", "Creep|Walk1_Action",
-            "Creep|Bite_Action", "Creep|Roar_Action" };
+        var names = new[] { "Idle", "Run", "Shoot", "Attack2" };
+        var sourcePaths = new[]
+        {
+            "Assets/Stylized3DMonster/Monster08/Anim/Monster08_Idle.anim",
+            "Assets/Stylized3DMonster/Monster08/Anim/Monster08_Run.anim",
+            "Assets/Stylized3DMonster/Monster08/Anim/Monster08_Shoot.anim",
+            "Assets/Stylized3DMonster/Monster08/Anim/Monster08_Attack02.anim"
+        };
         var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath)
             ?? AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
         controller.parameters = Array.Empty<AnimatorControllerParameter>();
@@ -42,14 +46,40 @@ public static class CreepMinionProductionSetup
         var machine = controller.layers[0].stateMachine;
         for (int i = 0; i < names.Length; i++)
         {
-            var clip = clips.FirstOrDefault(c => c.name == sourceNames[i]);
-            if (clip == null) throw new InvalidOperationException("Missing Creep animation clip: " + sourceNames[i]);
+            var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(sourcePaths[i]);
+            if (clip == null) throw new InvalidOperationException("Missing Monster08 animation clip: " + sourcePaths[i]);
+
+            if (names[i] == "Run")
+            {
+                MakeLoopingInPlace(clip);
+            }
+
             var state = machine.AddState(names[i]);
             state.motion = clip;
             if (i == 0) machine.defaultState = state;
         }
         EditorUtility.SetDirty(controller);
         return controller;
+    }
+
+    private static void MakeLoopingInPlace(AnimationClip clip)
+    {
+        var settings = AnimationUtility.GetAnimationClipSettings(clip);
+        settings.loopTime = true;
+        settings.loopBlend = true;
+        settings.keepOriginalPositionXZ = true;
+        AnimationUtility.SetAnimationClipSettings(clip, settings);
+
+        foreach (var binding in AnimationUtility.GetCurveBindings(clip))
+        {
+            if (binding.path == "root"
+                && binding.propertyName.StartsWith("m_LocalPosition.", StringComparison.Ordinal))
+            {
+                AnimationUtility.SetEditorCurve(clip, binding, null);
+            }
+        }
+
+        EditorUtility.SetDirty(clip);
     }
 
     private static void BuildNetworkPrefab(AnimatorController controller)
@@ -59,6 +89,8 @@ public static class CreepMinionProductionSetup
             : new GameObject("PF_CreepMinionNetwork");
         try
         {
+            root.transform.localScale = Vector3.one;
+
             if (root.GetComponent<NetworkObject>() == null)
             {
                 root.AddComponent<NetworkObject>();
@@ -90,9 +122,9 @@ public static class CreepMinionProductionSetup
                 collider = root.AddComponent<CapsuleCollider>();
             }
 
-            collider.radius = 0.35f;
+            collider.radius = 0.4f;
             collider.height = 1.2f;
-            collider.center = new Vector3(0f, 0.6f, 0f);
+            collider.center = new Vector3(0f, 1.6f, 0f);
 
             if (root.GetComponent<CreepMinionRuntime>() == null)
             {
@@ -108,12 +140,23 @@ public static class CreepMinionProductionSetup
             visual.transform.localPosition = Vector3.zero;
             visual.transform.localRotation = Quaternion.identity;
             visual.transform.localScale = Vector3.one;
-            foreach (var animator in root.GetComponentsInChildren<Animator>(true))
+
+            foreach (var existingAnimator in visual.GetComponentsInChildren<Animator>(true))
             {
-                animator.runtimeAnimatorController = controller;
-                animator.applyRootMotion = false;
-                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                UnityEngine.Object.DestroyImmediate(existingAnimator);
             }
+
+            var animatorTarget = visual
+                .GetComponentsInChildren<Transform>(true)
+                .FirstOrDefault(candidate => candidate.Find("root") != null);
+
+            if (animatorTarget == null)
+                throw new InvalidOperationException("Monster08 animation root was not found.");
+
+            var animator = animatorTarget.gameObject.AddComponent<Animator>();
+            animator.runtimeAnimatorController = controller;
+            animator.applyRootMotion = false;
+            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
 
             PrefabUtility.SaveAsPrefabAsset(root, NetworkPrefabPath);
             var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(NetworkPrefabPath);
