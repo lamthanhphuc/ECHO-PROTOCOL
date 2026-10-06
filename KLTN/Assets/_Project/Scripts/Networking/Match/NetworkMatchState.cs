@@ -256,6 +256,18 @@ namespace EchoProtocol.Networking
         [Networked] public Vector3 Zone3FrigatePosition { get; private set; }
         [Networked] public Quaternion Zone3FrigateRotation { get; private set; }
         [Networked] public PlayerRef Zone3Pusher { get; private set; }
+        [Networked] public NetworkBool Zone3ConvoyInitialized { get; private set; }
+        [Networked] public int Zone3FuelPointsRemaining { get; private set; }
+        [Networked] public int Zone3ConvoyCurrentPoint { get; private set; }
+        [Networked] public int Zone3ConvoyTargetPoint { get; private set; }
+        [Networked] public NetworkBool Zone3ConvoyRouteLocked { get; private set; }
+        [Networked] public NetworkBool Zone3ConvoyWaitingForRoute { get; private set; }
+        [Networked] public PlayerRef Zone3RefuelOperator { get; private set; }
+        [Networked] private TickTimer Zone3RefuelTimer { get; set; }
+        private TickTimer _zone3RefuelLease;
+        private long _zone3RefuelNoiseSequence;
+        public float Zone3RefuelProgress01 => Zone3RefuelOperator.IsRealPlayer && Runner != null
+            ? Mathf.Clamp01(1f - (Zone3RefuelTimer.RemainingTime(Runner) ?? 0f) / Zone3FuelRules.InsertDurationSeconds) : 0f;
         [Networked] public PlayerRef Zone3ChargeOperator { get; private set; }
         [Networked] public float Zone3ChargeDurationSeconds { get; private set; }
         [Networked] public float Zone3ChargeAccumulatedSeconds { get; private set; }
@@ -548,12 +560,16 @@ namespace EchoProtocol.Networking
             if (zone3 != null && (CurrentPhase == NetworkMatchPhase.Zone3FindFrigate
                 || CurrentPhase == NetworkMatchPhase.Zone3PushFrigate))
             {
+                var fuelSupply = FindAnyObjectByType<Zone3FuelSupply>();
+                fuelSupply?.EnsureInitialized(true);
                 zone3.ReleaseInvalidAuthoritativePushers(IsZone3PusherValid);
                 if (CurrentPhase == NetworkMatchPhase.Zone3PushFrigate)
                     zone3.TickConvoyAuthoritative(Runner.DeltaTime);
                 UpdateZone3FrigatePoseAuthoritative(zone3.FrigatePosition,
                     zone3.Convoy != null ? zone3.Convoy.transform.rotation
                     : (zone3.Frigate != null ? zone3.Frigate.transform.rotation : Quaternion.identity));
+                PublishZone3ConvoyState(zone3.Convoy);
+                AdvanceZone3RefuelAuthoritative();
                 EmitFrigatePushNoiseAuthoritative(zone3);
             }
             if (CurrentPhase == NetworkMatchPhase.Zone3PushFrigate)
@@ -1772,15 +1788,101 @@ namespace EchoProtocol.Networking
                 || CurrentPhase != NetworkMatchPhase.Zone3PushFrigate
                 || zone3?.Convoy == null
                 || !zone3.Convoy.IsFuelEmpty
+                || (Zone3RefuelOperator.IsRealPlayer && Zone3RefuelOperator != actor)
                 || !TryResolveActivePlayer(actor, out var lifeState)
-                || Vector3.Distance(lifeState.transform.position, zone3.FrigatePosition) > zone3.PushInteractionDistance + 1f)
+                || zone3.Convoy.GetComponentInChildren<Zone3FuelPort>()?.CanInteract(lifeState.gameObject) != true)
             {
                 return false;
             }
 
-            zone3.Convoy.Refuel();
+            if (Zone3RefuelOperator == actor) return true;
+            Zone3RefuelOperator = actor;
+            Zone3RefuelTimer = TickTimer.CreateFromSeconds(Runner, Zone3FuelRules.InsertDurationSeconds);
+            _zone3RefuelLease = TickTimer.CreateFromSeconds(Runner, 0.75f);
             HandleReplicatedStateChanged();
             return true;
+        }
+
+        private void PublishZone3ConvoyState(Zone3ConvoyController convoy)
+        {
+            if (convoy == null) return;
+            Zone3ConvoyInitialized = convoy.IsInitialized;
+            Zone3FuelPointsRemaining = convoy.FuelPointsRemaining;
+            Zone3ConvoyCurrentPoint = (int)convoy.CurrentPoint;
+            Zone3ConvoyTargetPoint = (int)convoy.TargetPoint;
+            Zone3ConvoyRouteLocked = convoy.RouteLocked;
+            Zone3ConvoyWaitingForRoute = convoy.IsWaitingForRouteChoice;
+        }
+
+        public void RequestCancelZone3Refuel()
+        {
+            if (!HasValidNetworkObject()) return;
+            if (Object.HasStateAuthority) CancelZone3RefuelAuthoritative(Runner.LocalPlayer);
+            else RpcCancelZone3Refuel();
+        }
+
+        public void RequestRefreshZone3Refuel()
+        {
+            if (!HasValidNetworkObject()) return;
+            if (Object.HasStateAuthority) RefreshZone3RefuelAuthoritative(Runner.LocalPlayer);
+            else RpcRefreshZone3Refuel();
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcCancelZone3Refuel(RpcInfo info = default) => CancelZone3RefuelAuthoritative(info.Source);
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcRefreshZone3Refuel(RpcInfo info = default) => RefreshZone3RefuelAuthoritative(info.Source);
+
+        private void CancelZone3RefuelAuthoritative(PlayerRef actor)
+        {
+            if (Zone3RefuelOperator != actor) return;
+            Zone3RefuelOperator = PlayerRef.None;
+            Zone3RefuelTimer = TickTimer.None;
+            _zone3RefuelLease = TickTimer.None;
+        }
+
+        private void RefreshZone3RefuelAuthoritative(PlayerRef actor)
+        {
+            if (Zone3RefuelOperator == actor && actor.IsRealPlayer)
+                _zone3RefuelLease = TickTimer.CreateFromSeconds(Runner, 0.75f);
+        }
+
+        private void AdvanceZone3RefuelAuthoritative()
+        {
+            if (!Zone3RefuelOperator.IsRealPlayer) return;
+            var actor = Zone3RefuelOperator;
+            var zone3 = Zone3MissionDirector.Instance;
+            var port = zone3?.Convoy?.GetComponentInChildren<Zone3FuelPort>();
+            if (CurrentPhase != NetworkMatchPhase.Zone3PushFrigate
+                || _zone3RefuelLease.ExpiredOrNotRunning(Runner)
+                || !TryResolveActivePlayer(actor, out var life) || port == null
+                || !port.CanInteract(life.gameObject))
+            {
+                CancelZone3RefuelAuthoritative(actor);
+                return;
+            }
+            if (!Zone3RefuelTimer.Expired(Runner)) return;
+            var cell = Zone3FuelCell.FindCarried(life.gameObject);
+            if (cell != null && cell.ConsumeAuthoritative(life.gameObject))
+            {
+                zone3.Convoy.Refuel();
+                PublishZone3ConvoyState(zone3.Convoy);
+                MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
+                EmitZone3RefuelNoiseAuthoritative(actor, port.transform.position);
+            }
+            CancelZone3RefuelAuthoritative(actor);
+            HandleReplicatedStateChanged();
+        }
+
+        private void EmitZone3RefuelNoiseAuthoritative(PlayerRef actor, Vector3 position)
+        {
+            var authority = MatchAuthorityRuntime.Instance;
+            if (authority == null || authority.MatchId == Guid.Empty) return;
+            long sequence = _zone3RefuelNoiseSequence == long.MaxValue ? 1 : _zone3RefuelNoiseSequence + 1;
+            var key = new RuntimeNoiseSourceOccurrenceKey($"zone3-fuel-insert:{authority.MatchId:D}", sequence);
+            if (HostRuntimeNoiseService.EnsureExists(authority).TryAccept(actor,
+                    RuntimeNoiseType.POWER_SURGE, key, position, out _))
+                _zone3RefuelNoiseSequence = sequence;
         }
 
         public bool RequestStartZone3Charge()

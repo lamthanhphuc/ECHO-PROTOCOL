@@ -1,83 +1,184 @@
-using UnityEngine;
 using EchoProtocol.Networking;
+using Fusion;
+using UnityEngine;
 
 namespace EchoProtocol.MatchFlow
 {
-    /// <summary>
-    /// World pickup for Fuel Cells in Zone 3. Reuses the standard IInteractable interface
-    /// and carrier-parenting pattern so players can pick up and transport fuel to Spacefrigate.
-    /// </summary>
-    [DisallowMultipleComponent]
-    [RequireComponent(typeof(Collider))]
-    public sealed class Zone3FuelCell : MonoBehaviour, IInteractable
+    /// <summary>Independent Zone 3 carry item; never enters the Zone 1 core inventory.</summary>
+    [DisallowMultipleComponent, RequireComponent(typeof(Collider), typeof(NetworkObject))]
+    public sealed class Zone3FuelCell : NetworkBehaviour, IInteractable
     {
-        [SerializeField] private string pickupPrompt = "Pick up Fuel Cell";
-        [SerializeField] private Vector3 carryLocalOffset = new Vector3(0.2f, -0.2f, 0.4f);
-
-        private GameObject _carrier;
+        [SerializeField] private Vector3 carryLocalOffset = new Vector3(0.25f, 1.15f, 0.55f);
+        [Networked] public NetworkBool Selected { get; private set; }
+        [Networked] public NetworkBool Consumed { get; private set; }
+        [Networked] public PlayerRef Holder { get; private set; }
+        [Networked] public Vector3 WorldPosition { get; private set; }
+        private GameObject _offlineCarrier;
+        private bool _offlineSelected;
+        private bool _offlineConsumed;
         private Collider _collider;
-        private Rigidbody _rigidbody;
-
-        public bool IsCarried => _carrier != null;
-        public GameObject Carrier => _carrier;
-        public string InteractionPrompt => pickupPrompt;
-
-        private void Awake()
+        private Renderer[] _renderers;
+        private bool Online => Object != null && Object.IsValid && Runner != null;
+        public bool IsAvailable => Online ? Selected && !Consumed : _offlineSelected && !_offlineConsumed;
+        public GameObject Carrier
         {
-            _collider = GetComponent<Collider>();
-            _rigidbody = GetComponent<Rigidbody>();
-            if (GetComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>() == null)
+            get
             {
-                gameObject.AddComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>();
+                if (!Online) return _offlineCarrier;
+                return Holder.IsRealPlayer && Runner.TryGetPlayerObject(Holder, out var player) ? player.gameObject : null;
             }
         }
+        public bool IsCarried => Online ? Holder.IsRealPlayer : _offlineCarrier != null;
+        public string InteractionPrompt => "E - PICK UP CONVOY FUEL CELL";
 
-        public bool CanInteract(GameObject interactor)
+        private Vector3 _originalVisualScale;
+        private void Awake()
         {
-            if (interactor == null || IsCarried) return false;
-            // Check if interactor is an alive gameplay player
-            var lifeState = interactor.GetComponentInParent<NetworkPlayerLifeState>();
-            if (lifeState != null && lifeState.Status != NetworkPlayerLifeStatus.Alive) return false;
-            var downState = interactor.GetComponentInParent<PlayerDownState>();
-            if (downState != null && (!downState.IsActive || downState.IsDown)) return false;
+            _originalVisualScale = transform.localScale;
+            _collider = GetComponent<Collider>();
+            _renderers = GetComponentsInChildren<Renderer>(true);
+            if (TryGetComponent<Rigidbody>(out var body)) { body.isKinematic = true; body.useGravity = false; }
+        }
+        public override void Spawned()
+        {
+            if (Object.HasStateAuthority)
+            {
+                Holder = PlayerRef.None;
+                WorldPosition = transform.position;
+            }
+            ApplyVisuals();
+        }
+        public void SetSelectedAuthoritative(bool selected)
+        {
+            if (Online)
+            {
+                if (!Object.HasStateAuthority) return;
+                Selected = selected;
+            }
+            else _offlineSelected = selected;
+            ApplyVisuals();
+        }
+        public static Zone3FuelCell FindCarried(GameObject player)
+        {
+            if (player == null) return null;
+            var root = player.GetComponentInParent<NetworkPlayerLifeState>()?.gameObject
+                ?? player.GetComponentInParent<PlayerDownState>()?.gameObject ?? player;
+            foreach (var cell in FindObjectsByType<Zone3FuelCell>(FindObjectsInactive.Exclude))
+                if (cell.IsAvailable && cell.IsCarried && cell.Carrier == root) return cell;
+            return null;
+        }
+        private static bool IsAlive(GameObject player)
+        {
+            if (player == null) return false;
+            var life = player.GetComponentInParent<NetworkPlayerLifeState>();
+            if (life != null)
+            {
+                var lobby = life.GetComponent<LobbyPlayerState>();
+                return life.Status == NetworkPlayerLifeStatus.Alive && lobby != null && lobby.IsGameplayPlayer;
+            }
+            var down = player.GetComponentInParent<PlayerDownState>();
+            return down != null && down.IsActive && !down.IsDown;
+        }
+        public bool CanInteract(GameObject player)
+        {
+            var match = NetworkMatchState.Instance;
+            var core = player != null ? player.GetComponentInParent<PlayerEnergyCoreCarrier>() : null;
+            var lobby = player != null ? player.GetComponentInParent<LobbyPlayerState>() : null;
+            return IsAvailable && !IsCarried && IsAlive(player) && FindCarried(player) == null
+                && (core == null || !core.IsCarrying) && (lobby == null || !lobby.CarriedCoreId.IsValid)
+                && Zone3MissionDirector.Instance?.IsPushAvailable == true
+                && (match == null || !match.IsEnded);
+        }
+        public void Interact(GameObject player)
+        {
+            if (!CanInteract(player)) return;
+            if (Online) RpcPickup();
+            else { _offlineCarrier = player.GetComponentInParent<PlayerDownState>()?.gameObject ?? player; ApplyVisuals(); }
+        }
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcPickup(RpcInfo info = default)
+        {
+            if (!Runner.TryGetPlayerObject(info.Source, out var player) || player.InputAuthority != info.Source
+                || !CanInteract(player.gameObject)
+                || Vector3.Distance(player.transform.position, transform.position) > 3f) return;
+            Holder = info.Source;
+            ApplyVisuals();
+        }
+        public bool ConsumeAuthoritative(GameObject player)
+        {
+            if (!IsAvailable || Carrier != player) return false;
+            if (Online)
+            {
+                if (!Object.HasStateAuthority) return false;
+                Consumed = true;
+                Holder = PlayerRef.None;
+            }
+            else { _offlineConsumed = true; _offlineCarrier = null; }
+            ApplyVisuals();
             return true;
         }
-
-        public void Interact(GameObject interactor)
+        public void RequestDrop()
         {
-            if (!CanInteract(interactor)) return;
-            AttachToCarrier(interactor);
+            if (!IsCarried) return;
+            if (Online) RpcDrop();
+            else DropOffline();
         }
-
-        public void AttachToCarrier(GameObject interactor)
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcDrop(RpcInfo info = default)
         {
-            _carrier = interactor;
-            if (_collider != null) _collider.enabled = false;
-            if (_rigidbody != null) _rigidbody.isKinematic = true;
-
-            // Parent to player's camera or hands if available, else root
-            Transform mount = interactor.transform;
-            var cam = interactor.GetComponentInChildren<Camera>();
-            if (cam != null) mount = cam.transform;
-
-            transform.SetParent(mount, false);
-            transform.localPosition = carryLocalOffset;
-            transform.localRotation = Quaternion.identity;
+            if (Holder != info.Source || !Holder.IsRealPlayer) return;
+            DropAuthoritative();
         }
-
-        public void Consume()
+        private Vector3 DropPosition(GameObject player)
         {
-            _carrier = null;
-            Destroy(gameObject);
+            if (player == null) return transform.position;
+            ItemDropPlacementUtility.GetFloorSnappedPose(player.transform, 1.1f, 0.3f,
+                out var position, out _);
+            return position;
         }
-
-        public void Drop(Vector3 position, Quaternion rotation)
+        private void DropAuthoritative()
         {
-            _carrier = null;
-            transform.SetParent(null, true);
-            transform.SetPositionAndRotation(position, rotation);
-            if (_collider != null) _collider.enabled = true;
-            if (_rigidbody != null) _rigidbody.isKinematic = false;
+            WorldPosition = DropPosition(Carrier);
+            Holder = PlayerRef.None;
+            transform.position = WorldPosition;
+            ApplyVisuals();
+        }
+        private void DropOffline()
+        {
+            transform.position = DropPosition(_offlineCarrier);
+            _offlineCarrier = null;
+            ApplyVisuals();
+        }
+        public override void FixedUpdateNetwork()
+        {
+            if (!Object.HasStateAuthority || !Holder.IsRealPlayer) return;
+            var player = Carrier;
+            if (!IsAlive(player)) { DropAuthoritative(); return; }
+            WorldPosition = player.transform.TransformPoint(carryLocalOffset);
+        }
+        public override void Render() => ApplyVisuals();
+        private void Update()
+        {
+            if (!Application.isPlaying) return;
+            if (!Online)
+            {
+                if (_offlineCarrier != null && !IsAlive(_offlineCarrier)) DropOffline();
+                ApplyVisuals();
+            }
+        }
+        private void ApplyVisuals()
+        {
+            if (_renderers == null) return;
+            foreach (var renderer in _renderers) if (renderer != null) renderer.enabled = IsAvailable;
+            if (_collider != null) _collider.enabled = IsAvailable && !IsCarried;
+            var player = Carrier;
+            transform.localScale = _originalVisualScale * (IsCarried && player != null ? player.GetComponent<PlayerCharacterPresenter>()?.HeldItemScale ?? 1f : 1f);
+            if (IsCarried && player != null)
+                transform.position = player.transform.TransformPoint(carryLocalOffset)
+                    + (player.GetComponent<PlayerCharacterPresenter>()?.HeldItemWorldOffset ?? Vector3.zero);
+            else if (Online) transform.position = WorldPosition;
         }
     }
 }
+
+

@@ -160,7 +160,14 @@ namespace EchoProtocol.Networking
             if (online && !match.Object.HasStateAuthority
                 && match.Zone3FrigatePosition.sqrMagnitude > 1f)
             {
-                if (Convoy != null) Convoy.ApplyReplicatedPose(match.Zone3FrigatePosition, match.Zone3FrigateRotation);
+                if (Convoy != null)
+                {
+                    Convoy.ApplyReplicatedState(match.Zone3ConvoyInitialized, match.Zone3FuelPointsRemaining,
+                        (Zone3ConvoyRoutePoint)match.Zone3ConvoyCurrentPoint,
+                        (Zone3ConvoyRoutePoint)match.Zone3ConvoyTargetPoint,
+                        match.Zone3ConvoyRouteLocked, match.Zone3ConvoyWaitingForRoute);
+                    Convoy.ApplyReplicatedPose(match.Zone3FrigatePosition, match.Zone3FrigateRotation);
+                }
                 else Frigate.transform.SetPositionAndRotation(match.Zone3FrigatePosition, match.Zone3FrigateRotation);
             }
             if (!online && push) Convoy?.TickAuthoritative(Time.deltaTime);

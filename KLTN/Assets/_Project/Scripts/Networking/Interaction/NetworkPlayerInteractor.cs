@@ -438,6 +438,13 @@ namespace EchoProtocol.Networking
         {
             if (!Object.HasInputAuthority) return false;
 
+            var fuelCell = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject);
+            if (fuelCell != null)
+            {
+                fuelCell.RequestDrop();
+                return true;
+            }
+
             var playerState = GetComponent<LobbyPlayerState>();
             if (playerState != null && playerState.CarriedCoreId.IsValid)
             {

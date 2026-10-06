@@ -82,6 +82,12 @@ public class PlayerInventoryDropInput : MonoBehaviour
     public bool DropCurrentItem()
     {
         if (PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return false;
+        var fuelCell = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject);
+        if (fuelCell != null)
+        {
+            fuelCell.RequestDrop();
+            return true;
+        }
         if (coreCarrier != null && coreCarrier.IsCarrying)
         {
             return false;

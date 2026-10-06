@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using EchoProtocol.MatchFlow;
 using EchoProtocol.Gameplay;
 using Fusion;
 using UnityEngine;
@@ -50,9 +51,15 @@ namespace EchoProtocol.Networking
         public bool IsInitialized => _initialized;
         public bool IsMoving => _initialized && _routeLocked && !_waitingForRouteChoice && _currentSpeed > 0.05f;
         public bool IsWaitingForRouteChoice => _waitingForRouteChoice;
-        public bool IsFuelEmpty => false;
-        public float Fuel01 => 1f;
-        public float LowFuelThreshold01 => 0f;
+        private int _fuelPointsRemaining = Zone3FuelRules.Capacity;
+        private float _fuelRestoredUntil;
+        public int FuelPointsRemaining => _fuelPointsRemaining;
+        public bool IsFuelEmpty => _initialized && _fuelPointsRemaining == 0;
+        public float Fuel01 => _fuelPointsRemaining / (float)Zone3FuelRules.Capacity;
+        public float LowFuelThreshold01 => 0.5f;
+        public bool RouteLocked => _routeLocked;
+        public bool WasFuelRestoredRecently => Time.unscaledTime < _fuelRestoredUntil;
+        public string FuelDisplay => "FUEL " + (_fuelPointsRemaining > 0 ? "■" : "□") + " " + (_fuelPointsRemaining > 1 ? "■" : "□");
         public Zone3ConvoyRoutePoint CurrentPoint => _currentPoint;
         public Zone3ConvoyRoutePoint TargetPoint => _targetPoint;
 
@@ -61,6 +68,7 @@ namespace EchoProtocol.Networking
             get
             {
                 if (!_initialized) return "SPACEFRIGATE\nINITIALIZE TRANSPORT";
+                if (IsFuelEmpty && _currentPoint != Zone3ConvoyRoutePoint.Final) return "FUEL REQUIRED\nFIND A CONVOY FUEL CELL";
                 if (_waitingForRouteChoice) return BuildRouteChoicePrompt();
                 return "SPACEFRIGATE - ESCORT ACTIVE";
             }
@@ -120,6 +128,7 @@ namespace EchoProtocol.Networking
             if (_initialized) return;
             ResolveRoutePoints();
             _initialized = true;
+            _fuelPointsRemaining = Zone3FuelRules.Capacity;
             _currentPoint = FindNearestPoint();
             TryAutoSelectNextPoint();
             RefreshRouteChoiceMarkers();
@@ -127,7 +136,7 @@ namespace EchoProtocol.Networking
 
         public bool SelectNextPoint(Zone3ConvoyRoutePoint nextPoint)
         {
-            if (!_initialized || !Zone3ConvoyRouteGraph.CanTravel(_currentPoint, nextPoint)) return false;
+            if (!_initialized || IsFuelEmpty || !Zone3ConvoyRouteGraph.CanTravel(_currentPoint, nextPoint)) return false;
             if (!_points.ContainsKey(nextPoint)) return false;
             _targetPoint = nextPoint;
             CacheSegmentDirection(nextPoint);
@@ -139,7 +148,7 @@ namespace EchoProtocol.Networking
 
         public bool CanSelectRoute(GameObject interactor, Zone3ConvoyRoutePoint nextPoint)
         {
-            if (!_initialized || !_waitingForRouteChoice || interactor == null) return false;
+            if (!_initialized || IsFuelEmpty || !_waitingForRouteChoice || interactor == null) return false;
             var zone3 = Zone3MissionDirector.Instance;
             if (zone3 == null || !zone3.IsPushAvailable) return false;
             if (!Zone3ConvoyRouteGraph.CanTravel(_currentPoint, nextPoint)) return false;
@@ -162,7 +171,7 @@ namespace EchoProtocol.Networking
 
         private void HandleRouteChoiceInput()
         {
-            if (!_initialized || !_waitingForRouteChoice) return;
+            if (!_initialized || IsFuelEmpty || !_waitingForRouteChoice) return;
             if (!IsLocalViewerNearConvoy()) return;
 
             var keyboard = Keyboard.current;
@@ -200,11 +209,34 @@ namespace EchoProtocol.Networking
 
         public void Refuel()
         {
+            if (!_initialized || !IsFuelEmpty || _currentPoint == Zone3ConvoyRoutePoint.Final) return;
+            _fuelPointsRemaining = Zone3FuelRules.Capacity;
+            _fuelRestoredUntil = Time.unscaledTime + 3f;
+            if (!_routeLocked) TryAutoSelectNextPoint();
+            RefreshRouteChoiceMarkers();
+        }
+
+        public void ApplyReplicatedState(bool initialized, int fuel, Zone3ConvoyRoutePoint current,
+            Zone3ConvoyRoutePoint target, bool routeLocked, bool waiting)
+        {
+            if (_initialized && _fuelPointsRemaining == 0 && fuel > 0)
+                _fuelRestoredUntil = Time.unscaledTime + 3f;
+            bool changed = _initialized != initialized || _fuelPointsRemaining != fuel
+                || _currentPoint != current || _targetPoint != target || _routeLocked != routeLocked
+                || _waitingForRouteChoice != waiting;
+            _initialized = initialized;
+            _fuelPointsRemaining = Mathf.Clamp(fuel, 0, Zone3FuelRules.Capacity);
+            _currentPoint = current;
+            _targetPoint = target;
+            _routeLocked = routeLocked;
+            _waitingForRouteChoice = waiting;
+            if (changed) RefreshRouteChoiceMarkers();
         }
 
         public void TickAuthoritative(float deltaTime)
         {
             if (!_initialized || deltaTime <= 0f) return;
+            if (IsFuelEmpty) { _currentSpeed = 0f; return; }
             if (!_routeLocked)
             {
                 Decelerate(deltaTime);
@@ -276,6 +308,7 @@ namespace EchoProtocol.Networking
             else transform.position = targetPosition;
             _currentSpeed = 0f;
             _currentPoint = _targetPoint;
+            _fuelPointsRemaining = Zone3FuelRules.ConsumeArrival(_fuelPointsRemaining);
             _routeLocked = false;
             _hasSegmentDirection = false;
             if (_currentPoint == Zone3ConvoyRoutePoint.Final) return;
@@ -286,7 +319,7 @@ namespace EchoProtocol.Networking
         private void TryAutoSelectNextPoint()
         {
             var next = Zone3ConvoyRouteGraph.GetNextPoints(_currentPoint);
-            if (next.Count == 1) SelectNextPoint(next[0]);
+            if (next.Count == 1 && !IsFuelEmpty) SelectNextPoint(next[0]);
             else
             {
                 _waitingForRouteChoice = next.Count > 1;
@@ -468,9 +501,11 @@ namespace EchoProtocol.Networking
                 marker.transform.localScale = Vector3.one * routeMarkerScale;
                 if (marker.TryGetComponent<Renderer>(out var renderer))
                 {
-                    renderer.material.color = new Color(0.1f, 0.95f, 1f, 1f);
-                    renderer.material.EnableKeyword("_EMISSION");
-                    renderer.material.SetColor("_EmissionColor", new Color(0.05f, 0.7f, 1f, 1f));
+                    var markerColor = new MaterialPropertyBlock();
+                    markerColor.SetColor("_BaseColor", new Color(0.1f, 0.95f, 1f, 1f));
+                    markerColor.SetColor("_Color", new Color(0.1f, 0.95f, 1f, 1f));
+                    markerColor.SetColor("_EmissionColor", new Color(0.05f, 0.7f, 1f, 1f));
+                    renderer.SetPropertyBlock(markerColor);
                 }
                 var choice = marker.AddComponent<Zone3RouteChoicePoint>();
                 choice.Bind(this, pair.Key);
@@ -486,7 +521,7 @@ namespace EchoProtocol.Networking
                 pair.Value.gameObject.SetActive(false);
             }
 
-            if (!_initialized || !_waitingForRouteChoice) return;
+            if (!_initialized || IsFuelEmpty || !_waitingForRouteChoice) return;
 
             var options = Zone3ConvoyRouteGraph.GetNextPoints(_currentPoint);
             for (int i = 0; i < options.Count; i++)
