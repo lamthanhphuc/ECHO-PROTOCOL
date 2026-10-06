@@ -100,6 +100,7 @@ namespace EchoProtocol.Networking
     {
         public const float DefaultMatchDurationSeconds = 2700f;
         public const float DefaultEscapeDurationSeconds = 45f;
+        public const float MinimumPowerTransferEscapeDurationSeconds = 180f;
 
         public static event Action<NetworkMatchState> StateChanged;
 
@@ -570,7 +571,12 @@ namespace EchoProtocol.Networking
 
             if (IsEscapeTimerRunning && EscapeTimer.Expired(Runner))
             {
-                TryEndMatch(NetworkMatchResult.Lose, NetworkMatchEndReason.EscapeTimeout, PlayerRef.None);
+                CountFinalPlayers(out var escapedCount, out _, out _);
+                bool hasEscapedPlayer = escapedCount > 0;
+                TryEndMatch(
+                    hasEscapedPlayer ? NetworkMatchResult.Win : NetworkMatchResult.Lose,
+                    hasEscapedPlayer ? NetworkMatchEndReason.PlayerEscaped : NetworkMatchEndReason.EscapeTimeout,
+                    hasEscapedPlayer ? LastActor : PlayerRef.None);
             }
         }
 
@@ -1906,11 +1912,14 @@ namespace EchoProtocol.Networking
         private void StartEscapeDeadlineIfNeededAuthoritative(string reason)
         {
             if (!Object.HasStateAuthority || EscapeTimer.IsRunning) return;
-            EscapeTimer = TickTimer.CreateFromSeconds(Runner, CurrentScenarioEscapeDoorTimerSeconds);
+            float duration = reason == "ZONE3_POWER_TRANSFER"
+                ? Mathf.Max(MinimumPowerTransferEscapeDurationSeconds, CurrentScenarioEscapeDoorTimerSeconds)
+                : CurrentScenarioEscapeDoorTimerSeconds;
+            EscapeTimer = TickTimer.CreateFromSeconds(Runner, duration);
             HandleReplicatedStateChanged();
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchState,
-                $"[MatchState] Escape deadline started by {reason}; duration={CurrentScenarioEscapeDoorTimerSeconds:0.##}s.");
+                $"[MatchState] Escape deadline started by {reason}; duration={duration:0.##}s.");
         }
 
         public void RequestZone3Exit()
