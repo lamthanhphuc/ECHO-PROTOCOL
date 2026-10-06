@@ -627,7 +627,6 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             var lifeState =
                 GetComponent<NetworkPlayerLifeState>();
 
@@ -642,8 +641,6 @@ namespace EchoProtocol.Networking
 
                 return;
             }
-#endif
-
             float delta =
                 Runner != null
                     ? Runner.DeltaTime

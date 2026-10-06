@@ -675,7 +675,6 @@ namespace EchoProtocol.Networking
 
         public void RequestDebugGodModeToggle()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (Object == null
                 || !Object.IsValid
                 || !Object.HasInputAuthority)
@@ -690,14 +689,12 @@ namespace EchoProtocol.Networking
             }
 
             RpcRequestDebugGodModeToggle();
-#endif
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestDebugGodModeToggle(
             RpcInfo info = default)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (Object == null
                 || !Object.IsValid
                 || !Object.HasStateAuthority
@@ -707,12 +704,10 @@ namespace EchoProtocol.Networking
             }
 
             ToggleDebugGodModeAuthoritative();
-#endif
         }
 
         private void ToggleDebugGodModeAuthoritative()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (Object == null
                 || !Object.IsValid
                 || !Object.HasStateAuthority)
@@ -744,7 +739,6 @@ namespace EchoProtocol.Networking
 
             Debug.Log(
                 $"[DebugGodMode] Player={Object.InputAuthority}, Enabled={DebugGodMode}.");
-#endif
         }
 
         private void CommitStatus(NetworkPlayerLifeStatus status, NetworkPlayerLifeTransitionCause cause)

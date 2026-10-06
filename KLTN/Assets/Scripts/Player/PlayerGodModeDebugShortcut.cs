@@ -4,7 +4,6 @@ using UnityEngine.InputSystem;
 
 public sealed class PlayerGodModeDebugShortcut : MonoBehaviour
 {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
     [RuntimeInitializeOnLoadMethod(
         RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Install()
@@ -22,11 +21,9 @@ public sealed class PlayerGodModeDebugShortcut : MonoBehaviour
         shortcut.AddComponent<
             PlayerGodModeDebugShortcut>();
     }
-#endif
 
     private void Update()
     {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
         var keyboard = Keyboard.current;
         if (keyboard == null)
         {
@@ -68,6 +65,5 @@ public sealed class PlayerGodModeDebugShortcut : MonoBehaviour
 
         Debug.LogWarning(
             "[DebugGodMode] Local player life state not found.");
-#endif
     }
 }

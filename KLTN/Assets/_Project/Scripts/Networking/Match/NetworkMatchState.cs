@@ -1593,7 +1593,6 @@ namespace EchoProtocol.Networking
 
         public bool DebugSkipToZone3()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (!HasValidNetworkObject() || !Object.HasStateAuthority || IsEnded) return false;
 
             ResetZone2AuthoritativeState();
@@ -1614,80 +1613,76 @@ namespace EchoProtocol.Networking
             CurrentPhase = NetworkMatchPhase.Zone3FindFrigate;
             LastActor = Runner != null ? Runner.LocalPlayer : PlayerRef.None;
             AdvancePhaseOrdinal();
+            TeleportGameplayPlayersAuthoritative(
+                NetworkMatchPhase.Zone3FindFrigate);
             HandleReplicatedStateChanged();
             RuntimeLog.Log(RuntimeLogCategory.MatchState, "[MatchState] Debug skipped to Zone3FindFrigate.");
             return true;
-#else
-            return false;
-#endif
         }
 
-        private bool DebugSkipToZone2(PlayerRef actor)
+        private bool DebugSkipToZone2()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (!HasValidNetworkObject() || !Object.HasStateAuthority || IsEnded) return false;
-            var entry = FindAnyObjectByType<StalkerZone2EntryTrigger>();
-            if (entry == null
-                || Runner == null
-                || !Runner.TryGetPlayerObject(actor, out var playerObject)
-                || !playerObject.TryGetComponent(out NetworkPlayerMovement movement)) return false;
+            if (!HasValidNetworkObject()
+                || !Object.HasStateAuthority
+                || IsEnded)
+            {
+                return false;
+            }
 
             ResetZone2AuthoritativeState();
-            if (!InitializeZone2RelayRuntimeAuthoritative()) return false;
+
+            if (!InitializeZone2RelayRuntimeAuthoritative())
+                return false;
+
             Zone2Stage = Zone2MissionStage.FindSecurityTerminal;
+
             if (!TryAdvancePhase(
                     NetworkMatchPhase.CoreObjective,
                     NetworkMatchPhase.Zone2Objective,
-                    "DEBUG_SKIP_ZONE1")) return false;
-            movement.TeleportAuthoritative(entry.transform.position, entry.transform.rotation);
-            RuntimeLog.Log(RuntimeLogCategory.MatchState, "[MatchState] Debug skipped to Zone2Objective.");
+                    "DEBUG_SKIP_ZONE1"))
+            {
+                return false;
+            }
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchState,
+                "[MatchState] Debug skipped to Zone2Objective.");
+
             return true;
-#else
-            return false;
-#endif
         }
 
         public void RequestDebugSkipToZone2()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (!HasValidNetworkObject()) return;
+            if (!HasValidNetworkObject())
+                return;
+
             if (Object.HasStateAuthority)
-            {
-                if (TryGetLocalRequester(out var requester)) DebugSkipToZone2(requester);
-            }
-            else RpcDebugSkipToZone2();
-#endif
+                DebugSkipToZone2();
+            else
+                RpcDebugSkipToZone2();
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        private void RpcDebugSkipToZone2(RpcInfo info = default)
+        private void RpcDebugSkipToZone2()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            DebugSkipToZone2(info.Source);
-#endif
+            DebugSkipToZone2();
         }
 
         public void RequestDebugSkipToZone3()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (!HasValidNetworkObject()) return;
+            if (!HasValidNetworkObject())
+                return;
+
             if (Object.HasStateAuthority)
-            {
                 DebugSkipToZone3();
-            }
             else
-            {
                 RpcDebugSkipToZone3();
-            }
-#endif
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        private void RpcDebugSkipToZone3(RpcInfo info = default)
+        private void RpcDebugSkipToZone3()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             DebugSkipToZone3();
-#endif
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -2018,6 +2013,60 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        private static Transform ResolveZoneTeleportTarget(NetworkMatchPhase phase)
+        {
+            if (phase == NetworkMatchPhase.Zone2Objective)
+            {
+                return FindAnyObjectByType<StalkerZone2EntryTrigger>()?.transform;
+            }
+
+            if (phase == NetworkMatchPhase.Zone3FindFrigate)
+            {
+                return GameObject.Find("08_Transition_To_Zone3_B_EMPTY")?.transform
+                    ?? GameObject.Find("07_Transition_To_Zone3_A_EMPTY")?.transform;
+            }
+
+            return null;
+        }
+
+        private void TeleportGameplayPlayersAuthoritative(NetworkMatchPhase phase)
+        {
+            if (!Object.HasStateAuthority || Runner == null)
+                return;
+
+            Transform target = ResolveZoneTeleportTarget(phase);
+            if (target == null)
+            {
+                Debug.LogWarning($"[MatchState] Missing teleport target for {phase}.");
+                return;
+            }
+
+            int index = 0;
+
+            foreach (PlayerRef player in Runner.ActivePlayers)
+            {
+                if (!Runner.TryGetPlayerObject(player, out var playerObject)
+                    || playerObject == null
+                    || !playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyState)
+                    || !lobbyState.IsGameplayPlayer
+                    || !playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement))
+                {
+                    continue;
+                }
+
+                float side = index % 2 == 0 ? -0.8f : 0.8f;
+                float back = index / 2 * 1.2f;
+
+                Vector3 position =
+                    target.position
+                    + target.right * side
+                    - target.forward * back;
+
+                movement.TeleportAuthoritative(position, target.rotation);
+                index++;
+            }
+        }
+
         private static bool IsZoneBoundary(NetworkMatchPhase previous, NetworkMatchPhase next)
         {
             return previous == NetworkMatchPhase.CoreObjective
@@ -2079,6 +2128,7 @@ namespace EchoProtocol.Networking
             if (IsZoneBoundary(previousPhase, next))
             {
                 ResetPlayerReviveBudgetsAuthoritative();
+                TeleportGameplayPlayersAuthoritative(next);
             }
 
             if (next != NetworkMatchPhase.Escape
