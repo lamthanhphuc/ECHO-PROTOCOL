@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
+using EchoProtocol.MatchFlow;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
 using Fusion;
@@ -712,31 +713,118 @@ namespace EchoProtocol.Tools.Scanner
         {
             List<ICoreScanCandidate> candidates = new List<ICoreScanCandidate>();
 
-            // 1. NetworkPickupItems
-            NetworkPickupItem[] networkItems = FindObjectsByType<NetworkPickupItem>(FindObjectsInactive.Exclude);
-            for (int i = 0; i < networkItems.Length; i++)
+            var match = NetworkMatchState.Instance;
+
+            if (match != null
+                && match.Object != null
+                && match.Object.IsValid)
             {
-                var netItem = networkItems[i];
-                if (netItem != null)
+                if (match.CurrentPhase == NetworkMatchPhase.Zone2Objective)
                 {
-                    candidates.Add(new NetworkPickupItemCandidateAdapter(netItem));
+                    CollectZone2Targets(candidates);
+                    return candidates;
+                }
+
+                if (match.CurrentPhase == NetworkMatchPhase.Zone3FindFrigate
+                    || match.CurrentPhase == NetworkMatchPhase.Zone3PushFrigate)
+                {
+                    CollectZone3Target(candidates);
+                    return candidates;
+                }
+            }
+            else
+            {
+                var flow = FindAnyObjectByType<MatchFlowController>();
+
+                if (flow != null)
+                {
+                    if (flow.Phase == MatchPhase.SecurityHold
+                        || flow.Phase == MatchPhase.PowerPuzzle)
+                    {
+                        CollectZone2Targets(candidates);
+                        return candidates;
+                    }
+
+                    if (flow.Phase == MatchPhase.Zone3FindFrigate
+                        || flow.Phase == MatchPhase.Zone3PushFrigate)
+                    {
+                        CollectZone3Target(candidates);
+                        return candidates;
+                    }
                 }
             }
 
-            // 2. Local EnergyCorePickup fallbacks if no network items found
+            NetworkPickupItem[] networkItems =
+                FindObjectsByType<NetworkPickupItem>(
+                    FindObjectsInactive.Exclude);
+
+            for (int i = 0; i < networkItems.Length; i++)
+            {
+                var item = networkItems[i];
+
+                if (item != null)
+                {
+                    candidates.Add(
+                        new NetworkPickupItemCandidateAdapter(item));
+                }
+            }
+
             if (candidates.Count == 0)
             {
-                EnergyCorePickup[] pickups = FindObjectsByType<EnergyCorePickup>(FindObjectsInactive.Exclude);
+                EnergyCorePickup[] pickups =
+                    FindObjectsByType<EnergyCorePickup>(
+                        FindObjectsInactive.Exclude);
+
                 for (int i = 0; i < pickups.Length; i++)
                 {
                     if (pickups[i] != null)
                     {
-                        candidates.Add(new EnergyCorePickupCandidateAdapter(pickups[i]));
+                        candidates.Add(
+                            new EnergyCorePickupCandidateAdapter(
+                                pickups[i]));
                     }
                 }
             }
 
             return candidates;
+        }
+
+        private static void CollectZone2Targets(
+            List<ICoreScanCandidate> candidates)
+        {
+            var zone2 = Zone2MissionDirector.Instance;
+
+            if (zone2 == null)
+            {
+                return;
+            }
+
+            AddObjectiveCandidate(candidates, zone2.SecurityTerminal);
+            AddObjectiveCandidate(candidates, zone2.RelayA1);
+            AddObjectiveCandidate(candidates, zone2.RelayA2);
+            AddObjectiveCandidate(candidates, zone2.RelayB1);
+            AddObjectiveCandidate(candidates, zone2.RelayB2);
+        }
+
+        private static void CollectZone3Target(
+            List<ICoreScanCandidate> candidates)
+        {
+            var dock =
+                FindAnyObjectByType<Zone3DockArea>(
+                    FindObjectsInactive.Exclude);
+
+            AddObjectiveCandidate(candidates, dock);
+        }
+
+        private static void AddObjectiveCandidate(
+            List<ICoreScanCandidate> candidates,
+            Component target)
+        {
+            if (target != null)
+            {
+                candidates.Add(
+                    new ObjectiveScanCandidateAdapter(target));
+            }
         }
 
         private List<IMotionScannable> CollectMotionTargets()
@@ -794,6 +882,45 @@ namespace EchoProtocol.Tools.Scanner
                         && _item.Holder == PlayerRef.None;
                 }
             }
+        }
+
+        private sealed class ObjectiveScanCandidateAdapter
+            : ICoreScanCandidate
+        {
+            private readonly Component _target;
+
+            public ObjectiveScanCandidateAdapter(
+                Component target)
+            {
+                _target = target;
+            }
+
+            public int TargetId =>
+                _target != null
+                    ? _target.GetEntityId().GetHashCode()
+                    : 0;
+
+            public Vector3 WorldPosition
+            {
+                get
+                {
+                    if (_target == null)
+                    {
+                        return Vector3.zero;
+                    }
+
+                    Collider collider =
+                        _target.GetComponent<Collider>();
+
+                    return collider != null
+                        ? collider.bounds.center
+                        : _target.transform.position;
+                }
+            }
+
+            public bool IsAvailableInWorld =>
+                _target != null
+                && _target.gameObject.activeInHierarchy;
         }
 
         private sealed class EnergyCorePickupCandidateAdapter : ICoreScanCandidate

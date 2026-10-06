@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Fusion;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 [DisallowMultipleComponent]
 public sealed class PlayerFirstPersonVisibility : MonoBehaviour
@@ -58,9 +59,22 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
 
         foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true))
         {
-            if (renderer != null && !_originalRendererStates.ContainsKey(renderer))
+            if (renderer == null)
             {
-                _originalRendererStates.Add(renderer, renderer.enabled);
+                continue;
+            }
+
+            if (IsFirstPersonOnlyRenderer(renderer))
+            {
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+            }
+
+            if (!_originalRendererStates.ContainsKey(renderer))
+            {
+                _originalRendererStates.Add(
+                    renderer,
+                    renderer.enabled);
             }
         }
     }

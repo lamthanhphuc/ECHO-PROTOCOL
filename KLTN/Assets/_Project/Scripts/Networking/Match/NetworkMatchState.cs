@@ -2020,12 +2020,6 @@ namespace EchoProtocol.Networking
                 return FindAnyObjectByType<StalkerZone2EntryTrigger>()?.transform;
             }
 
-            if (phase == NetworkMatchPhase.Zone3FindFrigate)
-            {
-                return GameObject.Find("08_Transition_To_Zone3_B_EMPTY")?.transform
-                    ?? GameObject.Find("07_Transition_To_Zone3_A_EMPTY")?.transform;
-            }
-
             return null;
         }
 
@@ -2034,11 +2028,25 @@ namespace EchoProtocol.Networking
             if (!Object.HasStateAuthority || Runner == null)
                 return;
 
-            Transform target = ResolveZoneTeleportTarget(phase);
-            if (target == null)
+            Vector3 targetPosition;
+            Quaternion targetRotation;
+
+            if (phase == NetworkMatchPhase.Zone3FindFrigate)
             {
-                Debug.LogWarning($"[MatchState] Missing teleport target for {phase}.");
-                return;
+                targetPosition = new Vector3(88.66215f, 2.080028f, -399.027f);
+                targetRotation = Quaternion.Euler(0f, -159.24f, 0f);
+            }
+            else
+            {
+                Transform target = ResolveZoneTeleportTarget(phase);
+                if (target == null)
+                {
+                    Debug.LogWarning($"[MatchState] Missing teleport target for {phase}.");
+                    return;
+                }
+
+                targetPosition = target.position;
+                targetRotation = target.rotation;
             }
 
             int index = 0;
@@ -2058,11 +2066,11 @@ namespace EchoProtocol.Networking
                 float back = index / 2 * 1.2f;
 
                 Vector3 position =
-                    target.position
-                    + target.right * side
-                    - target.forward * back;
+                    targetPosition
+                    + targetRotation * Vector3.right * side
+                    - targetRotation * Vector3.forward * back;
 
-                movement.TeleportAuthoritative(position, target.rotation);
+                movement.TeleportAuthoritative(position, targetRotation);
                 index++;
             }
         }
