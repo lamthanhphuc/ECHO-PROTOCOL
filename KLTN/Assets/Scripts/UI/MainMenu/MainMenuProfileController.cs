@@ -27,6 +27,8 @@ namespace EchoProtocol.UI.MainMenu
     [SerializeField] private Button logoutButton;
     [SerializeField] private Button shopButton;
     [SerializeField] private Button topUpButton;
+    [SerializeField] private Button webButton;
+    [SerializeField] private Button optionsButton;
     [SerializeField] private Button shopCloseButton;
     [SerializeField] private Button topUpCloseButton;
     [SerializeField] private Button package500Button;
@@ -36,6 +38,7 @@ namespace EchoProtocol.UI.MainMenu
     [SerializeField] private GameObject shopPopup;
     [SerializeField] private GameObject topUpPopup;
     [SerializeField] private string topUpWebUrl = "https://web.3.1.238.6.sslip.io/wallet";
+    [SerializeField] private string webUrl = "https://web.3.1.238.6.sslip.io/";
     [SerializeField] private string lobbySceneName = GameConstants.SceneLobby;
     [SerializeField] private string loginSceneName = GameConstants.SceneLogin;
     private readonly Button[] _packageButtons = new Button[4];
@@ -90,6 +93,16 @@ namespace EchoProtocol.UI.MainMenu
         topUpButton.onClick.AddListener(OnClickTopUp);
       }
 
+      if (webButton != null)
+      {
+        webButton.onClick.AddListener(OpenWebsite);
+      }
+
+      if (optionsButton != null)
+      {
+        optionsButton.onClick.AddListener(OnClickOptions);
+      }
+
       if (shopCloseButton != null) shopCloseButton.onClick.AddListener(CloseShop);
       if (topUpCloseButton != null) topUpCloseButton.onClick.AddListener(CloseTopUp);
       if (package500Button != null) package500Button.onClick.AddListener(OpenPackage0);
@@ -118,6 +131,16 @@ namespace EchoProtocol.UI.MainMenu
       if (topUpButton != null)
       {
         topUpButton.onClick.RemoveListener(OnClickTopUp);
+      }
+
+      if (webButton != null)
+      {
+        webButton.onClick.RemoveListener(OpenWebsite);
+      }
+
+      if (optionsButton != null)
+      {
+        optionsButton.onClick.RemoveListener(OnClickOptions);
       }
 
       if (shopCloseButton != null) shopCloseButton.onClick.RemoveListener(CloseShop);
@@ -207,6 +230,10 @@ namespace EchoProtocol.UI.MainMenu
       SceneManager.LoadScene(lobbySceneName);
     }
 
+    public void OnClickOptions()
+    {
+      Debug.Log("[MainMenu] OPTIONS selected. Settings UI will be connected later.");
+    }
     public void OnClickLogout()
     {
       var runtime = AuthRuntime.EnsureExists();
@@ -235,11 +262,7 @@ namespace EchoProtocol.UI.MainMenu
 
     public void OnClickTopUp()
     {
-      if (topUpPopup != null) topUpPopup.SetActive(true);
-      if (shopPopup != null) shopPopup.SetActive(false);
-      UpdateCreditsUI();
-      RefreshPlayerProfile();
-      RefreshPaymentCatalog();
+      OpenTopUpWebsite();
     }
 
     public void OpenTopUpWebsite()
@@ -254,6 +277,17 @@ namespace EchoProtocol.UI.MainMenu
       Debug.Log($"[MainMenu] Top Up web opened: {topUpWebUrl}");
     }
 
+    public void OpenWebsite()
+    {
+      if (string.IsNullOrWhiteSpace(webUrl))
+      {
+        Debug.LogWarning("[MainMenu] Web URL is empty.");
+        return;
+      }
+
+      Application.OpenURL(webUrl);
+      Debug.Log($"[MainMenu] Website opened: {webUrl}");
+    }
     public void CloseShop()
     {
       if (shopPopup != null) shopPopup.SetActive(false);
