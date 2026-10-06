@@ -31,6 +31,7 @@ namespace EchoProtocol.UI
         [Header("Status")]
         [SerializeField] private TMP_Text statusText;
         [SerializeField] private TMP_Text memberCountText;
+        [SerializeField] private TMP_Text roomNameText;
         [SerializeField] private TMP_Text memberListText;
         [SerializeField] private Image statusIndicator;
         [SerializeField] private TMP_Text networkMessage;
@@ -255,7 +256,15 @@ namespace EchoProtocol.UI
         }
 
         public void RefreshMemberList()
-        {
+        {            if (roomNameText != null)
+            {
+                roomNameText.text =
+                    bootstrap != null
+                    && !string.IsNullOrWhiteSpace(bootstrap.CurrentSessionName)
+                        ? bootstrap.CurrentSessionName.ToUpperInvariant()
+                        : "----";
+            }
+
             _room = lobbyManager != null ? lobbyManager.CurrentState : new RoomInfoViewModel();
             _room ??= new RoomInfoViewModel();
             SetMemberCount(_room.CurrentPlayers, _room.MaxPlayers > 0 ? _room.MaxPlayers : maxPlayers);
