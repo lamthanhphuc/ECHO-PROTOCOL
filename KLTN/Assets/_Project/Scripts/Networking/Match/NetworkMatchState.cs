@@ -454,7 +454,7 @@ namespace EchoProtocol.Networking
                     var toolsPerZone = MatchDifficultyProfiles.Get(difficulty).TeamToolsPerZone;
                     TeamToolWorldSpawnInitialized = TeamToolWorldSpawn.TrySpawnInitial(
                         Runner, _teamToolPickupCatalog, toolsPerZone,
-                        toolsPerZone, _teamToolSpawnMinimumSpacing);
+                        toolsPerZone, toolsPerZone, _teamToolSpawnMinimumSpacing);
                 }
             }
 

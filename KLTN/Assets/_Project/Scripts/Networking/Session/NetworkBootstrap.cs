@@ -127,6 +127,7 @@ namespace EchoProtocol.Networking
             if (Runner == null)
             {
                 CurrentSessionName = string.Empty;
+                _actorIds.Clear();
                 SetState(NetworkSessionState.Disconnected, "Disconnected");
                 if (returnToLobby) RestoreLobbyCursor();
                 return;
@@ -148,6 +149,7 @@ namespace EchoProtocol.Networking
             {
                 if (runner != null) Destroy(runner.gameObject);
                 CurrentSessionName = string.Empty;
+                _actorIds.Clear();
                 SetState(NetworkSessionState.Disconnected, "Disconnected");
                 if (returnToLobby) RestoreLobbyCursor();
                 else ReturnToBootstrapScene();

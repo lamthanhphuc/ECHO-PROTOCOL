@@ -34,6 +34,7 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains("RollbackSpawned", spawnSource);
             StringAssert.Contains("zone1Plans", spawnSource);
             StringAssert.Contains("zone2Plans", spawnSource);
+            StringAssert.Contains("zone3Plans", spawnSource);
             StringAssert.Contains("TeamToolWorldSpawnInitialized =", matchSource);
             StringAssert.Contains("TeamToolWorldSpawn.TrySpawnInitial", matchSource);
         }
@@ -52,6 +53,7 @@ namespace EchoProtocol.Player.Tests
                     .ToArray();
                 ValidateZone(points, TeamToolSpawnZone.Zone1);
                 ValidateZone(points, TeamToolSpawnZone.Zone2);
+                ValidateZone(points, TeamToolSpawnZone.Zone3);
             }
             finally
             {

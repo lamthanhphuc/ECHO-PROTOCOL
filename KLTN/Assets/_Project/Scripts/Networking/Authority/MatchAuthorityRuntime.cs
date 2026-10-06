@@ -35,6 +35,10 @@ namespace EchoProtocol.Networking.Authority
         private const float LeaseRenewIntervalSeconds = 15f;
         private const float LocalRewardRetryIntervalSeconds = 1f;
         private const int LocalRewardMaxAttempts = 8;
+        private const int PlayerBindRetryAttempts = 8;
+        private const int PlayerBindRetryDelayMs = 250;
+        private const string PlayerBindingConflictErrorCode =
+            "MATCH_PLAYER_BINDING_CONFLICT";
 
         private static MatchAuthorityRuntime _instance;
         private MatchAuthorityApiService _api;
@@ -402,34 +406,114 @@ namespace EchoProtocol.Networking.Authority
         }
 
         public async void BindPlayerFromProof(
-            LobbyPlayerState playerState, int actorNumber, string proof)
+            LobbyPlayerState playerState,
+            int actorNumber,
+            string proof)
         {
-            if (!IsHostBinding || !HasBinding || playerState == null
+            if (!IsHostBinding
+                || !HasBinding
+                || playerState == null
+                || playerState.Object == null
+                || !playerState.Object.IsValid
                 || !playerState.Object.HasStateAuthority)
             {
                 return;
             }
 
-            var result = await _api.BindPlayerAsync(MatchId, actorNumber, proof);
-            if (!IsSuccessful(result))
-            {
-                Debug.LogWarning($"[MatchAuthority] Player bind rejected: {Describe(result)}.");
-                if (_bootstrap?.Runner != null)
-                    _bootstrap.Runner.Disconnect(playerState.Object.InputAuthority);
-                return;
-            }
+            Guid bindingMatchId = MatchId;
+            PlayerRef inputAuthority =
+                playerState.Object.InputAuthority;
 
-            playerState.ApplyVerifiedBackendIdentity(result.Data.data.userId);
-            if (Guid.TryParse(result.Data.data.userId, out var boundUserId))
+            for (int attempt = 1;
+                 attempt <= PlayerBindRetryAttempts;
+                 attempt++)
             {
-                _boundPlayers[actorNumber] = boundUserId;
-                _disconnectedActors.Remove(actorNumber);
-            }
-            RuntimeLog.Log(
-                RuntimeLogCategory.MatchAuthority,
+                if (!IsHostBinding
+                    || !HasBinding
+                    || MatchId != bindingMatchId
+                    || playerState == null
+                    || playerState.Object == null
+                    || !playerState.Object.IsValid
+                    || !playerState.Object.HasStateAuthority
+                    || playerState.Object.InputAuthority
+                        != inputAuthority)
+                {
+                    return;
+                }
 
-                $"[MatchAuthority] Player verified. Actor={actorNumber}, " +
-                $"User={result.Data.data.userId}, Match={MatchId:D}.");
+                var result =
+                    await _api.BindPlayerAsync(
+                        bindingMatchId,
+                        actorNumber,
+                        proof);
+
+                if (IsSuccessful(result))
+                {
+                    if (playerState == null
+                        || playerState.Object == null
+                        || !playerState.Object.IsValid
+                        || playerState.Object.InputAuthority
+                            != inputAuthority)
+                    {
+                        return;
+                    }
+
+                    playerState.ApplyVerifiedBackendIdentity(
+                        result.Data.data.userId);
+
+                    if (Guid.TryParse(
+                            result.Data.data.userId,
+                            out var boundUserId))
+                    {
+                        _boundPlayers[actorNumber] =
+                            boundUserId;
+
+                        _disconnectedActors.Remove(
+                            actorNumber);
+                    }
+
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.MatchAuthority,
+                        $"[MatchAuthority] Player verified. " +
+                        $"Actor={actorNumber}, " +
+                        $"User={result.Data.data.userId}, " +
+                        $"Match={bindingMatchId:D}.");
+
+                    return;
+                }
+
+                bool retryable =
+                    result != null
+                    && string.Equals(
+                        result.ErrorCode,
+                        PlayerBindingConflictErrorCode,
+                        StringComparison.Ordinal);
+
+                if (!retryable
+                    || attempt >= PlayerBindRetryAttempts)
+                {
+                    Debug.LogWarning(
+                        $"[MatchAuthority] Player bind rejected: " +
+                        $"{Describe(result)}.");
+
+                    if (_bootstrap?.Runner != null
+                        && _bootstrap.Runner.IsRunning
+                        && playerState != null
+                        && playerState.Object != null
+                        && playerState.Object.IsValid
+                        && playerState.Object.InputAuthority
+                            == inputAuthority)
+                    {
+                        _bootstrap.Runner.Disconnect(
+                            inputAuthority);
+                    }
+
+                    return;
+                }
+
+                await Task.Delay(
+                    PlayerBindRetryDelayMs);
+            }
         }
 
         public async void MarkPlayerDisconnected(int actorNumber)
