@@ -2469,6 +2469,13 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            if (pressuredPlayer.IsValid)
+            {
+                RememberDetectionDecay(
+                    pressuredPlayer,
+                    GetDetectionMeterFull());
+            }
+
             ResetChaseDestinationTracking();
             ResetNavigationRecoveryBudget();
             if (HasTypedTargetFrame && !_memory.HasLastKnownPosition)
@@ -2868,17 +2875,6 @@ namespace EchoProtocol.AI.Stalker
                 }
 
                 var observation = candidate.Observation;
-                _memory.SetDetectionTarget(
-                    observation.PlayerId);
-
-                if (!_memory.TryAcceptDetectionTargetObservation(
-                        observation))
-                {
-                    CommitSearchTerminalAndInvalidateDetectionTarget(
-                        StalkerSearchTerminalOutcome
-                            .CURRENT_TARGET_INVALID_NO_REPLACEMENT);
-                    return;
-                }
 
                 CommitSearchEnded(
                     StalkerSearchTerminalOutcome
@@ -2889,13 +2885,7 @@ namespace EchoProtocol.AI.Stalker
 
                 ClearSearchRuntimeContext();
 
-                detectionMeter = 0f;
-                detectionTarget = null;
-
-                _detectMinimumHoldRemaining =
-                    searchReacquireDetectHoldSeconds;
-
-                EnterDetectState();
+                TryBeginTypedDetection(observation);
                 return;
             }
 
@@ -4001,44 +3991,6 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            _memory.SetDetectionTarget(
-                selectedObservation.PlayerId);
-
-            if (!_memory.TryAcceptDetectionTargetObservation(
-                    selectedObservation))
-            {
-                CommitSearchTerminalAndInvalidateDetectionTarget(
-                    StalkerSearchTerminalOutcome
-                        .CURRENT_TARGET_INVALID_NO_REPLACEMENT);
-
-                return true;
-            }
-
-            // Only a successfully accepted replacement acquisition
-            // may influence adaptive target history.
-            _targetHistoryMemory.RecordTargetAcquired(
-                selectedObservation.PlayerId,
-                simulationTime);
-
-            var pressure =
-                AddPlayerPressure(
-                    selectedObservation.PlayerId,
-                    playerPressureAcquireGain,
-                    "search-acquired");
-
-            if (pressure >= playerPressureStopThreshold)
-            {
-                CommitSearchEnded(
-                    StalkerSearchTerminalOutcome
-                        .CURRENT_TARGET_INVALID_NO_REPLACEMENT);
-
-                DisengagePressuredPlayer(
-                    selectedObservation.PlayerId,
-                    "search-acquired");
-
-                return true;
-            }
-
             CommitSearchEnded(
                 StalkerSearchTerminalOutcome
                     .NEW_ELIGIBLE_TARGET_OBSERVED);
@@ -4048,13 +4000,8 @@ namespace EchoProtocol.AI.Stalker
 
             ClearSearchRuntimeContext();
 
-            detectionMeter = 0f;
-            detectionTarget = null;
-
-            _detectMinimumHoldRemaining =
-                searchReacquireDetectHoldSeconds;
-
-            EnterDetectState();
+            TryBeginTypedDetection(
+                selectedObservation);
             return true;
         }
 
