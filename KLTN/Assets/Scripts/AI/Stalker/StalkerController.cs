@@ -217,6 +217,10 @@ namespace EchoProtocol.AI.Stalker
             _targetPolicyCandidates =
                 new List<StalkerTargetPolicyCandidate>(4);
 
+        private readonly Dictionary<PlayerId, double>
+            _detectDecayUntilByPlayer =
+                new Dictionary<PlayerId, double>();
+
         private readonly List<StalkerTargetPolicyCandidate>
             _searchTargetPolicyCandidates =
                 new List<StalkerTargetPolicyCandidate>(4);
@@ -889,6 +893,7 @@ namespace EchoProtocol.AI.Stalker
             _hasActiveHeardNoiseType = false;
             _filteredHearingObservations.Clear();
             _detectWasDecaying = false;
+            _detectDecayUntilByPlayer.Clear();
         }
 
         private void OnDisable()
@@ -1161,13 +1166,24 @@ namespace EchoProtocol.AI.Stalker
 
         private bool TryAcquireTypedDetectionTargetFromVisibleFrame()
         {
-            if (_currentVisibleTargetCandidates == null)
+            if (!TrySelectTypedDetectionTargetFromVisibleFrame(
+                    PlayerId.Invalid,
+                    out var selectedObservation))
             {
                 return false;
             }
 
-            var simulationTime = GetCurrentSimulationTime();
+            return TryBeginTypedDetection(selectedObservation);
+        }
 
+        private bool TrySelectTypedDetectionTargetFromVisibleFrame(
+            PlayerId excludedPlayerId,
+            out VisionObservation selectedObservation)
+        {
+            selectedObservation = default;
+            if (_currentVisibleTargetCandidates == null) return false;
+
+            var simulationTime = GetCurrentSimulationTime();
             StalkerTargetPolicySignalBuilder.Build(
                 _currentVisibleTargetCandidates,
                 _currentVisibleObjectiveCarrierIds,
@@ -1177,15 +1193,34 @@ namespace EchoProtocol.AI.Stalker
 
             _targetPolicyCandidates.RemoveAll(
                 candidate =>
-                    IsPlayerPressureBlocked(
-                        candidate.PlayerId,
-                        simulationTime));
+                    (excludedPlayerId.IsValid
+                     && candidate.PlayerId == excludedPlayerId)
+                    || IsPlayerPressureBlocked(candidate.PlayerId, simulationTime));
 
-            if (!AdaptiveStalkerTargetPolicy.TrySelectTarget(
-                    _targetPolicyCandidates,
-                    out var selectedObservation))
+            return AdaptiveStalkerTargetPolicy.TrySelectTarget(
+                _targetPolicyCandidates,
+                out selectedObservation);
+        }
+
+        private bool TryBeginTypedDetection(VisionObservation selectedObservation)
+        {
+            if (TryConsumeDetectionDecay(selectedObservation.PlayerId))
             {
-                return false;
+                _memory.SetDetectionTarget(selectedObservation.PlayerId);
+                if (!_memory.TryAcceptDetectionTargetObservation(selectedObservation))
+                {
+                    ClearDetectionContext();
+                    currentState = StalkerState.PATROL;
+                    SetCurrentPatrolDestination();
+                    return false;
+                }
+
+                detectionTarget = null;
+                currentTarget = null;
+                detectionMeter = 0f;
+                _detectMinimumHoldRemaining = 0f;
+                PromoteDetectionTargetToCurrentTarget(selectedObservation);
+                return true;
             }
 
             _memory.SetDetectionTarget(
@@ -1199,6 +1234,8 @@ namespace EchoProtocol.AI.Stalker
                 SetCurrentPatrolDestination();
                 return false;
             }
+
+            var simulationTime = GetCurrentSimulationTime();
 
             // Only a successfully accepted acquisition may influence
             // adaptive target history.
@@ -1226,6 +1263,42 @@ namespace EchoProtocol.AI.Stalker
             detectionMeter = 0f;
             _detectMinimumHoldRemaining = 0f;
             EnterDetectState();
+            return true;
+        }
+
+        private void RememberDetectionDecay(PlayerId playerId, float meter)
+        {
+            if (!playerId.IsValid) return;
+            meter = ClampDetectionMeter(meter);
+            if (meter <= 0f)
+            {
+                _detectDecayUntilByPlayer.Remove(playerId);
+                return;
+            }
+
+            var decayRate = GetDetectionDecayRate();
+            _detectDecayUntilByPlayer[playerId] =
+                decayRate <= 0f
+                    ? double.PositiveInfinity
+                    : _currentSimulationSeconds + meter / decayRate;
+        }
+
+        private bool TryConsumeDetectionDecay(PlayerId playerId)
+        {
+            if (!playerId.IsValid
+                || !_detectDecayUntilByPlayer.TryGetValue(playerId, out var decayUntil))
+            {
+                return false;
+            }
+
+            if (!double.IsPositiveInfinity(decayUntil)
+                && _currentSimulationSeconds >= decayUntil)
+            {
+                _detectDecayUntilByPlayer.Remove(playerId);
+                return false;
+            }
+
+            _detectDecayUntilByPlayer.Remove(playerId);
             return true;
         }
 
@@ -1363,6 +1436,20 @@ namespace EchoProtocol.AI.Stalker
             detectionMeter = ClampDetectionMeter(detectionMeter);
             _memory.SetDetectionMeter(detectionMeter);
 
+            if (TrySelectTypedDetectionTargetFromVisibleFrame(
+                    detectionTargetId,
+                    out var nextObservation))
+            {
+                if (detectionMeter > 0f)
+                {
+                    RememberDetectionDecay(detectionTargetId, detectionMeter);
+                }
+
+                ClearDetectionContext();
+                TryBeginTypedDetection(nextObservation);
+                return;
+            }
+
             if (detectionMeter <= 0f)
             {
                 InvalidateDetectionTarget();
@@ -1479,6 +1566,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void PromoteDetectionTargetToCurrentTarget(VisionObservation observation)
         {
+            _detectDecayUntilByPlayer.Remove(observation.PlayerId);
             _detectWasDecaying = false;
             _memory.SetCurrentTarget(observation.PlayerId);
             _memory.TryAcceptCurrentTargetObservation(observation);

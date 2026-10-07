@@ -390,6 +390,17 @@ namespace EchoProtocol.AI.Stalker.Presentation
             PlayDetectClip();
         }
 
+        public void PlayDetectForNewTarget()
+        {
+            var src = detectSource != null ? detectSource : voiceSource;
+            if (src != null && src.isPlaying && src.clip == detectClip)
+            {
+                src.Stop();
+            }
+
+            PlayDetect();
+        }
+
         public void BeginDetectAudioEntry()
         {
             _suppressDetectAnimationEvent = false;
