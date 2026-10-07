@@ -104,7 +104,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("private TickTimer EscapeTimer", source);
             StringAssert.Contains("private TickTimer MatchTimer", source);
             StringAssert.Contains("public float CurrentScenarioEscapeDoorTimerSeconds", source);
-            StringAssert.Contains("TickTimer.CreateFromSeconds(Runner, CurrentScenarioEscapeDoorTimerSeconds)", source);
+            StringAssert.Contains("TickTimer.CreateFromSeconds(Runner, duration)", source);
             StringAssert.Contains("EscapeTimer.Expired(Runner)", source);
             StringAssert.DoesNotContain("Time.deltaTime", source);
         }
@@ -124,8 +124,7 @@ namespace EchoProtocol.Networking.Tests
                 source);
 
             StringAssert.Contains(
-                "if (!Object.HasStateAuthority || EscapeTimer.IsRunning) return;\n" +
-                "            EscapeTimer = TickTimer.CreateFromSeconds(Runner, CurrentScenarioEscapeDoorTimerSeconds);",
+                "if (!Object.HasStateAuthority || EscapeTimer.IsRunning) return;",
                 source);
         }
 
@@ -314,6 +313,29 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains(
                 "Zone2Stage = Zone2MissionStage.RepairRelays",
                 source);
+        }
+
+        [Test]
+        public void MATCH_NET_EscapeTimeoutHonorsEscapedPlayers()
+        {
+            var source = LoadNetworkMatchStateSource();
+            int start = source.IndexOf("if (IsEscapeTimerRunning && EscapeTimer.Expired(Runner))");
+            int end = source.IndexOf("public override void Render()", start);
+            var timeout = source.Substring(start, end - start);
+            StringAssert.Contains("CountFinalPlayers(out var escapedCount, out _, out _)", timeout);
+            StringAssert.Contains("bool hasEscapedPlayer = escapedCount > 0", timeout);
+            StringAssert.Contains("hasEscapedPlayer ? NetworkMatchResult.Win : NetworkMatchResult.Lose", timeout);
+            StringAssert.Contains("hasEscapedPlayer ? NetworkMatchEndReason.PlayerEscaped : NetworkMatchEndReason.EscapeTimeout", timeout);
+        }
+
+        [Test]
+        public void MATCH_NET_PowerTransferAllowsAtLeastThreeMinutesRegardlessOfScenario()
+        {
+            var source = LoadNetworkMatchStateSource();
+            StringAssert.Contains("MinimumPowerTransferEscapeDurationSeconds = 180f", source);
+            StringAssert.Contains("reason == \"ZONE3_POWER_TRANSFER\"", source);
+            StringAssert.Contains("Mathf.Max(MinimumPowerTransferEscapeDurationSeconds, CurrentScenarioEscapeDoorTimerSeconds)", source);
+            StringAssert.Contains("TickTimer.CreateFromSeconds(Runner, duration)", source);
         }
 
         private static string LoadNetworkMatchStateSource()

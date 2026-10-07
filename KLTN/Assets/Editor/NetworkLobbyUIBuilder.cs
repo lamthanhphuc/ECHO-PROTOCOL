@@ -101,6 +101,7 @@ public static partial class NetworkLobbyUIBuilder
         var start = Button("StartButton", controls, 212, 0, 200, 36, "START MISSION", font);
         var leave = Button("LeaveButton", controls, 0, 46, 200, 36, "LEAVE ROOM", font);
         var exit = Button("ExitButton", controls, 212, 46, 200, 36, "EXIT", font);
+        var character = Button("CharacterChoiceButton", canvasObject.transform, 516, 70, 280, 42, "CHARACTER: ASTRONAUT", font);
 
         ready.interactable = start.interactable = leave.interactable = false;
 
@@ -110,6 +111,7 @@ public static partial class NetworkLobbyUIBuilder
         Assign(serialized, "hostButton", host); Assign(serialized, "joinButton", join);
         Assign(serialized, "readyButton", ready); Assign(serialized, "startButton", start); Assign(serialized, "leaveButton", leave);
         Assign(serialized, "exitButton", exit);
+        Assign(serialized, "characterButton", character);
         Assign(serialized, "statusText", statusText); Assign(serialized, "memberCountText", count);
         Assign(serialized, "memberListText", members); Assign(serialized, "statusIndicator", indicator);
         // Persistent Bootstrap services live in another scene and resolve at runtime.

@@ -260,16 +260,34 @@ namespace EchoProtocol.UI.HUD
                             $"Transfer Spacefrigate reserve power to the evacuation system ({Mathf.RoundToInt(chargeProgress * 100f)}%). Releasing slowly drains progress.",
                             chargeProgress, new Color(0f, 0.85f, 1f, 1f));
                     }
+                    else if (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(
+                        EchoProtocol.Visuals.ObjectiveGlowHighlight.GetLocalPlayerTransform()?.gameObject) != null)
+                    {
+                        SetObjective("RETURN TO SPACEFRIGATE",
+                            "Deliver the Fuel Cell. Hold E at the Fuel Port when the reserve is empty. G to drop.",
+                            convoy != null ? convoy.Fuel01 : 0f, new Color(1f, 0.65f, 0.1f, 1f));
+                    }
+                    else if (convoy != null && convoy.IsFuelEmpty)
+                    {
+                        SetObjective("FIND A FUEL CELL",
+                            "FUEL DEPLETED  □ □\nSearch nearby maintenance areas and return to the Fuel Port.",
+                            0f, new Color(1f, 0.35f, 0.1f, 1f));
+                    }
+                    else if (convoy != null && convoy.WasFuelRestoredRecently)
+                    {
+                        SetObjective("CONVOY POWER RESTORED", convoy.FuelDisplay + "\nContinue escorting Spacefrigate.",
+                            convoy.Fuel01, new Color(0.2f, 1f, 0.5f, 1f));
+                    }
                     else if (convoy != null && convoy.IsWaitingForRouteChoice)
                     {
                         SetObjective("CHOOSE CONVOY ROUTE",
-                            "Stand near Spacefrigate and choose a valid direction: 1 Left, 2 Straight, 3 Right, 4 Back.",
+                            convoy.FuelDisplay + "\nStand near Spacefrigate and choose: 1 Left, 2 Straight, 3 Right, 4 Back.",
                             0.5f, new Color(0f, 0.85f, 1f, 1f));
                     }
                     else
                     {
                         SetObjective("ESCORT SPACEFRIGATE",
-                            "Stay near the convoy to keep the emergency transport moving.",
+                            (convoy != null ? convoy.FuelDisplay + "\n" : "") + "Stay near the convoy to keep the emergency transport moving.",
                             0.35f,
                             new Color(0f, 0.85f, 1f, 1f));
                     }

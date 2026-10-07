@@ -92,7 +92,7 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
         {
             foreach (var r in _originalRendererStates.Keys)
             {
-                if (r != null && IsFirstPersonOnlyRenderer(r))
+                if (r != null && r.gameObject.activeInHierarchy && IsFirstPersonOnlyRenderer(r))
                 {
                     hasFirstPersonOnlyRenderer = true;
                     break;
@@ -152,8 +152,15 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
             }
             else if (isLocalView && hideBodyForLocalCamera && !IsAlwaysVisible(renderer))
             {
-                shouldShow = keepHandsIfSeparateRenderers && IsFirstPersonRenderer(renderer);
                 shouldShow = !hasFirstPersonOnlyRenderer && keepHandsIfSeparateRenderers && IsFirstPersonRenderer(renderer);
+            }
+
+            if (isLocalView && shouldShow && IsFirstPersonRenderer(renderer) && renderer is SkinnedMeshRenderer firstPersonMesh)
+            {
+                // Arm posing moves Jammo's meshes outside their imported bounds.
+                // Keep skinning/bounds updated even when the previous bounds left the view.
+                firstPersonMesh.updateWhenOffscreen = true;
+                firstPersonMesh.allowOcclusionWhenDynamic = false;
             }
 
             if (renderer.enabled != shouldShow)
@@ -224,7 +231,9 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
 
     private bool IsFirstPersonRenderer(Renderer renderer)
     {
-        return NameContainsToken(renderer.transform, firstPersonRendererNameTokens);
+        return NameContainsToken(renderer.transform, firstPersonRendererNameTokens)
+            || renderer.name == "palm_low" || renderer.name == "wrist_low"
+            || renderer.name.StartsWith("finger_", System.StringComparison.OrdinalIgnoreCase);
     }
 
     private bool IsPlayerHidden()
@@ -272,3 +281,4 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
         return false;
     }
 }
+

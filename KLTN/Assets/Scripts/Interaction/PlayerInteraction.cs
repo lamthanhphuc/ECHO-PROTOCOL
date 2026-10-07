@@ -316,10 +316,12 @@ public class PlayerInteraction : MonoBehaviour
     {
         if (Time.unscaledTime < _nextSecurityHoldRefresh) return;
         if (!(_heldInteractable is SecurityTerminalDownload)
-            && !(_heldInteractable is EchoProtocol.Networking.Zone3ChargeStation)) return;
+            && !(_heldInteractable is EchoProtocol.Networking.Zone3ChargeStation)
+            && !(_heldInteractable is EchoProtocol.MatchFlow.Zone3FuelPort)) return;
         _nextSecurityHoldRefresh = Time.unscaledTime + 0.25f;
         var match = EchoProtocol.Networking.NetworkMatchState.Instance;
         if (_heldInteractable is SecurityTerminalDownload) match?.RequestRefreshSecurityHold();
+        else if (_heldInteractable is EchoProtocol.MatchFlow.Zone3FuelPort) match?.RequestRefreshZone3Refuel();
         else match?.RequestRefreshZone3Charge();
     }
 

@@ -227,16 +227,6 @@ public static class PlayerSceneSetup
         reviveSo.FindProperty("revivePrompt").stringValue = "Giữ để Cứu Đồng Đội";
         reviveSo.ApplyModifiedPropertiesWithoutUndo();
 
-        PlayerCrawlPoseCorrector crawlPoseCorrector = player.GetComponent<PlayerCrawlPoseCorrector>();
-        if (crawlPoseCorrector == null)
-        {
-            crawlPoseCorrector = player.AddComponent<PlayerCrawlPoseCorrector>();
-        }
-
-        SerializedObject crawlPoseSo = new SerializedObject(crawlPoseCorrector);
-        crawlPoseSo.FindProperty("downState").objectReferenceValue = downState;
-        crawlPoseSo.ApplyModifiedPropertiesWithoutUndo();
-
         PlayerSpectateController spectateController = player.GetComponent<PlayerSpectateController>();
         if (spectateController == null)
         {

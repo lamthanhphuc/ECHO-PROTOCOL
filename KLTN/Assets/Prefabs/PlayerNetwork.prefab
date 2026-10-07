@@ -181,7 +181,6 @@ GameObject:
   - component: {fileID: 5130164143195792974}
   - component: {fileID: 1520762394266468972}
   - component: {fileID: 3015891846550289329}
-  - component: {fileID: 640200000000000002}
   - component: {fileID: 2990993374567826271}
   - component: {fileID: 4034885706722152808}
   - component: {fileID: 1325773130463563211}
@@ -198,6 +197,7 @@ GameObject:
   - component: {fileID: 8700373143392243168}
   - component: {fileID: 1936137012715162738}
   - component: {fileID: 5195137125508109749}
+  - component: {fileID: 5540313545828608349}
   - component: {fileID: 910000000000000001}
   m_Layer: 0
   m_Name: PlayerNetwork
@@ -385,6 +385,7 @@ MonoBehaviour:
     _data:
       Data: 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
   _TeamId: 0
+  _CharacterId: 0
   _ToolId: 0
   _IsGameplayPlayer:
     RawValue: 0
@@ -621,30 +622,6 @@ MonoBehaviour:
   directionDampTime: 0.12
   walkSpeedReference: 4
   runSpeedReference: 7
---- !u!114 &640200000000000002
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6628407516427798355}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2dd8ad9b5bd34f44aaf05df8da0f0f29, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerCrawlPoseCorrector
-  animator: {fileID: 8525993624502512922}
-  downState: {fileID: 0}
-  networkLifeState: {fileID: 8542491288236138449}
-  characterController: {fileID: 0}
-  correctWhileDowned: 1
-  groundOffset: 0.02
-  targetHipsHeight: 0.24
-  handContactBias: 0
-  rearFootLiftOffset: 0.03
-  rearLowerLegLiftOffset: 0.06
-  maximumLift: 0.45
-  blendSpeed: 14
 --- !u!114 &2990993374567826271
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1010,6 +987,21 @@ MonoBehaviour:
   maxVisibleDistance: 20
   outlineColor: {r: 0, g: 0.9, b: 1, a: 1}
   outlineWidth: 4
+--- !u!114 &5540313545828608349
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6628407516427798355}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 966dc4a3cc3e67043b42fca3b4d082f8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCharacterPresenter
+  animator: {fileID: 8525993624502512922}
+  offlineCharacterId: 0
+  jammoHeldItemScale: 1.4
 --- !u!1 &7403492165048496517
 GameObject:
   m_ObjectHideFlags: 0
@@ -1219,6 +1211,10 @@ PrefabInstance:
       propertyPath: playerRoot
       value: 
       objectReference: {fileID: 1770560598436581956}
+    - target: {fileID: 478196479434229163, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
+      propertyPath: jammoGripHeightOffset
+      value: 0.32
+      objectReference: {fileID: 0}
     - target: {fileID: 2829071216932153180, guid: fe60ef0f13391ad449987cf583050ff2, type: 3}
       propertyPath: playerRoot
       value: 

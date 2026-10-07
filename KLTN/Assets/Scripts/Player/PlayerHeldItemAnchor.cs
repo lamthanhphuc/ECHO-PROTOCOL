@@ -45,7 +45,7 @@ public sealed class PlayerHeldItemAnchor : MonoBehaviour
                     GameObject anchorObj = new GameObject("Runtime_RightHandAnchor");
                     anchorObj.transform.SetParent(baseTransform, false);
                     anchorObj.transform.localPosition = Vector3.zero;
-                    anchorObj.transform.localRotation = Quaternion.identity;
+                    anchorObj.transform.localRotation = GetComponent<PlayerCharacterPresenter>()?.RightHandGripCorrection ?? Quaternion.identity;
                     Vector3 lossy = baseTransform.lossyScale;
                     anchorObj.transform.localScale = new Vector3(
                         Mathf.Approximately(lossy.x, 0f) ? 1f : 1f / lossy.x,
@@ -105,6 +105,30 @@ public sealed class PlayerHeldItemAnchor : MonoBehaviour
 
             return EnsureCoreCarryAnchor();
         }
+    }
+
+    public void RefreshCharacterRig(Animator currentAnimator)
+    {
+        animator = currentAnimator;
+        rightHandAnchor = animator != null && animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.RightHand) : null;
+        coreCarryAnchor = null;
+        if (_runtimeFallbackAnchor != null && rightHandAnchor != null)
+        {
+            ReparentForCharacter(_runtimeFallbackAnchor, rightHandAnchor);
+            _runtimeFallbackAnchor.localRotation = GetComponent<PlayerCharacterPresenter>()?.RightHandGripCorrection ?? Quaternion.identity;
+        }
+        if (_runtimeCoreCarryAnchor != null)
+            ReparentForCharacter(_runtimeCoreCarryAnchor, ResolveCoreCarryParent());
+    }
+
+    private static void ReparentForCharacter(Transform anchor, Transform parent)
+    {
+        anchor.SetParent(parent, false);
+        Vector3 scale = parent.lossyScale;
+        anchor.localScale = new Vector3(
+            Mathf.Approximately(scale.x, 0f) ? 1f : 1f / scale.x,
+            Mathf.Approximately(scale.y, 0f) ? 1f : 1f / scale.y,
+            Mathf.Approximately(scale.z, 0f) ? 1f : 1f / scale.z);
     }
 
     private void Awake()
@@ -231,3 +255,4 @@ public sealed class PlayerHeldItemAnchor : MonoBehaviour
         return transform;
     }
 }
+

@@ -25,6 +25,7 @@ namespace EchoProtocol.UI
         [SerializeField] private Button hostButton;
         [SerializeField] private Button joinButton;
         [SerializeField] private Button readyButton;
+        [SerializeField] private Button characterButton;
         [SerializeField] private Button startButton;
         [SerializeField] private Button leaveButton;
         [SerializeField] private Button exitButton;
@@ -81,6 +82,7 @@ namespace EchoProtocol.UI
             if (hostButton != null) hostButton.onClick.AddListener(OnHostClicked);
             if (joinButton != null) joinButton.onClick.AddListener(OnJoinClicked);
             if (readyButton != null) readyButton.onClick.AddListener(OnReadyClicked);
+            if (characterButton != null) characterButton.onClick.AddListener(OnCharacterClicked);
             if (startButton != null) startButton.onClick.AddListener(OnStartClicked);
             if (leaveButton != null) leaveButton.onClick.AddListener(OnLeaveClicked);
             if (exitButton != null) exitButton.onClick.AddListener(OnExitClicked);
@@ -129,6 +131,7 @@ namespace EchoProtocol.UI
             if (hostButton != null) hostButton.onClick.RemoveListener(OnHostClicked);
             if (joinButton != null) joinButton.onClick.RemoveListener(OnJoinClicked);
             if (readyButton != null) readyButton.onClick.RemoveListener(OnReadyClicked);
+            if (characterButton != null) characterButton.onClick.RemoveListener(OnCharacterClicked);
             if (startButton != null) startButton.onClick.RemoveListener(OnStartClicked);
             if (leaveButton != null) leaveButton.onClick.RemoveListener(OnLeaveClicked);
             if (exitButton != null) exitButton.onClick.RemoveListener(OnExitClicked);
@@ -269,7 +272,8 @@ namespace EchoProtocol.UI
                     list.Append("> ").Append(member.DisplayName);
                     if (member.IsLocal) list.Append(_room.IsHost ? " [YOU / HOST]" : " [YOU]");
                     list.AppendLine().Append("  ").Append(member.IsReady ? "READY" : "NOT READY")
-                        .Append("  |  TOOL ").Append(member.ToolId);
+                        .Append("  |  TOOL ").Append(member.ToolId)
+                        .Append("  |  ").Append(member.CharacterId == 1 ? "JAMMO" : "ASTRONAUT");
                 }
             if (emptyMemberText != null) emptyMemberText.gameObject.SetActive(list.Length == 0);
             memberListText.text = list.Length == 0 ? (emptyMemberText == null ? "NO PLAYERS YET" : string.Empty) : list.ToString();
@@ -313,6 +317,12 @@ namespace EchoProtocol.UI
             Debug.LogError($"[NetworkLobbyUI] {detail}", this);
         }
 
+        private void OnCharacterClicked()
+        {
+            if (lobbyManager != null && lobbyManager.TryGetLocalPlayerState(out var state, false))
+                state.RequestCharacter(state.CharacterId == 0 ? 1 : 0);
+        }
+
         private void RefreshControls()
         {
             var canConnect =
@@ -346,6 +356,18 @@ namespace EchoProtocol.UI
                     || (inLobby && _room.IsHost);
             }
 
+            if (characterButton != null)
+            {
+                characterButton.interactable = false;
+                string character = "ASTRONAUT";
+                if (lobbyManager != null && lobbyManager.TryGetLocalPlayerState(out var local, false))
+                {
+                    character = local.CharacterId == 1 ? "JAMMO" : "ASTRONAUT";
+                    characterButton.interactable = inLobby && !local.IsReady;
+                }
+                var characterLabel = characterButton.GetComponentInChildren<TMP_Text>();
+                if (characterLabel != null) characterLabel.text = "CHARACTER: " + character;
+            }
             if (readyButton != null)
             {
                 readyButton.interactable = inLobby;

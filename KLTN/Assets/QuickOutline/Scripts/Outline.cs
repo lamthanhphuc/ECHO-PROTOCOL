@@ -3,7 +3,7 @@
 //  QuickOutline (Universal Render Pipeline Compatible)
 //
 //  Created by Chris Nolet on 3/30/18.
-//  Copyright © 2018 Chris Nolet. All rights reserved.
+//  Copyright Â© 2018 Chris Nolet. All rights reserved.
 //
 
 using System;
@@ -189,6 +189,17 @@ public class Outline : MonoBehaviour {
 
       renderer.materials = materials.ToArray();
     }
+  }
+
+  public void RefreshRenderers() {
+    if (!Application.IsPlaying(gameObject)) return;
+    // Remove old outline passes before replacing the cached mesh list.
+    OnDisable();
+    renderers = GetComponentsInChildren<Renderer>(true)
+      .Where(r => r != null && r.gameObject.activeInHierarchy && r.GetComponentInParent<Canvas>() == null)
+      .ToArray();
+    LoadSmoothNormals();
+    if (isActiveAndEnabled) OnEnable();
   }
 
   void OnDestroy() {
@@ -380,3 +391,4 @@ public class Outline : MonoBehaviour {
   }
 }
 }
+

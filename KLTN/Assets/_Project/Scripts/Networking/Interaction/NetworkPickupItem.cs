@@ -380,8 +380,20 @@ namespace EchoProtocol.Networking
             return hiding != null && hiding.IsHidden;
         }
 
+        private Vector3 _originalVisualScale;
+        private bool _visualScaleInitialized;
+        private void ApplyHeldVisualScale()
+        {
+            if (!_visualScaleInitialized) { _originalVisualScale = transform.localScale; _visualScaleInitialized = true; }
+            float multiplier = 1f;
+            if (State == NetworkItemState.Carried && Holder.IsRealPlayer && Runner != null
+                && Runner.TryGetPlayerObject(Holder, out var player) && player != null)
+                multiplier = player.GetComponent<PlayerCharacterPresenter>()?.HeldItemScale ?? 1f;
+            transform.localScale = _originalVisualScale * multiplier;
+        }
         private void ApplyReplicatedPose()
         {
+            ApplyHeldVisualScale();
             if (WorldRotation.x == 0f
                 && WorldRotation.y == 0f
                 && WorldRotation.z == 0f
@@ -407,11 +419,12 @@ namespace EchoProtocol.Networking
                 Transform coreAnchor = PlayerHeldItemAnchor.ResolveCoreCarryAnchor(playerObject.gameObject);
                 if (coreAnchor != null)
                 {
-                    position = coreAnchor.position;
+                    position = coreAnchor.position + (playerObject.GetComponent<PlayerCharacterPresenter>()?.HeldItemWorldOffset ?? Vector3.zero);
                     rotation = coreAnchor.rotation * Quaternion.Euler(_holderLocalEulerAngles);
                     return true;
                 }
-                position = playerObject.transform.TransformPoint(_holderLocalPosition);
+                position = playerObject.transform.TransformPoint(_holderLocalPosition)
+                    + (playerObject.GetComponent<PlayerCharacterPresenter>()?.HeldItemWorldOffset ?? Vector3.zero);
                 rotation = playerObject.transform.rotation * Quaternion.Euler(_holderLocalEulerAngles);
                 return true;
             }
@@ -463,3 +476,5 @@ namespace EchoProtocol.Networking
         }
     }
 }
+
+

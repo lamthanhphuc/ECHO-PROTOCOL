@@ -1,7 +1,7 @@
 using EchoProtocol.Networking;
 using UnityEngine;
 
-[DisallowMultipleComponent]
+[DisallowMultipleComponent, DefaultExecutionOrder(100)]
 public sealed class PlayerHeldItemView : MonoBehaviour
 {
     [SerializeField] private PlayerInventory inventory;
@@ -76,6 +76,21 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         RefreshVisual();
     }
 
+    private int CurrentVisualToolId => _currentItem == null ? 0 :
+        IsItem(_currentItem, "noise", "beacon") ? 2 :
+        IsItem(_currentItem, "first_aid", "first aid") ? 3 :
+        IsItem(_currentItem, "scan", "fieldscanner", "scanner") ? 1 : 0;
+    private Vector3 _heldVisualBaseScale;
+    private Vector3 _heldVisualBasePosition;
+    private void LateUpdate()
+    {
+        if (_currentVisual == null) return;
+        var character = GetComponentInParent<PlayerCharacterPresenter>();
+        var visual = _currentVisual.transform;
+        visual.localScale = _heldVisualBaseScale * (character?.ToolHeldScale(CurrentVisualToolId) ?? 1f);
+        visual.localPosition = _heldVisualBasePosition + (visual.parent != null
+            ? visual.parent.InverseTransformVector(character?.ToolHeldOffset(CurrentVisualToolId) ?? Vector3.zero) : Vector3.zero);
+    }
     private void Update()
     {
         bool pushing = IsPushing();
@@ -116,16 +131,16 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             return;
         }
 
-        // Trong phiên multiplayer Fusion, với remote players: Energy Core là NetworkObject
-        // tự bám vào PlayerHeldItemAnchor.ResolveCoreCarryAnchor trên thế giới.
-        // Với local player (HasInputAuthority): cần spawn visual first-person riêng.
+        // Trong phiÃƒÆ’Ã‚Âªn multiplayer Fusion, vÃƒÂ¡Ã‚Â»Ã¢â‚¬Âºi remote players: Energy Core lÃƒÆ’Ã‚Â  NetworkObject
+        // tÃƒÂ¡Ã‚Â»Ã‚Â± bÃƒÆ’Ã‚Â¡m vÃƒÆ’Ã‚Â o PlayerHeldItemAnchor.ResolveCoreCarryAnchor trÃƒÆ’Ã‚Âªn thÃƒÂ¡Ã‚ÂºÃ‚Â¿ giÃƒÂ¡Ã‚Â»Ã¢â‚¬Âºi.
+        // VÃƒÂ¡Ã‚Â»Ã¢â‚¬Âºi local player (HasInputAuthority): cÃƒÂ¡Ã‚ÂºÃ‚Â§n spawn visual first-person riÃƒÆ’Ã‚Âªng.
         if (_currentItem.ItemType == InventoryItemType.EnergyCore && IsActiveFusionSession())
         {
             var netObj = GetComponentInParent<Fusion.NetworkObject>();
             bool isLocalPlayer = netObj != null && netObj.HasInputAuthority;
             if (!isLocalPlayer)
             {
-                return; // remote player — NetworkPickupItem handles world rendering
+                return; // remote player ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â NetworkPickupItem handles world rendering
             }
         }
 
@@ -201,6 +216,9 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
         _currentVisual.name = "Held_" + _currentItem.ItemId;
         ApplyLocalPose(_currentVisual.transform, _currentItem);
+        _heldVisualBaseScale = _currentVisual.transform.localScale;
+        _heldVisualBasePosition = _currentVisual.transform.localPosition;
+        _currentVisual.transform.localScale = _heldVisualBaseScale * (GetComponentInParent<PlayerCharacterPresenter>()?.ToolHeldScale(CurrentVisualToolId) ?? 1f);
         StripWorldGameplayComponents(_currentVisual);
 
         bool isHoldingScanner = IsItem(_currentItem, "scan", "fieldscanner", "scanner");
@@ -446,3 +464,6 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             && netObj.Runner.IsRunning;
     }
 }
+
+
+
