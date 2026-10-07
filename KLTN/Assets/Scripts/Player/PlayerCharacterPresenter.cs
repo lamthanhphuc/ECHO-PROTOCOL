@@ -66,6 +66,7 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
     private int _applied = -1;
     private int _appliedTeam = -1;
     private MaterialPropertyBlock _teamTint;
+    private readonly Material[] _jammoSkins = new Material[4];
 
     private void Awake() => InitializeVisualRig();
     public void InitializeVisualRig()
@@ -93,15 +94,22 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         int team = _state != null && _state.Object != null && _state.Object.IsValid ? _state.TeamId : 0;
         if (_appliedTeam == team) return;
         if (_teamTint == null) _teamTint = new MaterialPropertyBlock();
-        Color tint = GetComponent<PlayerColorPresenter>()?.ResolveTeamTint(team) ?? Color.white;
+        int skinIndex = Mathf.Clamp(team, 0, 3);
+        if (_jammoSkins[skinIndex] == null)
+            _jammoSkins[skinIndex] = Resources.Load<Material>("Characters/JammoSkins/M_JammoSkin_" + skinIndex);
+        var skin = _jammoSkins[skinIndex];
+        if (skin == null) return;
         foreach (var child in _jammoChildren)
         {
             foreach (var renderer in child.GetComponentsInChildren<Renderer>(true))
             {
                 // Preserve the eye screen and its texture; tint metal body surfaces only.
                 if (renderer.name == "head_eyes_low" || renderer.name == "head_screen_low") continue;
+                var materials = renderer.sharedMaterials;
+                for (int i = 0; i < materials.Length; i++) materials[i] = skin;
+                renderer.sharedMaterials = materials;
                 renderer.GetPropertyBlock(_teamTint);
-                _teamTint.SetColor("_BaseColor", tint);
+                _teamTint.SetColor("_BaseColor", Color.white);
                 renderer.SetPropertyBlock(_teamTint);
             }
         }

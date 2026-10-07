@@ -8,6 +8,29 @@ public static class JammoCharacterSetup
 {
     private const string Model = "Assets/Jammo-Character/Models/Jammo_LowPoly.fbx";
     private const string Folder = "Assets/Resources/Characters";
+    public static void BuildSkinMaterials()
+    {
+        string skinFolder = Folder + "/JammoSkins";
+        if (!AssetDatabase.IsValidFolder(skinFolder)) AssetDatabase.CreateFolder(Folder, "JammoSkins");
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(Folder + "/PF_JammoVisual.prefab");
+        var body = prefab.GetComponentsInChildren<Renderer>(true).First(r => r.name != "head_eyes_low" && r.name != "head_screen_low").sharedMaterial;
+        string[] textures = { "mixbot_low_mixamo_edit1_AlbedoTransparency.png", "Alternates/t_jammo_black.psd",
+            "Alternates/t_jammo_blue.psd", "Alternates/t_jammo_yellow.psd" };
+        for (int i = 0; i < textures.Length; i++)
+        {
+            var texture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Jammo-Character/Textures/" + textures[i]);
+            if (texture == null) throw new Exception("Jammo skin texture missing: " + textures[i]);
+            string path = skinFolder + "/M_JammoSkin_" + i + ".mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null) { material = new Material(body); AssetDatabase.CreateAsset(material, path); }
+            else material.CopyPropertiesFromMaterial(body);
+            material.name = "M_JammoSkin_" + i;
+            material.SetTexture("_BaseMap", texture);
+            material.SetColor("_BaseColor", Color.white);
+            EditorUtility.SetDirty(material);
+        }
+        AssetDatabase.SaveAssets();
+    }
     [MenuItem("ECHO PROTOCOL/Player/Build Jammo Character")]
     public static void Build()
     {
@@ -75,6 +98,7 @@ public static class JammoCharacterSetup
                 renderer.sharedMaterials = shared;
             }
             PrefabUtility.SaveAsPrefabAsset(instance, Folder + "/PF_JammoVisual.prefab");
+            BuildSkinMaterials();
         }
         finally { UnityEngine.Object.DestroyImmediate(instance); }
         foreach (string path in new[] { "Assets/Prefabs/Player.prefab", "Assets/Prefabs/PlayerNetwork.prefab" })
