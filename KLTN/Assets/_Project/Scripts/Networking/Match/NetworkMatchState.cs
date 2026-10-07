@@ -560,8 +560,8 @@ namespace EchoProtocol.Networking
             if (zone3 != null && (CurrentPhase == NetworkMatchPhase.Zone3FindFrigate
                 || CurrentPhase == NetworkMatchPhase.Zone3PushFrigate))
             {
-                var fuelSupply = FindAnyObjectByType<Zone3FuelSupply>();
-                fuelSupply?.EnsureInitialized(true);
+                if (_zone3FuelSupply == null) _zone3FuelSupply = FindAnyObjectByType<Zone3FuelSupply>();
+                _zone3FuelSupply?.EnsureInitialized(true);
                 zone3.ReleaseInvalidAuthoritativePushers(IsZone3PusherValid);
                 if (CurrentPhase == NetworkMatchPhase.Zone3PushFrigate)
                     zone3.TickConvoyAuthoritative(Runner.DeltaTime);
@@ -3062,6 +3062,7 @@ namespace EchoProtocol.Networking
                 ref _securityHoldNoiseTimer, ref _securityHoldNoiseSequence);
         }
 
+        private Zone3FuelSupply _zone3FuelSupply;
         private void EmitFrigatePushNoiseAuthoritative(Zone3MissionDirector zone3)
         {
             // Convoy mode: emit noise while convoy is actually moving, not just when physically pushed.

@@ -421,6 +421,22 @@ namespace EchoProtocol.Networking
         private int CountNearbyAlivePlayers()
         {
             int count = 0;
+            var match = NetworkMatchState.Instance;
+            var runner = match != null ? match.Runner : null;
+            if (runner != null && runner.IsRunning)
+            {
+                float onlineRadiusSqr = escortRadius * escortRadius;
+                foreach (var actor in runner.ActivePlayers)
+                {
+                    if (!runner.TryGetPlayerObject(actor, out var player) || player == null) continue;
+                    var life = player.GetComponent<NetworkPlayerLifeState>();
+                    var lobby = player.GetComponent<LobbyPlayerState>();
+                    if (life == null || life.Status != NetworkPlayerLifeStatus.Alive
+                        || lobby == null || !lobby.IsGameplayPlayer) continue;
+                    if ((player.transform.position - transform.position).sqrMagnitude <= onlineRadiusSqr) count++;
+                }
+                return count;
+            }
             // Online: use authoritative NetworkPlayerLifeState (Alive only, gameplay players only).
             var players = FindObjectsByType<NetworkPlayerLifeState>(FindObjectsInactive.Exclude);
             float radiusSqr = escortRadius * escortRadius;
