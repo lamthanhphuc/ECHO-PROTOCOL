@@ -1,4 +1,5 @@
 using System.IO;
+using EchoProtocol.Networking;
 using UnityEditor;
 using UnityEngine;
 
@@ -213,7 +214,7 @@ public static class CoreStabilizerVisualPrefabBuilder
 
     private static void CreateCoveragePreview(Transform parent, Material material)
     {
-        const float radius = 5f;
+        float radius = CoreStabilizerRules.SupportRadius;
         const int segments = 72;
 
         var preview = CreateChild(parent, "CoveragePreview");

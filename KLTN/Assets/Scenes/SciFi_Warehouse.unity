@@ -37038,7 +37038,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1656206104
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -43138,6 +43138,7 @@ MonoBehaviour:
   minPitch: -45
   maxPitch: 45
   cameraForwardOffset: 0.13
+  crouchCameraForwardOffset: 0.25
   crouchCameraRightOffset: 0.2
   downedCameraRightOffset: 0.1
   downedCameraForwardOffset: 0.4

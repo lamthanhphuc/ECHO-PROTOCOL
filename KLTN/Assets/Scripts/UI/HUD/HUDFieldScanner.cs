@@ -253,6 +253,9 @@ namespace EchoProtocol.UI.HUD
         {
             bool connected = _boundScanner != null;
             bool motion = connected && _boundScanner.CurrentMode == FieldScannerMode.Motion;
+            string coreTargetLabel = connected
+                ? _boundScanner.CoreTargetLabel
+                : "LÕI NĂNG LƯỢNG";
             bool active = connected && _boundScanner.IsScanActive;
             bool hasResult = active && _boundScanner.HasActiveResult;
             float cooldown = connected ? _boundScanner.LocalCooldownRemaining : 0f;
@@ -263,10 +266,10 @@ namespace EchoProtocol.UI.HUD
             for (int i = 0; i < count; i++) nearest = Mathf.Min(nearest, offsets[i].magnitude);
             Color accent = motion ? new Color(0.94f, 0.43f, 0.29f) : new Color(0.35f, 0.78f, 0.76f);
 
-            SetText(titleText, motion ? "⚠  STALKER" : "◈  LÕI NĂNG LƯỢNG");
+            SetText(titleText, motion ? "⚠  STALKER" : $"◈  {coreTargetLabel}");
             SetText(modeBadgeText, "[Chuột phải] Đổi chế độ");
             SetText(controlsText, "");
-            SetText(detectedText, motion ? $"<size=23>{count}</size>\nPHÁT HIỆN" : $"<size=23>{count}</size>  LÕI");
+            SetText(detectedText, motion ? $"<size=23>{count}</size>\nPHÁT HIỆN" : $"<size=23>{count}</size>  {coreTargetLabel}");
             SetText(signalDetailText, "GẦN NHẤT\n<size=21>" + (count > 0 ? $"{nearest:F0}m" : "—") + "</size>");
             int bars = connected && count > 0 ? (int)FieldScannerCoreDetector.ResolveSignalBars(nearest, _boundScanner.Tuning) : 0;
             if (motion)

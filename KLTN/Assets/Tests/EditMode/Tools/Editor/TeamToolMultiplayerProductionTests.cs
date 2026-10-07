@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using EchoProtocol.Gameplay;
 using EchoProtocol.Networking;
 using EchoProtocol.Tools.Scanner;
 using EchoProtocol.TeamTools;
@@ -21,6 +22,28 @@ namespace EchoProtocol.Player.Tests
         private const string CoreStabilizerPickupPath = "Assets/Prefabs/Tools/PF_CoreStabilizer_NetworkPickup.prefab";
 
         [Test]
+        public void GOD_MODE_AllTeamToolsAreInfiniteAndCooldownFree()
+        {
+            string interactor = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
+            string scanner = File.ReadAllText(
+                "Assets/Scripts/Tools/Scanner/NetworkFieldScanner.cs");
+            string life = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Player/NetworkPlayerLifeState.cs");
+
+            StringAssert.Contains("if (IsDebugGodModeActive)", interactor);
+            StringAssert.Contains("return 0f;", interactor);
+            StringAssert.Contains("TickTimer.None", interactor);
+            StringAssert.Contains("if (IsDebugGodModeActive)", scanner);
+            StringAssert.Contains("RequestDebugTeamTool", life);
+            StringAssert.Contains("FieldScannerToolId", life);
+            StringAssert.Contains("NoiseMakerToolId", life);
+            StringAssert.Contains("FirstAidKitToolId", life);
+            StringAssert.Contains("DoorJammerToolId", life);
+            StringAssert.Contains("CoreStabilizerToolId", life);
+        }
+
+        [Test]
         public void TEAM_TOOL_WorldSpawn_IsTransactional()
         {
             const string spawnSourcePath = "Assets/Scripts/TeamTools/TeamToolWorldSpawn.cs";
@@ -34,8 +57,79 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains("RollbackSpawned", spawnSource);
             StringAssert.Contains("zone1Plans", spawnSource);
             StringAssert.Contains("zone2Plans", spawnSource);
+            StringAssert.Contains("zone3Plans", spawnSource);
             StringAssert.Contains("TeamToolWorldSpawnInitialized =", matchSource);
             StringAssert.Contains("TeamToolWorldSpawn.TrySpawnInitial", matchSource);
+        }
+
+        [Test]
+        public void TEAM_TOOL_SpawnCount_UsesDifficultyBudget()
+        {
+            Assert.That(
+                TeamToolWorldSpawn.RequiredToolCountPerZone,
+                Is.EqualTo(5));
+
+            Assert.That(
+                MatchDifficultyProfiles
+                    .Get(MatchDifficulty.Easy)
+                    .TeamToolsPerZone,
+                Is.EqualTo(6));
+
+            Assert.That(
+                MatchDifficultyProfiles
+                    .Get(MatchDifficulty.Normal)
+                    .TeamToolsPerZone,
+                Is.EqualTo(5));
+
+            Assert.That(
+                MatchDifficultyProfiles
+                    .Get(MatchDifficulty.Hard)
+                    .TeamToolsPerZone,
+                Is.EqualTo(5));
+        }
+
+        [Test]
+        public void TEAM_TOOL_Runtime_IsClearedWhenToolLeavesPlayer()
+        {
+            string source =
+                File.ReadAllText(
+                    "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
+
+            StringAssert.Contains(
+                "private void ResetTeamToolRuntimeAuthoritative()",
+                source);
+
+            StringAssert.Contains(
+                "TeamToolCooldown =",
+                source);
+
+            StringAssert.Contains(
+                "TickTimer.None",
+                source);
+
+            StringAssert.Contains(
+                "CoreStabilizerActiveTimer =",
+                source);
+
+            StringAssert.Contains(
+                "ClearStabilizerBuffedPlayers();",
+                source);
+        }
+
+        [Test]
+        public void TEAM_TOOL_HudShowsRemainingMultiUseCount()
+        {
+            string source =
+                File.ReadAllText(
+                    "Assets/Scripts/UI/HUD/HUDHotbar.cs");
+
+            StringAssert.Contains(
+                "TeamToolUsesRemaining",
+                source);
+
+            StringAssert.Contains(
+                "LobbyPlayerState.AnyStateChanged += RefreshSlots",
+                source);
         }
 
         [Test]
@@ -52,6 +146,7 @@ namespace EchoProtocol.Player.Tests
                     .ToArray();
                 ValidateZone(points, TeamToolSpawnZone.Zone1);
                 ValidateZone(points, TeamToolSpawnZone.Zone2);
+                ValidateZone(points, TeamToolSpawnZone.Zone3);
             }
             finally
             {

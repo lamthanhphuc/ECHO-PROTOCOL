@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Common.Spatial;
+using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.AI.Listener.Perception;
 using EchoProtocol.AI.Stalker.Hearing;
 using EchoProtocol.AI.Stalker.Spatial;
@@ -91,6 +92,16 @@ namespace EchoProtocol.AI.Stalker
         [Tooltip("Active SEARCH time budget; LKP sniff and search point holds pause this timer.")]
         private float searchDuration = 3f;
         [SerializeField] private float searchRadius = 8f;
+
+        [Header("Vehicle Noise Investigation")]
+        [SerializeField, Min(1f)]
+        private float vehicleInvestigationSeconds = 60f;
+
+        [SerializeField, Min(1f)]
+        private float vehicleReinvestigationCooldownSeconds = 180f;
+
+        [SerializeField, Min(0.5f)]
+        private float vehicleInvestigationArrivalDistance = 3f;
 
         [Header("Search Reacquire Detect")]
         [SerializeField, Min(0f)]
@@ -315,6 +326,13 @@ namespace EchoProtocol.AI.Stalker
         private IReadOnlyList<StalkerTargetStatus> _currentTargetStatuses;
         private IReadOnlyList<HearingObservation>
             _currentHearingObservations;
+        private bool _vehicleInvestigationLocked;
+        private double _vehicleNoiseIgnoreUntilSeconds;
+        private RuntimeNoiseType _activeHeardNoiseType;
+        private bool _hasActiveHeardNoiseType;
+        private readonly List<HearingObservation>
+            _filteredHearingObservations =
+                new List<HearingObservation>();
         private IReadOnlyList<StalkerFlashlightObservation> _currentFlashlightObservations;
         private System.DateTime
             _currentHearingEvaluationTimeUtc;
@@ -865,6 +883,10 @@ namespace EchoProtocol.AI.Stalker
             _hideSpotMemory.Reset();
             _targetHistoryMemory.Reset();
             ResetHideSpotRevealGrace();
+            _vehicleInvestigationLocked = false;
+            _vehicleNoiseIgnoreUntilSeconds = 0d;
+            _hasActiveHeardNoiseType = false;
+            _filteredHearingObservations.Clear();
         }
 
         private void OnDisable()
@@ -2061,6 +2083,35 @@ namespace EchoProtocol.AI.Stalker
             }
         }
 
+        private bool IsVehicleNoiseInvestigation =>
+            _hearingMemory.HasActiveNoiseInvestigation
+            && _hasActiveHeardNoiseType
+            && _activeHeardNoiseType == RuntimeNoiseType.VEHICLE_PUSH;
+
+        private IReadOnlyList<HearingObservation>
+            GetSelectableHearingObservations(bool suppressVehicle)
+        {
+            if (_currentHearingObservations == null || !suppressVehicle)
+            {
+                return _currentHearingObservations;
+            }
+
+            _filteredHearingObservations.Clear();
+
+            for (int i = 0; i < _currentHearingObservations.Count; i++)
+            {
+                var observation = _currentHearingObservations[i];
+                if (observation.NoiseType == RuntimeNoiseType.VEHICLE_PUSH)
+                {
+                    continue;
+                }
+
+                _filteredHearingObservations.Add(observation);
+            }
+
+            return _filteredHearingObservations;
+        }
+
         private void TryBeginHeardNoiseSearchFromCurrentFrame()
         {
             var canBeginHearingSearch =
@@ -2070,10 +2121,15 @@ namespace EchoProtocol.AI.Stalker
                     && _searchContext.Source
                         != StalkerSearchSource.HeardNoise);
 
+            bool suppressVehicle =
+                _currentSimulationSeconds < _vehicleNoiseIgnoreUntilSeconds;
+            var observations =
+                GetSelectableHearingObservations(suppressVehicle);
+
             if (!canBeginHearingSearch
                 || _worldInteractionDriver.HasActiveInteraction
-                || _currentHearingObservations == null
-                || _currentHearingObservations.Count == 0
+                || observations == null
+                || observations.Count == 0
                 || _currentHearingEvaluationTimeUtc == default
                 || _currentHearingEvaluationTimeUtc.Kind
                     != System.DateTimeKind.Utc)
@@ -2082,7 +2138,7 @@ namespace EchoProtocol.AI.Stalker
             }
 
             if (!_hearingSelector.TrySelectInitial(
-                    _currentHearingObservations,
+                    observations,
                     _currentHearingEvaluationTimeUtc,
                     out var selection)
                 || !selection.HasObservation)
@@ -2101,8 +2157,6 @@ namespace EchoProtocol.AI.Stalker
                 || _searchContext.Source
                     != StalkerSearchSource.HeardNoise
                 || !_hearingMemory.HasActiveNoiseInvestigation
-                || _currentHearingObservations == null
-                || _currentHearingObservations.Count == 0
                 || _currentHearingEvaluationTimeUtc == default
                 || _currentHearingEvaluationTimeUtc.Kind
                     != System.DateTimeKind.Utc)
@@ -2110,9 +2164,20 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            bool suppressVehicle =
+                _vehicleInvestigationLocked
+                || _currentSimulationSeconds < _vehicleNoiseIgnoreUntilSeconds;
+            var observations =
+                GetSelectableHearingObservations(suppressVehicle);
+
+            if (observations == null || observations.Count == 0)
+            {
+                return;
+            }
+
             if (!_hearingSelector.TrySelectInvestigationUpdate(
                     _hearingMemory,
-                    _currentHearingObservations,
+                    observations,
                     _currentHearingEvaluationTimeUtc,
                     out var selection)
                 || !selection.HasObservation)
@@ -2125,6 +2190,14 @@ namespace EchoProtocol.AI.Stalker
 
             _hearingMemory.UpdateNoiseInvestigation(
                 selection.Observation);
+
+            _activeHeardNoiseType = selection.Observation.NoiseType;
+            _hasActiveHeardNoiseType = true;
+
+            if (_activeHeardNoiseType != RuntimeNoiseType.VEHICLE_PUSH)
+            {
+                _vehicleInvestigationLocked = false;
+            }
 
             RuntimeLog.Log(
                 RuntimeLogCategory.StalkerHearing,
@@ -2209,6 +2282,10 @@ namespace EchoProtocol.AI.Stalker
             //
             _hearingMemory.BeginNoiseInvestigation(
                 observation);
+
+            _activeHeardNoiseType = observation.NoiseType;
+            _hasActiveHeardNoiseType = true;
+            _vehicleInvestigationLocked = false;
 
             RuntimeLog.Log(
                 RuntimeLogCategory.StalkerHearing,
@@ -2462,6 +2539,8 @@ namespace EchoProtocol.AI.Stalker
             //
             if (!_hearingMemory.HasActiveNoiseInvestigation)
             {
+                _vehicleInvestigationLocked = false;
+                _hasActiveHeardNoiseType = false;
                 ClearSearchRuntimeContext();
 
                 currentState =
@@ -2479,7 +2558,15 @@ namespace EchoProtocol.AI.Stalker
             if (TryAcquireDifferentVisibleTargetDuringSearch(
                     PlayerId.Invalid))
             {
+                _vehicleInvestigationLocked = false;
+                _hasActiveHeardNoiseType = false;
                 _hearingMemory.ClearNoiseInvestigation();
+                return;
+            }
+
+            if (IsVehicleNoiseInvestigation)
+            {
+                TickVehicleNoiseInvestigation();
                 return;
             }
 
@@ -2542,6 +2629,51 @@ namespace EchoProtocol.AI.Stalker
             currentState =
                 StalkerState.PATROL;
 
+            StopAgentPath();
+            SetCurrentPatrolDestination();
+        }
+
+        private void TickVehicleNoiseInvestigation()
+        {
+            if (!_vehicleInvestigationLocked)
+            {
+                bool closeEnough =
+                    Vector3.Distance(
+                        transform.position,
+                        _hearingMemory.InvestigationPosition)
+                    <= vehicleInvestigationArrivalDistance;
+
+                bool navigationArrived =
+                    _navigation != null
+                    && _navigation.HasActiveDestination
+                    && _navigation.HasArrived();
+
+                if (!closeEnough && !navigationArrived)
+                {
+                    return;
+                }
+
+                _vehicleInvestigationLocked = true;
+                searchElapsedTime = 0f;
+                StopAgentPath();
+            }
+
+            searchElapsedTime += CurrentSimulationDeltaSeconds;
+            if (searchElapsedTime < vehicleInvestigationSeconds)
+            {
+                return;
+            }
+
+            CommitSearchEnded(StalkerSearchTerminalOutcome.TIMEOUT);
+            _vehicleNoiseIgnoreUntilSeconds =
+                _currentSimulationSeconds
+                + vehicleReinvestigationCooldownSeconds;
+            _vehicleInvestigationLocked = false;
+            _hasActiveHeardNoiseType = false;
+            _hearingMemory.ClearNoiseInvestigation();
+            ClearSearchContext();
+            currentState = StalkerState.PATROL;
+            searchElapsedTime = 0f;
             StopAgentPath();
             SetCurrentPatrolDestination();
         }

@@ -198,6 +198,7 @@ GameObject:
   - component: {fileID: 1936137012715162738}
   - component: {fileID: 5195137125508109749}
   - component: {fileID: 5540313545828608349}
+  - component: {fileID: 910000000000000001}
   m_Layer: 0
   m_Name: PlayerNetwork
   m_TagString: Player
@@ -205,6 +206,19 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!114 &910000000000000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6628407516427798355}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f6f0f0f6f2d4c8ab1f0d4c6e7a8b9c0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  arrivalDistance: 3
 --- !u!4 &1770560598436581956
 Transform:
   m_ObjectHideFlags: 0
@@ -382,6 +396,7 @@ MonoBehaviour:
     Raw: 0
   _IsCoreStabilized:
     RawValue: 0
+  _TeamToolUsesRemaining: 0
 --- !u!114 &640100000000000002
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -943,7 +958,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6628407516427798355}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5fea29bb7c508c244a1f805a5fd3fc4d, type: 3}
   m_Name: 
@@ -1024,8 +1039,8 @@ SkinnedMeshRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7403492165048496517}
   m_Enabled: 0
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
+  m_CastShadows: 0
+  m_ReceiveShadows: 0
   m_DynamicOccludee: 1
   m_StaticShadowCaster: 0
   m_MotionVectors: 1

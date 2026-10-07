@@ -129,9 +129,15 @@ namespace EchoProtocol.Networking
         private static Outline GetOrAddOutline(GameObject target)
         {
             var outline = target.GetComponent<Outline>();
-            if (outline == null) outline = target.AddComponent<Outline>();
-            outline.OutlineColor = new Color(0.1f, 0.95f, 1f);
-            outline.OutlineWidth = 4f;
+            if (outline == null)
+            {
+                outline = target.AddComponent<Outline>();
+            }
+
+            outline.OutlineMode = Outline.Mode.OutlineAll;
+            outline.OutlineColor = new Color(0.1f, 0.95f, 1f, 1f);
+            outline.OutlineWidth = 5f;
+            outline.UpdateMaterialProperties();
             return outline;
         }
 

@@ -165,7 +165,6 @@ public class MatchFlowController : MonoBehaviour
 
     public void DebugSkipToZone3()
     {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
         if (_networkAuthorityPresentationOnly || IsMatchEnded) return;
 
         _securityHoldCompleted = true;
@@ -181,13 +180,15 @@ public class MatchFlowController : MonoBehaviour
         }
 
         SetPhase(MatchPhase.Zone3FindFrigate);
-#endif
     }
 
-    public void DebugSkipToZone2()
+    public bool DebugSkipToZone2()
     {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        if (_networkAuthorityPresentationOnly || IsMatchEnded) return;
+        if (_networkAuthorityPresentationOnly || IsMatchEnded) return false;
+
+        var entry = FindAnyObjectByType<StalkerZone2EntryTrigger>();
+        var player = FindAnyObjectByType<NetworkPlayerMovement>();
+        if (entry == null || player == null) return false;
 
         _securityHoldCompleted = false;
         _powerPuzzleCompleted = false;
@@ -205,7 +206,8 @@ public class MatchFlowController : MonoBehaviour
         }
 
         SetPhase(MatchPhase.SecurityHold);
-#endif
+        player.TeleportAuthoritative(entry.transform.position, entry.transform.rotation);
+        return true;
     }
 
     public void NotifyZone3Complete()

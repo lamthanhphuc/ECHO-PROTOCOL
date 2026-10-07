@@ -131,6 +131,7 @@ namespace EchoProtocol.Networking
             IsCoreStabilized = false;
             CarriedCoreId = default;
             Disconnected = false;
+            TeamToolUsesRemaining = 0;
 
             AnyStateChanged?.Invoke();
         }
@@ -140,6 +141,7 @@ namespace EchoProtocol.Networking
         public const int FirstAidKitToolId = 3;
         public const int DoorJammerToolId = 4;
         public const int CoreStabilizerToolId = 6;
+        public const int MultiUseTeamToolUses = 3;
 
         [Networked]
         public NetworkString<_64> BackendUserId { get; private set; }
@@ -149,6 +151,9 @@ namespace EchoProtocol.Networking
 
         [Networked]
         public NetworkBool IsCoreStabilized { get; private set; }
+
+        [Networked]
+        public int TeamToolUsesRemaining { get; private set; }
 
         public bool IsStabilizerBuffed =>
             IsCoreStabilized;
@@ -162,6 +167,7 @@ namespace EchoProtocol.Networking
         {
             TeamId = teamId;
             ToolId = toolId;
+            TeamToolUsesRemaining = UsesForTool(toolId);
             IsReady = false;
             IsGameplayPlayer = isGameplayPlayer;
             IsCoreStabilized = false;
@@ -214,6 +220,15 @@ namespace EchoProtocol.Networking
 
         public void SetGameplayToolId(int toolId)
         {
+            SetGameplayToolId(
+                toolId,
+                UsesForTool(toolId));
+        }
+
+        public void SetGameplayToolId(
+            int toolId,
+            int remainingUses)
+        {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority
                 || toolId < 0 || toolId > 6)
             {
@@ -221,8 +236,49 @@ namespace EchoProtocol.Networking
             }
 
             ToolId = toolId;
+            TeamToolUsesRemaining =
+                toolId == 0
+                    ? 0
+                    : toolId == NoiseMakerToolId
+                      || toolId == DoorJammerToolId
+                        ? Mathf.Clamp(
+                            remainingUses,
+                            1,
+                            MultiUseTeamToolUses)
+                        : 0;
             AnyStateChanged?.Invoke();
         }
+
+        public bool ConsumeTeamToolUseAuthoritative()
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || ToolId <= 0)
+            {
+                return false;
+            }
+
+            if ((ToolId == NoiseMakerToolId
+                 || ToolId == DoorJammerToolId)
+                && TeamToolUsesRemaining > 1)
+            {
+                TeamToolUsesRemaining--;
+                AnyStateChanged?.Invoke();
+                return true;
+            }
+
+            ToolId = 0;
+            TeamToolUsesRemaining = 0;
+            AnyStateChanged?.Invoke();
+            return true;
+        }
+
+        private static int UsesForTool(int toolId) =>
+            toolId == NoiseMakerToolId
+                || toolId == DoorJammerToolId
+                ? MultiUseTeamToolUses
+                : 0;
 
         public override void Spawned()
         {

@@ -21,6 +21,7 @@ public sealed class PlayerOutlineVisibility : MonoBehaviour
     private Outline _outline;
     private LobbyPlayerState _playerState;
     private LobbyPlayerState _localPlayerState;
+    private NetworkPlayerLifeState _lifeState;
 
     private void Awake()
     {
@@ -60,6 +61,14 @@ public sealed class PlayerOutlineVisibility : MonoBehaviour
             return;
         }
 
+        if (_lifeState == null
+            || !_lifeState.IsDowned
+            || !_lifeState.CanBeRevived)
+        {
+            SetOutline(false);
+            return;
+        }
+
         ResolveLocalPlayer();
 
         if (_localPlayerState == null
@@ -93,6 +102,13 @@ public sealed class PlayerOutlineVisibility : MonoBehaviour
             _playerState =
                 GetComponent<LobbyPlayerState>()
                 ?? GetComponentInParent<LobbyPlayerState>();
+        }
+
+        if (_lifeState == null)
+        {
+            _lifeState =
+                GetComponent<NetworkPlayerLifeState>()
+                ?? GetComponentInParent<NetworkPlayerLifeState>();
         }
     }
 
@@ -141,6 +157,7 @@ public sealed class PlayerOutlineVisibility : MonoBehaviour
         _outline.OutlineColor = outlineColor;
         _outline.OutlineWidth = outlineWidth;
         _outline.UpdateMaterialProperties();
+        _outline.enabled = false;
     }
 
     private void SetOutline(bool visible)

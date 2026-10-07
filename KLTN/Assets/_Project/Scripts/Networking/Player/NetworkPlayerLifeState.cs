@@ -673,9 +673,74 @@ namespace EchoProtocol.Networking
             return Runner == null ? 0f : Mathf.Max(0f, timer.RemainingTime(Runner) ?? 0f);
         }
 
+        public void RequestDebugTeamTool(
+            int toolId)
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasInputAuthority
+                || !IsDebugTeamToolId(toolId))
+            {
+                return;
+            }
+
+            if (Object.HasStateAuthority)
+            {
+                SetDebugTeamToolAuthoritative(toolId);
+                return;
+            }
+
+            RpcRequestDebugTeamTool(toolId);
+        }
+
+        [Rpc(
+            RpcSources.InputAuthority,
+            RpcTargets.StateAuthority)]
+        private void RpcRequestDebugTeamTool(
+            int toolId,
+            RpcInfo info = default)
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || info.Source != Object.InputAuthority)
+            {
+                return;
+            }
+
+            SetDebugTeamToolAuthoritative(toolId);
+        }
+
+        private void SetDebugTeamToolAuthoritative(
+            int toolId)
+        {
+            if (!DebugGodMode
+                || !IsDebugTeamToolId(toolId))
+            {
+                return;
+            }
+
+            var state = GetComponent<LobbyPlayerState>();
+            if (state == null)
+            {
+                return;
+            }
+
+            state.SetGameplayToolId(toolId);
+        }
+
+        private static bool IsDebugTeamToolId(
+            int toolId)
+        {
+            return toolId == LobbyPlayerState.FieldScannerToolId
+                || toolId == LobbyPlayerState.NoiseMakerToolId
+                || toolId == LobbyPlayerState.FirstAidKitToolId
+                || toolId == LobbyPlayerState.DoorJammerToolId
+                || toolId == LobbyPlayerState.CoreStabilizerToolId;
+        }
+
         public void RequestDebugGodModeToggle()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (Object == null
                 || !Object.IsValid
                 || !Object.HasInputAuthority)
@@ -690,14 +755,12 @@ namespace EchoProtocol.Networking
             }
 
             RpcRequestDebugGodModeToggle();
-#endif
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestDebugGodModeToggle(
             RpcInfo info = default)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (Object == null
                 || !Object.IsValid
                 || !Object.HasStateAuthority
@@ -707,12 +770,10 @@ namespace EchoProtocol.Networking
             }
 
             ToggleDebugGodModeAuthoritative();
-#endif
         }
 
         private void ToggleDebugGodModeAuthoritative()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (Object == null
                 || !Object.IsValid
                 || !Object.HasStateAuthority)
@@ -744,7 +805,6 @@ namespace EchoProtocol.Networking
 
             Debug.Log(
                 $"[DebugGodMode] Player={Object.InputAuthority}, Enabled={DebugGodMode}.");
-#endif
         }
 
         private void CommitStatus(NetworkPlayerLifeStatus status, NetworkPlayerLifeTransitionCause cause)

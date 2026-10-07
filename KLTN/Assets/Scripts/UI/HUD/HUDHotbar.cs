@@ -37,6 +37,16 @@ namespace EchoProtocol.UI.HUD
         private float _cooldownTimer;
         private LobbyPlayerState _boundNetworkPlayerState;
 
+        private void OnEnable()
+        {
+            LobbyPlayerState.AnyStateChanged += RefreshSlots;
+        }
+
+        private void OnDisable()
+        {
+            LobbyPlayerState.AnyStateChanged -= RefreshSlots;
+        }
+
         public void BindInventory(PlayerInventory playerInv, PlayerEnergyCoreCarrier coreCarrier)
         {
             if (inventory != null)
@@ -226,25 +236,76 @@ namespace EchoProtocol.UI.HUD
                 {
                     UpdateSlotView(null, slot1Icon, slot1NameText, "1: Trống");
                     UpdateSlotView(null, slot2Icon, slot2NameText, "2: Trống");
-                    UpdateSlotView(null, toolIcon, toolNameText, "Tool: Trống");
-                    return;
                 }
 
                 // Slot 1
-                InventoryItemDefinition item1 = inventory.GetNormalSlot(0);
+                InventoryItemDefinition item1 =
+                    inventory != null ? inventory.GetNormalSlot(0) : null;
                 UpdateSlotView(item1, slot1Icon, slot1NameText, "1: Trống");
 
                 // Slot 2
-                InventoryItemDefinition item2 = inventory.GetNormalSlot(1);
+                InventoryItemDefinition item2 =
+                    inventory != null ? inventory.GetNormalSlot(1) : null;
                 UpdateSlotView(item2, slot2Icon, slot2NameText, "2: Trống");
 
                 // Team Tool Slot
-                InventoryItemDefinition toolItem = inventory.TeamToolSlot;
+                InventoryItemDefinition toolItem =
+                    inventory != null ? inventory.TeamToolSlot : null;
+                int networkToolId = _boundNetworkPlayerState != null
+                    ? _boundNetworkPlayerState.ToolId
+                    : 0;
+                var lifeState = inventory != null
+                    ? inventory.GetComponent<NetworkPlayerLifeState>()
+                    : _boundNetworkPlayerState != null
+                        ? _boundNetworkPlayerState.GetComponent<NetworkPlayerLifeState>()
+                        : null;
+                bool godMode = lifeState != null && lifeState.DebugGodMode;
+
                 UpdateSlotView(toolItem, toolIcon, toolNameText, "Tool: Trống", isTeamTool: true);
+
+                if (godMode
+                    && toolNameText != null
+                    && networkToolId > 0)
+                {
+                    toolNameText.text =
+                        "<color=#FFD54F>GOD</color> "
+                        + DebugToolName(networkToolId)
+                        + " <color=#00E5FF>∞</color>";
+                }
+                else if (toolItem != null
+                         && toolNameText != null
+                         && _boundNetworkPlayerState != null
+                         && (networkToolId == LobbyPlayerState.NoiseMakerToolId
+                             || networkToolId == LobbyPlayerState.DoorJammerToolId))
+                {
+                    toolNameText.text =
+                        $"<color=#00E5FF>[LMB]</color> "
+                        + $"{toolItem.DisplayName} "
+                        + $"x{_boundNetworkPlayerState.TeamToolUsesRemaining}";
+                }
             }
             catch (System.Exception ex)
             {
                 Debug.LogWarning($"[HUDHotbar] RefreshSlots exception: {ex.Message}");
+            }
+        }
+
+        private static string DebugToolName(int toolId)
+        {
+            switch (toolId)
+            {
+                case LobbyPlayerState.FieldScannerToolId:
+                    return "Field Scanner";
+                case LobbyPlayerState.NoiseMakerToolId:
+                    return "Noise Maker";
+                case LobbyPlayerState.FirstAidKitToolId:
+                    return "First Aid Kit";
+                case LobbyPlayerState.DoorJammerToolId:
+                    return "Door Jammer";
+                case LobbyPlayerState.CoreStabilizerToolId:
+                    return "Core Stabilizer";
+                default:
+                    return "Team Tool";
             }
         }
 

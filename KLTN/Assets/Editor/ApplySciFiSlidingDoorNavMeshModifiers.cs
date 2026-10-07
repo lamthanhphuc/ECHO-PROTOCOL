@@ -19,7 +19,7 @@ public static class ApplySciFiSlidingDoorNavMeshModifiers
     private static readonly string[] MeshChildren = { "Door_Left", "Door_Right", "Frame" };
 
     [MenuItem("Tools/Stalker/Doors/Apply NavMesh Modifiers (SciFi)")]
-    private static void Apply()
+    public static void Apply()
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode)
         {

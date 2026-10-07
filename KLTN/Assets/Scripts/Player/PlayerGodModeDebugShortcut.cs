@@ -4,7 +4,6 @@ using UnityEngine.InputSystem;
 
 public sealed class PlayerGodModeDebugShortcut : MonoBehaviour
 {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
     [RuntimeInitializeOnLoadMethod(
         RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Install()
@@ -22,12 +21,12 @@ public sealed class PlayerGodModeDebugShortcut : MonoBehaviour
         shortcut.AddComponent<
             PlayerGodModeDebugShortcut>();
     }
-#endif
 
     private void Update()
     {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        var keyboard = Keyboard.current;
+        var keyboard =
+            Keyboard.current;
+
         if (keyboard == null)
         {
             return;
@@ -41,33 +40,82 @@ public sealed class PlayerGodModeDebugShortcut : MonoBehaviour
             keyboard.leftShiftKey.isPressed
             || keyboard.rightShiftKey.isPressed;
 
-        if (!ctrl
-            || !shift
-            || !keyboard.gKey.wasPressedThisFrame)
+        if (!ctrl || !shift)
         {
             return;
         }
 
+        NetworkPlayerLifeState localLife =
+            FindLocalLifeState();
+
+        if (localLife == null)
+        {
+            return;
+        }
+
+        if (keyboard.gKey.wasPressedThisFrame)
+        {
+            localLife.RequestDebugGodModeToggle();
+            return;
+        }
+
+        if (!localLife.DebugGodMode)
+        {
+            return;
+        }
+
+        if (keyboard.digit1Key.wasPressedThisFrame)
+        {
+            localLife.RequestDebugTeamTool(
+                LobbyPlayerState.FieldScannerToolId);
+            return;
+        }
+
+        if (keyboard.digit2Key.wasPressedThisFrame)
+        {
+            localLife.RequestDebugTeamTool(
+                LobbyPlayerState.NoiseMakerToolId);
+            return;
+        }
+
+        if (keyboard.digit3Key.wasPressedThisFrame)
+        {
+            localLife.RequestDebugTeamTool(
+                LobbyPlayerState.FirstAidKitToolId);
+            return;
+        }
+
+        if (keyboard.digit4Key.wasPressedThisFrame)
+        {
+            localLife.RequestDebugTeamTool(
+                LobbyPlayerState.DoorJammerToolId);
+            return;
+        }
+
+        if (keyboard.digit5Key.wasPressedThisFrame)
+        {
+            localLife.RequestDebugTeamTool(
+                LobbyPlayerState.CoreStabilizerToolId);
+        }
+    }
+
+    private static NetworkPlayerLifeState FindLocalLifeState()
+    {
         var lifeStates =
             FindObjectsByType<NetworkPlayerLifeState>(
                 FindObjectsInactive.Exclude);
 
         foreach (var lifeState in lifeStates)
         {
-            if (lifeState == null
-                || lifeState.Object == null
-                || !lifeState.Object.IsValid
-                || !lifeState.Object.HasInputAuthority)
+            if (lifeState != null
+                && lifeState.Object != null
+                && lifeState.Object.IsValid
+                && lifeState.Object.HasInputAuthority)
             {
-                continue;
+                return lifeState;
             }
-
-            lifeState.RequestDebugGodModeToggle();
-            return;
         }
 
-        Debug.LogWarning(
-            "[DebugGodMode] Local player life state not found.");
-#endif
+        return null;
     }
 }

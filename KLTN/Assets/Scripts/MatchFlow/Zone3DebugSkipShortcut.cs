@@ -6,7 +6,6 @@ public sealed class Zone3DebugSkipShortcut : MonoBehaviour
 {
     [SerializeField] private Key skipKey = Key.F9;
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Install()
     {
@@ -16,11 +15,9 @@ public sealed class Zone3DebugSkipShortcut : MonoBehaviour
         DontDestroyOnLoad(shortcut);
         shortcut.AddComponent<Zone3DebugSkipShortcut>();
     }
-#endif
 
     private void Update()
     {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
         var keyboard = Keyboard.current;
         if (keyboard == null || !keyboard[skipKey].wasPressedThisFrame) return;
 
@@ -41,6 +38,5 @@ public sealed class Zone3DebugSkipShortcut : MonoBehaviour
 
         offlineFlow.DebugSkipToZone3();
         Debug.Log("[Zone3DebugSkip] Skipped offline match flow to Zone 3.");
-#endif
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.Networking;
 using EchoProtocol.Tools.Scanner;
@@ -10,6 +11,25 @@ namespace EchoProtocol.Tests.EditMode.Tools
 {
     public sealed class FieldScannerTests
     {
+        [Test]
+        public void CoreScanner_UsesZone2ObjectivesAndZone3Fuel()
+        {
+            string source = File.ReadAllText(
+                "Assets/Scripts/Tools/Scanner/NetworkFieldScanner.cs");
+
+            StringAssert.Contains("Zone2MissionStage.FindSecurityTerminal", source);
+            StringAssert.Contains("Zone2MissionStage.RepairRelays", source);
+            StringAssert.Contains("RelaySlot.RelayA_1", source);
+            StringAssert.Contains("RelaySlot.RelayA_2", source);
+            StringAssert.Contains("RelaySlot.RelayB_1", source);
+            StringAssert.Contains("RelaySlot.RelayB_2", source);
+            StringAssert.Contains("CollectZone3FrigateTarget", source);
+            StringAssert.Contains("CollectZone3FuelTargets", source);
+            StringAssert.Contains("Zone3FuelCellScanCandidateAdapter", source);
+            StringAssert.Contains("!cell.IsAvailable", source);
+            StringAssert.Contains("cell.IsCarried", source);
+        }
+
         [Test]
         public void RadarHUD_PrefabsKeepReferences_AndRenderReadyScanDetectedEmptyCooldown()
         {

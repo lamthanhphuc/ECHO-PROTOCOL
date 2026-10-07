@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
+using EchoProtocol.MatchFlow;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
 using Fusion;
@@ -95,6 +96,69 @@ namespace EchoProtocol.Tools.Scanner
         public CoreScanResult CurrentCoreResult => HasActiveResult ? _lastLocalCoreResult : CoreScanResult.Empty;
         public MotionScanResult CurrentMotionResult => HasActiveResult ? _lastLocalMotionResult : MotionScanResult.Empty;
 
+        private bool IsDebugGodModeActive =>
+            GetComponent<NetworkPlayerLifeState>()
+                ?.DebugGodMode == true;
+
+        public string CoreTargetLabel
+        {
+            get
+            {
+                var match = NetworkMatchState.Instance;
+
+                if (match != null
+                    && match.Object != null
+                    && match.Object.IsValid)
+                {
+                    if (match.CurrentPhase == NetworkMatchPhase.Zone2Objective)
+                    {
+                        var zone2 = Zone2MissionDirector.Instance;
+                        return zone2 != null
+                               && zone2.CurrentStage == Zone2MissionStage.RepairRelays
+                            ? "RELAY"
+                            : "SECURITY";
+                    }
+
+                    if (match.CurrentPhase == NetworkMatchPhase.Zone3FindFrigate)
+                    {
+                        return "TÀU";
+                    }
+
+                    if (match.CurrentPhase == NetworkMatchPhase.Zone3PushFrigate)
+                    {
+                        return "NHIÊN LIỆU";
+                    }
+                }
+
+                var flow = FindAnyObjectByType<MatchFlowController>();
+
+                if (flow != null)
+                {
+                    if (flow.Phase == MatchPhase.SecurityHold
+                        || flow.Phase == MatchPhase.PowerPuzzle)
+                    {
+                        var zone2 = Zone2MissionDirector.Instance;
+                        return zone2 != null
+                               && zone2.CurrentStage == Zone2MissionStage.RepairRelays
+                            ? "RELAY"
+                            : "SECURITY";
+                    }
+
+                    if (flow.Phase == MatchPhase.Zone3FindFrigate)
+                    {
+                        return "TÀU";
+                    }
+
+                    if (flow.Phase == MatchPhase.Zone3PushFrigate)
+                    {
+                        return "NHIÊN LIỆU";
+                    }
+                }
+
+                return "LÕI NĂNG LƯỢNG";
+            }
+        }
+
         public float ActiveRemainingTime
         {
             get
@@ -114,6 +178,11 @@ namespace EchoProtocol.Tools.Scanner
         {
             get
             {
+                if (IsDebugGodModeActive)
+                {
+                    return 0f;
+                }
+
                 if (Runner != null && Runner.IsRunning && Object != null && Object.IsValid)
                 {
                     float rem = ScanCooldownTimer.RemainingTime(Runner) ?? 0f;
@@ -127,6 +196,11 @@ namespace EchoProtocol.Tools.Scanner
         {
             get
             {
+                if (IsDebugGodModeActive)
+                {
+                    return true;
+                }
+
                 if (Runner != null && Runner.IsRunning && Object != null && Object.IsValid)
                 {
                     return ScanCooldownTimer.ExpiredOrNotRunning(Runner);
@@ -488,7 +562,9 @@ namespace EchoProtocol.Tools.Scanner
         private bool ExecuteScanLocally(FieldScannerMode requestedMode)
         {
             _localActiveScanTimer = _tuning.ActiveDuration;
-            _localCooldownTimer = _tuning.ScanCooldown;
+            _localCooldownTimer = IsDebugGodModeActive
+                ? 0f
+                : _tuning.ScanCooldown;
             ScanPulseOrdinal++;
             AnyScanPulseTriggered?.Invoke(this);
 
@@ -545,7 +621,9 @@ namespace EchoProtocol.Tools.Scanner
 
             CurrentMode = requestedMode;
             // Active time and cooldown are accepted only by State Authority.
-            float totalDuration = _tuning.ActiveDuration + _tuning.ScanCooldown;
+            float totalDuration = IsDebugGodModeActive
+                ? _tuning.ActiveDuration
+                : _tuning.ActiveDuration + _tuning.ScanCooldown;
             ScanCooldownTimer = TickTimer.CreateFromSeconds(Runner, totalDuration);
             ScanPulseOrdinal++;
             AnyScanPulseTriggered?.Invoke(this);
@@ -712,31 +790,180 @@ namespace EchoProtocol.Tools.Scanner
         {
             List<ICoreScanCandidate> candidates = new List<ICoreScanCandidate>();
 
-            // 1. NetworkPickupItems
-            NetworkPickupItem[] networkItems = FindObjectsByType<NetworkPickupItem>(FindObjectsInactive.Exclude);
-            for (int i = 0; i < networkItems.Length; i++)
+            var match = NetworkMatchState.Instance;
+
+            if (match != null
+                && match.Object != null
+                && match.Object.IsValid)
             {
-                var netItem = networkItems[i];
-                if (netItem != null)
+                if (match.CurrentPhase == NetworkMatchPhase.Zone2Objective)
                 {
-                    candidates.Add(new NetworkPickupItemCandidateAdapter(netItem));
+                    CollectZone2Targets(candidates);
+                    return candidates;
+                }
+
+                if (match.CurrentPhase == NetworkMatchPhase.Zone3FindFrigate)
+                {
+                    CollectZone3FrigateTarget(candidates);
+                    return candidates;
+                }
+
+                if (match.CurrentPhase == NetworkMatchPhase.Zone3PushFrigate)
+                {
+                    CollectZone3FuelTargets(candidates);
+                    return candidates;
+                }
+            }
+            else
+            {
+                var flow = FindAnyObjectByType<MatchFlowController>();
+
+                if (flow != null)
+                {
+                    if (flow.Phase == MatchPhase.SecurityHold
+                        || flow.Phase == MatchPhase.PowerPuzzle)
+                    {
+                        CollectZone2Targets(candidates);
+                        return candidates;
+                    }
+
+                    if (flow.Phase == MatchPhase.Zone3FindFrigate)
+                    {
+                        CollectZone3FrigateTarget(candidates);
+                        return candidates;
+                    }
+
+                    if (flow.Phase == MatchPhase.Zone3PushFrigate)
+                    {
+                        CollectZone3FuelTargets(candidates);
+                        return candidates;
+                    }
                 }
             }
 
-            // 2. Local EnergyCorePickup fallbacks if no network items found
+            NetworkPickupItem[] networkItems =
+                FindObjectsByType<NetworkPickupItem>(
+                    FindObjectsInactive.Exclude);
+
+            for (int i = 0; i < networkItems.Length; i++)
+            {
+                var item = networkItems[i];
+
+                if (item != null)
+                {
+                    candidates.Add(
+                        new NetworkPickupItemCandidateAdapter(item));
+                }
+            }
+
             if (candidates.Count == 0)
             {
-                EnergyCorePickup[] pickups = FindObjectsByType<EnergyCorePickup>(FindObjectsInactive.Exclude);
+                EnergyCorePickup[] pickups =
+                    FindObjectsByType<EnergyCorePickup>(
+                        FindObjectsInactive.Exclude);
+
                 for (int i = 0; i < pickups.Length; i++)
                 {
                     if (pickups[i] != null)
                     {
-                        candidates.Add(new EnergyCorePickupCandidateAdapter(pickups[i]));
+                        candidates.Add(
+                            new EnergyCorePickupCandidateAdapter(
+                                pickups[i]));
                     }
                 }
             }
 
             return candidates;
+        }
+
+        private static void CollectZone2Targets(
+            List<ICoreScanCandidate> candidates)
+        {
+            var zone2 = Zone2MissionDirector.Instance;
+
+            if (zone2 == null)
+            {
+                return;
+            }
+
+            switch (zone2.CurrentStage)
+            {
+                case Zone2MissionStage.FindSecurityTerminal:
+                    AddObjectiveCandidate(candidates, zone2.SecurityTerminal);
+                    break;
+
+                case Zone2MissionStage.RepairRelays:
+                    AddRelayIfIncomplete(candidates, zone2, RelaySlot.RelayA_1, zone2.RelayA1);
+                    AddRelayIfIncomplete(candidates, zone2, RelaySlot.RelayA_2, zone2.RelayA2);
+                    AddRelayIfIncomplete(candidates, zone2, RelaySlot.RelayB_1, zone2.RelayB1);
+                    AddRelayIfIncomplete(candidates, zone2, RelaySlot.RelayB_2, zone2.RelayB2);
+                    break;
+
+                case Zone2MissionStage.SecurityHoldReady:
+                case Zone2MissionStage.SecurityHold:
+                    AddObjectiveCandidate(candidates, zone2.SecurityTerminal);
+                    break;
+            }
+        }
+
+        private static void AddRelayIfIncomplete(
+            List<ICoreScanCandidate> candidates,
+            Zone2MissionDirector zone2,
+            RelaySlot slot,
+            Component relay)
+        {
+            if (zone2 == null || relay == null)
+            {
+                return;
+            }
+
+            int mask = 1 << (int)slot;
+            if ((zone2.RelayCompletionMask & mask) != 0)
+            {
+                return;
+            }
+
+            AddObjectiveCandidate(candidates, relay);
+        }
+
+        private static void CollectZone3FrigateTarget(
+            List<ICoreScanCandidate> candidates)
+        {
+            var zone3 = Zone3MissionDirector.Instance;
+            if (zone3 == null || zone3.Frigate == null)
+            {
+                return;
+            }
+
+            AddObjectiveCandidate(candidates, zone3.Frigate);
+        }
+
+        private static void CollectZone3FuelTargets(
+            List<ICoreScanCandidate> candidates)
+        {
+            Zone3FuelCell[] cells = FindObjectsByType<Zone3FuelCell>(FindObjectsInactive.Exclude);
+
+            for (int i = 0; i < cells.Length; i++)
+            {
+                Zone3FuelCell cell = cells[i];
+                if (cell == null || !cell.IsAvailable || cell.IsCarried)
+                {
+                    continue;
+                }
+
+                candidates.Add(new Zone3FuelCellScanCandidateAdapter(cell));
+            }
+        }
+
+        private static void AddObjectiveCandidate(
+            List<ICoreScanCandidate> candidates,
+            Component target)
+        {
+            if (target != null)
+            {
+                candidates.Add(
+                    new ObjectiveScanCandidateAdapter(target));
+            }
         }
 
         private List<IMotionScannable> CollectMotionTargets()
@@ -794,6 +1021,82 @@ namespace EchoProtocol.Tools.Scanner
                         && _item.Holder == PlayerRef.None;
                 }
             }
+        }
+
+        private sealed class ObjectiveScanCandidateAdapter
+            : ICoreScanCandidate
+        {
+            private readonly Component _target;
+
+            public ObjectiveScanCandidateAdapter(
+                Component target)
+            {
+                _target = target;
+            }
+
+            public int TargetId =>
+                _target != null
+                    ? _target.GetEntityId().GetHashCode()
+                    : 0;
+
+            public Vector3 WorldPosition
+            {
+                get
+                {
+                    if (_target == null)
+                    {
+                        return Vector3.zero;
+                    }
+
+                    Collider collider =
+                        _target.GetComponent<Collider>();
+
+                    return collider != null
+                        ? collider.bounds.center
+                        : _target.transform.position;
+                }
+            }
+
+            public bool IsAvailableInWorld =>
+                _target != null
+                && _target.gameObject.activeInHierarchy;
+        }
+
+        private sealed class Zone3FuelCellScanCandidateAdapter : ICoreScanCandidate
+        {
+            private readonly Zone3FuelCell _cell;
+
+            public Zone3FuelCellScanCandidateAdapter(Zone3FuelCell cell)
+            {
+                _cell = cell;
+            }
+
+            public int TargetId =>
+                _cell != null
+                    ? _cell.GetEntityId().GetHashCode()
+                    : 0;
+
+            public Vector3 WorldPosition
+            {
+                get
+                {
+                    if (_cell == null)
+                    {
+                        return Vector3.zero;
+                    }
+
+                    Collider collider = _cell.GetComponent<Collider>();
+                    return collider != null
+                        ? collider.bounds.center
+                        : _cell.transform.position;
+                }
+            }
+
+            public bool IsAvailableInWorld =>
+                _cell != null
+                && _cell.gameObject.activeInHierarchy
+                && _cell.IsAvailable
+                && !_cell.IsCarried;
         }
 
         private sealed class EnergyCorePickupCandidateAdapter : ICoreScanCandidate

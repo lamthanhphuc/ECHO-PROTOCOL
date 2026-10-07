@@ -7,6 +7,27 @@ namespace EchoProtocol.Networking.Tests
 {
     public sealed class NetworkMatchStateTests
     {
+        [Test]
+        public void Zone1Completion_DoesNotTeleportPlayersToZone2()
+        {
+            string source = File.ReadAllText(
+                    "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs")
+                .Replace("\r\n", "\n");
+
+            StringAssert.Contains(
+                "if (next != NetworkMatchPhase.Zone2Objective)",
+                source);
+
+            StringAssert.Contains(
+                "TeleportGameplayPlayersAuthoritative(next);",
+                source);
+
+            StringAssert.Contains(
+                "TeleportGameplayPlayersAuthoritative(\n" +
+                "                NetworkMatchPhase.Zone2Objective);",
+                source);
+        }
+
         private const string MatchSourcePath =
             "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs";
         private const string ObjectiveSourcePath =
@@ -17,6 +38,20 @@ namespace EchoProtocol.Networking.Tests
             "Assets/Scripts/UI/HUD/HUDZoneMissions.cs";
         private const string MatchPrefabPath =
             "Assets/Resources/Network/NetworkMatchState.prefab";
+
+        [Test]
+        public void CoreStabilizer_SilencesObjectiveNoiseInsideField()
+        {
+            string source = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs");
+
+            StringAssert.Contains("IsObjectiveNoiseSilenced", source);
+            StringAssert.Contains("IsCoreStabilizerCovering", source);
+            StringAssert.Contains("RuntimeNoiseType.MACHINE_REPAIR", source);
+            StringAssert.Contains("RuntimeNoiseType.TERMINAL_DOWNLOAD", source);
+            StringAssert.Contains("RuntimeNoiseType.VEHICLE_PUSH", source);
+            StringAssert.Contains("RuntimeNoiseType.CHARGE_TRANSFER", source);
+        }
 
         [Test]
         public void NetworkMatchPrefab_UsesCanonicalTiming()

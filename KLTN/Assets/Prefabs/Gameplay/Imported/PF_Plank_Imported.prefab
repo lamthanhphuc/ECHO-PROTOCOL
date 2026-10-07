@@ -13,7 +13,6 @@ GameObject:
   - component: {fileID: 5085477122006853335}
   - component: {fileID: 4920552562951933515}
   - component: {fileID: 206289679462024012}
-  - component: {fileID: 8487900595107321446}
   m_Layer: 0
   m_Name: PF_Plank_Imported
   m_TagString: Untagged
@@ -52,7 +51,7 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 1
+  m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
@@ -201,24 +200,6 @@ MonoBehaviour:
   _visualRenderer: {fileID: 4882620373577368898}
   _WorldPosition: {x: 0, y: 0, z: 0}
   _WorldRotation: {x: 0, y: 0, z: 0, w: 0}
---- !u!114 &8487900595107321446
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1032971532598727059}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5fea29bb7c508c244a1f805a5fd3fc4d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::QuickOutline.Outline
-  outlineMode: 1
-  outlineColor: {r: 0, g: 1, b: 1, a: 1}
-  outlineWidth: 4
-  precomputeOutline: 0
-  bakeKeys: []
-  bakeValues: []
 --- !u!1 &6395798856667604119
 GameObject:
   m_ObjectHideFlags: 0
@@ -268,8 +249,8 @@ MeshRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6395798856667604119}
   m_Enabled: 1
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
+  m_CastShadows: 0
+  m_ReceiveShadows: 0
   m_DynamicOccludee: 1
   m_StaticShadowCaster: 0
   m_MotionVectors: 1

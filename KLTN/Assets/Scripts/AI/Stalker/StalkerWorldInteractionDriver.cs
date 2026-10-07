@@ -80,6 +80,19 @@ namespace EchoProtocol.AI.Stalker
                 return StalkerWorldInteractionStartResult.Completed;
             }
 
+            if (door.TryGetActiveJammer(out var doorJammer))
+            {
+                Begin(
+                    StalkerWorldInteractionKind.BreakingJammer,
+                    null,
+                    doorJammer,
+                    objectiveKey,
+                    state,
+                    doorJammer.BreakDurationSeconds);
+
+                return StalkerWorldInteractionStartResult.Started;
+            }
+
             if (!door.IsBroken)
             {
                 Begin(

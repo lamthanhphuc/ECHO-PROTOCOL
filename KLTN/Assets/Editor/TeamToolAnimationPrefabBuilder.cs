@@ -1,4 +1,5 @@
 using System.IO;
+using EchoProtocol.Networking;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
@@ -133,8 +134,9 @@ public static class TeamToolAnimationPrefabBuilder
         GameObject visual = InstantiateVisual(visualPrefab, root.transform);
         visual.transform.Find("DeviceVFXOrigin/StatusLight").localPosition = new Vector3(0.158f, 0.3239f, 0.01f);
         Transform mesh = visual.transform.Find("GripPivot/DeviceModel/RandomSciFiDevice/default");
-        mesh.localPosition = new Vector3(15.2f, 39.1f, -10.3f);
-        mesh.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        mesh.localPosition = new Vector3(7.7f, -10.7f, -27f);
+        mesh.localRotation = Quaternion.Euler(90.43701f, -89.996f, -177.121f);
+        mesh.localScale = Vector3.one * 3.7f;
         CreateSupportFieldVfx(root.transform, fieldMaterial);
         SaveWrapper(root, CorePrefabPath);
     }
@@ -167,7 +169,7 @@ public static class TeamToolAnimationPrefabBuilder
 
     private static void CreateSupportFieldVfx(Transform parent, Material material)
     {
-        const float radius = 5f;
+        float radius = CoreStabilizerRules.SupportRadius;
         const int segments = 128;
 
         var field = new GameObject("SupportFieldVFX");

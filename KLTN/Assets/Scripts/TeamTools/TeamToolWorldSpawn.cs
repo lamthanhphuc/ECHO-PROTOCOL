@@ -12,21 +12,12 @@ namespace EchoProtocol.TeamTools
         {
             LobbyPlayerState.FieldScannerToolId,
             LobbyPlayerState.NoiseMakerToolId,
-
             LobbyPlayerState.FirstAidKitToolId,
-            LobbyPlayerState.FirstAidKitToolId,
-            LobbyPlayerState.FirstAidKitToolId,
-            LobbyPlayerState.FirstAidKitToolId,
-            LobbyPlayerState.FirstAidKitToolId,
-            LobbyPlayerState.FirstAidKitToolId,
-            LobbyPlayerState.FirstAidKitToolId,
-            LobbyPlayerState.FirstAidKitToolId,
-
             LobbyPlayerState.DoorJammerToolId,
             LobbyPlayerState.CoreStabilizerToolId,
         };
 
-        public const int RequiredToolCountPerZone = 12;
+        public const int RequiredToolCountPerZone = 5;
 
         private readonly struct SpawnPlan
         {
@@ -56,6 +47,7 @@ namespace EchoProtocol.TeamTools
             TeamToolPickupCatalog catalog,
             int zone1Count,
             int zone2Count,
+            int zone3Count,
             float minimumSpacing)
         {
             if (runner == null
@@ -79,6 +71,11 @@ namespace EchoProtocol.TeamTools
                 Mathf.Max(
                     RequiredToolCountPerZone,
                     zone2Count);
+
+            int resolvedZone3Count =
+                Mathf.Max(
+                    RequiredToolCountPerZone,
+                    zone3Count);
 
             if (!TryBuildZonePlan(
                     catalog,
@@ -112,13 +109,31 @@ namespace EchoProtocol.TeamTools
                 return false;
             }
 
+            if (!TryBuildZonePlan(
+                    catalog,
+                    points,
+                    TeamToolSpawnZone.Zone3,
+                    resolvedZone3Count,
+                    minimumSpacing,
+                    out var zone3Plans))
+            {
+                Debug.LogError(
+                    "[TeamToolWorldSpawn] " +
+                    "Zone3 planning failed. " +
+                    "No runtime Team Tools were spawned.");
+
+                return false;
+            }
+
             var completePlan =
                 new List<SpawnPlan>(
                     zone1Plans.Count
-                    + zone2Plans.Count);
+                    + zone2Plans.Count
+                    + zone3Plans.Count);
 
             completePlan.AddRange(zone1Plans);
             completePlan.AddRange(zone2Plans);
+            completePlan.AddRange(zone3Plans);
 
             var spawnedObjects =
                 new List<NetworkObject>(

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Fusion;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 [DisallowMultipleComponent]
 public sealed class PlayerFirstPersonVisibility : MonoBehaviour
@@ -50,6 +51,7 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
             {
                 if (k == null) deadKeys.Add(k);
             }
+
             for (int i = 0; i < deadKeys.Count; i++)
             {
                 _originalRendererStates.Remove(deadKeys[i]);
@@ -58,9 +60,26 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
 
         foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true))
         {
-            if (renderer != null && !_originalRendererStates.ContainsKey(renderer))
+            if (renderer == null)
             {
-                _originalRendererStates.Add(renderer, renderer.enabled);
+                continue;
+            }
+
+            if (renderer is SkinnedMeshRenderer)
+            {
+                renderer.receiveShadows = false;
+            }
+
+            if (IsFirstPersonOnlyRenderer(renderer))
+            {
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+            }
+
+            if (!_originalRendererStates.ContainsKey(renderer))
+            {
+                _originalRendererStates.Add(
+                    renderer,
+                    renderer.enabled);
             }
         }
     }

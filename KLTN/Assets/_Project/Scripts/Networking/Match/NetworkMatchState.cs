@@ -469,7 +469,7 @@ namespace EchoProtocol.Networking
                     var toolsPerZone = MatchDifficultyProfiles.Get(difficulty).TeamToolsPerZone;
                     TeamToolWorldSpawnInitialized = TeamToolWorldSpawn.TrySpawnInitial(
                         Runner, _teamToolPickupCatalog, toolsPerZone,
-                        toolsPerZone, _teamToolSpawnMinimumSpacing);
+                        toolsPerZone, toolsPerZone, _teamToolSpawnMinimumSpacing);
                 }
             }
 
@@ -1333,6 +1333,7 @@ namespace EchoProtocol.Networking
         {
             if (!actor.IsRealPlayer
                 || terminal == null
+                || IsObjectiveNoiseSilenced(terminal.transform.position)
                 || MatchAuthorityRuntime.Instance == null
                 || MatchAuthorityRuntime.Instance.MatchId == Guid.Empty)
             {
@@ -1619,7 +1620,6 @@ namespace EchoProtocol.Networking
 
         public bool DebugSkipToZone3()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (!HasValidNetworkObject() || !Object.HasStateAuthority || IsEnded) return false;
 
             ResetZone2AuthoritativeState();
@@ -1640,81 +1640,79 @@ namespace EchoProtocol.Networking
             CurrentPhase = NetworkMatchPhase.Zone3FindFrigate;
             LastActor = Runner != null ? Runner.LocalPlayer : PlayerRef.None;
             AdvancePhaseOrdinal();
+            TeleportGameplayPlayersAuthoritative(
+                NetworkMatchPhase.Zone3FindFrigate);
             HandleReplicatedStateChanged();
             RuntimeLog.Log(RuntimeLogCategory.MatchState, "[MatchState] Debug skipped to Zone3FindFrigate.");
             return true;
-#else
-            return false;
-#endif
         }
 
-        public bool DebugSkipToZone2()
+        private bool DebugSkipToZone2()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (!HasValidNetworkObject() || !Object.HasStateAuthority || IsEnded) return false;
-
-            ResetZone2AuthoritativeState();
-            if (!InitializeZone2RelayRuntimeAuthoritative())
+            if (!HasValidNetworkObject()
+                || !Object.HasStateAuthority
+                || IsEnded)
             {
                 return false;
             }
 
-            Zone2Stage = Zone2MissionStage.FindSecurityTerminal;
-            CurrentPhase = NetworkMatchPhase.Zone2Objective;
-            LastActor = Runner != null ? Runner.LocalPlayer : PlayerRef.None;
-            AdvancePhaseOrdinal();
-            HandleReplicatedStateChanged();
-            RuntimeLog.Log(RuntimeLogCategory.MatchState, "[MatchState] Debug skipped to Zone2Objective.");
-            return true;
-#else
-            return false;
-#endif
-        }
+            ResetZone2AuthoritativeState();
 
-        public void RequestDebugSkipToZone3()
-        {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (!HasValidNetworkObject()) return;
-            if (Object.HasStateAuthority)
+            if (!InitializeZone2RelayRuntimeAuthoritative())
+                return false;
+
+            Zone2Stage = Zone2MissionStage.FindSecurityTerminal;
+
+            if (!TryAdvancePhase(
+                    NetworkMatchPhase.CoreObjective,
+                    NetworkMatchPhase.Zone2Objective,
+                    "DEBUG_SKIP_ZONE1"))
             {
-                DebugSkipToZone3();
+                return false;
             }
-            else
-            {
-                RpcDebugSkipToZone3();
-            }
-#endif
+
+            TeleportGameplayPlayersAuthoritative(
+                NetworkMatchPhase.Zone2Objective);
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchState,
+                "[MatchState] Debug skipped to Zone2Objective.");
+
+            return true;
         }
 
         public void RequestDebugSkipToZone2()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (!HasValidNetworkObject()) return;
+            if (!HasValidNetworkObject())
+                return;
+
             if (Object.HasStateAuthority)
-            {
                 DebugSkipToZone2();
-            }
             else
-            {
                 RpcDebugSkipToZone2();
-            }
-#endif
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        private void RpcDebugSkipToZone3(RpcInfo info = default)
+        private void RpcDebugSkipToZone2()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            DebugSkipToZone3();
-#endif
-        }
-
-        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        private void RpcDebugSkipToZone2(RpcInfo info = default)
-        {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             DebugSkipToZone2();
-#endif
+        }
+
+        public void RequestDebugSkipToZone3()
+        {
+            if (!HasValidNetworkObject())
+                return;
+
+            if (Object.HasStateAuthority)
+                DebugSkipToZone3();
+            else
+                RpcDebugSkipToZone3();
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcDebugSkipToZone3()
+        {
+            DebugSkipToZone3();
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -2134,6 +2132,68 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        private static Transform ResolveZoneTeleportTarget(NetworkMatchPhase phase)
+        {
+            if (phase == NetworkMatchPhase.Zone2Objective)
+            {
+                return FindAnyObjectByType<StalkerZone2EntryTrigger>()?.transform;
+            }
+
+            return null;
+        }
+
+        private void TeleportGameplayPlayersAuthoritative(NetworkMatchPhase phase)
+        {
+            if (!Object.HasStateAuthority || Runner == null)
+                return;
+
+            Vector3 targetPosition;
+            Quaternion targetRotation;
+
+            if (phase == NetworkMatchPhase.Zone3FindFrigate)
+            {
+                targetPosition = new Vector3(88.66215f, 2.080028f, -399.027f);
+                targetRotation = Quaternion.Euler(0f, -159.24f, 0f);
+            }
+            else
+            {
+                Transform target = ResolveZoneTeleportTarget(phase);
+                if (target == null)
+                {
+                    Debug.LogWarning($"[MatchState] Missing teleport target for {phase}.");
+                    return;
+                }
+
+                targetPosition = target.position;
+                targetRotation = target.rotation;
+            }
+
+            int index = 0;
+
+            foreach (PlayerRef player in Runner.ActivePlayers)
+            {
+                if (!Runner.TryGetPlayerObject(player, out var playerObject)
+                    || playerObject == null
+                    || !playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyState)
+                    || !lobbyState.IsGameplayPlayer
+                    || !playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement))
+                {
+                    continue;
+                }
+
+                float side = index % 2 == 0 ? -0.8f : 0.8f;
+                float back = index / 2 * 1.2f;
+
+                Vector3 position =
+                    targetPosition
+                    + targetRotation * Vector3.right * side
+                    - targetRotation * Vector3.forward * back;
+
+                movement.TeleportAuthoritative(position, targetRotation);
+                index++;
+            }
+        }
+
         private static bool IsZoneBoundary(NetworkMatchPhase previous, NetworkMatchPhase next)
         {
             return previous == NetworkMatchPhase.CoreObjective
@@ -2195,6 +2255,11 @@ namespace EchoProtocol.Networking
             if (IsZoneBoundary(previousPhase, next))
             {
                 ResetPlayerReviveBudgetsAuthoritative();
+
+                if (next != NetworkMatchPhase.Zone2Objective)
+                {
+                    TeleportGameplayPlayersAuthoritative(next);
+                }
             }
 
             if (next != NetworkMatchPhase.Escape
@@ -2887,6 +2952,33 @@ namespace EchoProtocol.Networking
             }
         }
 
+        private bool IsObjectiveNoiseSilenced(Vector3 worldPosition)
+        {
+            if (Runner == null)
+            {
+                return false;
+            }
+
+            foreach (PlayerRef player in Runner.ActivePlayers)
+            {
+                if (!Runner.TryGetPlayerObject(player, out var playerObject)
+                    || playerObject == null
+                    || !playerObject.IsValid
+                    || !playerObject.TryGetComponent<NetworkPlayerInteractor>(
+                        out var interactor))
+                {
+                    continue;
+                }
+
+                if (interactor.IsCoreStabilizerCovering(worldPosition))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private void EmitRelayRepairNoiseAuthoritative()
         {
             if (!RelayNoiseCatalog.TryGetDefinition(
@@ -2955,6 +3047,7 @@ namespace EchoProtocol.Networking
         {
             if (!actor.IsRealPlayer
                 || target == null
+                || IsObjectiveNoiseSilenced(target.transform.position)
                 || MatchAuthorityRuntime.Instance == null
                 || MatchAuthorityRuntime.Instance.MatchId == Guid.Empty)
             {
@@ -3010,14 +3103,24 @@ namespace EchoProtocol.Networking
                 || !TryValidateZone2Requester(
                     operatorPlayer,
                     target,
-                    _zone2InteractionDistance)
-                || !pulseTimer.ExpiredOrNotRunning(Runner))
+                    _zone2InteractionDistance))
             {
                 if (!active || !operatorPlayer.IsRealPlayer)
                 {
                     pulseTimer = TickTimer.None;
                 }
 
+                return;
+            }
+
+            if (IsObjectiveNoiseSilenced(target.transform.position))
+            {
+                pulseTimer = TickTimer.None;
+                return;
+            }
+
+            if (!pulseTimer.ExpiredOrNotRunning(Runner))
+            {
                 return;
             }
 
@@ -3120,6 +3223,12 @@ namespace EchoProtocol.Networking
         private void EmitObjectiveNoisePulse(RuntimeNoiseType type, PlayerRef actor,
             Vector3 position, string stream, ref TickTimer timer, ref long sequence)
         {
+            if (IsObjectiveNoiseSilenced(position))
+            {
+                timer = TickTimer.None;
+                return;
+            }
+
             if (!actor.IsRealPlayer || !timer.ExpiredOrNotRunning(Runner)
                 || !RelayNoiseCatalog.TryGetDefinition(type, out var definition)) return;
             var authority = MatchAuthorityRuntime.Instance;
@@ -3135,6 +3244,11 @@ namespace EchoProtocol.Networking
 
         private void EmitZone3PowerSurgeNoiseAuthoritative(PlayerRef actor, Vector3 position)
         {
+            if (IsObjectiveNoiseSilenced(position))
+            {
+                return;
+            }
+
             var authority = MatchAuthorityRuntime.Instance;
             if (!actor.IsRealPlayer || authority == null || authority.MatchId == Guid.Empty) return;
             long sequence = _zone3ChargeNoiseSequence == long.MaxValue ? 1 : _zone3ChargeNoiseSequence + 1;
