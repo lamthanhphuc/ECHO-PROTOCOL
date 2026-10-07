@@ -590,10 +590,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
                     case StalkerState.DETECT:
                         audioController.BeginDetectAudioEntry();
                         audioController.EnterIdle();
-                        if (detectTargetChanged && !semanticChanged)
-                            audioController.PlayDetectForNewTarget();
-                        else
-                            audioController.PlayDetect();
+                        audioController.PlayDetect();
                         break;
                     case StalkerState.ATTACK:
                         audioController.BeginAttackAudioEpisode();
@@ -603,6 +600,14 @@ namespace EchoProtocol.AI.Stalker.Presentation
                         audioController.PlaySearch();
                         break;
                 }
+            }
+
+            else if (presentation.SemanticState == StalkerState.DETECT
+                     && detectTargetChanged)
+            {
+                audioController.BeginDetectAudioEntry();
+                audioController.EnterIdle();
+                audioController.PlayDetectForNewTarget();
             }
 
             if (presentation.AttackHitMomentResolved
