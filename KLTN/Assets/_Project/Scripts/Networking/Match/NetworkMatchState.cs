@@ -173,6 +173,7 @@ namespace EchoProtocol.Networking
         [Networked] public int RelayA1CircuitMissing { get; private set; }
         [Networked] public NetworkBool RelayA1CircuitTrip { get; private set; }
         [Networked] public NetworkBool RelayA1CircuitFaultActive { get; private set; }
+        [Networked] public int RelayA1FailedCell { get; private set; }
         [Networked] public int RelayA1CircuitTestSequence { get; private set; }
         [Networked] public int RelayA2AttemptSeed { get; private set; }
         [Networked] public int RelayA2CircuitScenario { get; private set; }
@@ -182,6 +183,7 @@ namespace EchoProtocol.Networking
         [Networked] public int RelayA2CircuitMissing { get; private set; }
         [Networked] public NetworkBool RelayA2CircuitTrip { get; private set; }
         [Networked] public NetworkBool RelayA2CircuitFaultActive { get; private set; }
+        [Networked] public int RelayA2FailedCell { get; private set; }
         [Networked] public int RelayA2CircuitTestSequence { get; private set; }
         [Networked] public int RelayB1AttemptSeed { get; private set; }
         [Networked] public int RelayB1PresetIndex { get; private set; }
@@ -1148,6 +1150,7 @@ namespace EchoProtocol.Networking
                 RelayA1CircuitMissing = state.MissingTargets;
                 RelayA1CircuitTrip = state.FaultPowered;
                 RelayA1CircuitFaultActive = state.FaultActive;
+                RelayA1FailedCell = state.Scenario.FailedCell;
                 RelayA1CircuitTestSequence = state.TestSequence;
             }
             else
@@ -1159,6 +1162,7 @@ namespace EchoProtocol.Networking
                 RelayA2CircuitMissing = state.MissingTargets;
                 RelayA2CircuitTrip = state.FaultPowered;
                 RelayA2CircuitFaultActive = state.FaultActive;
+                RelayA2FailedCell = state.Scenario.FailedCell;
                 RelayA2CircuitTestSequence = state.TestSequence;
             }
         }

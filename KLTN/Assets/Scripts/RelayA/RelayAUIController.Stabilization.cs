@@ -264,7 +264,7 @@ namespace EchoProtocol.RelayA
                 _stabilizationControlValues[i].text = $"{controls[i]:0}%";
                 _stabilizationReadings[i].text = $"{readings[i]:0.0}{units[i]}";
                 _stabilizationReadings[i].color = color;
-                _stabilizationSafeLabels[i].text = $"SAFE {safe[i].x:0.#}-{safe[i].y:0.#}{units[i]}";
+            _stabilizationSafeLabels[i].text = $"{(isSafe ? "SAFE" : readings[i] < safe[i].x ? "RAISE" : "LOWER")} {safe[i].x:0.#}-{safe[i].y:0.#}{units[i]}";
                 float padding = Mathf.Max(1f, (danger[i].y - danger[i].x) * 0.2f);
                 float min = danger[i].x - padding;
                 float span = Mathf.Max(0.01f, danger[i].y - danger[i].x + padding * 2f);
@@ -284,16 +284,17 @@ namespace EchoProtocol.RelayA
             _stabilizationStatus.color = statusColor;
             _stabilizationProgressText.text = $"{state.StabilitySeconds:0.0} / {state.StabilityRequiredSeconds:0.0} s";
             _stabilizationProgressText.color = statusColor;
-            _stabilizationRecovery.text = config.RequireFaultRecovery ? $"FAULTS RESOLVED  {state.RecoveredFaults} / 3" : "";
+            _stabilizationRecovery.text = config.RequireFaultRecovery
+                ? state.RecoveredFaults > 0 ? "LOAD TEST PASSED - KEEP OUTPUT SAFE" : "LOAD TEST 0 / 1 - CORRECT THE FAULT" : "";
             for (int i = 0; i < _recoverySegments.Length; i++)
             {
-                _recoverySegments[i].gameObject.SetActive(config.RequireFaultRecovery);
+                _recoverySegments[i].gameObject.SetActive(config.RequireFaultRecovery && i == 0);
                 _recoverySegments[i].color = i < state.RecoveredFaults ? Green
                     : i == state.RecoveredFaults && state.IsRunning ? WarningYellow : TileBack;
             }
             _stabilizationProgress.rectTransform.anchorMax = new Vector2(state.Stability01, 1f);
             _stabilizationHoldState.text = _controller.IsOnline ? "STABLE" : !state.IsRunning ? "PAUSED"
-                : config.RequireFaultRecovery && state.RecoveredFaults < 3
+                : config.RequireFaultRecovery && state.RecoveredFaults < 1
                     ? state.ActiveFault != RelayAFaultType.None ? "COMPENSATE FAULT" : "LOAD TEST PENDING"
                     : state.IsStable ? "STABLE" : "OUTPUT UNSTABLE";
             _stabilizationHoldState.color = statusColor;
@@ -307,7 +308,7 @@ namespace EchoProtocol.RelayA
                 ? config.RequireFaultRecovery
                     ? state.IsStable
                         ? $"{FaultName(state.ActiveFault)}\nHOLD SAFE OUTPUT\n{state.FaultActiveRemaining:0.0} s HOLD LEFT"
-                        : $"{FaultName(state.ActiveFault)}\nKEEP ALL READINGS SAFE\nHOLD {config.FaultRecoveryHoldSeconds:0.0} s"
+                        : $"{FaultName(state.ActiveFault)}\n{FaultHint(state.ActiveFault)}\nSAFE HOLD {config.FaultRecoveryHoldSeconds:0.0} s"
                     : $"FAULT ACTIVE\n{FaultName(state.ActiveFault)}\n{state.FaultActiveRemaining:0.0} s"
                 : state.WarningFault != RelayAFaultType.None
                     ? $"WARNING\n{FaultName(state.WarningFault)}\nFAULT IN {state.FaultWarningRemaining:0.0} s" : "OVERLOAD";
@@ -331,6 +332,10 @@ namespace EchoProtocol.RelayA
 
         private static string FaultName(RelayAFaultType fault) => fault == RelayAFaultType.Overvoltage
             ? "OVERVOLTAGE" : fault == RelayAFaultType.FrequencyDesynchronization ? "FREQUENCY DESYNC" : "LOAD IMBALANCE";
+
+        private static string FaultHint(RelayAFaultType fault) => fault == RelayAFaultType.Overvoltage
+            ? "LOWER GENERATOR; CHECK Hz / LOAD" : fault == RelayAFaultType.FrequencyDesynchronization
+            ? "LOWER FREQUENCY; CHECK V / LOAD" : "LOWER LOAD; CHECK V / Hz";
 
         private void SendStabilizationControls()
         {

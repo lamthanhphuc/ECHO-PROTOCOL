@@ -5,9 +5,9 @@ namespace EchoProtocol.RelayA
     public sealed partial class RelayAConfig
     {
         [Header("Safe Ranges")]
-        [SerializeField] private Vector2 voltageSafeRange = new Vector2(220f, 230f);
-        [SerializeField] private Vector2 frequencySafeRange = new Vector2(49f, 51f);
-        [SerializeField] private Vector2 loadSafeRange = new Vector2(47f, 53f);
+        [SerializeField] private Vector2 voltageSafeRange = new Vector2(221f, 229f);
+        [SerializeField] private Vector2 frequencySafeRange = new Vector2(49.2f, 50.8f);
+        [SerializeField] private Vector2 loadSafeRange = new Vector2(47.5f, 52.5f);
 
         [Header("Danger Ranges")]
         [SerializeField] private Vector2 voltageDangerRange = new Vector2(210f, 240f);
@@ -24,13 +24,13 @@ namespace EchoProtocol.RelayA
         [SerializeField] private Vector3 solvedControls = new Vector3(58f, 42f, 54f);
 
         [Header("Cross Coupling")]
-        [SerializeField] private Vector3 voltageWeights = new Vector3(0.72f, 0.18f, -0.26f);
-        [SerializeField] private Vector3 frequencyWeights = new Vector3(-0.08f, 0.56f, 0.12f);
-        [SerializeField] private Vector3 loadWeights = new Vector3(0.16f, -0.12f, 0.62f);
+        [SerializeField] private Vector3 voltageWeights = new Vector3(0.72f, 0.26f, -0.34f);
+        [SerializeField] private Vector3 frequencyWeights = new Vector3(-0.13f, 0.56f, 0.18f);
+        [SerializeField] private Vector3 loadWeights = new Vector3(0.24f, -0.18f, 0.62f);
         [SerializeField] private Vector3 neutralControls = new Vector3(50f, 50f, 50f);
         [SerializeField] private Vector3 baselines = new Vector3(225f, 50f, 50f);
         [SerializeField] private Vector3 outputScales = new Vector3(22f, 5.2f, 18f);
-        [SerializeField, Min(0f)] private float signalDriftAmplitude = 0.35f;
+        [SerializeField, Min(0f)] private float signalDriftAmplitude = 0.6f;
         [SerializeField, Min(0.01f)] private float signalDriftFrequency = 0.43f;
 
         [Header("Fault")]

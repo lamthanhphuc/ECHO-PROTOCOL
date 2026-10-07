@@ -145,10 +145,10 @@ namespace EchoProtocol.RelayA
 
         public void ApplyAuthoritativeCircuitState(int scenarioIndex, ulong rotations,
             RelayACircuitPhase phase, ulong powered, int missingTargets, bool faultPowered,
-            int testSequence, bool faultActive)
+            int testSequence, bool faultActive, int failedCell = -1)
         {
             _circuit.ApplyAuthoritative(scenarioIndex, rotations, phase, powered,
-                missingTargets, faultPowered, testSequence, faultActive);
+                missingTargets, faultPowered, testSequence, faultActive, failedCell);
         }
 
         public void ApplyOnlineFromAuthority() => _circuit.ForceOnline();
@@ -182,7 +182,7 @@ namespace EchoProtocol.RelayA
         {
             ui?.Close();
             _attemptSeed = 0;
-            _circuit.Initialize(config, _circuit.Snapshot.ScenarioIndex);
+            _circuit.Initialize(config, _circuit.Snapshot.ScenarioIndex, attemptSeed);
         }
 
         private void HandleCircuitChanged(RelayACircuitSnapshot snapshot)

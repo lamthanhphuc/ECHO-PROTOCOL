@@ -254,6 +254,7 @@ namespace EchoProtocol.Tests
             Assert.That(completions, Is.Zero);
             sim.Tick(_config.CircuitFaultDelaySeconds + 0.1f);
             Assert.IsTrue(sim.Snapshot.FaultActive);
+            board = sim.Snapshot.Scenario;
             Assert.IsFalse(sim.Rotate(board.FailedCell));
 
             Assert.IsTrue(sim.TestCircuit());
@@ -263,7 +264,7 @@ namespace EchoProtocol.Tests
             Assert.That(faults, Is.EqualTo(1));
 
             for (int i = 0; i < board.Count; i++)
-                while (sim.Snapshot.Rotations[i] != board.FaultSolution[i])
+                while (i != board.FailedCell && sim.Snapshot.Rotations[i] != board.FaultSolution[i])
                     Assert.IsTrue(sim.Rotate(i));
             Assert.IsTrue(sim.TestCircuit());
             sim.Tick(_config.CircuitTestSeconds + 0.1f);
@@ -296,7 +297,21 @@ namespace EchoProtocol.Tests
             sim.Tick(0.2f);
             Assert.IsTrue(sim.SetStabilizationRunning(false));
             Assert.That(sim.Snapshot.Rotations, Is.EqualTo(preservedRotations));
-            var solved = _config.SolvedControls;
+            Vector3 solved = Vector3.zero;
+            float bestDistance = float.PositiveInfinity;
+            for (int g = 0; g <= 100; g += 5)
+                for (int f = 0; f <= 100; f += 5)
+                    for (int l = 0; l <= 100; l += 5)
+                    {
+                        var candidate = new Vector3(g, f, l);
+                        var output = sim.Stabilization.EvaluateControlTarget(candidate, RelayAFaultType.None, 0f);
+                        float distance = Mathf.Pow((output.Voltage - 225f) / 4f, 2f)
+                            + Mathf.Pow((output.Frequency - 50f) / 0.8f, 2f)
+                            + Mathf.Pow((output.LoadBalance - 50f) / 2.5f, 2f);
+                        if (distance >= bestDistance) continue;
+                        bestDistance = distance;
+                        solved = candidate;
+                    }
             Assert.IsTrue(sim.SetStabilizationControls(solved.x, solved.y, solved.z));
             for (int tick = 0; tick < 100; tick++) sim.Tick(0.1f);
             Assert.IsTrue(sim.SetStabilizationRunning(true));
@@ -337,6 +352,28 @@ namespace EchoProtocol.Tests
             proxy.ApplyAuthoritative(2, host.PackedRotations, after.Phase, after.Powered,
                 after.MissingTargets, after.FaultPowered, after.TestSequence, after.FaultActive);
             Assert.That(proxy.Snapshot.Rotations, Is.EqualTo(after.Rotations));
+        }
+
+        [Test]
+        public void UnseededRoutingAndFault_AlwaysRequirePlayerEdits()
+        {
+            for (int index = 0; index < _config.CircuitScenarios.Count; index++)
+            {
+                var sim = new RelayACircuitSimulation();
+                sim.Initialize(_config, index);
+                var state = sim.Snapshot;
+                Assert.IsFalse(RelayACircuitBoard.Evaluate(state.Scenario, state.Rotations, false).IsValid);
+                for (int cell = 0; cell < state.Scenario.Count; cell++)
+                    while (sim.Snapshot.Rotations[cell] != state.Scenario.InitialSolution[cell])
+                        Assert.IsTrue(sim.Rotate(cell));
+                sim.TestCircuit();
+                sim.Tick(_config.CircuitTestSeconds + 0.1f);
+                sim.Tick(_config.CircuitFaultDelaySeconds + 0.1f);
+                var fault = sim.Snapshot;
+                Assert.IsTrue(fault.FaultActive);
+                Assert.IsFalse(RelayACircuitBoard.Evaluate(fault.Scenario, fault.Rotations, true).IsValid);
+                Assert.IsFalse(sim.Rotate(fault.Scenario.FailedCell));
+            }
         }
 
         [Test]

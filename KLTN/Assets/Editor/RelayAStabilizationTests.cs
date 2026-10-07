@@ -190,7 +190,7 @@ namespace EchoProtocol.Tests
         }
 
         [Test]
-        public void ExpertAttempt_RequiresAllThreeDistinctRecoveriesThenFinalHold()
+        public void ExpertAttempt_RequiresOneRecoveryThenFinalHold()
         {
             Set("enableFault", true);
             _simulation.Initialize(_config, true, 123);
@@ -206,8 +206,8 @@ namespace EchoProtocol.Tests
                 _simulation.SetControls(settings.x, settings.y, settings.z);
                 _simulation.Tick(0.05f);
             }
-            Assert.That(seen.Count, Is.EqualTo(3));
-            Assert.That(_simulation.Snapshot.RecoveredFaults, Is.EqualTo(3));
+            Assert.That(seen.Count, Is.EqualTo(1));
+            Assert.That(_simulation.Snapshot.RecoveredFaults, Is.EqualTo(1));
             Assert.IsTrue(_simulation.Snapshot.IsOnline);
             Assert.That(completed, Is.EqualTo(1));
             _simulation.Initialize(_config, true, 456);
@@ -224,7 +224,7 @@ namespace EchoProtocol.Tests
                     for (int l = 0; l <= 100; l += 5)
                     {
                         var candidate = new Vector3(g, f, l);
-                        var output = _config.EvaluateTarget(candidate, fault, 0f);
+                        var output = _simulation.EvaluateControlTarget(candidate, fault, 0f);
                         float v = (output.Voltage - 225f) / 5f;
                         float hz = output.Frequency - 50f;
                         float load = (output.LoadBalance - 50f) / 3f;

@@ -27,6 +27,16 @@ namespace EchoProtocol.RelayA
         private int _recoveredFaults;
         private float _recoverySeconds;
         private int _faultOrderOffset;
+        private Vector3 _calibrationOffset;
+        private float _faultStrength = 1f;
+
+        public RelayAStabilizationOutputs EvaluateControlTarget(Vector3 controls, RelayAFaultType fault, float elapsedSeconds)
+        {
+            if (_config == null) return new RelayAStabilizationOutputs(225f, 50f, 50f);
+            var output = _config.EvaluateTarget(controls + _calibrationOffset, fault, elapsedSeconds);
+            Vector3 extra = _config.GetFaultOffset(fault) * (_faultStrength - 1f);
+            return new RelayAStabilizationOutputs(output.Voltage + extra.x, output.Frequency + extra.y, output.LoadBalance + extra.z);
+        }
 
         public event Action<RelayAStabilizationSnapshot> Changed;
         public event Action Completed;
@@ -42,16 +52,20 @@ namespace EchoProtocol.RelayA
             _attemptRandom = randomizeAttempt
                 ? new System.Random(attemptSeed != 0 ? attemptSeed : Environment.TickCount)
                 : null;
+            _calibrationOffset = randomizeAttempt
+                ? new Vector3(Range(_attemptRandom, -10f, 10f), Range(_attemptRandom, -10f, 10f), Range(_attemptRandom, -10f, 10f))
+                : Vector3.zero;
+            _faultStrength = randomizeAttempt ? Range(_attemptRandom, 0.85f, 1.15f) : 1f;
             _controls = config != null && randomizeAttempt
                 ? RandomizeControls(config.InitialControls, _attemptRandom)
                 : config != null ? config.InitialControls : new Vector3(50f, 50f, 50f);
             _outputs = config != null
-                ? config.EvaluateTarget(_controls, RelayAFaultType.None, 0f)
+                ? EvaluateControlTarget(_controls, RelayAFaultType.None, 0f)
                 : new RelayAStabilizationOutputs(225f, 50f, 50f);
-            if (config != null && config.IsOutputStable(_outputs))
+            for (int retry = 0; config != null && config.IsOutputStable(_outputs) && retry < 32; retry++)
             {
-                _controls = config.InitialControls;
-                _outputs = config.EvaluateTarget(_controls, RelayAFaultType.None, 0f);
+                _controls = randomizeAttempt ? RandomizeControls(config.InitialControls, _attemptRandom) : config.InitialControls;
+                _outputs = EvaluateControlTarget(_controls, RelayAFaultType.None, 0f);
             }
             _previousOutputs = _outputs;
             _elapsedRunningSeconds = 0f;
@@ -72,7 +86,8 @@ namespace EchoProtocol.RelayA
             _warningFault = RelayAFaultType.None;
             _activeFault = RelayAFaultType.None;
             _scheduledFault = randomizeAttempt ? SelectRandomFault(_attemptRandom) : RelayAFaultType.None;
-            if (config != null && config.RequireFaultRecovery) _faultTriggerAtSeconds = 2f;
+            if (config != null && config.RequireFaultRecovery)
+                _faultTriggerAtSeconds = randomizeAttempt ? Range(_attemptRandom, 2f, 5f) : 2f;
             NotifyChanged();
         }
 
@@ -131,7 +146,7 @@ namespace EchoProtocol.RelayA
                 UpdateFault(deltaTime);
             }
 
-            RelayAStabilizationOutputs target = _config.EvaluateTarget(_controls, _activeFault, _elapsedRunningSeconds);
+            RelayAStabilizationOutputs target = EvaluateControlTarget(_controls, _activeFault, _elapsedRunningSeconds);
             float response = 1f - Mathf.Exp(-deltaTime / Mathf.Max(0.05f, _config.ResponseDelaySeconds));
             _outputs = new RelayAStabilizationOutputs(
                 Mathf.Lerp(_outputs.Voltage, target.Voltage, response),
@@ -152,7 +167,7 @@ namespace EchoProtocol.RelayA
                     _recoverySeconds = 0f;
                     _activeFault = RelayAFaultType.None;
                     _faultActiveRemaining = 0f;
-                    _faultTriggerAtSeconds = _recoveredFaults < 3 ? _elapsedRunningSeconds + 2f : float.PositiveInfinity;
+                    _faultTriggerAtSeconds = float.PositiveInfinity;
                     _stabilitySeconds = 0f;
                     stable = false;
                 }
@@ -174,7 +189,7 @@ namespace EchoProtocol.RelayA
             {
                 _dangerPenaltyNotified = false;
                 _instabilitySeconds = 0f;
-                if (!_config.RequireFaultRecovery || _recoveredFaults >= 3)
+                if (!_config.RequireFaultRecovery || _recoveredFaults >= 1)
                     _stabilitySeconds += deltaTime;
                 if (_stabilitySeconds >= _config.StabilityRequiredSeconds)
                 {
@@ -202,7 +217,7 @@ namespace EchoProtocol.RelayA
 
         public void ForceCompleteForAuthoritativeSync()
         {
-            _recoveredFaults = 3;
+            _recoveredFaults = 1;
             _online = true;
             _running = false;
             _stabilitySeconds = _config != null ? _config.StabilityRequiredSeconds : 12f;
@@ -274,7 +289,7 @@ namespace EchoProtocol.RelayA
             if (_elapsedRunningSeconds >= _faultTriggerAtSeconds)
             {
                 _warningFault = _config.RequireFaultRecovery
-                    ? (RelayAFaultType)(1 + (_faultOrderOffset + _recoveredFaults) % 3)
+                    ? (RelayAFaultType)(1 + _faultOrderOffset)
                     : SelectFaultType(_randomizeAttempt);
                 _faultWarningRemaining = _config.FaultWarningSeconds;
                 FaultWarningStarted?.Invoke(_warningFault);
@@ -346,7 +361,7 @@ namespace EchoProtocol.RelayA
         private RelayAStabilizationSnapshot BuildSnapshot()
         {
             RelayAStabilizationOutputs target = _config != null
-                ? _config.EvaluateTarget(_controls, _activeFault, _elapsedRunningSeconds)
+                ? EvaluateControlTarget(_controls, _activeFault, _elapsedRunningSeconds)
                 : _outputs;
             bool stable = _config != null && _config.IsOutputStable(_outputs);
             bool dangerous = _config != null && _config.IsOutputDangerous(_outputs);

@@ -138,7 +138,7 @@ namespace EchoProtocol.RelayA
             _status.text = snapshot.Phase == RelayACircuitPhase.Testing ? "TESTING CIRCUIT"
                 : snapshot.Phase == RelayACircuitPhase.Stable ? "GRID STABLE"
                 : snapshot.IsOnline ? "RELAY ONLINE"
-                : snapshot.FaultActive && snapshot.Phase != RelayACircuitPhase.Failed ? "FAULT DETECTED - REROUTE POWER"
+                : snapshot.FaultActive && snapshot.Phase != RelayACircuitPhase.Failed ? "LINE BROKEN / ROUTES SHIFTED - BYPASS RED TILE"
                 : snapshot.Phase == RelayACircuitPhase.Failed ? snapshot.FaultPowered
                     ? "PROTECTION TRIP - BOARD RESET"
                     : "CONNECTION FAILED - BOARD RESET"

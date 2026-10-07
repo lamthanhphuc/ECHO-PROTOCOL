@@ -868,13 +868,13 @@ namespace EchoProtocol.MatchFlow
                     matchState.RelayA1CircuitRotations, (RelayACircuitPhase)matchState.RelayA1CircuitPhase,
                     matchState.RelayA1CircuitPowered, matchState.RelayA1CircuitMissing,
                     matchState.RelayA1CircuitTrip, matchState.RelayA1CircuitTestSequence,
-                    matchState.RelayA1CircuitFaultActive);
+                    matchState.RelayA1CircuitFaultActive, matchState.RelayA1FailedCell);
             if (!matchState.Object.HasStateAuthority)
                 relayA2?.ApplyAuthoritativeCircuitState(matchState.RelayA2CircuitScenario,
                     matchState.RelayA2CircuitRotations, (RelayACircuitPhase)matchState.RelayA2CircuitPhase,
                     matchState.RelayA2CircuitPowered, matchState.RelayA2CircuitMissing,
                     matchState.RelayA2CircuitTrip, matchState.RelayA2CircuitTestSequence,
-                    matchState.RelayA2CircuitFaultActive);
+                    matchState.RelayA2CircuitFaultActive, matchState.RelayA2FailedCell);
 
             if (!matchState.Object.HasStateAuthority)
             {

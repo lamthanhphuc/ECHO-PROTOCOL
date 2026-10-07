@@ -106,19 +106,16 @@ namespace EchoProtocol.RelayA
             _faultWasActivated = false;
             for (int i = 0; i < _rotations.Length; i++) _rotations[i] = _scenario.Cells[i].Rotation;
             _routingRandom = new System.Random(attemptSeed != 0 ? attemptSeed : Environment.TickCount);
-            if (attemptSeed != 0)
-            {
-                for (int cell = 0; cell < _rotations.Length; cell++)
-                    if (!_scenario.Cells[cell].Locked) _rotations[cell] = _scenario.InitialSolution[cell];
-                ScrambleRouting();
-            }
+            for (int cell = 0; cell < _rotations.Length; cell++)
+                if (!_scenario.Cells[cell].Locked) _rotations[cell] = _scenario.InitialSolution[cell];
+            ScrambleRouting();
             _phase = RelayACircuitPhase.Editing;
             _powered = 0;
             _missingTargets = 0;
             _faultPowered = false;
             _elapsed = 0;
             _testSequence = 0;
-            Stabilization.Initialize(config, attemptSeed != 0, attemptSeed);
+            Stabilization.Initialize(config, true, attemptSeed);
             Breakers.Initialize(scenarioIndex >= 2, attemptSeed);
             Notify();
         }
@@ -203,7 +200,9 @@ namespace EchoProtocol.RelayA
             {
                 _elapsed += Mathf.Max(0f, deltaTime);
                 if (_elapsed < (_config != null ? _config.CircuitFaultDelaySeconds : 1.2f)) return;
+                SelectLiveFault();
                 _faultWasActivated = true;
+                ScrambleRouting();
                 _phase = RelayACircuitPhase.Faulted;
                 _powered = 0;
                 _elapsed = 0;
@@ -213,6 +212,31 @@ namespace EchoProtocol.RelayA
         }
 
         private bool _faultWasActivated;
+
+        private void SelectLiveFault()
+        {
+            var choices = new System.Collections.Generic.List<RelayACircuitScenario>();
+            var redundantChoices = new System.Collections.Generic.List<RelayACircuitScenario>();
+            var authored = _config.GetCircuitScenario(_scenarioIndex);
+            ulong live = RelayACircuitBoard.Evaluate(_scenario, _rotations, false).Powered;
+            for (int cell = 0; cell < _scenario.Count; cell++)
+            {
+                if (_scenario.Cells[cell].Locked || (live & (1UL << cell)) == 0
+                    || _scenario.Cells[cell].Type == RelayACircuitTile.Source) continue;
+                foreach (var bypass in new[] { authored.InitialSolution, authored.FaultSolution })
+                {
+                    var candidate = new RelayACircuitScenario(_scenario.Name, _scenario.Width, _scenario.Height,
+                        _scenario.Cells, cell, (int[])_rotations.Clone(), (int[])bypass.Clone());
+                    if (!RelayACircuitBoard.Evaluate(candidate, bypass, true).IsValid) continue;
+                    if (RelayACircuitBoard.HasAuthoredSolutions(candidate)) choices.Add(candidate);
+                    else redundantChoices.Add(candidate);
+                    break;
+                }
+            }
+            if (choices.Count == 0) choices = redundantChoices;
+            if (choices.Count == 0) throw new InvalidOperationException("No validated bypass for the live route.");
+            _scenario = choices[_routingRandom.Next(choices.Count)];
+        }
 
         public bool PressBreaker(int cell) => _phase == RelayACircuitPhase.BreakerMatrix && Breakers.Press(cell);
         public bool ResetBreakers() => _phase == RelayACircuitPhase.BreakerMatrix && Breakers.Reset();
@@ -260,14 +284,18 @@ namespace EchoProtocol.RelayA
         }
 
         public void ApplyAuthoritative(int scenarioIndex, ulong packedRotations, RelayACircuitPhase phase,
-            ulong powered, int missingTargets, bool faultPowered, int testSequence, bool faultActive)
+            ulong powered, int missingTargets, bool faultPowered, int testSequence, bool faultActive, int failedCell = -1)
         {
             if (_config == null) return;
             if (_scenario != null && _scenarioIndex == scenarioIndex && PackedRotations == packedRotations
                 && _phase == phase && _powered == powered && _missingTargets == missingTargets
-                && _faultPowered == faultPowered && _testSequence == testSequence && _faultWasActivated == faultActive)
+                && _faultPowered == faultPowered && _testSequence == testSequence && _faultWasActivated == faultActive
+                && (failedCell < 0 || _scenario.FailedCell == failedCell))
                 return;
             if (_scenario == null || _scenarioIndex != scenarioIndex) Initialize(_config, scenarioIndex);
+            if (failedCell >= 0 && failedCell < _scenario.Count && _scenario.FailedCell != failedCell)
+                _scenario = new RelayACircuitScenario(_scenario.Name, _scenario.Width, _scenario.Height,
+                    _scenario.Cells, failedCell, _scenario.InitialSolution, _scenario.FaultSolution);
             for (int i = 0; i < _rotations.Length; i++) _rotations[i] = (int)((packedRotations >> (2 * i)) & 3UL);
             _phase = phase;
             _faultWasActivated = faultActive;
