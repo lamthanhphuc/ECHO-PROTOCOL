@@ -188,6 +188,7 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float detectionMeter;
 
         private float _detectMinimumHoldRemaining;
+        private bool _detectWasDecaying;
         private bool _detectRotationOwnershipCaptured;
         private bool _detectPreviousAgentUpdateRotation;
 
@@ -887,6 +888,7 @@ namespace EchoProtocol.AI.Stalker
             _vehicleNoiseIgnoreUntilSeconds = 0d;
             _hasActiveHeardNoiseType = false;
             _filteredHearingObservations.Clear();
+            _detectWasDecaying = false;
         }
 
         private void OnDisable()
@@ -1252,6 +1254,13 @@ namespace EchoProtocol.AI.Stalker
             if (TryGetVisibleDetectionTargetObservation(out var observedPosition))
             {
                 FaceDetectObservedPosition(observedPosition);
+
+                if (_detectWasDecaying && detectionMeter > 0f)
+                {
+                    PromoteDetectionTargetToCurrentTarget(observedPosition);
+                    return;
+                }
+
                 detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
 
@@ -1266,6 +1275,7 @@ namespace EchoProtocol.AI.Stalker
 
             detectionMeter -= GetDetectionDecayRate() * CurrentSimulationDeltaSeconds;
             detectionMeter = ClampDetectionMeter(detectionMeter);
+            _detectWasDecaying = detectionMeter > 0f;
 
             if (detectionMeter <= 0f)
             {
@@ -1324,10 +1334,16 @@ namespace EchoProtocol.AI.Stalker
                 }
 
                 FaceDetectObservedPosition(observation.ObservedPosition);
+
+                if (_detectWasDecaying && detectionMeter > 0f)
+                {
+                    PromoteDetectionTargetToCurrentTarget(observation);
+                    return;
+                }
+
                 detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
                 _memory.SetDetectionMeter(detectionMeter);
-
                 if (detectionMeter >= GetDetectionMeterFull()
                     && _detectMinimumHoldRemaining <= 0f)
                 {
@@ -1355,6 +1371,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void EnterDetectState()
         {
+            _detectWasDecaying = false;
             currentState = StalkerState.DETECT;
             StopAgentPath();
             BeginDetectRotationControl();
@@ -1451,6 +1468,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void PromoteDetectionTargetToCurrentTarget(Vector3 observedPosition)
         {
+            _detectWasDecaying = false;
             currentTarget = detectionTarget;
             lastKnownPosition = observedPosition;
             detectionTarget = null;
@@ -1461,6 +1479,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void PromoteDetectionTargetToCurrentTarget(VisionObservation observation)
         {
+            _detectWasDecaying = false;
             _memory.SetCurrentTarget(observation.PlayerId);
             _memory.TryAcceptCurrentTargetObservation(observation);
             _memory.ClearDetectionTarget();
@@ -4038,6 +4057,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void ClearDetectionContext()
         {
+            _detectWasDecaying = false;
             detectionTarget = null;
             detectionMeter = 0f;
             _memory.ClearDetectionTarget();

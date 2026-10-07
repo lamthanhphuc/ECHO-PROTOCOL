@@ -91,6 +91,29 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
+        public IEnumerator STK_SIM_DetectReacquireDuringDecay_PromotesDirectlyToChase()
+        {
+            var fixture = CreateFixture();
+            SetState(fixture.Controller, "DETECT");
+            SetPrivateField(fixture.Controller, "detectionTarget", fixture.Target);
+            SetPrivateField(fixture.Controller, "detectionMeter", 1f);
+            SetPrivateField(fixture.Controller, "detectionMeterFull", 10f);
+            SetPrivateField(fixture.Controller, "detectionDecayRate", 2f);
+            SetPrivateField(fixture.VisionSensor, "candidate", null);
+
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(0.25f, null)), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Controller, "CurrentState"), Is.EqualTo("DETECT"));
+            Assert.That(GetFloatProperty(fixture.Controller, "DetectionMeter"), Is.EqualTo(0.5f).Within(FloatTolerance));
+
+            SetPrivateField(fixture.VisionSensor, "candidate", fixture.Target);
+            Physics.SyncTransforms();
+
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(0.05f, null)), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Controller, "CurrentState"), Is.EqualTo("CHASE"));
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator STK_SIM_SearchTimer_UsesExplicitDelta()
         {
             var fixture = CreateFixture();
