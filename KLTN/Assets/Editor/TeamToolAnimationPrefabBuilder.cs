@@ -1,4 +1,5 @@
 using System.IO;
+using EchoProtocol.Networking;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
@@ -167,7 +168,7 @@ public static class TeamToolAnimationPrefabBuilder
 
     private static void CreateSupportFieldVfx(Transform parent, Material material)
     {
-        const float radius = 5f;
+        float radius = CoreStabilizerRules.SupportRadius;
         const int segments = 128;
 
         var field = new GameObject("SupportFieldVFX");

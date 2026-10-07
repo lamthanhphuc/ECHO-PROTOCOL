@@ -138,6 +138,8 @@ namespace EchoProtocol.Networking
             }
 
             FirstAidRevivesUsedThisMatch = 0;
+
+            ResetTeamToolRuntimeAuthoritative();
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -525,6 +527,9 @@ namespace EchoProtocol.Networking
                 if (TrySpawnDroppedTeamToolAuthoritative(toolId, out _))
                 {
                     state.SetGameplayToolId(0);
+
+                    ResetTeamToolRuntimeAuthoritative();
+
                     return true;
                 }
             }
@@ -557,6 +562,9 @@ namespace EchoProtocol.Networking
             }
 
             state.SetGameplayToolId(0);
+
+            ResetTeamToolRuntimeAuthoritative();
+
             return true;
         }
 
@@ -1130,6 +1138,8 @@ namespace EchoProtocol.Networking
                 else
                 {
                     state.SetGameplayToolId(0);
+
+                    ResetTeamToolRuntimeAuthoritative();
                 }
             }
 
@@ -1964,10 +1974,14 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            ResetTeamToolRuntimeAuthoritative();
+
             var inv = GetComponent<PlayerInventory>();
-            if (inv != null && inv.TeamToolSlot != null)
+            if (inv != null
+                && inv.TeamToolSlot != null)
             {
-                inv.TryRemove(inv.TeamToolSlot);
+                inv.TryRemove(
+                    inv.TeamToolSlot);
             }
         }
 
@@ -2025,6 +2039,17 @@ namespace EchoProtocol.Networking
                 TeamToolCooldown =
                     TickTimer.CreateFromSeconds(Runner, seconds);
             }
+        }
+
+        private void ResetTeamToolRuntimeAuthoritative()
+        {
+            TeamToolCooldown =
+                TickTimer.None;
+
+            CoreStabilizerActiveTimer =
+                TickTimer.None;
+
+            ClearStabilizerBuffedPlayers();
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]

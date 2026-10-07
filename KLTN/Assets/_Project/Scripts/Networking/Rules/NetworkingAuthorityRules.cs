@@ -57,7 +57,7 @@ namespace EchoProtocol.Networking
 
     public static class CoreStabilizerRules
     {
-        public const float SupportRadius = 5f;
+        public const float SupportRadius = 10f;
         public const float DurationSeconds = 15f;
         public const float CooldownSeconds = 45f;
         public const float SpeedMultiplier = 1.25f;

@@ -27,10 +27,16 @@ public sealed class CoreStabilizerTeamTool : MonoBehaviour, ITeamToolGameplay
     public bool IsActive => isActive;
     public float SupportRadius => supportRadius;
 
+    private void Awake()
+    {
+        supportRadius = CoreStabilizerRules.SupportRadius;
+    }
+
     public void Equip(GameObject newOwner, Transform aimOrigin)
     {
         owner = newOwner;
         ownerLife = owner != null ? owner.GetComponentInParent<PlayerDownState>() : null;
+        supportRadius = CoreStabilizerRules.SupportRadius;
         ConfigureSupportFieldVisual();
         SetActive(activeOnEquip);
     }

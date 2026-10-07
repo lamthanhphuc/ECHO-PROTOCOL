@@ -37,6 +37,16 @@ namespace EchoProtocol.UI.HUD
         private float _cooldownTimer;
         private LobbyPlayerState _boundNetworkPlayerState;
 
+        private void OnEnable()
+        {
+            LobbyPlayerState.AnyStateChanged += RefreshSlots;
+        }
+
+        private void OnDisable()
+        {
+            LobbyPlayerState.AnyStateChanged -= RefreshSlots;
+        }
+
         public void BindInventory(PlayerInventory playerInv, PlayerEnergyCoreCarrier coreCarrier)
         {
             if (inventory != null)
@@ -241,6 +251,23 @@ namespace EchoProtocol.UI.HUD
                 // Team Tool Slot
                 InventoryItemDefinition toolItem = inventory.TeamToolSlot;
                 UpdateSlotView(toolItem, toolIcon, toolNameText, "Tool: Trống", isTeamTool: true);
+
+                if (toolItem != null
+                    && toolNameText != null
+                    && _boundNetworkPlayerState != null)
+                {
+                    int toolId =
+                        _boundNetworkPlayerState.ToolId;
+
+                    if (toolId == LobbyPlayerState.NoiseMakerToolId
+                        || toolId == LobbyPlayerState.DoorJammerToolId)
+                    {
+                        toolNameText.text =
+                            $"<color=#00E5FF>[LMB]</color> "
+                            + $"{toolItem.DisplayName} "
+                            + $"x{_boundNetworkPlayerState.TeamToolUsesRemaining}";
+                    }
+                }
             }
             catch (System.Exception ex)
             {

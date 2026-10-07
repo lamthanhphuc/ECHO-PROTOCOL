@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using EchoProtocol.Gameplay;
 using EchoProtocol.Networking;
 using EchoProtocol.Tools.Scanner;
 using EchoProtocol.TeamTools;
@@ -37,6 +38,76 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains("zone3Plans", spawnSource);
             StringAssert.Contains("TeamToolWorldSpawnInitialized =", matchSource);
             StringAssert.Contains("TeamToolWorldSpawn.TrySpawnInitial", matchSource);
+        }
+
+        [Test]
+        public void TEAM_TOOL_SpawnCount_UsesDifficultyBudget()
+        {
+            Assert.That(
+                TeamToolWorldSpawn.RequiredToolCountPerZone,
+                Is.EqualTo(5));
+
+            Assert.That(
+                MatchDifficultyProfiles
+                    .Get(MatchDifficulty.Easy)
+                    .TeamToolsPerZone,
+                Is.EqualTo(6));
+
+            Assert.That(
+                MatchDifficultyProfiles
+                    .Get(MatchDifficulty.Normal)
+                    .TeamToolsPerZone,
+                Is.EqualTo(5));
+
+            Assert.That(
+                MatchDifficultyProfiles
+                    .Get(MatchDifficulty.Hard)
+                    .TeamToolsPerZone,
+                Is.EqualTo(5));
+        }
+
+        [Test]
+        public void TEAM_TOOL_Runtime_IsClearedWhenToolLeavesPlayer()
+        {
+            string source =
+                File.ReadAllText(
+                    "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
+
+            StringAssert.Contains(
+                "private void ResetTeamToolRuntimeAuthoritative()",
+                source);
+
+            StringAssert.Contains(
+                "TeamToolCooldown =",
+                source);
+
+            StringAssert.Contains(
+                "TickTimer.None",
+                source);
+
+            StringAssert.Contains(
+                "CoreStabilizerActiveTimer =",
+                source);
+
+            StringAssert.Contains(
+                "ClearStabilizerBuffedPlayers();",
+                source);
+        }
+
+        [Test]
+        public void TEAM_TOOL_HudShowsRemainingMultiUseCount()
+        {
+            string source =
+                File.ReadAllText(
+                    "Assets/Scripts/UI/HUD/HUDHotbar.cs");
+
+            StringAssert.Contains(
+                "TeamToolUsesRemaining",
+                source);
+
+            StringAssert.Contains(
+                "LobbyPlayerState.AnyStateChanged += RefreshSlots",
+                source);
         }
 
         [Test]

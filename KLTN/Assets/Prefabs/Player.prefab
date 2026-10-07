@@ -546,6 +546,7 @@ MonoBehaviour:
   animator: {fileID: 1535689403677083624}
   offlineCharacterId: 0
   jammoHeldItemScale: 1.4
+  jammoHeldItemLift: 0.03
 --- !u!1 &2288167123551940416
 GameObject:
   m_ObjectHideFlags: 0
