@@ -26,6 +26,45 @@ namespace EchoProtocol.RelayB.Tests
             }
         }
 
+        [Test]
+        public void SeededExpertSignal_RejectsDecoysAndRecoversBothDriftAxes()
+        {
+            bool frequencyDrift = false, phaseDrift = false;
+            var waves = new System.Collections.Generic.HashSet<WaveformType>();
+            for (int seed = 1; seed <= 40; seed++)
+            {
+                var sim = new RelayBSignalSimulation();
+                sim.Initialize(_config, 2, true, seed);
+                var preset = sim.GetCurrentPreset();
+                waves.Add(preset.ReferenceWaveform);
+                sim.ScanSpectrum();
+                foreach (var candidate in preset.Candidates)
+                {
+                    if (candidate.ChannelIndex == preset.CorrectChannelIndex) continue;
+                    sim.SelectChannel(candidate.ChannelIndex);
+                    Assert.That(sim.SelectedChannelIndex, Is.EqualTo(-1));
+                }
+                sim.SelectChannel(preset.CorrectChannelIndex);
+                SolveDecoder(sim);
+                sim.SetFrequency(preset.TargetFrequency);
+                sim.SetPhase(preset.TargetPhase);
+                sim.StartSynchronization();
+                for (int tick = 0; tick < 400 && !sim.IsOnline; tick++)
+                {
+                    sim.Tick(0.05f);
+                    if (!sim.Snapshot.IsDriftActive) continue;
+                    frequencyDrift |= Mathf.Abs(sim.GetEffectiveTargetFrequency() - preset.TargetFrequency) > 0.01f;
+                    phaseDrift |= Mathf.Abs(Mathf.DeltaAngle(sim.GetEffectiveTargetPhase(), preset.TargetPhase)) > 0.01f;
+                    sim.SetFrequency(sim.GetEffectiveTargetFrequency());
+                    sim.SetPhase(sim.GetEffectiveTargetPhase());
+                }
+                Assert.IsTrue(sim.IsOnline, "Seed " + seed);
+                Assert.That(sim.FrequencyTolerancePercent, Is.LessThan(_config.FrequencyTolerancePercent));
+            }
+            Assert.IsTrue(frequencyDrift && phaseDrift);
+            Assert.That(waves.Count, Is.EqualTo(5));
+        }
+
         private void PrepareStage3(RelayBSignalSimulation sim)
         {
             sim.ScanSpectrum();
@@ -93,7 +132,8 @@ namespace EchoProtocol.RelayB.Tests
                     if (candidate.Peaks[0] >= preset.ReferenceProfile.FundamentalMinKhz
                         && candidate.Peaks[0] <= preset.ReferenceProfile.FundamentalMaxKhz
                         && candidate.Waveform == preset.ReferenceWaveform
-                        && candidate.PilotFrame == preset.ReferenceProfile.ExpectedPilot) matches++;
+                        && candidate.PilotFrame == preset.ReferenceProfile.ExpectedPilot
+                        && RelayBSignalSimulation.HasMatchingHarmonic(candidate, preset.ReferenceProfile)) matches++;
                 }
                 Assert.That(matches, Is.EqualTo(1));
                 signatures.Add($"{preset.TargetFrequency:0.0}:{preset.ReferenceProfile.ExpectedPilot}:{preset.CorrectChannelIndex}");

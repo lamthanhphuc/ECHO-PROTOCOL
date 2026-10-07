@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 60a557579c52bc84981299c6ba98a824, type: 3}
   m_Name: RelayB_Hard_Config
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.RelayB.RelayBConfig
-  frequencyTolerancePercent: 3
-  phaseToleranceDegrees: 12
+  frequencyTolerancePercent: 2
+  phaseToleranceDegrees: 8
   holdRequiredSeconds: 14
   instabilityGraceSeconds: 0.5
   instabilityDecaySecondsPerSecond: 2

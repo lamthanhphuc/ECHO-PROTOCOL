@@ -36,6 +36,11 @@ namespace EchoProtocol.RelayB
         private bool _hasScanned;
 
         private bool _driftTriggered;
+        private float _attemptDriftPhaseOffset;
+        private float _attemptDriftFrequencyPercent;
+        private float _attemptDriftTriggerSeconds;
+        public float FrequencyTolerancePercent => (_config != null ? _config.FrequencyTolerancePercent : 2f) * (_presetIndex >= 2 ? 0.65f : 1f);
+        public float PhaseToleranceDegrees => (_config != null ? _config.PhaseToleranceDegrees : 8f) * (_presetIndex >= 2 ? 0.65f : 1f);
         private bool _driftWarningTriggered;
         private bool _mismatchPenaltyNotified;
         private float _scanDurationRemaining;
@@ -71,6 +76,22 @@ namespace EchoProtocol.RelayB
             Decoder.Initialize(attemptSeed != 0 ? attemptSeed : 1337);
             _presetIndex = presetIndex;
             System.Random attemptRandom = new System.Random(attemptSeed != 0 ? attemptSeed : 1337);
+            _attemptDriftPhaseOffset = config != null ? config.DriftPhaseOffset : 30f;
+            _attemptDriftFrequencyPercent = 0f;
+            _attemptDriftTriggerSeconds = config != null ? config.DriftTriggerHoldSeconds : 3.5f;
+            if (randomizeAttempt)
+            {
+                _attemptDriftPhaseOffset *= Range(attemptRandom, 0.8f, 1.4f) * (attemptRandom.Next(2) == 0 ? -1f : 1f);
+                if (attemptRandom.Next(2) == 0)
+                {
+                    _attemptDriftPhaseOffset = 0f;
+                    _attemptDriftFrequencyPercent = Range(attemptRandom, 3.5f, 6f) * (attemptRandom.Next(2) == 0 ? -1f : 1f);
+                }
+                float hold = config != null ? config.HoldRequiredSeconds : 8f;
+                float warning = config != null ? config.DriftWarningSeconds : 3f;
+                _attemptDriftTriggerSeconds = Range(attemptRandom, Mathf.Min(warning + 0.5f, hold * 0.5f), Mathf.Max(warning + 0.5f, hold * 0.65f));
+                _attemptDriftTriggerSeconds = Mathf.Min(_attemptDriftTriggerSeconds, hold - 0.5f);
+            }
             _attemptPreset = randomizeAttempt && config != null
                 ? BuildAttemptPreset(config.GetPreset(presetIndex), attemptRandom) : null;
             RelayBPreset preset = GetCurrentPreset();
@@ -142,11 +163,11 @@ namespace EchoProtocol.RelayB
             bool matches = candidate.Peaks[0] >= profile.FundamentalMinKhz
                 && candidate.Peaks[0] <= profile.FundamentalMaxKhz
                 && candidate.Waveform == preset.ReferenceWaveform
-                && candidate.PilotFrame == profile.ExpectedPilot;
+                && candidate.PilotFrame == profile.ExpectedPilot && HasMatchingHarmonic(candidate, profile);
             if (!matches)
             {
                 _falseLockDetected = _selectedChannelIndex < 0;
-                AddSystemLog("SIGNAL DOES NOT MATCH TARGET PROFILE. REVIEW FREQUENCY, WAVEFORM AND PILOT.");
+                AddSystemLog("SIGNAL MISMATCH. REVIEW FREQUENCY, WAVEFORM, PILOT AND HARMONIC.");
                 SignalMismatchOccurred?.Invoke();
                 NotifyChanged();
                 return;
@@ -438,7 +459,7 @@ namespace EchoProtocol.RelayB
             // Handle Ionospheric Drift during link acquisition
             if (_config != null && _config.EnableDrift && !_driftTriggered)
             {
-                float holdForDrift = _config.DriftTriggerHoldSeconds;
+                float holdForDrift = _attemptDriftTriggerSeconds;
                 float warningTime = holdForDrift - _config.DriftWarningSeconds;
 
                 if (_syncTimer >= warningTime - 0.001f && !_driftWarningTriggered)
@@ -451,7 +472,7 @@ namespace EchoProtocol.RelayB
                 if (_syncTimer >= holdForDrift - 0.001f)
                 {
                     _driftTriggered = true;
-                    AddSystemLog("SIGNAL DRIFT DETECTED. RE-ALIGN PHASE.");
+                    AddSystemLog(_attemptDriftFrequencyPercent != 0f ? "FREQUENCY DRIFT: RE-TUNE FREQUENCY." : "PHASE DRIFT: RE-ALIGN PHASE.");
                     DriftTriggered?.Invoke();
                 }
             }
@@ -504,14 +525,14 @@ namespace EchoProtocol.RelayB
                 return false;
             }
 
-            float targetFreq = preset.TargetFrequency;
+            float targetFreq = GetEffectiveTargetFrequency();
             float targetPhase = GetEffectiveTargetPhase();
 
             freqErrorPercent = CalculateFrequencyErrorPercent(_currentFrequency, targetFreq);
             phaseErrorDegrees = CalculatePhaseErrorDegrees(_currentPhase, targetPhase);
 
-            float freqTol = _config != null ? _config.FrequencyTolerancePercent : 3f;
-            float phaseTol = _config != null ? _config.PhaseToleranceDegrees : 12f;
+            float freqTol = FrequencyTolerancePercent;
+            float phaseTol = PhaseToleranceDegrees;
 
             bool isChannelCorrect = _selectedChannelIndex == preset.CorrectChannelIndex;
             bool phaseAligned = phaseErrorDegrees <= phaseTol;
@@ -559,40 +580,43 @@ namespace EchoProtocol.RelayB
         private static RelayBPreset BuildAttemptPreset(RelayBPreset source, System.Random random)
         {
             if (source == null || source.Candidates.Length != 4) return source;
-            float shift = (random.Next(-20, 21)) * 0.1f;
-            int pilotMask = random.Next(1, 256);
+            float frequency = Range(random, 20f, 90f);
+            float phase = random.Next(0, 360);
+            var wave = (WaveformType)random.Next(0, 5);
+            string pilot = MaskPilot(source.ReferenceProfile.ExpectedPilot, random.Next(1, 256));
+            var profile = new RelayBReferenceProfile(frequency - 2f, frequency + 2f, frequency, phase,
+                true, source.ReferenceProfile.MaxDistortionPercent,
+                source.ReferenceProfile.SymbolRateMin, source.ReferenceProfile.SymbolRateMax, pilot);
             var order = new[] { 0, 1, 2, 3 };
-            for (int i = order.Length - 1; i > 0; i--)
+            for (int i = 3; i > 0; i--)
             {
                 int other = random.Next(i + 1);
                 (order[i], order[other]) = (order[other], order[i]);
             }
-
-            RelayBReferenceProfile original = source.ReferenceProfile;
-            var profile = new RelayBReferenceProfile(
-                original.FundamentalMinKhz + shift, original.FundamentalMaxKhz + shift,
-                original.TargetFundamentalKhz + shift, original.TargetPhaseDegrees,
-                original.SecondHarmonicRequired, original.MaxDistortionPercent,
-                original.SymbolRateMin, original.SymbolRateMax,
-                MaskPilot(original.ExpectedPilot, pilotMask));
             var candidates = new RelayBCandidate[4];
             var channels = new RelayBChannelDef[4];
-            int correctIndex = -1;
-            for (int i = 0; i < order.Length; i++)
+            var nominal = source.GetCandidate(source.CorrectChannelIndex);
+            int correct = -1;
+            for (int i = 0; i < 4; i++)
             {
-                int sourceIndex = order[i];
-                RelayBCandidate candidate = source.GetCandidate(sourceIndex);
-                if (candidate == null) return source;
-                var peaks = new float[candidate.Peaks.Length];
-                for (int p = 0; p < peaks.Length; p++) peaks[p] = candidate.Peaks[p] + shift * (p + 1);
-                candidates[i] = new RelayBCandidate(i, peaks, candidate.DistortionPercent,
-                    candidate.SymbolRateKbaud, candidate.Waveform, MaskPilot(candidate.PilotFrame, pilotMask),
-                    candidate.HasSpur, candidate.SpurFrequencyKhz, candidate.Notes);
-                channels[i] = source.GetChannel(sourceIndex);
-                if (sourceIndex == source.CorrectChannelIndex) correctIndex = i;
+                int defect = order[i];
+                float fundamental = frequency + Range(random, -1.5f, 1.5f);
+                float harmonicRatio = 2f;
+                var candidateWave = wave;
+                string candidatePilot = pilot;
+                if (defect == 0) { correct = i; fundamental = frequency; }
+                else if (defect == 1) candidatePilot = MaskPilot(pilot, 1 << random.Next(8));
+                else if (defect == 2) harmonicRatio = random.Next(2) == 0 ? 1.90f : 2.10f;
+                else if (random.Next(2) == 0) candidateWave = (WaveformType)(((int)wave + random.Next(1, 5)) % 5);
+                else fundamental = random.Next(2) == 0
+                    ? profile.FundamentalMinKhz - Range(random, 0.3f, 0.9f)
+                    : profile.FundamentalMaxKhz + Range(random, 0.3f, 0.9f);
+                candidates[i] = new RelayBCandidate(i, new[] { fundamental, fundamental * harmonicRatio },
+                    nominal.DistortionPercent, nominal.SymbolRateKbaud, candidateWave, candidatePilot,
+                    nominal.HasSpur, nominal.SpurFrequencyKhz, "");
+                channels[i] = new RelayBChannelDef("CHANNEL " + (i + 1).ToString("00"), candidateWave, nominal.DistortionPercent / 100f);
             }
-            return new RelayBPreset(source.PresetName, correctIndex, source.ReferenceWaveform,
-                source.TargetFrequency + shift, source.TargetPhase, channels, profile, candidates);
+            return new RelayBPreset(source.PresetName, correct, wave, frequency, phase, channels, profile, candidates);
         }
 
         private static string MaskPilot(string pilot, int mask)
@@ -608,8 +632,21 @@ namespace EchoProtocol.RelayB
         {
             RelayBPreset preset = GetCurrentPreset();
             return preset != null
-                ? (preset.TargetPhase + (_driftTriggered && _config != null ? _config.DriftPhaseOffset : 0f) + 360f) % 360f
+                ? (preset.TargetPhase + (_driftTriggered ? _attemptDriftPhaseOffset : 0f) + 360f) % 360f
                 : 0f;
+        }
+
+        public float GetEffectiveTargetFrequency()
+        {
+            float frequency = GetCurrentPreset()?.TargetFrequency ?? 50f;
+            return frequency * (1f + (_driftTriggered ? _attemptDriftFrequencyPercent : 0f) / 100f);
+        }
+
+        public static bool HasMatchingHarmonic(RelayBCandidate candidate, RelayBReferenceProfile profile)
+        {
+            if (!profile.SecondHarmonicRequired) return true;
+            return candidate.Peaks.Length >= 2 && candidate.Peaks[0] > 0f
+                && Mathf.Abs(candidate.Peaks[1] / candidate.Peaks[0] - 2f) <= 0.02f;
         }
 
         // Backward compatibility methods
@@ -641,7 +678,7 @@ namespace EchoProtocol.RelayB
             RelayBChannelDef chDef = preset != null && _selectedChannelIndex >= 0 ? preset.GetChannel(_selectedChannelIndex) : null;
             WaveformType curWave = chDef != null ? chDef.Waveform : WaveformType.Sine;
 
-            float targetFreq = preset != null ? preset.TargetFrequency : 50f;
+            float targetFreq = GetEffectiveTargetFrequency();
             float targetPhase = GetEffectiveTargetPhase();
             bool isSync = CheckIsSynchronized(out float fErr, out float pErr);
             float match = EvaluateSignalMatch(fErr, pErr);

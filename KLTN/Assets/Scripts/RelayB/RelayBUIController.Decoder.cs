@@ -219,12 +219,19 @@ namespace EchoProtocol.RelayB
             if (resetInputButton != null) { resetInputButton.gameObject.SetActive(stage2 && !state.IsComplete); resetInputButton.interactable = edit; }
             if (transmitButton != null) transmitButton.gameObject.SetActive(!state.IsComplete);
             if (decodeContinue != null) decodeContinue.gameObject.SetActive(state.IsComplete);
-            string notice = state.Phase == RelayBDecodePhase.Failed ? "DECODER FAILED"
+            string notice = state.Phase == RelayBDecodePhase.Failed ? "OUT OF ATTEMPTS - NEW CODE NEXT"
                 : state.Phase == RelayBDecodePhase.Solved || state.IsComplete ? "SIGNAL DECODED"
                 : state.Phase == RelayBDecodePhase.Transmitting ? "TRANSMITTING"
                 : state.Phase == RelayBDecodePhase.Revealing || state.Phase == RelayBDecodePhase.Holding ? "READING SIGNAL"
-                : "6 SIGNALS / NO DUPLICATES";
+                : $"6 UNIQUE DIGITS / {RelayBDecoder.MaxAttempts - state.Attempts} ATTEMPTS LEFT";
             SetText(decodeNotice, notice);
+            if (decodeNotice != null) { decodeNotice.enableAutoSizing = true; decodeNotice.fontSizeMin = 10f; }
+            if (processingTabPanel != null)
+            {
+                RefreshDecodeLegend("LegendRight", "RIGHT\nCORRECT POSITION");
+                RefreshDecodeLegend("LegendPlace", "PLACE\nMOVE THIS DIGIT");
+                RefreshDecodeLegend("LegendUnused", "UNUSED\nNOT IN CODE");
+            }
             if (decodeNotice != null) decodeNotice.color = state.Phase == RelayBDecodePhase.Failed ? dangerColor
                 : state.IsComplete || state.Phase == RelayBDecodePhase.Solved ? safeColor : offlineColor;
             if (statusLabel != null && stage2) statusLabel.gameObject.SetActive(false);
@@ -255,6 +262,16 @@ namespace EchoProtocol.RelayB
 
         private Color DecodeColor(RelayBCodeFeedback feedback) => feedback == RelayBCodeFeedback.Right ? safeColor
             : feedback == RelayBCodeFeedback.WrongPlace ? warningColor : offlineColor;
+
+        private void RefreshDecodeLegend(string name, string explanation)
+        {
+            var label = processingTabPanel.transform.Find(name)?.GetComponent<TMP_Text>();
+            if (label == null) return;
+            label.text = explanation;
+            label.enableAutoSizing = true;
+            label.fontSizeMin = 9f;
+            label.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 36f);
+        }
 
         private void HandleDecoderKeyboard()
         {

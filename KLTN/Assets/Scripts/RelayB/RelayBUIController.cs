@@ -240,9 +240,10 @@ namespace EchoProtocol.RelayB
                 float drift = Mathf.Max(profile.TargetFundamentalKhz - profile.FundamentalMinKhz,
                     profile.FundamentalMaxKhz - profile.TargetFundamentalKhz);
                 SetText(referenceProfileText,
-                    $"FREQUENCY\n{profile.FundamentalMinKhz:0.0} - {profile.FundamentalMaxKhz:0.0} kHz\n\n" +
-                    $"WAVEFORM\n{snapshot.ReferenceWaveform.ToString().ToUpper()}\n\n" +
-                    $"PILOT\n{profile.ExpectedPilot}");
+                    $"FREQUENCY\n{profile.FundamentalMinKhz:0.0} - {profile.FundamentalMaxKhz:0.0} kHz\n" +
+                    $"WAVEFORM\n{snapshot.ReferenceWaveform.ToString().ToUpper()}\n" +
+                    $"PILOT\n{profile.ExpectedPilot}\nHARMONIC\nH2 = 2 x F1 (+/- 1%)");
+                if (referenceProfileText != null) { referenceProfileText.enableAutoSizing = true; referenceProfileText.fontSizeMin = 11f; }
             }
 
             if (scanSpectrumButton != null)
@@ -276,11 +277,13 @@ namespace EchoProtocol.RelayB
 
                 var candidate = snapshot.Candidates[i];
                 SetText(candidateTexts[i],
-                    $"CH {i + 1:00}\n{candidate.Peaks[0]:0.0} kHz  /  {candidate.Waveform.ToString().ToUpper()}\n{candidate.PilotFrame}");
+                    $"CH {i + 1:00}  /  {candidate.Waveform.ToString().ToUpper()}\nF1 {candidate.Peaks[0]:0.0} kHz  /  H2 {(candidate.Peaks.Length > 1 ? candidate.Peaks[1] : 0f):0.0} kHz\nPILOT {candidate.PilotFrame}");
+                candidateTexts[i].enableAutoSizing = true;
+                candidateTexts[i].fontSizeMin = 10f;
             }
             SetText(findNotice, snapshot.SelectedChannelIndex >= 0 ? "SIGNAL ROUTED"
                 : snapshot.FalseLockDetected ? "PROFILE CHANGED - RESCAN"
-                : snapshot.HasScanned ? "MATCH ALL THREE SIGNATURES" : "AWAITING SCAN");
+                : snapshot.HasScanned ? _pendingChannelIndex >= 0 ? "SELECTED - ROUTE TO CHECK ALL 4 CLUES" : "MATCH F1 / WAVEFORM / PILOT / HARMONIC" : "SCAN TO REVEAL 4 CHANNELS");
             if (findNotice != null) findNotice.color = snapshot.SelectedChannelIndex >= 0 ? safeColor : offlineColor;
             if (findContinue != null) findContinue.gameObject.SetActive(snapshot.SelectedChannelIndex >= 0);
         }
@@ -291,7 +294,7 @@ namespace EchoProtocol.RelayB
             bool canAdjust = !readOnly && canOperate && snapshot.Decoder.IsComplete && !snapshot.IsOnline;
             var holdRule = syncTabPanel != null
                 ? syncTabPanel.transform.Find("CalibrationSection/Rule3")?.GetComponent<TMP_Text>() : null;
-            SetText(holdRule, "3. START SYNC, hold the signal, then correct one drift.");
+            SetText(holdRule, "3. START SYNC when aligned. Drift may change FREQUENCY or PHASE.");
             if (referenceWaveformRenderer != null)
             {
                 referenceWaveformRenderer.SetWaveParameters(snapshot.ReferenceWaveform,
@@ -310,18 +313,19 @@ namespace EchoProtocol.RelayB
             SetText(referenceSignalLabel, "REFERENCE WAVE");
             SetText(currentSignalLabel, "CURRENT WAVE");
             float frequencyTolerance = _controller != null && _controller.Config != null
-                ? _controller.Config.FrequencyTolerancePercent : 3f;
+                ? _controller.Simulation.FrequencyTolerancePercent : 2f;
             float phaseTolerance = _controller != null && _controller.Config != null
-                ? _controller.Config.PhaseToleranceDegrees : 12f;
+                ? _controller.Simulation.PhaseToleranceDegrees : 8f;
             string frequencyHint = snapshot.FrequencyErrorPercent <= frequencyTolerance ? "ALIGNED"
-                : snapshot.CurrentFrequency < snapshot.TargetFrequency ? "TUNE UP" : "TUNE DOWN";
-            float phaseDirection = Mathf.DeltaAngle(snapshot.CurrentPhase, snapshot.TargetPhase);
+                : snapshot.CurrentFrequency < snapshot.TargetFrequency ? "TURN UP >" : "< TURN DOWN";
             string phaseHint = snapshot.PhaseErrorDegrees <= phaseTolerance ? "ALIGNED"
-                : phaseDirection > 0f ? "TUNE UP" : "TUNE DOWN";
+                : snapshot.CurrentPhase < snapshot.TargetPhase ? "TURN UP >" : "< TURN DOWN";
             SetText(frequencyValueText,
-                $"FREQUENCY  {frequencyHint}");
+                $"FREQUENCY  {frequencyHint}\n{(frequencyHint == "ALIGNED" ? "KEEP THIS POSITION" : snapshot.CurrentFrequency < snapshot.TargetFrequency ? "DRAG RIGHT TO INCREASE" : "DRAG LEFT TO DECREASE")}");
             SetText(phaseValueText,
-                $"PHASE  {phaseHint}");
+                $"PHASE  {phaseHint}\n{(phaseHint == "ALIGNED" ? "KEEP THIS POSITION" : snapshot.CurrentPhase < snapshot.TargetPhase ? "DRAG RIGHT TO INCREASE" : "DRAG LEFT TO DECREASE")}");
+            if (frequencyValueText != null) { frequencyValueText.enableAutoSizing = true; frequencyValueText.fontSizeMin = 10f; frequencyValueText.color = frequencyHint == "ALIGNED" ? safeColor : warningColor; }
+            if (phaseValueText != null) { phaseValueText.enableAutoSizing = true; phaseValueText.fontSizeMin = 10f; phaseValueText.color = phaseHint == "ALIGNED" ? safeColor : warningColor; }
 
             if (frequencySlider != null && phaseSlider != null && !_sliderHooked)
             {
@@ -373,13 +377,13 @@ namespace EchoProtocol.RelayB
             if (snapshot.IsOnline)
                 SetSyncNotice("RELAY ONLINE", safeColor);
             else if (snapshot.IsDriftActive && !snapshot.IsSynchronized)
-                SetSyncNotice("DRIFT - REALIGN PHASE", dangerColor);
+                SetSyncNotice(snapshot.FrequencyErrorPercent > frequencyTolerance ? "FREQUENCY DRIFT - ADJUST FREQUENCY" : "PHASE DRIFT - ADJUST PHASE", dangerColor);
             else if (snapshot.IsDriftWarning && !snapshot.IsDriftActive)
                 SetSyncNotice("SIGNAL DRIFT APPROACHING", warningColor);
             else if (snapshot.Status == RelayBStatus.Synchronizing)
-                SetSyncNotice("HOLD SIGNAL", referenceColor);
+                SetSyncNotice(snapshot.IsSynchronized ? "BOTH ALIGNED - HOLD POSITION" : "SIGNAL MISALIGNED - ADJUST SLIDERS", snapshot.IsSynchronized ? safeColor : warningColor);
             else
-                SetSyncNotice("ALIGN CARRIERS", offlineColor);
+                SetSyncNotice(snapshot.IsSynchronized ? "BOTH ALIGNED - PRESS START SYNC" : "FOLLOW EACH HINT: UP = RIGHT / DOWN = LEFT", snapshot.IsSynchronized ? safeColor : offlineColor);
         }
 
         private void SetSyncNotice(string message, Color color)
