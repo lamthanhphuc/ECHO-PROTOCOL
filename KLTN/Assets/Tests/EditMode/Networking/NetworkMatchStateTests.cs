@@ -40,6 +40,20 @@ namespace EchoProtocol.Networking.Tests
             "Assets/Resources/Network/NetworkMatchState.prefab";
 
         [Test]
+        public void CoreStabilizer_SilencesObjectiveNoiseInsideField()
+        {
+            string source = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs");
+
+            StringAssert.Contains("IsObjectiveNoiseSilenced", source);
+            StringAssert.Contains("IsCoreStabilizerCovering", source);
+            StringAssert.Contains("RuntimeNoiseType.MACHINE_REPAIR", source);
+            StringAssert.Contains("RuntimeNoiseType.TERMINAL_DOWNLOAD", source);
+            StringAssert.Contains("RuntimeNoiseType.VEHICLE_PUSH", source);
+            StringAssert.Contains("RuntimeNoiseType.CHARGE_TRANSFER", source);
+        }
+
+        [Test]
         public void NetworkMatchPrefab_UsesCanonicalTiming()
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
@@ -7,6 +8,20 @@ namespace EchoProtocol.AI.Stalker.Tests
 {
     public sealed class StalkerHeardNoiseSearchTests
     {
+        [Test]
+        public void VehicleNoise_HasFixedInspectionAndReinvestigationCooldown()
+        {
+            string source = File.ReadAllText(
+                "Assets/Scripts/AI/Stalker/StalkerController.cs");
+
+            StringAssert.Contains("vehicleInvestigationSeconds", source);
+            StringAssert.Contains("vehicleReinvestigationCooldownSeconds", source);
+            StringAssert.Contains("vehicleInvestigationArrivalDistance", source);
+            StringAssert.Contains("RuntimeNoiseType.VEHICLE_PUSH", source);
+            StringAssert.Contains("TickVehicleNoiseInvestigation", source);
+            StringAssert.Contains("_vehicleNoiseIgnoreUntilSeconds", source);
+            StringAssert.Contains("SetCurrentPatrolDestination();", source);
+        }
         private const string ControllerTypeName =
             "EchoProtocol.AI.Stalker.StalkerController";
 

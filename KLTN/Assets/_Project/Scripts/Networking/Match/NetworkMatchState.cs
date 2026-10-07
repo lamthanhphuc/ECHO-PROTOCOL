@@ -1329,6 +1329,7 @@ namespace EchoProtocol.Networking
         {
             if (!actor.IsRealPlayer
                 || terminal == null
+                || IsObjectiveNoiseSilenced(terminal.transform.position)
                 || MatchAuthorityRuntime.Instance == null
                 || MatchAuthorityRuntime.Instance.MatchId == Guid.Empty)
             {
@@ -2947,6 +2948,33 @@ namespace EchoProtocol.Networking
             }
         }
 
+        private bool IsObjectiveNoiseSilenced(Vector3 worldPosition)
+        {
+            if (Runner == null)
+            {
+                return false;
+            }
+
+            foreach (PlayerRef player in Runner.ActivePlayers)
+            {
+                if (!Runner.TryGetPlayerObject(player, out var playerObject)
+                    || playerObject == null
+                    || !playerObject.IsValid
+                    || !playerObject.TryGetComponent<NetworkPlayerInteractor>(
+                        out var interactor))
+                {
+                    continue;
+                }
+
+                if (interactor.IsCoreStabilizerCovering(worldPosition))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private void EmitRelayRepairNoiseAuthoritative()
         {
             if (!RelayNoiseCatalog.TryGetDefinition(
@@ -3015,6 +3043,7 @@ namespace EchoProtocol.Networking
         {
             if (!actor.IsRealPlayer
                 || target == null
+                || IsObjectiveNoiseSilenced(target.transform.position)
                 || MatchAuthorityRuntime.Instance == null
                 || MatchAuthorityRuntime.Instance.MatchId == Guid.Empty)
             {
@@ -3070,14 +3099,24 @@ namespace EchoProtocol.Networking
                 || !TryValidateZone2Requester(
                     operatorPlayer,
                     target,
-                    _zone2InteractionDistance)
-                || !pulseTimer.ExpiredOrNotRunning(Runner))
+                    _zone2InteractionDistance))
             {
                 if (!active || !operatorPlayer.IsRealPlayer)
                 {
                     pulseTimer = TickTimer.None;
                 }
 
+                return;
+            }
+
+            if (IsObjectiveNoiseSilenced(target.transform.position))
+            {
+                pulseTimer = TickTimer.None;
+                return;
+            }
+
+            if (!pulseTimer.ExpiredOrNotRunning(Runner))
+            {
                 return;
             }
 
@@ -3179,6 +3218,12 @@ namespace EchoProtocol.Networking
         private void EmitObjectiveNoisePulse(RuntimeNoiseType type, PlayerRef actor,
             Vector3 position, string stream, ref TickTimer timer, ref long sequence)
         {
+            if (IsObjectiveNoiseSilenced(position))
+            {
+                timer = TickTimer.None;
+                return;
+            }
+
             if (!actor.IsRealPlayer || !timer.ExpiredOrNotRunning(Runner)
                 || !RelayNoiseCatalog.TryGetDefinition(type, out var definition)) return;
             var authority = MatchAuthorityRuntime.Instance;
@@ -3194,6 +3239,11 @@ namespace EchoProtocol.Networking
 
         private void EmitZone3PowerSurgeNoiseAuthoritative(PlayerRef actor, Vector3 position)
         {
+            if (IsObjectiveNoiseSilenced(position))
+            {
+                return;
+            }
+
             var authority = MatchAuthorityRuntime.Instance;
             if (!actor.IsRealPlayer || authority == null || authority.MatchId == Guid.Empty) return;
             long sequence = _zone3ChargeNoiseSequence == long.MaxValue ? 1 : _zone3ChargeNoiseSequence + 1;

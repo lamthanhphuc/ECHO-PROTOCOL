@@ -2053,6 +2053,33 @@ namespace EchoProtocol.Networking
             }
         }
 
+        public bool IsCoreStabilizerActive
+        {
+            get
+            {
+                var state = GetComponent<LobbyPlayerState>();
+
+                return Runner != null
+                    && Runner.IsRunning
+                    && state != null
+                    && state.IsGameplayPlayer
+                    && state.ToolId == LobbyPlayerState.CoreStabilizerToolId
+                    && !CoreStabilizerActiveTimer.ExpiredOrNotRunning(Runner);
+            }
+        }
+
+        public bool IsCoreStabilizerCovering(Vector3 worldPosition)
+        {
+            if (!IsCoreStabilizerActive)
+            {
+                return false;
+            }
+
+            float radius = CoreStabilizerRules.SupportRadius;
+            return (worldPosition - transform.position).sqrMagnitude
+                <= radius * radius;
+        }
+
         public float GetCoreStabilizerCooldownRemaining()
         {
             if (IsDebugGodModeActive)

@@ -216,6 +216,9 @@ MonoBehaviour:
   detectionDecayRate: 1
   searchDuration: 3
   searchRadius: 8
+  vehicleInvestigationSeconds: 60
+  vehicleReinvestigationCooldownSeconds: 180
+  vehicleInvestigationArrivalDistance: 3
   searchReacquireDetectHoldSeconds: 1.5
   searchLkpSniffDurationSeconds: 3
   searchPointHoldDurationSeconds: 3
