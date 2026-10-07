@@ -84,8 +84,15 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         Clear();
     }
 
+    private bool _wasCarryingFuel;
     private void LateUpdate()
     {
+        bool carryingFuel = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null;
+        if (carryingFuel != _wasCarryingFuel)
+        {
+            _wasCarryingFuel = carryingFuel;
+            Refresh();
+        }
         if (_visual == null) return;
         var visual = _visual.transform;
         var offset = GetComponentInParent<PlayerCharacterPresenter>()?.ToolHeldOffset(_shownToolId) ?? Vector3.zero;
@@ -121,7 +128,8 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             return;
         }
 
-        int toolId = lobbyState.CarriedCoreId.IsValid || IsPushing() ? 0 : lobbyState.ToolId;
+        int toolId = lobbyState.CarriedCoreId.IsValid || IsPushing()
+            || EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null ? 0 : lobbyState.ToolId;
         if (ShouldSuppressLocalNetworkToolView(toolId))
         {
             toolId = 0;

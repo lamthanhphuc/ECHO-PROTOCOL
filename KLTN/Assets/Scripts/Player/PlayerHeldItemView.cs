@@ -82,8 +82,15 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         IsItem(_currentItem, "scan", "fieldscanner", "scanner") ? 1 : 0;
     private Vector3 _heldVisualBaseScale;
     private Vector3 _heldVisualBasePosition;
+    private bool _wasCarryingFuel;
     private void LateUpdate()
     {
+        bool carryingFuel = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null;
+        if (carryingFuel != _wasCarryingFuel)
+        {
+            _wasCarryingFuel = carryingFuel;
+            RefreshVisual();
+        }
         if (_currentVisual == null) return;
         var character = GetComponentInParent<PlayerCharacterPresenter>();
         var visual = _currentVisual.transform;
@@ -227,6 +234,7 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
     private InventoryItemDefinition ResolveDesiredHeldItem()
     {
+        if (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null) return null;
         if (IsPushing())
         {
             return null;

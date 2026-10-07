@@ -1,13 +1,18 @@
 using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
+using System.Collections.Generic;
 
 namespace EchoProtocol.MatchFlow
 {
     /// <summary>Independent Zone 3 carry item; never enters the Zone 1 core inventory.</summary>
+    [DefaultExecutionOrder(100)]
     [DisallowMultipleComponent, RequireComponent(typeof(Collider), typeof(NetworkObject))]
     public sealed class Zone3FuelCell : NetworkBehaviour, IInteractable
     {
+        private static readonly HashSet<Zone3FuelCell> ActiveCells = new HashSet<Zone3FuelCell>();
+        private void OnEnable() => ActiveCells.Add(this);
+        private void OnDisable() => ActiveCells.Remove(this);
         [SerializeField] private Vector3 carryLocalOffset = new Vector3(0.25f, 1.15f, 0.55f);
         [Networked] public NetworkBool Selected { get; private set; }
         [Networked] public NetworkBool Consumed { get; private set; }
@@ -63,7 +68,7 @@ namespace EchoProtocol.MatchFlow
             if (player == null) return null;
             var root = player.GetComponentInParent<NetworkPlayerLifeState>()?.gameObject
                 ?? player.GetComponentInParent<PlayerDownState>()?.gameObject ?? player;
-            foreach (var cell in FindObjectsByType<Zone3FuelCell>(FindObjectsInactive.Exclude))
+            foreach (var cell in ActiveCells)
                 if (cell.IsAvailable && cell.IsCarried && cell.Carrier == root) return cell;
             return null;
         }
@@ -95,7 +100,7 @@ namespace EchoProtocol.MatchFlow
             if (Online) RpcPickup();
             else { _offlineCarrier = player.GetComponentInParent<PlayerDownState>()?.gameObject ?? player; ApplyVisuals(); }
         }
-        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority, HostMode = RpcHostMode.SourceIsHostPlayer)]
         private void RpcPickup(RpcInfo info = default)
         {
             if (!Runner.TryGetPlayerObject(info.Source, out var player) || player.InputAuthority != info.Source
@@ -123,7 +128,7 @@ namespace EchoProtocol.MatchFlow
             if (Online) RpcDrop();
             else DropOffline();
         }
-        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority, HostMode = RpcHostMode.SourceIsHostPlayer)]
         private void RpcDrop(RpcInfo info = default)
         {
             if (Holder != info.Source || !Holder.IsRealPlayer) return;
@@ -157,6 +162,10 @@ namespace EchoProtocol.MatchFlow
             WorldPosition = player.transform.TransformPoint(carryLocalOffset);
         }
         public override void Render() => ApplyVisuals();
+        private void LateUpdate()
+        {
+            if (Application.isPlaying && IsCarried) ApplyVisuals();
+        }
         private void Update()
         {
             if (!Application.isPlaying) return;
@@ -174,8 +183,12 @@ namespace EchoProtocol.MatchFlow
             var player = Carrier;
             transform.localScale = _originalVisualScale * (IsCarried && player != null ? player.GetComponent<PlayerCharacterPresenter>()?.HeldItemScale ?? 1f : 1f);
             if (IsCarried && player != null)
-                transform.position = player.transform.TransformPoint(carryLocalOffset)
-                    + (player.GetComponent<PlayerCharacterPresenter>()?.HeldItemWorldOffset ?? Vector3.zero);
+            {
+                var anchor = PlayerHeldItemAnchor.ResolveCoreCarryAnchor(player);
+                transform.SetPositionAndRotation((anchor != null ? anchor.position : player.transform.TransformPoint(carryLocalOffset))
+                    + (player.GetComponent<PlayerCharacterPresenter>()?.HeldItemWorldOffset ?? Vector3.zero),
+                    anchor != null ? anchor.rotation : player.transform.rotation);
+            }
             else if (Online) transform.position = WorldPosition;
         }
     }

@@ -470,7 +470,8 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
     private bool IsCarryingCore()
     {
-        return (_coreCarrier != null && _coreCarrier.IsCarrying)
+        return EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null
+            || (_coreCarrier != null && _coreCarrier.IsCarrying)
             || (_lobbyState != null && _lobbyState.Object != null && _lobbyState.Object.IsValid && _lobbyState.CarriedCoreId.IsValid);
     }
 

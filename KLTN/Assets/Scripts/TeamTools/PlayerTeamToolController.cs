@@ -45,7 +45,7 @@ public sealed class PlayerTeamToolController : MonoBehaviour
 
     private void Update()
     {
-        bool pushing = IsPushing();
+        bool pushing = IsPushing() || EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null;
         if (pushing != _wasPushing)
         {
             _wasPushing = pushing;
@@ -64,6 +64,7 @@ public sealed class PlayerTeamToolController : MonoBehaviour
         return inventory != null
             && !inventory.IsTeamToolLocked
             && !IsPushing()
+            && EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) == null
             && equippedTool != null
             && equippedTool.TryUse();
     }
@@ -103,7 +104,7 @@ public sealed class PlayerTeamToolController : MonoBehaviour
     {
         if (equippedObject != null)
         {
-            equippedObject.SetActive(!IsPushing());
+            equippedObject.SetActive(!IsPushing() && EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) == null);
         }
     }
 
