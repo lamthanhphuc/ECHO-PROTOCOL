@@ -98,7 +98,7 @@ namespace EchoProtocol.Networking
     [DisallowMultipleComponent]
     public sealed class NetworkMatchState : NetworkBehaviour
     {
-        public const float DefaultMatchDurationSeconds = 2700f;
+        public const float DefaultMatchDurationSeconds = 7200f;
         public const float DefaultEscapeDurationSeconds = 45f;
         public const float MinimumPowerTransferEscapeDurationSeconds = 180f;
 

@@ -1005,6 +1005,11 @@ namespace EchoProtocol.AI.Stalker.Networking
             for (var i = 0; i < _activeNoiseEvents.Count; i++)
             {
                 var noise = _activeNoiseEvents[i];
+                if (noise.NoiseType == RuntimeNoiseType.VEHICLE_PUSH)
+                {
+                    continue;
+                }
+
                 if (!controller.TryResolveStrategicActivityRoom(
                         noise.WorldPosition,
                         out var room))

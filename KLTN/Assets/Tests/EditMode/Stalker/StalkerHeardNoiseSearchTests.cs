@@ -22,6 +22,27 @@ namespace EchoProtocol.AI.Stalker.Tests
             StringAssert.Contains("_vehicleNoiseIgnoreUntilSeconds", source);
             StringAssert.Contains("SetCurrentPatrolDestination();", source);
         }
+
+        [Test]
+        public void VehicleNoise_DoesNotFeedStrategicPatrol()
+        {
+            string source =
+                File.ReadAllText(
+                    "Assets/Scripts/AI/Stalker/Networking/StalkerFusionRuntime.cs");
+
+            StringAssert.Contains(
+                "noise.NoiseType",
+                source);
+
+            StringAssert.Contains(
+                "RuntimeNoiseType.VEHICLE_PUSH",
+                source);
+
+            StringAssert.Contains(
+                "continue;",
+                source);
+        }
+
         private const string ControllerTypeName =
             "EchoProtocol.AI.Stalker.StalkerController";
 
