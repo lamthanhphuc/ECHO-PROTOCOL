@@ -47,11 +47,6 @@ public class PlayerInventoryDropInput : MonoBehaviour
             return;
         }
 
-        if (IsActiveFusionGameplay())
-        {
-            return;
-        }
-
         if (keyboard != null)
         {
             if (keyboard.digit1Key.wasPressedThisFrame)
@@ -129,14 +124,22 @@ public class PlayerInventoryDropInput : MonoBehaviour
             return false;
         }
 
-        if (inventory == null || inventory.TeamToolSlot == null)
-        {
-            return false;
-        }
-
         var networkObject = GetComponentInParent<NetworkObject>();
         var interactor = GetComponentInParent<EchoProtocol.Networking.NetworkPlayerInteractor>();
         var lobbyState = GetComponentInParent<EchoProtocol.Networking.LobbyPlayerState>();
+        var lifeState = GetComponentInParent<EchoProtocol.Networking.NetworkPlayerLifeState>();
+
+        bool godModeScanner =
+            lifeState != null
+            && lifeState.DebugGodMode
+            && lobbyState != null
+            && lobbyState.ToolId == EchoProtocol.Networking.LobbyPlayerState.FieldScannerToolId;
+
+        if (inventory == null
+            || (inventory.TeamToolSlot == null && !godModeScanner))
+        {
+            return false;
+        }
 
         // If in an active online Fusion session with valid gameplay player:
         if (networkObject != null && networkObject.IsValid && networkObject.Runner != null 

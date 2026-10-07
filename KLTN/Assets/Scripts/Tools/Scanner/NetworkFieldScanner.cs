@@ -166,7 +166,11 @@ namespace EchoProtocol.Tools.Scanner
                 if (Runner != null && Runner.IsRunning && Object != null && Object.IsValid)
                 {
                     float rem = ScanCooldownTimer.RemainingTime(Runner) ?? 0f;
-                    return Mathf.Max(0f, rem - _tuning.ScanCooldown);
+                    return Mathf.Max(
+                        0f,
+                        rem - (IsDebugGodModeActive
+                            ? 0f
+                            : _tuning.ScanCooldown));
                 }
                 return Mathf.Max(0f, _localActiveScanTimer);
             }
