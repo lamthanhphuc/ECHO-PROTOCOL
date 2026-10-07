@@ -12,7 +12,6 @@ GameObject:
   - component: {fileID: 87502891790684871}
   - component: {fileID: 7407995254980528878}
   - component: {fileID: 5881284223579513545}
-  - component: {fileID: 5299903761156081916}
   m_Layer: 0
   m_Name: PF_FieldScanner_Pickup
   m_TagString: Untagged
@@ -103,24 +102,6 @@ MonoBehaviour:
   _visualRenderer: {fileID: 2614116851527872563}
   _WorldPosition: {x: 0, y: 0, z: 0}
   _WorldRotation: {x: 0, y: 0, z: 0, w: 0}
---- !u!114 &5299903761156081916
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2588609610789739567}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5fea29bb7c508c244a1f805a5fd3fc4d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::QuickOutline.Outline
-  outlineMode: 1
-  outlineColor: {r: 0, g: 1, b: 1, a: 1}
-  outlineWidth: 4
-  precomputeOutline: 0
-  bakeKeys: []
-  bakeValues: []
 --- !u!1 &6640771576920526913
 GameObject:
   m_ObjectHideFlags: 0

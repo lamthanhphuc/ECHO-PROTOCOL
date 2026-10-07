@@ -224,7 +224,7 @@ MonoBehaviour:
   noiseMakerDefinition: {fileID: 0}
   firstAidDefinition: {fileID: 0}
   doorJammerDefinition: {fileID: 0}
-  coreStabilizerDefinition: {fileID: 0}
+  coreStabilizerDefinition: {fileID: 11400000, guid: 28502e164a7e0374487e1b70255a5baf, type: 2}
 --- !u!114 &572491202776372816
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -28,10 +28,10 @@ namespace EchoProtocol.AI.Minions
     public sealed class CreepMinionRuntime : NetworkBehaviour
     {
         [Header("Movement")]
-        [SerializeField] private float roamSpeed = 3.5f;
-        [SerializeField] private float trackSpeed = 4.5f;
-        [SerializeField] private float harassSpeed = 6f;
-        [SerializeField] private float fleeSpeed = 7f;
+        [SerializeField] private float roamSpeed = 4.5f;
+        [SerializeField] private float trackSpeed = 6f;
+        [SerializeField] private float harassSpeed = 8f;
+        [SerializeField] private float fleeSpeed = 9.5f;
 
         [SerializeField, Min(5f)]
         private float roamRadius = 28f;
@@ -42,43 +42,47 @@ namespace EchoProtocol.AI.Minions
         [SerializeField, Range(4, 24)]
         private int roamDestinationAttempts = 12;
 
-        [SerializeField] private float targetRefreshSeconds = 0.35f;
+        [SerializeField] private float targetRefreshSeconds = 0.15f;
 
         [Header("Perception")]
-        [SerializeField] private float visionRange = 16f;
-        [SerializeField] private float visionHalfAngle = 80f;
-        [SerializeField] private float trackRequiredSeconds = 5f;
-        [SerializeField] private float zone2SecurityTrackRequiredSeconds = 3f;
-        [SerializeField] private float lostSightGraceSeconds = 2.5f;
+        [SerializeField] private float visionRange = 18f;
+        [SerializeField] private float visionHalfAngle = 90f;
+        [SerializeField] private float trackRequiredSeconds = 1f;
+        [SerializeField] private float zone2SecurityTrackRequiredSeconds = 0.6f;
+        [SerializeField] private float lostSightGraceSeconds = 1.25f;
         [FormerlySerializedAs("shadowStopDistance")]
-        [SerializeField, Min(0.5f)] private float trackStandOffDistance = 2.5f;
-        [SerializeField, Min(0f)] private float roamArrivalSlack = 0.25f;
+        [SerializeField, Min(0.5f)] private float trackStandOffDistance = 2f;
+        [SerializeField, Min(0f)] private float roamArrivalSlack = 0.2f;
 
         [Header("Flying")]
-        [SerializeField] private float flightHeight = 3f;
-        [SerializeField] private float flightBobAmplitude = 0.08f;
-        [SerializeField] private float flightBobSpeed = 2.5f;
-        [SerializeField, Min(0f)] private float ceilingClearance = 0.05f;
-        [SerializeField, Min(1f)] private float ceilingProbeDistance = 20f;
+        [SerializeField] private float flightHeight = 4f;
+        [SerializeField] private float flightBobAmplitude = 0.06f;
+        [SerializeField] private float flightBobSpeed = 3.5f;
+        [SerializeField, Min(0.01f)] private float ceilingClearance = 0.08f;
+        [SerializeField, Min(1f)] private float ceilingProbeDistance = 30f;
         [SerializeField] private Color visualTint = new Color(0.42f, 0.42f, 0.42f, 1f);
 
         [Header("Combat")]
-        [SerializeField] private float shootRange = 8f;
-        [SerializeField] private float stealToolRange = 1.8f;
-        [SerializeField, Min(0.1f)] private float attackCooldownSeconds = 2.2f;
+        [SerializeField] private float shootRange = 9f;
+        [SerializeField] private float stealToolRange = 2.2f;
+        [SerializeField, Min(0.1f)] private float attackCooldownSeconds = 1.1f;
 
         [Header("Hit Effects")]
         [SerializeField] private float slowMultiplier = 0.65f;
         [SerializeField] private float slowDurationSeconds = 3f;
-        [SerializeField] private float coreCarryDistance = 10f;
-        [SerializeField] private float coreCarryTimeoutSeconds = 6f;
+        [SerializeField] private float coreCarryDistance = 12f;
+        [SerializeField] private float coreCarryTimeoutSeconds = 4f;
         [SerializeField] private float coreCarryHeight = 0.65f;
         [SerializeField, Min(1f)] private float stolenToolDropMinDistance = 6f;
         [SerializeField, Min(1f)] private float stolenToolDropMaxDistance = 10f;
 
         [Header("Alert")]
-        [SerializeField] private float alertCooldownSeconds = 20f;
-        [SerializeField, Min(0.1f)] private float alertRetrySeconds = 1f;
+        [SerializeField] private float alertCooldownSeconds = 8f;
+        [SerializeField, Min(0.1f)] private float alertRetrySeconds = 0.35f;
+
+        [Header("Presentation")]
+        [SerializeField, Min(0.1f)] private float animationSpeed = 1.35f;
+        [SerializeField, Min(0.1f)] private float attackAnimationLockSeconds = 0.55f;
 
         [Header("Counterplay")]
         [FormerlySerializedAs("flashlightRepelRange")]
@@ -87,7 +91,7 @@ namespace EchoProtocol.AI.Minions
 
         [FormerlySerializedAs("flashlightExposureRequiredSeconds")]
         [SerializeField, Min(0.1f)]
-        private float flashlightKillExposureSeconds = 0.4f;
+        private float flashlightKillExposureSeconds = 1f;
 
         [SerializeField, Min(0f)]
         private float flashlightExposureDecayPerSecond = 2f;
@@ -157,6 +161,13 @@ namespace EchoProtocol.AI.Minions
         {
             _agent = GetComponent<NavMeshAgent>();
             _animators = GetComponentsInChildren<Animator>(true);
+            foreach (var animator in _animators)
+            {
+                if (animator != null)
+                {
+                    animator.speed = animationSpeed;
+                }
+            }
             _bodyCollider = GetComponent<Collider>();
             _renderedAttackSequence = AttackSequence;
             _renderedAlertSequence = AlertSequence;
@@ -478,7 +489,7 @@ namespace EchoProtocol.AI.Minions
             }
 
             // Không tìm được đường thì thử lại sau 1 giây.
-            _nextRoamRetargetAt = Time.time + 1f;
+            _nextRoamRetargetAt = Time.time + 0.35f;
         }
 
         private bool TrySetLongRangeRoamDestination()
@@ -577,9 +588,9 @@ namespace EchoProtocol.AI.Minions
                 if (!TryGetEligiblePlayer(player, out var obj, out var lobby, out _) || !CanSeePlayer(obj)) continue;
                 float score = -Vector3.Distance(transform.position, obj.transform.position);
                 if (lobby.CarriedCoreId.IsValid)
-                    score += 100f;
+                    score += 500f;
                 else if (lobby.ToolId >= 1 && lobby.ToolId <= 6)
-                    score += 40f;
+                    score += 250f;
                 var match = NetworkMatchState.Instance;
                 if (Zone == RegionSemanticZone.Zone02 && match != null)
                 {
@@ -616,7 +627,11 @@ namespace EchoProtocol.AI.Minions
             var offset = playerObject.transform.position - transform.position;
             if (offset.magnitude > visionRange || Vector3.Angle(transform.forward, Vector3.ProjectOnPlane(offset, Vector3.up)) > visionHalfAngle)
                 return false;
-            var origin = transform.position + Vector3.up * flightHeight;
+            float currentFlightHeight =
+                FlightHeightValue > 0.01f
+                    ? FlightHeightValue
+                    : flightHeight;
+            var origin = transform.position + Vector3.up * currentFlightHeight;
             var destination = playerObject.transform.position + Vector3.up;
             var ray = destination - origin;
             var hits = Physics.RaycastAll(origin, ray.normalized, ray.magnitude, ~0, QueryTriggerInteraction.Ignore);
@@ -725,6 +740,9 @@ namespace EchoProtocol.AI.Minions
                 && TryRelocateTeamTool(playerObject, interactor))
             {
                 CommitAttack(CreepMinionAttackKind.StealTool);
+                BeginFlee(
+                    playerObject.transform.position,
+                    2.5f);
                 return;
             }
 
@@ -1153,7 +1171,7 @@ namespace EchoProtocol.AI.Minions
                         || AttackKind == CreepMinionAttackKind.StealCore
                         ? "Attack2"
                         : "Shoot");
-                _actionAnimationUntil = Time.time + 0.8f;
+                _actionAnimationUntil = Time.time + attackAnimationLockSeconds;
                 return;
             }
             if (Time.time < _actionAnimationUntil) return;
@@ -1168,12 +1186,22 @@ namespace EchoProtocol.AI.Minions
             if (Time.time < _nextCeilingProbeAt)
                 return;
 
-            _nextCeilingProbeAt = Time.time + 0.25f;
+            _nextCeilingProbeAt = Time.time + 0.1f;
             FlightHeightValue = ResolveFlightHeight();
         }
 
         private float ResolveFlightHeight()
         {
+            float visualTopOffset = _visualTopOffset;
+
+            if (_visualRoot != null
+                && TryGetVisualBounds(out var visualBounds))
+            {
+                visualTopOffset = Mathf.Max(
+                    0f,
+                    visualBounds.max.y - _visualRoot.position.y);
+            }
+
             var hits = Physics.RaycastAll(
                 transform.position + Vector3.up * 0.1f,
                 Vector3.up,
@@ -1198,7 +1226,7 @@ namespace EchoProtocol.AI.Minions
                     0.1f
                     + hit.distance
                     - ceilingClearance
-                    - _visualTopOffset
+                    - visualTopOffset
                     - flightBobAmplitude);
             }
 

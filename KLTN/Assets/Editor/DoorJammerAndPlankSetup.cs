@@ -250,6 +250,23 @@ namespace EchoProtocol.Editor
 
             try
             {
+                var networkObject =
+                    root.GetComponent<NetworkObject>();
+
+                if (networkObject == null)
+                {
+                    networkObject =
+                        root.AddComponent<NetworkObject>();
+                }
+
+                var networkTransform =
+                    root.GetComponent<NetworkTransform>();
+
+                if (networkTransform == null)
+                {
+                    root.AddComponent<NetworkTransform>();
+                }
+
                 // Configure BoxCollider (covers full door opening from Y = -0.04 to 3.15)
                 var boxCol = root.GetComponent<BoxCollider>();
                 if (boxCol == null)

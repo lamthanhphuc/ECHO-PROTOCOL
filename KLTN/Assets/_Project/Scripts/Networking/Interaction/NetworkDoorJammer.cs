@@ -11,7 +11,10 @@ namespace EchoProtocol.Networking
     }
 
     [DisallowMultipleComponent]
-    public sealed class NetworkDoorJammer : NetworkBehaviour, INetworkTraversalBlocker
+    [RequireComponent(typeof(NetworkTransform))]
+    public sealed class NetworkDoorJammer :
+        NetworkBehaviour,
+        INetworkTraversalBlocker
     {
         private const float SpawnVisualGraceSeconds = 3f;
 
@@ -220,14 +223,29 @@ namespace EchoProtocol.Networking
 
             if (_visualRoot != null)
             {
-                _visualRoot.gameObject.SetActive(IsVisuallyActive);
+                bool visible = IsVisuallyActive;
+
+                if (_visualRoot.gameObject.activeSelf != visible)
+                {
+                    _visualRoot.gameObject.SetActive(visible);
+                }
+
+                if (visible)
+                {
+                    foreach (var renderer
+                             in _visualRoot.GetComponentsInChildren<Renderer>(true))
+                    {
+                        if (renderer != null)
+                        {
+                            renderer.enabled = true;
+                        }
+                    }
+                }
             }
         }
 
         private bool IsVisuallyActive =>
-            State == NetworkDoorJammerState.Active
-            || _forceActivePresentation
-            || (State == NetworkDoorJammerState.NotDeployed && Time.unscaledTime <= _spawnVisualGraceUntil);
+            State != NetworkDoorJammerState.Destroyed;
 
         private void OnValidate()
         {
