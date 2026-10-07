@@ -7,6 +7,27 @@ namespace EchoProtocol.Networking.Tests
 {
     public sealed class NetworkMatchStateTests
     {
+        [Test]
+        public void Zone1Completion_DoesNotTeleportPlayersToZone2()
+        {
+            string source = File.ReadAllText(
+                    "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs")
+                .Replace("\r\n", "\n");
+
+            StringAssert.Contains(
+                "if (next != NetworkMatchPhase.Zone2Objective)",
+                source);
+
+            StringAssert.Contains(
+                "TeleportGameplayPlayersAuthoritative(next);",
+                source);
+
+            StringAssert.Contains(
+                "TeleportGameplayPlayersAuthoritative(\n" +
+                "                NetworkMatchPhase.Zone2Objective);",
+                source);
+        }
+
         private const string MatchSourcePath =
             "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs";
         private const string ObjectiveSourcePath =

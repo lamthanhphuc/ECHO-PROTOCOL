@@ -220,6 +220,15 @@ namespace EchoProtocol.Networking
 
         public void SetGameplayToolId(int toolId)
         {
+            SetGameplayToolId(
+                toolId,
+                UsesForTool(toolId));
+        }
+
+        public void SetGameplayToolId(
+            int toolId,
+            int remainingUses)
+        {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority
                 || toolId < 0 || toolId > 6)
             {
@@ -227,7 +236,16 @@ namespace EchoProtocol.Networking
             }
 
             ToolId = toolId;
-            TeamToolUsesRemaining = UsesForTool(toolId);
+            TeamToolUsesRemaining =
+                toolId == 0
+                    ? 0
+                    : toolId == NoiseMakerToolId
+                      || toolId == DoorJammerToolId
+                        ? Mathf.Clamp(
+                            remainingUses,
+                            1,
+                            MultiUseTeamToolUses)
+                        : 0;
             AnyStateChanged?.Invoke();
         }
 

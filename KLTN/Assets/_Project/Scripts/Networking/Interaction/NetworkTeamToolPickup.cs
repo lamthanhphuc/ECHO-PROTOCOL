@@ -22,6 +22,7 @@ namespace EchoProtocol.Networking
         [Networked, OnChangedRender(nameof(OnConsumedChanged))] private NetworkBool IsConsumed { get; set; }
         [Networked, OnChangedRender(nameof(ApplyReplicatedPose))] public Vector3 WorldPosition { get; private set; }
         [Networked, OnChangedRender(nameof(ApplyReplicatedPose))] public Quaternion WorldRotation { get; private set; }
+        [Networked] public int RemainingUses { get; private set; }
 
         public int ToolId => _toolId;
 
@@ -40,6 +41,14 @@ namespace EchoProtocol.Networking
                 IsConsumed = false;
                 WorldPosition = transform.position;
                 WorldRotation = transform.rotation;
+
+                if (RemainingUses <= 0
+                    && (_toolId == LobbyPlayerState.NoiseMakerToolId
+                        || _toolId == LobbyPlayerState.DoorJammerToolId))
+                {
+                    RemainingUses =
+                        LobbyPlayerState.MultiUseTeamToolUses;
+                }
             }
 
             ApplyReplicatedPose();
@@ -182,7 +191,29 @@ namespace EchoProtocol.Networking
 
             IsConsumed = true;
             SetVisualsAndCollidersActive(false);
-            playerState.SetGameplayToolId(_toolId);
+            playerState.SetGameplayToolId(
+                _toolId,
+                RemainingUses);
+        }
+
+        public void SetRemainingUsesAuthoritative(
+            int remainingUses)
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority)
+            {
+                return;
+            }
+
+            RemainingUses =
+                _toolId == LobbyPlayerState.NoiseMakerToolId
+                || _toolId == LobbyPlayerState.DoorJammerToolId
+                    ? Mathf.Clamp(
+                        remainingUses,
+                        1,
+                        LobbyPlayerState.MultiUseTeamToolUses)
+                    : 0;
         }
 
         public override void FixedUpdateNetwork()

@@ -22,6 +22,28 @@ namespace EchoProtocol.Player.Tests
         private const string CoreStabilizerPickupPath = "Assets/Prefabs/Tools/PF_CoreStabilizer_NetworkPickup.prefab";
 
         [Test]
+        public void GOD_MODE_AllTeamToolsAreInfiniteAndCooldownFree()
+        {
+            string interactor = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
+            string scanner = File.ReadAllText(
+                "Assets/Scripts/Tools/Scanner/NetworkFieldScanner.cs");
+            string life = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Player/NetworkPlayerLifeState.cs");
+
+            StringAssert.Contains("if (IsDebugGodModeActive)", interactor);
+            StringAssert.Contains("return 0f;", interactor);
+            StringAssert.Contains("TickTimer.None", interactor);
+            StringAssert.Contains("if (IsDebugGodModeActive)", scanner);
+            StringAssert.Contains("RequestDebugTeamTool", life);
+            StringAssert.Contains("FieldScannerToolId", life);
+            StringAssert.Contains("NoiseMakerToolId", life);
+            StringAssert.Contains("FirstAidKitToolId", life);
+            StringAssert.Contains("DoorJammerToolId", life);
+            StringAssert.Contains("CoreStabilizerToolId", life);
+        }
+
+        [Test]
         public void TEAM_TOOL_WorldSpawn_IsTransactional()
         {
             const string spawnSourcePath = "Assets/Scripts/TeamTools/TeamToolWorldSpawn.cs";

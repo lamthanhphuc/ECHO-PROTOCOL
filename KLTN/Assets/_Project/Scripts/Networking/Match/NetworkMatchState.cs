@@ -1666,6 +1666,9 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            TeleportGameplayPlayersAuthoritative(
+                NetworkMatchPhase.Zone2Objective);
+
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchState,
                 "[MatchState] Debug skipped to Zone2Objective.");
@@ -2247,7 +2250,11 @@ namespace EchoProtocol.Networking
             if (IsZoneBoundary(previousPhase, next))
             {
                 ResetPlayerReviveBudgetsAuthoritative();
-                TeleportGameplayPlayersAuthoritative(next);
+
+                if (next != NetworkMatchPhase.Zone2Objective)
+                {
+                    TeleportGameplayPlayersAuthoritative(next);
+                }
             }
 
             if (next != NetworkMatchPhase.Escape

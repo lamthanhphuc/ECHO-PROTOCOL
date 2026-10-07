@@ -60,7 +60,35 @@ namespace EchoProtocol.Networking.Tests
 
             var retry = new SerializedObject(minion).FindProperty("alertRetrySeconds");
             Assert.That(retry, Is.Not.Null);
-            Assert.That(retry.floatValue, Is.EqualTo(1f).Within(0.001f));
+            Assert.That(retry.floatValue, Is.EqualTo(0.15f).Within(0.001f));
+        }
+
+        [Test]
+        public void UnifiedMinion_ContainsAllMechanics()
+        {
+            string source = File.ReadAllText(MinionSource);
+
+            StringAssert.Contains("CreepMinionAttackKind.ShootSlow", source);
+            StringAssert.Contains("CreepMinionAttackKind.StealTool", source);
+            StringAssert.Contains("CreepMinionAttackKind.StealCore", source);
+            StringAssert.Contains("TryApplySlowAuthoritative", source);
+            StringAssert.Contains("TryRelocateTeamTool", source);
+            StringAssert.Contains("TryStealCore", source);
+            StringAssert.Contains("BeginFleeTo", source);
+            StringAssert.Contains("TrySendStalkerAlert", source);
+            StringAssert.Contains("RuntimeNoiseType.NOISE_MAKER", source);
+            StringAssert.Contains("IsStabilizerBuffed", source);
+            StringAssert.Contains("BeginFlashlightDeath", source);
+        }
+
+        [Test]
+        public void BothZones_UseSameUnifiedMinionPrefab()
+        {
+            string source = File.ReadAllText(SpawnerSource);
+
+            StringAssert.Contains("ResolveCreepMinionPrefab()", source);
+            StringAssert.Contains("ConfigureBeforeSpawn(zone)", source);
+            StringAssert.Contains("GetComponent<CreepMinionRuntime>()", source);
         }
 
         private static Component FindComponentByTypeName(GameObject root, string fullTypeName)

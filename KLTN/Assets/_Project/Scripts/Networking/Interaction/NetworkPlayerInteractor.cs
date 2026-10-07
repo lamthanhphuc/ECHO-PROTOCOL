@@ -524,7 +524,11 @@ namespace EchoProtocol.Networking
             if (state.ToolId >= 1 && state.ToolId <= 6)
             {
                 int toolId = state.ToolId;
-                if (TrySpawnDroppedTeamToolAuthoritative(toolId, out _))
+                int remainingUses = state.TeamToolUsesRemaining;
+                if (TrySpawnDroppedTeamToolAuthoritative(
+                        toolId,
+                        remainingUses,
+                        out _))
                 {
                     state.SetGameplayToolId(0);
 
@@ -551,9 +555,11 @@ namespace EchoProtocol.Networking
             }
 
             int toolId = state.ToolId;
+            int remainingUses = state.TeamToolUsesRemaining;
             GetAuthoritativeDropPose(toolId, out _, out var dropRotation);
             if (!TrySpawnDroppedTeamToolAuthoritative(
                     toolId,
+                    remainingUses,
                     forcedDropPosition,
                     dropRotation,
                     out _))
@@ -621,7 +627,8 @@ namespace EchoProtocol.Networking
                 return scanner.RequestScan();
             }
 
-            if (toolId == LobbyPlayerState.CoreStabilizerToolId
+            if (!IsDebugGodModeActive
+                && toolId == LobbyPlayerState.CoreStabilizerToolId
                 && GetCoreStabilizerCooldownRemaining() > 0f) return false;
 
             if (!isOnline)
@@ -1131,7 +1138,10 @@ namespace EchoProtocol.Networking
                 {
                     result = InteractionValidationResult.InvalidTargetState;
                 }
-                else if (!TrySpawnDroppedTeamToolAuthoritative(state.ToolId, out targetId))
+                else if (!TrySpawnDroppedTeamToolAuthoritative(
+                             state.ToolId,
+                             state.TeamToolUsesRemaining,
+                             out targetId))
                 {
                     result = InteractionValidationResult.InvalidTarget;
                 }
@@ -1147,11 +1157,15 @@ namespace EchoProtocol.Networking
             RpcInteractionResult(requester, targetId, sequence, (int)result);
         }
 
-        private bool TrySpawnDroppedTeamToolAuthoritative(int toolId, out NetworkId pickupId)
+        private bool TrySpawnDroppedTeamToolAuthoritative(
+            int toolId,
+            int remainingUses,
+            out NetworkId pickupId)
         {
             GetAuthoritativeDropPose(toolId, out var dropPosition, out var dropRotation);
             return TrySpawnDroppedTeamToolAuthoritative(
                 toolId,
+                remainingUses,
                 dropPosition,
                 dropRotation,
                 out pickupId);
@@ -1159,6 +1173,7 @@ namespace EchoProtocol.Networking
 
         private bool TrySpawnDroppedTeamToolAuthoritative(
             int toolId,
+            int remainingUses,
             Vector3 dropPosition,
             Quaternion dropRotation,
             out NetworkId pickupId)
@@ -1171,18 +1186,25 @@ namespace EchoProtocol.Networking
             }
 
             var pickupObject = Runner.Spawn(prefab, dropPosition, dropRotation);
-            var validPickup = pickupObject != null
-                && ((pickupObject.TryGetComponent<NetworkTeamToolPickup>(out var teamToolPickup)
-                        && teamToolPickup.ToolId == toolId)
-                    || (pickupObject.TryGetComponent<NetworkToolPickup>(out var scannerPickup)
-                        && scannerPickup.ToolId == toolId));
-            if (!validPickup)
+            if (pickupObject == null)
             {
-                if (pickupObject != null)
+                return false;
+            }
+
+            if (pickupObject.TryGetComponent<NetworkTeamToolPickup>(out var teamToolPickup))
+            {
+                if (teamToolPickup.ToolId != toolId)
                 {
                     Runner.Despawn(pickupObject);
+                    return false;
                 }
 
+                teamToolPickup.SetRemainingUsesAuthoritative(remainingUses);
+            }
+            else if (!pickupObject.TryGetComponent<NetworkToolPickup>(out var scannerPickup)
+                     || scannerPickup.ToolId != toolId)
+            {
+                Runner.Despawn(pickupObject);
                 return false;
             }
 
@@ -1963,8 +1985,17 @@ namespace EchoProtocol.Networking
 
         private void ConsumeGameplayTeamTool(LobbyPlayerState state)
         {
-            if (state == null
-                || !state.ConsumeTeamToolUseAuthoritative())
+            if (state == null)
+            {
+                return;
+            }
+
+            if (IsDebugGodModeActive)
+            {
+                return;
+            }
+
+            if (!state.ConsumeTeamToolUseAuthoritative())
             {
                 return;
             }
@@ -2024,9 +2055,23 @@ namespace EchoProtocol.Networking
 
         public float GetCoreStabilizerCooldownRemaining()
         {
-            if (Runner != null && Runner.IsRunning)
-                return TeamToolCooldown.RemainingTime(Runner) ?? 0f;
-            return Mathf.Max(0f, _offlineCoreStabilizerCooldownUntil - Time.time);
+            if (IsDebugGodModeActive)
+            {
+                return 0f;
+            }
+
+            if (Runner != null
+                && Runner.IsRunning)
+            {
+                return TeamToolCooldown
+                    .RemainingTime(Runner)
+                    ?? 0f;
+            }
+
+            return Mathf.Max(
+                0f,
+                _offlineCoreStabilizerCooldownUntil
+                - Time.time);
         }
 
         private bool IsDebugGodModeActive =>
@@ -2034,11 +2079,16 @@ namespace EchoProtocol.Networking
 
         private void SetTeamToolCooldown(float seconds)
         {
-            if (!IsDebugGodModeActive)
+            if (IsDebugGodModeActive)
             {
-                TeamToolCooldown =
-                    TickTimer.CreateFromSeconds(Runner, seconds);
+                TeamToolCooldown = TickTimer.None;
+                return;
             }
+
+            TeamToolCooldown =
+                TickTimer.CreateFromSeconds(
+                    Runner,
+                    seconds);
         }
 
         private void ResetTeamToolRuntimeAuthoritative()

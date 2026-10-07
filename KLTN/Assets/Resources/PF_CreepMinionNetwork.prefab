@@ -155,41 +155,43 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 55f703aa77f231342a1dbcf07df27688, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Minions.CreepMinionRuntime
-  roamSpeed: 4.5
-  trackSpeed: 6
-  harassSpeed: 8
-  fleeSpeed: 9.5
+  roamSpeed: 5.5
+  trackSpeed: 8
+  harassSpeed: 10
+  fleeSpeed: 12
   roamRadius: 28
-  roamMinPathDistance: 12
-  roamDestinationAttempts: 12
-  targetRefreshSeconds: 0.15
-  visionRange: 18
-  visionHalfAngle: 90
-  trackRequiredSeconds: 1
-  zone2SecurityTrackRequiredSeconds: 0.6
-  lostSightGraceSeconds: 1.25
-  trackStandOffDistance: 2
-  roamArrivalSlack: 0.2
-  flightHeight: 4
-  flightBobAmplitude: 0.06
-  flightBobSpeed: 3.5
-  ceilingClearance: 0.08
-  ceilingProbeDistance: 30
+  roamMinPathDistance: 10
+  roamDestinationAttempts: 16
+  targetRefreshSeconds: 0.08
+  visionRange: 20
+  visionHalfAngle: 95
+  trackRequiredSeconds: 0.45
+  zone2SecurityTrackRequiredSeconds: 0.25
+  lostSightGraceSeconds: 0.75
+  trackStandOffDistance: 1.5
+  roamArrivalSlack: 0.15
+  flightHeight: 6
+  flightBobAmplitude: 0.05
+  flightBobSpeed: 4
+  ceilingClearance: 0.03
+  ceilingProbeDistance: 40
   visualTint: {r: 0.42, g: 0.42, b: 0.42, a: 1}
-  shootRange: 9
-  stealToolRange: 2.2
-  attackCooldownSeconds: 1.1
+  shootRange: 10
+  stealToolRange: 30
+  attackCooldownSeconds: 0.65
+  toolFleeSeconds: 1.6
   slowMultiplier: 0.65
   slowDurationSeconds: 3
   coreCarryDistance: 12
-  coreCarryTimeoutSeconds: 4
+  coreCarryTimeoutSeconds: 3
   coreCarryHeight: 0.65
+  fleeMinDistance: 4
   stolenToolDropMinDistance: 6
-  stolenToolDropMaxDistance: 10
-  alertCooldownSeconds: 8
-  alertRetrySeconds: 0.35
-  animationSpeed: 1.35
-  attackAnimationLockSeconds: 0.55
+  stolenToolDropMaxDistance: 30
+  alertCooldownSeconds: 4
+  alertRetrySeconds: 0.15
+  animationSpeed: 1.6
+  attackAnimationLockSeconds: 0.35
   flashlightKillRange: 15
   flashlightKillExposureSeconds: 0.75
   flashlightExposureDecayPerSecond: 2

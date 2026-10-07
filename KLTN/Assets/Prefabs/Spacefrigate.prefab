@@ -154,7 +154,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3bdc8e2171f8461787672209c41ff038, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Gameplay.PushableObject
-  pushSpeed: 1.4
+  pushSpeed: 5
   acceleration: 2
   deceleration: 4
   maxTurnSpeed: 25
@@ -170,3 +170,5 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   groundCheckDistance: 4
+  extraPusherSpeedBonus: 0.15
+  maxCoopSpeedMultiplier: 1.45
