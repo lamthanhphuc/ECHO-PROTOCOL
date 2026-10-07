@@ -575,6 +575,11 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             audioController.UpdateChasePresentation(pursuing, isLocalTarget);
 
+            if (presentation.SemanticState != StalkerState.DETECT)
+            {
+                audioController.StopDetectVoice();
+            }
+
             if (semanticChanged)
             {
                 switch (presentation.SemanticState)

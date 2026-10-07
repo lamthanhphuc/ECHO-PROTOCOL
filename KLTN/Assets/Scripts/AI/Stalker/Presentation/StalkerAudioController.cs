@@ -401,6 +401,13 @@ namespace EchoProtocol.AI.Stalker.Presentation
             PlayDetect();
         }
 
+        public void StopDetectVoice()
+        {
+            var src = detectSource != null ? detectSource : voiceSource;
+            if (src == null || !src.isPlaying || src.clip != detectClip) return;
+            src.Stop();
+        }
+
         public void BeginDetectAudioEntry()
         {
             _suppressDetectAnimationEvent = false;
@@ -558,7 +565,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
         /// </summary>
         public void StopAllLoops()
         {
-            if (detectSource    != null && detectSource.isPlaying)    detectSource.Stop();
+            StopDetectVoice();
             if (breathingSource != null && breathingSource.isPlaying) breathingSource.Stop();
             if (chaseSource     != null && chaseSource.isPlaying)     chaseSource.Stop();
             if (_chaseFadeCoroutine != null)

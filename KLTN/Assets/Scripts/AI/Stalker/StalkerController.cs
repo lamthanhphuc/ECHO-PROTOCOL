@@ -1408,7 +1408,8 @@ namespace EchoProtocol.AI.Stalker
 
                 FaceDetectObservedPosition(observation.ObservedPosition);
 
-                if (_detectWasDecaying && detectionMeter > 0f)
+                if (TryConsumeDetectionDecay(
+                        detectionTargetId))
                 {
                     PromoteDetectionTargetToCurrentTarget(observation);
                     return;
@@ -1435,16 +1436,21 @@ namespace EchoProtocol.AI.Stalker
             detectionMeter -= GetDetectionDecayRate() * CurrentSimulationDeltaSeconds;
             detectionMeter = ClampDetectionMeter(detectionMeter);
             _memory.SetDetectionMeter(detectionMeter);
+            _detectWasDecaying = detectionMeter > 0f;
+
+            if (detectionMeter > 0f)
+            {
+                RememberDetectionDecay(detectionTargetId, detectionMeter);
+            }
+            else
+            {
+                _detectDecayUntilByPlayer.Remove(detectionTargetId);
+            }
 
             if (TrySelectTypedDetectionTargetFromVisibleFrame(
                     detectionTargetId,
                     out var nextObservation))
             {
-                if (detectionMeter > 0f)
-                {
-                    RememberDetectionDecay(detectionTargetId, detectionMeter);
-                }
-
                 ClearDetectionContext();
                 TryBeginTypedDetection(nextObservation);
                 return;
