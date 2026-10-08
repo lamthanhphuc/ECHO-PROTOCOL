@@ -89,7 +89,6 @@ namespace EchoProtocol.Tests.MatchFlow
             var entry = new GameObject("Zone2Entry");
             entry.transform.SetPositionAndRotation(new Vector3(4f, 2f, 8f), Quaternion.Euler(0f, 90f, 0f));
             entry.AddComponent<BoxCollider>().isTrigger = true;
-            LogAssert.Expect(LogType.Error, "[STK_ZONE2][CONFIG] PlayerSpawner was not found for the Zone 2 entry trigger.");
             entry.AddComponent<StalkerZone2EntryTrigger>();
             var player = new GameObject("Player").AddComponent<NetworkPlayerMovement>();
 
