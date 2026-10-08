@@ -140,51 +140,253 @@ namespace EchoProtocol.Editor
         public static void ValidateStore()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode)
-                throw new InvalidOperationException("Exit Play mode before validating the store.");
-            var scene = EditorSceneManager.OpenPreviewScene("Assets/Scenes/MainMenu.unity");
+            {
+                throw new InvalidOperationException(
+                    "Exit Play mode before validating the store.");
+            }
+
+            var scene =
+                EditorSceneManager.OpenPreviewScene(
+                    "Assets/Scenes/MainMenu.unity");
+
             try
             {
-                var transforms = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Transform>(true)).ToArray();
-                var shop = transforms.First(t => t.name == "ShopPopup");
-                var topUp = transforms.FirstOrDefault(t => t.name == "TopUpPopup");
-                if (topUp != null) topUp.gameObject.SetActive(false);
+                var transforms =
+                    scene.GetRootGameObjects()
+                        .SelectMany(
+                            root =>
+                                root.GetComponentsInChildren<
+                                    Transform>(true))
+                        .ToArray();
+
+                var shop =
+                    transforms.FirstOrDefault(
+                        t => t.name == "StoreV2Popup");
+
+                if (shop == null)
+                {
+                    throw new InvalidOperationException(
+                        "StoreV2Popup not found in MainMenu.");
+                }
+
+                var topUp =
+                    transforms.FirstOrDefault(
+                        t => t.name == "TopUpPopup");
+
+                if (topUp != null)
+                    topUp.gameObject.SetActive(false);
+
                 shop.gameObject.SetActive(true);
-                var presenter = shop.gameObject.AddComponent<TeamToolShopPanel>();
+
+                var presenter =
+                    shop.GetComponent<TeamToolShopPanel>();
+
+                if (presenter == null)
+                {
+                    presenter =
+                        shop.gameObject
+                            .AddComponent<TeamToolShopPanel>();
+                }
+
                 presenter.PreviewLayout();
-                var camera = CreateCamera(scene);
-                foreach (var canvas in scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Canvas>(true)))
+
+                var window =
+                    shop.Find("Window")
+                    as RectTransform;
+
+                var content =
+                    shop.Find(
+                        "Window/Content")
+                    as RectTransform;
+
+                var teamTools =
+                    shop.Find(
+                        "Window/Content/TeamTools")
+                    as RectTransform;
+
+                var grid =
+                    shop.Find(
+                        "Window/Content/TeamTools/ItemGrid")
+                    as RectTransform;
+
+                var close =
+                    shop.Find(
+                        "Window/CloseButton")
+                    as RectTransform;
+
+                if (window == null)
+                    throw new InvalidOperationException(
+                        "Store V2 Window missing.");
+
+                if (content == null)
+                    throw new InvalidOperationException(
+                        "Store V2 Content missing.");
+
+                if (teamTools == null)
+                    throw new InvalidOperationException(
+                        "Store V2 TeamTools missing.");
+
+                if (grid == null)
+                    throw new InvalidOperationException(
+                        "Store V2 ItemGrid missing.");
+
+                if (close == null)
+                    throw new InvalidOperationException(
+                        "Store V2 Back button missing.");
+
+                var thumbnails =
+                    grid.GetComponentsInChildren<
+                        RawImage>(true);
+
+                if (thumbnails.Length != 4)
                 {
-                    if (!canvas.isRootCanvas) continue;
-                    var scaler = canvas.GetComponent<CanvasScaler>();
-                    if (scaler != null) scaler.enabled = false;
-                    canvas.renderMode = RenderMode.ScreenSpaceCamera;
-                    canvas.worldCamera = camera;
-                    canvas.planeDistance = 5f;
+                    throw new InvalidOperationException(
+                        "Store V2 must contain exactly " +
+                        "four Team Tool card thumbnails. " +
+                        "Found " +
+                        thumbnails.Length +
+                        ".");
                 }
 
-                int[] widths = { 1920, 1280 };
-                int[] heights = { 1080, 720 };
-                for (int i = 0; i < widths.Length; i++)
+                if (thumbnails.Any(
+                        thumbnail =>
+                            thumbnail.texture == null))
                 {
-                    foreach (var canvas in scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Canvas>(true)))
-                        if (canvas.isRootCanvas) canvas.scaleFactor = widths[i] / 1920f;
-                    Capture(camera, widths[i], heights[i], $"Temp/StoreTerminal-{widths[i]}x{heights[i]}.png");
-                    var window = shop.Find("Window");
-                    var content = window.Find("TeamTools") as RectTransform;
-                    var close = window.Find("CloseButton") as RectTransform;
-                    if (WorldRect(content).Overlaps(WorldRect(close)))
-                        throw new InvalidOperationException("Store content overlaps Close at " + widths[i]);
-                    var thumbnails = content.GetComponentsInChildren<RawImage>();
-                    if (thumbnails.Length != 4 || thumbnails.Any(t => t.texture == null))
-                        throw new InvalidOperationException("The four imported prefab thumbnails must all be visible.");
-                    foreach (var button in content.GetComponentsInChildren<Button>())
-                        if (WorldRect((RectTransform)button.transform).Overlaps(WorldRect(close)))
-                            throw new InvalidOperationException("A Buy button overlaps Close.");
+                    throw new InvalidOperationException(
+                        "Every Team Tool card must have " +
+                        "a baked thumbnail.");
                 }
+
+                var camera =
+                    CreateCamera(scene);
+
+                foreach (var canvas in
+                         scene.GetRootGameObjects()
+                             .SelectMany(
+                                 root =>
+                                     root.GetComponentsInChildren<
+                                         Canvas>(true)))
+                {
+                    if (!canvas.isRootCanvas)
+                        continue;
+
+                    var scaler =
+                        canvas.GetComponent<
+                            CanvasScaler>();
+
+                    if (scaler != null)
+                        scaler.enabled = false;
+
+                    canvas.renderMode =
+                        RenderMode.ScreenSpaceCamera;
+
+                    canvas.worldCamera =
+                        camera;
+
+                    canvas.planeDistance =
+                        5f;
+                }
+
+                int[] widths =
+                {
+                    1920,
+                    1280
+                };
+
+                int[] heights =
+                {
+                    1080,
+                    720
+                };
+
+                for (int i = 0;
+                     i < widths.Length;
+                     i++)
+                {
+                    foreach (var canvas in
+                             scene.GetRootGameObjects()
+                                 .SelectMany(
+                                     root =>
+                                         root.GetComponentsInChildren<
+                                             Canvas>(true)))
+                    {
+                        if (canvas.isRootCanvas)
+                        {
+                            canvas.scaleFactor =
+                                widths[i] / 1920f;
+                        }
+                    }
+
+                    Canvas.ForceUpdateCanvases();
+
+                    if (WorldRect(teamTools)
+                        .Overlaps(
+                            WorldRect(close)))
+                    {
+                        throw new InvalidOperationException(
+                            "Store V2 content overlaps " +
+                            "Back button at " +
+                            widths[i] +
+                            "x" +
+                            heights[i] +
+                            ".");
+                    }
+
+                    foreach (var button in
+                             grid.GetComponentsInChildren<
+                                 Button>(true))
+                    {
+                        if (WorldRect(
+                                button.transform
+                                    as RectTransform)
+                            .Overlaps(
+                                WorldRect(close)))
+                        {
+                            throw new InvalidOperationException(
+                                "Store V2 item card overlaps " +
+                                "Back button.");
+                        }
+                    }
+
+                    string projectRoot =
+                        Directory.GetParent(
+                            Application.dataPath).FullName;
+
+                    string previewDirectory =
+                        Path.Combine(
+                            projectRoot,
+                            "StorePreviews");
+
+                    Directory.CreateDirectory(
+                        previewDirectory);
+
+                    string previewPath =
+                        Path.Combine(
+                            previewDirectory,
+                            $"StoreV2-{widths[i]}x{heights[i]}.png");
+
+                    Capture(
+                        camera,
+                        widths[i],
+                        heights[i],
+                        previewPath);
+
+                    Debug.Log(
+                        "[ECHO] Store V2 preview written: " +
+                        previewPath);
+                }
+
+                Debug.Log(
+                    "[ECHO] Store V2 validation PASS: " +
+                    "4 thumbnails, hierarchy valid, " +
+                    "1920x1080 and 1280x720 rendered.");
             }
-            finally { EditorSceneManager.ClosePreviewScene(scene); }
+            finally
+            {
+                EditorSceneManager.ClosePreviewScene(
+                    scene);
+            }
         }
-
         private static Rect WorldRect(RectTransform transform)
         {
             var corners = new Vector3[4];

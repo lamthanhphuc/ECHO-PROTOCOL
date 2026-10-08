@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using EchoProtocol.Networking;
+using EchoProtocol.UI.MainMenu;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -34,6 +35,12 @@ namespace EchoProtocol.UI
                 nextButton.onClick.AddListener(OnNext);
 
             Subscribe();
+
+            TeamToolOwnershipSession.Changed +=
+                HandleOwnershipChanged;
+
+            TeamToolOwnershipSession.Refresh();
+
             Refresh();
         }
 
@@ -44,6 +51,9 @@ namespace EchoProtocol.UI
 
             if (nextButton != null)
                 nextButton.onClick.RemoveListener(OnNext);
+
+            TeamToolOwnershipSession.Changed -=
+                HandleOwnershipChanged;
 
             Unsubscribe();
         }
@@ -91,6 +101,22 @@ namespace EchoProtocol.UI
                 HandleSelectionResult;
         }
 
+        private void HandleOwnershipChanged()
+        {
+            int current =
+                GetLocalToolId();
+
+            if (current != 0
+                && !TeamToolOwnershipSession.OwnsTool(current)
+                && lobbyManager != null
+                && lobbyManager.IsInRoom
+                && !_room.IsReady)
+            {
+                lobbyManager.RequestTool(0);
+            }
+
+            Refresh();
+        }
         private void HandleRoomUpdated(
             RoomInfoViewModel room)
         {
@@ -183,14 +209,32 @@ namespace EchoProtocol.UI
             var result =
                 new List<int> { 0 };
 
-            if (playerState?.ToolDefinitions == null)
+            if (playerState?.ToolDefinitions == null
+                || !TeamToolOwnershipSession.IsLoaded)
+            {
                 return result;
+            }
 
             foreach (var definition
                      in playerState.ToolDefinitions)
             {
                 if (definition == null)
                     continue;
+
+                // First Aid / Medkit is world pickup only.
+                if (definition.Id ==
+                    LobbyPlayerState.FirstAidKitToolId)
+                {
+                    continue;
+                }
+
+                // Purchasable Team Tools must be owned
+                // before they can be selected in Lobby.
+                if (!TeamToolOwnershipSession.OwnsTool(
+                        definition.Id))
+                {
+                    continue;
+                }
 
                 if (!result.Contains(definition.Id))
                     result.Add(definition.Id);
@@ -232,13 +276,13 @@ namespace EchoProtocol.UI
                     out playerState,
                     false);
 
-            bool hasTools =
+            bool hasOwnedTools =
                 hasPlayer
-                && playerState.ToolDefinitions != null
-                && playerState.ToolDefinitions.Count > 0;
+                && TeamToolOwnershipSession.IsLoaded
+                && BuildToolIdList(playerState).Count > 1;
 
             bool canChange =
-                hasTools
+                hasOwnedTools
                 && !_room.IsReady
                 && lobbyManager.IsInRoom;
 

@@ -423,6 +423,11 @@ namespace EchoProtocol.Networking
             {
                 error = LobbySelectionError.InvalidSelection;
             }
+            if (error == LobbySelectionError.None
+                && toolId == FirstAidKitToolId)
+            {
+                error = LobbySelectionError.InvalidSelection;
+            }
             if (error == LobbySelectionError.None && IsReady)
             {
                 error = LobbySelectionError.SelectionLockedWhileReady;
