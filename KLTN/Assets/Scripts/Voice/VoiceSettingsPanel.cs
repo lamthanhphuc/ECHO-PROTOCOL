@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Text;
 using EchoProtocol.Audio;
@@ -408,24 +409,22 @@ namespace EchoProtocol.Voice
 
         private void RefreshTeam()
         {
-            var bindings = _voice.GetComponentsInChildren<VoicePlayerBinding>();
+            var players = new List<Fusion.NetworkObject>(_voice.GetRemotePlayers());
             var signature = new StringBuilder();
-            foreach (var binding in bindings)
+            foreach (var player in players)
             {
-                var player = _voice.FindPlayer(binding.Key);
-                if (player != null) signature.Append(binding.Key).Append(NameFor(player)).Append(_voice.IsPlayerMuted(binding.Key));
+                if (player != null) signature.Append(_voice.GetPlayerKey(player)).Append(NameFor(player)).Append(_voice.IsPlayerMuted(_voice.GetPlayerKey(player)));
             }
             string value = signature.ToString();
             if (value == _teamSignature) return;
             _teamSignature = value;
             ClearRows(_teamList);
             int count = 0;
-            foreach (var binding in bindings)
+            foreach (var player in players)
             {
-                var player = _voice.FindPlayer(binding.Key);
                 if (player == null) continue;
                 count++;
-                string key = binding.Key;
+                string key = _voice.GetPlayerKey(player);
                 bool muted = _voice.IsPlayerMuted(key);
                 VoiceSettingsCanvasFactory.AddListButton(_teamList, "Teammate", (muted ? "Bật tiếng  ·  " : "Tắt tiếng  ·  ") + NameFor(player), muted)
                     .onClick.AddListener(() => { _voice.SetPlayerMuted(key, !_voice.IsPlayerMuted(key)); _teamSignature = null; });
