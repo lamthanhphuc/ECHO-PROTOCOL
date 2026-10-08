@@ -6240,9 +6240,10 @@ namespace EchoProtocol.AI.Stalker
             var rejectedProbe = _roomSweepPlanner.RejectProbe(probeNodeId);
             var rejectedProbeCountAfter = _roomSweepPlanner.RejectedProbeCount;
 
+            #if false
             if (enableDiagnostics || rejectionCategory == "SELF_PROBE_FULL_SCAN_UNSEEN")
             {
-                UnityEngine.Debug.LogWarning(
+                // UnityEngine.Debug.LogWarning(
                     "[STK ROOM SWEEP REJECT DIAG] probe-rejected "
                     + $"probeNodeId={probeNodeId} "
                     + $"rejectionCategory={rejectionCategory} "
@@ -6260,6 +6261,7 @@ namespace EchoProtocol.AI.Stalker
                     + $"destinationSpatialNodeId={_blackboard.DestinationSpatialNodeId} "
                     + $"position={transform.position}");
             }
+            #endif
         }
 
         private static string GetRoomSweepNavigationRejectionCategory(NavigationFailureReason failureReason)
@@ -6773,7 +6775,7 @@ namespace EchoProtocol.AI.Stalker
         {
             if (enableDiagnostics)
             {
-                UnityEngine.Debug.LogWarning(message);
+                // UnityEngine.Debug.LogWarning(message);
             }
         }
 

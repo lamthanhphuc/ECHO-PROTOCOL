@@ -200,11 +200,11 @@ namespace EchoProtocol.AI.Stalker.Presentation
             EchoProtocol.Audio.GameAudioSettings.RouteEffects(breathingSource);
             EchoProtocol.Audio.GameAudioSettings.RouteMusic(chaseSource);
 
-            if (detectSource    == null) Debug.LogError("[StalkerAudio] detectSource is not assigned.",    this);
-            if (voiceSource     == null) Debug.LogError("[StalkerAudio] voiceSource is not assigned.",     this);
-            if (movementSource  == null) Debug.LogError("[StalkerAudio] movementSource is not assigned.",  this);
-            if (breathingSource == null) Debug.LogError("[StalkerAudio] breathingSource is not assigned.", this);
-            if (chaseSource     == null) Debug.LogError("[StalkerAudio] chaseSource is not assigned.",     this);
+            // if (detectSource    == null) Debug.LogError("[StalkerAudio] detectSource is not assigned.",    this);
+            // if (voiceSource     == null) Debug.LogError("[StalkerAudio] voiceSource is not assigned.",     this);
+            // if (movementSource  == null) Debug.LogError("[StalkerAudio] movementSource is not assigned.",  this);
+            // if (breathingSource == null) Debug.LogError("[StalkerAudio] breathingSource is not assigned.", this);
+            // if (chaseSource     == null) Debug.LogError("[StalkerAudio] chaseSource is not assigned.",     this);
         }
 
         private AudioSource ResolveAudioChild(AudioSource current, string childName)
@@ -689,12 +689,12 @@ namespace EchoProtocol.AI.Stalker.Presentation
         {
             if (source == null)
             {
-                Debug.LogWarning("[StalkerAudio] AudioSource is null – skipping playback.");
+                // Debug.LogWarning("[StalkerAudio] AudioSource is null – skipping playback.");
                 return false;
             }
             if (clip == null)
             {
-                Debug.LogWarning("[StalkerAudio] AudioClip is null – skipping playback.");
+                // Debug.LogWarning("[StalkerAudio] AudioClip is null – skipping playback.");
                 return false;
             }
             return true;

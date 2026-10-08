@@ -189,10 +189,10 @@ namespace EchoProtocol.AI.Stalker.Networking
         {
             if (acousticBlockerMask.value == 0)
             {
-                Debug.LogWarning(
-                    "[StalkerFusion] acousticBlockerMask is empty; " +
-                    "authoritative hearing cannot classify wall/door occlusion.",
-                    this);
+                // Debug.LogWarning(
+                    // "[StalkerFusion] acousticBlockerMask is empty; " +
+                    // "authoritative hearing cannot classify wall/door occlusion.",
+                    // this);
             }
 
             ResolveLocalDependencies();
@@ -1111,15 +1111,15 @@ namespace EchoProtocol.AI.Stalker.Networking
                 || !Runner.TryGetPlayerObject(TargetPlayer, out var playerObject)
                 || playerObject.InputAuthority != TargetPlayer)
             {
-                UnityEngine.Debug.LogWarning("[StalkerFusion] Rejected attack damage: authoritative target is unavailable.");
+                // UnityEngine.Debug.LogWarning("[StalkerFusion] Rejected attack damage: authoritative target is unavailable.");
                 return false;
             }
 
             var delta = playerObject.transform.position - transform.position;
             if (delta.sqrMagnitude > maximumDamageDistance * maximumDamageDistance)
             {
-                UnityEngine.Debug.LogWarning(
-                    $"[StalkerFusion] Rejected attack damage against {TargetPlayer}: target left range.");
+                // UnityEngine.Debug.LogWarning(
+                    // $"[StalkerFusion] Rejected attack damage against {TargetPlayer}: target left range.");
                 return false;
             }
 
@@ -1136,8 +1136,8 @@ namespace EchoProtocol.AI.Stalker.Networking
 
             if (!applied)
             {
-                UnityEngine.Debug.LogWarning(
-                    $"[StalkerFusion] Rejected attack damage against {TargetPlayer}: health/life state unavailable.");
+                // UnityEngine.Debug.LogWarning(
+                    // $"[StalkerFusion] Rejected attack damage against {TargetPlayer}: health/life state unavailable.");
                 return false;
             }
 
