@@ -908,7 +908,7 @@ namespace EchoProtocol.AI.Minions
                 Runner,
                 Mathf.Max(0.1f, deathVanishSeconds));
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if false
             // Debug.Log(
                 $"[CREEP_FLASHLIGHT][DEATH] " +
                 $"id={Object.Id} " +
@@ -1143,7 +1143,7 @@ namespace EchoProtocol.AI.Minions
                             playerObject
                                 .transform.position;
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if false
                         // Debug.Log(
                             $"[CREEP_FLASHLIGHT][HIT] " +
                             $"id={Object.Id} " +
