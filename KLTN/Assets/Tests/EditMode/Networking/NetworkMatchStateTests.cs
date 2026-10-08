@@ -123,8 +123,8 @@ namespace EchoProtocol.Networking.Tests
             var source = LoadNetworkMatchStateSource();
             var prefab = File.ReadAllText(MatchPrefabPath);
 
-            StringAssert.Contains("_matchDurationSeconds = 3600f", source);
-            StringAssert.Contains("_matchDurationSeconds: 3600", prefab);
+            StringAssert.Contains("_matchDurationSeconds = 7200f", source);
+            StringAssert.Contains("_matchDurationSeconds: 7200", prefab);
         }
 
         [Test]
