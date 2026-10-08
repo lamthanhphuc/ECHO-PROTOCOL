@@ -288,12 +288,17 @@ namespace EchoProtocol.Networking
         public void RefreshAEDv2ReviveBonusAuthoritative()
         {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
+            var previousBonus = AEDv2ReviveBonus;
             AEDv2ReviveBonus = 0;
             var authority = MatchAuthorityRuntime.Instance;
             if (authority != null && authority.Difficulty == MatchDifficulty.Normal &&
                 authority.TryGetMatchId(out var matchId) &&
                 EchoProtocol.AI.AED.AEDv2Authority.TryGetApplied(matchId, out var plan, out _))
+            {
                 AEDv2ReviveBonus = plan.ReviveBonus;
+                if (AEDv2ReviveBonus != previousBonus)
+                    EchoProtocol.AI.AED.AEDv2E2ELog.State("REVIVE_TUNING_APPLIED");
+            }
         }
 
         public bool ResetZoneReviveBudgetAuthoritative()

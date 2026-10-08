@@ -2309,6 +2309,7 @@ namespace EchoProtocol.Networking
 
             RecordCompletedPhase(runtime, completedPhase, expected);
             var evidence = runtime.LastFrozenAEDv2Evidence;
+            AEDv2E2ELog.State("EVIDENCE_FROZEN");
             var previous = AEDv2Authority.TryGetApplied(matchId,
                 out var applied, out _) ? applied : AEDv2Plan.Normal();
             var point = next == NetworkMatchPhase.FinalHunt
@@ -2363,6 +2364,7 @@ namespace EchoProtocol.Networking
                 expected.ToString(), next.ToString(), nextOrdinal,
                 runtime.AEDv2RosterIdentity, evidence.EvidenceFingerprint,
                 previous.Fingerprint(), nextPlan, key, request);
+            AEDv2E2ELog.State("PROPOSAL", decisionId: decisionId);
             var api = new AEDSnapshotApiService();
             return _aedv2Boundary.TryBegin(transaction,
                 token => api.SubmitPlanAsync(matchId, request, token),
@@ -2399,6 +2401,7 @@ namespace EchoProtocol.Networking
             if (IsZoneBoundary(previousPhase, next))
             {
                 ResetPlayerReviveBudgetsAuthoritative();
+                AEDv2E2ELog.State("REVIVE_RESET");
 
                 if (next != NetworkMatchPhase.Zone2Objective)
                 {
@@ -2441,6 +2444,7 @@ namespace EchoProtocol.Networking
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchState,
                 $"[MatchState] Phase {previousPhase} -> {next}.");
+            AEDv2E2ELog.State("PHASE_ADVANCED");
         }
 
         private bool RevalidateAEDv2Boundary(AEDv2BoundaryTransaction transaction,
@@ -2480,6 +2484,7 @@ namespace EchoProtocol.Networking
                     out var plan, out var revision)) return false;
             AEDv2PlanRevision = revision;
             AEDv2PlanFingerprint = plan.Fingerprint();
+            AEDv2E2ELog.State("LOCAL_COMMIT", decisionId: transaction.DecisionId);
             ScenarioConfigAuthorityRuntime.Instance?.AuditV2(transaction.MatchId,
                 transaction.DecisionId, approval.decisionPoint == "FINAL_HUNT_SETUP"
                     ? ScenarioDecisionPoint.FinalHuntSetup
@@ -4066,6 +4071,10 @@ namespace EchoProtocol.Networking
             {
                 AEDv2PlanRevision = v2Revision;
                 AEDv2PlanFingerprint = v2Plan.Fingerprint();
+                AEDv2E2ELog.State(
+                    "NETWORK_REVISION_PUBLISHED",
+                    fields: $"revision={v2Revision} " +
+                            $"fingerprint={v2Plan.Fingerprint()}");
             }
 
             if (decisionPoint == ScenarioDecisionPoint.PreMatch)

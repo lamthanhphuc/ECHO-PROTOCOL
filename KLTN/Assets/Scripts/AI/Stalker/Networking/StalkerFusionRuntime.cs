@@ -1208,6 +1208,8 @@ namespace EchoProtocol.AI.Stalker.Networking
                 useAEDv2 ? (float)tuning.Get(AEDv2Key.PostSpecialCooldownSeconds) : 20f);
             _aedv2Applied = useAEDv2;
             _aedv2AppliedRevision = useAEDv2 ? revision : 0;
+            if (useAEDv2)
+                AEDv2E2ELog.State("STALKER_TUNING_APPLIED");
             _hearingSensor = null;
             ResolveLocalDependencies();
         }

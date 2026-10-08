@@ -77,6 +77,7 @@ namespace EchoProtocol.AI.AED
 
             Transaction = transaction;
             HoldReason = string.Empty;
+            AEDv2E2ELog.State("BOUNDARY_BEGIN", decisionId: transaction.DecisionId);
             _operation = RunAsync(submit, revalidate, apply,
                 completeTransition, confirmReceipt, submitRetryable,
                 completeHold, _lifetime.Token);
@@ -95,6 +96,8 @@ namespace EchoProtocol.AI.AED
             HoldReason = string.IsNullOrWhiteSpace(reason)
                 ? "AED_V2_BOUNDARY_HOLD" : reason;
             State = AEDv2BoundaryState.Hold;
+            AEDv2E2ELog.State("BOUNDARY_HOLD", fields: $"reason={HoldReason}",
+                decisionId: Transaction != null ? Transaction.DecisionId : Guid.Empty);
         }
 
         public void Reset()
@@ -156,16 +159,20 @@ namespace EchoProtocol.AI.AED
                         completeHold?.Invoke();
                         return;
                     }
+                    AEDv2E2ELog.State("POST_RETRY", decisionId: Transaction.DecisionId);
                     await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
                 }
             }
             if (approval == null || cancellationToken.IsCancellationRequested) return;
+            AEDv2E2ELog.State("POST_APPROVED", decisionId: Transaction.DecisionId);
             if (!revalidate(approval))
             {
+                AEDv2E2ELog.State("REVALIDATE_FAIL", decisionId: Transaction.DecisionId);
                 Hold("AED_V2_BOUNDARY_STALE");
                 completeHold?.Invoke();
                 return;
             }
+            AEDv2E2ELog.State("REVALIDATE_PASS", decisionId: Transaction.DecisionId);
             State = AEDv2BoundaryState.Approved;
             if (!apply(approval))
             {
@@ -176,6 +183,7 @@ namespace EchoProtocol.AI.AED
             State = AEDv2BoundaryState.Applied;
             completeTransition();
             State = AEDv2BoundaryState.AwaitingReceipt;
+            AEDv2E2ELog.State("RECEIPT_WAIT", decisionId: Transaction.DecisionId);
             while (!cancellationToken.IsCancellationRequested)
             {
                 if (await confirmReceipt(cancellationToken))
@@ -184,6 +192,7 @@ namespace EchoProtocol.AI.AED
                     Transaction = null;
                     return;
                 }
+                AEDv2E2ELog.State("RECEIPT_RETRY", decisionId: Transaction.DecisionId);
                 await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
             }
         }

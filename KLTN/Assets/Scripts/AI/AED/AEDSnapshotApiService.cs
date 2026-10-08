@@ -32,6 +32,14 @@ namespace EchoProtocol.AI.AED
         public async Task<AEDPlanV2Data> SubmitPlanAsync(Guid matchId,
             AEDPlanV2Request request, CancellationToken cancellationToken)
         {
+            Guid.TryParse(request.decisionId, out var traceDecisionId);
+            AEDv2E2ELog.Write(
+                "POST_BEGIN",
+                matchId,
+                traceDecisionId,
+                fields: $"point={request.decisionPoint} " +
+                        $"ordinal={request.phaseOrdinal} " +
+                        $"commit={request.commitStatus}");
             var completion = new TaskCompletionSource<ApiResult<AEDPlanV2Response>>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             using (cancellationToken.Register(() => completion.TrySetCanceled()))
@@ -43,6 +51,15 @@ namespace EchoProtocol.AI.AED
                 {
                     var result = await completion.Task;
                     var data = result.Data?.data;
+                    AEDv2E2ELog.Write(
+                        "POST_RESULT",
+                        matchId,
+                        traceDecisionId,
+                        fields: $"success={result.IsSuccess} " +
+                                $"http={result.StatusCode} " +
+                                $"failure={result.FailureKind} " +
+                                $"commit={data?.commitStatus ?? "none"} " +
+                                $"apply={data?.applyStatus ?? "none"}");
                     var valid = result.IsSuccess && result.Data?.success == true && data != null
                         && data.matchId == matchId.ToString("D")
                         && data.decisionId == request.decisionId
@@ -67,13 +84,23 @@ namespace EchoProtocol.AI.AED
                          || result.StatusCode == 0 || result.StatusCode >= 500);
                     return valid ? data : null;
                 }
-                catch (TaskCanceledException) { LastPlanSubmitRetryable = false; return null; }
+                catch (TaskCanceledException)
+                {
+                    AEDv2E2ELog.Write("POST_CANCELED", matchId, traceDecisionId);
+                    LastPlanSubmitRetryable = false;
+                    return null;
+                }
             }
         }
 
         public async Task<bool> ConfirmPlanAppliedAsync(Guid matchId, Guid decisionId,
             string fingerprint, CancellationToken cancellationToken)
         {
+            AEDv2E2ELog.Write(
+                "RECEIPT_BEGIN",
+                matchId,
+                decisionId,
+                fields: $"fingerprint={fingerprint}");
             var completion = new TaskCompletionSource<ApiResult<AEDPlanV2Response>>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             using (cancellationToken.Register(() => completion.TrySetCanceled()))
@@ -85,12 +112,23 @@ namespace EchoProtocol.AI.AED
                 try
                 {
                     var result = await completion.Task;
+                    AEDv2E2ELog.Write(
+                        "RECEIPT_RESULT",
+                        matchId,
+                        decisionId,
+                        fields: $"success={result.IsSuccess} " +
+                                $"http={result.StatusCode} " +
+                                $"apply={result.Data?.data?.applyStatus ?? "none"}");
                     return result.IsSuccess && result.Data?.success == true
                         && result.Data.data?.decisionId == decisionId.ToString("D")
                         && result.Data.data.resultingPlanFingerprint == fingerprint
                         && result.Data.data.applyStatus == "APPLIED";
                 }
-                catch (TaskCanceledException) { return false; }
+                catch (TaskCanceledException)
+                {
+                    AEDv2E2ELog.Write("RECEIPT_CANCELED", matchId, decisionId);
+                    return false;
+                }
             }
         }
 
@@ -108,9 +146,12 @@ namespace EchoProtocol.AI.AED
                 try
                 {
                     var result = await completion.Task;
-                    return result.IsSuccess && result.Data?.success == true
+                    var confirmed = result.IsSuccess && result.Data?.success == true
                         && result.Data.data?.decisionId == decisionId.ToString("D")
                         && result.Data.data.applyStatus == "ABORTED";
+                    if (confirmed)
+                        AEDv2E2ELog.State("ABORT_CONFIRMED", decisionId: decisionId);
+                    return confirmed;
                 }
                 catch (TaskCanceledException) { return false; }
             }
