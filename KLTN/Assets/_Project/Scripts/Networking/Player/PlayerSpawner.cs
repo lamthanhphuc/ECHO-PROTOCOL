@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Minions;
 using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Spatial;
@@ -576,6 +577,11 @@ namespace EchoProtocol.Networking
             var difficulty = MatchAuthorityRuntime.Instance != null
                 ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
             var profile = MatchDifficultyProfiles.Get(difficulty);
+            var authority = MatchAuthorityRuntime.Instance;
+            if (difficulty == MatchDifficulty.Normal && authority != null &&
+                authority.TryGetMatchId(out var aedMatchId) &&
+                AEDv2Authority.TryGetApplied(aedMatchId, out var plan, out _))
+                profile = AEDv2GameplayBridge.ToNormalDifficultyProfile(plan);
             var zone = _zone2MinionsActive ? RegionSemanticZone.Zone02 : RegionSemanticZone.Zone01;
             int cap = zone == RegionSemanticZone.Zone02 ? profile.Zone2MinionCap : profile.Zone1MinionCap;
             int count = 0;
@@ -1306,9 +1312,17 @@ namespace EchoProtocol.Networking
             var pose = gameplay ? GetGameplaySpawnPose(slot) : GetLobbySpawnPose(slot);
             if (playerObject.TryGetComponent<LobbyPlayerState>(out var state))
             {
-                // In gameplay, players always start unarmed (ToolId = 0) and must pick up tools in the map
-                var enteringGameplay = gameplay && !state.IsGameplayPlayer;
-                var toolId = enteringGameplay ? 0 : state.ToolId;
+                // Purchasable Team Tools selected in Lobby carry into gameplay.
+// First Aid is world-pickup-only and must never be a starting loadout.
+var enteringGameplay =
+    gameplay && !state.IsGameplayPlayer;
+
+var toolId =
+    enteringGameplay
+    && state.ToolId ==
+        LobbyPlayerState.FirstAidKitToolId
+        ? 0
+        : state.ToolId;
                 var teamId = state.TeamId > 0 ? state.TeamId : slot;
                 state.InitializeAuthoritativeSelection(teamId, toolId, gameplay);
             }

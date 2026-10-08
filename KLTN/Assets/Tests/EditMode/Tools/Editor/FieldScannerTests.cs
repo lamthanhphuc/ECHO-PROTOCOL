@@ -115,7 +115,12 @@ namespace EchoProtocol.Tests.EditMode.Tools
             var expected = FieldScannerCoreDetector.Evaluate(origin, Vector3.forward, cores, isOccludedFunc: (a, b) => false);
             var actual = FieldScannerCoreDetector.Evaluate(origin, Vector3.forward, cores, isOccludedFunc: (a, b) => false, radarOffsets: offsets);
             Assert.That(actual, Is.EqualTo(expected));
-            Assert.That(offsets, Is.EqualTo(new[] { Vector3.right * 4, Vector3.forward * 8 }));
+            Assert.That(offsets, Is.EqualTo(new[]
+            {
+                Vector3.right * 4,
+                Vector3.forward * 8,
+                Vector3.forward * 60
+            }));
             var monsters = new IMotionScannable[]
             {
                 new MockMotionTarget { TargetId = 1, WorldPosition = origin + Vector3.left * 9, CurrentSpeed = 1 },
@@ -222,13 +227,13 @@ namespace EchoProtocol.Tests.EditMode.Tools
         }
 
         [Test]
-        public void Test02_CoreMode_CoreBeyond50m_NotDetected()
+        public void Test02_CoreMode_CoreBeyond100m_NotDetected()
         {
             var tuning = FieldScannerTuning.Default;
             var candidates = new List<ICoreScanCandidate>
             {
                 new MockCoreCandidate { TargetId = 102, WorldPosition =
-                    new Vector3(0f, 0f, 55f), IsAvailableInWorld = true }
+                    new Vector3(0f, 0f, 101f), IsAvailableInWorld = true }
             };
 
             var result = FieldScannerCoreDetector.Evaluate(Vector3.zero, Vector3.forward, candidates, tuning);
@@ -375,13 +380,13 @@ namespace EchoProtocol.Tests.EditMode.Tools
         }
 
         [Test]
-        public void Test11_MotionMode_MonsterBeyond35m_NotDetected()
+        public void Test11_MotionMode_MonsterBeyond100m_NotDetected()
         {
             var tuning = FieldScannerTuning.Default;
             var targets = new List<IMotionScannable>
             {
                 new MockMotionTarget { TargetId = 503, WorldPosition =
-                    new Vector3(0f, 0f, 40f), CurrentSpeed = 2.0f }
+                    new Vector3(0f, 0f, 101f), CurrentSpeed = 2.0f }
             };
 
             var result = FieldScannerMotionDetector.Evaluate(Vector3.zero, Vector3.forward, targets, tuning);

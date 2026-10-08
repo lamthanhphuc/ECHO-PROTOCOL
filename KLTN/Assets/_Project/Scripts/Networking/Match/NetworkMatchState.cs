@@ -98,7 +98,7 @@ namespace EchoProtocol.Networking
     [DisallowMultipleComponent]
     public sealed class NetworkMatchState : NetworkBehaviour
     {
-        public const float DefaultMatchDurationSeconds = 2700f;
+        public const float DefaultMatchDurationSeconds = 7200f;
         public const float DefaultEscapeDurationSeconds = 45f;
         public const float MinimumPowerTransferEscapeDurationSeconds = 180f;
 
@@ -467,9 +467,24 @@ namespace EchoProtocol.Networking
                     var difficulty = MatchAuthorityRuntime.Instance != null
                         ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
                     var toolsPerZone = MatchDifficultyProfiles.Get(difficulty).TeamToolsPerZone;
+                    int supportBonus = 0;
+                    if (difficulty == MatchDifficulty.Normal &&
+                        MatchAuthorityRuntime.Instance != null &&
+                        MatchAuthorityRuntime.Instance.TryGetMatchId(out var tuningMatchId) &&
+                        AEDv2Authority.TryGetApplied(tuningMatchId, out var tuning, out _))
+                    {
+                        supportBonus = tuning.SupportBonus;
+                    }
+                    // The bonus is TOTAL per match, distributed deterministically.
+                    var extraZone1 = Math.Min(1, supportBonus);
+                    var extraZone2 = Math.Min(1, Math.Max(0, supportBonus - 1));
+                    var extraZone3 = Math.Max(0, supportBonus - 2);
                     TeamToolWorldSpawnInitialized = TeamToolWorldSpawn.TrySpawnInitial(
-                        Runner, _teamToolPickupCatalog, toolsPerZone,
-                        toolsPerZone, toolsPerZone, _teamToolSpawnMinimumSpacing);
+                        Runner, _teamToolPickupCatalog,
+                        toolsPerZone + extraZone1,
+                        toolsPerZone + extraZone2,
+                        toolsPerZone + extraZone3,
+                        _teamToolSpawnMinimumSpacing, supportBonus > 0);
                 }
             }
 
@@ -2204,6 +2219,19 @@ namespace EchoProtocol.Networking
                        && next == NetworkMatchPhase.FinalHunt;
         }
 
+        private void RefreshAEDv2ReviveBonusesAuthoritative()
+        {
+            if (Runner == null || Object == null || !Object.HasStateAuthority)
+                return;
+            foreach (var player in Runner.ActivePlayers)
+            {
+                if (Runner.TryGetPlayerObject(player, out var playerObject) &&
+                    playerObject != null &&
+                    playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState))
+                    lifeState.RefreshAEDv2ReviveBonusAuthoritative();
+            }
+        }
+
         private void ResetPlayerReviveBudgetsAuthoritative()
         {
             if (Runner == null)
@@ -3755,6 +3783,9 @@ namespace EchoProtocol.Networking
                 result,
                 Object != null
                 && Object.HasStateAuthority);
+
+            if (decisionPoint == ScenarioDecisionPoint.PreMatch)
+                RefreshAEDv2ReviveBonusesAuthoritative();
 
             authority?.NotifyScenarioResolutionFinalized(
                 matchId,

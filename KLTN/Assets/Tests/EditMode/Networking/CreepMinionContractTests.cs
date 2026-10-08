@@ -37,13 +37,13 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
-        public void Zone2Minions_PreserveZone2Anchor()
+        public void Zone2Minions_UseZone2StalkerAsAnchor()
         {
             string source = File.ReadAllText(SpawnerSource);
-            StringAssert.Contains("_zone2AnchorPlayer", source);
-            StringAssert.Contains("_zone2MonsterInstance", source);
-            StringAssert.Contains("_zone2MinionAnchorFallbackRadius", source);
-            StringAssert.Contains("zone2Player.transform.position - zone2Origin", source);
+            StringAssert.Contains("TryGetCreepMinionSpawnAnchor(zone, out var stalker)", source);
+            StringAssert.Contains("? _zone2MonsterInstance", source);
+            StringAssert.Contains(": _monsterInstance;", source);
+            StringAssert.Contains("NavMesh.SamplePosition(", source);
         }
 
         [Test]

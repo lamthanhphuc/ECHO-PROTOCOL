@@ -91,6 +91,29 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
+        public IEnumerator STK_SIM_DetectReacquireDuringDecay_PromotesDirectlyToChase()
+        {
+            var fixture = CreateFixture();
+            SetState(fixture.Controller, "DETECT");
+            SetPrivateField(fixture.Controller, "detectionTarget", fixture.Target);
+            SetPrivateField(fixture.Controller, "detectionMeter", 1f);
+            SetPrivateField(fixture.Controller, "detectionMeterFull", 10f);
+            SetPrivateField(fixture.Controller, "detectionDecayRate", 2f);
+            SetPrivateField(fixture.VisionSensor, "candidate", null);
+
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(0.25f, null)), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Controller, "CurrentState"), Is.EqualTo("DETECT"));
+            Assert.That(GetFloatProperty(fixture.Controller, "DetectionMeter"), Is.EqualTo(0.5f).Within(FloatTolerance));
+
+            SetPrivateField(fixture.VisionSensor, "candidate", fixture.Target);
+            Physics.SyncTransforms();
+
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(0.05f, null)), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Controller, "CurrentState"), Is.EqualTo("CHASE"));
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator STK_SIM_SearchTimer_UsesExplicitDelta()
         {
             var fixture = CreateFixture();
@@ -181,6 +204,85 @@ namespace EchoProtocol.AI.Stalker.Tests
             yield return null;
         }
 
+        [UnityTest]
+        public IEnumerator STK_SIM_DetectDecay_IsTrackedPerPlayer()
+        {
+            var fixture = CreateFixture();
+            var player1 = Activator.CreateInstance(ResolveType(PlayerIdTypeName), 1);
+            var player2 = Activator.CreateInstance(ResolveType(PlayerIdTypeName), 2);
+            var statuses = CreateTargetStatusList(CreateTargetStatus(1), CreateTargetStatus(2));
+
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(
+                0.1f, CreateTargetCandidateList(CreateTargetCandidate(1)), statuses)), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Controller, "CurrentState"), Is.EqualTo("DETECT"));
+            Assert.That(GetProperty(fixture.Controller, "DetectionTargetId"), Is.EqualTo(player1));
+
+            SetPrivateField(fixture.Controller, "detectionMeter", 0.8f);
+
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(
+                0.1f, CreateTargetCandidateList(CreateTargetCandidate(2)), statuses)), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Controller, "CurrentState"), Is.EqualTo("DETECT"));
+            Assert.That(GetProperty(fixture.Controller, "DetectionTargetId"), Is.EqualTo(player2));
+
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(
+                0.1f, CreateTargetCandidateList(CreateTargetCandidate(1)), statuses)), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Controller, "CurrentState"), Is.EqualTo("CHASE"));
+            Assert.That(GetProperty(fixture.Controller, "CurrentTargetId"), Is.EqualTo(player1));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator STK_SIM_TypedDetectReacquireDuringOwnDecay_GoesStraightToChase()
+        {
+            var fixture = CreateFixture();
+            var player1 = Activator.CreateInstance(ResolveType(PlayerIdTypeName), 1);
+            var statuses = CreateTargetStatusList(CreateTargetStatus(1));
+
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(
+                0.1f, CreateTargetCandidateList(CreateTargetCandidate(1)), statuses)), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Controller, "CurrentState"), Is.EqualTo("DETECT"));
+            Assert.That(GetProperty(fixture.Controller, "DetectionTargetId"), Is.EqualTo(player1));
+
+            SetPrivateField(fixture.Controller, "detectionMeter", 0.8f);
+            SetPrivateField(fixture.Controller, "detectionDecayRate", 1f);
+
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(0.1f, null, statuses)), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Controller, "CurrentState"), Is.EqualTo("DETECT"));
+            Assert.That(GetFloatProperty(fixture.Controller, "DetectionMeter"), Is.EqualTo(0.7f).Within(FloatTolerance));
+
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(
+                0.1f, CreateTargetCandidateList(CreateTargetCandidate(1)), statuses)), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Controller, "CurrentState"), Is.EqualTo("CHASE"));
+            Assert.That(GetProperty(fixture.Controller, "CurrentTargetId"), Is.EqualTo(player1));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator STK_SIM_TypedDetectReacquireDuringDecay_GoesStraightToChase()
+        {
+            var fixture = CreateFixture();
+            var player1 = Activator.CreateInstance(ResolveType(PlayerIdTypeName), 1);
+            var statuses = CreateTargetStatusList(CreateTargetStatus(1));
+
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(
+                0.1f, CreateTargetCandidateList(CreateTargetCandidate(1)), statuses)), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Controller, "CurrentState"), Is.EqualTo("DETECT"));
+            Assert.That(GetProperty(fixture.Controller, "DetectionTargetId"), Is.EqualTo(player1));
+
+            SetPrivateField(fixture.Controller, "detectionMeter", 0.8f);
+            SetPrivateField(fixture.Controller, "detectionDecayRate", 1f);
+
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(0.1f, null, statuses)), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Controller, "CurrentState"), Is.EqualTo("DETECT"));
+            Assert.That(GetFloatProperty(fixture.Controller, "DetectionMeter"), Is.EqualTo(0.7f).Within(FloatTolerance));
+
+            Assert.That(Simulate(fixture.Controller, CreateSimulationInput(
+                0.1f, CreateTargetCandidateList(CreateTargetCandidate(1)), statuses)), Is.True);
+            Assert.That(GetEnumPropertyName(fixture.Controller, "CurrentState"), Is.EqualTo("CHASE"));
+            Assert.That(GetProperty(fixture.Controller, "CurrentTargetId"), Is.EqualTo(player1));
+            yield return null;
+        }
+
         private StalkerFixture CreateFixture()
         {
             return CreateFixture(new Vector3(0f, 1f, 4f));
@@ -247,6 +349,14 @@ namespace EchoProtocol.AI.Stalker.Tests
             return list;
         }
 
+        private static object CreateTargetCandidateList(object first, object second)
+        {
+            var list = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(ResolveType(StalkerTargetCandidateTypeName)));
+            list.Add(first);
+            list.Add(second);
+            return list;
+        }
+
         private static object CreateTargetCandidate(int playerId)
         {
             var observation = Activator.CreateInstance(
@@ -267,6 +377,14 @@ namespace EchoProtocol.AI.Stalker.Tests
         {
             var list = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(ResolveType(StalkerTargetStatusTypeName)));
             list.Add(status);
+            return list;
+        }
+
+        private static object CreateTargetStatusList(object first, object second)
+        {
+            var list = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(ResolveType(StalkerTargetStatusTypeName)));
+            list.Add(first);
+            list.Add(second);
             return list;
         }
 

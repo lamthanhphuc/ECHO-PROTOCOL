@@ -32,6 +32,7 @@ namespace EchoProtocol.UI
         [Header("Status")]
         [SerializeField] private TMP_Text statusText;
         [SerializeField] private TMP_Text memberCountText;
+        [SerializeField] private TMP_Text roomNameText;
         [SerializeField] private TMP_Text memberListText;
         [SerializeField] private Image statusIndicator;
         [SerializeField] private TMP_Text networkMessage;
@@ -254,11 +255,19 @@ namespace EchoProtocol.UI
 
         public void SetMemberCount(int current, int max)
         {
-            if (memberCountText != null) memberCountText.text = $"PLAYERS IN ROOM: {current} / {max}";
+            if (memberCountText != null) memberCountText.text = $"{current} / {max}";
         }
 
         public void RefreshMemberList()
-        {
+        {            if (roomNameText != null)
+            {
+                roomNameText.text =
+                    bootstrap != null
+                    && !string.IsNullOrWhiteSpace(bootstrap.CurrentSessionName)
+                        ? bootstrap.CurrentSessionName.ToUpperInvariant()
+                        : "----";
+            }
+
             _room = lobbyManager != null ? lobbyManager.CurrentState : new RoomInfoViewModel();
             _room ??= new RoomInfoViewModel();
             SetMemberCount(_room.CurrentPlayers, _room.MaxPlayers > 0 ? _room.MaxPlayers : maxPlayers);
@@ -296,13 +305,13 @@ namespace EchoProtocol.UI
                 state == NetworkSessionState.Connecting || state == NetworkSessionState.ShuttingDown ? Connecting : Offline;
             switch (state)
             {
-                case NetworkSessionState.Connecting: SetStatus("CONNECTION STATUS: CONNECTING\n> Joining the network...\n" + message); break;
+                case NetworkSessionState.Connecting: SetStatus("CONNECTING..."); break;
                 case NetworkSessionState.InLobby:
-                    SetStatus("CONNECTION STATUS: ROOM OPEN\n> Waiting for players to ready up..."); break;
-                case NetworkSessionState.InMatch: SetStatus("CONNECTION STATUS: IN MISSION\n> Loading the mission..."); break;
-                case NetworkSessionState.ShuttingDown: SetStatus("> LEAVING ROOM..."); break;
+                    SetStatus("ROOM OPEN"); break;
+                case NetworkSessionState.InMatch: SetStatus("MISSION STARTING..."); break;
+                case NetworkSessionState.ShuttingDown: SetStatus("LEAVING ROOM..."); break;
                 case NetworkSessionState.Failed: ReportError(message); break;
-                default: SetStatus("CONNECTION STATUS: OFFLINE\nEnter your name and room code.\nThen create or join a room."); break;
+                default: SetStatus("OFFLINE"); break;
             }
             RefreshMemberList();
         }
@@ -310,7 +319,7 @@ namespace EchoProtocol.UI
         private void ReportError(string message)
         {
             var detail = string.IsNullOrWhiteSpace(message) ? "Check Console for connection details." : message;
-            SetStatus("> CONNECTION FAILURE\n" + detail);
+            SetStatus("CONNECTION FAILED");
             if (statusText != null) statusText.color = Offline;
             if (statusIndicator != null) statusIndicator.color = Offline;
             _blinkSignal = true;

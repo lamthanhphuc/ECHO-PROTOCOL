@@ -6,7 +6,7 @@ namespace EchoProtocol.UI
     public enum SettingsIcon
     {
         Gear, Microphone, Mouse, Audio, Keyboard, Monitor, Team, Interact, Run, Crouch,
-        Flashlight, Inventory, Up, Down, Left, Right, Play, Exit, Dot, Pill
+        Flashlight, Inventory, Up, Down, Left, Right, Play, Exit, Dot, Pill, Shop, Web
     }
 
     /// <summary>Small vector icons, independent of installed fonts and texture resolution.</summary>
@@ -90,6 +90,24 @@ namespace EchoProtocol.UI
                 case SettingsIcon.Exit:
                     Stroke(45, 88, 17, 88); Stroke(17, 88, 17, 12); Stroke(17, 12, 45, 12);
                     Stroke(38, 50, 91, 50); Stroke(73, 68, 91, 50); Stroke(73, 32, 91, 50); break;
+                case SettingsIcon.Shop:
+                    // Compact sci-fi storefront / equipment bag.
+                    Box(18, 20, 64, 52);
+                    Arc(50, 72, 18, 0, 180, 6);
+                    Stroke(18, 58, 82, 58, 4);
+                    Stroke(37, 20, 37, 58, 3);
+                    Stroke(63, 20, 63, 58, 3);
+                    break;
+
+                case SettingsIcon.Web:
+                    // Globe. Pure vector so it stays sharp
+                    // at every UI resolution.
+                    Arc(50, 50, 40, 0, 360, 6);
+                    Stroke(11, 50, 89, 50, 4);
+                    Stroke(50, 10, 50, 90, 4);
+                    Stroke(23, 35, 77, 35, 3);
+                    Stroke(23, 65, 77, 65, 3);
+                    break;
                 case SettingsIcon.Dot: Disc(50, 50, 48); break;
                 case SettingsIcon.Pill:
                     float radius = _bounds.height / _bounds.width * 50;

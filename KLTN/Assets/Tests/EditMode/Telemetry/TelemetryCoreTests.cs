@@ -344,20 +344,25 @@ namespace EchoProtocol.Telemetry.Tests
         }
 
         [Test]
-        public void NoiseAdapter_AcceptsFieldScannerAndUsesCanonicalReasonCode()
+        public void NoiseAdapter_RejectsFieldScannerOutsideV11NoiseSchema()
         {
             var fixture = new Fixture();
             fixture.Factory.BeginMatch();
             StartMatch(fixture);
             var adapter = new NoiseTelemetryAdapter(fixture.Emitter);
 
-            Assert.That(adapter.EmitAcceptedRuntimeNoise(
-                "scanner-noise-1", DateTime.UtcNow, Guid.NewGuid(), "CORE_COLLECTION",
-                "FIELD_SCANNER", 0.5, new TelemetryPositionSnapshot(1, 2, 3),
-                out var telemetryEvent, out var failureReason, 30), Is.True);
-
-            Assert.That(failureReason, Is.EqualTo(TelemetryBufferFailureReason.None));
-            Assert.That(telemetryEvent.ReasonCode, Is.EqualTo("FIELD_SCANNER_USED"));
+            Assert.Throws<ArgumentException>(() =>
+                adapter.EmitAcceptedRuntimeNoise(
+                    "scanner-noise-1",
+                    DateTime.UtcNow,
+                    Guid.NewGuid(),
+                    "CORE_COLLECTION",
+                    "FIELD_SCANNER",
+                    0.5,
+                    new TelemetryPositionSnapshot(1, 2, 3),
+                    out _,
+                    out _,
+                    30));
         }
 
         [Test]

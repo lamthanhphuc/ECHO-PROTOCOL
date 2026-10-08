@@ -70,7 +70,7 @@ namespace EchoProtocol.Networking.Tests
             var escapeDuration = serializedState.FindProperty("_escapeDurationSeconds");
             Assert.That(matchDuration, Is.Not.Null);
             Assert.That(escapeDuration, Is.Not.Null);
-            Assert.That(matchDuration.floatValue, Is.EqualTo(2700f).Within(0.001f));
+            Assert.That(matchDuration.floatValue, Is.EqualTo(7200f).Within(0.001f));
             Assert.That(escapeDuration.floatValue, Is.EqualTo(45f).Within(0.001f));
         }
 
@@ -78,7 +78,7 @@ namespace EchoProtocol.Networking.Tests
         public void NetworkMatchSource_DeclaresCanonicalTiming()
         {
             string source = File.ReadAllText(MatchSourcePath);
-            StringAssert.Contains("public const float DefaultMatchDurationSeconds = 2700f;", source);
+            StringAssert.Contains("public const float DefaultMatchDurationSeconds = 7200f;", source);
             StringAssert.Contains("public const float DefaultEscapeDurationSeconds = 45f;", source);
         }
 
@@ -118,13 +118,15 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
-        public void MATCH_NET_AuthoritativeMatchTimerIsFortyFiveMinutes()
+        public void MATCH_NET_AuthoritativeMatchTimerIsTwoHours()
         {
             var source = LoadNetworkMatchStateSource();
             var prefab = File.ReadAllText(MatchPrefabPath);
 
-            StringAssert.Contains("_matchDurationSeconds = 2700f", source);
-            StringAssert.Contains("_matchDurationSeconds: 2700", prefab);
+            StringAssert.Contains(
+                "DefaultMatchDurationSeconds = 7200f",
+                source);
+            StringAssert.Contains("_matchDurationSeconds: 7200", prefab);
         }
 
         [Test]
@@ -183,21 +185,25 @@ namespace EchoProtocol.Networking.Tests
         [Test]
         public void MATCH_NET_Zone3DoorexitTransitionsToEscapeWithoutResettingDeadline()
         {
-            var source = LoadNetworkMatchStateSource().Replace("\r\n", "\n");
+            var source = LoadNetworkMatchStateSource();
+
+            var normalized =
+                System.Text.RegularExpressions.Regex.Replace(
+                    source, @"\s+", " ");
 
             StringAssert.Contains(
-                "if (CurrentPhase != NetworkMatchPhase.FinalHunt\n" +
-                "                    && CurrentPhase != NetworkMatchPhase.Escape)",
-                source);
+                "if (CurrentPhase != NetworkMatchPhase.FinalHunt " +
+                "&& CurrentPhase != NetworkMatchPhase.Escape)",
+                normalized);
 
             StringAssert.Contains(
-                "fromDoorexit\n" +
-                "                    && CurrentPhase == NetworkMatchPhase.FinalHunt\n" +
-                "                    && !TryAdvancePhase(\n" +
-                "                        NetworkMatchPhase.FinalHunt,\n" +
-                "                        NetworkMatchPhase.Escape,\n" +
-                "                        \"FINAL_HUNT\")",
-                source);
+                "if (fromDoorexit " +
+                "&& CurrentPhase == NetworkMatchPhase.FinalHunt " +
+                "&& !TryAdvancePhase( " +
+                "NetworkMatchPhase.FinalHunt, " +
+                "NetworkMatchPhase.Escape, " +
+                "\"FINAL_HUNT\"))",
+                normalized);
 
             StringAssert.Contains(
                 "StartEscapeDeadlineIfNeededAuthoritative(\"LEGACY_ESCAPE_DOOR\")",

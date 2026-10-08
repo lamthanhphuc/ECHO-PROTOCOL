@@ -195,7 +195,7 @@ namespace EchoProtocol.Player.Tests
         }
 
         [Test]
-        public void PLAYER_CROUCH_CameraMovesForwardAndLeftHandStaysDown()
+        public void PLAYER_CROUCH_CameraMovesForwardAndNonJammoSkipsUpperBodyAim()
         {
             var camera = File.ReadAllText("Assets/Scripts/Player/PlayerCamera.cs");
             var upperBodyAim = File.ReadAllText("Assets/Scripts/Player/PlayerUpperBodyAim.cs");
@@ -203,7 +203,7 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains("crouchCameraForwardOffset = 0.25f", camera);
             StringAssert.Contains("? crouchCameraForwardOffset", camera);
             StringAssert.Contains("animator.GetBool(IsCrouchingHash)", upperBodyAim);
-            StringAssert.Contains("crouchLeftHandLocalPosition", upperBodyAim);
+            StringAssert.Contains("if (animator.GetBool(IsCrouchingHash) && !jammo)", upperBodyAim);
         }
 
         [Test]

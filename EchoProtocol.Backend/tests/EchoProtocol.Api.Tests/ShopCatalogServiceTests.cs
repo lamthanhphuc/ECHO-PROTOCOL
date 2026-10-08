@@ -118,10 +118,45 @@ public sealed class ShopCatalogServiceTests
         await ShopCatalogSeeder.SeedTestCatalogAsync(
             harness.Db, timeProvider, NullLogger.Instance);
 
-        Assert.Equal(6, await harness.Db.ShopItems.CountAsync());
-        Assert.Equal(6, await harness.Db.ShopItems.Select(item => item.ItemId).Distinct().CountAsync());
-        Assert.Equal(4, await harness.Db.ShopItems.CountAsync(item =>
-            item.AssetReference.StartsWith("Assets/Prefabs/Gameplay/Imported/")));
+        Assert.Equal(
+            6,
+            await harness.Db.ShopItems.CountAsync());
+
+        Assert.Equal(
+            6,
+            await harness.Db.ShopItems
+                .Select(item => item.ItemId)
+                .Distinct()
+                .CountAsync());
+
+        var seededIds =
+            await harness.Db.ShopItems
+                .Select(item => item.ItemId)
+                .ToListAsync();
+
+        Assert.Contains(
+            Guid.Parse("12000000-0000-0000-0000-000000000001"),
+            seededIds);
+
+        Assert.Contains(
+            Guid.Parse("12000000-0000-0000-0000-000000000002"),
+            seededIds);
+
+        Assert.Contains(
+            Guid.Parse("12000000-0000-0000-0000-000000000004"),
+            seededIds);
+
+        Assert.Contains(
+            Guid.Parse("12000000-0000-0000-0000-000000000006"),
+            seededIds);
+
+        Assert.DoesNotContain(
+            Guid.Parse("12000000-0000-0000-0000-000000000003"),
+            seededIds);
+
+        Assert.DoesNotContain(
+            Guid.Parse("12000000-0000-0000-0000-000000000005"),
+            seededIds);
     }
 
     [Fact, Trait("Category", "M4ShopUnit")]

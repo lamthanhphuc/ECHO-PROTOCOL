@@ -226,7 +226,9 @@ namespace EchoProtocol.AI.Minions
             _agent.acceleration = 40f;
             _agent.stoppingDistance = 0.4f;
             if (!TryActivateAgent())
-                Debug.LogWarning($"[CREEP_SPAWN][NO_NAVMESH] id={Object.Id} position={transform.position}; retrying", this);
+            {
+                // Runtime log intentionally disabled.
+            }
         }
 
         private bool TryActivateAgent()
@@ -328,15 +330,15 @@ namespace EchoProtocol.AI.Minions
                           * flashlightExposureDecayPerSecond);
             }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if false
             if (illuminated)
             {
-                Debug.Log(
-                    $"[CREEP_FLASHLIGHT][EXPOSURE] " +
-                    $"id={Object.Id} " +
-                    $"exposure={_flashlightExposureSeconds:F2}/" +
-                    $"{flashlightKillExposureSeconds:F2}",
-                    this);
+                // Debug.Log(
+                    // $"[CREEP_FLASHLIGHT][EXPOSURE] " +
+                    // $"id={Object.Id} " +
+                    // $"exposure={_flashlightExposureSeconds:F2}/" +
+                    // $"{flashlightKillExposureSeconds:F2}",
+                    // this);
             }
 #endif
 
@@ -541,8 +543,8 @@ namespace EchoProtocol.AI.Minions
 
                 _agent.SetDestination(hit.position);
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.Log(
+#if false
+                // Debug.Log(
                     $"[CREEP_ROAM][DESTINATION] " +
                     $"id={Object.Id} " +
                     $"pathLength={pathLength:F1} " +
@@ -553,8 +555,8 @@ namespace EchoProtocol.AI.Minions
                 return true;
             }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.LogWarning(
+#if false
+            // Debug.LogWarning(
                 $"[CREEP_ROAM][NO_LONG_PATH] " +
                 $"id={Object.Id} " +
                 $"position={transform.position}",
@@ -666,11 +668,11 @@ namespace EchoProtocol.AI.Minions
                 out _);
 
             if (accepted) AlertSequence++;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if false
             if (!accepted)
-                Debug.LogWarning($"[CREEP_ALERT][REJECTED] target={TargetPlayer} zone={Zone} position={_lastKnownTargetPosition}", this);
+                // Debug.LogWarning($"[CREEP_ALERT][REJECTED] target={TargetPlayer} zone={Zone} position={_lastKnownTargetPosition}", this);
             else
-                Debug.Log($"[CREEP_ALERT][ACCEPTED] target={TargetPlayer} zone={Zone} position={_lastKnownTargetPosition}", this);
+                // Debug.Log($"[CREEP_ALERT][ACCEPTED] target={TargetPlayer} zone={Zone} position={_lastKnownTargetPosition}", this);
 #endif
             return accepted;
         }
@@ -711,10 +713,10 @@ namespace EchoProtocol.AI.Minions
                 playerObject.GetComponent<
                     NetworkPlayerInteractor>();
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if false
             bool _hasCore = lobby != null && lobby.CarriedCoreId.IsValid;
             int  _toolId  = lobby != null ? lobby.ToolId : 0;
-            Debug.Log(
+            // Debug.Log(
                 $"[CREEP_ATTACK][HIT] " +
                 $"target={TargetPlayer} " +
                 $"zone={Zone} " +
@@ -794,8 +796,8 @@ namespace EchoProtocol.AI.Minions
             bool success = interactor.DropTeamToolAuthoritative(
                 TargetPlayer,
                 dropPosition);
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log($"[CREEP_STEAL_TOOL] target={TargetPlayer} success={success} drop={dropPosition}", this);
+#if false
+            // Debug.Log($"[CREEP_STEAL_TOOL] target={TargetPlayer} success={success} drop={dropPosition}", this);
 #endif
             return success;
         }
@@ -833,30 +835,30 @@ namespace EchoProtocol.AI.Minions
             if (!Runner.TryFindObject(coreId, out var obj)
                 || obj == null || !obj.TryGetComponent<NetworkPickupItem>(out var core))
             {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.LogWarning($"[CREEP_STEAL_CORE][NO_OBJECT] id={coreId}", this);
+#if false
+                // Debug.LogWarning($"[CREEP_STEAL_CORE][NO_OBJECT] id={coreId}", this);
 #endif
                 return false;
             }
             if (!interactor.DropCarriedCoreAuthoritative(TargetPlayer))
             {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.LogWarning($"[CREEP_STEAL_CORE][DROP_FAILED] target={TargetPlayer} id={coreId}", this);
+#if false
+                // Debug.LogWarning($"[CREEP_STEAL_CORE][DROP_FAILED] target={TargetPlayer} id={coreId}", this);
 #endif
                 return false;
             }
             // A successful forced drop consumes this hit's one side effect even if carry cannot begin.
             if (!core.TryBeginMonsterCarryAuthoritative(Object.Id, CarryPosition(), transform.rotation))
             {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.LogWarning($"[CREEP_STEAL_CORE][CARRY_FAILED] core={coreId} monster={Object.Id}", this);
+#if false
+                // Debug.LogWarning($"[CREEP_STEAL_CORE][CARRY_FAILED] core={coreId} monster={Object.Id}", this);
 #endif
                 return true;
             }
             StolenCoreId = coreId;
             BeginFlee(playerObject.transform.position, coreCarryTimeoutSeconds);
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log($"[CREEP_STEAL_CORE][SUCCESS] core={coreId} destination={_fleeDestination}", this);
+#if false
+            // Debug.Log($"[CREEP_STEAL_CORE][SUCCESS] core={coreId} destination={_fleeDestination}", this);
 #endif
             return true;
         }
@@ -906,8 +908,8 @@ namespace EchoProtocol.AI.Minions
                 Runner,
                 Mathf.Max(0.1f, deathVanishSeconds));
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log(
+#if false
+            // Debug.Log(
                 $"[CREEP_FLASHLIGHT][DEATH] " +
                 $"id={Object.Id} " +
                 $"zone={Zone}",
@@ -921,7 +923,7 @@ namespace EchoProtocol.AI.Minions
             {
                 _fleeDestination = transform.position;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                Debug.LogWarning($"[CREEP_FLEE][NO_DESTINATION] id={Object.Id} position={transform.position}", this);
+                // Debug.LogWarning($"[CREEP_FLEE][NO_DESTINATION] id={Object.Id} position={transform.position}", this);
 #endif
             }
 
@@ -1141,8 +1143,8 @@ namespace EchoProtocol.AI.Minions
                             playerObject
                                 .transform.position;
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-                        Debug.Log(
+#if false
+                        // Debug.Log(
                             $"[CREEP_FLASHLIGHT][HIT] " +
                             $"id={Object.Id} " +
                             $"state={State} " +
