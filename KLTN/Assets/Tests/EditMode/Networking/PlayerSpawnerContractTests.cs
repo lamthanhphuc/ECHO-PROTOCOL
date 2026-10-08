@@ -76,6 +76,27 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
+        public void FND_NET_PLAYER_SPAWNER_StartingLoadout_PreservesSelectedTeamTool_ExceptFirstAid()
+        {
+            var source = LoadSpawnerSource();
+
+            StringAssert.Contains(
+                "state.ToolId ==",
+                source);
+
+            StringAssert.Contains(
+                "LobbyPlayerState.FirstAidKitToolId",
+                source);
+
+            StringAssert.Contains(
+                ": state.ToolId;",
+                source);
+
+            StringAssert.DoesNotContain(
+                "enteringGameplay ? 0 : state.ToolId",
+                source);
+        }
+        [Test]
         public void FND_NET_PLAYER_SPAWNER_TeleportsThroughReplicatedCharacterControllerFirst()
         {
             var source = LoadSpawnerSource();
