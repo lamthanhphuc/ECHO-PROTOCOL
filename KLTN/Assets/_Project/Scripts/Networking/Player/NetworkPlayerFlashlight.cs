@@ -322,7 +322,7 @@ namespace EchoProtocol.Networking
             _flashlight.innerSpotAngle = Mathf.Min(_beamInnerSpotAngle, _beamSpotAngle);
             _flashlight.renderMode = LightRenderMode.ForcePixel;
             _flashlight.bounceIntensity = 0.4f;
-            _flashlight.shadows = LightShadows.Soft;
+            _flashlight.shadows = LightShadows.None;
 
             RemoveBeamVisual();
         }
