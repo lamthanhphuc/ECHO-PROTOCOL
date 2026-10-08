@@ -70,6 +70,23 @@ namespace EchoProtocol.Tools.Scanner
         public override string InteractionPrompt => _pickupPrompt;
         string IInteractable.InteractionPrompt => _pickupPrompt;
 
+        private void Awake() => ConfigurePassThroughCollider();
+
+        private void ConfigurePassThroughCollider()
+        {
+            if (_toolId != LobbyPlayerState.CoreStabilizerToolId) return;
+            // Keep the pickup collider queryable by interaction casts, without blocking movement.
+            foreach (var collider in GetComponentsInChildren<Collider>(true))
+            {
+                if (collider is MeshCollider mesh && !mesh.convex)
+                {
+                    mesh.enabled = false;
+                    continue;
+                }
+                collider.isTrigger = true;
+            }
+        }
+
         private void Reset()
         {
             _pickupCollider = GetComponent<Collider>();
@@ -139,6 +156,7 @@ namespace EchoProtocol.Tools.Scanner
 
         private void OnReplicatedStateChanged()
         {
+            ConfigurePassThroughCollider();
             ConfigureWorldPickupShadows();
 
             if (Runner != null && Object != null && Object.IsValid)
