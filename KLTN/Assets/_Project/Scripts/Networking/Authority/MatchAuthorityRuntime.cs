@@ -1,6 +1,8 @@
 using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common.AED;
@@ -77,6 +79,30 @@ namespace EchoProtocol.Networking.Authority
         private bool _pendingAuthoritativeTelemetryMatchStart;
         private string _currentTelemetryPhase = "CORE_COLLECTION";
         private HostRuntimeNoiseService _runtimeNoise;
+        private readonly AEDv2MatchEvidenceCollector _aedv2Evidence = new AEDv2MatchEvidenceCollector();
+        public AEDv2CurrentMatchEvidence LastFrozenAEDv2Evidence => _aedv2Evidence.LastFrozen;
+        public void MarkAEDv2EvidenceIncomplete()
+        {
+            _aedv2Evidence.MarkIncomplete();
+        }
+
+        public string AEDv2RosterIdentity => HasStateAuthority ? CurrentRosterIdentity() : string.Empty;
+
+        private string CurrentRosterIdentity()
+        {
+            var users = new List<string>();
+            foreach (var userId in _boundPlayers.Values) users.Add(userId.ToString("D"));
+            users.Sort(StringComparer.Ordinal);
+            var roster = new StringBuilder(MatchId.ToString("D")).Append('|');
+            for (var i = 0; i < users.Count; i++)
+            {
+                if (i > 0) roster.Append(',');
+                roster.Append(users[i]);
+            }
+            using (var sha = SHA256.Create())
+                return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(roster.ToString())))
+                    .Replace("-", string.Empty).ToLowerInvariant();
+        }
         private bool _runtimeNoiseTelemetryCapacityWarningLogged;
         private bool _runtimeNoiseTelemetryInactiveWarningLogged;
         [SerializeField] private bool _researchCaptureEnabled;
@@ -613,6 +639,8 @@ namespace EchoProtocol.Networking.Authority
             _runtimeNoiseTelemetryCapacityWarningLogged = false;
             _runtimeNoiseTelemetryInactiveWarningLogged = false;
             _runtimeNoise?.ResetForMatch();
+            _aedv2Evidence.Clear();
+            BackendAdaptiveInputSnapshotProvider.Current?.ClearForMatch(oldMatchId);
             ScenarioConfigRuntimeRegistry.Clear(oldMatchId);
             ScenarioConfigAuthorityRuntime.Instance?.ResetForMatch(oldMatchId);
         }
@@ -853,6 +881,11 @@ namespace EchoProtocol.Networking.Authority
                     out var phaseFailure))
             {
                 Debug.LogWarning($"[Telemetry] initial PHASE_STARTED was not buffered: {phaseFailure}.");
+            }
+            else
+            {
+                _aedv2Evidence.StartPhase(MatchId, CurrentRosterIdentity(),
+                    "CORE_COLLECTION", 1, occurredAtUtc);
             }
         }
 
@@ -1323,11 +1356,12 @@ namespace EchoProtocol.Networking.Authority
         {
             if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
             {
+                _aedv2Evidence.MarkIncomplete();
                 return false;
             }
 
             var reasonCode = monsterType == "LISTENER" ? "LISTENER_ATTACK" : "STALKER_ATTACK";
-            return _telemetry.PlayerAdapter.EmitPlayerDowned(
+            var accepted = _telemetry.PlayerAdapter.EmitPlayerDowned(
                 occurrenceKey,
                 DateTime.UtcNow,
                 userId,
@@ -1338,6 +1372,9 @@ namespace EchoProtocol.Networking.Authority
                 out _,
                 downCount,
                 Snapshot(position));
+            if (accepted) _aedv2Evidence.RecordAcceptedDown(occurrenceKey);
+            else _aedv2Evidence.MarkIncomplete();
+            return accepted;
         }
 
         public bool RecordPlayerRevived(
@@ -1351,10 +1388,11 @@ namespace EchoProtocol.Networking.Authority
                 || !TryResolveBackendUser(revivedPlayer, out var revivedUserId)
                 || !TryResolveBackendUser(reviver, out var reviverUserId))
             {
+                _aedv2Evidence.MarkIncomplete();
                 return false;
             }
 
-            return _telemetry.PlayerAdapter.EmitPlayerRevived(
+            var accepted = _telemetry.PlayerAdapter.EmitPlayerRevived(
                 occurrenceKey,
                 DateTime.UtcNow,
                 revivedUserId,
@@ -1364,6 +1402,9 @@ namespace EchoProtocol.Networking.Authority
                 out _,
                 reviveCount,
                 usedFirstAidKit);
+            if (accepted) _aedv2Evidence.RecordAcceptedRevive(occurrenceKey);
+            else _aedv2Evidence.MarkIncomplete();
+            return accepted;
         }
 
         public bool RecordPlayerEliminated(
@@ -1373,10 +1414,11 @@ namespace EchoProtocol.Networking.Authority
         {
             if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
             {
+                _aedv2Evidence.MarkIncomplete();
                 return false;
             }
 
-            return _telemetry.PlayerAdapter.EmitPlayerEliminated(
+            var accepted = _telemetry.PlayerAdapter.EmitPlayerEliminated(
                 occurrenceKey,
                 DateTime.UtcNow,
                 userId,
@@ -1384,6 +1426,9 @@ namespace EchoProtocol.Networking.Authority
                 out _,
                 out _,
                 reviveCount);
+            if (accepted) _aedv2Evidence.RecordAcceptedElimination(occurrenceKey);
+            else _aedv2Evidence.MarkIncomplete();
+            return accepted;
         }
 
         public bool RecordPlayerEscaped(
@@ -1407,8 +1452,12 @@ namespace EchoProtocol.Networking.Authority
 
         public bool RecordPhaseCompleted(string occurrenceKey, string phase, string reasonCode)
         {
-            if (!CanEmitProductionTelemetry()) return false;
-            return _telemetry.MatchAdapter.EmitPhaseCompleted(
+            if (!CanEmitProductionTelemetry())
+            {
+                _aedv2Evidence.MarkIncomplete();
+                return false;
+            }
+            var accepted = _telemetry.MatchAdapter.EmitPhaseCompleted(
                 occurrenceKey,
                 DateTime.UtcNow,
                 phase,
@@ -1416,6 +1465,9 @@ namespace EchoProtocol.Networking.Authority
                 out _,
                 null,
                 reasonCode);
+            if (!accepted) _aedv2Evidence.MarkIncomplete();
+            _aedv2Evidence.Freeze(phase, _boundPlayers.Count, CurrentRosterIdentity(), DateTime.UtcNow);
+            return accepted;
         }
 
         public bool RecordPhaseStarted(string occurrenceKey, string phase, string reasonCode)
@@ -1429,17 +1481,23 @@ namespace EchoProtocol.Networking.Authority
                 out _,
                 reasonCode);
             if (emitted) _currentTelemetryPhase = phase;
+            if (emitted) _aedv2Evidence.StartPhase(MatchId, CurrentRosterIdentity(),
+                phase, (_aedv2Evidence.LastFrozen?.PhaseOrdinal ?? 0) + 1, DateTime.UtcNow);
+            else _aedv2Evidence.MarkIncomplete();
             return emitted;
         }
 
         public bool RecordPuzzleCompleted(string occurrenceKey)
         {
-            return CanEmitProductionTelemetry()
+            var accepted = CanEmitProductionTelemetry()
                 && _telemetry.ObjectiveAdapter.EmitPuzzleCompleted(
                     occurrenceKey,
                     DateTime.UtcNow,
                     out _,
                     out _);
+            if (accepted) _aedv2Evidence.RecordAcceptedObjective(occurrenceKey);
+            else _aedv2Evidence.MarkIncomplete();
+            return accepted;
         }
 
         public bool RecordSecurityHoldInterrupted(string occurrenceKey)
@@ -1459,14 +1517,19 @@ namespace EchoProtocol.Networking.Authority
             string targetId = null)
         {
             // ponytail: Telemetry 1.1 rejects Core Stabilizer; emit it after the schema and backend catalog support it.
-            if (toolType == "CORE_STABILIZER") return false;
-
-            if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
+            if (toolType == "CORE_STABILIZER")
             {
+                _aedv2Evidence.MarkIncomplete();
                 return false;
             }
 
-            return _telemetry.PlayerAdapter.EmitTeamToolUsed(
+            if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
+            {
+                _aedv2Evidence.MarkIncomplete();
+                return false;
+            }
+
+            var accepted = _telemetry.PlayerAdapter.EmitTeamToolUsed(
                 occurrenceKey,
                 DateTime.UtcNow,
                 userId,
@@ -1475,6 +1538,9 @@ namespace EchoProtocol.Networking.Authority
                 out _,
                 out _,
                 targetId);
+            if (accepted) _aedv2Evidence.RecordAcceptedTeamTool(occurrenceKey);
+            else _aedv2Evidence.MarkIncomplete();
+            return accepted;
         }
 
         public bool RecordHelpPingUsed(
@@ -1508,16 +1574,21 @@ namespace EchoProtocol.Networking.Authority
         {
             // ponytail: gameplay noise is broader than Telemetry 1.1.
             // Unsupported types remain gameplay-only until the telemetry contract expands.
-            if (!NoiseTelemetryAdapter.SupportsNoiseType(noiseType)) return false;
+            if (!NoiseTelemetryAdapter.SupportsNoiseType(noiseType))
+            {
+                _aedv2Evidence.MarkIncomplete();
+                return false;
+            }
 
             if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
             {
+                _aedv2Evidence.MarkIncomplete();
                 return false;
             }
 
             try
             {
-                return _telemetry.NoiseAdapter.EmitAcceptedRuntimeNoise(
+                var accepted = _telemetry.NoiseAdapter.EmitAcceptedRuntimeNoise(
                     noiseEventId,
                     emittedAtUtc,
                     userId,
@@ -1528,6 +1599,9 @@ namespace EchoProtocol.Networking.Authority
                     out _,
                     out _,
                     hearingRadius);
+                if (accepted) _aedv2Evidence.RecordAcceptedNoise(noiseEventId);
+                else _aedv2Evidence.MarkIncomplete();
+                return accepted;
             }
             catch (InvalidOperationException exception)
                 when (string.Equals(

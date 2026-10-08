@@ -12,7 +12,7 @@ namespace EchoProtocol.Api.Services;
 public sealed class AdaptiveInputSnapshotBuilder(AppDbContext db, TimeProvider timeProvider)
     : IAdaptiveInputSnapshotBuilder
 {
-    private const string SupportedProfileFormula = "PROFILE_FORMULA_V1_1";
+    public const string SupportedProfileFormula = "PROFILE_FORMULA_V1_1";
     private const string DeferredJson = "{\"objective\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0},\"teamwork\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0},\"exploration\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0},\"navigation\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0},\"toolUsage\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0},\"risk\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0},\"revive\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0}}";
 
     public async Task<AdaptiveSnapshotBuildResult> BuildPreMatchAsync(Guid matchId, CancellationToken cancellationToken = default)
@@ -79,7 +79,7 @@ public sealed class AdaptiveInputSnapshotBuilder(AppDbContext db, TimeProvider t
             CreatedAtUtc = now, Players = players
         };
         foreach (var player in players) player.SnapshotId = snapshot.SnapshotId;
-        snapshot.SnapshotContentFingerprint = Fingerprint(snapshot);
+        snapshot.SnapshotContentFingerprint = ScenarioFingerprint.Snapshot(snapshot);
         return new(snapshot, reasons.OrderBy(x => x).ToArray());
     }
 
@@ -101,12 +101,4 @@ public sealed class AdaptiveInputSnapshotBuilder(AppDbContext db, TimeProvider t
         noise ? p.ProfileNoiseFilterVersion : null);
     private static string Status(ProfileDimensionStatus status) => status switch
     { ProfileDimensionStatus.Active => "ACTIVE", ProfileDimensionStatus.ColdStart => "COLD_START", _ => "DEFERRED" };
-    private static string Fingerprint(AdaptiveInputSnapshot s) => ScenarioFingerprint.Hash(
-        s.MatchId.ToString("D"), s.DecisionPoint, s.RosterIdentity, s.TeamSize.ToString(CultureInfo.InvariantCulture),
-        s.Validity.ToString().ToUpperInvariant(), s.ReasonCodesJson, s.ProfileFormulaSemanticId,
-        s.SurvivalComparisonKey, s.NoiseComparisonKey,
-        string.Join(";", s.Players.OrderBy(x => x.UserId).Select(x => string.Join(",",
-            x.UserId.ToString("D"), x.ProfileRevision?.ToString(CultureInfo.InvariantCulture),
-            x.SurvivalStatus, x.SurvivalScore?.ToString(CultureInfo.InvariantCulture), x.SurvivalSampleCount,
-            x.NoiseStatus, x.NoiseScore?.ToString(CultureInfo.InvariantCulture), x.NoiseSampleCount))));
 }

@@ -33,7 +33,7 @@ namespace EchoProtocol.AI.AED
         public static MatchDifficultyProfile ToNormalDifficultyProfile(AEDv2Plan plan)
         {
             if (plan == null || !IsNormalCompatible() ||
-                !plan.TrySingleBoundedChange(out _))
+                !plan.IsBounded())
                 throw new InvalidOperationException("AED_V2_PROFILE_INVALID_OR_BASELINE_DRIFT");
             var n = MatchDifficultyProfiles.Get(MatchDifficulty.Normal);
             return new MatchDifficultyProfile(

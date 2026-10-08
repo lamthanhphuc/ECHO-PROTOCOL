@@ -168,6 +168,7 @@ namespace EchoProtocol.Auth
 
     private static void ClearLocalAuth()
     {
+      EchoProtocol.AI.AED.BackendAdaptiveInputSnapshotProvider.Current?.ClearForMatch(Guid.Empty);
       TokenStorage.Clear();
       AuthSession.Clear();
       PlayerProfileSession.Clear();

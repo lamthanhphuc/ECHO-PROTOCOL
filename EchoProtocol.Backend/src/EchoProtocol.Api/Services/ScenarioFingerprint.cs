@@ -22,4 +22,14 @@ public static class ScenarioFingerprint
         item.EscapeDoorTimerSeconds.ToString("R", CultureInfo.InvariantCulture),
         item.FallbackConfigId, item.FallbackConfigVersion, item.ContentWhitelistVersion,
         item.UnityCompatibilityVersion);
+
+    public static string Snapshot(AdaptiveInputSnapshot s) => Hash(
+        s.MatchId.ToString("D"), s.DecisionPoint, s.RosterIdentity,
+        s.TeamSize.ToString(CultureInfo.InvariantCulture),
+        s.Validity.ToString().ToUpperInvariant(), s.ReasonCodesJson,
+        s.ProfileFormulaSemanticId, s.SurvivalComparisonKey, s.NoiseComparisonKey,
+        string.Join(";", s.Players.OrderBy(x => x.UserId).Select(x => string.Join(",",
+            x.UserId.ToString("D"), x.ProfileRevision?.ToString(CultureInfo.InvariantCulture),
+            x.SurvivalStatus, x.SurvivalScore?.ToString(CultureInfo.InvariantCulture), x.SurvivalSampleCount,
+            x.NoiseStatus, x.NoiseScore?.ToString(CultureInfo.InvariantCulture), x.NoiseSampleCount))));
 }

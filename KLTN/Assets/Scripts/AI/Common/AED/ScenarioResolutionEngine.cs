@@ -280,6 +280,10 @@ namespace EchoProtocol.AI.Common.AED
                     ? FixedDirector.CreateFixedBaseline()
                     : null;
 
+            if (input.AdaptiveInputUnavailableReason == "AED_RUNTIME_SETTINGS_MISSING")
+                return Fallback(input, fallbackAction, fallbackConfig,
+                    new[] { "AED_RUNTIME_SETTINGS_MISSING" });
+
             if (fallbackConfig != null)
             {
                 var fixedValidation =

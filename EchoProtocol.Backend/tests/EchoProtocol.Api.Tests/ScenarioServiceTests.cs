@@ -10,7 +10,7 @@ using Xunit;
 
 namespace EchoProtocol.Api.Tests;
 
-public sealed class ScenarioServiceTests
+public sealed partial class ScenarioServiceTests
 {
     private static readonly DateTime Now = new(2026, 9, 21, 14, 0, 0, DateTimeKind.Utc);
 

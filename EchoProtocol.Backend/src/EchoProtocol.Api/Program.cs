@@ -227,6 +227,8 @@ builder.Services.AddScoped<IScenarioConfigRegistry, ScenarioConfigRegistry>();
 builder.Services.AddScoped<IAIProfileReadService, AIProfileReadService>();
 builder.Services.AddScoped<IAdaptiveInputSnapshotBuilder, AdaptiveInputSnapshotBuilder>();
 builder.Services.AddScoped<IScenarioService, ScenarioService>();
+builder.Services.AddScoped<IScenarioSnapshotReadService, ScenarioSnapshotReadService>();
+builder.Services.AddScoped<IScenarioAdaptivePlanV2Service, ScenarioAdaptivePlanV2Service>();
 builder.Services.AddScoped<IPaymentOrderService, PaymentOrderService>();
 builder.Services.AddSingleton<IPaymentCatalogService, PaymentCatalogService>();
 builder.Services.AddHttpClient<PayOSPaymentProvider>();

@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aac1e2fa43ec3cd49b52e4e648bb6132, type: 3}
+  m_Name: AEDRuntimeSettings
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.AED.AEDRuntimeSettings
+  policyConfigVersion: AED_POLICY_CONFIG_V1_1
+  evidencePolicyVersion: AED_EVIDENCE_POLICY_V1_1
+  parameterRegistryVersion: AED_PARAMETER_REGISTRY_V1_1
+  contentWhitelistVersion: M2-WHITELIST-1
+  survivalLowThreshold: 30
+  survivalHighThreshold: 70
+  noiseLowThreshold: 30
+  noiseHighThreshold: 70
+  minimumSurvivalSampleCountPerObservedPlayer: 1
+  minimumNoiseSampleCountPerObservedPlayer: 1
+  requireFullRosterObservedCoverage: 1
+  supportItemBudgetDefaultValue: 0
+  supportItemBudgetMinValue: 0
+  supportItemBudgetMaxValue: 2
+  supportItemBudgetCandidateValues:
+  - 0
+  - 1
+  - 2
+  chaseSpeedDefaultValue: 9
+  chaseSpeedMinValue: 9
+  chaseSpeedMaxValue: 11
+  chaseSpeedCandidateValues:
+  - 9
+  - 10
+  - 11
+  extendedPolicyShadowEnabled: 0
+  extendedPolicyGameplayEnabled: 0

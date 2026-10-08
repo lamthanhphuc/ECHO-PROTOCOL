@@ -33,6 +33,7 @@ public class AppDbContext : DbContext
     public DbSet<AdaptiveInputSnapshotPlayer> AdaptiveInputSnapshotPlayers => Set<AdaptiveInputSnapshotPlayer>();
     public DbSet<ScenarioDecision> ScenarioDecisions => Set<ScenarioDecision>();
     public DbSet<ScenarioApplyReceipt> ScenarioApplyReceipts => Set<ScenarioApplyReceipt>();
+    public DbSet<ScenarioAdaptivePlanV2> ScenarioAdaptivePlansV2 => Set<ScenarioAdaptivePlanV2>();
     public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
     public DbSet<PaymentCheckout> PaymentCheckouts => Set<PaymentCheckout>();
     public DbSet<PaymentProviderEvent> PaymentProviderEvents => Set<PaymentProviderEvent>();
@@ -861,6 +862,30 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.MatchId).IsUnique();
             entity.HasOne(e => e.Decision).WithOne(e => e.ApplyReceipt).HasForeignKey<ScenarioApplyReceipt>(e => e.DecisionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<User>().WithMany().HasForeignKey(e => e.ReportedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ScenarioAdaptivePlanV2>(entity =>
+        {
+            entity.ToTable("ScenarioAdaptivePlansV2");
+            entity.HasKey(e => e.DecisionId);
+            entity.Property(e => e.DecisionPoint).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.PolicyVersion).IsRequired().HasMaxLength(80);
+            entity.Property(e => e.BaselineVersion).IsRequired().HasMaxLength(80);
+            entity.Property(e => e.PreviousPlanFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.ResultingPlanFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.ChangedKey).IsRequired().HasMaxLength(80);
+            entity.Property(e => e.AdaptationIntent).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.DecisionReason).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.SnapshotFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.EvidenceFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.RosterIdentity).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.PlanValuesJson).IsRequired().HasColumnType("jsonb");
+            entity.Property(e => e.CommitStatus).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.ApplyStatus).IsRequired().HasMaxLength(20);
+            entity.HasIndex(e => new { e.MatchId, e.PhaseOrdinal }).IsUnique();
+            entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(e => e.MatchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.HostUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<AdaptiveInputSnapshot>().WithMany().HasForeignKey(e => e.SnapshotId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

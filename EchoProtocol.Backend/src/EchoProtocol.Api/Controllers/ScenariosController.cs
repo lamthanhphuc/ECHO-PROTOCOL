@@ -8,8 +8,42 @@ using Microsoft.AspNetCore.Mvc;
 namespace EchoProtocol.Api.Controllers;
 
 [ApiController, Authorize, Route("api/matches/{matchId:guid}/scenario")]
-public sealed class ScenariosController(IScenarioService service) : ControllerBase
+public sealed class ScenariosController(IScenarioService service,
+    IScenarioSnapshotReadService snapshotReadService,
+    IScenarioAdaptivePlanV2Service adaptivePlanV2Service) : ControllerBase
 {
+    [HttpPost("plans-v2")]
+    public async Task<IActionResult> SubmitPlanV2(Guid matchId,
+        SubmitScenarioAdaptivePlanV2Request request, CancellationToken ct)
+    {
+        if (!TryUser(out var userId)) return Unauthorized(ApiResponse<object>.Fail("Invalid token", ErrorCodes.TokenInvalid));
+        var result = await adaptivePlanV2Service.SubmitAsync(userId, matchId, request, ct);
+        return Respond(result, result.Data?.IsReplay == true ? 200 : 201);
+    }
+
+    [HttpPut("plans-v2/{decisionId:guid}/applied")]
+    public async Task<IActionResult> ApplyPlanV2(Guid matchId, Guid decisionId,
+        ConfirmScenarioAdaptivePlanV2AppliedRequest request, CancellationToken ct)
+    {
+        if (!TryUser(out var userId)) return Unauthorized(ApiResponse<object>.Fail("Invalid token", ErrorCodes.TokenInvalid));
+        return Respond(await adaptivePlanV2Service.ConfirmAppliedAsync(userId, matchId,
+            decisionId, request.PlanFingerprint, ct), 200);
+    }
+
+    [HttpPut("plans-v2/{decisionId:guid}/aborted")]
+    public async Task<IActionResult> AbortPlanV2(Guid matchId, Guid decisionId, CancellationToken ct)
+    {
+        if (!TryUser(out var userId)) return Unauthorized(ApiResponse<object>.Fail("Invalid token", ErrorCodes.TokenInvalid));
+        return Respond(await adaptivePlanV2Service.AbortPendingAsync(
+            userId, matchId, decisionId, ct), 200);
+    }
+
+    [HttpGet("decisions/{decisionId:guid}/input-snapshot")]
+    public async Task<IActionResult> InputSnapshot(Guid matchId, Guid decisionId, CancellationToken ct)
+    {
+        if (!TryUser(out var userId)) return Unauthorized(ApiResponse<object>.Fail("Invalid token", ErrorCodes.TokenInvalid));
+        return Respond(await snapshotReadService.GetAsync(userId, matchId, decisionId, ct), 200);
+    }
     [HttpPost("resolve")]
     public async Task<IActionResult> Resolve(Guid matchId, ResolveScenarioRequest request, CancellationToken ct)
     {

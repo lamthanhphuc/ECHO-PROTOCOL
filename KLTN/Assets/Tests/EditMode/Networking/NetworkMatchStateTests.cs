@@ -153,7 +153,7 @@ namespace EchoProtocol.Networking.Tests
 
             StringAssert.Contains(
                 "TryAdvancePhase(NetworkMatchPhase.Zone3PushFrigate,\n" +
-                "                    NetworkMatchPhase.FinalHunt, \"ZONE3_CHARGE_ACTIVATED\")",
+                "                NetworkMatchPhase.FinalHunt, \"ZONE3_CHARGE_ACTIVATED\", () =>",
                 source);
 
             StringAssert.Contains(
@@ -198,11 +198,9 @@ namespace EchoProtocol.Networking.Tests
 
             StringAssert.Contains(
                 "if (fromDoorexit " +
-                "&& CurrentPhase == NetworkMatchPhase.FinalHunt " +
-                "&& !TryAdvancePhase( " +
-                "NetworkMatchPhase.FinalHunt, " +
-                "NetworkMatchPhase.Escape, " +
-                "\"FINAL_HUNT\"))",
+                "&& CurrentPhase == NetworkMatchPhase.FinalHunt) { " +
+                "return TryAdvancePhase(NetworkMatchPhase.FinalHunt, " +
+                "NetworkMatchPhase.Escape, \"FINAL_HUNT\", () =>",
                 normalized);
 
             StringAssert.Contains(
@@ -220,7 +218,8 @@ namespace EchoProtocol.Networking.Tests
                 source);
 
             StringAssert.Contains(
-                "TryAdvancePhase(NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.Zone3FindFrigate, \"ZONE2_OBJECTIVE\")",
+                "TryAdvancePhase(NetworkMatchPhase.Zone2Objective,\n" +
+                "                NetworkMatchPhase.Zone3FindFrigate, \"ZONE2_OBJECTIVE\", () =>",
                 source);
 
             StringAssert.DoesNotContain(

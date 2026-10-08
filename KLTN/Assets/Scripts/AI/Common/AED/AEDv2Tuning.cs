@@ -82,7 +82,7 @@ namespace EchoProtocol.AI.Common.AED
             new AEDv2ParameterSpec(AEDv2Key.ReviveBonusPerZone, AEDv2Axis.Resource, 0, 1, 0, true),
             new AEDv2ParameterSpec(AEDv2Key.DetectionAcquireSeconds, AEDv2Axis.Detection, 1.25, 1.50, 1.00),
             new AEDv2ParameterSpec(AEDv2Key.DetectionForgetSeconds, AEDv2Axis.Detection, 25, 20, 30),
-            new AEDv2ParameterSpec(AEDv2Key.ChaseSpeed, AEDv2Axis.Pursuit, 8, 7.5, 8.5),
+            new AEDv2ParameterSpec(AEDv2Key.ChaseSpeed, AEDv2Axis.Pursuit, 7.5, 7.0, 8.0),
             new AEDv2ParameterSpec(AEDv2Key.SearchSeconds, AEDv2Axis.Pursuit, 2.25, 1.5, 3),
             new AEDv2ParameterSpec(AEDv2Key.HearingMultiplier, AEDv2Axis.Detection, 1, 0.85, 1.15),
             new AEDv2ParameterSpec(AEDv2Key.SeekPlayersAfterSeconds, AEDv2Axis.Pursuit, 120, 150, 90),
@@ -169,6 +169,13 @@ namespace EchoProtocol.AI.Common.AED
             return changes <= 1;
         }
 
+        public bool IsBounded()
+        {
+            foreach (var spec in AEDv2Catalog.All)
+                if (!spec.IsRegistered(Get(spec.Key))) return false;
+            return true;
+        }
+
         public string Fingerprint()
         {
             var parts = new System.Text.StringBuilder("AED_DIFFICULTY_V2|NORMAL");
@@ -235,16 +242,9 @@ namespace EchoProtocol.AI.Common.AED
             if (intent == AdaptationIntent.Hold)
                 return Hold(request, normal, "AED_V2_HOLD");
 
-            // Deterministic key selection. A policy decision modifies ONE registered key,
-            // never a full Easy/Hard preset and never an unbounded parameter bundle.
-            var eligible = new List<AEDv2Key>();
-            foreach (var spec in AEDv2Catalog.All)
-                if (spec.HasTarget(intent)) eligible.Add(spec.Key);
-            if (eligible.Count == 0) return Hold(request, normal, "AED_V2_NO_ELIGIBLE_KEY");
-            var bytes = request.ResolutionId.ToByteArray();
-            var selector = (uint)bytes[0] | ((uint)bytes[1] << 8) |
-                           ((uint)bytes[2] << 16) | ((uint)bytes[3] << 24);
-            var key = eligible[(int)(selector % eligible.Count)];
+            var key = s == ScoreBand.Low ? AEDv2Key.SupportBonus
+                : n == ScoreBand.Low ? AEDv2Key.DetectionAcquireSeconds
+                : AEDv2Key.ChaseSpeed;
             return EvaluateKey(request, gate, intent, key);
         }
 

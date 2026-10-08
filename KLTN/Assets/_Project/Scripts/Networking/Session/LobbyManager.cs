@@ -1,8 +1,12 @@
 using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Fusion;
+using EchoProtocol.AI.AED;
+using EchoProtocol.AI.Common.AED;
+using EchoProtocol.Gameplay;
 using EchoProtocol.Networking.Authority;
 using UnityEngine;
 
@@ -18,6 +22,8 @@ namespace EchoProtocol.Networking
 
         [SerializeField] private NetworkBootstrap _bootstrap;
         private bool _matchStartInProgress;
+        private CancellationTokenSource _preMatchCancellation;
+        private BackendAdaptiveInputSnapshotProvider _snapshotProvider;
         private string _localOperatorName = string.Empty;
         private LobbyPlayerState _namedPlayer;
 
@@ -92,6 +98,7 @@ namespace EchoProtocol.Networking
         public async void LeaveRoom()
         {
             if (_bootstrap == null || _bootstrap.IsBusy) return;
+            ClearPreparedSnapshot();
             await _bootstrap.ShutdownRunnerAsync();
             RefreshFromRunner();
         }
@@ -272,6 +279,109 @@ namespace EchoProtocol.Networking
                     }
                 }
 
+                var settings = ScenarioConfigAuthorityRuntime.EnsureExists().RuntimeSettings;
+                var needsSnapshot = settings != null
+                    && (settings.ExtendedPolicyShadowEnabled
+                        || settings.ExtendedPolicyGameplayEnabled);
+                if (needsSnapshot)
+                {
+                    if (authority.MatchId == Guid.Empty || !authority.IsHostBinding
+                        || !BuildStateFromRunner().CanStartMatch
+                        || authority.BoundPlayerCount != BuildStateFromRunner().CurrentPlayers)
+                    {
+                        ReportError("AED pre-match rejected: host, ready room or bound roster changed.");
+                        return;
+                    }
+                    _preMatchCancellation = new CancellationTokenSource();
+                    var matchId = authority.MatchId;
+                    var decisionId = ScenarioConfigAuthorityRuntime.CreateDecisionId(
+                        matchId, ScenarioDecisionPoint.PreMatch, "PRE_MATCH", 0);
+                    var api = new AEDSnapshotApiService();
+                    var decision = await api.ResolvePreMatchAsync(matchId, decisionId,
+                        authority.ExperimentCondition, _preMatchCancellation.Token);
+                    if (decision == null || !Guid.TryParse(decision.snapshotId, out var snapshotId)
+                        || snapshotId == Guid.Empty || decision.matchId != matchId.ToString("D"))
+                    {
+                        ReportError("AED pre-match resolve failed; match remains in lobby.");
+                        return;
+                    }
+                    _snapshotProvider = new BackendAdaptiveInputSnapshotProvider();
+                    if (!await _snapshotProvider.PrepareAsync(matchId, decisionId,
+                            _preMatchCancellation.Token))
+                    {
+                        ReportError("AED snapshot is unavailable or stale.");
+                        return;
+                    }
+                    var request = new ScenarioResolutionRequest(decisionId, matchId,
+                        ScenarioResolutionMode.Adaptive, ScenarioDecisionPoint.PreMatch,
+                        "PRE_MATCH", authority.ExperimentCondition);
+                    if (!_snapshotProvider.TryGetSnapshot(request, out var snapshot,
+                            out var currency, out _)
+                        || snapshot.SnapshotId != snapshotId
+                        || snapshot.SnapshotContentFingerprint != decision.snapshotContentFingerprint
+                        || snapshot.RosterIdentity != decision.rosterIdentity
+                        || !currency.IsCurrent || _preMatchCancellation.IsCancellationRequested
+                        || authority.MatchId != matchId || !BuildStateFromRunner().CanStartMatch
+                        || authority.BoundPlayerCount != BuildStateFromRunner().CurrentPlayers)
+                    {
+                        ReportError("AED pre-match snapshot changed before match start.");
+                        return;
+                    }
+                    if (settings.ExtendedPolicyGameplayEnabled
+                        && authority.Difficulty != MatchDifficulty.Normal)
+                    {
+                        ReportError("AED v2 gameplay requires Normal difficulty.");
+                        return;
+                    }
+                    settings.TryBuildPolicyConfig(out var policy, out _);
+                    settings.TryBuildEvidencePolicy(out var evidence, out _);
+                    var gate = AEDInputGate.Evaluate(snapshot, request, policy,
+                        evidence, currency);
+                    var proposal = AEDv2Policy.Evaluate(request, snapshot, gate, policy);
+                    if (proposal.Changed)
+                    {
+                        var normal = AEDv2Plan.Normal();
+                        var values = new double[AEDv2Catalog.All.Count];
+                        foreach (var spec in AEDv2Catalog.All)
+                            values[(int)spec.Key] = proposal.Plan.Get(spec.Key);
+                        var changed = proposal.Key.Value;
+                        var planRequest = new AEDPlanV2Request
+                        {
+                            decisionId = decisionId.ToString("D"),
+                            phaseOrdinal = 0,
+                            decisionPoint = "PRE_MATCH",
+                            policyVersion = "AED_V2_POLICY_V1",
+                            baselineVersion = "AED_DIFFICULTY_V2|NORMAL",
+                            previousPlanFingerprint = normal.Fingerprint(),
+                            resultingPlanFingerprint = proposal.Plan.Fingerprint(),
+                            changedKey = changed.ToString(),
+                            previousValue = normal.Get(changed),
+                            appliedValue = proposal.Plan.Get(changed),
+                            adaptationIntent = proposal.Intent == AdaptationIntent.Relieve
+                                ? "RELIEVE" : "INCREASE_PRESSURE",
+                            decisionReason = proposal.Reason,
+                            snapshotId = snapshot.SnapshotId.ToString("D"),
+                            snapshotFingerprint = snapshot.SnapshotContentFingerprint,
+                            evidenceFingerprint = string.Empty,
+                            rosterIdentity = snapshot.RosterIdentity,
+                            commitStatus = settings.ExtendedPolicyGameplayEnabled
+                                ? "COMMITTED" : "SHADOW_ONLY",
+                            planValues = values
+                        };
+                        var approved = await api.SubmitPlanAsync(matchId, planRequest,
+                            _preMatchCancellation.Token);
+                        if (approved == null || _preMatchCancellation.IsCancellationRequested
+                            || authority.MatchId != matchId || !BuildStateFromRunner().CanStartMatch
+                            || authority.BoundPlayerCount != BuildStateFromRunner().CurrentPlayers)
+                        {
+                            ReportError("AED v2 backend plan was not confirmed before match start.");
+                            return;
+                        }
+                        if (settings.ExtendedPolicyGameplayEnabled)
+                            AEDv2Authority.ApproveBackendPreMatch(matchId, approved);
+                    }
+                }
+
                 var (accepted, error) =
                     await authority.StartMatchAsync();
                 if (!accepted)
@@ -311,6 +421,10 @@ namespace EchoProtocol.Networking
             }
             finally
             {
+                if (_bootstrap == null || _bootstrap.State != NetworkSessionState.InMatch)
+                    ClearPreparedSnapshot();
+                _preMatchCancellation?.Dispose();
+                _preMatchCancellation = null;
                 _matchStartInProgress = false;
             }
         }
@@ -378,7 +492,18 @@ namespace EchoProtocol.Networking
             };
         }
 
-        private void HandlePlayerChanged(PlayerRef player) => RefreshFromRunner();
+        private void HandlePlayerChanged(PlayerRef player)
+        {
+            _preMatchCancellation?.Cancel();
+            RefreshFromRunner();
+        }
+
+        private void ClearPreparedSnapshot()
+        {
+            _preMatchCancellation?.Cancel();
+            _snapshotProvider?.Dispose();
+            _snapshotProvider = null;
+        }
 
         private void HandleSelectionResult(LobbySelectionResult result)
         {
