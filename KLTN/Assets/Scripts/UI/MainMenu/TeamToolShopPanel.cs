@@ -1,7 +1,7 @@
 using System;
-using System.Collections.Generic;
 using EchoProtocol.Api;
 using EchoProtocol.Auth;
+using EchoProtocol.Profile;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,19 +10,29 @@ namespace EchoProtocol.UI.MainMenu
     [DisallowMultipleComponent]
     public sealed class TeamToolShopPanel : MonoBehaviour
     {
-        [Serializable] private sealed class CatalogResponse
+        private enum StoreCategory
+        {
+            Character,
+            TeamTool,
+            Pet
+        }
+
+        [Serializable]
+        private sealed class CatalogResponse
         {
             public bool success;
             public string message;
             public CatalogData data;
         }
 
-        [Serializable] private sealed class CatalogData
+        [Serializable]
+        private sealed class CatalogData
         {
             public ShopItem[] items;
         }
 
-        [Serializable] private sealed class ShopItem
+        [Serializable]
+        private sealed class ShopItem
         {
             public string itemId;
             public string name;
@@ -31,297 +41,1565 @@ namespace EchoProtocol.UI.MainMenu
             public int price;
         }
 
-        [Serializable] private sealed class PurchaseRequest
+        [Serializable]
+        private sealed class PurchaseRequest
         {
             public string itemId;
             public string idempotencyKey;
         }
 
-        [Serializable] private sealed class PurchaseResponse
+        [Serializable]
+        private sealed class PurchaseResponse
         {
             public bool success;
             public string message;
         }
 
-        [Serializable] private sealed class InventoryResponse
-        {
-            public bool success;
-            public InventoryData data;
-        }
+        private static readonly Color WindowBackground =
+            new Color32(10, 13, 14, 250);
 
-        [Serializable] private sealed class InventoryData
-        {
-            public OwnedItem[] items;
-        }
+        private static readonly Color PanelBackground =
+            new Color32(14, 18, 19, 238);
 
-        [Serializable] private sealed class OwnedItem
-        {
-            public string itemId;
-        }
+        private static readonly Color CardBackground =
+            new Color32(19, 23, 24, 245);
 
-        private RectTransform _panel;
-        private RectTransform _list;
+        private static readonly Color Border =
+            new Color32(58, 66, 66, 230);
+
+        private static readonly Color TextPrimary =
+            new Color32(222, 224, 219, 255);
+
+        private static readonly Color TextSecondary =
+            new Color32(128, 136, 133, 255);
+
+        private static readonly Color Accent =
+            new Color32(132, 37, 33, 255);
+
+        private static readonly Color AccentSoft =
+            new Color32(50, 24, 23, 235);
+
+        private static readonly Color Credits =
+            new Color32(193, 178, 130, 255);
+
+        private RectTransform _window;
+        private RectTransform _teamTools;
+        private RectTransform _grid;
+
+        private Text _credits;
+        private Text _sectionTitle;
+        private Text _sectionSubtitle;
+        private Text _selectedName;
+        private Text _selectedDescription;
+        private Text _selectedPrice;
         private Text _status;
-        private MainMenuProfileController _profile;
-        private bool _purchasing;
-        private readonly HashSet<string> _owned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private GameObject[] _cosmeticCards;
 
-        public void Open(MainMenuProfileController profile)
+        private RawImage _selectedPreview;
+
+        private Button _characterButton;
+        private Button _teamToolButton;
+        private Button _petButton;
+        private Button _buyButton;
+        private Button _closeButton;
+
+        private MainMenuProfileController _profile;
+
+        private ShopItem[] _catalog =
+            Array.Empty<ShopItem>();
+
+        private ShopItem _selected;
+
+        private bool _built;
+        private bool _purchasing;
+        private bool _previewMode;
+
+        public void Open()
+        {
+            Open(null);
+        }
+
+        public void Open(
+            MainMenuProfileController profile)
         {
             _profile = profile;
-            if (_panel == null) Build();
-            SetToolView(true);
+            _previewMode = false;
+
+            gameObject.SetActive(true);
+
+            if (!_built)
+                Build();
+
+            ShowCategory(
+                StoreCategory.TeamTool);
+
+            RefreshCredits();
             LoadCatalog();
         }
 
 #if UNITY_EDITOR
-        // Allows isolated Editor previews to use the same layout without sending API requests.
         public void PreviewLayout()
         {
-            if (_panel == null) Build();
-            if (_panel == null) return;
-            SetToolView(true);
-            ShowItems(null);
+            _previewMode = true;
+
+            gameObject.SetActive(true);
+
+            if (!_built)
+                Build();
+
+            ShowCategory(
+                StoreCategory.TeamTool);
+
+            RefreshCredits();
+
+            _catalog =
+                BuildPreviewCatalog();
+
+            ShowItems(_catalog);
+
+            _status.text =
+                "SELECT A TEAM TOOL.";
         }
 #endif
 
-        private void Build()
+        public void Close()
         {
-            var window = transform.Find("Window");
-            if (window == null) { Debug.LogError("[TeamToolShopPanel] Store Terminal Window not found.", this); return; }
-            _cosmeticCards = new[]
-            {
-                window.Find("HazmatCard")?.gameObject,
-                window.Find("FlashlightCard")?.gameObject,
-                window.Find("BackpackCard")?.gameObject,
-                window.Find("GasMaskCard")?.gameObject
-            };
-            foreach (var button in window.GetComponentsInChildren<Button>(true))
-            {
-                var caption = button.GetComponentInChildren<Text>(true);
-                if (caption == null) continue;
-                if (caption.text == "EQUIPMENT" || caption.text == "ALL") button.onClick.AddListener(() => SetToolView(true));
-                if (caption.text == "COSMETICS" || caption.text == "CHARACTER") button.onClick.AddListener(() => SetToolView(false));
-            }
-            // The footer owns the bottom 56 pixels; content starts above it with a 16px gap.
-            _panel = Box("TeamTools", window, Vector2.zero, Vector2.zero);
-            Stretch(_panel, new Vector2(200f, 72f), new Vector2(-32f, -100f));
-            _panel.GetComponent<Image>().color = Color.clear;
-            _panel.GetComponent<Image>().raycastTarget = false;
-            _status = Label("Status", _panel, "Loading...", 13, Vector2.zero, Vector2.zero);
-            var statusRect = _status.rectTransform;
-            statusRect.anchorMin = Vector2.zero;
-            statusRect.anchorMax = new Vector2(1f, 0f);
-            statusRect.pivot = new Vector2(0.5f, 0f);
-            statusRect.offsetMin = Vector2.zero;
-            statusRect.offsetMax = new Vector2(0f, 20f);
-            _status.horizontalOverflow = HorizontalWrapMode.Wrap;
-            _status.resizeTextForBestFit = true;
-            _status.resizeTextMinSize = 10;
-            _status.resizeTextMaxSize = 13;
-            var listBox = new GameObject("Items", typeof(RectTransform));
-            listBox.transform.SetParent(_panel, false);
-            _list = (RectTransform)listBox.transform;
-            Stretch(_list, new Vector2(0f, 24f), Vector2.zero);
-            var layout = listBox.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = 10f;
-            layout.childControlWidth = layout.childControlHeight = true;
-            layout.childForceExpandWidth = layout.childForceExpandHeight = true;
-
-            var close = window.Find("CloseButton") as RectTransform;
-            if (close != null)
-            {
-                close.anchorMin = Vector2.zero;
-                close.anchorMax = new Vector2(1f, 0f);
-                close.pivot = new Vector2(0.5f, 0f);
-                close.offsetMin = new Vector2(32f, 20f);
-                close.offsetMax = new Vector2(-32f, 56f);
-                close.SetAsLastSibling();
-            }
-
-            ShowItems(null);
+            gameObject.SetActive(false);
         }
 
-        private void SetToolView(bool visible)
+        private void Build()
         {
-            if (_panel != null) _panel.gameObject.SetActive(visible);
-            if (_cosmeticCards == null) return;
-            foreach (var card in _cosmeticCards) if (card != null) card.SetActive(!visible);
+            _window =
+                transform.Find("Window")
+                as RectTransform;
+
+            if (_window == null)
+            {
+                Debug.LogError(
+                    "[StoreV2] Window missing.",
+                    this);
+
+                return;
+            }
+
+            _built = true;
+
+            BuildHeader();
+            BuildCategoryNavigation();
+            BuildContent();
+            BuildFooter();
+
+            ShowCategory(
+                StoreCategory.TeamTool);
+        }
+
+        private void BuildHeader()
+        {
+            var title =
+                Label(
+                    "StoreTitle",
+                    _window,
+                    "STORE",
+                    30);
+
+            PlaceTopLeft(
+                title.rectTransform,
+                38f,
+                24f,
+                500f,
+                42f);
+
+            title.fontStyle =
+                FontStyle.Bold;
+
+            title.color =
+                TextPrimary;
+
+            var subtitle =
+                Label(
+                    "StoreSubtitle",
+                    _window,
+                    "ECHO PROTOCOL // SUPPLY TERMINAL",
+                    10);
+
+            PlaceTopLeft(
+                subtitle.rectTransform,
+                40f,
+                60f,
+                480f,
+                22f);
+
+            subtitle.color =
+                TextSecondary;
+
+            var creditsBox =
+                Box(
+                    "CreditsBox",
+                    _window);
+
+            PlaceTopLeft(
+                creditsBox,
+                900f,
+                20f,
+                188f,
+                56f);
+
+            var amount =
+                Label(
+                    "Amount",
+                    creditsBox,
+                    "0",
+                    18);
+
+            PlaceTopLeft(
+                amount.rectTransform,
+                14f,
+                6f,
+                158f,
+                24f);
+
+            amount.fontStyle =
+                FontStyle.Bold;
+
+            amount.color =
+                Credits;
+
+            _credits =
+                amount;
+
+            var caption =
+                Label(
+                    "Caption",
+                    creditsBox,
+                    "CREDITS",
+                    10);
+
+            PlaceTopLeft(
+                caption.rectTransform,
+                14f,
+                30f,
+                158f,
+                18f);
+
+            caption.color =
+                TextSecondary;
+
+            var line =
+                Box(
+                    "HeaderDivider",
+                    _window);
+
+            PlaceTopLeft(
+                line,
+                38f,
+                91f,
+                1048f,
+                1f);
+
+            line.GetComponent<Image>().color =
+                Border;
+        }
+
+        private void BuildCategoryNavigation()
+        {
+            var nav =
+                Box(
+                    "Categories",
+                    _window);
+
+            PlaceTopLeft(
+                nav,
+                38f,
+                116f,
+                184f,
+                474f);
+
+            _characterButton =
+                CategoryButton(
+                    nav,
+                    "CharacterButton",
+                    "CHARACTER",
+                    18f);
+
+            _teamToolButton =
+                CategoryButton(
+                    nav,
+                    "TeamToolButton",
+                    "TEAM TOOL",
+                    84f);
+
+            _petButton =
+                CategoryButton(
+                    nav,
+                    "PetButton",
+                    "PET",
+                    150f);
+
+            _characterButton.onClick.AddListener(
+                () => ShowCategory(
+                    StoreCategory.Character));
+
+            _teamToolButton.onClick.AddListener(
+                () => ShowCategory(
+                    StoreCategory.TeamTool));
+
+            _petButton.onClick.AddListener(
+                () => ShowCategory(
+                    StoreCategory.Pet));
+
+            var hint =
+                Label(
+                    "NavigationHint",
+                    nav,
+                    "PURCHASED TEAM TOOLS\nCAN BE SELECTED IN LOBBY.",
+                    10);
+
+            PlaceTopLeft(
+                hint.rectTransform,
+                14f,
+                392f,
+                156f,
+                50f);
+
+            hint.color =
+                TextSecondary;
+
+            hint.horizontalOverflow =
+                HorizontalWrapMode.Wrap;
+
+            hint.verticalOverflow =
+                VerticalWrapMode.Overflow;
+        }
+
+        private void BuildContent()
+        {
+            var content =
+                Box(
+                    "Content",
+                    _window);
+
+            PlaceTopLeft(
+                content,
+                242f,
+                116f,
+                846f,
+                474f);
+
+            _sectionTitle =
+                Label(
+                    "SectionTitle",
+                    content,
+                    "TEAM TOOL",
+                    20);
+
+            PlaceTopLeft(
+                _sectionTitle.rectTransform,
+                20f,
+                14f,
+                500f,
+                30f);
+
+            _sectionTitle.fontStyle =
+                FontStyle.Bold;
+
+            _sectionSubtitle =
+                Label(
+                    "SectionSubtitle",
+                    content,
+                    "FIELD EQUIPMENT // PERMANENT UNLOCK",
+                    9);
+
+            PlaceTopLeft(
+                _sectionSubtitle.rectTransform,
+                20f,
+                42f,
+                500f,
+                18f);
+
+            _sectionSubtitle.color =
+                TextSecondary;
+
+            _teamTools =
+                Box(
+                    "TeamTools",
+                    content);
+
+            Stretch(
+                _teamTools,
+                new Vector2(18f, 18f),
+                new Vector2(-18f, -70f));
+
+            _teamTools.GetComponent<Image>().color =
+                Color.clear;
+
+            BuildTeamToolContent();
+
+            _status =
+                Label(
+                    "Status",
+                    content,
+                    string.Empty,
+                    10);
+
+            PlaceTopLeft(
+                _status.rectTransform,
+                20f,
+                434f,
+                780f,
+                22f);
+
+            _status.color =
+                TextSecondary;
+        }
+
+        private void BuildTeamToolContent()
+        {
+            var previewBox =
+                Box(
+                    "SelectedPreviewBox",
+                    _teamTools);
+
+            PlaceTopLeft(
+                previewBox,
+                0f,
+                60f,
+                392f,
+                228f);
+
+            var previewObject =
+                new GameObject(
+                    "SelectedPreview",
+                    typeof(RectTransform),
+                    typeof(CanvasRenderer),
+                    typeof(RawImage));
+
+            previewObject.transform.SetParent(
+                previewBox,
+                false);
+
+            var previewRect =
+                previewObject.transform
+                as RectTransform;
+
+            PlaceTopLeft(
+                previewRect,
+                12f,
+                12f,
+                368f,
+                204f);
+
+            _selectedPreview =
+                previewObject.GetComponent<RawImage>();
+
+            _selectedPreview.raycastTarget =
+                false;
+
+            _selectedPreview.color =
+                Color.clear;
+
+            _grid =
+                Box(
+                    "ItemGrid",
+                    _teamTools);
+
+            PlaceTopLeft(
+                _grid,
+                408f,
+                60f,
+                392f,
+                228f);
+
+            _grid.GetComponent<Image>().color =
+                Color.clear;
+
+            var layout =
+                _grid.gameObject
+                    .AddComponent<GridLayoutGroup>();
+
+            layout.cellSize =
+                new Vector2(190f, 108f);
+
+            layout.spacing =
+                new Vector2(12f, 12f);
+
+            layout.constraint =
+                GridLayoutGroup.Constraint.FixedColumnCount;
+
+            layout.constraintCount = 2;
+
+            _selectedName =
+                Label(
+                    "SelectedName",
+                    _teamTools,
+                    "SELECT A TEAM TOOL",
+                    17);
+
+            PlaceTopLeft(
+                _selectedName.rectTransform,
+                0f,
+                304f,
+                470f,
+                28f);
+
+            _selectedName.fontStyle =
+                FontStyle.Bold;
+
+            _selectedDescription =
+                Label(
+                    "SelectedDescription",
+                    _teamTools,
+                    string.Empty,
+                    11);
+
+            PlaceTopLeft(
+                _selectedDescription.rectTransform,
+                0f,
+                334f,
+                530f,
+                42f);
+
+            _selectedDescription.color =
+                new Color32(150, 158, 155, 255);
+
+            _selectedDescription.horizontalOverflow =
+                HorizontalWrapMode.Wrap;
+
+            _selectedDescription.verticalOverflow =
+                VerticalWrapMode.Overflow;
+
+            _selectedPrice =
+                Label(
+                    "SelectedPrice",
+                    _teamTools,
+                    "-- CR",
+                    15);
+
+            PlaceTopLeft(
+                _selectedPrice.rectTransform,
+                544f,
+                332f,
+                110f,
+                34f);
+
+            _selectedPrice.alignment =
+                TextAnchor.MiddleRight;
+
+            _selectedPrice.color =
+                Credits;
+
+            _buyButton =
+                CreateButton(
+                    "BuyButton",
+                    _teamTools,
+                    "BUY");
+
+            PlaceTopLeft(
+                _buyButton.transform
+                    as RectTransform,
+                668f,
+                326f,
+                132f,
+                44f);
+
+            _buyButton.onClick.AddListener(
+                PurchaseSelected);
+
+            SetBuyState();
+        }
+
+        private void BuildFooter()
+        {
+            _closeButton =
+                CreateButton(
+                    "CloseButton",
+                    _window,
+                    "BACK");
+
+            PlaceTopLeft(
+                _closeButton.transform
+                    as RectTransform,
+                900f,
+                610f,
+                188f,
+                40f);
+
+            _closeButton.onClick.AddListener(
+                Close);
+        }
+
+        private void ShowCategory(
+            StoreCategory category)
+        {
+            if (!_built)
+                return;
+
+            bool tools =
+                category == StoreCategory.TeamTool;
+
+            if (_teamTools != null)
+                _teamTools.gameObject.SetActive(
+                    tools);
+
+            switch (category)
+            {
+                case StoreCategory.Character:
+                    _sectionTitle.text =
+                        "CHARACTER";
+
+                    _sectionSubtitle.text =
+                        "UNDER DEVELOPMENT";
+
+                    _status.text =
+                        "CHARACTER STORE IS NOT AVAILABLE IN THIS BUILD.";
+                    break;
+
+                case StoreCategory.Pet:
+                    _sectionTitle.text =
+                        "PET";
+
+                    _sectionSubtitle.text =
+                        "UNDER DEVELOPMENT";
+
+                    _status.text =
+                        "PET STORE IS NOT AVAILABLE IN THIS BUILD.";
+                    break;
+
+                default:
+                    _sectionTitle.text =
+                        "TEAM TOOL";
+
+                    _sectionSubtitle.text =
+                        "FIELD EQUIPMENT // PERMANENT UNLOCK";
+
+                    _status.text =
+                        _previewMode
+                            ? "SELECT A TEAM TOOL."
+                            : TeamToolOwnershipSession.IsLoaded
+                                ? "SELECT A TEAM TOOL."
+                                : "LOADING INVENTORY...";
+                    break;
+            }
+
+            StyleCategoryButton(
+                _characterButton,
+                category == StoreCategory.Character);
+
+            StyleCategoryButton(
+                _teamToolButton,
+                category == StoreCategory.TeamTool);
+
+            StyleCategoryButton(
+                _petButton,
+                category == StoreCategory.Pet);
         }
 
         private void LoadCatalog()
         {
-            var runtime = AuthRuntime.EnsureExists();
-            if (_panel == null) return;
-            if (runtime == null || runtime.Client == null) { ShowItems(null); return; }
-            _status.text = "Loading team tools...";
-            runtime.Client.GetJson<CatalogResponse>(ApiEndpoints.ShopTeamTools, true, result =>
+            if (_previewMode)
             {
-                if (this == null) return;
-                if (!result.IsSuccess || result.Data == null || !result.Data.success || result.Data.data == null)
-                {
-                    ShowItems(null);
-                    return;
-                }
-                var items = result.Data.data.items;
-                runtime.Client.GetJson<InventoryResponse>(ApiEndpoints.InventoryMe, true, inventory =>
-                {
-                    if (this == null) return;
-                    _owned.Clear();
-                    if (inventory.IsSuccess && inventory.Data != null && inventory.Data.success
-                        && inventory.Data.data != null && inventory.Data.data.items != null)
-                        foreach (var owned in inventory.Data.data.items)
-                            if (owned != null && !string.IsNullOrEmpty(owned.itemId)) _owned.Add(owned.itemId);
-                    ShowItems(items);
-                });
-            });
-        }
+                _catalog =
+                    BuildPreviewCatalog();
 
-        private void ShowItems(ShopItem[] items)
-        {
-            for (int i = _list.childCount - 1; i >= 0; i--)
-            {
-                var child = _list.GetChild(i).gameObject;
-                child.SetActive(false);
-                if (Application.isPlaying) Destroy(child);
-                else DestroyImmediate(child);
+                ShowItems(_catalog);
+                _status.text =
+                    "SELECT A TEAM TOOL.";
+                return;
             }
-            int available = 0;
-            foreach (var expected in TeamToolShopAssets.Items)
+
+            var runtime =
+                AuthRuntime.EnsureExists();
+
+            if (runtime == null
+                || runtime.Client == null)
             {
-                ShopItem item = null;
-                if (items != null)
-                    foreach (var candidate in items)
-                        if (candidate != null && candidate.itemId == expected.ItemId) { item = candidate; break; }
-                if (item != null) available++;
-                var card = Box("Tool_" + expected.Name, _list, Vector2.zero, Vector2.zero);
-                card.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-                card.GetComponent<Image>().raycastTarget = false;
+                _status.text =
+                    "STORE SERVICE UNAVAILABLE.";
 
-                var imageRegion = new GameObject("ImageRegion", typeof(RectTransform));
-                imageRegion.transform.SetParent(card, false);
-                Stretch((RectTransform)imageRegion.transform, new Vector2(8f, 68f), new Vector2(-8f, -8f));
-                var preview = new GameObject("PrefabPreview", typeof(RectTransform), typeof(CanvasRenderer), typeof(RawImage));
-                preview.transform.SetParent(imageRegion.transform, false);
-                var thumbnail = preview.GetComponent<RawImage>();
-                thumbnail.texture = Resources.Load<Texture2D>(expected.ThumbnailResource);
-                thumbnail.raycastTarget = false;
-                thumbnail.color = thumbnail.texture != null ? Color.white : Color.clear;
-                var fit = preview.AddComponent<AspectRatioFitter>();
-                fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
-                fit.aspectRatio = 1f;
-
-                var name = Label("Name", card, expected.Name, 14, Vector2.zero, Vector2.zero);
-                BottomBand(name.rectTransform, 43f, 22f, 4f);
-                name.alignment = TextAnchor.MiddleCenter;
-                name.resizeTextForBestFit = true;
-                name.resizeTextMinSize = 11;
-                name.resizeTextMaxSize = 14;
-                var button = Button("Buy", card, item != null ? $"BUY · {item.price} CR" : "UNAVAILABLE",
-                    Vector2.zero, Vector2.zero);
-                BottomBand((RectTransform)button.transform, 8f, 30f, 8f);
-                button.GetComponent<Image>().color = new Color(0.55f, 0.025f, 0.025f, 1f);
-                var caption = button.GetComponentInChildren<Text>();
-                Stretch(caption.rectTransform, new Vector2(3f, 0f), new Vector2(-3f, 0f));
-                caption.fontSize = 13;
-                caption.resizeTextForBestFit = true;
-                caption.resizeTextMinSize = 10;
-                caption.resizeTextMaxSize = 13;
-                if (item == null) button.interactable = false;
-                else if (_owned.Contains(item.itemId))
-                {
-                    button.interactable = false;
-                    button.GetComponentInChildren<Text>().text = "OWNED";
-                }
-                var selected = item;
-                button.onClick.AddListener(() => Purchase(selected, button));
+                ShowItems(null);
+                return;
             }
-            _status.text = available == 0 ? "Items are currently unavailable for purchase." : "Select a team tool to buy.";
-        }
 
-        private void Purchase(ShopItem item, Button button)
-        {
-            if (_purchasing || item == null) return;
-            var runtime = AuthRuntime.EnsureExists();
-            if (runtime == null || runtime.Client == null) { _status.text = "Shop unavailable."; return; }
-            _purchasing = true;
-            button.interactable = false;
-            _status.text = "Purchasing " + item.name + "...";
-            runtime.Client.PostJson<PurchaseRequest, PurchaseResponse>(ApiEndpoints.ShopPurchase,
-                new PurchaseRequest { itemId = item.itemId, idempotencyKey = Guid.NewGuid().ToString("N") }, true,
+            _status.text =
+                "LOADING TEAM TOOLS...";
+
+            runtime.Client.GetJson<CatalogResponse>(
+                ApiEndpoints.ShopTeamTools,
+                true,
                 result =>
                 {
-                    if (this == null) return;
-                    _purchasing = false;
-                    if (!result.IsSuccess || result.Data == null || !result.Data.success)
+                    if (this == null)
+                        return;
+
+                    if (!result.IsSuccess
+                        || result.Data == null
+                        || !result.Data.success
+                        || result.Data.data == null)
                     {
-                        if (button != null) button.interactable = true;
-                        _status.text = result.Message ?? "Purchase failed.";
+                        _catalog =
+                            Array.Empty<ShopItem>();
+
+                        ShowItems(null);
+
+                        _status.text =
+                            "TEAM TOOL CATALOG UNAVAILABLE.";
+
                         return;
                     }
-                    if (button != null) button.GetComponentInChildren<Text>().text = "OWNED";
-                    _owned.Add(item.itemId);
-                    _status.text = item.name + " purchased.";
-                    runtime.AuthService.GetCurrentUser(_ => { if (_profile != null) _profile.UpdateCreditsUI(); });
+
+                    _catalog =
+                        result.Data.data.items
+                        ?? Array.Empty<ShopItem>();
+
+                    TeamToolOwnershipSession.Refresh(
+                        success =>
+                        {
+                            if (this == null)
+                                return;
+
+                            ShowItems(_catalog);
+
+                            _status.text =
+                                success
+                                    ? "SELECT A TEAM TOOL."
+                                    : "INVENTORY STATUS UNAVAILABLE.";
+                        });
                 });
         }
 
-        private static RectTransform Box(string name, Transform parent, Vector2 size, Vector2 position)
+        private void ShowItems(
+            ShopItem[] items)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            go.transform.SetParent(parent, false);
-            var rect = (RectTransform)go.transform;
-            rect.sizeDelta = size;
-            rect.anchoredPosition = position;
-            var image = go.GetComponent<Image>();
-            image.color = new Color(0.035f, 0.065f, 0.08f, 0.96f);
-            return rect;
+            if (_grid == null)
+                return;
+
+            ClearChildren(_grid);
+
+            ShopItem first =
+                null;
+
+            for (int i = 0;
+                 i < TeamToolShopAssets.Items.Length;
+                 i++)
+            {
+                var expected =
+                    TeamToolShopAssets.Items[i];
+
+                ShopItem item =
+                    FindItem(
+                        items,
+                        expected.ItemId);
+
+                if (item != null
+                    && first == null)
+                {
+                    first = item;
+                }
+
+                CreateItemCard(
+                    expected,
+                    item);
+            }
+
+            if (first != null)
+                SelectItem(first);
+            else
+                SelectItem(null);
         }
 
-        private static Text Label(string name, Transform parent, string value, int fontSize, Vector2 size, Vector2 position)
+        private void CreateItemCard(
+            TeamToolShopAssets.Item expected,
+            ShopItem item)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-            go.transform.SetParent(parent, false);
-            var rect = (RectTransform)go.transform;
-            rect.sizeDelta = size;
-            rect.anchoredPosition = position;
-            var text = go.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            text.fontSize = fontSize;
-            text.color = Color.white;
-            text.alignment = TextAnchor.MiddleLeft;
-            text.raycastTarget = false;
-            text.text = value;
-            return text;
+            var card =
+                Box(
+                    "Tool_" + expected.ToolId,
+                    _grid);
+
+            card.GetComponent<Image>().color =
+                CardBackground;
+
+            var button =
+                card.gameObject
+                    .AddComponent<Button>();
+
+            button.targetGraphic =
+                card.GetComponent<Image>();
+
+            var imageObject =
+                new GameObject(
+                    "Thumbnail",
+                    typeof(RectTransform),
+                    typeof(CanvasRenderer),
+                    typeof(RawImage));
+
+            imageObject.transform.SetParent(
+                card,
+                false);
+
+            var imageRect =
+                imageObject.transform
+                as RectTransform;
+
+            PlaceTopLeft(
+                imageRect,
+                10f,
+                14f,
+                78f,
+                78f);
+
+            var thumbnail =
+                imageObject.GetComponent<RawImage>();
+
+            thumbnail.texture =
+                Resources.Load<Texture2D>(
+                    expected.ThumbnailResource);
+
+            thumbnail.color =
+                thumbnail.texture != null
+                    ? Color.white
+                    : Color.clear;
+
+            thumbnail.raycastTarget =
+                false;
+
+            var name =
+                Label(
+                    "Name",
+                    card,
+                    expected.Name,
+                    11);
+
+            PlaceTopLeft(
+                name.rectTransform,
+                96f,
+                16f,
+                84f,
+                36f);
+
+            name.fontStyle =
+                FontStyle.Bold;
+
+            name.resizeTextForBestFit =
+                true;
+
+            name.resizeTextMinSize = 9;
+            name.resizeTextMaxSize = 11;
+
+            string state =
+                item == null
+                    ? "UNAVAILABLE"
+                    : TeamToolOwnershipSession
+                        .OwnsItem(item.itemId)
+                            ? "OWNED"
+                            : $"{item.price:N0} CR";
+
+            var stateText =
+                Label(
+                    "State",
+                    card,
+                    state,
+                    10);
+
+            PlaceTopLeft(
+                stateText.rectTransform,
+                96f,
+                70f,
+                84f,
+                18f);
+
+            stateText.color =
+                item != null
+                && TeamToolOwnershipSession
+                    .OwnsItem(item.itemId)
+                    ? new Color32(122, 170, 127, 255)
+                    : Credits;
+
+            if (item == null)
+            {
+                button.interactable =
+                    false;
+            }
+            else
+            {
+                var selected =
+                    item;
+
+                button.onClick.AddListener(
+                    () => SelectItem(
+                        selected));
+            }
         }
 
-        private static Button Button(string name, Transform parent, string caption, Vector2 size, Vector2 position)
+        private void SelectItem(
+            ShopItem item)
         {
-            var rect = Box(name, parent, size, position);
-            var button = rect.gameObject.AddComponent<Button>();
-            button.targetGraphic = rect.GetComponent<Image>();
-            var label = Label("Caption", rect, caption, 17, size, Vector2.zero);
-            label.alignment = TextAnchor.MiddleCenter;
-            label.raycastTarget = false;
+            _selected =
+                item;
+
+            if (item == null)
+            {
+                _selectedName.text =
+                    "NO ITEM AVAILABLE";
+
+                _selectedDescription.text =
+                    string.Empty;
+
+                _selectedPrice.text =
+                    "-- CR";
+
+                _selectedPreview.texture =
+                    null;
+
+                _selectedPreview.color =
+                    Color.clear;
+
+                SetBuyState();
+                return;
+            }
+
+            _selectedName.text =
+                string.IsNullOrWhiteSpace(
+                    item.name)
+                    ? "TEAM TOOL"
+                    : item.name.ToUpperInvariant();
+
+            _selectedDescription.text =
+                item.description
+                ?? string.Empty;
+
+            _selectedPrice.text =
+                $"{item.price:N0} CR";
+
+            if (TeamToolShopAssets.TryGetByItemId(
+                    item.itemId,
+                    out var expected))
+            {
+                _selectedPreview.texture =
+                    Resources.Load<Texture2D>(
+                        expected.ThumbnailResource);
+            }
+            else
+            {
+                _selectedPreview.texture =
+                    null;
+            }
+
+            _selectedPreview.color =
+                _selectedPreview.texture != null
+                    ? Color.white
+                    : Color.clear;
+
+            SetBuyState();
+        }
+
+        private void SetBuyState()
+        {
+            if (_buyButton == null)
+                return;
+
+            var caption =
+                _buyButton
+                    .GetComponentInChildren<Text>();
+
+            if (_selected == null)
+            {
+                _buyButton.interactable =
+                    false;
+
+                if (caption != null)
+                    caption.text =
+                        "UNAVAILABLE";
+
+                return;
+            }
+
+            bool owned =
+                TeamToolOwnershipSession
+                    .OwnsItem(
+                        _selected.itemId);
+
+            if (_previewMode)
+            {
+                _buyButton.interactable =
+                    true;
+
+                if (caption != null)
+                    caption.text = "BUY";
+
+                return;
+            }
+
+            _buyButton.interactable =
+                !owned
+                && !_purchasing;
+
+            if (caption != null)
+            {
+                caption.text =
+                    owned
+                        ? "OWNED"
+                        : _purchasing
+                            ? "PURCHASING..."
+                            : "BUY";
+            }
+        }
+
+        private void PurchaseSelected()
+        {
+            if (_previewMode)
+            {
+                _status.text =
+                    "EDITOR PREVIEW MODE.";
+                return;
+            }
+
+            if (_selected == null
+                || _purchasing
+                || TeamToolOwnershipSession
+                    .OwnsItem(_selected.itemId))
+            {
+                return;
+            }
+
+            var runtime =
+                AuthRuntime.EnsureExists();
+
+            if (runtime == null
+                || runtime.Client == null)
+            {
+                _status.text =
+                    "STORE SERVICE UNAVAILABLE.";
+
+                return;
+            }
+
+            ShopItem purchasingItem =
+                _selected;
+
+            _purchasing = true;
+
+            _status.text =
+                "PURCHASING " +
+                purchasingItem.name
+                    .ToUpperInvariant() +
+                "...";
+
+            SetBuyState();
+
+            runtime.Client.PostJson<
+                PurchaseRequest,
+                PurchaseResponse>(
+                ApiEndpoints.ShopPurchase,
+                new PurchaseRequest
+                {
+                    itemId =
+                        purchasingItem.itemId,
+
+                    idempotencyKey =
+                        Guid.NewGuid()
+                            .ToString("N")
+                },
+                true,
+                result =>
+                {
+                    if (this == null)
+                        return;
+
+                    _purchasing =
+                        false;
+
+                    if (!result.IsSuccess
+                        || result.Data == null
+                        || !result.Data.success)
+                    {
+                        _status.text =
+                            string.IsNullOrWhiteSpace(
+                                result.Message)
+                                ? "PURCHASE FAILED."
+                                : result.Message
+                                    .ToUpperInvariant();
+
+                        SetBuyState();
+                        return;
+                    }
+
+                    TeamToolOwnershipSession.MarkOwned(
+                        purchasingItem.itemId);
+
+                    _status.text =
+                        purchasingItem.name
+                            .ToUpperInvariant() +
+                        " PURCHASED.";
+
+                    ShowItems(
+                        _catalog);
+
+                    runtime.PlayerProfileService
+                        .GetCurrentProfile(
+                            _ =>
+                            {
+                                if (this == null)
+                                    return;
+
+                                RefreshCredits();
+
+                                if (_profile != null)
+                                    _profile.UpdateCreditsUI();
+                            });
+                });
+        }
+
+        private void RefreshCredits()
+        {
+            if (_credits == null)
+                return;
+
+            int balance =
+                _previewMode
+                    ? 1250
+                    : PlayerProfileSession.HasProfile
+                        ? PlayerProfileSession
+                            .WalletBalance
+                        : AuthSession.WalletBalance;
+
+            _credits.text =
+                $"{balance:N0}";
+        }
+
+        private static ShopItem[] BuildPreviewCatalog()
+        {
+            var result =
+                new ShopItem[
+                    TeamToolShopAssets.Items.Length];
+
+            for (int i = 0;
+                 i < TeamToolShopAssets.Items.Length;
+                 i++)
+            {
+                var item =
+                    TeamToolShopAssets.Items[i];
+
+                result[i] =
+                    new ShopItem
+                    {
+                        itemId =
+                            item.ItemId,
+                        name =
+                            item.Name,
+                        description =
+                            PreviewDescriptionFor(
+                                item.ItemId,
+                                item.Name),
+                        assetReference =
+                            item.ThumbnailResource,
+                        price =
+                            PreviewPriceFor(
+                                item.ItemId)
+                    };
+            }
+
+            return result;
+        }
+
+        private static int PreviewPriceFor(
+            string itemId)
+        {
+            if (string.Equals(
+                    itemId,
+                    "12000000-0000-0000-0000-000000000001",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return 300;
+            }
+
+            if (string.Equals(
+                    itemId,
+                    "12000000-0000-0000-0000-000000000002",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return 250;
+            }
+
+            if (string.Equals(
+                    itemId,
+                    "12000000-0000-0000-0000-000000000004",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return 275;
+            }
+
+            if (string.Equals(
+                    itemId,
+                    "12000000-0000-0000-0000-000000000006",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return 350;
+            }
+
+            return 0;
+        }
+
+        private static string PreviewDescriptionFor(
+            string itemId,
+            string fallbackName)
+        {
+            if (string.Equals(
+                    itemId,
+                    "12000000-0000-0000-0000-000000000001",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return "Scan Energy Cores and moving threats.";
+            }
+
+            if (string.Equals(
+                    itemId,
+                    "12000000-0000-0000-0000-000000000002",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return "Place a beacon that draws the Stalker.";
+            }
+
+            if (string.Equals(
+                    itemId,
+                    "12000000-0000-0000-0000-000000000004",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return "Temporarily jam a compatible door.";
+            }
+
+            if (string.Equals(
+                    itemId,
+                    "12000000-0000-0000-0000-000000000006",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return "Stabilize volatile energy-core handling.";
+            }
+
+            return fallbackName;
+        }
+
+        private static ShopItem FindItem(
+            ShopItem[] items,
+            string itemId)
+        {
+            if (items == null)
+                return null;
+
+            for (int i = 0;
+                 i < items.Length;
+                 i++)
+            {
+                ShopItem item =
+                    items[i];
+
+                if (item != null
+                    && string.Equals(
+                        item.itemId,
+                        itemId,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return item;
+                }
+            }
+
+            return null;
+        }
+
+        private static void StyleCategoryButton(
+            Button button,
+            bool selected)
+        {
+            if (button == null)
+                return;
+
+            var image =
+                button.targetGraphic as Image;
+
+            if (image != null)
+            {
+                image.color =
+                    selected
+                        ? AccentSoft
+                        : CardBackground;
+            }
+
+            var text =
+                button.GetComponentInChildren<Text>();
+
+            if (text != null)
+            {
+                text.color =
+                    selected
+                        ? TextPrimary
+                        : TextSecondary;
+            }
+
+            var accent =
+                button.transform.Find("Accent")
+                as RectTransform;
+
+            if (accent == null)
+            {
+                var go =
+                    new GameObject(
+                        "Accent",
+                        typeof(RectTransform),
+                        typeof(CanvasRenderer),
+                        typeof(Image));
+
+                go.transform.SetParent(
+                    button.transform,
+                    false);
+
+                accent =
+                    go.transform
+                    as RectTransform;
+
+                PlaceTopLeft(
+                    accent,
+                    0f,
+                    0f,
+                    4f,
+                    52f);
+
+                go.GetComponent<Image>().raycastTarget =
+                    false;
+            }
+
+            accent.GetComponent<Image>().color =
+                selected
+                    ? Accent
+                    : Color.clear;
+        }
+
+        private static Button CategoryButton(
+            Transform parent,
+            string name,
+            string caption,
+            float y)
+        {
+            var button =
+                CreateButton(
+                    name,
+                    parent,
+                    caption);
+
+            PlaceTopLeft(
+                button.transform
+                    as RectTransform,
+                10f,
+                y,
+                164f,
+                52f);
+
             return button;
         }
 
-        private static void Stretch(RectTransform rect, Vector2 minimum, Vector2 maximum)
+        private static Button CreateButton(
+            string name,
+            Transform parent,
+            string caption)
         {
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = minimum;
-            rect.offsetMax = maximum;
+            var rect =
+                Box(
+                    name,
+                    parent);
+
+            var button =
+                rect.gameObject
+                    .AddComponent<Button>();
+
+            button.targetGraphic =
+                rect.GetComponent<Image>();
+
+            var colors =
+                button.colors;
+
+            colors.normalColor =
+                CardBackground;
+
+            colors.highlightedColor =
+                new Color32(
+                    38, 43, 43, 255);
+
+            colors.pressedColor =
+                new Color32(
+                    64, 34, 31, 255);
+
+            colors.selectedColor =
+                colors.highlightedColor;
+
+            colors.disabledColor =
+                new Color32(
+                    12, 15, 15, 170);
+
+            colors.fadeDuration =
+                0.08f;
+
+            button.colors =
+                colors;
+
+            var label =
+                Label(
+                    "Caption",
+                    rect,
+                    caption,
+                    12);
+
+            Stretch(
+                label.rectTransform,
+                new Vector2(10f, 0f),
+                new Vector2(-10f, 0f));
+
+            label.alignment =
+                TextAnchor.MiddleCenter;
+
+            label.fontStyle =
+                FontStyle.Bold;
+
+            return button;
         }
 
-        private static void BottomBand(RectTransform rect, float bottom, float height, float inset)
+        private static RectTransform Box(
+            string name,
+            Transform parent)
         {
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = new Vector2(1f, 0f);
-            rect.pivot = new Vector2(0.5f, 0f);
-            rect.offsetMin = new Vector2(inset, bottom);
-            rect.offsetMax = new Vector2(-inset, bottom + height);
+            var go =
+                new GameObject(
+                    name,
+                    typeof(RectTransform),
+                    typeof(CanvasRenderer),
+                    typeof(Image));
+
+            go.transform.SetParent(
+                parent,
+                false);
+
+            var rect =
+                go.transform
+                as RectTransform;
+
+            var image =
+                go.GetComponent<Image>();
+
+            image.color =
+                PanelBackground;
+
+            var outline =
+                go.AddComponent<Outline>();
+
+            outline.effectColor =
+                Border;
+
+            outline.effectDistance =
+                new Vector2(1f, -1f);
+
+            return rect;
+        }
+
+        private static Text Label(
+            string name,
+            Transform parent,
+            string value,
+            int fontSize)
+        {
+            var go =
+                new GameObject(
+                    name,
+                    typeof(RectTransform),
+                    typeof(CanvasRenderer),
+                    typeof(Text));
+
+            go.transform.SetParent(
+                parent,
+                false);
+
+            var text =
+                go.GetComponent<Text>();
+
+            text.font =
+                Resources.GetBuiltinResource<Font>(
+                    "LegacyRuntime.ttf");
+
+            text.fontSize =
+                fontSize;
+
+            text.text =
+                value;
+
+            text.color =
+                TextPrimary;
+
+            text.alignment =
+                TextAnchor.MiddleLeft;
+
+            text.raycastTarget =
+                false;
+
+            return text;
+        }
+
+        private static void ClearChildren(
+            Transform parent)
+        {
+            for (int i =
+                     parent.childCount - 1;
+                 i >= 0;
+                 i--)
+            {
+                GameObject child =
+                    parent.GetChild(i)
+                        .gameObject;
+
+                child.SetActive(false);
+
+                if (Application.isPlaying)
+                    Destroy(child);
+                else
+                    DestroyImmediate(child);
+            }
+        }
+
+        private static void Stretch(
+            RectTransform rect,
+            Vector2 minimum,
+            Vector2 maximum)
+        {
+            rect.anchorMin =
+                Vector2.zero;
+
+            rect.anchorMax =
+                Vector2.one;
+
+            rect.offsetMin =
+                minimum;
+
+            rect.offsetMax =
+                maximum;
+        }
+
+        private static void PlaceTopLeft(
+            RectTransform rect,
+            float x,
+            float y,
+            float width,
+            float height)
+        {
+            rect.anchorMin =
+                new Vector2(0f, 1f);
+
+            rect.anchorMax =
+                new Vector2(0f, 1f);
+
+            rect.pivot =
+                new Vector2(0f, 1f);
+
+            rect.anchoredPosition =
+                new Vector2(x, -y);
+
+            rect.sizeDelta =
+                new Vector2(
+                    width,
+                    height);
         }
     }
 }

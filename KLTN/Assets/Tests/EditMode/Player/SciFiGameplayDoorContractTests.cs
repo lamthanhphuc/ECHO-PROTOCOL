@@ -415,9 +415,10 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains("SpawnVisualGraceSeconds", source);
             StringAssert.Contains("_spawnVisualGraceUntil = Time.unscaledTime + SpawnVisualGraceSeconds;", source);
             StringAssert.Contains("_forceActivePresentation = false;", source);
-            StringAssert.Contains("_visualRoot.gameObject.SetActive(IsVisuallyActive);", source);
+            StringAssert.Contains("bool visible = IsVisuallyActive;", source);
+            StringAssert.Contains("_visualRoot.gameObject.SetActive(visible);", source);
             StringAssert.Contains("State == NetworkDoorJammerState.Active", source);
-            StringAssert.Contains("|| _forceActivePresentation", source);
+            StringAssert.Contains("State != NetworkDoorJammerState.Destroyed", source);
         }
 
         [Test]
@@ -595,24 +596,39 @@ namespace EchoProtocol.Player.Tests
                 File.ReadAllText(
                     NetworkPlayerInteractorScriptPath);
 
-            var placementMethod =
+            var validation =
                 MethodBody(
                     interactorSource,
-                    "private bool TryResolveNoiseMakerPlacement");
+                    "private bool TryValidateRequestedPlacementSurface");
+
+            var placement =
+                MethodBody(
+                    interactorSource,
+                    "private bool TryBuildNoiseMakerPlacement");
 
             var useMethod =
                 MethodBody(
                     interactorSource,
                     "private InteractionValidationResult TryUseNoiseMakerAuthoritative");
 
-            var sphereCastIndex =
-                placementMethod.IndexOf(
-                    "Physics.SphereCastAll",
+            var validationRaycastIndex =
+                validation.IndexOf(
+                    "Physics.RaycastAll",
                     StringComparison.Ordinal);
 
-            var selfFilterIndex =
-                placementMethod.IndexOf(
+            var validationSelfFilterIndex =
+                validation.IndexOf(
                     "IsSelfCollider",
+                    StringComparison.Ordinal);
+
+            var overlapIndex =
+                placement.IndexOf(
+                    "Physics.OverlapSphere",
+                    StringComparison.Ordinal);
+
+            var placementSelfFilterIndex =
+                placement.IndexOf(
+                    "IsSelfCollider(overlap)",
                     StringComparison.Ordinal);
 
             var placementCallIndex =
@@ -625,14 +641,13 @@ namespace EchoProtocol.Player.Tests
                     "Runner.Spawn",
                     StringComparison.Ordinal);
 
-            Assert.That(
-                sphereCastIndex,
+            Assert.That(validationRaycastIndex,
                 Is.GreaterThanOrEqualTo(0));
+            Assert.That(validationSelfFilterIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(overlapIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(placementSelfFilterIndex, Is.GreaterThan(overlapIndex));
 
-            Assert.That(
-                selfFilterIndex,
-                Is.GreaterThan(
-                    sphereCastIndex));
+            StringAssert.Contains("TryBuildNoiseMakerPlacement", interactorSource);
 
             Assert.That(
                 placementCallIndex,

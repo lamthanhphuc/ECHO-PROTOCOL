@@ -173,7 +173,21 @@ namespace EchoProtocol.Tests
             Set("enableFault", true);
             Set("faultChance", 0f);
             _simulation.Initialize(_config, true, 123);
-            SettleSafe();
+
+            var safeControls =
+                FindCompensation(RelayAFaultType.None);
+
+            _simulation.SetControls(
+                safeControls.x,
+                safeControls.y,
+                safeControls.z);
+
+            Tick(10f);
+
+            Assert.That(
+                _simulation.Snapshot.IsStable,
+                Is.True);
+
             _simulation.Start();
             Tick(40f);
             Assert.IsFalse(_simulation.Snapshot.IsOnline);

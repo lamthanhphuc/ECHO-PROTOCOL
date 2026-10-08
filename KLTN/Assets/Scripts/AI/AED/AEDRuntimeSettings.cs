@@ -27,6 +27,12 @@ namespace EchoProtocol.AI.AED
         [SerializeField] private double chaseSpeedMaxValue;
         [SerializeField] private double[] chaseSpeedCandidateValues;
 
+        [Header("AED v2 (dormant by default)")]
+        [SerializeField] private bool extendedPolicyShadowEnabled = false;
+        [SerializeField] private bool extendedPolicyGameplayEnabled = false;
+        public bool ExtendedPolicyShadowEnabled => extendedPolicyShadowEnabled;
+        public bool ExtendedPolicyGameplayEnabled => extendedPolicyGameplayEnabled;
+
         public bool TryBuildPolicyConfig(out AEDPolicyConfig config, out string reason)
         {
             config = null;

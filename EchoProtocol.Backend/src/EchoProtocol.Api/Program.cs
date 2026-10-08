@@ -351,6 +351,24 @@ if (app.Environment.IsProduction())
         }
     }
 }
+if (app.Environment.IsProduction())
+{
+    using var shopScope =
+        app.Services.CreateScope();
+
+    var shopDb =
+        shopScope.ServiceProvider
+            .GetRequiredService<AppDbContext>();
+
+    await ShopCatalogSeeder
+        .SeedProductionCatalogAsync(
+            shopDb,
+            shopScope.ServiceProvider
+                .GetRequiredService<TimeProvider>(),
+            shopScope.ServiceProvider
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("ShopCatalogSeeder"));
+}
 app.UseHttpsRedirection();
 app.UseCors("EchoProtocolDev");
 app.UseAuthentication();

@@ -80,6 +80,12 @@ namespace EchoProtocol.AI.Stalker.Special
         public void SetCooldownSeconds(float seconds) =>
             cooldownSeconds = Mathf.Max(300f, seconds);
 
+        public void SetAEDv2Pacing(float entryReuse, float postSpecial)
+        {
+            minimumEntryReuseSeconds = Mathf.Max(0f, entryReuse);
+            postSpecialDirectorCooldownSeconds = Mathf.Max(0f, postSpecial);
+        }
+
         public float FailedAttemptBackoffSeconds =>
             Mathf.Max(
                 0f,

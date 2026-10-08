@@ -110,6 +110,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 StalkerAttackEpisodeId.Invalid;
 
         private int _presentedAnimatorStateHash;
+        private PlayerRef _presentedDetectNetworkTarget = PlayerRef.None;
+        private int _presentedDetectPlayerId;
 
         private bool _lastPresentationVisible = true;
 
@@ -145,6 +147,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
             audioController?.StopAllLoops();
             _hasPresented = false;
             _playedBiteEpisodeId = StalkerAttackEpisodeId.Invalid;
+            _presentedDetectNetworkTarget = PlayerRef.None;
+            _presentedDetectPlayerId = 0;
         }
 
         private void Update()
@@ -459,10 +463,13 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 || _presentedSemanticState
                     != presentation.SemanticState;
 
+            var detectTargetChanged = HasDetectTargetChanged(presentation);
+
             ApplyAudioPresentation(
                 presentation,
                 moving,
-                semanticChanged);
+                semanticChanged,
+                detectTargetChanged);
 
             var actionChanged =
                 !_hasPresented
@@ -492,6 +499,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             if (!forceRefresh
                 && !semanticChanged
+                && !detectTargetChanged
                 && !actionChanged
                 && !attackEpisodeChanged
                 && !animatorStateChanged)
@@ -505,7 +513,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             var enteringDetect =
                 presentation.SemanticState == StalkerState.DETECT
-                && semanticChanged;
+                && (semanticChanged || detectTargetChanged);
 
             if (immediate
                 || !_hasPresented
@@ -544,13 +552,16 @@ namespace EchoProtocol.AI.Stalker.Presentation
             _presentedAnimatorStateHash =
                 targetHash;
 
+            CapturePresentedDetectTarget(presentation);
+
             _hasPresented = true;
         }
 
         private void ApplyAudioPresentation(
             StalkerNetworkPresentationState presentation,
             bool moving,
-            bool semanticChanged)
+            bool semanticChanged,
+            bool detectTargetChanged)
         {
             if (audioController == null)
             {
@@ -563,6 +574,11 @@ namespace EchoProtocol.AI.Stalker.Presentation
             var isLocalTarget = IsTargetingLocalPlayer();
 
             audioController.UpdateChasePresentation(pursuing, isLocalTarget);
+
+            if (presentation.SemanticState != StalkerState.DETECT)
+            {
+                audioController.StopDetectVoice();
+            }
 
             if (semanticChanged)
             {
@@ -586,6 +602,14 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 }
             }
 
+            else if (presentation.SemanticState == StalkerState.DETECT
+                     && detectTargetChanged)
+            {
+                audioController.BeginDetectAudioEntry();
+                audioController.EnterIdle();
+                audioController.PlayDetectForNewTarget();
+            }
+
             if (presentation.AttackHitMomentResolved
                 && presentation.AttackEpisodeId.IsValid
                 && _playedBiteEpisodeId
@@ -594,6 +618,56 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 audioController.PlayBite();
                 _playedBiteEpisodeId = presentation.AttackEpisodeId;
             }
+        }
+
+        private bool HasDetectTargetChanged(
+            StalkerNetworkPresentationState presentation)
+        {
+            if (!_hasPresented
+                || presentation.SemanticState != StalkerState.DETECT)
+            {
+                return false;
+            }
+
+            if (fusionRuntime != null
+                && fusionRuntime.Object != null
+                && fusionRuntime.Object.IsValid
+                && fusionRuntime.Runner != null
+                && fusionRuntime.Runner.IsRunning)
+            {
+                return fusionRuntime.TargetPlayer != _presentedDetectNetworkTarget;
+            }
+
+            return controller != null
+                && controller.DetectionTargetId.Value != _presentedDetectPlayerId;
+        }
+
+        private void CapturePresentedDetectTarget(
+            StalkerNetworkPresentationState presentation)
+        {
+            if (presentation.SemanticState != StalkerState.DETECT)
+            {
+                _presentedDetectNetworkTarget = PlayerRef.None;
+                _presentedDetectPlayerId = 0;
+                return;
+            }
+
+            if (fusionRuntime != null
+                && fusionRuntime.Object != null
+                && fusionRuntime.Object.IsValid
+                && fusionRuntime.Runner != null
+                && fusionRuntime.Runner.IsRunning)
+            {
+                _presentedDetectNetworkTarget = fusionRuntime.TargetPlayer;
+            }
+            else
+            {
+                _presentedDetectNetworkTarget = PlayerRef.None;
+            }
+
+            _presentedDetectPlayerId = controller != null
+                ? controller.DetectionTargetId.Value
+                : 0;
         }
 
         private bool IsTargetingLocalPlayer()

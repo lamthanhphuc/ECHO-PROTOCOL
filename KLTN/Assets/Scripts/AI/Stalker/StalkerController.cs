@@ -188,6 +188,7 @@ namespace EchoProtocol.AI.Stalker
         [SerializeField] private float detectionMeter;
 
         private float _detectMinimumHoldRemaining;
+        private bool _detectWasDecaying;
         private bool _detectRotationOwnershipCaptured;
         private bool _detectPreviousAgentUpdateRotation;
 
@@ -215,6 +216,10 @@ namespace EchoProtocol.AI.Stalker
         private readonly List<StalkerTargetPolicyCandidate>
             _targetPolicyCandidates =
                 new List<StalkerTargetPolicyCandidate>(4);
+
+        private readonly Dictionary<PlayerId, double>
+            _detectDecayUntilByPlayer =
+                new Dictionary<PlayerId, double>();
 
         private readonly List<StalkerTargetPolicyCandidate>
             _searchTargetPolicyCandidates =
@@ -321,6 +326,7 @@ namespace EchoProtocol.AI.Stalker
         private long _legacySimulationTick;
         private ScenarioMonsterParameters _scenarioMonsterParameters;
         private bool _hasScenarioMonsterParameters;
+        private bool _aedv2ProfileOwnsTuning;
         private IReadOnlyList<StalkerTargetCandidate> _currentVisibleTargetCandidates;
         private IReadOnlyList<PlayerId> _currentVisibleObjectiveCarrierIds;
         private IReadOnlyList<StalkerTargetStatus> _currentTargetStatuses;
@@ -823,6 +829,17 @@ namespace EchoProtocol.AI.Stalker
             ApplyMovementSpeedForCurrentState();
         }
 
+        public void SetAEDv2ProfileOwnership(bool enabled)
+        {
+            _aedv2ProfileOwnsTuning = enabled;
+        }
+
+        public void ApplyAEDv2Pacing(float postChase, float postAttack, float sameRoom)
+        {
+            smartPatrolSettings ??= new StalkerSmartPatrolSettings();
+            smartPatrolSettings.SetAEDv2Pacing(postChase, postAttack, sameRoom);
+        }
+
         public void ApplyMatchDifficulty(MatchDifficultyProfile profile)
         {
             patrolSpeed = Mathf.Max(0f, profile.PatrolSpeed);
@@ -887,6 +904,8 @@ namespace EchoProtocol.AI.Stalker
             _vehicleNoiseIgnoreUntilSeconds = 0d;
             _hasActiveHeardNoiseType = false;
             _filteredHearingObservations.Clear();
+            _detectWasDecaying = false;
+            _detectDecayUntilByPlayer.Clear();
         }
 
         private void OnDisable()
@@ -1159,13 +1178,24 @@ namespace EchoProtocol.AI.Stalker
 
         private bool TryAcquireTypedDetectionTargetFromVisibleFrame()
         {
-            if (_currentVisibleTargetCandidates == null)
+            if (!TrySelectTypedDetectionTargetFromVisibleFrame(
+                    PlayerId.Invalid,
+                    out var selectedObservation))
             {
                 return false;
             }
 
-            var simulationTime = GetCurrentSimulationTime();
+            return TryBeginTypedDetection(selectedObservation);
+        }
 
+        private bool TrySelectTypedDetectionTargetFromVisibleFrame(
+            PlayerId excludedPlayerId,
+            out VisionObservation selectedObservation)
+        {
+            selectedObservation = default;
+            if (_currentVisibleTargetCandidates == null) return false;
+
+            var simulationTime = GetCurrentSimulationTime();
             StalkerTargetPolicySignalBuilder.Build(
                 _currentVisibleTargetCandidates,
                 _currentVisibleObjectiveCarrierIds,
@@ -1175,15 +1205,34 @@ namespace EchoProtocol.AI.Stalker
 
             _targetPolicyCandidates.RemoveAll(
                 candidate =>
-                    IsPlayerPressureBlocked(
-                        candidate.PlayerId,
-                        simulationTime));
+                    (excludedPlayerId.IsValid
+                     && candidate.PlayerId == excludedPlayerId)
+                    || IsPlayerPressureBlocked(candidate.PlayerId, simulationTime));
 
-            if (!AdaptiveStalkerTargetPolicy.TrySelectTarget(
-                    _targetPolicyCandidates,
-                    out var selectedObservation))
+            return AdaptiveStalkerTargetPolicy.TrySelectTarget(
+                _targetPolicyCandidates,
+                out selectedObservation);
+        }
+
+        private bool TryBeginTypedDetection(VisionObservation selectedObservation)
+        {
+            if (TryConsumeDetectionDecay(selectedObservation.PlayerId))
             {
-                return false;
+                _memory.SetDetectionTarget(selectedObservation.PlayerId);
+                if (!_memory.TryAcceptDetectionTargetObservation(selectedObservation))
+                {
+                    ClearDetectionContext();
+                    currentState = StalkerState.PATROL;
+                    SetCurrentPatrolDestination();
+                    return false;
+                }
+
+                detectionTarget = null;
+                currentTarget = null;
+                detectionMeter = 0f;
+                _detectMinimumHoldRemaining = 0f;
+                PromoteDetectionTargetToCurrentTarget(selectedObservation);
+                return true;
             }
 
             _memory.SetDetectionTarget(
@@ -1197,6 +1246,8 @@ namespace EchoProtocol.AI.Stalker
                 SetCurrentPatrolDestination();
                 return false;
             }
+
+            var simulationTime = GetCurrentSimulationTime();
 
             // Only a successfully accepted acquisition may influence
             // adaptive target history.
@@ -1227,6 +1278,42 @@ namespace EchoProtocol.AI.Stalker
             return true;
         }
 
+        private void RememberDetectionDecay(PlayerId playerId, float meter)
+        {
+            if (!playerId.IsValid) return;
+            meter = ClampDetectionMeter(meter);
+            if (meter <= 0f)
+            {
+                _detectDecayUntilByPlayer.Remove(playerId);
+                return;
+            }
+
+            var decayRate = GetDetectionDecayRate();
+            _detectDecayUntilByPlayer[playerId] =
+                decayRate <= 0f
+                    ? double.PositiveInfinity
+                    : _currentSimulationSeconds + meter / decayRate;
+        }
+
+        private bool TryConsumeDetectionDecay(PlayerId playerId)
+        {
+            if (!playerId.IsValid
+                || !_detectDecayUntilByPlayer.TryGetValue(playerId, out var decayUntil))
+            {
+                return false;
+            }
+
+            if (!double.IsPositiveInfinity(decayUntil)
+                && _currentSimulationSeconds >= decayUntil)
+            {
+                _detectDecayUntilByPlayer.Remove(playerId);
+                return false;
+            }
+
+            _detectDecayUntilByPlayer.Remove(playerId);
+            return true;
+        }
+
         private void TickDetect()
         {
             if (HasTypedTargetFrame)
@@ -1252,6 +1339,13 @@ namespace EchoProtocol.AI.Stalker
             if (TryGetVisibleDetectionTargetObservation(out var observedPosition))
             {
                 FaceDetectObservedPosition(observedPosition);
+
+                if (_detectWasDecaying && detectionMeter > 0f)
+                {
+                    PromoteDetectionTargetToCurrentTarget(observedPosition);
+                    return;
+                }
+
                 detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
 
@@ -1266,6 +1360,7 @@ namespace EchoProtocol.AI.Stalker
 
             detectionMeter -= GetDetectionDecayRate() * CurrentSimulationDeltaSeconds;
             detectionMeter = ClampDetectionMeter(detectionMeter);
+            _detectWasDecaying = detectionMeter > 0f;
 
             if (detectionMeter <= 0f)
             {
@@ -1324,10 +1419,17 @@ namespace EchoProtocol.AI.Stalker
                 }
 
                 FaceDetectObservedPosition(observation.ObservedPosition);
+
+                if (_detectWasDecaying
+                    && detectionMeter > 0f)
+                {
+                    PromoteDetectionTargetToCurrentTarget(observation);
+                    return;
+                }
+
                 detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
                 _memory.SetDetectionMeter(detectionMeter);
-
                 if (detectionMeter >= GetDetectionMeterFull()
                     && _detectMinimumHoldRemaining <= 0f)
                 {
@@ -1343,9 +1445,49 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            detectionMeter -= GetDetectionDecayRate() * CurrentSimulationDeltaSeconds;
-            detectionMeter = ClampDetectionMeter(detectionMeter);
-            _memory.SetDetectionMeter(detectionMeter);
+            detectionMeter -=
+                GetDetectionDecayRate()
+                * CurrentSimulationDeltaSeconds;
+
+            detectionMeter =
+                ClampDetectionMeter(
+                    detectionMeter);
+
+            _memory.SetDetectionMeter(
+                detectionMeter);
+            _detectWasDecaying = detectionMeter > 0f;
+
+            if (detectionMeter > 0f)
+            {
+                RememberDetectionDecay(detectionTargetId, detectionMeter);
+            }
+            else
+            {
+                _detectDecayUntilByPlayer.Remove(detectionTargetId);
+            }
+
+            if (TrySelectTypedDetectionTargetFromVisibleFrame(
+                    detectionTargetId,
+                    out var nextObservation))
+            {
+                if (detectionMeter > 0f)
+                {
+                    RememberDetectionDecay(
+                        detectionTargetId,
+                        detectionMeter);
+                }
+                else
+                {
+                    _detectDecayUntilByPlayer.Remove(
+                        detectionTargetId);
+                }
+
+                ClearDetectionContext();
+
+                TryBeginTypedDetection(
+                    nextObservation);
+                return;
+            }
 
             if (detectionMeter <= 0f)
             {
@@ -1355,6 +1497,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void EnterDetectState()
         {
+            _detectWasDecaying = false;
             currentState = StalkerState.DETECT;
             StopAgentPath();
             BeginDetectRotationControl();
@@ -1451,6 +1594,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void PromoteDetectionTargetToCurrentTarget(Vector3 observedPosition)
         {
+            _detectWasDecaying = false;
             currentTarget = detectionTarget;
             lastKnownPosition = observedPosition;
             detectionTarget = null;
@@ -1461,6 +1605,8 @@ namespace EchoProtocol.AI.Stalker
 
         private void PromoteDetectionTargetToCurrentTarget(VisionObservation observation)
         {
+            _detectDecayUntilByPlayer.Remove(observation.PlayerId);
+            _detectWasDecaying = false;
             _memory.SetCurrentTarget(observation.PlayerId);
             _memory.TryAcceptCurrentTargetObservation(observation);
             _memory.ClearDetectionTarget();
@@ -2335,6 +2481,13 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            if (pressuredPlayer.IsValid)
+            {
+                RememberDetectionDecay(
+                    pressuredPlayer,
+                    GetDetectionMeterFull());
+            }
+
             ResetChaseDestinationTracking();
             ResetNavigationRecoveryBudget();
             if (HasTypedTargetFrame && !_memory.HasLastKnownPosition)
@@ -2734,17 +2887,6 @@ namespace EchoProtocol.AI.Stalker
                 }
 
                 var observation = candidate.Observation;
-                _memory.SetDetectionTarget(
-                    observation.PlayerId);
-
-                if (!_memory.TryAcceptDetectionTargetObservation(
-                        observation))
-                {
-                    CommitSearchTerminalAndInvalidateDetectionTarget(
-                        StalkerSearchTerminalOutcome
-                            .CURRENT_TARGET_INVALID_NO_REPLACEMENT);
-                    return;
-                }
 
                 CommitSearchEnded(
                     StalkerSearchTerminalOutcome
@@ -2755,13 +2897,7 @@ namespace EchoProtocol.AI.Stalker
 
                 ClearSearchRuntimeContext();
 
-                detectionMeter = 0f;
-                detectionTarget = null;
-
-                _detectMinimumHoldRemaining =
-                    searchReacquireDetectHoldSeconds;
-
-                EnterDetectState();
+                TryBeginTypedDetection(observation);
                 return;
             }
 
@@ -3867,44 +4003,6 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            _memory.SetDetectionTarget(
-                selectedObservation.PlayerId);
-
-            if (!_memory.TryAcceptDetectionTargetObservation(
-                    selectedObservation))
-            {
-                CommitSearchTerminalAndInvalidateDetectionTarget(
-                    StalkerSearchTerminalOutcome
-                        .CURRENT_TARGET_INVALID_NO_REPLACEMENT);
-
-                return true;
-            }
-
-            // Only a successfully accepted replacement acquisition
-            // may influence adaptive target history.
-            _targetHistoryMemory.RecordTargetAcquired(
-                selectedObservation.PlayerId,
-                simulationTime);
-
-            var pressure =
-                AddPlayerPressure(
-                    selectedObservation.PlayerId,
-                    playerPressureAcquireGain,
-                    "search-acquired");
-
-            if (pressure >= playerPressureStopThreshold)
-            {
-                CommitSearchEnded(
-                    StalkerSearchTerminalOutcome
-                        .CURRENT_TARGET_INVALID_NO_REPLACEMENT);
-
-                DisengagePressuredPlayer(
-                    selectedObservation.PlayerId,
-                    "search-acquired");
-
-                return true;
-            }
-
             CommitSearchEnded(
                 StalkerSearchTerminalOutcome
                     .NEW_ELIGIBLE_TARGET_OBSERVED);
@@ -3914,13 +4012,8 @@ namespace EchoProtocol.AI.Stalker
 
             ClearSearchRuntimeContext();
 
-            detectionMeter = 0f;
-            detectionTarget = null;
-
-            _detectMinimumHoldRemaining =
-                searchReacquireDetectHoldSeconds;
-
-            EnterDetectState();
+            TryBeginTypedDetection(
+                selectedObservation);
             return true;
         }
 
@@ -4038,6 +4131,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void ClearDetectionContext()
         {
+            _detectWasDecaying = false;
             detectionTarget = null;
             detectionMeter = 0f;
             _memory.ClearDetectionTarget();
@@ -4316,7 +4410,8 @@ namespace EchoProtocol.AI.Stalker
 
         private bool ShouldUseScenarioMonsterParameters()
         {
-            return useScenarioMonsterOverrides
+            return !_aedv2ProfileOwnsTuning
+                && useScenarioMonsterOverrides
                 && _hasScenarioMonsterParameters
                 && _scenarioMonsterParameters != null;
         }
@@ -6158,9 +6253,10 @@ namespace EchoProtocol.AI.Stalker
             var rejectedProbe = _roomSweepPlanner.RejectProbe(probeNodeId);
             var rejectedProbeCountAfter = _roomSweepPlanner.RejectedProbeCount;
 
+            #if false
             if (enableDiagnostics || rejectionCategory == "SELF_PROBE_FULL_SCAN_UNSEEN")
             {
-                UnityEngine.Debug.LogWarning(
+                // UnityEngine.Debug.LogWarning(
                     "[STK ROOM SWEEP REJECT DIAG] probe-rejected "
                     + $"probeNodeId={probeNodeId} "
                     + $"rejectionCategory={rejectionCategory} "
@@ -6178,6 +6274,7 @@ namespace EchoProtocol.AI.Stalker
                     + $"destinationSpatialNodeId={_blackboard.DestinationSpatialNodeId} "
                     + $"position={transform.position}");
             }
+            #endif
         }
 
         private static string GetRoomSweepNavigationRejectionCategory(NavigationFailureReason failureReason)
@@ -6691,7 +6788,7 @@ namespace EchoProtocol.AI.Stalker
         {
             if (enableDiagnostics)
             {
-                UnityEngine.Debug.LogWarning(message);
+                // UnityEngine.Debug.LogWarning(message);
             }
         }
 

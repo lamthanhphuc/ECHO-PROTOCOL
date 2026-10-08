@@ -96,7 +96,7 @@ namespace EchoProtocol.AI.Listener.Tests
                 RuntimeNoiseEmissionMode.DiscreteAction);
             AssertDefinition(catalog, RuntimeNoiseType.CORE_DROP, 0.9d, 28d, 3d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
-            AssertDefinition(catalog, RuntimeNoiseType.NOISE_MAKER, 1d, 40d, 6d,
+            AssertDefinition(catalog, RuntimeNoiseType.NOISE_MAKER, 1d, 100d, 12d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
             AssertDefinition(catalog, RuntimeNoiseType.FIELD_SCANNER, 0.45d, 8d, 2.5d,
                 RuntimeNoiseEmissionMode.DiscreteAction);
@@ -163,7 +163,7 @@ namespace EchoProtocol.AI.Listener.Tests
                 source);
 
             StringAssert.Contains(
-                "if (Object.HasStateAuthority && !isMoving)",
+                "&& (!isMoving || stabilizerProtected)",
                 source);
             StringAssert.Contains(
                 "_hasLastMovementNoiseType = false;",
@@ -622,8 +622,8 @@ namespace EchoProtocol.AI.Listener.Tests
 
             StringAssert.DoesNotContain("TryEmitNoiseEvent", relayA);
             StringAssert.DoesNotContain("TryEmitNoiseEvent", relayB);
-            StringAssert.DoesNotContain("PlayerRef.None", relayA);
-            StringAssert.DoesNotContain("PlayerRef.None", relayB);
+            StringAssert.Contains("HostRuntimeNoiseService.EnsureExists(authority)", relayA);
+            StringAssert.Contains("HostRuntimeNoiseService.EnsureExists(authority)", relayB);
             StringAssert.Contains("RelayA1Operator", matchState);
             StringAssert.Contains("RelayB2Synchronizing", matchState);
             StringAssert.Contains("EmitRelayInteractionNoiseAuthoritative", matchState);
@@ -811,7 +811,7 @@ namespace EchoProtocol.AI.Listener.Tests
 
             Assert.That(
                 observation.EffectiveIntensity,
-                Is.EqualTo(0.25d)
+                Is.EqualTo(0.7d)
                     .Within(0.0001d));
         }
 
@@ -870,7 +870,7 @@ namespace EchoProtocol.AI.Listener.Tests
                 out var clearObservation,
                 out var clearReject), Is.True);
             Assert.That(clearReject, Is.EqualTo(ListenerHearingRejectReason.None));
-            Assert.That(clearObservation.EffectiveIntensity, Is.EqualTo(0.75d).Within(0.0001d));
+            Assert.That(clearObservation.EffectiveIntensity, Is.EqualTo(0.9d).Within(0.0001d));
 
             var wallSensor = new ListenerHearingSensor(
                 new StaticListenerOcclusionResolver(ListenerOcclusionClass.SOLID_WALL),
@@ -882,7 +882,7 @@ namespace EchoProtocol.AI.Listener.Tests
                 now,
                 out var wallObservation,
                 out _), Is.True);
-            Assert.That(wallObservation.EffectiveIntensity, Is.EqualTo(0.75d).Within(0.0001d));
+            Assert.That(wallObservation.EffectiveIntensity, Is.EqualTo(0.9d).Within(0.0001d));
             Assert.That(
                 wallObservation.OcclusionClass,
                 Is.EqualTo(
@@ -920,7 +920,7 @@ namespace EchoProtocol.AI.Listener.Tests
             outOfRangeSensor.BeginMatch(Guid.NewGuid());
             Assert.That(outOfRangeSensor.TryEvaluate(
                 open,
-                new Vector3(0, 0, 41),
+                new Vector3(0, 0, 101),
                 now,
                 out _,
                 out var outOfRange), Is.False);
@@ -1116,7 +1116,7 @@ namespace EchoProtocol.AI.Listener.Tests
             var outside = CreateNoise(RuntimeNoiseType.NOISE_MAKER, "retro", 1, Vector3.zero, now, 12);
             Assert.That(retroactiveSensor.TryEvaluate(
                 outside,
-                new Vector3(0, 0, 41),
+                new Vector3(0, 0, 101),
                 now,
                 out _,
                 out var outsideReason), Is.False);

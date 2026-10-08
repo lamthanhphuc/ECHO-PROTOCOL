@@ -17,6 +17,13 @@ namespace EchoProtocol.TeamTools
             LobbyPlayerState.CoreStabilizerToolId,
         };
 
+        private static readonly int[] AEDSupportIds =
+        {
+            LobbyPlayerState.FirstAidKitToolId,
+            LobbyPlayerState.NoiseMakerToolId,
+            LobbyPlayerState.DoorJammerToolId,
+        };
+
         public const int RequiredToolCountPerZone = 5;
 
         private readonly struct SpawnPlan
@@ -48,7 +55,8 @@ namespace EchoProtocol.TeamTools
             int zone1Count,
             int zone2Count,
             int zone3Count,
-            float minimumSpacing)
+            float minimumSpacing,
+            bool useAEDSupportPool = false)
         {
             if (runner == null
                 || catalog == null
@@ -83,6 +91,7 @@ namespace EchoProtocol.TeamTools
                     TeamToolSpawnZone.Zone1,
                     resolvedZone1Count,
                     minimumSpacing,
+                    useAEDSupportPool,
                     out var zone1Plans))
             {
                 Debug.LogError(
@@ -99,6 +108,7 @@ namespace EchoProtocol.TeamTools
                     TeamToolSpawnZone.Zone2,
                     resolvedZone2Count,
                     minimumSpacing,
+                    useAEDSupportPool,
                     out var zone2Plans))
             {
                 Debug.LogError(
@@ -115,6 +125,7 @@ namespace EchoProtocol.TeamTools
                     TeamToolSpawnZone.Zone3,
                     resolvedZone3Count,
                     minimumSpacing,
+                    useAEDSupportPool,
                     out var zone3Plans))
             {
                 Debug.LogError(
@@ -182,6 +193,7 @@ namespace EchoProtocol.TeamTools
             TeamToolSpawnZone zone,
             int targetCount,
             float spacing,
+            bool useAEDSupportPool,
             out List<SpawnPlan> plans)
         {
             plans =
@@ -237,7 +249,7 @@ namespace EchoProtocol.TeamTools
             {
                 var extras =
                     new List<int>(
-                        RequiredToolIds);
+                        useAEDSupportPool ? AEDSupportIds : RequiredToolIds);
 
                 Shuffle(extras);
 
@@ -272,6 +284,14 @@ namespace EchoProtocol.TeamTools
                 if (added)
                 {
                     continue;
+                }
+
+                // An optional AED support item must never invalidate the
+                // guaranteed five tools or roll back a whole zone spawn.
+                if (useAEDSupportPool)
+                {
+                    Debug.LogWarning("[TeamToolWorldSpawn] Optional AED support slots unavailable; retaining guaranteed tools.");
+                    return plans.Count >= RequiredToolCountPerZone;
                 }
 
                 Debug.LogError(

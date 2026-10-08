@@ -558,7 +558,12 @@ namespace EchoProtocol.Networking
             }
 
             var error = ValidateOwnedRequest(requester);
-            if (error == LobbySelectionError.None && toolId != 0)
+            if (error == LobbySelectionError.None && toolId < 0)
+            {
+                error = LobbySelectionError.InvalidSelection;
+            }
+            if (error == LobbySelectionError.None
+                && toolId == FirstAidKitToolId)
             {
                 error = LobbySelectionError.InvalidSelection;
             }
