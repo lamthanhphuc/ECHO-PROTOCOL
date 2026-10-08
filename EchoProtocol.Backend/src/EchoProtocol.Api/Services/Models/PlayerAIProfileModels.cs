@@ -13,6 +13,14 @@ public sealed record AggregatedMetric(
     string Reason,
     string EvidenceFingerprint);
 
+public sealed record PlayerMatchBehaviorSignals(
+    int CorePlacements,
+    int TeamToolsUsed,
+    int TimesDowned,
+    int TimesRevived,
+    bool SourceComplete,
+    string SourceFingerprint);
+
 public sealed record MatchTelemetryAggregation(
     Guid MatchId,
     Guid UserId,
@@ -24,7 +32,8 @@ public sealed record MatchTelemetryAggregation(
     string SourceFingerprint,
     bool ResearchCaptureEnabled,
     bool? ResearchEligible,
-    IReadOnlyDictionary<PlayerAIDimension, AggregatedMetric> Metrics);
+    IReadOnlyDictionary<PlayerAIDimension, AggregatedMetric> Metrics,
+    PlayerMatchBehaviorSignals? BehaviorSignals = null);
 
 public sealed record NormalizedMatchScore(
     PlayerAIDimension Dimension,

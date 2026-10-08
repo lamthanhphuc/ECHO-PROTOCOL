@@ -25,6 +25,7 @@ namespace EchoProtocol.AI.AED
         public string[] reasonCodes;
         public string createdAtUtc;
         public string profileFormulaSemanticId;
+        public string fingerprintVersion;
         public string survivalComparisonKey;
         public string noiseComparisonKey;
         public string survivalAggregationStatus;
@@ -35,6 +36,16 @@ namespace EchoProtocol.AI.AED
         public bool noiseMeanObservedScorePresent;
         public int survivalObservedActiveCount;
         public int noiseObservedActiveCount;
+        public string objectiveComparisonKey;
+        public string toolUsageComparisonKey;
+        public string objectiveAggregationStatus;
+        public string toolUsageAggregationStatus;
+        public double objectiveMeanObservedScore;
+        public double toolUsageMeanObservedScore;
+        public bool objectiveMeanObservedScorePresent;
+        public bool toolUsageMeanObservedScorePresent;
+        public int objectiveObservedActiveCount;
+        public int toolUsageObservedActiveCount;
         public AEDSnapshotPlayerDto[] players;
         public bool rosterCurrent;
         public bool profileRevisionsCurrent;
@@ -63,6 +74,16 @@ namespace EchoProtocol.AI.AED
         public string noiseStatus;
         public int noiseSampleCount;
         public string noiseComparisonKey;
+        public double objectiveScore;
+        public bool objectiveScorePresent;
+        public string objectiveStatus;
+        public int objectiveSampleCount;
+        public string objectiveComparisonKey;
+        public double toolUsageScore;
+        public bool toolUsageScorePresent;
+        public string toolUsageStatus;
+        public int toolUsageSampleCount;
+        public string toolUsageComparisonKey;
     }
 
     [Serializable]

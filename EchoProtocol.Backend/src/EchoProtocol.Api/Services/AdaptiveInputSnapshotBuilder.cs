@@ -13,7 +13,56 @@ public sealed class AdaptiveInputSnapshotBuilder(AppDbContext db, TimeProvider t
     : IAdaptiveInputSnapshotBuilder
 {
     public const string SupportedProfileFormula = "PROFILE_FORMULA_V1_1";
-    private const string DeferredJson = "{\"objective\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0},\"teamwork\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0},\"exploration\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0},\"navigation\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0},\"toolUsage\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0},\"risk\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0},\"revive\":{\"score\":null,\"status\":\"DEFERRED\",\"sampleCount\":0}}";
+    private static string OptionalKey(string dimension, PlayerAIProfile profile) =>
+        dimension == "OBJECTIVE"
+            ? ScenarioFingerprint.Hash(
+                dimension,
+                "MATCH_SCORE_OBJECTIVE_V1",
+                profile.AlphaConfigVersion)
+            : ScenarioFingerprint.Hash(
+                dimension,
+                "MATCH_SCORE_TOOL_USAGE_V1",
+                profile.ToolUsageNormalizationVersion,
+                profile.AlphaConfigVersion);
+
+    private static string BuildOptionalDimensions(PlayerAIProfile? profile)
+    {
+        object Dimension(
+            decimal? score,
+            ProfileDimensionStatus status,
+            int sampleCount,
+            string dimension) => new
+        {
+            score,
+            status = status.ToString().ToUpperInvariant(),
+            sampleCount,
+            comparisonKey = profile is null || sampleCount == 0
+                ? null
+                : OptionalKey(dimension, profile)
+        };
+
+        var objective = Dimension(
+            profile?.ObjectiveScore,
+            profile?.ObjectiveStatus ?? ProfileDimensionStatus.ColdStart,
+            profile?.ObjectiveSampleCount ?? 0,
+            "OBJECTIVE");
+        var toolUsage = Dimension(
+            profile?.ToolUsageScore,
+            profile?.ToolUsageStatus ?? ProfileDimensionStatus.ColdStart,
+            profile?.ToolUsageSampleCount ?? 0,
+            "TOOL_USAGE");
+
+        return JsonSerializer.Serialize(new
+        {
+            objective,
+            toolUsage,
+            teamwork = new { score = (decimal?)null, status = "DEFERRED", sampleCount = 0 },
+            exploration = new { score = (decimal?)null, status = "DEFERRED", sampleCount = 0 },
+            navigation = new { score = (decimal?)null, status = "DEFERRED", sampleCount = 0 },
+            risk = new { score = (decimal?)null, status = "DEFERRED", sampleCount = 0 },
+            revive = new { score = (decimal?)null, status = "DEFERRED", sampleCount = 0 }
+        });
+    }
 
     public async Task<AdaptiveSnapshotBuildResult> BuildPreMatchAsync(Guid matchId, CancellationToken cancellationToken = default)
     {
@@ -35,7 +84,7 @@ public sealed class AdaptiveInputSnapshotBuilder(AppDbContext db, TimeProvider t
                 players.Add(new AdaptiveInputSnapshotPlayer
                 {
                     UserId = userId, ProfileAvailable = false, SurvivalStatus = "UNAVAILABLE",
-                    NoiseStatus = "UNAVAILABLE", DeferredDimensionsJson = DeferredJson, CapturedAtUtc = now
+                    NoiseStatus = "UNAVAILABLE", DeferredDimensionsJson = BuildOptionalDimensions(null), CapturedAtUtc = now
                 });
                 continue;
             }
@@ -54,7 +103,7 @@ public sealed class AdaptiveInputSnapshotBuilder(AppDbContext db, TimeProvider t
                 SurvivalSampleCount = profile.SurvivalSampleCount, SurvivalComparisonKey = survivalKey,
                 NoiseScore = profile.NoiseScore, NoiseStatus = Status(profile.NoiseStatus),
                 NoiseSampleCount = profile.NoiseSampleCount, NoiseComparisonKey = noiseKey,
-                DeferredDimensionsJson = DeferredJson, CapturedAtUtc = now
+                DeferredDimensionsJson = BuildOptionalDimensions(profile), CapturedAtUtc = now
             });
             if (profile.SurvivalStatus != ProfileDimensionStatus.Active || profile.SurvivalSampleCount < 1
                 || profile.NoiseStatus != ProfileDimensionStatus.Active || profile.NoiseSampleCount < 1)
@@ -62,12 +111,15 @@ public sealed class AdaptiveInputSnapshotBuilder(AppDbContext db, TimeProvider t
         }
         var survival = Aggregate(players, true, reasons);
         var noise = Aggregate(players, false, reasons);
+        var objective = AggregateOptional(profiles.Values, true, reasons);
+        var toolUsage = AggregateOptional(profiles.Values, false, reasons);
         var validity = reasons.Contains("ROSTER_EMPTY") || reasons.Contains("PROFILE_VERSION_UNSUPPORTED")
             || reasons.Contains("FORMULA_VERSION_CONFLICT") ? AdaptiveSnapshotValidity.Invalid
             : reasons.Count > 0 ? AdaptiveSnapshotValidity.Partial : AdaptiveSnapshotValidity.Valid;
         var snapshot = new AdaptiveInputSnapshot
         {
             SnapshotId = Guid.NewGuid(), MatchId = matchId, RosterIdentity = rosterIdentity,
+            FingerprintVersion = "V2",
             TeamSize = userIds.Length, Validity = validity,
             ReasonCodesJson = JsonSerializer.Serialize(reasons.OrderBy(x => x)),
             ProfileFormulaSemanticId = players.Where(x => x.ProfileAvailable).Select(x => x.ProfileFormulaVersion).Distinct().Count() == 1
@@ -76,6 +128,14 @@ public sealed class AdaptiveInputSnapshotBuilder(AppDbContext db, TimeProvider t
             SurvivalAggregationStatus = survival.Status, NoiseAggregationStatus = noise.Status,
             SurvivalMeanObservedScore = survival.Mean, NoiseMeanObservedScore = noise.Mean,
             SurvivalObservedActiveCount = survival.Count, NoiseObservedActiveCount = noise.Count,
+            ObjectiveAggregationStatus = objective.Status,
+            ObjectiveComparisonKey = objective.Key,
+            ObjectiveMeanObservedScore = objective.Mean,
+            ObjectiveObservedActiveCount = objective.Count,
+            ToolUsageAggregationStatus = toolUsage.Status,
+            ToolUsageComparisonKey = toolUsage.Key,
+            ToolUsageMeanObservedScore = toolUsage.Mean,
+            ToolUsageObservedActiveCount = toolUsage.Count,
             CreatedAtUtc = now, Players = players
         };
         foreach (var player in players) player.SnapshotId = snapshot.SnapshotId;
@@ -93,6 +153,28 @@ public sealed class AdaptiveInputSnapshotBuilder(AppDbContext db, TimeProvider t
         var keys = observed.Select(x => survival ? x.SurvivalComparisonKey : x.NoiseComparisonKey).Distinct().ToArray();
         if (keys.Length != 1 || keys[0] is null) { reasons.Add("FORMULA_VERSION_CONFLICT"); return ("INVALID", null, null, observed.Length); }
         return ("AVAILABLE", keys[0], observed.Average(x => survival ? x.SurvivalScore!.Value : x.NoiseScore!.Value), observed.Length);
+    }
+
+    private static (string Status, string? Key, decimal? Mean, int Count) AggregateOptional(
+        IEnumerable<PlayerAIProfile> profiles, bool objective, ISet<string> reasons)
+    {
+        var observed = profiles.Where(x => objective
+                ? x.ObjectiveStatus == ProfileDimensionStatus.Active
+                    && x.ObjectiveSampleCount > 0 && x.ObjectiveScore.HasValue
+                : x.ToolUsageStatus == ProfileDimensionStatus.Active
+                    && x.ToolUsageSampleCount > 0 && x.ToolUsageScore.HasValue)
+            .ToArray();
+        if (observed.Length == 0) return ("UNAVAILABLE", null, null, 0);
+        var keys = observed.Select(x => OptionalKey(objective ? "OBJECTIVE" : "TOOL_USAGE", x))
+            .Distinct(StringComparer.Ordinal).ToArray();
+        if (keys.Length != 1)
+        {
+            reasons.Add("FORMULA_VERSION_CONFLICT");
+            return ("INVALID", null, null, observed.Length);
+        }
+        return ("AVAILABLE", keys[0],
+            observed.Average(x => objective ? x.ObjectiveScore!.Value : x.ToolUsageScore!.Value),
+            observed.Length);
     }
 
     private static string ComparisonKey(string dimension, PlayerAIProfile p, bool noise) => ScenarioFingerprint.Hash(

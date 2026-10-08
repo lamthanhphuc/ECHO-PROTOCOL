@@ -11,9 +11,13 @@ public interface IPlayerAIProfilePolicy
     string? AlphaConfigVersion { get; }
     decimal? SurvivalAlpha { get; }
     decimal? NoiseAlpha { get; }
+    decimal? ObjectiveAlpha { get; }
+    decimal? ToolUsageAlpha { get; }
+    decimal? ToolUsageCountMax { get; }
     decimal? ProfileNoiseCountMin { get; }
     decimal? ProfileNoiseCountMax { get; }
 
     bool IsNoisePenalty(string noiseType);
     bool TryValidate(PlayerAIDimension dimension, out string reason);
+    decimal GetAlpha(PlayerAIDimension dimension);
 }

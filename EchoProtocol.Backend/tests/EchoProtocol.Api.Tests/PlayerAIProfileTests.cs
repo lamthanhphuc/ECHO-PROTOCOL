@@ -36,6 +36,111 @@ public sealed class PlayerAIProfileTests
     }
 
     [Fact, Trait("Category", "M4PlayerAIProfile")]
+    public async Task Aggregator_BehaviorEvents_ProduceObjectiveAndToolUsageSignals()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync();
+        var events = CreateCompleteEvents(fixture.MatchId, fixture.UserId).Take(3)
+            .Concat([
+                Event(fixture.MatchId, fixture.UserId, "CORE_PLACED", 4, "CORE_SECURED"),
+                Event(fixture.MatchId, fixture.UserId, "TEAM_TOOL_USED", 5, "TOOL_ACTIVATED"),
+                Event(fixture.MatchId, null, "MATCH_ENDED", 6, "TEAM_ESCAPED", new BsonDocument
+                {
+                    ["context"] = new BsonDocument(),
+                    ["data"] = new BsonDocument
+                    {
+                        ["outcome"] = "SUCCESS", ["durationSeconds"] = 120, ["survivorCount"] = 1
+                    }
+                })
+            ]).ToArray();
+        var aggregator = new MatchTelemetryAggregator(
+            fixture.Db, new FakeTelemetryRepository(events), TestPolicy());
+
+        var result = await aggregator.AggregateAsync(fixture.MatchId, fixture.UserId);
+
+        Assert.True(result.Metrics.ContainsKey(PlayerAIDimension.Objective),
+            string.Join(',', result.Reasons));
+        Assert.Equal(100m, result.Metrics[PlayerAIDimension.Objective].RawValue);
+        Assert.Equal(1m, result.Metrics[PlayerAIDimension.ToolUsage].RawValue);
+        Assert.Equal(1, result.BehaviorSignals!.CorePlacements);
+        Assert.Equal(1, result.BehaviorSignals.TeamToolsUsed);
+        Assert.True(result.BehaviorSignals.SourceComplete);
+    }
+
+    [Fact, Trait("Category", "M4PlayerAIProfile")]
+    public async Task ToolUsageCountsOnlyBoundPlayerEvents()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync();
+        var other = await fixture.AddBoundPlayerAsync();
+        var events = CreateCompleteEvents(fixture.MatchId, fixture.UserId).Take(3)
+            .Concat([
+                Event(fixture.MatchId, fixture.UserId, "TEAM_TOOL_USED", 4, "TOOL_ACTIVATED"),
+                Event(fixture.MatchId, other, "TEAM_TOOL_USED", 5, "TOOL_ACTIVATED"),
+                MatchEnded(fixture.MatchId, 6)
+            ]).ToArray();
+        var result = await new MatchTelemetryAggregator(
+            fixture.Db, new FakeTelemetryRepository(events), TestPolicy())
+            .AggregateAsync(fixture.MatchId, fixture.UserId);
+
+        Assert.Equal(1m, result.Metrics[PlayerAIDimension.ToolUsage].RawValue);
+        Assert.Equal(1, result.BehaviorSignals!.TeamToolsUsed);
+    }
+
+    [Fact, Trait("Category", "M4PlayerAIProfile")]
+    public async Task ObjectiveWithoutTeamOpportunityUnavailable()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync();
+        var result = await new MatchTelemetryAggregator(fixture.Db,
+                new FakeTelemetryRepository(CreateCompleteEvents(fixture.MatchId, fixture.UserId)),
+                TestPolicy())
+            .AggregateAsync(fixture.MatchId, fixture.UserId);
+
+        Assert.Equal(MetricAvailability.Unavailable,
+            result.Metrics[PlayerAIDimension.Objective].Availability);
+        Assert.Null(result.Metrics[PlayerAIDimension.Objective].RawValue);
+    }
+
+    [Fact, Trait("Category", "M4PlayerAIProfile")]
+    public async Task ObjectiveContributionIsPerPlayer()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync();
+        var other = await fixture.AddBoundPlayerAsync();
+        var events = CreateCompleteEvents(fixture.MatchId, fixture.UserId).Take(3)
+            .Concat([
+                Event(fixture.MatchId, other, "CORE_PLACED", 4, "CORE_SECURED"),
+                MatchEnded(fixture.MatchId, 5)
+            ]).ToArray();
+        var result = await new MatchTelemetryAggregator(
+            fixture.Db, new FakeTelemetryRepository(events), TestPolicy())
+            .AggregateAsync(fixture.MatchId, fixture.UserId);
+
+        Assert.Equal(MetricAvailability.Available,
+            result.Metrics[PlayerAIDimension.Objective].Availability);
+        Assert.Equal(0m, result.Metrics[PlayerAIDimension.Objective].RawValue);
+    }
+
+    [Fact, Trait("Category", "M4PlayerAIProfile")]
+    public async Task IncompleteTelemetryBlocksOptionalScores()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync();
+        var events = new[]
+        {
+            CreateCompleteEvents(fixture.MatchId, fixture.UserId)[0],
+            CreateCompleteEvents(fixture.MatchId, fixture.UserId)[1],
+            Event(fixture.MatchId, fixture.UserId, "CORE_PLACED", 4, "CORE_SECURED"),
+            Event(fixture.MatchId, fixture.UserId, "TEAM_TOOL_USED", 5, "TOOL_ACTIVATED"),
+            MatchEnded(fixture.MatchId, 6)
+        };
+        var result = await new MatchTelemetryAggregator(
+            fixture.Db, new FakeTelemetryRepository(events), TestPolicy())
+            .AggregateAsync(fixture.MatchId, fixture.UserId);
+
+        Assert.Equal(MetricAvailability.Unavailable,
+            result.Metrics[PlayerAIDimension.Objective].Availability);
+        Assert.Equal(MetricAvailability.Unavailable,
+            result.Metrics[PlayerAIDimension.ToolUsage].Availability);
+    }
+
+    [Fact, Trait("Category", "M4PlayerAIProfile")]
     public async Task Aggregator_IncompleteTelemetry_DoesNotTreatMissingNoiseAsZero()
     {
         await using var fixture = await ProfileFixture.CreateAsync();
@@ -87,6 +192,23 @@ public sealed class PlayerAIProfileTests
         Assert.Equal(expected, result!.Score);
     }
 
+    [Theory, Trait("Category", "M4PlayerAIProfile")]
+    [InlineData(PlayerAIDimension.Objective, 100, 100)]
+    [InlineData(PlayerAIDimension.ToolUsage, 2, 40)]
+    [InlineData(PlayerAIDimension.ToolUsage, 99, 100)]
+    public void ExpandedDimensions_NormalizeWithOwnFormula(
+        PlayerAIDimension dimension, int raw, int expected)
+    {
+        var metric = new AggregatedMetric(dimension, raw,
+            MetricAvailability.Available, "test", new string('A', 64));
+
+        var ok = MatchScoreNormalizer.TryNormalize(metric, TestPolicy(), out var result, out _);
+
+        Assert.True(ok);
+        Assert.Equal(expected, result!.Score);
+        Assert.NotEqual("PLAYER_MATCH_SCORE_V1_1", result.MatchScoreFormulaVersion);
+    }
+
     [Fact, Trait("Category", "M4PlayerAIProfile")]
     public async Task FirstObservation_ReplacesColdStartWithoutBlending()
     {
@@ -101,6 +223,110 @@ public sealed class PlayerAIProfileTests
         Assert.Equal(ProfileDimensionStatus.Active, profile.SurvivalStatus);
         Assert.Equal(1, profile.SurvivalSampleCount);
         Assert.Null(profile.ObjectiveScore);
+    }
+
+    [Fact, Trait("Category", "M4PlayerAIProfile")]
+    public async Task ExpandedDimensions_ReplayIntoIndependentProfileFields()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync();
+        var aggregation = Aggregation(fixture.MatchId, fixture.UserId, EndedAt, 100m, 0m);
+        var metrics = aggregation.Metrics.ToDictionary(item => item.Key, item => item.Value);
+        metrics[PlayerAIDimension.Objective] = new(PlayerAIDimension.Objective, 100m,
+            MetricAvailability.Available, "test", new string('D', 64));
+        metrics[PlayerAIDimension.ToolUsage] = new(PlayerAIDimension.ToolUsage, 2m,
+            MetricAvailability.Available, "test", new string('E', 64));
+
+        var result = await fixture.CreateUpdater(aggregation with { Metrics = metrics })
+            .ProcessAsync(fixture.MatchId, fixture.UserId);
+        var profile = await fixture.Db.PlayerAIProfiles.SingleAsync();
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal(100m, profile.ObjectiveScore);
+        Assert.Equal(40m, profile.ToolUsageScore);
+        Assert.Equal(ProfileDimensionStatus.Active, profile.ObjectiveStatus);
+        Assert.Equal(ProfileDimensionStatus.Active, profile.ToolUsageStatus);
+        Assert.Equal("TOOL_USAGE_COUNT_MAX_5_V1", profile.ToolUsageNormalizationVersion);
+    }
+
+    [Fact, Trait("Category", "M4PlayerAIProfile")]
+    public async Task OptionalReplayDoesNotModifyNoise()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync();
+        var secondMatch = await fixture.AddMatchAsync(EndedAt.AddMinutes(1));
+        var updater = fixture.CreateUpdater(new FakeAggregator(
+            Aggregation(fixture.MatchId, fixture.UserId, EndedAt, 100m, 0m),
+            OptionalAggregation(secondMatch, fixture.UserId, EndedAt.AddMinutes(1),
+                PlayerAIDimension.Objective, 100m)));
+
+        Assert.True((await updater.ProcessAsync(fixture.MatchId, fixture.UserId)).IsSuccess);
+        var before = await fixture.Db.PlayerAIProfiles.AsNoTracking().SingleAsync();
+        Assert.True((await updater.ProcessAsync(secondMatch, fixture.UserId)).IsSuccess);
+        var after = await fixture.Db.PlayerAIProfiles.AsNoTracking().SingleAsync();
+
+        Assert.Equal(before.NoiseScore, after.NoiseScore);
+        Assert.Equal(before.NoiseSampleCount, after.NoiseSampleCount);
+        Assert.Equal(100m, after.ObjectiveScore);
+    }
+
+    [Fact, Trait("Category", "M4PlayerAIProfile")]
+    public async Task OptionalRetractionIsIdempotent()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync();
+        var valid = OptionalAggregation(fixture.MatchId, fixture.UserId, EndedAt,
+            PlayerAIDimension.Objective, 100m);
+        var ineligible = valid with
+        {
+            Eligibility = MatchProfileEligibilityStatus.Ineligible,
+            Reasons = ["SOURCE_RETRACTED"]
+        };
+        var updater = fixture.CreateUpdater(new SequencedAggregator(
+            valid, valid, ineligible, ineligible));
+
+        Assert.True((await updater.ProcessAsync(fixture.MatchId, fixture.UserId)).IsSuccess);
+        Assert.True((await updater.ProcessAsync(fixture.MatchId, fixture.UserId)).IsSuccess);
+        Assert.False((await updater.ProcessAsync(fixture.MatchId, fixture.UserId)).IsSuccess);
+        var profile = await fixture.Db.PlayerAIProfiles.SingleAsync();
+
+        Assert.Equal(0, profile.ObjectiveSampleCount);
+        Assert.Equal(ProfileDimensionStatus.ColdStart, profile.ObjectiveStatus);
+        Assert.Single(await fixture.Db.MatchScores.Where(x =>
+            x.Dimension == PlayerAIDimension.Objective).ToArrayAsync());
+    }
+
+    [Fact, Trait("Category", "M4PlayerAIProfile")]
+    public async Task ToolUsageNormalizationVersionConflict()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync();
+        var profile = ExistingProfile(fixture.UserId);
+        profile.ToolUsageScore = 20m;
+        profile.ToolUsageStatus = ProfileDimensionStatus.Active;
+        profile.ToolUsageSampleCount = 1;
+        profile.ToolUsageNormalizationVersion = "OLD_TOOL_VERSION";
+        fixture.Db.PlayerAIProfiles.Add(profile);
+        await fixture.Db.SaveChangesAsync();
+        var updater = fixture.CreateUpdater(OptionalAggregation(
+            fixture.MatchId, fixture.UserId, EndedAt,
+            PlayerAIDimension.ToolUsage, 2m));
+
+        var result = await updater.ProcessAsync(fixture.MatchId, fixture.UserId);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("AI_PROFILE_APPLY_CONFLICT", result.ErrorCode);
+    }
+
+    [Fact, Trait("Category", "M4PlayerAIProfile")]
+    public async Task OldProfileStillBuildsSnapshot()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync();
+        fixture.Db.PlayerAIProfiles.Add(ExistingProfile(fixture.UserId));
+        await fixture.Db.SaveChangesAsync();
+
+        var built = await new AdaptiveInputSnapshotBuilder(fixture.Db, TimeProvider.System)
+            .BuildPreMatchAsync(fixture.MatchId);
+
+        Assert.Equal("V2", built.Snapshot.FingerprintVersion);
+        Assert.Equal("UNAVAILABLE", built.Snapshot.ObjectiveAggregationStatus);
+        Assert.Contains("\"objective\"", built.Snapshot.Players.Single().DeferredDimensionsJson);
     }
 
     [Fact, Trait("Category", "M4PlayerAIProfile")]
@@ -283,6 +509,9 @@ public sealed class PlayerAIProfileTests
             AlphaConfigVersion = "TEST_ALPHA_V1",
             SurvivalAlpha = 0.5m,
             NoiseAlpha = 0.5m,
+            ObjectiveAlpha = 0.3m,
+            ToolUsageAlpha = 0.3m,
+            ToolUsageCountMax = 5m,
             ProfileNoiseCountMin = 0m,
             ProfileNoiseCountMax = 10m,
             NoisePenaltyTypes = ["SPRINT"]
@@ -301,6 +530,41 @@ public sealed class PlayerAIProfileTests
         return new(matchId, userId, endedAt, MatchProfileEligibilityStatus.Eligible,
             TelemetryCompleteness.Complete, [], "1.1", new string('C', 64), true, null, metrics);
     }
+
+    private static MatchTelemetryAggregation OptionalAggregation(
+        Guid matchId, Guid userId, DateTime endedAt,
+        PlayerAIDimension dimension, decimal rawValue)
+    {
+        var metric = new AggregatedMetric(dimension, rawValue,
+            MetricAvailability.Available, "test", new string('D', 64));
+        return new MatchTelemetryAggregation(
+            matchId, userId, endedAt, MatchProfileEligibilityStatus.Eligible,
+            TelemetryCompleteness.Complete, [], "1.1", new string('C', 64),
+            true, null, new Dictionary<PlayerAIDimension, AggregatedMetric>
+            {
+                [dimension] = metric
+            });
+    }
+
+    private static PlayerAIProfile ExistingProfile(Guid userId) => new()
+    {
+        UserId = userId,
+        ProfileLineageId = Guid.NewGuid(),
+        ProfileRevision = 1,
+        ProfileFormulaVersion = "PROFILE_FORMULA_V1_1",
+        MatchScoreFormulaVersion = "PLAYER_MATCH_SCORE_V1_1",
+        NormalizationConfigVersion = "TEST_NORM_V1",
+        ProfileNoiseFilterVersion = "TEST_FILTER_V1",
+        AlphaConfigVersion = "TEST_ALPHA_V1",
+        SurvivalScore = 75m,
+        SurvivalStatus = ProfileDimensionStatus.Active,
+        SurvivalSampleCount = 1,
+        NoiseScore = 70m,
+        NoiseStatus = ProfileDimensionStatus.Active,
+        NoiseSampleCount = 1,
+        CreatedAtUtc = EndedAt,
+        UpdatedAtUtc = EndedAt
+    };
 
     private static TelemetryEventDocument[] CreateCompleteEvents(Guid matchId, Guid userId) =>
     [
@@ -328,10 +592,20 @@ public sealed class PlayerAIProfileTests
     {
         Id = Guid.NewGuid(), MatchId = matchId, UserId = userId, EventType = type,
         EventSequence = sequence, ReasonCode = reason, SchemaVersion = "1.1",
-        SemanticFingerprint = new string((char)('A' + (int)sequence), 64),
+        SemanticFingerprint = new string("0123456789ABCDEF"[(int)(sequence % 16)], 64),
         ValueJson = value ?? new BsonDocument { ["context"] = new BsonDocument(), ["data"] = new BsonDocument() },
         Ts = EndedAt.AddSeconds(sequence), IngestedAt = EndedAt
     };
+
+    private static TelemetryEventDocument MatchEnded(Guid matchId, long sequence) =>
+        Event(matchId, null, "MATCH_ENDED", sequence, "TEAM_ESCAPED", new BsonDocument
+        {
+            ["context"] = new BsonDocument(),
+            ["data"] = new BsonDocument
+            {
+                ["outcome"] = "SUCCESS", ["durationSeconds"] = 120, ["survivorCount"] = 1
+            }
+        });
 
     private static TelemetryEventDocument CloneAtSequence(TelemetryEventDocument source, long sequence) => new()
     {
@@ -402,6 +676,19 @@ public sealed class PlayerAIProfileTests
         {
             var id = Guid.NewGuid();
             AddCompletedMatch(Db, id, UserId, endedAt);
+            await Db.SaveChangesAsync();
+            return id;
+        }
+
+        public async Task<Guid> AddBoundPlayerAsync()
+        {
+            var id = Guid.NewGuid();
+            Db.Users.Add(User(id));
+            Db.MatchPlayerBindings.Add(new MatchPlayerBinding
+            {
+                Id = Guid.NewGuid(), MatchId = MatchId, UserId = id, FusionActorNumber = 2,
+                JoinProofId = Guid.NewGuid(), BoundAtUtc = EndedAt.AddMinutes(-2), LastSeenAtUtc = EndedAt
+            });
             await Db.SaveChangesAsync();
             return id;
         }

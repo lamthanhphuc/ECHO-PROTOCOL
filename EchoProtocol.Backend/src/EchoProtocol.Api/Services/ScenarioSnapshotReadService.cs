@@ -62,16 +62,47 @@ public sealed class ScenarioSnapshotReadService(AppDbContext db, TimeProvider ti
             s.SnapshotContentFingerprint, s.RosterIdentity, s.TeamSize,
             s.Validity.ToString().ToUpperInvariant(),
             JsonSerializer.Deserialize<string[]>(s.ReasonCodesJson) ?? [], s.CreatedAtUtc,
+            s.FingerprintVersion,
             s.ProfileFormulaSemanticId, s.SurvivalComparisonKey, s.NoiseComparisonKey,
             s.SurvivalAggregationStatus, s.NoiseAggregationStatus,
             s.SurvivalMeanObservedScore, s.NoiseMeanObservedScore,
             s.SurvivalObservedActiveCount, s.NoiseObservedActiveCount,
-            s.Players.OrderBy(x => x.UserId).Select(x => new AdaptiveInputPlayerReadResponse(
-                x.UserId, x.ProfileAvailable, x.ProfileLineageId, x.ProfileRevision,
-                x.SurvivalScore, x.SurvivalStatus, x.SurvivalSampleCount, x.SurvivalComparisonKey,
-                x.NoiseScore, x.NoiseStatus, x.NoiseSampleCount, x.NoiseComparisonKey)).ToArray(),
+            s.ObjectiveAggregationStatus, s.ObjectiveComparisonKey,
+            s.ObjectiveMeanObservedScore, s.ObjectiveObservedActiveCount,
+            s.ToolUsageAggregationStatus, s.ToolUsageComparisonKey,
+            s.ToolUsageMeanObservedScore, s.ToolUsageObservedActiveCount,
+            s.Players.OrderBy(x => x.UserId).Select(MapPlayer).ToArray(),
             rosterCurrent, revisionsCurrent, fingerprintValid, semanticsSupported,
             s.MatchId == matchId, decision.IsCurrent && s.DecisionPoint == decision.DecisionPoint,
             s.DecisionPoint == "PRE_MATCH"));
+    }
+
+    private static AdaptiveInputPlayerReadResponse MapPlayer(
+        EchoProtocol.Api.Entities.AdaptiveInputSnapshotPlayer player)
+    {
+        using var document = JsonDocument.Parse(player.DeferredDimensionsJson);
+        var objective = ReadOptional(document.RootElement, "objective");
+        var toolUsage = ReadOptional(document.RootElement, "toolUsage");
+        return new AdaptiveInputPlayerReadResponse(
+            player.UserId, player.ProfileAvailable, player.ProfileLineageId, player.ProfileRevision,
+            player.SurvivalScore, player.SurvivalStatus, player.SurvivalSampleCount,
+            player.SurvivalComparisonKey, player.NoiseScore, player.NoiseStatus,
+            player.NoiseSampleCount, player.NoiseComparisonKey,
+            objective.Score, objective.Status, objective.SampleCount, objective.Key,
+            toolUsage.Score, toolUsage.Status, toolUsage.SampleCount, toolUsage.Key);
+    }
+
+    private static (decimal? Score, string Status, int SampleCount, string? Key) ReadOptional(
+        JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var value))
+            return (null, "DEFERRED", 0, null);
+        return (
+            value.TryGetProperty("score", out var score) && score.ValueKind == JsonValueKind.Number
+                ? score.GetDecimal() : null,
+            value.TryGetProperty("status", out var status) ? status.GetString() ?? "DEFERRED" : "DEFERRED",
+            value.TryGetProperty("sampleCount", out var count) ? count.GetInt32() : 0,
+            value.TryGetProperty("comparisonKey", out var key) && key.ValueKind == JsonValueKind.String
+                ? key.GetString() : null);
     }
 }

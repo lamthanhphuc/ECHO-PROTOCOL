@@ -45,7 +45,9 @@ namespace EchoProtocol.AI.Common.Profile
             long profileRevision,
             string profileLineageId,
             PlayerDimensionSnapshot survival,
-            PlayerDimensionSnapshot noise)
+            PlayerDimensionSnapshot noise,
+            PlayerDimensionSnapshot objective = null,
+            PlayerDimensionSnapshot toolUsage = null)
         {
             UserId = RequireText(userId, nameof(userId));
             if (profileRevision < 0) throw new ArgumentOutOfRangeException(nameof(profileRevision));
@@ -53,6 +55,8 @@ namespace EchoProtocol.AI.Common.Profile
             ProfileLineageId = RequireText(profileLineageId, nameof(profileLineageId));
             Survival = survival ?? throw new ArgumentNullException(nameof(survival));
             Noise = noise ?? throw new ArgumentNullException(nameof(noise));
+            Objective = objective;
+            ToolUsage = toolUsage;
         }
 
         public string UserId { get; }
@@ -60,6 +64,8 @@ namespace EchoProtocol.AI.Common.Profile
         public string ProfileLineageId { get; }
         public PlayerDimensionSnapshot Survival { get; }
         public PlayerDimensionSnapshot Noise { get; }
+        public PlayerDimensionSnapshot Objective { get; }
+        public PlayerDimensionSnapshot ToolUsage { get; }
 
         internal static string RequireText(string value, string name)
         {
@@ -123,19 +129,25 @@ namespace EchoProtocol.AI.Common.Profile
             string rosterIdentity,
             int teamSize,
             RosterDimensionSummary survival,
-            RosterDimensionSummary noise)
+            RosterDimensionSummary noise,
+            RosterDimensionSummary objective = null,
+            RosterDimensionSummary toolUsage = null)
         {
             RosterIdentity = PlayerProfileSnapshot.RequireText(rosterIdentity, nameof(rosterIdentity));
             if (teamSize < 1) throw new ArgumentOutOfRangeException(nameof(teamSize));
             TeamSize = teamSize;
             Survival = survival ?? throw new ArgumentNullException(nameof(survival));
             Noise = noise ?? throw new ArgumentNullException(nameof(noise));
+            Objective = objective;
+            ToolUsage = toolUsage;
         }
 
         public string RosterIdentity { get; }
         public int TeamSize { get; }
         public RosterDimensionSummary Survival { get; }
         public RosterDimensionSummary Noise { get; }
+        public RosterDimensionSummary Objective { get; }
+        public RosterDimensionSummary ToolUsage { get; }
     }
 
     public sealed class ProfileRevisionRef

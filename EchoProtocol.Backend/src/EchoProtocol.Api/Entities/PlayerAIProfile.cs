@@ -11,6 +11,7 @@ public sealed class PlayerAIProfile
     public string MatchScoreFormulaVersion { get; set; } = string.Empty;
     public string? NormalizationConfigVersion { get; set; }
     public string? ProfileNoiseFilterVersion { get; set; }
+    public string? ToolUsageNormalizationVersion { get; set; }
     public string AlphaConfigVersion { get; set; } = string.Empty;
 
     public decimal SurvivalScore { get; set; }
@@ -27,12 +28,15 @@ public sealed class PlayerAIProfile
     public Guid? NoiseLastMatchId { get; set; }
     public DateTime? NoiseLastUpdatedAtUtc { get; set; }
 
-    // Contract v1.1 dimensions whose formulas are DEFERRED. They must remain null.
     public decimal? ObjectiveScore { get; set; }
+    public ProfileDimensionStatus ObjectiveStatus { get; set; } = ProfileDimensionStatus.ColdStart;
+    public int ObjectiveSampleCount { get; set; }
     public decimal? TeamworkScore { get; set; }
     public decimal? ExplorationScore { get; set; }
     public decimal? NavigationScore { get; set; }
     public decimal? ToolUsageScore { get; set; }
+    public ProfileDimensionStatus ToolUsageStatus { get; set; } = ProfileDimensionStatus.ColdStart;
+    public int ToolUsageSampleCount { get; set; }
     public decimal? RiskScore { get; set; }
     public decimal? ReviveScore { get; set; }
 

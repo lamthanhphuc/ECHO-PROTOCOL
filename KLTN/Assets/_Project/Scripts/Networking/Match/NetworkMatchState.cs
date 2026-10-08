@@ -2332,6 +2332,8 @@ namespace EchoProtocol.Networking
                 return true;
             }
 
+            LogAEDv2PolicyMetrics(evidence, key, previous, nextPlan);
+
             var decisionId = ScenarioConfigAuthorityRuntime.CreateDecisionId(matchId,
                 point, PhaseName(next), nextOrdinal);
             var values = new double[AEDv2Catalog.All.Count];
@@ -2541,6 +2543,8 @@ namespace EchoProtocol.Networking
                 authority.AEDv2RosterIdentity, PhaseOrdinal, safe,
                 point,
                 out var nextPlan, out var key, out var reason);
+            if (proposed)
+                LogAEDv2PolicyMetrics(authority.LastFrozenAEDv2Evidence, key, previous, nextPlan);
             RuntimeLog.Log(RuntimeLogCategory.Aed,
                 proposed
                     ? $"[AED_V2][BOUNDARY_SHADOW] phase={next} key={key} plan={nextPlan.Fingerprint()} evidence={authority.LastFrozenAEDv2Evidence.EvidenceFingerprint}"
@@ -2589,6 +2593,31 @@ namespace EchoProtocol.Networking
                 };
                 _ = SubmitAEDv2BoundaryShadowAsync(authority.MatchId, request);
             }
+        }
+
+        private static void LogAEDv2PolicyMetrics(
+            AEDv2CurrentMatchEvidence evidence,
+            AEDv2Key key,
+            AEDv2Plan previous,
+            AEDv2Plan nextPlan)
+        {
+            if (evidence == null || evidence.ElapsedSeconds < 30) return;
+            var minutes = evidence.ElapsedSeconds / 60.0;
+            AEDv2E2ELog.State(
+                "POLICY_METRICS",
+                fields:
+                    $"downs={evidence.DownCount} " +
+                    $"revives={evidence.ReviveCount} " +
+                    $"eliminated={evidence.EliminatedCount} " +
+                    $"noise={evidence.AcceptedNoiseCount} " +
+                    $"tools={evidence.TeamToolUseCount} " +
+                    $"objectives={evidence.ObjectiveProgress} " +
+                    $"downsPerMin={evidence.DownCount / minutes:F3} " +
+                    $"noisePerMin={evidence.AcceptedNoiseCount / minutes:F3} " +
+                    $"objectivesPerMin={evidence.ObjectiveProgress / minutes:F3} " +
+                    $"changedKey={key} " +
+                    $"previous={previous.Get(key):F3} " +
+                    $"proposed={nextPlan.Get(key):F3}");
         }
 
         private static async Task SubmitAEDv2BoundaryShadowAsync(Guid matchId,

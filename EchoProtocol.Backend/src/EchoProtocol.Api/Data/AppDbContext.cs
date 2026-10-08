@@ -1,4 +1,5 @@
 using EchoProtocol.Api.Entities;
+using EchoProtocol.Api.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace EchoProtocol.Api.Data;
@@ -625,7 +626,23 @@ public class AppDbContext : DbContext
                 t.HasCheckConstraint("CK_PlayerAIProfiles_SurvivalScore_Range", "CAST(\"SurvivalScore\" AS NUMERIC) >= 0 AND CAST(\"SurvivalScore\" AS NUMERIC) <= 100");
                 t.HasCheckConstraint("CK_PlayerAIProfiles_NoiseScore_Range", "CAST(\"NoiseScore\" AS NUMERIC) >= 0 AND CAST(\"NoiseScore\" AS NUMERIC) <= 100");
                 t.HasCheckConstraint("CK_PlayerAIProfiles_SampleCounts_NonNegative", "\"SurvivalSampleCount\" >= 0 AND \"NoiseSampleCount\" >= 0");
-                t.HasCheckConstraint("CK_PlayerAIProfiles_Deferred_Null", "\"ObjectiveScore\" IS NULL AND \"TeamworkScore\" IS NULL AND \"ExplorationScore\" IS NULL AND \"NavigationScore\" IS NULL AND \"ToolUsageScore\" IS NULL AND \"RiskScore\" IS NULL AND \"ReviveScore\" IS NULL");
+                t.HasCheckConstraint(
+                    "CK_PlayerAIProfiles_Deferred_Null",
+                    "\"TeamworkScore\" IS NULL " +
+                    "AND \"ExplorationScore\" IS NULL " +
+                    "AND \"NavigationScore\" IS NULL " +
+                    "AND \"RiskScore\" IS NULL " +
+                    "AND \"ReviveScore\" IS NULL");
+                t.HasCheckConstraint(
+                    "CK_PlayerAIProfiles_ExpandedScores_Range",
+                    "(\"ObjectiveScore\" IS NULL OR " +
+                    "(CAST(\"ObjectiveScore\" AS NUMERIC) >= 0 AND CAST(\"ObjectiveScore\" AS NUMERIC) <= 100)) " +
+                    "AND (\"ToolUsageScore\" IS NULL OR " +
+                    "(CAST(\"ToolUsageScore\" AS NUMERIC) >= 0 AND CAST(\"ToolUsageScore\" AS NUMERIC) <= 100))");
+                t.HasCheckConstraint(
+                    "CK_PlayerAIProfiles_ExpandedSamples_NonNegative",
+                    "\"ObjectiveSampleCount\" >= 0 " +
+                    "AND \"ToolUsageSampleCount\" >= 0");
             });
 
             entity.HasKey(e => e.UserId);
@@ -633,11 +650,18 @@ public class AppDbContext : DbContext
             entity.Property(e => e.MatchScoreFormulaVersion).IsRequired().HasMaxLength(80);
             entity.Property(e => e.NormalizationConfigVersion).HasMaxLength(80);
             entity.Property(e => e.ProfileNoiseFilterVersion).HasMaxLength(80);
+            entity.Property(e => e.ToolUsageNormalizationVersion).HasMaxLength(80);
             entity.Property(e => e.AlphaConfigVersion).IsRequired().HasMaxLength(80);
             entity.Property(e => e.SurvivalScore).HasPrecision(9, 6).HasDefaultValue(50m);
             entity.Property(e => e.NoiseScore).HasPrecision(9, 6).HasDefaultValue(50m);
             entity.Property(e => e.SurvivalStatus).HasConversion<string>().HasMaxLength(20);
             entity.Property(e => e.NoiseStatus).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.ObjectiveScore).HasPrecision(9, 6);
+            entity.Property(e => e.ToolUsageScore).HasPrecision(9, 6);
+            entity.Property(e => e.ObjectiveStatus).HasConversion<string>().HasMaxLength(20)
+                .HasDefaultValue(ProfileDimensionStatus.ColdStart);
+            entity.Property(e => e.ToolUsageStatus).HasConversion<string>().HasMaxLength(20)
+                .HasDefaultValue(ProfileDimensionStatus.ColdStart);
         });
 
         modelBuilder.Entity<MatchScore>(entity =>
@@ -783,6 +807,7 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.SnapshotId);
             entity.Property(e => e.DecisionPoint).IsRequired().HasMaxLength(30);
             entity.Property(e => e.SnapshotContentFingerprint).IsRequired().HasMaxLength(64).IsFixedLength();
+            entity.Property(e => e.FingerprintVersion).IsRequired().HasMaxLength(10).HasDefaultValue("V1");
             entity.Property(e => e.RosterIdentity).IsRequired().HasMaxLength(64).IsFixedLength();
             entity.Property(e => e.Validity).HasConversion<string>().HasMaxLength(20);
             entity.Property(e => e.ReasonCodesJson).IsRequired().HasColumnType("jsonb");
@@ -791,8 +816,16 @@ public class AppDbContext : DbContext
             entity.Property(e => e.NoiseComparisonKey).HasMaxLength(64).IsFixedLength();
             entity.Property(e => e.SurvivalAggregationStatus).IsRequired().HasMaxLength(20);
             entity.Property(e => e.NoiseAggregationStatus).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.ObjectiveAggregationStatus).IsRequired().HasMaxLength(20)
+                .HasDefaultValue("UNAVAILABLE");
+            entity.Property(e => e.ToolUsageAggregationStatus).IsRequired().HasMaxLength(20)
+                .HasDefaultValue("UNAVAILABLE");
+            entity.Property(e => e.ObjectiveComparisonKey).HasMaxLength(64).IsFixedLength();
+            entity.Property(e => e.ToolUsageComparisonKey).HasMaxLength(64).IsFixedLength();
             entity.Property(e => e.SurvivalMeanObservedScore).HasPrecision(9, 6);
             entity.Property(e => e.NoiseMeanObservedScore).HasPrecision(9, 6);
+            entity.Property(e => e.ObjectiveMeanObservedScore).HasPrecision(9, 6);
+            entity.Property(e => e.ToolUsageMeanObservedScore).HasPrecision(9, 6);
             entity.HasIndex(e => new { e.MatchId, e.CreatedAtUtc });
             entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(e => e.MatchId).OnDelete(DeleteBehavior.Restrict);
         });

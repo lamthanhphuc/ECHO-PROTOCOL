@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Common.Profile;
 
@@ -35,6 +36,16 @@ namespace EchoProtocol.AI.AED
                 || !ScoreValid(dto.noiseMeanObservedScorePresent, dto.noiseMeanObservedScore))
                 return false;
 
+            var fingerprintVersion =
+                string.IsNullOrWhiteSpace(dto.fingerprintVersion)
+                    ? "V1"
+                    : dto.fingerprintVersion;
+            if (fingerprintVersion != "V1" && fingerprintVersion != "V2")
+            {
+                reason = "AED_FINGERPRINT_VERSION_UNSUPPORTED";
+                return false;
+            }
+
             if (!string.Equals(dto.profileFormulaSemanticId, SupportedProfileFormula, StringComparison.Ordinal))
             {
                 reason = "AED_PROFILE_FORMULA_UNSUPPORTED";
@@ -57,6 +68,8 @@ namespace EchoProtocol.AI.AED
                     reason = "AED_PROFILE_MISSING";
                     return false;
                 }
+                PlayerDimensionSnapshot objective = null;
+                PlayerDimensionSnapshot toolUsage = null;
                 if (!Guid.TryParse(player.profileLineageId, out var lineageId)
                     || lineageId == Guid.Empty || !player.profileRevisionPresent
                     || player.profileRevision < 0
@@ -67,13 +80,24 @@ namespace EchoProtocol.AI.AED
                     || !TryDimension(player.noiseStatus, player.noiseScorePresent,
                         player.noiseScore, player.noiseSampleCount,
                         player.noiseComparisonKey, player.profileRevision,
-                        out var noise)) return false;
+                        out var noise)
+                    || fingerprintVersion == "V2"
+                    && (!TryOptionalDimension(player.objectiveStatus,
+                            player.objectiveScorePresent, player.objectiveScore,
+                            player.objectiveSampleCount, player.objectiveComparisonKey,
+                            player.profileRevision, out objective)
+                        || !TryOptionalDimension(player.toolUsageStatus,
+                            player.toolUsageScorePresent, player.toolUsageScore,
+                            player.toolUsageSampleCount, player.toolUsageComparisonKey,
+                            player.profileRevision, out toolUsage))) return false;
                 if (survival.Status == PlayerDimensionStatus.ColdStart) survivalCold++;
                 if (noise.Status == PlayerDimensionStatus.ColdStart) noiseCold++;
                 if (survival.Status == PlayerDimensionStatus.Active) survivalActive++;
                 if (noise.Status == PlayerDimensionStatus.Active) noiseActive++;
                 profiles.Add(new PlayerProfileSnapshot(userId.ToString("D"), player.profileRevision,
-                    lineageId.ToString("D"), survival, noise));
+                    lineageId.ToString("D"), survival, noise,
+                    fingerprintVersion == "V2" ? objective : null,
+                    fingerprintVersion == "V2" ? toolUsage : null));
                 revisions.Add(new ProfileRevisionRef(userId.ToString("D"), player.profileRevision));
             }
 
@@ -88,6 +112,34 @@ namespace EchoProtocol.AI.AED
                 noiseCold, 0, 0, (double)dto.noiseObservedActiveCount / dto.teamSize,
                 noiseStatus, dto.noiseComparisonKey,
                 dto.noiseMeanObservedScorePresent ? dto.noiseMeanObservedScore : null);
+            var objectiveSummary = OptionalSummary(profiles, true);
+            var toolUsageSummary = OptionalSummary(profiles, false);
+            if (fingerprintVersion == "V2")
+            {
+                if (!MatchesOptionalAggregate(
+                        objectiveSummary,
+                        dto.objectiveAggregationStatus,
+                        dto.objectiveObservedActiveCount,
+                        dto.objectiveComparisonKey,
+                        dto.objectiveMeanObservedScorePresent,
+                        dto.objectiveMeanObservedScore))
+                {
+                    reason = "AED_OBJECTIVE_AGGREGATE_MISMATCH";
+                    return false;
+                }
+
+                if (!MatchesOptionalAggregate(
+                        toolUsageSummary,
+                        dto.toolUsageAggregationStatus,
+                        dto.toolUsageObservedActiveCount,
+                        dto.toolUsageComparisonKey,
+                        dto.toolUsageMeanObservedScorePresent,
+                        dto.toolUsageMeanObservedScore))
+                {
+                    reason = "AED_TOOL_USAGE_AGGREGATE_MISMATCH";
+                    return false;
+                }
+            }
             if (string.IsNullOrWhiteSpace(dto.survivalComparisonKey)
                 || string.IsNullOrWhiteSpace(dto.noiseComparisonKey))
             {
@@ -100,13 +152,88 @@ namespace EchoProtocol.AI.AED
             snapshot = new AdaptiveInputSnapshot(snapshotId, dto.snapshotContentFingerprint,
                 matchId, point, dto.phaseContext, created, dto.rosterIdentity, dto.teamSize,
                 profiles, new RosterProfileSummary(dto.rosterIdentity, dto.teamSize,
-                    survivalSummary, noiseSummary), validity, dto.reasonCodes ?? Array.Empty<string>(),
+                    survivalSummary, noiseSummary, objectiveSummary, toolUsageSummary),
+                validity, dto.reasonCodes ?? Array.Empty<string>(),
                 provenance);
             currency = new AdaptiveInputCurrencyValidation(dto.targetMatchCurrent,
                 dto.decisionPointCurrent, dto.phaseContextCurrent,
                 dto.rosterCurrent, dto.profileRevisionsCurrent, dto.snapshotFingerprintValid,
                 dto.profileSemanticsSupported);
             reason = string.Empty;
+            return true;
+        }
+
+        private static RosterDimensionSummary OptionalSummary(
+            IReadOnlyList<PlayerProfileSnapshot> profiles,
+            bool objective)
+        {
+            var dimensions = profiles
+                .Select(p => objective ? p.Objective : p.ToolUsage)
+                .ToArray();
+            var active = dimensions
+                .Where(d => d != null
+                    && d.Status == PlayerDimensionStatus.Active
+                    && d.SampleCount > 0
+                    && d.Score.HasValue)
+                .ToArray();
+            var keys = active
+                .Select(d => d.ComparisonSemanticKey)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            var status = active.Length == 0
+                ? RosterAggregationStatus.Unavailable
+                : keys.Length == 1 && !string.IsNullOrWhiteSpace(keys[0])
+                    ? RosterAggregationStatus.Available
+                    : RosterAggregationStatus.Invalid;
+
+            return new RosterDimensionSummary(
+                active.Length,
+                dimensions.Count(d => d != null
+                    && d.Status == PlayerDimensionStatus.ColdStart),
+                dimensions.Count(d => d == null),
+                dimensions.Count(d => d != null
+                    && d.Status == PlayerDimensionStatus.Deferred),
+                (double)active.Length / profiles.Count,
+                status,
+                status == RosterAggregationStatus.Available ? keys[0] : string.Empty,
+                status == RosterAggregationStatus.Available
+                    ? active.Average(d => d.Score.Value)
+                    : (double?)null);
+        }
+
+        private static bool MatchesOptionalAggregate(
+            RosterDimensionSummary actual,
+            string rawStatus,
+            int reportedCount,
+            string reportedKey,
+            bool meanPresent,
+            double reportedMean)
+        {
+            if (!TryEnum(rawStatus, out RosterAggregationStatus expectedStatus))
+                return false;
+            if (actual.AggregationStatus != expectedStatus
+                || actual.ObservedActiveCount != reportedCount)
+                return false;
+            if (!string.Equals(actual.ComparisonSemanticKey,
+                    reportedKey ?? string.Empty, StringComparison.Ordinal))
+                return false;
+            if (actual.MeanObservedScore.HasValue != meanPresent)
+                return false;
+            return !meanPresent || Math.Abs(actual.MeanObservedScore.Value - reportedMean) <= 0.000001;
+        }
+
+        private static bool TryOptionalDimension(string raw, bool hasScore, double score,
+            int sampleCount, string key, long revision, out PlayerDimensionSnapshot dimension)
+        {
+            dimension = null;
+            if (!TryEnum(raw, out PlayerDimensionStatus status)
+                || !ScoreValid(hasScore, score) || sampleCount < 0)
+                return false;
+            if (status == PlayerDimensionStatus.Active
+                && (!hasScore || sampleCount == 0 || string.IsNullOrWhiteSpace(key)))
+                return false;
+            dimension = new PlayerDimensionSnapshot(hasScore ? score : null,
+                status, sampleCount, key, revision);
             return true;
         }
 
