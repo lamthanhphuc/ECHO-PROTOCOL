@@ -78,7 +78,7 @@ namespace EchoProtocol.Networking.Tests
         public void NetworkMatchSource_DeclaresCanonicalTiming()
         {
             string source = File.ReadAllText(MatchSourcePath);
-            StringAssert.Contains("public const float DefaultMatchDurationSeconds = 3600f;", source);
+            StringAssert.Contains("public const float DefaultMatchDurationSeconds = 7200f;", source);
             StringAssert.Contains("public const float DefaultEscapeDurationSeconds = 45f;", source);
         }
 
