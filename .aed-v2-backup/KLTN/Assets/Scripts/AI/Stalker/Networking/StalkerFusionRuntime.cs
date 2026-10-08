@@ -50,9 +50,6 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private bool _objectiveInvestigationEnabled = true;
         private bool _flashlightReactionEnabled = true;
-        private uint _aedv2AppliedRevision;
-        private bool _aedv2Applied;
-        private bool _aedv2CorePressureEnabled = true;
 
         [SerializeField, Range(0.01f, 0.99f)]
         private float closedDoorMultiplier = 0.5f;
@@ -309,7 +306,6 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return;
             }
 
-            RefreshAEDv2ProfileAuthoritative();
             BindPatrolVariationFromMatchAuthority();
             BindScenarioConfigFromRegistry();
             _lastAuthoritativeStep = step;
@@ -544,7 +540,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
             StalkerPerceptionTargetSnapshot? sustainedCoreCarrier = null;
 
-            if (_aedv2CorePressureEnabled)
+            if (_objectiveInvestigationEnabled)
             {
                 CollectVisibleObjectiveCarrierIds();
                 sustainedCoreCarrier = SelectSustainedCoreCarrier(step.Time.Seconds);
@@ -1009,8 +1005,6 @@ namespace EchoProtocol.AI.Stalker.Networking
             for (var i = 0; i < _activeNoiseEvents.Count; i++)
             {
                 var noise = _activeNoiseEvents[i];
-                if (!_objectiveInvestigationEnabled && IsEasyDisabledObjectiveNoise(noise))
-                    continue;
                 if (noise.NoiseType == RuntimeNoiseType.VEHICLE_PUSH)
                 {
                     continue;
@@ -1155,59 +1149,28 @@ namespace EchoProtocol.AI.Stalker.Networking
             return true;
         }
 
-        private void RefreshAEDv2ProfileAuthoritative()
-        {
-            var authority = MatchAuthorityRuntime.Instance;
-            if (authority == null || !authority.TryGetMatchId(out var matchId))
-                return;
-            uint revision = 0;
-            bool active = authority.Difficulty == MatchDifficulty.Normal &&
-                AEDv2Authority.TryGetApplied(matchId, out _, out revision);
-            if ((active && (!_aedv2Applied || revision != _aedv2AppliedRevision)) ||
-                (!active && _aedv2Applied))
-            {
-                if (controller == null ||
-                    controller.CurrentState == StalkerState.ATTACK ||
-                    controller.CurrentState == StalkerState.RECOVER ||
-                    controller.SpecialEncounterOverrideActive)
-                    return;
-                ApplyMatchDifficulty();
-            }
-        }
-
         private void ApplyMatchDifficulty()
         {
-            var authority = MatchAuthorityRuntime.Instance;
-            var difficulty = authority != null ? authority.Difficulty : MatchDifficulty.Normal;
+            var difficulty = MatchAuthorityRuntime.Instance != null
+                ? MatchAuthorityRuntime.Instance.Difficulty
+                : MatchDifficulty.Normal;
+
             var profile = MatchDifficultyProfiles.Get(difficulty);
-            AEDv2Plan tuning = null;
-            uint revision = 0;
-            bool useAEDv2 = difficulty == MatchDifficulty.Normal &&
-                authority != null && authority.TryGetMatchId(out var matchId) &&
-                AEDv2Authority.TryGetApplied(matchId, out tuning, out revision);
-            if (useAEDv2) profile = AEDv2GameplayBridge.ToNormalDifficultyProfile(tuning);
 
-            controller?.SetAEDv2ProfileOwnership(useAEDv2);
             controller?.ApplyMatchDifficulty(profile);
-            coreCarrierPursuitDelaySeconds = profile.CoreCarrierPursuitDelaySeconds;
-            hearingRangeMultiplier = profile.HearingRangeMultiplier;
-            _objectiveInvestigationEnabled = profile.ObjectiveInvestigationEnabled;
-            _aedv2CorePressureEnabled = useAEDv2
-                ? tuning.Get(AEDv2Key.CoreCarrierPressureEnabled) != 0
-                : profile.ObjectiveInvestigationEnabled;
-            // Flashlight exposure is a fixed player-learnable rule, not an AED knob.
-            _flashlightReactionEnabled = difficulty != MatchDifficulty.Easy;
-            specialEncounterRuntime?.SetCooldownSeconds(profile.SpecialEncounterCooldownSeconds);
+            coreCarrierPursuitDelaySeconds =
+                profile.CoreCarrierPursuitDelaySeconds;
+            hearingRangeMultiplier =
+                profile.HearingRangeMultiplier;
+            _objectiveInvestigationEnabled =
+                profile.ObjectiveInvestigationEnabled;
 
-            controller?.ApplyAEDv2Pacing(
-                useAEDv2 ? (float)tuning.Get(AEDv2Key.PostChaseCooldownSeconds) : 18f,
-                useAEDv2 ? (float)tuning.Get(AEDv2Key.PostAttackCooldownSeconds) : 22f,
-                useAEDv2 ? (float)tuning.Get(AEDv2Key.SameRoomCooldownSeconds) : 15f);
-            specialEncounterRuntime?.SetAEDv2Pacing(
-                useAEDv2 ? (float)tuning.Get(AEDv2Key.JumpEntryReuseSeconds) : 120f,
-                useAEDv2 ? (float)tuning.Get(AEDv2Key.PostSpecialCooldownSeconds) : 20f);
-            _aedv2Applied = useAEDv2;
-            _aedv2AppliedRevision = useAEDv2 ? revision : 0;
+            _flashlightReactionEnabled =
+                difficulty != MatchDifficulty.Easy;
+
+            specialEncounterRuntime?.SetCooldownSeconds(
+                profile.SpecialEncounterCooldownSeconds);
+
             _hearingSensor = null;
             ResolveLocalDependencies();
         }

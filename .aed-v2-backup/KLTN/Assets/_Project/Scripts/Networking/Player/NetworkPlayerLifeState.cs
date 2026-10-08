@@ -108,7 +108,6 @@ namespace EchoProtocol.Networking
 
         [Networked] public int DownCount { get; private set; }
         [Networked] public int ReviveCount { get; private set; }
-        [Networked] public int AEDv2ReviveBonus { get; private set; }
         [Networked] public uint TransitionOrdinal { get; private set; }
         [Networked] public NetworkPlayerLifeTransitionCause LastTransitionCause { get; private set; }
         [Networked] private TickTimer BleedoutTimer { get; set; }
@@ -149,7 +148,7 @@ namespace EchoProtocol.Networking
                 MatchAuthorityRuntime.Instance != null
                     ? MatchAuthorityRuntime.Instance.Difficulty
                     : MatchDifficulty.Normal)
-                .MaximumRevivesPerZone + AEDv2ReviveBonus;
+                .MaximumRevivesPerZone;
 
         public bool CanBeRevived => (Object != null && Object.IsValid) && NetworkPlayerLifeStateRules.CanRevive(
             Status,
@@ -189,8 +188,6 @@ namespace EchoProtocol.Networking
                 IsCrawling = false;
                 DownCount = 0;
                 ReviveCount = 0;
-                AEDv2ReviveBonus = 0;
-                RefreshAEDv2ReviveBonusAuthoritative();
                 TransitionOrdinal = 0;
                 LastTransitionCause = NetworkPlayerLifeTransitionCause.None;
                 BleedoutTimer = TickTimer.None;
@@ -268,8 +265,6 @@ namespace EchoProtocol.Networking
             IsCrawling = false;
             DownCount = 0;
             ReviveCount = 0;
-            AEDv2ReviveBonus = 0;
-            RefreshAEDv2ReviveBonusAuthoritative();
             TransitionOrdinal = 0;
             LastTransitionCause = NetworkPlayerLifeTransitionCause.None;
             BleedoutTimer = TickTimer.None;
@@ -283,17 +278,6 @@ namespace EchoProtocol.Networking
             ClearReviveSnapshot();
             ApplyPresentation();
             StateChanged?.Invoke(this);
-        }
-
-        public void RefreshAEDv2ReviveBonusAuthoritative()
-        {
-            if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
-            AEDv2ReviveBonus = 0;
-            var authority = MatchAuthorityRuntime.Instance;
-            if (authority != null && authority.Difficulty == MatchDifficulty.Normal &&
-                authority.TryGetMatchId(out var matchId) &&
-                EchoProtocol.AI.AED.AEDv2Authority.TryGetApplied(matchId, out var plan, out _))
-                AEDv2ReviveBonus = plan.ReviveBonus;
         }
 
         public bool ResetZoneReviveBudgetAuthoritative()
@@ -311,7 +295,6 @@ namespace EchoProtocol.Networking
 
             DownCount = 0;
             ReviveCount = 0;
-            RefreshAEDv2ReviveBonusAuthoritative();
             return true;
         }
 

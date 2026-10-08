@@ -67,12 +67,6 @@ namespace EchoProtocol.AI.Stalker.Special
             settings.SetCooldownSeconds(seconds);
         }
 
-        public void SetAEDv2Pacing(float entryReuse, float postSpecial)
-        {
-            settings ??= new StalkerSpecialEncounterSettings();
-            settings.SetAEDv2Pacing(entryReuse, postSpecial);
-        }
-
         private void Awake()
         {
             ResolveDependencies();

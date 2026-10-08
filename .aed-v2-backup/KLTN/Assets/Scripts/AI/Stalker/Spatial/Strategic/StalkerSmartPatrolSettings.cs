@@ -91,12 +91,5 @@ namespace EchoProtocol.AI.Stalker.Spatial.Strategic
 
         public void SetSeekPlayersAfterSeconds(float seconds) =>
             seekPlayersAfterSeconds = Mathf.Max(1f, seconds);
-
-        public void SetAEDv2Pacing(float postChase, float postAttack, float sameRoom)
-        {
-            postChaseCooldownSeconds = Mathf.Max(0f, postChase);
-            postAttackCooldownSeconds = Mathf.Max(0f, postAttack);
-            sameRoomPressureCooldownSeconds = Mathf.Max(0.01f, sameRoom);
-        }
     }
 }

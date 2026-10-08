@@ -103,17 +103,6 @@ namespace EchoProtocol.AI.AED
                     out adaptiveInputUnavailableReason);
             }
 
-            if (mode == ScenarioResolutionMode.Adaptive
-                && runtimeSettings != null
-                && (runtimeSettings.ExtendedPolicyShadowEnabled
-                    || runtimeSettings.ExtendedPolicyGameplayEnabled))
-            {
-                AEDv2Authority.Stage(
-                    request, snapshot, policyConfig, evidencePolicy, currency,
-                    runtimeSettings.ExtendedPolicyShadowEnabled,
-                    runtimeSettings.ExtendedPolicyGameplayEnabled);
-            }
-
             var result = _engine.Resolve(
                 new ScenarioResolutionEngineInput(
                     request,
@@ -144,23 +133,6 @@ namespace EchoProtocol.AI.AED
                 throw new InvalidOperationException(
                     "Finalized match id does not match " +
                     "the resolution target match.");
-            }
-
-            var extendedApplied = AEDv2Authority.Commit(
-                matchId,
-                result.Context.Request.ResolutionId,
-                hasStateAuthority,
-                result.IsPrecommitRejected ||
-                result.CommitDisposition != ScenarioResolutionCommitDisposition.NewDecision);
-            if (result.Context.Request.DecisionPoint == ScenarioDecisionPoint.PreMatch
-                && AEDv2Authority.LastProposal != null)
-            {
-                var extended = AEDv2Authority.LastProposal;
-                RuntimeLog.Log(RuntimeLogCategory.Aed,
-                    $"[AED_V2][DECISION] id={extended.DecisionId:D} " +
-                    $"key={extended.Key?.ToString() ?? "NONE"} intent={extended.Intent} " +
-                    $"reason={extended.Reason} applied={extendedApplied} " +
-                    $"plan={extended.Plan.Fingerprint()}");
             }
 
             var record =
@@ -229,7 +201,6 @@ namespace EchoProtocol.AI.AED
         public void ResetForMatch(Guid oldMatchId)
         {
             if (oldMatchId != Guid.Empty) ScenarioConfigRuntimeRegistry.Clear(oldMatchId);
-            AEDv2Authority.Reset(oldMatchId);
             CurrentAppliedScenarioConfig = null;
             LastAdaptiveDecision = null;
             LastDebugSnapshot = null;

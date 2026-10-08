@@ -326,7 +326,6 @@ namespace EchoProtocol.AI.Stalker
         private long _legacySimulationTick;
         private ScenarioMonsterParameters _scenarioMonsterParameters;
         private bool _hasScenarioMonsterParameters;
-        private bool _aedv2ProfileOwnsTuning;
         private IReadOnlyList<StalkerTargetCandidate> _currentVisibleTargetCandidates;
         private IReadOnlyList<PlayerId> _currentVisibleObjectiveCarrierIds;
         private IReadOnlyList<StalkerTargetStatus> _currentTargetStatuses;
@@ -827,17 +826,6 @@ namespace EchoProtocol.AI.Stalker
             _hasScenarioMonsterParameters = false;
 
             ApplyMovementSpeedForCurrentState();
-        }
-
-        public void SetAEDv2ProfileOwnership(bool enabled)
-        {
-            _aedv2ProfileOwnsTuning = enabled;
-        }
-
-        public void ApplyAEDv2Pacing(float postChase, float postAttack, float sameRoom)
-        {
-            smartPatrolSettings ??= new StalkerSmartPatrolSettings();
-            smartPatrolSettings.SetAEDv2Pacing(postChase, postAttack, sameRoom);
         }
 
         public void ApplyMatchDifficulty(MatchDifficultyProfile profile)
@@ -4410,8 +4398,7 @@ namespace EchoProtocol.AI.Stalker
 
         private bool ShouldUseScenarioMonsterParameters()
         {
-            return !_aedv2ProfileOwnsTuning
-                && useScenarioMonsterOverrides
+            return useScenarioMonsterOverrides
                 && _hasScenarioMonsterParameters
                 && _scenarioMonsterParameters != null;
         }
