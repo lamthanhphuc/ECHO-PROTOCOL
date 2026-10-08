@@ -1,0 +1,52 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a6c6ca168fd94eafbd6db10c89827975, type: 3}
+  m_Name: PetCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Pets.PetCatalog
+  buildVersion: 6
+  entries:
+  - displayName: NIGHTMARE
+    prefab: {fileID: 6120731942578185373, guid: cf7ade716a3c17e4cab487a455815901, type: 3}
+    controller: {fileID: 9100000, guid: 0efedba084474df4aa72e2325d87a720, type: 2}
+    canFly: 0
+    scale: 0.06263136
+    groundOffset: 0.18030162
+    jumpSeconds: 2
+    takeOffSeconds: 1
+    landSeconds: 1
+  - displayName: SOUL EATER
+    prefab: {fileID: 3769579991783339973, guid: c11fe3af27b567d41b4815aca47fd6a6, type: 3}
+    controller: {fileID: 9100000, guid: afcdbe11fec52bc48a8eb27853c7d8cb, type: 2}
+    canFly: 1
+    scale: 0.07745957
+    groundOffset: 0.12675598
+    jumpSeconds: 1
+    takeOffSeconds: 2.6666667
+    landSeconds: 2.6000001
+  - displayName: TERROR BRINGER
+    prefab: {fileID: 2851670760557117028, guid: c714abb755f868e46a8dbcb5bef8a475, type: 3}
+    controller: {fileID: 9100000, guid: 428b96b1915bc8d43bb2072d6663feb5, type: 2}
+    canFly: 1
+    scale: 0.040552262
+    groundOffset: 0.15761866
+    jumpSeconds: 1
+    takeOffSeconds: 2.8666668
+    landSeconds: 3.7000003
+  - displayName: USURPER
+    prefab: {fileID: 6398126494533875944, guid: 99ee4be2e12697642909e5dbddedc73d, type: 3}
+    controller: {fileID: 9100000, guid: 66666a5f1685cfb47b2767296b843af8, type: 2}
+    canFly: 1
+    scale: 0.059946783
+    groundOffset: 0.12756832
+    jumpSeconds: 1
+    takeOffSeconds: 4
+    landSeconds: 4

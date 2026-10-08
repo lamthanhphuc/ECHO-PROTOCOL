@@ -411,8 +411,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
                 continue;
             }
 
-            renderer.shadowCastingMode = ShadowCastingMode.Off;
-            renderer.receiveShadows = false;
+            HeldVisualShadowOverride.SetActive(renderer, true);
         }
     }
 

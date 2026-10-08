@@ -59,7 +59,7 @@ namespace EchoProtocol.RelayB.Tests
                     sim.SetPhase(sim.GetEffectiveTargetPhase());
                 }
                 Assert.IsTrue(sim.IsOnline, "Seed " + seed);
-                Assert.That(sim.FrequencyTolerancePercent, Is.LessThan(_config.FrequencyTolerancePercent));
+                Assert.That(sim.FrequencyTolerancePercent, Is.EqualTo(_config.FrequencyTolerancePercent));
             }
             Assert.IsTrue(frequencyDrift && phaseDrift);
             Assert.That(waves.Count, Is.EqualTo(5));
@@ -132,8 +132,7 @@ namespace EchoProtocol.RelayB.Tests
                     if (candidate.Peaks[0] >= preset.ReferenceProfile.FundamentalMinKhz
                         && candidate.Peaks[0] <= preset.ReferenceProfile.FundamentalMaxKhz
                         && candidate.Waveform == preset.ReferenceWaveform
-                        && candidate.PilotFrame == preset.ReferenceProfile.ExpectedPilot
-                        && RelayBSignalSimulation.HasMatchingHarmonic(candidate, preset.ReferenceProfile)) matches++;
+                        && candidate.PilotFrame == preset.ReferenceProfile.ExpectedPilot) matches++;
                 }
                 Assert.That(matches, Is.EqualTo(1));
                 signatures.Add($"{preset.TargetFrequency:0.0}:{preset.ReferenceProfile.ExpectedPilot}:{preset.CorrectChannelIndex}");

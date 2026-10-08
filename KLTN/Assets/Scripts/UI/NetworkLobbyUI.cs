@@ -1,3 +1,4 @@
+using EchoProtocol.Pets;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -26,6 +27,7 @@ namespace EchoProtocol.UI
         [SerializeField] private Button joinButton;
         [SerializeField] private Button readyButton;
         [SerializeField] private Button characterButton;
+        [SerializeField] private Button petButton;
         [SerializeField] private Button startButton;
         [SerializeField] private Button leaveButton;
         [SerializeField] private Button exitButton;
@@ -83,6 +85,8 @@ namespace EchoProtocol.UI
             if (hostButton != null) hostButton.onClick.AddListener(OnHostClicked);
             if (joinButton != null) joinButton.onClick.AddListener(OnJoinClicked);
             if (readyButton != null) readyButton.onClick.AddListener(OnReadyClicked);
+            EnsurePetButton();
+            if (petButton != null) petButton.onClick.AddListener(OnPetClicked);
             if (characterButton != null) characterButton.onClick.AddListener(OnCharacterClicked);
             if (startButton != null) startButton.onClick.AddListener(OnStartClicked);
             if (leaveButton != null) leaveButton.onClick.AddListener(OnLeaveClicked);
@@ -132,6 +136,7 @@ namespace EchoProtocol.UI
             if (hostButton != null) hostButton.onClick.RemoveListener(OnHostClicked);
             if (joinButton != null) joinButton.onClick.RemoveListener(OnJoinClicked);
             if (readyButton != null) readyButton.onClick.RemoveListener(OnReadyClicked);
+            if (petButton != null) petButton.onClick.RemoveListener(OnPetClicked);
             if (characterButton != null) characterButton.onClick.RemoveListener(OnCharacterClicked);
             if (startButton != null) startButton.onClick.RemoveListener(OnStartClicked);
             if (leaveButton != null) leaveButton.onClick.RemoveListener(OnLeaveClicked);
@@ -282,7 +287,8 @@ namespace EchoProtocol.UI
                     if (member.IsLocal) list.Append(_room.IsHost ? " [YOU / HOST]" : " [YOU]");
                     list.AppendLine().Append("  ").Append(member.IsReady ? "READY" : "NOT READY")
                         .Append("  |  TOOL ").Append(member.ToolId)
-                        .Append("  |  ").Append(member.CharacterId == 1 ? "JAMMO" : "ASTRONAUT");
+                        .Append("  |  ").Append(member.CharacterId == 1 ? "JAMMO" : "ASTRONAUT")
+                        .AppendLine().Append("  PET: ").Append(PetCatalog.Name(member.PetId));
                 }
             if (emptyMemberText != null) emptyMemberText.gameObject.SetActive(list.Length == 0);
             memberListText.text = list.Length == 0 ? (emptyMemberText == null ? "NO PLAYERS YET" : string.Empty) : list.ToString();
@@ -324,6 +330,21 @@ namespace EchoProtocol.UI
             if (statusIndicator != null) statusIndicator.color = Offline;
             _blinkSignal = true;
             Debug.LogError($"[NetworkLobbyUI] {detail}", this);
+        }
+
+        private void EnsurePetButton()
+        {
+            if (petButton != null || characterButton == null) return;
+            petButton = Instantiate(characterButton, characterButton.transform.parent);
+            petButton.name = "PetSelectionButton";
+            petButton.onClick = new Button.ButtonClickedEvent();
+            var rect = (RectTransform)petButton.transform;
+            rect.anchoredPosition += Vector2.down * (rect.rect.height + 8f);
+        }
+        private void OnPetClicked()
+        {
+            if (lobbyManager != null && lobbyManager.TryGetLocalPlayerState(out var state, false))
+                state.RequestPet((state.PetId + 1) % 5);
         }
 
         private void OnCharacterClicked()
@@ -376,6 +397,18 @@ namespace EchoProtocol.UI
                 }
                 var characterLabel = characterButton.GetComponentInChildren<TMP_Text>();
                 if (characterLabel != null) characterLabel.text = "CHARACTER: " + character;
+            }
+            if (petButton != null)
+            {
+                petButton.interactable = false;
+                int petId = 0;
+                if (lobbyManager != null && lobbyManager.TryGetLocalPlayerState(out var petOwner, false))
+                {
+                    petId = petOwner.PetId;
+                    petButton.interactable = inLobby && !petOwner.IsReady;
+                }
+                var label = petButton.GetComponentInChildren<TMP_Text>();
+                if (label != null) label.text = "PET: " + PetCatalog.Name(petId);
             }
             if (readyButton != null)
             {

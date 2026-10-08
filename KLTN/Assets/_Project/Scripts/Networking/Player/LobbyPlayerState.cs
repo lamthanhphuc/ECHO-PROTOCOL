@@ -1,3 +1,4 @@
+using EchoProtocol.Pets;
 using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
@@ -39,7 +40,7 @@ namespace EchoProtocol.Networking
         }
     }
 
-    public enum LobbySelectionKind { Team = 1, Tool = 2, Character = 3 }
+    public enum LobbySelectionKind { Team = 1, Tool = 2, Character = 3, Pet = 4 }
 
     public enum LobbySelectionError
     {
@@ -282,6 +283,8 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            _pet = GetComponent<PetCompanionController>();
+            if (_pet == null) _pet = gameObject.AddComponent<PetCompanionController>();
             AnyStateChanged?.Invoke();
             if (Object.HasInputAuthority)
             {
@@ -310,6 +313,7 @@ namespace EchoProtocol.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            if (_pet != null) Destroy(_pet);
             AnyStateChanged?.Invoke();
         }
 
@@ -397,6 +401,58 @@ namespace EchoProtocol.Networking
             if (!CanSendSelectionRequest(LobbySelectionKind.Tool, toolId)) return false;
             RpcRequestTool(toolId);
             return true;
+        }
+
+        public bool RequestPet(int petId)
+        {
+            if (!CanSendSelectionRequest(LobbySelectionKind.Pet, petId)) return false;
+            RpcRequestPet(petId);
+            return true;
+        }
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority, HostMode = RpcHostMode.SourceIsHostPlayer)]
+        private void RpcRequestPet(int petId, RpcInfo info = default)
+        {
+            if (!TryResolveRequester(info.Source, out var requester)) return;
+            var error = ValidateOwnedRequest(requester);
+            if (error == LobbySelectionError.None && (IsReady || IsGameplayPlayer)) error = LobbySelectionError.SelectionLockedWhileReady;
+            if (error == LobbySelectionError.None && (petId < 0 || petId > 4)) error = LobbySelectionError.InvalidSelection;
+            if (error == LobbySelectionError.None) { PetId = petId; AnyStateChanged?.Invoke(); }
+            SendSelectionResult(requester, LobbySelectionKind.Pet, petId, error);
+        }
+        [Networked, OnChangedRender(nameof(HandleSelectionChanged))] public int PetId { get; private set; }
+        [Networked] public Vector3 PetPosition { get; private set; }
+        [Networked] public Quaternion PetRotation { get; private set; }
+        [Networked] public PetMotion PetMotion { get; private set; }
+        [Networked] public float PetAnimationStartTime { get; private set; }
+        public bool GetPetRenderPose(out Vector3 position, out Quaternion rotation, out PetMotion motion, out float startTime, out float renderTime)
+        {
+            position=PetPosition; rotation=PetRotation; motion=PetMotion; startTime=PetAnimationStartTime;
+            renderTime=(float)Runner.SimulationTime;
+            if (!TryGetSnapshotsBuffers(out var from, out var to, out var alpha)) return false;
+            var ids=GetPropertyReader<int>(nameof(PetId));
+            if(ids.Read(from)!=PetId || ids.Read(to)!=PetId) return false;
+            var positions=GetPropertyReader<Vector3>(nameof(PetPosition));
+            var rotations=GetPropertyReader<Quaternion>(nameof(PetRotation));
+            var motions=GetPropertyReader<PetMotion>(nameof(PetMotion));
+            var starts=GetPropertyReader<float>(nameof(PetAnimationStartTime));
+            var first=positions.Read(from); var last=positions.Read(to);
+            bool teleport=Vector3.Distance(first,last)>5f;
+            position=teleport ? last : Vector3.Lerp(first,last,alpha);
+            rotation=Quaternion.Slerp(rotations.Read(from),rotations.Read(to),alpha);
+            motion=motions.Read(teleport ? to : from); startTime=starts.Read(teleport ? to : from);
+            renderTime=((int)from.Tick+((int)to.Tick-(int)from.Tick)*alpha)*Runner.DeltaTime;
+            return true;
+        }
+        private PetCompanionController _pet;
+        public void SetPetPose(Vector3 position, Quaternion rotation, PetMotion motion)
+        {
+            if (Object == null || !Object.HasStateAuthority) return;
+            if (PetMotion != motion) PetAnimationStartTime = (float)Runner.SimulationTime;
+            PetPosition = position; PetRotation = rotation; PetMotion = motion;
+        }
+        public override void FixedUpdateNetwork()
+        {
+            if (Object.HasStateAuthority && _pet != null) _pet.TickAuthority(Runner.DeltaTime);
         }
 
         public bool RequestCharacter(int characterId)
