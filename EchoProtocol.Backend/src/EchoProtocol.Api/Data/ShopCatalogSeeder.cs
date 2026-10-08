@@ -38,7 +38,15 @@ public static class ShopCatalogSeeder
             "TEAM_TOOL",
             350,
             "Stabilize volatile energy-core handling.",
-            "Assets/Prefabs/Environment/Teamtoools/Gameplay/PF_CoreStabilizer_Pickup.prefab")
+            "Assets/Prefabs/Environment/Teamtoools/Gameplay/PF_CoreStabilizer_Pickup.prefab"),
+
+        new(
+            Guid.Parse("13000000-0000-0000-0000-000000000001"),
+            "Jammo",
+            "CHARACTER",
+            600,
+            "Compact expedition unit configured for hazardous operations.",
+            "Assets/Resources/Characters/PF_JammoVisual.prefab")
     ];
 
     // Development/test-only catalog entries.

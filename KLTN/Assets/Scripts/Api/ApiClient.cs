@@ -17,6 +17,7 @@ namespace EchoProtocol.Api
     public const string AuthMe = "/api/auth/me";
     public const string PlayerMe = "/api/player/me";
     public const string PaymentsCatalog = "/api/payments/catalog";
+    public const string ShopCharacters = "/api/shop/items?category=CHARACTER&pageSize=100";
     public const string ShopTeamTools = "/api/shop/items?category=TEAM_TOOL&pageSize=100";
     public const string ShopPurchase = "/api/shop/purchase";
     public const string InventoryMe = "/api/inventory/me";

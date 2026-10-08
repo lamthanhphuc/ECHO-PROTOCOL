@@ -163,9 +163,16 @@ namespace EchoProtocol.UI.MainMenu
 
         public void Close()
         {
+            var livePreview =
+                GetComponent<StoreLivePreviewRenderer>();
+
+            if (livePreview != null)
+            {
+                livePreview.Clear();
+            }
+
             gameObject.SetActive(false);
         }
-
         private void Build()
         {
             _window =
@@ -187,6 +194,16 @@ namespace EchoProtocol.UI.MainMenu
             BuildCategoryNavigation();
             BuildContent();
             BuildFooter();
+            var characterStore =
+                GetComponent<CharacterShopController>();
+
+            if (characterStore == null)
+            {
+                characterStore =
+                    gameObject.AddComponent<CharacterShopController>();
+            }
+
+            characterStore.EnsureBuilt();
 
             ShowCategory(
                 StoreCategory.TeamTool);
@@ -350,7 +367,7 @@ namespace EchoProtocol.UI.MainMenu
                 Label(
                     "NavigationHint",
                     nav,
-                    "PURCHASED TEAM TOOLS\nCAN BE SELECTED IN LOBBY.",
+                    "PURCHASED CHARACTERS AND\nTEAM TOOLS CAN BE SELECTED\nIN LOBBY.",
                     10);
 
             PlaceTopLeft(
@@ -638,6 +655,10 @@ namespace EchoProtocol.UI.MainMenu
             if (_teamTools != null)
                 _teamTools.gameObject.SetActive(
                     tools);
+            if (tools)
+            {
+                RefreshSelectedTeamToolPreview();
+            }
 
             switch (category)
             {
@@ -646,12 +667,11 @@ namespace EchoProtocol.UI.MainMenu
                         "CHARACTER";
 
                     _sectionSubtitle.text =
-                        "UNDER DEVELOPMENT";
+                        "OPERATOR UNLOCKS // PERMANENT";
 
                     _status.text =
-                        "CHARACTER STORE IS NOT AVAILABLE IN THIS BUILD.";
+                        "SELECT A CHARACTER.";
                     break;
-
                 case StoreCategory.Pet:
                     _sectionTitle.text =
                         "PET";
@@ -679,6 +699,15 @@ namespace EchoProtocol.UI.MainMenu
                     break;
             }
 
+            var characterStore =
+                GetComponent<CharacterShopController>();
+
+            if (characterStore != null)
+            {
+                characterStore.SetVisible(
+                    category == StoreCategory.Character,
+                    _previewMode);
+            }
             StyleCategoryButton(
                 _characterButton,
                 category == StoreCategory.Character);
@@ -946,6 +975,15 @@ namespace EchoProtocol.UI.MainMenu
                 _selectedPrice.text =
                     "-- CR";
 
+                var existingLivePreview =
+                    GetComponent<StoreLivePreviewRenderer>();
+
+                if (existingLivePreview != null)
+                {
+                    existingLivePreview.Clear(
+                        _selectedPreview);
+                }
+
                 _selectedPreview.texture =
                     null;
 
@@ -973,24 +1011,59 @@ namespace EchoProtocol.UI.MainMenu
                     item.itemId,
                     out var expected))
             {
-                _selectedPreview.texture =
+                var fallbackTexture =
                     Resources.Load<Texture2D>(
                         expected.ThumbnailResource);
+
+                // Static image is kept as fallback while
+                // the live model is being resolved.
+                _selectedPreview.texture =
+                    fallbackTexture;
+
+                _selectedPreview.color =
+                    fallbackTexture != null
+                        ? Color.white
+                        : Color.clear;
+
+                var livePreview =
+                    ResolveLivePreviewRenderer();
+
+                bool liveShown =
+                    livePreview.Show(
+                        expected.LivePreviewResource,
+                        _selectedPreview);
+
+                if (!liveShown)
+                {
+                    _selectedPreview.texture =
+                        fallbackTexture;
+
+                    _selectedPreview.color =
+                        fallbackTexture != null
+                            ? Color.white
+                            : Color.clear;
+                }
             }
             else
             {
+                var existingLivePreview =
+                    GetComponent<StoreLivePreviewRenderer>();
+
+                if (existingLivePreview != null)
+                {
+                    existingLivePreview.Clear(
+                        _selectedPreview);
+                }
+
                 _selectedPreview.texture =
                     null;
-            }
 
-            _selectedPreview.color =
-                _selectedPreview.texture != null
-                    ? Color.white
-                    : Color.clear;
+                _selectedPreview.color =
+                    Color.clear;
+            }
 
             SetBuyState();
         }
-
         private void SetBuyState()
         {
             if (_buyButton == null)
@@ -1148,6 +1221,68 @@ namespace EchoProtocol.UI.MainMenu
                 });
         }
 
+        private StoreLivePreviewRenderer ResolveLivePreviewRenderer()
+        {
+            var renderer =
+                GetComponent<StoreLivePreviewRenderer>();
+
+            if (renderer == null)
+            {
+                renderer =
+                    gameObject.AddComponent<StoreLivePreviewRenderer>();
+            }
+
+            renderer.EnsureInitialized();
+
+            return renderer;
+        }
+
+        private void RefreshSelectedTeamToolPreview()
+        {
+            if (_selected == null
+                || _selectedPreview == null)
+            {
+                return;
+            }
+
+            if (!TeamToolShopAssets.TryGetByItemId(
+                    _selected.itemId,
+                    out var expected))
+            {
+                return;
+            }
+
+            var fallbackTexture =
+                Resources.Load<Texture2D>(
+                    expected.ThumbnailResource);
+
+            _selectedPreview.texture =
+                fallbackTexture;
+
+            _selectedPreview.color =
+                fallbackTexture != null
+                    ? Color.white
+                    : Color.clear;
+
+            var livePreview =
+                ResolveLivePreviewRenderer();
+
+            bool liveShown =
+                livePreview.Show(
+                    expected.LivePreviewResource,
+                    _selectedPreview);
+
+            if (!liveShown)
+            {
+                _selectedPreview.texture =
+                    fallbackTexture;
+
+                _selectedPreview.color =
+                    fallbackTexture != null
+                        ? Color.white
+                        : Color.clear;
+            }
+        }
         private void RefreshCredits()
         {
             if (_credits == null)

@@ -119,11 +119,11 @@ public sealed class ShopCatalogServiceTests
             harness.Db, timeProvider, NullLogger.Instance);
 
         Assert.Equal(
-            6,
+            7,
             await harness.Db.ShopItems.CountAsync());
 
         Assert.Equal(
-            6,
+            7,
             await harness.Db.ShopItems
                 .Select(item => item.ItemId)
                 .Distinct()
@@ -148,6 +148,9 @@ public sealed class ShopCatalogServiceTests
 
         Assert.Contains(
             Guid.Parse("12000000-0000-0000-0000-000000000006"),
+            seededIds);
+        Assert.Contains(
+            Guid.Parse("13000000-0000-0000-0000-000000000001"),
             seededIds);
 
         Assert.DoesNotContain(
