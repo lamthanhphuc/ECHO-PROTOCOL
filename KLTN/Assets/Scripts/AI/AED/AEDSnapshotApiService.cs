@@ -203,6 +203,13 @@ namespace EchoProtocol.AI.AED
                 {
                     return new AEDSnapshotFetchResult(null, null, "AED_SNAPSHOT_CANCELLED");
                 }
+                Debug.LogWarning(
+                    $"[AED_V2][SNAPSHOT_HTTP] " +
+                    $"http={response.StatusCode} " +
+                    $"success={response.IsSuccess} " +
+                    $"apiSuccess={response.Data?.success} " +
+                    $"errorCode={response.Data?.errorCode} " +
+                    $"message={response.Data?.message}");
                 if (!response.IsSuccess || response.Data?.success != true)
                     return new AEDSnapshotFetchResult(null, null, response.StatusCode switch
                     {
@@ -217,6 +224,19 @@ namespace EchoProtocol.AI.AED
                 if (!AEDSnapshotMapper.TryMap(response.Data.data, out var snapshot,
                         out var currency, out var reason))
                     return new AEDSnapshotFetchResult(null, null, reason);
+                var dto = response.Data.data;
+
+                Debug.LogWarning(
+                    $"[AED_V2][SNAPSHOT_CURRENCY] " +
+                    $"matchOk={snapshot.TargetMatchId == matchId} " +
+                    $"current={currency.IsCurrent} " +
+                    $"roster={dto.rosterCurrent} " +
+                    $"revisions={dto.profileRevisionsCurrent} " +
+                    $"fingerprint={dto.snapshotFingerprintValid} " +
+                    $"semantics={dto.profileSemanticsSupported} " +
+                    $"targetMatch={dto.targetMatchCurrent} " +
+                    $"decisionPoint={dto.decisionPointCurrent} " +
+                    $"phaseContext={dto.phaseContextCurrent}");
                 if (snapshot.TargetMatchId != matchId || !currency.IsCurrent)
                     return new AEDSnapshotFetchResult(null, null, "AED_SNAPSHOT_STALE");
                 return new AEDSnapshotFetchResult(snapshot, currency, string.Empty);

@@ -54,8 +54,23 @@ public sealed class ScenarioSnapshotReadService(AppDbContext db, TimeProvider ti
             x.ProfileFormulaVersion == AdaptiveInputSnapshotBuilder.SupportedProfileFormula)
             && (available.Length == 0 ? s.ProfileFormulaSemanticId is null
                 : s.ProfileFormulaSemanticId == AdaptiveInputSnapshotBuilder.SupportedProfileFormula);
-        if (!rosterCurrent || !revisionsCurrent || !fingerprintValid || !semanticsSupported)
-            return Fail("Scenario snapshot is no longer current or supported", ErrorCodes.ScenarioDecisionStaleRoster);
+        if (!rosterCurrent || !revisionsCurrent
+            || !fingerprintValid || !semanticsSupported)
+        {
+            Console.Error.WriteLine(
+                $"[AED_V2][SNAPSHOT_CONFLICT] " +
+                $"match={matchId:D} decision={decisionId:D} " +
+                $"rosterCurrent={rosterCurrent} " +
+                $"revisionsCurrent={revisionsCurrent} " +
+                $"fingerprintValid={fingerprintValid} " +
+                $"semanticsSupported={semanticsSupported} " +
+                $"validity={s.Validity} " +
+                $"fingerprintVersion={s.FingerprintVersion}");
+
+            return Fail(
+                "Scenario snapshot is no longer current or supported",
+                ErrorCodes.ScenarioDecisionStaleRoster);
+        }
 
         return ServiceResult<AdaptiveInputSnapshotReadResponse>.Success(new(
             s.SnapshotId, s.MatchId, s.DecisionPoint, s.DecisionPoint,
