@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader, Panel, StatCard } from "@/components/ui/panel";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { AdminCreditGrant } from "@/components/admin/admin-credit-grant";
 import { adminApi } from "@/lib/api/server-api";
 import { formatDate, formatNumber } from "@/lib/utils/format";
 
@@ -14,6 +15,10 @@ export default async function UserDetailPage({ params }: { params: Promise<{ use
       <StatCard label="Total matches" value={formatNumber(user.totalMatches)} />
       <StatCard label="Total wins" value={formatNumber(user.totalWins)} />
     </div>
+    <AdminCreditGrant
+      userId={user.userId}
+      currentBalance={user.walletBalance ?? 0}
+    />
     <Panel className="mt-5">
       <dl className="grid gap-4 sm:grid-cols-2">
         <div><dt className="eyebrow">User ID</dt><dd className="code mt-1 break-all">{user.userId}</dd></div>

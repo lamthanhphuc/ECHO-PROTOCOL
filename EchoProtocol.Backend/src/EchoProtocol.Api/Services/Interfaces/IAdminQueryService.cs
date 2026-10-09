@@ -17,4 +17,8 @@ public interface IAdminQueryService
         AdminWalletTransactionsQuery query, CancellationToken cancellationToken = default);
     Task<ServiceResult<AdminPagedResponse<AdminPurchaseResponse>>> GetPurchasesAsync(
         AdminPurchasesQuery query, CancellationToken cancellationToken = default);
-}
+
+    Task<ServiceResult<AdminGrantCreditsResponse>> GrantCreditsAsync(
+        Guid userId,
+        AdminGrantCreditsRequest request,
+        CancellationToken cancellationToken = default);}

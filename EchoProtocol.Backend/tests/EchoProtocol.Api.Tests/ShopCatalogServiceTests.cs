@@ -110,20 +110,34 @@ public sealed class ShopCatalogServiceTests
     [Fact, Trait("Category", "M4ShopUnit")]
     public async Task TestCatalogSeedCanRunTwiceWithoutDuplicates()
     {
-        await using var harness = await ShopHarness.CreateAsync();
-        var timeProvider = new FixedTimeProvider(Now);
+        await using var harness =
+            await ShopHarness.CreateAsync();
+
+        var timeProvider =
+            new FixedTimeProvider(Now);
 
         await ShopCatalogSeeder.SeedTestCatalogAsync(
-            harness.Db, timeProvider, NullLogger.Instance);
-        await ShopCatalogSeeder.SeedTestCatalogAsync(
-            harness.Db, timeProvider, NullLogger.Instance);
+            harness.Db,
+            timeProvider,
+            NullLogger.Instance);
 
+        await ShopCatalogSeeder.SeedTestCatalogAsync(
+            harness.Db,
+            timeProvider,
+            NullLogger.Instance);
+
+        // 4 production Team Tools
+        // + 1 Jammo Character
+        // + 4 Pets
+        // + 12 alternate Pet Skins
+        // + 2 development-only items
+        // = 23 unique catalog entries.
         Assert.Equal(
-            7,
+            23,
             await harness.Db.ShopItems.CountAsync());
 
         Assert.Equal(
-            7,
+            23,
             await harness.Db.ShopItems
                 .Select(item => item.ItemId)
                 .Distinct()
@@ -134,31 +148,94 @@ public sealed class ShopCatalogServiceTests
                 .Select(item => item.ItemId)
                 .ToListAsync();
 
+        // Existing production Team Tools.
         Assert.Contains(
-            Guid.Parse("12000000-0000-0000-0000-000000000001"),
+            Guid.Parse(
+                "12000000-0000-0000-0000-000000000001"),
             seededIds);
 
         Assert.Contains(
-            Guid.Parse("12000000-0000-0000-0000-000000000002"),
+            Guid.Parse(
+                "12000000-0000-0000-0000-000000000002"),
             seededIds);
 
         Assert.Contains(
-            Guid.Parse("12000000-0000-0000-0000-000000000004"),
+            Guid.Parse(
+                "12000000-0000-0000-0000-000000000004"),
             seededIds);
 
         Assert.Contains(
-            Guid.Parse("12000000-0000-0000-0000-000000000006"),
+            Guid.Parse(
+                "12000000-0000-0000-0000-000000000006"),
             seededIds);
+
+        // Jammo Character.
         Assert.Contains(
-            Guid.Parse("13000000-0000-0000-0000-000000000001"),
+            Guid.Parse(
+                "13000000-0000-0000-0000-000000000001"),
+            seededIds);
+
+        // Four Pet SKUs.
+        Assert.Contains(
+            Guid.Parse(
+                "14000000-0000-0000-0000-000000000001"),
+            seededIds);
+
+        Assert.Contains(
+            Guid.Parse(
+                "14000000-0000-0000-0000-000000000004"),
+            seededIds);
+
+        // First and last paid Pet Skin SKUs.
+        Assert.Contains(
+            Guid.Parse(
+                "14100000-0000-0000-0000-000000000101"),
+            seededIds);
+
+        Assert.Contains(
+            Guid.Parse(
+                "14100000-0000-0000-0000-000000000403"),
+            seededIds);
+
+        Assert.Equal(
+            4,
+            await harness.Db.ShopItems.CountAsync(
+                item =>
+                    item.Category ==
+                    ShopItemCategories.Pet));
+
+        Assert.Equal(
+            12,
+            await harness.Db.ShopItems.CountAsync(
+                item =>
+                    item.Category ==
+                    ShopItemCategories.PetSkin));
+
+        // Jammo + development Test Explorer.
+        Assert.Equal(
+            2,
+            await harness.Db.ShopItems.CountAsync(
+                item =>
+                    item.Category ==
+                    ShopItemCategories.Character));
+
+        // 4 production tools + development Test Signal Scanner.
+        Assert.Equal(
+            5,
+            await harness.Db.ShopItems.CountAsync(
+                item =>
+                    item.Category ==
+                    ShopItemCategories.TeamTool));
+
+        // World-only gameplay items must remain outside the shop.
+        Assert.DoesNotContain(
+            Guid.Parse(
+                "12000000-0000-0000-0000-000000000003"),
             seededIds);
 
         Assert.DoesNotContain(
-            Guid.Parse("12000000-0000-0000-0000-000000000003"),
-            seededIds);
-
-        Assert.DoesNotContain(
-            Guid.Parse("12000000-0000-0000-0000-000000000005"),
+            Guid.Parse(
+                "12000000-0000-0000-0000-000000000005"),
             seededIds);
     }
 

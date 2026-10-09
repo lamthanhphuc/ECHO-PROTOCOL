@@ -1,6 +1,8 @@
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.DTOs.Admin;
+using EchoProtocol.Api.Entities;
+using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
@@ -290,7 +292,107 @@ public sealed class AdminQueryService(AppDbContext db) : IAdminQueryService
             projected.OrderByDescending(item => item.CreatedAtUtc)
                 .ThenByDescending(item => item.PurchaseId),
             query, "Admin purchases retrieved", cancellationToken);
+    }    public async Task<ServiceResult<AdminGrantCreditsResponse>> GrantCreditsAsync(
+        Guid userId,
+        AdminGrantCreditsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        const int maximumGrant = 100_000;
+        const int maximumReasonLength = 200;
+
+        if (request.Amount is < 1 or > maximumGrant)
+        {
+            return ServiceResult<AdminGrantCreditsResponse>.Failure(
+                $"Amount must be between 1 and {maximumGrant}",
+                ErrorCodes.ValidationError);
+        }
+
+        var reason =
+            (request.Reason ?? string.Empty).Trim();
+
+        if (reason.Length > maximumReasonLength)
+        {
+            return ServiceResult<AdminGrantCreditsResponse>.Failure(
+                $"Reason must not exceed {maximumReasonLength} characters",
+                ErrorCodes.ValidationError);
+        }
+
+        var wallet =
+            await db.Wallets
+                .SingleOrDefaultAsync(
+                    item => item.UserId == userId,
+                    cancellationToken);
+
+        if (wallet is null)
+        {
+            return ServiceResult<AdminGrantCreditsResponse>.Failure(
+                "User wallet not found",
+                ErrorCodes.NotFound);
+        }
+
+        if (wallet.Balance > int.MaxValue - request.Amount)
+        {
+            return ServiceResult<AdminGrantCreditsResponse>.Failure(
+                "Wallet balance would exceed the supported range",
+                ErrorCodes.ValidationError);
+        }
+
+        var balanceBefore =
+            wallet.Balance;
+
+        var balanceAfter =
+            balanceBefore + request.Amount;
+
+        var transactionId =
+            Guid.NewGuid();
+
+        var reference =
+            Guid.NewGuid();
+
+        var now =
+            DateTime.UtcNow;
+
+        wallet.Balance =
+            balanceAfter;
+
+        wallet.UpdatedAt =
+            now;
+
+        db.WalletTransactions.Add(
+            new WalletTransaction
+            {
+                Id = transactionId,
+                WalletId = wallet.Id,
+                Type = WalletTransactionType.ADMIN_GRANT,
+                Amount = request.Amount,
+                BalanceBefore = balanceBefore,
+                BalanceAfter = balanceAfter,
+                ReferenceId = reference,
+                Description =
+                    string.IsNullOrWhiteSpace(reason)
+                        ? "Admin credit grant"
+                        : $"Admin credit grant: {reason}",
+                CreatedAtUtc = now
+            });
+
+        await db.SaveChangesAsync(
+            cancellationToken);
+
+        return ServiceResult<AdminGrantCreditsResponse>.Success(
+            new AdminGrantCreditsResponse
+            {
+                UserId = userId,
+                TransactionId = transactionId,
+                Reference = reference,
+                Amount = request.Amount,
+                BalanceBefore = balanceBefore,
+                BalanceAfter = balanceAfter,
+                Reason = reason,
+                CreatedAtUtc = now
+            },
+            "Credits granted");
     }
+
 
     private IQueryable<AdminWalletTransactionResponse> WalletTransactions() =>
         db.WalletTransactions.AsNoTracking().Select(item => new AdminWalletTransactionResponse

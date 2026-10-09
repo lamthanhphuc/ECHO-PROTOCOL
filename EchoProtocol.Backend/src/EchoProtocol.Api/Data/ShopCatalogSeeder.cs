@@ -49,6 +49,142 @@ public static class ShopCatalogSeeder
             "Assets/Resources/Characters/PF_JammoVisual.prefab")
     ];
 
+    // Cosmetic pets and purchasable alternate skins.
+    // Skin 0 is bundled with the owned pet and is not a separate SKU.
+    private static readonly ShopSeedDefinition[] PetCatalog =
+    [
+        new(
+            Guid.Parse("14000000-0000-0000-0000-000000000001"),
+            "Nightmare",
+            "PET",
+            700,
+            "Ground companion with agile movement and idle animations.",
+            "Assets/Resources/Pets/PF_Pet_DragonNightmare.prefab"),
+
+        new(
+            Guid.Parse("14000000-0000-0000-0000-000000000002"),
+            "Soul Eater",
+            "PET",
+            800,
+            "Flying cosmetic companion configured for expedition support.",
+            "Assets/Resources/Pets/PF_Pet_DragonSoulEater.prefab"),
+
+        new(
+            Guid.Parse("14000000-0000-0000-0000-000000000003"),
+            "Terror Bringer",
+            "PET",
+            900,
+            "Large flying cosmetic companion with synchronized movement.",
+            "Assets/Resources/Pets/PF_Pet_DragonTerrorBringer.prefab"),
+
+        new(
+            Guid.Parse("14000000-0000-0000-0000-000000000004"),
+            "Usurper",
+            "PET",
+            1000,
+            "Premium flying cosmetic companion.",
+            "Assets/Resources/Pets/PF_Pet_DragonUsurper.prefab"),
+
+        // Nightmare alternate skins.
+        new(
+            Guid.Parse("14100000-0000-0000-0000-000000000101"),
+            "Nightmare Albino",
+            "PET_SKIN",
+            150,
+            "Albino skin for Nightmare.",
+            "Assets/Resources/Pets/Skins/Nightmare/M_Pet_Nightmare_Albino.mat"),
+
+        new(
+            Guid.Parse("14100000-0000-0000-0000-000000000102"),
+            "Nightmare Blue",
+            "PET_SKIN",
+            150,
+            "Blue skin for Nightmare.",
+            "Assets/Resources/Pets/Skins/Nightmare/M_Pet_Nightmare_Blue.mat"),
+
+        new(
+            Guid.Parse("14100000-0000-0000-0000-000000000103"),
+            "Nightmare Red",
+            "PET_SKIN",
+            150,
+            "Red skin for Nightmare.",
+            "Assets/Resources/Pets/Skins/Nightmare/M_Pet_Nightmare_Red.mat"),
+
+        // Soul Eater alternate skins.
+        new(
+            Guid.Parse("14100000-0000-0000-0000-000000000201"),
+            "Soul Eater Blue",
+            "PET_SKIN",
+            150,
+            "Blue skin for Soul Eater.",
+            "Assets/Resources/Pets/Skins/SoulEater/M_Pet_SoulEater_Blue.mat"),
+
+        new(
+            Guid.Parse("14100000-0000-0000-0000-000000000202"),
+            "Soul Eater Green",
+            "PET_SKIN",
+            150,
+            "Green skin for Soul Eater.",
+            "Assets/Resources/Pets/Skins/SoulEater/M_Pet_SoulEater_Green.mat"),
+
+        new(
+            Guid.Parse("14100000-0000-0000-0000-000000000203"),
+            "Soul Eater Red",
+            "PET_SKIN",
+            150,
+            "Red skin for Soul Eater.",
+            "Assets/Resources/Pets/Skins/SoulEater/M_Pet_SoulEater_Red.mat"),
+
+        // Terror Bringer alternate skins.
+        new(
+            Guid.Parse("14100000-0000-0000-0000-000000000301"),
+            "Terror Bringer Albino",
+            "PET_SKIN",
+            150,
+            "Albino skin for Terror Bringer.",
+            "Assets/Resources/Pets/Skins/TerrorBringer/M_Pet_TerrorBringer_Albino.mat"),
+
+        new(
+            Guid.Parse("14100000-0000-0000-0000-000000000302"),
+            "Terror Bringer Green",
+            "PET_SKIN",
+            150,
+            "Green skin for Terror Bringer.",
+            "Assets/Resources/Pets/Skins/TerrorBringer/M_Pet_TerrorBringer_Green.mat"),
+
+        new(
+            Guid.Parse("14100000-0000-0000-0000-000000000303"),
+            "Terror Bringer Red",
+            "PET_SKIN",
+            150,
+            "Red skin for Terror Bringer.",
+            "Assets/Resources/Pets/Skins/TerrorBringer/M_Pet_TerrorBringer_Red.mat"),
+
+        // Usurper alternate skins.
+        new(
+            Guid.Parse("14100000-0000-0000-0000-000000000401"),
+            "Usurper Albino",
+            "PET_SKIN",
+            150,
+            "Albino skin for Usurper.",
+            "Assets/Resources/Pets/Skins/Usurper/M_Pet_Usurper_Albino.mat"),
+
+        new(
+            Guid.Parse("14100000-0000-0000-0000-000000000402"),
+            "Usurper Black",
+            "PET_SKIN",
+            150,
+            "Black skin for Usurper.",
+            "Assets/Resources/Pets/Skins/Usurper/M_Pet_Usurper_Black.mat"),
+
+        new(
+            Guid.Parse("14100000-0000-0000-0000-000000000403"),
+            "Usurper Blue",
+            "PET_SKIN",
+            150,
+            "Blue skin for Usurper.",
+            "Assets/Resources/Pets/Skins/Usurper/M_Pet_Usurper_Blue.mat")
+    ];
     // Development/test-only catalog entries.
     private static readonly ShopSeedDefinition[] DevelopmentOnlyCatalog =
     [
@@ -88,6 +224,12 @@ public static class ShopCatalogSeeder
             timeProvider,
             logger,
             cancellationToken);
+        await EnsureCatalogAsync(
+            db,
+            PetCatalog,
+            timeProvider,
+            logger,
+            cancellationToken);
 
         await DeactivateLegacyItemsAsync(
             db,
@@ -105,6 +247,12 @@ public static class ShopCatalogSeeder
         await EnsureCatalogAsync(
             db,
             ProductionCatalog,
+            timeProvider,
+            logger,
+            cancellationToken);
+        await EnsureCatalogAsync(
+            db,
+            PetCatalog,
             timeProvider,
             logger,
             cancellationToken);

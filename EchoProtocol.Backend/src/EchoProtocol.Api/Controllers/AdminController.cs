@@ -24,7 +24,17 @@ public sealed class AdminController(
     public Task<IActionResult> UserDetail(
         Guid userId,
         CancellationToken cancellationToken) => Execute(
-            () => service.GetUserAsync(userId, cancellationToken), cancellationToken);
+            () => service.GetUserAsync(userId, cancellationToken), cancellationToken);    [HttpPost("users/{userId:guid}/wallet/credit")]
+    public Task<IActionResult> GrantCredits(
+        Guid userId,
+        [FromBody] AdminGrantCreditsRequest request,
+        CancellationToken cancellationToken) => Execute(
+            () => service.GrantCreditsAsync(
+                userId,
+                request,
+                cancellationToken),
+            cancellationToken);
+
 
     [HttpGet("payments")]
     public Task<IActionResult> Payments(

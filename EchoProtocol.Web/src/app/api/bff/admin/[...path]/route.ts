@@ -18,3 +18,51 @@ export async function GET(request: Request, context: { params: Promise<{ path: s
     return routeErrorResponse(error);
   }
 }
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ path: string[] }> },
+): Promise<NextResponse> {
+  try {
+    const session = await getSession();
+    const token = await getAccessToken();
+
+    if (!session || session.role !== "ADMIN" || !token) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Không có quyền quản trị.",
+          data: null,
+          errorCode: "FORBIDDEN",
+        },
+        { status: 403 },
+      );
+    }
+
+    const { path } = await context.params;
+
+    const body =
+      await request
+        .json()
+        .catch(() => null);
+
+    const data =
+      await backendRequest<unknown>(
+        `/api/admin/${path.map(encodeURIComponent).join("/")}`,
+        {
+          token,
+          method: "POST",
+          body,
+        },
+      );
+
+    return NextResponse.json({
+      success: true,
+      message: "OK",
+      data,
+      errorCode: null,
+    });
+  } catch (error) {
+    return routeErrorResponse(error);
+  }
+}

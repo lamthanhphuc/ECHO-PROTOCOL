@@ -40,6 +40,23 @@ public sealed class AdminPurchasesQuery : AdminPagedQuery
     public DateTime? ToUtc { get; set; }
 }
 
+public sealed class AdminGrantCreditsRequest
+{
+    public int Amount { get; init; }
+    public string? Reason { get; init; }
+}
+
+public sealed class AdminGrantCreditsResponse
+{
+    public Guid UserId { get; init; }
+    public Guid TransactionId { get; init; }
+    public Guid Reference { get; init; }
+    public int Amount { get; init; }
+    public int BalanceBefore { get; init; }
+    public int BalanceAfter { get; init; }
+    public string Reason { get; init; } = string.Empty;
+    public DateTime CreatedAtUtc { get; init; }
+}
 public sealed class AdminPagedResponse<T>
 {
     public IReadOnlyList<T> Items { get; init; } = [];

@@ -6,7 +6,7 @@ import { adminApi } from "@/lib/api/server-api";
 import type { SearchParams } from "@/lib/types/common";
 import { formatDate, formatNumber, param, queryString } from "@/lib/utils/format";
 
-const types = ["MATCH_REWARD", "PURCHASE", "PAYMENT_FULFILLMENT"];
+const types = ["MATCH_REWARD", "PURCHASE", "PAYMENT_FULFILLMENT", "ADMIN_GRANT"];
 
 export default async function WalletTransactionsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const raw = await searchParams;
