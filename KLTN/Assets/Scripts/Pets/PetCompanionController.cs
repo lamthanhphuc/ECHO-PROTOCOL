@@ -22,9 +22,15 @@ public sealed class PetCompanionController : MonoBehaviour {
  private float _nextPath, _phaseEnd, _nextFlight, _idleTime, _height;
  private bool _initialized;
  private float _followSpeed;
+ private Vector3 _previousOwnerPosition;
+ private float _stuckTime;
  private float _nextRetry;
  private float _phaseStart, _phaseStartHeight;
  private float _groundingOffset, _groundingVelocity;
+ private float _takeOffGroundingOffset;
+ private float _restFootHeight, _lastRenderTime;
+ private bool _hasRestFootHeight;
+ private int _flightLoops, _flightCycle;
  private bool _renderInitialized, _isFollowing;
  private Vector3 _renderPositionVelocity;
  private PetMotion _renderMotion=PetMotion.Hidden;
@@ -40,18 +46,21 @@ public sealed class PetCompanionController : MonoBehaviour {
   if(entry==null || !Visible) { _initialized=false; _height=0; _owner.SetPetPose(transform.position,transform.rotation,PetMotion.Hidden); return; }
   if(_authorityId!=_owner.PetId){_authorityId=_owner.PetId;_initialized=false;}
   var time=(float)_owner.Runner.SimulationTime;
+  bool ownerRunning=_movement!=null && _movement.IsAnimationSprinting;
   bool inLobby=SceneManager.GetActiveScene().name=="Lobby";
   var target=transform.position+transform.forward*(inLobby ? 1.1f : -1.25f)+transform.right*(inLobby ? 0.55f : 0.85f);
-  if (!_initialized || Vector3.Distance(_ground,transform.position)>10f) {
+  bool ownerTeleported=_initialized && Vector3.Distance(_previousOwnerPosition,transform.position)>5f;
+  _previousOwnerPosition=transform.position;
+  if (!_initialized || ownerTeleported || _stuckTime>=8f) {
    if(!NavMesh.SamplePosition(target,out var reset,2f,NavMesh.AllAreas)) {
     if(!Physics.Raycast(target+Vector3.up*1.5f,Vector3.down,out var hit,4f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)) {
      _owner.SetPetPose(target,transform.rotation,PetMotion.Hidden);return;
     } _ground=hit.point;
    } else _ground=reset.position;
-   _initialized=true; _followSpeed=0; _nextPath=0;_height=0;_motion=PetMotion.Idle; _nextFlight=time+FlightDelay();
+   _initialized=true; _followSpeed=0; _stuckTime=0; _nextPath=0;_height=0;_motion=PetMotion.Idle; _nextFlight=time+FlightDelay();
   }
-  if(time>=_nextPath) {
-   _nextPath=time+0.3f; _goal=_ground;
+  if(time>=_nextPath || ownerRunning && Vector3.Distance(_ground,_goal)<0.15f) {
+   _nextPath=time+(ownerRunning ? 0.1f : 0.3f); _goal=_ground;
    if(NavMesh.SamplePosition(target,out var navGoal,2f,NavMesh.AllAreas) && NavMesh.SamplePosition(_ground,out var navStart,1f,NavMesh.AllAreas)
     && NavMesh.CalculatePath(navStart.position,navGoal.position,NavMesh.AllAreas,_path) && _path.status==NavMeshPathStatus.PathComplete) {
     foreach(var corner in _path.corners) if(Vector3.Distance(corner,_ground)>0.2f){_goal=corner;break;}
@@ -64,8 +73,13 @@ public sealed class PetCompanionController : MonoBehaviour {
   // Ease into following, and only catch up gradually when the owner is far away.
   bool lifting=_motion==PetMotion.TakeOff || _motion==PetMotion.Land;
   float desiredSpeed=moving ? Mathf.Lerp(1.2f,3.5f,Mathf.InverseLerp(2f,6f,distance)) : 0f;
-  if(lifting)desiredSpeed*=0.35f;
-  _followSpeed=Mathf.MoveTowards(_followSpeed,desiredSpeed,dt*(desiredSpeed>_followSpeed ? 1.8f : 3f));
+  if(moving && ownerRunning) desiredSpeed=Mathf.Lerp(4.5f,8.5f,Mathf.InverseLerp(1f,6f,distance));
+  if(lifting) {
+   float progress=Mathf.InverseLerp(_phaseStart,_phaseEnd,time);
+   // Slow in the middle of the transition, with no speed step at either end.
+   desiredSpeed*=1f-0.65f*Mathf.Sin(progress*Mathf.PI);
+  }
+  _followSpeed=Mathf.MoveTowards(_followSpeed,desiredSpeed,dt*(desiredSpeed>_followSpeed ? (ownerRunning ? 6f : 1.8f) : (ownerRunning || _followSpeed>3.5f ? 10f : 3f)));
   bool airborne=_motion==PetMotion.TakeOff||_motion==PetMotion.FlyIdle||_motion==PetMotion.FlyForward||_motion==PetMotion.FlyGlide||_motion==PetMotion.Land;
   if(_motion==PetMotion.Jump) {
    float progress=1f-(_phaseEnd-time)/Mathf.Max(0.1f,entry.jumpSeconds);
@@ -73,18 +87,29 @@ public sealed class PetCompanionController : MonoBehaviour {
    if(time>=_phaseEnd){_height=0;_motion=moving ? PetMotion.Walk : PetMotion.Idle;_nextFlight=time+FlightDelay();}
   } else if(!airborne) {
    _idleTime=moving ? 0 : _idleTime+dt;
-   _motion=moving ? (_followSpeed>2.2f ? PetMotion.Run : PetMotion.Walk) : (_idleTime>10 ? PetMotion.Sleep : (_owner.PetId==1 && _idleTime>4 ? PetMotion.IdleAlt : PetMotion.Idle));
+   _motion=moving ? (ownerRunning ? PetMotion.Run : PetMotion.Walk) : (_idleTime>10 ? PetMotion.Sleep : (_owner.PetId==1 && _idleTime>4 ? PetMotion.IdleAlt : PetMotion.Idle));
    if(!entry.canFly && !moving && time>=_nextFlight && ClearFlight()){_motion=PetMotion.Jump;_phaseEnd=time+entry.jumpSeconds;}
    if(entry.canFly && time>=_nextFlight && ClearFlight()) { _motion=PetMotion.TakeOff;_phaseStart=time;_phaseStartHeight=_height;_phaseEnd=time+entry.takeOffSeconds; }
   } else if (_motion==PetMotion.TakeOff) {
    _height=Mathf.Lerp(_phaseStartHeight,0.7f,Mathf.SmoothStep(0,1,(time-_phaseStart)/Mathf.Max(0.1f,entry.takeOffSeconds)));
-   if(time>=_phaseEnd){_height=0.7f;_motion=moving ? PetMotion.FlyForward : PetMotion.FlyIdle;_phaseEnd=time+6f+(_owner.TeamId%3)*2f;}
+   if(time>=_phaseEnd){_height=0.7f;_motion=moving ? PetMotion.FlyForward : PetMotion.FlyIdle;_phaseEnd=time+FlightDuration();_flightLoops=0;_flightCycle=0;}
   } else if(_motion==PetMotion.Land) {
    _height=Mathf.Lerp(_phaseStartHeight,0,Mathf.SmoothStep(0,1,(time-_phaseStart)/Mathf.Max(0.1f,entry.landSeconds)));
-   if(time>=_phaseEnd){_height=0;_motion=moving ? PetMotion.Walk : PetMotion.Idle;_nextFlight=time+FlightDelay();}
+   if(time>=_phaseEnd){_height=0;_motion=moving ? (ownerRunning ? PetMotion.Run : PetMotion.Walk) : PetMotion.Idle;_nextFlight=time+FlightDelay();}
   } else {
-   _motion=!moving ? PetMotion.FlyIdle : ((int)(time*0.25f)%2==0 ? PetMotion.FlyForward : PetMotion.FlyGlide);
-   if((time>=_phaseEnd || !ClearFlight()) && SafeLanding()){_motion=PetMotion.Land;_phaseStart=time;_phaseStartHeight=_height;_phaseEnd=time+entry.landSeconds;}
+   bool blockedFlight=!ClearFlight();
+   // Finish a wingbeat before changing flight clips or starting a scheduled landing.
+   float loopSeconds=GetFlightClipLength(entry,_motion);
+   float elapsed=Mathf.Max(0,time-_owner.PetAnimationStartTime);
+   int cycle=Mathf.FloorToInt(elapsed/loopSeconds);
+   bool loopEnd=cycle>_flightCycle;
+   _flightCycle=cycle;
+   if(loopEnd) {
+    _flightLoops++;
+    PetMotion next=!moving ? PetMotion.FlyIdle : (_motion==PetMotion.FlyIdle ? PetMotion.FlyForward : (_flightLoops>=3 ? (_motion==PetMotion.FlyForward ? PetMotion.FlyGlide : PetMotion.FlyForward) : _motion));
+    if(next!=_motion){_motion=next;_flightLoops=0;_flightCycle=0;}
+   }
+   if((blockedFlight || time>=_phaseEnd && loopEnd) && SafeLanding()){_motion=PetMotion.Land;_phaseStart=time;_phaseStartHeight=_height;_phaseEnd=time+entry.landSeconds;}
   }
   var previous=_ground;
   if(moving && _motion!=PetMotion.Jump) {
@@ -96,10 +121,22 @@ public sealed class PetCompanionController : MonoBehaviour {
     : Physics.Linecast(origin,next+Vector3.up*0.2f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore);
    if(!blocked) _ground=next;
   }
+  _stuckTime=distance>10f && Vector3.Distance(_ground,previous)<0.001f ? _stuckTime+dt : 0f;
   var direction=Vector3.ProjectOnPlane(_ground-previous,Vector3.up); var rotation=direction.sqrMagnitude>0.00001f ? Quaternion.LookRotation(direction.normalized,Vector3.up) : (Quaternion.Dot(_owner.PetRotation,_owner.PetRotation)>0.1f ? _owner.PetRotation : transform.rotation);
   _owner.SetPetPose(_ground+Vector3.up*_height,rotation,_motion);
  }
- private float FlightDelay()=>15f+Mathf.Abs((_owner.TeamId*13+(int)_owner.Runner.Tick)%11);
+ private float FlightDelay() {
+  bool canFly=_catalog!=null && _catalog.Get(_owner.PetId)!=null && _catalog.Get(_owner.PetId).canFly;
+  return (canFly ? 18f : 15f)+Mathf.Abs((_owner.TeamId*13+(int)_owner.Runner.Tick)%11);
+ }
+ private float FlightDuration()=>30f+Mathf.Abs((_owner.TeamId*17+(int)_owner.Runner.Tick)%16);
+ private static float GetFlightClipLength(PetCatalog.Entry entry,PetMotion motion) {
+  string clipName=motion==PetMotion.FlyIdle ? "Fly Float" : (motion==PetMotion.FlyGlide ? "Fly Glide" : "Fly Forward");
+  if(entry.controller!=null)foreach(var clip in entry.controller.animationClips)
+   if(clip.name==clipName)return Mathf.Max(0.1f,clip.length);
+  return 1f;
+ }
+ private static bool IsOneShot(PetMotion motion)=>motion==PetMotion.TakeOff || motion==PetMotion.Land || motion==PetMotion.Jump;
  private bool ClearFlight()=>!Physics.CheckCapsule(_ground+Vector3.up*0.4f,_ground+Vector3.up*1.3f,0.3f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore);
  private bool SafeLanding()=>Physics.Raycast(_ground+Vector3.up*0.3f,Vector3.down,0.6f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore);
  private void LateUpdate() {
@@ -118,6 +155,12 @@ public sealed class PetCompanionController : MonoBehaviour {
      if(bone.name.IndexOf("Toe",System.StringComparison.OrdinalIgnoreCase)>=0 || bone.name.EndsWith("Foot",System.StringComparison.OrdinalIgnoreCase))feet.Add(bone);
     _feet=feet.ToArray();
     _animator.runtimeAnimatorController=entry.controller;_animator.applyRootMotion=false;
+    // Evaluate once at rest, then advance explicitly on the network render clock.
+    _animator.enabled=false;_animator.cullingMode=AnimatorCullingMode.AlwaysAnimate;
+    _animator.Play("Idle",0,0);_animator.Update(0);
+    _restFootHeight=float.PositiveInfinity;
+    foreach(var foot in _feet)if(foot!=null)_restFootHeight=Mathf.Min(_restFootHeight,foot.position.y-_visual.transform.position.y);
+    _hasRestFootHeight=!float.IsInfinity(_restFootHeight);
     foreach(var c in _visual.GetComponentsInChildren<Collider>())c.enabled=false;
     foreach(var a in _visual.GetComponentsInChildren<AudioSource>())a.enabled=false;
     _visual.transform.SetPositionAndRotation(_owner.PetPosition,_owner.PetRotation);
@@ -127,27 +170,48 @@ public sealed class PetCompanionController : MonoBehaviour {
   bool interpolated=_owner.GetPetRenderPose(out var posePosition,out var poseRotation,out var motion,out var startTime,out var renderTime);
   bool show=Visible && motion!=PetMotion.Hidden;
   _visual.SetActive(show);if(!show){_renderInitialized=false;return;}
+  float renderDelta=_renderInitialized ? Mathf.Max(0,renderTime-_lastRenderTime) : 0;
+  _lastRenderTime=renderTime;
+  // Animator and replicated height now use the same clock on host and clients.
+  _animator.Update(renderDelta);
+  if(_renderMotion!=motion) {
+   var state=_animator.GetCurrentAnimatorStateInfo(0);
+   bool completed=!IsOneShot(_renderMotion) || (!_animator.IsInTransition(0) && state.normalizedTime>=1f);
+   if(!_renderInitialized || completed) {
+    bool transition=IsOneShot(motion) || IsOneShot(_renderMotion);
+    if(motion==PetMotion.TakeOff)_takeOffGroundingOffset=_groundingOffset;
+    float offset=Mathf.Max(0,renderTime-startTime);
+    if(!_renderInitialized) {
+     _animator.Play(motion.ToString(),0,0);_animator.Update(0);
+     float length=Mathf.Max(0.1f,_animator.GetCurrentAnimatorStateInfo(0).length);
+     _animator.Play(motion.ToString(),0,IsOneShot(motion) ? Mathf.Min(offset/length,0.9999f) : offset/length);
+    }
+    else _animator.CrossFadeInFixedTime(motion.ToString(),transition ? 0.3f : 0.2f,0,offset);
+    _renderMotion=motion;_animator.Update(0);
+   }
+  }
   var entryForPose=_catalog.Get(_id);
   var position=posePosition+Vector3.up*(entryForPose!=null ? entryForPose.groundOffset*GetVisualScaleMultiplier(_id) : 0f);
   if(!interpolated && _renderInitialized && Vector3.Distance(_visual.transform.position,position)<5f)
    position=Vector3.SmoothDamp(_visual.transform.position-Vector3.up*_groundingOffset,position,ref _renderPositionVelocity,0.08f);
   else _renderPositionVelocity=Vector3.zero;
   bool grounded=motion==PetMotion.Idle || motion==PetMotion.IdleAlt || motion==PetMotion.Walk || motion==PetMotion.Run || motion==PetMotion.Sleep;
+  float transitionSeconds=entryForPose==null ? 1f : (motion==PetMotion.Land ? entryForPose.landSeconds : entryForPose.takeOffSeconds);
+  float transitionProgress=Mathf.SmoothStep(0,1,(renderTime-startTime)/Mathf.Max(0.1f,transitionSeconds));
   float desiredGrounding=0;
-  if(grounded && _feet.Length>0) {
+  if(motion==PetMotion.TakeOff)desiredGrounding=_takeOffGroundingOffset*(1f-transitionProgress);
+  if((grounded || motion==PetMotion.Land) && _hasRestFootHeight) {
    float floorY=posePosition.y;
    if(Physics.Raycast(posePosition+Vector3.up*0.6f,Vector3.down,out var hit,1.6f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore))floorY=hit.point.y;
-   float lowest=float.PositiveInfinity;
-   foreach(var foot in _feet)if(foot!=null)lowest=Mathf.Min(lowest,foot.position.y-_visual.transform.position.y);
-   if(!float.IsInfinity(lowest))desiredGrounding=floorY+0.015f-position.y-lowest;
+   {
+    // Restore floor contact gradually during landing, instead of at its final frame.
+    float flightHeight=motion==PetMotion.Land ? 0.7f*(1f-transitionProgress) : 0f;
+    desiredGrounding=(floorY+flightHeight+0.015f-position.y-_restFootHeight)*(motion==PetMotion.Land ? transitionProgress : 1f);
+   }
   }
   if(!_renderInitialized){_groundingOffset=desiredGrounding;_groundingVelocity=0;_renderInitialized=true;}
-  else _groundingOffset=Mathf.SmoothDamp(_groundingOffset,desiredGrounding,ref _groundingVelocity,grounded ? 0.12f : 0.35f);
+  else _groundingOffset=Mathf.SmoothDamp(_groundingOffset,desiredGrounding,ref _groundingVelocity,0.2f);
   _visual.transform.SetPositionAndRotation(position+Vector3.up*_groundingOffset,poseRotation);
-  if(_renderMotion!=motion) {
-   _renderMotion=motion;
-   _animator.CrossFadeInFixedTime(motion.ToString(),0.25f,0,Mathf.Max(0,renderTime-startTime));
-  }
  }
  private void OnEnable(){SceneManager.activeSceneChanged+=OnSceneChanged;}
  private void OnSceneChanged(Scene previous,Scene current){_initialized=false;_nextPath=0;}
