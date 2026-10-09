@@ -173,9 +173,9 @@ namespace EchoProtocol.AI.Common.Profile
             IReadOnlyList<ProfileRevisionRef> sourceProfileRevisions,
             string currentMatchTelemetrySchemaVersion)
         {
-            ProfileFormulaSemanticId = PlayerProfileSnapshot.RequireText(profileFormulaSemanticId, nameof(profileFormulaSemanticId));
-            SurvivalComparisonKey = PlayerProfileSnapshot.RequireText(survivalComparisonKey, nameof(survivalComparisonKey));
-            NoiseComparisonKey = PlayerProfileSnapshot.RequireText(noiseComparisonKey, nameof(noiseComparisonKey));
+            ProfileFormulaSemanticId = profileFormulaSemanticId ?? string.Empty;
+            SurvivalComparisonKey = survivalComparisonKey ?? string.Empty;
+            NoiseComparisonKey = noiseComparisonKey ?? string.Empty;
             TeamPerformanceFormulaVersion = teamPerformanceFormulaVersion ?? string.Empty;
             SourceProfileRevisions = Copy(sourceProfileRevisions);
             CurrentMatchTelemetrySchemaVersion = currentMatchTelemetrySchemaVersion ?? string.Empty;
@@ -215,7 +215,8 @@ namespace EchoProtocol.AI.Common.Profile
             RosterProfileSummary rosterProfileSummary,
             SnapshotValidity snapshotValidity,
             IReadOnlyList<string> reasonCodes,
-            AdaptiveInputProvenance provenance)
+            AdaptiveInputProvenance provenance,
+            IReadOnlyList<string> missingProfileUserIds = null)
         {
             if (snapshotId == Guid.Empty) throw new ArgumentException("Snapshot id is required.", nameof(snapshotId));
             if (targetMatchId == Guid.Empty) throw new ArgumentException("Target match id is required.", nameof(targetMatchId));
@@ -235,6 +236,7 @@ namespace EchoProtocol.AI.Common.Profile
             SnapshotValidity = snapshotValidity;
             ReasonCodes = CopyStrings(reasonCodes);
             Provenance = provenance ?? throw new ArgumentNullException(nameof(provenance));
+            MissingProfileUserIds = CopyStrings(missingProfileUserIds);
         }
 
         public Guid SnapshotId { get; }
@@ -250,6 +252,8 @@ namespace EchoProtocol.AI.Common.Profile
         public SnapshotValidity SnapshotValidity { get; }
         public IReadOnlyList<string> ReasonCodes { get; }
         public AdaptiveInputProvenance Provenance { get; }
+        public IReadOnlyList<string> MissingProfileUserIds { get; }
+        public bool HasMissingProfiles => MissingProfileUserIds.Count > 0;
 
         private static IReadOnlyList<PlayerProfileSnapshot> CopySnapshots(IReadOnlyList<PlayerProfileSnapshot> values)
         {

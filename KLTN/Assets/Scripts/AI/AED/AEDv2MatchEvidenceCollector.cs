@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using EchoProtocol.AI.Common.AED;
 
 namespace EchoProtocol.AI.AED
@@ -7,6 +8,7 @@ namespace EchoProtocol.AI.AED
     public sealed class AEDv2MatchEvidenceCollector
     {
         private readonly HashSet<string> _acceptedOccurrences = new HashSet<string>();
+        private readonly Dictionary<string, AEDv2PlayerPhaseEvidence> _playerEvidence = new Dictionary<string, AEDv2PlayerPhaseEvidence>();
         private Guid _matchId;
         private string _rosterIdentity;
         private string _phase;
@@ -21,6 +23,8 @@ namespace EchoProtocol.AI.AED
         private bool _complete;
 
         public AEDv2CurrentMatchEvidence LastFrozen { get; private set; }
+        public IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence> PlayerEvidence => _playerEvidence;
+        public IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence> LastFrozenPlayerEvidence { get; private set; }
 
         public void StartPhase(Guid matchId, string rosterIdentity, string phase,
             uint ordinal, DateTime startedAtUtc)
@@ -33,16 +37,22 @@ namespace EchoProtocol.AI.AED
             _downCount = _reviveCount = _eliminatedCount = _noiseCount = _objectiveProgress = 0;
             _teamToolUseCount = 0;
             _acceptedOccurrences.Clear();
+            _playerEvidence.Clear();
             _complete = matchId != Guid.Empty && !string.IsNullOrWhiteSpace(rosterIdentity)
                 && !string.IsNullOrWhiteSpace(phase) && ordinal > 0;
         }
 
         public void RecordAcceptedDown(string occurrenceKey) => Count(occurrenceKey, ref _downCount);
+        public void RecordAcceptedDown(string occurrenceKey, string userId) => Count(occurrenceKey, ref _downCount, () => GetPlayer(userId).RecordDown());
         public void RecordAcceptedRevive(string occurrenceKey) => Count(occurrenceKey, ref _reviveCount);
+        public void RecordAcceptedRevive(string occurrenceKey, string userId) => Count(occurrenceKey, ref _reviveCount, () => GetPlayer(userId).RecordRevive());
         public void RecordAcceptedElimination(string occurrenceKey) => Count(occurrenceKey, ref _eliminatedCount);
+        public void RecordAcceptedElimination(string occurrenceKey, string userId) => Count(occurrenceKey, ref _eliminatedCount, () => GetPlayer(userId).RecordElimination());
         public void RecordAcceptedNoise(string occurrenceKey) => Count(occurrenceKey, ref _noiseCount);
+        public void RecordAcceptedNoise(string occurrenceKey, string userId) => Count(occurrenceKey, ref _noiseCount, () => GetPlayer(userId).RecordNoise());
         public void RecordAcceptedObjective(string occurrenceKey) => Count(occurrenceKey, ref _objectiveProgress);
         public void RecordAcceptedTeamTool(string occurrenceKey) => Count(occurrenceKey, ref _teamToolUseCount);
+        public void RecordAcceptedTeamTool(string occurrenceKey, string userId) => Count(occurrenceKey, ref _teamToolUseCount, () => GetPlayer(userId).RecordToolUse());
         public void MarkIncomplete() => _complete = false;
 
         public AEDv2CurrentMatchEvidence Freeze(string completedPhase, int rosterSize,
@@ -61,6 +71,8 @@ namespace EchoProtocol.AI.AED
                 Math.Max(0, rosterSize - _eliminatedCount), _downCount, _reviveCount,
                 _eliminatedCount, _noiseCount, _objectiveProgress,
                 reasons.Count == 0, reasons, _teamToolUseCount);
+            LastFrozenPlayerEvidence = new ReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence>(
+                new Dictionary<string, AEDv2PlayerPhaseEvidence>(_playerEvidence));
             return LastFrozen;
         }
 
@@ -70,13 +82,31 @@ namespace EchoProtocol.AI.AED
             _phase = null;
             _rosterIdentity = null;
             _acceptedOccurrences.Clear();
+            _playerEvidence.Clear();
             LastFrozen = null;
+            LastFrozenPlayerEvidence = null;
         }
 
         private void Count(string key, ref int counter)
         {
             if (string.IsNullOrWhiteSpace(key)) { _complete = false; return; }
             if (_acceptedOccurrences.Add(key)) counter++;
+        }
+
+        private void Count(string key, ref int counter, Action recordPlayer)
+        {
+            if (string.IsNullOrWhiteSpace(key)) { _complete = false; return; }
+            if (_acceptedOccurrences.Add(key)) { counter++; recordPlayer(); }
+        }
+
+        private AEDv2PlayerPhaseEvidence GetPlayer(string userId)
+        {
+            if (!_playerEvidence.TryGetValue(userId, out var player))
+            {
+                player = new AEDv2PlayerPhaseEvidence(userId);
+                _playerEvidence.Add(userId, player);
+            }
+            return player;
         }
     }
 }

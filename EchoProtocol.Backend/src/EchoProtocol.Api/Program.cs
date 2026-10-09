@@ -229,6 +229,9 @@ builder.Services.AddScoped<IAdaptiveInputSnapshotBuilder, AdaptiveInputSnapshotB
 builder.Services.AddScoped<IScenarioService, ScenarioService>();
 builder.Services.AddScoped<IScenarioSnapshotReadService, ScenarioSnapshotReadService>();
 builder.Services.AddScoped<IScenarioAdaptivePlanV2Service, ScenarioAdaptivePlanV2Service>();
+builder.Services.AddScoped<IAEDv2PhaseEvidenceVerifier, AEDv2PhaseEvidenceVerifier>();
+builder.Services.AddScoped<IMatchProfilePostProcessingService, MatchProfilePostProcessingService>();
+builder.Services.AddHostedService<MatchProfilePostProcessingWorker>();
 builder.Services.AddScoped<IPaymentOrderService, PaymentOrderService>();
 builder.Services.AddSingleton<IPaymentCatalogService, PaymentCatalogService>();
 builder.Services.AddHttpClient<PayOSPaymentProvider>();

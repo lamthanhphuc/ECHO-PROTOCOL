@@ -20,7 +20,8 @@ namespace EchoProtocol.AI.Common.AED
             AEDv2CurrentMatchEvidence evidence, Guid matchId,
             string rosterIdentity, uint phaseOrdinal, bool safeBoundary,
             ScenarioDecisionPoint decisionPoint,
-            out AEDv2Plan next, out AEDv2Key changedKey, out string reason)
+            out AEDv2Plan next, out AEDv2Key changedKey, out string reason,
+            AEDv2RosterSafety rosterSafety = null)
         {
             next = previous;
             changedKey = default;
@@ -99,6 +100,12 @@ namespace EchoProtocol.AI.Common.AED
             {
                 changedKey = AEDv2Key.ChaseSpeed;
                 intent = AdaptationIntent.IncreasePressure;
+            }
+            if (intent == AdaptationIntent.IncreasePressure
+                && (rosterSafety == null || !rosterSafety.AllowPressure))
+            {
+                reason = "AED_V2_ROSTER_PRESSURE_GUARD";
+                return false;
             }
             if (intent == AdaptationIntent.Hold) return false;
             var spec = AEDv2Catalog.Find(changedKey);

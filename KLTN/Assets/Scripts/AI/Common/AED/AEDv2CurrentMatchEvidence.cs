@@ -62,13 +62,15 @@ namespace EchoProtocol.AI.Common.AED
 
         private static string ComputeFingerprint(AEDv2CurrentMatchEvidence e)
         {
-            var content = string.Join("|", e.MatchId.ToString("D"), e.CompletedPhase,
+            var content = string.Join("|", "AED_V2_PHASE_EVIDENCE_V2", e.MatchId.ToString("D"), e.CompletedPhase,
                 e.PhaseOrdinal.ToString(CultureInfo.InvariantCulture), e.RosterIdentity,
-                e.StartedAtUtc.ToString("O", CultureInfo.InvariantCulture),
-                e.EndedAtUtc.ToString("O", CultureInfo.InvariantCulture),
-                e.AlivePlayers, e.DownCount, e.ReviveCount, e.EliminatedCount,
-                e.AcceptedNoiseCount, e.ObjectiveProgress, e.TeamToolUseCount,
-                e.TelemetryCompleteness ? "1" : "0", string.Join(",", e.ReasonCodes));
+                e.StartedAtUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+                e.EndedAtUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+                e.AlivePlayers.ToString(CultureInfo.InvariantCulture), e.DownCount.ToString(CultureInfo.InvariantCulture),
+                e.ReviveCount.ToString(CultureInfo.InvariantCulture), e.EliminatedCount.ToString(CultureInfo.InvariantCulture),
+                e.AcceptedNoiseCount.ToString(CultureInfo.InvariantCulture), e.ObjectiveProgress.ToString(CultureInfo.InvariantCulture),
+                e.TeamToolUseCount.ToString(CultureInfo.InvariantCulture), e.TelemetryCompleteness ? "1" : "0",
+                string.Join(",", e.ReasonCodes));
             using (var sha = SHA256.Create())
                 return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(content)))
                     .Replace("-", string.Empty).ToLowerInvariant();

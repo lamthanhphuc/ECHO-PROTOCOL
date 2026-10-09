@@ -1,7 +1,9 @@
 using EchoProtocol.Api.Common;
+using EchoProtocol.Api.Data.Telemetry;
 using EchoProtocol.Api.DTOs.Scenarios;
 using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services;
+using EchoProtocol.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -25,32 +27,36 @@ public sealed partial class ScenarioServiceTests
     }
 
     [Fact, Trait("Category", "AEDv2")]
-    public async Task AEDv2_HostCommitsOneBoundedKeyAndReplaysWithoutExtraRevision()
+    public void AEDv2_PhaseEvidenceFingerprintMatchesUnityContractV2()
+    {
+        Assert.Equal("2a3ad9de5f5f5ee16fbb36879049951b5e12ab83a96912b75fe84481fd22cd18",
+            AEDv2PhaseEvidenceVerifier.ComputeCanonicalFingerprint(
+                Guid.Parse("00000000-0000-0000-0000-000000000001"), "ZONE_1_OBJECTIVE", 1,
+                "roster-fingerprint", DateTime.Parse("2026-10-08T00:00:00.123Z"),
+                DateTime.Parse("2026-10-08T00:01:00.456Z"), 2, 1, 2, 0, 3, 4, 5,
+                true, Array.Empty<string>()));
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_BoundaryRejectsFingerprintWithoutAcceptedPhaseEvidence()
+    {
+        await using var f = await ValidAEDv2Fixture();
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+        var verifier = new AEDv2PhaseEvidenceVerifier(f.Db, new NoAcceptedEvidenceRepository());
+        Assert.False(await verifier.VerifyAsync(f.MatchId, 1, new string('a', 64)));
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_PreMatchGameplayCommitIsRejected()
     {
         await using var f = await ValidAEDv2Fixture();
         var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
         var service = V2(f);
         var request = V2Request(scenario, 0, "PRE_MATCH", "SupportBonus", 0, 2, "RELIEVE", "COMMITTED");
         var first = await service.SubmitAsync(f.HostId, f.MatchId, request);
-        var stored = await f.Db.ScenarioAdaptivePlansV2.SingleAsync();
-        stored.PlanValuesJson = stored.PlanValuesJson.Replace(",", ", ");
-        await f.Db.SaveChangesAsync();
-        var replay = await service.SubmitAsync(f.HostId, f.MatchId, request);
-        Assert.True(first.IsSuccess, $"{first.ErrorCode}: {first.Message}");
-        Assert.Equal("COMMITTED", first.Data!.CommitStatus);
-        Assert.True(replay.Data!.IsReplay);
-        Assert.Single(await f.Db.ScenarioAdaptivePlansV2.ToArrayAsync());
-        Assert.Equal("PENDING", first.Data.ApplyStatus);
-        var applied = await service.ConfirmAppliedAsync(f.HostId, f.MatchId,
-            request.DecisionId, request.ResultingPlanFingerprint);
-        var applyReplay = await service.ConfirmAppliedAsync(f.HostId, f.MatchId,
-            request.DecisionId, request.ResultingPlanFingerprint);
-        Assert.Equal("APPLIED", applied.Data!.ApplyStatus);
-        Assert.True(applyReplay.Data!.IsReplay);
-        f.Db.PlayerAIProfiles.Single(x => x.UserId == f.PlayerId).ProfileRevision++;
-        await f.Db.SaveChangesAsync();
-        Assert.Equal(ErrorCodes.ScenarioDecisionStaleRoster,
-            (await service.SubmitAsync(f.HostId, f.MatchId, request)).ErrorCode);
+        Assert.Equal(ErrorCodes.ValidationError, first.ErrorCode);
+        Assert.Empty(await f.Db.ScenarioAdaptivePlansV2.ToArrayAsync());
     }
 
     [Fact, Trait("Category", "AEDv2")]
@@ -75,7 +81,7 @@ public sealed partial class ScenarioServiceTests
         await using var f = await ValidAEDv2Fixture();
         var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
         var service = V2(f);
-        var request = V2Request(scenario, 0, "PRE_MATCH", "SupportBonus", 0, 2, "RELIEVE", "COMMITTED");
+        var request = V2Request(scenario, 0, "PRE_MATCH", "SupportBonus", 0, 2, "RELIEVE", "SHADOW_ONLY");
         Assert.Equal(ErrorCodes.MatchAuthorityForbidden,
             (await service.SubmitAsync(f.PlayerId, f.MatchId, request)).ErrorCode);
         request.PlanValues[4] = 8;
@@ -97,25 +103,18 @@ public sealed partial class ScenarioServiceTests
         await using var f = await ValidAEDv2Fixture();
         var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
         var service = V2(f);
-        var pre = V2Request(scenario, 0, "PRE_MATCH", "SupportBonus", 0, 2, "RELIEVE", "COMMITTED");
-        Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, pre)).IsSuccess);
-        var preApplied = await service.ConfirmAppliedAsync(
-            f.HostId, f.MatchId,
-            pre.DecisionId, pre.ResultingPlanFingerprint);
-        Assert.True(preApplied.IsSuccess);
         f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
         await f.Db.SaveChangesAsync();
         var boundary = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY", "DetectionAcquireSeconds",
-            1.25, 1.5, "RELIEVE", "COMMITTED", pre.PlanValues);
+            1.25, 1.5, "RELIEVE", "COMMITTED");
         Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, boundary)).IsSuccess);
-        Assert.Equal(2, (await f.Db.ScenarioAdaptivePlansV2.ToArrayAsync()).Length);
-        Assert.Equal(2, boundary.PlanValues[0]);
+        Assert.Single(await f.Db.ScenarioAdaptivePlansV2.ToArrayAsync());
         var boundaryApplied = await service.ConfirmAppliedAsync(
             f.HostId, f.MatchId,
             boundary.DecisionId, boundary.ResultingPlanFingerprint);
         Assert.True(boundaryApplied.IsSuccess);
         var stale = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY", "ChaseSpeed",
-            7.5, 8, "INCREASE_PRESSURE", "COMMITTED", boundary.PlanValues);
+            7.5, 8, "INCREASE_PRESSURE", "COMMITTED");
         Assert.Equal(ErrorCodes.ScenarioDecisionConflict,
             (await service.SubmitAsync(f.HostId, f.MatchId, stale)).ErrorCode);
     }
@@ -127,13 +126,13 @@ public sealed partial class ScenarioServiceTests
         var scenario = (await f.Service.ResolvePreMatchAsync(
             f.HostId, f.MatchId, AdaptiveRequest())).Data!;
         var service = V2(f);
-        var pre = V2Request(scenario, 0, "PRE_MATCH", "SupportBonus", 0, 2, "RELIEVE", "COMMITTED");
-        Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, pre)).IsSuccess);
         f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
         await f.Db.SaveChangesAsync();
-
-        var boundary = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
-            "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED", pre.PlanValues);
+        var first = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
+            "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
+        Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, first)).IsSuccess);
+        var boundary = V2Request(scenario, 2, "ALLOWED_PHASE_BOUNDARY",
+            "ChaseSpeed", 7.5, 8, "INCREASE_PRESSURE", "COMMITTED");
         var result = await service.SubmitAsync(f.HostId, f.MatchId, boundary);
 
         Assert.Equal(ErrorCodes.ScenarioApplyConflict, result.ErrorCode);
@@ -147,8 +146,10 @@ public sealed partial class ScenarioServiceTests
         var scenario = (await f.Service.ResolvePreMatchAsync(
             f.HostId, f.MatchId, AdaptiveRequest())).Data!;
         var service = V2(f);
-        var request = V2Request(scenario, 0, "PRE_MATCH",
-            "SupportBonus", 0, 2, "RELIEVE", "COMMITTED");
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+        var request = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
+            "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
         Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, request)).IsSuccess);
         Assert.True((await service.AbortPendingAsync(
             f.HostId, f.MatchId, request.DecisionId)).IsSuccess);
@@ -167,15 +168,14 @@ public sealed partial class ScenarioServiceTests
         var scenario = (await f.Service.ResolvePreMatchAsync(
             f.HostId, f.MatchId, AdaptiveRequest())).Data!;
         var service = V2(f);
-        var pre = V2Request(scenario, 0, "PRE_MATCH",
-            "SupportBonus", 0, 2, "RELIEVE", "COMMITTED");
-        Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, pre)).IsSuccess);
-        Assert.True((await service.AbortPendingAsync(
-            f.HostId, f.MatchId, pre.DecisionId)).IsSuccess);
         f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
         await f.Db.SaveChangesAsync();
 
-        var boundary = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
+        var aborted = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
+            "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
+        Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, aborted)).IsSuccess);
+        Assert.True((await service.AbortPendingAsync(f.HostId, f.MatchId, aborted.DecisionId)).IsSuccess);
+        var boundary = V2Request(scenario, 2, "ALLOWED_PHASE_BOUNDARY",
             "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
         var result = await service.SubmitAsync(f.HostId, f.MatchId, boundary);
 
@@ -192,8 +192,10 @@ public sealed partial class ScenarioServiceTests
         var scenario = (await f.Service.ResolvePreMatchAsync(
             f.HostId, f.MatchId, AdaptiveRequest())).Data!;
         var service = V2(f);
-        var request = V2Request(scenario, 0, "PRE_MATCH",
-            "SupportBonus", 0, 2, "RELIEVE", "COMMITTED");
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+        var request = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
+            "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
         Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, request)).IsSuccess);
 
         var aborted = await service.AbortPendingAsync(f.HostId, f.MatchId, request.DecisionId);
@@ -213,8 +215,10 @@ public sealed partial class ScenarioServiceTests
         var scenario = (await f.Service.ResolvePreMatchAsync(
             f.HostId, f.MatchId, AdaptiveRequest())).Data!;
         var service = V2(f);
-        var request = V2Request(scenario, 0, "PRE_MATCH",
-            "SupportBonus", 0, 2, "RELIEVE", "COMMITTED");
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+        var request = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
+            "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
         Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, request)).IsSuccess);
         Assert.True((await service.ConfirmAppliedAsync(f.HostId, f.MatchId,
             request.DecisionId, request.ResultingPlanFingerprint)).IsSuccess);
@@ -230,7 +234,7 @@ public sealed partial class ScenarioServiceTests
     {
         await using var f = await ValidAEDv2Fixture();
         var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, Request())).Data!;
-        var request = V2Request(scenario, 0, "PRE_MATCH", "SupportBonus", 0, 2, "RELIEVE", "COMMITTED");
+        var request = V2Request(scenario, 0, "PRE_MATCH", "SupportBonus", 0, 2, "RELIEVE", "SHADOW_ONLY");
         Assert.Equal(ErrorCodes.ScenarioDecisionStaleRoster,
             (await V2(f).SubmitAsync(f.HostId, f.MatchId, request)).ErrorCode);
         Assert.Empty(await f.Db.ScenarioAdaptivePlansV2.ToArrayAsync());
@@ -249,7 +253,23 @@ public sealed partial class ScenarioServiceTests
     }
 
     private static ScenarioAdaptivePlanV2Service V2(Fixture f) =>
-        new(f.Db, new ScenarioSnapshotReadService(f.Db, new FixedClock(Now)), new FixedClock(Now));
+        new(f.Db, new ScenarioSnapshotReadService(f.Db, new FixedClock(Now)), new FixedClock(Now), new AcceptEvidenceVerifier());
+
+    private sealed class AcceptEvidenceVerifier : IAEDv2PhaseEvidenceVerifier
+    {
+        public Task<bool> VerifyAsync(Guid matchId, int phaseOrdinal, string evidenceFingerprint,
+            CancellationToken cancellationToken = default) => Task.FromResult(true);
+    }
+
+    private sealed class NoAcceptedEvidenceRepository : ITelemetryEventRepository
+    {
+        public Task EnsureIndexesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<TelemetryWriteResult> AtomicCommitBatchAsync(IReadOnlyCollection<TelemetryEventDocument> events, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<TelemetryWriteResult> InsertBatchAsync(IReadOnlyCollection<TelemetryEventDocument> events, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyDictionary<Guid, TelemetryWriteItemResult>> LoadConflictsAsync(IReadOnlyCollection<TelemetryEventDocument> events, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyDictionary<Guid, TelemetryMatchBoundary>> LoadMatchBoundariesAsync(IReadOnlyCollection<Guid> matchIds, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<TelemetryEventDocument>> LoadAcceptedMatchEventsAsync(Guid matchId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TelemetryEventDocument>>(Array.Empty<TelemetryEventDocument>());
+    }
 
     private static ResolveScenarioRequest AdaptiveRequest()
     {

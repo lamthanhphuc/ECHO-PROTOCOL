@@ -46,7 +46,10 @@ namespace EchoProtocol.AI.AED
                 return false;
             }
 
-            if (!string.Equals(dto.profileFormulaSemanticId, SupportedProfileFormula, StringComparison.Ordinal))
+            var hasAvailableProfiles = dto.players.Any(p => p != null && p.profileAvailable);
+            if (hasAvailableProfiles
+                ? !string.Equals(dto.profileFormulaSemanticId, SupportedProfileFormula, StringComparison.Ordinal)
+                : !string.IsNullOrWhiteSpace(dto.profileFormulaSemanticId))
             {
                 reason = "AED_PROFILE_FORMULA_UNSUPPORTED";
                 return false;
@@ -54,6 +57,7 @@ namespace EchoProtocol.AI.AED
 
             var profiles = new List<PlayerProfileSnapshot>(dto.teamSize);
             var revisions = new List<ProfileRevisionRef>(dto.teamSize);
+            var missingProfileUserIds = new List<string>();
             var seen = new HashSet<Guid>();
             var survivalCold = 0;
             var noiseCold = 0;
@@ -65,8 +69,20 @@ namespace EchoProtocol.AI.AED
                     || userId == Guid.Empty || !seen.Add(userId)) return false;
                 if (!player.profileAvailable)
                 {
-                    reason = "AED_PROFILE_MISSING";
-                    return false;
+                    if (player.profileRevisionPresent
+                        || !string.IsNullOrWhiteSpace(player.profileLineageId)
+                        || player.survivalScorePresent || player.noiseScorePresent
+                        || player.objectiveScorePresent || player.toolUsageScorePresent
+                        || player.survivalSampleCount != 0 || player.noiseSampleCount != 0
+                        || player.objectiveSampleCount != 0 || player.toolUsageSampleCount != 0
+                        || player.survivalStatus != "UNAVAILABLE"
+                        || player.noiseStatus != "UNAVAILABLE")
+                    {
+                        reason = "AED_MISSING_PROFILE_PAYLOAD_INVALID";
+                        return false;
+                    }
+                    missingProfileUserIds.Add(userId.ToString("D"));
+                    continue;
                 }
                 PlayerDimensionSnapshot objective = null;
                 PlayerDimensionSnapshot toolUsage = null;
@@ -101,19 +117,27 @@ namespace EchoProtocol.AI.AED
                 revisions.Add(new ProfileRevisionRef(userId.ToString("D"), player.profileRevision));
             }
 
+            if (missingProfileUserIds.Count > 0
+                && (validity != SnapshotValidity.Partial
+                    || dto.reasonCodes == null
+                    || !dto.reasonCodes.Contains("PROFILE_MISSING")))
+            {
+                reason = "AED_COLD_START_VALIDITY_MISMATCH";
+                return false;
+            }
             if (dto.survivalObservedActiveCount != survivalActive
                 || dto.noiseObservedActiveCount != noiseActive)
                 return false;
             var survivalSummary = new RosterDimensionSummary(dto.survivalObservedActiveCount,
-                survivalCold, 0, 0, (double)dto.survivalObservedActiveCount / dto.teamSize,
+                survivalCold, missingProfileUserIds.Count, 0, (double)dto.survivalObservedActiveCount / dto.teamSize,
                 survivalStatus, dto.survivalComparisonKey,
                 dto.survivalMeanObservedScorePresent ? dto.survivalMeanObservedScore : null);
             var noiseSummary = new RosterDimensionSummary(dto.noiseObservedActiveCount,
-                noiseCold, 0, 0, (double)dto.noiseObservedActiveCount / dto.teamSize,
+                noiseCold, missingProfileUserIds.Count, 0, (double)dto.noiseObservedActiveCount / dto.teamSize,
                 noiseStatus, dto.noiseComparisonKey,
                 dto.noiseMeanObservedScorePresent ? dto.noiseMeanObservedScore : null);
-            var objectiveSummary = OptionalSummary(profiles, true);
-            var toolUsageSummary = OptionalSummary(profiles, false);
+            var objectiveSummary = OptionalSummary(profiles, true, dto.teamSize);
+            var toolUsageSummary = OptionalSummary(profiles, false, dto.teamSize);
             if (fingerprintVersion == "V2")
             {
                 if (!MatchesOptionalAggregate(
@@ -140,8 +164,8 @@ namespace EchoProtocol.AI.AED
                     return false;
                 }
             }
-            if (string.IsNullOrWhiteSpace(dto.survivalComparisonKey)
-                || string.IsNullOrWhiteSpace(dto.noiseComparisonKey))
+            if ((survivalActive > 0 && string.IsNullOrWhiteSpace(dto.survivalComparisonKey))
+                || (noiseActive > 0 && string.IsNullOrWhiteSpace(dto.noiseComparisonKey)))
             {
                 reason = "AED_COMPARISON_KEY_MISSING";
                 return false;
@@ -154,7 +178,7 @@ namespace EchoProtocol.AI.AED
                 profiles, new RosterProfileSummary(dto.rosterIdentity, dto.teamSize,
                     survivalSummary, noiseSummary, objectiveSummary, toolUsageSummary),
                 validity, dto.reasonCodes ?? Array.Empty<string>(),
-                provenance);
+                provenance, missingProfileUserIds);
             currency = new AdaptiveInputCurrencyValidation(dto.targetMatchCurrent,
                 dto.decisionPointCurrent, dto.phaseContextCurrent,
                 dto.rosterCurrent, dto.profileRevisionsCurrent, dto.snapshotFingerprintValid,
@@ -165,7 +189,8 @@ namespace EchoProtocol.AI.AED
 
         private static RosterDimensionSummary OptionalSummary(
             IReadOnlyList<PlayerProfileSnapshot> profiles,
-            bool objective)
+            bool objective,
+            int teamSize)
         {
             var dimensions = profiles
                 .Select(p => objective ? p.Objective : p.ToolUsage)
@@ -190,10 +215,10 @@ namespace EchoProtocol.AI.AED
                 active.Length,
                 dimensions.Count(d => d != null
                     && d.Status == PlayerDimensionStatus.ColdStart),
-                dimensions.Count(d => d == null),
+                teamSize - profiles.Count + dimensions.Count(d => d == null),
                 dimensions.Count(d => d != null
                     && d.Status == PlayerDimensionStatus.Deferred),
-                (double)active.Length / profiles.Count,
+                (double)active.Length / teamSize,
                 status,
                 status == RosterAggregationStatus.Available ? keys[0] : string.Empty,
                 status == RosterAggregationStatus.Available

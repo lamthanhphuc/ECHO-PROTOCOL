@@ -15,7 +15,8 @@ using Npgsql;
 namespace EchoProtocol.Api.Services;
 
 public sealed class ScenarioAdaptivePlanV2Service(
-    AppDbContext db, IScenarioSnapshotReadService snapshots, TimeProvider clock)
+    AppDbContext db, IScenarioSnapshotReadService snapshots, TimeProvider clock,
+    IAEDv2PhaseEvidenceVerifier evidenceVerifier)
     : IScenarioAdaptivePlanV2Service
 {
     public const string PolicyVersion = "AED_V2_POLICY_V2";
@@ -67,6 +68,8 @@ public sealed class ScenarioAdaptivePlanV2Service(
             && request.PhaseOrdinal > 0 && IsFingerprint(request.EvidenceFingerprint, 64);
         if (!preMatch && !boundary)
             return Fail("Invalid AED v2 decision point", ErrorCodes.ValidationError);
+        if (preMatch && request.CommitStatus == "COMMITTED")
+            return Fail("AED v2 pre-match gameplay commit is disabled", ErrorCodes.ValidationError);
 
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var match = await db.MatchAuthorityBindings.SingleOrDefaultAsync(x => x.MatchId == matchId, ct);
@@ -80,10 +83,17 @@ public sealed class ScenarioAdaptivePlanV2Service(
             || scenario.SnapshotId != request.SnapshotId)
             return Fail("AED v2 snapshot is stale", ErrorCodes.ScenarioDecisionStaleRoster);
         var read = await snapshots.GetAsync(callerUserId, matchId, scenario.DecisionId, ct);
-        if (!read.IsSuccess || read.Data is null ||
-            read.Data.SnapshotValidity != "VALID" ||
-            read.Data.SnapshotContentFingerprint != request.SnapshotFingerprint ||
-            read.Data.RosterIdentity != request.RosterIdentity)
+        if (!read.IsSuccess || read.Data is null)
+            return Fail("AED v2 snapshot unavailable", ErrorCodes.ScenarioDecisionStaleRoster);
+        var data = read.Data;
+        var validSnapshot = data.SnapshotValidity == "VALID";
+        var allowedColdStartReasons = data.ReasonCodes is { Length: > 0 }
+            && data.ReasonCodes.All(r => r is "PROFILE_MISSING" or "INSUFFICIENT_OBSERVED_PROFILE_EVIDENCE");
+        var coldStartSnapshot = boundary && data.SnapshotValidity == "PARTIAL" && allowedColdStartReasons;
+        if ((!validSnapshot && !coldStartSnapshot)
+            || data.SnapshotId != request.SnapshotId
+            || data.SnapshotContentFingerprint != request.SnapshotFingerprint
+            || data.RosterIdentity != request.RosterIdentity)
             return Fail("AED v2 snapshot is stale or ineligible", ErrorCodes.ScenarioDecisionStaleRoster);
         if (existing is not null)
         {
@@ -95,6 +105,9 @@ public sealed class ScenarioAdaptivePlanV2Service(
         }
         if (preMatch ? match!.Status != MatchAuthorityStatus.Lobby : match!.Status != MatchAuthorityStatus.InMatch)
             return Fail("AED v2 decision window is closed", ErrorCodes.ScenarioDecisionWindowClosed);
+        if (boundary && !await evidenceVerifier.VerifyAsync(
+                matchId, request.PhaseOrdinal, request.EvidenceFingerprint, ct))
+            return Fail("AED v2 phase evidence is not verified", ErrorCodes.ScenarioApplyConflict);
 
         var hasPending = await db.Set<ScenarioAdaptivePlanV2>()
             .AnyAsync(x => x.MatchId == matchId

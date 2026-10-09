@@ -33,6 +33,16 @@ namespace EchoProtocol.Networking.Tests
             + "\"noiseScore\":60,\"noiseScorePresent\":true,\"noiseStatus\":\"ACTIVE\","
             + "\"noiseSampleCount\":2,\"noiseComparisonKey\":\"noise-key\"}";
 
+        private static string MissingPlayer() =>
+            "{\"userId\":\"" + Guid.NewGuid() + "\",\"profileAvailable\":false,"
+            + "\"profileRevisionPresent\":false,\"survivalScorePresent\":false,"
+            + "\"survivalStatus\":\"UNAVAILABLE\",\"survivalSampleCount\":0,"
+            + "\"noiseScorePresent\":false,\"noiseStatus\":\"UNAVAILABLE\",\"noiseSampleCount\":0}";
+
+        private static string ColdPayload(string players) => Payload(players, 2)
+            .Replace("\"snapshotValidity\":\"VALID\"", "\"snapshotValidity\":\"PARTIAL\"")
+            .Replace("\"reasonCodes\":[]", "\"reasonCodes\":[\"PROFILE_MISSING\"]");
+
         private static string OptionalPlayer(bool active, double score = 70,
             string key = "objective-key")
         {
@@ -115,6 +125,50 @@ namespace EchoProtocol.Networking.Tests
                 "PROFILE_FORMULA_UNSUPPORTED")).Mapped, Is.False);
             Assert.That(Map(valid.Replace("\"survivalStatus\":\"ACTIVE\"",
                 "\"survivalStatus\":\"COLD_START\"")).Mapped, Is.False);
+        }
+
+        [Test]
+        public void MissingProfilesStayInRosterWithoutFakeProfileRevisions()
+        {
+            var result = Map(ColdPayload(MissingPlayer() + "," + MissingPlayer())
+                .Replace("PROFILE_FORMULA_V1_1", "")
+                .Replace("\"survivalComparisonKey\":\"survival-key\"", "\"survivalComparisonKey\":\"\"")
+                .Replace("\"noiseComparisonKey\":\"noise-key\"", "\"noiseComparisonKey\":\"\"")
+                .Replace("\"survivalAggregationStatus\":\"AVAILABLE\"", "\"survivalAggregationStatus\":\"UNAVAILABLE\"")
+                .Replace("\"noiseAggregationStatus\":\"AVAILABLE\"", "\"noiseAggregationStatus\":\"UNAVAILABLE\"")
+                .Replace("\"survivalMeanObservedScore\":50,\"survivalMeanObservedScorePresent\":true", "\"survivalMeanObservedScore\":0,\"survivalMeanObservedScorePresent\":false")
+                .Replace("\"noiseMeanObservedScore\":60,\"noiseMeanObservedScorePresent\":true", "\"noiseMeanObservedScore\":0,\"noiseMeanObservedScorePresent\":false")
+                .Replace("\"survivalObservedActiveCount\":1", "\"survivalObservedActiveCount\":0")
+                .Replace("\"noiseObservedActiveCount\":1", "\"noiseObservedActiveCount\":0"));
+            Assert.That(result.Mapped, Is.True, result.Reason);
+            Assert.That(((System.Collections.ICollection)result.Snapshot.GetType()
+                .GetProperty("PlayerProfileSnapshots").GetValue(result.Snapshot)).Count, Is.EqualTo(0));
+            Assert.That(((System.Collections.ICollection)result.Snapshot.GetType()
+                .GetProperty("MissingProfileUserIds").GetValue(result.Snapshot)).Count, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void MixedRosterKeepsExistingProfileAndOneMissingIdentity()
+        {
+            var result = Map(ColdPayload(Player() + "," + MissingPlayer()));
+            Assert.That(result.Mapped, Is.True, result.Reason);
+            Assert.That(((System.Collections.ICollection)result.Snapshot.GetType()
+                .GetProperty("PlayerProfileSnapshots").GetValue(result.Snapshot)).Count, Is.EqualTo(1));
+            Assert.That(((System.Collections.ICollection)result.Snapshot.GetType()
+                .GetProperty("MissingProfileUserIds").GetValue(result.Snapshot)).Count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void FullyProfiledRosterHasNoMissingIds()
+        {
+            var result = Map(Payload(Player() + "," + Player(), 2)
+                .Replace("\"survivalObservedActiveCount\":1", "\"survivalObservedActiveCount\":2")
+                .Replace("\"noiseObservedActiveCount\":1", "\"noiseObservedActiveCount\":2"));
+            Assert.That(result.Mapped, Is.True, result.Reason);
+            Assert.That(((System.Collections.ICollection)result.Snapshot.GetType()
+                .GetProperty("PlayerProfileSnapshots").GetValue(result.Snapshot)).Count, Is.EqualTo(2));
+            Assert.That(((System.Collections.ICollection)result.Snapshot.GetType()
+                .GetProperty("MissingProfileUserIds").GetValue(result.Snapshot)).Count, Is.EqualTo(0));
         }
 
         [Test]

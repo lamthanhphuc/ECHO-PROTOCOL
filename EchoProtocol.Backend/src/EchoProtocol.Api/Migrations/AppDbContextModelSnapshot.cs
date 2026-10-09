@@ -22,6 +22,19 @@ namespace EchoProtocol.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchProfileProcessingJob", b =>
+                {
+                    b.Property<Guid>("MatchId").HasColumnType("uuid");
+                    b.Property<int>("Attempts").HasColumnType("integer");
+                    b.Property<string>("LastError").IsRequired().HasMaxLength(200).HasColumnType("character varying(200)");
+                    b.Property<DateTime>("NextAttemptAtUtc").HasColumnType("timestamp with time zone");
+                    b.Property<DateTime?>("LeaseExpiresAtUtc").HasColumnType("timestamp with time zone");
+                    b.Property<string>("Status").IsRequired().HasMaxLength(20).HasColumnType("character varying(20)");
+                    b.HasKey("MatchId");
+                    b.HasIndex("Status", "NextAttemptAtUtc");
+                    b.ToTable("MatchProfileProcessingJobs");
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", b =>
                 {
                     b.Property<Guid>("SnapshotId")

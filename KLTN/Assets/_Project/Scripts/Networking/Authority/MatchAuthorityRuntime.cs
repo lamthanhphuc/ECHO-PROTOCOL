@@ -1,6 +1,7 @@
 using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -81,12 +82,16 @@ namespace EchoProtocol.Networking.Authority
         private HostRuntimeNoiseService _runtimeNoise;
         private readonly AEDv2MatchEvidenceCollector _aedv2Evidence = new AEDv2MatchEvidenceCollector();
         public AEDv2CurrentMatchEvidence LastFrozenAEDv2Evidence => _aedv2Evidence.LastFrozen;
+        public IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence> AEDv2PlayerEvidence => _aedv2Evidence.PlayerEvidence;
+        public IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence> LastFrozenAEDv2PlayerEvidence => _aedv2Evidence.LastFrozenPlayerEvidence;
         public void MarkAEDv2EvidenceIncomplete()
         {
             _aedv2Evidence.MarkIncomplete();
         }
 
         public string AEDv2RosterIdentity => HasStateAuthority ? CurrentRosterIdentity() : string.Empty;
+        public IReadOnlyCollection<string> AEDv2BoundUserIds => _boundPlayers.Values
+            .Select(userId => userId.ToString("D")).ToArray();
 
         private string CurrentRosterIdentity()
         {
@@ -1372,7 +1377,7 @@ namespace EchoProtocol.Networking.Authority
                 out _,
                 downCount,
                 Snapshot(position));
-            if (accepted) _aedv2Evidence.RecordAcceptedDown(occurrenceKey);
+            if (accepted) _aedv2Evidence.RecordAcceptedDown(occurrenceKey, userId.ToString("D"));
             else _aedv2Evidence.MarkIncomplete();
             return accepted;
         }
@@ -1402,7 +1407,7 @@ namespace EchoProtocol.Networking.Authority
                 out _,
                 reviveCount,
                 usedFirstAidKit);
-            if (accepted) _aedv2Evidence.RecordAcceptedRevive(occurrenceKey);
+            if (accepted) _aedv2Evidence.RecordAcceptedRevive(occurrenceKey, revivedUserId.ToString("D"));
             else _aedv2Evidence.MarkIncomplete();
             return accepted;
         }
@@ -1426,7 +1431,7 @@ namespace EchoProtocol.Networking.Authority
                 out _,
                 out _,
                 reviveCount);
-            if (accepted) _aedv2Evidence.RecordAcceptedElimination(occurrenceKey);
+            if (accepted) _aedv2Evidence.RecordAcceptedElimination(occurrenceKey, userId.ToString("D"));
             else _aedv2Evidence.MarkIncomplete();
             return accepted;
         }
@@ -1457,32 +1462,36 @@ namespace EchoProtocol.Networking.Authority
                 _aedv2Evidence.MarkIncomplete();
                 return false;
             }
+            var nowUtc = DateTime.UtcNow;
+            nowUtc = new DateTime(nowUtc.Ticks - nowUtc.Ticks % TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
             var accepted = _telemetry.MatchAdapter.EmitPhaseCompleted(
                 occurrenceKey,
-                DateTime.UtcNow,
+                nowUtc,
                 phase,
                 out _,
                 out _,
                 null,
                 reasonCode);
             if (!accepted) _aedv2Evidence.MarkIncomplete();
-            _aedv2Evidence.Freeze(phase, _boundPlayers.Count, CurrentRosterIdentity(), DateTime.UtcNow);
+            _aedv2Evidence.Freeze(phase, _boundPlayers.Count, CurrentRosterIdentity(), nowUtc);
             return accepted;
         }
 
         public bool RecordPhaseStarted(string occurrenceKey, string phase, string reasonCode)
         {
             if (!CanEmitProductionTelemetry()) return false;
+            var nowUtc = DateTime.UtcNow;
+            nowUtc = new DateTime(nowUtc.Ticks - nowUtc.Ticks % TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
             var emitted = _telemetry.MatchAdapter.EmitPhaseStarted(
                 occurrenceKey,
-                DateTime.UtcNow,
+                nowUtc,
                 phase,
                 out _,
                 out _,
                 reasonCode);
             if (emitted) _currentTelemetryPhase = phase;
             if (emitted) _aedv2Evidence.StartPhase(MatchId, CurrentRosterIdentity(),
-                phase, (_aedv2Evidence.LastFrozen?.PhaseOrdinal ?? 0) + 1, DateTime.UtcNow);
+                phase, (_aedv2Evidence.LastFrozen?.PhaseOrdinal ?? 0) + 1, nowUtc);
             else _aedv2Evidence.MarkIncomplete();
             return emitted;
         }
@@ -1538,7 +1547,7 @@ namespace EchoProtocol.Networking.Authority
                 out _,
                 out _,
                 targetId);
-            if (accepted) _aedv2Evidence.RecordAcceptedTeamTool(occurrenceKey);
+            if (accepted) _aedv2Evidence.RecordAcceptedTeamTool(occurrenceKey, userId.ToString("D"));
             else _aedv2Evidence.MarkIncomplete();
             return accepted;
         }
@@ -1599,7 +1608,7 @@ namespace EchoProtocol.Networking.Authority
                     out _,
                     out _,
                     hearingRadius);
-                if (accepted) _aedv2Evidence.RecordAcceptedNoise(noiseEventId);
+                if (accepted) _aedv2Evidence.RecordAcceptedNoise(noiseEventId, userId.ToString("D"));
                 else _aedv2Evidence.MarkIncomplete();
                 return accepted;
             }

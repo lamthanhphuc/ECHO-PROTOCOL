@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EchoProtocol.MatchFlow;
@@ -515,6 +516,15 @@ namespace EchoProtocol.Networking
         public override void FixedUpdateNetwork()
         {
             if (!Object.HasStateAuthority) return;
+
+            if (_aedv2Boundary.State == AEDv2BoundaryState.AwaitingReceipt
+                && _aedv2Boundary.Transaction != null)
+            {
+                var pending = _aedv2Boundary.Transaction;
+                _aedv2Boundary.TryReconcileReceipt(token =>
+                    new AEDSnapshotApiService().ConfirmPlanAppliedAsync(
+                        pending.MatchId, pending.DecisionId, pending.Plan.Fingerprint(), token));
+            }
 
             if (IsEnded)
             {
@@ -2305,7 +2315,13 @@ namespace EchoProtocol.Networking
             if (_aedv2Boundary.State == AEDv2BoundaryState.AwaitingReceipt
                 || _aedv2Boundary.State == AEDv2BoundaryState.PendingBackend
                 || _aedv2Boundary.State == AEDv2BoundaryState.Approved)
-                return false;
+            {
+                if (_aedv2Boundary.State != AEDv2BoundaryState.AwaitingReceipt)
+                    return false;
+                RecordCompletedPhase(runtime, completedPhase, expected);
+                CompletePhaseTransition(expected, next, runtime, afterTransition);
+                return true;
+            }
 
             RecordCompletedPhase(runtime, completedPhase, expected);
             var evidence = runtime.LastFrozenAEDv2Evidence;
@@ -2316,9 +2332,17 @@ namespace EchoProtocol.Networking
                 ? ScenarioDecisionPoint.FinalHuntSetup
                 : ScenarioDecisionPoint.AllowedPhaseBoundary;
             var safe = IsAEDv2BoundarySafe();
+            var rosterEvidence = runtime.LastFrozenAEDv2PlayerEvidence;
+            var allObserved = rosterEvidence != null && runtime.AEDv2BoundUserIds.Count > 0
+                && runtime.AEDv2BoundUserIds.All(rosterEvidence.ContainsKey)
+                && runtime.AEDv2BoundUserIds.All(userId => rosterEvidence[userId].ObservationCount > 0);
+            var anyStruggling = rosterEvidence != null && runtime.AEDv2BoundUserIds.Any(userId =>
+                rosterEvidence.TryGetValue(userId, out var player)
+                && (player.DownCount > 0 || player.EliminatedCount > 0));
+            var rosterSafety = new AEDv2RosterSafety(allObserved, anyStruggling);
             var proposed = AEDv2BoundaryPolicy.TryPropose(previous, evidence,
                 matchId, runtime.AEDv2RosterIdentity, nextOrdinal, safe, point,
-                out var nextPlan, out var key, out var reason);
+                out var nextPlan, out var key, out var reason, rosterSafety);
             if (!proposed || BackendAdaptiveInputSnapshotProvider.Current == null)
             {
                 _aedv2Boundary.Hold(proposed ? "AED_V2_SNAPSHOT_UNAVAILABLE" : reason);
@@ -2538,11 +2562,18 @@ namespace EchoProtocol.Networking
             var point = next == NetworkMatchPhase.FinalHunt
                 ? ScenarioDecisionPoint.FinalHuntSetup
                 : ScenarioDecisionPoint.AllowedPhaseBoundary;
+            var playerEvidence = authority.LastFrozenAEDv2PlayerEvidence;
+            var roster = authority.AEDv2BoundUserIds;
+            var allObserved = playerEvidence != null && roster.Count > 0 && roster.All(playerEvidence.ContainsKey)
+                && roster.All(userId => playerEvidence[userId].ObservationCount > 0);
+            var anyStruggling = playerEvidence != null && roster.Any(userId => playerEvidence.TryGetValue(userId, out var player)
+                && (player.DownCount > 0 || player.EliminatedCount > 0));
             var proposed = AEDv2BoundaryPolicy.TryPropose(previous,
                 authority.LastFrozenAEDv2Evidence, authority.MatchId,
                 authority.AEDv2RosterIdentity, PhaseOrdinal, safe,
                 point,
-                out var nextPlan, out var key, out var reason);
+                out var nextPlan, out var key, out var reason,
+                new AEDv2RosterSafety(allObserved, anyStruggling));
             if (proposed)
                 LogAEDv2PolicyMetrics(authority.LastFrozenAEDv2Evidence, key, previous, nextPlan);
             RuntimeLog.Log(RuntimeLogCategory.Aed,

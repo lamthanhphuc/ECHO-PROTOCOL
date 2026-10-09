@@ -111,6 +111,15 @@ namespace EchoProtocol.AI.AED
             State = AEDv2BoundaryState.Idle;
         }
 
+        public bool TryReconcileReceipt(Func<CancellationToken, Task<bool>> confirmReceipt)
+        {
+            if (State != AEDv2BoundaryState.AwaitingReceipt || Transaction == null
+                || confirmReceipt == null || _operation != null && !_operation.IsCompleted)
+                return false;
+            _operation = ReconcileReceiptAsync(confirmReceipt, Transaction, _lifetime.Token);
+            return true;
+        }
+
         public void Dispose()
         {
             _lifetime.Cancel();
@@ -148,6 +157,7 @@ namespace EchoProtocol.AI.AED
         {
             State = AEDv2BoundaryState.PendingBackend;
             AEDPlanV2Data approval = null;
+            var submitAttempts = 0;
             while (!cancellationToken.IsCancellationRequested && approval == null)
             {
                 approval = await submit(cancellationToken);
@@ -156,6 +166,12 @@ namespace EchoProtocol.AI.AED
                     if (submitRetryable != null && !submitRetryable())
                     {
                         Hold("AED_V2_BOUNDARY_BACKEND_REJECTED");
+                        completeHold?.Invoke();
+                        return;
+                    }
+                    if (++submitAttempts >= 3)
+                    {
+                        Hold("AED_V2_BOUNDARY_BACKEND_RETRY_EXHAUSTED");
                         completeHold?.Invoke();
                         return;
                     }
@@ -184,6 +200,7 @@ namespace EchoProtocol.AI.AED
             completeTransition();
             State = AEDv2BoundaryState.AwaitingReceipt;
             AEDv2E2ELog.State("RECEIPT_WAIT", decisionId: Transaction.DecisionId);
+            var receiptAttempts = 0;
             while (!cancellationToken.IsCancellationRequested)
             {
                 if (await confirmReceipt(cancellationToken))
@@ -192,9 +209,34 @@ namespace EchoProtocol.AI.AED
                     Transaction = null;
                     return;
                 }
+                if (++receiptAttempts >= 3) return;
                 AEDv2E2ELog.State("RECEIPT_RETRY", decisionId: Transaction.DecisionId);
                 await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
             }
+        }
+
+        private async Task ReconcileReceiptAsync(
+            Func<CancellationToken, Task<bool>> confirmReceipt,
+            AEDv2BoundaryTransaction transaction,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                for (var attempt = 0; attempt < 3 && !cancellationToken.IsCancellationRequested; attempt++)
+                {
+                    if (await confirmReceipt(cancellationToken))
+                    {
+                        if (Transaction == transaction)
+                        {
+                            State = AEDv2BoundaryState.Idle;
+                            Transaction = null;
+                        }
+                        return;
+                    }
+                    if (attempt < 2) await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         }
     }
 }

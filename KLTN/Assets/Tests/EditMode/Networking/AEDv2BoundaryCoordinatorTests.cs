@@ -45,6 +45,35 @@ namespace EchoProtocol.Networking.Tests
             ((IDisposable)coordinator).Dispose();
         }
 
+        [Test]
+        public async Task PermanentBackendRejectionHoldsAndCompletesPhaseTransition()
+        {
+            var coordinatorType = RuntimeType("AEDv2BoundaryCoordinator");
+            var transaction = CreateTransaction(RuntimeType("AEDv2BoundaryTransaction"),
+                RuntimeType("AEDPlanV2Data"));
+            var submitMethod = typeof(AEDv2BoundaryCoordinatorTests).GetMethod(nameof(Reject),
+                BindingFlags.Static | BindingFlags.NonPublic).MakeGenericMethod(RuntimeType("AEDPlanV2Data"));
+            var submit = Delegate.CreateDelegate(
+                typeof(Func<,>).MakeGenericType(typeof(CancellationToken),
+                    typeof(Task<>).MakeGenericType(RuntimeType("AEDPlanV2Data"))), submitMethod);
+            var order = string.Empty;
+            var coordinator = Activator.CreateInstance(coordinatorType);
+            var started = (bool)coordinatorType.GetMethod("TryBegin").Invoke(coordinator,
+                new object[] { transaction, submit,
+                    MakeDelegate(nameof(Validate), RuntimeType("AEDPlanV2Data")),
+                    MakeDelegate(nameof(Apply), RuntimeType("AEDPlanV2Data")),
+                    new Action(() => order += "unexpected"),
+                    new Func<CancellationToken, Task<bool>>(Receipt),
+                    new Func<bool>(NotRetryable), new Action(() => order += "transition") });
+            Assert.That(started, Is.True);
+            for (var i = 0; i < 20 && coordinatorType.GetProperty("State")
+                     .GetValue(coordinator).ToString() == "PendingBackend"; i++)
+                await Task.Delay(10);
+            Assert.That(order, Is.EqualTo("transition"));
+            Assert.That(coordinatorType.GetProperty("State").GetValue(coordinator).ToString(), Is.EqualTo("Hold"));
+            ((IDisposable)coordinator).Dispose();
+        }
+
         private static Type RuntimeType(string name) => Type.GetType(
             $"EchoProtocol.AI.AED.{name}, Assembly-CSharp", true);
 
@@ -89,6 +118,8 @@ namespace EchoProtocol.Networking.Tests
         private static void Set(object target, string field, object value) =>
             target.GetType().GetField(field).SetValue(target, value);
         private static Task<T> Submit<T>(CancellationToken _) => Task.FromResult((T)_approval);
+        private static Task<T> Reject<T>(CancellationToken _) => Task.FromResult(default(T));
+        private static bool NotRetryable() => false;
         private static bool Validate<T>(T _) => true;
         private static bool Apply<T>(T _) { _order += "apply|"; return true; }
         private static void Transition() => _order += "transition|";

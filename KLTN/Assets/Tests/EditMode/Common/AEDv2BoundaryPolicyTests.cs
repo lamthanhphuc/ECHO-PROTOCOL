@@ -46,7 +46,7 @@ namespace EchoProtocol.AI.Common.Tests
             var matchId = Guid.NewGuid();
             Assert.That(AEDv2BoundaryPolicy.TryPropose(AEDv2Plan.Normal(), Evidence(matchId, downs: 2),
                 matchId, "roster", 1, true, ScenarioDecisionPoint.AllowedPhaseBoundary,
-                out var next, out var key, out _), Is.True);
+                out var next, out var key, out _, new AEDv2RosterSafety(true, false)), Is.True);
             Assert.That(key, Is.EqualTo(AEDv2Key.ReviveBonusPerZone));
             Assert.That(next.ReviveBonus, Is.EqualTo(1));
             Assert.That(next.Get(AEDv2Key.ChaseSpeed), Is.EqualTo(7.5));
@@ -90,7 +90,7 @@ namespace EchoProtocol.AI.Common.Tests
             Assert.That(AEDv2BoundaryPolicy.TryPropose(previous,
                 Evidence(id, downs: 0, noise: 9), id, "roster", 1, true,
                 ScenarioDecisionPoint.AllowedPhaseBoundary,
-                out var next, out var key, out _), Is.True);
+                out var next, out var key, out _, new AEDv2RosterSafety(true, false)), Is.True);
             Assert.That(key, Is.EqualTo(AEDv2Key.DetectionAcquireSeconds));
             Assert.That(next.ReviveBonus, Is.EqualTo(1));
             Assert.That(next.Get(key), Is.EqualTo(1.5));
@@ -126,7 +126,7 @@ namespace EchoProtocol.AI.Common.Tests
             var proposed = AEDv2BoundaryPolicy.TryPropose(
                 AEDv2Plan.Normal(), evidence, id, "roster", 1u, true,
                 ScenarioDecisionPoint.AllowedPhaseBoundary,
-                out var next, out var key, out _);
+                out var next, out var key, out _, new AEDv2RosterSafety(true, false));
 
             Assert.That(proposed, Is.True);
             Assert.That(key, Is.EqualTo(expectedKey));
@@ -150,7 +150,7 @@ namespace EchoProtocol.AI.Common.Tests
                 previous, Evidence(id, downs: 2, revives: 1),
                 id, "roster", 1u, true,
                 ScenarioDecisionPoint.AllowedPhaseBoundary,
-                out var next, out var key, out _);
+                out var next, out var key, out _, new AEDv2RosterSafety(true, false));
 
             Assert.That(proposed, Is.True);
             Assert.That(key, Is.EqualTo(AEDv2Key.SeekPlayersAfterSeconds));
@@ -170,6 +170,24 @@ namespace EchoProtocol.AI.Common.Tests
                 out _, out var key, out _);
 
             Assert.That(key, Is.Not.EqualTo(AEDv2Key.ReviveBonusPerZone));
+        }
+
+        [Test]
+        public void PressureNeedsRosterSafetyButReliefRemainsAvailable()
+        {
+            var id = Guid.NewGuid();
+            var pressureEvidence = Evidence(id, objectives: 2, durationSeconds: 120);
+            Assert.That(AEDv2BoundaryPolicy.TryPropose(AEDv2Plan.Normal(), pressureEvidence,
+                id, "roster", 1u, true, ScenarioDecisionPoint.AllowedPhaseBoundary,
+                out _, out _, out var reason), Is.False);
+            Assert.That(reason, Is.EqualTo("AED_V2_ROSTER_PRESSURE_GUARD"));
+
+            Assert.That(AEDv2BoundaryPolicy.TryPropose(AEDv2Plan.Normal(), pressureEvidence,
+                id, "roster", 1u, true, ScenarioDecisionPoint.AllowedPhaseBoundary,
+                out _, out _, out _, new AEDv2RosterSafety(true, false)), Is.True);
+            Assert.That(AEDv2BoundaryPolicy.TryPropose(AEDv2Plan.Normal(), pressureEvidence,
+                id, "roster", 1u, true, ScenarioDecisionPoint.AllowedPhaseBoundary,
+                out _, out _, out _, new AEDv2RosterSafety(true, true)), Is.False);
         }
     }
 }

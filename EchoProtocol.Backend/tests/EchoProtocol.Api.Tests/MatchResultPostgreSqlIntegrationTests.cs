@@ -811,6 +811,7 @@ public sealed class MatchResultPostgreSqlIntegrationTests
                 new RewardPolicyV1(),
                 new ProgressionService(new ProgressionPolicyV1()),
                 new FixedTimeProvider(Now)),
+            new MatchProfilePostProcessingService(db, new FixedTimeProvider(Now)),
             NullLogger<MatchResultsController>.Instance)
         {
             ControllerContext = new ControllerContext
@@ -834,6 +835,9 @@ public sealed class MatchResultPostgreSqlIntegrationTests
             .Include(item => item.Players)
             .SingleAsync(item => item.MatchId == seed.MatchId);
         Assert.Equal(MatchRewardStatus.Completed, stored.RewardStatus);
+        var processing = await verify.MatchProfileProcessingJobs.AsNoTracking()
+            .SingleAsync(job => job.MatchId == seed.MatchId);
+        Assert.Equal("PENDING", processing.Status);
         Assert.Equal(2, stored.Players.Count);
         Assert.All(await verify.Wallets.AsNoTracking().ToListAsync(), wallet =>
             Assert.Equal(230, wallet.Balance));

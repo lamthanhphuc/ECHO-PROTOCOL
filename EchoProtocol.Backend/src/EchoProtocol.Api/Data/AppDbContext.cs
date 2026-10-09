@@ -39,6 +39,7 @@ public class AppDbContext : DbContext
     public DbSet<PaymentCheckout> PaymentCheckouts => Set<PaymentCheckout>();
     public DbSet<PaymentProviderEvent> PaymentProviderEvents => Set<PaymentProviderEvent>();
     public DbSet<PaymentFulfillment> PaymentFulfillments => Set<PaymentFulfillment>();
+    public DbSet<MatchProfileProcessingJob> MatchProfileProcessingJobs => Set<MatchProfileProcessingJob>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -744,6 +745,15 @@ public class AppDbContext : DbContext
                 .WithOne(e => e.TeamProfile)
                 .HasForeignKey<TeamProfile>(e => e.MatchId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MatchProfileProcessingJob>(entity =>
+        {
+            entity.ToTable("MatchProfileProcessingJobs");
+            entity.HasKey(item => item.MatchId);
+            entity.Property(item => item.Status).IsRequired().HasMaxLength(20);
+            entity.Property(item => item.LastError).IsRequired().HasMaxLength(200);
+            entity.HasIndex(item => new { item.Status, item.NextAttemptAtUtc });
         });
 
         modelBuilder.Entity<ScenarioContentDefinition>(entity =>

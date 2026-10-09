@@ -309,7 +309,8 @@ namespace EchoProtocol.Networking
                     if (!await _snapshotProvider.PrepareAsync(matchId, decisionId,
                             _preMatchCancellation.Token))
                     {
-                        ReportError("AED snapshot is unavailable or stale.");
+                        ReportError(
+                            "AED snapshot rejected: " + _snapshotProvider.LastReason);
                         return;
                     }
                     var request = new ScenarioResolutionRequest(decisionId, matchId,
@@ -337,49 +338,18 @@ namespace EchoProtocol.Networking
                     settings.TryBuildEvidencePolicy(out var evidence, out _);
                     var gate = AEDInputGate.Evaluate(snapshot, request, policy,
                         evidence, currency);
-                    var proposal = AEDv2Policy.Evaluate(request, snapshot, gate, policy);
-                    if (proposal.Changed)
+                    if (gate.Status == AEDInputGateStatus.Invalid)
                     {
-                        var normal = AEDv2Plan.Normal();
-                        var values = new double[AEDv2Catalog.All.Count];
-                        foreach (var spec in AEDv2Catalog.All)
-                            values[(int)spec.Key] = proposal.Plan.Get(spec.Key);
-                        var changed = proposal.Key.Value;
-                        var planRequest = new AEDPlanV2Request
-                        {
-                            decisionId = decisionId.ToString("D"),
-                            phaseOrdinal = 0,
-                            decisionPoint = "PRE_MATCH",
-                            policyVersion = "AED_V2_POLICY_V2",
-                            baselineVersion = "AED_DIFFICULTY_V2|NORMAL",
-                            previousPlanFingerprint = normal.Fingerprint(),
-                            resultingPlanFingerprint = proposal.Plan.Fingerprint(),
-                            changedKey = changed.ToString(),
-                            previousValue = normal.Get(changed),
-                            appliedValue = proposal.Plan.Get(changed),
-                            adaptationIntent = proposal.Intent == AdaptationIntent.Relieve
-                                ? "RELIEVE" : "INCREASE_PRESSURE",
-                            decisionReason = proposal.Reason,
-                            snapshotId = snapshot.SnapshotId.ToString("D"),
-                            snapshotFingerprint = snapshot.SnapshotContentFingerprint,
-                            evidenceFingerprint = string.Empty,
-                            rosterIdentity = snapshot.RosterIdentity,
-                            commitStatus = settings.ExtendedPolicyGameplayEnabled
-                                ? "COMMITTED" : "SHADOW_ONLY",
-                            planValues = values
-                        };
-                        var approved = await api.SubmitPlanAsync(matchId, planRequest,
-                            _preMatchCancellation.Token);
-                        if (approved == null || _preMatchCancellation.IsCancellationRequested
-                            || authority.MatchId != matchId || !BuildStateFromRunner().CanStartMatch
-                            || authority.BoundPlayerCount != BuildStateFromRunner().CurrentPlayers)
-                        {
-                            ReportError("AED v2 backend plan was not confirmed before match start.");
-                            return;
-                        }
-                        if (settings.ExtendedPolicyGameplayEnabled)
-                            AEDv2Authority.ApproveBackendPreMatch(matchId, approved);
+                        ReportError("AED pre-match input invalid: "
+                            + string.Join(",", gate.Reasons));
+                        return;
                     }
+                    Debug.Log(
+                        $"[AED_V2][BASELINE] match={matchId:D} " +
+                        $"snapshot={snapshot.SnapshotId:D} " +
+                        $"validity={snapshot.SnapshotValidity} " +
+                        $"missing={snapshot.MissingProfileUserIds.Count} " +
+                        $"plan={AEDv2Plan.Normal().Fingerprint()}");
                 }
 
                 var (accepted, error) =

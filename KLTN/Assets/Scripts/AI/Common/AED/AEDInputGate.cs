@@ -310,6 +310,19 @@ namespace EchoProtocol.AI.Common.AED
                     evidencePolicy);
             }
 
+            if (string.IsNullOrWhiteSpace(snapshot.Provenance.ProfileFormulaSemanticId)
+                || string.IsNullOrWhiteSpace(snapshot.Provenance.SurvivalComparisonKey)
+                || string.IsNullOrWhiteSpace(snapshot.Provenance.NoiseComparisonKey))
+            {
+                return Result(
+                    AEDInputGateStatus.Invalid,
+                    AEDReasonCodes.UnsupportedVersion,
+                    snapshot,
+                    request,
+                    policyConfig,
+                    evidencePolicy);
+            }
+
             return Result(
                 AEDInputGateStatus.Eligible,
                 string.Empty,
@@ -374,6 +387,12 @@ namespace EchoProtocol.AI.Common.AED
                 out string reason)
         {
             reason = string.Empty;
+
+            if (snapshot.HasMissingProfiles)
+            {
+                reason = AEDReasonCodes.InputInvalid;
+                return AEDInputGateStatus.Invalid;
+            }
 
             if (snapshot.RosterProfileSummary == null
                 || snapshot.Provenance == null)

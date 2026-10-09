@@ -223,6 +223,8 @@ namespace EchoProtocol.AI.Common.AED
             var normal = AEDv2Plan.Normal();
             if (request.ResolutionMode != ScenarioResolutionMode.Adaptive)
                 return Hold(request, normal, "AED_V2_FIXED_MODE");
+            if (request.DecisionPoint == ScenarioDecisionPoint.PreMatch)
+                return Hold(request, normal, "AED_V2_FIRST_PHASE_BASELINE");
             if (request.DecisionPoint != ScenarioDecisionPoint.PreMatch)
                 return Hold(request, normal, "AED_V2_BOUNDARY_HOLD_NO_CURRENT_MATCH_EVIDENCE");
             if (gate == null || gate.Status != AEDInputGateStatus.Eligible ||
