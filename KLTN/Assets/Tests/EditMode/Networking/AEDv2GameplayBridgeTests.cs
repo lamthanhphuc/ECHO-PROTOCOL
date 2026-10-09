@@ -81,17 +81,42 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
-        public void RuntimeSettingsAssetIsValidAndDormant()
+        public void RuntimeSettingsAssetIsValid()
         {
             var asset = Resources.Load("AED/AEDRuntimeSettings");
             Assert.That(asset, Is.Not.Null);
             var type = asset.GetType();
-            Assert.That(type.GetProperty("ExtendedPolicyShadowEnabled").GetValue(asset), Is.False);
-            Assert.That(type.GetProperty("ExtendedPolicyGameplayEnabled").GetValue(asset), Is.False);
             foreach (var method in new[] { "TryBuildPolicyConfig", "TryBuildEvidencePolicy", "TryBuildParameterRegistry" })
             {
                 var args = new object[] { null, null };
                 Assert.That((bool)type.GetMethod(method).Invoke(asset, args), Is.True, method + ": " + args[1]);
+            }
+        }
+
+        [Test]
+        public void RuntimeSettingsDefaultsAreDormant()
+        {
+            var asset = Resources.Load("AED/AEDRuntimeSettings");
+            Assert.That(asset, Is.Not.Null);
+
+            var type = asset.GetType();
+            var defaults = ScriptableObject.CreateInstance(type);
+
+            try
+            {
+                Assert.That(
+                    type.GetProperty("ExtendedPolicyShadowEnabled")
+                        .GetValue(defaults),
+                    Is.False);
+
+                Assert.That(
+                    type.GetProperty("ExtendedPolicyGameplayEnabled")
+                        .GetValue(defaults),
+                    Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(defaults);
             }
         }
     }

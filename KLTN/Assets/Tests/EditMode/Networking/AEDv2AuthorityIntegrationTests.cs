@@ -15,7 +15,7 @@ namespace EchoProtocol.Networking.Tests
         public void Cleanup() => Authority.GetMethod("Reset").Invoke(null, new object[] { Guid.Empty });
 
         [Test]
-        public void GameplayStageRequiresMatchingBackendCommit()
+        public void PreMatchBaselineNeverQueuesGameplayCommit()
         {
             var request = new ScenarioResolutionRequest(Guid.NewGuid(), Guid.NewGuid(),
                 ScenarioResolutionMode.Adaptive, ScenarioDecisionPoint.PreMatch, "PRE_MATCH", "");
@@ -42,7 +42,11 @@ namespace EchoProtocol.Networking.Tests
             Authority.GetMethod("ApproveBackendPreMatch").Invoke(null,
                 new[] { (object)request.TargetMatchId, approved });
             stage.Invoke(null, new object[] { request, snapshot, policy, evidence, currency, true, true });
-            Assert.That(pending.GetValue(null), Is.True);
+            Assert.That(pending.GetValue(null), Is.False);
+            Assert.That(Authority.GetProperty("Revision").GetValue(null),
+                Is.EqualTo(0u));
+            Assert.That(Authority.GetProperty("HasAppliedPlan").GetValue(null),
+                Is.False);
 
             Set(approved, "snapshotFingerprint", "stale");
             Authority.GetMethod("ApproveBackendPreMatch").Invoke(null,
