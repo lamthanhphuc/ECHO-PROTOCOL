@@ -416,7 +416,7 @@ namespace EchoProtocol.UI.Auth
 
     private void SetStatus(string message)
     {
-      if (statusText != null) statusText.text = message ?? string.Empty;
+      if (statusText != null) statusText.text = EchoProtocol.Settings.GameLanguage.Translate(message ?? string.Empty);
     }
 
     private static bool ValidateLoginInput(string username, string password, out string message)

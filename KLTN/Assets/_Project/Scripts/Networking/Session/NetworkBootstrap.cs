@@ -2,6 +2,7 @@ using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Threading;
 using EchoProtocol.Auth;
 using EchoProtocol.Gameplay;
 using Fusion;
@@ -36,6 +37,14 @@ namespace EchoProtocol.Networking
         private string _reconnectSessionName;
         private bool _reconnectIdentityPending;
         private bool _completedMatchObserved;
+        private int _reconnectGeneration;
+        private Task _terminationTask;
+        private CancellationTokenSource _reconnectCancellation;
+        private float _reconnectDeadline;
+        public bool IsReconnecting { get; private set; }
+        public int ReconnectAttempt { get; private set; }
+        public float ReconnectSecondsRemaining => Mathf.Max(0f, _reconnectDeadline - Time.realtimeSinceStartup);
+        public bool IsSceneLoading { get; private set; }
         private float _nextReconnectProofRetryAt;
         private readonly Dictionary<PlayerRef, int> _actorIds = new();
 
@@ -83,6 +92,9 @@ namespace EchoProtocol.Networking
 
         private void OnDestroy()
         {
+            _reconnectGeneration++;
+            _reconnectCancellation?.Cancel();
+            _reconnectCancellation?.Dispose();
             if (_instance == this) _instance = null;
             UnregisterCallbacks();
         }
@@ -107,11 +119,13 @@ namespace EchoProtocol.Networking
 
         public Task Shutdown() => ShutdownAsync(returnToLobby: false);
 
-        private async Task ShutdownAsync(bool returnToLobby)
+        private async Task ShutdownAsync(bool returnToLobby, string destinationScene = null)
         {
             if (State == NetworkSessionState.ShuttingDown) return;
             SetState(NetworkSessionState.ShuttingDown, "Leaving room...");
             _reconnectSessionName = null;
+            IsReconnecting = false;
+            IsSceneLoading = false;
             _reconnectIdentityPending = false;
             _completedMatchObserved = false;
             PlayerInteractionControlLock.ReleaseAll();
@@ -130,6 +144,7 @@ namespace EchoProtocol.Networking
                 _actorIds.Clear();
                 SetState(NetworkSessionState.Disconnected, "Disconnected");
                 if (returnToLobby) RestoreLobbyCursor();
+                if (destinationScene != null) await LoadDestinationAsync(destinationScene);
                 return;
             }
 
@@ -151,7 +166,8 @@ namespace EchoProtocol.Networking
                 CurrentSessionName = string.Empty;
                 _actorIds.Clear();
                 SetState(NetworkSessionState.Disconnected, "Disconnected");
-                if (returnToLobby) RestoreLobbyCursor();
+                if (destinationScene != null) await LoadDestinationAsync(destinationScene);
+                else if (returnToLobby) RestoreLobbyCursor();
                 else ReturnToBootstrapScene();
             }
         }
@@ -165,6 +181,27 @@ namespace EchoProtocol.Networking
         }
 
         public Task ShutdownRunnerAsync() => ShutdownAsync(returnToLobby: true);
+
+        public async Task LeaveToMainMenuAsync()
+        {
+            // Invalidate the retry loop before awaiting an in-flight join or cleanup.
+            _reconnectGeneration++;
+            _reconnectSessionName = null;
+            _reconnectCancellation?.Cancel();
+            IsReconnecting = false;
+            if (_terminationTask != null) await _terminationTask;
+            _reconnectCancellation?.Dispose();
+            _reconnectCancellation = null;
+            if (State == NetworkSessionState.ShuttingDown && !_sessionOperationInProgress)
+                SetState(NetworkSessionState.Disconnected, string.Empty);
+            await ShutdownAsync(false, EchoProtocol.Core.GameConstants.SceneMainMenu);
+        }
+
+        private static async Task LoadDestinationAsync(string sceneName)
+        {
+            var operation = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
+            if (operation != null) while (!operation.isDone) await Task.Yield();
+        }
 
         public bool RegisterLocalInputProvider(NetworkObject owner, Func<NetworkPlayerInput> provider)
         {
@@ -250,6 +287,8 @@ namespace EchoProtocol.Networking
                     SceneManager = runner.GetComponent<INetworkSceneManager>(),
                     ObjectProvider = runner.GetComponent<INetworkObjectProvider>(),
                     RealtimeClient = _realtimeClient,
+                    StartGameCancellationToken = IsReconnecting && _reconnectCancellation != null
+                        ? _reconnectCancellation.Token : CancellationToken.None,
                 };
                 var tokenKey = $"EchoProtocol.ConnectionToken.{userId:D}";
                 if (!Guid.TryParse(PlayerPrefs.GetString(tokenKey), out var connectionId))
@@ -320,6 +359,7 @@ namespace EchoProtocol.Networking
 
         private async Task HandleStartFailureAsync(string message)
         {
+            IsSceneLoading = false;
             ClearLocalInputProvider();
             if (_matchAuthority != null) await _matchAuthority.EndAsync("FUSION_START_FAILED");
             LastError = message;
@@ -450,6 +490,8 @@ namespace EchoProtocol.Networking
 
         void INetworkRunnerCallbacks.OnShutdown(NetworkRunner runner, ShutdownReason reason)
         {
+            // StartGame owns cleanup for failed / cancelled startup attempts.
+            if (_sessionOperationInProgress && State != NetworkSessionState.InMatch && State != NetworkSessionState.InLobby) return;
             RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
                 $"[NetworkSession] Runner shutdown: {reason}.");
@@ -474,6 +516,7 @@ namespace EchoProtocol.Networking
 
         void INetworkRunnerCallbacks.OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
         {
+            if (_sessionOperationInProgress && State != NetworkSessionState.InMatch && State != NetworkSessionState.InLobby) return;
             if (State == NetworkSessionState.ShuttingDown) return;
             LastError = _completedMatchObserved
                 ? "Match finished. Create or join a new room."
@@ -523,10 +566,18 @@ namespace EchoProtocol.Networking
             SetState(NetworkSessionState.ShuttingDown,
                 matchFinished ? "Closing finished match..." : "Cleaning up disconnected session...");
             var graceSeconds = runner.GetComponent<FusionPlayerLifecycle>()?.ReconnectGraceSeconds ?? 60f;
-            _ = FinishUnexpectedTerminationAsync(runner, message, graceSeconds);
+            int generation = ++_reconnectGeneration;
+            IsReconnecting = reconnect;
+            ReconnectAttempt = 0;
+            _reconnectDeadline = Time.realtimeSinceStartup + Mathf.Max(1f, graceSeconds - 5f);
+            _reconnectCancellation?.Dispose();
+            _reconnectCancellation = reconnect ? new CancellationTokenSource() : null;
+            _reconnectCancellation?.CancelAfter(TimeSpan.FromSeconds(Mathf.Max(1f, graceSeconds - 5f)));
+            IsSceneLoading = false;
+            _terminationTask = FinishUnexpectedTerminationAsync(runner, message, generation);
         }
 
-        private async Task FinishUnexpectedTerminationAsync(NetworkRunner runner, string message, float graceSeconds)
+        private async Task FinishUnexpectedTerminationAsync(NetworkRunner runner, string message, int generation)
         {
             if (runner != null)
             {
@@ -543,19 +594,32 @@ namespace EchoProtocol.Networking
             }
             _callbacksRegistered = false;
             _sessionOperationInProgress = false;
+            if (generation != _reconnectGeneration) return;
             if (!string.IsNullOrEmpty(_reconnectSessionName))
             {
                 var sessionName = _reconnectSessionName;
-                var deadline = Time.realtimeSinceStartup + Mathf.Max(1f, graceSeconds - 5f);
-                while (_reconnectSessionName == sessionName && Time.realtimeSinceStartup < deadline)
+                while (_reconnectSessionName == sessionName && Time.realtimeSinceStartup < _reconnectDeadline)
                 {
                     await Task.Delay(2000);
-                    if (_reconnectSessionName != sessionName) return;
-                    if (await JoinRoomAsync(sessionName)) return;
+                    if (generation != _reconnectGeneration || _reconnectSessionName != sessionName) return;
+                    ReconnectAttempt++;
+                    bool joined = await JoinRoomAsync(sessionName);
+                    if (generation != _reconnectGeneration) return;
+                    if (joined)
+                    {
+                        // The grace-period timer must not cancel an already restored session.
+                        IsReconnecting = false;
+                        _reconnectCancellation?.Dispose();
+                        _reconnectCancellation = null;
+                        return;
+                    }
                 }
                 _reconnectSessionName = null;
             }
             _reconnectIdentityPending = false;
+            IsReconnecting = false;
+            _reconnectCancellation?.Dispose();
+            _reconnectCancellation = null;
             if (message.StartsWith("Match finished", StringComparison.Ordinal))
             {
                 LastError = string.Empty;
@@ -576,6 +640,7 @@ namespace EchoProtocol.Networking
 
         private void CleanupTermination(NetworkRunner runner)
         {
+            IsSceneLoading = false;
             ClearLocalInputProvider();
             UnregisterCallbacks(runner);
             Runner = null;
@@ -630,6 +695,7 @@ namespace EchoProtocol.Networking
         }
         void INetworkRunnerCallbacks.OnSceneLoadDone(NetworkRunner runner)
         {
+            if (Runner == runner) IsSceneLoading = false;
             var sceneName = SceneManager.GetActiveScene().name;
             RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
@@ -660,9 +726,13 @@ namespace EchoProtocol.Networking
             if (Runner == runner && _reconnectIdentityPending && runner.IsClient)
                 _matchAuthority?.TrySubmitLocalIdentity(force: true);
         }
-        void INetworkRunnerCallbacks.OnSceneLoadStart(NetworkRunner runner) => RuntimeLog.Log(
+        void INetworkRunnerCallbacks.OnSceneLoadStart(NetworkRunner runner)
+        {
+            if (Runner == runner) IsSceneLoading = true;
+            RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
                 "[NetworkSession] Network scene load started.");
+        }
         void INetworkRunnerCallbacks.OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ReadOnlySpan<byte> data) { }
         void INetworkRunnerCallbacks.OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
     }

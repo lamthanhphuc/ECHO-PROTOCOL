@@ -54,6 +54,23 @@ namespace EchoProtocol.Voice
             _canvas.transform.SetParent(transform, false);
             _overlay = _canvas.transform.Find("Overlay").gameObject;
             _confirm = _canvas.transform.Find("Overlay/Confirm").gameObject;
+            var general = _canvas.transform.Find(Body + "Mouse");
+            SettingsMenuWidgets.Label("LanguageTitle", general, 34, 174, 350, 30, "Ngôn ngữ", 19);
+            SettingsMenuWidgets.Button("Language", general, 405, 172, 347, 32, "Tiếng Việt / English", false, 17);
+            general.GetComponent<RectTransform>().sizeDelta = new Vector2(780, 216);
+            var audioRect = _canvas.transform.Find(Body + "Audio").GetComponent<RectTransform>();
+            audioRect.anchoredPosition = new Vector2(audioRect.anchoredPosition.x, -570);
+            audioRect.sizeDelta = new Vector2(audioRect.sizeDelta.x, 168);
+            string[] audioRows = { "Master", "Music", "Effects", "Voice" };
+            for (int i = 0; i < audioRows.Length; i++)
+                foreach (string suffix in new[] { "", "Title", "Value" })
+                {
+                    var row = audioRect.Find(audioRows[i] + suffix) as RectTransform;
+                    if (row != null) row.anchoredPosition = new Vector2(row.anchoredPosition.x, -(54 + i * 25));
+                }
+            foreach (var label in _canvas.GetComponentsInChildren<TMP_Text>(true))
+                if (label.transform.parent == audioRect && label.name != "Title" && label.name != "Icon")
+                    label.fontSize = Mathf.Min(label.fontSize, 18);
             Bind();
             _overlay.SetActive(false);
         }
@@ -74,6 +91,12 @@ namespace EchoProtocol.Voice
 
         private void Bind()
         {
+            Click(Body + "Mouse/Language", () =>
+            {
+                CancelRebind();
+                GameLanguage.Set(GameLanguage.Current == GameLocale.Vietnamese ? GameLocale.English : GameLocale.Vietnamese);
+                RefreshVisuals();
+            });
             Click("Overlay/Window/CloseButton", Close);
             Click(Footer + "Resume", Close);
             Click(Footer + "Inventory", () =>
@@ -116,6 +139,13 @@ namespace EchoProtocol.Voice
 
             foreach (GameplayAction action in Enum.GetValues(typeof(GameplayAction)))
             {
+                if (action == GameplayAction.Inventory)
+                {
+                    var controls = _canvas.transform.Find(Body + "Controls");
+                    foreach (var suffix in new[] { "", "Icon", "Title", "Rule" })
+                        controls.Find(action + suffix)?.gameObject.SetActive(false);
+                    continue;
+                }
                 GameplayAction selected = action;
                 Click(Body + "Controls/" + action, () => { BeginRebind(); _rebindAction = selected; RefreshVisuals(); });
             }
@@ -140,7 +170,8 @@ namespace EchoProtocol.Voice
             var keyboard = Keyboard.current;
             if (!_open)
             {
-                if (keyboard != null && SceneManager.GetActiveScene().name == NetworkBootstrap.LobbySceneName
+                if (keyboard != null && (SceneManager.GetActiveScene().name == NetworkBootstrap.LobbySceneName
+                    || SceneManager.GetActiveScene().name == EchoProtocol.Core.GameConstants.SceneMainMenu)
                     && keyboard.escapeKey.wasPressedThisFrame && !PlayerInteractionControlLock.HasModal
                     && !PlayerInteractionControlLock.EscapeConsumedThisFrame && !IsTextInputSelected())
                     Open(gameObject);
@@ -240,6 +271,12 @@ namespace EchoProtocol.Voice
             return false;
         }
 
+        public bool OpenFromMainMenu()
+        {
+            if (_open || PlayerInteractionControlLock.HasModal) return false;
+            return Open(gameObject);
+        }
+
         private bool Open(GameObject player)
         {
             EnsureEventSystem();
@@ -267,6 +304,7 @@ namespace EchoProtocol.Voice
 
         private void Close()
         {
+            GameGraphicsSettings.RevertResolution();
             bool wasOpen = _open;
             var callback = _onClosed;
             _open = IsOpen = false;
@@ -292,13 +330,13 @@ namespace EchoProtocol.Voice
             CancelRebind();
             Place("Voice", index == 0 || index == 2, 0, 0);
             Place("Mouse", index == 0 || index == 3, 0, index == 0 ? 342 : 0);
-            Place("Audio", index == 0 || index == 2, 0, index == 0 ? 534 : 342);
+            Place("Audio", index == 0 || index == 2, 0, index == 0 ? 570 : 342);
             Place("Controls", index == 0 || index == 3, 800, 0);
             Place("Devices", index == 2, 800, 0);
             Place("Team", index == 2, 800, 362);
             Place("Graphics", index == 1, 0, 0);
             Place("Display", index == 1, 800, 0);
-            Place("ControlsNote", index == 3, 0, 196);
+            Place("ControlsNote", index == 3, 0, 228);
             string[] tabs = { "General", "Graphics", "Audio", "Controls" };
             for (int i = 0; i < tabs.Length; i++)
             {
@@ -320,7 +358,10 @@ namespace EchoProtocol.Voice
 
         private void RefreshVisuals()
         {
+            TextAt(Body + "Mouse/Language/Label").text = GameLanguage.Current == GameLocale.Vietnamese ? "Tiếng Việt" : "English";
             if (!_open) return;
+            bool mainMenu = SceneManager.GetActiveScene().name == EchoProtocol.Core.GameConstants.SceneMainMenu;
+            TextAt(Footer + "Resume/Label").text = mainMenu ? GameLanguage.Choose("Đóng", "Close") : GameLanguage.Choose("TIẾP TỤC", "RESUME");
             Find<Button>(Footer + "Inventory").interactable = CanOpenInventory;
             SetToggle("Voice/MicToggle", _voice.MicrophoneEnabled && !_voice.SelfMuted);
             SetToggle("Voice/PushToTalkToggle", _voice.PushToTalk);
@@ -338,12 +379,15 @@ namespace EchoProtocol.Voice
             SetToggle("Mouse/Invert", GameplayInputSettings.InvertY);
             SetToggle("Mouse/Acceleration", GameplayInputSettings.MouseAcceleration);
             foreach (GameplayAction action in Enum.GetValues(typeof(GameplayAction)))
+            {
+                if (action == GameplayAction.Inventory) continue;
                 TextAt(Body + "Controls/" + action + "/Label").text = _rebindAction == action
                     ? "NHẤN PHÍM..." : GameplayInputSettings.GetKeyLabel(action);
+            }
             TextAt(Body + "Controls/Hint").text = !string.IsNullOrEmpty(_bindingMessage) ? _bindingMessage
                 : IsRebinding ? "Nhấn phím mới  ·  ESC để hủy" : "Chọn một phím để thay đổi  ·  ESC để hủy";
             TextAt(Footer + "Saved").text = !string.IsNullOrEmpty(_bindingMessage) && _micRebinding ? _bindingMessage
-                : IsRebinding ? "ESC  ·  HỦY ĐỔI PHÍM" : "ESC  ·  QUAY LẠI GAME";
+                : IsRebinding ? "ESC  ·  HỦY ĐỔI PHÍM" : mainMenu ? GameLanguage.Choose("ESC  ·  QUAY LẠI MENU", "ESC  ·  RETURN TO MENU") : "ESC  ·  QUAY LẠI GAME";
             if (_tab == 1)
             {
                 TextAt(Body + "Graphics/Quality/Label").text = GameGraphicsSettings.QualityLabel;
@@ -352,8 +396,8 @@ namespace EchoProtocol.Voice
                 TextAt(Body + "Display/Monitor/Resolution").text = GameGraphicsSettings.ResolutionLabel;
                 SetToggle("Graphics/Fullscreen", GameGraphicsSettings.Fullscreen);
                 SetToggle("Graphics/VSync", GameGraphicsSettings.VSync);
-                Find<Button>(Body + "Graphics/Resolution").interactable = GameGraphicsSettings.CanChangeResolution;
-                Find<Toggle>(Body + "Graphics/Fullscreen").interactable = GameGraphicsSettings.CanChangeFullscreen;
+                Find<Button>(Body + "Graphics/Resolution").interactable = GameGraphicsSettings.CanChangeResolution && !GameGraphicsSettings.HasResolutionPreview;
+                Find<Toggle>(Body + "Graphics/Fullscreen").interactable = GameGraphicsSettings.CanChangeFullscreen && !GameGraphicsSettings.HasResolutionPreview;
                 TextAt(Body + "Graphics/Hint").text = Application.isEditor
                     ? "Độ phân giải / toàn màn hình thay đổi trong bản game."
                     : "Chọn giá trị để chuyển sang tùy chọn tiếp theo.";
@@ -435,10 +479,11 @@ namespace EchoProtocol.Voice
         private void ShowConfirmation(bool quit)
         {
             CancelRebind();
-            _confirmQuit = quit;
-            TextAt("Overlay/Confirm/Prompt/Title").text = quit ? "THOÁT GAME?" : "RỜI PHÒNG?";
-            TextAt("Overlay/Confirm/Prompt/Accept/Label").text = quit ? "THOÁT GAME" : "RỜI PHÒNG";
-            _confirm.SetActive(true);
+            GameUIFeedback.Instance.Confirm(GameLanguage.Choose(quit ? "Thoát game?" : "Rời phòng?", quit ? "Quit game?" : "Leave room?"),
+                () => NetworkBootstrap.Instance != null && NetworkBootstrap.Instance.HasRunningRunner
+                    ? GameUIFeedback.LeaveWarning() : GameLanguage.Choose("Bạn muốn đóng game?", "Do you want to close the game?"),
+                () => { _confirmQuit = quit; ConfirmExit(); },
+                GameLanguage.Choose(quit ? "Thoát game" : "Rời phòng", quit ? "Quit game" : "Leave room"));
         }
 
         private void ConfirmExit()

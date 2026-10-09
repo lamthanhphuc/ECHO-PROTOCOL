@@ -55,7 +55,7 @@ namespace EchoProtocol.UI
             var rect = Rect(name, parent, x, y, w, h);
             var label = rect.gameObject.AddComponent<TextMeshProUGUI>();
             label.font = TMP_Settings.defaultFontAsset;
-            label.text = text;
+            label.text = EchoProtocol.Settings.GameLanguage.Translate(text);
             label.fontSize = size;
             label.color = tint ?? Foreground;
             label.alignment = align;

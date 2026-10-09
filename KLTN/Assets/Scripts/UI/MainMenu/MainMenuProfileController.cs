@@ -73,6 +73,9 @@ namespace EchoProtocol.UI.MainMenu
 
     private void OnEnable()
     {
+      if (optionsButton == null)
+        foreach (var button in FindObjectsByType<Button>(FindObjectsInactive.Include))
+          if (button.name == "OptionsButton" && button.gameObject.scene == gameObject.scene) { optionsButton = button; break; }
       if (playButton != null)
       {
         playButton.onClick.AddListener(OnClickPlay);
@@ -232,7 +235,8 @@ namespace EchoProtocol.UI.MainMenu
 
     public void OnClickOptions()
     {
-      Debug.Log("[MainMenu] OPTIONS selected. Settings UI will be connected later.");
+      EchoProtocol.Voice.VoiceManager.EnsureExists();
+      EchoProtocol.Voice.VoiceManager.Instance.GetComponent<EchoProtocol.Voice.VoiceSettingsPanel>().OpenFromMainMenu();
     }
     public void OnClickLogout()
     {

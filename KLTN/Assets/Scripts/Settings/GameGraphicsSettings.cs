@@ -15,6 +15,11 @@ namespace EchoProtocol.Settings
         private static int _resolutionRequestFrame = -10;
         private static bool _requestedFullscreen;
         private static int _fullscreenRequestFrame = -10;
+        private static Vector2Int _previousResolution;
+        private static bool _previousFullscreen;
+        private static float _previewDeadline;
+        public static bool HasResolutionPreview { get; private set; }
+        public static float ResolutionPreviewSecondsRemaining => Mathf.Max(0, _previewDeadline - Time.realtimeSinceStartup);
 
         public static string QualityLabel
         {
@@ -48,6 +53,7 @@ namespace EchoProtocol.Settings
         {
             _resolutionRequestFrame = -10;
             _fullscreenRequestFrame = -10;
+            HasResolutionPreview = false;
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -94,21 +100,52 @@ namespace EchoProtocol.Settings
 
         public static void CycleResolution()
         {
-            if (!CanChangeResolution) return;
+            if (!CanChangeResolution || HasResolutionPreview) return;
             var choices = AvailableResolutions();
             if (choices.Count == 0) return;
             int current = choices.IndexOf(CurrentResolution);
             var next = choices[(current + 1) % choices.Count];
-            PlayerPrefs.SetInt(WidthKey, next.x);
-            PlayerPrefs.SetInt(HeightKey, next.y);
+            BeginResolutionPreview();
             RequestResolution(next, Fullscreen);
         }
 
         public static void SetFullscreen(bool enabled)
         {
-            if (!CanChangeFullscreen) return;
-            PlayerPrefs.SetInt(FullscreenKey, enabled ? 1 : 0);
+            if (!CanChangeFullscreen || HasResolutionPreview || enabled == Fullscreen) return;
+            BeginResolutionPreview();
             RequestFullscreen(enabled);
+        }
+
+        private static void BeginResolutionPreview()
+        {
+            _previousResolution = CurrentResolution;
+            _previousFullscreen = Fullscreen;
+            _previewDeadline = Time.realtimeSinceStartup + 15f;
+            HasResolutionPreview = true;
+            // Ensure the deadline is monitored even outside the settings panel.
+            _ = EchoProtocol.UI.GameUIFeedback.Instance;
+        }
+
+        public static void ConfirmResolution()
+        {
+            if (!HasResolutionPreview) return;
+            HasResolutionPreview = false;
+            PlayerPrefs.SetInt(WidthKey, CurrentResolution.x);
+            PlayerPrefs.SetInt(HeightKey, CurrentResolution.y);
+            PlayerPrefs.SetInt(FullscreenKey, Fullscreen ? 1 : 0);
+            PlayerPrefs.Save();
+        }
+
+        public static void RevertResolution()
+        {
+            if (!HasResolutionPreview) return;
+            HasResolutionPreview = false;
+            RequestResolution(_previousResolution, _previousFullscreen);
+        }
+
+        public static void TickResolutionPreview()
+        {
+            if (HasResolutionPreview && Time.realtimeSinceStartup >= _previewDeadline) RevertResolution();
         }
 
         public static void SetVSync(bool enabled)
