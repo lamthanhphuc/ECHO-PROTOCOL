@@ -350,7 +350,7 @@ namespace EchoProtocol.Networking
                             decisionId = decisionId.ToString("D"),
                             phaseOrdinal = 0,
                             decisionPoint = "PRE_MATCH",
-                            policyVersion = "AED_V2_POLICY_V1",
+                            policyVersion = "AED_V2_POLICY_V2",
                             baselineVersion = "AED_DIFFICULTY_V2|NORMAL",
                             previousPlanFingerprint = normal.Fingerprint(),
                             resultingPlanFingerprint = proposal.Plan.Fingerprint(),

@@ -186,7 +186,7 @@ MonoBehaviour:
   coreCarryTimeoutSeconds: 3
   coreCarryHeight: 0.65
   fleeMinDistance: 4
-  stolenToolDropMinDistance: 6
+  stolenToolDropMinDistance: 15
   stolenToolDropMaxDistance: 30
   alertCooldownSeconds: 4
   alertRetrySeconds: 0.15

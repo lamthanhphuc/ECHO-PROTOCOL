@@ -2345,7 +2345,7 @@ namespace EchoProtocol.Networking
                 phaseOrdinal = (int)nextOrdinal,
                 decisionPoint = point == ScenarioDecisionPoint.FinalHuntSetup
                     ? "FINAL_HUNT_SETUP" : "ALLOWED_PHASE_BOUNDARY",
-                policyVersion = "AED_V2_POLICY_V1",
+                policyVersion = "AED_V2_POLICY_V2",
                 baselineVersion = "AED_DIFFICULTY_V2|NORMAL",
                 previousPlanFingerprint = previous.Fingerprint(),
                 resultingPlanFingerprint = nextPlan.Fingerprint(),
@@ -2574,7 +2574,7 @@ namespace EchoProtocol.Networking
                     phaseOrdinal = (int)PhaseOrdinal,
                     decisionPoint = point == ScenarioDecisionPoint.FinalHuntSetup
                         ? "FINAL_HUNT_SETUP" : "ALLOWED_PHASE_BOUNDARY",
-                    policyVersion = "AED_V2_POLICY_V1",
+                    policyVersion = "AED_V2_POLICY_V2",
                     baselineVersion = "AED_DIFFICULTY_V2|NORMAL",
                     previousPlanFingerprint = previous.Fingerprint(),
                     resultingPlanFingerprint = nextPlan.Fingerprint(),

@@ -1,84 +1,11 @@
-# ECHO PROTOCOL
+# AED v2 E2E logging — no gameplay changes
 
-Online cooperative first-person horror game — capstone project (4 months, team of 4).
+1. Copy `KLTN/Assets/Scripts/AI/AED/AEDv2E2ELog.cs` to the same path under your Unity repository; if this file already exists, add only `State(...)` helper from this version. Unity automatically generates a `.meta` file for new scripts.
+2. Place `AEDv2E2ELog.State("BOUNDARY_BEGIN")`, `State("BOUNDARY_HOLD")`, `State("PROPOSAL")`, `State("REVALIDATE_PASS")`, `State("REVALIDATE_FAIL")`, `State("LOCAL_COMMIT")`, `State("PHASE_ADVANCED")`, `State("RECEIPT_WAIT")`, `State("ABORT")` at REAL event/transition sites in your local `AEDv2BoundaryCoordinator.cs` and `NetworkMatchState.cs`. Include decisionId via named argument only if the in-scope transaction has it. Never put these calls in Update/FixedUpdate/Render.
+3. Instrument `AEDSnapshotApiService.SubmitPlanAsync()` before HTTP POST, after receiving HTTP result, and in canceled catch; instrument `ConfirmPlanAppliedAsync()` likewise. Use `Write()` and existing request/response metadata only, not Authorization headers or request/response bodies.
+4. For gameplay consumer proof, log once when an AED revision changes and the Stalker/revive consumer ACTUALLY updates its tuning, not on each frame.
+5. Run Fixed / Shadow / Gameplay with distinct match IDs and save logs using `collect-aed-v2-logs.ps1` and `query-aed-v2-status.sql`.
 
-## Tech stack
+All traces are editor/development-only. `AEDv2E2ELog.State` captures phase, ordinal, revision and fingerprint, and infers role from Fusion state authority. It is *not* a substitute for HTTP approval/receipt instrumentation.
 
-| Layer | Technology |
-|---|---|
-| Game client | Unity 6.5 (`6000.5.8f1`, `KLTN/`) |
-| Multiplayer | Photon Fusion Host Mode (manual setup required) |
-| Backend | ASP.NET Core Web API (`EchoProtocol.Backend/`) |
-| Database | PostgreSQL for transactional data + MongoDB for telemetry |
-| Auth | JWT + BCrypt |
-
-## Repository layout
-
-```text
-d:\Bin\KLTN\
-├── KLTN\                    # Unity client (EchoProtocol.Client)
-├── EchoProtocol.Backend\    # ASP.NET Core solution
-├── docs\                    # SRS, API, DB schema, setup guides
-├── docker\                  # Local PostgreSQL + MongoDB
-├── .gitignore
-└── README.md
-```
-
-> **Note:** Unity project stays at `KLTN/` to avoid breaking Unity paths. Treat it as `EchoProtocol.Client`.
-
-Canonical SRS: [`docs/SRS.md`](docs/SRS.md)
-
-## Local setup
-
-### 1. Databases (Docker)
-
-```powershell
-Copy-Item .env.example .env
-# Replace all placeholders in .env locally before continuing.
-docker compose --env-file .env -f docker/docker-compose.yml up -d
-```
-
-Local credentials and the backend connection string come from untracked environment variables;
-see [`EchoProtocol.Backend/README.md`](EchoProtocol.Backend/README.md).
-
-### 2. Backend API
-
-```powershell
-cd EchoProtocol.Backend
-dotnet restore
-dotnet build
-dotnet run --project src/EchoProtocol.Api
-```
-
-Health check: `GET http://localhost:5042/health`
-
-### 3. Unity client
-
-1. Open Unity Hub → project `d:\Bin\KLTN\KLTN`
-2. Unity version: **6000.5.8f1**
-3. Ensure MCP bridge: Console shows `[MCP] Server started on port 6400`
-
-See [`docs/SETUP_GUIDE.md`](docs/SETUP_GUIDE.md) for full instructions.
-
-## Manual requirements (not automated)
-
-- [ ] Photon Fusion package imported (Unity 6000.5 compatible)
-- [ ] Photon Fusion App ID from [Photon Dashboard](https://dashboard.photonengine.com)
-- [ ] Docker Desktop running for local PostgreSQL and MongoDB
-- [ ] Production secrets via env / user-secrets (never commit)
-
-## Foundation status checklist
-
-- [x] Git + `.gitignore`
-- [x] Docs (`docs/`)
-- [x] Docker PostgreSQL + MongoDB compose
-- [x] Backend skeleton + health endpoint
-- [x] Unity folder/scene/script foundation
-- [ ] Photon Fusion wired (manual)
-- [ ] Auth / JWT / seed admin (next phase)
-
-## Team conventions
-
-- Shell: prefix with `rtk` when possible (`rtk git status`, `rtk dotnet build`)
-- Cursor: use `unity-editor` MCP for Unity Editor ops; `codegraph` before structural changes
-- No plain-text passwords; no production secrets in repo
+Requires Unity sources/types used by the previous code snapshot: `NetworkMatchState`, `MatchAuthorityRuntime`, `ScenarioConfigAuthorityRuntime`, `AEDv2Authority`, `AEDv2Plan`. The local uncommitted coordinator has not been reviewed; paste event calls into the actual branch transitions yourself.

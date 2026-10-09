@@ -18,7 +18,7 @@ public sealed class ScenarioAdaptivePlanV2Service(
     AppDbContext db, IScenarioSnapshotReadService snapshots, TimeProvider clock)
     : IScenarioAdaptivePlanV2Service
 {
-    public const string PolicyVersion = "AED_V2_POLICY_V1";
+    public const string PolicyVersion = "AED_V2_POLICY_V2";
     public const string BaselineVersion = "AED_DIFFICULTY_V2|NORMAL";
 
     // The order and candidates mirror the Unity AEDv2Catalog contract. Any catalog change

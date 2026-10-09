@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using EchoProtocol.AI.Common.Profile;
 
 namespace EchoProtocol.AI.Common.AED
@@ -235,16 +236,66 @@ namespace EchoProtocol.AI.Common.AED
 
             var s = policy.SurvivalThresholds.Classify(survival.Value);
             var n = policy.NoiseThresholds.Classify(noise.Value);
-            var intent = s == ScoreBand.Low || n == ScoreBand.Low
-                ? AdaptationIntent.Relieve
-                : (s == ScoreBand.High && n == ScoreBand.High
-                    ? AdaptationIntent.IncreasePressure : AdaptationIntent.Hold);
+
+            var roster = snapshot.RosterProfileSummary;
+
+            bool Ready(
+                RosterDimensionSummary dimension,
+                Func<PlayerProfileSnapshot, PlayerDimensionSnapshot> select)
+            {
+                return dimension != null
+                    && dimension.AggregationStatus == RosterAggregationStatus.Available
+                    && dimension.ObservedActiveCount == snapshot.TeamSize
+                    && dimension.MeanObservedScore.HasValue
+                    && snapshot.PlayerProfileSnapshots.Count == snapshot.TeamSize
+                    && snapshot.PlayerProfileSnapshots.All(player =>
+                    {
+                        var d = select(player);
+                        return d != null
+                            && d.Status == PlayerDimensionStatus.Active
+                            && d.Score.HasValue
+                            && d.SampleCount >= 2;
+                    });
+            }
+
+            var objectiveReady = Ready(
+                roster.Objective, p => p.Objective);
+            var toolReady = Ready(
+                roster.ToolUsage, p => p.ToolUsage);
+
+            var objectiveHigh = objectiveReady
+                && roster.Objective.MeanObservedScore.Value >= 70d;
+            var toolHigh = toolReady
+                && roster.ToolUsage.MeanObservedScore.Value >= 70d;
+
+            var intent = AdaptationIntent.Hold;
+            var key = AEDv2Key.ChaseSpeed;
+
+            if (s == ScoreBand.Low)
+            {
+                intent = AdaptationIntent.Relieve;
+                key = AEDv2Key.SupportBonus;
+            }
+            else if (n == ScoreBand.Low)
+            {
+                intent = AdaptationIntent.Relieve;
+                key = AEDv2Key.DetectionAcquireSeconds;
+            }
+            else if (s == ScoreBand.High && n == ScoreBand.High)
+            {
+                intent = AdaptationIntent.IncreasePressure;
+
+                if (objectiveHigh && toolHigh)
+                    key = AEDv2Key.SpecialCooldownSeconds;
+                else if (objectiveHigh)
+                    key = AEDv2Key.PatrolSpeed;
+                else
+                    key = AEDv2Key.ChaseSpeed;
+            }
+
             if (intent == AdaptationIntent.Hold)
                 return Hold(request, normal, "AED_V2_HOLD");
 
-            var key = s == ScoreBand.Low ? AEDv2Key.SupportBonus
-                : n == ScoreBand.Low ? AEDv2Key.DetectionAcquireSeconds
-                : AEDv2Key.ChaseSpeed;
             return EvaluateKey(request, gate, intent, key);
         }
 

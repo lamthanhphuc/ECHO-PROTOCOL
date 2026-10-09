@@ -80,6 +80,7 @@ mono_crash.*
 *.unitypackage
 *.unitypackage.meta
 *.app
+/DBinEchoProtocol-P3-NetworkTest/
 
 # Crashlytics generated file
 crashlytics-build.properties

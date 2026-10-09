@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -37,7 +38,7 @@ namespace EchoProtocol.Networking.Tests
         {
             var player = Player();
             return player.Substring(0, player.Length - 1)
-                + ",\"objectiveScore\":" + score
+                + ",\"objectiveScore\":" + score.ToString(CultureInfo.InvariantCulture)
                 + ",\"objectiveScorePresent\":" + (active ? "true" : "false")
                 + ",\"objectiveStatus\":\"" + (active ? "ACTIVE" : "COLD_START") + "\""
                 + ",\"objectiveSampleCount\":" + (active ? 1 : 0)
@@ -61,7 +62,8 @@ namespace EchoProtocol.Networking.Tests
                 + "\"objectiveAggregationStatus\":\"" + status + "\","
                 + "\"objectiveComparisonKey\":\"" + key + "\","
                 + "\"objectiveObservedActiveCount\":" + count + ","
-                + "\"objectiveMeanObservedScore\":" + mean + ","
+                + "\"objectiveMeanObservedScore\":"
+                + mean.ToString(CultureInfo.InvariantCulture) + ","
                 + "\"objectiveMeanObservedScorePresent\":" + (meanPresent ? "true" : "false") + ","
                 + "\"toolUsageAggregationStatus\":\"UNAVAILABLE\","
                 + "\"toolUsageComparisonKey\":\"\",\"toolUsageObservedActiveCount\":0,"

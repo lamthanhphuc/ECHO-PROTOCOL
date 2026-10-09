@@ -38,4 +38,4 @@ MonoBehaviour:
   - 10
   - 11
   extendedPolicyShadowEnabled: 0
-  extendedPolicyGameplayEnabled: 0
+  extendedPolicyGameplayEnabled: 1
