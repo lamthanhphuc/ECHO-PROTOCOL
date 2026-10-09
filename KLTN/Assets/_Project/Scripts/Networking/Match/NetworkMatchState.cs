@@ -276,6 +276,7 @@ namespace EchoProtocol.Networking
         [Networked] public uint PhaseOrdinal { get; private set; }
         [Networked] public uint EndOrdinal { get; private set; }
         [Networked] private TickTimer EscapeTimer { get; set; }
+        [Networked] public float EscapeDurationSeconds { get; private set; }
         [Networked] private TickTimer MatchTimer { get; set; }
         [Networked] private TickTimer ReturnToLobbyTimer { get; set; }
         [Networked] private NetworkBool ReturnToLobbyRequested { get; set; }
@@ -422,6 +423,7 @@ namespace EchoProtocol.Networking
                 PhaseOrdinal = 0;
                 EndOrdinal = 0;
                 EscapeTimer = TickTimer.None;
+                EscapeDurationSeconds = 0f;
                 MatchTimer = TickTimer.CreateFromSeconds(Runner, _matchDurationSeconds);
                 ReturnToLobbyTimer = TickTimer.None;
                 ReturnToLobbyRequested = false;
@@ -2035,6 +2037,7 @@ namespace EchoProtocol.Networking
                 ? Mathf.Max(MinimumPowerTransferEscapeDurationSeconds, CurrentScenarioEscapeDoorTimerSeconds)
                 : CurrentScenarioEscapeDoorTimerSeconds;
             EscapeTimer = TickTimer.CreateFromSeconds(Runner, duration);
+            EscapeDurationSeconds = duration;
             HandleReplicatedStateChanged();
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchState,
@@ -2284,10 +2287,8 @@ namespace EchoProtocol.Networking
             {
                 ResetPlayerReviveBudgetsAuthoritative();
 
-                if (next != NetworkMatchPhase.Zone2Objective)
-                {
-                    TeleportGameplayPlayersAuthoritative(next);
-                }
+                // Normal zone progression opens the route; players keep their position.
+                // Debug skips explicitly teleport through their own entry points.
             }
 
             if (next != NetworkMatchPhase.Escape
@@ -2355,6 +2356,7 @@ namespace EchoProtocol.Networking
             LastActor = actor;
             FinalSurvivorCount = survivorCount;
             EscapeTimer = TickTimer.None;
+            EscapeDurationSeconds = 0f;
             MatchTimer = TickTimer.None;
             ReturnToLobbyTimer = TickTimer.CreateFromSeconds(
                 Runner,
