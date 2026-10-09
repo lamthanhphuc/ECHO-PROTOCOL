@@ -128,6 +128,7 @@ namespace EchoProtocol.AI.Minions
             ? (CreepMinionState)StateValue : CreepMinionState.Roam;
         public RegionSemanticZone Zone => ZoneValue == (int)RegionSemanticZone.Zone01
             || ZoneValue == (int)RegionSemanticZone.Zone02
+            || ZoneValue == (int)RegionSemanticZone.Zone03
             ? (RegionSemanticZone)ZoneValue : RegionSemanticZone.Unknown;
 
         private NavMeshAgent _agent;

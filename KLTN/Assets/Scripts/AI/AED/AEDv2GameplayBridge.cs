@@ -51,6 +51,7 @@ namespace EchoProtocol.AI.AED
                 (float)plan.Get(AEDv2Key.SpecialCooldownSeconds),
                 (int)plan.Get(AEDv2Key.Zone1MinionCap),
                 (int)plan.Get(AEDv2Key.Zone2MinionCap),
+                n.Zone3MinionCap,
                 n.MaximumRevivesPerZone,
                 plan.Get(AEDv2Key.ObjectiveNoiseInvestigationEnabled) != 0);
         }

@@ -119,9 +119,7 @@ namespace EchoProtocol.Networking
             EnsureZone3Stalker(runner, matchState);
 
             var phase = matchState.CurrentPhase;
-            if (phase == NetworkMatchPhase.Zone3FindFrigate
-                || phase == NetworkMatchPhase.Zone3PushFrigate
-                || phase == NetworkMatchPhase.FinalHunt
+            if (phase == NetworkMatchPhase.FinalHunt
                 || phase == NetworkMatchPhase.Escape)
             {
                 return;
@@ -582,8 +580,14 @@ namespace EchoProtocol.Networking
                 authority.TryGetMatchId(out var aedMatchId) &&
                 AEDv2Authority.TryGetApplied(aedMatchId, out var plan, out _))
                 profile = AEDv2GameplayBridge.ToNormalDifficultyProfile(plan);
-            var zone = _zone2MinionsActive ? RegionSemanticZone.Zone02 : RegionSemanticZone.Zone01;
-            int cap = zone == RegionSemanticZone.Zone02 ? profile.Zone2MinionCap : profile.Zone1MinionCap;
+            var zone = _zone3MonsterSpawned
+                ? RegionSemanticZone.Zone03
+                : (_zone2MinionsActive ? RegionSemanticZone.Zone02 : RegionSemanticZone.Zone01);
+            int cap = zone == RegionSemanticZone.Zone01
+                ? profile.Zone1MinionCap
+                : zone == RegionSemanticZone.Zone02
+                    ? profile.Zone2MinionCap
+                    : profile.Zone3MinionCap;
             int count = 0;
             foreach (var obj in _creepMinionInstances)
             {
@@ -608,9 +612,9 @@ namespace EchoProtocol.Networking
             RegionSemanticZone zone,
             out NetworkObject stalker)
         {
-            stalker = zone == RegionSemanticZone.Zone02
-                ? _zone2MonsterInstance
-                : _monsterInstance;
+            stalker = zone == RegionSemanticZone.Zone03
+                ? _zone3MonsterInstance
+                : (zone == RegionSemanticZone.Zone02 ? _zone2MonsterInstance : _monsterInstance);
 
             return IsValidNetworkObject(stalker);
         }
