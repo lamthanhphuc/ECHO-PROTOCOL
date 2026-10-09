@@ -1,5 +1,6 @@
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Enums;
+using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -8,6 +9,55 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed partial class ScenarioServiceTests
 {
+    [Fact]
+    public void V2FingerprintCanonicalizesJsonAndDecimalValues()
+    {
+        var first = CreateFingerprintSnapshot(" { \"b\": 2, \"a\": 1 } ", "{\"b\":2,\"a\":1}", 1.23456789m);
+        var second = CreateFingerprintSnapshot("{\"a\":1,\"b\":2}", "{\"a\":1,\"b\":2}", 1.23456781m);
+        var changed = CreateFingerprintSnapshot("{\"a\":1,\"b\":3}", "{\"a\":1,\"b\":2}", 1.23456789m);
+
+        Assert.Equal(ScenarioFingerprint.Snapshot(first), ScenarioFingerprint.Snapshot(second));
+        Assert.NotEqual(ScenarioFingerprint.Snapshot(first), ScenarioFingerprint.Snapshot(changed));
+    }
+
+    [Fact]
+    public void V2FingerprintAcceptsPartialMissingProfiles()
+    {
+        var snapshot = CreateFingerprintSnapshot("[\"PROFILE_MISSING\"]", "{}", null);
+        snapshot.Validity = AdaptiveSnapshotValidity.Partial;
+        snapshot.Players =
+        [
+            new AdaptiveInputSnapshotPlayer { SnapshotId = snapshot.SnapshotId, UserId = Guid.NewGuid(), ProfileAvailable = false, DeferredDimensionsJson = "{}" },
+            new AdaptiveInputSnapshotPlayer { SnapshotId = snapshot.SnapshotId, UserId = Guid.NewGuid(), ProfileAvailable = false, DeferredDimensionsJson = "{}" }
+        ];
+
+        var fingerprint = ScenarioFingerprint.Snapshot(snapshot);
+        Assert.NotEmpty(fingerprint);
+    }
+
+    private static AdaptiveInputSnapshot CreateFingerprintSnapshot(
+        string reasons, string deferred, decimal? objective)
+    {
+        var snapshot = new AdaptiveInputSnapshot
+        {
+            SnapshotId = Guid.Parse("00000000-0000-0000-0000-000000000010"),
+            MatchId = Guid.Parse("00000000-0000-0000-0000-000000000011"), FingerprintVersion = "V2",
+            DecisionPoint = "PRE_MATCH", RosterIdentity = "roster", TeamSize = 1,
+            Validity = AdaptiveSnapshotValidity.Valid, ReasonCodesJson = reasons,
+            ProfileFormulaSemanticId = "FORMULA", SurvivalComparisonKey = "SURVIVAL",
+            NoiseComparisonKey = "NOISE", ObjectiveAggregationStatus = "AVAILABLE",
+            ObjectiveComparisonKey = "OBJECTIVE", ObjectiveMeanObservedScore = objective,
+            ToolUsageAggregationStatus = "UNAVAILABLE", ToolUsageComparisonKey = null
+        };
+        snapshot.Players.Add(new AdaptiveInputSnapshotPlayer
+        {
+            SnapshotId = snapshot.SnapshotId, UserId = Guid.Parse("00000000-0000-0000-0000-000000000001"), ProfileAvailable = true,
+            SurvivalStatus = "ACTIVE", NoiseStatus = "ACTIVE", SurvivalScore = 1.23456789m,
+            NoiseScore = 2.34567891m, DeferredDimensionsJson = deferred
+        });
+        return snapshot;
+    }
+
     private static async Task<(ScenarioSnapshotReadService Reader, Guid DecisionId)> PrepareReadAsync(Fixture f)
     {
         var decision = await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, Request());
