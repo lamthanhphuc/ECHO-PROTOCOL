@@ -36,6 +36,7 @@ namespace EchoProtocol.UI.HUD
         private float _cooldownDuration;
         private float _cooldownTimer;
         private LobbyPlayerState _boundNetworkPlayerState;
+        private Text _usesLabel;
 
         private void OnEnable()
         {
@@ -217,8 +218,8 @@ namespace EchoProtocol.UI.HUD
 
             if (isCarrying)
             {
-                if (slot1LockText != null) slot1LockText.text = "VÁC CORE";
-                if (slot2LockText != null) slot2LockText.text = "VÁC CORE";
+                if (slot1LockText != null) slot1LockText.text = "Đang mang core";
+                if (slot2LockText != null) slot2LockText.text = "Đang mang core";
             }
 
             if (toolLockedOverlay != null)
@@ -232,21 +233,22 @@ namespace EchoProtocol.UI.HUD
         {
             try
             {
+                if (_usesLabel != null) _usesLabel.gameObject.SetActive(false);
                 if (inventory == null)
                 {
-                    UpdateSlotView(null, slot1Icon, slot1NameText, "1: Trống");
-                    UpdateSlotView(null, slot2Icon, slot2NameText, "2: Trống");
+                    UpdateSlotView(null, slot1Icon, slot1NameText, "Trống");
+                    UpdateSlotView(null, slot2Icon, slot2NameText, "Trống");
                 }
 
                 // Slot 1
                 InventoryItemDefinition item1 =
                     inventory != null ? inventory.GetNormalSlot(0) : null;
-                UpdateSlotView(item1, slot1Icon, slot1NameText, "1: Trống");
+                UpdateSlotView(item1, slot1Icon, slot1NameText, "Trống");
 
                 // Slot 2
                 InventoryItemDefinition item2 =
                     inventory != null ? inventory.GetNormalSlot(1) : null;
-                UpdateSlotView(item2, slot2Icon, slot2NameText, "2: Trống");
+                UpdateSlotView(item2, slot2Icon, slot2NameText, "Trống");
 
                 // Team Tool Slot
                 InventoryItemDefinition toolItem =
@@ -261,7 +263,7 @@ namespace EchoProtocol.UI.HUD
                         : null;
                 bool godMode = lifeState != null && lifeState.DebugGodMode;
 
-                UpdateSlotView(toolItem, toolIcon, toolNameText, "Tool: Trống", isTeamTool: true);
+                UpdateSlotView(toolItem, toolIcon, toolNameText, "Trống", isTeamTool: true);
 
                 if (godMode
                     && toolNameText != null
@@ -279,9 +281,27 @@ namespace EchoProtocol.UI.HUD
                              || networkToolId == LobbyPlayerState.DoorJammerToolId))
                 {
                     toolNameText.text =
-                        $"<color=#00E5FF>[LMB]</color> "
-                        + $"{toolItem.DisplayName} "
-                        + $"x{_boundNetworkPlayerState.TeamToolUsesRemaining}";
+                        ShortName(toolItem.DisplayName);
+                    if (_usesLabel == null && toolContainer != null)
+                    {
+                        var go = new GameObject("RemainingUses", typeof(RectTransform), typeof(Text));
+                        go.transform.SetParent(toolContainer.transform, false);
+                        var rect = go.GetComponent<RectTransform>();
+                        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 0.5f);
+                        rect.anchoredPosition = new Vector2(-6f, 0f);
+                        rect.sizeDelta = new Vector2(26f, 18f);
+                        _usesLabel = go.GetComponent<Text>();
+                        _usesLabel.font = toolNameText.font;
+                        _usesLabel.fontSize = 12;
+                        _usesLabel.color = HUDPresentationStyle.Ink;
+                        _usesLabel.alignment = TextAnchor.MiddleRight;
+                        _usesLabel.raycastTarget = false;
+                    }
+                    if (_usesLabel != null)
+                    {
+                        _usesLabel.gameObject.SetActive(true);
+                        _usesLabel.text = $"×{_boundNetworkPlayerState.TeamToolUsesRemaining}";
+                    }
                 }
             }
             catch (System.Exception ex)
@@ -325,31 +345,33 @@ namespace EchoProtocol.UI.HUD
                         }
                         else
                         {
-                            var circle = HUDTextureUtility.CircleFilled;
-                            if (circle != null) icon.sprite = circle;
+                            icon.sprite = HUDTextureUtility.InventoryFallback(item.ItemType == InventoryItemType.EnergyCore);
                             icon.color = item.ItemType == InventoryItemType.EnergyCore
-                                ? new Color(0f, 0.9f, 1f, 0.9f)
-                                : new Color(0.2f, 0.8f, 0.5f, 0.9f);
+                                ? HUDPresentationStyle.Accent
+                                : HUDPresentationStyle.Muted;
                         }
                     }
 
                     if (nameLabel != null)
                     {
-                        nameLabel.text = isTeamTool
-                            ? $"<color=#00E5FF>[LMB]</color> {item.DisplayName}"
-                            : item.DisplayName;
+                        nameLabel.text = ShortName(item.DisplayName);
                     }
                 }
                 else
                 {
                     if (icon != null) icon.gameObject.SetActive(false);
-                    if (nameLabel != null) nameLabel.text = $"<color=#78909C>{emptyLabel}</color>";
+                    if (nameLabel != null) nameLabel.text = $"<color=#9AA5A3>{emptyLabel}</color>";
                 }
             }
             catch (System.Exception ex)
             {
                 Debug.LogWarning($"[HUDHotbar] UpdateSlotView exception: {ex.Message}");
             }
+        }
+
+        private static string ShortName(string value)
+        {
+            return string.IsNullOrEmpty(value) || value.Length <= 24 ? value : value.Substring(0, 23).TrimEnd() + "…";
         }
     }
 }

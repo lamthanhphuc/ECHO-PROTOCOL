@@ -34,6 +34,7 @@ namespace EchoProtocol.UI.HUD
         private MatchPhase _lastPhase = (MatchPhase)(-1);
         private int _lastZone2Stage = -1;
         private float _pulseTimer;
+        private Image[] _progressSteps;
         private float _lastRelayRemaining = -1f;
         private int _lastRelayWarningThreshold = -1;
         private float _localRelayResetNoticeUntil = -1f;
@@ -121,7 +122,7 @@ namespace EchoProtocol.UI.HUD
             {
                 _lastPhase = currentPhase;
                 _lastZone2Stage = z2Stage;
-                _pulseTimer = 1.8f; // Trigger objective update pulse animation
+                _pulseTimer = 0.2f; // Brief fade when the objective changes.
             }
 
             UpdateUI(currentPhase);
@@ -167,13 +168,13 @@ namespace EchoProtocol.UI.HUD
                 switch (z2.CurrentStage)
                 {
                     case EchoProtocol.MatchFlow.Zone2MissionStage.Zone1CoreObjective:
-                        SetPhaseBadge("ZONE 1 // RESTORE SECTOR POWER", "#00E5FF");
+                        SetPhaseBadge("ZONE 1", "#00E5FF");
                         int placed = coreProgress != null ? coreProgress.PlacedCoreCount : 0;
                         int required = coreProgress != null ? coreProgress.RequiredCoreCount : 4;
                         if (required <= 0) required = 4;
                         SetObjective(
-                            "RESTORE SECTOR POWER",
-                            $"Locate and insert {required} Energy Cores into Sector Box [{placed}/{required}]",
+                            "Khôi phục nguồn điện",
+                            $"Lắp Energy Core vào Sector Box    {placed}/{required}",
                             required > 0 ? (float)placed / required : 0f,
                             new Color(0f, 0.85f, 1f, 1f));
                         return;
@@ -181,18 +182,18 @@ namespace EchoProtocol.UI.HUD
                     case EchoProtocol.MatchFlow.Zone2MissionStage.FindSecurityTerminal:
                         SetPhaseBadge("ZONE 2 // FIND SECURITY TERMINAL", "#00E5FF");
                         SetObjective(
-                            "ENTER ZONE 2",
-                            "Proceed through airlock into Zone 2 and locate Security Terminal",
+                            "Tìm trạm an ninh",
+                            "Qua cửa airlock và tìm Security Terminal.",
                             0f,
                             new Color(0f, 0.85f, 1f, 1f));
                         return;
 
                     case EchoProtocol.MatchFlow.Zone2MissionStage.RepairRelays:
-                        SetPhaseBadge("ZONE 2 // RESTORE RELAY NETWORK", "#FFB300");
+                        SetPhaseBadge("ZONE 2 // Khôi phục hệ thống relay", "#FFB300");
                         int online = z2.CompletedRelayCount;
                         SetObjective(
-                            "RESTORE RELAY NETWORK",
-                            $"Stabilize and synchronize emergency relays [Relays Online: {online} / 4]",
+                            "Khôi phục hệ thống relay",
+                            $"Sửa và đồng bộ relay    {online}/4",
                             (float)online / 4f,
                             new Color(1f, 0.7f, 0.1f, 1f));
                         return;
@@ -200,32 +201,32 @@ namespace EchoProtocol.UI.HUD
                     case EchoProtocol.MatchFlow.Zone2MissionStage.SecurityHoldReady:
                         SetPhaseBadge("ZONE 2 // SECURITY HOLD READY", "#00E676");
                         SetObjective(
-                            "RETURN TO TERMINAL",
-                            $"4/4 relays online. Reach terminal | Reset in {RelayTimeText(z2)}",
+                            "Trở về Security Terminal",
+                            $"Relay 4/4 · Trở về trạm\nĐặt lại sau {RelayTimeText(z2)}",
                             1f,
                             new Color(0f, 0.9f, 0.4f, 1f));
                         return;
 
                     case EchoProtocol.MatchFlow.Zone2MissionStage.SecurityHold:
-                        SetPhaseBadge("ZONE 2 // SECURITY AUTHENTICATION", "#FF3D00");
+                        SetPhaseBadge("ZONE 2 // Xác thực bảo mật", "#FF3D00");
                         float secProgress = securityTerminal != null ? securityTerminal.Progress01 : 0f;
                         int secPercent = Mathf.RoundToInt(secProgress * 100f);
                         var matchState = EchoProtocol.Networking.NetworkMatchState.Instance;
                         int holders = matchState != null && matchState.Object != null && matchState.Object.IsValid
                             ? matchState.SecurityHoldParticipantCount : 1;
                         SetObjective(
-                            "SECURITY AUTHENTICATION",
-                            $"Hold {GameplayInputSettings.GetKeyLabel(GameplayAction.Interact)} {secPercent}% | {holders}/4 | ETA {SecurityHoldEtaText(matchState)} | Reset {RelayTimeText(z2)}",
+                            "Xác thực bảo mật",
+                            $"Giữ {GameplayInputSettings.GetKeyLabel(GameplayAction.Interact)} · {secPercent}% · {holders}/4 người\nCòn {SecurityHoldEtaText(matchState)} · Đặt lại {RelayTimeText(z2)}",
                             secProgress,
                             new Color(1f, 0.3f, 0.1f, 1f));
                         return;
 
                     case EchoProtocol.MatchFlow.Zone2MissionStage.AuthorizationCodeGranted:
                     case EchoProtocol.MatchFlow.Zone2MissionStage.UnlockZoneDoors:
-                        SetPhaseBadge("ZONE 2 // UNLOCK ZONE ACCESS", "#00FF99");
+                        SetPhaseBadge("ZONE 2 // Mở lối sang khu vực tiếp theo", "#00FF99");
                         SetObjective(
-                            "UNLOCK ZONE ACCESS",
-                            "Input authorization code at either Access Panel",
+                            "Mở lối sang khu vực tiếp theo",
+                            "Nhập mã xác thực tại Access Panel.",
                             1f,
                             new Color(0f, 1f, 0.6f, 1f));
                         return;
@@ -233,8 +234,8 @@ namespace EchoProtocol.UI.HUD
                     case EchoProtocol.MatchFlow.Zone2MissionStage.Zone2Completed:
                         SetPhaseBadge("ZONE 2 // FACILITY ACCESS GRANTED", "#00E676");
                         SetObjective(
-                            "ZONE 2 COMPLETE",
-                            "Security blast doors unsealed. Proceed to facility evacuation corridor!",
+                            "Đã mở cửa an ninh",
+                            "Đi tiếp đến hành lang sơ tán.",
                             1f,
                             new Color(0f, 0.9f, 0.4f, 1f));
                         return;
@@ -245,7 +246,7 @@ namespace EchoProtocol.UI.HUD
             {
                 case MatchPhase.Zone3FindFrigate:
                     SetPhaseBadge("ZONE 3 // EMERGENCY POWER", "#00E5FF");
-                    SetObjective("FIND SPACEFRIGATE", "Locate the Spacefrigate reserve core and prepare transport.", 0f,
+                    SetObjective("Tìm Spacefrigate", "Tìm nguồn dự phòng và chuẩn bị vận chuyển.", 0f,
                         new Color(0f, 0.85f, 1f, 1f));
                     break;
 
@@ -256,38 +257,38 @@ namespace EchoProtocol.UI.HUD
                     SetPhaseBadge(docked ? "ZONE 3 // POWER DOCK" : "ZONE 3 // EMERGENCY POWER", "#00E5FF");
                     if (docked)
                     {
-                        SetObjective("INITIATE POWER TRANSFER",
-                            $"Transfer Spacefrigate reserve power to the evacuation system ({Mathf.RoundToInt(chargeProgress * 100f)}%). Releasing slowly drains progress.",
+                        SetObjective("Chuyển nguồn điện",
+                            $"Cấp điện cho hệ thống sơ tán · {Mathf.RoundToInt(chargeProgress * 100f)}%\nThả tay sẽ làm giảm tiến độ.",
                             chargeProgress, new Color(0f, 0.85f, 1f, 1f));
                     }
                     else if (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(
                         EchoProtocol.Visuals.ObjectiveGlowHighlight.GetLocalPlayerTransform()?.gameObject) != null)
                     {
-                        SetObjective("RETURN TO SPACEFRIGATE",
-                            "Deliver the Fuel Cell. Hold E at the Fuel Port when the reserve is empty. G to drop.",
+                        SetObjective("Nạp nhiên liệu cho Spacefrigate",
+                            "Mang Fuel Cell về Fuel Port.\nGiữ E để nạp khi hết nhiên liệu · G để thả.",
                             convoy != null ? convoy.Fuel01 : 0f, new Color(1f, 0.65f, 0.1f, 1f));
                     }
                     else if (convoy != null && convoy.IsFuelEmpty)
                     {
-                        SetObjective("FIND A FUEL CELL",
-                            "FUEL DEPLETED  □ □\nSearch nearby maintenance areas and return to the Fuel Port.",
+                        SetObjective("Tìm Fuel Cell",
+                            "Hết nhiên liệu. Tìm Fuel Cell trong khu bảo trì\nrồi mang về Fuel Port.",
                             0f, new Color(1f, 0.35f, 0.1f, 1f));
                     }
                     else if (convoy != null && convoy.WasFuelRestoredRecently)
                     {
-                        SetObjective("CONVOY POWER RESTORED", convoy.FuelDisplay + "\nContinue escorting Spacefrigate.",
+                        SetObjective("Đã nạp nhiên liệu", convoy.FuelDisplay + "\nTiếp tục hộ tống Spacefrigate.",
                             convoy.Fuel01, new Color(0.2f, 1f, 0.5f, 1f));
                     }
                     else if (convoy != null && convoy.IsWaitingForRouteChoice)
                     {
-                        SetObjective("CHOOSE CONVOY ROUTE",
-                            convoy.FuelDisplay + "\nStand near Spacefrigate and choose: 1 Left, 2 Straight, 3 Right, 4 Back.",
+                        SetObjective("Chọn hướng di chuyển",
+                            convoy.FuelDisplay + "\n1 Trái · 2 Thẳng · 3 Phải · 4 Lùi",
                             0.5f, new Color(0f, 0.85f, 1f, 1f));
                     }
                     else
                     {
-                        SetObjective("ESCORT SPACEFRIGATE",
-                            (convoy != null ? convoy.FuelDisplay + "\n" : "") + "Stay near the convoy to keep the emergency transport moving.",
+                        SetObjective("Hộ tống Spacefrigate",
+                            (convoy != null ? convoy.FuelDisplay + "\n" : "") + "Đứng gần tàu để tiếp tục di chuyển.",
                             0.35f,
                             new Color(0f, 0.85f, 1f, 1f));
                     }
@@ -299,19 +300,19 @@ namespace EchoProtocol.UI.HUD
                     int required = coreProgress != null ? coreProgress.RequiredCoreCount : 4;
                     if (required <= 0) required = 4;
                     SetObjective(
-                        "RESTORE SECTOR POWER",
-                        $"Locate and insert {required} Energy Cores into Sector Box [{placed}/{required}]",
+                        "Khôi phục nguồn điện",
+                        $"Lắp Energy Core vào Sector Box    {placed}/{required}",
                         required > 0 ? (float)placed / required : 0f,
                         new Color(0f, 0.85f, 1f, 1f));
                     break;
 
                 case MatchPhase.SecurityHold:
-                    SetPhaseBadge("PRIMARY OBJECTIVE // SECURITY AUTHENTICATION", "#FF3D00");
+                    SetPhaseBadge("PRIMARY OBJECTIVE // Xác thực bảo mật", "#FF3D00");
                     float progress = securityTerminal != null ? securityTerminal.Progress01 : 0f;
                     int percent = Mathf.RoundToInt(progress * 100f);
                     SetObjective(
-                        "SECURITY AUTHENTICATION",
-                        $"Download security credentials at Security Terminal ({percent}%)",
+                        "Xác thực bảo mật",
+                        $"Tải dữ liệu tại Security Terminal · {percent}%",
                         progress,
                         new Color(1f, 0.3f, 0.1f, 1f));
                     break;
@@ -319,8 +320,8 @@ namespace EchoProtocol.UI.HUD
                 case MatchPhase.PowerPuzzle:
                     SetPhaseBadge("PRIMARY OBJECTIVE // RESTORE MAIN POWER", "#FFB300");
                     SetObjective(
-                        "ENTER ACCESS CODE",
-                        "Proceed to Power Control panel and input authorization code",
+                        "Nhập mã truy cập",
+                        "Nhập mã xác thực tại Power Control.",
                         1f,
                         new Color(1f, 0.7f, 0.1f, 1f));
                     break;
@@ -333,21 +334,21 @@ namespace EchoProtocol.UI.HUD
                     bool timerRunning = IsEmergencyPowerTimerRunning();
                     string timeFormatted = FormatTime(secondsRemaining);
                     string statusMsg = timerRunning
-                        ? $"EMERGENCY GRID RESTORED // Exit online. Emergency power remaining: {timeFormatted}. Return to Doorexit."
-                        : "EMERGENCY GRID RESTORED // Exit online. Return to Doorexit and escape.";
+                        ? $"Cửa thoát đã mở · Còn {timeFormatted}\nTrở về Doorexit để sơ tán."
+                        : "Cửa thoát đã mở. Trở về Doorexit để sơ tán.";
 
                     SetObjective(
-                        escapePhase ? "ESCAPE" : "RETURN TO EXIT",
+                        escapePhase ? "Thoát khỏi cơ sở" : "Trở về cửa thoát hiểm",
                         statusMsg,
-                        timerRunning ? Mathf.Clamp01(secondsRemaining / 60f) : 1f,
+                        timerRunning ? Mathf.Clamp01(secondsRemaining / GetEmergencyPowerDurationSeconds()) : 1f,
                         new Color(1f, 0.15f, 0.25f, 1f));
                     break;
 
                 case MatchPhase.Win:
                     SetPhaseBadge("MISSION ACCOMPLISHED", "#00E676");
                     SetObjective(
-                        "EVACUATION SUCCESSFUL",
-                        "All surviving personnel have extracted from the facility.",
+                        "Sơ tán thành công",
+                        "Đội đã hoàn thành cuộc sơ tán.",
                         1f,
                         new Color(0f, 0.9f, 0.4f, 1f));
                     break;
@@ -355,8 +356,8 @@ namespace EchoProtocol.UI.HUD
                 case MatchPhase.Lose:
                     SetPhaseBadge("MISSION FAILED", "#D50000");
                     SetObjective(
-                        "OPERATIVES LOST",
-                        "All personnel eliminated within the facility.",
+                        "Nhiệm vụ thất bại",
+                        "Không thể hoàn thành cuộc sơ tán.",
                         0f,
                         new Color(0.8f, 0.1f, 0.1f, 1f));
                     break;
@@ -365,8 +366,15 @@ namespace EchoProtocol.UI.HUD
 
         private void SetPhaseBadge(string badge, string hexColor)
         {
-            string formatted = $"<color={hexColor}><b>{badge}</b></color>";
-            SetText(phaseBadgeTmp, phaseBadgeText, formatted);
+            string label = badge.StartsWith("ZONE 1") ? "ZONE 01"
+                : badge.StartsWith("ZONE 2") ? "ZONE 02"
+                : badge.StartsWith("ZONE 3") ? "ZONE 03"
+                : badge.StartsWith("PHASE 1") ? "ZONE 01"
+                : badge.StartsWith("PRIMARY OBJECTIVE") ? "ZONE 02"
+                : badge.StartsWith("FINAL HUNT") || badge.StartsWith("ESCAPE") ? "THOÁT HIỂM"
+                : badge == "MISSION ACCOMPLISHED" ? "HOÀN THÀNH"
+                : badge == "MISSION FAILED" ? "THẤT BẠI" : badge;
+            SetText(phaseBadgeTmp, phaseBadgeText, label);
         }
 
         private static string RelayTimeText(EchoProtocol.MatchFlow.Zone2MissionDirector director)
@@ -403,6 +411,14 @@ namespace EchoProtocol.UI.HUD
             if (match != null && match.Object != null && match.Object.IsValid)
                 return match.IsEscapeTimerRunning;
             return escapeDoor != null && escapeDoor.IsCountingDown;
+        }
+
+        private float GetEmergencyPowerDurationSeconds()
+        {
+            var match = EchoProtocol.Networking.NetworkMatchState.Instance;
+            if (match != null && match.Object != null && match.Object.IsValid)
+                return Mathf.Max(1f, match.EscapeDurationSeconds);
+            return escapeDoor != null ? escapeDoor.DurationSeconds : 1f;
         }
 
         private void UpdateRelayWarning()
@@ -453,45 +469,56 @@ namespace EchoProtocol.UI.HUD
             if (progressBarFill != null)
             {
                 progressBarFill.fillAmount = Mathf.Clamp01(progress01);
-                progressBarFill.color = accentColor;
+                progressBarFill.color = accentColor.r > 0.7f && accentColor.g < 0.5f
+                    ? HUDPresentationStyle.Danger : HUDPresentationStyle.Accent;
+                UpdateProgressSteps(title, progress01);
+            }
+        }
+
+        private void UpdateProgressSteps(string title, float progress)
+        {
+            bool discrete = title == "Khôi phục nguồn điện" || title == "Khôi phục hệ thống relay";
+            int count = title == "Khôi phục nguồn điện" && coreProgress != null
+                ? Mathf.Clamp(coreProgress.RequiredCoreCount, 1, 12) : 4;
+            if (discrete && (_progressSteps == null || _progressSteps.Length != count))
+            {
+                if (_progressSteps != null)
+                    foreach (var step in _progressSteps) if (step != null) Destroy(step.gameObject);
+                _progressSteps = new Image[count];
+                float width = (392f - (count - 1) * 6f) / count;
+                for (int i = 0; i < count; i++)
+                {
+                    var go = new GameObject("ObjectiveStep", typeof(RectTransform), typeof(Image));
+                    go.transform.SetParent(progressBarFill.transform.parent, false);
+                    var rect = go.GetComponent<RectTransform>();
+                    rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.zero;
+                    rect.anchoredPosition = new Vector2(i * (width + 6f), 0f);
+                    rect.sizeDelta = new Vector2(width, 3f);
+                    var image = go.GetComponent<Image>();
+                    image.sprite = HUDTextureUtility.WhitePixel;
+                    image.raycastTarget = false;
+                    _progressSteps[i] = image;
+                }
+            }
+            progressBarFill.gameObject.SetActive(!discrete);
+            var track = progressBarFill.transform.parent.GetComponent<Image>();
+            if (track != null) track.color = discrete ? Color.clear : HUDPresentationStyle.Track;
+            if (_progressSteps == null) return;
+            int completed = Mathf.RoundToInt(Mathf.Clamp01(progress) * count);
+            for (int i = 0; i < _progressSteps.Length; i++)
+            {
+                _progressSteps[i].gameObject.SetActive(discrete);
+                _progressSteps[i].color = i < completed ? HUDPresentationStyle.Accent : HUDPresentationStyle.Track;
             }
         }
 
         private void UpdatePulseAnimation()
         {
-            if (_pulseTimer > 0f)
-            {
-                _pulseTimer -= Time.deltaTime;
-                float progress = _pulseTimer / 1.8f;
-                float pulse = 1f + 0.12f * Mathf.Sin(progress * Mathf.PI * 4f);
-
-                if (headerGlow != null)
-                {
-                    Color c = headerGlow.color;
-                    c.a = Mathf.Clamp01(0.2f + 0.8f * progress * pulse);
-                    headerGlow.color = c;
-                }
-
-                if (containerRect != null)
-                {
-                    float scale = 1f + 0.03f * progress * Mathf.Sin(progress * Mathf.PI * 2f);
-                    containerRect.localScale = new Vector3(scale, scale, 1f);
-                }
-            }
-            else
-            {
-                if (headerGlow != null)
-                {
-                    Color c = headerGlow.color;
-                    c.a = 0.2f;
-                    headerGlow.color = c;
-                }
-
-                if (containerRect != null && containerRect.localScale != Vector3.one)
-                {
-                    containerRect.localScale = Vector3.one;
-                }
-            }
+            if (containerRect != null) containerRect.localScale = Vector3.one;
+            if (_pulseTimer <= 0f) return;
+            _pulseTimer = Mathf.Max(0f, _pulseTimer - Time.deltaTime);
+            if (_visibilityGroup != null)
+                _visibilityGroup.alpha *= Mathf.Lerp(0.65f, 1f, 1f - _pulseTimer / 0.2f);
         }
 
         private static void SetText(TMP_Text tmp, Text legacy, string content)

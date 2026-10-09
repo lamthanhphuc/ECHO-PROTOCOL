@@ -87,7 +87,7 @@ namespace EchoProtocol.EditorTools
 
             CanvasScaler scaler = canvasGo.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920, 1080);
+            scaler.referenceResolution = new Vector2(1600, 900);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = 0.5f;
             scaler.dynamicPixelsPerUnit = 2.0f;
@@ -134,6 +134,7 @@ namespace EchoProtocol.EditorTools
                 Directory.CreateDirectory(prefabDir);
             }
             string prefabPath = $"{prefabDir}/PF_GameplayHUD_Canvas.prefab";
+            HUDPresentationStyle.Apply(canvasGo.transform);
             PrefabUtility.SaveAsPrefabAssetAndConnect(canvasGo, prefabPath, InteractionMode.AutomatedAction);
 
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());

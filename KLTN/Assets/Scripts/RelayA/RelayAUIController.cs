@@ -36,12 +36,13 @@ namespace EchoProtocol.RelayA
         private int _boardCount;
         private RelayACircuitScenario _renderedScenario;
 
-        private static readonly Color Back = new Color(0.015f, 0.05f, 0.065f, 0.98f);
-        private static readonly Color TileBack = new Color(0.075f, 0.15f, 0.18f, 1f);
+        private static readonly Color Back = new Color(0.045f, 0.055f, 0.055f, 0.98f);
+        private static readonly Color TileBack = new Color(0.12f, 0.15f, 0.15f, 1f);
         private static readonly Color IdleLine = new Color(0.55f, 0.69f, 0.72f, 1f);
-        private static readonly Color LiveLine = new Color(0.22f, 0.9f, 0.98f, 1f);
-        private static readonly Color Green = new Color(0.36f, 0.96f, 0.53f, 1f);
-        private static readonly Color Red = new Color(1f, 0.31f, 0.24f, 1f);
+        private static readonly Color LiveLine = new Color(0.49f, 0.65f, 0.64f, 1f);
+        private static readonly Color SourceLine = new Color32(239, 185, 84, 255);
+        private static readonly Color Green = new Color(0.52f, 0.68f, 0.57f, 1f);
+        private static readonly Color Red = new Color(0.82f, 0.41f, 0.37f, 1f);
 
         public bool IsOpen => panelRoot != null && panelRoot.activeSelf;
 
@@ -107,7 +108,7 @@ namespace EchoProtocol.RelayA
             }
             if (_boardCount != snapshot.Scenario.Count || _renderedScenario != snapshot.Scenario) BuildBoard(snapshot.Scenario);
             bool busy = snapshot.Phase == RelayACircuitPhase.Testing || snapshot.Phase == RelayACircuitPhase.Stable;
-            _routingStage.text = snapshot.FaultActive ? "01 / ROUTING     BYPASS DAMAGED LINE" : "01 / ROUTING     CONNECT TERMINALS";
+            _routingStage.text = snapshot.FaultActive ? "01 · Nối mạch — Đi vòng ô hỏng" : "01 · Nối mạch — Cấp điện cho các đầu nối";
             for (int i = 0; i < _boardCount; i++)
             {
                 var cell = snapshot.Scenario.Cells[i];
@@ -115,11 +116,12 @@ namespace EchoProtocol.RelayA
                 bool powered = (snapshot.Powered & (1UL << i)) != 0;
                 _tiles[i].interactable = !busy && !snapshot.IsOnline && cell.Type != RelayACircuitTile.Empty;
                 _tiles[i].GetComponent<Image>().color = broken ? new Color(0.32f, 0.08f, 0.09f, 1f)
+                    : cell.Type == RelayACircuitTile.Source ? new Color(0.28f, 0.19f, 0.07f, 1f)
                     : powered ? new Color(0.05f, 0.3f, 0.34f, 1f) : TileBack;
                 int mask = broken ? 0 : RelayACircuitBoard.Connections(cell.Type, snapshot.Rotations[i]);
                 Color lineColor = cell.Type == RelayACircuitTile.Fault ? Red
                     : cell.Type == RelayACircuitTile.Target ? Green
-                    : cell.Type == RelayACircuitTile.Source || powered ? LiveLine : IdleLine;
+                    : cell.Type == RelayACircuitTile.Source ? SourceLine : powered ? LiveLine : IdleLine;
                 for (int direction = 0; direction < 4; direction++)
                 {
                     _arms[i][direction].gameObject.SetActive((mask & (1 << direction)) != 0);
@@ -132,17 +134,18 @@ namespace EchoProtocol.RelayA
                     && cell.Type != RelayACircuitTile.Source && cell.Type != RelayACircuitTile.Target
                     && cell.Type != RelayACircuitTile.Fault);
                 _symbols[i].color = cell.Type == RelayACircuitTile.Target ? Green
+                    : cell.Type == RelayACircuitTile.Source ? SourceLine
                     : cell.Type == RelayACircuitTile.Fault || broken ? Red : powered ? LiveLine : IdleLine;
             }
 
-            _status.text = snapshot.Phase == RelayACircuitPhase.Testing ? "TESTING CIRCUIT"
-                : snapshot.Phase == RelayACircuitPhase.Stable ? "GRID STABLE"
-                : snapshot.IsOnline ? "RELAY ONLINE"
-                : snapshot.FaultActive && snapshot.Phase != RelayACircuitPhase.Failed ? "LINE BROKEN / ROUTES SHIFTED - BYPASS RED TILE"
+            _status.text = snapshot.Phase == RelayACircuitPhase.Testing ? "Đang kiểm tra mạch"
+                : snapshot.Phase == RelayACircuitPhase.Stable ? "Mạch ổn định"
+                : snapshot.IsOnline ? "Relay hoạt động"
+                : snapshot.FaultActive && snapshot.Phase != RelayACircuitPhase.Failed ? "Đường điện thay đổi · Đi vòng ô đỏ"
                 : snapshot.Phase == RelayACircuitPhase.Failed ? snapshot.FaultPowered
-                    ? "PROTECTION TRIP - BOARD RESET"
-                    : "CONNECTION FAILED - BOARD RESET"
-                : "READY TO TEST";
+                    ? "Bảo vệ ngắt điện · Bảng đã đặt lại"
+                    : "Nối sai · Bảng đã đặt lại"
+                : "Sẵn sàng kiểm tra";
             _status.color = snapshot.IsOnline ? Green
                 : snapshot.Phase == RelayACircuitPhase.Failed || snapshot.Phase == RelayACircuitPhase.Faulted ? Red : LiveLine;
             _testButton.interactable = !busy && !snapshot.IsOnline;
@@ -211,20 +214,20 @@ namespace EchoProtocol.RelayA
             }
             LoadStabilizationArtInEditor();
             _surface = AddIndustrialPanel(panelRoot.transform, "PowerRoutingMatrix", Vector2.zero, Vector2.one, stabilizationPanelSprite);
-            AddText(_surface, "Title", "POWER RELAY A", new Vector2(0.045f, 0.865f),
-                new Vector2(0.60f, 0.06f), 30, TextAlignmentOptions.Left, Color.white);
-            _routingStage = AddText(_surface, "Stage", "01 / ROUTING", new Vector2(0.045f, 0.815f),
+            AddText(_surface, "Title", "Relay A · Nguồn điện", new Vector2(0.045f, 0.865f),
+                new Vector2(0.60f, 0.06f), 24, TextAlignmentOptions.Left, Color.white);
+            _routingStage = AddText(_surface, "Stage", "01 · Nối mạch", new Vector2(0.045f, 0.815f),
                 new Vector2(0.91f, 0.04f), 17, TextAlignmentOptions.Left, LiveLine);
-            _rules = AddText(_surface, "Rules", "P  SOURCE\n●  TERMINAL\nX  FAULT\n\nPOWER ALL TERMINALS\nKEEP FAULTS ISOLATED\n\nFAILED TEST\nRESETS TILE ORIENTATIONS",
+            _rules = AddText(_surface, "Rules", "P  Nguồn điện\n●  Đầu nối\nX  Ô hỏng\n\nCấp điện cho mọi đầu nối.\nCách ly các ô hỏng.\n\nKiểm tra thất bại sẽ\nđặt lại hướng các ô.",
                 new Vector2(0.045f, 0.28f), new Vector2(0.265f, 0.48f), 17,
                 TextAlignmentOptions.TopLeft, IdleLine);
             _board = new GameObject("CircuitBoard", typeof(RectTransform)).GetComponent<RectTransform>();
             _board.SetParent(_surface, false);
             SetRect(_board, new Vector2(0.32f, 0.21f), new Vector2(0.955f, 0.79f));
-            _status = AddText(_surface, "Status", "READY TO TEST",
+            _status = AddText(_surface, "Status", "Sẵn sàng kiểm tra",
                 new Vector2(0.045f, 0.135f), new Vector2(0.91f, 0.05f), 16,
                 TextAlignmentOptions.Left, LiveLine);
-            _testButton = AddIndustrialButton(_surface, "TestCircuit", "TEST CIRCUIT",
+            _testButton = AddIndustrialButton(_surface, "TestCircuit", "Kiểm tra mạch",
                 new Vector2(0.045f, 0.045f), new Vector2(0.32f, 0.075f), stabilizationButtonSprite);
             _closeButton = AddIndustrialButton(_surface, "Close", "CLOSE",
                 new Vector2(0.805f, 0.045f), new Vector2(0.15f, 0.075f), stabilizationButtonSprite);
@@ -331,13 +334,13 @@ namespace EchoProtocol.RelayA
             if (state.Scenario == null || index >= state.Scenario.Count) return;
             if (state.FaultActive && index == state.Scenario.FailedCell)
             {
-                _status.text = "BROKEN CIRCUIT - REROUTE POWER";
+                _status.text = "Mạch đứt · Chọn đường cấp điện khác";
                 _status.color = Red;
                 return;
             }
             if (state.Scenario.Cells[index].Locked)
             {
-                _status.text = "LOCKED TILE - CANNOT ROTATE";
+                _status.text = "Ô bị khóa · Không thể xoay";
                 _status.color = IdleLine;
                 return;
             }
@@ -354,9 +357,10 @@ namespace EchoProtocol.RelayA
             var text = go.GetComponent<TMP_Text>();
             text.text = value;
             text.font = _font;
+            fontSize = Mathf.Max(12f, fontSize);
             text.fontSize = fontSize;
             text.enableAutoSizing = true;
-            text.fontSizeMin = Mathf.Max(10f, fontSize * 0.8f);
+            text.fontSizeMin = Mathf.Max(12f, fontSize * 0.8f);
             text.fontSizeMax = fontSize;
             text.alignment = alignment;
             text.color = color;
@@ -383,7 +387,7 @@ namespace EchoProtocol.RelayA
                 text.font = _font;
                 text.fontSize = 15;
                 text.enableAutoSizing = true;
-                text.fontSizeMin = 11f;
+                text.fontSizeMin = 12f;
                 text.fontSizeMax = 15f;
                 text.alignment = TextAlignmentOptions.Center;
                 text.color = Color.white;

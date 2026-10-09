@@ -72,6 +72,14 @@ namespace EchoProtocol.RelayB
 
         private void Awake()
         {
+            safeColor = new Color(0.52f, 0.68f, 0.57f);
+            warningColor = EchoProtocol.UI.HUD.HUDPresentationStyle.Warning;
+            dangerColor = EchoProtocol.UI.HUD.HUDPresentationStyle.Danger;
+            offlineColor = EchoProtocol.UI.HUD.HUDPresentationStyle.Muted;
+            referenceColor = EchoProtocol.UI.HUD.HUDPresentationStyle.Accent;
+            activeTabColor = new Color(0.23f, 0.32f, 0.3f);
+            inactiveTabColor = new Color(0.1f, 0.13f, 0.13f);
+            EchoProtocol.UI.HUD.HUDModalPresentation.Apply(panelRoot);
             EnsureProgressFillSprite();
             HookControls();
             SetVisible(false);
@@ -161,8 +169,8 @@ namespace EchoProtocol.RelayB
 
             // Header
             FitTerminal();
-            SetText(relayLabel, snapshot.ActiveTab == 0 ? "FIND SIGNAL" : snapshot.ActiveTab == 1 ? "DECODE SIGNAL" : "SYNC SIGNAL");
-            SetText(stageLabel, $"RELAY B / STAGE {snapshot.ActiveTab + 1:00}");
+            SetText(relayLabel, snapshot.ActiveTab == 0 ? "Tìm tín hiệu" : snapshot.ActiveTab == 1 ? "Giải mã" : "Đồng bộ");
+            SetText(stageLabel, $"Relay B · Bước {snapshot.ActiveTab + 1:00}");
             SetText(statusLabel, StatusToDisplayString(snapshot.Status));
             if (statusLabel != null) statusLabel.color = StatusToColor(snapshot.Status);
 
@@ -173,7 +181,7 @@ namespace EchoProtocol.RelayB
             // 1. Spectrum Tab
             RefreshSpectrumTab(snapshot, readOnly, canOperate);
             if (snapshot.ActiveTab == 0)
-                SetText(statusLabel, snapshot.SelectedChannelIndex >= 0 ? "SIGNAL ROUTED" : snapshot.HasScanned ? "4 CHANNELS" : "AWAITING SCAN");
+                SetText(statusLabel, snapshot.SelectedChannelIndex >= 0 ? "Đã chọn tín hiệu" : snapshot.HasScanned ? "4 kênh tín hiệu" : "Chờ quét");
 
             // 2. Processing Tab
             RefreshProcessingTab(snapshot, readOnly, canOperate);
@@ -196,13 +204,13 @@ namespace EchoProtocol.RelayB
             {
                 startLinkButton.gameObject.SetActive(isStage3);
                 SetInteractable(startLinkButton, canSync);
-                SetText(startLinkButton.GetComponentInChildren<TMP_Text>(), "START SYNC");
+                SetText(startLinkButton.GetComponentInChildren<TMP_Text>(), "Bắt đầu đồng bộ");
             }
             if (abortLinkButton != null)
             {
                 abortLinkButton.gameObject.SetActive(isStage3);
                 SetInteractable(abortLinkButton, canAbort);
-                SetText(abortLinkButton.GetComponentInChildren<TMP_Text>(), "CANCEL SYNC");
+                SetText(abortLinkButton.GetComponentInChildren<TMP_Text>(), "Hủy đồng bộ");
             }
             SetInteractable(closeButton, true);
         }
@@ -233,15 +241,15 @@ namespace EchoProtocol.RelayB
         {
             var targetTitle = spectrumTabPanel != null
                 ? spectrumTabPanel.transform.Find("ReferenceProfileCard/Title")?.GetComponent<TMP_Text>() : null;
-            SetText(targetTitle, "TARGET SIGNAL");
+            SetText(targetTitle, "Tín hiệu đích");
             if (snapshot.ReferenceProfile != null)
             {
                 var profile = snapshot.ReferenceProfile;
                 SetText(referenceProfileText,
-                    $"FREQUENCY\n{profile.FundamentalMinKhz:0.0} - {profile.FundamentalMaxKhz:0.0} kHz\n" +
-                    $"WAVEFORM\n{snapshot.ReferenceWaveform.ToString().ToUpper()}\n" +
-                    $"PILOT\n{profile.ExpectedPilot}");
-                if (referenceProfileText != null) { referenceProfileText.enableAutoSizing = true; referenceProfileText.fontSizeMin = 11f; referenceProfileText.fontSizeMax = 18f; referenceProfileText.fontSize = 18f; }
+                    EchoProtocol.Settings.GameLanguage.Choose(
+                        $"Tần số: {profile.FundamentalMinKhz:0.0} - {profile.FundamentalMaxKhz:0.0} kHz\nDạng sóng: {snapshot.ReferenceWaveform.ToString().ToUpper()}\nPilot: {profile.ExpectedPilot}",
+                        $"Frequency: {profile.FundamentalMinKhz:0.0} - {profile.FundamentalMaxKhz:0.0} kHz\nWaveform: {snapshot.ReferenceWaveform.ToString().ToUpper()}\nPilot: {profile.ExpectedPilot}"));
+                if (referenceProfileText != null) { referenceProfileText.enableAutoSizing = true; referenceProfileText.fontSizeMin = 12f; referenceProfileText.fontSizeMax = 18f; referenceProfileText.fontSize = 18f; }
             }
 
             if (scanSpectrumButton != null)
@@ -251,8 +259,8 @@ namespace EchoProtocol.RelayB
                     && (!snapshot.HasScanned || _pendingChannelIndex >= 0);
                 SetInteractable(scanSpectrumButton, canScanOrRoute);
                 SetText(scanSpectrumButton.GetComponentInChildren<TMP_Text>(),
-                    snapshot.SelectedChannelIndex >= 0 ? "SIGNAL ROUTED"
-                    : snapshot.HasScanned ? "ROUTE SIGNAL" : "SCAN SIGNALS");
+                    snapshot.SelectedChannelIndex >= 0 ? "Đã chọn tín hiệu"
+                    : snapshot.HasScanned ? "Chọn tín hiệu" : "Quét tín hiệu");
             }
 
             for (int i = 0; i < candidateButtons.Length; i++)
@@ -269,7 +277,7 @@ namespace EchoProtocol.RelayB
                 if (candidateTexts == null || i >= candidateTexts.Length || candidateTexts[i] == null) continue;
                 if (!snapshot.HasScanned || !hasCandidate)
                 {
-                    SetText(candidateTexts[i], $"CH {i + 1:00}\nNO DATA");
+                    SetText(candidateTexts[i], $"CH {i + 1:00}\nChưa có dữ liệu");
                     continue;
                 }
 
@@ -277,13 +285,13 @@ namespace EchoProtocol.RelayB
                 SetText(candidateTexts[i],
                     $"CH {i + 1:00}  /  {candidate.Waveform.ToString().ToUpper()}\nFREQUENCY {candidate.Peaks[0]:0.0} kHz\nPILOT {candidate.PilotFrame}");
                 candidateTexts[i].enableAutoSizing = true;
-                candidateTexts[i].fontSizeMin = 10f;
+                candidateTexts[i].fontSizeMin = 12f;
                 candidateTexts[i].fontSizeMax = 14f;
                 candidateTexts[i].fontSize = 14f;
             }
-            SetText(findNotice, snapshot.SelectedChannelIndex >= 0 ? "SIGNAL ROUTED"
-                : snapshot.FalseLockDetected ? "PROFILE CHANGED - RESCAN"
-                : snapshot.HasScanned ? _pendingChannelIndex >= 0 ? "SELECTED - ROUTE TO CHECK ALL 3 CLUES" : "MATCH FREQUENCY / WAVEFORM / PILOT" : "SCAN TO REVEAL 4 CHANNELS");
+            SetText(findNotice, snapshot.SelectedChannelIndex >= 0 ? "Đã chọn tín hiệu"
+                : snapshot.FalseLockDetected ? "Tín hiệu đích thay đổi · Quét lại"
+                : snapshot.HasScanned ? _pendingChannelIndex >= 0 ? "Đã chọn · Xác nhận cả 3 dấu hiệu" : "Kiểm tra tần số, dạng sóng và pilot" : "Quét để xem 4 kênh");
             if (findNotice != null) findNotice.color = snapshot.SelectedChannelIndex >= 0 ? safeColor : offlineColor;
             if (findContinue != null) findContinue.gameObject.SetActive(snapshot.SelectedChannelIndex >= 0);
         }
@@ -294,7 +302,7 @@ namespace EchoProtocol.RelayB
             bool canAdjust = !readOnly && canOperate && snapshot.Decoder.IsComplete && !snapshot.IsOnline;
             var holdRule = syncTabPanel != null
                 ? syncTabPanel.transform.Find("CalibrationSection/Rule3")?.GetComponent<TMP_Text>() : null;
-            SetText(holdRule, "3. START SYNC when aligned. Drift may change FREQUENCY or PHASE.");
+            SetText(holdRule, "3. Bắt đầu khi đã khớp. Nhiễu có thể đổi tần số hoặc pha.");
             if (referenceWaveformRenderer != null)
             {
                 referenceWaveformRenderer.SetWaveParameters(snapshot.ReferenceWaveform,
@@ -310,18 +318,18 @@ namespace EchoProtocol.RelayB
                 currentWaveformRenderer.SetNoise(snapshot.IsSynchronized ? 0.05f : 0.25f);
             }
 
-            SetText(referenceSignalLabel, "REFERENCE WAVE");
-            SetText(currentSignalLabel, "CURRENT WAVE");
+            SetText(referenceSignalLabel, "Sóng tham chiếu");
+            SetText(currentSignalLabel, "Sóng hiện tại");
             float frequencyTolerance = _controller != null && _controller.Config != null
                 ? _controller.Simulation.FrequencyTolerancePercent : 3f;
             float phaseTolerance = _controller != null && _controller.Config != null
                 ? _controller.Simulation.PhaseToleranceDegrees : 12f;
             bool frequencyAligned = snapshot.FrequencyErrorPercent <= frequencyTolerance;
             bool phaseAligned = snapshot.PhaseErrorDegrees <= phaseTolerance;
-            SetText(frequencyValueText, frequencyAligned ? "FREQUENCY  ALIGNED" : "FREQUENCY");
-            SetText(phaseValueText, phaseAligned ? "PHASE  ALIGNED" : "PHASE");
-            if (frequencyValueText != null) { frequencyValueText.enableAutoSizing = true; frequencyValueText.fontSizeMin = 10f; frequencyValueText.fontSizeMax = 16f; frequencyValueText.fontSize = 16f; frequencyValueText.color = frequencyAligned ? safeColor : warningColor; }
-            if (phaseValueText != null) { phaseValueText.enableAutoSizing = true; phaseValueText.fontSizeMin = 10f; phaseValueText.fontSizeMax = 16f; phaseValueText.fontSize = 16f; phaseValueText.color = phaseAligned ? safeColor : warningColor; }
+            SetText(frequencyValueText, frequencyAligned ? "Tần số · Khớp" : "Tần số");
+            SetText(phaseValueText, phaseAligned ? "Pha · Khớp" : "Pha");
+            if (frequencyValueText != null) { frequencyValueText.enableAutoSizing = true; frequencyValueText.fontSizeMin = 12f; frequencyValueText.fontSizeMax = 16f; frequencyValueText.fontSize = 16f; frequencyValueText.color = frequencyAligned ? safeColor : warningColor; }
+            if (phaseValueText != null) { phaseValueText.enableAutoSizing = true; phaseValueText.fontSizeMin = 12f; phaseValueText.fontSizeMax = 16f; phaseValueText.fontSize = 16f; phaseValueText.color = phaseAligned ? safeColor : warningColor; }
 
             if (frequencySlider != null && phaseSlider != null && !_sliderHooked)
             {
@@ -362,7 +370,7 @@ namespace EchoProtocol.RelayB
             }
 
             SetText(linkProgressText,
-                $"SYNC PROGRESS  {snapshot.SyncProgressSeconds:0.0} / {snapshot.HoldRequiredSeconds:0.0} sec");
+                $"Đồng bộ · {snapshot.SyncProgressSeconds:0.0} / {snapshot.HoldRequiredSeconds:0.0} giây");
             if (linkProgressFill != null)
             {
                 EnsureProgressFillSprite();
@@ -371,15 +379,15 @@ namespace EchoProtocol.RelayB
             }
             if (warningBannerText == null) return;
             if (snapshot.IsOnline)
-                SetSyncNotice("RELAY ONLINE", safeColor);
+                SetSyncNotice("Relay hoạt động", safeColor);
             else if (snapshot.IsDriftActive && !snapshot.IsSynchronized)
-                SetSyncNotice(snapshot.FrequencyErrorPercent > frequencyTolerance ? "FREQUENCY DRIFT - ADJUST FREQUENCY" : "PHASE DRIFT - ADJUST PHASE", dangerColor);
+                SetSyncNotice(snapshot.FrequencyErrorPercent > frequencyTolerance ? "Tần số bị trôi · Chỉnh lại tần số" : "Pha bị trôi · Chỉnh lại pha", dangerColor);
             else if (snapshot.IsDriftWarning && !snapshot.IsDriftActive)
-                SetSyncNotice("SIGNAL DRIFT APPROACHING", warningColor);
+                SetSyncNotice("Sắp có nhiễu tín hiệu", warningColor);
             else if (snapshot.Status == RelayBStatus.Synchronizing)
-                SetSyncNotice(snapshot.IsSynchronized ? "BOTH ALIGNED - HOLD POSITION" : "SIGNAL MISALIGNED - ADJUST SLIDERS", snapshot.IsSynchronized ? safeColor : warningColor);
+                SetSyncNotice(snapshot.IsSynchronized ? "Đã khớp · Giữ vị trí" : "Tín hiệu lệch · Chỉnh lại slider", snapshot.IsSynchronized ? safeColor : warningColor);
             else
-                SetSyncNotice(snapshot.IsSynchronized ? "BOTH ALIGNED - PRESS START SYNC" : "MATCH CURRENT WAVE TO REFERENCE", snapshot.IsSynchronized ? safeColor : offlineColor);
+                SetSyncNotice(snapshot.IsSynchronized ? "Đã khớp · Bắt đầu đồng bộ" : "Chỉnh sóng hiện tại khớp sóng tham chiếu", snapshot.IsSynchronized ? safeColor : offlineColor);
         }
 
         private void SetSyncNotice(string message, Color color)
@@ -601,14 +609,14 @@ namespace EchoProtocol.RelayB
         {
             switch (status)
             {
-                case RelayBStatus.Scanning: return "SCANNING SPECTRUM...";
-                case RelayBStatus.ChannelSelected: return "CANDIDATE ROUTED";
-                case RelayBStatus.SignalMismatch: return "CARRIER MISMATCH / REJECTED";
-                case RelayBStatus.Synchronizing: return "SYNCHRONIZING LINK";
-                case RelayBStatus.DriftWarning: return "IONOSPHERIC DRIFT WARNING";
-                case RelayBStatus.ConnectionLost: return "LINK LOST";
-                case RelayBStatus.Online: return "ONLINE";
-                default: return "OFFLINE";
+                case RelayBStatus.Scanning: return "Đang quét tín hiệu…";
+                case RelayBStatus.ChannelSelected: return "Đã chọn kênh";
+                case RelayBStatus.SignalMismatch: return "Tín hiệu không khớp";
+                case RelayBStatus.Synchronizing: return "Đang đồng bộ";
+                case RelayBStatus.DriftWarning: return "Cảnh báo trôi tín hiệu";
+                case RelayBStatus.ConnectionLost: return "Mất kết nối";
+                case RelayBStatus.Online: return "Hoạt động";
+                default: return "Chưa hoạt động";
             }
         }
 
@@ -619,7 +627,7 @@ namespace EchoProtocol.RelayB
                 case RelayBStatus.Online: return safeColor;
                 case RelayBStatus.Synchronizing: return referenceColor;
                 case RelayBStatus.DriftWarning: return warningColor;
-                case RelayBStatus.ChannelSelected: return new Color(1f, 0.85f, 0.2f, 1f);
+                case RelayBStatus.ChannelSelected: return warningColor;
                 case RelayBStatus.Scanning: return warningColor;
                 case RelayBStatus.SignalMismatch:
                 case RelayBStatus.ConnectionLost: return dangerColor;

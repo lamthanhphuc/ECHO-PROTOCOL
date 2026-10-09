@@ -54,9 +54,9 @@ namespace EchoProtocol.RelayA
             {
                 _breakerSurface = AddIndustrialPanel(panelRoot.transform, "BreakerMatrix", Vector2.zero,
                     Vector2.one, stabilizationPanelSprite);
-                AddText(_breakerSurface, "Title", "POWER RELAY A", new Vector2(0.045f, 0.865f),
-                    new Vector2(0.60f, 0.06f), 30, TextAlignmentOptions.Left, Color.white);
-                AddText(_breakerSurface, "Stage", "02 / BREAKER MATRIX", new Vector2(0.045f, 0.815f),
+                AddText(_breakerSurface, "Title", "Relay A · Nguồn điện", new Vector2(0.045f, 0.865f),
+                    new Vector2(0.60f, 0.06f), 24, TextAlignmentOptions.Left, Color.white);
+                AddText(_breakerSurface, "Stage", "02 · Ma trận cầu dao", new Vector2(0.045f, 0.815f),
                     new Vector2(0.70f, 0.04f), 17, TextAlignmentOptions.Left, LiveLine);
                 _breakerStatus = AddText(_breakerSurface, "Status", "ACTIVE", new Vector2(0.72f, 0.845f),
                     new Vector2(0.23f, 0.065f), 22, TextAlignmentOptions.Right, LiveLine);
@@ -65,9 +65,9 @@ namespace EchoProtocol.RelayA
                 SetRect(_breakerBoard, new Vector2(0.15f, 0.245f), new Vector2(0.85f, 0.795f));
                 _breakerCounts = AddText(_breakerSurface, "Counts", "", new Vector2(0.15f, 0.19f),
                     new Vector2(0.70f, 0.05f), 19, TextAlignmentOptions.Center, Color.white);
-                _breakerRule = AddText(_breakerSurface, "Rule", "GOAL: ALL GREEN\nPressing a breaker changes itself and its four neighbors.",
+                _breakerRule = AddText(_breakerSurface, "Rule", "Đưa mọi ô về màu xanh.\nNhấn đổi ô hiện tại và 4 ô cạnh nó.",
                     new Vector2(0.045f, 0.13f), new Vector2(0.91f, 0.055f), 16, TextAlignmentOptions.Left, IdleLine);
-                _breakerReset = AddIndustrialButton(_breakerSurface, "ResetMatrix", "RESET MATRIX",
+                _breakerReset = AddIndustrialButton(_breakerSurface, "ResetMatrix", "Đặt lại ma trận",
                     new Vector2(0.045f, 0.045f), new Vector2(0.20f, 0.075f), stabilizationButtonSprite);
                 _breakerClose = AddIndustrialButton(_breakerSurface, "Close", "CLOSE",
                     new Vector2(0.805f, 0.045f), new Vector2(0.15f, 0.075f), stabilizationButtonSprite);
@@ -149,11 +149,11 @@ namespace EchoProtocol.RelayA
             if (_breakerSize != state.Pattern.Size || _breakerTiles == null) BuildBreakerBoard(state.Pattern.Size);
             bool editing = state.Phase == RelayABreakerPhase.Editing;
             _breakerReset.interactable = editing;
-            _breakerRule.text = "GOAL: ALL GREEN\nPress changes itself + four neighbors."
-                + (state.Pattern.Locked != 0 ? " Locked breakers cannot be pressed." : "");
-            _breakerCounts.text = $"STABLE  {state.StableCount} / {state.Pattern.Size * state.Pattern.Size}     MOVES  {state.Moves}";
+            _breakerRule.text = "Đưa mọi ô về màu xanh.\nNhấn đổi ô hiện tại và 4 ô cạnh nó."
+                + (state.Pattern.Locked != 0 ? " Không thể nhấn cầu dao bị khóa." : "");
+            _breakerCounts.text = $"Ô ổn định {state.StableCount}/{state.Pattern.Size * state.Pattern.Size} · {state.Moves} lượt";
             _breakerStatus.text = Time.unscaledTime < _deniedUntil ? "LOCKED"
-                : state.Phase == RelayABreakerPhase.Balancing || state.Phase == RelayABreakerPhase.Complete ? "MATRIX STABLE" : "ACTIVE";
+                : state.Phase == RelayABreakerPhase.Balancing || state.Phase == RelayABreakerPhase.Complete ? "Ma trận ổn định" : "ACTIVE";
             _breakerStatus.color = state.Red == 0 ? Green : LiveLine;
             uint preview = editing && _hoverBreaker >= 0 && (state.Pattern.Locked & (1u << _hoverBreaker)) == 0
                 ? RelayABreakerMatrix.ToggleMask(state.Pattern.Size, _hoverBreaker) : 0u;

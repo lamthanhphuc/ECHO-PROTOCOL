@@ -4,6 +4,35 @@ namespace EchoProtocol.UI.HUD
 {
     public static class HUDTextureUtility
     {
+        private static Sprite _fallbackCore;
+        private static Sprite _fallbackItem;
+
+        public static Sprite InventoryFallback(bool energyCore)
+        {
+            var cached = energyCore ? _fallbackCore : _fallbackItem;
+            if (cached != null) return cached;
+            const int size = 32;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            texture.filterMode = FilterMode.Bilinear;
+            var pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                bool shell = energyCore
+                    ? (x >= 10 && x <= 21 && (y == 5 || y == 26)) || ((x == 9 || x == 22) && y >= 6 && y <= 25)
+                    : (x >= 6 && x <= 25 && (y == 9 || y == 25)) || ((x == 5 || x == 26) && y >= 10 && y <= 24)
+                        || (y == 5 && x >= 12 && x <= 19) || ((x == 11 || x == 20) && y >= 6 && y <= 8);
+                bool detail = energyCore
+                    ? (x >= 14 && x <= 17 && y >= 10 && y <= 21)
+                    : (x >= 13 && x <= 18 && y >= 15 && y <= 19);
+                pixels[y * size + x] = shell || detail ? Color.white : Color.clear;
+            }
+            texture.SetPixels(pixels);
+            texture.Apply();
+            cached = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+            if (energyCore) _fallbackCore = cached; else _fallbackItem = cached;
+            return cached;
+        }
         private static Sprite _whitePixel;
         private static Sprite _circleFilled;
         private static Sprite _circleRing;

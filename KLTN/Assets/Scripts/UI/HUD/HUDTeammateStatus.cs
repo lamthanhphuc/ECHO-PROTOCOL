@@ -60,6 +60,11 @@ namespace EchoProtocol.UI.HUD
 
         private void Awake()
         {
+            healthyColor = HUDPresentationStyle.Ink;
+            carryingColor = HUDPresentationStyle.Accent;
+            downedColor = HUDPresentationStyle.Danger;
+            eliminatedColor = HUDPresentationStyle.Muted;
+            escapedColor = HUDPresentationStyle.Accent;
             if (panelCanvasGroup == null)
             {
                 panelCanvasGroup = GetComponent<CanvasGroup>();
@@ -200,7 +205,7 @@ namespace EchoProtocol.UI.HUD
         private void UpdateRealPlayerSlot(TeammateSlotUI slot, int index)
         {
             PlayerDownState p = slot.boundPlayer;
-            string displayName = index == 0 ? $"YOU (P{index + 1})" : $"P{index + 1} ({p.name})";
+            string displayName = index == 0 ? $"Bạn" : $"P{index + 1} ({p.name})";
             SetSlotName(slot, displayName);
 
             bool isCarrying = slot.boundCarrier != null && slot.boundCarrier.IsCarrying;
@@ -210,34 +215,24 @@ namespace EchoProtocol.UI.HUD
 
             if (matchWon && !p.IsEliminated)
             {
-                ApplySlotStatus(slot, "EXTRACTED", escapedColor);
+                ApplySlotStatus(slot, "Đã thoát", escapedColor);
                 if (slot.healthFill != null) slot.healthFill.fillAmount = 1f;
                 ResetSlotScale(slot);
             }
             else if (p.IsDowned)
             {
-                // Emergency Flash for Downed Teammate
                 float bleedout = p.BleedoutRemaining;
-                bool flash = Mathf.PingPong(Time.time * 6f, 1f) > 0.35f;
-                Color statusCol = flash ? downedColor : new Color(0.5f, 0.05f, 0.05f, 0.8f);
-
-                ApplySlotStatus(slot, $"DOWNED ({bleedout:F0}s)", statusCol);
+                ApplySlotStatus(slot, $"Cần cứu · {Mathf.CeilToInt(bleedout)}s", downedColor);
                 if (slot.healthFill != null)
                 {
                     slot.healthFill.fillAmount = p.Bleedout01;
                     slot.healthFill.color = downedColor;
                 }
-
-                // Visual punch scale on emergency
-                if (slot.root != null)
-                {
-                    float punch = 1f + (flash ? 0.035f : 0f);
-                    slot.root.transform.localScale = new Vector3(punch, punch, 1f);
-                }
+                ResetSlotScale(slot);
             }
             else if (p.IsEliminated)
             {
-                ApplySlotStatus(slot, "KIA", eliminatedColor);
+                ApplySlotStatus(slot, "Đã tử vong", eliminatedColor);
                 if (slot.healthFill != null)
                 {
                     slot.healthFill.fillAmount = 0f;
@@ -247,7 +242,7 @@ namespace EchoProtocol.UI.HUD
             }
             else if (isCarrying)
             {
-                ApplySlotStatus(slot, "CARRYING CORE", carryingColor);
+                ApplySlotStatus(slot, "Đang mang core", carryingColor);
                 if (slot.healthFill != null)
                 {
                     slot.healthFill.fillAmount = Mathf.Clamp01(p.Health / 100f);
@@ -259,17 +254,17 @@ namespace EchoProtocol.UI.HUD
             {
                 if (p.Health < 50f)
                 {
-                    ApplySlotStatus(slot, "INJURED", new Color(1f, 0.7f, 0.1f, 1f));
+                    ApplySlotStatus(slot, "Bị thương", HUDPresentationStyle.Warning);
                 }
                 else
                 {
-                    ApplySlotStatus(slot, "OPERATIONAL", healthyColor);
+                    ApplySlotStatus(slot, "Bình thường", healthyColor);
                 }
 
                 if (slot.healthFill != null)
                 {
                     slot.healthFill.fillAmount = Mathf.Clamp01(p.Health / 100f);
-                    slot.healthFill.color = p.Health < 50f ? new Color(1f, 0.7f, 0.1f, 1f) : healthyColor;
+                    slot.healthFill.color = p.Health < 50f ? HUDPresentationStyle.Warning : healthyColor;
                 }
                 ResetSlotScale(slot);
             }
@@ -286,7 +281,7 @@ namespace EchoProtocol.UI.HUD
                 string distStr = $"{dist:F0}m";
                 if (p.IsDowned || dist > 35f)
                 {
-                    distStr = $"<color=#FFB300>{distStr}</color>";
+                    distStr = $"<color=#D8A85E>{distStr}</color>";
                 }
                 SetDistanceText(slot, distStr);
             }
@@ -300,7 +295,7 @@ namespace EchoProtocol.UI.HUD
             bool matchWon = _matchFlow != null && _matchFlow.Phase == MatchPhase.Win;
             if (matchWon)
             {
-                ApplySlotStatus(slot, "EXTRACTED", escapedColor);
+                ApplySlotStatus(slot, "Đã thoát", escapedColor);
                 if (slot.healthFill != null) slot.healthFill.fillAmount = 1f;
                 return;
             }
@@ -308,7 +303,7 @@ namespace EchoProtocol.UI.HUD
             switch (index)
             {
                 case 1: // Teammate 2: Carrying Core
-                    ApplySlotStatus(slot, "CARRYING CORE", carryingColor);
+                    ApplySlotStatus(slot, "Đang mang core", carryingColor);
                     if (slot.coreCarryIcon != null) slot.coreCarryIcon.gameObject.SetActive(true);
                     if (slot.healthFill != null)
                     {
@@ -320,7 +315,7 @@ namespace EchoProtocol.UI.HUD
                     break;
 
                 case 2: // Teammate 3: Operational
-                    ApplySlotStatus(slot, "OPERATIONAL", healthyColor);
+                    ApplySlotStatus(slot, "Bình thường", healthyColor);
                     if (slot.coreCarryIcon != null) slot.coreCarryIcon.gameObject.SetActive(false);
                     if (slot.healthFill != null)
                     {
@@ -332,7 +327,7 @@ namespace EchoProtocol.UI.HUD
                     break;
 
                 case 3: // Teammate 4: Operational
-                    ApplySlotStatus(slot, "OPERATIONAL", healthyColor);
+                    ApplySlotStatus(slot, "Bình thường", healthyColor);
                     if (slot.coreCarryIcon != null) slot.coreCarryIcon.gameObject.SetActive(false);
                     if (slot.healthFill != null)
                     {
@@ -360,7 +355,7 @@ namespace EchoProtocol.UI.HUD
 
             if (slot.statusBadgeBg != null)
             {
-                slot.statusBadgeBg.color = new Color(color.r, color.g, color.b, 0.22f);
+                slot.statusBadgeBg.color = Color.clear;
             }
 
             if (slot.accentBar != null)

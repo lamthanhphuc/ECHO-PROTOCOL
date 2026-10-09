@@ -27,6 +27,8 @@ namespace EchoProtocol.UI.HUD
 
         private float _targetAlpha;
         private bool _completedTriggered;
+        private GameObject _keyBadge;
+        private Text _keyText;
 
         public void BindInteraction(PlayerInteraction interaction)
         {
@@ -52,6 +54,14 @@ namespace EchoProtocol.UI.HUD
             }
 
             ResolveComponents();
+            var badge = transform.Find("KeyBadge");
+            if (badge != null)
+            {
+                _keyBadge = badge.gameObject;
+                _keyText = badge.GetComponentInChildren<Text>(true);
+            }
+            normalPromptColor = HUDPresentationStyle.Ink;
+            holdPromptColor = HUDPresentationStyle.Accent;
         }
 
         private void ResolveComponents()
@@ -239,21 +249,26 @@ namespace EchoProtocol.UI.HUD
                     fadeSpeed * Time.deltaTime);
             }
 
-            string keyColorHex = isHold ? "#FFB300" : "#00E5FF";
-            string keyLabel = "[" + GameplayInputSettings.GetKeyLabel(GameplayAction.Interact) + "]";
+            string keyLabel = GameplayInputSettings.GetKeyLabel(GameplayAction.Interact);
 
             // Clean existing [E] or [E GIỮ] if present in source prompt
             string cleanPrompt = prompt.Replace("[E GIỮ]", "").Replace("[E]", "").Replace("[E ]", "").Trim();
             bool isSpacefrigateRouteChoice = cleanPrompt.StartsWith("SPACEFRIGATE:", System.StringComparison.Ordinal);
-            string formattedText = isHold
-                ? $"<color={keyColorHex}><b>{keyLabel}</b></color>  {cleanPrompt} <color=#FFB300>(Giữ)</color>"
-                : $"<color={keyColorHex}><b>{keyLabel}</b></color>  {cleanPrompt}";
+            bool badgeVisible = showInteractKey && !isSpacefrigateRouteChoice;
+            if (_keyBadge != null) _keyBadge.SetActive(badgeVisible);
+            if (_keyText != null) _keyText.text = keyLabel;
+            var labelRect = promptTmp != null ? promptTmp.rectTransform : promptText != null ? promptText.rectTransform : null;
+            if (labelRect != null)
+            {
+                labelRect.anchoredPosition = new Vector2(badgeVisible ? 70f : 16f, -8f);
+                labelRect.sizeDelta = new Vector2(badgeVisible ? 388f : 442f, 48f);
+            }
+            string formattedText = isHold ? $"Giữ để {cleanPrompt}" : cleanPrompt;
+            if (_keyBadge == null && badgeVisible) formattedText = $"[{keyLabel}]  {formattedText}";
 
             if (!showInteractKey || isSpacefrigateRouteChoice)
             {
-                formattedText = isSpacefrigateRouteChoice
-                    ? $"<color=#00E5FF><b>{cleanPrompt}</b></color>"
-                    : $"<color=#FFB300><b>{prompt}</b></color>";
+                formattedText = isSpacefrigateRouteChoice ? cleanPrompt : prompt;
             }
 
             SetText(promptTmp, promptText, formattedText);
@@ -269,12 +284,8 @@ namespace EchoProtocol.UI.HUD
                     if (holdProgressRing != null)
                     {
                         holdProgressRing.fillAmount = progress01;
-                        // Transition color from amber towards bright cyan/green as completion nears
-                        holdProgressRing.color = Color.Lerp(holdPromptColor, new Color(0f, 1f, 0.6f, 1f), progress01);
-
-                        // Subtle breathing pulse during hold
-                        float pulse = 1f + 0.05f * Mathf.Sin(Time.time * 12f);
-                        holdProgressRing.transform.localScale = Vector3.one * pulse;
+                        holdProgressRing.color = HUDPresentationStyle.Accent;
+                        holdProgressRing.transform.localScale = Vector3.one;
                     }
 
                     SetText(holdProgressTmp, holdProgressText, $"{Mathf.RoundToInt(progress01 * 100f)}%");

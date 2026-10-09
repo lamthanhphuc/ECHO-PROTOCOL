@@ -45,6 +45,11 @@ namespace EchoProtocol.UI.HUD
 
         private void Awake()
         {
+            downedTeammateColor = HUDPresentationStyle.Danger;
+            escapeDoorColor = HUDPresentationStyle.Accent;
+            sectorBoxColor = HUDPresentationStyle.Warning;
+            terminalColor = HUDPresentationStyle.Accent;
+            distributionPanelColor = HUDPresentationStyle.Accent;
             if (markerPool != null)
             {
                 for (int i = 0; i < markerPool.Length; i++)
@@ -189,7 +194,7 @@ namespace EchoProtocol.UI.HUD
                     if (terminal != null && !terminal.IsComplete)
                     {
                         _targetTransforms.Add(terminal.transform);
-                        _targetTitles.Add("MÁY BẢO MẬT (SECURITY TERMINAL)");
+                        _targetTitles.Add("Security Terminal");
                         _targetColors.Add(terminalColor);
                     }
                 }
@@ -199,7 +204,7 @@ namespace EchoProtocol.UI.HUD
                     if (panel != null)
                     {
                         _targetTransforms.Add(panel.transform);
-                        _targetTitles.Add("BẢNG ĐIỀU KHIỂN CỬA (DISTRIBUTION PANEL)");
+                        _targetTitles.Add("Access Panel");
                         _targetColors.Add(distributionPanelColor);
                     }
                 }
@@ -210,7 +215,7 @@ namespace EchoProtocol.UI.HUD
                 if (terminal != null && !terminal.IsComplete)
                 {
                     _targetTransforms.Add(terminal.transform);
-                    _targetTitles.Add("MÁY BẢO MẬT (SECURITY TERMINAL)");
+                    _targetTitles.Add("Security Terminal");
                     _targetColors.Add(terminalColor);
                 }
             }
@@ -349,12 +354,11 @@ namespace EchoProtocol.UI.HUD
                     marker.distanceText.text = $"{distance:F0}m";
                 }
 
-                // Pulsate ring
+                // A fixed marker keeps the target readable without competing with gameplay.
                 if (marker.pulseRing != null)
                 {
-                    float pulse = Mathf.PingPong(Time.time * 2.5f, 1f);
-                    marker.pulseRing.transform.localScale = Vector3.one * Mathf.Lerp(0.85f, 1.4f, pulse);
-                    marker.pulseRing.color = new Color(color.r, color.g, color.b, Mathf.Lerp(0.9f, 0.1f, pulse));
+                    marker.pulseRing.transform.localScale = Vector3.one;
+                    marker.pulseRing.color = new Color(color.r, color.g, color.b, 0.2f);
                 }
             }
         }

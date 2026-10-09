@@ -215,149 +215,52 @@ namespace EchoProtocol.UI.HUD
             panelRect.anchorMin = panelRect.anchorMax = panelRect.pivot = new Vector2(0.5f, 0.5f);
             panelRect.anchoredPosition = Vector2.zero;
 
+            ConfigureToolCard(panelRect, toolId);
+        }
+
+        private void ConfigureToolCard(RectTransform panel, int toolId)
+        {
+            string title, controls, description;
+            string interact = EchoProtocol.Settings.GameplayInputSettings.GetKeyLabel(
+                EchoProtocol.Settings.GameplayAction.Interact);
             switch (toolId)
             {
                 case 1:
-                    ConfigureScannerTutorial(panel, panelRect);
+                    title = "Máy quét hiện trường";
+                    controls = "[Chuột trái]  Quét khu vực trong 10 giây\n[Chuột phải]  Đổi giữa lõi năng lượng và Stalker";
+                    description = "Bạn ở giữa radar. Chế độ lõi tìm nguồn năng lượng gần bạn.\nChế độ Stalker chỉ phát hiện Stalker đang di chuyển.";
                     break;
                 case 2:
-                    ConfigureNoiseMakerTutorial(panel, panelRect);
+                    title = "Máy tạo tiếng động";
+                    controls = "[Chuột trái]  Đặt thiết bị\nVị trí xem trước cho biết nơi thiết bị sẽ được đặt.";
+                    description = "Đèn đỏ nhấp nháy báo khu vực đang thu hút Stalker.\nRời khỏi khu vực sau khi đặt thiết bị.";
                     break;
                 case 3:
-                    ConfigureFirstAidTutorial(panel, panelRect);
+                    title = "Bộ sơ cứu";
+                    controls = $"[Giữ {interact} / Chuột trái]  Cứu đồng đội\nNhắm vào người bị gục và giữ đến khi cứu hoàn tất.";
+                    description = "Chỉ dùng để cứu người bị gục.\nKhông hồi máu cho người vẫn còn đứng.";
                     break;
                 case 4:
-                    ConfigurePlankTutorial(panel, panelRect);
+                    title = "Ván chèn cửa";
+                    controls = $"[{interact} / Chuột trái]  Chèn cửa\nChỉ gắn ván vào cửa đã bị phá.";
+                    description = "Ván chặn Stalker trong thời gian ngắn.\nStalker có thể phá ván để đi qua.";
                     break;
                 case 6:
-                    ConfigureCoreStabilizerTutorial(panel, panelRect);
+                    title = "Bộ ổn định lõi";
+                    controls = "[Chuột trái]  Kích hoạt\nVùng ổn định bán kính 5 m, kéo dài 15 giây.";
+                    description = "Người mang lõi trong vùng có thể chạy nước rút bình thường.\nHồi chiêu 45 giây; theo dõi trên ô trang bị.";
                     break;
+                default: return;
             }
-        }
-
-        private void ConfigureScannerTutorial(Image panel, RectTransform panelRect)
-        {
-            Color accent = new Color(0.58f, 0.95f, 0.92f);
-
-            panel.gameObject.AddComponent<Outline>().effectColor = new Color(accent.r, accent.g, accent.b, 0.55f);
-            panelRect.sizeDelta = new Vector2(820f, 480f);
-
-            TextLabel("Title", panelRect, "MÁY QUÉT HIỆN TRƯỜNG", 31, TextAnchor.MiddleCenter, FontStyle.Bold, accent, 28, 48);
-
-            var controls = Row("ControlsRow", panelRect, 88, 112);
-            ControlBlock("ScanControl", controls, "[CHUỘT TRÁI]\n<size=27>QUÉT</size>\n<size=20>Quét khu vực trong 10 giây.</size>");
-            ControlBlock("ModeControl", controls, "[CHUỘT PHẢI]\n<size=27>ĐỔI CHẾ ĐỘ</size>\n<size=20>Lõi năng lượng ↔ Stalker</size>");
-
-            var modes = Row("ModesRow", panelRect, 220, 98);
-            InfoBlock("CoreMode", modes, "◈ LÕI NĂNG LƯỢNG\n<size=21>Tìm lõi gần bạn</size>", new Color(0.35f, 0.78f, 0.76f));
-            InfoBlock("StalkerMode", modes, "⚠ STALKER\n<size=21>Phát hiện Stalker đang di chuyển</size>", new Color(0.94f, 0.43f, 0.29f));
-
-            TextLabel("RadarHint", panelRect, "▲ BẠN LUÔN Ở GIỮA RA-ĐA", 23, TextAnchor.MiddleCenter, FontStyle.Bold, new Color(0.78f, 0.84f, 0.84f), 342, 34);
-            AddContinueText(panelRect, 414f);
-        }
-
-        private void ConfigureSimpleTutorial(Image panel, RectTransform panelRect, string title, string controlText, string infoText, string hintText, Color accent)
-        {
-            panel.gameObject.AddComponent<Outline>().effectColor = new Color(accent.r, accent.g, accent.b, 0.55f);
-            panelRect.sizeDelta = new Vector2(820f, 400f);
-
-            TextLabel("Title", panelRect, title, 31, TextAnchor.MiddleCenter, FontStyle.Bold, accent, 30f, 50f);
-
-            var row = Row("TutorialRow", panelRect, 105f, 130f);
-            InfoBlock("Control", row, controlText, accent);
-            InfoBlock("Info", row, infoText, new Color(0.78f, 0.84f, 0.84f));
-
-            TextLabel("Hint", panelRect, hintText, 21, TextAnchor.MiddleCenter, FontStyle.Bold, new Color(0.78f, 0.84f, 0.84f), 265f, 42f);
-            AddContinueText(panelRect, 335f);
-        }
-
-        private void AddContinueText(RectTransform panelRect, float top)
-        {
-            TextLabel("ContinueText", panelRect, "NHẤN PHÍM BẤT KỲ ĐỂ TIẾP TỤC", 21, TextAnchor.MiddleCenter, FontStyle.Bold, new Color(0.95f, 0.86f, 0.52f), top, 32f);
-        }
-
-        private void ConfigureNoiseMakerTutorial(Image panel, RectTransform panelRect)
-        {
-            Color accent = new Color(0.95f, 0.67f, 0.30f);
-
-            panel.gameObject.AddComponent<Outline>().effectColor = new Color(accent.r, accent.g, accent.b, 0.55f);
-            panelRect.sizeDelta = new Vector2(820f, 520f);
-
-            TextLabel("Title", panelRect, "MÁY TẠO TIẾNG ĐỘNG", 31, TextAnchor.MiddleCenter, FontStyle.Bold, accent, 28f, 48f);
-
-            var row = Row("NoiseMakerRow", panelRect, 92f, 128f);
-            InfoBlock("Control", row, "[CHUỘT TRÁI]\n<size=27>ĐẶT THIẾT BỊ</size>", accent);
-            InfoBlock("Marker", row, "◎ DẤU TRÊN MÀN HÌNH\n<size=21>Cho biết thiết bị sẽ được đặt ở đâu.</size>", new Color(0.78f, 0.84f, 0.84f));
-
-            var warningRow = Row("NoiseMakerWarningRow", panelRect, 238f, 112f);
-            InfoBlock("Light", warningRow, "ĐÈN ĐỎ NHẤP NHÁY\n<size=21>Báo khu vực đang thu hút Stalker.</size>", new Color(1f, 0.35f, 0.24f));
-            InfoBlock("Leave", warningRow, "⚠ RỜI KHỎI KHU VỰC SAU KHI ĐẶT", new Color(0.95f, 0.86f, 0.52f));
-
-            AddContinueText(panelRect, 438f);
-        }
-
-        private void ConfigureFirstAidTutorial(Image panel, RectTransform panelRect)
-        {
-            ConfigureSimpleTutorial(
-                panel,
-                panelRect,
-                "BỘ SƠ CỨU",
-                "[GIỮ E / CHUỘT TRÁI]\n<size=27>CỨU ĐỒNG ĐỘI</size>\n<size=20>Nhắm vào đồng đội đang bị gục.</size>",
-                "CỨU NGƯỜI BỊ GỤC\n<size=21>Không dùng để hồi máu cho người vẫn còn đứng.</size>",
-                "Giữ nút cho đến khi quá trình cứu hoàn tất.",
-                new Color(0.48f, 0.92f, 0.58f));
-        }
-
-        private void ConfigurePlankTutorial(Image panel, RectTransform panelRect)
-        {
-            ConfigureSimpleTutorial(
-                panel,
-                panelRect,
-                "VÁN CHÈN CỬA",
-                $"[{EchoProtocol.Settings.GameplayInputSettings.GetKeyLabel(EchoProtocol.Settings.GameplayAction.Interact)} / CHUỘT TRÁI]\n<size=27>CHÈN CỬA</size>\n<size=20>Chỉ gắn vào cửa đã bị phá.</size>",
-                "CHẶN STALKER\n<size=21>Stalker có thể phá ván để đi qua.</size>",
-                "Ván chỉ chặn Stalker trong thời gian ngắn, không khóa chết.",
-                new Color(0.82f, 0.63f, 0.38f));
-        }
-
-        private void ConfigureCoreStabilizerTutorial(Image panel, RectTransform panelRect)
-        {
-            ConfigureSimpleTutorial(
-                panel,
-                panelRect,
-                "BỘ ỔN ĐỊNH LÕI",
-                "[CHUỘT TRÁI]\n<size=27>KÍCH HOẠT</size>\n<size=20>Tạo vùng ổn định bán kính 5 m trong 15 giây.</size>",
-                "HỖ TRỢ NGƯỜI MANG LÕI\n<size=21>Cho phép đồng đội chạy nước rút bình thường.</size>",
-                "Hồi chiêu 45 giây. Theo dõi thời gian còn lại trên ô trang bị.",
-                new Color(0.42f, 0.82f, 1f));
-        }
-
-        private static RectTransform Row(string name, Transform parent, float top, float height)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            go.transform.SetParent(parent, false);
-            var rt = (RectTransform)go.transform;
-            Stretch(rt, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(34f, -top - height), new Vector2(-34f, -top));
-            var layout = go.GetComponent<HorizontalLayoutGroup>();
-            layout.spacing = 18f;
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = true;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            return rt;
-        }
-
-        private static void ControlBlock(string name, Transform parent, string text)
-        {
-            InfoBlock(name, parent, text, new Color(0.58f, 0.95f, 0.92f));
-        }
-
-        private static void InfoBlock(string name, Transform parent, string text, Color color)
-        {
-            var image = Image(name, parent, new Color(color.r * 0.08f, color.g * 0.08f, color.b * 0.08f, 0.82f));
-            image.gameObject.AddComponent<Outline>().effectColor = new Color(color.r, color.g, color.b, 0.25f);
-            TextLabel("Text", image.transform, text, 19, TextAnchor.MiddleCenter, FontStyle.Bold, color, 0, 0);
-            Stretch((RectTransform)image.transform.GetChild(0), Vector2.zero, Vector2.one, new Vector2(12f, 8f), new Vector2(-12f, -8f));
+            panel.sizeDelta = new Vector2(620f, 300f);
+            TextLabel("Title", panel, title, 23, TextAnchor.MiddleLeft,
+                FontStyle.Bold, HUDPresentationStyle.Ink, 20f, 36f);
+            TextLabel("Controls", panel, controls, 16, TextAnchor.UpperLeft,
+                FontStyle.Normal, HUDPresentationStyle.Ink, 82f, 62f);
+            TextLabel("Description", panel, description, 14, TextAnchor.UpperLeft,
+                FontStyle.Normal, HUDPresentationStyle.Muted, 164f, 64f);
+            TextLabel("ContinueText", panel, "Nhấn phím bất kỳ để tiếp tục", 12,
+                TextAnchor.MiddleLeft, FontStyle.Normal, HUDPresentationStyle.Muted, 250f, 24f);
         }
 
         private static Image Image(string name, Transform parent, Color color)

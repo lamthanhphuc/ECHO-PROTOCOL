@@ -38,7 +38,6 @@ namespace EchoProtocol.UI.HUD
         private float _displayStamina = 1f;
         private Image _healthBarFill;
         private float _noiseIntensity;
-        private float _flashTimer;
 
         public void BindPlayer(
             PlayerMovement move,
@@ -54,7 +53,7 @@ namespace EchoProtocol.UI.HUD
                     : null;
             downState = down;
             carrier = coreCarrier;
-            if (down == null && _healthBarFill != null) _healthBarFill.gameObject.SetActive(false);
+            if (_healthBarFill != null) _healthBarFill.transform.parent.gameObject.SetActive(down != null);
 
             if (carrier != null)
             {
@@ -73,6 +72,8 @@ namespace EchoProtocol.UI.HUD
         private void Start()
         {
             ResolveReferences();
+            staminaNormalColor = HUDPresentationStyle.Accent;
+            staminaLowColor = HUDPresentationStyle.Danger;
             EnsureHealthBar();
             if (noiseCanvasGroup != null)
             {
@@ -141,13 +142,12 @@ namespace EchoProtocol.UI.HUD
 
             PlayerLifeState life = downState.State;
             EnsureHealthBar();
-            if (_healthBarFill != null) _healthBarFill.gameObject.SetActive(life == PlayerLifeState.Active);
-            _flashTimer += Time.deltaTime * 5f;
-            float flashAlpha = (Mathf.Sin(_flashTimer) + 1f) * 0.5f;
+            if (_healthBarFill != null) _healthBarFill.transform.parent.gameObject.SetActive(
+                life == PlayerLifeState.Active || life == PlayerLifeState.Downed);
 
             if (life == PlayerLifeState.Spectating)
             {
-                SetStatusBadge("ĐANG QUAN SÁT (SPECTATOR)", "#B388FF", new Color(0.7f, 0.5f, 1f, 0.3f));
+                SetStatusBadge("Đang quan sát", "#9AA5A3", Color.clear);
                 if (bleedoutContainer != null)
                 {
                     bleedoutContainer.SetActive(false);
@@ -156,7 +156,7 @@ namespace EchoProtocol.UI.HUD
             }
             else if (life == PlayerLifeState.Eliminated)
             {
-                SetStatusBadge("ĐÃ TỬ VONG", "#D50000", new Color(0.8f, 0.1f, 0.1f, 0.4f));
+                SetStatusBadge("Đã tử vong", "#D0685F", Color.clear);
                 if (bleedoutContainer != null)
                 {
                     bleedoutContainer.SetActive(false);
@@ -165,21 +165,22 @@ namespace EchoProtocol.UI.HUD
             }
             else if (life == PlayerLifeState.Downed)
             {
-                // Downed state with bleedout countdown and heartbeat pulse
+                // The health track becomes the bleedout timer while downed.
                 float bleedout = downState.BleedoutRemaining;
                 float bleedout01 = downState.Bleedout01;
 
-                Color flashColor = Color.Lerp(new Color(0.9f, 0.1f, 0.1f, 0.9f), new Color(0.5f, 0f, 0f, 0.4f), flashAlpha);
-                SetStatusBadge("HẤP HỐI (DOWNED)", "#FF1744", flashColor);
+                SetStatusBadge("Cần cứu trợ", "#D0685F", Color.clear);
+                if (_healthBarFill != null)
+                {
+                    _healthBarFill.rectTransform.localScale = new Vector3(bleedout01, 1f, 1f);
+                    _healthBarFill.color = HUDPresentationStyle.Danger;
+                }
 
                 if (bleedoutContainer != null)
                 {
                     bleedoutContainer.SetActive(true);
 
-                    // Dynamic Heartbeat Pulse: speeds up when bleedout is critically low (< 10s)
-                    float pulseRate = bleedout < 10f ? 12f : 6f;
-                    float pulseScale = 1f + 0.08f * Mathf.Sin(Time.time * pulseRate);
-                    bleedoutContainer.transform.localScale = new Vector3(pulseScale, pulseScale, 1f);
+                    bleedoutContainer.transform.localScale = Vector3.one;
 
                     if (bleedoutBarFill != null)
                     {
@@ -187,12 +188,12 @@ namespace EchoProtocol.UI.HUD
                         bleedoutBarFill.color = Color.Lerp(new Color(1f, 0.1f, 0.1f), new Color(1f, 0.6f, 0.1f), bleedout01);
                     }
 
-                    SetText(bleedoutTimerTmp, bleedoutTimerText, $"HẾT MÁU SAU: {bleedout:F1}s");
+                    SetText(bleedoutTimerTmp, bleedoutTimerText, $"Còn {Mathf.CeilToInt(bleedout)} giây");
                 }
             }
             else if (life == PlayerLifeState.Caught)
             {
-                SetStatusBadge("BỊ BẮT", "#FF1744", new Color(0.8f, 0.1f, 0.1f, 0.4f));
+                SetStatusBadge("Bị bắt", "#D0685F", Color.clear);
                 if (bleedoutContainer != null)
                 {
                     bleedoutContainer.SetActive(false);
@@ -215,19 +216,28 @@ namespace EchoProtocol.UI.HUD
         {
             if (_healthBarFill != null || statusBadgeBg == null) return;
 
-            var existing = statusBadgeBg.transform.Find("HealthFill");
-            var fillObject = existing != null ? existing.gameObject : new GameObject("HealthFill", typeof(RectTransform), typeof(Image));
-            if (existing == null) fillObject.transform.SetParent(statusBadgeBg.transform, false);
+            var trackTransform = statusBadgeBg.transform.Find("HealthTrack");
+            var trackObject = trackTransform != null ? trackTransform.gameObject
+                : new GameObject("HealthTrack", typeof(RectTransform), typeof(Image));
+            trackObject.transform.SetParent(statusBadgeBg.transform, false);
+            var trackRect = trackObject.GetComponent<RectTransform>();
+            trackRect.anchorMin = trackRect.anchorMax = trackRect.pivot = new Vector2(0f, 1f);
+            trackRect.anchoredPosition = new Vector2(0f, -31f);
+            trackRect.sizeDelta = new Vector2(288f, 7f);
+            var trackImage = trackObject.GetComponent<Image>();
+            trackImage.sprite = HUDTextureUtility.WhitePixel;
+            trackImage.color = HUDPresentationStyle.Track;
+            trackImage.raycastTarget = false;
 
+            var fillObject = new GameObject("HealthFill", typeof(RectTransform), typeof(Image));
+            fillObject.transform.SetParent(trackObject.transform, false);
             var rect = fillObject.GetComponent<RectTransform>();
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
             rect.pivot = new Vector2(0f, 0.5f);
-            rect.offsetMin = new Vector2(4f, 4f);
-            rect.offsetMax = new Vector2(-4f, -4f);
-            fillObject.transform.SetAsFirstSibling();
-
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
             _healthBarFill = fillObject.GetComponent<Image>();
+            _healthBarFill.sprite = HUDTextureUtility.WhitePixel;
             _healthBarFill.raycastTarget = false;
         }
 
@@ -237,19 +247,21 @@ namespace EchoProtocol.UI.HUD
             float health = Mathf.Clamp(downState.Health, 0f, maxHealth);
             float amount = health / maxHealth;
             Color barColor = amount < 0.3f
-                ? new Color(0.95f, 0.15f, 0.15f, 0.9f)
+                ? HUDPresentationStyle.Danger
                 : amount < 0.6f
-                    ? new Color(1f, 0.65f, 0.1f, 0.9f)
-                    : new Color(0f, 0.85f, 0.4f, 0.9f);
+                    ? HUDPresentationStyle.Warning
+                    : HUDPresentationStyle.Ink;
 
             if (_healthBarFill != null)
             {
                 _healthBarFill.rectTransform.localScale = new Vector3(amount, 1f, 1f);
                 _healthBarFill.color = barColor;
             }
-            if (statusBadgeBg != null) statusBadgeBg.color = new Color(0.06f, 0.1f, 0.11f, 0.95f);
+            if (statusBadgeBg != null) statusBadgeBg.color = Color.clear;
+            if (statusLabelText != null) statusLabelText.rectTransform.sizeDelta = new Vector2(288f, 23f);
+            if (statusLabelTmp != null) statusLabelTmp.rectTransform.sizeDelta = new Vector2(288f, 23f);
             SetText(statusLabelTmp, statusLabelText,
-                $"<color=#FFFFFF><b>HP {Mathf.CeilToInt(health)}/{Mathf.CeilToInt(maxHealth)}</b></color>");
+                $"HP    {Mathf.CeilToInt(health)} / {Mathf.CeilToInt(maxHealth)}");
         }
 
         private void SetStatusBadge(string label, string hexColor, Color bgColor)
@@ -258,7 +270,9 @@ namespace EchoProtocol.UI.HUD
 
             if (statusBadgeBg != null)
             {
-                statusBadgeBg.color = bgColor;
+                statusBadgeBg.color = Color.clear;
+                if (statusLabelText != null) statusLabelText.rectTransform.sizeDelta = new Vector2(156f, 23f);
+                if (statusLabelTmp != null) statusLabelTmp.rectTransform.sizeDelta = new Vector2(156f, 23f);
             }
         }
 
@@ -284,15 +298,13 @@ namespace EchoProtocol.UI.HUD
 
             if (noiseIcon != null)
             {
-                // Sound pulse wave animation
-                float pulse = 1f + 0.22f * Mathf.Sin(Time.time * 16f);
-                noiseIcon.transform.localScale = Vector3.one * (1f + (_noiseIntensity * 0.3f * pulse));
-                noiseIcon.color = Color.Lerp(new Color(1f, 0.8f, 0.2f, 0.6f), new Color(1f, 0.15f, 0.15f, 1f), _noiseIntensity);
+                noiseIcon.transform.localScale = Vector3.one;
+                noiseIcon.color = HUDPresentationStyle.Warning;
             }
 
             string noiseDesc = isCarryMoving
-                ? "CẢNH BÁO TIẾNG ĐỘNG // VÁC NẶNG [BÁN KÍNH CAO]"
-                : "CẢNH BÁO TIẾNG ĐỘNG // BƯỚC CHẠY GÂY CHÚ Ý STALKER";
+                ? "Vác nặng · Dễ bị phát hiện"
+                : "Chạy gây tiếng động";
             SetText(noiseLabelTmp, noiseLabel, noiseDesc);
         }
 

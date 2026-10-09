@@ -38,10 +38,10 @@ namespace EchoProtocol.UI.HUD
 
             _targetAlpha = 1f;
             string targetLabel = spectateController.SpectateTargetLabel;
-            if (string.IsNullOrWhiteSpace(targetLabel)) targetLabel = "NO SIGNAL";
+            if (string.IsNullOrWhiteSpace(targetLabel)) targetLabel = "Không có tín hiệu";
 
-            SetText(titleTmp, titleText, $"SPECTATING: {targetLabel}");
-            SetText(hintTmp, hintText, "[LMB] Next Player");
+            SetText(titleTmp, titleText, $"Đang quan sát · {targetLabel}");
+            SetText(hintTmp, hintText, "[Chuột trái] Đổi người chơi");
             SetAlpha(Mathf.MoveTowards(GetAlpha(), _targetAlpha, fadeSpeed * Time.deltaTime));
         }
 
@@ -54,16 +54,16 @@ namespace EchoProtocol.UI.HUD
             rect.anchorMin = new Vector2(0.5f, 1f);
             rect.anchorMax = new Vector2(0.5f, 1f);
             rect.pivot = new Vector2(0.5f, 1f);
-            rect.anchoredPosition = new Vector2(0f, -68f);
-            rect.sizeDelta = new Vector2(460f, 96f);
+            rect.anchoredPosition = new Vector2(0f, -32f);
+            rect.sizeDelta = new Vector2(360f, 68f);
 
             var background = root.GetComponent<Image>();
             background.color = new Color(0.02f, 0.04f, 0.07f, 0.78f);
 
             var overlay = root.AddComponent<HUDSpectateOverlay>();
             overlay.canvasGroup = root.GetComponent<CanvasGroup>();
-            overlay.titleTmp = CreateText(root.transform, "Title", 0f, -18f, 24, FontStyles.Bold);
-            overlay.hintTmp = CreateText(root.transform, "Hint", 0f, -52f, 18, FontStyles.Normal);
+            overlay.titleTmp = CreateText(root.transform, "Title", 0f, -8f, 16, FontStyles.Normal);
+            overlay.hintTmp = CreateText(root.transform, "Hint", 0f, -34f, 12, FontStyles.Normal);
             overlay.SetAlpha(0f);
             return overlay;
         }
@@ -83,9 +83,8 @@ namespace EchoProtocol.UI.HUD
             text.alignment = TextAlignmentOptions.Center;
             text.fontSize = size;
             text.fontStyle = style;
-            text.color = name == "Title"
-                ? new Color(0.78f, 0.96f, 1f, 1f)
-                : new Color(1f, 0.74f, 0.2f, 1f);
+            text.color = name == "Title" ? HUDPresentationStyle.Ink : HUDPresentationStyle.Muted;
+            text.overflowMode = TextOverflowModes.Ellipsis;
             text.text = string.Empty;
             return text;
         }

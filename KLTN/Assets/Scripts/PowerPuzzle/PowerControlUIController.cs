@@ -41,7 +41,7 @@ public class PowerControlUIController : MonoBehaviour
     private bool _awaitingServerResult;
     private float _networkCooldownPresentationUntil;
     private float _ledFlashTimer;
-    private Color _ledFlashColor = new Color(0f, 0.9f, 1f, 1f);
+    private Color _ledFlashColor = EchoProtocol.UI.HUD.HUDPresentationStyle.Accent;
 
     public bool IsOpen => _isOpen;
     public bool IsInCooldown => TryGetNetworkMatchState(out var matchState)
@@ -234,6 +234,7 @@ public class PowerControlUIController : MonoBehaviour
 
         if (rootCanvas != null)
         {
+            EchoProtocol.UI.HUD.HUDModalPresentation.Apply(rootCanvas);
             rootCanvas.SetActive(true);
         }
 
@@ -295,7 +296,7 @@ public class PowerControlUIController : MonoBehaviour
         {
             if (feedbackText != null)
             {
-                feedbackText.text = "<color=#FFB300>MẬT MÃ PHẢI CÓ ĐỦ 4 CHỮ SỐ</color>";
+                feedbackText.text = "<color=#D8A85E>MẬT MÃ PHẢI CÓ ĐỦ 4 CHỮ SỐ</color>";
             }
             TriggerLedFlash(new Color(1f, 0.7f, 0.1f, 1f), 1.0f);
             EchoProtocol.Audio.GameAudioRuntime.UI("power_puzzle/wrong_input");
@@ -313,14 +314,14 @@ public class PowerControlUIController : MonoBehaviour
                 if (disposition == Zone2AccessSubmissionDisposition.Pending)
                 {
                     _awaitingServerResult = true;
-                    if (feedbackText != null) feedbackText.text = "<color=#00E5FF>VERIFYING // WAITING FOR AUTHORIZATION</color>";
-                    TriggerLedFlash(new Color(0f, 0.9f, 1f, 1f), 1.5f);
+                    if (feedbackText != null) feedbackText.text = "<color=#7EA6A4>Đang xác thực mã…</color>";
+                    TriggerLedFlash(EchoProtocol.UI.HUD.HUDPresentationStyle.Accent, 1.5f);
                     RefreshDisplay();
                 }
                 else if (disposition == Zone2AccessSubmissionDisposition.Rejected
                     && !networkMatchState.Object.HasStateAuthority)
                 {
-                    if (feedbackText != null) feedbackText.text = "<color=#FFB300>REQUEST REJECTED // STATE CHANGED</color>";
+                    if (feedbackText != null) feedbackText.text = "<color=#D8A85E>Trạng thái đã thay đổi · Thử lại</color>";
                     TriggerLedFlash(new Color(1f, 0.7f, 0.1f, 1f), 1.2f);
                     RefreshDisplay();
                 }
@@ -333,7 +334,7 @@ public class PowerControlUIController : MonoBehaviour
 
         if (networked)
         {
-            if (feedbackText != null) feedbackText.text = "<color=#FFB300>REQUEST REJECTED // STATE CHANGED</color>";
+            if (feedbackText != null) feedbackText.text = "<color=#D8A85E>Trạng thái đã thay đổi · Thử lại</color>";
             return;
         }
 
@@ -367,7 +368,7 @@ public class PowerControlUIController : MonoBehaviour
                 _consecutiveFails = 0;
                 if (feedbackText != null)
                 {
-                    feedbackText.text = "<color=#FF1744>ACCESS DENIED // HỆ THỐNG TẠM KHÓA 5 GIÂY</color>";
+                    feedbackText.text = "<color=#D0685F>Sai mã · Tạm khóa 5 giây</color>";
                 }
             }
             else
@@ -375,7 +376,7 @@ public class PowerControlUIController : MonoBehaviour
                 int remaining = 3 - _consecutiveFails;
                 if (feedbackText != null)
                 {
-                    feedbackText.text = $"<color=#FF1744>ACCESS DENIED // CÒN LẠI {remaining} LẦN THỬ</color>";
+                    feedbackText.text = $"<color=#D0685F>Sai mã · Còn {remaining} lượt thử</color>";
                 }
             }
         }
@@ -417,17 +418,17 @@ public class PowerControlUIController : MonoBehaviour
                 _inputBuffer.Clear();
                 EchoProtocol.Audio.GameAudioRuntime.UI("power_puzzle/wrong_input");
                 TriggerLedFlash(new Color(1f, 0.15f, 0.15f, 1f), 1.8f);
-                if (feedbackText != null) feedbackText.text = "<color=#FF1744>ACCESS DENIED</color>";
+                if (feedbackText != null) feedbackText.text = "<color=#D0685F>Không được cấp quyền</color>";
                 break;
             case Zone2NetworkCommandResult.Cooldown:
                 _networkCooldownPresentationUntil = Mathf.Max(
                     _networkCooldownPresentationUntil,
                     Time.unscaledTime + Mathf.Max(0f, response.CooldownSeconds));
                 TriggerLedFlash(new Color(1f, 0.55f, 0f, 1f), 2.0f);
-                if (feedbackText != null) feedbackText.text = "<color=#FF9100>HỆ THỐNG TẠM KHÓA // VUI LÒNG CHỜ</color>";
+                if (feedbackText != null) feedbackText.text = "<color=#D8A85E>Hệ thống tạm khóa · Vui lòng chờ</color>";
                 break;
             default:
-                if (feedbackText != null) feedbackText.text = "<color=#FFB300>REQUEST REJECTED // STATE CHANGED</color>";
+                if (feedbackText != null) feedbackText.text = "<color=#D8A85E>Trạng thái đã thay đổi · Thử lại</color>";
                 break;
         }
         RefreshDisplay();
@@ -471,7 +472,7 @@ public class PowerControlUIController : MonoBehaviour
 
         if (headerTitleText != null)
         {
-            headerTitleText.text = "ZONE ACCESS AUTHORIZATION";
+            headerTitleText.text = "Mở cửa khu vực";
         }
 
         if (online)
@@ -482,7 +483,7 @@ public class PowerControlUIController : MonoBehaviour
 
             if (statusBannerText != null)
             {
-                statusBannerText.text = "<color=#00E676>ACCESS GRANTED // ZONE DOORS UNLOCKED</color>";
+                statusBannerText.text = "<color=#86AD91>Đã mở cửa khu vực</color>";
             }
             if (_ledFlashTimer <= 0f && statusLed != null)
             {
@@ -498,7 +499,7 @@ public class PowerControlUIController : MonoBehaviour
 
             if (statusBannerText != null)
             {
-                statusBannerText.text = "<color=#FF1744>LOCKED // SECURITY AUTHORIZATION REQUIRED</color>";
+                statusBannerText.text = "<color=#D0685F>Cần xác thực tại Security Terminal</color>";
             }
             if (_ledFlashTimer <= 0f && statusLed != null)
             {
@@ -517,7 +518,7 @@ public class PowerControlUIController : MonoBehaviour
                 int sec = Mathf.CeilToInt(CooldownRemaining);
                 if (statusBannerText != null)
                 {
-                    statusBannerText.text = $"<color=#FF9100>HỆ THỐNG TẠM KHÓA // CHỜ ({sec}s)</color>";
+                    statusBannerText.text = $"<color=#D8A85E>Tạm khóa · Còn {sec} giây</color>";
                 }
                 if (_ledFlashTimer <= 0f && statusLed != null)
                 {
@@ -529,7 +530,7 @@ public class PowerControlUIController : MonoBehaviour
             {
                 if (statusBannerText != null)
                 {
-                    statusBannerText.text = "<color=#00E5FF>AUTHORIZATION AVAILABLE // ENTER ACCESS CODE</color>";
+                    statusBannerText.text = "<color=#7EA6A4>Nhập mã xác thực để mở cửa</color>";
                 }
                 if (_ledFlashTimer <= 0f && statusLed != null)
                 {
@@ -551,7 +552,7 @@ public class PowerControlUIController : MonoBehaviour
         string d2 = _inputBuffer.Length > 2 ? _inputBuffer[2].ToString() : "_";
         string d3 = _inputBuffer.Length > 3 ? _inputBuffer[3].ToString() : "_";
 
-        codeSlotsText.text = $"[ <color=#00FF99><b>{d0}</b></color> ]   [ <color=#00FF99><b>{d1}</b></color> ]   [ <color=#00FF99><b>{d2}</b></color> ]   [ <color=#00FF99><b>{d3}</b></color> ]";
+        codeSlotsText.text = $"{d0}    {d1}    {d2}    {d3}";
     }
 
     private void SetKeypadInteractable(bool interactable)

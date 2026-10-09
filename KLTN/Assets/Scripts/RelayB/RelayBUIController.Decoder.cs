@@ -219,18 +219,18 @@ namespace EchoProtocol.RelayB
             if (resetInputButton != null) { resetInputButton.gameObject.SetActive(stage2 && !state.IsComplete); resetInputButton.interactable = edit; }
             if (transmitButton != null) transmitButton.gameObject.SetActive(!state.IsComplete);
             if (decodeContinue != null) decodeContinue.gameObject.SetActive(state.IsComplete);
-            string notice = state.Phase == RelayBDecodePhase.Failed ? "OUT OF ATTEMPTS - NEW CODE NEXT"
-                : state.Phase == RelayBDecodePhase.Solved || state.IsComplete ? "SIGNAL DECODED"
+            string notice = state.Phase == RelayBDecodePhase.Failed ? "Hết lượt thử · Chờ mã mới"
+                : state.Phase == RelayBDecodePhase.Solved || state.IsComplete ? "Đã giải mã"
                 : state.Phase == RelayBDecodePhase.Transmitting ? "TRANSMITTING"
-                : state.Phase == RelayBDecodePhase.Revealing || state.Phase == RelayBDecodePhase.Holding ? "READING SIGNAL"
-                : $"6 UNIQUE DIGITS / {RelayBDecoder.MaxAttempts - state.Attempts} ATTEMPTS LEFT";
+                : state.Phase == RelayBDecodePhase.Revealing || state.Phase == RelayBDecodePhase.Holding ? "Đang đọc tín hiệu"
+                : $"6 chữ số khác nhau · Còn {RelayBDecoder.MaxAttempts - state.Attempts} lượt";
             SetText(decodeNotice, notice);
-            if (decodeNotice != null) { decodeNotice.enableAutoSizing = true; decodeNotice.fontSizeMin = 10f; }
+            if (decodeNotice != null) { decodeNotice.enableAutoSizing = true; decodeNotice.fontSizeMin = 12f; }
             if (processingTabPanel != null)
             {
-                RefreshDecodeLegend("LegendRight", "RIGHT\nCORRECT POSITION");
-                RefreshDecodeLegend("LegendPlace", "PLACE\nMOVE THIS DIGIT");
-                RefreshDecodeLegend("LegendUnused", "UNUSED\nNOT IN CODE");
+                RefreshDecodeLegend("LegendRight", "Đúng số\nĐúng vị trí");
+                RefreshDecodeLegend("LegendPlace", "Đúng số\nSai vị trí");
+                RefreshDecodeLegend("LegendUnused", "Không có\ntrong mã");
             }
             if (decodeNotice != null) decodeNotice.color = state.Phase == RelayBDecodePhase.Failed ? dangerColor
                 : state.IsComplete || state.Phase == RelayBDecodePhase.Solved ? safeColor : offlineColor;
@@ -269,7 +269,7 @@ namespace EchoProtocol.RelayB
             if (label == null) return;
             label.text = explanation;
             label.enableAutoSizing = true;
-            label.fontSizeMin = 9f;
+            label.fontSizeMin = 12f;
             label.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 36f);
         }
 
