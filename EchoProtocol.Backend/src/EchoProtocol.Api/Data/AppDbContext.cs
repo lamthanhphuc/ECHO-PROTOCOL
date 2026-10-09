@@ -653,8 +653,14 @@ public class AppDbContext : DbContext
             entity.Property(e => e.ProfileNoiseFilterVersion).HasMaxLength(80);
             entity.Property(e => e.ToolUsageNormalizationVersion).HasMaxLength(80);
             entity.Property(e => e.AlphaConfigVersion).IsRequired().HasMaxLength(80);
-            entity.Property(e => e.SurvivalScore).HasPrecision(9, 6).HasDefaultValue(50m);
-            entity.Property(e => e.NoiseScore).HasPrecision(9, 6).HasDefaultValue(50m);
+            entity.Property(e => e.SurvivalScore)
+                .HasPrecision(9, 6)
+                .HasDefaultValue(50m)
+                .ValueGeneratedNever();
+            entity.Property(e => e.NoiseScore)
+                .HasPrecision(9, 6)
+                .HasDefaultValue(50m)
+                .ValueGeneratedNever();
             entity.Property(e => e.SurvivalStatus).HasConversion<string>().HasMaxLength(20);
             entity.Property(e => e.NoiseStatus).HasConversion<string>().HasMaxLength(20);
             entity.Property(e => e.ObjectiveScore).HasPrecision(9, 6);

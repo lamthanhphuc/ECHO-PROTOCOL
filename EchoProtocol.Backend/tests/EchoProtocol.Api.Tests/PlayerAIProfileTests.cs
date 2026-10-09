@@ -226,6 +226,44 @@ public sealed class PlayerAIProfileTests
     }
 
     [Fact, Trait("Category", "M4PlayerAIProfile")]
+    public async Task FirstLoss_PersistsZeroSurvivalScore()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync();
+
+        var updater = fixture.CreateUpdater(
+            Aggregation(
+                fixture.MatchId,
+                fixture.UserId,
+                EndedAt,
+                0m,
+                1m));
+
+        var result = await updater.ProcessAsync(
+            fixture.MatchId,
+            fixture.UserId);
+
+        Assert.True(result.IsSuccess, result.Message);
+
+        fixture.Db.ChangeTracker.Clear();
+
+        var profile = await fixture.Db.PlayerAIProfiles
+            .AsNoTracking()
+            .SingleAsync();
+
+        Assert.Equal(0m, profile.SurvivalScore);
+        Assert.Equal(ProfileDimensionStatus.Active, profile.SurvivalStatus);
+        Assert.Equal(1, profile.SurvivalSampleCount);
+
+        var receipt = await fixture.Db.MatchScores
+            .AsNoTracking()
+            .SingleAsync(x =>
+                x.MatchId == fixture.MatchId &&
+                x.Dimension == PlayerAIDimension.Survival);
+
+        Assert.Equal(0m, receipt.Score);
+    }
+
+    [Fact, Trait("Category", "M4PlayerAIProfile")]
     public async Task ExpandedDimensions_ReplayIntoIndependentProfileFields()
     {
         await using var fixture = await ProfileFixture.CreateAsync();

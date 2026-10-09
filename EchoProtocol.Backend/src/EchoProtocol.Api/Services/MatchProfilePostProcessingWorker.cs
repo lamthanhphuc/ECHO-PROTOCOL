@@ -67,7 +67,7 @@ public sealed class MatchProfilePostProcessingWorker(
 
             var updater = scope.ServiceProvider.GetRequiredService<IPlayerAIProfileUpdater>();
             var users = await db.MatchPlayerBindings.AsNoTracking().Where(item => item.MatchId == job.MatchId)
-                .Select(item => item.UserId).Distinct().Order().ToListAsync(ct);
+                .Select(item => item.UserId).Distinct().OrderBy(userId => userId).ToListAsync(ct);
             foreach (var userId in users)
             {
                 var updated = await updater.ProcessAsync(job.MatchId, userId, ct);

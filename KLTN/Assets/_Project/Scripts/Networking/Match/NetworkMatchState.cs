@@ -2340,6 +2340,41 @@ namespace EchoProtocol.Networking
                 rosterEvidence.TryGetValue(userId, out var player)
                 && (player.DownCount > 0 || player.EliminatedCount > 0));
             var rosterSafety = new AEDv2RosterSafety(allObserved, anyStruggling);
+            var stalkerDiag = FindAnyObjectByType<
+                EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
+
+            var playerUnsafe = false;
+            foreach (var player in Runner.ActivePlayers)
+            {
+                if (Runner.TryGetPlayerObject(player, out var playerObject)
+                    && playerObject.TryGetComponent<NetworkPlayerLifeState>(out var life)
+                    && (life.IsDowned || life.IsReviveInProgress))
+                {
+                    playerUnsafe = true;
+                    break;
+                }
+            }
+
+            Debug.LogWarning(
+                $"[AED_V2][BOUNDARY_DIAG] " +
+                $"safe={safe} " +
+                $"stalkerState={stalkerDiag?.ReplicatedState} " +
+                $"special={stalkerDiag?.ReplicatedSpecialPhaseValue} " +
+                $"playerUnsafe={playerUnsafe} " +
+                $"complete={evidence?.TelemetryCompleteness} " +
+                $"fingerprintValid={evidence?.HasValidFingerprint()} " +
+                $"matchOk={evidence?.MatchId == matchId} " +
+                $"rosterOk={evidence?.RosterIdentity == runtime.AEDv2RosterIdentity} " +
+                $"ordinal={evidence?.PhaseOrdinal}/{nextOrdinal} " +
+                $"elapsed={evidence?.ElapsedSeconds:F1} " +
+                $"alive={evidence?.AlivePlayers} " +
+                $"noise={evidence?.AcceptedNoiseCount} " +
+                $"downs={evidence?.DownCount} " +
+                $"eliminated={evidence?.EliminatedCount} " +
+                $"objectives={evidence?.ObjectiveProgress} " +
+                $"bounded={previous.IsBounded()} " +
+                $"reasons={string.Join(",", evidence?.ReasonCodes ?? Array.Empty<string>())}"
+            );
             var proposed = AEDv2BoundaryPolicy.TryPropose(previous, evidence,
                 matchId, runtime.AEDv2RosterIdentity, nextOrdinal, safe, point,
                 out var nextPlan, out var key, out var reason, rosterSafety);
