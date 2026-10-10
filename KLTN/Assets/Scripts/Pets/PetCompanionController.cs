@@ -53,7 +53,7 @@ public sealed class PetCompanionController : MonoBehaviour {
   _previousOwnerPosition=transform.position;
   if (!_initialized || ownerTeleported || _stuckTime>=8f) {
    if(!NavMesh.SamplePosition(target,out var reset,2f,NavMesh.AllAreas)) {
-    if(!Physics.Raycast(target+Vector3.up*1.5f,Vector3.down,out var hit,4f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)) {
+    if(!GameplayEnvironmentPhysics.Raycast(target+Vector3.up*1.5f,Vector3.down,out var hit,4f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)) {
      _owner.SetPetPose(target,transform.rotation,PetMotion.Hidden);return;
     } _ground=hit.point;
    } else _ground=reset.position;
@@ -64,8 +64,8 @@ public sealed class PetCompanionController : MonoBehaviour {
    if(NavMesh.SamplePosition(target,out var navGoal,2f,NavMesh.AllAreas) && NavMesh.SamplePosition(_ground,out var navStart,1f,NavMesh.AllAreas)
     && NavMesh.CalculatePath(navStart.position,navGoal.position,NavMesh.AllAreas,_path) && _path.status==NavMeshPathStatus.PathComplete) {
     foreach(var corner in _path.corners) if(Vector3.Distance(corner,_ground)>0.2f){_goal=corner;break;}
-   } else if(!Physics.Linecast(_ground+Vector3.up*0.2f,target+Vector3.up*0.2f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)
-    && Physics.Raycast(target+Vector3.up,Vector3.down,out var floor,2f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)) _goal=floor.point;
+   } else if(!GameplayEnvironmentPhysics.Linecast(_ground+Vector3.up*0.2f,target+Vector3.up*0.2f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)
+    && GameplayEnvironmentPhysics.Raycast(target+Vector3.up,Vector3.down,out var floor,2f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)) _goal=floor.point;
   }
   float distance=Vector3.Distance(_ground,target);
   bool moving=Vector3.Distance(_ground,_goal)>(_isFollowing ? 0.1f : 0.18f) && distance>(_isFollowing ? 0.4f : 0.8f);
@@ -117,8 +117,8 @@ public sealed class PetCompanionController : MonoBehaviour {
    var origin=_ground+Vector3.up*(0.2f+_height);
    var displacement=next-_ground;
    bool blocked=_height>0.1f
-    ? Physics.SphereCast(origin,0.25f,displacement.normalized,out _,displacement.magnitude,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)
-    : Physics.Linecast(origin,next+Vector3.up*0.2f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore);
+    ? GameplayEnvironmentPhysics.SphereCast(origin,0.25f,displacement.normalized,out _,displacement.magnitude,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)
+    : GameplayEnvironmentPhysics.Linecast(origin,next+Vector3.up*0.2f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore);
    if(!blocked) _ground=next;
   }
   _stuckTime=distance>10f && Vector3.Distance(_ground,previous)<0.001f ? _stuckTime+dt : 0f;
@@ -137,8 +137,8 @@ public sealed class PetCompanionController : MonoBehaviour {
   return 1f;
  }
  private static bool IsOneShot(PetMotion motion)=>motion==PetMotion.TakeOff || motion==PetMotion.Land || motion==PetMotion.Jump;
- private bool ClearFlight()=>!Physics.CheckCapsule(_ground+Vector3.up*0.4f,_ground+Vector3.up*1.3f,0.3f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore);
- private bool SafeLanding()=>Physics.Raycast(_ground+Vector3.up*0.3f,Vector3.down,0.6f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore);
+ private bool ClearFlight()=>!GameplayEnvironmentPhysics.CheckCapsule(_ground+Vector3.up*0.4f,_ground+Vector3.up*1.3f,0.3f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore);
+ private bool SafeLanding()=>GameplayEnvironmentPhysics.Raycast(_ground+Vector3.up*0.3f,Vector3.down,0.6f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore);
  private void LateUpdate() {
   if(_owner==null || _owner.Object==null || !_owner.Object.IsValid)return;
   if(_catalog==null){if(Time.unscaledTime<_nextRetry)return;_nextRetry=Time.unscaledTime+1;_catalog=Resources.Load<PetCatalog>("Pets/PetCatalog");if(_catalog==null)return;}
@@ -202,7 +202,7 @@ public sealed class PetCompanionController : MonoBehaviour {
   if(motion==PetMotion.TakeOff)desiredGrounding=_takeOffGroundingOffset*(1f-transitionProgress);
   if((grounded || motion==PetMotion.Land) && _hasRestFootHeight) {
    float floorY=posePosition.y;
-   if(Physics.Raycast(posePosition+Vector3.up*0.6f,Vector3.down,out var hit,1.6f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore))floorY=hit.point.y;
+   if(GameplayEnvironmentPhysics.Raycast(posePosition+Vector3.up*0.6f,Vector3.down,out var hit,1.6f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore))floorY=hit.point.y;
    {
     // Restore floor contact gradually during landing, instead of at its final frame.
     float flightHeight=motion==PetMotion.Land ? 0.7f*(1f-transitionProgress) : 0f;

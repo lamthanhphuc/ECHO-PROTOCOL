@@ -100,6 +100,8 @@ public static class PlayerAnimatorSetupBuilder
         AnimationClip revive = LoadRequiredClip("Player_Revive", ReviveFbxPath, "Reviving");
         AnimationClip pushing = LoadRequiredClip("Player_Pushing", PushFbxPath, "Pushing");
 
+        walkForward = AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/Resources/Characters/a_Walking_Jammo_Humanoid.anim") ?? walkForward;
+        runForward = AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/Resources/Characters/a_Running_Jammo_Humanoid.anim") ?? runForward;
         PlayerClips clips = new PlayerClips
         {
             Idle = idle,
@@ -143,9 +145,17 @@ public static class PlayerAnimatorSetupBuilder
     {
         ClearEditorSelection();
 
-        if (AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath) != null)
+        var existing = AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath);
+        if (existing != null)
         {
-            AssetDatabase.DeleteAsset(ControllerPath);
+            // Preserve the controller GUID used by prefabs and the Jammo override.
+            existing.layers = System.Array.Empty<AnimatorControllerLayer>();
+            existing.parameters = System.Array.Empty<AnimatorControllerParameter>();
+            foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(ControllerPath))
+                if (asset != null && asset != existing) Object.DestroyImmediate(asset, true);
+            existing.AddLayer("Base Layer");
+            EditorUtility.SetDirty(existing);
+            return existing;
         }
 
         return AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
@@ -161,6 +171,8 @@ public static class PlayerAnimatorSetupBuilder
         }
 
         controller.AddParameter("Speed", AnimatorControllerParameterType.Float);
+        controller.AddParameter(new AnimatorControllerParameter { name = "LocomotionRate",
+            type = AnimatorControllerParameterType.Float, defaultFloat = 1f });
         controller.AddParameter("MoveX", AnimatorControllerParameterType.Float);
         controller.AddParameter("MoveY", AnimatorControllerParameterType.Float);
         controller.AddParameter("IsMoving", AnimatorControllerParameterType.Bool);
@@ -206,6 +218,35 @@ public static class PlayerAnimatorSetupBuilder
         AddAnyBoolTransition(stateMachine, pushing, true, "IsPushing");
         AddBoolTransition(pushing, locomotion, false, "IsPushing");
         AddBoolTransition(pushing, reviving, true, "IsReviving");
+        var mask = AssetDatabase.LoadAssetAtPath<AvatarMask>(AnimationFolder + "/CarryLegs.mask");
+        if (mask == null)
+        {
+            mask = new AvatarMask { name = "CarryLegs" };
+            AssetDatabase.CreateAsset(mask, AnimationFolder + "/CarryLegs.mask");
+        }
+        for (int i = 0; i < (int)AvatarMaskBodyPart.LastBodyPart; i++)
+            mask.SetHumanoidBodyPartActive((AvatarMaskBodyPart)i, i == (int)AvatarMaskBodyPart.Body
+                || i == (int)AvatarMaskBodyPart.LeftLeg || i == (int)AvatarMaskBodyPart.RightLeg);
+        EditorUtility.SetDirty(mask);
+        controller.AddLayer("Carry Legs");
+        var allLayers = controller.layers;
+        var legLayer = allLayers[allLayers.Length - 1];
+        legLayer.avatarMask = mask;
+        legLayer.defaultWeight = 0;
+        legLayer.iKPass = false;
+        var legs = CreateDirectionalTree(controller, "BT_CarryLegs");
+        AddChild(legs, clips.Idle, Vector2.zero);
+        AddChild(legs, clips.WalkForward, Vector2.up);
+        AddChild(legs, clips.WalkBackward, Vector2.down);
+        AddChild(legs, clips.WalkLeft, Vector2.left);
+        AddChild(legs, clips.WalkRight, Vector2.right);
+        AddChild(legs, clips.RunForward, Vector2.up * 2);
+        var legState = AddState(legLayer.stateMachine, "Carry Legs", legs, Vector3.zero);
+        legLayer.stateMachine.defaultState = legState;
+        allLayers[allLayers.Length - 1] = legLayer;
+        controller.layers = allLayers;
+        foreach (var state in new[] { locomotion, runForward, crouch, legState })
+        { state.speedParameter = "LocomotionRate"; state.speedParameterActive = true; }
     }
 
     private static Motion CreateLocomotionTree(AnimatorController controller, PlayerClips clips)

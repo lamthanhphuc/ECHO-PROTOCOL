@@ -46,6 +46,9 @@ public class PlayerAnimatorDriver : MonoBehaviour
     private bool _isHoldingDownedIdlePose;
     private float _animatorSpeedBeforeDownedIdlePose = 1f;
     private bool _externalPushing;
+    private Vector3 _lastAnimationPosition;
+    private bool _hasAnimationPosition;
+    private float _locomotionRate = 1f;
 
     private void Awake()
     {
@@ -83,7 +86,8 @@ public class PlayerAnimatorDriver : MonoBehaviour
         if (networkLifeState == null) networkLifeState = GetComponent<NetworkPlayerLifeState>() ?? GetComponentInParent<NetworkPlayerLifeState>();
         if (downState == null) downState = GetComponent<PlayerDownState>() ?? GetComponentInParent<PlayerDownState>();
 
-        bool isCarryingCore = (coreCarrier != null && coreCarrier.IsCarrying)
+        bool isCarryingCore = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null
+            || (coreCarrier != null && coreCarrier.IsCarrying)
             || (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid);
         bool useCarryPose = isCarryingCore || IsHoldingCoreStabilizer();
         bool isCrouching = !useCarryPose && (movement != null
@@ -156,13 +160,38 @@ public class PlayerAnimatorDriver : MonoBehaviour
         animator.SetBool(IsCarryingHash, useCarryPose);
         animator.SetBool(IsPushingHash, isPushing);
         animator.SetBool(IsDownedHash, isDowned);
+        float distance = _hasAnimationPosition ? Vector3.ProjectOnPlane(transform.position - _lastAnimationPosition, Vector3.up).magnitude : 0f;
+        _lastAnimationPosition = transform.position;
+        _hasAnimationPosition = true;
+        float referenceSpeed = isSprinting && moveDirection.y > 1.1f ? runSpeedReference
+            : isCrouching ? walkSpeedReference * 0.55f : walkSpeedReference;
+        float rate = isMoving && Time.deltaTime > 0.001f && distance < 2f
+            ? Mathf.Clamp(distance / Time.deltaTime / Mathf.Max(0.1f, referenceSpeed), 0.65f, 2.2f) : 1f;
+        _locomotionRate = Mathf.Lerp(_locomotionRate, rate, 1f - Mathf.Exp(-Time.deltaTime / 0.12f));
+        animator.SetFloat("LocomotionRate", _locomotionRate);
+        int carryLegLayer = animator.GetLayerIndex("Carry Legs");
+        if (carryLegLayer >= 0)
+        {
+            // Override legs only; retain the original carry clip and hand posing above the hips.
+            float targetWeight = (useCarryPose || isSprinting) && !isCrouching
+                && !isDowned && !IsReviving && !isPushing ? 1f : 0f;
+            float weight = Mathf.MoveTowards(animator.GetLayerWeight(carryLegLayer), targetWeight,
+                Time.deltaTime / 0.18f);
+            animator.SetLayerWeight(carryLegLayer, weight);
+        }
         SetDownedIdlePoseHold(isDowned && !isMoving && !IsReviving);
     }
 
     private void OnDisable()
     {
         _wasSprinting = false;
+        _hasAnimationPosition = false;
         _smoothedSpeed = 0f;
+        if (animator != null && animator.runtimeAnimatorController != null)
+        {
+            int layer = animator.GetLayerIndex("Carry Legs");
+            if (layer >= 0) animator.SetLayerWeight(layer, 0f);
+        }
         SetDownedIdlePoseHold(false);
     }
 
@@ -310,11 +339,9 @@ public class PlayerAnimatorDriver : MonoBehaviour
 
         input = input.sqrMagnitude > 1f ? input.normalized : input;
 
-        if (isSprinting && !isCarrying && !isDowned)
-        {
-            return Vector2.up;
-        }
-
+        // Keep lateral/backward direction during sprint; the shared leg tree has its run at y = 2.
+        if (isSprinting && !isDowned && input.y > 0f)
+            input.y *= 2f;
         return input;
     }
 }

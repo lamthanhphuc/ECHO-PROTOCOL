@@ -18,8 +18,13 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     [Header("Sprint Leg Anti-Cross")]
     [SerializeField, Min(0f)] private float sprintFootHalfSpacing = 0.09f;
     [SerializeField, Range(0f, 1f)] private float sprintLegCorrectionWeight = 0.85f;
-    [SerializeField, Min(0f)] private float sprintKneePoleForwardOffset = 0.45f;
-    [SerializeField, Min(0f)] private float sprintKneePoleSideOffset = 0.12f;
+    private Vector2 _legSeparationOffset;
+    private Vector2 _legSeparationVelocity;
+    private Avatar _footAvatar;
+    private Quaternion _leftSoleBasis;
+    private Quaternion _rightSoleBasis;
+    private readonly RaycastHit[] _footGroundHits = new RaycastHit[8];
+    private Vector3 _leftGroundNormal = Vector3.up, _rightGroundNormal = Vector3.up;
 
     [Header("Carry (Two-Hand) Pose")]
     [SerializeField] private float carryForwardOffset = 0.30f;
@@ -86,6 +91,73 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
         ApplyArmPosingInLateUpdate();
         ApplySprintLegSeparation();
+        StabilizeFootOrientation();
+    }
+
+    private void StabilizeFootOrientation()
+    {
+        if (animator == null || !animator.isHuman || animator.avatar == null || !animator.avatar.isValid
+            || IsDowned() || IsReviving() || IsPushing()) return;
+        Transform left = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
+        Transform right = animator.GetBoneTransform(HumanBodyBones.RightFoot);
+        if (left == null || right == null) return;
+        if (_footAvatar != animator.avatar)
+        {
+            // Read the avatar's neutral skeleton, not the current (possibly already tilted) frame.
+            _leftSoleBasis = GetNeutralSoleBasis(left);
+            _rightSoleBasis = GetNeutralSoleBasis(right);
+            _footAvatar = animator.avatar;
+        }
+        StabilizeFoot(left, _leftSoleBasis, ref _leftGroundNormal);
+        StabilizeFoot(right, _rightSoleBasis, ref _rightGroundNormal);
+    }
+
+    private Quaternion GetNeutralSoleBasis(Transform foot)
+    {
+        Quaternion rotation = Quaternion.identity;
+        var skeleton = animator.avatar.humanDescription.skeleton;
+        // Follow actual parents while reading neutral rotations from the avatar description.
+        for (Transform current = foot; current != null && current != animator.transform; current = current.parent)
+        {
+            int index = System.Array.FindIndex(skeleton, bone => bone.name == current.name);
+            if (index < 0) continue;
+            rotation = skeleton[index].rotation * rotation;
+        }
+        return Quaternion.Inverse(rotation);
+    }
+
+    private void StabilizeFoot(Transform foot, Quaternion soleBasis, ref Vector3 smoothedNormal)
+    {
+        Transform root = playerRoot != null ? playerRoot : transform;
+        Vector3 up = root.up;
+        Quaternion sole = foot.rotation * soleBasis;
+        Vector3 forward = sole * Vector3.forward;
+        Vector3 flatForward = Vector3.ProjectOnPlane(forward, up);
+        if (flatForward.sqrMagnitude < 0.001f) flatForward = root.forward;
+        float yaw = Mathf.Clamp(Vector3.SignedAngle(root.forward, flatForward, up), -45f, 45f);
+        Vector3 heading = Quaternion.AngleAxis(yaw, up) * root.forward;
+        Vector3 normal = up;
+        float clearance = float.PositiveInfinity;
+        int count = Physics.RaycastNonAlloc(foot.position + up * 0.15f, -up, _footGroundHits,
+            0.5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+        {
+            var hit = _footGroundHits[i];
+            if (!GameplayEnvironmentPhysics.IsEnvironment(hit.collider)
+                || hit.transform == root || hit.transform.IsChildOf(root)
+                || Vector3.Dot(hit.normal, up) < 0.65f) continue;
+            float distance = hit.distance - 0.15f;
+            if (distance < clearance) { clearance = distance; normal = hit.normal; }
+        }
+        smoothedNormal = Vector3.Slerp(smoothedNormal, normal, 1f - Mathf.Exp(-Time.deltaTime / 0.12f)).normalized;
+        normal = smoothedNormal;
+        heading = Vector3.ProjectOnPlane(heading, normal).normalized;
+        Quaternion level = Quaternion.LookRotation(heading, normal);
+        // Keep a heel/toe lift in mid-step; planted feet have a smaller allowed tilt.
+        float plant = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.02f, 0.14f, clearance));
+        float maxTilt = Mathf.Lerp(35f, 12f, plant);
+        Quaternion boundedSole = Quaternion.RotateTowards(level, sole, maxTilt);
+        foot.rotation = boundedSole * Quaternion.Inverse(soleBasis);
     }
 
     private void OnAnimatorIK(int layerIndex)
@@ -222,9 +294,12 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             || IsDowned()
             || IsPushing()
             || animator.GetBool(IsCrouchingHash)
+            || Mathf.Abs(animator.GetFloat("MoveX")) > 0.15f
             || !animator.GetBool(IsMovingHash)
             || !animator.GetBool(IsSprintingHash))
         {
+            _legSeparationOffset = Vector2.zero;
+            _legSeparationVelocity = Vector2.zero;
             return;
         }
 
@@ -247,8 +322,15 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         Vector3 leftLocal = root.InverseTransformPoint(leftFoot.position);
         Vector3 rightLocal = root.InverseTransformPoint(rightFoot.position);
 
-        bool fixLeft = leftLocal.x > -sprintFootHalfSpacing;
-        bool fixRight = rightLocal.x < sprintFootHalfSpacing;
+        // Smooth the displacement, rather than switching a strong solver weight at a threshold.
+        // Limit correction to a small clearance so the authored gait remains intact.
+        Vector2 desiredOffset = new Vector2(
+            Mathf.Clamp(-sprintFootHalfSpacing - leftLocal.x, -0.06f, 0f),
+            Mathf.Clamp(sprintFootHalfSpacing - rightLocal.x, 0f, 0.06f));
+        _legSeparationOffset = Vector2.SmoothDamp(_legSeparationOffset, desiredOffset,
+            ref _legSeparationVelocity, 0.12f, Mathf.Infinity, Time.deltaTime);
+        bool fixLeft = Mathf.Abs(_legSeparationOffset.x) > 0.0001f;
+        bool fixRight = Mathf.Abs(_legSeparationOffset.y) > 0.0001f;
 
         if (!fixLeft && !fixRight)
         {
@@ -257,14 +339,13 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
         if (fixLeft)
         {
-            leftLocal.x = -sprintFootHalfSpacing;
+            leftLocal.x += _legSeparationOffset.x;
 
             Vector3 leftTarget = root.TransformPoint(leftLocal);
             Vector3 leftPole =
-                leftUpper.position
-                + root.forward * sprintKneePoleForwardOffset
-                - root.right * sprintKneePoleSideOffset;
+                leftLower.position + root.forward * 0.05f;
 
+            Quaternion footRotation = leftFoot.rotation;
             SolveTwoBoneIK(
                 leftUpper,
                 leftLower,
@@ -272,18 +353,18 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
                 leftTarget,
                 leftPole,
                 sprintLegCorrectionWeight);
+            leftFoot.rotation = footRotation;
         }
 
         if (fixRight)
         {
-            rightLocal.x = sprintFootHalfSpacing;
+            rightLocal.x += _legSeparationOffset.y;
 
             Vector3 rightTarget = root.TransformPoint(rightLocal);
             Vector3 rightPole =
-                rightUpper.position
-                + root.forward * sprintKneePoleForwardOffset
-                + root.right * sprintKneePoleSideOffset;
+                rightLower.position + root.forward * 0.05f;
 
+            Quaternion footRotation = rightFoot.rotation;
             SolveTwoBoneIK(
                 rightUpper,
                 rightLower,
@@ -291,6 +372,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
                 rightTarget,
                 rightPole,
                 sprintLegCorrectionWeight);
+            rightFoot.rotation = footRotation;
         }
     }
 
