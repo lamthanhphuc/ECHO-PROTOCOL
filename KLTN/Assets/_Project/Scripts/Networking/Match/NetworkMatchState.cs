@@ -531,7 +531,10 @@ namespace EchoProtocol.Networking
 
             if (MatchTimer.Expired(Runner))
             {
-                TryEndMatch(NetworkMatchResult.Lose, NetworkMatchEndReason.MatchTimeout, PlayerRef.None);
+                CountFinalPlayers(out var escapedPlayers, out _, out _);
+                TryEndMatch(escapedPlayers > 0 ? NetworkMatchResult.Win : NetworkMatchResult.Lose,
+                    escapedPlayers > 0 ? NetworkMatchEndReason.PlayerEscaped : NetworkMatchEndReason.MatchTimeout,
+                    PlayerRef.None);
                 return;
             }
 
