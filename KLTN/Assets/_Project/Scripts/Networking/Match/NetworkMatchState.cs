@@ -2348,6 +2348,11 @@ namespace EchoProtocol.Networking
                 runtime.LastFrozenAEDv2PlayerEvidence);
             var stalkerDiag = FindAnyObjectByType<
                 EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
+            var stalkerUnsafe = stalkerDiag == null
+                || stalkerDiag.ReplicatedSpecialPhaseValue != 0
+                || stalkerDiag.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.CHASE
+                || stalkerDiag.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.ATTACK
+                || stalkerDiag.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.RECOVER;
 
             var playerUnsafe = false;
             foreach (var player in Runner.ActivePlayers)
@@ -2360,6 +2365,13 @@ namespace EchoProtocol.Networking
                     break;
                 }
             }
+
+            var holdContext = new AEDv2BoundaryHoldContext
+            {
+                StalkerUnsafeState = stalkerUnsafe,
+                PlayerDownedOrReviving = playerUnsafe,
+                ExpectedPhaseName = completedPhase
+            };
 
             Debug.LogWarning(
                 $"[AED_V2][BOUNDARY_DIAG] " +
@@ -2383,7 +2395,8 @@ namespace EchoProtocol.Networking
             );
             var proposed = AEDv2BoundaryPolicy.TryPropose(previous, evidence,
                 matchId, runtime.AEDv2RosterIdentity, nextOrdinal, safe, point,
-                out var nextPlan, out var key, out var reason, rosterSafety);
+                out var nextPlan, out var key, out var reason, rosterSafety,
+                holdContext);
             if (!proposed || BackendAdaptiveInputSnapshotProvider.Current == null)
             {
                 _aedv2Boundary.Hold(proposed ? "AED_V2_SNAPSHOT_UNAVAILABLE" : reason);
@@ -2607,17 +2620,25 @@ namespace EchoProtocol.Networking
                     && !settings.ExtendedPolicyGameplayEnabled)) return;
 
             var safe = true;
+            var stalkerUnsafe = false;
+            var playerUnsafe = false;
             var stalker = FindAnyObjectByType<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
             if (stalker == null || stalker.ReplicatedSpecialPhaseValue != 0
                 || stalker.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.CHASE
                 || stalker.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.ATTACK
                 || stalker.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.RECOVER)
+            {
                 safe = false;
+                stalkerUnsafe = true;
+            }
             foreach (var player in Runner.ActivePlayers)
                 if (Runner.TryGetPlayerObject(player, out var playerObject)
                     && playerObject.TryGetComponent<NetworkPlayerLifeState>(out var life)
                     && (life.IsDowned || life.IsReviveInProgress))
+                {
                     safe = false;
+                    playerUnsafe = true;
+                }
 
             var previous = AEDv2Authority.TryGetApplied(authority.MatchId,
                 out var applied, out _) ? applied : AEDv2Plan.Normal();
@@ -2627,12 +2648,18 @@ namespace EchoProtocol.Networking
             var rosterSafety = AEDv2RosterSafety.FromEvidence(
                 authority.AEDv2BoundUserIds,
                 authority.LastFrozenAEDv2PlayerEvidence);
+            var holdContext = new AEDv2BoundaryHoldContext
+            {
+                StalkerUnsafeState = stalkerUnsafe,
+                PlayerDownedOrReviving = playerUnsafe,
+                ExpectedPhaseName = authority.LastFrozenAEDv2Evidence?.CompletedPhase
+            };
             var proposed = AEDv2BoundaryPolicy.TryPropose(previous,
                 authority.LastFrozenAEDv2Evidence, authority.MatchId,
                 authority.AEDv2RosterIdentity, PhaseOrdinal, safe,
                 point,
                 out var nextPlan, out var key, out var reason,
-                rosterSafety);
+                rosterSafety, holdContext);
             if (proposed)
                 LogAEDv2PolicyMetrics(authority.LastFrozenAEDv2Evidence, key, previous, nextPlan);
             RuntimeLog.Log(RuntimeLogCategory.Aed,

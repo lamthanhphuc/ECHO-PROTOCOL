@@ -2,6 +2,16 @@ using System;
 
 namespace EchoProtocol.AI.Common.AED
 {
+    public sealed class AEDv2BoundaryHoldContext
+    {
+        public bool StalkerUnsafeState { get; set; }
+        public bool PlayerDownedOrReviving { get; set; }
+        public bool AdjustmentBudgetExhausted { get; set; }
+        public bool PressureMetricDecisionEligible { get; set; }
+        public AEDMetricStatusV1? PressureMetricStatus { get; set; }
+        public string ExpectedPhaseName { get; set; }
+    }
+
     public static class AEDv2BoundaryPolicy
     {
         private static bool CanChange(
@@ -21,25 +31,73 @@ namespace EchoProtocol.AI.Common.AED
             string rosterIdentity, uint phaseOrdinal, bool safeBoundary,
             ScenarioDecisionPoint decisionPoint,
             out AEDv2Plan next, out AEDv2Key changedKey, out string reason,
-            AEDv2RosterSafety rosterSafety = null)
+            AEDv2RosterSafety rosterSafety = null,
+            AEDv2BoundaryHoldContext holdContext = null)
         {
             next = previous;
             changedKey = default;
-            reason = "AED_V2_BOUNDARY_HOLD";
-            if (previous == null || !previous.IsBounded() || evidence == null
-                || !safeBoundary || !evidence.TelemetryCompleteness
-                || !evidence.HasValidFingerprint()
-                || evidence.MatchId != matchId
-                || evidence.RosterIdentity != rosterIdentity
-                || evidence.PhaseOrdinal != phaseOrdinal
-                || evidence.ElapsedSeconds < 30 || evidence.AlivePlayers < 1)
+            reason = "HOLD_NO_ELIGIBLE_ADJUSTMENT";
+            if (previous == null || !previous.IsBounded())
+            {
+                reason = "HOLD_INVALID_PLAN";
                 return false;
+            }
+            if (evidence == null || !evidence.TelemetryCompleteness)
+            {
+                reason = "HOLD_EVIDENCE_INCOMPLETE";
+                return false;
+            }
+            if (!evidence.HasValidFingerprint())
+            {
+                reason = "HOLD_FINGERPRINT_MISMATCH";
+                return false;
+            }
+            if (evidence.MatchId != matchId || matchId == Guid.Empty)
+            {
+                reason = "HOLD_INVALID_EVIDENCE";
+                return false;
+            }
+            if (evidence.RosterIdentity != rosterIdentity)
+            {
+                reason = "HOLD_ROSTER_CHANGED";
+                return false;
+            }
+            if (evidence.PhaseOrdinal != phaseOrdinal
+                || (!string.IsNullOrWhiteSpace(holdContext?.ExpectedPhaseName)
+                    && evidence.CompletedPhase != holdContext.ExpectedPhaseName))
+            {
+                reason = "HOLD_PHASE_MISMATCH";
+                return false;
+            }
+            if (holdContext?.PlayerDownedOrReviving == true)
+            {
+                reason = "HOLD_PLAYER_DOWNED_OR_REVIVING";
+                return false;
+            }
+            if (holdContext?.StalkerUnsafeState == true)
+            {
+                reason = "HOLD_UNSAFE_STALKER_STATE";
+                return false;
+            }
+            if (!safeBoundary)
+            {
+                reason = "HOLD_UNSAFE_BOUNDARY";
+                return false;
+            }
+            if (evidence.ElapsedSeconds < 30 || evidence.AlivePlayers < 1)
+            {
+                reason = "HOLD_INSUFFICIENT_OBSERVATION";
+                return false;
+            }
+            if (holdContext?.AdjustmentBudgetExhausted == true)
+            {
+                reason = "HOLD_ADJUSTMENT_BUDGET_EXHAUSTED";
+                return false;
+            }
 
             var intent = AdaptationIntent.Hold;
             var elapsedMinutes = evidence.ElapsedSeconds / 60.0;
-            var noisePerMinute = evidence.AcceptedNoiseCount / elapsedMinutes;
             var downsPerMinute = evidence.DownCount / elapsedMinutes;
-            var objectivesPerMinute = evidence.ObjectiveProgress / elapsedMinutes;
 
             if (evidence.EliminatedCount >= 1
                 && CanChange(previous, AEDv2Key.SpecialCooldownSeconds,
@@ -65,49 +123,22 @@ namespace EchoProtocol.AI.Common.AED
                 changedKey = AEDv2Key.SeekPlayersAfterSeconds;
                 intent = AdaptationIntent.Relieve;
             }
-            else if (evidence.AcceptedNoiseCount >= 8
-                && noisePerMinute >= 4.0
-                && CanChange(previous, AEDv2Key.DetectionAcquireSeconds,
-                    AdaptationIntent.Relieve))
+            if (intent == AdaptationIntent.Hold)
             {
-                changedKey = AEDv2Key.DetectionAcquireSeconds;
-                intent = AdaptationIntent.Relieve;
-            }
-            else if (evidence.TeamToolUseCount >= 3
-                && evidence.DownCount >= 1
-                && CanChange(previous, AEDv2Key.HearingMultiplier,
-                    AdaptationIntent.Relieve))
-            {
-                changedKey = AEDv2Key.HearingMultiplier;
-                intent = AdaptationIntent.Relieve;
-            }
-            else if (evidence.DownCount == 0
-                && evidence.EliminatedCount == 0
-                && evidence.ObjectiveProgress >= 2
-                && objectivesPerMinute >= 0.5
-                && CanChange(previous, AEDv2Key.PatrolSpeed,
-                    AdaptationIntent.IncreasePressure))
-            {
-                changedKey = AEDv2Key.PatrolSpeed;
-                intent = AdaptationIntent.IncreasePressure;
-            }
-            else if (evidence.DownCount == 0
-                && evidence.EliminatedCount == 0
-                && evidence.ObjectiveProgress > 0
-                && noisePerMinute < 3.0
-                && CanChange(previous, AEDv2Key.ChaseSpeed,
-                    AdaptationIntent.IncreasePressure))
-            {
-                changedKey = AEDv2Key.ChaseSpeed;
-                intent = AdaptationIntent.IncreasePressure;
-            }
-            if (intent == AdaptationIntent.IncreasePressure
-                && (rosterSafety == null || !rosterSafety.AllowPressure))
-            {
-                reason = "AED_V2_ROSTER_PRESSURE_GUARD";
+                if (holdContext?.PressureMetricStatus == AEDMetricStatusV1.NoOpportunity)
+                    reason = "HOLD_METRIC_NO_OPPORTUNITY";
+                else if (holdContext?.PressureMetricStatus == AEDMetricStatusV1.Incomplete)
+                    reason = "HOLD_EVIDENCE_INCOMPLETE";
+                else if (holdContext?.PressureMetricStatus != AEDMetricStatusV1.Available)
+                    reason = "HOLD_METRIC_UNSUPPORTED";
+                else if (!holdContext.PressureMetricDecisionEligible
+                    || rosterSafety == null || !rosterSafety.AllowPressure)
+                    reason = "HOLD_INSUFFICIENT_OBSERVATION";
+                else
+                    reason = "HOLD_NO_ELIGIBLE_ADJUSTMENT";
                 return false;
             }
-            if (intent == AdaptationIntent.Hold) return false;
+
             var spec = AEDv2Catalog.Find(changedKey);
             next = previous.With(changedKey, spec.Target(intent));
             reason = string.Empty;

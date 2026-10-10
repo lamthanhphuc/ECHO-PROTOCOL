@@ -81,9 +81,18 @@ namespace EchoProtocol.Networking.Authority
         private string _currentTelemetryPhase = "CORE_COLLECTION";
         private HostRuntimeNoiseService _runtimeNoise;
         private readonly AEDv2MatchEvidenceCollector _aedv2Evidence = new AEDv2MatchEvidenceCollector();
+        private readonly AEDObjectiveEvidenceCollectorV1 _aedObjectiveEvidence =
+            new AEDObjectiveEvidenceCollectorV1();
+        private readonly AEDSurvivalEvidenceCollectorV1 _aedSurvivalEvidence =
+            new AEDSurvivalEvidenceCollectorV1();
+        private readonly AEDToolNoiseEvidenceCollectorV1 _aedToolNoiseEvidence =
+            new AEDToolNoiseEvidenceCollectorV1();
         public AEDv2CurrentMatchEvidence LastFrozenAEDv2Evidence => _aedv2Evidence.LastFrozen;
         public IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence> AEDv2PlayerEvidence => _aedv2Evidence.PlayerEvidence;
         public IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence> LastFrozenAEDv2PlayerEvidence => _aedv2Evidence.LastFrozenPlayerEvidence;
+        public AEDObjectiveEvidenceV1 LastFrozenAEDObjectiveEvidence => _aedObjectiveEvidence.LastFrozen;
+        public AEDSurvivalEvidenceSnapshotV1 LastFrozenAEDSurvivalEvidence => _aedSurvivalEvidence.LastFrozen;
+        public AEDToolNoiseEvidenceSnapshotV1 LastFrozenAEDToolNoiseEvidence => _aedToolNoiseEvidence.LastFrozen;
         public void MarkAEDv2EvidenceIncomplete()
         {
             _aedv2Evidence.MarkIncomplete();
@@ -680,6 +689,9 @@ namespace EchoProtocol.Networking.Authority
             _runtimeNoiseTelemetryInactiveWarningLogged = false;
             _runtimeNoise?.ResetForMatch();
             _aedv2Evidence.Clear();
+            _aedObjectiveEvidence.Clear();
+            _aedSurvivalEvidence.Clear();
+            _aedToolNoiseEvidence.Clear();
             BackendAdaptiveInputSnapshotProvider.Current?.ClearForMatch(oldMatchId);
             ScenarioConfigRuntimeRegistry.Clear(oldMatchId);
             ScenarioConfigAuthorityRuntime.Instance?.ResetForMatch(oldMatchId);
@@ -913,19 +925,27 @@ namespace EchoProtocol.Networking.Authority
             _pendingAuthoritativeTelemetryMatchStart = false;
             _matchEndEmitted = false;
             _currentTelemetryPhase = "CORE_COLLECTION";
-            if (!_telemetry.MatchAdapter.EmitPhaseStarted(
+            var phaseStarted = _telemetry.MatchAdapter.EmitPhaseStarted(
                     "phase:core-collection:start:1",
                     occurredAtUtc,
                     "CORE_COLLECTION",
                     out _,
-                    out var phaseFailure))
+                    out var phaseFailure);
+            if (!phaseStarted)
             {
                 Debug.LogWarning($"[Telemetry] initial PHASE_STARTED was not buffered: {phaseFailure}.");
             }
-            else
+            _aedv2Evidence.StartPhase(MatchId, CurrentRosterIdentity(),
+                "CORE_COLLECTION", 1, occurredAtUtc);
+            _aedObjectiveEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION");
+            _aedSurvivalEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION");
+            _aedToolNoiseEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION");
+            if (!phaseStarted)
             {
-                _aedv2Evidence.StartPhase(MatchId, CurrentRosterIdentity(),
-                    "CORE_COLLECTION", 1, occurredAtUtc);
+                _aedv2Evidence.MarkIncomplete();
+                _aedObjectiveEvidence.MarkIncomplete();
+                _aedSurvivalEvidence.MarkIncomplete();
+                _aedToolNoiseEvidence.MarkIncomplete();
             }
         }
 
@@ -996,15 +1016,36 @@ namespace EchoProtocol.Networking.Authority
                     return;
             }
 
-            _telemetry.ObjectiveAdapter.EmitCoreTransition(
-                $"{coreId}:{transitionName}:{transition.Ordinal}",
+            var occurrenceKey = $"{coreId}:{transitionName}:{transition.Ordinal}";
+            var accepted = _telemetry.ObjectiveAdapter.EmitCoreTransition(
+                occurrenceKey,
                 DateTime.UtcNow,
                 eventType,
                 userId,
                 coreId,
-                out _,
+                out var emittedEvent,
                 out _,
                 Snapshot(transition.Position));
+
+            if (transition.State == NetworkItemState.Placed && accepted
+                && emittedEvent != null
+                && emittedEvent.EventType == TelemetryEventTypes.CorePlaced
+                && emittedEvent.MatchId == MatchId
+                && emittedEvent.UserId == userId
+                && item.Object != null && item.Object.IsValid)
+            {
+                var runner = _bootstrap?.Runner;
+                _aedObjectiveEvidence.RecordCorePlaced(
+                    true, emittedEvent.Id, coreId,
+                    item.PlacedSectorId.ToString(), item.PlacementSlot,
+                    transition.Ordinal, occurrenceKey, userId.ToString("D"),
+                    runner != null ? runner.Tick.Raw : 0L,
+                    "FusionStateAuthority", _currentTelemetryPhase);
+            }
+            else if (transition.State == NetworkItemState.Placed && accepted)
+            {
+                _aedObjectiveEvidence.MarkIncomplete();
+            }
         }
 
         private void EmitAbortedMatchEndIfActive()
@@ -1048,6 +1089,7 @@ namespace EchoProtocol.Networking.Authority
 
         public bool RecordMatchEnded(string occurrenceKey, string outcome, int survivorCount, string reasonCode)
         {
+            FreezeAEDv1Evidence(objectivePhaseIncomplete: true);
             if (!CanEmitProductionTelemetry() || _matchEndEmitted) return false;
 
             _pendingMatchEnd = true;
@@ -1056,6 +1098,15 @@ namespace EchoProtocol.Networking.Authority
             _pendingMatchEndSurvivorCount = survivorCount;
             _pendingMatchEndReasonCode = reasonCode;
             return TryEmitPendingMatchEnd();
+        }
+
+        private void FreezeAEDv1Evidence(bool objectivePhaseIncomplete = false)
+        {
+            var nowUtc = DateTime.UtcNow;
+            if (objectivePhaseIncomplete) _aedObjectiveEvidence.MarkIncomplete();
+            _aedObjectiveEvidence.Freeze(nowUtc, nowUtc);
+            _aedSurvivalEvidence.Freeze();
+            _aedToolNoiseEvidence.Freeze();
         }
 
         private bool TryEmitPendingMatchEnd()
@@ -1392,11 +1443,22 @@ namespace EchoProtocol.Networking.Authority
             string occurrenceKey,
             string monsterType,
             int downCount,
-            Vector3 position)
+            Vector3 position,
+            uint transitionOrdinal)
         {
-            if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
+            if (!TryResolveBackendUser(player, out var userId))
             {
                 _aedv2Evidence.MarkIncomplete();
+                _aedSurvivalEvidence.MarkIncomplete();
+                return false;
+            }
+
+            if (!CanEmitProductionTelemetry())
+            {
+                _aedv2Evidence.MarkIncomplete();
+                _aedSurvivalEvidence.Record(AEDSurvivalOutcomeKindV1.Downed,
+                    userId.ToString("D"), null, occurrenceKey, transitionOrdinal,
+                    monsterType, false, null, "FusionStateAuthority");
                 return false;
             }
 
@@ -1408,10 +1470,15 @@ namespace EchoProtocol.Networking.Authority
                 _currentTelemetryPhase,
                 monsterType,
                 reasonCode,
-                out _,
+                out var telemetryEvent,
                 out _,
                 downCount,
                 Snapshot(position));
+            _aedSurvivalEvidence.Record(AEDSurvivalOutcomeKindV1.Downed,
+                userId.ToString("D"), null, occurrenceKey, transitionOrdinal,
+                monsterType, false,
+                accepted ? telemetryEvent?.Id.ToString("D") : null,
+                "FusionStateAuthority");
             if (accepted) _aedv2Evidence.RecordAcceptedDown(occurrenceKey, userId.ToString("D"));
             else _aedv2Evidence.MarkIncomplete();
             return accepted;
@@ -1422,13 +1489,33 @@ namespace EchoProtocol.Networking.Authority
             PlayerRef reviver,
             string occurrenceKey,
             int reviveCount,
-            bool usedFirstAidKit)
+            bool usedFirstAidKit,
+            uint transitionOrdinal)
         {
-            if (!CanEmitProductionTelemetry()
-                || !TryResolveBackendUser(revivedPlayer, out var revivedUserId)
-                || !TryResolveBackendUser(reviver, out var reviverUserId))
+            if (!TryResolveBackendUser(revivedPlayer, out var revivedUserId))
             {
                 _aedv2Evidence.MarkIncomplete();
+                _aedSurvivalEvidence.MarkIncomplete();
+                if (usedFirstAidKit) _aedToolNoiseEvidence.MarkIncomplete();
+                return false;
+            }
+
+            var hasReviver = TryResolveBackendUser(reviver, out var reviverUserId);
+            if (!CanEmitProductionTelemetry() || !hasReviver)
+            {
+                _aedv2Evidence.MarkIncomplete();
+                _aedSurvivalEvidence.Record(AEDSurvivalOutcomeKindV1.Revived,
+                    revivedUserId.ToString("D"),
+                    hasReviver ? reviverUserId.ToString("D") : null,
+                    occurrenceKey, transitionOrdinal,
+                    "REVIVE_COMPLETED", false, null, "FusionStateAuthority");
+                if (usedFirstAidKit && hasReviver)
+                    _aedToolNoiseEvidence.RecordToolEffect("FIRST_AID_KIT",
+                        reviverUserId.ToString("D"), revivedUserId.ToString("D"),
+                        occurrenceKey, AEDToolEffectOutcomeV1.ResolvedSuccess,
+                        null, "FusionStateAuthority");
+                else if (usedFirstAidKit)
+                    _aedToolNoiseEvidence.MarkIncomplete();
                 return false;
             }
 
@@ -1438,10 +1525,21 @@ namespace EchoProtocol.Networking.Authority
                 revivedUserId,
                 reviverUserId,
                 _currentTelemetryPhase,
-                out _,
+                out var telemetryEvent,
                 out _,
                 reviveCount,
                 usedFirstAidKit);
+            _aedSurvivalEvidence.Record(AEDSurvivalOutcomeKindV1.Revived,
+                revivedUserId.ToString("D"), reviverUserId.ToString("D"),
+                occurrenceKey, transitionOrdinal, "REVIVE_COMPLETED", false,
+                accepted ? telemetryEvent?.Id.ToString("D") : null,
+                "FusionStateAuthority");
+            if (usedFirstAidKit)
+                _aedToolNoiseEvidence.RecordToolEffect("FIRST_AID_KIT",
+                    reviverUserId.ToString("D"), revivedUserId.ToString("D"),
+                    occurrenceKey, AEDToolEffectOutcomeV1.ResolvedSuccess,
+                    accepted ? telemetryEvent?.Id.ToString("D") : null,
+                    "FusionStateAuthority");
             if (accepted) _aedv2Evidence.RecordAcceptedRevive(occurrenceKey, revivedUserId.ToString("D"));
             else _aedv2Evidence.MarkIncomplete();
             return accepted;
@@ -1450,11 +1548,33 @@ namespace EchoProtocol.Networking.Authority
         public bool RecordPlayerEliminated(
             PlayerRef player,
             string occurrenceKey,
-            int reviveCount)
+            int reviveCount,
+            NetworkPlayerLifeTransitionCause cause,
+            bool directFromHit,
+            uint transitionOrdinal,
+            string reason)
         {
-            if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
+            if (!TryResolveBackendUser(player, out var userId))
             {
                 _aedv2Evidence.MarkIncomplete();
+                _aedSurvivalEvidence.MarkIncomplete();
+                return false;
+            }
+
+            var kind = directFromHit && cause == NetworkPlayerLifeTransitionCause.ReviveLimit
+                ? AEDSurvivalOutcomeKindV1.DirectElimination
+                : cause == NetworkPlayerLifeTransitionCause.Bleedout && reason == "TEAM_DOWNED"
+                    ? AEDSurvivalOutcomeKindV1.TeamElimination
+                    : cause == NetworkPlayerLifeTransitionCause.Bleedout
+                        ? AEDSurvivalOutcomeKindV1.BleedoutElimination
+                        : AEDSurvivalOutcomeKindV1.OtherElimination;
+
+            if (!CanEmitProductionTelemetry())
+            {
+                _aedv2Evidence.MarkIncomplete();
+                _aedSurvivalEvidence.Record(kind, userId.ToString("D"), null,
+                    occurrenceKey, transitionOrdinal, cause.ToString(),
+                    directFromHit, null, "FusionStateAuthority");
                 return false;
             }
 
@@ -1463,9 +1583,13 @@ namespace EchoProtocol.Networking.Authority
                 DateTime.UtcNow,
                 userId,
                 _currentTelemetryPhase,
-                out _,
+                out var telemetryEvent,
                 out _,
                 reviveCount);
+            _aedSurvivalEvidence.Record(kind, userId.ToString("D"), null,
+                occurrenceKey, transitionOrdinal, cause.ToString(), directFromHit,
+                accepted ? telemetryEvent?.Id.ToString("D") : null,
+                "FusionStateAuthority");
             if (accepted) _aedv2Evidence.RecordAcceptedElimination(occurrenceKey, userId.ToString("D"));
             else _aedv2Evidence.MarkIncomplete();
             return accepted;
@@ -1492,14 +1616,10 @@ namespace EchoProtocol.Networking.Authority
 
         public bool RecordPhaseCompleted(string occurrenceKey, string phase, string reasonCode)
         {
-            if (!CanEmitProductionTelemetry())
-            {
-                _aedv2Evidence.MarkIncomplete();
-                return false;
-            }
             var nowUtc = DateTime.UtcNow;
             nowUtc = new DateTime(nowUtc.Ticks - nowUtc.Ticks % TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
-            var accepted = _telemetry.MatchAdapter.EmitPhaseCompleted(
+            var accepted = CanEmitProductionTelemetry()
+                && _telemetry.MatchAdapter.EmitPhaseCompleted(
                 occurrenceKey,
                 nowUtc,
                 phase,
@@ -1507,8 +1627,15 @@ namespace EchoProtocol.Networking.Authority
                 out _,
                 null,
                 reasonCode);
-            if (!accepted) _aedv2Evidence.MarkIncomplete();
+            if (!accepted)
+            {
+                _aedv2Evidence.MarkIncomplete();
+                _aedObjectiveEvidence.MarkIncomplete();
+                _aedSurvivalEvidence.MarkIncomplete();
+                _aedToolNoiseEvidence.MarkIncomplete();
+            }
             _aedv2Evidence.Freeze(phase, _boundPlayers.Count, CurrentRosterIdentity(), nowUtc);
+            FreezeAEDv1Evidence();
             var frozen = _aedv2Evidence.LastFrozen;
             var players = _aedv2Evidence.LastFrozenPlayerEvidence;
             var safety = AEDv2RosterSafety.FromEvidence(
@@ -1533,25 +1660,46 @@ namespace EchoProtocol.Networking.Authority
 
         public bool RecordPhaseStarted(string occurrenceKey, string phase, string reasonCode)
         {
-            if (!CanEmitProductionTelemetry())
-            {
-                _aedv2Evidence.MarkIncomplete();
-                return false;
-            }
             var nowUtc = DateTime.UtcNow;
             nowUtc = new DateTime(nowUtc.Ticks - nowUtc.Ticks % TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
-            var emitted = _telemetry.MatchAdapter.EmitPhaseStarted(
+            var emitted = CanEmitProductionTelemetry()
+                && _telemetry.MatchAdapter.EmitPhaseStarted(
                 occurrenceKey,
                 nowUtc,
                 phase,
                 out _,
                 out _,
                 reasonCode);
-            if (emitted) _currentTelemetryPhase = phase;
-            if (emitted) _aedv2Evidence.StartPhase(MatchId, CurrentRosterIdentity(),
-                phase, (_aedv2Evidence.LastFrozen?.PhaseOrdinal ?? 0) + 1, nowUtc);
-            else _aedv2Evidence.MarkIncomplete();
+            _currentTelemetryPhase = phase;
+            var phaseOrdinal = (_aedv2Evidence.LastFrozen?.PhaseOrdinal ?? 0) + 1;
+            _aedv2Evidence.StartPhase(MatchId, CurrentRosterIdentity(),
+                phase, phaseOrdinal, nowUtc);
+            _aedObjectiveEvidence.StartPhase(MatchId, phaseOrdinal, phase);
+            _aedSurvivalEvidence.StartPhase(MatchId, phaseOrdinal, phase);
+            _aedToolNoiseEvidence.StartPhase(MatchId, phaseOrdinal, phase);
+            if (!emitted)
+            {
+                _aedv2Evidence.MarkIncomplete();
+                _aedObjectiveEvidence.MarkIncomplete();
+                _aedSurvivalEvidence.MarkIncomplete();
+                _aedToolNoiseEvidence.MarkIncomplete();
+            }
             return emitted;
+        }
+
+        public void RegisterCoreObjectiveSlots(NetworkSectorBox sectorBox)
+        {
+            if (!HasStateAuthority || sectorBox == null
+                || sectorBox.Object == null || !sectorBox.Object.IsValid
+                || MatchId == Guid.Empty
+                || _currentTelemetryPhase != "CORE_COLLECTION")
+                return;
+
+            var phaseOrdinal = (_aedv2Evidence.LastFrozen?.PhaseOrdinal ?? 0) + 1;
+            _aedObjectiveEvidence.StartPhase(MatchId, phaseOrdinal,
+                _currentTelemetryPhase);
+            _aedObjectiveEvidence.RegisterCorePlacementSlots(
+                sectorBox.Object.Id.ToString(), sectorBox.RequiredCoreCount);
         }
 
         public bool RecordPuzzleCompleted(string occurrenceKey)
@@ -1585,11 +1733,31 @@ namespace EchoProtocol.Networking.Authority
         {
             // CoreStabilizer is gameplay-only in Telemetry v1.1.
             if (toolType == "CORE_STABILIZER")
+            {
+                if (TryResolveBackendUser(player, out var stabilizerUserId))
+                    _aedToolNoiseEvidence.RecordToolAction(toolType,
+                        stabilizerUserId.ToString("D"), occurrenceKey,
+                        AEDEvidenceSourceCategoryV1.GameplayOnlyAccepted,
+                        null, "FusionStateAuthority");
+                else
+                    _aedToolNoiseEvidence.MarkIncomplete();
                 return false;
+            }
 
-            if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
+            if (!TryResolveBackendUser(player, out var userId))
             {
                 _aedv2Evidence.MarkIncomplete();
+                _aedToolNoiseEvidence.MarkIncomplete();
+                return false;
+            }
+
+            if (!CanEmitProductionTelemetry())
+            {
+                _aedv2Evidence.MarkIncomplete();
+                _aedToolNoiseEvidence.RecordToolAction(toolType,
+                    userId.ToString("D"), occurrenceKey,
+                    AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected,
+                    null, "FusionStateAuthority");
                 return false;
             }
 
@@ -1599,9 +1767,16 @@ namespace EchoProtocol.Networking.Authority
                 userId,
                 _currentTelemetryPhase,
                 toolType,
-                out _,
+                out var telemetryEvent,
                 out _,
                 targetId);
+            _aedToolNoiseEvidence.RecordToolAction(toolType,
+                userId.ToString("D"), occurrenceKey,
+                accepted
+                    ? AEDEvidenceSourceCategoryV1.CanonicalTelemetryAccepted
+                    : AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected,
+                accepted ? telemetryEvent?.Id.ToString("D") : null,
+                "FusionStateAuthority");
             if (accepted) _aedv2Evidence.RecordAcceptedTeamTool(occurrenceKey, userId.ToString("D"));
             else _aedv2Evidence.MarkIncomplete();
             return accepted;
@@ -1637,11 +1812,31 @@ namespace EchoProtocol.Networking.Authority
             double hearingRadius)
         {
             if (!NoiseTelemetryAdapter.SupportsNoiseType(noiseType))
+            {
+                if (TryResolveBackendUser(player, out var gameplayUserId))
+                    _aedToolNoiseEvidence.RecordNoise(noiseType,
+                        gameplayUserId.ToString("D"), noiseEventId,
+                        AEDEvidenceSourceCategoryV1.GameplayOnlyAccepted,
+                        null, "FusionStateAuthority");
+                else
+                    _aedToolNoiseEvidence.MarkIncomplete();
                 return false;
+            }
 
-            if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
+            if (!TryResolveBackendUser(player, out var userId))
             {
                 _aedv2Evidence.MarkIncomplete();
+                _aedToolNoiseEvidence.MarkIncomplete();
+                return false;
+            }
+
+            if (!CanEmitProductionTelemetry())
+            {
+                _aedv2Evidence.MarkIncomplete();
+                _aedToolNoiseEvidence.RecordNoise(noiseType,
+                    userId.ToString("D"), noiseEventId,
+                    AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected,
+                    null, "FusionStateAuthority");
                 return false;
             }
 
@@ -1655,9 +1850,16 @@ namespace EchoProtocol.Networking.Authority
                     noiseType,
                     loudness,
                     Snapshot(position),
-                    out _,
+                    out var telemetryEvent,
                     out _,
                     hearingRadius);
+                _aedToolNoiseEvidence.RecordNoise(noiseType,
+                    userId.ToString("D"), noiseEventId,
+                    accepted
+                        ? AEDEvidenceSourceCategoryV1.CanonicalTelemetryAccepted
+                        : AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected,
+                    accepted ? telemetryEvent?.Id.ToString("D") : null,
+                    "FusionStateAuthority");
                 if (accepted) _aedv2Evidence.RecordAcceptedNoise(noiseEventId, userId.ToString("D"));
                 else _aedv2Evidence.MarkIncomplete();
                 return accepted;
@@ -1669,6 +1871,10 @@ namespace EchoProtocol.Networking.Authority
                     StringComparison.Ordinal))
             {
                 _aedv2Evidence.MarkIncomplete();
+                _aedToolNoiseEvidence.RecordNoise(noiseType,
+                    userId.ToString("D"), noiseEventId,
+                    AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected,
+                    null, "FusionStateAuthority");
                 if (!_runtimeNoiseTelemetryCapacityWarningLogged)
                 {
                     _runtimeNoiseTelemetryCapacityWarningLogged = true;
@@ -1689,6 +1895,10 @@ namespace EchoProtocol.Networking.Authority
                     StringComparison.Ordinal))
             {
                 _aedv2Evidence.MarkIncomplete();
+                _aedToolNoiseEvidence.RecordNoise(noiseType,
+                    userId.ToString("D"), noiseEventId,
+                    AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected,
+                    null, "FusionStateAuthority");
                 if (!_runtimeNoiseTelemetryInactiveWarningLogged)
                 {
                     _runtimeNoiseTelemetryInactiveWarningLogged = true;

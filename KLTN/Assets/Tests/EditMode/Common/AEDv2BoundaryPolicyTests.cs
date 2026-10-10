@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using EchoProtocol.AI.Common.AED;
 using NUnit.Framework;
 
@@ -83,60 +84,16 @@ namespace EchoProtocol.AI.Common.Tests
         }
 
         [Test]
-        public void LaterBoundaryRetainsEarlierKey()
+        public void NoiseOnlyEvidenceHoldsAndRetainsEarlierPlan()
         {
             var id = Guid.NewGuid();
             var previous = AEDv2Plan.Normal().With(AEDv2Key.ReviveBonusPerZone, 1);
             Assert.That(AEDv2BoundaryPolicy.TryPropose(previous,
                 Evidence(id, downs: 0, noise: 9), id, "roster", 1, true,
                 ScenarioDecisionPoint.AllowedPhaseBoundary,
-                out var next, out var key, out _, new AEDv2RosterSafety(true, false)), Is.True);
-            Assert.That(key, Is.EqualTo(AEDv2Key.DetectionAcquireSeconds));
+                out var next, out _, out var reason), Is.False);
+            Assert.That(reason, Is.EqualTo("HOLD_METRIC_UNSUPPORTED"));
             Assert.That(next.ReviveBonus, Is.EqualTo(1));
-            Assert.That(next.Get(key), Is.EqualTo(1.5));
-        }
-
-        [TestCase(0, 0, 0, 0, 1, 0, 60,
-            AEDv2Key.SpecialCooldownSeconds, 540d)]
-        [TestCase(2, 0, 0, 0, 0, 0, 60,
-            AEDv2Key.ReviveBonusPerZone, 1d)]
-        [TestCase(0, 8, 0, 0, 0, 0, 60,
-            AEDv2Key.DetectionAcquireSeconds, 1.5d)]
-        [TestCase(1, 0, 0, 0, 0, 3, 60,
-            AEDv2Key.HearingMultiplier, 0.85d)]
-        [TestCase(0, 0, 2, 0, 0, 0, 120,
-            AEDv2Key.PatrolSpeed, 7d)]
-        [TestCase(0, 0, 1, 0, 0, 0, 60,
-            AEDv2Key.ChaseSpeed, 8d)]
-        public void ExpandedPolicyChoosesExpectedKey(
-            int downs, int noise, int objectives, int revives,
-            int eliminated, int tools, int duration,
-            AEDv2Key expectedKey, double expectedValue)
-        {
-            var id = Guid.NewGuid();
-            var evidence = Evidence(id,
-                downs: downs,
-                noise: noise,
-                objectives: objectives,
-                revives: revives,
-                eliminated: eliminated,
-                tools: tools,
-                durationSeconds: duration);
-
-            var proposed = AEDv2BoundaryPolicy.TryPropose(
-                AEDv2Plan.Normal(), evidence, id, "roster", 1u, true,
-                ScenarioDecisionPoint.AllowedPhaseBoundary,
-                out var next, out var key, out _, new AEDv2RosterSafety(true, false));
-
-            Assert.That(proposed, Is.True);
-            Assert.That(key, Is.EqualTo(expectedKey));
-            Assert.That(next.Get(key), Is.EqualTo(expectedValue));
-
-            foreach (var spec in AEDv2Catalog.All)
-            {
-                if (spec.Key == key) continue;
-                Assert.That(next.Get(spec.Key), Is.EqualTo(spec.Baseline));
-            }
         }
 
         [Test]
@@ -173,21 +130,82 @@ namespace EchoProtocol.AI.Common.Tests
         }
 
         [Test]
-        public void PressureNeedsRosterSafetyButReliefRemainsAvailable()
+        public void ObjectiveOnlyEvidenceCannotIncreasePressure()
         {
             var id = Guid.NewGuid();
             var pressureEvidence = Evidence(id, objectives: 2, durationSeconds: 120);
             Assert.That(AEDv2BoundaryPolicy.TryPropose(AEDv2Plan.Normal(), pressureEvidence,
                 id, "roster", 1u, true, ScenarioDecisionPoint.AllowedPhaseBoundary,
                 out _, out _, out var reason), Is.False);
-            Assert.That(reason, Is.EqualTo("AED_V2_ROSTER_PRESSURE_GUARD"));
+            Assert.That(reason, Is.EqualTo("HOLD_METRIC_UNSUPPORTED"));
 
+            var verifiedButNoCandidate = new AEDv2BoundaryHoldContext
+            {
+                PressureMetricStatus = AEDMetricStatusV1.Available,
+                PressureMetricDecisionEligible = true
+            };
             Assert.That(AEDv2BoundaryPolicy.TryPropose(AEDv2Plan.Normal(), pressureEvidence,
                 id, "roster", 1u, true, ScenarioDecisionPoint.AllowedPhaseBoundary,
-                out _, out _, out _, new AEDv2RosterSafety(true, false)), Is.True);
+                out _, out _, out reason, new AEDv2RosterSafety(true, false),
+                verifiedButNoCandidate), Is.False);
+            Assert.That(reason, Is.EqualTo("HOLD_NO_ELIGIBLE_ADJUSTMENT"));
             Assert.That(AEDv2BoundaryPolicy.TryPropose(AEDv2Plan.Normal(), pressureEvidence,
                 id, "roster", 1u, true, ScenarioDecisionPoint.AllowedPhaseBoundary,
-                out _, out _, out _, new AEDv2RosterSafety(true, true)), Is.False);
+                out _, out _, out reason, new AEDv2RosterSafety(false, false),
+                verifiedButNoCandidate), Is.False);
+            Assert.That(reason, Is.EqualTo("HOLD_INSUFFICIENT_OBSERVATION"));
+        }
+
+        [Test]
+        public void HoldsExposeDeterministicFailureReasons()
+        {
+            var id = Guid.NewGuid();
+            var plan = AEDv2Plan.Normal();
+            AssertHold(null, Evidence(id), id, "roster", 1, true, null,
+                "HOLD_INVALID_PLAN");
+            AssertHold(plan, Evidence(id, complete: false), id, "roster", 1, true, null,
+                "HOLD_EVIDENCE_INCOMPLETE");
+
+            var fingerprint = Evidence(id);
+            typeof(AEDv2CurrentMatchEvidence).GetField(
+                "<EvidenceFingerprint>k__BackingField",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(fingerprint, "bad");
+            AssertHold(plan, fingerprint, id, "roster", 1, true, null,
+                "HOLD_FINGERPRINT_MISMATCH");
+            AssertHold(plan, Evidence(id), id, "changed", 1, true, null,
+                "HOLD_ROSTER_CHANGED");
+            AssertHold(plan, Evidence(id, durationSeconds: 60), id, "roster", 1, true,
+                new AEDv2BoundaryHoldContext { ExpectedPhaseName = "ZONE_2_OBJECTIVE" },
+                "HOLD_PHASE_MISMATCH");
+            AssertHold(plan, Evidence(id), id, "roster", 1, false,
+                new AEDv2BoundaryHoldContext { StalkerUnsafeState = true },
+                "HOLD_UNSAFE_STALKER_STATE");
+            AssertHold(plan, Evidence(id), id, "roster", 1, false,
+                new AEDv2BoundaryHoldContext { PlayerDownedOrReviving = true },
+                "HOLD_PLAYER_DOWNED_OR_REVIVING");
+            AssertHold(plan, Evidence(id, durationSeconds: 29), id, "roster", 1, true,
+                null, "HOLD_INSUFFICIENT_OBSERVATION");
+            AssertHold(plan, Evidence(id), id, "roster", 1, true,
+                new AEDv2BoundaryHoldContext
+                    { PressureMetricStatus = AEDMetricStatusV1.NoOpportunity },
+                "HOLD_METRIC_NO_OPPORTUNITY");
+            AssertHold(plan, Evidence(id), id, "roster", 1, true, null,
+                "HOLD_METRIC_UNSUPPORTED");
+            AssertHold(plan, Evidence(id), id, "roster", 1, true,
+                new AEDv2BoundaryHoldContext { AdjustmentBudgetExhausted = true },
+                "HOLD_ADJUSTMENT_BUDGET_EXHAUSTED");
+        }
+
+        private static void AssertHold(AEDv2Plan plan,
+            AEDv2CurrentMatchEvidence evidence, Guid matchId, string roster,
+            uint ordinal, bool safe, AEDv2BoundaryHoldContext context,
+            string expectedReason)
+        {
+            Assert.That(AEDv2BoundaryPolicy.TryPropose(plan, evidence, matchId,
+                roster, ordinal, safe, ScenarioDecisionPoint.AllowedPhaseBoundary,
+                out _, out _, out var reason, null, context), Is.False);
+            Assert.That(reason, Is.EqualTo(expectedReason));
         }
     }
 }

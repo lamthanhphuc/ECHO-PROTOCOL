@@ -632,6 +632,11 @@ namespace EchoProtocol.Tools.Scanner
             ScanPulseOrdinal++;
             AnyScanPulseTriggered?.Invoke(this);
 
+            MatchAuthorityRuntime.Instance?.RecordTeamToolUsed(
+                requester,
+                $"player:{Object.Id}:tool:FIELD_SCANNER:{sequence}",
+                "FIELD_SCANNER");
+
             // Authoritative electronic noise
             HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance)
                 ?.TryAccept(

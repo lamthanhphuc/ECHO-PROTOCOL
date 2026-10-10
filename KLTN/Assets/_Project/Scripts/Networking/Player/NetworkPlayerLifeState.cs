@@ -522,7 +522,8 @@ namespace EchoProtocol.Networking
                 IsCrawling = false;
                 DownCount = nextDownCount;
                 GetComponent<NetworkPlayerInteractor>()?.DropHeldItemsAuthoritative(Object.InputAuthority);
-                CommitEliminated(NetworkPlayerLifeTransitionCause.ReviveLimit, "REVIVE_LIMIT_REACHED");
+                CommitEliminated(NetworkPlayerLifeTransitionCause.ReviveLimit,
+                    "REVIVE_LIMIT_REACHED", directFromHit: true);
                 return;
             }
 
@@ -541,7 +542,8 @@ namespace EchoProtocol.Networking
                 BuildOccurrenceKey("down"),
                 sourceType,
                 DownCount,
-                hitPosition);
+                hitPosition,
+                TransitionOrdinal);
             Debug.Log($"[LifeState] {Object.InputAuthority} Alive -> Downed by {sourceType}.");
         }
 
@@ -631,11 +633,13 @@ namespace EchoProtocol.Networking
                 completedReviver,
                 BuildOccurrenceKey("revive"),
                 ReviveCount,
-                usedFirstAidKit);
+                usedFirstAidKit,
+                TransitionOrdinal);
             Debug.Log($"[LifeState] {Object.InputAuthority} revived by {completedReviver}; protection={_reviveProtectionSeconds:0.##}s.");
         }
 
-        private bool CommitEliminated(NetworkPlayerLifeTransitionCause cause, string reason)
+        private bool CommitEliminated(NetworkPlayerLifeTransitionCause cause, string reason,
+            bool directFromHit = false)
         {
             if (DebugGodMode)
             {
@@ -655,7 +659,11 @@ namespace EchoProtocol.Networking
             MatchAuthorityRuntime.Instance?.RecordPlayerEliminated(
                 Object.InputAuthority,
                 BuildOccurrenceKey("eliminate"),
-                ReviveCount);
+                ReviveCount,
+                cause,
+                directFromHit,
+                TransitionOrdinal,
+                reason);
             Debug.Log($"[LifeState] {Object.InputAuthority} -> Eliminated reason={reason}.");
             return true;
         }
