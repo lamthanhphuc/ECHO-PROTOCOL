@@ -109,6 +109,8 @@ public sealed class PlayerZoneExitGuide : MonoBehaviour
     {
         var match =
             NetworkMatchState.Instance;
+        if (match != null && match.Object != null && match.Object.IsValid && match.IsEnded)
+            return GuideStage.None;
 
         if (match != null
             && match.Object != null
@@ -343,6 +345,7 @@ public sealed class PlayerZoneExitGuide : MonoBehaviour
         {
             if (_createdOutline)
             {
+                _outline.enabled = false;
                 Destroy(_outline);
             }
             else
@@ -356,8 +359,8 @@ public sealed class PlayerZoneExitGuide : MonoBehaviour
                 _outline.OutlineWidth =
                     _originalOutlineWidth;
 
-                _outline.enabled =
-                    _originalOutlineEnabled;
+                // A completed guide must not restore an old prefab highlight.
+                _outline.enabled = false;
 
                 _outline.UpdateMaterialProperties();
             }
