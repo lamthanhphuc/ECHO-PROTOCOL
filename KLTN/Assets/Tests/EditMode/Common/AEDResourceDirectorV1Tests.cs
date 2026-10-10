@@ -44,5 +44,70 @@ namespace EchoProtocol.AI.Common.Tests
         { var p = AEDResourceDirectorV1.Evaluate(Request(strong: true)); var points = Points().Select(x => new AEDResourceSpawnCandidateV1 { PointId = x.PointId, Zone = x.Zone, RoomId = x.RoomId, AllowedToolIds = x.AllowedToolIds, NavMeshReachable = x.Zone != 2, PathDistanceFromZoneEntry = x.PathDistanceFromZoneEntry, X = x.X, Y = x.Y, Z = x.Z }); Assert.That(AEDResourcePlacementV1.TryPlan(p, points, 6, out var receipts), Is.False); Assert.That(receipts, Is.Empty); }
         [Test] public void ResearchProposalCannotCommitGameplay()
         { var p = AEDResourceDirectorV1.Evaluate(Request(strong: true)); Assert.That(p.ResearchOnly, Is.True); Assert.That(p.CanApplyGameplay, Is.False); }
+
+        [Test]
+        public void RestrictedToolPlacementBacktracksToValidSolution()
+        {
+            var plan = AEDResourceDirectorV1.Evaluate(Request(strong: true));
+            var points = new List<AEDResourceSpawnCandidateV1>();
+            void Add(int zone, string id, int index, double distance, params int[] allowed)
+            { points.Add(new AEDResourceSpawnCandidateV1 { PointId = $"z{zone}-{id}", Zone = zone, RoomId = index + 1, AllowedToolIds = allowed, NavMeshReachable = true, PathDistanceFromZoneEntry = distance, X = index * 10, Y = 0, Z = zone * 100 }); }
+            Add(1, "A", 0, 10, AEDResourceToolIdsV1.FirstAid, AEDResourceToolIdsV1.NoiseMaker);
+            Add(1, "B", 1, 20, AEDResourceToolIdsV1.FirstAid, AEDResourceToolIdsV1.Scanner);
+            Add(1, "C", 2, 30, AEDResourceToolIdsV1.Scanner, AEDResourceToolIdsV1.NoiseMaker);
+            Add(1, "D", 3, 40, AEDResourceToolIdsV1.DoorJammer);
+            Add(1, "E", 4, 50, AEDResourceToolIdsV1.CoreStabilizer);
+            for (int zone = 2; zone <= 3; zone++) { Add(zone, "scanner", 0, 30, AEDResourceToolIdsV1.Scanner); Add(zone, "firstaid", 1, 10, AEDResourceToolIdsV1.FirstAid); Add(zone, "noise", 2, 20, AEDResourceToolIdsV1.NoiseMaker); Add(zone, "door", 3, 40, AEDResourceToolIdsV1.DoorJammer); }
+            Assert.That(AEDResourcePlacementV1.TryPlan(plan, points, 6, out var receipts), Is.True);
+            Assert.That(receipts.Count, Is.EqualTo(13));
+            Assert.That(receipts.Single(r => r.Zone == 1 && r.ToolId == AEDResourceToolIdsV1.FirstAid).PointId, Is.EqualTo("z1-A"));
+            Assert.That(receipts.Single(r => r.Zone == 1 && r.ToolId == AEDResourceToolIdsV1.Scanner).PointId, Is.EqualTo("z1-B"));
+            Assert.That(receipts.Single(r => r.Zone == 1 && r.ToolId == AEDResourceToolIdsV1.NoiseMaker).PointId, Is.EqualTo("z1-C"));
+        }
+
+        [Test]
+        public void FailedPlacementReturnsNoPartialReceipts()
+        {
+            var plan = AEDResourceDirectorV1.Evaluate(Request(strong: true));
+            var points = new[] { Point(1, 0), Point(1, 1), Point(1, 2) };
+            Assert.That(AEDResourcePlacementV1.TryPlan(plan, points, 6, out var receipts), Is.False);
+            Assert.That(receipts, Is.Empty);
+        }
+
+        [Test]
+        public void SupplySnapshotSeparatesWorldFromLobby()
+        {
+            Guid match = Guid.NewGuid(); string owner = Guid.NewGuid().ToString("D");
+            var items = new[]
+            {
+                new AEDResourceSupplyItemV1("world-core-1", AEDResourceToolIdsV1.CoreStabilizer, 1, AEDResourceSupplyOriginV1.WorldSpawn, AEDResourceLocationV1.World, null, 1, false, false, true, 10, "spawn-core-1", true),
+                new AEDResourceSupplyItemV1("lobby-core-1", AEDResourceToolIdsV1.CoreStabilizer, 0, AEDResourceSupplyOriginV1.LobbyLoadout, AEDResourceLocationV1.Carried, owner, 1, true, true, false, 10, "loadout-core-1", true)
+            };
+            Assert.That(AEDResourceSupplySnapshotV1.TryCreate(match, 1, items, true, out var snapshot), Is.True);
+            Assert.That(snapshot.SourcesHostVerified, Is.True);
+            Assert.That(snapshot.CountReachableWorld(1, AEDResourceToolIdsV1.CoreStabilizer), Is.EqualTo(1));
+            Assert.That(snapshot.Items.Count, Is.EqualTo(2));
+            Assert.That(snapshot.ResearchOnly, Is.True);
+            Assert.That(snapshot.CanApplyGameplay, Is.False);
+            Assert.That(AEDResourceSupplySnapshotV1.TryCreate(match, 1, items.Concat(items), true, out _), Is.False);
+        }
+
+        [Test]
+        public void BacktrackingUndoesPreferredFirstAidPlacement()
+        {
+            var plan = AEDResourceDirectorV1.Evaluate(Request(strong: true));
+            var points = new List<AEDResourceSpawnCandidateV1>();
+            void Add(int zone, string name, int index, double pathDistance, params int[] tools)
+            { points.Add(new AEDResourceSpawnCandidateV1 { PointId = $"z{zone}-{name}", Zone = zone, RoomId = index + 1, AllowedToolIds = tools, NavMeshReachable = true, PathDistanceFromZoneEntry = pathDistance, X = index * 10, Y = 0, Z = zone * 100 }); }
+            Add(1, "A", 0, 20, AEDResourceToolIdsV1.FirstAid, AEDResourceToolIdsV1.Scanner, AEDResourceToolIdsV1.NoiseMaker);
+            Add(1, "B", 1, 30, AEDResourceToolIdsV1.FirstAid);
+            Add(1, "C", 2, 40, AEDResourceToolIdsV1.Scanner, AEDResourceToolIdsV1.NoiseMaker);
+            Add(1, "D", 3, 50, AEDResourceToolIdsV1.DoorJammer);
+            Add(1, "E", 4, 60, AEDResourceToolIdsV1.CoreStabilizer);
+            for (int zone = 2; zone <= 3; zone++) { Add(zone, "S", 0, 30, AEDResourceToolIdsV1.Scanner); Add(zone, "F", 1, 10, AEDResourceToolIdsV1.FirstAid); Add(zone, "N", 2, 20, AEDResourceToolIdsV1.NoiseMaker); Add(zone, "D", 3, 40, AEDResourceToolIdsV1.DoorJammer); }
+            Assert.That(AEDResourcePlacementV1.TryPlan(plan, points, 6, out var result), Is.True);
+            Assert.That(result.Single(x => x.Zone == 1 && x.ToolId == AEDResourceToolIdsV1.FirstAid).PointId, Is.EqualTo("z1-B"));
+            Assert.That(result.Where(x => x.Zone == 1).Select(x => x.PointId).Distinct().Count(), Is.EqualTo(5));
+        }
     }
 }

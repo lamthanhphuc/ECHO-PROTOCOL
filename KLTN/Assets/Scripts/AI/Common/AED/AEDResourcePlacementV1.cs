@@ -33,6 +33,13 @@ namespace EchoProtocol.AI.Common.AED
     public static class AEDResourcePlacementV1
     {
         public const double DistantScannerMeters = 20d;
+        public const int MaxSearchNodes = 200000;
+
+        private sealed class Slot { public int Index; public int Zone; public int ToolId; }
+        private sealed class Assignment { public Slot Slot; public AEDResourceSpawnCandidateV1 Point; }
+
+        private static bool Finite(double value) =>
+            !double.IsNaN(value) && !double.IsInfinity(value);
 
         public static bool TryPlan(AEDResourceProposalV1 proposal,
             IEnumerable<AEDResourceSpawnCandidateV1> candidates, double minimumSpacing,
@@ -40,51 +47,81 @@ namespace EchoProtocol.AI.Common.AED
         {
             receipts = Array.Empty<AEDResourcePlacementReceiptV1>();
             if (proposal == null || !AEDResourceDirectorV1.ValidateFairness(proposal) ||
-                candidates == null || minimumSpacing < 0 || double.IsNaN(minimumSpacing) ||
-                double.IsInfinity(minimumSpacing)) return false;
+                candidates == null || !Finite(minimumSpacing) || minimumSpacing < 0)
+                return false;
 
             var points = candidates.ToArray();
             if (points.Any(p => p == null || string.IsNullOrWhiteSpace(p.PointId) ||
-                p.RoomId <= 0 || p.AllowedToolIds == null ||
-                double.IsNaN(p.PathDistanceFromZoneEntry) ||
-                double.IsInfinity(p.PathDistanceFromZoneEntry))) return false;
-            if (points.GroupBy(p => p.PointId).Any(group => group.Count() > 1)) return false;
+                p.Zone < 1 || p.Zone > 3 || p.RoomId <= 0 || p.AllowedToolIds == null ||
+                !Finite(p.PathDistanceFromZoneEntry) || !Finite(p.X) || !Finite(p.Y) ||
+                !Finite(p.Z) || p.AllowedToolIds.Any(id => !AEDResourceToolIdsV1.All.Contains(id))))
+                return false;
+            if (points.GroupBy(p => p.PointId, StringComparer.Ordinal).Any(g => g.Count() > 1))
+                return false;
 
-            var selected = new List<AEDResourcePlacementReceiptV1>();
+            var requests = new List<Slot>();
+            int sequence = 0;
+            var zones = new[] { proposal.Zone1, proposal.Zone2, proposal.Zone3 };
+            for (int zone = 1; zone <= 3; zone++)
+                foreach (int toolId in zones[zone - 1])
+                    requests.Add(new Slot { Index = sequence++, Zone = zone, ToolId = toolId });
+
+            var selected = new List<Assignment>();
             var used = new HashSet<string>(StringComparer.Ordinal);
-            var occupied = new List<AEDResourceSpawnCandidateV1>();
+            int exploredNodes = 0;
             bool FarEnough(AEDResourceSpawnCandidateV1 candidate)
             {
-                var squared = minimumSpacing * minimumSpacing;
-                return occupied.Where(p => p.Zone == candidate.Zone).All(p =>
+                double squared = minimumSpacing * minimumSpacing;
+                return selected.Where(a => a.Slot.Zone == candidate.Zone).All(a =>
                 {
-                    var dx = p.X - candidate.X; var dy = p.Y - candidate.Y; var dz = p.Z - candidate.Z;
+                    var dx = a.Point.X - candidate.X; var dy = a.Point.Y - candidate.Y; var dz = a.Point.Z - candidate.Z;
                     return dx * dx + dy * dy + dz * dz >= squared;
                 });
             }
 
-            var zoneRequests = new[] { proposal.Zone1, proposal.Zone2, proposal.Zone3 };
-            for (int zone = 1; zone <= 3; zone++)
+            AEDResourceSpawnCandidateV1[] Eligible(Slot slot)
             {
-                foreach (var toolId in zoneRequests[zone - 1])
-                {
-                    var eligible = points.Where(p => p.Zone == zone && p.NavMeshReachable &&
-                        p.PathDistanceFromZoneEntry >= 0 && p.AllowedToolIds.Contains(toolId) &&
-                        !used.Contains(p.PointId) && FarEnough(p)).ToArray();
-                    if (toolId == AEDResourceToolIdsV1.Scanner && proposal.PreferDistantScanner)
-                        eligible = eligible.Where(p => p.PathDistanceFromZoneEntry >= DistantScannerMeters).ToArray();
-                    var roomCounts = selected.Where(x => x.Zone == zone)
-                        .GroupBy(x => x.RoomId).ToDictionary(g => g.Key, g => g.Count());
-                    var ordered = eligible.OrderBy(p => roomCounts.TryGetValue(p.RoomId, out int n) ? n : 0)
-                        .ThenBy(p => toolId == AEDResourceToolIdsV1.FirstAid ? p.PathDistanceFromZoneEntry : -p.PathDistanceFromZoneEntry)
-                        .ThenBy(p => p.PointId, StringComparer.Ordinal).ToArray();
-                    if (ordered.Length == 0) return false;
-                    var chosen = ordered[0]; used.Add(chosen.PointId); occupied.Add(chosen);
-                    selected.Add(new AEDResourcePlacementReceiptV1(zone, toolId, chosen.PointId,
-                        chosen.RoomId, chosen.PathDistanceFromZoneEntry));
-                }
+                var query = points.Where(p => p.Zone == slot.Zone && p.NavMeshReachable &&
+                    p.PathDistanceFromZoneEntry >= 0 && p.AllowedToolIds.Contains(slot.ToolId) &&
+                    !used.Contains(p.PointId) && FarEnough(p));
+                if (slot.ToolId == AEDResourceToolIdsV1.Scanner && proposal.PreferDistantScanner)
+                    query = query.Where(p => p.PathDistanceFromZoneEntry >= DistantScannerMeters);
+                return query.ToArray();
             }
-            receipts = new ReadOnlyCollection<AEDResourcePlacementReceiptV1>(selected);
+
+            int RoomUse(int zone, int roomId) => selected.Count(a =>
+                a.Slot.Zone == zone && a.Point.RoomId == roomId);
+
+            bool Solve()
+            {
+                if (selected.Count == requests.Count) return true;
+                if (++exploredNodes > MaxSearchNodes) return false;
+                var next = requests.Where(slot => !selected.Any(a => a.Slot.Index == slot.Index))
+                    .Select(slot => new { Slot = slot, Options = Eligible(slot) })
+                    .OrderBy(x => x.Options.Length)
+                    .ThenBy(x => x.Slot.ToolId == AEDResourceToolIdsV1.FirstAid ? 0 : 1)
+                    .ThenBy(x => x.Slot.Zone).ThenBy(x => x.Slot.Index).First();
+                if (next.Options.Length == 0) return false;
+                var ordered = next.Options.OrderBy(p => RoomUse(next.Slot.Zone, p.RoomId))
+                    .ThenBy(p => next.Slot.ToolId == AEDResourceToolIdsV1.FirstAid ? p.PathDistanceFromZoneEntry : -p.PathDistanceFromZoneEntry)
+                    .ThenBy(p => p.PointId, StringComparer.Ordinal);
+                foreach (var point in ordered)
+                {
+                    selected.Add(new Assignment { Slot = next.Slot, Point = point });
+                    used.Add(point.PointId);
+                    if (Solve()) return true;
+                    used.Remove(point.PointId);
+                    selected.RemoveAt(selected.Count - 1);
+                }
+                return false;
+            }
+
+            if (!Solve()) return false;
+            var result = selected.OrderBy(a => a.Slot.Index)
+                .Select(a => new AEDResourcePlacementReceiptV1(a.Slot.Zone, a.Slot.ToolId,
+                    a.Point.PointId, a.Point.RoomId, a.Point.PathDistanceFromZoneEntry)).ToArray();
+            if (result.Length != requests.Count) return false;
+            receipts = new ReadOnlyCollection<AEDResourcePlacementReceiptV1>(result);
             return true;
         }
     }

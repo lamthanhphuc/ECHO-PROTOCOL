@@ -34,7 +34,8 @@ namespace EchoProtocol.TeamTools
             AEDResourceProposalV1 proposal,
             Vector3[] zoneEntryPositions,
             float minimumSpacing,
-            out IReadOnlyList<AEDResourcePlacementReceiptV1> receipts)
+            out IReadOnlyList<AEDResourcePlacementReceiptV1> receipts,
+            string requiredScenePath = null)
         {
             receipts = Array.Empty<AEDResourcePlacementReceiptV1>();
             if (catalog == null || proposal == null ||
@@ -44,19 +45,44 @@ namespace EchoProtocol.TeamTools
 
             var points = UnityEngine.Object.FindObjectsByType<TeamToolSpawnPoint>(FindObjectsInactive.Exclude);
             var candidates = new List<AEDResourceSpawnCandidateV1>();
+            int rejectedNavMesh = 0;
+            int rejectedNearby = 0;
+            int rejectedCatalog = 0;
             foreach (var point in points)
             {
-                if (point == null) continue;
+                if (point == null)
+                    continue;
+
+                if (!string.IsNullOrWhiteSpace(requiredScenePath) &&
+                    !string.Equals(point.gameObject.scene.path,
+                        requiredScenePath, StringComparison.Ordinal))
+                    continue;
+
                 int zone = (int)point.Zone;
                 if (zone < 1 || zone > 3) return false;
-                if (!point.TryGetReachablePosition(zoneEntryPositions[zone - 1],
-                    out var position, out var pathDistance)) continue;
-                if (HasNearbyWorldTeamTool(position, minimumSpacing)) continue;
+                if (!point.TryGetReachablePosition(
+                    zoneEntryPositions[zone - 1],
+                    out var position,
+                    out var pathDistance))
+                {
+                    rejectedNavMesh++;
+                    continue;
+                }
+
+                if (HasNearbyWorldTeamTool(position, minimumSpacing))
+                {
+                    rejectedNearby++;
+                    continue;
+                }
 
                 var allowed = AEDResourceToolIdsV1.All
                     .Where(id => point.Allows(id) && IsCorrectTool(catalog.GetPrefab(id), id))
                     .ToArray();
-                if (allowed.Length == 0) continue;
+                if (allowed.Length == 0)
+                {
+                    rejectedCatalog++;
+                    continue;
+                }
 
                 candidates.Add(new AEDResourceSpawnCandidateV1
                 {
@@ -67,8 +93,41 @@ namespace EchoProtocol.TeamTools
                 });
             }
 
-            return AEDResourcePlacementV1.TryPlan(proposal, candidates,
-                minimumSpacing, out receipts);
+            bool success = AEDResourcePlacementV1.TryPlan(
+                proposal,
+                candidates,
+                minimumSpacing,
+                out receipts);
+
+            if (!success)
+            {
+                Debug.LogWarning(
+                    $"[AED_P5_6] Preview FAILED " +
+                    $"points={points.Length} " +
+                    $"eligible={candidates.Count} " +
+                    $"navRejected={rejectedNavMesh} " +
+                    $"nearbyRejected={rejectedNearby} " +
+                    $"catalogRejected={rejectedCatalog}");
+
+                for (int zone = 1; zone <= 3; zone++)
+                {
+                    int currentZone = zone;
+                    var zoneCandidates = candidates
+                        .Where(p => p.Zone == currentZone)
+                        .ToArray();
+
+                    Debug.LogWarning(
+                        $"[AED_P5_6] Zone{zone} " +
+                        $"candidates={zoneCandidates.Length} " +
+                        $"scanner={zoneCandidates.Count(p => p.AllowedToolIds.Contains(AEDResourceToolIdsV1.Scanner))} " +
+                        $"firstAid={zoneCandidates.Count(p => p.AllowedToolIds.Contains(AEDResourceToolIdsV1.FirstAid))} " +
+                        $"noise={zoneCandidates.Count(p => p.AllowedToolIds.Contains(AEDResourceToolIdsV1.NoiseMaker))} " +
+                        $"jammer={zoneCandidates.Count(p => p.AllowedToolIds.Contains(AEDResourceToolIdsV1.DoorJammer))} " +
+                        $"core={zoneCandidates.Count(p => p.AllowedToolIds.Contains(AEDResourceToolIdsV1.CoreStabilizer))}");
+                }
+            }
+
+            return success;
         }
 
         private static string BuildResearchPointId(Transform point)

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Networking;
 using EchoProtocol.Tools.Scanner;
@@ -10,6 +11,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.SceneManagement;
 using Assert = NUnit.Framework.Assert;
 
@@ -457,6 +459,66 @@ namespace EchoProtocol.Player.Tests
             finally
             {
                 UnityEngine.Object.DestroyImmediate(anchor);
+            }
+        }
+
+        [Test]
+        public void TEAM_TOOL_SciFi_ResearchPreviewUsesRealZoneEntries()
+        {
+            const string scenePath = "Assets/Scenes/SciFi.unity";
+            var scene = SceneManager.GetSceneByPath(scenePath);
+            bool opened = !scene.IsValid() || !scene.isLoaded;
+            if (opened) scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+
+            try
+            {
+                var roots = scene.GetRootGameObjects();
+                var zone1 = roots.SelectMany(root => root.GetComponentsInChildren<NetworkPlayerSpawnPoint>(true))
+                    .OrderBy(point => point.Order).FirstOrDefault();
+                var zone2 = roots.SelectMany(root => root.GetComponentsInChildren<StalkerZone2EntryTrigger>(true)).FirstOrDefault();
+                Assert.That(zone1, Is.Not.Null);
+                Assert.That(zone2, Is.Not.Null);
+
+                var zone3 = new Vector3(88.66215f, 2.080028f, -399.027f);
+                string matchSource = File.ReadAllText("Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs");
+                StringAssert.Contains("new Vector3(88.66215f, 2.080028f, -399.027f)", matchSource);
+                var catalog = AssetDatabase.LoadAssetAtPath<TeamToolPickupCatalog>("Assets/ScriptableObjects/TeamTools/SO_TeamToolPickupCatalog.asset");
+                Assert.That(catalog, Is.Not.Null);
+
+                var proposal = AEDResourceDirectorV1.Evaluate(new AEDResourceRequestV1
+                {
+                    MatchId = Guid.NewGuid(), Difficulty = "Normal", ResolutionMode = "Fixed"
+                });
+                var entries = new[] { zone1.transform.position, zone2.transform.position, zone3 };
+                var triangulation = NavMesh.CalculateTriangulation();
+
+                Debug.LogWarning(
+                    $"[AED_P5_6] NavMesh triangles=" +
+                    $"{triangulation.indices.Length / 3}");
+
+                for (int i = 0; i < entries.Length; i++)
+                {
+                    bool sampled = NavMesh.SamplePosition(
+                        entries[i],
+                        out var hit,
+                        2f,
+                        NavMesh.AllAreas);
+
+                    Debug.LogWarning(
+                        $"[AED_P5_6] Zone{i + 1} " +
+                        $"entry={entries[i]} " +
+                        $"sampled={sampled} " +
+                        $"nearest={(sampled ? hit.position.ToString() : "NONE")}");
+                }
+                bool success = TeamToolWorldSpawn.TryBuildResearchPreview(catalog, proposal, entries, 6f, out var receipts, scenePath);
+                Assert.That(success, Is.True, "SciFi research preview failed: check NavMesh bake, zone entries, point reachability and tool masks.");
+                Assert.That(receipts.Count, Is.EqualTo(15));
+                Assert.That(receipts.Select(x => x.PointId).Distinct().Count(), Is.EqualTo(15));
+                Assert.That(receipts.All(x => x.PointId.StartsWith(scenePath + "/", StringComparison.Ordinal)), Is.True);
+            }
+            finally
+            {
+                if (opened) EditorSceneManager.CloseScene(scene, true);
             }
         }
     }

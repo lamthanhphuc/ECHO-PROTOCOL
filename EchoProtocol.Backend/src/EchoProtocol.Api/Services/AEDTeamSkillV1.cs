@@ -75,7 +75,7 @@ public static class AEDTeamSkillProjectorV1
             var complete = validDimensions && contextComplete;
 
             decimal? score = complete
-                ? rows.Average(x => x.Score.Value)
+                ? rows.Average(x => x.Score.GetValueOrDefault())
                 : null;
 
             if (complete)
