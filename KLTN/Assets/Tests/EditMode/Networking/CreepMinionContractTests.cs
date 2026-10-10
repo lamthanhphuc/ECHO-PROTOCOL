@@ -37,13 +37,25 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
-        public void Zone2Minions_UseZone2StalkerAsAnchor()
+        public void Minions_UseStalkerAnchorFromTheirZone()
         {
             string source = File.ReadAllText(SpawnerSource);
-            StringAssert.Contains("TryGetCreepMinionSpawnAnchor(zone, out var stalker)", source);
-            StringAssert.Contains("? _zone2MonsterInstance", source);
-            StringAssert.Contains(": _monsterInstance;", source);
-            StringAssert.Contains("NavMesh.SamplePosition(", source);
+            string anchor = ExtractMethod(
+                source,
+                "private bool TryGetCreepMinionSpawnAnchor(",
+                "private bool TryFindCreepMinionSpawnPosition(");
+
+            StringAssert.Contains("RegionSemanticZone.Zone03", anchor);
+            StringAssert.Contains("_zone3MonsterInstance", anchor);
+            StringAssert.Contains("RegionSemanticZone.Zone02", anchor);
+            StringAssert.Contains("_zone2MonsterInstance", anchor);
+            StringAssert.Contains("_monsterInstance", anchor);
+            StringAssert.Contains("IsValidNetworkObject(stalker)", anchor);
+
+            StringAssert.Contains(
+                "TryGetCreepMinionSpawnAnchor(zone, out var stalker)",
+                source);
+            StringAssert.Contains("profile.Zone3MinionCap", source);
         }
 
         [Test]

@@ -76,6 +76,14 @@ namespace EchoProtocol.Networking
 
     public static class NetworkMatchStateRules
     {
+        public static bool CanApplyAEDv2Gameplay(
+            bool enabled,
+            ScenarioResolutionMode mode,
+            MatchDifficulty difficulty) =>
+            enabled
+            && mode == ScenarioResolutionMode.Adaptive
+            && difficulty == MatchDifficulty.Normal;
+
         public static bool CanAdvance(
             NetworkMatchStatus status,
             NetworkMatchPhase current,
@@ -2297,7 +2305,10 @@ namespace EchoProtocol.Networking
 
             var runtime = MatchAuthorityRuntime.Instance;
             var settings = ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings;
-            var gameplayEnabled = settings?.ExtendedPolicyGameplayEnabled == true;
+            var gameplayEnabled = NetworkMatchStateRules.CanApplyAEDv2Gameplay(
+                settings?.ExtendedPolicyGameplayEnabled == true,
+                runtime?.RequestedScenarioResolutionMode ?? ScenarioResolutionMode.Fixed,
+                runtime?.Difficulty ?? MatchDifficulty.Normal);
             if (!gameplayEnabled)
             {
                 RecordCompletedPhase(runtime, completedPhase, expected);
@@ -2512,7 +2523,15 @@ namespace EchoProtocol.Networking
             AEDPlanV2Data approval)
         {
             var runtime = MatchAuthorityRuntime.Instance;
-            return Object.HasStateAuthority && Status == NetworkMatchStatus.Running
+            var enabled = ScenarioConfigAuthorityRuntime.Instance?
+                .RuntimeSettings?.ExtendedPolicyGameplayEnabled == true;
+
+            return NetworkMatchStateRules.CanApplyAEDv2Gameplay(
+                    enabled,
+                    runtime?.RequestedScenarioResolutionMode ?? ScenarioResolutionMode.Fixed,
+                    runtime?.Difficulty ?? MatchDifficulty.Normal)
+                && Object.HasStateAuthority
+                && Status == NetworkMatchStatus.Running
                 && CurrentPhase.ToString() == transaction.ExpectedPhase
                 && PhaseOrdinal + 1 == transaction.PhaseOrdinal
                 && runtime != null && runtime.MatchId == transaction.MatchId
@@ -2527,6 +2546,16 @@ namespace EchoProtocol.Networking
         private bool CommitAEDv2Boundary(AEDv2BoundaryTransaction transaction,
             AEDPlanV2Data approval)
         {
+            var runtime = MatchAuthorityRuntime.Instance;
+            var enabled = ScenarioConfigAuthorityRuntime.Instance?
+                .RuntimeSettings?.ExtendedPolicyGameplayEnabled == true;
+
+            if (!NetworkMatchStateRules.CanApplyAEDv2Gameplay(
+                    enabled,
+                    runtime?.RequestedScenarioResolutionMode ?? ScenarioResolutionMode.Fixed,
+                    runtime?.Difficulty ?? MatchDifficulty.Normal))
+                return false;
+
             if (!AEDv2Authority.CommitBoundary(transaction.MatchId,
                     transaction.DecisionId, transaction.PhaseOrdinal,
                     transaction.RosterIdentity, transaction.EvidenceFingerprint,
@@ -2576,6 +2605,9 @@ namespace EchoProtocol.Networking
         {
             var settings = ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings;
             if (authority == null || settings == null
+                || authority.RequestedScenarioResolutionMode
+                    != ScenarioResolutionMode.Adaptive
+                || authority.Difficulty != MatchDifficulty.Normal
                 || (!settings.ExtendedPolicyShadowEnabled
                     && !settings.ExtendedPolicyGameplayEnabled)) return;
 

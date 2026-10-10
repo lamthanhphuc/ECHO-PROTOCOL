@@ -15,6 +15,28 @@ namespace EchoProtocol.Networking.Tests
             Assert.That((bool)Bridge.GetMethod("IsNormalCompatible").Invoke(null, null), Is.True);
         }
 
+        [TestCase(false, ScenarioResolutionMode.Adaptive, "Normal", false)]
+        [TestCase(true, ScenarioResolutionMode.Fixed, "Normal", false)]
+        [TestCase(true, ScenarioResolutionMode.Adaptive, "Easy", false)]
+        [TestCase(true, ScenarioResolutionMode.Adaptive, "Hard", false)]
+        [TestCase(true, ScenarioResolutionMode.Adaptive, "Normal", true)]
+        public void GameplayBoundaryRequiresAdaptiveNormal(
+            bool enabled,
+            ScenarioResolutionMode mode,
+            string difficultyName,
+            bool expected)
+        {
+            var difficultyType = Type.GetType(
+                "EchoProtocol.Gameplay.MatchDifficulty, Assembly-CSharp", true);
+            var rulesType = Type.GetType(
+                "EchoProtocol.Networking.NetworkMatchStateRules, Assembly-CSharp", true);
+            var difficulty = Enum.Parse(difficultyType, difficultyName);
+            Assert.That(
+                rulesType.GetMethod("CanApplyAEDv2Gameplay").Invoke(null, new object[] {
+                    enabled, mode, difficulty }),
+                Is.EqualTo(expected));
+        }
+
         [Test]
         public void FixedBaselineContentIsBoundToGameplayBuild()
         {

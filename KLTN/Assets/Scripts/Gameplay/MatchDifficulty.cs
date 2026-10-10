@@ -97,11 +97,11 @@ namespace EchoProtocol.Gameplay
                 case MatchDifficulty.Hard:
                     return new MatchDifficultyProfile(
                         5, 8f, 9f, 0.75f, 30f, 3f, 3f, 0.35f,
-                        1f, 3f, 75f, 15f, 1.25f, 300f, 1, 1, 1, 1, true);
+                        1f, 3f, 75f, 15f, 1.25f, 300f, 1, 1, 1, 2, true);
                 default:
                     return new MatchDifficultyProfile(
                         5, 6.5f, 7.5f, 1.25f, 25f, 2.25f, 2.7f, 0.6f,
-                        1.4f, 4.5f, 120f, 25f, 1f, 420f, 1, 1, 1, 3, true);
+                        1.4f, 4.5f, 120f, 25f, 1f, 420f, 1, 2, 1, 3, true);
             }
         }
     }
