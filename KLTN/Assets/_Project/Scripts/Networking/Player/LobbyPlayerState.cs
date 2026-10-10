@@ -447,7 +447,9 @@ namespace EchoProtocol.Networking
         public bool GetPetRenderPose(out Vector3 position, out Quaternion rotation, out PetMotion motion, out float startTime, out float renderTime)
         {
             position=PetPosition; rotation=PetRotation; motion=PetMotion; startTime=PetAnimationStartTime;
-            renderTime=(float)Runner.SimulationTime;
+            // Snapshot endpoints can remain unchanged for stationary lobby pets.
+            // Fusion's render clock keeps advancing between network updates.
+            renderTime=Object.HasStateAuthority ? Runner.LocalRenderTime : Runner.RemoteRenderTime;
             if (!TryGetSnapshotsBuffers(out var from, out var to, out var alpha)) return false;
             var ids=GetPropertyReader<int>(nameof(PetId));
             if(ids.Read(from)!=PetId || ids.Read(to)!=PetId) return false;
@@ -460,7 +462,6 @@ namespace EchoProtocol.Networking
             position=teleport ? last : Vector3.Lerp(first,last,alpha);
             rotation=Quaternion.Slerp(rotations.Read(from),rotations.Read(to),alpha);
             motion=motions.Read(teleport ? to : from); startTime=starts.Read(teleport ? to : from);
-            renderTime=((int)from.Tick+((int)to.Tick-(int)from.Tick)*alpha)*Runner.DeltaTime;
             return true;
         }
         private PetCompanionController _pet;
