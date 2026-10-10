@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Networking;
 using EchoProtocol.Tools.Scanner;
 using Fusion;
@@ -25,6 +28,56 @@ namespace EchoProtocol.TeamTools
         };
 
         public const int RequiredToolCountPerZone = 5;
+
+        public static bool TryBuildResearchPreview(
+            TeamToolPickupCatalog catalog,
+            AEDResourceProposalV1 proposal,
+            Vector3[] zoneEntryPositions,
+            float minimumSpacing,
+            out IReadOnlyList<AEDResourcePlacementReceiptV1> receipts)
+        {
+            receipts = Array.Empty<AEDResourcePlacementReceiptV1>();
+            if (catalog == null || proposal == null ||
+                !AEDResourceDirectorV1.ValidateFairness(proposal) ||
+                zoneEntryPositions == null || zoneEntryPositions.Length != 3)
+                return false;
+
+            var points = UnityEngine.Object.FindObjectsByType<TeamToolSpawnPoint>(FindObjectsInactive.Exclude);
+            var candidates = new List<AEDResourceSpawnCandidateV1>();
+            foreach (var point in points)
+            {
+                if (point == null) continue;
+                int zone = (int)point.Zone;
+                if (zone < 1 || zone > 3) return false;
+                if (!point.TryGetReachablePosition(zoneEntryPositions[zone - 1],
+                    out var position, out var pathDistance)) continue;
+                if (HasNearbyWorldTeamTool(position, minimumSpacing)) continue;
+
+                var allowed = AEDResourceToolIdsV1.All
+                    .Where(id => point.Allows(id) && IsCorrectTool(catalog.GetPrefab(id), id))
+                    .ToArray();
+                if (allowed.Length == 0) continue;
+
+                candidates.Add(new AEDResourceSpawnCandidateV1
+                {
+                    PointId = BuildResearchPointId(point.transform), Zone = zone,
+                    RoomId = point.RoomId, AllowedToolIds = allowed,
+                    NavMeshReachable = true, PathDistanceFromZoneEntry = pathDistance,
+                    X = position.x, Y = position.y, Z = position.z
+                });
+            }
+
+            return AEDResourcePlacementV1.TryPlan(proposal, candidates,
+                minimumSpacing, out receipts);
+        }
+
+        private static string BuildResearchPointId(Transform point)
+        {
+            var parts = new Stack<string>();
+            for (var current = point; current != null; current = current.parent)
+                parts.Push($"{current.name}:{current.GetSiblingIndex()}");
+            return point.gameObject.scene.path + "/" + string.Join("/", parts);
+        }
 
         private readonly struct SpawnPlan
         {
@@ -66,7 +119,7 @@ namespace EchoProtocol.TeamTools
             }
 
             TeamToolSpawnPoint[] points =
-                Object.FindObjectsByType<
+                UnityEngine.Object.FindObjectsByType<
                     TeamToolSpawnPoint>(
                     FindObjectsInactive.Exclude);
 
@@ -380,7 +433,7 @@ namespace EchoProtocol.TeamTools
             while (candidates.Count > 0)
             {
                 int index =
-                    Random.Range(
+                    UnityEngine.Random.Range(
                         0,
                         candidates.Count);
 
@@ -583,7 +636,7 @@ namespace EchoProtocol.TeamTools
                  i--)
             {
                 int swap =
-                    Random.Range(
+                    UnityEngine.Random.Range(
                         0,
                         i + 1);
 
