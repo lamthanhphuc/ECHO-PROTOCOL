@@ -4,6 +4,34 @@ using System.Collections.ObjectModel;
 
 namespace EchoProtocol.AI.Common.AED
 {
+    public sealed class AEDMetricPolicyContextV1
+    {
+        public string Difficulty { get; }
+        public string ScenarioResolutionMode { get; }
+        public string ConfigSource { get; }
+        public string ScenarioConfigVersion { get; }
+        public string PolicyVersion { get; }
+        public long? AppliedPlanRevision { get; }
+        public string AppliedParameterFingerprint { get; }
+        public string ComparisonContextKey { get; }
+
+        public AEDMetricPolicyContextV1(string difficulty,
+            string scenarioResolutionMode, string configSource,
+            string scenarioConfigVersion, string policyVersion,
+            long? appliedPlanRevision, string appliedParameterFingerprint,
+            string comparisonContextKey)
+        {
+            Difficulty = difficulty;
+            ScenarioResolutionMode = scenarioResolutionMode;
+            ConfigSource = configSource;
+            ScenarioConfigVersion = scenarioConfigVersion;
+            PolicyVersion = policyVersion;
+            AppliedPlanRevision = appliedPlanRevision;
+            AppliedParameterFingerprint = appliedParameterFingerprint;
+            ComparisonContextKey = comparisonContextKey;
+        }
+    }
+
     public enum AEDMetricStatusV1
     {
         Available,
@@ -65,6 +93,7 @@ namespace EchoProtocol.AI.Common.AED
         public int ConfidenceEvidenceCount { get; }
         public string ConfidenceStatus { get; }
         public AEDMetricStatusV1 Status { get; }
+        public bool DecisionEligible { get; }
         public IReadOnlyList<string> ReasonCodes { get; }
         public DateTime WindowStartedAtUtc { get; }
         public DateTime WindowEndedAtUtc { get; }
@@ -87,7 +116,8 @@ namespace EchoProtocol.AI.Common.AED
             double? observedDurationSeconds, int confidenceEvidenceCount,
             string confidenceStatus, AEDMetricStatusV1 status,
             IEnumerable<string> reasonCodes, DateTime windowStartedAtUtc,
-            DateTime windowEndedAtUtc)
+            DateTime windowEndedAtUtc,
+            AEDMetricPolicyContextV1 policyContext = null)
         {
             MetricId = metricId ?? throw new ArgumentNullException(nameof(metricId));
             MatchId = matchId;
@@ -96,14 +126,15 @@ namespace EchoProtocol.AI.Common.AED
             Zone = zone;
             UserId = userId;
             TeamKey = matchId.ToString("D");
-            Difficulty = difficulty;
-            ScenarioResolutionMode = scenarioResolutionMode;
-            ConfigSource = configSource;
-            ScenarioConfigVersion = scenarioConfigVersion;
-            PolicyVersion = policyVersion;
+            Difficulty = policyContext?.Difficulty ?? difficulty;
+            ScenarioResolutionMode = policyContext?.ScenarioResolutionMode ?? scenarioResolutionMode;
+            ConfigSource = policyContext?.ConfigSource ?? configSource;
+            ScenarioConfigVersion = policyContext?.ScenarioConfigVersion ?? scenarioConfigVersion;
+            PolicyVersion = policyContext?.PolicyVersion ?? policyVersion;
             SourceTelemetrySchemaVersion = sourceTelemetrySchemaVersion;
-            AppliedPlanRevision = appliedPlanRevision;
-            AppliedParameterFingerprint = appliedParameterFingerprint;
+            AppliedPlanRevision = policyContext?.AppliedPlanRevision ?? appliedPlanRevision;
+            AppliedParameterFingerprint = policyContext?.AppliedParameterFingerprint
+                ?? appliedParameterFingerprint;
             SourceSystem = sourceSystem;
             AuthorityActor = authorityActor;
             SourceEventIds = Freeze(sourceEventIds);
@@ -119,7 +150,7 @@ namespace EchoProtocol.AI.Common.AED
             Value = value;
             MeasurementKind = measurementKind;
             DenominatorUnit = denominatorUnit;
-            ComparisonContextKey = comparisonContextKey;
+            ComparisonContextKey = policyContext?.ComparisonContextKey ?? comparisonContextKey;
             CensorReasonCounts = new ReadOnlyDictionary<string, int>(
                 censorReasonCounts == null
                     ? new Dictionary<string, int>()
@@ -128,9 +159,34 @@ namespace EchoProtocol.AI.Common.AED
             ConfidenceEvidenceCount = confidenceEvidenceCount;
             ConfidenceStatus = confidenceStatus;
             Status = status;
-            ReasonCodes = Freeze(reasonCodes);
             WindowStartedAtUtc = windowStartedAtUtc;
             WindowEndedAtUtc = windowEndedAtUtc;
+            var reasons = reasonCodes == null
+                ? new List<string>() : new List<string>(reasonCodes);
+            var policyContextComplete = !string.IsNullOrWhiteSpace(Difficulty)
+                && !string.IsNullOrWhiteSpace(ScenarioResolutionMode)
+                && !string.IsNullOrWhiteSpace(ConfigSource)
+                && !string.IsNullOrWhiteSpace(ScenarioConfigVersion)
+                && !string.IsNullOrWhiteSpace(PolicyVersion)
+                && !string.IsNullOrWhiteSpace(ComparisonContextKey)
+                && string.Equals(AuthorityActor, "FusionStateAuthority", StringComparison.Ordinal)
+                && !string.IsNullOrWhiteSpace(SourceSystem)
+                && !string.IsNullOrWhiteSpace(SourceTelemetrySchemaVersion)
+                && WindowStartedAtUtc.Kind == DateTimeKind.Utc
+                && WindowEndedAtUtc.Kind == DateTimeKind.Utc
+                && WindowEndedAtUtc >= WindowStartedAtUtc
+                && (ScenarioResolutionMode != "Adaptive"
+                    || (AppliedPlanRevision.HasValue
+                        && !string.IsNullOrWhiteSpace(AppliedParameterFingerprint)));
+            DecisionEligible = status == AEDMetricStatusV1.Available
+                && policyContextComplete && SourceEventIds.Count > 0
+                && ConfidenceEvidenceCount > 0 && EligibleOpportunities > 0
+                && Denominator.HasValue && Denominator.Value > 0
+                && Value.HasValue && !double.IsNaN(Value.Value)
+                && !double.IsInfinity(Value.Value);
+            if (status == AEDMetricStatusV1.Available && !DecisionEligible)
+                reasons.Add("POLICY_CONTEXT_INCOMPLETE");
+            ReasonCodes = Freeze(reasons);
         }
 
         private static IReadOnlyList<string> Freeze(IEnumerable<string> values) =>

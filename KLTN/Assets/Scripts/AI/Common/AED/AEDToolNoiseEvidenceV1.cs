@@ -7,8 +7,10 @@ namespace EchoProtocol.AI.Common.AED
     public enum AEDToolNoiseFactKindV1
     {
         ToolActionAccepted,
+        ToolActionRejected,
         ToolEffectResolved,
-        GameplayNoiseAccepted
+        GameplayNoiseAccepted,
+        GameplayNoiseRejected
     }
 
     public enum AEDEvidenceSourceCategoryV1

@@ -15,6 +15,8 @@ namespace EchoProtocol.AI.Common.AED
             new HashSet<string>(StringComparer.Ordinal);
         private readonly HashSet<string> _eventIds =
             new HashSet<string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _registeredSectors =
+            new Dictionary<string, int>(StringComparer.Ordinal);
         private Guid _matchId;
         private uint _phaseOrdinal;
         private string _phaseName;
@@ -23,6 +25,8 @@ namespace EchoProtocol.AI.Common.AED
         private bool _frozen;
         private bool _invalid;
         private bool _incomplete;
+        private DateTime _windowStartedAtUtc;
+        private AEDMetricPolicyContextV1 _policyContext;
 
         public AEDObjectiveEvidenceV1 LastFrozen { get; private set; }
 
@@ -38,7 +42,9 @@ namespace EchoProtocol.AI.Common.AED
         }
 
         public void StartPhase(Guid matchId, uint phaseOrdinal,
-            string phaseName, string stage = null)
+            string phaseName, string stage = null,
+            DateTime? windowStartedAtUtc = null,
+            AEDMetricPolicyContextV1 policyContext = null)
         {
             if (matchId == Guid.Empty || phaseOrdinal == 0
                 || string.IsNullOrWhiteSpace(phaseName))
@@ -59,6 +65,9 @@ namespace EchoProtocol.AI.Common.AED
             {
                 _matchId = matchId;
                 _stage = stage;
+                if (windowStartedAtUtc.HasValue)
+                    _windowStartedAtUtc = windowStartedAtUtc.Value;
+                if (policyContext != null) _policyContext = policyContext;
                 return;
             }
 
@@ -68,6 +77,8 @@ namespace EchoProtocol.AI.Common.AED
             _phaseName = phaseName;
             _stage = stage;
             _coverageComplete = phaseName != "CORE_COLLECTION";
+            _windowStartedAtUtc = windowStartedAtUtc ?? DateTime.MinValue;
+            _policyContext = policyContext;
         }
 
         public bool RegisterCorePlacementSlots(string sectorId, int slotCount)
@@ -80,10 +91,29 @@ namespace EchoProtocol.AI.Common.AED
                 return false;
             }
 
+            if (_registeredSectors.TryGetValue(sectorId, out var registeredCount))
+            {
+                if (registeredCount != slotCount)
+                {
+                    _invalid = true;
+                    return false;
+                }
+                return true;
+            }
+
+            _registeredSectors.Add(sectorId, slotCount);
             for (var slot = 0; slot < slotCount; slot++)
                 _opportunities.Add(UnitId(sectorId, slot));
-            _coverageComplete = true;
             return true;
+        }
+
+        public bool CompleteCorePlacementCoverage(int expectedSectorCount)
+        {
+            _coverageComplete = !_frozen && _phaseName == "CORE_COLLECTION"
+                && expectedSectorCount > 0
+                && _registeredSectors.Count == expectedSectorCount;
+            if (!_coverageComplete) _incomplete = true;
+            return _coverageComplete;
         }
 
         public bool RecordCorePlaced(bool canonicalAccepted, Guid sourceEventId,
@@ -135,8 +165,7 @@ namespace EchoProtocol.AI.Common.AED
             return true;
         }
 
-        public AEDObjectiveEvidenceV1 Freeze(DateTime windowStartedAtUtc,
-            DateTime windowEndedAtUtc)
+        public AEDObjectiveEvidenceV1 Freeze(DateTime windowEndedAtUtc)
         {
             if (_frozen) return LastFrozen;
             var sourceUnits = _completed.Values.OrderBy(unit => unit.ObjectiveUnitId,
@@ -170,7 +199,8 @@ namespace EchoProtocol.AI.Common.AED
                 denominator, successes, failures, 0, successes, denominator,
                 "unit", value, AEDMetricMeasurementKindV1.Rate, "unit",
                 null, null, null, sourceUnits.Length, "InsufficientForPolicy",
-                status, reasons, windowStartedAtUtc, windowEndedAtUtc);
+                status, reasons, _windowStartedAtUtc, windowEndedAtUtc,
+                _policyContext);
             LastFrozen = new AEDObjectiveEvidenceV1(
                 _matchId, _phaseOrdinal, _phaseName, sourceUnits,
                 opportunityIds, metric);
@@ -182,6 +212,7 @@ namespace EchoProtocol.AI.Common.AED
         {
             ClearPhase();
             _matchId = Guid.Empty;
+            LastFrozen = null;
         }
 
         private void ClearPhase()
@@ -190,6 +221,7 @@ namespace EchoProtocol.AI.Common.AED
             _opportunities.Clear();
             _occurrences.Clear();
             _eventIds.Clear();
+            _registeredSectors.Clear();
             _phaseOrdinal = 0;
             _phaseName = null;
             _stage = null;
@@ -197,7 +229,8 @@ namespace EchoProtocol.AI.Common.AED
             _frozen = false;
             _invalid = false;
             _incomplete = false;
-            LastFrozen = null;
+            _windowStartedAtUtc = DateTime.MinValue;
+            _policyContext = null;
         }
 
         private static bool IsSupportedPhase(string phase) => phase == "CORE_COLLECTION";

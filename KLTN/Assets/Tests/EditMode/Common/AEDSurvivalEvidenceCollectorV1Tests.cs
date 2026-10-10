@@ -89,9 +89,11 @@ namespace EchoProtocol.AI.Common.Tests
             Assert.That(first.Outcomes.Count, Is.EqualTo(1));
 
             collector.StartPhase(_matchId, 2, "ZONE_2_OBJECTIVE");
+            Assert.That(collector.LastFrozen, Is.SameAs(first));
             Assert.That(collector.Freeze().Outcomes, Is.Empty);
             var nextMatch = Guid.NewGuid();
             collector.ResetMatch(nextMatch);
+            Assert.That(collector.LastFrozen, Is.Null);
             collector.StartPhase(nextMatch, 1, "CORE_COLLECTION");
             Assert.That(Record(collector, AEDSurvivalOutcomeKindV1.Downed,
                 "new-match", 1, "Damage"), Is.True);

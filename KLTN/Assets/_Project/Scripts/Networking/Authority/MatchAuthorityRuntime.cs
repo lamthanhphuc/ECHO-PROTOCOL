@@ -937,7 +937,9 @@ namespace EchoProtocol.Networking.Authority
             }
             _aedv2Evidence.StartPhase(MatchId, CurrentRosterIdentity(),
                 "CORE_COLLECTION", 1, occurredAtUtc);
-            _aedObjectiveEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION");
+            _aedObjectiveEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION",
+                windowStartedAtUtc: occurredAtUtc,
+                policyContext: BuildAEDMetricPolicyContext("CORE_COLLECTION"));
             _aedSurvivalEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION");
             _aedToolNoiseEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION");
             if (!phaseStarted)
@@ -1089,7 +1091,7 @@ namespace EchoProtocol.Networking.Authority
 
         public bool RecordMatchEnded(string occurrenceKey, string outcome, int survivorCount, string reasonCode)
         {
-            FreezeAEDv1Evidence(objectivePhaseIncomplete: true);
+            FreezeAEDv1Evidence(DateTime.UtcNow, objectivePhaseIncomplete: true);
             if (!CanEmitProductionTelemetry() || _matchEndEmitted) return false;
 
             _pendingMatchEnd = true;
@@ -1100,11 +1102,11 @@ namespace EchoProtocol.Networking.Authority
             return TryEmitPendingMatchEnd();
         }
 
-        private void FreezeAEDv1Evidence(bool objectivePhaseIncomplete = false)
+        private void FreezeAEDv1Evidence(DateTime windowEndedAtUtc,
+            bool objectivePhaseIncomplete = false)
         {
-            var nowUtc = DateTime.UtcNow;
             if (objectivePhaseIncomplete) _aedObjectiveEvidence.MarkIncomplete();
-            _aedObjectiveEvidence.Freeze(nowUtc, nowUtc);
+            _aedObjectiveEvidence.Freeze(windowEndedAtUtc);
             _aedSurvivalEvidence.Freeze();
             _aedToolNoiseEvidence.Freeze();
         }
@@ -1635,7 +1637,7 @@ namespace EchoProtocol.Networking.Authority
                 _aedToolNoiseEvidence.MarkIncomplete();
             }
             _aedv2Evidence.Freeze(phase, _boundPlayers.Count, CurrentRosterIdentity(), nowUtc);
-            FreezeAEDv1Evidence();
+            FreezeAEDv1Evidence(nowUtc);
             var frozen = _aedv2Evidence.LastFrozen;
             var players = _aedv2Evidence.LastFrozenPlayerEvidence;
             var safety = AEDv2RosterSafety.FromEvidence(
@@ -1674,7 +1676,9 @@ namespace EchoProtocol.Networking.Authority
             var phaseOrdinal = (_aedv2Evidence.LastFrozen?.PhaseOrdinal ?? 0) + 1;
             _aedv2Evidence.StartPhase(MatchId, CurrentRosterIdentity(),
                 phase, phaseOrdinal, nowUtc);
-            _aedObjectiveEvidence.StartPhase(MatchId, phaseOrdinal, phase);
+            _aedObjectiveEvidence.StartPhase(MatchId, phaseOrdinal, phase,
+                windowStartedAtUtc: nowUtc,
+                policyContext: BuildAEDMetricPolicyContext(phase));
             _aedSurvivalEvidence.StartPhase(MatchId, phaseOrdinal, phase);
             _aedToolNoiseEvidence.StartPhase(MatchId, phaseOrdinal, phase);
             if (!emitted)
@@ -1687,10 +1691,12 @@ namespace EchoProtocol.Networking.Authority
             return emitted;
         }
 
-        public void RegisterCoreObjectiveSlots(NetworkSectorBox sectorBox)
+        public void RegisterCoreObjectiveSlots(
+            IReadOnlyCollection<NetworkObject> sectorBoxObjects,
+            int expectedSectorCount)
         {
-            if (!HasStateAuthority || sectorBox == null
-                || sectorBox.Object == null || !sectorBox.Object.IsValid
+            if (!HasStateAuthority || sectorBoxObjects == null
+                || sectorBoxObjects.Count == 0 || expectedSectorCount <= 0
                 || MatchId == Guid.Empty
                 || _currentTelemetryPhase != "CORE_COLLECTION")
                 return;
@@ -1698,8 +1704,33 @@ namespace EchoProtocol.Networking.Authority
             var phaseOrdinal = (_aedv2Evidence.LastFrozen?.PhaseOrdinal ?? 0) + 1;
             _aedObjectiveEvidence.StartPhase(MatchId, phaseOrdinal,
                 _currentTelemetryPhase);
-            _aedObjectiveEvidence.RegisterCorePlacementSlots(
-                sectorBox.Object.Id.ToString(), sectorBox.RequiredCoreCount);
+            foreach (var boxObject in sectorBoxObjects)
+            {
+                if (boxObject == null || !boxObject.IsValid
+                    || !boxObject.TryGetComponent<NetworkSectorBox>(out var box)
+                    || !box.MatchStateId.IsValid || box.RequiredCoreCount < 0
+                    || !_aedObjectiveEvidence.RegisterCorePlacementSlots(
+                        boxObject.Id.ToString(), box.RequiredCoreCount))
+                {
+                    _aedObjectiveEvidence.MarkIncomplete();
+                    return;
+                }
+            }
+            _aedObjectiveEvidence.CompleteCorePlacementCoverage(expectedSectorCount);
+        }
+
+        private AEDMetricPolicyContextV1 BuildAEDMetricPolicyContext(string phase)
+        {
+            ScenarioConfigRuntimeRegistry.TryGetAppliedConfig(MatchId, out var config);
+            var hasAppliedPlan = AEDv2Authority.TryGetApplied(MatchId,
+                out var plan, out var revision);
+            var comparisonContext = config == null ? null
+                : $"{config.MapId}|{phase}|{requestedDifficulty}|{requestedScenarioResolutionMode}|{_boundPlayers.Count}";
+            return new AEDMetricPolicyContextV1(
+                requestedDifficulty.ToString(), requestedScenarioResolutionMode.ToString(),
+                config?.ConfigSource.ToString(), config?.ScenarioConfigVersion,
+                config?.PolicyVersion, hasAppliedPlan ? revision : (long?)null,
+                hasAppliedPlan ? plan.Fingerprint() : null, comparisonContext);
         }
 
         public bool RecordPuzzleCompleted(string occurrenceKey)

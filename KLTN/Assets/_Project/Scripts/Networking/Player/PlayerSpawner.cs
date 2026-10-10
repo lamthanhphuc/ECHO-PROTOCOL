@@ -836,9 +836,10 @@ namespace EchoProtocol.Networking
                 if (_sectorBoxInstances[i] != null && _sectorBoxInstances[i].TryGetComponent<NetworkSectorBox>(out var sectorBox))
                 {
                     sectorBox.InitializeAuthoritative(_matchStateInstance.Id);
-                    MatchAuthorityRuntime.Instance?.RegisterCoreObjectiveSlots(sectorBox);
                 }
             }
+            MatchAuthorityRuntime.Instance?.RegisterCoreObjectiveSlots(
+                _sectorBoxInstances, TargetSectorBoxCount);
         }
 
         private void RegisterExistingNetworkSectorBoxes()

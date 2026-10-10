@@ -85,7 +85,29 @@ namespace EchoProtocol.AI.Common.Tests
             Assert.That(frozen.Facts.Count, Is.EqualTo(1));
 
             collector.StartPhase(_matchId, 2, "ZONE_2_OBJECTIVE");
+            Assert.That(collector.LastFrozen, Is.SameAs(frozen));
             Assert.That(collector.Freeze().Facts, Is.Empty);
+        }
+
+        [Test]
+        public void RejectedCanonicalToolAndNoiseUseRejectedFactKinds()
+        {
+            var collector = Create();
+            Assert.That(collector.RecordToolAction("FIELD_SCANNER", UserId,
+                "tool:rejected", AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected,
+                null, "FusionStateAuthority"), Is.True);
+            Assert.That(collector.RecordNoise("SPRINT", UserId,
+                "noise:rejected", AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected,
+                null, "FusionStateAuthority"), Is.True);
+
+            var facts = collector.Freeze().Facts;
+            Assert.That(facts.Select(fact => fact.Kind), Is.EquivalentTo(new[]
+            {
+                AEDToolNoiseFactKindV1.ToolActionRejected,
+                AEDToolNoiseFactKindV1.GameplayNoiseRejected
+            }));
+            Assert.That(facts.Any(fact => fact.Kind == AEDToolNoiseFactKindV1.ToolActionAccepted
+                || fact.Kind == AEDToolNoiseFactKindV1.GameplayNoiseAccepted), Is.False);
         }
 
         [Test]

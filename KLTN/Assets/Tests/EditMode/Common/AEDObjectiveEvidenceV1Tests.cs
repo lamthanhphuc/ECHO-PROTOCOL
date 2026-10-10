@@ -16,9 +16,14 @@ namespace EchoProtocol.AI.Common.Tests
         {
             var collector = new AEDObjectiveEvidenceCollectorV1();
             collector.ResetMatch(MatchId);
-            collector.StartPhase(MatchId, 1, phase);
+            collector.StartPhase(MatchId, 1, phase,
+                windowStartedAtUtc: DateTime.UnixEpoch);
             return collector;
         }
+
+        private static void CompleteCoverage(AEDObjectiveEvidenceCollectorV1 collector,
+            int expectedSectors = 1) =>
+            Assert.That(collector.CompleteCorePlacementCoverage(expectedSectors), Is.True);
 
         private static bool Place(AEDObjectiveEvidenceCollectorV1 collector,
             Guid eventId, string sector = "sector-a", int slot = 0,
@@ -29,13 +34,14 @@ namespace EchoProtocol.AI.Common.Tests
                 "FusionStateAuthority", phase);
 
         private static AEDObjectiveEvidenceV1 Freeze(AEDObjectiveEvidenceCollectorV1 collector) =>
-            collector.Freeze(DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(30));
+            collector.Freeze(DateTime.UnixEpoch.AddSeconds(30));
 
         [Test]
         public void AcceptedAndRejectedPlacementAreSeparatedFromOpportunityCount()
         {
             var collector = Create();
             Assert.That(collector.RegisterCorePlacementSlots("sector-a", 2), Is.True);
+            CompleteCoverage(collector);
             Assert.That(Place(collector, Guid.NewGuid(), accepted: false), Is.False);
             Assert.That(Place(collector, Guid.NewGuid()), Is.True);
 
@@ -48,6 +54,17 @@ namespace EchoProtocol.AI.Common.Tests
             Assert.That(frozen.UnitCompletionRate.ConfigSource, Is.Null);
             Assert.That(frozen.UnitCompletionRate.SourceSystem,
                 Is.EqualTo(AEDObjectiveEvidenceV1.SourceSystemName));
+            Assert.That(frozen.UnitCompletionRate.AuthorityActor,
+                Is.EqualTo("FusionStateAuthority"));
+            Assert.That(frozen.UnitCompletionRate.SourceEventIds,
+                Is.EquivalentTo(new[] { frozen.Units[0].SourceCanonicalEventId }));
+            Assert.That(frozen.UnitCompletionRate.WindowStartedAtUtc,
+                Is.EqualTo(DateTime.UnixEpoch));
+            Assert.That(frozen.UnitCompletionRate.WindowEndedAtUtc,
+                Is.EqualTo(DateTime.UnixEpoch.AddSeconds(30)));
+            Assert.That(frozen.UnitCompletionRate.DecisionEligible, Is.False);
+            Assert.That(frozen.UnitCompletionRate.ReasonCodes,
+                Does.Contain("POLICY_CONTEXT_INCOMPLETE"));
             Assert.That(frozen.Units.Count, Is.EqualTo(1));
         }
 
@@ -56,6 +73,7 @@ namespace EchoProtocol.AI.Common.Tests
         {
             var collector = Create();
             collector.RegisterCorePlacementSlots("sector-a", 2);
+            CompleteCoverage(collector);
             var eventId = Guid.NewGuid();
             Assert.That(Place(collector, eventId), Is.True);
             Assert.That(Place(collector, eventId), Is.False);
@@ -89,6 +107,7 @@ namespace EchoProtocol.AI.Common.Tests
         {
             var none = Create();
             none.RegisterCorePlacementSlots("sector-a", 0);
+            CompleteCoverage(none);
             Assert.That(Freeze(none).UnitCompletionRate.Status,
                 Is.EqualTo(AEDMetricStatusV1.NoOpportunity));
 
@@ -114,13 +133,16 @@ namespace EchoProtocol.AI.Common.Tests
         {
             var collector = Create();
             collector.RegisterCorePlacementSlots("sector-a", 1);
+            CompleteCoverage(collector);
             Place(collector, Guid.NewGuid());
             var first = Freeze(collector);
             Assert.That(Place(collector, Guid.NewGuid(), slot: 0,
                 ordinal: 2, occurrence: "late"), Is.False);
             Assert.That(first.Units.Count, Is.EqualTo(1));
 
-            collector.StartPhase(MatchId, 2, "ZONE_2_OBJECTIVE");
+            collector.StartPhase(MatchId, 2, "ZONE_2_OBJECTIVE",
+                windowStartedAtUtc: DateTime.UnixEpoch.AddMinutes(2));
+            Assert.That(collector.LastFrozen, Is.SameAs(first));
             var second = Freeze(collector);
             Assert.That(second.PhaseOrdinal, Is.EqualTo(2));
             Assert.That(second.Units, Is.Empty);
@@ -129,8 +151,11 @@ namespace EchoProtocol.AI.Common.Tests
 
             var nextMatch = Guid.NewGuid();
             collector.ResetMatch(nextMatch);
-            collector.StartPhase(nextMatch, 1, "CORE_COLLECTION");
+            Assert.That(collector.LastFrozen, Is.Null);
+            collector.StartPhase(nextMatch, 1, "CORE_COLLECTION",
+                windowStartedAtUtc: DateTime.UnixEpoch);
             collector.RegisterCorePlacementSlots("new-sector", 1);
+            CompleteCoverage(collector);
             Assert.That(Place(collector, Guid.NewGuid(), sector: "new-sector"), Is.True);
             Assert.That(Freeze(collector).MatchId, Is.EqualTo(nextMatch));
 
@@ -142,6 +167,47 @@ namespace EchoProtocol.AI.Common.Tests
                 2, 1, 2, 0, 3, 4, true, Array.Empty<string>(), 5);
             Assert.That(v2.EvidenceFingerprint,
                 Is.EqualTo("2a3ad9de5f5f5ee16fbb36879049951b5e12ab83a96912b75fe84481fd22cd18"));
+        }
+
+        [Test]
+        public void CoverageWaitsForEverySectorBoxAndPolicyContextGatesEligibility()
+        {
+            var collector = Create();
+            collector.RegisterCorePlacementSlots("sector-a", 2);
+            Assert.That(collector.CompleteCorePlacementCoverage(2), Is.False);
+            Assert.That(Freeze(collector).UnitCompletionRate.Status,
+                Is.EqualTo(AEDMetricStatusV1.Incomplete));
+
+            collector.StartPhase(MatchId, 2, "CORE_COLLECTION",
+                windowStartedAtUtc: DateTime.UnixEpoch,
+                policyContext: new AEDMetricPolicyContextV1(
+                    "Normal", "Fixed", "Fixed", "scenario-v1", "policy-v1",
+                    null, null, "map|CORE_COLLECTION|Normal|Fixed|2"));
+            collector.RegisterCorePlacementSlots("sector-a", 2);
+            collector.RegisterCorePlacementSlots("sector-b", 1);
+            Assert.That(collector.CompleteCorePlacementCoverage(2), Is.True);
+            Assert.That(Place(collector, Guid.NewGuid()), Is.True);
+
+            var metric = Freeze(collector).UnitCompletionRate;
+            Assert.That(metric.EligibleOpportunities, Is.EqualTo(3));
+            Assert.That(metric.DecisionEligible, Is.True);
+            Assert.That(metric.Difficulty, Is.EqualTo("Normal"));
+            Assert.That(metric.ScenarioResolutionMode, Is.EqualTo("Fixed"));
+            Assert.That(metric.ConfigSource, Is.EqualTo("Fixed"));
+            Assert.That(metric.ScenarioConfigVersion, Is.EqualTo("scenario-v1"));
+            Assert.That(metric.PolicyVersion, Is.EqualTo("policy-v1"));
+            Assert.That(metric.ComparisonContextKey,
+                Is.EqualTo("map|CORE_COLLECTION|Normal|Fixed|2"));
+
+            collector.StartPhase(MatchId, 3, "CORE_COLLECTION",
+                windowStartedAtUtc: DateTime.UnixEpoch,
+                policyContext: new AEDMetricPolicyContextV1(
+                    "Normal", "Adaptive", "Adaptive", "scenario-v2", "policy-v2",
+                    null, null, "map|CORE_COLLECTION|Normal|Adaptive|2"));
+            collector.RegisterCorePlacementSlots("sector-c", 1);
+            CompleteCoverage(collector);
+            Assert.That(Place(collector, Guid.NewGuid(), sector: "sector-c"), Is.True);
+            Assert.That(Freeze(collector).UnitCompletionRate.DecisionEligible, Is.False);
         }
     }
 }

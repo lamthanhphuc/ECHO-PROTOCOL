@@ -53,7 +53,10 @@ namespace EchoProtocol.AI.Common.AED
             string occurrenceKey, AEDEvidenceSourceCategoryV1 sourceCategory,
             string canonicalEventId, string sourceAuthority)
         {
-            return Record(AEDToolNoiseFactKindV1.ToolActionAccepted,
+            var kind = sourceCategory == AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected
+                ? AEDToolNoiseFactKindV1.ToolActionRejected
+                : AEDToolNoiseFactKindV1.ToolActionAccepted;
+            return Record(kind,
                 sourceCategory, toolType, null, userId, null, occurrenceKey,
                 canonicalEventId, null, sourceAuthority);
         }
@@ -73,7 +76,10 @@ namespace EchoProtocol.AI.Common.AED
             string occurrenceKey, AEDEvidenceSourceCategoryV1 sourceCategory,
             string canonicalEventId, string sourceAuthority)
         {
-            return Record(AEDToolNoiseFactKindV1.GameplayNoiseAccepted,
+            var kind = sourceCategory == AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected
+                ? AEDToolNoiseFactKindV1.GameplayNoiseRejected
+                : AEDToolNoiseFactKindV1.GameplayNoiseAccepted;
+            return Record(kind,
                 sourceCategory, null, noiseType, userId, null, occurrenceKey,
                 canonicalEventId, null, sourceAuthority);
         }
@@ -99,6 +105,7 @@ namespace EchoProtocol.AI.Common.AED
         {
             ClearPhase();
             _matchId = Guid.Empty;
+            LastFrozen = null;
         }
 
         private bool Record(AEDToolNoiseFactKindV1 kind,
@@ -115,8 +122,10 @@ namespace EchoProtocol.AI.Common.AED
                 || string.IsNullOrWhiteSpace(occurrenceKey)
                 || string.IsNullOrWhiteSpace(sourceAuthority)
                 || (kind != AEDToolNoiseFactKindV1.GameplayNoiseAccepted
+                    && kind != AEDToolNoiseFactKindV1.GameplayNoiseRejected
                     && string.IsNullOrWhiteSpace(toolType))
-                || (kind == AEDToolNoiseFactKindV1.GameplayNoiseAccepted
+                || ((kind == AEDToolNoiseFactKindV1.GameplayNoiseAccepted
+                    || kind == AEDToolNoiseFactKindV1.GameplayNoiseRejected)
                     && string.IsNullOrWhiteSpace(noiseType)))
             {
                 _invalid = true;
@@ -148,7 +157,6 @@ namespace EchoProtocol.AI.Common.AED
             _frozen = false;
             _incomplete = false;
             _invalid = false;
-            LastFrozen = null;
         }
     }
 }

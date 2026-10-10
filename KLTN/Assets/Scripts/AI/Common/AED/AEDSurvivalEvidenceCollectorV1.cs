@@ -106,6 +106,7 @@ namespace EchoProtocol.AI.Common.AED
         {
             ClearPhase();
             _matchId = Guid.Empty;
+            LastFrozen = null;
         }
 
         private void ClearPhase()
@@ -117,7 +118,6 @@ namespace EchoProtocol.AI.Common.AED
             _frozen = false;
             _invalid = false;
             _incomplete = false;
-            LastFrozen = null;
         }
     }
 }
