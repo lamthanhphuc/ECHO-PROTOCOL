@@ -203,6 +203,7 @@ namespace EchoProtocol.Networking.Authority
         private async void Update()
         {
             var matchState = NetworkMatchState.Instance;
+            SampleAEDv2PlayerObservation(matchState);
             if (HasBinding
                 && matchState != null
                 && matchState.IsEnded
@@ -243,6 +244,40 @@ namespace EchoProtocol.Networking.Authority
             if (!IsSuccessful(result))
             {
                 Debug.LogError($"[MatchAuthority] Lease renewal failed: {Describe(result)}");
+            }
+        }
+
+        private void SampleAEDv2PlayerObservation(NetworkMatchState matchState)
+        {
+            if (!CanEmitProductionTelemetry()
+                || matchState == null
+                || matchState.Status != NetworkMatchStatus.Running)
+                return;
+
+            var runner = _bootstrap?.Runner;
+            if (runner == null) return;
+
+            double seconds = Math.Min((double)Time.unscaledDeltaTime, 1d);
+            if (seconds <= 0) return;
+
+            foreach (var player in runner.ActivePlayers)
+            {
+                int actorNumber = runner.GetPlayerActorId(player) ?? player.PlayerId;
+                if (_disconnectedActors.Contains(actorNumber)
+                    || !_boundPlayers.TryGetValue(actorNumber, out var userId))
+                    continue;
+
+                if (!runner.TryGetPlayerObject(player, out var playerObject)
+                    || playerObject == null || !playerObject.IsValid
+                    || !playerObject.TryGetComponent<LobbyPlayerState>(out var lobby)
+                    || !lobby.IsGameplayPlayer
+                    || !Guid.TryParse(lobby.BackendUserId.ToString(), out var verifiedId)
+                    || verifiedId != userId
+                    || !playerObject.TryGetComponent<NetworkPlayerLifeState>(out var life)
+                    || life.Status != NetworkPlayerLifeStatus.Alive)
+                    continue;
+
+                _aedv2Evidence.RecordActiveObservation(userId.ToString("D"), seconds);
             }
         }
 

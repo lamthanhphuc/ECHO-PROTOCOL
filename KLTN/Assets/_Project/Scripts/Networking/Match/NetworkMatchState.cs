@@ -2343,14 +2343,9 @@ namespace EchoProtocol.Networking
                 ? ScenarioDecisionPoint.FinalHuntSetup
                 : ScenarioDecisionPoint.AllowedPhaseBoundary;
             var safe = IsAEDv2BoundarySafe();
-            var rosterEvidence = runtime.LastFrozenAEDv2PlayerEvidence;
-            var allObserved = rosterEvidence != null && runtime.AEDv2BoundUserIds.Count > 0
-                && runtime.AEDv2BoundUserIds.All(rosterEvidence.ContainsKey)
-                && runtime.AEDv2BoundUserIds.All(userId => rosterEvidence[userId].ObservationCount > 0);
-            var anyStruggling = rosterEvidence != null && runtime.AEDv2BoundUserIds.Any(userId =>
-                rosterEvidence.TryGetValue(userId, out var player)
-                && (player.DownCount > 0 || player.EliminatedCount > 0));
-            var rosterSafety = new AEDv2RosterSafety(allObserved, anyStruggling);
+            var rosterSafety = AEDv2RosterSafety.FromEvidence(
+                runtime.AEDv2BoundUserIds,
+                runtime.LastFrozenAEDv2PlayerEvidence);
             var stalkerDiag = FindAnyObjectByType<
                 EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
 
@@ -2629,18 +2624,15 @@ namespace EchoProtocol.Networking
             var point = next == NetworkMatchPhase.FinalHunt
                 ? ScenarioDecisionPoint.FinalHuntSetup
                 : ScenarioDecisionPoint.AllowedPhaseBoundary;
-            var playerEvidence = authority.LastFrozenAEDv2PlayerEvidence;
-            var roster = authority.AEDv2BoundUserIds;
-            var allObserved = playerEvidence != null && roster.Count > 0 && roster.All(playerEvidence.ContainsKey)
-                && roster.All(userId => playerEvidence[userId].ObservationCount > 0);
-            var anyStruggling = playerEvidence != null && roster.Any(userId => playerEvidence.TryGetValue(userId, out var player)
-                && (player.DownCount > 0 || player.EliminatedCount > 0));
+            var rosterSafety = AEDv2RosterSafety.FromEvidence(
+                authority.AEDv2BoundUserIds,
+                authority.LastFrozenAEDv2PlayerEvidence);
             var proposed = AEDv2BoundaryPolicy.TryPropose(previous,
                 authority.LastFrozenAEDv2Evidence, authority.MatchId,
                 authority.AEDv2RosterIdentity, PhaseOrdinal, safe,
                 point,
                 out var nextPlan, out var key, out var reason,
-                new AEDv2RosterSafety(allObserved, anyStruggling));
+                rosterSafety);
             if (proposed)
                 LogAEDv2PolicyMetrics(authority.LastFrozenAEDv2Evidence, key, previous, nextPlan);
             RuntimeLog.Log(RuntimeLogCategory.Aed,

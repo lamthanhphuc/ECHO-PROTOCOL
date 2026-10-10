@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using EchoProtocol.AI.Common.AED;
@@ -84,6 +85,56 @@ namespace EchoProtocol.Networking.Tests
             var player = (AEDv2PlayerPhaseEvidence)players["user-a"];
             Assert.That(evidence.DownCount, Is.EqualTo(1));
             Assert.That(player.DownCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void QuietPlayersCanBeObservedWithoutGameplayEvents()
+        {
+            var collector = CreateCollector();
+            var start = DateTime.UtcNow;
+            Call(collector, "StartPhase", Guid.NewGuid(), "roster", "CORE_COLLECTION", 1u, start);
+            Call(collector, "RecordActiveObservation", "user-a", 15d);
+            Call(collector, "RecordActiveObservation", "user-b", 30d);
+
+            var players = (IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence>)
+                collector.GetType().GetProperty("PlayerEvidence").GetValue(collector);
+            Assert.That(players["user-a"].ObservationCount, Is.Zero);
+            Assert.That(players["user-b"].ObservationCount, Is.Zero);
+
+            var roster = new[] { "user-a", "user-b" };
+            Assert.That(AEDv2RosterSafety.FromEvidence(roster, players).AllowPressure, Is.False);
+
+            Call(collector, "RecordActiveObservation", "user-a", 15d);
+            Assert.That(AEDv2RosterSafety.FromEvidence(roster, players).AllowPressure, Is.True);
+
+            Call(collector, "RecordAcceptedDown", "down-1", "user-b");
+            Assert.That(AEDv2RosterSafety.FromEvidence(roster, players).AllowPressure, Is.False);
+        }
+
+        [Test]
+        public void DeduplicationUsesEventTypeAndFrozenEvidenceIsStable()
+        {
+            var collector = CreateCollector();
+            var start = DateTime.UtcNow;
+            Call(collector, "StartPhase", Guid.NewGuid(), "roster", "CORE_COLLECTION", 1u, start);
+            Call(collector, "RecordAcceptedDown", "same-key", "user-a");
+            Call(collector, "RecordAcceptedDown", "same-key", "user-a");
+            Call(collector, "RecordAcceptedNoise", "same-key", "user-a");
+            Call(collector, "RecordActiveObservation", "user-a", 30d);
+
+            var evidence = (AEDv2CurrentMatchEvidence)Call(
+                collector, "Freeze", "CORE_COLLECTION", 1, "roster", start.AddSeconds(40));
+            var frozen = (IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence>)
+                collector.GetType().GetProperty("LastFrozenPlayerEvidence").GetValue(collector);
+
+            Assert.That(evidence.DownCount, Is.EqualTo(1));
+            Assert.That(evidence.AcceptedNoiseCount, Is.EqualTo(1));
+            Assert.That(frozen["user-a"].ActiveObservedSeconds, Is.EqualTo(30d));
+
+            Call(collector, "RecordActiveObservation", "user-a", 30d);
+            Call(collector, "RecordAcceptedDown", "late-down", "user-a");
+            Assert.That(frozen["user-a"].ActiveObservedSeconds, Is.EqualTo(30d));
+            Assert.That(frozen["user-a"].DownCount, Is.EqualTo(1));
         }
 
         [Test]

@@ -11,6 +11,7 @@ namespace EchoProtocol.AI.Common.AED
         public int ToolUseCount { get; private set; }
         public int EliminatedCount { get; private set; }
         public int ObservationCount => DownCount + ReviveCount + NoiseCount + ToolUseCount + EliminatedCount;
+        public double ActiveObservedSeconds { get; private set; }
 
         public AEDv2PlayerPhaseEvidence(string userId)
         {
@@ -22,5 +23,11 @@ namespace EchoProtocol.AI.Common.AED
         public void RecordNoise() => NoiseCount++;
         public void RecordToolUse() => ToolUseCount++;
         public void RecordElimination() => EliminatedCount++;
+
+        public void RecordActiveObservation(double seconds)
+        {
+            if (seconds > 0 && !double.IsNaN(seconds) && !double.IsInfinity(seconds))
+                ActiveObservedSeconds += seconds;
+        }
     }
 }
