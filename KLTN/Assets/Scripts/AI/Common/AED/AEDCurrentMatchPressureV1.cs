@@ -141,15 +141,13 @@ namespace EchoProtocol.AI.Common.AED
                 .Select(s => 0.30d * Decay(s.EndTick.Value))
                 .DefaultIfEmpty(0d).Max();
 
-            var phaseDownPressure =
-                canonical.DownCount > 0 ? 0.25d : 0d;
+            var phaseDownObserved = canonical.DownCount > 0;
 
             var score = Math.Min(1d,
                 stalkerImpact +
                 recentChase +
                 minionImpact +
-                recentHarass +
-                phaseDownPressure);
+                recentHarass);
 
             var level = score >= 0.70d
                 ? AEDPressureLevelV1.Critical
@@ -171,8 +169,10 @@ namespace EchoProtocol.AI.Common.AED
             if (recentHarass > 0)
                 reasons.Add("RECENT_MINION_HARASS");
 
-            if (phaseDownPressure > 0)
+            if (phaseDownObserved)
+            {
                 reasons.Add("PHASE_DOWN_OBSERVED_NOT_TIME_RESOLVED");
+            }
 
             return new AEDCurrentMatchPressureV1(
                 matchId, ordinal, level,

@@ -45,6 +45,7 @@ public static class AEDTeamSkillProjectorV1
         };
 
         var members = new List<AEDTeamMemberSkillV1>();
+        var memberContexts = new List<string>();
 
         foreach (var userId in users)
         {
@@ -52,28 +53,44 @@ public static class AEDTeamSkillProjectorV1
                 x.UserId == userId &&
                 required.Contains(x.Dimension)).ToArray();
 
-            var contextComplete = rows
-                .Select(x => x.ComparisonContextKey)
-                .Distinct(StringComparer.Ordinal)
-                .Count() == 1 &&
-                !string.IsNullOrWhiteSpace(rows.FirstOrDefault()?.ComparisonContextKey);
+            var validDimensions =
+                rows.Length == required.Length
+                && required.All(dimension =>
+                    rows.Count(x => x.Dimension == dimension) == 1)
+                && rows.All(x =>
+                    x.Confidence == AEDSkillConfidenceV1.Sufficient
+                    && x.ReadyForIncrease
+                    && x.Score.HasValue
+                    && x.Score.Value >= 0m
+                    && x.Score.Value <= 1m);
 
-            var complete = contextComplete && required.All(d =>
-                rows.Count(x =>
-                    x.Dimension == d &&
-                    x.Confidence == AEDSkillConfidenceV1.Sufficient &&
-                    x.ReadyForIncrease &&
-                    x.Score.HasValue) == 1);
+            var contextComplete =
+                rows.Length > 0
+                && rows.All(x =>
+                    !string.IsNullOrWhiteSpace(x.ComparisonContextKey))
+                && rows.Select(x => x.ComparisonContextKey)
+                    .Distinct(StringComparer.Ordinal)
+                    .Count() == 1;
+
+            var complete = validDimensions && contextComplete;
 
             decimal? score = complete
-                ? rows.Average(x => x.Score!.Value)
+                ? rows.Average(x => x.Score.Value)
                 : null;
+
+            if (complete)
+                memberContexts.Add(rows[0].ComparisonContextKey);
 
             members.Add(new AEDTeamMemberSkillV1(
                 userId, score, complete));
         }
 
-        var allComplete = members.All(x => x.ConfidenceComplete);
+        var allComplete =
+            members.All(x => x.ConfidenceComplete)
+            && memberContexts.Count == users.Length
+            && memberContexts
+                .Distinct(StringComparer.Ordinal)
+                .Count() == 1;
 
         decimal? mean = allComplete
             ? members.Average(x => x.Score!.Value)

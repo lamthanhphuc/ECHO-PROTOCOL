@@ -13,7 +13,8 @@ namespace EchoProtocol.AI.Common.Tests
             "00000000-0000-0000-0000-000000000402";
 
         private static AEDv2CurrentMatchEvidence Canonical(
-            bool complete = true)
+            bool complete = true,
+            int downCount = 0)
         {
             var start = new DateTime(
                 2026, 10, 10, 0, 0, 0, DateTimeKind.Utc);
@@ -21,7 +22,7 @@ namespace EchoProtocol.AI.Common.Tests
             return new AEDv2CurrentMatchEvidence(
                 Match, "CORE_COLLECTION", 1, "roster",
                 start, start.AddSeconds(10),
-                2, 0, 0, 0, 0, 0,
+                2, downCount, 0, 0, 0, 0,
                 complete, Array.Empty<string>());
         }
 
@@ -105,6 +106,28 @@ namespace EchoProtocol.AI.Common.Tests
             Assert.That(pressure.Score, Is.Null);
             Assert.That(pressure.Level,
                 Is.EqualTo(AEDPressureLevelV1.Unknown));
+        }
+
+        [Test]
+        public void PhaseLevelDownWithoutRecentThreatDoesNotRaisePressure()
+        {
+            var pressure = AEDCurrentMatchPressureV1.Project(
+                Canonical(downCount: 1),
+                Pursuit().Freeze(),
+                Minion().Freeze(),
+                Survival().Freeze(),
+                1000,
+                10);
+
+            Assert.That(pressure.SourceComplete, Is.True);
+            Assert.That(
+                pressure.Level,
+                Is.EqualTo(AEDPressureLevelV1.Quiet));
+            Assert.That(pressure.Score, Is.EqualTo(0d));
+            Assert.That(
+                pressure.ReasonCodes,
+                Does.Contain(
+                    "PHASE_DOWN_OBSERVED_NOT_TIME_RESOLVED"));
         }
     }
 }

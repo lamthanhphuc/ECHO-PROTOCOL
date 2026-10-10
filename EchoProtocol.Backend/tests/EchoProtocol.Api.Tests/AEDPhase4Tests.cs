@@ -27,6 +27,24 @@ public sealed class AEDPhase4Tests
             verified, true);
     }
 
+    private static AEDHistoricalSkillDimensionV1 TrustedDimension(
+        Guid user,
+        AEDSkillDimensionV1 dimension,
+        string context = Context,
+        decimal score = 0.85m)
+    {
+        return new AEDHistoricalSkillDimensionV1(
+            user,
+            dimension,
+            context,
+            score,
+            3,
+            9,
+            0,
+            AEDSkillConfidenceV1.Sufficient,
+            true);
+    }
+
     [Fact, Trait("Category", "AEDv2")]
     public void ColdStartHasNoSkillScore()
     {
@@ -65,15 +83,15 @@ public sealed class AEDPhase4Tests
     }
 
     [Fact, Trait("Category", "AEDv2")]
-    public void ManyEpisodesFromOneMatchAreNotIndependentMatches()
+    public void ReplayedObservationDoesNotIncreaseSampleCount()
     {
-        var source = Enumerable.Range(1, 10)
-            .Select(i => Sample(1, UserA,
-                AEDSkillDimensionV1.Evasion,
-                resolved: 2) with
-                {
-                    SourceFingerprint = $"episode-{i}"
-                });
+        var observation = Sample(
+            1,
+            UserA,
+            AEDSkillDimensionV1.Evasion,
+            resolved: 2);
+
+        var source = Enumerable.Repeat(observation, 10);
 
         var result = AEDHistoricalSkillProjectorV1.Project(
             UserA, Context, source)
@@ -81,6 +99,7 @@ public sealed class AEDPhase4Tests
                 x.Dimension == AEDSkillDimensionV1.Evasion);
 
         Assert.Equal(1, result.DistinctMatches);
+        Assert.Equal(2, result.ResolvedOpportunities);
         Assert.Equal(AEDSkillConfidenceV1.Insufficient,
             result.Confidence);
         Assert.False(result.ReadyForIncrease);
@@ -211,5 +230,96 @@ public sealed class AEDPhase4Tests
 
         Assert.Equal(AEDPhase4CandidateV1.RelieveCandidate,
             decision.Candidate);
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public void ConflictingSourceFingerprintWithinMatchIsInvalid()
+    {
+        var first = Sample(1, UserA, AEDSkillDimensionV1.Objective);
+        var second = first with { SourceFingerprint = "corrected-fingerprint" };
+
+        var result = AEDHistoricalSkillProjectorV1.Project(
+            UserA, Context, new[] { first, second })
+            .Single(x => x.Dimension == AEDSkillDimensionV1.Objective);
+
+        Assert.Equal(AEDSkillConfidenceV1.Invalid, result.Confidence);
+        Assert.Null(result.Score);
+        Assert.False(result.ReadyForIncrease);
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public void SameFingerprintWithChangedPayloadIsInvalid()
+    {
+        var first = Sample(1, UserA, AEDSkillDimensionV1.Objective);
+        var second = first with { NormalizedValue = 0.25m };
+
+        var result = AEDHistoricalSkillProjectorV1.Project(
+            UserA, Context, new[] { first, second })
+            .Single(x => x.Dimension == AEDSkillDimensionV1.Objective);
+
+        Assert.Equal(AEDSkillConfidenceV1.Invalid, result.Confidence);
+        Assert.Null(result.Score);
+        Assert.False(result.ReadyForIncrease);
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public void DifferentContextsAcrossPlayersBlockTeamConfidence()
+    {
+        var required = new[]
+        {
+            AEDSkillDimensionV1.Survival,
+            AEDSkillDimensionV1.Evasion,
+            AEDSkillDimensionV1.Objective
+        };
+
+        var source = required.SelectMany(dimension => new[]
+        {
+            TrustedDimension(UserA, dimension, "CONTEXT_A"),
+            TrustedDimension(UserB, dimension, "CONTEXT_B")
+        });
+
+        var team = AEDTeamSkillProjectorV1.Project(
+            Guid.NewGuid(), new[] { UserA, UserB }, source);
+
+        Assert.All(team.Members, member =>
+            Assert.True(member.ConfidenceComplete));
+        Assert.False(team.ConfidenceComplete);
+        Assert.True(team.HasUncertainPlayer);
+        Assert.Null(team.Mean);
+        Assert.Null(team.Weakest);
+        Assert.Null(team.Variance);
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public void DuplicateValidAndInvalidDimensionBlocksTeamScore()
+    {
+        var required = new[]
+        {
+            AEDSkillDimensionV1.Survival,
+            AEDSkillDimensionV1.Evasion,
+            AEDSkillDimensionV1.Objective
+        };
+
+        var valid = required
+            .Select(dimension => TrustedDimension(UserA, dimension))
+            .ToArray();
+        var invalidDuplicate = TrustedDimension(
+            UserA, AEDSkillDimensionV1.Evasion) with
+        {
+            Score = null,
+            Confidence = AEDSkillConfidenceV1.Invalid,
+            ReadyForIncrease = false
+        };
+
+        var team = AEDTeamSkillProjectorV1.Project(
+            Guid.NewGuid(), new[] { UserA },
+            valid.Append(invalidDuplicate));
+
+        Assert.False(team.ConfidenceComplete);
+        Assert.True(team.HasUncertainPlayer);
+        Assert.Null(team.Members.Single().Score);
+        Assert.Null(team.Mean);
+        Assert.Null(team.Weakest);
+        Assert.Null(team.Variance);
     }
 }

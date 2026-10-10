@@ -103,8 +103,14 @@ public static class AEDHistoricalSkillProjectorV1
                 (x.Resolved == 0 && x.NormalizedValue.HasValue));
 
             var duplicateConflicts = rows
-                .GroupBy(x => new { x.MatchId, x.SourceFingerprint })
-                .Any(group => group.Distinct().Count() > 1);
+                .GroupBy(x => x.MatchId)
+                .Any(group =>
+                {
+                    var first = group.First();
+
+                    return group.Skip(1)
+                        .Any(observation => observation != first);
+                });
 
             if (invalid || duplicateConflicts)
             {
@@ -115,8 +121,8 @@ public static class AEDHistoricalSkillProjectorV1
             }
 
             var unique = rows
-                .GroupBy(x => new { x.MatchId, x.SourceFingerprint })
-                .Select(g => g.First())
+                .GroupBy(x => x.MatchId)
+                .Select(group => group.First())
                 .ToArray();
 
             var resolved = unique.Where(x => x.Resolved > 0)
