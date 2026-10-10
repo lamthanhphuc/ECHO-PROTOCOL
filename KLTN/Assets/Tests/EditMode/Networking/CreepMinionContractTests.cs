@@ -103,6 +103,46 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("GetComponent<CreepMinionRuntime>()", source);
         }
 
+        [Test]
+        public void MinionResearchBaselineMatchesNormalProduction()
+        {
+            var difficultyType = System.Type.GetType(
+                "EchoProtocol.Gameplay.MatchDifficulty, Assembly-CSharp");
+            var profilesType = System.Type.GetType(
+                "EchoProtocol.Gameplay.MatchDifficultyProfiles, Assembly-CSharp");
+            Assert.That(difficultyType, Is.Not.Null);
+            Assert.That(profilesType, Is.Not.Null);
+            var normal = profilesType.GetMethod("Get").Invoke(
+                null, new[] { System.Enum.Parse(difficultyType, "Normal") });
+            Assert.That((int)normal.GetType().GetProperty("Zone1MinionCap").GetValue(normal), Is.EqualTo(1));
+            Assert.That((int)normal.GetType().GetProperty("Zone2MinionCap").GetValue(normal), Is.EqualTo(2));
+            Assert.That((int)normal.GetType().GetProperty("Zone3MinionCap").GetValue(normal), Is.EqualTo(1));
+
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Resources/PF_CreepMinionNetwork.prefab");
+            Assert.That(prefab, Is.Not.Null);
+            var minion = FindComponentByTypeName(prefab,
+                "EchoProtocol.AI.Minions.CreepMinionRuntime");
+            Assert.That(minion, Is.Not.Null);
+            var serialized = new SerializedObject(minion);
+            Assert.That(serialized.FindProperty("visionRange").floatValue, Is.EqualTo(20f));
+            Assert.That(serialized.FindProperty("trackSpeed").floatValue, Is.EqualTo(8f));
+            Assert.That(serialized.FindProperty("harassSpeed").floatValue, Is.EqualTo(10f));
+            Assert.That(serialized.FindProperty("attackCooldownSeconds").floatValue, Is.EqualTo(0.65f));
+            Assert.That(serialized.FindProperty("alertCooldownSeconds").floatValue, Is.EqualTo(4f));
+        }
+
+        [Test]
+        public void MinionProductionSpawnKeepsSafetyConstraints()
+        {
+            string source = File.ReadAllText(SpawnerSource);
+            StringAssert.Contains("_minionSpawnMinDistanceFromPlayer = 18f", source);
+            StringAssert.Contains("_minionSpawnCheckInterval = 3f", source);
+            StringAssert.Contains("NavMeshPathStatus.PathComplete", source);
+            StringAssert.Contains("TryGetCreepMinionSpawnAnchor(zone, out var stalker)", source);
+            StringAssert.Contains("IsCreepMinionSpawnFarFromPlayers", source);
+        }
+
         private static Component FindComponentByTypeName(GameObject root, string fullTypeName)
         {
             var components = root.GetComponents<Component>();
