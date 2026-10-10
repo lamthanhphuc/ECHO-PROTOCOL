@@ -173,7 +173,7 @@ namespace EchoProtocol.UI.HUD
             if (target != null && !isComplete)
             {
                 _targetTransforms.Add(target);
-                _targetTitles.Add("TRẠM NẠP ĐIỆN (SECTOR BOX)");
+                _targetTitles.Add("Trạm cấp điện");
                 _targetColors.Add(sectorBoxColor);
             }
         }
@@ -215,7 +215,7 @@ namespace EchoProtocol.UI.HUD
                 if (terminal != null && !terminal.IsComplete)
                 {
                     _targetTransforms.Add(terminal.transform);
-                    _targetTitles.Add("Security Terminal");
+                    _targetTitles.Add("Trạm an ninh");
                     _targetColors.Add(terminalColor);
                 }
             }
@@ -228,7 +228,7 @@ namespace EchoProtocol.UI.HUD
                 (_matchFlow.Phase == MatchPhase.FinalHunt || _matchFlow.Phase == MatchPhase.ExitCountdown))
             {
                 _targetTransforms.Add(zone3Exit);
-                _targetTitles.Add("DOOREXIT");
+                _targetTitles.Add("Cửa thoát");
                 _targetColors.Add(escapeDoorColor);
                 return;
             }
@@ -238,7 +238,7 @@ namespace EchoProtocol.UI.HUD
                 (_matchFlow.Phase == MatchPhase.FinalHunt || _matchFlow.Phase == MatchPhase.ExitCountdown))
             {
                 _targetTransforms.Add(_escapeDoor.transform);
-                string doorTitle = _escapeDoor.IsComplete ? "CỬA THOÁT HIỂM [SẴN SÀNG]" : "CỬA THOÁT HIỂM [ĐANG MỞ]";
+                string doorTitle = _escapeDoor.IsComplete ? "Cửa thoát" : "Cửa thoát · Đang mở";
                 _targetTitles.Add(doorTitle);
                 _targetColors.Add(escapeDoorColor);
             }

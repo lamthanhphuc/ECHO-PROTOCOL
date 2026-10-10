@@ -28,6 +28,8 @@ namespace EchoProtocol.UI.HUD
         private bool _isOpen;
         private bool _releaseWhenInputClears;
         private float _dismissAllowedAt;
+        private bool _fullGuide;
+        private float _hintExpiresAt;
 
         private void Awake()
         {
@@ -37,6 +39,16 @@ namespace EchoProtocol.UI.HUD
 
         private void Update()
         {
+            if (Keyboard.current != null && Keyboard.current.f2Key.wasPressedThisFrame && _playerRoot != null)
+            {
+                if (_isOpen && _fullGuide) Hide();
+                else if (!PlayerInteractionControlLock.IsGameplayInputBlocked())
+                {
+                    Hide();
+                    Show(GetCurrentToolId(), true);
+                }
+                return;
+            }
             if (_releaseWhenInputClears && !IsAnyButtonPressed())
             {
                 _releaseWhenInputClears = false;
@@ -45,14 +57,15 @@ namespace EchoProtocol.UI.HUD
 
             if (!_isOpen) return;
 
-            if (_controlLock.ShouldAutoRelease())
+            if (_fullGuide && _controlLock.ShouldAutoRelease())
             {
                 Hide(true);
                 return;
             }
 
             if (Time.unscaledTime < _dismissAllowedAt) return;
-            if (WasAnyButtonPressedThisFrame()) Hide(false);
+            if (!_fullGuide && (Time.unscaledTime >= _hintExpiresAt || PlayerInteractionControlLock.IsGameplayInputBlocked())) Hide();
+            else if (_fullGuide && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) Hide();
         }
 
         public void BindPlayer(PlayerInventory inventory, GameObject playerRoot)
@@ -148,17 +161,19 @@ namespace EchoProtocol.UI.HUD
             if (toolId > 0) _shownToolMask |= 1 << toolId;
         }
 
-        private void Show(int toolId)
+        private void Show(int toolId, bool fullGuide = false)
         {
-            if (_isOpen || _playerRoot == null || !IsSupportedTool(toolId) || WasShown(toolId)) return;
+            if (_isOpen || _playerRoot == null || !IsSupportedTool(toolId) || !fullGuide && WasShown(toolId)) return;
 
             MarkShown(toolId);
             _activeToolId = toolId;
             _isOpen = true;
+            _fullGuide = fullGuide;
+            _hintExpiresAt = Time.unscaledTime + 7f;
             _releaseWhenInputClears = false;
             ConfigureLayout(toolId);
             SetVisual(true);
-            _controlLock.Acquire(_playerRoot, Hide, unlockCursor: false);
+            if (_fullGuide) _controlLock.Acquire(_playerRoot, Hide, unlockCursor: false);
             _dismissAllowedAt = Time.unscaledTime + dismissInputDelay;
         }
 
@@ -195,7 +210,7 @@ namespace EchoProtocol.UI.HUD
 
             canvasGroup.alpha = visible ? 1f : 0f;
             canvasGroup.interactable = false;
-            canvasGroup.blocksRaycasts = visible;
+            canvasGroup.blocksRaycasts = visible && _fullGuide;
         }
 
         private void ConfigureLayout(int toolId)
@@ -207,7 +222,7 @@ namespace EchoProtocol.UI.HUD
             root.anchorMax = Vector2.one;
             root.offsetMin = root.offsetMax = Vector2.zero;
 
-            var background = Image("Background", transform, new Color(0f, 0f, 0f, 0.68f));
+            var background = Image("Background", transform, new Color(0f, 0f, 0f, _fullGuide ? 0.68f : 0f));
             Stretch(background.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
             var panel = Image("Panel", transform, new Color(0.025f, 0.035f, 0.038f, 0.96f));
@@ -216,6 +231,23 @@ namespace EchoProtocol.UI.HUD
             panelRect.anchoredPosition = Vector2.zero;
 
             ConfigureToolCard(panelRect, toolId);
+            if (!_fullGuide)
+            {
+                panelRect.anchorMin = panelRect.anchorMax = panelRect.pivot = new Vector2(1f, 1f);
+                panelRect.anchoredPosition = new Vector2(-24f, -24f);
+                panelRect.sizeDelta = new Vector2(460f, 96f);
+                panelRect.Find("Title").gameObject.SetActive(false);
+                panelRect.Find("Description").gameObject.SetActive(false);
+                var controls = panelRect.Find("Controls").GetComponent<Text>();
+                controls.text = controls.text.Split('\n')[0];
+                var rect = controls.rectTransform;
+                Stretch(rect, new Vector2(0f, 1f), new Vector2(1f, 1f),
+                    new Vector2(24f, -48f), new Vector2(-24f, -16f));
+                var hint = panelRect.Find("ContinueText").GetComponent<Text>();
+                hint.text = EchoProtocol.Settings.GameLanguage.Choose("[F2] Hướng dẫn công cụ", "[F2] Tool guide");
+                Stretch(hint.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f),
+                    new Vector2(24f, -78f), new Vector2(-24f, -56f));
+            }
         }
 
         private void ConfigureToolCard(RectTransform panel, int toolId)
@@ -227,7 +259,9 @@ namespace EchoProtocol.UI.HUD
             {
                 case 1:
                     title = "Máy quét hiện trường";
-                    controls = "[Chuột trái]  Quét khu vực trong 10 giây\n[Chuột phải]  Đổi giữa lõi năng lượng và Stalker";
+                    var scanner = _playerRoot.GetComponent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>();
+                    var tuning = scanner != null ? scanner.Tuning : new EchoProtocol.Tools.Scanner.FieldScannerTuning();
+                    controls = EchoProtocol.Settings.GameLanguage.Choose($"[Chuột trái] Quét {tuning.ActiveDuration:0.#} giây\n[Chuột phải] Đổi chế độ", $"[Left click] Scan for {tuning.ActiveDuration:0.#} seconds\n[Right click] Switch mode");
                     description = "Bạn ở giữa radar. Chế độ lõi tìm nguồn năng lượng gần bạn.\nChế độ Stalker chỉ phát hiện Stalker đang di chuyển.";
                     break;
                 case 2:
@@ -247,8 +281,8 @@ namespace EchoProtocol.UI.HUD
                     break;
                 case 6:
                     title = "Bộ ổn định lõi";
-                    controls = "[Chuột trái]  Kích hoạt\nVùng ổn định bán kính 5 m, kéo dài 15 giây.";
-                    description = "Người mang lõi trong vùng có thể chạy nước rút bình thường.\nHồi chiêu 45 giây; theo dõi trên ô trang bị.";
+                    controls = EchoProtocol.Settings.GameLanguage.Choose($"[Chuột trái] Kích hoạt\nBán kính {CoreStabilizerRules.SupportRadius:0.#} m · {CoreStabilizerRules.DurationSeconds:0.#} giây", $"[Left click] Activate\nRadius {CoreStabilizerRules.SupportRadius:0.#} m · {CoreStabilizerRules.DurationSeconds:0.#} seconds");
+                    description = EchoProtocol.Settings.GameLanguage.Choose($"Hỗ trợ người mang lõi trong vùng.\nHồi chiêu {CoreStabilizerRules.CooldownSeconds:0.#} giây.", $"Supports core carriers in range.\nCooldown: {CoreStabilizerRules.CooldownSeconds:0.#} seconds.");
                     break;
                 default: return;
             }
@@ -259,7 +293,7 @@ namespace EchoProtocol.UI.HUD
                 FontStyle.Normal, HUDPresentationStyle.Ink, 82f, 62f);
             TextLabel("Description", panel, description, 14, TextAnchor.UpperLeft,
                 FontStyle.Normal, HUDPresentationStyle.Muted, 164f, 64f);
-            TextLabel("ContinueText", panel, "Nhấn phím bất kỳ để tiếp tục", 12,
+            TextLabel("ContinueText", panel, EchoProtocol.Settings.GameLanguage.Choose("[F2 / ESC] Đóng hướng dẫn", "[F2 / ESC] Close guide"), 12,
                 TextAnchor.MiddleLeft, FontStyle.Normal, HUDPresentationStyle.Muted, 250f, 24f);
         }
 

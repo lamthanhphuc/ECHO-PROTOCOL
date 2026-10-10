@@ -200,7 +200,7 @@ namespace EchoProtocol.UI.HUD
                 : null;
             if (reviveTarget != null && reviveTarget.IsDowned)
             {
-                prompt = "Giữ để Cứu Đồng Đội";
+                prompt = "cứu đồng đội";
                 isHold = true;
                 progress01 = reviveTarget.ReviveProgress01;
                 return true;
@@ -214,8 +214,7 @@ namespace EchoProtocol.UI.HUD
             if (networkPlayerInteractor.IsTeamToolPickupBlocked)
             {
                 prompt =
-                    "CHỈ CÓ THỂ MANG 1 TEAM TOOL\n"
-                    + "<size=18>[G] THẢ TEAM TOOL ĐANG CẦM</size>";
+                    EchoProtocol.Settings.GameLanguage.Choose("Đã có công cụ · [G] Thả để đổi", "Tool equipped · [G] Drop to swap");
                 showInteractKey = false;
                 return true;
             }
@@ -254,6 +253,8 @@ namespace EchoProtocol.UI.HUD
             // Clean existing [E] or [E GIỮ] if present in source prompt
             string cleanPrompt = prompt.Replace("[E GIỮ]", "").Replace("[E]", "").Replace("[E ]", "").Trim();
             bool isSpacefrigateRouteChoice = cleanPrompt.StartsWith("SPACEFRIGATE:", System.StringComparison.Ordinal);
+            if (isSpacefrigateRouteChoice)
+                cleanPrompt = cleanPrompt.Replace("SPACEFRIGATE:", EchoProtocol.Settings.GameLanguage.Choose("Tàu:", "Ship:"));
             bool badgeVisible = showInteractKey && !isSpacefrigateRouteChoice;
             if (_keyBadge != null) _keyBadge.SetActive(badgeVisible);
             if (_keyText != null) _keyText.text = keyLabel;

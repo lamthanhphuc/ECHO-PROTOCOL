@@ -106,7 +106,7 @@ public class SecurityTerminalUIController : MonoBehaviour
 
             if (headerTitleText != null)
             {
-                headerTitleText.text = "ECHO PROTOCOL // SECURITY TERMINAL [ZONE 2]";
+            headerTitleText.text = EchoProtocol.Settings.GameLanguage.Choose("Trạm an ninh", "Security terminal");
             }
 
             if (!relaysOnline && !isComplete)
@@ -180,12 +180,12 @@ public class SecurityTerminalUIController : MonoBehaviour
 
                 if (codeDisplayText != null)
                 {
-                    codeDisplayText.text = $"Mã mở cửa Zone 2:\n<size=32><color=#7EA6A4><b>{code}</b></color></size>";
+                    codeDisplayText.text = $"Mã mở cửa Khu vực 2:\n<size=32><color=#7EA6A4><b>{code}</b></color></size>";
                 }
 
                 if (instructionText != null)
                 {
-                    instructionText.text = "Nhập mã tại một trong hai Access Panel để mở cửa.";
+                    instructionText.text = "Nhập mã tại một trong hai bảng mở cửa để mở cửa.";
                 }
             }
             else
@@ -208,7 +208,7 @@ public class SecurityTerminalUIController : MonoBehaviour
                     float remaining = director != null ? director.RelayRepairRemainingSeconds : 0f;
                     int seconds = Mathf.CeilToInt(remaining);
                     progressText.text = remaining > 0f
-                        ? $"Xác thực: {percent}% | Relay đặt lại sau {seconds / 60:00}:{seconds % 60:00}"
+                        ? $"Xác thực: {percent}% · Relay đặt lại sau {seconds / 60:00}:{seconds % 60:00}"
                         : $"Tiến độ xác thực: {percent}%";
                 }
 

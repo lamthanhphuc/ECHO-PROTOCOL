@@ -62,11 +62,19 @@ namespace EchoProtocol.Settings
 
         private static string TranslateLine(string source)
         {
+            // Accept copy serialized before the terminology update without changing scene object names.
+            string canonical = source.Replace("Doorexit", "cửa thoát").Replace("Spacefrigate", "tàu")
+                .Replace("Security Hold", "xác thực bảo mật").Replace("Access Panel", "bảng mở cửa")
+                .Replace("Fuel Port", "cổng nạp nhiên liệu").Replace("Fuel Cell", "pin nhiên liệu")
+                .Replace("Energy Core", "lõi năng lượng").Replace("Sector Box", "trạm cấp điện")
+                .Replace("Security Terminal", "trạm an ninh");
+            if (Phrases.TryGetValue(canonical, out var canonicalPair)) return canonicalPair[(int)Current];
             if (Phrases.TryGetValue(source, out var pair)) return pair[(int)Current];
             foreach (var template in Templates)
             {
                 if (template.Locale != Current) continue;
                 var match = template.Pattern.Match(source);
+                if (!match.Success && canonical != source) match = template.Pattern.Match(canonical);
                 if (!match.Success) continue;
                 string output = template.Output;
                 for (int argument = 0; argument < 8; argument++)
@@ -158,8 +166,8 @@ PHÒNG ĐANG MỞ|ROOM OPEN
 ĐANG RỜI PHÒNG…|LEAVING ROOM...
 SẴN SÀNG|READY
 CHƯA SẴN SÀNG|NOT READY
-Microphone|Microphone
-Microphone (đầu vào)|Microphone input
+Micrô|Microphone
+Đầu vào micrô|Microphone input
 Âm lượng đầu ra|Output volume
 Nhấn giữ để nói|Push to talk
 Phím bật / tắt mic|Microphone toggle key
@@ -199,15 +207,15 @@ Chọn một phím để thay đổi  ·  ESC để hủy|Select a binding to ch
 Nhấn phím mới  ·  ESC để hủy|Press a new key  ·  ESC to cancel
 ESC  ·  HỦY ĐỔI PHÍM|ESC  ·  CANCEL REBIND
 ESC  ·  QUAY LẠI GAME|ESC  ·  RETURN TO GAME
-Chưa có đồng đội trong voice.|No teammates connected to voice yet.
-Đã kết nối voice trong phòng|Connected to room voice
-Vào phòng để kết nối voice|Join a room to connect voice
-Voice chưa kết nối. Có thể thử kết nối lại.|Voice is disconnected. Try reconnecting.
+Chưa có đồng đội trong thoại.|No teammates connected to voice yet.
+Đã kết nối thoại|Connected to room voice
+Vào phòng để kết nối thoại|Join a room to connect voice
+Thoại chưa kết nối. Có thể thử kết nối lại.|Voice is disconnected. Try reconnecting.
 Đang đăng nhập…|Logging in...
 Đang đăng ký…|Registering...
 Đang xác nhận phiên đăng nhập…|Confirming session...
 Đăng ký thành công. Hãy đăng nhập.|Registration successful. Please log in.
-Không thể kết nối máy chủ. Kiểm tra mạng và thử lại.|Cannot connect to server. Check backend connection.
+Không thể kết nối máy chủ. Kiểm tra mạng và thử lại.|Cannot connect to server. Check your connection and retry.
 Yêu cầu quá thời gian. Vui lòng thử lại.|Request timed out. Please try again.
 Đã xảy ra lỗi. Vui lòng thử lại.|Something went wrong. Please try again.
 Email đã được đăng ký.|Email is already registered
@@ -371,42 +379,42 @@ Mở lối sang khu vực tiếp theo|Open the next area
 Xác thực bảo mật|Security authorization
 Nhập mã truy cập|Enter access code
 Tìm trạm an ninh|Find the security terminal
-Tìm Spacefrigate|Find the Spacefrigate
-Tìm Fuel Cell|Find a Fuel Cell
-Hộ tống Spacefrigate|Escort the Spacefrigate
-Nạp nhiên liệu cho Spacefrigate|Refuel the Spacefrigate
+Tìm tàu|Find the Spacefrigate
+Tìm pin nhiên liệu|Find a Fuel Cell
+Hộ tống tàu|Escort the Spacefrigate
+Nạp nhiên liệu cho tàu|Refuel the Spacefrigate
 Chuyển nguồn điện|Transfer power
 Đã nạp nhiên liệu|Refueled
 Đã mở cửa an ninh|Security door opened
-Trở về Security Terminal|Return to the Security Terminal
-Trở về Doorexit để sơ tán.|Return to Doorexit to evacuate.
-Cửa thoát đã mở. Trở về Doorexit để sơ tán.|The exit is open. Return to Doorexit to evacuate.
+Trở về trạm an ninh|Return to the Security Terminal
+Trở về cửa thoát để sơ tán.|Return to the exit to evacuate.
+Cửa thoát đã mở. Trở về cửa thoát để sơ tán.|The exit is open. Return to the exit to evacuate.
 Cửa thoát đã mở · Còn {0}|The exit is open · {0} remaining
-Trở về Doorexit · Còn {0}|Return to Doorexit · {0} remaining
+Trở về cửa thoát · Còn {0}|Return to the exit · {0} remaining
 Đi tiếp đến hành lang sơ tán.|Proceed to the evacuation corridor.
 Đứng gần tàu để tiếp tục di chuyển.|Stay near the frigate to keep it moving.
 Tìm nguồn dự phòng và chuẩn bị vận chuyển.|Find the backup power source and prepare transport.
 Cấp điện để mở lối sơ tán.|Supply power to open the evacuation route.
 Thả tay sẽ làm giảm tiến độ.|Releasing will reduce progress.
 Cấp điện cho hệ thống sơ tán · {0}%|Power the evacuation system · {0}%
-Lắp Energy Core vào Sector Box    {0}/{1}|Insert Energy Cores into the Sector Box    {0}/{1}
+Lắp lõi năng lượng vào trạm cấp điện    {0}/{1}|Insert Energy Cores into the Sector Box    {0}/{1}
 Sửa và đồng bộ relay    {0}/4|Repair and synchronize relays    {0}/4
-Tải dữ liệu tại Security Terminal · {0}%|Download data at the Security Terminal · {0}%
-Qua cửa airlock và tìm Security Terminal.|Go through the airlock and find the Security Terminal.
-Nhập mã xác thực tại Access Panel.|Enter the authorization code at the Access Panel.
+Tải dữ liệu tại trạm an ninh · {0}%|Download data at the Security Terminal · {0}%
+Qua cửa airlock và tìm trạm an ninh.|Go through the airlock and find the Security Terminal.
+Nhập mã xác thực tại bảng mở cửa.|Enter the authorization code at the Access Panel.
 Nhập mã xác thực tại Power Control.|Enter the authorization code at Power Control.
 Giữ để {0}|Hold to {0}
 1 Trái · 2 Thẳng · 3 Phải · 4 Lùi|1 Left · 2 Forward · 3 Right · 4 Back
 Chọn hướng di chuyển|Choose a direction
-Tiếp tục hộ tống Spacefrigate.|Continue escorting the Spacefrigate.
+Tiếp tục hộ tống tàu.|Continue escorting the Spacefrigate.
 Đội đã sơ tán|The team evacuated
 Đội đã sơ tán thành công.|The team evacuated successfully.
-Hết nhiên liệu. Tìm Fuel Cell trong khu bảo trì|Out of fuel. Find a Fuel Cell in the maintenance area
-rồi mang về Fuel Port.|and bring it to the Fuel Port.
-Mang Fuel Cell về Fuel Port.|Bring the Fuel Cell to the Fuel Port.
+Hết nhiên liệu. Tìm pin nhiên liệu trong khu bảo trì|Out of fuel. Find a Fuel Cell in the maintenance area
+rồi mang về cổng nạp nhiên liệu.|and bring it to the Fuel Port.
+Mang pin nhiên liệu về cổng nạp nhiên liệu.|Bring the Fuel Cell to the Fuel Port.
 Giữ E để nạp khi hết nhiên liệu · G để thả.|Hold E to refuel when empty · G to drop.
 SECURITY HOLD QUÁ HẠN|SECURITY HOLD EXPIRED
-Cả 4 Relay đã bị đặt lại vì Security Hold quá hạn. Hãy sửa lại các Relay.|All 4 relays reset because the Security Hold expired. Repair the relays again.
+Cả 4 Relay đã bị đặt lại vì xác thực bảo mật quá hạn. Hãy sửa lại các Relay.|All 4 relays reset because the Security Hold expired. Repair the relays again.
 Tên đăng nhập và mật khẩu không được để trống.|Username and password are required.
 Vui lòng điền đầy đủ thông tin.|All fields are required.
 Email không hợp lệ.|Email is invalid.
@@ -432,22 +440,22 @@ Xác nhận mật khẩu|CONFIRM PASSWORD
 ĐANG TẢI…|Loading...
 TÀI KHOẢN|ACCOUNT
 TRỞ VỀ|BACK
-Tìm Security Terminal|Find Security Terminal
-Mở Access Panel|Open Access Panel
-Trở về Doorexit|Return to Doorexit
+Tìm trạm an ninh|Find Security Terminal
+Mở bảng mở cửa|Open Access Panel
+Trở về cửa thoát|Return to the exit
 THOÁT HIỂM|EVACUATE
-ZONE 01 · Khôi phục nguồn điện|ZONE 01 · Restore sector power
-ZONE 02 · An ninh|ZONE 02 · Security
-ZONE 03 · Nguồn dự phòng|ZONE 03 · Backup power
+Khu vực 01 · Khôi phục nguồn điện|ZONE 01 · Restore sector power
+Khu vực 02 · An ninh|ZONE 02 · Security
+Khu vực 03 · Nguồn dự phòng|ZONE 03 · Backup power
 [J] Đóng|[J] Close
 [J] Nhiệm vụ|[J] Objectives
 Xác thực {0}%|Authorize {0}%
-Tìm và lắp Energy Core vào Sector Box: {0}/{1}|Find and insert Energy Cores into the Sector Box: {0}/{1}
-Tìm Security Terminal: {0}|Find the Security Terminal: {0}
+Tìm và lắp lõi năng lượng vào trạm cấp điện: {0}/{1}|Find and insert Energy Cores into the Sector Box: {0}/{1}
+Tìm trạm an ninh: {0}|Find the Security Terminal: {0}
 Sửa 4 relay: {0}/4|Repair 4 relays: {0}/4
 Xác thực bảo mật: {0}% {1}|Security authorization: {0}% {1}
-Nhập mã tại Access Panel: {0}|Enter the Access Panel code: {0}
-Tìm Spacefrigate: {0} · Đưa tàu về bến: {1}|Find the Spacefrigate: {0} · Bring it to the dock: {1}
+Nhập mã tại bảng mở cửa: {0}|Enter the Access Panel code: {0}
+Tìm tàu: {0} · Đưa tàu về bến: {1}|Find the Spacefrigate: {0} · Bring it to the dock: {1}
 Chuyển nguồn điện: {0}|Transfer power: {0}
 Hoàn tất|Done
 Giữ {0} · {1}% · {2}/4 người|Hold {0} · {1}% · {2}/4 players
@@ -623,6 +631,56 @@ Về menu|Return to menu
 Về menu chính?|Return to main menu?
 Bạn muốn về menu chính?|Return to the main menu?
 Thử lại|Retry
+MẬT MÃ PHẢI CÓ ĐỦ 4 CHỮ SỐ|ENTER ALL 4 CODE DIGITS
+Đang xác thực mã…|Verifying code…
+Trạng thái đã thay đổi · Thử lại|State changed · Retry
+XÁC THỰC THÀNH CÔNG // KHÔI PHỤC NGUỒN ĐIỆN!|VERIFICATION SUCCESSFUL // POWER RESTORED!
+Sai mã · Tạm khóa 5 giây|Incorrect code · Locked for 5 seconds
+Sai mã · Còn {0} lượt thử|Incorrect code · {0} attempts remaining
+Không được cấp quyền|Access denied
+Hệ thống tạm khóa · Vui lòng chờ|System temporarily locked · Please wait
+Mở cửa khu vực|Unlock area door
+Đã mở cửa khu vực|Area door unlocked
+Cần xác thực tại trạm an ninh|Authorization required at the Security Terminal
+Tạm khóa · Còn {0} giây|Locked · {0} seconds remaining
+Nhập mã xác thực để mở cửa|Enter the authorization code to unlock the door
+Relay chưa hoạt động|Relays offline
+{0} / {1} hoạt động|{0} / {1} online
+{0} / {1} chưa hoạt động|{0} / {1} offline
+{0} / {1} đã khôi phục|{0} / {1} restored
+Trạng thái hệ thống relay|Relay system status
+• Nguồn điện · Relay A:|• Power · Relay A:
+• Dữ liệu · Relay B:|• Data · Relay B:
+Tổng tiến độ:|Total progress:
+Đã cấp quyền truy cập|Access authorized
+Mã mở cửa Khu vực 2:|Zone 2 door code:
+Nhập mã tại một trong hai bảng mở cửa để mở cửa.|Enter the code at either Access Panel to unlock the door.
+Đang xác thực ({0}%)|Verifying ({0}%)
+Sẵn sàng xác thực|Ready to verify
+Xác thực: {0}% · Relay đặt lại sau {1}|Verification: {0}% · Relays reset in {1}
+Tiến độ xác thực: {0}%|Verification progress: {0}%
+Đang truyền mã|TRANSMITTING
+Giải mã để mở đồng bộ|Decode to unlock synchronization
+Đã khóa|LOCKED
+Lỗi|Fault
+Cảnh báo|Warning
+Giữ để cứu đồng đội|Hold to revive teammate
+Trạm cấp điện|Power station
+Trạm an ninh|Security terminal
+Cửa thoát|Exit
+Cửa thoát · Đang mở|Exit · Opening
+Trò chuyện thoại|Voice Chat
+P Nguồn · ● Đầu nối · X Hỏng|P Source · ● Terminal · X Fault
+Đã qua kiểm tra tải|Load test passed
+Kiểm tra tải 0/1|Load test 0/1
+Đúng vị trí|Correct position
+Đúng số, sai vị trí|Correct digit, wrong position
+Không có trong mã|Not in the code
+Đã khôi phục nguồn điện|Power restored
+Nhặt lõi năng lượng|Pick up Energy Core
+Nạp lõi năng lượng vào trạm cấp điện|Place Energy Core
+Đã nạp đủ lõi năng lượng|Sector Box complete
+Số dư: {0} Echo Credits|Balance: {0} Echo Credits
 ";
     }
 }

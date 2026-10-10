@@ -74,6 +74,8 @@ namespace EchoProtocol.RelayA
                 breakerLayoutRevision = BreakerLayoutRevision;
                 _breakerSurface.gameObject.SetActive(false);
             }
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayControl(_breakerReset);
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayControl(_breakerClose);
             if (_breakerBound || !Application.isPlaying) return;
             _breakerBound = true;
             _breakerReset.onClick.AddListener(() => SendBreaker(-1, true));
@@ -149,10 +151,11 @@ namespace EchoProtocol.RelayA
             if (_breakerSize != state.Pattern.Size || _breakerTiles == null) BuildBreakerBoard(state.Pattern.Size);
             bool editing = state.Phase == RelayABreakerPhase.Editing;
             _breakerReset.interactable = editing;
+
             _breakerRule.text = "Đưa mọi ô về màu xanh.\nNhấn đổi ô hiện tại và 4 ô cạnh nó."
                 + (state.Pattern.Locked != 0 ? " Không thể nhấn cầu dao bị khóa." : "");
             _breakerCounts.text = $"Ô ổn định {state.StableCount}/{state.Pattern.Size * state.Pattern.Size} · {state.Moves} lượt";
-            _breakerStatus.text = Time.unscaledTime < _deniedUntil ? "LOCKED"
+            _breakerStatus.text = Time.unscaledTime < _deniedUntil ? EchoProtocol.Settings.GameLanguage.Choose("Đã khóa", "Locked")
                 : state.Phase == RelayABreakerPhase.Balancing || state.Phase == RelayABreakerPhase.Complete ? "Ma trận ổn định" : "ACTIVE";
             _breakerStatus.color = state.Red == 0 ? Green : LiveLine;
             uint preview = editing && _hoverBreaker >= 0 && (state.Pattern.Locked & (1u << _hoverBreaker)) == 0

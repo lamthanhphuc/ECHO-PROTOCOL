@@ -26,7 +26,7 @@ namespace EchoProtocol.RelayA
         [SerializeField] private Button _closeButton;
         [SerializeField] private int routingLayoutRevision;
         [SerializeField] private TMP_Text _routingStage;
-        private const int RoutingLayoutRevision = 2;
+        private const int RoutingLayoutRevision = 3;
         private bool _buttonsBound;
         private Button[] _tiles;
         private Image[][] _arms;
@@ -218,12 +218,12 @@ namespace EchoProtocol.RelayA
                 new Vector2(0.60f, 0.06f), 24, TextAlignmentOptions.Left, Color.white);
             _routingStage = AddText(_surface, "Stage", "01 · Nối mạch", new Vector2(0.045f, 0.815f),
                 new Vector2(0.91f, 0.04f), 17, TextAlignmentOptions.Left, LiveLine);
-            _rules = AddText(_surface, "Rules", "P  Nguồn điện\n●  Đầu nối\nX  Ô hỏng\n\nCấp điện cho mọi đầu nối.\nCách ly các ô hỏng.\n\nKiểm tra thất bại sẽ\nđặt lại hướng các ô.",
-                new Vector2(0.045f, 0.28f), new Vector2(0.265f, 0.48f), 17,
+            _rules = AddText(_surface, "Rules", "P Nguồn · ● Đầu nối · X Hỏng",
+                new Vector2(0.045f, 0.75f), new Vector2(0.91f, 0.04f), 15,
                 TextAlignmentOptions.TopLeft, IdleLine);
             _board = new GameObject("CircuitBoard", typeof(RectTransform)).GetComponent<RectTransform>();
             _board.SetParent(_surface, false);
-            SetRect(_board, new Vector2(0.32f, 0.21f), new Vector2(0.955f, 0.79f));
+            SetRect(_board, new Vector2(0.32f, 0.21f), new Vector2(0.955f, 0.74f));
             _status = AddText(_surface, "Status", "Sẵn sàng kiểm tra",
                 new Vector2(0.045f, 0.135f), new Vector2(0.91f, 0.05f), 16,
                 TextAlignmentOptions.Left, LiveLine);
@@ -237,6 +237,8 @@ namespace EchoProtocol.RelayA
 
         private void BindButtons()
         {
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayControl(_testButton);
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayControl(_closeButton);
             if (_buttonsBound || !Application.isPlaying) return;
             _buttonsBound = true;
             _testButton.onClick.AddListener(() =>
@@ -376,7 +378,9 @@ namespace EchoProtocol.RelayA
             var image = go.GetComponent<Image>();
             image.color = TileBack;
             var button = go.GetComponent<Button>();
+            EchoProtocol.Audio.GameAudioRuntime.RegisterButton(button);
             button.targetGraphic = image;
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayControl(button);
             if (!string.IsNullOrEmpty(label))
             {
                 var textGo = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));

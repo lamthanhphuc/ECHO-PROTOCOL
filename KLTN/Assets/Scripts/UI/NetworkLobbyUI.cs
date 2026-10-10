@@ -293,15 +293,25 @@ namespace EchoProtocol.UI
                     if (member == null) continue;
                     if (list.Length > 0) list.AppendLine().AppendLine();
                     list.Append("> ").Append(member.DisplayName);
-                    if (member.IsLocal) list.Append(EchoProtocol.Settings.GameLanguage.Choose(_room.IsHost ? " [BẠN / HOST]" : " [BẠN]", _room.IsHost ? " [YOU / HOST]" : " [YOU]"));
+                    if (member.IsLocal) list.Append(EchoProtocol.Settings.GameLanguage.Choose(_room.IsHost ? " [BẠN / CHỦ PHÒNG]" : " [BẠN]", _room.IsHost ? " [YOU / HOST]" : " [YOU]"));
                     list.AppendLine().Append("  ").Append(EchoProtocol.Settings.GameLanguage.Choose(member.IsReady ? "SẴN SÀNG" : "CHƯA SẴN SÀNG", member.IsReady ? "READY" : "NOT READY"))
-                        .Append(EchoProtocol.Settings.GameLanguage.Choose("  |  CÔNG CỤ ", "  |  TOOL ")).Append(member.ToolId)
-                        .Append("  |  ").Append(member.CharacterId == 1 ? "JAMMO" : "ASTRONAUT")
-                        .AppendLine().Append("  PET: ").Append(PetCatalog.Name(member.PetId));
+                        .Append(EchoProtocol.Settings.GameLanguage.Choose("  |  CÔNG CỤ: ", "  |  TOOL: ")).Append(MemberToolName(member.ToolId))
+                        .Append("  |  ").Append(member.CharacterId == 1 ? "JAMMO" : EchoProtocol.Settings.GameLanguage.Choose("PHI HÀNH GIA", "ASTRONAUT"))
+                        .AppendLine().Append(EchoProtocol.Settings.GameLanguage.Choose("  THÚ ĐỒNG HÀNH: ", "  PET: ")).Append(member.PetId == 0 ? EchoProtocol.Settings.GameLanguage.Choose("Không có", "None") : PetCatalog.Name(member.PetId));
                 }
             if (emptyMemberText != null) emptyMemberText.gameObject.SetActive(list.Length == 0);
-            memberListText.text = list.Length == 0 ? (emptyMemberText == null ? "NO PLAYERS YET" : string.Empty) : list.ToString();
+            memberListText.text = list.Length == 0 ? (emptyMemberText == null ? EchoProtocol.Settings.GameLanguage.Choose("Chưa có người chơi", "No players yet") : string.Empty) : list.ToString();
         }
+
+        private static string MemberToolName(int toolId) => toolId switch
+        {
+            LobbyPlayerState.FieldScannerToolId => EchoProtocol.Settings.GameLanguage.Choose("Máy quét", "Field Scanner"),
+            LobbyPlayerState.NoiseMakerToolId => EchoProtocol.Settings.GameLanguage.Choose("Máy tạo tiếng động", "Noise Maker"),
+            LobbyPlayerState.FirstAidKitToolId => EchoProtocol.Settings.GameLanguage.Choose("Bộ sơ cứu", "First Aid Kit"),
+            LobbyPlayerState.DoorJammerToolId => EchoProtocol.Settings.GameLanguage.Choose("Thiết bị chặn cửa", "Door Jammer"),
+            LobbyPlayerState.CoreStabilizerToolId => EchoProtocol.Settings.GameLanguage.Choose("Bộ ổn định lõi", "Core Stabilizer"),
+            _ => EchoProtocol.Settings.GameLanguage.Choose("Chưa chọn", "Not selected"),
+        };
 
         private void OnRoomUpdated(RoomInfoViewModel state) => RefreshMemberList();
 

@@ -111,7 +111,7 @@ namespace EchoProtocol.UI.Auth
       if (_runtime.RestoreState == AuthDomain.SessionRestoreState.FailedNetwork)
       {
         SetBusy(false);
-        SetStatus("Cannot connect to server. Check backend connection.");
+        SetStatus("Cannot connect to server. Check your connection and retry.");
         ShowLoginPanel();
         yield break;
       }
@@ -170,7 +170,7 @@ namespace EchoProtocol.UI.Auth
 
           _runtime.SetRestoreState(AuthDomain.SessionRestoreState.FailedNetwork);
           SetBusy(false);
-          SetStatus("Cannot connect to server. Check backend connection.");
+          SetStatus("Cannot connect to server. Check your connection and retry.");
           ShowLoginPanel();
           yield break;
         }

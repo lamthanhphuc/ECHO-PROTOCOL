@@ -212,13 +212,7 @@ namespace EchoProtocol.RelayA
                     : primary ? new Color(0.07f, 0.23f, 0.25f, 1f) : new Color(0.085f, 0.13f, 0.15f, 1f));
             body.transform.SetAsFirstSibling();
             button.targetGraphic = body;
-            var colors = button.colors;
-            colors.highlightedColor = new Color(1.25f, 1.35f, 1.4f, 1f);
-            colors.selectedColor = colors.highlightedColor;
-            colors.pressedColor = new Color(0.65f, 0.8f, 0.85f, 1f);
-            colors.disabledColor = new Color(0.35f, 0.38f, 0.4f, 1f);
-            colors.fadeDuration = 0.08f;
-            button.colors = colors;
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayControl(button);
             var buttonLabel = button.GetComponentInChildren<TMP_Text>();
             if (buttonLabel != null) { buttonLabel.fontSize = 16f; buttonLabel.fontSizeMax = 16f; }
             return button;
@@ -285,7 +279,7 @@ namespace EchoProtocol.RelayA
             _stabilizationProgressText.text = $"{state.StabilitySeconds:0.0} / {state.StabilityRequiredSeconds:0.0} s";
             _stabilizationProgressText.color = statusColor;
             _stabilizationRecovery.text = config.RequireFaultRecovery
-                ? state.RecoveredFaults > 0 ? "Đã qua kiểm tra tải · Giữ đầu ra an toàn" : "Kiểm tra tải 0/1 · Xử lý lỗi" : "";
+                ? state.RecoveredFaults > 0 ? "Đã qua kiểm tra tải" : "Kiểm tra tải 0/1" : "";
             for (int i = 0; i < _recoverySegments.Length; i++)
             {
                 _recoverySegments[i].gameObject.SetActive(config.RequireFaultRecovery && i == 0);
@@ -298,6 +292,7 @@ namespace EchoProtocol.RelayA
                     ? state.ActiveFault != RelayAFaultType.None ? "Bù lỗi" : "Chờ kiểm tra tải"
                     : state.IsStable ? "Ổn định" : "Đầu ra chưa ổn định";
             _stabilizationHoldState.color = statusColor;
+            _stabilizationHoldState.gameObject.SetActive(false);
             bool active = state.ActiveFault != RelayAFaultType.None || state.IsDangerous;
             Color alertColor = active ? Red : WarningYellow;
             _stabilizationWarningPanel.GetComponent<Image>().color = active
@@ -307,7 +302,7 @@ namespace EchoProtocol.RelayA
             _stabilizationWarningText.text = state.ActiveFault != RelayAFaultType.None
                 ? config.RequireFaultRecovery
                     ? state.IsStable
-                        ? $"{FaultName(state.ActiveFault)}\nGiữ đầu ra an toàn\nCòn {state.FaultActiveRemaining:0.0} giây"
+                        ? $"{FaultName(state.ActiveFault)}\nCòn {state.FaultActiveRemaining:0.0} giây"
                         : $"{FaultName(state.ActiveFault)}\n{FaultHint(state.ActiveFault)}\nGiữ an toàn {config.FaultRecoveryHoldSeconds:0.0} s"
                     : $"Lỗi đang tác động\n{FaultName(state.ActiveFault)}\n{state.FaultActiveRemaining:0.0} s"
                 : state.WarningFault != RelayAFaultType.None

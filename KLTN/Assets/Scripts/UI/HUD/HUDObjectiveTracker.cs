@@ -174,7 +174,7 @@ namespace EchoProtocol.UI.HUD
                         if (required <= 0) required = 4;
                         SetObjective(
                             "Khôi phục nguồn điện",
-                            $"Lắp Energy Core vào Sector Box    {placed}/{required}",
+                            $"Lắp lõi năng lượng vào trạm cấp điện    {placed}/{required}",
                             required > 0 ? (float)placed / required : 0f,
                             new Color(0f, 0.85f, 1f, 1f));
                         return;
@@ -183,7 +183,7 @@ namespace EchoProtocol.UI.HUD
                         SetPhaseBadge("ZONE 2 // FIND SECURITY TERMINAL", "#00E5FF");
                         SetObjective(
                             "Tìm trạm an ninh",
-                            "Qua cửa airlock và tìm Security Terminal.",
+                            "Qua cửa airlock và tìm trạm an ninh.",
                             0f,
                             new Color(0f, 0.85f, 1f, 1f));
                         return;
@@ -201,7 +201,7 @@ namespace EchoProtocol.UI.HUD
                     case EchoProtocol.MatchFlow.Zone2MissionStage.SecurityHoldReady:
                         SetPhaseBadge("ZONE 2 // SECURITY HOLD READY", "#00E676");
                         SetObjective(
-                            "Trở về Security Terminal",
+                            "Trở về trạm an ninh",
                             $"Relay 4/4 · Trở về trạm\nĐặt lại sau {RelayTimeText(z2)}",
                             1f,
                             new Color(0f, 0.9f, 0.4f, 1f));
@@ -226,7 +226,7 @@ namespace EchoProtocol.UI.HUD
                         SetPhaseBadge("ZONE 2 // Mở lối sang khu vực tiếp theo", "#00FF99");
                         SetObjective(
                             "Mở lối sang khu vực tiếp theo",
-                            "Nhập mã xác thực tại Access Panel.",
+                            "Nhập mã xác thực tại bảng mở cửa.",
                             1f,
                             new Color(0f, 1f, 0.6f, 1f));
                         return;
@@ -246,7 +246,7 @@ namespace EchoProtocol.UI.HUD
             {
                 case MatchPhase.Zone3FindFrigate:
                     SetPhaseBadge("ZONE 3 // EMERGENCY POWER", "#00E5FF");
-                    SetObjective("Tìm Spacefrigate", "Tìm nguồn dự phòng và chuẩn bị vận chuyển.", 0f,
+                    SetObjective("Tìm tàu", "Tìm nguồn dự phòng và chuẩn bị vận chuyển.", 0f,
                         new Color(0f, 0.85f, 1f, 1f));
                     break;
 
@@ -264,19 +264,19 @@ namespace EchoProtocol.UI.HUD
                     else if (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(
                         EchoProtocol.Visuals.ObjectiveGlowHighlight.GetLocalPlayerTransform()?.gameObject) != null)
                     {
-                        SetObjective("Nạp nhiên liệu cho Spacefrigate",
-                            "Mang Fuel Cell về Fuel Port.\nGiữ E để nạp khi hết nhiên liệu · G để thả.",
+                        SetObjective("Nạp nhiên liệu cho tàu",
+                            "Mang pin nhiên liệu về cổng nạp nhiên liệu.\nGiữ E để nạp khi hết nhiên liệu · G để thả.",
                             convoy != null ? convoy.Fuel01 : 0f, new Color(1f, 0.65f, 0.1f, 1f));
                     }
                     else if (convoy != null && convoy.IsFuelEmpty)
                     {
-                        SetObjective("Tìm Fuel Cell",
-                            "Hết nhiên liệu. Tìm Fuel Cell trong khu bảo trì\nrồi mang về Fuel Port.",
+                        SetObjective("Tìm pin nhiên liệu",
+                            "Hết nhiên liệu. Tìm pin nhiên liệu trong khu bảo trì\nrồi mang về cổng nạp nhiên liệu.",
                             0f, new Color(1f, 0.35f, 0.1f, 1f));
                     }
                     else if (convoy != null && convoy.WasFuelRestoredRecently)
                     {
-                        SetObjective("Đã nạp nhiên liệu", convoy.FuelDisplay + "\nTiếp tục hộ tống Spacefrigate.",
+                        SetObjective("Đã nạp nhiên liệu", convoy.FuelDisplay + "\nTiếp tục hộ tống tàu.",
                             convoy.Fuel01, new Color(0.2f, 1f, 0.5f, 1f));
                     }
                     else if (convoy != null && convoy.IsWaitingForRouteChoice)
@@ -287,7 +287,7 @@ namespace EchoProtocol.UI.HUD
                     }
                     else
                     {
-                        SetObjective("Hộ tống Spacefrigate",
+                        SetObjective("Hộ tống tàu",
                             (convoy != null ? convoy.FuelDisplay + "\n" : "") + "Đứng gần tàu để tiếp tục di chuyển.",
                             0.35f,
                             new Color(0f, 0.85f, 1f, 1f));
@@ -301,7 +301,7 @@ namespace EchoProtocol.UI.HUD
                     if (required <= 0) required = 4;
                     SetObjective(
                         "Khôi phục nguồn điện",
-                        $"Lắp Energy Core vào Sector Box    {placed}/{required}",
+                        $"Lắp lõi năng lượng vào trạm cấp điện    {placed}/{required}",
                         required > 0 ? (float)placed / required : 0f,
                         new Color(0f, 0.85f, 1f, 1f));
                     break;
@@ -312,7 +312,7 @@ namespace EchoProtocol.UI.HUD
                     int percent = Mathf.RoundToInt(progress * 100f);
                     SetObjective(
                         "Xác thực bảo mật",
-                        $"Tải dữ liệu tại Security Terminal · {percent}%",
+                        $"Tải dữ liệu tại trạm an ninh · {percent}%",
                         progress,
                         new Color(1f, 0.3f, 0.1f, 1f));
                     break;
@@ -334,8 +334,8 @@ namespace EchoProtocol.UI.HUD
                     bool timerRunning = IsEmergencyPowerTimerRunning();
                     string timeFormatted = FormatTime(secondsRemaining);
                     string statusMsg = timerRunning
-                        ? $"Cửa thoát đã mở · Còn {timeFormatted}\nTrở về Doorexit để sơ tán."
-                        : "Cửa thoát đã mở. Trở về Doorexit để sơ tán.";
+                        ? $"Cửa thoát đã mở · Còn {timeFormatted}\nTrở về cửa thoát để sơ tán."
+                        : "Cửa thoát đã mở. Trở về cửa thoát để sơ tán.";
 
                     SetObjective(
                         escapePhase ? "Thoát khỏi cơ sở" : "Trở về cửa thoát hiểm",
@@ -458,7 +458,7 @@ namespace EchoProtocol.UI.HUD
             if (!networkNotice && Time.unscaledTime >= _localRelayResetNoticeUntil) return;
             SetPhaseBadge("SECURITY HOLD QUÁ HẠN", "#FF3D00");
             SetText(objectiveDetailTmp, objectiveDetailText,
-                "Cả 4 Relay đã bị đặt lại vì Security Hold quá hạn. Hãy sửa lại các Relay.");
+                "Cả 4 Relay đã bị đặt lại vì xác thực bảo mật quá hạn. Hãy sửa lại các Relay.");
         }
 
         private void SetObjective(string title, string detail, float progress01, Color accentColor)

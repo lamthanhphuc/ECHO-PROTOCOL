@@ -11,6 +11,8 @@ namespace EchoProtocol.UI.HUD
     {
         private GameObject _panel;
         private Text _body;
+        private Text _title;
+        private Text _closeHint;
         private GameObject _compactPanel;
         private Text _compactText;
         private EnergyCoreObjectiveProgress _cores;
@@ -37,7 +39,7 @@ namespace EchoProtocol.UI.HUD
             labelRect.anchorMin = Vector2.zero;
             labelRect.anchorMax = Vector2.one;
             labelRect.offsetMin = new Vector2(32f, 24f);
-            labelRect.offsetMax = new Vector2(-32f, -24f);
+            labelRect.offsetMax = new Vector2(-32f, -76f);
             _body = label.GetComponent<Text>();
             _body.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             _body.fontSize = 17;
@@ -45,6 +47,8 @@ namespace EchoProtocol.UI.HUD
             _body.alignment = TextAnchor.UpperLeft;
             _body.supportRichText = true;
             _body.raycastTarget = false;
+            _title = CreateHeader("MissionsTitle", false);
+            _closeHint = CreateHeader("MissionsCloseHint", true);
             _panel.SetActive(false);
 
             _compactPanel = new GameObject("ZoneMissionCompact", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
@@ -74,6 +78,25 @@ namespace EchoProtocol.UI.HUD
             _compactText.raycastTarget = false;
         }
 
+        private Text CreateHeader(string name, bool rightAligned)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            go.transform.SetParent(_panel.transform, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = new Vector2(rightAligned ? 1f : 0f, 1f);
+            rect.pivot = new Vector2(rightAligned ? 1f : 0f, 1f);
+            rect.anchoredPosition = new Vector2(rightAligned ? -32f : 32f, -24f);
+            rect.sizeDelta = new Vector2(rightAligned ? 180f : 340f, 32f);
+            var text = go.GetComponent<Text>();
+            text.font = _body.font;
+            text.fontSize = rightAligned ? 13 : 22;
+            text.fontStyle = rightAligned ? FontStyle.Normal : FontStyle.Bold;
+            text.color = rightAligned ? HUDPresentationStyle.Muted : HUDPresentationStyle.Ink;
+            text.alignment = rightAligned ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
+            text.raycastTarget = false;
+            return text;
+        }
+
         private void Update()
         {
             if (_panel == null) return;
@@ -95,6 +118,8 @@ namespace EchoProtocol.UI.HUD
 
         private void RefreshText()
         {
+            _title.text = EchoProtocol.Settings.GameLanguage.Choose("Nhiệm vụ", "Objectives");
+            _closeHint.text = EchoProtocol.Settings.GameLanguage.Choose("[J] Đóng", "[J] Close");
             if (_cores == null) _cores = FindAnyObjectByType<EnergyCoreObjectiveProgress>();
             if (_terminal == null) _terminal = FindAnyObjectByType<SecurityTerminalDownload>();
             if (_flow == null) _flow = FindAnyObjectByType<MatchFlowController>();
@@ -140,30 +165,29 @@ namespace EchoProtocol.UI.HUD
             bool zone2Available = stage > Zone2MissionStage.Zone1CoreObjective;
 
             if (!zone2Available)
-                _compactText.text = $"<color=#7EA6A4><b>ZONE 1</b></color>  [J] Nhiệm vụ\nCore {placed}/{required}";
+                _compactText.text = $"<color=#7EA6A4><b>Khu vực 01</b></color>  [J] Nhiệm vụ\nCore {placed}/{required}";
             else if (stage == Zone2MissionStage.FindSecurityTerminal)
-                _compactText.text = "<color=#7EA6A4><b>ZONE 2</b></color>  [J] Nhiệm vụ\nTìm Security Terminal";
+                _compactText.text = "<color=#7EA6A4><b>Khu vực 02</b></color>  [J] Nhiệm vụ\nTìm trạm an ninh";
             else if (stage == Zone2MissionStage.RepairRelays)
-                _compactText.text = $"<color=#7EA6A4><b>ZONE 2</b></color>  [J] Nhiệm vụ\nRelay {relays}/4";
+                _compactText.text = $"<color=#7EA6A4><b>Khu vực 02</b></color>  [J] Nhiệm vụ\nRelay {relays}/4";
             else if (stage == Zone2MissionStage.SecurityHoldReady || stage == Zone2MissionStage.SecurityHold)
-                _compactText.text = $"<color=#7EA6A4><b>ZONE 2</b></color>  [J] Nhiệm vụ\nXác thực {security}%";
+                _compactText.text = $"<color=#7EA6A4><b>Khu vực 02</b></color>  [J] Nhiệm vụ\nXác thực {security}%";
             else if (stage < Zone2MissionStage.Zone2Completed)
-                _compactText.text = "<color=#7EA6A4><b>ZONE 2</b></color>  [J] Nhiệm vụ\nMở Access Panel";
+                _compactText.text = "<color=#7EA6A4><b>Khu vực 02</b></color>  [J] Nhiệm vụ\nMở bảng mở cửa";
             else
-                _compactText.text = "<color=#7EA6A4><b>ZONE 2</b></color>  [J] Nhiệm vụ\nHoàn thành";
+                _compactText.text = "<color=#7EA6A4><b>Khu vực 02</b></color>  [J] Nhiệm vụ\nHoàn thành";
 
-            _body.text = "<size=22><b>Nhiệm vụ</b></size>    <size=13>[J] Đóng</size>\n\n"
-                + $"<color=#7EA6A4><b>ZONE 01 · Khôi phục nguồn điện</b></color>\n"
-                + $"Tìm và lắp Energy Core vào Sector Box: {placed}/{required}"
+            _body.text = $"<color=#7EA6A4><b>Khu vực 01 · Khôi phục nguồn điện</b></color>\n"
+                + $"Tìm và lắp lõi năng lượng vào trạm cấp điện: {placed}/{required}"
                 + (zone2Available ? "  ✓" : "");
 
             if (!zone2Available) return;
 
-            _body.text += "\n\n<color=#7EA6A4><b>ZONE 02 · An ninh</b></color>\n"
-                + $"Tìm Security Terminal: {Done(stage >= Zone2MissionStage.RepairRelays)}\n"
+            _body.text += "\n\n<color=#7EA6A4><b>Khu vực 02 · An ninh</b></color>\n"
+                + $"Tìm trạm an ninh: {Done(stage >= Zone2MissionStage.RepairRelays)}\n"
                 + $"Sửa 4 relay: {relays}/4\n"
                 + $"Xác thực bảo mật: {security}% {Done(stage >= Zone2MissionStage.AuthorizationCodeGranted)}\n"
-                + $"Nhập mã tại Access Panel: {Done(stage >= Zone2MissionStage.Zone2Completed)}";
+                + $"Nhập mã tại bảng mở cửa: {Done(stage >= Zone2MissionStage.Zone2Completed)}";
 
             var zone3 = Zone3MissionDirector.Instance;
             MatchPhase phase = _flow != null ? _flow.Phase : MatchPhase.ExploreCore;
@@ -182,8 +206,8 @@ namespace EchoProtocol.UI.HUD
             float charge = hasNetworkMatch ? match.Zone3ChargeProgress01
                 : zone3 != null && zone3.ChargeStation != null ? zone3.ChargeStation.Progress01 : 0f;
             bool transferred = escaping || won || charge >= 0.999f;
-            _body.text += "\n\n<color=#7EA6A4><b>ZONE 03 · Nguồn dự phòng</b></color>\n"
-                + $"Tìm Spacefrigate: {Done(found)} · Đưa tàu về bến: {Done(docked)}\n"
+            _body.text += "\n\n<color=#7EA6A4><b>Khu vực 03 · Nguồn dự phòng</b></color>\n"
+                + $"Tìm tàu: {Done(found)} · Đưa tàu về bến: {Done(docked)}\n"
                 + $"Chuyển nguồn điện: {(transferred ? "Hoàn tất" : Mathf.RoundToInt(charge * 100f) + "%")}";
             if (zone3 != null && zone3.Convoy != null && found && !docked)
                 _body.text += "\n" + zone3.Convoy.FuelDisplay;
@@ -195,12 +219,12 @@ namespace EchoProtocol.UI.HUD
             {
                 float remaining = hasNetworkMatch ? match.EscapeRemainingSeconds : _escape != null ? _escape.RemainingSeconds : 0f;
                 int seconds = Mathf.CeilToInt(remaining);
-                _body.text += seconds > 0 ? $"Trở về Doorexit · Còn {seconds / 60:00}:{seconds % 60:00}"
-                    : "Trở về Doorexit để sơ tán.";
+                _body.text += seconds > 0 ? $"Trở về cửa thoát · Còn {seconds / 60:00}:{seconds % 60:00}"
+                    : "Trở về cửa thoát để sơ tán.";
             }
             else _body.text += "Cấp điện để mở lối sơ tán.";
-            if (zone3Started) _compactText.text = escaping ? "THOÁT HIỂM\nTrở về Doorexit"
-                : won ? "HOÀN THÀNH\nĐội đã sơ tán" : "ZONE 03\n" + (docked ? "Chuyển nguồn điện" : "Hộ tống Spacefrigate");
+            if (zone3Started) _compactText.text = escaping ? "THOÁT HIỂM\nTrở về cửa thoát"
+                : won ? "HOÀN THÀNH\nĐội đã sơ tán" : "Khu vực 03\n" + (docked ? "Chuyển nguồn điện" : "Hộ tống tàu");
         }
 
         private static string Done(bool completed) => completed ? "✓" : "Chưa hoàn thành";

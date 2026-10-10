@@ -348,7 +348,11 @@ public class PowerControlUIController : MonoBehaviour
             _consecutiveFails = 0;
             if (feedbackText != null)
             {
-                feedbackText.text = "<color=#00FF99>XÁC THỰC THÀNH CÔNG // KHÔI PHỤC NGUỒN ĐIỆN!</color>";
+                var director = Zone2MissionDirector.Instance;
+                bool unlocksDoor = director != null && director.TryGetDistributionPanelIndex(this, out _);
+                feedbackText.text = unlocksDoor
+                    ? EchoProtocol.Settings.GameLanguage.Choose("<color=#86AD91>Đã mở cửa</color>", "<color=#86AD91>Door unlocked</color>")
+                    : EchoProtocol.Settings.GameLanguage.Choose("<color=#86AD91>Đã khôi phục nguồn điện</color>", "<color=#86AD91>Power restored</color>");
             }
             TriggerLedFlash(new Color(0f, 1f, 0.6f, 1f), 3.0f);
             EchoProtocol.Audio.GameAudioRuntime.UI("power_puzzle/puzzle_complete");
@@ -410,7 +414,7 @@ public class PowerControlUIController : MonoBehaviour
         {
             case Zone2NetworkCommandResult.Accepted:
                 _inputBuffer.Clear();
-                if (feedbackText != null) feedbackText.text = "<color=#00FF99>XÁC THỰC THÀNH CÔNG // KHÔI PHỤC NGUỒN ĐIỆN!</color>";
+                if (feedbackText != null) feedbackText.text = EchoProtocol.Settings.GameLanguage.Choose("<color=#86AD91>Đã mở cửa</color>", "<color=#86AD91>Door unlocked</color>");
                 TriggerLedFlash(new Color(0f, 1f, 0.6f, 1f), 3.0f);
                 EchoProtocol.Audio.GameAudioRuntime.UI("power_puzzle/puzzle_complete");
                 break;
@@ -499,7 +503,7 @@ public class PowerControlUIController : MonoBehaviour
 
             if (statusBannerText != null)
             {
-                statusBannerText.text = "<color=#D0685F>Cần xác thực tại Security Terminal</color>";
+                statusBannerText.text = "<color=#D0685F>Cần xác thực tại trạm an ninh</color>";
             }
             if (_ledFlashTimer <= 0f && statusLed != null)
             {

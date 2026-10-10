@@ -5,11 +5,11 @@ public class EnergyCorePickup : MonoBehaviour, IInteractable
 {
     [SerializeField] private InventoryItemDefinition coreItem;
     [SerializeField] private string coreId = "EnergyCore";
-    [SerializeField] private string pickupPrompt = "Nhặt Energy Core";
+    [SerializeField] private string pickupPrompt = "Nhặt lõi năng lượng";
 
     public InventoryItemDefinition CoreItem => coreItem;
     public string CoreId => coreId;
-    public string InteractionPrompt => string.IsNullOrWhiteSpace(pickupPrompt) || pickupPrompt == "Pick up Energy Core" ? "Nhặt Energy Core" : pickupPrompt;
+    public string InteractionPrompt => string.IsNullOrWhiteSpace(pickupPrompt) || pickupPrompt == "Pick up Energy Core" ? "Nhặt lõi năng lượng" : pickupPrompt;
 
     private void Awake()
     {

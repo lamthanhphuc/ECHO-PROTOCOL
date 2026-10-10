@@ -205,15 +205,20 @@ namespace EchoProtocol.UI.HUD
         private void UpdateRealPlayerSlot(TeammateSlotUI slot, int index)
         {
             PlayerDownState p = slot.boundPlayer;
-            string displayName = index == 0 ? $"Bạn" : $"P{index + 1} ({p.name})";
+            var identity = p.GetComponent<EchoProtocol.Networking.LobbyPlayerState>();
+            string displayName = identity != null && identity.Object != null && identity.Object.IsValid
+                ? identity.OperatorName.ToString() : string.Empty;
+            if (string.IsNullOrWhiteSpace(displayName)) displayName = EchoProtocol.Settings.GameLanguage.Choose("Người chơi", "Player");
             SetSlotName(slot, displayName);
 
             bool isCarrying = slot.boundCarrier != null && slot.boundCarrier.IsCarrying;
             if (slot.coreCarryIcon != null) slot.coreCarryIcon.gameObject.SetActive(isCarrying);
 
-            bool matchWon = _matchFlow != null && _matchFlow.Phase == MatchPhase.Win;
+            var life = p.GetComponent<EchoProtocol.Networking.NetworkPlayerLifeState>();
+            bool escaped = life != null && life.Object != null && life.Object.IsValid
+                && life.Status == EchoProtocol.Networking.NetworkPlayerLifeStatus.Escaped;
 
-            if (matchWon && !p.IsEliminated)
+            if (escaped)
             {
                 ApplySlotStatus(slot, "Đã thoát", escapedColor);
                 if (slot.healthFill != null) slot.healthFill.fillAmount = 1f;

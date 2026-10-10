@@ -37,6 +37,7 @@ namespace EchoProtocol.UI.HUD
         private float _cooldownTimer;
         private LobbyPlayerState _boundNetworkPlayerState;
         private Text _usesLabel;
+        private Text _carryLabel;
 
         private void OnEnable()
         {
@@ -73,6 +74,7 @@ namespace EchoProtocol.UI.HUD
 
         private void OnDestroy()
         {
+            if (_carryLabel != null) Destroy(_carryLabel.gameObject);
             if (inventory != null)
             {
                 inventory.InventoryChanged -= RefreshSlots;
@@ -211,15 +213,39 @@ namespace EchoProtocol.UI.HUD
 
         private void UpdateCarryState()
         {
-            bool isCarrying = carrier != null && carrier.IsCarrying;
+            var fuelCell = inventory != null ? EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(inventory.gameObject) : null;
+            bool isCarrying = carrier != null && carrier.IsCarrying || fuelCell != null;
 
             if (slot1LockOverlay != null) slot1LockOverlay.SetActive(isCarrying);
             if (slot2LockOverlay != null) slot2LockOverlay.SetActive(isCarrying);
 
             if (isCarrying)
             {
-                if (slot1LockText != null) slot1LockText.text = "Đang mang core";
-                if (slot2LockText != null) slot2LockText.text = "Đang mang core";
+                if (slot1LockText != null) slot1LockText.text = "×";
+                if (slot2LockText != null) slot2LockText.text = "×";
+            }
+            if (_carryLabel == null && slot1Container != null)
+            {
+                var go = new GameObject("CarriedItemLabel", typeof(RectTransform), typeof(Text));
+                go.transform.SetParent(slot1Container.transform.parent, false);
+                var rect = (RectTransform)go.transform;
+                rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
+                rect.pivot = new Vector2(0.5f, 0f);
+                rect.anchoredPosition = new Vector2(0f, 8f);
+                rect.sizeDelta = new Vector2(400f, 24f);
+                _carryLabel = go.GetComponent<Text>();
+                _carryLabel.font = slot1NameText != null ? slot1NameText.font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                _carryLabel.fontSize = 14;
+                _carryLabel.alignment = TextAnchor.MiddleCenter;
+                _carryLabel.color = HUDPresentationStyle.Ink;
+                _carryLabel.raycastTarget = false;
+            }
+            if (_carryLabel != null)
+            {
+                _carryLabel.gameObject.SetActive(isCarrying);
+                _carryLabel.text = fuelCell != null
+                    ? EchoProtocol.Settings.GameLanguage.Choose("Đang mang pin nhiên liệu", "Carrying a fuel cell")
+                    : EchoProtocol.Settings.GameLanguage.Choose("Đang mang lõi năng lượng", "Carrying an energy core");
             }
 
             if (toolLockedOverlay != null)
