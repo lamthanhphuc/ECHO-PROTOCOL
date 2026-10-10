@@ -96,7 +96,7 @@ namespace EchoProtocol.Networking
 
     /// <summary>Host-owned match FSM. Objective state stays in its authoritative source object.</summary>
     [DisallowMultipleComponent]
-    public sealed class NetworkMatchState : NetworkBehaviour
+    public sealed partial class NetworkMatchState : NetworkBehaviour
     {
         public const float DefaultMatchDurationSeconds = 7200f;
         public const float DefaultEscapeDurationSeconds = 45f;
@@ -398,6 +398,7 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             Instance = this;
             NetworkPlayerLifeState.StateChanged += HandlePlayerLifeStateChanged;
             ResolveLegacyPresentation();
@@ -558,6 +559,7 @@ namespace EchoProtocol.Networking
                         CaptureRelayACircuitState(RelaySlot.RelayA_2, relayDirector.RelayA2);
                     if (relayDirector.RelayB1 != null)
                     {
+                        TickRelayBSurgeAuthoritative(RelaySlot.RelayB_1,relayDirector.RelayB1);
                         var b1Sync = relayDirector.RelayB1.Snapshot;
                         RelayB1SyncProgress = b1Sync.SyncProgressSeconds;
                         RelayB1Decoder = RelayBDecodeTelemetry.From(b1Sync.Decoder);
@@ -566,6 +568,7 @@ namespace EchoProtocol.Networking
                     }
                     if (relayDirector.RelayB2 != null)
                     {
+                        TickRelayBSurgeAuthoritative(RelaySlot.RelayB_2,relayDirector.RelayB2);
                         var b2Sync = relayDirector.RelayB2.Snapshot;
                         RelayB2SyncProgress = b2Sync.SyncProgressSeconds;
                         RelayB2Decoder = RelayBDecodeTelemetry.From(b2Sync.Decoder);
@@ -1246,6 +1249,7 @@ namespace EchoProtocol.Networking
                 || !TryValidateRelayCommand(requester, slot, out var target)) return false;
             var controller = (RelayBController)target;
             if (controller.Simulation.IsSynchronizing && channel != controller.Snapshot.SelectedChannelIndex) return false;
+            if(controller.Surge.Phase!=RelayBSurgePhase.Contained || !controller.Snapshot.Decoder.IsComplete)return false;
             if (!ClaimRelayOperator(requester, slot)) return false;
             var before = controller.Snapshot;
             if (before.SelectedChannelIndex >= 0 && channel != before.SelectedChannelIndex) return false;
@@ -1289,6 +1293,7 @@ namespace EchoProtocol.Networking
 
         private bool TryRelayBActionAuthoritative(PlayerRef requester, RelaySlot slot, RelayBAction action)
         {
+            if(action==RelayBAction.Scan)return false;
             if (!IsRelayBSlot(slot) || !TryValidateRelayCommand(requester, slot, out var target)) return false;
             var controller = (RelayBController)target;
             if (action == RelayBAction.StartSync
@@ -2550,6 +2555,7 @@ namespace EchoProtocol.Networking
             RelayA2AttemptSeed = 0;
             RelayB1AttemptSeed = 0;
             RelayB2AttemptSeed = 0;
+            RelayB1Surge=default;RelayB2Surge=default;
             RelayB1PresetIndex = 0;
             RelayB2PresetIndex = 0;
             RelayB1Channel = -1;

@@ -27,12 +27,8 @@ namespace EchoProtocol.RelayB
         [SerializeField] private GameObject processingTabPanel;
         [SerializeField] private GameObject syncTabPanel;
 
-        [Header("Tab 1: Spectrum")]
+        [Header("Containment font reference")]
         [SerializeField] private TMP_Text referenceProfileText;
-        [SerializeField] private Button scanSpectrumButton;
-        [SerializeField] private Button[] candidateButtons = new Button[4];
-        [SerializeField] private Image[] candidateHighlights = new Image[4];
-        [SerializeField] private TMP_Text[] candidateTexts = new TMP_Text[4];
 
 
         [Header("Tab 3: Carrier & Link Sync")]
@@ -66,7 +62,6 @@ namespace EchoProtocol.RelayB
         private readonly RelayBPlayerControlLock _controlLock = new RelayBPlayerControlLock();
         private RelayBController _controller;
         private bool _sliderHooked;
-        private int _pendingChannelIndex = -1;
 
         public bool IsOpen => panelRoot != null && panelRoot.activeSelf;
 
@@ -82,6 +77,25 @@ namespace EchoProtocol.RelayB
             EchoProtocol.UI.HUD.HUDModalPresentation.Apply(panelRoot);
             EnsureProgressFillSprite();
             HookControls();
+            foreach(var button in tabButtons) {
+                EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayControl(button);
+                if(button==null || button.transform.Find("ActiveTabLine")!=null)continue;
+                var line=new GameObject("ActiveTabLine",typeof(RectTransform),typeof(Image));
+                line.transform.SetParent(button.transform,false);
+                var rect=line.GetComponent<RectTransform>();rect.anchorMin=new Vector2(0,0);rect.anchorMax=new Vector2(1,0);
+                rect.pivot=new Vector2(0.5f,0);rect.offsetMin=new Vector2(8,2);rect.offsetMax=new Vector2(-8,4);
+                line.GetComponent<Image>().color=referenceColor;line.GetComponent<Image>().raycastTarget=false;
+            }
+            foreach(var button in codeSlots) EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayControl(button);
+            foreach(var button in signalBank) EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayAction(button);
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayAction(transmitButton,true);
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayAction(decodeContinue,true);
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayAction(resetInputButton);
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayAction(startLinkButton,true);
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayAction(abortLinkButton,false,true);
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayAction(closeButton);
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayControl(frequencySlider);
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayControl(phaseSlider);
             SetVisible(false);
         }
 
@@ -92,7 +106,10 @@ namespace EchoProtocol.RelayB
         {
             if (!IsOpen) return;
             FitTerminal();
-            if (_controller != null) RefreshDecoderPresentation(_controller.Snapshot);
+            if (_controller != null) {
+                RefreshDecoderPresentation(_controller.Snapshot);
+                RefreshSurgePresentation(!TryGetNetworkDirector(out var surgeDirector) || surgeDirector.CanLocalPlayerOperateRelay(_controller));
+            }
             HandleDecoderKeyboard();
 
             if (_controlLock.ShouldAutoRelease())
@@ -116,7 +133,6 @@ namespace EchoProtocol.RelayB
 
         public void Open(GameObject interactor)
         {
-            _pendingChannelIndex = -1;
             EnsureEventSystem();
             Zone2MinigameUIFocus.CloseOthers(this);
             if (TryGetNetworkDirector(out var director))
@@ -157,8 +173,6 @@ namespace EchoProtocol.RelayB
 
         public void Refresh(RelayBSnapshot snapshot)
         {
-            if (snapshot.SelectedChannelIndex >= 0 || !snapshot.HasScanned)
-                _pendingChannelIndex = -1;
             bool readOnly = snapshot.IsOnline;
             bool canOperate = !TryGetNetworkDirector(out var director) || director.CanLocalPlayerOperateRelay(_controller);
             if (IsOpen && !readOnly && !canOperate)
@@ -178,13 +192,14 @@ namespace EchoProtocol.RelayB
             UpdateTabs(snapshot.ActiveTab, snapshot.HasScanned && snapshot.SelectedChannelIndex >= 0,
                 snapshot.Decoder.IsComplete || snapshot.IsOnline);
 
-            // 1. Spectrum Tab
-            RefreshSpectrumTab(snapshot, readOnly, canOperate);
-            if (snapshot.ActiveTab == 0)
-                SetText(statusLabel, snapshot.SelectedChannelIndex >= 0 ? "Đã chọn tín hiệu" : snapshot.HasScanned ? "4 kênh tín hiệu" : "Chờ quét");
-
+            // 1. Surge containment
+            RefreshSurgeTab(snapshot, readOnly, canOperate);
             // 2. Processing Tab
             RefreshProcessingTab(snapshot, readOnly, canOperate);
+            if(snapshot.ActiveTab==1 && snapshot.HasScanned && snapshot.SelectedChannelIndex>=0)
+                SetText(statusLabel,EchoProtocol.Settings.GameLanguage.Choose(
+                    snapshot.Decoder.IsComplete ? "Đã giải mã" : snapshot.Decoder.Phase==RelayBDecodePhase.Transmitting ? "Đang truyền mã" : "Giải mã để mở đồng bộ",
+                    snapshot.Decoder.IsComplete ? "Decoded" : snapshot.Decoder.Phase==RelayBDecodePhase.Transmitting ? "Transmitting code" : "Decode to unlock sync"));
 
             // 3. Sync Tab
             RefreshSyncTab(snapshot, readOnly, canOperate);
@@ -231,71 +246,20 @@ namespace EchoProtocol.RelayB
 
             if (tabButtons != null)
             {
+                for(int i=0;i<tabButtons.Length;i++) {
+                    var line=tabButtons[i]!=null ? tabButtons[i].transform.Find("ActiveTabLine") : null;
+                    if(line!=null)line.gameObject.SetActive(i==activeTab);
+                }
                 if (tabButtons.Length > 0 && tabButtons[0] != null) SetInteractable(tabButtons[0], true);
                 if (tabButtons.Length > 1 && tabButtons[1] != null) SetInteractable(tabButtons[1], stage2Unlocked);
                 if (tabButtons.Length > 2 && tabButtons[2] != null) SetInteractable(tabButtons[2], stage3Unlocked);
             }
         }
 
-        private void RefreshSpectrumTab(RelayBSnapshot snapshot, bool readOnly, bool canOperate)
+        private void RefreshSurgeTab(RelayBSnapshot snapshot, bool readOnly, bool canOperate)
         {
-            var targetTitle = spectrumTabPanel != null
-                ? spectrumTabPanel.transform.Find("ReferenceProfileCard/Title")?.GetComponent<TMP_Text>() : null;
-            SetText(targetTitle, "Tín hiệu đích");
-            if (snapshot.ReferenceProfile != null)
-            {
-                var profile = snapshot.ReferenceProfile;
-                SetText(referenceProfileText,
-                    EchoProtocol.Settings.GameLanguage.Choose(
-                        $"Tần số: {profile.FundamentalMinKhz:0.0} - {profile.FundamentalMaxKhz:0.0} kHz\nDạng sóng: {snapshot.ReferenceWaveform.ToString().ToUpper()}\nPilot: {profile.ExpectedPilot}",
-                        $"Frequency: {profile.FundamentalMinKhz:0.0} - {profile.FundamentalMaxKhz:0.0} kHz\nWaveform: {snapshot.ReferenceWaveform.ToString().ToUpper()}\nPilot: {profile.ExpectedPilot}"));
-                if (referenceProfileText != null) { referenceProfileText.enableAutoSizing = true; referenceProfileText.fontSizeMin = 12f; referenceProfileText.fontSizeMax = 18f; referenceProfileText.fontSize = 18f; }
-            }
-
-            if (scanSpectrumButton != null)
-            {
-                scanSpectrumButton.gameObject.SetActive(snapshot.SelectedChannelIndex < 0);
-                bool canScanOrRoute = !readOnly && canOperate && snapshot.SelectedChannelIndex < 0
-                    && (!snapshot.HasScanned || _pendingChannelIndex >= 0);
-                SetInteractable(scanSpectrumButton, canScanOrRoute);
-                SetText(scanSpectrumButton.GetComponentInChildren<TMP_Text>(),
-                    snapshot.SelectedChannelIndex >= 0 ? "Đã chọn tín hiệu"
-                    : snapshot.HasScanned ? "Chọn tín hiệu" : "Quét tín hiệu");
-            }
-
-            for (int i = 0; i < candidateButtons.Length; i++)
-            {
-                bool hasCandidate = snapshot.Candidates != null && i < snapshot.Candidates.Length
-                    && snapshot.Candidates[i] != null && snapshot.Candidates[i].Peaks.Length > 0;
-                SetInteractable(candidateButtons[i], !readOnly && canOperate && snapshot.HasScanned && hasCandidate
-                    && snapshot.SelectedChannelIndex < 0
-                    && !(_controller != null && _controller.Simulation.IsSynchronizing));
-                if (candidateHighlights != null && i < candidateHighlights.Length && candidateHighlights[i] != null)
-                    candidateHighlights[i].color = snapshot.SelectedChannelIndex == i || _pendingChannelIndex == i
-                        ? (snapshot.SelectedChannelIndex == i ? new Color(0.08f, 0.28f, 0.18f) : new Color(0.08f, 0.29f, 0.32f))
-                        : new Color(0.07f, 0.1f, 0.115f, 1f);
-                if (candidateTexts == null || i >= candidateTexts.Length || candidateTexts[i] == null) continue;
-                if (!snapshot.HasScanned || !hasCandidate)
-                {
-                    SetText(candidateTexts[i], $"CH {i + 1:00}\nChưa có dữ liệu");
-                    continue;
-                }
-
-                var candidate = snapshot.Candidates[i];
-                SetText(candidateTexts[i],
-                    $"CH {i + 1:00}  /  {candidate.Waveform.ToString().ToUpper()}\nFREQUENCY {candidate.Peaks[0]:0.0} kHz\nPILOT {candidate.PilotFrame}");
-                candidateTexts[i].enableAutoSizing = true;
-                candidateTexts[i].fontSizeMin = 12f;
-                candidateTexts[i].fontSizeMax = 14f;
-                candidateTexts[i].fontSize = 14f;
-            }
-            SetText(findNotice, snapshot.SelectedChannelIndex >= 0 ? "Đã chọn tín hiệu"
-                : snapshot.FalseLockDetected ? "Tín hiệu đích thay đổi · Quét lại"
-                : snapshot.HasScanned ? _pendingChannelIndex >= 0 ? "Đã chọn · Xác nhận cả 3 dấu hiệu" : "Kiểm tra tần số, dạng sóng và pilot" : "Quét để xem 4 kênh");
-            if (findNotice != null) findNotice.color = snapshot.SelectedChannelIndex >= 0 ? safeColor : offlineColor;
-            if (findContinue != null) findContinue.gameObject.SetActive(snapshot.SelectedChannelIndex >= 0);
+            RefreshSurgePresentation(canOperate && !readOnly);
         }
-
 
         private void RefreshSyncTab(RelayBSnapshot snapshot, bool readOnly, bool canOperate)
         {
@@ -400,6 +364,7 @@ namespace EchoProtocol.RelayB
         private void HookControls()
         {
             HookDecoderControls();
+            if(tabButtons.Length>0 && tabButtons[0]!=null)SetText(tabButtons[0].GetComponentInChildren<TMP_Text>(),EchoProtocol.Settings.GameLanguage.Choose("01 PHONG TỎA","01 CONTAIN"));
             // Tab Buttons
             for (int i = 0; i < tabButtons.Length; i++)
             {
@@ -410,24 +375,6 @@ namespace EchoProtocol.RelayB
                     tabButtons[i].onClick.AddListener(() => _controller?.SetActiveTab(tabIndex));
                 }
             }
-
-            // Spectrum Tab
-            if (scanSpectrumButton != null)
-            {
-                scanSpectrumButton.onClick.RemoveAllListeners();
-                scanSpectrumButton.onClick.AddListener(HandleScanClicked);
-            }
-
-            for (int i = 0; i < candidateButtons.Length; i++)
-            {
-                int chIndex = i;
-                if (candidateButtons[i] != null)
-                {
-                    candidateButtons[i].onClick.RemoveAllListeners();
-                    candidateButtons[i].onClick.AddListener(() => HandleChannelSelected(chIndex));
-                }
-            }
-
 
             // Sync Tab: sliders are wired lazily in RefreshSyncTab on first refresh.
             // (Phase step buttons and timing buttons removed per redesign)
@@ -449,57 +396,6 @@ namespace EchoProtocol.RelayB
                 closeButton.onClick.AddListener(Close);
             }
         }
-
-        private void HandleScanClicked()
-        {
-            if (_controller == null) return;
-            var snapshot = _controller.Snapshot;
-            if (snapshot.SelectedChannelIndex >= 0) return;
-            if (snapshot.HasScanned)
-            {
-                if (_pendingChannelIndex >= 0) RouteSelectedChannel(_pendingChannelIndex);
-                return;
-            }
-            if (TryGetNetworkDirector(out var director))
-            {
-                director.RequestRelayBScan(_controller);
-            }
-            else
-            {
-                _controller?.ScanSpectrum();
-            }
-        }
-
-        private void HandleChannelSelected(int channelIndex)
-        {
-            if (_controller == null) return;
-            var snapshot = _controller.Snapshot;
-            if (!snapshot.HasScanned || snapshot.ReferenceProfile == null || snapshot.Candidates == null
-                || channelIndex < 0 || channelIndex >= snapshot.Candidates.Length) return;
-            var candidate = snapshot.Candidates[channelIndex];
-            if (candidate == null || candidate.Peaks.Length == 0) return;
-            if (snapshot.SelectedChannelIndex >= 0) return;
-            _pendingChannelIndex = channelIndex;
-            Refresh(snapshot);
-        }
-
-        private void RouteSelectedChannel(int channelIndex)
-        {
-            var snapshot = _controller.Snapshot;
-            _pendingChannelIndex = -1;
-            if (TryGetNetworkDirector(out var director))
-            {
-                director.RequestRelayBControls(_controller, channelIndex, snapshot.CurrentFrequency, snapshot.CurrentPhase);
-            }
-            else
-            {
-                _controller.SelectChannel(channelIndex);
-                if (_controller.Snapshot.SelectedChannelIndex < 0)
-                    _controller.RerollFindAfterMismatch(channelIndex);
-            }
-        }
-
-
 
         private void HandleStartLink()
         {

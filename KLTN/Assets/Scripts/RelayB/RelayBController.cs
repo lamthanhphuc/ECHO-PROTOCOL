@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.Networking.Authority;
 using EchoProtocol.Networking;
@@ -29,6 +31,47 @@ namespace EchoProtocol.RelayB
         private int _presetIndex = 0;
         private int _attemptSeed;
         private readonly AudioSource[] _decoderFeedbackSources = new AudioSource[3];
+        private int _surgeDifficulty=1, _surgeVariant;
+        public RelayBSurgeSimulation Surge => _simulation.Surge;
+
+        // Only pure C# board generation runs on workers; simulation/events stay on Unity's thread.
+        private readonly Dictionary<int, Task<RelayBSurgeBoard>> _preparedBoards = new Dictionary<int, Task<RelayBSurgeBoard>>();
+        private int _preparedSeed, _preparedDifficulty=-1, _preparedVariant=-1;
+        private bool _preparingSurge;
+        private Task<RelayBSurgeBoard> _reportedGenerationFailure;
+        public bool IsPreparingSurge => _preparingSurge || (Surge.IsFailed
+            && _preparedBoards.TryGetValue(Surge.Attempt+1,out var next) && !next.IsCompleted);
+
+        private Task<RelayBSurgeBoard> PrepareSurge(int seed,int difficulty,int variant,int attempt)
+        {
+            if (_preparedSeed!=seed || _preparedDifficulty!=difficulty || _preparedVariant!=variant) {
+                _preparedBoards.Clear(); _preparedSeed=seed; _preparedDifficulty=difficulty; _preparedVariant=variant;
+            }
+            if (!_preparedBoards.TryGetValue(attempt,out var task)) {
+                task=Task.Run(()=>RelayBSurgeGenerator.Generate(seed,difficulty,variant,attempt));
+                _preparedBoards.Add(attempt,task);
+            }
+            return task;
+        }
+        private bool EnsureSurge(int seed,int difficulty,int variant,int attempt)
+        {
+            var task=PrepareSurge(seed,difficulty,variant,attempt);
+            _preparingSurge=!task.IsCompleted;
+            if (!task.IsCompleted) return false;
+            if (task.IsFaulted) {
+                _preparingSurge=true;
+                if (_reportedGenerationFailure!=task) {
+                    _reportedGenerationFailure=task;Debug.LogException(task.Exception,this);
+                }
+                return false;
+            }
+            if (Surge.Board==null || Surge.Board.Seed!=seed || Surge.Attempt!=attempt
+                || Surge.Board.Difficulty!=difficulty || Surge.Board.Variant!=variant) Surge.Reset(task.Result,attempt);
+            // Keep only this board and one retry, not an ever-growing cache.
+            _preparedBoards.Remove(attempt-1);
+            PrepareSurge(seed,difficulty,variant,attempt+1);
+            return true;
+        }
 
         public event Action<RelayBSnapshot> StateChanged;
         public event Action RelayBOnline;
@@ -43,6 +86,7 @@ namespace EchoProtocol.RelayB
 
         private void Awake()
         {
+            EchoProtocol.Audio.GameAudioRuntime.RegisterEnvironmentOwner(this);
             if (GetComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>() == null)
             {
                 gameObject.AddComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>();
@@ -76,6 +120,11 @@ namespace EchoProtocol.RelayB
             _simulation.InstabilityReset += HandleInstabilityReset;
             _simulation.Decoder.Failed += HandleDecoderFailed;
             _simulation.Decoder.Completed += HandleDecoderCompleted;
+            Surge.Changed += HandleSurgeChanged;
+            Surge.Pulsed += HandleSurgePulse;
+            Surge.CriticalOverload += HandleSurgeCritical;
+            Surge.Failed += HandleSurgeFailed;
+            Surge.Completed += HandleSurgeCompleted;
 
             RandomizePresetIndex();
             _attemptSeed = NewAttemptSeed();
@@ -93,14 +142,83 @@ namespace EchoProtocol.RelayB
             _simulation.InstabilityReset -= HandleInstabilityReset;
             _simulation.Decoder.Failed -= HandleDecoderFailed;
             _simulation.Decoder.Completed -= HandleDecoderCompleted;
+            Surge.Changed -= HandleSurgeChanged;
+            Surge.Pulsed -= HandleSurgePulse;
+            Surge.CriticalOverload -= HandleSurgeCritical;
+            Surge.Failed -= HandleSurgeFailed;
+            Surge.Completed -= HandleSurgeCompleted;
         }
 
         private void Update()
         {
             var matchState = NetworkMatchState.Instance;
-            if (matchState != null && matchState.Object != null && matchState.Object.IsValid
-                && !matchState.Object.HasStateAuthority) return;
+            // Network simulation advances only in FixedUpdateNetwork.
+            if (matchState != null && matchState.Object != null && matchState.Object.IsValid) return;
+            EnsureSurge(_attemptSeed,_surgeDifficulty,_surgeVariant,Surge.Board==null ? 0 : Surge.Attempt);
+            Surge.Tick(Time.deltaTime);
             _simulation.Tick(Time.deltaTime);
+        }
+
+        public void TickAuthoritative(float dt) { Surge.Tick(dt);_simulation.Tick(dt); }
+        public void ConfigureSurge(int difficulty,int variant)
+        {
+            if(_surgeDifficulty==difficulty && _surgeVariant==variant) {
+                EnsureSurge(_attemptSeed,difficulty,variant,Surge.Board==null ? 0 : Surge.Attempt);return;
+            }
+            _surgeDifficulty=difficulty;_surgeVariant=variant;
+            EnsureSurge(_attemptSeed,difficulty,variant,0);
+        }
+        public bool StartSurge()
+        {
+            if(!EnsureSurge(_attemptSeed,_surgeDifficulty,_surgeVariant,Surge.IsFailed ? Surge.Attempt+1 : Surge.Attempt))return false;
+            if(!Surge.Start())return false;
+            PlayOneShot(startupClip,0.7f,"security_terminal/terminal_boot");
+            EmitAuthoritativeNoise(RuntimeNoiseType.MACHINE_REPAIR);return true;
+        }
+        public bool PlaceSurgeInsulation(int cell,int attempt)
+        {
+            if(attempt!=Surge.Attempt || !Surge.Place(cell))return false;
+            PlayAdjustSound();return true;
+        }
+        public void ApplyAuthoritativeSurge(RelayBSurgeTelemetry state)
+        {
+            if(state.Seed==0)return;
+            _surgeDifficulty=state.Difficulty;_surgeVariant=state.Variant;
+            if(Surge.Board==null || Surge.Board.Seed!=state.Seed || Surge.Attempt!=state.Attempt
+                || Surge.Board.Difficulty!=state.Difficulty || Surge.Board.Variant!=state.Variant)
+                if(!EnsureSurge(state.Seed,state.Difficulty,state.Variant,state.Attempt))return;
+            if(state.PulseSequence>Surge.PulseSequence)HandleSurgePulse();
+            if((RelayBSurgePhase)state.Phase>=RelayBSurgePhase.CoreLost && !Surge.IsFailed)
+                PlayOneShot(mismatchClip,0.8f,"objectives/relay_b_desync");
+            bool newlyContained=(RelayBSurgePhase)state.Phase==RelayBSurgePhase.Contained && Surge.Phase!=RelayBSurgePhase.Contained;
+            Surge.ApplyRemote((RelayBSurgePhase)state.Phase,
+                new RelayBSurgeMask{Low=state.InfectedLow,High=state.InfectedHigh},
+                new RelayBSurgeMask{Low=state.InsulatedLow,High=state.InsulatedHigh},
+                state.Elapsed,state.PulseRemaining,state.Cooldown,state.PulseSequence);
+            _simulation.CompleteSurge();
+            if(newlyContained)PresentSurgeContained();
+        }
+        private void HandleSurgeChanged()=>HandleSimulationChanged(_simulation.Snapshot);
+        private void HandleSurgePulse()=>PlayOneShot(adjustClip,0.25f,"ui/click");
+        private void HandleSurgeCritical()
+        {
+            PlayOneShot(warningClip,0.65f,"objectives/relay_b_desync");
+            EmitAuthoritativeNoise(RuntimeNoiseType.MACHINE_OVERLOAD);
+        }
+        private void HandleSurgeFailed()
+        {
+            PlayOneShot(mismatchClip,0.8f,"objectives/relay_b_desync");
+            EmitAuthoritativeNoise(RuntimeNoiseType.MACHINE_OVERLOAD);
+        }
+        private void HandleSurgeCompleted()
+        {
+            _simulation.CompleteSurge();PresentSurgeContained();
+        }
+        private void PresentSurgeContained()
+        {
+            PlayOneShot(completeClip,0.65f,"security_terminal/access_granted");
+            if(ui!=null && ui.IsOpen)EchoProtocol.UI.GameUIFeedback.Instance.Toast(
+                EchoProtocol.Settings.GameLanguage.Choose("Xung điện đã cô lập · Mở giải mã","Surge contained · Decoder unlocked"));
         }
 
         public void SetPresetIndex(int presetIndex)
@@ -390,6 +508,7 @@ namespace EchoProtocol.RelayB
         private void InitializeAttempt()
         {
             _simulation.Initialize(config, _presetIndex, true, _attemptSeed);
+            EnsureSurge(_attemptSeed,_surgeDifficulty,_surgeVariant,0);
             // Spectrum seeds are replicated; decoder secrets must use an independent private seed.
             _simulation.Decoder.Initialize(NewAttemptSeed());
         }

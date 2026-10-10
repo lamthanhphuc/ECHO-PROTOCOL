@@ -10,8 +10,6 @@ namespace EchoProtocol.RelayB
     {
         [Header("Terminal / Decoder")]
         [SerializeField] private TMP_Text stageLabel;
-        [SerializeField] private TMP_Text findNotice;
-        [SerializeField] private Button findContinue;
         [SerializeField] private Button[] codeSlots = new Button[6];
         [SerializeField] private TMP_Text[] codeDigits = new TMP_Text[6];
         [SerializeField] private TMP_Text[] codeFeedback = new TMP_Text[6];
@@ -64,7 +62,6 @@ namespace EchoProtocol.RelayB
             }
             BindDecoderButton(transmitButton, TransmitGuess);
             BindDecoderButton(resetInputButton, ResetInput);
-            BindDecoderButton(findContinue, () => _controller?.SetActiveTab(1));
             BindDecoderButton(decodeContinue, () => _controller?.SetActiveTab(2));
         }
 
@@ -157,10 +154,12 @@ namespace EchoProtocol.RelayB
             }
             int packed = state.Current;
             bool completeInput = true;
+            bool hasInput = false;
             for (int i = 0; i < 6; i++)
             {
                 int digit = state.CanEdit ? _guess[i] : RelayBDecoder.DigitAt(packed, i);
                 completeInput &= digit != 0;
+                hasInput |= digit != 0;
                 bool showFeedback = !state.CanEdit && i < revealed;
                 var feedback = RelayBDecoder.FeedbackAt(state.Feedback, i);
                 Color accent = showFeedback ? DecodeColor(feedback) : referenceColor;
@@ -192,13 +191,15 @@ namespace EchoProtocol.RelayB
             {
                 bool available = edit && Array.IndexOf(_guess, i + 1) < 0;
                 SetInteractable(signalBank[i], available);
-                if (signalBank[i] != null && signalBank[i].TryGetComponent<CanvasGroup>(out var group)) group.alpha = available ? 1f : 0.35f;
+                if (signalBank[i] != null && signalBank[i].TryGetComponent<CanvasGroup>(out var group)) group.alpha = available ? 1f : 0.55f;
             }
             for (int i = 0; i < 5; i++)
             {
                 if (attemptDots[i] != null)
                 {
-                    attemptDots[i].gameObject.SetActive(stage2);
+                    // Remaining attempts are already written in decodeNotice; the legacy dots
+                    // share the header row with localized status text and obscure it.
+                    attemptDots[i].gameObject.SetActive(false);
                     attemptDots[i].color = i < 5 - state.Attempts ? referenceColor : new Color(0.18f, 0.23f, 0.25f);
                 }
                 for (int slot = 0; slot < 6; slot++)
@@ -216,21 +217,21 @@ namespace EchoProtocol.RelayB
                 }
             }
             SetInteractable(transmitButton, edit && completeInput);
-            if (resetInputButton != null) { resetInputButton.gameObject.SetActive(stage2 && !state.IsComplete); resetInputButton.interactable = edit; }
+            if (resetInputButton != null) { resetInputButton.gameObject.SetActive(stage2 && !state.IsComplete); resetInputButton.interactable = edit && hasInput; }
             if (transmitButton != null) transmitButton.gameObject.SetActive(!state.IsComplete);
             if (decodeContinue != null) decodeContinue.gameObject.SetActive(state.IsComplete);
             string notice = state.Phase == RelayBDecodePhase.Failed ? "Hết lượt thử · Chờ mã mới"
                 : state.Phase == RelayBDecodePhase.Solved || state.IsComplete ? "Đã giải mã"
-                : state.Phase == RelayBDecodePhase.Transmitting ? "TRANSMITTING"
+                : state.Phase == RelayBDecodePhase.Transmitting ? "Đang truyền mã"
                 : state.Phase == RelayBDecodePhase.Revealing || state.Phase == RelayBDecodePhase.Holding ? "Đang đọc tín hiệu"
                 : $"6 chữ số khác nhau · Còn {RelayBDecoder.MaxAttempts - state.Attempts} lượt";
             SetText(decodeNotice, notice);
             if (decodeNotice != null) { decodeNotice.enableAutoSizing = true; decodeNotice.fontSizeMin = 12f; }
             if (processingTabPanel != null)
             {
-                RefreshDecodeLegend("LegendRight", "Đúng số\nĐúng vị trí");
-                RefreshDecodeLegend("LegendPlace", "Đúng số\nSai vị trí");
-                RefreshDecodeLegend("LegendUnused", "Không có\ntrong mã");
+                RefreshDecodeLegend("LegendRight", "Đúng vị trí");
+                RefreshDecodeLegend("LegendPlace", "Đúng số, sai vị trí");
+                RefreshDecodeLegend("LegendUnused", "Không có trong mã");
             }
             if (decodeNotice != null) decodeNotice.color = state.Phase == RelayBDecodePhase.Failed ? dangerColor
                 : state.IsComplete || state.Phase == RelayBDecodePhase.Solved ? safeColor : offlineColor;

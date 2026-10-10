@@ -21,7 +21,7 @@ public static partial class RelayBSetupBuilder
             PrefabUtility.SaveAsPrefabAsset(root, RelayBPrefabPath);
         }
         finally { PrefabUtility.UnloadPrefabContents(root); }
-        Debug.Log("[RelayB] Applied Find / Decode / Sync terminal UI.");
+        Debug.Log("[RelayB] Applied Containment / Decode / Sync terminal UI.");
     }
 
     private static readonly Color TerminalBack = new Color(0.045f, 0.052f, 0.058f, 1f);
@@ -50,11 +50,11 @@ public static partial class RelayBSetupBuilder
         panel.GetComponent<Image>().pixelsPerUnitMultiplier = 2f;
         TerminalSurface(panel.transform, "Matte", 12, 12, 1136, 656, TerminalBack);
         var stage = TerminalText(panel.transform, "StageLabel", "RELAY B / STAGE 01", 14, 40, 30, 360, 20, TerminalMuted);
-        var title = TerminalText(panel.transform, "RelayLabel", "FIND SIGNAL", 28, 40, 54, 560, 36, Color.white);
-        var status = TerminalText(panel.transform, "StatusLabel", "AWAITING SCAN", 16, 820, 56, 300, 32, TerminalMuted, TextAlignmentOptions.Right);
+        var title = TerminalText(panel.transform, "RelayLabel", "SURGE CONTAINMENT", 28, 40, 54, 560, 36, Color.white);
+        var status = TerminalText(panel.transform, "StatusLabel", "AWAITING ACTIVATION", 16, 820, 56, 300, 32, TerminalMuted, TextAlignmentOptions.Right);
         TerminalSurface(panel.transform, "HeaderLine", 40, 104, 1080, 1, TerminalLine);
         var tabs = new Button[3]; var highlights = new Image[3];
-        string[] labels = { "01  FIND", "02  DECODE", "03  SYNC" };
+        string[] labels = { "01  CONTAIN", "02  DECODE", "03  SYNC" };
         for (int i = 0; i < 3; i++)
         {
             tabs[i] = TerminalButton(panel.transform, "TabButton_" + i, labels[i], 40 + i * 180, 116, 164, 32, 14);
@@ -80,7 +80,7 @@ public static partial class RelayBSetupBuilder
         SetObject(so, "spectrumTabPanel", spectrum); SetObject(so, "processingTabPanel", processing); SetObject(so, "syncTabPanel", sync);
         SetObject(so, "closeButton", close); SetObject(so, "startLinkButton", start); SetObject(so, "abortLinkButton", abort);
         SetObject(so, "resetInputButton", reset);
-        BuildFindTerminal(spectrum.transform, so);
+        BuildContainmentTerminal(spectrum.transform, so);
         BuildDecodeTerminal(processing.transform, so);
         BuildSyncTerminal(sync.transform, so);
         so.ApplyModifiedPropertiesWithoutUndo();
@@ -89,26 +89,13 @@ public static partial class RelayBSetupBuilder
         return ui;
     }
 
-    private static void BuildFindTerminal(Transform parent, SerializedObject so)
+    private static void BuildContainmentTerminal(Transform parent, SerializedObject so)
     {
-        var target = TerminalContainer(parent, "ReferenceProfileCard", 0, 0, 310, 360);
-        TerminalText(target.transform, "Title", "TARGET SIGNATURE", 16, 0, 0, 300, 24, TerminalCyan);
-        var profile = TerminalText(target.transform, "ProfileText", "", 18, 0, 44, 300, 270, Color.white);
-        TerminalSurface(parent, "Divider", 330, 0, 1, 354, TerminalLine);
-        TerminalText(parent, "CandidatesTitle", "CHANNEL / FREQUENCY / WAVEFORM / PILOT", 14, 354, 0, 720, 24, TerminalMuted);
-        var buttons = new Button[4]; var texts = new TMP_Text[4]; var images = new Image[4];
-        for (int i = 0; i < 4; i++)
-        {
-            buttons[i] = TerminalButton(parent, "Candidate_" + i, "", 354, 40 + i * 76, 724, 66, 16);
-            texts[i] = TerminalText(buttons[i].transform, "CandidateText", "NO DATA", 16, 16, 4, 680, 60, Color.white);
-            images[i] = buttons[i].GetComponent<Image>();
-        }
-        var notice = TerminalText(parent, "FindNotice", "AWAITING SCAN", 14, 0, 374, 560, 28, TerminalMuted);
-        var scan = TerminalButton(parent, "ScanSpectrumButton", "SCAN SIGNALS", 778, 374, 300, 42, 16, true);
-        var next = TerminalButton(parent, "FindContinue", "DECODE SIGNAL  >", 778, 374, 300, 42, 16, true);
-        SetObject(so, "referenceProfileText", profile); SetObject(so, "scanSpectrumButton", scan);
-        SetObject(so, "findNotice", notice); SetObject(so, "findContinue", next);
-        SetArray(so, "candidateButtons", buttons); SetArray(so, "candidateTexts", texts); SetArray(so, "candidateHighlights", images);
+        // The seeded board is built by RelayBUIController at runtime. Keep a font reference
+        // and an editor preview instead of recreating the retired channel-selection interface.
+        var title = TerminalText(parent, "ContainmentTitle", "SURGE CONTAINMENT", 22, 0, 0, 600, 34, Color.white);
+        var hint = TerminalText(parent, "ContainmentHint", "Insulate gray cells. Isolate every red surge before it reaches a green core.", 16, 0, 50, 940, 56, TerminalMuted);
+        SetObject(so, "referenceProfileText", hint);
     }
 
     private static void BuildDecodeTerminal(Transform parent, SerializedObject so)

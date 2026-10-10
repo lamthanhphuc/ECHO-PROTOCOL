@@ -601,6 +601,10 @@ namespace EchoProtocol.MatchFlow
         public bool RequestRelayBScan(RelayBController controller) =>
             TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot) && matchState.RequestRelayBScan(slot);
 
+        public bool RequestRelayBSurge(RelayBController controller,int cell,int attempt)=>
+            TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller,out var slot)
+            && controller.Surge.Board!=null && matchState.RequestRelayBSurge(slot,cell,attempt,controller.Surge.Board.Seed);
+
         public bool RequestRelayBSlot(RelayBController controller, int slotIndex, RelayBModuleType module) =>
             TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot)
             && matchState.RequestRelayBSlot(slot, slotIndex, module);
@@ -887,6 +891,7 @@ namespace EchoProtocol.MatchFlow
             if (relayB1 != null)
             {
                 relayB1.ApplyAuthoritativeAttempt(matchState.RelayB1PresetIndex, matchState.RelayB1AttemptSeed);
+                if(!matchState.Object.HasStateAuthority)relayB1.ApplyAuthoritativeSurge(matchState.RelayB1Surge);
                 relayB1.ApplyAuthoritativeProcessing(matchState.RelayB1Scanned, matchState.RelayB1Slot1,
                     matchState.RelayB1Slot2, matchState.RelayB1Tested, false);
                 relayB1.ApplyAuthoritativeControls(matchState.RelayB1Channel, matchState.RelayB1Frequency, matchState.RelayB1Phase);
@@ -902,6 +907,7 @@ namespace EchoProtocol.MatchFlow
             if (relayB2 != null)
             {
                 relayB2.ApplyAuthoritativeAttempt(matchState.RelayB2PresetIndex, matchState.RelayB2AttemptSeed);
+                if(!matchState.Object.HasStateAuthority)relayB2.ApplyAuthoritativeSurge(matchState.RelayB2Surge);
                 relayB2.ApplyAuthoritativeProcessing(matchState.RelayB2Scanned, matchState.RelayB2Slot1,
                     matchState.RelayB2Slot2, matchState.RelayB2Tested, false);
                 relayB2.ApplyAuthoritativeControls(matchState.RelayB2Channel, matchState.RelayB2Frequency, matchState.RelayB2Phase);
