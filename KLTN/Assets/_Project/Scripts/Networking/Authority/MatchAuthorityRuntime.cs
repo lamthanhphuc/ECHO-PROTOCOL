@@ -986,14 +986,33 @@ namespace EchoProtocol.Networking.Authority
         {
             var item = transition.Item;
             var actor = transition.Actor;
-            if (!HasStateAuthority || !actor.IsValid || item == null
-                || _telemetry == null || !_telemetry.IsInitialized)
+            if (!HasStateAuthority || !actor.IsValid || item == null)
             {
+                return;
+            }
+
+            if (_telemetry == null || !_telemetry.IsInitialized)
+            {
+                if (transition.State == NetworkItemState.Placed
+                    && _telemetryMatchActive)
+                {
+                    _aedObjectiveEvidence.MarkIncomplete();
+                    _aedv2Evidence.MarkIncomplete();
+                }
+
                 return;
             }
 
             if (!TryResolveBackendUser(actor, out var userId))
             {
+                if (HasStateAuthority
+                    && transition.State == NetworkItemState.Placed
+                    && _telemetryMatchActive)
+                {
+                    _aedObjectiveEvidence.MarkIncomplete();
+                    _aedv2Evidence.MarkIncomplete();
+                }
+
                 return;
             }
 
