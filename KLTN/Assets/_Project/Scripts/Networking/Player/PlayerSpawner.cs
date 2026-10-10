@@ -16,8 +16,8 @@ namespace EchoProtocol.Networking
     // Shared by authoritative placement and the lobby presentation lights.
     public static class LobbyLineupLayout
     {
-        public const float Spacing = 1.35f;
-        public static Vector3 Position(int slot) => new Vector3(-4.65f + Mathf.Clamp(slot,0,3)*Spacing,1f,-1.8f);
+        public const float Spacing = 1.4f;
+        public static Vector3 Position(int slot) => new Vector3(-3.35f + Mathf.Clamp(slot,0,3)*Spacing,1f,-5.5f);
     }
 
     /// <summary>Host-authoritative gameplay placement coordinator for lifecycle-owned player objects.</summary>

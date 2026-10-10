@@ -48,7 +48,10 @@ public sealed class PetCompanionController : MonoBehaviour {
   var time=(float)_owner.Runner.SimulationTime;
   bool ownerRunning=_movement!=null && _movement.IsAnimationSprinting;
   bool inLobby=SceneManager.GetActiveScene().name=="Lobby";
-  var target=transform.position+transform.forward*(inLobby ? 1.1f : -1.25f)+transform.right*(inLobby ? 0.55f : 0.85f);
+  // Lobby characters face the camera, so their local left is screen-right.
+  var target=inLobby
+   ? transform.position-transform.right*(LobbyLineupLayout.Spacing*0.5f)
+   : transform.position-transform.forward*1.25f+transform.right*0.85f;
   bool ownerTeleported=_initialized && Vector3.Distance(_previousOwnerPosition,transform.position)>5f;
   _previousOwnerPosition=transform.position;
   if (!_initialized || ownerTeleported || _stuckTime>=8f) {
@@ -81,7 +84,12 @@ public sealed class PetCompanionController : MonoBehaviour {
   }
   _followSpeed=Mathf.MoveTowards(_followSpeed,desiredSpeed,dt*(desiredSpeed>_followSpeed ? (ownerRunning ? 6f : 1.8f) : (ownerRunning || _followSpeed>3.5f ? 10f : 3f)));
   bool airborne=_motion==PetMotion.TakeOff||_motion==PetMotion.FlyIdle||_motion==PetMotion.FlyForward||_motion==PetMotion.FlyGlide||_motion==PetMotion.Land;
-  if(_motion==PetMotion.Jump) {
+  if(inLobby) {
+   // Keep flight and jumps gameplay-only, while retaining ground idle animations.
+   _height=0;
+   _idleTime=moving ? 0 : _idleTime+dt;
+   _motion=moving ? PetMotion.Walk : (_idleTime>10 ? PetMotion.Sleep : (_owner.PetId==1 && _idleTime>4 ? PetMotion.IdleAlt : PetMotion.Idle));
+  } else if(_motion==PetMotion.Jump) {
    float progress=1f-(_phaseEnd-time)/Mathf.Max(0.1f,entry.jumpSeconds);
    _height=Mathf.Sin(Mathf.Clamp01(progress)*Mathf.PI)*0.18f;
    if(time>=_phaseEnd){_height=0;_motion=moving ? PetMotion.Walk : PetMotion.Idle;_nextFlight=time+FlightDelay();}
