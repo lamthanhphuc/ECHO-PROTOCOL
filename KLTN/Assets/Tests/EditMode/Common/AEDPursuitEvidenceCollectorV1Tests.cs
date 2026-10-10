@@ -184,7 +184,7 @@ namespace EchoProtocol.AI.Common.Tests
         {
             var c = Create();
             Observe(c, "CHASE", UserA, 100);
-            Assert.That(c.RecordConsequence(UserA, AEDPursuitFactKindV1.Hit,
+            Assert.That(c.RecordConsequence("stalker-1", UserA, AEDPursuitFactKindV1.Hit,
                 "hit-1", 101, "STALKER_HIT_COMMITTED", false), Is.True);
             var episode = c.Freeze().Episodes.Single();
             Assert.That(episode.TerminalOutcome, Is.EqualTo(AEDPursuitTerminalV1.Censored));
@@ -197,14 +197,14 @@ namespace EchoProtocol.AI.Common.Tests
         {
             var down = Create();
             Observe(down, "CHASE", UserA, 10);
-            Assert.That(down.RecordConsequence(UserA, AEDPursuitFactKindV1.Downed,
+            Assert.That(down.RecordConsequence("stalker-1", UserA, AEDPursuitFactKindV1.Downed,
                 "down-1", 15, "STALKER_ATTACK", false), Is.True);
             Assert.That(down.Freeze().Episodes.Single().TerminalOutcome,
                 Is.EqualTo(AEDPursuitTerminalV1.Downed));
 
             var eliminated = Create();
             Observe(eliminated, "CHASE", UserA, 20);
-            Assert.That(eliminated.RecordConsequence(UserA,
+            Assert.That(eliminated.RecordConsequence("stalker-1", UserA,
                 AEDPursuitFactKindV1.Eliminated, "elimination-1", 24,
                 "STALKER_DIRECT_HIT", true), Is.True);
             var fact = eliminated.Freeze().Episodes.Single().Facts.Single();
@@ -217,7 +217,7 @@ namespace EchoProtocol.AI.Common.Tests
         {
             var c = Create();
             Observe(c, "CHASE", UserA, 10);
-            Assert.That(c.RecordConsequence(UserA,
+            Assert.That(c.RecordConsequence("stalker-1", UserA,
                 AEDPursuitFactKindV1.Downed, "bleedout-down", 30,
                 "BLEEDOUT", false), Is.True);
             var fact = c.Freeze().Episodes.Single().Facts.Single();
@@ -230,9 +230,9 @@ namespace EchoProtocol.AI.Common.Tests
         {
             var c = Create();
             Observe(c, "CHASE", UserA, 1);
-            Assert.That(c.RecordConsequence(UserA, AEDPursuitFactKindV1.Downed,
+            Assert.That(c.RecordConsequence("stalker-1", UserA, AEDPursuitFactKindV1.Downed,
                 "down-event", 2, "STALKER_ATTACK", false), Is.True);
-            Assert.That(c.RecordConsequence(UserA, AEDPursuitFactKindV1.Downed,
+            Assert.That(c.RecordConsequence("stalker-1", UserA, AEDPursuitFactKindV1.Downed,
                 "down-event", 2, "STALKER_ATTACK", false), Is.False);
             Assert.That(c.Freeze().Episodes.Count, Is.EqualTo(1));
         }
@@ -242,7 +242,7 @@ namespace EchoProtocol.AI.Common.Tests
         {
             var timed = Create();
             Observe(timed, "CHASE", UserA, 100);
-            timed.RecordConsequence(UserA, AEDPursuitFactKindV1.Downed,
+            timed.RecordConsequence("stalker-1", UserA, AEDPursuitFactKindV1.Downed,
                 "down-1", 140, "STALKER_ATTACK", false);
             var duration = AEDPursuitMetricProjectorV1.Project(timed.Freeze(), 10,
                 DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(4))
@@ -263,6 +263,65 @@ namespace EchoProtocol.AI.Common.Tests
                 .Single(m => m.MetricId == "Stalker.PursuitEscapeRate");
             Assert.That(censoredMetric.Status, Is.EqualTo(AEDMetricStatusV1.CensoredOnly));
             Assert.That(censoredMetric.Value, Is.Null);
+        }
+
+        [Test]
+        public void TwoStalkersCanChaseIndependently()
+        {
+            var c = Create();
+            Observe(c, "CHASE", UserA, 1, stalker: "stalker-1");
+            Observe(c, "CHASE", UserB, 1, stalker: "stalker-2");
+            Assert.That(c.RecordConsequence("stalker-2", UserB,
+                AEDPursuitFactKindV1.Hit, "stalker-2-hit", 2,
+                "STALKER_HIT_COMMITTED", false), Is.True);
+            Observe(c, "SEARCH", null, 3, stalker: "stalker-1");
+            var snapshot = c.Freeze();
+            Assert.That(snapshot.Episodes.Count, Is.EqualTo(2));
+            Assert.That(snapshot.Episodes.Count(e =>
+                e.TerminalOutcome == AEDPursuitTerminalV1.Censored), Is.EqualTo(2));
+            Assert.That(snapshot.Episodes.Single(e => e.StalkerNetworkId == "stalker-2")
+                .Facts.Count(f => f.Kind == AEDPursuitFactKindV1.Hit), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ConsequenceCannotCrossStalkerIdentity()
+        {
+            var c = Create();
+            Observe(c, "CHASE", UserA, 1, stalker: "stalker-1");
+            Observe(c, "CHASE", UserB, 1, stalker: "stalker-2");
+            Assert.That(c.RecordConsequence("stalker-2", UserA,
+                AEDPursuitFactKindV1.Downed, "wrong-target-down", 2,
+                "STALKER_ATTACK", false), Is.False);
+            Assert.That(c.Freeze().IsIncomplete, Is.True);
+        }
+
+        [Test]
+        public void TargetSwitchDoesNotEnterEscapeRateDenominator()
+        {
+            var c = Create();
+            Observe(c, "CHASE", UserA, 1);
+            Observe(c, "CHASE", UserB, 2);
+            c.RecordConsequence("stalker-1", UserB,
+                AEDPursuitFactKindV1.Downed, "down-b", 3,
+                "STALKER_ATTACK", false);
+            var metric = AEDPursuitMetricProjectorV1.Project(c.Freeze(), 1,
+                DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(4))
+                .Single(m => m.MetricId == "Stalker.PursuitEscapeRate");
+            Assert.That(metric.Denominator, Is.EqualTo(1d));
+            Assert.That(metric.Value, Is.Zero);
+        }
+
+        [Test]
+        public void OnlyTargetSwitchIsCensoredOnly()
+        {
+            var c = Create();
+            Observe(c, "CHASE", UserA, 1);
+            Observe(c, "CHASE", UserB, 2);
+            var metric = AEDPursuitMetricProjectorV1.Project(c.Freeze(), 1,
+                DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(3))
+                .Single(m => m.MetricId == "Stalker.PursuitEscapeRate");
+            Assert.That(metric.Status, Is.EqualTo(AEDMetricStatusV1.CensoredOnly));
+            Assert.That(metric.Value, Is.Null);
         }
     }
 }

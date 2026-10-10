@@ -116,8 +116,10 @@ namespace EchoProtocol.AI.Common.Tests
         public void NoiseMakerNeedsMatchedHostReactionAndKeepsUnresolvedOpportunityCensored()
         {
             var c = Create();
+            Observe(c, "Harass", UserA, 0);
             c.RecordFact(AEDMinionFactKindV1.NoiseMakerOpportunity,
                 "minion-1", "noise-opportunity", 1, UserA,
+                effectKind: "ACTIVE_THREAT_DIVERSION",
                 sourceEventId: "noise-event");
             var beforeReaction = AEDMinionMetricProjectorV1.Project(c.Freeze(),
                 DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(2))
@@ -126,11 +128,14 @@ namespace EchoProtocol.AI.Common.Tests
             Assert.That(beforeReaction.Value, Is.Null);
 
             var resolved = Create();
+            Observe(resolved, "Harass", UserA, 0);
             resolved.RecordFact(AEDMinionFactKindV1.NoiseMakerOpportunity,
                 "minion-1", "noise-opportunity", 1, UserA,
+                effectKind: "ACTIVE_THREAT_DIVERSION",
                 sourceEventId: "noise-event");
             resolved.RecordFact(AEDMinionFactKindV1.NoiseMakerReaction,
                 "minion-1", "noise-reaction", 2, UserA,
+                effectKind: "ACTIVE_THREAT_DIVERSION",
                 accepted: true, sourceEventId: "noise-event");
             var metric = AEDMinionMetricProjectorV1.Project(resolved.Freeze(),
                 DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(3))
@@ -138,6 +143,62 @@ namespace EchoProtocol.AI.Common.Tests
             Assert.That(metric.Status, Is.EqualTo(AEDMetricStatusV1.Available));
             Assert.That(metric.Value, Is.EqualTo(1d));
             Assert.That(metric.DecisionEligible, Is.False);
+        }
+
+        [Test]
+        public void SlowAppliedThenRoamIsNotCountered()
+        {
+            var c = Create();
+            Observe(c, "Harass", UserA, 1);
+            c.RecordFact(AEDMinionFactKindV1.SlowApplied, "minion-1", "slow-1",
+                2, UserA, effectKind: "SLOW_APPLIED", accepted: true);
+            Observe(c, "Roam", null, 3);
+            Observe(c, "Roam", null, 8);
+            var episode = c.Freeze().Episodes.Single();
+            Assert.That(episode.TerminalOutcome, Is.EqualTo(AEDMinionTerminalV1.Disengaged));
+            Assert.That(episode.Facts.Any(f => f.Kind == AEDMinionFactKindV1.SlowApplied), Is.True);
+        }
+
+        [Test]
+        public void CoreForcedDropThenRoamIsNotCountered()
+        {
+            var c = Create();
+            Observe(c, "Harass", UserA, 1);
+            c.RecordFact(AEDMinionFactKindV1.CoreForcedDrop, "minion-1", "core-drop-1",
+                2, UserA, objectId: "core-1", accepted: true);
+            Observe(c, "Roam", null, 3);
+            Observe(c, "Roam", null, 8);
+            Assert.That(c.Freeze().Episodes.Single().TerminalOutcome,
+                Is.EqualTo(AEDMinionTerminalV1.Disengaged));
+        }
+
+        [Test]
+        public void FlashlightDeathConfirmsCounteredExactlyOnce()
+        {
+            var c = Create();
+            Observe(c, "Harass", UserA, 1);
+            Assert.That(c.RecordFact(AEDMinionFactKindV1.TeamDeathReceipt,
+                "minion-1", "death-1", 2, effectKind: "FLASHLIGHT_DEATH", accepted: true), Is.True);
+            Assert.That(c.RecordFact(AEDMinionFactKindV1.TeamDeathReceipt,
+                "minion-1", "death-1", 2, effectKind: "FLASHLIGHT_DEATH", accepted: true), Is.False);
+            var snapshot = c.Freeze();
+            Assert.That(snapshot.Episodes.Single().TerminalOutcome,
+                Is.EqualTo(AEDMinionTerminalV1.Countered));
+            Assert.That(snapshot.Episodes.Single().Facts.Count(f =>
+                f.Kind == AEDMinionFactKindV1.TeamDeathReceipt), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void IdleNoiseMakerIsNotThreatOpportunity()
+        {
+            var c = Create();
+            c.RecordFact(AEDMinionFactKindV1.NoiseMakerOpportunity,
+                "minion-1", "idle-noise", 1, UserA, sourceEventId: "noise-idle");
+            var metric = AEDMinionMetricProjectorV1.Project(c.Freeze(),
+                DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(2))
+                .Single(m => m.MetricId == "Minion.DistractionSuccessRate");
+            Assert.That(metric.Status, Is.EqualTo(AEDMetricStatusV1.NoOpportunity));
+            Assert.That(metric.Value, Is.Null);
         }
 
         [Test]

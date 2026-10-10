@@ -154,6 +154,7 @@ namespace EchoProtocol.AI.Minions
         private bool _stalkerAlertDeliveredForTarget;
         private string _noiseMakerSourceEventId;
         private PlayerRef _noiseMakerSourcePlayer;
+        private PlayerRef _noiseMakerThreatTarget;
         private bool _noiseMakerReactionRecorded;
         private Transform _visualRoot;
         private Vector3 _visualInitialScale;
@@ -219,6 +220,10 @@ namespace EchoProtocol.AI.Minions
             StateValue = (int)CreepMinionState.Roam;
             FlightHeightValue = flightHeight;
             TargetPlayer = PlayerRef.None;
+            _noiseMakerSourceEventId = null;
+            _noiseMakerSourcePlayer = PlayerRef.None;
+            _noiseMakerThreatTarget = PlayerRef.None;
+            _noiseMakerReactionRecorded = false;
             StolenCoreId = default;
             AttackCooldown = TickTimer.None;
             AlertCooldown = TickTimer.None;
@@ -283,20 +288,32 @@ namespace EchoProtocol.AI.Minions
             {
                 return;
             }
+            bool activeThreat = (State == CreepMinionState.Track
+                || State == CreepMinionState.Harass)
+                && TargetPlayer.IsRealPlayer && !IsDying;
+            var threatTarget = TargetPlayer;
             var authority = MatchAuthorityRuntime.Instance;
             var sourcePlayer = ResolveNoiseSourcePlayer(noiseEvent.SourcePlayerId);
-            if (sourcePlayer.IsValid && !string.IsNullOrWhiteSpace(noiseEvent.NoiseEventId))
+            _noiseMakerSourceEventId = null;
+            _noiseMakerSourcePlayer = PlayerRef.None;
+            _noiseMakerThreatTarget = PlayerRef.None;
+            _noiseMakerReactionRecorded = false;
+            if (activeThreat && sourcePlayer.IsValid
+                && !string.IsNullOrWhiteSpace(noiseEvent.NoiseEventId))
                 authority?.RecordMinionFact(AEDMinionFactKindV1.NoiseMakerOpportunity,
                     Object.Id, $"noisemaker-opportunity:{noiseEvent.NoiseEventId}",
-                    Runner.Tick.Raw, sourcePlayer, TargetPlayer,
+                    Runner.Tick.Raw, sourcePlayer, threatTarget,
+                    effectKind: "ACTIVE_THREAT_DIVERSION",
                     sourceEventId: noiseEvent.NoiseEventId);
-            if (sourcePlayer.IsValid && !string.IsNullOrWhiteSpace(noiseEvent.NoiseEventId))
+            if (activeThreat && sourcePlayer.IsValid
+                && !string.IsNullOrWhiteSpace(noiseEvent.NoiseEventId))
             {
                 _noiseMakerSourceEventId = noiseEvent.NoiseEventId;
                 _noiseMakerSourcePlayer = sourcePlayer;
+                _noiseMakerThreatTarget = threatTarget;
                 _noiseMakerReactionRecorded = false;
             }
-            else
+            else if (activeThreat)
                 authority?.MarkMinionEvidenceIncomplete();
             _distractionPoint = noiseEvent.WorldPosition;
             _distractionUntil = Time.time + noiseMakerDistractionSeconds;
@@ -394,12 +411,14 @@ namespace EchoProtocol.AI.Minions
                 {
                     if (!_noiseMakerReactionRecorded
                         && !string.IsNullOrWhiteSpace(_noiseMakerSourceEventId)
-                        && _noiseMakerSourcePlayer.IsValid)
+                        && _noiseMakerSourcePlayer.IsValid
+                        && _noiseMakerThreatTarget.IsRealPlayer)
                     {
                         MatchAuthorityRuntime.Instance?.RecordMinionFact(
                             AEDMinionFactKindV1.NoiseMakerReaction, Object.Id,
                             $"noisemaker-reaction:{_noiseMakerSourceEventId}",
-                            Runner.Tick.Raw, _noiseMakerSourcePlayer, TargetPlayer,
+                            Runner.Tick.Raw, _noiseMakerSourcePlayer, _noiseMakerThreatTarget,
+                            effectKind: "ACTIVE_THREAT_DIVERSION",
                             accepted: true, sourceEventId: _noiseMakerSourceEventId);
                         _noiseMakerReactionRecorded = true;
                     }

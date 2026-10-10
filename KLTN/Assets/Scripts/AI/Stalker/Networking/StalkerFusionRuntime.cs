@@ -1388,7 +1388,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             var authority = MatchAuthorityRuntime.Instance;
             var occurrence = $"stalker-hit:{Object.Id}:{++_aedPursuitHitOrdinal}";
             var tick = Runner != null ? Runner.Tick.Raw : 0L;
-            authority?.RecordStalkerPursuitFact(targetPlayer,
+            authority?.RecordStalkerPursuitFact(Object.Id.ToString(), targetPlayer,
                 AEDPursuitFactKindV1.Hit, occurrence, tick,
                 "STALKER_HIT_COMMITTED");
             if (Runner != null
@@ -1396,7 +1396,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 && playerObject != null
                 && playerObject.TryGetComponent<NetworkPlayerLifeState>(out var life)
                 && life.IsEliminated)
-                authority?.RecordStalkerPursuitFact(targetPlayer,
+                authority?.RecordStalkerPursuitFact(Object.Id.ToString(), targetPlayer,
                     AEDPursuitFactKindV1.Eliminated, occurrence + ":eliminated",
                     tick, "STALKER_DIRECT_HIT", true);
 
@@ -1452,7 +1452,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             if (lifecycle != null && lifecycle.IdentityRegistry != null
                 && lifecycle.IdentityRegistry.TryGetPlayerRef(fact.PlayerId, out var downedPlayer))
                 MatchAuthorityRuntime.Instance?.RecordStalkerPursuitFact(
-                    downedPlayer, AEDPursuitFactKindV1.Downed,
+                    Object.Id.ToString(), downedPlayer, AEDPursuitFactKindV1.Downed,
                     $"stalker-down:{Object.Id}:{fact.AttackEpisodeId.Value}",
                     Runner != null ? Runner.Tick.Raw : 0L,
                     "STALKER_ATTACK");

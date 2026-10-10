@@ -115,16 +115,8 @@ namespace EchoProtocol.AI.Common.AED
                 if (!active.HasLostTick) { active.HasLostTick = true; active.LostTick = tick; }
                 if (tick - active.LostTick >= (long)tickRate * 5)
                 {
-                    var counterplayEffect = active.Facts.Any(f =>
-                        f.Kind == AEDMinionFactKindV1.SlowApplied
-                        || f.Kind == AEDMinionFactKindV1.NoiseMakerReaction
-                        || f.Kind == AEDMinionFactKindV1.ToolRelocated
-                        || f.Kind == AEDMinionFactKindV1.CoreForcedDrop
-                        || f.Kind == AEDMinionFactKindV1.CoreStolen
-                        || f.Kind == AEDMinionFactKindV1.TeamDeathReceipt);
-                    CloseEpisode(active, counterplayEffect
-                        ? AEDMinionTerminalV1.Countered : AEDMinionTerminalV1.Evaded,
-                        "ROAM_GRACE_CONFIRMED", tick);
+                    CloseEpisode(active, AEDMinionTerminalV1.Disengaged,
+                        "ROAM_GRACE_NO_VERIFIED_EVASION", tick);
                 }
             }
             return true;
@@ -146,11 +138,24 @@ namespace EchoProtocol.AI.Common.AED
             if (!Accept(kind.ToString(), occurrenceKey)) return false;
             _lastSourceTick = Math.Max(_lastSourceTick, tick);
             _active.TryGetValue(minionId, out var active);
+            if (active != null
+                && (kind == AEDMinionFactKindV1.NoiseMakerOpportunity
+                    || kind == AEDMinionFactKindV1.NoiseMakerReaction)
+                && string.IsNullOrWhiteSpace(relatedUserId))
+                relatedUserId = active.TargetId;
             var fact = new AEDMinionFactV1(kind, active?.Id, minionId,
                 occurrenceKey, sourceEventId, NormalizeUser(userId),
                 NormalizeUser(relatedUserId), objectId, effectKind, tick,
                 attemptOrdinal, accepted, seconds, x, y, z, HostAuthority);
-            if (active != null) active.Facts.Add(fact);
+            if (active != null)
+            {
+                active.Facts.Add(fact);
+                if (kind == AEDMinionFactKindV1.TeamDeathReceipt
+                    && accepted && string.Equals(effectKind, "FLASHLIGHT_DEATH",
+                        StringComparison.Ordinal))
+                    CloseEpisode(active, AEDMinionTerminalV1.Countered,
+                        "FLASHLIGHT_DEATH_CONFIRMED", tick);
+            }
             else _facts.Add(fact);
             return true;
         }

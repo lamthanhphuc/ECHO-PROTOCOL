@@ -13,14 +13,18 @@ namespace EchoProtocol.AI.Common.AED
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var episodes = snapshot.Episodes;
             var terminal = episodes.Where(e => e.TerminalOutcome.HasValue).ToArray();
-            var censored = terminal.Count(e => e.TerminalOutcome == AEDPursuitTerminalV1.Censored);
-            var resolved = terminal.Where(e => e.TerminalOutcome != AEDPursuitTerminalV1.Censored
-                && e.TerminalOutcome != AEDPursuitTerminalV1.Cancelled
-                && e.TerminalOutcome != AEDPursuitTerminalV1.Incomplete).ToArray();
+            var censored = terminal.Count(e =>
+                e.TerminalOutcome == AEDPursuitTerminalV1.Censored
+                || e.TerminalOutcome == AEDPursuitTerminalV1.Cancelled
+                || e.TerminalOutcome == AEDPursuitTerminalV1.Incomplete
+                || e.TerminalOutcome == AEDPursuitTerminalV1.TargetSwitched);
+            var resolved = terminal.Where(e =>
+                e.TerminalOutcome == AEDPursuitTerminalV1.Escaped
+                || e.TerminalOutcome == AEDPursuitTerminalV1.Downed
+                || e.TerminalOutcome == AEDPursuitTerminalV1.Eliminated).ToArray();
             var escape = resolved.Count(e => e.TerminalOutcome == AEDPursuitTerminalV1.Escaped);
             var down = resolved.Count(e => e.TerminalOutcome == AEDPursuitTerminalV1.Downed
                 || e.TerminalOutcome == AEDPursuitTerminalV1.Eliminated);
-            var switched = resolved.Count(e => e.TerminalOutcome == AEDPursuitTerminalV1.TargetSwitched);
             var lostEligible = episodes.Sum(e => e.EligibleLostWindows);
             var lostResolved = episodes.Sum(e => e.ResolvedLostWindows);
             var reacquired = episodes.Sum(e => e.ReacquisitionCount);

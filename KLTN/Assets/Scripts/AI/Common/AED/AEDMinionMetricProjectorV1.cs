@@ -23,12 +23,17 @@ namespace EchoProtocol.AI.Common.AED
             var coreAttempts = facts.Where(f => f.Kind == AEDMinionFactKindV1.AttackAttempted
                 && f.EffectKind == "CORE").ToArray();
             var alerts = facts.Where(f => f.Kind == AEDMinionFactKindV1.AlertAccepted).ToArray();
-            var distractions = facts.Where(f => f.Kind == AEDMinionFactKindV1.NoiseMakerReaction).ToArray();
-            var distractionOpportunities = facts.Where(f => f.Kind == AEDMinionFactKindV1.NoiseMakerOpportunity).ToArray();
+            const string ActiveThreat = "ACTIVE_THREAT_DIVERSION";
+            var distractions = facts.Where(f => f.Kind == AEDMinionFactKindV1.NoiseMakerReaction
+                && f.Accepted && f.EffectKind == ActiveThreat).ToArray();
+            var distractionOpportunities = facts.Where(f => f.Kind == AEDMinionFactKindV1.NoiseMakerOpportunity
+                && f.EffectKind == ActiveThreat && !string.IsNullOrWhiteSpace(f.SourceEventId)
+                && !string.IsNullOrWhiteSpace(f.RelatedUserId)).ToArray();
             var resolvedDistractions = distractionOpportunities.Where(opportunity =>
-                distractions.Any(reaction => !string.IsNullOrWhiteSpace(opportunity.SourceEventId)
-                    && string.Equals(reaction.SourceEventId, opportunity.SourceEventId,
-                        StringComparison.Ordinal))).ToArray();
+                distractions.Any(reaction => reaction.MinionNetworkId == opportunity.MinionNetworkId
+                    && reaction.SourceEventId == opportunity.SourceEventId
+                    && reaction.RelatedUserId == opportunity.RelatedUserId
+                    && reaction.SourceTick >= opportunity.SourceTick)).ToArray();
             var recovery = facts.Where(f => f.Kind == AEDMinionFactKindV1.CoreForcedDrop
                 && !string.IsNullOrWhiteSpace(f.ObjectId)).ToArray();
             var recovered = facts.Where(f => f.Kind == AEDMinionFactKindV1.ItemRecovered

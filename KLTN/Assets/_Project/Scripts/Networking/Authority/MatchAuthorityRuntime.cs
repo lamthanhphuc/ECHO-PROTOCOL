@@ -129,7 +129,8 @@ namespace EchoProtocol.Networking.Authority
                 $"stalker-state:{stalkerNetworkId}:{tick}");
         }
 
-        public void RecordStalkerPursuitFact(PlayerRef target,
+        public void RecordStalkerPursuitFact(string stalkerNetworkId,
+            PlayerRef target,
             AEDPursuitFactKindV1 kind, string occurrenceKey,
             long tick, string cause, bool directFromHit = false)
         {
@@ -139,7 +140,7 @@ namespace EchoProtocol.Networking.Authority
                 _aedPursuitEvidence.MarkIncomplete();
                 return;
             }
-            _aedPursuitEvidence.RecordConsequence(userId, kind,
+            _aedPursuitEvidence.RecordConsequence(stalkerNetworkId, userId, kind,
                 occurrenceKey, tick, cause, directFromHit);
         }
 
