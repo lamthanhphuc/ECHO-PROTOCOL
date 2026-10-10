@@ -169,6 +169,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         private float _moveDiagDistance;
         private Vector3 _moveDiagLastPosition;
 #endif
+        private long _aedPursuitHitOrdinal;
 
         private struct StrategicOccupancyAccumulator
         {
@@ -254,6 +255,10 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            if (hasState && runner != null && runner.IsServer
+                && Object != null && Object.HasStateAuthority)
+                MatchAuthorityRuntime.Instance?.RecordStalkerDespawn(
+                    Object.Id.ToString(), runner.Tick.Raw);
             controller?.SetAuthoritativeLocomotion(false);
             _coreCarryStartedAt.Clear();
             specialEncounterRuntime?.ResetForMatch();
@@ -324,6 +329,13 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             PublishAuthoritativeState();
+            if (Runner.IsServer && Object.HasStateAuthority)
+            {
+                MatchAuthorityRuntime.Instance?.RecordStalkerPursuitSnapshot(
+                    Object.Id.ToString(), controller.CurrentState.ToString(),
+                    ResolveCurrentControllerTarget(), Runner.Tick.Raw,
+                    Runner.TickRate);
+            }
             ResolveAuthoritativeAttack();
         }
 
@@ -677,6 +689,18 @@ namespace EchoProtocol.AI.Stalker.Networking
             {
                 if (CreateRunnerPlayerId(player) == playerId) return player;
             }
+            return PlayerRef.None;
+        }
+
+        private PlayerRef ResolveCurrentControllerTarget()
+        {
+            var playerId = controller != null ? controller.CurrentTargetId : PlayerId.Invalid;
+            if (!playerId.IsValid || Runner == null) return PlayerRef.None;
+            if (lifecycle != null && lifecycle.IdentityRegistry != null
+                && lifecycle.IdentityRegistry.TryGetPlayerRef(playerId, out var registered))
+                return registered;
+            foreach (var player in Runner.ActivePlayers)
+                if (CreateRunnerPlayerId(player) == playerId) return player;
             return PlayerRef.None;
         }
 
@@ -1361,6 +1385,21 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return;
             }
 
+            var authority = MatchAuthorityRuntime.Instance;
+            var occurrence = $"stalker-hit:{Object.Id}:{++_aedPursuitHitOrdinal}";
+            var tick = Runner != null ? Runner.Tick.Raw : 0L;
+            authority?.RecordStalkerPursuitFact(targetPlayer,
+                AEDPursuitFactKindV1.Hit, occurrence, tick,
+                "STALKER_HIT_COMMITTED");
+            if (Runner != null
+                && Runner.TryGetPlayerObject(targetPlayer, out var playerObject)
+                && playerObject != null
+                && playerObject.TryGetComponent<NetworkPlayerLifeState>(out var life)
+                && life.IsEliminated)
+                authority?.RecordStalkerPursuitFact(targetPlayer,
+                    AEDPursuitFactKindV1.Eliminated, occurrence + ":eliminated",
+                    tick, "STALKER_DIRECT_HIT", true);
+
             RPC_PlayStalkerBite(
                 targetPlayer);
         }
@@ -1409,6 +1448,14 @@ namespace EchoProtocol.AI.Stalker.Networking
             {
                 return;
             }
+
+            if (lifecycle != null && lifecycle.IdentityRegistry != null
+                && lifecycle.IdentityRegistry.TryGetPlayerRef(fact.PlayerId, out var downedPlayer))
+                MatchAuthorityRuntime.Instance?.RecordStalkerPursuitFact(
+                    downedPlayer, AEDPursuitFactKindV1.Downed,
+                    $"stalker-down:{Object.Id}:{fact.AttackEpisodeId.Value}",
+                    Runner != null ? Runner.Tick.Raw : 0L,
+                    "STALKER_ATTACK");
 
             if (specialEncounterRuntime == null)
             {

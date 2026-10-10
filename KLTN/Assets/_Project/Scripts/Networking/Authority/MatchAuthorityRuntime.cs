@@ -87,15 +87,129 @@ namespace EchoProtocol.Networking.Authority
             new AEDSurvivalEvidenceCollectorV1();
         private readonly AEDToolNoiseEvidenceCollectorV1 _aedToolNoiseEvidence =
             new AEDToolNoiseEvidenceCollectorV1();
+        private readonly AEDPursuitEvidenceCollectorV1 _aedPursuitEvidence =
+            new AEDPursuitEvidenceCollectorV1();
+        private readonly AEDMinionEvidenceCollectorV1 _aedMinionEvidence =
+            new AEDMinionEvidenceCollectorV1();
         public AEDv2CurrentMatchEvidence LastFrozenAEDv2Evidence => _aedv2Evidence.LastFrozen;
         public IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence> AEDv2PlayerEvidence => _aedv2Evidence.PlayerEvidence;
         public IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence> LastFrozenAEDv2PlayerEvidence => _aedv2Evidence.LastFrozenPlayerEvidence;
         public AEDObjectiveEvidenceV1 LastFrozenAEDObjectiveEvidence => _aedObjectiveEvidence.LastFrozen;
         public AEDSurvivalEvidenceSnapshotV1 LastFrozenAEDSurvivalEvidence => _aedSurvivalEvidence.LastFrozen;
         public AEDToolNoiseEvidenceSnapshotV1 LastFrozenAEDToolNoiseEvidence => _aedToolNoiseEvidence.LastFrozen;
+        public AEDPursuitEvidenceSnapshotV1 LastFrozenAEDPursuitEvidence => _aedPursuitEvidence.LastFrozen;
+        public AEDMinionEvidenceSnapshotV1 LastFrozenAEDMinionEvidence => _aedMinionEvidence.LastFrozen;
         public void MarkAEDv2EvidenceIncomplete()
         {
             _aedv2Evidence.MarkIncomplete();
+        }
+
+        private long CurrentAuthorityTick => _bootstrap?.Runner != null
+            ? _bootstrap.Runner.Tick.Raw : 0L;
+
+        public bool TryResolveVerifiedBackendUserId(PlayerRef player, out string userId)
+        {
+            userId = null;
+            if (!TryResolveBackendUser(player, out var verifiedId)) return false;
+            userId = verifiedId.ToString("D");
+            return true;
+        }
+
+        public void RecordStalkerPursuitSnapshot(string stalkerNetworkId,
+            string state, PlayerRef target, long tick, int tickRate)
+        {
+            if (!HasStateAuthority || !_telemetryMatchActive) return;
+            string targetUserId = null;
+            if (target.IsValid
+                && !TryResolveVerifiedBackendUserId(target, out targetUserId)
+                && state == "CHASE")
+                _aedPursuitEvidence.MarkIncomplete();
+            _aedPursuitEvidence.Observe(true, stalkerNetworkId,
+                targetUserId, state, tick, tickRate,
+                $"stalker-state:{stalkerNetworkId}:{tick}");
+        }
+
+        public void RecordStalkerPursuitFact(PlayerRef target,
+            AEDPursuitFactKindV1 kind, string occurrenceKey,
+            long tick, string cause, bool directFromHit = false)
+        {
+            if (!HasStateAuthority || !_telemetryMatchActive) return;
+            if (!TryResolveVerifiedBackendUserId(target, out var userId))
+            {
+                _aedPursuitEvidence.MarkIncomplete();
+                return;
+            }
+            _aedPursuitEvidence.RecordConsequence(userId, kind,
+                occurrenceKey, tick, cause, directFromHit);
+        }
+
+        public void RecordStalkerDespawn(string stalkerNetworkId, long tick)
+        {
+            if (HasStateAuthority)
+                _aedPursuitEvidence.CensorStalker(stalkerNetworkId,
+                    "STALKER_DESPAWN", tick);
+        }
+
+        public void RecordMinionSnapshot(NetworkId minionId, string zone,
+            string state, PlayerRef target, long tick, int tickRate)
+        {
+            if (!HasStateAuthority || !_telemetryMatchActive) return;
+            string userId = null;
+            if (target.IsValid && !TryResolveVerifiedBackendUserId(target, out userId)
+                && (state == "Track" || state == "Harass"))
+                _aedMinionEvidence.MarkIncomplete();
+            _aedMinionEvidence.Observe(true, minionId.ToString(), zone,
+                state, userId, tick, tickRate,
+                $"minion-state:{minionId}:{tick}");
+        }
+
+        public void RecordMinionFact(AEDMinionFactKindV1 kind,
+            NetworkId minionId, string occurrenceKey, long tick,
+            PlayerRef user = default, PlayerRef relatedUser = default,
+            string objectId = null, string effectKind = null,
+            long attemptOrdinal = 0, bool accepted = false,
+            double seconds = 0, string sourceEventId = null,
+            Vector3 position = default)
+        {
+            if (!HasStateAuthority || !_telemetryMatchActive) return;
+            string userId = null;
+            string relatedUserId = null;
+            if (user.IsValid && !TryResolveVerifiedBackendUserId(user, out userId)
+                || relatedUser.IsValid
+                    && !TryResolveVerifiedBackendUserId(relatedUser, out relatedUserId))
+            {
+                _aedMinionEvidence.MarkIncomplete();
+                return;
+            }
+            _aedMinionEvidence.RecordFact(kind, minionId.ToString(),
+                occurrenceKey, tick, userId, relatedUserId, objectId,
+                effectKind, attemptOrdinal, accepted, seconds, sourceEventId,
+                position.x, position.y, position.z);
+        }
+
+        public void RecordMinionDespawn(NetworkId minionId, long tick)
+        {
+            if (HasStateAuthority)
+                _aedMinionEvidence.CensorMinion(minionId.ToString(),
+                    "MINION_DESPAWN", tick);
+        }
+
+        public void MarkMinionEvidenceIncomplete() => _aedMinionEvidence.MarkIncomplete();
+
+        public void RecordMinionRecoveredItem(NetworkId itemId,
+            PlayerRef player, string occurrenceKey, long tick,
+            string sourceEventId = null)
+        {
+            if (!HasStateAuthority || !_telemetryMatchActive) return;
+            if (!TryResolveVerifiedBackendUserId(player, out var userId))
+            {
+                _aedMinionEvidence.MarkIncomplete();
+                return;
+            }
+            _aedMinionEvidence.RecordFact(AEDMinionFactKindV1.ItemRecovered,
+                "world-pickup", occurrenceKey, tick, userId,
+                objectId: itemId.ToString(), accepted: true,
+                sourceEventId: sourceEventId);
         }
 
         public string AEDv2RosterIdentity => HasStateAuthority ? CurrentRosterIdentity() : string.Empty;
@@ -602,6 +716,12 @@ namespace EchoProtocol.Networking.Authority
             }
 
             _disconnectedActors.Add(actorNumber);
+            if (_boundPlayers.TryGetValue(actorNumber, out var disconnectedUser))
+            {
+                var userId = disconnectedUser.ToString("D");
+                _aedPursuitEvidence.CensorTarget(userId, "PLAYER_DISCONNECTED", CurrentAuthorityTick);
+                _aedMinionEvidence.CensorTarget(userId, "PLAYER_DISCONNECTED", CurrentAuthorityTick);
+            }
         }
 
         public async Task<(bool Accepted, string Error)> StartMatchAsync()
@@ -692,6 +812,8 @@ namespace EchoProtocol.Networking.Authority
             _aedObjectiveEvidence.Clear();
             _aedSurvivalEvidence.Clear();
             _aedToolNoiseEvidence.Clear();
+            _aedPursuitEvidence.Clear();
+            _aedMinionEvidence.Clear();
             BackendAdaptiveInputSnapshotProvider.Current?.ClearForMatch(oldMatchId);
             ScenarioConfigRuntimeRegistry.Clear(oldMatchId);
             ScenarioConfigAuthorityRuntime.Instance?.ResetForMatch(oldMatchId);
@@ -937,6 +1059,12 @@ namespace EchoProtocol.Networking.Authority
             }
             _aedv2Evidence.StartPhase(MatchId, CurrentRosterIdentity(),
                 "CORE_COLLECTION", 1, occurredAtUtc);
+            _aedPursuitEvidence.ResetMatch(MatchId);
+            _aedPursuitEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION",
+                BuildAEDMetricPolicyContext("CORE_COLLECTION"));
+            _aedMinionEvidence.ResetMatch(MatchId);
+            _aedMinionEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION",
+                BuildAEDMetricPolicyContext("CORE_COLLECTION"));
             _aedObjectiveEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION",
                 windowStartedAtUtc: occurredAtUtc,
                 policyContext: BuildAEDMetricPolicyContext("CORE_COLLECTION"));
@@ -999,6 +1127,8 @@ namespace EchoProtocol.Networking.Authority
                     _aedObjectiveEvidence.MarkIncomplete();
                     _aedv2Evidence.MarkIncomplete();
                 }
+                if (transition.State == NetworkItemState.Carried && _telemetryMatchActive)
+                    _aedMinionEvidence.MarkIncomplete();
 
                 return;
             }
@@ -1012,6 +1142,8 @@ namespace EchoProtocol.Networking.Authority
                     _aedObjectiveEvidence.MarkIncomplete();
                     _aedv2Evidence.MarkIncomplete();
                 }
+                if (transition.State == NetworkItemState.Carried && _telemetryMatchActive)
+                    _aedMinionEvidence.MarkIncomplete();
 
                 return;
             }
@@ -1054,6 +1186,13 @@ namespace EchoProtocol.Networking.Authority
                 out var emittedEvent,
                 out _,
                 Snapshot(transition.Position));
+
+            if (transition.State == NetworkItemState.Carried
+                && item.Object != null && item.Object.IsValid)
+                RecordMinionRecoveredItem(item.Object.Id, actor,
+                    $"core-player-pickup:{occurrenceKey}",
+                    _bootstrap?.Runner != null ? _bootstrap.Runner.Tick.Raw : 0L,
+                    accepted ? emittedEvent?.Id.ToString("D") : null);
 
             if (transition.State == NetworkItemState.Placed && accepted
                 && emittedEvent != null
@@ -1137,9 +1276,13 @@ namespace EchoProtocol.Networking.Authority
             bool objectivePhaseIncomplete = false)
         {
             if (objectivePhaseIncomplete) _aedObjectiveEvidence.MarkIncomplete();
+            _aedPursuitEvidence.CensorActive("PHASE_END", CurrentAuthorityTick);
+            _aedMinionEvidence.CensorAll("PHASE_END", CurrentAuthorityTick);
             _aedObjectiveEvidence.Freeze(windowEndedAtUtc);
             _aedSurvivalEvidence.Freeze();
             _aedToolNoiseEvidence.Freeze();
+            _aedPursuitEvidence.Freeze();
+            _aedMinionEvidence.Freeze();
         }
 
         private bool TryEmitPendingMatchEnd()
@@ -1726,6 +1869,10 @@ namespace EchoProtocol.Networking.Authority
                 policyContext: BuildAEDMetricPolicyContext(phase));
             _aedSurvivalEvidence.StartPhase(MatchId, phaseOrdinal, phase);
             _aedToolNoiseEvidence.StartPhase(MatchId, phaseOrdinal, phase);
+            _aedPursuitEvidence.StartPhase(MatchId, phaseOrdinal, phase,
+                BuildAEDMetricPolicyContext(phase));
+            _aedMinionEvidence.StartPhase(MatchId, phaseOrdinal, phase,
+                BuildAEDMetricPolicyContext(phase));
             if (!emitted)
             {
                 _aedv2Evidence.MarkIncomplete();

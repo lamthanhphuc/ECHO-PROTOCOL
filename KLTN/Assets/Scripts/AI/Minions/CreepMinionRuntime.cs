@@ -2,6 +2,7 @@ using System;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Spatial;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.MatchFlow;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
@@ -145,11 +146,15 @@ namespace EchoProtocol.AI.Minions
         private Vector3 _fleeDestination;
         private Vector3 _distractionPoint;
         private long _alertOrdinal;
+        private long _attackAttemptOrdinal;
         private uint _renderedAttackSequence;
         private uint _renderedAlertSequence;
         private float _actionAnimationUntil;
         private string _currentLocomotionAnimation;
         private bool _stalkerAlertDeliveredForTarget;
+        private string _noiseMakerSourceEventId;
+        private PlayerRef _noiseMakerSourcePlayer;
+        private bool _noiseMakerReactionRecorded;
         private Transform _visualRoot;
         private Vector3 _visualInitialScale;
         private Vector3 _visualBaseLocalPosition;
@@ -263,6 +268,10 @@ namespace EchoProtocol.AI.Minions
         {
             _navigation?.SetAuthoritativeLocomotion(false);
             _navigation = null;
+            if (hasState && runner != null && runner.IsServer
+                && Object != null && Object.HasStateAuthority)
+                MatchAuthorityRuntime.Instance?.RecordMinionDespawn(
+                    Object.Id, runner.Tick.Raw);
             if (_noiseService != null) _noiseService.RuntimeNoiseAccepted -= HandleRuntimeNoiseAccepted;
             if (hasState && Object.HasStateAuthority) ReleaseStolenCoreAuthoritative();
         }
@@ -274,6 +283,21 @@ namespace EchoProtocol.AI.Minions
             {
                 return;
             }
+            var authority = MatchAuthorityRuntime.Instance;
+            var sourcePlayer = ResolveNoiseSourcePlayer(noiseEvent.SourcePlayerId);
+            if (sourcePlayer.IsValid && !string.IsNullOrWhiteSpace(noiseEvent.NoiseEventId))
+                authority?.RecordMinionFact(AEDMinionFactKindV1.NoiseMakerOpportunity,
+                    Object.Id, $"noisemaker-opportunity:{noiseEvent.NoiseEventId}",
+                    Runner.Tick.Raw, sourcePlayer, TargetPlayer,
+                    sourceEventId: noiseEvent.NoiseEventId);
+            if (sourcePlayer.IsValid && !string.IsNullOrWhiteSpace(noiseEvent.NoiseEventId))
+            {
+                _noiseMakerSourceEventId = noiseEvent.NoiseEventId;
+                _noiseMakerSourcePlayer = sourcePlayer;
+                _noiseMakerReactionRecorded = false;
+            }
+            else
+                authority?.MarkMinionEvidenceIncomplete();
             _distractionPoint = noiseEvent.WorldPosition;
             _distractionUntil = Time.time + noiseMakerDistractionSeconds;
             ResetTracking();
@@ -367,7 +391,20 @@ namespace EchoProtocol.AI.Minions
                 _agent.speed = trackSpeed;
                 _agent.SetDestination(_distractionPoint);
                 if (Vector3.Distance(transform.position, _distractionPoint) <= noiseMakerArrivalDistance)
+                {
+                    if (!_noiseMakerReactionRecorded
+                        && !string.IsNullOrWhiteSpace(_noiseMakerSourceEventId)
+                        && _noiseMakerSourcePlayer.IsValid)
+                    {
+                        MatchAuthorityRuntime.Instance?.RecordMinionFact(
+                            AEDMinionFactKindV1.NoiseMakerReaction, Object.Id,
+                            $"noisemaker-reaction:{_noiseMakerSourceEventId}",
+                            Runner.Tick.Raw, _noiseMakerSourcePlayer, TargetPlayer,
+                            accepted: true, sourceEventId: _noiseMakerSourceEventId);
+                        _noiseMakerReactionRecorded = true;
+                    }
                     _distractionUntil = 0f;
+                }
             }
             else
             {
@@ -376,6 +413,7 @@ namespace EchoProtocol.AI.Minions
             }
             _navigation.TickAuthoritativeLocomotion(Runner.DeltaTime);
             IsMoving = _navigation.AuthoritativeMoveSpeed > 0.2f;
+            PublishAEDSnapshot();
         }
 
         private void UpdateTargetAndMovement()
@@ -661,12 +699,28 @@ namespace EchoProtocol.AI.Minions
 
         private bool TrySendStalkerAlert()
         {
+            var ordinal = ++_alertOrdinal;
+            var occurrence = $"minion-alert:{Object.Id}:{ordinal}";
+            RuntimeNoiseEvent noiseEvent = default;
             bool accepted = _noiseService != null && _noiseService.TryAccept(
                 TargetPlayer,
                 RuntimeNoiseType.MINION_ALERT,
-                new RuntimeNoiseSourceOccurrenceKey($"minion-alert:{Object.Id}", ++_alertOrdinal),
+                new RuntimeNoiseSourceOccurrenceKey($"minion-alert:{Object.Id}", ordinal),
                 _lastKnownTargetPosition,
-                out _);
+                out noiseEvent);
+
+            var authority = MatchAuthorityRuntime.Instance;
+            authority?.RecordMinionFact(AEDMinionFactKindV1.AlertAttempted,
+                Object.Id, occurrence, Runner.Tick.Raw, TargetPlayer,
+                effectKind: "MINION_ALERT", accepted: accepted,
+                sourceEventId: accepted ? noiseEvent.NoiseEventId : null);
+            if (accepted && !string.IsNullOrWhiteSpace(noiseEvent.NoiseEventId))
+                authority?.RecordMinionFact(AEDMinionFactKindV1.AlertAccepted,
+                    Object.Id, occurrence, Runner.Tick.Raw, TargetPlayer,
+                    effectKind: "MINION_ALERT", accepted: true,
+                    sourceEventId: noiseEvent.NoiseEventId);
+            else if (accepted)
+                authority?.MarkMinionEvidenceIncomplete();
 
             if (accepted) AlertSequence++;
 #if false
@@ -731,43 +785,87 @@ namespace EchoProtocol.AI.Minions
                 && lobby != null
                 && lobby.CarriedCoreId.IsValid
                 && interactor != null
-                && TryStealCore(playerObject, lobby, interactor))
+                )
             {
-                CommitAttack(CreepMinionAttackKind.StealCore);
-                return;
+                var ordinal = ++_attackAttemptOrdinal;
+                var attempt = $"minion-attack:{Object.Id}:{ordinal}";
+                var coreId = lobby.CarriedCoreId.ToString();
+                var success = TryStealCore(playerObject, lobby, interactor,
+                    out var forcedDrop, out var stolen);
+                var authority = MatchAuthorityRuntime.Instance;
+                authority?.RecordMinionFact(AEDMinionFactKindV1.AttackAttempted,
+                    Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
+                    objectId: coreId, effectKind: "CORE", attemptOrdinal: ordinal,
+                    accepted: forcedDrop);
+                if (forcedDrop)
+                    authority?.RecordMinionFact(AEDMinionFactKindV1.CoreForcedDrop,
+                        Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
+                        objectId: coreId, effectKind: "CORE_FORCED_DROP",
+                        attemptOrdinal: ordinal, accepted: true);
+                if (stolen)
+                    authority?.RecordMinionFact(AEDMinionFactKindV1.CoreStolen,
+                        Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
+                        objectId: coreId, effectKind: "CORE_STOLEN",
+                        attemptOrdinal: ordinal, accepted: true);
+                if (success)
+                {
+                    CommitAttack(CreepMinionAttackKind.StealCore);
+                    return;
+                }
             }
 
             if (distance <= stealToolRange
                 && lobby != null
                 && lobby.ToolId >= 1
                 && lobby.ToolId <= 6
-                && interactor != null
-                && TryRelocateTeamTool(
-                    playerObject,
-                    interactor,
-                    out Vector3 toolDropPosition))
+                && interactor != null)
             {
-                CommitAttack(CreepMinionAttackKind.StealTool);
-                BeginFleeTo(
-                    toolDropPosition,
-                    toolFleeSeconds);
-                return;
+                var ordinal = ++_attackAttemptOrdinal;
+                var attempt = $"minion-attack:{Object.Id}:{ordinal}";
+                var toolType = lobby.ToolId.ToString();
+                bool relocated = TryRelocateTeamTool(playerObject,
+                    interactor, out Vector3 toolDropPosition);
+                var authority = MatchAuthorityRuntime.Instance;
+                authority?.RecordMinionFact(AEDMinionFactKindV1.AttackAttempted,
+                    Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
+                    objectId: $"tool-type:{toolType}", effectKind: "TOOL",
+                    attemptOrdinal: ordinal, accepted: relocated,
+                    position: relocated ? toolDropPosition : default);
+                if (relocated)
+                {
+                    authority?.RecordMinionFact(AEDMinionFactKindV1.ToolRelocated,
+                        Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
+                        objectId: $"tool-type:{toolType}", effectKind: "TOOL_RELOCATED",
+                        attemptOrdinal: ordinal, accepted: true,
+                        position: toolDropPosition);
+                    CommitAttack(CreepMinionAttackKind.StealTool);
+                    BeginFleeTo(toolDropPosition, toolFleeSeconds);
+                    return;
+                }
             }
 
             if (distance > shootRange)
                 return;
 
+            var slowOrdinal = ++_attackAttemptOrdinal;
+            var slowAttempt = $"minion-attack:{Object.Id}:{slowOrdinal}";
+
             var movement =
                 playerObject.GetComponent<
                     NetworkPlayerMovement>();
 
-            if (movement == null
-                || !movement.TryApplySlowAuthoritative(
-                    slowMultiplier,
-                    slowDurationSeconds))
-            {
-                return;
-            }
+            bool slowApplied = movement != null && movement.TryApplySlowAuthoritative(
+                slowMultiplier, slowDurationSeconds);
+            var minionAuthority = MatchAuthorityRuntime.Instance;
+            minionAuthority?.RecordMinionFact(AEDMinionFactKindV1.AttackAttempted,
+                Object.Id, slowAttempt, Runner.Tick.Raw, TargetPlayer,
+                effectKind: "SLOW", attemptOrdinal: slowOrdinal,
+                accepted: slowApplied);
+            if (!slowApplied) return;
+            minionAuthority?.RecordMinionFact(AEDMinionFactKindV1.SlowApplied,
+                Object.Id, slowAttempt, Runner.Tick.Raw, TargetPlayer,
+                effectKind: "SLOW_APPLIED", attemptOrdinal: slowOrdinal,
+                accepted: true);
 
             CommitAttack(CreepMinionAttackKind.ShootSlow);
         }
@@ -829,8 +927,11 @@ namespace EchoProtocol.AI.Minions
             return false;
         }
 
-        private bool TryStealCore(NetworkObject playerObject, LobbyPlayerState lobby, NetworkPlayerInteractor interactor)
+        private bool TryStealCore(NetworkObject playerObject, LobbyPlayerState lobby,
+            NetworkPlayerInteractor interactor, out bool forcedDrop, out bool stolen)
         {
+            forcedDrop = false;
+            stolen = false;
             var coreId = lobby.CarriedCoreId;
             if (interactor == null || !coreId.IsValid) return false;
             if (!Runner.TryFindObject(coreId, out var obj)
@@ -848,6 +949,7 @@ namespace EchoProtocol.AI.Minions
 #endif
                 return false;
             }
+            forcedDrop = true;
             // A successful forced drop consumes this hit's one side effect even if carry cannot begin.
             if (!core.TryBeginMonsterCarryAuthoritative(Object.Id, CarryPosition(), transform.rotation))
             {
@@ -857,6 +959,7 @@ namespace EchoProtocol.AI.Minions
                 return true;
             }
             StolenCoreId = coreId;
+            stolen = true;
             BeginFlee(playerObject.transform.position, coreCarryTimeoutSeconds);
 #if false
             // Debug.Log($"[CREEP_STEAL_CORE][SUCCESS] core={coreId} destination={_fleeDestination}", this);
@@ -879,6 +982,11 @@ namespace EchoProtocol.AI.Minions
         private void BeginFlashlightDeath()
         {
             if (!Object.HasStateAuthority || IsDying) return;
+
+            MatchAuthorityRuntime.Instance?.RecordMinionFact(
+                AEDMinionFactKindV1.TeamDeathReceipt, Object.Id,
+                $"minion-team-death:{Object.Id}", Runner.Tick.Raw,
+                effectKind: "FLASHLIGHT_DEATH", accepted: true);
 
             // Nếu đang giữ Core thì trả Core trước,
             // không để Core biến mất cùng Minion.
@@ -1018,6 +1126,7 @@ namespace EchoProtocol.AI.Minions
             out Vector3 source)
         {
             source = default;
+            bool anySource = false;
 
             foreach (var player
                      in Runner.ActivePlayers)
@@ -1140,9 +1249,15 @@ namespace EchoProtocol.AI.Minions
 
                     if (hitMinion == this)
                     {
-                        source =
-                            playerObject
-                                .transform.position;
+                        if (!anySource)
+                            source = playerObject.transform.position;
+                        anySource = true;
+                        MatchAuthorityRuntime.Instance?.RecordMinionFact(
+                            AEDMinionFactKindV1.FlashlightContribution,
+                            Object.Id,
+                            $"flashlight:{Object.Id}:{player.PlayerId}:{Runner.Tick.Raw}",
+                            Runner.Tick.Raw, player, effectKind: "FLASHLIGHT_BEAM",
+                            accepted: true, seconds: Runner.DeltaTime);
 
 #if false
                         // Debug.Log(
@@ -1157,7 +1272,7 @@ namespace EchoProtocol.AI.Minions
                             this);
 #endif
 
-                        return true;
+                        break;
                     }
 
                     // Vật khác chắn beam.
@@ -1165,7 +1280,28 @@ namespace EchoProtocol.AI.Minions
                 }
             }
 
-            return false;
+            return anySource;
+        }
+
+        private void PublishAEDSnapshot()
+        {
+            if (Runner == null || !Runner.IsServer || Object == null
+                || !Object.HasStateAuthority || !Object.IsValid)
+                return;
+            MatchAuthorityRuntime.Instance?.RecordMinionSnapshot(Object.Id,
+                Zone.ToString(), State.ToString(), TargetPlayer,
+                Runner.Tick.Raw, Runner.TickRate);
+        }
+
+        private PlayerRef ResolveNoiseSourcePlayer(string sourcePlayerId)
+        {
+            if (Runner == null || string.IsNullOrWhiteSpace(sourcePlayerId))
+                return PlayerRef.None;
+            foreach (var player in Runner.ActivePlayers)
+                if (string.Equals(player.ToString(), sourcePlayerId,
+                        StringComparison.Ordinal))
+                    return player;
+            return PlayerRef.None;
         }
 
         public override void Render()
