@@ -35,6 +35,8 @@ namespace EchoProtocol.AI.Common.AED
         public static bool TryPlan(AEDMinionProposalV1 proposal, IEnumerable<AEDMinionSpawnCandidateV1> candidates, out IReadOnlyList<AEDMinionPlacementReceiptV1> receipts)
         {
             receipts = Array.Empty<AEDMinionPlacementReceiptV1>();
+            if (proposal == null || proposal.Intent != AEDMinionIntentV1.IncreasePressure)
+                return false;
             if (!AEDMinionDirectorV1.Validate(proposal) || candidates == null || proposal.AdditionalSpawnSlots <= 0 || proposal.AdditionalSpawnSlots > AEDMinionDirectorV1.MaxResearchCap) return false;
             var points = candidates.ToArray();
             if (points.Length == 0 || points.Length > MaximumCandidates || points.Any(p => p == null || string.IsNullOrWhiteSpace(p.PointId) || p.RoomId <= 0 || !Finite(p.X) || !Finite(p.Y) || !Finite(p.Z) || !Finite(p.DistanceFromStalker) || !Finite(p.DistanceFromNearestAlivePlayer) || !Finite(p.DistanceFromZoneEntry) || (p.DistanceFromNearestExistingMinion.HasValue && !Finite(p.DistanceFromNearestExistingMinion.Value)))) return false;

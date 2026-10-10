@@ -120,6 +120,7 @@ namespace EchoProtocol.AI.Common.AED
             if (mustRelieve) return Create(AEDMinionIntentV1.Relieve, Math.Max(0, request.BaselineCap - 1), "RELIEVE_MINION_PRESSURE_CANDIDATE");
             if (request.PressureLevel != AEDPressureLevelV1.Quiet) return Hold("HOLD_PRESSURE_NOT_LOW");
             if (request.ActiveEncounters > 0) return Hold("HOLD_ACTIVE_ENCOUNTER");
+            if (request.CurrentPopulation != request.BaselineCap) return Hold("HOLD_WAIT_BASELINE_POPULATION");
             if (double.IsNaN(request.SecondsSinceLastDirectorChange) || double.IsInfinity(request.SecondsSinceLastDirectorChange) || request.SecondsSinceLastDirectorChange < IncreaseCooldownSeconds)
                 return Hold("HOLD_PACING_COOLDOWN");
             if (!request.BackendMetricVerifierSupported || !request.TeamConfidenceComplete || !request.WeakestPlayerSkill.HasValue ||

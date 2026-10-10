@@ -55,5 +55,23 @@ namespace EchoProtocol.AI.Common.Tests
 
         [Test] public void ResearchProposalCannotCommitGameplay()
         { var p = AEDMinionDirectorV1.Evaluate(Request()); Assert.That(p.ResearchOnly, Is.True); Assert.That(p.CanApplyGameplay, Is.False); Assert.That(p.AllowForcedDespawn, Is.False); }
+
+        [Test]
+        public void ReliefNeverCreatesSpawnPlacement()
+        {
+            var r = Request(); r.PressureLevel = AEDPressureLevelV1.Critical; r.CurrentPopulation = 0;
+            var p = AEDMinionDirectorV1.Evaluate(r);
+            Assert.That(p.Intent, Is.EqualTo(AEDMinionIntentV1.Relieve));
+            Assert.That(AEDMinionPlacementV1.TryPlan(p, new[] { Point("candidate") }, out var receipts), Is.False);
+            Assert.That(receipts, Is.Empty);
+        }
+
+        [Test]
+        public void UnderfilledBaselineCannotIncrease()
+        { var r = Request(); r.CurrentPopulation = 0; Assert.That(AEDMinionDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDMinionIntentV1.Hold)); }
+
+        [Test]
+        public void OverfilledBaselineCannotIncrease()
+        { var r = Request(); r.CurrentPopulation = 3; Assert.That(AEDMinionDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDMinionIntentV1.Hold)); }
     }
 }
