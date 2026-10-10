@@ -4,6 +4,8 @@ using UnityEngine.UI;
 
 namespace EchoProtocol.Audio
 {
+    [DisallowMultipleComponent]
+    [RequireComponent(typeof(Button))]
     public sealed class GameAudioButton : MonoBehaviour, IPointerEnterHandler
     {
         private Button _button;

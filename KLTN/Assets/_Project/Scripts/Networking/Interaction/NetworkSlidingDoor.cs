@@ -307,6 +307,7 @@ namespace EchoProtocol.Networking
 
         private void Awake()
         {
+            EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             ResolveDoorVisualReferences();
             CacheClosedPositions();
             _offlineState = _startsBroken

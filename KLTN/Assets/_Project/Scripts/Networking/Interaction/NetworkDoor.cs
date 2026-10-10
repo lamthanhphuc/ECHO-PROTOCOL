@@ -47,6 +47,7 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             if (Object.HasStateAuthority)
             {
                 State = _startsOpen ? NetworkDoorState.Open : (_startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed);

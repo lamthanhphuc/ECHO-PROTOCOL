@@ -71,6 +71,7 @@ namespace EchoProtocol.UI
         {
             var rect = Frame(name, parent, x, y, w, h, accent);
             var button = rect.gameObject.AddComponent<Button>();
+            EchoProtocol.Audio.GameAudioRuntime.RegisterButton(button);
             button.targetGraphic = rect.GetComponent<HorrorFrameGraphic>();
             var colors = button.colors;
             colors.normalColor = Color.white;

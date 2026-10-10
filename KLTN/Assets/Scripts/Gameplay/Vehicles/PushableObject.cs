@@ -189,6 +189,7 @@ namespace EchoProtocol.Gameplay
 
         private void Awake()
         {
+            EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             _rigidbody = GetComponent<Rigidbody>();
             if (pushCollider == null)
             {

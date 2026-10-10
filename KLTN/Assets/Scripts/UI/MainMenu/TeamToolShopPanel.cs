@@ -820,6 +820,7 @@ namespace EchoProtocol.UI.MainMenu
             var button =
                 card.gameObject
                     .AddComponent<Button>();
+            EchoProtocol.Audio.GameAudioRuntime.RegisterButton(button);
 
             button.targetGraphic =
                 card.GetComponent<Image>();
@@ -1407,6 +1408,7 @@ namespace EchoProtocol.UI.MainMenu
             var button =
                 rect.gameObject
                     .AddComponent<Button>();
+            EchoProtocol.Audio.GameAudioRuntime.RegisterButton(button);
 
             button.targetGraphic =
                 rect.GetComponent<Image>();

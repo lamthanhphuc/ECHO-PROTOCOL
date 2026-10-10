@@ -32,6 +32,7 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             if (GetComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>() == null)
             {
                 gameObject.AddComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>();
