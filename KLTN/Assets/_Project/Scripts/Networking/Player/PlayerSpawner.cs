@@ -13,6 +13,13 @@ using UnityEngine.SceneManagement;
 
 namespace EchoProtocol.Networking
 {
+    // Shared by authoritative placement and the lobby presentation lights.
+    public static class LobbyLineupLayout
+    {
+        public const float Spacing = 1.35f;
+        public static Vector3 Position(int slot) => new Vector3(-4.65f + Mathf.Clamp(slot,0,3)*Spacing,1f,-1.8f);
+    }
+
     /// <summary>Host-authoritative gameplay placement coordinator for lifecycle-owned player objects.</summary>
     public sealed class PlayerSpawner : MonoBehaviour
     {
@@ -21,10 +28,6 @@ namespace EchoProtocol.Networking
         private const float FallbackSpacing = 2.5f;
 
         [SerializeField] private NetworkBootstrap _bootstrap;
-        [Header("Lobby Lineup")]
-        [Tooltip("First player's position for the Lobby camera at (0, 1, -10). Leaves the left side for the lobby panel.")]
-        [SerializeField] private Vector3 _lobbySpawnOrigin = new Vector3(0.15f, 1f, -5.5f);
-        [SerializeField, Min(1f)] private float _lobbySpawnSpacing = 1.1f;
         [Header("Authoritative Gameplay World")]
         [SerializeField] private NetworkObject _doorPrefab;
         [SerializeField] private NetworkObject _pickupItemPrefab;
@@ -1487,9 +1490,8 @@ var toolId =
 
         private SpawnPose GetLobbySpawnPose(int slot)
         {
-            // Keep all four players in one row, close to the Lobby camera and
-            // to the right of the network panel. The host assigns stable slots.
-            var position = _lobbySpawnOrigin + Vector3.right * (slot * _lobbySpawnSpacing);
+            // Stable world slots leave the right-hand mission panel unobstructed on every peer.
+            var position = LobbyLineupLayout.Position(slot);
             return new SpawnPose(position, Quaternion.Euler(0f, 180f, 0f));
         }
 

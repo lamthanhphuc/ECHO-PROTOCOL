@@ -1,4 +1,4 @@
-﻿using EchoProtocol.Networking;
+using EchoProtocol.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -63,13 +63,7 @@ namespace EchoProtocol.UI
                     $"Player {_playerState.Object.InputAuthority.PlayerId}";
             }
 
-            bool localPlayer =
-                _playerState.Object.HasInputAuthority;
-
-            string displayName =
-                localPlayer
-                    ? $"{name}   YOU"
-                    : name;
+            string displayName = name;
 
             if (_displayedName != displayName)
             {
@@ -137,7 +131,7 @@ namespace EchoProtocol.UI
                 Vector3.one * 0.01f;
 
             _canvasRect.sizeDelta =
-                new Vector2(160f, 48f);
+                new Vector2(125f, 48f);
 
             _canvas =
                 canvasObject.GetComponent<Canvas>();

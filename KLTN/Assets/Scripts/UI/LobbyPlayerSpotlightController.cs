@@ -89,6 +89,10 @@ namespace EchoProtocol.UI
                 Light spotlight = spotlights[i];
                 if (spotlight == null) continue;
 
+                // Move the overhead fixture with the same fixed slot layout used by the host.
+                var slotPosition=LobbyLineupLayout.Position(i);
+                var lightPosition=spotlight.transform.position;
+                spotlight.transform.position=new Vector3(slotPosition.x,lightPosition.y,slotPosition.z);
                 spotlight.enabled = HasLobbyPlayerUnderLight(spotlight, players, out var matchedPlayer);
                 if (_bodyFillLights != null && _bodyFillLights[i] != null)
                 {
