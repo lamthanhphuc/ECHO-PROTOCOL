@@ -37,5 +37,5 @@ MonoBehaviour:
   - 9
   - 10
   - 11
-  extendedPolicyShadowEnabled: 1
+  extendedPolicyShadowEnabled: 0
   extendedPolicyGameplayEnabled: 0

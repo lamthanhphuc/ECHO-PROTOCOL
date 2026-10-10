@@ -99,6 +99,8 @@ namespace EchoProtocol.Networking.Authority
         public AEDToolNoiseEvidenceSnapshotV1 LastFrozenAEDToolNoiseEvidence => _aedToolNoiseEvidence.LastFrozen;
         public AEDPursuitEvidenceSnapshotV1 LastFrozenAEDPursuitEvidence => _aedPursuitEvidence.LastFrozen;
         public AEDMinionEvidenceSnapshotV1 LastFrozenAEDMinionEvidence => _aedMinionEvidence.LastFrozen;
+        public AEDCurrentMatchPressureV1 LastFrozenAEDCurrentPressure
+            { get; private set; }
         public void MarkAEDv2EvidenceIncomplete()
         {
             _aedv2Evidence.MarkIncomplete();
@@ -815,6 +817,7 @@ namespace EchoProtocol.Networking.Authority
             _aedToolNoiseEvidence.Clear();
             _aedPursuitEvidence.Clear();
             _aedMinionEvidence.Clear();
+            LastFrozenAEDCurrentPressure = null;
             BackendAdaptiveInputSnapshotProvider.Current?.ClearForMatch(oldMatchId);
             ScenarioConfigRuntimeRegistry.Clear(oldMatchId);
             ScenarioConfigAuthorityRuntime.Instance?.ResetForMatch(oldMatchId);
@@ -1284,6 +1287,22 @@ namespace EchoProtocol.Networking.Authority
             _aedToolNoiseEvidence.Freeze();
             _aedPursuitEvidence.Freeze();
             _aedMinionEvidence.Freeze();
+
+            if (HasStateAuthority)
+            {
+                var pressureTickRate = _bootstrap?.Runner != null
+                    ? (double)_bootstrap.Runner.TickRate
+                    : 0d;
+
+                LastFrozenAEDCurrentPressure =
+                    AEDCurrentMatchPressureV1.Project(
+                        _aedv2Evidence.LastFrozen,
+                        _aedPursuitEvidence.LastFrozen,
+                        _aedMinionEvidence.LastFrozen,
+                        _aedSurvivalEvidence.LastFrozen,
+                        CurrentAuthorityTick,
+                        pressureTickRate);
+            }
         }
 
         private bool TryEmitPendingMatchEnd()
