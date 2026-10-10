@@ -1,22 +1,38 @@
 # ECHO-PROTOCOL — AED Metric & Opportunity Contract V1
 
 **Loại:** Hợp đồng thiết kế và kế hoạch triển khai Phase 1 (không phải bằng chứng rằng runtime đã triển khai).  
-**Source baseline:** GitHub `lamthanhphuc/ECHO-PROTOCOL`, branch `LTP`, HEAD `c9577cc517b45f44cc0fe8a84bd314fae39e8adb` (2026-10-10).  
-**Contract ID đề xuất:** `AED_METRIC_OPPORTUNITY_V1`.  
+**Source baseline (code):** GitHub `lamthanhphuc/ECHO-PROTOCOL`, branch `LTP`, HEAD `c9577cc517b45f44cc0fe8a84bd314fae39e8adb` (2026-10-10); bản contract ban đầu đã được commit tại `e60e4b9ff2cabf3138c7c7a1fb7395048a09d16d`.
+**Contract ID đã chốt:** `AED_METRIC_OPPORTUNITY_V1` (sign-off: 2026-10-10; 9/9 quyết định được chủ dự án phê duyệt).
 **Phạm vi:** Stalker, Minion, Survival, Objective, TeamTool, Resource, Noise, Movement, Teamwork, Player Profile, Team Profile, Current Match Pressure.  
 **Không thuộc Phase 1:** sửa telemetry, schema DB, fingerprint, AI state machine, spawn, gameplay policy hoặc bật adaptation.
+**Trạng thái:** SIGNED OFF — hợp đồng thiết kế đã khóa; triển khai runtime theo từng phase sau, không coi là feature đã chạy.
+
+### Sign-off: 9 quyết định bắt buộc
+
+| ID | Quyết định đã chốt | Quy tắc bắt buộc |
+|---|---|---|
+| D1 | Trạng thái thứ sáu `CensoredOnly` | Có opportunity nhưng không có resolved result vì tất cả censored hợp lệ; `value=null`, không coi là `NoOpportunity` hoặc lỗi mất dữ liệu |
+| D2 | Chuẩn hóa unit và denominator | Count/seconds/rate/share riêng; không tạo tỷ lệ mặc định 100%; `Objective.TimeEfficiency` chờ baseline; `Minion.SlowHitRate` chờ attempt evidence |
+| D3 | Phương án **B** cho Core Objective | V2 `ObjectiveProgress` và fingerprint giữ nguyên; thêm sidecar `Objective.UnitCompletionRate`/evidence phiên bản mới; muốn đưa vào backend approval phải nâng đồng bộ contract/verifier |
+| D4 | Phân biệt Down/Elimination | Direct elimination khác Down, truyền authoritative cause vào outcome mới; không tạo `PLAYER_DOWNED` giả |
+| D5 | Stalker pursuit | CHASE thật mới bắt đầu; SEARCH/PATROL/decay không tự escape; reacquisition là event trung gian, không phải terminal |
+| D6 | Minion encounter | Terminal độc lập với effects và counterplay; kill team đúng một lần, đóng góp flashlight theo người; forced drop khác carry steal |
+| D7 | TeamTool/Resource | Outcome dựa opportunity; First Aid có guaranteed floor; Core Stabilizer có giới hạn có điều kiện, Scanner có reachability; các con số để calibration |
+| D8 | Historical Skill / Pressure / Confidence | Tách skill và match pressure; cold start có thể xét RELIEVE dựa pressure hợp lệ; tăng pressure cần đủ confidence + fairness, bảo vệ player yếu |
+| D9 | Identity / phase / sidecar | Host-authoritative `matchId/userId/episodeId/sourceTick`; canonical dedup theo event type + occurrence; phase mapping cố định; sidecar research có version riêng |
+
 
 ## 0. Các điều kiện bất biến
 
 1. Mọi event dùng cho adaptive phải bắt nguồn từ Fusion Host/State Authority, có identity hợp lệ, provenance, phase/zone và căn cứ kiểm chứng.
-2. Đếm một metric bằng **kết quả trong cơ hội hợp lệ**, không dùng raw activity count làm skill. Nếu mẫu số bằng 0: `NoOpportunity`, value `null` — tuyệt đối không thay bằng 0% hoặc 100%.
+2. Đếm một metric bằng **kết quả trong cơ hội hợp lệ**, không dùng raw activity count làm skill. Không có opportunity → `NoOpportunity`; đã có opportunity nhưng toàn bộ outcome bị censor hợp lệ → `CensoredOnly`. Cả hai có `value=null`; không biến thành 0%/100%.
 3. Không diễn giải player đứng yên/quiet 30 giây là giỏi: `ActiveObservedSeconds` chỉ là *coverage*, không phải sample gameplay.
 4. Không cho AED học sai từ chính sự thay đổi nó đã áp dụng: lưu `configSource`, applied plan/revision và các tham số điều kiện tại episode.
 5. Không cho tăng độ khó khi sample thấp/không đầy đủ/không công bằng; `Available` không mặc nhiên đồng nghĩa `DecisionEligible`.
-6. Không cho episode trùng nhau tự nhân sample; mỗi outcome được commit tối đa một lần; `Censored` không biến thành thắng/thua.
+6. Không cho episode trùng nhau tự nhân sample; mỗi terminal outcome được commit tối đa một lần. `Reacquired` và Minion attack effects không phải terminal; `Censored` không biến thành thắng/thua.
 7. `Fixed` phải có bản đo tương đương nhưng không được apply quyết định AED; không xóa, chỉnh vật phẩm đã sở hữu/đã xuất hiện.
 8. Khi chưa implement nguồn dữ liệu chính thức: `Unsupported` (không giả dữ liệu); nếu nguồn hỗ trợ nhưng mất event bắt buộc: `Incomplete`.
-9. Schema telemetry `1.1` và fingerprint `AED_V2_PHASE_EVIDENCE_V2` được giữ nguyên trong Phase 1.
+9. Schema telemetry `1.1`, ý nghĩa V2 `ObjectiveProgress = accepted PUZZLE_COMPLETED count` và fingerprint `AED_V2_PHASE_EVIDENCE_V2` giữ nguyên. Objective metric mới dùng sidecar có version, không đổi một phía.
 10. Các ngưỡng confidence, thời gian grace, outcome window và trọng số trong tài liệu này là **tham số đề xuất cần calibrate ở Phase 3–4/9**, không phải giá trị tối ưu hoặc giá trị đang chạy.
 
 ## 1. Kiểm kê source ↔ bằng chứng hiện tại ↔ lỗ hổng
@@ -26,7 +42,7 @@
 | Match/phase | `NetworkMatchState.cs` → `RecordCompletedPhase`, `TryAdvancePhase`; `MatchAuthorityRuntime.RecordPhaseStarted/Completed`; telemetry `MATCH_STARTED`, `PHASE_STARTED`, `PHASE_COMPLETED`, `MATCH_ENDED` | Canonical v1.1 | Metric phase-specific objectives, exposure window/phase context |
 | Core | `NetworkSectorBox.PlaceCarriedCore` → `NetworkMatchState.TryCompleteCoreObjective`; canonical `CORE_PICKED_UP`, `CORE_DROPPED`, `CORE_PLACED` | Events có; **không được tính vào `ObjectiveProgress` v2** | Core objective units và attribution, rejected placements, denominator |
 | Puzzle | `MatchAuthorityRuntime.RecordPuzzleCompleted` → `AEDv2MatchEvidenceCollector.RecordAcceptedObjective` | Có, v2 `ObjectiveProgress` chỉ đếm `PUZZLE_COMPLETED` | Cần phân biệt Core, relay, Security Hold, Zone3 |
-| Down/elimination | `NetworkPlayerLifeState.CommitDown/CommitEliminated`; `PLAYER_DOWNED`, `PLAYER_ELIMINATED`, `PLAYER_REVIVED` | Có | Revive limit có thể eliminate trực tiếp, không sinh Down; phải đo lethal consequence riêng |
+| Down/elimination | `NetworkPlayerLifeState.CommitDown/CommitEliminated`; `PLAYER_DOWNED`, `PLAYER_ELIMINATED`, `PLAYER_REVIVED` | Có; **adapter hiện hardcode `PLAYER_ELIMINATED` reason=`REVIVE_LIMIT_REACHED`** | Revive limit có thể eliminate trực tiếp, không sinh Down; các cause `BLEEDOUT`, `TEAM_DOWNED`, `GHOST_CATCH`... phải phân biệt ở sidecar có Host authority |
 | Noise | `NoiseTelemetryAdapter.SupportsNoiseType`: `SPRINT`, `INTERACTION`, `CORE_CARRY`, `CORE_DROP`, `NOISE_MAKER` | Chỉ năm loại canonical; accepted-noise count không phải noise gây phát hiện | Liên kết source noise với actual AI response/detection |
 | Minion alert | `CreepMinionRuntime.TrySendStalkerAlert` → `HostRuntimeNoiseService.TryAccept`, `RuntimeNoiseType.MINION_ALERT` | Gameplay accepted nhưng ngoài schema telemetry 1.1 | Alert accepted và Stalker response episode; không giả làm SPRINT |
 | Minion attack | `CreepMinionRuntime.AttackPlayer`, `CommitAttack` (`ShootSlow/StealTool/StealCore`) | Host gameplay confirmed; **chưa đủ per-player outcome telemetry** | Attack attempted/accepted/effect/target, episode id, recovery |
@@ -40,7 +56,7 @@
 | Player skill | Backend `PlayerAIProfile` có Survival/Noise/Objective/ToolUsage và dimension fields | Có lineage/revision/samples | Evasion, Minion counterplay, resource effectiveness, confidence/opportunity |
 | Team profile | Backend `TeamProfile` gắn `MatchId` (teamKey), có ObjectiveTime/ReviveSuccess/ResourceEfficiency | Match-scoped profile | Multi-dimensional team pressure & weakest-player guard |
 | AED gate | `AEDv2BoundaryPolicy.TryPropose`, `AEDv2RosterSafety.FromEvidence` | Has safe boundary, 30s coverage; policy còn dùng noise count làm relieve | Granular HOLD & confidence gates, không tự suy skill từ sprint |
-| Backend verifier | `AEDv2PhaseEvidenceVerifier.VerifyAsync` | V2 fingerprint tính Down/Revive/Eliminated/Noise/Tool/PUZZLE_COMPLETED; không tính CORE_PLACED | Đổi ngữ nghĩa chỉ ở Phase 2 với contract migration và tests hai phía |
+| Backend verifier | `AEDv2PhaseEvidenceVerifier.VerifyAsync` | V2 fingerprint tính Down/Revive/Eliminated/Noise/Tool/PUZZLE_COMPLETED; không tính CORE_PLACED | **Phương án B:** giữ V2, phát triển objective sidecar riêng; chỉ nâng collector+verifier+consumer đồng thời nếu metric mới trở thành bằng chứng approval |
 
 **Các file cần đối chiếu khi triển khai:**
 
@@ -65,17 +81,20 @@
 
 ## 2. Metric result model (P1.1)
 
-### 2.1 Trạng thái
+### 2.1 Trạng thái — **đã khóa: 6 trạng thái**
 
-| Status | Khi sử dụng | `value` | Được làm cơ sở tăng pressure? |
+| Status | Khi sử dụng | `value` | Có đủ cho tăng pressure? |
 |---|---|---|---|
-| `Available` | Nguồn hỗ trợ, cơ hội >0, dữ liệu đầy đủ, kết quả giải được | number | Chỉ sau confidence/fairness gate riêng |
-| `NoOpportunity` | Cơ hội xác thực =0 (không bị chase; không có Scanner; không có teammate Down...) | null | Không |
-| `Unsupported` | Có gameplay nhưng chưa có host-authoritative verified outcome contract | null | Không |
-| `Incomplete` | Có cơ hội nhưng thiếu/lost required evidence; đang chờ resolve window; thiếu quyền Host | null | Không |
-| `Invalid` | Identity/phase/timestamp/roster không hợp lệ, mâu thuẫn, impossible transition, unreconcilable duplicate | null | Không |
+| `Available` | Nguồn được hỗ trợ, có ít nhất 1 resolved eligible opportunity, có phép đo hợp lệ | number | **Chưa**; cần `DecisionEligible` và fairness gate riêng |
+| `NoOpportunity` | Nguồn supported, đã kiểm tra coverage, xác nhận không có opportunity nào | null | Không |
+| `CensoredOnly` | Opportunity > 0, tất cả opportunity bị censor hợp lệ; resolvedSuccesses=0 và resolvedFailures=0 | null | Không |
+| `Unsupported` | Gameplay tồn tại nhưng chưa có Host-authoritative verified metric/outcome contract | null | Không |
+| `Incomplete` | Thiếu/lost evidence cần có; chưa hoàn tất nguồn hoặc authority/sequence không đủ; **không** dùng để thay cho censor hợp lệ | null | Không |
+| `Invalid` | Identity/phase/timestamp/roster sai, impossible transition, unreconcilable duplicate | null | Không |
 
-`Pending` có thể là trạng thái nội bộ trước khi window đóng; **không xuất thành `Available` trước khi resolved**. Episode `Censored` không đồng nghĩa `Incomplete` nếu lý do censor hợp lệ và được ghi nhận.
+**Phân loại có thứ tự:** (1) nguồn sai không thể sử dụng → `Invalid`; (2) không thể xác minh evidence bắt buộc → `Incomplete`; (3) metric chưa có hợp đồng Host được triển khai → `Unsupported`; (4) số eligible opportunities bằng 0 nhưng đã đủ coverage → `NoOpportunity`; (5) eligible > 0 nhưng resolved = 0 và censored = eligible → `CensoredOnly`; (6) eligible > 0 và resolved > 0 → `Available` (chỉ tính trên resolved set). Nếu vẫn đang trong observation window, dùng `Pending` **nội bộ**, chưa publish metric terminal.
+
+`Censored` là **outcome của episode**; `CensoredOnly` là **trạng thái tổng hợp MetricResult**. Metric `Available` vẫn được phép chứa một phần censored opportunities, nhưng confidence phải giảm tương ứng. Một episode bị cắt mà **thiếu lý do cắt hợp lệ** là `Incomplete`, không phải `Censored`.
 
 ### 2.2 Logical record bắt buộc (không thay DB trong Phase 1)
 
@@ -88,7 +107,9 @@ MetricResultV1 {
   appliedPlanRevision?, appliedParameterFingerprint?,
   sourceSystem, authorityActor, sourceEventIds[], occurrenceKeys[], episodeIds[],
   eligibleOpportunities, resolvedSuccesses, resolvedFailures, censoredOpportunities,
-  numerator, denominator, measurementUnit, value?,
+  numerator, denominator?, measurementUnit, value?,
+  measurementKind: Count | DurationSeconds | Rate | Share | Ratio | Score,
+  denominatorUnit?, comparisonContextKey?, censorReasonCounts?,
   observedDurationSeconds?, confidenceEvidenceCount, confidenceStatus,
   status, reasonCodes[], windowStartedAtUtc, windowEndedAtUtc
 }
@@ -98,10 +119,10 @@ MetricResultV1 {
 
 ### 2.3 Quy tắc tính
 
-- Tỷ lệ: `value = numerator / denominator` khi `denominator > 0`, không round trước khi quyết định.
+- **Rate/Share/Ratio:** `value = numerator / denominator` trên tập resolved eligible; `denominator > 0`, không round trước khi quyết định. **Count/DurationSeconds:** `value` mang đúng đơn vị count hoặc seconds, `denominator = null` khi không áp dụng tỷ lệ; sample/opportunity được lưu riêng. Không gán Count/Seconds thành %.
 - Down/Elimination rate là negative outcome density: ghi đơn vị/denominator; **không mặc định đảo dấu rồi gọi Skill**.
 - So sánh giữa trận dùng điều kiện tương đương: map/phase/objective count/difficulty/team size/applied AED parameters.
-- `eligibleOpportunities = success + failure + censored` cho từng loại; `denominator = success + failure` nếu censor loại trừ. Ghi lý do loại bỏ.
+- Metric episode dạng rate: `eligibleOpportunities = resolvedSuccesses + resolvedFailures + censoredOpportunities`; `denominator = resolvedSuccesses + resolvedFailures`. `resolved=0, censored>0` → `CensoredOnly`, không tự 0%. Metric dạng seconds/count không dùng công thức episode-rate. Ghi rõ `measurementKind`, `measurementUnit`, censor reasons.
 - Tỷ lệ không cộng tùy tiện cùng metric có độ khó encounter khác nhau; giữ event-level context và tính profile sau.
 - Source canonical, research-capture và gameplay-only phải được dán nhãn nguồn riêng.
 - Một episode thay đổi target có thể tạo *participant segments* nhưng không tạo nhiều encounter thắng giả.
@@ -118,14 +139,14 @@ MetricResultV1 {
 | `Survival.EliminationRate` | Lượt eliminated trong threat encounter | Eligible threat encounters có resolved result | Không gộp MatchEnd/Disconnected; mỗi Player tối đa 1 elimination per match | `PLAYER_ELIMINATED`, LifeState; **Partial** opportunity | RELIEVE |
 | `Survival.ReviveSuccessRate` | `PLAYER_REVIVED` confirmed | Đồng đội Downed và teammate Alive có cơ hội hợp lệ tiếp cận/FirstAid | Revive thất bại do phase end/cutoff → Censored; solo no opportunity | Canonical revive; **Partial** eligibility | RELIEVE / TEAMWORK |
 | `Survival.PostEncounterRecoverySeconds` | Tổng thời gian hồi phục hợp lệ | Số episode đã thoát áp lực và có mốc kết thúc recovery | Không đánh giá khi chưa có dangerous encounter | Stalker/Minion episode; **Unsupported** | Pacing |
-| `Survival.LethalConsequenceRate` | Hit chuyển sang Eliminated trực tiếp (revive limit...) | Committed lethal hits có state outcome | Không tạo `PLAYER_DOWNED` giả | `CommitDown`, `CommitEliminated`; **Partial** | RELIEVE |
+| `Survival.DirectLethalConsequenceCount` | Số direct eliminations do committed hit vượt revive limit, có cause Host hợp lệ | **Không có denominator tỷ lệ**; opportunity count và threat exposure ghi riêng | `value` đơn vị `count`; không tạo `PLAYER_DOWNED` giả; chưa có event source chính xác thì Unsupported | `CommitDown`, `CommitEliminated`; **Partial gameplay / Unsupported verified cause** | RELIEVE |
 
 ### 3.2 Stalker Evasion / Stealth
 
 | Metric ID | Numerator | Denominator / Opportunity | Success/Failure/NoOpportunity | Source & readiness | AED usage |
 |---|---|---|---|---|---|
 | `Stalker.PursuitEscapeRate` | Episode resolve `Escaped` | Episode confirmed CHASE có target player, outcome resolved | SEARCH timeout một mình không đủ để gọi `Escaped`; target switch không tự thắng | `StalkerController`, `StalkerFusionRuntime`; **Unsupported** | Skill/Evasion |
-| `Stalker.ReacquisitionRate` | `Reacquired` cùng target trong confirm window | Lost-target windows eligible | Chưa từng mất dấu → NoOpportunity; đổi target → censored/segmented | Controller detection decay & SEARCH; **Unsupported** | Risk/stealth, negative |
+| `Stalker.ReacquisitionRate` | Số **reacquisition facts trung gian** của cùng target trong confirmed episode | Eligible lost-target windows đã có outcome của cửa sổ | Chưa từng mất dấu → NoOpportunity; đổi target → censored/segmented; reacquired **không** kết thúc chase | Controller detection decay & SEARCH; **Unsupported** | Risk/stealth, negative |
 | `Stalker.ChaseDownRate` | Chase resolved `Downed` hoặc direct lethal consequence | Confirmed eligible target chase | Down sau chase chỉ tính khi nối cause trong outcome window | Controller + LifeState; **Unsupported** join | Pressure/RELIEVE |
 | `Stalker.PursuitDurationSeconds` | Tổng thời gian theo đuổi đã resolve | Số resolved pursuit episodes | Không suy stamina/performance chỉ từ duration; giữ per-episode distribution | FSM Host; **Unsupported** | Pressure/Pacing |
 | `Stalker.HideEscapeSuccessRate` | Escape hợp lệ có hide action confirmed | Threatened hide windows player thực sự dùng hide spot | Không suy `escaped` chỉ vì Stalker rẽ hướng | hide state + episode; **Unsupported** | Stealth |
@@ -136,7 +157,7 @@ MetricResultV1 {
 | Metric ID | Numerator | Denominator / Opportunity | Success/Failure/NoOpportunity | Source & readiness | AED usage |
 |---|---|---|---|---|---|
 | `Objective.UnitCompletionRate` | Confirmed objective units completed | Units thực sự mở, hợp lệ, reachable trong phase | Core placed, relay complete, security hold complete, zone3 units tách `unitType`; không tính request bị reject | CORE_PLACED canonical; NetworkMatchState; **Partial** | Objective skill |
-| `Objective.TimeEfficiency` | Baseline expected time for matched objective units (or inverse calibrated time) | Observed eligible active objective seconds | Không so khác objective/map/team size; phase chưa hoàn tất → censored | phase telemetry; **Partial** | Skill, pressure |
+| `Objective.TimeEfficiency` | Baseline expected time cho nhóm objective/map/team-size/difficulty tương đương | Active eligible objective seconds **đã resolve**; `measurementKind=Ratio` | Chưa có baseline calibrated → `Unsupported` cho **score**, không tính từ phase duration thô; incomplete phase → censored | phase telemetry có thời gian; **baseline Unsupported** | Skill, pressure |
 | `Objective.StallTimeSeconds` | Thời gian cửa sổ objective mở không tiến triển theo rule | Tổng thời gian objective có thể làm với player Alive | NoOpportunity khi objective locked; không penalize khi threat buộc evade | network objective state; **Unsupported** | Current pressure |
 | `Objective.CoreTransportLossRate` | Core bị forced drop/hoặc stolen trong eligible carry episode | Eligible core carried-and-threatened exposures | `CORE_FORCED_DROP` khác `CORE_STOLEN`; không gộp voluntary drop | Core carry + Minion; **Partial** | Resource skill |
 
@@ -146,7 +167,7 @@ MetricResultV1 {
 |---|---|---|---|---|---|
 | `Minion.EvasionRate` | Player escaped Track/Harass mà không bị attack-effect, sau confirm window | Eligible Minion target segments có outcome resolved | Target switch, spawn/despawn, phase end → censored; không encounter → NoOpportunity | CreepMinionRuntime states; **Unsupported** | Skill/counterplay |
 | `Minion.FlashlightDefenseRate` | Counterplay commit kill/repel có attributable contribution | Confirmed flashlight defensive opportunities khi beam có reach/LOS | Multi-player dùng contribution credit, không double count same Minion death | `BeginFlashlightDeath`, `TryGetFlashlightSource`; **Partial** | Skill |
-| `Minion.SlowHitRate` | `ShootSlow` accepted effect | Attack attempts có thể Slow và eligible target | Không tính lần không vào shootRange, cooldown block | `TryApplySlowAuthoritative`, `CommitAttack`; **Partial** | Pressure |
+| `Minion.SlowHitRate` | `ShootSlow` accepted effect | **Host-authored eligible slow attempts** (kể cả attempt hợp lệ bị effect reject) | Không có attempted evidence đủ bao phủ → `Unsupported`; tuyệt đối không dùng số successful `CommitAttack` làm cả tử và mẫu | `TryApplySlowAuthoritative`, `CommitAttack`; **Unsupported attempt coverage** | Pressure |
 | `Minion.ToolProtectionRate` | Encounter resolved không mất Tool | Target đã có Tool, Minion có cơ hội steal | Không có Tool → NoOpportunity; steal/relocate confirmed là thất bại | `TryRelocateTeamTool`; **Partial** | Resource skill |
 | `Minion.CoreProtectionRate` | Core vẫn được giữ sau eligible steal opportunity | Target mang Core trong steal-range encounter | `Drop` nhưng carry thất bại vẫn là forced-drop loss, không ghi stolen | `TryStealCore`; **Partial** | Resource skill |
 | `Minion.RecoveryRate` | Core/Tool được player thu hồi sau confirmed loss | Theft/forced-drop episodes có object reachable và window | Despawn không do player → censored; phải liên kết same object identity | inventory/core world state; **Unsupported** | Skill/support |
@@ -162,7 +183,7 @@ MetricResultV1 {
 | `Tool.FirstAidReviveSuccessRate` | FirstAid consumed/used gắn `PLAYER_REVIVED` confirmed | Eligible revive attempts có FirstAid hợp lệ | Team solo không có teammate: NoOpportunity | `PLAYER_REVIVED` + life/interactor; **Partial** | Teamwork/support |
 | `Tool.NoiseMakerDistractionRate` | Stalker/Minion chuyển target/điều tra noise do tool một cách xác thực | Deploy có monster eligible to hear trong window | Tool dùng không có monster cạnh không tự là failure/skill yếu | canonical TEAM_TOOL_USED/NOISE_EMITTED + AI; **Partial** | Tool effectiveness |
 | `Tool.DoorJammerPursuitDelaySeconds` | Verified delay từ encounter qua cửa có Jammer active | Eligible threatened door passages with Jammer | Không so ở zone không có door opportunity | network door/jammer + Stalker; **Unsupported** | Support |
-| `Tool.CoreStabilizerProtectedSeconds` | Seconds active buff trùng confirmed threat to protected player | Eligible protection threat seconds khi Buff có hiệu lực | Chỉ `activated` không là protected; gameplay-only ở v1.1 | `NetworkPlayerInteractor` buff/target exclusion; **Partial** | High-impact resource |
+| `Tool.CoreStabilizerProtectedSeconds` | Tổng giây buff hoạt động đồng thời có Host-confirmed threat và protection effect | **Không có mẫu số tỷ lệ** (`measurementKind=DurationSeconds`, `unit=seconds`); số threat windows lưu ở opportunity | Chỉ activated không là protected; gameplay-only ở v1.1; share nếu cần là metric riêng | `NetworkPlayerInteractor` buff/target exclusion; **Partial** | High-impact resource |
 | `Tool.EffectivenessByType` | Successful outcome đơn vị riêng từng tool | Eligible activation windows theo type, không cộng 5 loại trực tiếp | Không cho một tool mạnh thống trị count mọi tool | Tool-specific outcomes; **Unsupported** aggregate | Skill |
 | `Resource.LossRate` | Accepted stolen/forced drop/consumed ngoài ý muốn | Eligible carried resource threats, theo `core/tool` | Resource chưa có/không reachable: NoOpportunity | core/inventory + Minion; **Partial** | Resource demand |
 | `Resource.AvailabilityCoverage` | Intervals hoặc objectives có resource cần thiết reachable | Intervals/objectives thật sự yêu cầu resource | Scan/tool reachability dùng NavMesh path distance, không dùng Euclidean-only | TeamToolWorldSpawn/Point; **Unsupported** | Resource Director fairness |
@@ -177,64 +198,64 @@ MetricResultV1 {
 | `Teamwork.ReviveOpportunitySuccessRate` | Confirmed team revives | Legit downed teammate episodes with other Alive teammates and reachable FirstAid | Không đánh giá team solo bằng 0% | PlayerRevived + roster + resource; **Partial** | Team skill |
 | `Teamwork.ObjectiveContribution` | Proven objective unit contribution/participation | Eligible objective roles/episodes participant có quyền làm | Không chia đều credit cho toàn team chỉ vì cùng trận | match objective network authority; **Unsupported** | Team skill |
 | `Noise.DetectionCausingNoiseRate` | Noise actually attributed to acquire/investigate AI | Host-accepted noise trong radius/LOS/hearing eligible windows | Chỉ đếm canonical 5 loại nếu sử dụng telemetry 1.1; MINION_ALERT tách research | Noise adapter + Stalker/Minion; **Unsupported** | Threat diagnosis |
-| `Pacing.HighIntensitySeconds` | Confirmed time weighted by active chase/down/harass | Valid phase alive observation seconds | Không gán intensity cao chỉ do raw noise | episodes & current pressure; **Unsupported** | Horror pacing |
+| `Pacing.HighIntensitySeconds` | Tổng thời gian (seconds) ở mức intensity cao, threat episodes được Host xác nhận | **Không có mẫu số tỷ lệ**, `measurementKind=DurationSeconds`; time không được nhân trọng số rồi gọi seconds | Không gán intensity cao chỉ do raw noise | episodes & current pressure; **Unsupported** | Horror pacing |
+| `Pacing.HighIntensityShare` | HighIntensitySeconds trong valid observed window | Valid phase Alive-observed seconds với threat data complete | `measurementKind=Share`; NoOpportunity khi không đủ coverage; không dùng noisy activity count | episodes & current pressure; **Unsupported** | Horror pacing |
 | `Pacing.ReliefAfterDangerSeconds` | Quiet recovery duration following confirmed danger | Resolved dangerous episodes with alive survivors | Không gán relief cho disconnect or match ended | episode resolution; **Unsupported** | Horror pacing |
 
-## 4. Stalker Pursuit Episode Contract (P1.2)
+## 4. Stalker Pursuit Episode Contract (P1.2) — D5 đã khóa
 
 ```text
 StalkerPursuitEpisodeV1 {
-  episodeId, matchId, phaseOrdinal, zone, stalkerNetworkId,
-  targetUserId, targetPlayerRef, startedTick, startedAtUtc,
-  chaseStartCause, phaseContext, configSource, appliedPlanRevision,
+  episodeId, matchId, phaseOrdinal, phaseName, zone,
+  stalkerNetworkId, targetUserId, targetPlayerRef,
+  startedTick, startedAtUtc, chaseStartCause,
+  configSource, appliedPlanRevision, appliedParameterFingerprint?,
   segments:[{segmentId,targetUserId,firstChaseTick,lastSeenTick,
              searchEnteredTick?,patrolReturnedTick?,decayExpiresTick?,
-             targetSwitchedAtTick?,reacquiredAtTick?,downTick?}],
-  outcome: Escaped | Reacquired | Downed | Eliminated | TargetSwitched | Cancelled | Censored,
-  endedTick?, endedAtUtc?, outcomeReason, sourceOccurrenceKeys[],
+             targetSwitchedAtTick?,downTick?, reacquisitions:[{tick,reason,sourceEventId?}]}],
+  terminalOutcome: Escaped | Downed | Eliminated | TargetSwitched | Cancelled | Censored,
+  endedTick?, endedAtUtc?, terminalReason, sourceOccurrenceKeys[],
   measurementStatus
 }
 ```
 
-**Start:** Host xác nhận `CHASE` với chính `targetUserId` hợp lệ, không phải chỉ bắt đầu detect animation/audio.  
-**SEARCH:** episode vẫn còn pending; không coi SEARCH hoặc PATROL là escape tự động.  
-**Decay:** cùng target tái phát hiện khi detection decay còn phải được nối với episode đúng.  
-**Reacquired:** cùng player bị reacquired trong confirmation window phiên bản hóa.  
-**Target switch:** kết thúc hoặc segment hóa target cũ với kết quả `TargetSwitched/Censored`, không tự cộng success.  
-**Escaped:** chỉ sau grace window (đề xuất thử nghiệm, chưa chốt threshold) mà không reacquired/down và với bằng chứng target đã thực sự thoát.  
-**Downed/Eliminated:** liên kết Host commit life consequence, không suy từ animation/overlap.  
-**Censored:** MatchEnd/phase cut, authority disconnect, Stalker despawn hoặc observer loss.  
-**Attribution:** mỗi committed outcome có unique `(matchId, stalkerNetworkId, episodeId, outcomeKind)`; không replay/duplicate.
+- **Episode start:** Host xác nhận `CHASE` với target verified. `DETECT` animation/audio hoặc SEARCH tự nó không đủ.
+- **SEARCH/PATROL:** giữ episode pending trong cửa sổ grace khi vẫn có thể reacquire, không tự công nhận escape.
+- **Decay/reacquisition:** lần nhìn lại đúng target trong confirmation window gắn `reacquisitions[]` vào episode cũ; **`Reacquired` không phải terminal outcome**.
+- **Target switch:** kết thúc target segment cũ bằng `TargetSwitched` hoặc censor theo điều kiện versioned, không cộng escape success.
+- **Escaped:** chỉ khi có bằng chứng mất truy đuổi thật, không down và qua grace window. Giá trị grace là tham số versioned được chọn ở Phase 3, hiệu chỉnh Phase 9.
+- **Downed/Eliminated:** nối authoritative life-state consequence đúng target/cause. Không suy kết quả từ animation.
+- **Censored:** match end, phase cut, disconnect, Stalker despawn, authority lost có bằng chứng và reason; missing essential evidence → `Incomplete`.
+- **Exactly once:** terminal receipt duy nhất cho mỗi episode; `Reacquired` fact riêng có occurrence identity và có thể nhiều lần trong một episode.
 
-## 5. Minion Encounter Episode Contract (P1.2)
+## 5. Minion Encounter Episode Contract (P1.2) — D6 đã khóa
 
 ```text
 MinionEncounterEpisodeV1 {
-  episodeId, matchId, phaseOrdinal, zone, minionNetworkId,
-  targetUserId, startedTick, stateSegments:Roam/Track/Harass/Flee,
-  targetSwitches[], alerts:[{sourceId,accepted,stalkerResponseId?}],
-  attacks:[{attackOrdinal,kind,targetUserId,attempted,accepted,
-            effectKind?,appliedSeconds?,coreId?,toolInstanceId?,
-            forcedDrop?,monsterCarryStarted?,itemRecovered?}],
-  flashlightContributions:[{userId,visibleExposureSeconds}],
-  deathCommitted?, distractionEpisodes[],
-  outcome: Evaded | Affected | Countered | ItemLost | ItemRecovered | Censored,
-  endedTick?, outcomeReason, sourceEventIds[], measurementStatus
+  episodeId, matchId, phaseOrdinal, phaseName, zone, minionNetworkId,
+  startedTick, participantSegments:[{userId,startTick,endTick?,targetStatus}],
+  stateSegments:[{state:Roam|Track|Harass|Flee,startTick,endTick?}],
+  alerts:[{sourceOccurrenceId,accepted,stalkerResponseId?}],
+  effects:[{effectId,attackOrdinal,kind,targetUserId,attempted,accepted,
+           effectKind?,appliedSeconds?,coreId?,toolInstanceId?,
+           forcedDropCommitted?,monsterCarryStarted?,itemRecovered?}],
+  flashlightContributions:[{userId,eligibleBeamSeconds,contributionSeconds}],
+  teamMinionDeathReceiptId?, distractionEpisodes[],
+  terminalOutcome: Evaded | Countered | Disengaged | Cancelled | Censored,
+  endedTick?, terminalReason, sourceEventIds[], measurementStatus
 }
 ```
 
-Quy tắc bắt buộc:
-
-1. `Roam` không tự tính là encounter. Episode bắt đầu khi Host thực sự acquire target để `Track`/`Harass`.
-2. Đổi target tạo participant segment; **không nhân 1 Minion death thành 2 success** khi hai player cùng chiếu flashlight.
-3. `ShootSlow`: phân biệt attempted, `TryApplySlowAuthoritative` accepted, duration thực nhận.
-4. `StealTool`: chỉ loss khi `DropTeamToolAuthoritative` trả success; giữ identity instance/charges và eventual recovery.
-5. `StealCore`: `DropCarriedCoreAuthoritative` success → `CORE_FORCED_DROP`; chỉ `TryBeginMonsterCarryAuthoritative` success → `CORE_STOLEN`.
-6. `MINION_ALERT`: `HostRuntimeNoiseService.TryAccept` true là accepted alert; chỉ khi Stalker có response rõ ràng mới tính AlertImpact success.
-7. Flashlight: phải ghi candidate contributor theo authoritative beam/LOS/time, không từ client-only HUD.
-8. NoiseMaker: thay đổi target của Minion phải trace về noise event cụ thể và giữ eligible-opportunity window.
-9. Phase cut / despawn / disconnect hoặc thiếu authority → `Censored`/`Incomplete` tùy trường hợp.
-10. Tác động AED lên cap, respawn, alert cooldown, slow duration... phải được lưu vào episode context để profile không so sai.
+- `Roam` không phải encounter. Host acquire target vào `Track`/`Harass` mới mở episode; đổi target đóng/mở participant segment, không nhân đôi encounter team.
+- `SlowApplied`, `CoreForcedDrop`, `CoreStolen`, `ToolRelocated`, `ItemRecovered`, `StalkerAlertAccepted` là **effects độc lập**, không được làm terminal outcome cạnh tranh; chúng có thể cùng xảy ra.
+- `ShootSlow`: `attempted` hợp lệ được ghi riêng với `TryApplySlowAuthoritative` accepted, cả attempted-success và attempted-failure phải có để tính `Minion.SlowHitRate`.
+- `StealTool`: chỉ loss khi `DropTeamToolAuthoritative` xác nhận success; theo dõi tool instance/charges và recovery.
+- `StealCore`: forced-drop khi `DropCarriedCoreAuthoritative` thành công; stolen chỉ khi `TryBeginMonsterCarryAuthoritative` thành công; một attack có thể chỉ forced-drop.
+- `MINION_ALERT`: `HostRuntimeNoiseService.TryAccept` true chỉ là accepted alert; `AlertImpact` cần Stalker investigative response link.
+- **Flashlight attribution:** Minion death đúng một `teamMinionDeathReceiptId`. Từng Player chỉ được cộng `eligibleBeamSeconds`/contribution Host-confirmed; không biến mỗi contributor thành một kill độc lập. `TryGetFlashlightSource` hiện chưa chứng minh multi-contributor attribution, Phase 3 phải nâng cấp source trước khi `Available`.
+- `NoiseMaker`: distraction phải liên kết noise occurrence với state/target change và valid hearing opportunity.
+- Phase cut/despawn/disconnect có reason → `Censored`; mất authority evidence bắt buộc → `Incomplete`. Applied AED config/cap/cooldown phải gắn vào episode để profile không học sai do tự tạo áp lực.
+- **Phân cấp:** team-level death/outcome đúng một lần; player-level opportunity dựa trên participant segments thực sự, không lấy cùng team kill làm thắng của mọi người.
 
 ## 6. Tool & Resource Opportunity Contract (P1.3)
 
@@ -253,11 +274,15 @@ ToolEffectEpisodeV1 {
   episodeId, matchId, toolInstanceId, toolType, actorUserId,
   opportunityId, targetId?, activatedTick, outcomeWindowEndedTick?,
   state: ResolvedSuccess | ResolvedFailure | NoOpportunity | Censored,
-  effectUnit, effectValue, sourceEventIds[], sourceAuthority
+  effectUnit, effectValue, sourceEventIds[], sourceAuthority,
+  opportunityEligibilityReason, opportunityOutcomeSource
 }
 ```
 
-### 6.2 Từng loại Tool
+### 6.2 Từng loại Tool — D7 đã khóa
+
+**Tách ý nghĩa metric:** `TEAM_TOOL_USED` chỉ là activation, không phải `ToolEffectResolved`. `CORE_STABILIZER` gameplay-only trong canonical telemetry 1.1 và vẫn được đánh giá qua sidecar Host-authoritative khi triển khai. Không giảm nguồn cung FirstAid tối thiểu, không thu hồi loadout đã mua hay tool đã được nhìn thấy/sở hữu.
+
 
 | Tool | Opportunity | ResolvedSuccess phải có | Không được coi là skill |
 |---|---|---|---|
@@ -267,7 +292,12 @@ ToolEffectEpisodeV1 {
 | `NOISE_MAKER` | Có threat có thể nhận noise | Stalker/Minion distraction được xác nhận liên kết nguồn | Chỉ deploy một beacon |
 | `DOOR_JAMMER` | Có usable door và Stalker pursuing/approaching | Delay/deny passage measured bởi Host | Đặt Jammer ở hành lang không threat |
 
-### 6.3 Resource Director fairness contract (chỉ thiết kế, triển khai Phase 5)
+### 6.3 Resource Director fairness contract (chỉ thiết kế, triển khai Phase 5) — D7 đã khóa
+
+**Nguồn cung phải tách:** `WorldSpawn`, `LobbyLoadout`, `Drop`, `Recovery`, `SupportSpawn`, số charges còn lại, vị trí và accessibility. ToolEffect outcome hợp lệ phải có Host source, đủ opportunity và causal link.
+
+**Contract 5 tool:** `CORE_STABILIZER` theo protected threat seconds; `FIELD_SCANNER` theo useful detectable target; `FIRST_AID_KIT` theo confirmed revive; `NOISE_MAKER` theo distraction effect; `DOOR_JAMMER` theo door threat delay. Không dùng `TEAM_TOOL_USED` đơn độc làm success.
+
 
 - **First Aid:** `GuaranteedFloor` phải đảm bảo cơ hội revive tối thiểu đã được kiểm chứng, theo team size và phase; không áp dụng chính sách chỉ vì một Player giỏi.
 - **Core Stabilizer:** world supply có thể bị giới hạn theo zone/match khi high confidence và tổng loadout được xét; không xóa đồ đã nhặt/mua. Cần test phương án chỉ **1 world spawn/match** như một *candidate*, không là production default.
@@ -279,7 +309,7 @@ ToolEffectEpisodeV1 {
 
 ## 7. Player, Team, Current Pressure, Confidence Contract (P1.4)
 
-### 7.1 Ba mô hình tách biệt
+### 7.1 Ba mô hình tách biệt — D8 đã khóa
 
 **Historical Player Skill:** dimension-scoped aggregates theo nhiều trận có comparable configuration, profile lineage/revision/version, sample/confidence riêng: Survival, Evasion, Objective, MinionCounterplay, ToolEffectiveness, ResourceManagement, Teamwork, RiskStyle (RiskStyle là phong cách, không phải điểm giỏi/yếu). Mọi dimension chưa đủ cơ hội giữ Uncertain; không lấy NoiseScore hiện tại làm skill âm.
 
@@ -287,7 +317,10 @@ ToolEffectEpisodeV1 {
 
 **Current Match Pressure:** decayed-window pressure từ active Stalker pursuit/attack, Minion harass/slow/forced drop, recent down/elimination/revive, scarce First Aid/Core, objective stall, insufficient relief. Không gộp với historical skill. Episode do AED tạo phải có config context.
 
-### 7.2 Confidence
+### 7.2 Confidence — D8 đã khóa
+
+**Hai hành động policy không đối xứng:** `RELIEVE` có thể dựa current-match danger rõ ràng khi cold-start, nhưng không dùng dữ liệu bị thiếu làm cớ giảm; `INCREASE_PRESSURE` phải có chứng cứ historical/comparable skill đáng tin cậy và áp lực hiện tại thấp. `ActiveObservedSeconds>=30` là coverage guard, không phải chứng nhận năng lực.
+
 
 ```text
 ConfidenceInput {
@@ -297,52 +330,75 @@ ConfidenceInput {
 }
 ```
 
-- `Available` = metric value đo được; **`DecisionEligible` = Available && đủ distinct opportunity && đủ contextual confidence && không bất công**.
+- `Available` = metric value đo được; **`DecisionEligible` = Available && đủ distinct opportunity && đủ contextual confidence && fairness guard && production-verified source**. `CensoredOnly` không DecisionEligible.
 - Ngưỡng `minimumResolvedEpisodes`, `minimumDistinctMatches`, hysteresis/cooldown **để calibrate và ghi version ở Phase 4/9**, không gắn mặc định 30 giây như skill.
 - Số episode từ cùng một threat/cùng một match có correlation; không coi tất cả sample là độc lập.
-- Team mạnh không được làm mất quyền bảo vệ Player yếu/cold-start; increase pressure cần full roster coverage và safety guard.
+- Team mạnh không được làm mất quyền bảo vệ Player yếu/cold-start; **INCREASE_PRESSURE** đòi hỏi đủ historical/comparable skill evidence, full roster coverage và safe current pressure; không tăng chỉ vì sống đủ 30 giây hay không Down. **RELIEVE** có thể dựa current pressure Host-verified ngay cả khi historical profile cold-start; vẫn phải qua safety và safe-apply.
 - Đề xuất label `Struggling`, `Stable`, `Dominating`, `Uncertain` là **output mục tiêu**, chưa phải enum production.
 - Dữ liệu thiếu `NoOpportunity` hoặc `Unsupported` → HOLD cho chiều tương ứng, không suy player yếu.
 
-## 8. Event, identity, window, versioning (P1.5)
+## 8. Event, identity, window, versioning (P1.5) — D9 đã khóa
 
 ### 8.1 Identity
 
 | Identity | Quy tắc |
 |---|---|
 | `matchId` | Non-empty Host match GUID, trùng backend binding |
-| `phaseOrdinal` | Tăng theo accepted phase start; lưu cả canonical phaseName/zone |
+| `phaseOrdinal` | Tăng theo accepted phase start; lưu cả canonical phaseName/zone; logical objective stage có thể nhỏ hơn telemetry phase |
 | `userId` | Backend verified UserId, không suy từ `PlayerRef` nếu binding mất |
 | `teamKey` | Match-scoped `matchId` hiện tại |
 | `sourceEventId` | Canonical TelemetryEvent Id khi có; Host gameplay-only có deterministic occurrence identity riêng |
-| `dedupKey` | `(matchId, eventType, sourceOccurrenceKey)` đối với canonical; **sát code emitter `EventType + "|" + SourceOccurrenceKey`** |
+| `dedupKey` | `(matchId, eventType, sourceOccurrenceKey)` với canonical; emitter có `EventType + "|" + SourceOccurrenceKey` trong phạm vi active match. Sidecar dùng `matchId + episodeId + factKind + factOrdinal`/source ID ổn định |
 | `episodeId` | Stable Host ID theo entity/target/started tick/ordinal; không dùng Unity instance id tái sử dụng đơn lẻ |
 | `sourceTick` | NetworkRunner authoritative tick; `occurredAtUtc` để audit/ordering phụ |
-| `context` | Policy/version/config source, difficulty, roster snapshot, phase, zone, applied plan params |
+| `context` | Policy/version/config source, difficulty, roster snapshot, phase, zone, applied plan params; identity của stage (`Zone2MissionStage`) khi cần |
+
+### 8.1.1 Mapping phase — lấy trực tiếp từ `NetworkMatchState.PhaseName()`
+
+| `NetworkMatchPhase` | Telemetry `phaseName` | Ngữ nghĩa |
+|---|---|---|
+| `CoreObjective` | `CORE_COLLECTION` | Core placement objective units |
+| `Zone2Objective` | `ZONE_2_OBJECTIVE` | Có nhiều `Zone2MissionStage`, bắt buộc lưu stage riêng |
+| `Puzzle` | `POWER_PUZZLE` | Legacy/supported phase khi active |
+| `SecurityHold` | `SECURITY_HOLD` | Legacy/supported phase khi active |
+| `Zone3FindFrigate` | `ZONE_3_FIND_FRIGATE` | Zone 3 exploration objective |
+| `Zone3PushFrigate` | `ZONE_3_PUSH_FRIGATE` | Zone 3 escort/refuel/charge objective |
+| `FinalHunt` | `FINAL_HUNT` | Hunt/exit threat |
+| `Escape` | `ESCAPE` | Exit |
+| `MatchEnded` | `MATCH_ENDED` | Non-active terminal phase |
+
+**Không suy `Zone2MissionStage` từ `phaseName`**: một telemetry phase `ZONE_2_OBJECTIVE` chứa nhiều stage. Các event legacy có `POWER_PUZZLE`/`SECURITY_HOLD` không tự đồng nghĩa network phase `Zone2Objective` nếu không có explicit source mapping.
 
 ### 8.2 Episode/window
 
 - `startTick <= endTick`; lag/chuyển phase không ghi hai resolution cùng một episode.
-- End thuộc `ResolvedSuccess`, `ResolvedFailure`, `Censored` hoặc `Incomplete`; không đo cùng một outcome thành nhiều chiến thắng.
-- Chỉ xem `Censored` khi đã ghi lý do: MatchEnd, phase break, AI despawn, player disconnect, state authority loss.
+- Episode terminal thuộc domain terminal outcome; metric projection dùng `ResolvedSuccess`, `ResolvedFailure`, `Censored` hoặc `Incomplete`. `Reacquired`, `SlowApplied`, `ItemRecovered` là fact/effect, không tự là terminal episode outcome; không nhân thắng.
+- Chỉ xem `Censored` khi đã ghi lý do: MatchEnd, phase break, AI despawn, player disconnect, state authority loss. Nếu tất cả opportunity hợp lệ đều censored → `CensoredOnly` (`value=null`).
 - Nếu available opportunity mà source required mất/gap sequence → `Incomplete`, không bỏ silently.
 - Source research-only không tự upgraded lên canonical; `MINION_ALERT` gameplay accepted vẫn loại khỏi `AcceptedNoiseCount` v1.1.
+
+### 8.2.1 Chính sách sidecar và migration — D3 đã khóa
+
+1. **Không sửa semantics V2:** `AEDv2MatchEvidenceCollector.RecordAcceptedObjective` chỉ đếm `PUZZLE_COMPLETED`; Backend `AEDv2PhaseEvidenceVerifier` giữ cùng cách đếm trong V2.
+2. Phase 2 bổ sung `Objective.UnitCompleted` / `Objective.UnitCompletionRate` dưới dạng **Host-authoritative sidecar V1** có `objectiveUnitId`, `unitType`, `phaseOrdinal`, `stage`, `sourceCanonicalEventId?`, `sourceOccurrenceKey`, accepted/rejected, `completionTick`, `sourceAuthority`. Accepted `CORE_PLACED` được liên kết vào sidecar nhưng **không cộng vào V2 ObjectiveProgress**.
+3. Sidecar được dùng tính metric và research; **không tự đưa vào backend plan approval** trước khi backend verifier tiêu thụ và xác minh contract mới. Research-only không tự là production-ready.
+4. Khi cần thêm sidecar vào approval fingerprint, tạo **fingerprint version mới** và triển khai migration nguyên tử cho Unity collector, Backend verifier, proposal/approval service và regression parity tests; không đổi thuật toán của `AED_V2_PHASE_EVIDENCE_V2` nhưng giữ version cũ.
 
 ### 8.3 Version matrix
 
 | Artifact | Hiện tại trên LTP | Phase 1 quyết định | Phase triển khai |
 |---|---|---|---|
 | Telemetry wire | `1.1` | Không sửa | Phase 2+ nếu cần additive/bumped version |
-| AED phase fingerprint | `AED_V2_PHASE_EVIDENCE_V2` | Giữ nguyên để không mất parity | Phase 2, bump/version + both-side verifier tests nếu sửa |
-| Metric semantics | Chưa có bộ Opportunity V1 đầy đủ | **`AED_METRIC_OPPORTUNITY_V1`** (đề xuất) | Phase 2–4 |
-| Pursuit episode | Chưa canonical | **`AED_PURSUIT_EPISODE_V1`** (đề xuất) | Phase 3 |
-| Minion episode | Chưa canonical | **`AED_MINION_EPISODE_V1`** (đề xuất) | Phase 3 |
-| Tool effect episode | Chưa canonical | **`AED_TOOL_EFFECT_V1`** (đề xuất) | Phase 2/5 |
-| Resource plan/receipt | Chưa | **`AED_RESOURCE_PLAN_V1`** (đề xuất) | Phase 5 |
+| AED phase fingerprint | `AED_V2_PHASE_EVIDENCE_V2` | **D3: khóa ngữ nghĩa đếm `PUZZLE_COMPLETED` của V2**, sidecar Objective V1 độc lập | Chỉ bump khi vào backend approval; collector+verifier+proposal parity tests đồng bộ |
+| Metric semantics | Chưa có bộ Opportunity V1 đầy đủ | **`AED_METRIC_OPPORTUNITY_V1` — SIGNED OFF** | Phase 2–4 |
+| Pursuit episode | Chưa canonical | **`AED_PURSUIT_EPISODE_V1` — SIGNED OFF** | Phase 3 |
+| Minion episode | Chưa canonical | **`AED_MINION_EPISODE_V1` — SIGNED OFF** | Phase 3 |
+| Tool effect episode | Chưa canonical | **`AED_TOOL_EFFECT_V1` — SIGNED OFF** | Phase 2/5 |
+| Resource plan/receipt | Chưa | **`AED_RESOURCE_PLAN_V1` — SIGNED OFF (semantics only)** | Phase 5 |
 | Backend profile | Có lineage/revision/formula version | Version dimensions độc lập; migration có kế hoạch | Phase 4 |
 | Unified policy | AED v2 có boundary policy | Không coi raw noise là skill; explicit HOLD categories | Phase 8 |
 
-**Quy tắc migration:** mọi thay đổi V2 fingerprint/ObjectiveProgress phải nâng cấp collector **cùng** Backend `AEDv2PhaseEvidenceVerifier`, `ScenarioAdaptivePlanV2Service` và regression tests. Không giữ tên fingerprint cũ nhưng đổi cách tính. Một policy có thể dùng metric V1 sidecar độc lập trước khi đổi canonical evidence.
+**Quy tắc migration:** giữ nguyên V2. Khi cần tiêu thụ sidecar cho backend approval phải **version bump cùng lúc** ở Unity collector, Backend `AEDv2PhaseEvidenceVerifier`, `ScenarioAdaptivePlanV2Service` và regression tests, không đổi nghĩa một fingerprint đã công bố. Sidecar có thể tính metric/research độc lập nhưng không được lén tham gia approval V2.
 
 ## 9. HOLD taxonomy thiết kế (triển khai Phase 2/8)
 
@@ -368,9 +424,9 @@ Các mã trên **là đề xuất thiết kế**, không phải enum/code hiện
 ### P1.1 — Create contract & validate registry
 
 1. Tạo thư mục `docs/aed/` trong repo nếu chưa có.
-2. Sao chép **chính tài liệu này** thành `docs/aed/AED_Metric_Opportunity_Contract_V1.md`.
+2. Tài liệu đã có trong `docs/aed/AED_Metric_Opportunity_Contract_V1.md` ở commit `e60e4b9`; cập nhật theo sign-off D1–D9, không tạo bản contract khác song song.
 3. Rà từng metric: numerator, denominator, opportunity, success/failure, NoOpportunity, authority, readiness, AED use đều có.
-4. Không viết C# enum trước khi ký chốt tên/status và measurement unit. Không gọi `ActiveObservedSeconds` là metric skill.
+4. Sáu metric status và `measurementKind` đã ký chốt, chuẩn bị enum/registry cho Phase 2. Không gọi `ActiveObservedSeconds` là metric skill.
 
 ### P1.2 — Episode sign-off
 
@@ -395,10 +451,10 @@ Các mã trên **là đề xuất thiết kế**, không phải enum/code hiện
 
 ### P1.5 — Freeze contract & handoff
 
-1. Chốt semantic version `AED_METRIC_OPPORTUNITY_V1`; các contract episode V1 ở mục 8.
+1. **Đã chốt** semantic version `AED_METRIC_OPPORTUNITY_V1` và các episode/tool V1 ở mục 8; ngưỡng định lượng vẫn là mục cần calibrate sau.
 2. Chốt source identity, Host authority, phases, Censored vs NoOpportunity vs Incomplete.
 3. **Không sửa `AEDv2CurrentMatchEvidence`, `TelemetryContracts`, Backend DB/verifier trong Phase 1**.
-4. Commit docs riêng: `docs(aed): define phase-1 opportunity and episode contracts`.
+4. Commit **bản sign-off cập nhật** riêng: `docs(aed): sign off phase-1 metric opportunity semantics`.
 5. Phase 2 làm theo thứ tự: CORE_PLACED/parity → Down lethal consequence → Tool Effect → Noise source tagging → detailed HOLD → regression.
 
 ### Kiểm tra tài liệu trước commit
@@ -406,21 +462,21 @@ Các mã trên **là đề xuất thiết kế**, không phải enum/code hiện
 - [ ] Tất cả metric trong tài liệu Phase 1 gốc đã được định nghĩa (Survival, Stalker, Objective, Minion, Tool, Resource, Teamwork, Movement, Noise).
 - [ ] Core placement không bị cộng nhầm vào V2 canonical hiện tại; công việc nâng cấp được chuyển rõ sang Phase 2.
 - [ ] Mỗi outcome đều có Host source; unsupported được đánh dấu rõ; không dùng event research-only làm production.
-- [ ] NoOpportunity không là 0; Incomplete khác Unsafe; Censored không tự thành Failure.
+- [ ] `NoOpportunity` ≠ `CensoredOnly` ≠ `Incomplete`; 6 status có rules/value cụ thể; Censored không là Failure.
 - [ ] Tool 5 loại có outcome/eligible window riêng; FirstAid floor, CoreStabilizer limit, Scanner NavMesh distance là **đề xuất fairness**, chưa production.
 - [ ] Stalker detection decay/target switch được tính trong episode.
 - [ ] Minion forced-drop khác carry-steal; flashlight multi-contributor không double-count.
 - [ ] Policy context để chống self-induced learning; Team player disparity safeguard.
-- [ ] Backend fingerprint V2 schema giữ nguyên; mọi thay đổi tương lai yêu cầu version bump parity cả hai phía.
+- [ ] V2 ObjectiveProgress chỉ đếm `PUZZLE_COMPLETED`; Objective sidecar Phase 2 riêng; mọi thay đổi approval yêu cầu version bump parity Unity/Backend.
 - [ ] Giữ `extendedPolicyGameplayEnabled: 0`; Shadow có thể trở lại `0` sau test P0.
 
-**Phase 1 DONE = đủ 5 nhóm contract, source inventory, readiness, semantic version & review; không phải yêu cầu Unity/Backend E2E của Phase 2–8 đã chạy.**
+**Phase 1 SIGNED OFF (D1–D9) = đủ 5 nhóm contract, source inventory, readiness, semantic version & review; không phải bằng chứng implementation hoặc E2E của Phase 2–8.**
 
 ## 11. Những việc chuyển hẳn sang Phase 2–9 (không làm sớm)
 
 | Phase | Implementation backlog được chốt từ hợp đồng |
 |---|---|
-| Phase 2 | Core placements/ObjectiveProgress + verifier parity; revive-limit lethal evidence; tool/noise semantics; HOLD diagnostics; tests |
+| Phase 2 | **Bắt đầu từ `Objective.UnitCompletionRate` sidecar V1** (không đổi V2 count); direct lethal elimination cause; tool/noise semantics; HOLD diagnostics; tests. Khi sidecar vào approval phải bump fingerprint + verifier đồng bộ |
 | Phase 3 | Host Stalker pursuit and Minion encounter capture + resolved outcome + source contribution, censor handling |
 | Phase 4 | Player/Team dimension aggregators, confidence, current pressure, historical revision/fairness |
 | Phase 5 | Resource Director: composition/quantity/location/timing, per-zone lazy spawn & receipt, loadout, reachability |
