@@ -1509,6 +1509,25 @@ namespace EchoProtocol.Networking.Authority
                 reasonCode);
             if (!accepted) _aedv2Evidence.MarkIncomplete();
             _aedv2Evidence.Freeze(phase, _boundPlayers.Count, CurrentRosterIdentity(), nowUtc);
+            var frozen = _aedv2Evidence.LastFrozen;
+            var players = _aedv2Evidence.LastFrozenPlayerEvidence;
+            var safety = AEDv2RosterSafety.FromEvidence(
+                AEDv2BoundUserIds, players);
+
+            if (frozen != null)
+            {
+                var observedSeconds = string.Join(",", players.Values.Select(
+                    p => p.ActiveObservedSeconds.ToString("F1")));
+                Debug.Log(
+                    $"[AED_P0] phase={phase} " +
+                    $"complete={frozen.TelemetryCompleteness} " +
+                    $"fingerprintValid={frozen.HasValidFingerprint()} " +
+                    $"rosterValid={frozen.RosterIdentity == CurrentRosterIdentity()} " +
+                    $"allObserved={safety.AllPlayersObserved} " +
+                    $"allowPressure={safety.AllowPressure} " +
+                    $"observedSeconds={observedSeconds} " +
+                    $"reasons={string.Join(",", frozen.ReasonCodes)}");
+            }
             return accepted;
         }
 
