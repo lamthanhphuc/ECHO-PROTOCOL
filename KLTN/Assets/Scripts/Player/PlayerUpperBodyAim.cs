@@ -1,5 +1,7 @@
 using EchoProtocol.Networking;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 [DisallowMultipleComponent]
 public sealed class PlayerUpperBodyAim : MonoBehaviour
@@ -81,9 +83,54 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         _heldItemAnchor = GetComponentInParent<PlayerHeldItemAnchor>();
     }
 
+    private Vector2 _lobbyLookAngles, _lobbyLookVelocity, _lastLobbyLookSent;
+    private float _nextLobbyLookSend;
+    private Transform _lobbyHead;
+    private Quaternion _lobbyAppliedRotation, _lobbyHeadResult;
+    private bool _lobbyRotationApplied;
+    private bool IsLobbyPresentation => _lobbyState != null && _lobbyState.Object!=null && _lobbyState.Object.IsValid && !_lobbyState.IsGameplayPlayer
+        && SceneManager.GetActiveScene().name == "Lobby";
+
+    private void UpdateLobbyLook()
+    {
+        if (animator == null || !animator.isHuman || animator.avatar == null || !animator.avatar.isValid) return;
+        var head=animator.GetBoneTransform(HumanBodyBones.Head);
+        if(head==null)return;
+        // Strip the previous offset when the Animator was culled and did not write a fresh pose.
+        if(_lobbyRotationApplied && _lobbyHead==head && Quaternion.Angle(head.rotation,_lobbyHeadResult)<0.01f)
+            head.rotation=Quaternion.Inverse(_lobbyAppliedRotation)*head.rotation;
+        var camera=Camera.main;
+        bool local=_lobbyState.Object.HasInputAuthority;
+        Vector2 target=local ? Vector2.zero : _lobbyState.LobbyLookAngles;
+        if(local && camera!=null && Mouse.current!=null && Application.isFocused && Screen.width>0 && Screen.height>0) {
+            var mouse=Mouse.current.position.ReadValue();
+            if(mouse.x>=0 && mouse.x<=Screen.width && mouse.y>=0 && mouse.y<=Screen.height) {
+                var headScreen=camera.WorldToScreenPoint(head.position);
+                target=new Vector2(Mathf.Clamp((mouse.x-headScreen.x)/(Screen.width*0.35f),-1f,1f)*28f,
+                    Mathf.Clamp((mouse.y-headScreen.y)/(Screen.height*0.35f),-1f,1f)*16f);
+            }
+        }
+        if(local && Time.unscaledTime>=_nextLobbyLookSend && (target-_lastLobbyLookSent).sqrMagnitude>0.04f) {
+            _nextLobbyLookSend=Time.unscaledTime+0.05f;
+            _lastLobbyLookSent=target;_lobbyState.RequestLobbyLook(target);
+        }
+        _lobbyLookAngles=Vector2.SmoothDamp(_lobbyLookAngles,target,ref _lobbyLookVelocity,0.16f,Mathf.Infinity,Time.unscaledDeltaTime);
+        var up=playerRoot!=null ? playerRoot.up : Vector3.up;
+        var right=camera!=null ? camera.transform.right : Vector3.right;
+        // Camera screen-right is opposite the character's facing-right in the lobby.
+        _lobbyAppliedRotation=Quaternion.AngleAxis(-_lobbyLookAngles.x,up)*Quaternion.AngleAxis(_lobbyLookAngles.y,right);
+        head.rotation=_lobbyAppliedRotation*head.rotation;
+        _lobbyHead=head;_lobbyHeadResult=head.rotation;_lobbyRotationApplied=true;
+    }
+
     private void LateUpdate()
     {
         if (playerRoot == null) playerRoot = ResolvePlayerRoot();
+        if (IsLobbyPresentation) { UpdateLobbyLook(); return; }
+        if (_lobbyRotationApplied && _lobbyHead!=null && Quaternion.Angle(_lobbyHead.rotation,_lobbyHeadResult)<0.01f)
+            _lobbyHead.rotation=Quaternion.Inverse(_lobbyAppliedRotation)*_lobbyHead.rotation;
+        _lobbyRotationApplied=false;_lobbyLookAngles=Vector2.zero;_lobbyLookVelocity=Vector2.zero;
+
         if (!_hasExternalAim && (playerCamera == null || !IsCameraTargetForThisPlayer(playerCamera.Target)))
         {
             playerCamera = FindBoundCamera();
@@ -162,7 +209,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
     private void OnAnimatorIK(int layerIndex)
     {
-        if (IsReviving() || IsDowned() || IsPushing())
+        if (IsLobbyPresentation || IsReviving() || IsDowned() || IsPushing())
         {
             if (animator != null && animator.isHuman) animator.SetLookAtWeight(0f);
             return;

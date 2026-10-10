@@ -281,6 +281,26 @@ namespace EchoProtocol.Networking
                 ? MultiUseTeamToolUses
                 : 0;
 
+        [Networked] public Vector2 LobbyLookAngles { get; private set; }
+        public void RequestLobbyLook(Vector2 angles)
+        {
+            if(Object==null || !Object.IsValid || !Object.HasInputAuthority || IsGameplayPlayer)return;
+            if(Object.HasStateAuthority) ApplyLobbyLook(angles);
+            else RpcLobbyLook(angles);
+        }
+        private void ApplyLobbyLook(Vector2 angles)
+        {
+            if(IsGameplayPlayer || float.IsNaN(angles.x) || float.IsNaN(angles.y)
+                || float.IsInfinity(angles.x) || float.IsInfinity(angles.y))return;
+            LobbyLookAngles=new Vector2(Mathf.Clamp(angles.x,-28f,28f),Mathf.Clamp(angles.y,-16f,16f));
+        }
+        [Rpc(RpcSources.InputAuthority,RpcTargets.StateAuthority)]
+        private void RpcLobbyLook(Vector2 angles,RpcInfo info=default)
+        {
+            if(!TryResolveOwnedRequester(info.Source,out _))return;
+            ApplyLobbyLook(angles);
+        }
+
         public override void Spawned()
         {
             _pet = GetComponent<PetCompanionController>();
