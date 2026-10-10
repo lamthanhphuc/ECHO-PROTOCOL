@@ -1479,7 +1479,11 @@ namespace EchoProtocol.Networking.Authority
 
         public bool RecordPhaseStarted(string occurrenceKey, string phase, string reasonCode)
         {
-            if (!CanEmitProductionTelemetry()) return false;
+            if (!CanEmitProductionTelemetry())
+            {
+                _aedv2Evidence.MarkIncomplete();
+                return false;
+            }
             var nowUtc = DateTime.UtcNow;
             nowUtc = new DateTime(nowUtc.Ticks - nowUtc.Ticks % TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
             var emitted = _telemetry.MatchAdapter.EmitPhaseStarted(
@@ -1525,12 +1529,9 @@ namespace EchoProtocol.Networking.Authority
             string toolType,
             string targetId = null)
         {
-            // ponytail: Telemetry 1.1 rejects Core Stabilizer; emit it after the schema and backend catalog support it.
+            // CoreStabilizer is gameplay-only in Telemetry v1.1.
             if (toolType == "CORE_STABILIZER")
-            {
-                _aedv2Evidence.MarkIncomplete();
                 return false;
-            }
 
             if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
             {
@@ -1581,13 +1582,8 @@ namespace EchoProtocol.Networking.Authority
             Vector3 position,
             double hearingRadius)
         {
-            // ponytail: gameplay noise is broader than Telemetry 1.1.
-            // Unsupported types remain gameplay-only until the telemetry contract expands.
             if (!NoiseTelemetryAdapter.SupportsNoiseType(noiseType))
-            {
-                _aedv2Evidence.MarkIncomplete();
                 return false;
-            }
 
             if (!CanEmitProductionTelemetry() || !TryResolveBackendUser(player, out var userId))
             {
@@ -1618,6 +1614,7 @@ namespace EchoProtocol.Networking.Authority
                     "Telemetry occurrence identity capacity is exhausted.",
                     StringComparison.Ordinal))
             {
+                _aedv2Evidence.MarkIncomplete();
                 if (!_runtimeNoiseTelemetryCapacityWarningLogged)
                 {
                     _runtimeNoiseTelemetryCapacityWarningLogged = true;
@@ -1637,6 +1634,7 @@ namespace EchoProtocol.Networking.Authority
                     "Telemetry sequence allocation requires an active match.",
                     StringComparison.Ordinal))
             {
+                _aedv2Evidence.MarkIncomplete();
                 if (!_runtimeNoiseTelemetryInactiveWarningLogged)
                 {
                     _runtimeNoiseTelemetryInactiveWarningLogged = true;
