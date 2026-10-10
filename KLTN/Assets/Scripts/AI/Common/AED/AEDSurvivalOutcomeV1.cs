@@ -57,11 +57,13 @@ namespace EchoProtocol.AI.Common.AED
         public string PhaseName { get; }
         public IReadOnlyList<AEDSurvivalOutcomeV1> Outcomes { get; }
         public bool IsIncomplete { get; }
+        public bool IsInvalid { get; }
+        public bool IsUsable => !IsIncomplete && !IsInvalid;
         public bool IsFrozen => true;
 
         internal AEDSurvivalEvidenceSnapshotV1(Guid matchId, uint phaseOrdinal,
             string phaseName, IEnumerable<AEDSurvivalOutcomeV1> outcomes,
-            bool isIncomplete)
+            bool isIncomplete, bool isInvalid)
         {
             MatchId = matchId;
             PhaseOrdinal = phaseOrdinal;
@@ -69,6 +71,7 @@ namespace EchoProtocol.AI.Common.AED
             Outcomes = new ReadOnlyCollection<AEDSurvivalOutcomeV1>(
                 new List<AEDSurvivalOutcomeV1>(outcomes));
             IsIncomplete = isIncomplete;
+            IsInvalid = isInvalid;
         }
     }
 }

@@ -97,7 +97,8 @@ namespace EchoProtocol.AI.Common.AED
                 _matchId, _phaseOrdinal, _phaseName,
                 _outcomes.Values.OrderBy(outcome => outcome.TransitionOrdinal)
                     .ThenBy(outcome => outcome.OccurrenceKey, StringComparer.Ordinal),
-                _incomplete);
+                _incomplete,
+                _invalid);
             _frozen = true;
             return LastFrozen;
         }

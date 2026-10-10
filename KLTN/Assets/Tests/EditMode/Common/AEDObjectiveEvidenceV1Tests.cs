@@ -190,7 +190,13 @@ namespace EchoProtocol.AI.Common.Tests
 
             var metric = Freeze(collector).UnitCompletionRate;
             Assert.That(metric.EligibleOpportunities, Is.EqualTo(3));
-            Assert.That(metric.DecisionEligible, Is.True);
+            Assert.That(metric.DecisionEligible, Is.False);
+            Assert.That(metric.ReasonCodes,
+                Does.Contain("CONFIDENCE_INSUFFICIENT"));
+            Assert.That(metric.ReasonCodes,
+                Does.Contain("POLICY_SOURCE_UNVERIFIED"));
+            Assert.That(metric.ReasonCodes,
+                Does.Contain("POLICY_MIN_OPPORTUNITIES_UNMET"));
             Assert.That(metric.Difficulty, Is.EqualTo("Normal"));
             Assert.That(metric.ScenarioResolutionMode, Is.EqualTo("Fixed"));
             Assert.That(metric.ConfigSource, Is.EqualTo("Fixed"));
@@ -208,6 +214,51 @@ namespace EchoProtocol.AI.Common.Tests
             CompleteCoverage(collector);
             Assert.That(Place(collector, Guid.NewGuid(), sector: "sector-c"), Is.True);
             Assert.That(Freeze(collector).UnitCompletionRate.DecisionEligible, Is.False);
+        }
+
+        [Test]
+        public void CorePlacementReplayAndMissingTelemetryAreSeparated()
+        {
+            var collector = Create();
+
+            collector.RegisterCorePlacementSlots("sector-a", 1);
+            CompleteCoverage(collector);
+
+            Assert.That(
+                collector.HasRecordedCorePlacementOccurrence("core:place:1"),
+                Is.False);
+
+            Assert.That(
+                Place(collector, Guid.NewGuid()),
+                Is.True);
+
+            Assert.That(
+                collector.HasRecordedCorePlacementOccurrence("core:place:1"),
+                Is.True);
+
+            Assert.That(
+                Place(collector, Guid.NewGuid()),
+                Is.False);
+
+            var frozen = Freeze(collector);
+
+            Assert.That(frozen.Units.Count, Is.EqualTo(1));
+            Assert.That(frozen.UnitCompletionRate.Status,
+                Is.EqualTo(AEDMetricStatusV1.Available));
+
+            var missingTelemetry = Create();
+
+            missingTelemetry.RegisterCorePlacementSlots("sector-a", 1);
+            CompleteCoverage(missingTelemetry);
+
+            missingTelemetry.MarkIncomplete();
+
+            var incomplete = Freeze(missingTelemetry);
+
+            Assert.That(incomplete.UnitCompletionRate.Status,
+                Is.EqualTo(AEDMetricStatusV1.Incomplete));
+
+            Assert.That(incomplete.UnitCompletionRate.Value, Is.Null);
         }
     }
 }

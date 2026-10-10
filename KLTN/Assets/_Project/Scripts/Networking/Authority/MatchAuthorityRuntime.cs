@@ -1019,6 +1019,13 @@ namespace EchoProtocol.Networking.Authority
             }
 
             var occurrenceKey = $"{coreId}:{transitionName}:{transition.Ordinal}";
+        if (transition.State == NetworkItemState.Placed
+            && _aedObjectiveEvidence.HasRecordedCorePlacementOccurrence(
+                occurrenceKey))
+        {
+            return;
+        }
+
             var accepted = _telemetry.ObjectiveAdapter.EmitCoreTransition(
                 occurrenceKey,
                 DateTime.UtcNow,
@@ -1048,6 +1055,11 @@ namespace EchoProtocol.Networking.Authority
             {
                 _aedObjectiveEvidence.MarkIncomplete();
             }
+        else if (transition.State == NetworkItemState.Placed && !accepted)
+        {
+            _aedObjectiveEvidence.MarkIncomplete();
+            _aedv2Evidence.MarkIncomplete();
+        }
         }
 
         private void EmitAbortedMatchEndIfActive()
@@ -1481,8 +1493,12 @@ namespace EchoProtocol.Networking.Authority
                 monsterType, false,
                 accepted ? telemetryEvent?.Id.ToString("D") : null,
                 "FusionStateAuthority");
-            if (accepted) _aedv2Evidence.RecordAcceptedDown(occurrenceKey, userId.ToString("D"));
-            else _aedv2Evidence.MarkIncomplete();
+              if (accepted) _aedv2Evidence.RecordAcceptedDown(occurrenceKey, userId.ToString("D"));
+              else
+              {
+                  _aedv2Evidence.MarkIncomplete();
+                  _aedSurvivalEvidence.MarkIncomplete();
+              }
             return accepted;
         }
 
@@ -1542,8 +1558,14 @@ namespace EchoProtocol.Networking.Authority
                     occurrenceKey, AEDToolEffectOutcomeV1.ResolvedSuccess,
                     accepted ? telemetryEvent?.Id.ToString("D") : null,
                     "FusionStateAuthority");
-            if (accepted) _aedv2Evidence.RecordAcceptedRevive(occurrenceKey, revivedUserId.ToString("D"));
-            else _aedv2Evidence.MarkIncomplete();
+              if (accepted) _aedv2Evidence.RecordAcceptedRevive(occurrenceKey, revivedUserId.ToString("D"));
+              else
+              {
+                  _aedv2Evidence.MarkIncomplete();
+                  _aedSurvivalEvidence.MarkIncomplete();
+                  if (usedFirstAidKit)
+                      _aedToolNoiseEvidence.MarkIncomplete();
+              }
             return accepted;
         }
 
@@ -1592,8 +1614,12 @@ namespace EchoProtocol.Networking.Authority
                 occurrenceKey, transitionOrdinal, cause.ToString(), directFromHit,
                 accepted ? telemetryEvent?.Id.ToString("D") : null,
                 "FusionStateAuthority");
-            if (accepted) _aedv2Evidence.RecordAcceptedElimination(occurrenceKey, userId.ToString("D"));
-            else _aedv2Evidence.MarkIncomplete();
+              if (accepted) _aedv2Evidence.RecordAcceptedElimination(occurrenceKey, userId.ToString("D"));
+              else
+              {
+                  _aedv2Evidence.MarkIncomplete();
+                  _aedSurvivalEvidence.MarkIncomplete();
+              }
             return accepted;
         }
 

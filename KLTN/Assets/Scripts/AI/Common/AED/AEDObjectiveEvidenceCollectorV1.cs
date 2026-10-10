@@ -35,6 +35,12 @@ namespace EchoProtocol.AI.Common.AED
             if (!_frozen) _incomplete = true;
         }
 
+        public bool HasRecordedCorePlacementOccurrence(string occurrenceKey)
+        {
+            return !string.IsNullOrWhiteSpace(occurrenceKey)
+                && _occurrences.Contains(occurrenceKey);
+        }
+
         public void ResetMatch(Guid matchId)
         {
             Clear();
@@ -144,11 +150,7 @@ namespace EchoProtocol.AI.Common.AED
 
             var eventId = sourceEventId.ToString("D");
             if (_eventIds.Contains(eventId)) return false;
-            if (_occurrences.Contains(sourceOccurrenceKey))
-            {
-                _invalid = true;
-                return false;
-            }
+            if (_occurrences.Contains(sourceOccurrenceKey)) return false;
             if (_completed.ContainsKey(unitId))
             {
                 _invalid = true;

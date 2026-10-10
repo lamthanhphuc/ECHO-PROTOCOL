@@ -117,7 +117,9 @@ namespace EchoProtocol.AI.Common.AED
             string confidenceStatus, AEDMetricStatusV1 status,
             IEnumerable<string> reasonCodes, DateTime windowStartedAtUtc,
             DateTime windowEndedAtUtc,
-            AEDMetricPolicyContextV1 policyContext = null)
+            AEDMetricPolicyContextV1 policyContext = null,
+            bool sourceVerifiedForPolicy = false,
+            int minimumResolvedOpportunitiesForPolicy = 0)
         {
             MetricId = metricId ?? throw new ArgumentNullException(nameof(metricId));
             MatchId = matchId;
@@ -178,14 +180,47 @@ namespace EchoProtocol.AI.Common.AED
                 && (ScenarioResolutionMode != "Adaptive"
                     || (AppliedPlanRevision.HasValue
                         && !string.IsNullOrWhiteSpace(AppliedParameterFingerprint)));
-            DecisionEligible = status == AEDMetricStatusV1.Available
-                && policyContextComplete && SourceEventIds.Count > 0
-                && ConfidenceEvidenceCount > 0 && EligibleOpportunities > 0
-                && Denominator.HasValue && Denominator.Value > 0
-                && Value.HasValue && !double.IsNaN(Value.Value)
+            var resolvedOpportunities =
+                ResolvedSuccesses + ResolvedFailures;
+
+            var confidenceSufficient = string.Equals(
+                ConfidenceStatus,
+                "SufficientForPolicy",
+                StringComparison.Ordinal);
+
+            var opportunitiesSufficient =
+                minimumResolvedOpportunitiesForPolicy > 0
+                && resolvedOpportunities >= minimumResolvedOpportunitiesForPolicy
+                && ConfidenceEvidenceCount >= minimumResolvedOpportunitiesForPolicy
+                && EligibleOpportunities >= resolvedOpportunities;
+
+            DecisionEligible =
+                status == AEDMetricStatusV1.Available
+                && policyContextComplete
+                && sourceVerifiedForPolicy
+                && confidenceSufficient
+                && opportunitiesSufficient
+                && SourceEventIds.Count > 0
+                && Denominator.HasValue
+                && Denominator.Value > 0
+                && Value.HasValue
+                && !double.IsNaN(Value.Value)
                 && !double.IsInfinity(Value.Value);
+
             if (status == AEDMetricStatusV1.Available && !DecisionEligible)
-                reasons.Add("POLICY_CONTEXT_INCOMPLETE");
+            {
+                if (!policyContextComplete)
+                    reasons.Add("POLICY_CONTEXT_INCOMPLETE");
+
+                if (!sourceVerifiedForPolicy)
+                    reasons.Add("POLICY_SOURCE_UNVERIFIED");
+
+                if (!confidenceSufficient)
+                    reasons.Add("CONFIDENCE_INSUFFICIENT");
+
+                if (!opportunitiesSufficient)
+                    reasons.Add("POLICY_MIN_OPPORTUNITIES_UNMET");
+            }
             ReasonCodes = Freeze(reasons);
         }
 

@@ -90,7 +90,7 @@ namespace EchoProtocol.AI.Common.Tests
         }
 
         [Test]
-        public void RejectedCanonicalToolAndNoiseUseRejectedFactKinds()
+        public void CanonicalEmissionFailureDoesNotRejectAcceptedGameplay()
         {
             var collector = Create();
             Assert.That(collector.RecordToolAction("FIELD_SCANNER", UserId,
@@ -100,14 +100,42 @@ namespace EchoProtocol.AI.Common.Tests
                 "noise:rejected", AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected,
                 null, "FusionStateAuthority"), Is.True);
 
-            var facts = collector.Freeze().Facts;
-            Assert.That(facts.Select(fact => fact.Kind), Is.EquivalentTo(new[]
+            var snapshot = collector.Freeze();
+
+            Assert.That(snapshot.IsIncomplete, Is.True);
+
+            Assert.That(snapshot.Facts.Select(f => f.Kind), Is.EquivalentTo(new[]
             {
-                AEDToolNoiseFactKindV1.ToolActionRejected,
-                AEDToolNoiseFactKindV1.GameplayNoiseRejected
+                AEDToolNoiseFactKindV1.ToolActionAccepted,
+                AEDToolNoiseFactKindV1.GameplayNoiseAccepted
             }));
-            Assert.That(facts.Any(fact => fact.Kind == AEDToolNoiseFactKindV1.ToolActionAccepted
-                || fact.Kind == AEDToolNoiseFactKindV1.GameplayNoiseAccepted), Is.False);
+            Assert.That(snapshot.Facts.All(f =>
+                f.SourceCategory ==
+                AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected), Is.True);
+        }
+
+        [Test]
+        public void InvalidToolNoiseEvidenceRemainsInvalidAfterFreeze()
+        {
+            var collector = Create();
+
+            collector.RecordNoise(
+                "SPRINT",
+                "invalid-user",
+                "noise-invalid",
+                AEDEvidenceSourceCategoryV1.CanonicalTelemetryAccepted,
+                "event-invalid",
+                "FusionStateAuthority");
+
+            var snapshot = collector.Freeze();
+
+            Assert.That(snapshot.IsInvalid, Is.True);
+            Assert.That(snapshot.IsUsable, Is.False);
+
+            collector.StartPhase(_matchId, 2, "ZONE_2_OBJECTIVE");
+
+            Assert.That(collector.LastFrozen, Is.SameAs(snapshot));
+            Assert.That(snapshot.IsInvalid, Is.True);
         }
 
         [Test]

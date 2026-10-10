@@ -53,10 +53,7 @@ namespace EchoProtocol.AI.Common.AED
             string occurrenceKey, AEDEvidenceSourceCategoryV1 sourceCategory,
             string canonicalEventId, string sourceAuthority)
         {
-            var kind = sourceCategory == AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected
-                ? AEDToolNoiseFactKindV1.ToolActionRejected
-                : AEDToolNoiseFactKindV1.ToolActionAccepted;
-            return Record(kind,
+            return Record(AEDToolNoiseFactKindV1.ToolActionAccepted,
                 sourceCategory, toolType, null, userId, null, occurrenceKey,
                 canonicalEventId, null, sourceAuthority);
         }
@@ -76,10 +73,7 @@ namespace EchoProtocol.AI.Common.AED
             string occurrenceKey, AEDEvidenceSourceCategoryV1 sourceCategory,
             string canonicalEventId, string sourceAuthority)
         {
-            var kind = sourceCategory == AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected
-                ? AEDToolNoiseFactKindV1.GameplayNoiseRejected
-                : AEDToolNoiseFactKindV1.GameplayNoiseAccepted;
-            return Record(kind,
+            return Record(AEDToolNoiseFactKindV1.GameplayNoiseAccepted,
                 sourceCategory, null, noiseType, userId, null, occurrenceKey,
                 canonicalEventId, null, sourceAuthority);
         }
@@ -96,7 +90,8 @@ namespace EchoProtocol.AI.Common.AED
                 _matchId, _phaseOrdinal, _phaseName,
                 _facts.Values.OrderBy(fact => fact.Kind)
                     .ThenBy(fact => fact.OccurrenceKey, StringComparer.Ordinal),
-                _incomplete);
+                _incomplete,
+                _invalid);
             _frozen = true;
             return LastFrozen;
         }
@@ -146,6 +141,11 @@ namespace EchoProtocol.AI.Common.AED
                 kind, sourceCategory, toolType, noiseType,
                 verifiedUserId.ToString("D"), relatedUserId, occurrenceKey,
                 canonicalEventId, effectOutcome, sourceAuthority));
+            if (sourceCategory ==
+                AEDEvidenceSourceCategoryV1.CanonicalEmissionRejected)
+            {
+                _incomplete = true;
+            }
             return true;
         }
 

@@ -65,11 +65,14 @@ namespace EchoProtocol.AI.Common.AED
         public string PhaseName { get; }
         public IReadOnlyList<AEDToolNoiseFactV1> Facts { get; }
         public bool IsIncomplete { get; }
+        public bool IsInvalid { get; }
+        public bool IsUsable => !IsIncomplete && !IsInvalid;
         public bool IsFrozen => true;
 
         internal AEDToolNoiseEvidenceSnapshotV1(Guid matchId,
             uint phaseOrdinal, string phaseName,
-            IEnumerable<AEDToolNoiseFactV1> facts, bool isIncomplete)
+            IEnumerable<AEDToolNoiseFactV1> facts,
+            bool isIncomplete, bool isInvalid)
         {
             MatchId = matchId;
             PhaseOrdinal = phaseOrdinal;
@@ -77,6 +80,7 @@ namespace EchoProtocol.AI.Common.AED
             Facts = new ReadOnlyCollection<AEDToolNoiseFactV1>(
                 new List<AEDToolNoiseFactV1>(facts));
             IsIncomplete = isIncomplete;
+            IsInvalid = isInvalid;
         }
     }
 }

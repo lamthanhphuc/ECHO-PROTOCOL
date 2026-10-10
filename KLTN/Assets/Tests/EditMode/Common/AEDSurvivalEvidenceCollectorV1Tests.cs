@@ -113,5 +113,29 @@ namespace EchoProtocol.AI.Common.Tests
                 "direct", 1, "ReviveLimit", direct: false), Is.False);
             Assert.That(collector.IsInvalid, Is.True);
         }
+
+        [Test]
+        public void InvalidSurvivalEvidenceRemainsInvalidAfterFreeze()
+        {
+        var collector = Create();
+
+        Record(
+            collector,
+            AEDSurvivalOutcomeKindV1.Downed,
+            "invalid-down",
+            1,
+            "Damage",
+            userId: "not-a-guid");
+
+        var snapshot = collector.Freeze();
+
+        Assert.That(snapshot.IsInvalid, Is.True);
+        Assert.That(snapshot.IsUsable, Is.False);
+
+        collector.StartPhase(_matchId, 2, "ZONE_2_OBJECTIVE");
+
+        Assert.That(collector.LastFrozen, Is.SameAs(snapshot));
+        Assert.That(snapshot.IsInvalid, Is.True);
+        }
     }
 }
