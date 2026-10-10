@@ -13,9 +13,6 @@ namespace EchoProtocol.AI.Common.AED
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var facts = snapshot.Episodes.SelectMany(e => e.Facts)
                 .Concat(snapshot.Facts).ToArray();
-            var resolvedEvasion = snapshot.Episodes.Where(e =>
-                e.TerminalOutcome == AEDMinionTerminalV1.Evaded
-                || e.TerminalOutcome == AEDMinionTerminalV1.Countered).ToArray();
             var slowAttempts = facts.Where(f => f.Kind == AEDMinionFactKindV1.AttackAttempted
                 && f.EffectKind == "SLOW").ToArray();
             var toolAttempts = facts.Where(f => f.Kind == AEDMinionFactKindV1.AttackAttempted
@@ -42,12 +39,15 @@ namespace EchoProtocol.AI.Common.AED
             return new[]
             {
                 Rate("Minion.EvasionRate", snapshot, snapshot.Episodes.Count,
-                    resolvedEvasion.Length,
-                    resolvedEvasion.Count(e => e.TerminalOutcome == AEDMinionTerminalV1.Evaded),
+                    0, 0,
                     snapshot.Episodes.Count(e => e.TerminalOutcome == AEDMinionTerminalV1.Censored
                         || e.TerminalOutcome == AEDMinionTerminalV1.Disengaged),
                     snapshot.Episodes.Select(e => e.EpisodeId), facts,
-                    windowStartedAtUtc, windowEndedAtUtc),
+                    windowStartedAtUtc, windowEndedAtUtc,
+                    statusOverride: snapshot.Episodes.Any(e =>
+                        e.TerminalOutcome == AEDMinionTerminalV1.Countered
+                        || e.TerminalOutcome == AEDMinionTerminalV1.Evaded)
+                        ? AEDMetricStatusV1.Unsupported : (AEDMetricStatusV1?)null),
                 Unsupported("Minion.FlashlightDefenseRate", snapshot, 0,
                     0, facts, windowStartedAtUtc, windowEndedAtUtc),
                 AttemptRate("Minion.SlowHitRate", snapshot, slowAttempts,
@@ -65,8 +65,10 @@ namespace EchoProtocol.AI.Common.AED
                     resolvedDistractions.Length,
                     resolvedDistractions.Length,
                     distractionOpportunities.Length - resolvedDistractions.Length,
-                    resolvedDistractions.Select(f => f.OccurrenceKey), facts,
-                    windowStartedAtUtc, windowEndedAtUtc),
+                    distractionOpportunities.Select(f => f.OccurrenceKey), facts,
+                    windowStartedAtUtc, windowEndedAtUtc,
+                    statusOverride: resolvedDistractions.Length > 0
+                        ? AEDMetricStatusV1.Unsupported : (AEDMetricStatusV1?)null),
                 Unsupported("Minion.ObjectiveDisruptionSeconds", snapshot, 0,
                     0, facts, windowStartedAtUtc, windowEndedAtUtc)
             };
@@ -86,9 +88,12 @@ namespace EchoProtocol.AI.Common.AED
         private static AEDMetricResultV1 Rate(string id,
             AEDMinionEvidenceSnapshotV1 snapshot, int eligible, int resolved,
             int successes, int censored, IEnumerable<string> episodes,
-            AEDMinionFactV1[] facts, DateTime started, DateTime ended)
+            AEDMinionFactV1[] facts, DateTime started, DateTime ended,
+            AEDMetricStatusV1? statusOverride = null)
         {
-            var status = Status(snapshot, eligible, resolved, censored);
+            var status = snapshot.IsInvalid ? AEDMetricStatusV1.Invalid
+                : snapshot.IsIncomplete ? AEDMetricStatusV1.Incomplete
+                : statusOverride ?? Status(snapshot, eligible, resolved, censored);
             double? value = status == AEDMetricStatusV1.Available && resolved > 0
                 ? (double?)successes / resolved : null;
             return new AEDMetricResultV1(id, snapshot.MatchId,
@@ -99,7 +104,8 @@ namespace EchoProtocol.AI.Common.AED
                     .Select(f => f.SourceEventId),
                 facts.Select(f => f.OccurrenceKey), episodes,
                 eligible, successes, Math.Max(0, resolved - successes), censored,
-                successes, resolved > 0 ? resolved : (double?)null,
+                successes, status == AEDMetricStatusV1.Unsupported ? null
+                    : resolved > 0 ? resolved : (double?)null,
                 "ratio", value, AEDMetricMeasurementKindV1.Rate,
                 "opportunity", null, null, null, 0, "InsufficientForPolicy",
                 status, status == AEDMetricStatusV1.Available

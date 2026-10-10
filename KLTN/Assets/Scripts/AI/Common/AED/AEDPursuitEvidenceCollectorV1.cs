@@ -152,13 +152,9 @@ namespace EchoProtocol.AI.Common.AED
                 && active.LostTick.HasValue
                 && tick - active.LostTick.Value >= (long)tickRate * DefaultEscapeGraceSeconds)
             {
-                if (active.LostWindowPending)
-                {
-                    active.ResolvedLostWindows++;
-                    active.LostWindowPending = false;
-                }
-                Close(active, AEDPursuitTerminalV1.Escaped,
-                    $"{GraceWindowVersion}:{DefaultEscapeGraceSeconds}", tick);
+                active.LostWindowPending = false;
+                Close(active, AEDPursuitTerminalV1.Censored,
+                    $"{GraceWindowVersion}:UNVERIFIED_ESCAPE:{DefaultEscapeGraceSeconds}", tick);
             }
             return true;
         }

@@ -135,7 +135,8 @@ namespace EchoProtocol.AI.Common.AED
                 || (relatedUserId != null && !ValidUser(relatedUserId))
                 || double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds < 0)
             { _invalid = true; return false; }
-            if (!Accept(kind.ToString(), occurrenceKey)) return false;
+            if (!Accept(kind.ToString(), $"{minionId}:{occurrenceKey}"))
+                return false;
             _lastSourceTick = Math.Max(_lastSourceTick, tick);
             _active.TryGetValue(minionId, out var active);
             if (active != null

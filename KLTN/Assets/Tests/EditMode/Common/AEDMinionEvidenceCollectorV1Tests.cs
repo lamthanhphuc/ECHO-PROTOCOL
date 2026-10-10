@@ -140,8 +140,9 @@ namespace EchoProtocol.AI.Common.Tests
             var metric = AEDMinionMetricProjectorV1.Project(resolved.Freeze(),
                 DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(3))
                 .Single(m => m.MetricId == "Minion.DistractionSuccessRate");
-            Assert.That(metric.Status, Is.EqualTo(AEDMetricStatusV1.Available));
-            Assert.That(metric.Value, Is.EqualTo(1d));
+            Assert.That(metric.Status, Is.EqualTo(AEDMetricStatusV1.Unsupported));
+            Assert.That(metric.Value, Is.Null);
+            Assert.That(metric.Denominator, Is.Null);
             Assert.That(metric.DecisionEligible, Is.False);
         }
 
@@ -199,6 +200,64 @@ namespace EchoProtocol.AI.Common.Tests
                 .Single(m => m.MetricId == "Minion.DistractionSuccessRate");
             Assert.That(metric.Status, Is.EqualTo(AEDMetricStatusV1.NoOpportunity));
             Assert.That(metric.Value, Is.Null);
+        }
+
+        [Test]
+        public void TwoMinionsCanObserveSameNoiseEventIndependently()
+        {
+            var c = Create();
+            Observe(c, "Harass", UserA, 1, id: "minion-1");
+            Observe(c, "Harass", UserB, 1, id: "minion-2");
+            Assert.That(c.RecordFact(AEDMinionFactKindV1.NoiseMakerOpportunity,
+                "minion-1", "noisemaker-opportunity:noise-1", 2, UserA, UserA,
+                effectKind: "ACTIVE_THREAT_DIVERSION", sourceEventId: "noise-1"), Is.True);
+            Assert.That(c.RecordFact(AEDMinionFactKindV1.NoiseMakerOpportunity,
+                "minion-2", "noisemaker-opportunity:noise-1", 2, UserA, UserB,
+                effectKind: "ACTIVE_THREAT_DIVERSION", sourceEventId: "noise-1"), Is.True);
+            Assert.That(c.RecordFact(AEDMinionFactKindV1.NoiseMakerOpportunity,
+                "minion-1", "noisemaker-opportunity:noise-1", 2, UserA, UserA,
+                effectKind: "ACTIVE_THREAT_DIVERSION", sourceEventId: "noise-1"), Is.False);
+            var facts = c.Freeze().Episodes.SelectMany(e => e.Facts)
+                .Where(f => f.Kind == AEDMinionFactKindV1.NoiseMakerOpportunity).ToArray();
+            Assert.That(facts.Length, Is.EqualTo(2));
+            Assert.That(facts.Select(f => f.MinionNetworkId).Distinct().Count(), Is.EqualTo(2));
+        }
+
+        [Test]
+        public void PartialDistractionDoesNotReportOneHundredPercent()
+        {
+            var c = Create();
+            Observe(c, "Harass", UserA, 1);
+            for (int i = 1; i <= 3; i++)
+                c.RecordFact(AEDMinionFactKindV1.NoiseMakerOpportunity, "minion-1",
+                    $"noise-opportunity-{i}", i + 1, UserA, UserA,
+                    effectKind: "ACTIVE_THREAT_DIVERSION", sourceEventId: $"noise-{i}");
+            c.RecordFact(AEDMinionFactKindV1.NoiseMakerReaction, "minion-1", "reaction-1",
+                5, UserA, UserA, effectKind: "ACTIVE_THREAT_DIVERSION",
+                accepted: true, sourceEventId: "noise-1");
+            var metric = AEDMinionMetricProjectorV1.Project(c.Freeze(),
+                DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(6))
+                .Single(m => m.MetricId == "Minion.DistractionSuccessRate");
+            Assert.That(metric.Status, Is.EqualTo(AEDMetricStatusV1.Unsupported));
+            Assert.That(metric.Value, Is.Null);
+            Assert.That(metric.Denominator, Is.Null);
+            Assert.That(metric.EligibleOpportunities, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void FlashlightCounterDoesNotBecomeFailedEvasion()
+        {
+            var c = Create();
+            Observe(c, "Harass", UserA, 1);
+            c.RecordFact(AEDMinionFactKindV1.TeamDeathReceipt, "minion-1",
+                "flashlight-death-1", 2, effectKind: "FLASHLIGHT_DEATH", accepted: true);
+            var metric = AEDMinionMetricProjectorV1.Project(c.Freeze(),
+                DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(3))
+                .Single(m => m.MetricId == "Minion.EvasionRate");
+            Assert.That(metric.Status, Is.EqualTo(AEDMetricStatusV1.Unsupported));
+            Assert.That(metric.Value, Is.Null);
+            Assert.That(metric.Denominator, Is.Null);
+            Assert.That(metric.ResolvedFailures, Is.Zero);
         }
 
         [Test]

@@ -99,16 +99,23 @@ namespace EchoProtocol.AI.Common.Tests
         }
 
         [Test]
-        public void EscapeRequiresVersionedGraceWindow()
+        public void SearchGraceWithoutVerifiedEscapeIsCensored()
         {
             var c = Create();
             Observe(c, "CHASE", UserA, 100, tickRate: 10);
             Observe(c, "SEARCH", null, 101, tickRate: 10);
             Observe(c, "PATROL", null, 151, tickRate: 10);
-            Assert.That(c.Freeze().Episodes.Single().TerminalOutcome,
-                Is.EqualTo(AEDPursuitTerminalV1.Escaped));
-            Assert.That(c.LastFrozen.Episodes.Single().TerminalReason,
-                Does.Contain(AEDPursuitEvidenceCollectorV1.GraceWindowVersion));
+            var snapshot = c.Freeze();
+            Assert.That(snapshot.Episodes.Single().TerminalOutcome,
+                Is.EqualTo(AEDPursuitTerminalV1.Censored));
+            Assert.That(snapshot.Episodes.Single().TerminalReason,
+                Does.Contain("UNVERIFIED_ESCAPE"));
+            Assert.That(snapshot.Episodes.Single().ResolvedLostWindows, Is.Zero);
+            var metric = AEDPursuitMetricProjectorV1.Project(snapshot, 10,
+                DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(6))
+                .Single(m => m.MetricId == "Stalker.PursuitEscapeRate");
+            Assert.That(metric.Status, Is.EqualTo(AEDMetricStatusV1.CensoredOnly));
+            Assert.That(metric.Value, Is.Null);
         }
 
         [Test]
@@ -173,7 +180,8 @@ namespace EchoProtocol.AI.Common.Tests
             var metrics = AEDPursuitMetricProjectorV1.Project(c.Freeze(), 1,
                 DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(10));
             Assert.That(metrics.Count, Is.EqualTo(6));
-            Assert.That(metrics[0].Status, Is.EqualTo(AEDMetricStatusV1.Available));
+            Assert.That(metrics[0].Status, Is.EqualTo(AEDMetricStatusV1.CensoredOnly));
+            Assert.That(metrics[0].Value, Is.Null);
             Assert.That(metrics[4].Status, Is.EqualTo(AEDMetricStatusV1.Unsupported));
             Assert.That(metrics[5].Status, Is.EqualTo(AEDMetricStatusV1.Unsupported));
             Assert.That(metrics.All(metric => !metric.DecisionEligible), Is.True);
@@ -307,8 +315,11 @@ namespace EchoProtocol.AI.Common.Tests
             var metric = AEDPursuitMetricProjectorV1.Project(c.Freeze(), 1,
                 DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(4))
                 .Single(m => m.MetricId == "Stalker.PursuitEscapeRate");
-            Assert.That(metric.Denominator, Is.EqualTo(1d));
-            Assert.That(metric.Value, Is.Zero);
+            Assert.That(metric.Status, Is.EqualTo(AEDMetricStatusV1.Unsupported));
+            Assert.That(metric.Denominator, Is.Null);
+            Assert.That(metric.Value, Is.Null);
+            Assert.That(metric.CensoredOpportunities, Is.EqualTo(1));
+            Assert.That(metric.ResolvedFailures, Is.Zero);
         }
 
         [Test]
@@ -321,6 +332,37 @@ namespace EchoProtocol.AI.Common.Tests
                 DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(3))
                 .Single(m => m.MetricId == "Stalker.PursuitEscapeRate");
             Assert.That(metric.Status, Is.EqualTo(AEDMetricStatusV1.CensoredOnly));
+            Assert.That(metric.Value, Is.Null);
+        }
+
+        [Test]
+        public void DownDoesNotProduceUnverifiedEscapeScore()
+        {
+            var c = Create();
+            Observe(c, "CHASE", UserA, 1);
+            c.RecordConsequence("stalker-1", UserA, AEDPursuitFactKindV1.Downed,
+                "down-1", 2, "STALKER_ATTACK", false);
+            var metrics = AEDPursuitMetricProjectorV1.Project(c.Freeze(), 1,
+                DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(3));
+            var escape = metrics.Single(m => m.MetricId == "Stalker.PursuitEscapeRate");
+            var down = metrics.Single(m => m.MetricId == "Stalker.ChaseDownRate");
+            Assert.That(escape.Status, Is.EqualTo(AEDMetricStatusV1.Unsupported));
+            Assert.That(escape.Value, Is.Null);
+            Assert.That(down.Status, Is.EqualTo(AEDMetricStatusV1.Available));
+            Assert.That(down.Value, Is.EqualTo(1d));
+        }
+
+        [Test]
+        public void ReacquisitionWithoutVerifiedNegativeWindowsIsUnsupported()
+        {
+            var c = Create();
+            Observe(c, "CHASE", UserA, 1);
+            Observe(c, "SEARCH", null, 2);
+            Observe(c, "CHASE", UserA, 3);
+            var metric = AEDPursuitMetricProjectorV1.Project(c.Freeze(), 1,
+                DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(4))
+                .Single(m => m.MetricId == "Stalker.ReacquisitionRate");
+            Assert.That(metric.Status, Is.EqualTo(AEDMetricStatusV1.Unsupported));
             Assert.That(metric.Value, Is.Null);
         }
     }
