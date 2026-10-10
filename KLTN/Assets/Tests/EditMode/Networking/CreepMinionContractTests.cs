@@ -72,7 +72,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("CreepMinionAttackKind.StealTool", source);
             StringAssert.Contains("CreepMinionAttackKind.StealCore", source);
             StringAssert.Contains("TryApplySlowAuthoritative", source);
-            StringAssert.Contains("TryRelocateTeamTool", source);
+            StringAssert.Contains("TryTransferTeamToolToMonster", source);
             StringAssert.Contains("TryStealCore", source);
             StringAssert.Contains("BeginFleeTo", source);
             StringAssert.Contains("TrySendStalkerAlert", source);

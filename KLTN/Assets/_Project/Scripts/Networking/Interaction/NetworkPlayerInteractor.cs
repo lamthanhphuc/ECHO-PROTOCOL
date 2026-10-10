@@ -1212,6 +1212,26 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public bool TryTransferTeamToolToMonster(NetworkId monsterId, out NetworkId pickupId)
+        {
+            pickupId = default;
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority || !monsterId.IsValid) return false;
+            var state = GetComponent<LobbyPlayerState>();
+            if (state == null || state.ToolId <= 0) return false;
+            if (!TrySpawnDroppedTeamToolAuthoritative(state.ToolId, state.TeamToolUsesRemaining,
+                    transform.position, Quaternion.identity, out pickupId)) return false;
+            if (!Runner.TryFindObject(pickupId, out var pickup) || !pickup.TryGetComponent<NetworkInteractable>(out var interactable))
+            {
+                if (pickup != null) Runner.Despawn(pickup);
+                pickupId = default;
+                return false;
+            }
+            interactable.BeginMonsterCarryAuthoritative(monsterId);
+            state.SetGameplayToolId(0);
+            ResetTeamToolRuntimeAuthoritative();
+            return true;
+        }
+
         private NetworkObject TeamToolPickupPrefabFor(int toolId)
         {
             return _teamToolPickupCatalog != null ? _teamToolPickupCatalog.GetPrefab(toolId) : null;
