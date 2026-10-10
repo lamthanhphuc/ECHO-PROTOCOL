@@ -408,8 +408,10 @@ namespace EchoProtocol.Voice
             TextAt(Body + "Devices/Test/Label").text = _voice.Devices.Testing ? "DỪNG THỬ MIC" : "THỬ MICROPHONE";
             Find<Button>(Body + "Devices/Test").interactable = _voice.Devices.Ready;
             TextAt(Body + "Devices/LevelText").text = "Mức đầu vào: " + Mathf.RoundToInt(_voice.InputLevel * 100) + "%";
-            TextAt(Body + "Team/Status").text = _voice.Joined ? "Đã kết nối voice trong phòng"
-                : _voice.Status.StartsWith("Waiting") ? "Vào phòng để kết nối voice" : "Voice chưa kết nối. Có thể thử kết nối lại.";
+            TextAt(Body + "Team/Status").text = _voice.Joined ? "Đã kết nối thoại"
+                 : _voice.Status.StartsWith("Waiting") ? GameLanguage.Choose("Vào phòng để kết nối thoại", "Join a room to connect voice")
+                : _voice.RetryInSeconds>0 ? string.Format(GameLanguage.Choose("Tự kết nối lại sau {0} giây", "Reconnecting automatically in {0}s"),Mathf.CeilToInt(_voice.RetryInSeconds))
+                : GameLanguage.Choose("Đang kết nối thoại…", "Connecting voice…");
             Find<Button>(Body + "Team/Retry").gameObject.SetActive(!_voice.Joined);
             RefreshDevices();
             RefreshTeam();
@@ -473,7 +475,7 @@ namespace EchoProtocol.Voice
                 VoiceSettingsCanvasFactory.AddListButton(_teamList, "Teammate", (muted ? "Bật tiếng  ·  " : "Tắt tiếng  ·  ") + NameFor(player), muted)
                     .onClick.AddListener(() => { _voice.SetPlayerMuted(key, !_voice.IsPlayerMuted(key)); _teamSignature = null; });
             }
-            if (count == 0) VoiceSettingsCanvasFactory.AddListButton(_teamList, "EmptyTeam", "Chưa có đồng đội trong voice.", false).interactable = false;
+            if (count == 0) VoiceSettingsCanvasFactory.AddListButton(_teamList, "EmptyTeam", "Chưa có đồng đội trong thoại.", false).interactable = false;
         }
 
         private void ShowConfirmation(bool quit)
