@@ -15,6 +15,39 @@ namespace EchoProtocol.UI
         [SerializeField, Min(0.1f)] private float bodyFillRange = 4f;
         private Light[] _bodyFillLights;
         private float _nextRefreshAt;
+        private Camera _presentationCamera;
+        private Vector3 _cameraPosition;
+        private float _cameraFov;
+        private NetworkLobbyUI _lobbyUI;
+        private void FitNarrowPresentation()
+        {
+            if(SceneManager.GetActiveScene().name!="Lobby")return;
+            var camera=Camera.main;
+            if(camera==null || camera.orthographic)return;
+            if(_presentationCamera!=camera) {
+                _presentationCamera=camera;_cameraPosition=camera.transform.position;_cameraFov=camera.fieldOfView;
+            }
+            const float referenceAspect=16f/9f;
+            if(camera.aspect>=referenceAspect-0.01f) {
+                camera.fieldOfView=_cameraFov;camera.transform.position=_cameraPosition;return;
+            }
+            if(_lobbyUI==null)_lobbyUI=FindAnyObjectByType<NetworkLobbyUI>();
+            float right=_lobbyUI!=null ? _lobbyUI.PresentationRightEdge : 0.74f;
+            const float left=0.04f;
+            float fit=Mathf.Max(1f,(0.74f-left)/Mathf.Max(0.1f,right-left));
+            float tangent=Mathf.Tan(_cameraFov*Mathf.Deg2Rad*0.5f);
+            camera.fieldOfView=Mathf.Atan(tangent*referenceAspect/camera.aspect*fit)*2f*Mathf.Rad2Deg;
+            float depth=Mathf.Abs(Vector3.Dot(LobbyLineupLayout.Position(0)-_cameraPosition,camera.transform.forward));
+            float extraHalfWidth=depth*tangent*referenceAspect*(fit-1f);
+            camera.transform.position=_cameraPosition+camera.transform.right*(extraHalfWidth*(1f-2f*left));
+        }
+        private void RestorePresentationCamera()
+        {
+            if(_presentationCamera!=null) {
+                _presentationCamera.fieldOfView=_cameraFov;
+                _presentationCamera.transform.position=_cameraPosition;
+            }
+        }
 
         private void EnsureBodyFillLights()
         {
@@ -60,6 +93,7 @@ namespace EchoProtocol.UI
 
         private void Update()
         {
+            FitNarrowPresentation();
             if (Time.unscaledTime < _nextRefreshAt) return;
 
             _nextRefreshAt = Time.unscaledTime + refreshInterval;
@@ -68,6 +102,7 @@ namespace EchoProtocol.UI
 
         private void OnDisable()
         {
+            RestorePresentationCamera();
             DisableAll();
         }
 

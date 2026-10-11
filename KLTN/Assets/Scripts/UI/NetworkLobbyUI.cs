@@ -56,6 +56,18 @@ namespace EchoProtocol.UI
         private bool _inputsInitialized;
         private float _nextResolve;
         private RoomInfoViewModel _room = new RoomInfoViewModel();
+        private readonly Vector3[] _panelCorners = new Vector3[4];
+        public float PresentationRightEdge
+        {
+            get
+            {
+                if(startButton==null || Screen.width<=0)return 0.74f;
+                var canvas=startButton.GetComponentInParent<Canvas>();
+                ((RectTransform)startButton.transform).GetWorldCorners(_panelCorners);
+                var camera=canvas!=null && canvas.renderMode!=RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+                return Mathf.Clamp(RectTransformUtility.WorldToScreenPoint(camera,_panelCorners[0]).x/Screen.width-0.03f,0.25f,0.9f);
+            }
+        }
         private bool Connected => bootstrap != null && bootstrap.HasRunningRunner;
         private bool Busy => _busy || (bootstrap != null && bootstrap.IsBusy);
 
