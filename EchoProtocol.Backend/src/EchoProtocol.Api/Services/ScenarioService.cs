@@ -38,6 +38,10 @@ public sealed class ScenarioService(
             var existingById = await LoadDecisionAsync(request.DecisionId, cancellationToken);
             if (existingById is not null)
             {
+                if (!existingById.IsCurrent)
+                    return Fail(
+                        "Scenario decision is no longer current",
+                        ErrorCodes.ScenarioDecisionConflict);
                 if (existingById.MatchId != matchId || existingById.HostUserId != callerUserId
                     || !string.Equals(existingById.RequestFingerprint, requestFingerprint, StringComparison.Ordinal))
                     return Fail("DecisionId has conflicting semantics", ErrorCodes.ScenarioDecisionIdentityConflict);
@@ -213,7 +217,8 @@ public sealed class ScenarioService(
             await tx.RollbackAsync(cancellationToken);
             db.ChangeTracker.Clear();
             var stored = await LoadDecisionAsync(request.DecisionId, cancellationToken);
-            if (stored is not null && stored.MatchId == matchId && stored.HostUserId == callerUserId
+            if (stored is { IsCurrent: true } &&
+                stored.MatchId == matchId && stored.HostUserId == callerUserId
                 && string.Equals(stored.RequestFingerprint, requestFingerprint, StringComparison.Ordinal)
                 && await RosterStillMatchesAsync(stored, cancellationToken)
                 && CommittedConfigMatches(stored))
@@ -264,7 +269,9 @@ public sealed class ScenarioService(
         {
             await tx.RollbackAsync(cancellationToken); db.ChangeTracker.Clear();
             var stored = await LoadDecisionAsync(decisionId, cancellationToken);
-            if (stored is not null && CommittedConfigMatches(stored)
+            if (stored is { IsCurrent: true } &&
+                await RosterStillMatchesAsync(stored, cancellationToken) &&
+                CommittedConfigMatches(stored)
                 && Matches(stored, request) && stored.ApplyReceipt is not null)
                 return ServiceResult<ScenarioDecisionResponse>.Success(Map(stored, true), "Scenario apply confirmation replayed");
             return Fail("Concurrent apply confirmation conflict", ErrorCodes.ScenarioApplyConflict);

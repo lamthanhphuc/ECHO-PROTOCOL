@@ -210,6 +210,36 @@ public sealed partial class ScenarioServiceTests
         Assert.False(result.PressureVerified);
         Assert.False(result.SupplyLedgerVerified);
         Assert.False(result.MinionPopulationVerified);
+
+        var invalidFingerprint = await verifier.VerifyAsync(
+            f.MatchId,
+            request with { EvidenceFingerprint = "invalid" });
+        Assert.Equal("P8_SOURCE_REQUEST_INVALID", invalidFingerprint.ReasonCode);
+
+        var invalidContext = await verifier.VerifyAsync(
+            f.MatchId,
+            request with { ComparisonContextKey = "" });
+        Assert.Equal("P8_SOURCE_REQUEST_INVALID", invalidContext.ReasonCode);
+
+        var invalidVersion = await verifier.VerifyAsync(
+            f.MatchId,
+            request with { SourceVersion = new string('x', 81) });
+        Assert.Equal("P8_SOURCE_REQUEST_INVALID", invalidVersion.ReasonCode);
+
+        var injected = await verifier.VerifyAsync(
+            f.MatchId,
+            request with
+            {
+                SourceVersion = "AED_PHASE8_SOURCE_REFERENCES_V1",
+                Supply = new[]
+                {
+                    new AEDPhase8SupplyEvidenceV1(
+                        "tool-1", 1, 1, "WorldSpawn", "World", null,
+                        null, true, 1, "forged-source")
+                }
+            });
+        Assert.Equal("P8_SOURCE_REFERENCE_ONLY", injected.ReasonCode);
+        Assert.False(injected.SupplyLedgerVerified);
     }
 
     [Fact, Trait("Category", "AEDv2")]

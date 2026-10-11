@@ -273,6 +273,29 @@ public sealed partial class ScenarioServiceTests
         Assert.Empty(await f.Db.ScenarioApplyReceipts.ToArrayAsync());
     }
 
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task SupersededDecision_CannotReplay()
+    {
+        await using var f = await Fixture.CreateAsync();
+        var request = Request();
+        var first = await f.Service.ResolvePreMatchAsync(
+            f.HostId, f.MatchId, request);
+        Assert.True(first.IsSuccess);
+
+        var decision = await f.Db.ScenarioDecisions
+            .SingleAsync(x => x.DecisionId == request.DecisionId);
+        decision.IsCurrent = false;
+        await f.Db.SaveChangesAsync();
+
+        var replay = await f.Service.ResolvePreMatchAsync(
+            f.HostId, f.MatchId, request);
+
+        Assert.False(replay.IsSuccess);
+        Assert.Equal(
+            ErrorCodes.ScenarioDecisionConflict,
+            replay.ErrorCode);
+    }
+
     [Fact, Trait("Category", "M4ScenarioService")]
     public async Task MissingOrIncompatibleProductionFallback_ReturnsConfigurationError()
     {
