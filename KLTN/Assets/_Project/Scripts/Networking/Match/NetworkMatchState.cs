@@ -2606,6 +2606,18 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        private static bool HasUnsafeAEDMinion()
+        {
+            return FindObjectsByType<
+                    EchoProtocol.AI.Minions.CreepMinionRuntime>(
+                    FindObjectsSortMode.None)
+                .Any(minion =>
+                    minion != null &&
+                    minion.State is
+                        EchoProtocol.AI.Minions.CreepMinionState.Track or
+                        EchoProtocol.AI.Minions.CreepMinionState.Harass);
+        }
+
         private bool IsAEDv2BoundarySafe()
         {
             var stalker = FindAnyObjectByType<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
@@ -2613,6 +2625,8 @@ namespace EchoProtocol.Networking
                 || stalker.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.CHASE
                 || stalker.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.ATTACK
                 || stalker.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.RECOVER)
+                return false;
+            if (HasUnsafeAEDMinion())
                 return false;
             foreach (var player in Runner.ActivePlayers)
                 if (Runner.TryGetPlayerObject(player, out var playerObject)
@@ -2634,6 +2648,9 @@ namespace EchoProtocol.Networking
 
             var safe = true;
             var stalkerUnsafe = false;
+            var minionUnsafe = HasUnsafeAEDMinion();
+            if (minionUnsafe)
+                safe = false;
             var playerUnsafe = false;
             var stalker = FindAnyObjectByType<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
             if (stalker == null || stalker.ReplicatedSpecialPhaseValue != 0
@@ -2669,7 +2686,12 @@ namespace EchoProtocol.Networking
                 Object.HasStateAuthority,
                 authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive && authority.Difficulty == MatchDifficulty.Normal,
                 safe, stalkerUnsafe, playerUnsafe);
-            RuntimeLog.Log(RuntimeLogCategory.Aed, $"[AED_P8][LOCAL_GATE] eligible={phase8Gate.LocallyEligible} reason={phase8Gate.ReasonCode} canApply={phase8Gate.CanApplyGameplay}");
+            RuntimeLog.Log(RuntimeLogCategory.Aed,
+                $"[AED_P8][LOCAL_GATE] " +
+                $"eligible={phase8Gate.LocallyEligible} " +
+                $"reason={phase8Gate.ReasonCode} " +
+                $"canApply={phase8Gate.CanApplyGameplay} " +
+                $"minionUnsafe={minionUnsafe}");
             if (settings.ExtendedPolicyShadowEnabled &&
                 authority.LastFrozenAEDv2Evidence != null &&
                 authority.TryGetAEDPhase8SourceReferences(
