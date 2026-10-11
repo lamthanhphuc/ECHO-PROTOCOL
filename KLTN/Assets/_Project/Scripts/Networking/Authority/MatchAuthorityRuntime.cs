@@ -122,9 +122,10 @@ namespace EchoProtocol.Networking.Authority
         {
             if (!HasStateAuthority || !_telemetryMatchActive) return;
             string targetUserId = null;
-            if (target.IsValid
-                && !TryResolveVerifiedBackendUserId(target, out targetUserId)
-                && state == "CHASE")
+            if (state == "CHASE" &&
+                (target == PlayerRef.None ||
+                 !target.IsValid ||
+                 !TryResolveVerifiedBackendUserId(target, out targetUserId)))
                 _aedPursuitEvidence.MarkIncomplete();
             _aedPursuitEvidence.Observe(true, stalkerNetworkId,
                 targetUserId, state, tick, tickRate,
@@ -158,8 +159,9 @@ namespace EchoProtocol.Networking.Authority
         {
             if (!HasStateAuthority || !_telemetryMatchActive) return;
             string userId = null;
-            if (target.IsValid && !TryResolveVerifiedBackendUserId(target, out userId)
-                && (state == "Track" || state == "Harass"))
+            if ((state == "Track" || state == "Harass") &&
+                target.IsRealPlayer &&
+                !TryResolveVerifiedBackendUserId(target, out userId))
                 _aedMinionEvidence.MarkIncomplete();
             _aedMinionEvidence.Observe(true, minionId.ToString(), zone,
                 state, userId, tick, tickRate,
@@ -177,9 +179,10 @@ namespace EchoProtocol.Networking.Authority
             if (!HasStateAuthority || !_telemetryMatchActive) return;
             string userId = null;
             string relatedUserId = null;
-            if (user.IsValid && !TryResolveVerifiedBackendUserId(user, out userId)
-                || relatedUser.IsValid
-                    && !TryResolveVerifiedBackendUserId(relatedUser, out relatedUserId))
+            if ((user.IsRealPlayer &&
+                 !TryResolveVerifiedBackendUserId(user, out userId)) ||
+                (relatedUser.IsRealPlayer &&
+                 !TryResolveVerifiedBackendUserId(relatedUser, out relatedUserId)))
             {
                 _aedMinionEvidence.MarkIncomplete();
                 return;
@@ -237,7 +240,7 @@ namespace EchoProtocol.Networking.Authority
         private bool _runtimeNoiseTelemetryCapacityWarningLogged;
         private bool _runtimeNoiseTelemetryInactiveWarningLogged;
         [SerializeField] private bool _researchCaptureEnabled;
-        [SerializeField] private ScenarioResolutionMode requestedScenarioResolutionMode = ScenarioResolutionMode.Fixed;
+        [SerializeField] private ScenarioResolutionMode requestedScenarioResolutionMode = ScenarioResolutionMode.Adaptive;
         [SerializeField] private MatchDifficulty requestedDifficulty = MatchDifficulty.Normal;
         [SerializeField] private string experimentCondition;
         [SerializeField]
@@ -1302,6 +1305,20 @@ namespace EchoProtocol.Networking.Authority
                         _aedSurvivalEvidence.LastFrozen,
                         CurrentAuthorityTick,
                         pressureTickRate);
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                var pressure = LastFrozenAEDCurrentPressure;
+
+                Debug.Log(
+                    $"[AED_P8][PRESSURE_DIAG] " +
+                    $"complete={pressure?.SourceComplete} " +
+                    $"level={pressure?.Level} " +
+                    $"reasons={string.Join(",", pressure?.ReasonCodes ?? Array.Empty<string>())} " +
+                    $"pursuitIncomplete={_aedPursuitEvidence.IsIncomplete} " +
+                    $"minionIncomplete={_aedMinionEvidence.IsIncomplete} " +
+                    $"minionInvalid={_aedMinionEvidence.IsInvalid} " +
+                    $"survivalUsable={_aedSurvivalEvidence.LastFrozen?.IsUsable}");
+#endif
             }
         }
 
