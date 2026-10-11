@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using EchoProtocol.Api;
+using EchoProtocol.Auth;
 
 namespace EchoProtocol.AI.AED
 {
