@@ -7,6 +7,39 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed class AEDPreMatchPolicyV1Tests
 {
+    [Theory, Trait("Category", "AEDv2")]
+    [InlineData(0d, 0d, "AED-PRE-010-SURVIVAL-LOW-RELIEVE")]
+    [InlineData(29.99d, 70d, "AED-PRE-010-SURVIVAL-LOW-RELIEVE")]
+    [InlineData(30d, 29.99d, "AED-PRE-020-NOISE-LOW-RELIEVE")]
+    [InlineData(30d, 30d, "AED-PRE-040-MIXED-HOLD")]
+    [InlineData(69.99d, 69.99d, "AED-PRE-040-MIXED-HOLD")]
+    [InlineData(70d, 69.99d, "AED-PRE-040-MIXED-HOLD")]
+    [InlineData(69.99d, 70d, "AED-PRE-040-MIXED-HOLD")]
+    [InlineData(70d, 70d, "AED-PRE-030-BOTH-HIGH-INCREASE")]
+    [InlineData(100d, 100d, "AED-PRE-030-BOTH-HIGH-INCREASE")]
+    public void SelectRule_MatchesUnityThresholdContract(
+        double survival,
+        double noise,
+        string expected)
+    {
+        var snapshot = new AdaptiveInputSnapshot
+        {
+            Validity = AdaptiveSnapshotValidity.Valid,
+            TeamSize = 2,
+            SurvivalAggregationStatus = "AVAILABLE",
+            NoiseAggregationStatus = "AVAILABLE",
+            SurvivalObservedActiveCount = 2,
+            NoiseObservedActiveCount = 2,
+            SurvivalMeanObservedScore = (decimal)survival,
+            NoiseMeanObservedScore = (decimal)noise
+        };
+
+        Assert.Equal(
+            expected,
+            AEDPreMatchPolicyV1.SelectRule(
+                snapshot, 30m, 70m, 30m, 70m));
+    }
+
     [Fact, Trait("Category", "AEDv2")]
     public void SelectRule_UsesDeterministicPriority()
     {
