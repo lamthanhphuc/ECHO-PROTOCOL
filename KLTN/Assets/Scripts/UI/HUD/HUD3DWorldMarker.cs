@@ -31,6 +31,9 @@ namespace EchoProtocol.UI.HUD
         [SerializeField] private Color terminalColor = new Color(0f, 0.95f, 1f, 1f);
         [SerializeField] private Color distributionPanelColor = new Color(0.2f, 1f, 0.4f, 1f);
 
+        private float _nextTargetRefresh;
+        private readonly Dictionary<PlayerDownState, (int Seconds, EchoProtocol.Settings.GameLocale Locale, string Title)> _rescueTitles = new();
+        private readonly List<PlayerDownState> _staleRescueTitles = new();
         private Camera _mainCamera;
         private MatchFlowController _matchFlow;
         private EscapeDoorCountdown _escapeDoor;
@@ -77,7 +80,11 @@ namespace EchoProtocol.UI.HUD
                 if (_mainCamera == null) return;
             }
 
-            CollectTargets();
+            if (Time.unscaledTime >= _nextTargetRefresh)
+            {
+                _nextTargetRefresh = Time.unscaledTime + 0.2f;
+                CollectTargets();
+            }
             RenderMarkers();
         }
 
@@ -88,10 +95,12 @@ namespace EchoProtocol.UI.HUD
             _targetColors.Clear();
 
             // 1. Downed Teammates (Need Help)
-            PlayerDownState[] players = FindObjectsByType<PlayerDownState>();
-            for (int i = 0; i < players.Length; i++)
+            _staleRescueTitles.Clear();
+            foreach (var entry in _rescueTitles)
+                if (entry.Key == null || !entry.Key.isActiveAndEnabled || !entry.Key.IsDowned) _staleRescueTitles.Add(entry.Key);
+            foreach (var player in _staleRescueTitles) _rescueTitles.Remove(player);
+            foreach (var p in PlayerDownState.RegisteredPlayers)
             {
-                PlayerDownState p = players[i];
                 if (p == null || !p.IsDowned) continue;
 
                 // Check if this is not local player (or if local player is downed, local player doesn't need 3D offscreen marker)
@@ -99,7 +108,14 @@ namespace EchoProtocol.UI.HUD
                     continue;
 
                 _targetTransforms.Add(p.transform);
-                _targetTitles.Add($"CỨU ĐỒNG ĐỘI ({p.BleedoutRemaining:F0}s)");
+                int seconds = Mathf.CeilToInt(p.BleedoutRemaining);
+                var locale = EchoProtocol.Settings.GameLanguage.Current;
+                if (!_rescueTitles.TryGetValue(p, out var cached) || cached.Seconds != seconds || cached.Locale != locale)
+                {
+                    cached = (seconds, locale, EchoProtocol.Settings.GameLanguage.Choose($"Cứu đồng đội ({seconds}s)", $"Revive teammate ({seconds}s)"));
+                    _rescueTitles[p] = cached;
+                }
+                _targetTitles.Add(cached.Title);
                 _targetColors.Add(downedTeammateColor);
             }
 
