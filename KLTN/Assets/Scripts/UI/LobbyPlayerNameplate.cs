@@ -1,4 +1,5 @@
 using EchoProtocol.Networking;
+using EchoProtocol.Settings;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -29,6 +30,7 @@ namespace EchoProtocol.UI
 
         private string _displayedName;
         private bool _displayedReady;
+        private GameLocale _displayedLocale;
 
         private void Awake()
         {
@@ -74,14 +76,16 @@ namespace EchoProtocol.UI
             bool ready = _playerState.IsReady;
 
             if (_displayedReady != ready
+                || _displayedLocale != GameLanguage.Current
                 || _stateText.text.Length == 0)
             {
                 _displayedReady = ready;
+                _displayedLocale = GameLanguage.Current;
 
                 _stateText.text =
                     ready
-                        ? "READY"
-                        : "NOT READY";
+                        ? GameLanguage.Choose("SẴN SÀNG", "READY")
+                        : GameLanguage.Choose("CHƯA SẴN SÀNG", "NOT READY");
 
                 _stateText.color =
                     ready
