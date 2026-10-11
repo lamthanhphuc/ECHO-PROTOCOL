@@ -45,4 +45,30 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
         Assert.AreEqual(matchId, snapshot.MatchId);
         Assert.AreEqual(1u, snapshot.PhaseOrdinal);
     }
+
+    [Test]
+    public void ValidMinionLifecycle_PreservesNetworkIdentity()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var matchId = Guid.NewGuid();
+        collector.BeginMatch(matchId);
+        collector.RecordMinionSpawn("minion-1", 2, 10, "spawn-1");
+        collector.RecordMinionDespawn("minion-1", 2, 20, "despawn-1");
+        Assert.True(collector.TryFreeze(matchId, 1, out var snapshot));
+        Assert.AreEqual(2, snapshot.Minions.Count);
+        Assert.AreEqual("minion-1", snapshot.Minions[0].NetworkInstanceId);
+        Assert.AreEqual("SPAWNED", snapshot.Minions[0].State);
+        Assert.AreEqual("DESPAWNED", snapshot.Minions[1].State);
+        Assert.False(snapshot.CoverageComplete);
+    }
+
+    [Test]
+    public void DuplicateOccurrenceAcrossInstances_IsRejected()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordMinionSpawn("minion-1", 1, 10, "shared-key");
+        Assert.Throws<InvalidOperationException>(() =>
+            collector.RecordMinionSpawn("minion-2", 1, 11, "shared-key"));
+    }
 }

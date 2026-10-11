@@ -51,6 +51,7 @@ namespace EchoProtocol.AI.AED
     {
         private readonly List<AEDPhase8ToolSourceV1> _tools = new();
         private readonly List<AEDPhase8MinionSourceV1> _minions = new();
+        private readonly HashSet<string> _occurrenceKeys = new(StringComparer.Ordinal);
         private Guid _matchId;
 
         public void BeginMatch(Guid matchId)
@@ -66,6 +67,7 @@ namespace EchoProtocol.AI.AED
             if (toolId is not (1 or 2 or 3 or 4 or 6))
                 throw new ArgumentOutOfRangeException(nameof(toolId));
             if (_tools.Any(x => x.InstanceId == instanceId)) throw new InvalidOperationException("AED_P8_DUPLICATE_TOOL_INSTANCE");
+            RegisterOccurrence(occurrenceKey);
             _tools.Add(new AEDPhase8ToolSourceV1(instanceId, toolId, zone, "WorldSpawn", "World", null, null, tick, occurrenceKey));
         }
 
@@ -78,6 +80,7 @@ namespace EchoProtocol.AI.AED
             if (string.IsNullOrWhiteSpace(newLocation) ||
                 remainingCharges < 0 ||
                 tick <= previous.SourceTick) throw new InvalidOperationException("AED_P8_INVALID_TOOL_TRANSITION");
+            RegisterOccurrence(occurrenceKey);
             _tools.Add(new AEDPhase8ToolSourceV1(instanceId, previous.ToolId, previous.Zone, previous.Origin, newLocation, ownerUserId, remainingCharges, tick, occurrenceKey));
         }
 
@@ -85,6 +88,7 @@ namespace EchoProtocol.AI.AED
         {
             RequireActive(); RequireRow(networkInstanceId, zone, tick, occurrenceKey);
             if (_minions.Any(x => x.NetworkInstanceId == networkInstanceId)) throw new InvalidOperationException("AED_P8_DUPLICATE_MINION_INSTANCE");
+            RegisterOccurrence(occurrenceKey);
             _minions.Add(new AEDPhase8MinionSourceV1(networkInstanceId, zone, "SPAWNED", tick, occurrenceKey));
         }
 
@@ -94,6 +98,7 @@ namespace EchoProtocol.AI.AED
             var spawn = _minions.LastOrDefault(x => x.NetworkInstanceId == networkInstanceId && x.State == "SPAWNED");
             var terminal = _minions.LastOrDefault(x => x.NetworkInstanceId == networkInstanceId && x.State == "DESPAWNED");
             if (spawn == null || terminal != null || spawn.Zone != zone || tick <= spawn.SourceTick) throw new InvalidOperationException("AED_P8_INVALID_MINION_TRANSITION");
+            RegisterOccurrence(occurrenceKey);
             _minions.Add(new AEDPhase8MinionSourceV1(networkInstanceId, zone, "DESPAWNED", tick, occurrenceKey));
         }
 
@@ -107,7 +112,13 @@ namespace EchoProtocol.AI.AED
         }
 
         public void ResetMatch()
-        { _matchId = Guid.Empty; _tools.Clear(); _minions.Clear(); }
+        { _matchId = Guid.Empty; _tools.Clear(); _minions.Clear(); _occurrenceKeys.Clear(); }
+
+        private void RegisterOccurrence(string occurrenceKey)
+        {
+            if (!_occurrenceKeys.Add(occurrenceKey))
+                throw new InvalidOperationException("AED_P8_DUPLICATE_OCCURRENCE");
+        }
 
         private void RequireActive()
         { if (_matchId == Guid.Empty) throw new InvalidOperationException("AED_P8_MATCH_NOT_STARTED"); }

@@ -91,6 +91,8 @@ namespace EchoProtocol.Networking.Authority
             new AEDPursuitEvidenceCollectorV1();
         private readonly AEDMinionEvidenceCollectorV1 _aedMinionEvidence =
             new AEDMinionEvidenceCollectorV1();
+        private readonly AEDPhase8AuthoritySourceCollectorV1 _aedPhase8Source =
+            new AEDPhase8AuthoritySourceCollectorV1();
         public AEDv2CurrentMatchEvidence LastFrozenAEDv2Evidence => _aedv2Evidence.LastFrozen;
         public IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence> AEDv2PlayerEvidence => _aedv2Evidence.PlayerEvidence;
         public IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence> LastFrozenAEDv2PlayerEvidence => _aedv2Evidence.LastFrozenPlayerEvidence;
@@ -191,6 +193,44 @@ namespace EchoProtocol.Networking.Authority
                 occurrenceKey, tick, userId, relatedUserId, objectId,
                 effectKind, attemptOrdinal, accepted, seconds, sourceEventId,
                 position.x, position.y, position.z);
+        }
+
+        public void RecordPhase8MinionSpawn(NetworkId minionId, int zone, long tick)
+        {
+            if (!HasStateAuthority || !_telemetryMatchActive) return;
+            try
+            {
+                _aedPhase8Source.RecordMinionSpawn(
+                    minionId.ToString(), zone, tick,
+                    $"p8:minion:{minionId}:spawn");
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log($"[AED_P8][MINION_SOURCE] action=SPAWN id={minionId} zone={zone} tick={tick}");
+#endif
+            }
+            catch (Exception exception)
+            {
+                _aedMinionEvidence.MarkIncomplete();
+                Debug.LogWarning($"[AED_P8][MINION_SOURCE_INVALID] action=SPAWN id={minionId} reason={exception.Message}");
+            }
+        }
+
+        public void RecordPhase8MinionDespawn(NetworkId minionId, int zone, long tick)
+        {
+            if (!HasStateAuthority || !_telemetryMatchActive) return;
+            try
+            {
+                _aedPhase8Source.RecordMinionDespawn(
+                    minionId.ToString(), zone, tick,
+                    $"p8:minion:{minionId}:despawn");
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log($"[AED_P8][MINION_SOURCE] action=DESPAWN id={minionId} zone={zone} tick={tick}");
+#endif
+            }
+            catch (Exception exception)
+            {
+                _aedMinionEvidence.MarkIncomplete();
+                Debug.LogWarning($"[AED_P8][MINION_SOURCE_INVALID] action=DESPAWN id={minionId} reason={exception.Message}");
+            }
         }
 
         public void RecordMinionDespawn(NetworkId minionId, long tick)
@@ -820,6 +860,7 @@ namespace EchoProtocol.Networking.Authority
             _aedToolNoiseEvidence.Clear();
             _aedPursuitEvidence.Clear();
             _aedMinionEvidence.Clear();
+            _aedPhase8Source.ResetMatch();
             LastFrozenAEDCurrentPressure = null;
             BackendAdaptiveInputSnapshotProvider.Current?.ClearForMatch(oldMatchId);
             ScenarioConfigRuntimeRegistry.Clear(oldMatchId);
@@ -1051,6 +1092,7 @@ namespace EchoProtocol.Networking.Authority
 
             _matchStartedAtUtc = occurredAtUtc;
             _telemetryMatchActive = true;
+            _aedPhase8Source.BeginMatch(MatchId);
             _pendingAuthoritativeTelemetryMatchStart = false;
             _matchEndEmitted = false;
             _currentTelemetryPhase = "CORE_COLLECTION";

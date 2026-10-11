@@ -240,6 +240,16 @@ namespace EchoProtocol.AI.Minions
             {
                 // Runtime log intentionally disabled.
             }
+
+            if (Runner != null &&
+                Runner.IsServer &&
+                Object != null)
+            {
+                MatchAuthorityRuntime.Instance?.RecordPhase8MinionSpawn(
+                    Object.Id,
+                    (int)Zone,
+                    Runner.Tick.Raw);
+            }
         }
 
         private bool TryActivateAgent()
@@ -273,10 +283,20 @@ namespace EchoProtocol.AI.Minions
         {
             _navigation?.SetAuthoritativeLocomotion(false);
             _navigation = null;
-            if (hasState && runner != null && runner.IsServer
-                && Object != null && Object.HasStateAuthority)
-                MatchAuthorityRuntime.Instance?.RecordMinionDespawn(
+            if (hasState &&
+                runner != null &&
+                runner.IsServer &&
+                Object != null &&
+                Object.HasStateAuthority)
+            {
+                var authority = MatchAuthorityRuntime.Instance;
+                authority?.RecordMinionDespawn(
                     Object.Id, runner.Tick.Raw);
+                authority?.RecordPhase8MinionDespawn(
+                    Object.Id,
+                    (int)Zone,
+                    runner.Tick.Raw);
+            }
             if (_noiseService != null) _noiseService.RuntimeNoiseAccepted -= HandleRuntimeNoiseAccepted;
             if (hasState && Object.HasStateAuthority) ReleaseStolenCoreAuthoritative();
         }
