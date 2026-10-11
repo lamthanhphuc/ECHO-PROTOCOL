@@ -1835,7 +1835,12 @@ public sealed class MatchResultPostgreSqlIntegrationTests
     {
         var clock = new FixedTimeProvider(Now);
         var builder = new AdaptiveInputSnapshotBuilder(db, clock);
-        return new ScenarioService(db, new ScenarioConfigRegistry(db), builder, clock);
+        return new ScenarioService(
+            db,
+            new ScenarioConfigRegistry(db),
+            builder,
+            clock,
+            Options.Create(new AEDPreMatchPolicySettings { Enabled = false }));
     }
 
     private static async Task<MatchSeed> SeedScenarioDecisionAsync(PostgresScope scope)

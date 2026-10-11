@@ -1,12 +1,14 @@
 using System.Data;
 using System.Text.Json;
 using EchoProtocol.Api.Common;
+using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.DTOs.Scenarios;
 using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace EchoProtocol.Api.Services;
@@ -15,7 +17,8 @@ public sealed class ScenarioService(
     AppDbContext db,
     IScenarioConfigRegistry registry,
     IAdaptiveInputSnapshotBuilder snapshotBuilder,
-    TimeProvider timeProvider) : IScenarioService
+    TimeProvider timeProvider,
+    IOptions<AEDPreMatchPolicySettings> policyOptions) : IScenarioService
 {
     public async Task<ServiceResult<ScenarioDecisionResponse>> ResolvePreMatchAsync(
         Guid callerUserId, Guid matchId, ResolveScenarioRequest request,
@@ -66,13 +69,114 @@ public sealed class ScenarioService(
                 return Fail(fixedResult.Message, fixedResult.ErrorCode!);
             var config = fixedResult.Data!;
             var adaptive = request.ResolutionMode == ScenarioResolutionMode.Adaptive;
-            var fallbackReason = adaptive ? "POLICY_CONFIG_INVALID" : null;
+            var settings = policyOptions.Value;
+
+            string? fallbackReason = adaptive ? "POLICY_CONFIG_INVALID" : null;
+
+            ScenarioCandidateValidationStatus? candidateStatus =
+                adaptive ? ScenarioCandidateValidationStatus.NotEvaluated : null;
+
+            var resolutionResult = adaptive
+                ? "FIXED_FALLBACK"
+                : "FIXED_CONFIG_ISSUED";
+
+            if (adaptive && settings.Enabled)
+            {
+                candidateStatus = ScenarioCandidateValidationStatus.Invalid;
+
+                if (!settings.IsContractValid() ||
+                    config.ContentWhitelistVersion != settings.ContentWhitelistVersion ||
+                    !settings.SupportItemBudgetCandidateValues.Contains(
+                        config.SupportItemBudget) ||
+                    !settings.ChaseSpeedCandidateValues.Contains(config.ChaseSpeed))
+                {
+                    fallbackReason = "POLICY_CONFIG_INVALID";
+                }
+                else
+                {
+                    var snapshot = snapshotResult.Snapshot;
+
+                    var evidenceComplete =
+                        snapshot.Players.Count == snapshot.TeamSize &&
+                        snapshot.Players.All(x =>
+                            x.SurvivalStatus == "ACTIVE" &&
+                            x.NoiseStatus == "ACTIVE" &&
+                            x.SurvivalSampleCount >=
+                                settings.MinimumSurvivalSampleCountPerObservedPlayer &&
+                            x.NoiseSampleCount >=
+                                settings.MinimumNoiseSampleCountPerObservedPlayer);
+
+                    var rule = evidenceComplete
+                        ? AEDPreMatchPolicyV1.SelectRule(
+                            snapshot,
+                            settings.SurvivalLowThreshold,
+                            settings.SurvivalHighThreshold,
+                            settings.NoiseLowThreshold,
+                            settings.NoiseHighThreshold)
+                        : null;
+
+                    if (rule is null)
+                    {
+                        fallbackReason = "INPUT_INVALID";
+                    }
+                    else if (rule == "AED-PRE-040-MIXED-HOLD")
+                    {
+                        fallbackReason = "HOLD_RULE";
+                        candidateStatus = ScenarioCandidateValidationStatus.Valid;
+                    }
+                    else
+                    {
+                        var candidates = await registry
+                            .GetProductionAdaptiveCandidatesAsync(
+                                request.UnityCompatibilityVersion,
+                                cancellationToken);
+
+                        if (!candidates.IsSuccess || candidates.Data is null)
+                        {
+                            fallbackReason = "ADAPTIVE_CONFIG_UNAVAILABLE";
+                        }
+                        else
+                        {
+                            var relief = rule is
+                                "AED-PRE-010-SURVIVAL-LOW-RELIEVE" or
+                                "AED-PRE-020-NOISE-LOW-RELIEVE";
+
+                            var values = relief
+                                ? settings.SupportItemBudgetCandidateValues
+                                : settings.ChaseSpeedCandidateValues;
+
+                            if (AEDPreMatchCandidateV1.TrySelect(
+                                    rule,
+                                    config,
+                                    candidates.Data,
+                                    values,
+                                    out var selected,
+                                    out var reason) && selected is not null)
+                            {
+                                config = selected;
+                                fallbackReason = null;
+                                candidateStatus =
+                                    ScenarioCandidateValidationStatus.Valid;
+                                resolutionResult = "ADAPTIVE_CONFIG_ISSUED";
+                            }
+                            else
+                            {
+                                fallbackReason = reason;
+                            }
+                        }
+                    }
+                }
+            }
+
             var configFingerprint = ScenarioFingerprint.Config(config);
             var decisionFingerprint = ScenarioFingerprint.Hash(
                 matchId.ToString("D"), "PRE_MATCH", request.ResolutionMode.ToString().ToUpperInvariant(),
                 snapshotResult.Snapshot.SnapshotContentFingerprint, config.ScenarioConfigId,
                 config.ScenarioConfigVersion, configFingerprint, config.PolicyVersion,
-                config.ContentWhitelistVersion, config.FallbackConfigVersion, fallbackReason);
+                config.ContentWhitelistVersion, config.FallbackConfigVersion, fallbackReason,
+                adaptive && settings.Enabled ? settings.PolicyConfigVersion : null,
+                adaptive && settings.Enabled ? settings.EvidencePolicyVersion : null,
+                adaptive && settings.Enabled ? settings.ParameterRegistryVersion : null);
             var decision = new ScenarioDecision
             {
                 DecisionId = request.DecisionId, MatchId = matchId, HostUserId = callerUserId,
@@ -80,11 +184,19 @@ public sealed class ScenarioService(
                 ExperimentCondition = request.ExperimentCondition?.Trim(), RequestFingerprint = requestFingerprint,
                 DecisionSemanticFingerprint = decisionFingerprint, ScenarioConfigId = config.ScenarioConfigId,
                 ScenarioConfigVersion = config.ScenarioConfigVersion, ScenarioConfigFingerprint = configFingerprint,
-                PolicyVersion = config.PolicyVersion, ContentWhitelistVersion = config.ContentWhitelistVersion,
+                PolicyVersion = config.PolicyVersion,
+                PolicyConfigVersion = adaptive && settings.Enabled
+                    ? settings.PolicyConfigVersion : null,
+                EvidencePolicyVersion = adaptive && settings.Enabled
+                    ? settings.EvidencePolicyVersion : null,
+                ParameterRegistryVersion = adaptive && settings.Enabled
+                    ? settings.ParameterRegistryVersion : null,
+                ContentWhitelistVersion = config.ContentWhitelistVersion,
                 FallbackConfigId = config.FallbackConfigId, FallbackConfigVersion = config.FallbackConfigVersion,
-                UsedFixedFallback = adaptive, FallbackReasonCode = fallbackReason,
-                CandidateValidationStatus = adaptive ? ScenarioCandidateValidationStatus.NotEvaluated : null,
-                ResolutionResult = adaptive ? "FIXED_FALLBACK" : "FIXED_CONFIG_ISSUED",
+                UsedFixedFallback = adaptive && config.ConfigSource == ScenarioConfigSource.Fixed,
+                FallbackReasonCode = fallbackReason,
+                CandidateValidationStatus = candidateStatus,
+                ResolutionResult = resolutionResult,
                 Status = ScenarioDecisionStatus.Committed, IsCurrent = true,
                 CommittedAtUtc = timeProvider.GetUtcNow().UtcDateTime,
                 Snapshot = snapshotResult.Snapshot
