@@ -80,6 +80,12 @@ builder.Services.Configure<PlayerAIProfileSettings>(
     builder.Configuration.GetSection(PlayerAIProfileSettings.SectionName));
 builder.Services.Configure<TeamProfileSettings>(
     builder.Configuration.GetSection(TeamProfileSettings.SectionName));
+builder.Services.AddOptions<AEDPreMatchPolicySettings>()
+    .Bind(builder.Configuration.GetSection(
+        AEDPreMatchPolicySettings.SectionName))
+    .Validate(x => x.IsContractValid(),
+        "AED pre-match policy configuration is invalid")
+    .ValidateOnStart();
 builder.Services.AddOptions<LoadoutSettings>()
     .Bind(builder.Configuration.GetSection(LoadoutSettings.SectionName))
     .Validate(settings => settings.TeamToolSlotCount == 1,
