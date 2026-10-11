@@ -27,11 +27,28 @@ public sealed class AEDPhase8SourceVerifierV1(AppDbContext db, ITelemetryEventRe
         var phaseName = ReadPhase(phaseStart.ValueJson);
         var phaseEnds = accepted.Where(x => x.MatchId == matchId && x.EventType == "PHASE_COMPLETED" && ReadPhase(x.ValueJson) == phaseName).ToArray();
         if (phaseEnds.Length != 1 || phaseStart.EventSequence >= phaseEnds[0].EventSequence) return new(true, false, false, false, false, "P8_SOURCE_PHASE_WINDOW_INVALID");
-        if (request.SourceEvents.Length == 0 ||
-            request.SourceEvents.Any(x => x == null || x.EventId == Guid.Empty || x.EventSequence <= 0 || string.IsNullOrWhiteSpace(x.EventType) || string.IsNullOrWhiteSpace(x.OccurrenceKey)) ||
+        if (request.SourceEvents.Any(x => x == null || x.EventId == Guid.Empty || x.EventSequence <= 0 || string.IsNullOrWhiteSpace(x.EventType) || string.IsNullOrWhiteSpace(x.OccurrenceKey)) ||
             request.SourceEvents.Select(x => x.EventId).Distinct().Count() != request.SourceEvents.Length ||
             request.SourceEvents.GroupBy(x => (x.EventType, x.OccurrenceKey)).Any(group => group.Count() > 1))
             return new(true, false, false, false, false, "P8_SOURCE_REFERENCE_INVALID");
+
+        var phaseEventIds = accepted
+            .Where(x =>
+                x.MatchId == matchId &&
+                x.EventSequence > phaseStart.EventSequence &&
+                x.EventSequence < phaseEnds[0].EventSequence)
+            .Select(x => x.Id)
+            .ToHashSet();
+
+        if (phaseEventIds.Count != request.SourceEvents.Length ||
+            !phaseEventIds.SetEquals(
+                request.SourceEvents.Select(x => x.EventId)))
+        {
+            return new(
+                true, false, false, false, false,
+                "P8_SOURCE_COVERAGE_MISMATCH");
+        }
+
         foreach (var source in request.SourceEvents)
         {
             if (!byId.TryGetValue(source.EventId, out var matches) || matches.Length != 1) return new(true, false, false, false, false, "P8_SOURCE_EVENT_NOT_ACCEPTED");

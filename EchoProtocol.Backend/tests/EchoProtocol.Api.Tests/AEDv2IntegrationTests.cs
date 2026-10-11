@@ -167,7 +167,49 @@ public sealed partial class ScenarioServiceTests
         var duplicated = await verifier.VerifyAsync(f.MatchId, request with { SourceEvents = new[] { reference, reference } });
         Assert.Equal("P8_SOURCE_REFERENCE_INVALID", duplicated.ReasonCode);
         var missing = await verifier.VerifyAsync(f.MatchId, request with { SourceEvents = Array.Empty<AEDPhase8SourceReferenceV1>() });
-        Assert.Equal("P8_SOURCE_REFERENCE_INVALID", missing.ReasonCode);
+        Assert.Equal("P8_SOURCE_COVERAGE_MISMATCH", missing.ReasonCode);
+
+        var omitted = PhaseEvent(f.MatchId, "SECURITY_HOLD_INTERRUPTED", "PHASE_ONE", 3, 15);
+        omitted.ValueJson["context"].AsBsonDocument["occurrenceKey"] = "hold-3";
+        var expandedEvents = events
+            .Select(x => x.EventType == "PHASE_COMPLETED"
+                ? CopySequence(x, 4)
+                : x)
+            .Append(omitted)
+            .ToArray();
+        var expandedRepo = new AcceptedEvidenceRepository(expandedEvents);
+        var expandedVerifier = new AEDPhase8SourceVerifierV1(f.Db, expandedRepo, new AEDv2PhaseEvidenceVerifier(f.Db, expandedRepo));
+        var uncovered = await expandedVerifier.VerifyAsync(f.MatchId, request);
+        Assert.True(uncovered.CanonicalVerified);
+        Assert.Equal("P8_SOURCE_COVERAGE_MISMATCH", uncovered.ReasonCode);
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_EmptyPhaseAcceptsEmptySourceReferences()
+    {
+        await using var f = await ValidAEDv2Fixture();
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+
+        var events = new[]
+        {
+            PhaseEvent(f.MatchId, "PHASE_STARTED", "PHASE_ONE", 1, 0),
+            PhaseEvent(f.MatchId, "PHASE_COMPLETED", "PHASE_ONE", 2, 20)
+        };
+        var users = f.Db.MatchPlayerBindings.Where(x => x.MatchId == f.MatchId).Select(x => x.UserId).ToArray();
+        var roster = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(f.MatchId.ToString("D") + "|" + string.Join(",", users.Select(x => x.ToString("D")).Order(StringComparer.Ordinal))))).ToLowerInvariant();
+        var fingerprint = AEDv2PhaseEvidenceVerifier.ComputeCanonicalFingerprint(f.MatchId, "PHASE_ONE", 1, roster, DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(20), users.Length, 0, 0, 0, 0, 0, 0, true, Array.Empty<string>());
+        var request = new AEDPhase8SourceUploadRequestV1(1, fingerprint, roster, "TEST_CONTEXT", "P8_SOURCE_TEST_V1", Array.Empty<AEDPhase8SourceReferenceV1>(), Array.Empty<AEDPhase8MetricEvidenceV1>(), Array.Empty<AEDPhase8SupplyEvidenceV1>(), Array.Empty<AEDPhase8MinionEvidenceV1>());
+        var repository = new AcceptedEvidenceRepository(events);
+        var verifier = new AEDPhase8SourceVerifierV1(f.Db, repository, new AEDv2PhaseEvidenceVerifier(f.Db, repository));
+
+        var result = await verifier.VerifyAsync(f.MatchId, request);
+        Assert.True(result.CanonicalVerified);
+        Assert.Equal("P8_SOURCE_AUTHORITATIVE_COVERAGE_INCOMPLETE", result.ReasonCode);
+        Assert.False(result.HistoricalSkillVerified);
+        Assert.False(result.PressureVerified);
+        Assert.False(result.SupplyLedgerVerified);
+        Assert.False(result.MinionPopulationVerified);
     }
 
     [Fact, Trait("Category", "AEDv2")]
