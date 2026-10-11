@@ -198,5 +198,14 @@ namespace EchoProtocol.Telemetry.Unity
         {
             return _initialized && _batchSender.TryFlush(DateTime.UtcNow);
         }
+
+        public bool TryGetPhaseSourceReferences(int completedPhaseOrdinal,
+            out TelemetrySourceIdentity[] references)
+        {
+            references = Array.Empty<TelemetrySourceIdentity>();
+            return _initialized && _eventFactory != null &&
+                _eventFactory.TryGetPhaseSourceReferences(
+                    completedPhaseOrdinal, out references);
+        }
     }
 }

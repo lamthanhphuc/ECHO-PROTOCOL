@@ -1872,6 +1872,18 @@ namespace EchoProtocol.Networking.Authority
             return accepted;
         }
 
+        public bool TryGetAEDPhase8SourceReferences(uint completedPhaseOrdinal,
+            out TelemetrySourceIdentity[] references)
+        {
+            references = Array.Empty<TelemetrySourceIdentity>();
+            if (!HasStateAuthority || !_telemetryMatchActive ||
+                _telemetry == null || !_telemetry.IsInitialized ||
+                completedPhaseOrdinal == 0 || completedPhaseOrdinal > int.MaxValue)
+                return false;
+            return _telemetry.TryGetPhaseSourceReferences(
+                (int)completedPhaseOrdinal, out references);
+        }
+
         public bool RecordPhaseStarted(string occurrenceKey, string phase, string reasonCode)
         {
             var nowUtc = DateTime.UtcNow;

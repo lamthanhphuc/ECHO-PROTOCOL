@@ -38,6 +38,23 @@ namespace EchoProtocol.Telemetry
         public const string WardenRouteActionReleased = "WARDEN_ROUTE_ACTION_RELEASED";
     }
 
+    public sealed class TelemetrySourceIdentity
+    {
+        public Guid EventId { get; }
+        public long EventSequence { get; }
+        public string EventType { get; }
+        public string OccurrenceKey { get; }
+
+        public TelemetrySourceIdentity(Guid eventId, long eventSequence,
+            string eventType, string occurrenceKey)
+        {
+            EventId = eventId;
+            EventSequence = eventSequence;
+            EventType = eventType;
+            OccurrenceKey = occurrenceKey;
+        }
+    }
+
     public enum TelemetryEventStatus
     {
         ActiveProduction,

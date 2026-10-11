@@ -245,4 +245,12 @@ namespace EchoProtocol.AI.AED
     {
         public string planFingerprint;
     }
+
+    [Serializable] public sealed class AEDPhase8SourceReferenceDtoV1 { public string eventId; public long eventSequence; public string eventType; public string occurrenceKey; }
+    [Serializable] public sealed class AEDPhase8MetricDtoV1 { public string userId; public string metricId; public string metricVersion; public string comparisonContextKey; public int eligible; public int resolvedSuccess; public int resolvedFailure; public int censored; public double? normalizedValue; public string confidenceStatus; public string[] sourceOccurrenceKeys; }
+    [Serializable] public sealed class AEDPhase8SupplyDtoV1 { public string instanceId; public int toolId; public int zone; public string origin; public string location; public string ownerUserId; public int? remainingCharges; public bool reachable; public long sourceTick; public string sourceOccurrenceKey; }
+    [Serializable] public sealed class AEDPhase8MinionDtoV1 { public string networkInstanceId; public int zone; public string state; public long sourceTick; public string sourceOccurrenceKey; }
+    [Serializable] public sealed class AEDPhase8SourceUploadDtoV1 { public int completedPhaseOrdinal; public string evidenceFingerprint; public string rosterIdentity; public string comparisonContextKey; public string sourceVersion; public AEDPhase8SourceReferenceDtoV1[] sourceEvents; public AEDPhase8MetricDtoV1[] metrics; public AEDPhase8SupplyDtoV1[] supply; public AEDPhase8MinionDtoV1[] minions; }
+    [Serializable] public sealed class AEDPhase8SourceVerificationDtoV1 { public bool canonicalVerified; public bool historicalSkillVerified; public bool pressureVerified; public bool supplyLedgerVerified; public bool minionPopulationVerified; public string reasonCode; }
+    [Serializable] public sealed class AEDPhase8SourceVerificationResponseV1 { public bool success; public string message; public string errorCode; public AEDPhase8SourceVerificationDtoV1 data; }
 }

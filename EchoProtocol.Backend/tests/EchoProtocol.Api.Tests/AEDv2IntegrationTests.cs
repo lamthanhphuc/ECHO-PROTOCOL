@@ -234,6 +234,8 @@ public sealed partial class ScenarioServiceTests
         var shadow = await service.SubmitAsync(f.HostId, f.MatchId, request);
         Assert.True(shadow.IsSuccess);
         Assert.Equal("NOT_APPLICABLE", shadow.Data!.ApplyStatus);
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
         var applied = await service.ConfirmAppliedAsync(f.HostId, f.MatchId,
             request.DecisionId, request.ResultingPlanFingerprint);
         Assert.Equal(ErrorCodes.ScenarioApplyConflict, applied.ErrorCode);

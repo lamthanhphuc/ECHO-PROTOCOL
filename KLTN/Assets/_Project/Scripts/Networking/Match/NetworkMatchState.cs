@@ -12,6 +12,7 @@ using EchoProtocol.Networking.Authority;
 using EchoProtocol.RelayA;
 using EchoProtocol.RelayB;
 using EchoProtocol.TeamTools;
+using EchoProtocol.Telemetry;
 using Fusion;
 using UnityEngine;
 
@@ -2467,7 +2468,8 @@ namespace EchoProtocol.Networking
                     nextPlan.Fingerprint(), token),
                 () => api.LastPlanSubmitRetryable,
                 () => CompletePhaseTransition(expected, next,
-                    MatchAuthorityRuntime.Instance, afterTransition));
+                    MatchAuthorityRuntime.Instance, afterTransition),
+                token => api.AbortPlanAsync(matchId, decisionId, token));
         }
 
         private void RecordCompletedPhase(MatchAuthorityRuntime runtime,
@@ -2668,6 +2670,19 @@ namespace EchoProtocol.Networking
                 authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive && authority.Difficulty == MatchDifficulty.Normal,
                 safe, stalkerUnsafe, playerUnsafe);
             RuntimeLog.Log(RuntimeLogCategory.Aed, $"[AED_P8][LOCAL_GATE] eligible={phase8Gate.LocallyEligible} reason={phase8Gate.ReasonCode} canApply={phase8Gate.CanApplyGameplay}");
+            if (settings.ExtendedPolicyShadowEnabled &&
+                authority.LastFrozenAEDv2Evidence != null &&
+                authority.TryGetAEDPhase8SourceReferences(
+                    authority.LastFrozenAEDv2Evidence.PhaseOrdinal,
+                    out var sourceReferences))
+            {
+                _ = UploadPhase8SourcesAsync(
+                    authority.MatchId,
+                    authority.LastFrozenAEDv2Evidence.PhaseOrdinal,
+                    authority.LastFrozenAEDv2Evidence.EvidenceFingerprint,
+                    authority.AEDv2RosterIdentity,
+                    sourceReferences);
+            }
             if (settings.ExtendedPolicyShadowEnabled && phase8Gate.LocallyEligible)
             {
                 var frozenEvidence = authority.LastFrozenAEDv2Evidence;
@@ -2748,6 +2763,47 @@ namespace EchoProtocol.Networking
             catch (Exception exception)
             {
                 Debug.LogWarning($"[AED_P8][BACKEND_EVIDENCE] match={matchId:D} phase={completedOrdinal} failure={exception.GetType().Name}");
+            }
+        }
+
+        private static async Task UploadPhase8SourcesAsync(
+            Guid matchId, uint phaseOrdinal, string evidenceFingerprint,
+            string rosterIdentity, TelemetrySourceIdentity[] references)
+        {
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+                var api = new AEDSnapshotApiService();
+                var probe = await api.ProbeDirectorEvidenceAsync(
+                    matchId, phaseOrdinal, evidenceFingerprint, timeout.Token);
+                if (probe?.canonicalEvidenceVerified != true)
+                {
+                    Debug.LogWarning("[AED_P8] Canonical evidence unavailable.");
+                    return;
+                }
+                var request = new AEDPhase8SourceUploadDtoV1
+                {
+                    completedPhaseOrdinal = (int)phaseOrdinal,
+                    evidenceFingerprint = evidenceFingerprint,
+                    rosterIdentity = rosterIdentity,
+                    comparisonContextKey = "AED_PHASE8_CANONICAL_V1",
+                    sourceVersion = "AED_PHASE8_SOURCE_REFERENCES_V1",
+                    sourceEvents = Array.ConvertAll(references, x => new AEDPhase8SourceReferenceDtoV1
+                    {
+                        eventId = x.EventId.ToString("D"), eventSequence = x.EventSequence,
+                        eventType = x.EventType, occurrenceKey = x.OccurrenceKey
+                    }),
+                    metrics = Array.Empty<AEDPhase8MetricDtoV1>(),
+                    supply = Array.Empty<AEDPhase8SupplyDtoV1>(),
+                    minions = Array.Empty<AEDPhase8MinionDtoV1>()
+                };
+                var result = await api.VerifyDirectorSourcesAsync(
+                    matchId, request, timeout.Token);
+                Debug.Log($"[AED_P8][SOURCE_UPLOAD] canonical={result?.canonicalVerified == true} reason={result?.reasonCode ?? "UNVERIFIED"}");
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[AED_P8][SOURCE_UPLOAD] {exception.GetType().Name}");
             }
         }
 

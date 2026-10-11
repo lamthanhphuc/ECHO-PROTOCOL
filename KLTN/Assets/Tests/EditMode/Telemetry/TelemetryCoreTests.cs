@@ -54,6 +54,25 @@ namespace EchoProtocol.Telemetry.Tests
         }
 
         [Test]
+        public void PhaseSourceReferencesPreserveCanonicalIdentity()
+        {
+            var fixture = new Fixture();
+            fixture.Factory.BeginMatch();
+            fixture.Emit(TelemetryEventTypes.MatchStarted, "match-start");
+            fixture.Emit(TelemetryEventTypes.PhaseStarted, "phase-1-start");
+            fixture.Emit(TelemetryEventTypes.HelpPingUsed, "ping-1");
+            fixture.Emit(TelemetryEventTypes.PhaseCompleted, "phase-1-end");
+
+            Assert.That(fixture.Factory.TryGetPhaseSourceReferences(
+                1, out var references), Is.True);
+            Assert.That(references.Length, Is.EqualTo(1));
+            Assert.That(references[0].EventType,
+                Is.EqualTo(TelemetryEventTypes.HelpPingUsed));
+            Assert.That(references[0].OccurrenceKey, Is.EqualTo("ping-1"));
+            Assert.That(references[0].EventSequence, Is.EqualTo(3));
+        }
+
+        [Test]
         public void EventFactory_ProxyCannotCreateAuthoritativeTelemetry()
         {
             var fixture = new Fixture(hasAuthority: false);

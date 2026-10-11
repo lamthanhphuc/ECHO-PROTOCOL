@@ -120,6 +120,27 @@ namespace EchoProtocol.AI.AED
             }
         }
 
+        public async Task<AEDPhase8SourceVerificationDtoV1> VerifyDirectorSourcesAsync(
+            Guid matchId, AEDPhase8SourceUploadDtoV1 request,
+            CancellationToken cancellationToken)
+        {
+            if (matchId == Guid.Empty || request == null) return null;
+            var completion = new TaskCompletionSource<ApiResult<AEDPhase8SourceVerificationResponseV1>>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            using (cancellationToken.Register(() => completion.TrySetCanceled()))
+            {
+                AuthRuntime.EnsureExists().Client.PostJson<AEDPhase8SourceUploadDtoV1, AEDPhase8SourceVerificationResponseV1>(
+                    $"/api/matches/{matchId:D}/scenario/director-sources-v1", request, true,
+                    result => completion.TrySetResult(result));
+                try
+                {
+                    var result = await completion.Task;
+                    return result.IsSuccess && result.Data?.success == true ? result.Data.data : null;
+                }
+                catch (TaskCanceledException) { return null; }
+            }
+        }
+
         public async Task<bool> ConfirmPlanAppliedAsync(Guid matchId, Guid decisionId,
             string fingerprint, CancellationToken cancellationToken)
         {

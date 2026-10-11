@@ -32,7 +32,7 @@ namespace EchoProtocol.Networking.Tests
                     MakeDelegate(nameof(Apply), approvalType),
                     new Action(Transition),
                     new Func<CancellationToken, Task<bool>>(Receipt),
-                    null, null });
+                    null, null, null });
             Assert.That(started, Is.True);
 
             for (var i = 0; i < 20 && coordinatorType.GetProperty("State")
@@ -64,13 +64,53 @@ namespace EchoProtocol.Networking.Tests
                     MakeDelegate(nameof(Apply), RuntimeType("AEDPlanV2Data")),
                     new Action(() => order += "unexpected"),
                     new Func<CancellationToken, Task<bool>>(Receipt),
-                    new Func<bool>(NotRetryable), new Action(() => order += "transition") });
+                    new Func<bool>(NotRetryable), new Action(() => order += "transition"), null });
             Assert.That(started, Is.True);
             for (var i = 0; i < 20 && coordinatorType.GetProperty("State")
                      .GetValue(coordinator).ToString() == "PendingBackend"; i++)
                 await Task.Delay(10);
             Assert.That(order, Is.EqualTo("transition"));
             Assert.That(coordinatorType.GetProperty("State").GetValue(coordinator).ToString(), Is.EqualTo("Hold"));
+            ((IDisposable)coordinator).Dispose();
+        }
+
+        [Test]
+        public async Task RevalidationFailureCallsAbortBeforeHoldTransition()
+        {
+            var coordinatorType = RuntimeType("AEDv2BoundaryCoordinator");
+            var approvalType = RuntimeType("AEDPlanV2Data");
+            var coordinator = Activator.CreateInstance(coordinatorType);
+            var transaction = CreateTransaction(
+                RuntimeType("AEDv2BoundaryTransaction"), approvalType);
+            var submitMethod = GetType().GetMethod(nameof(Submit),
+                BindingFlags.Static | BindingFlags.NonPublic)
+                .MakeGenericMethod(approvalType);
+            var submit = Delegate.CreateDelegate(
+                typeof(Func<,>).MakeGenericType(typeof(CancellationToken),
+                    typeof(Task<>).MakeGenericType(approvalType)), submitMethod);
+            var order = string.Empty;
+            var started = (bool)coordinatorType.GetMethod("TryBegin")
+                .Invoke(coordinator, new object[]
+                {
+                    transaction, submit,
+                    MakeDelegate(nameof(RejectValidation), approvalType),
+                    MakeDelegate(nameof(Apply), approvalType),
+                    new Action(() => order += "unexpected"),
+                    new Func<CancellationToken, Task<bool>>(Receipt),
+                    null,
+                    new Action(() => order += "transition"),
+                    new Func<CancellationToken, Task<bool>>(_ =>
+                    {
+                        order += "abort|";
+                        return Task.FromResult(true);
+                    })
+                });
+            Assert.That(started, Is.True);
+            for (var i = 0; i < 50 && order != "abort|transition"; i++)
+                await Task.Delay(10);
+            Assert.That(order, Is.EqualTo("abort|transition"));
+            Assert.That(coordinatorType.GetProperty("State")
+                .GetValue(coordinator).ToString(), Is.EqualTo("Hold"));
             ((IDisposable)coordinator).Dispose();
         }
 
@@ -121,6 +161,7 @@ namespace EchoProtocol.Networking.Tests
         private static Task<T> Reject<T>(CancellationToken _) => Task.FromResult(default(T));
         private static bool NotRetryable() => false;
         private static bool Validate<T>(T _) => true;
+        private static bool RejectValidation<T>(T _) => false;
         private static bool Apply<T>(T _) { _order += "apply|"; return true; }
         private static void Transition() => _order += "transition|";
         private static Task<bool> Receipt(CancellationToken _) { _order += "receipt"; return Task.FromResult(true); }

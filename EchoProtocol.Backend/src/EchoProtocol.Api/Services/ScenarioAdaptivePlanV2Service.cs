@@ -181,7 +181,7 @@ public sealed class ScenarioAdaptivePlanV2Service(
         var match = await db.MatchAuthorityBindings.SingleOrDefaultAsync(x => x.MatchId == matchId, ct);
         var auth = CheckHost(match, callerUserId);
         if (auth is not null) return Fail(auth.Value.Message, auth.Value.Code);
-        if (match!.Status == MatchAuthorityStatus.Ended)
+        if (match!.Status != MatchAuthorityStatus.InMatch)
             return Fail("AED v2 apply window is closed", ErrorCodes.ScenarioDecisionWindowClosed);
         var plan = await db.Set<ScenarioAdaptivePlanV2>()
             .SingleOrDefaultAsync(x => x.DecisionId == decisionId && x.MatchId == matchId, ct);

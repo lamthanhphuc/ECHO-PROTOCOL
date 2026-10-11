@@ -65,7 +65,8 @@ namespace EchoProtocol.AI.AED
             Action completeTransition,
             Func<CancellationToken, Task<bool>> confirmReceipt,
             Func<bool> submitRetryable = null,
-            Action completeHold = null)
+            Action completeHold = null,
+            Func<CancellationToken, Task<bool>> abortPending = null)
         {
             if (transaction == null || submit == null || revalidate == null
                 || apply == null || completeTransition == null || confirmReceipt == null)
@@ -80,7 +81,7 @@ namespace EchoProtocol.AI.AED
             AEDv2E2ELog.State("BOUNDARY_BEGIN", decisionId: transaction.DecisionId);
             _operation = RunAsync(submit, revalidate, apply,
                 completeTransition, confirmReceipt, submitRetryable,
-                completeHold, _lifetime.Token);
+                completeHold, abortPending, _lifetime.Token);
             return true;
         }
 
@@ -133,13 +134,14 @@ namespace EchoProtocol.AI.AED
             Func<CancellationToken, Task<bool>> confirmReceipt,
             Func<bool> submitRetryable,
             Action completeHold,
+            Func<CancellationToken, Task<bool>> abortPending,
             CancellationToken cancellationToken)
         {
             try
             {
                 await RunCoreAsync(submit, revalidate, apply,
                     completeTransition, confirmReceipt, submitRetryable,
-                    completeHold, cancellationToken);
+                    completeHold, abortPending, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -153,8 +155,16 @@ namespace EchoProtocol.AI.AED
             Func<CancellationToken, Task<bool>> confirmReceipt,
             Func<bool> submitRetryable,
             Action completeHold,
+            Func<CancellationToken, Task<bool>> abortPending,
             CancellationToken cancellationToken)
         {
+            async Task<bool> TryAbortPendingAsync()
+            {
+                if (abortPending == null) return false;
+                try { return await abortPending(cancellationToken); }
+                catch (Exception) { return false; }
+            }
+
             State = AEDv2BoundaryState.PendingBackend;
             AEDPlanV2Data approval = null;
             var submitAttempts = 0;
@@ -184,7 +194,8 @@ namespace EchoProtocol.AI.AED
             if (!revalidate(approval))
             {
                 AEDv2E2ELog.State("REVALIDATE_FAIL", decisionId: Transaction.DecisionId);
-                Hold("AED_V2_BOUNDARY_STALE");
+                var aborted = await TryAbortPendingAsync();
+                Hold(aborted ? "AED_V2_BOUNDARY_STALE" : "AED_V2_BOUNDARY_ABORT_UNCONFIRMED");
                 completeHold?.Invoke();
                 return;
             }
@@ -192,7 +203,8 @@ namespace EchoProtocol.AI.AED
             State = AEDv2BoundaryState.Approved;
             if (!apply(approval))
             {
-                Hold("AED_V2_BOUNDARY_COMMIT_REJECTED");
+                var aborted = await TryAbortPendingAsync();
+                Hold(aborted ? "AED_V2_BOUNDARY_COMMIT_REJECTED" : "AED_V2_BOUNDARY_ABORT_UNCONFIRMED");
                 completeHold?.Invoke();
                 return;
             }
