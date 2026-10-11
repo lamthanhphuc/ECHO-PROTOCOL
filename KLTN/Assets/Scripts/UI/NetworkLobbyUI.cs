@@ -386,7 +386,7 @@ namespace EchoProtocol.UI
             if (error.Contains("gameclosed"))
                 return "PHÒNG ĐÃ ĐÓNG\nTrận có thể đã bắt đầu. Nhờ host mở phòng mới rồi nhập lại mã.";
             if (error.Contains("host disconnected"))
-                return "HOST ĐÃ NGẮT KẾT NỐI\nNhờ host tạo lại phòng rồi chọn Vào phòng với mã mới.";
+                return EchoProtocol.Settings.GameLanguage.Choose("Host đã ngắt kết nối. Trận đã kết thúc vì chưa hỗ trợ chuyển host. Về menu và tạo hoặc vào phòng mới.", "The host disconnected. The match ended because host migration is not supported. Return to the menu and create or join a new room.");
             if (error.Contains("timeout") || error.Contains("timedout"))
                 return "KẾT NỐI QUÁ THỜI GIAN\nKiểm tra mạng và mã phòng. Chọn Tạo phòng hoặc Vào phòng để thử lại.";
             if (error.Contains("authentication") || error.Contains("invalidregion") || error.Contains("maxccu"))

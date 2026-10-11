@@ -541,7 +541,7 @@ namespace EchoProtocol.Networking
             return count;
         }
 
-        private void CleanupUnexpectedTermination(NetworkRunner runner, string message)
+        private void CleanupUnexpectedTermination(NetworkRunner runner, string message, bool allowReconnect = true)
         {
             if (Runner != runner) return;
             var matchFinished = State == NetworkSessionState.InMatch
@@ -549,7 +549,7 @@ namespace EchoProtocol.Networking
                     || SceneManager.GetActiveScene().name == LobbySceneName
                     || NetworkMatchState.Instance != null && NetworkMatchState.Instance.IsEnded);
             if (matchFinished) message = "Match finished. Create or join a new room.";
-            var reconnect = runner.IsClient && State == NetworkSessionState.InMatch && !matchFinished;
+            var reconnect = allowReconnect && runner.IsClient && State == NetworkSessionState.InMatch && !matchFinished;
             var reconnectName = reconnect ? CurrentSessionName : null;
             PlayerInteractionControlLock.ReleaseAll();
             ClearLocalInputProvider();
@@ -691,7 +691,7 @@ namespace EchoProtocol.Networking
         void INetworkRunnerCallbacks.OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken)
         {
             if (Runner == runner)
-                CleanupUnexpectedTermination(runner, "Host disconnected – Match aborted.");
+                CleanupUnexpectedTermination(runner, "Host disconnected – Match aborted.", allowReconnect: false);
         }
         void INetworkRunnerCallbacks.OnSceneLoadDone(NetworkRunner runner)
         {
