@@ -215,6 +215,64 @@ public sealed partial class ScenarioServiceTests
         Assert.Equal("FIXED", result.Data.Config.ConfigSource);
     }
 
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AdaptiveReplay_RejectsModifiedCommittedConfig()
+    {
+        await using var f = await Fixture.CreateAsync();
+        await f.EnableApprovedReliefAsync();
+
+        var request = Request();
+        request.ResolutionMode = ScenarioResolutionMode.Adaptive;
+        var first = await f.Service.ResolvePreMatchAsync(
+            f.HostId, f.MatchId, request);
+        Assert.True(first.IsSuccess);
+
+        var candidate = f.Db.ScenarioConfigs.Single(
+            x => x.ConfigSource == ScenarioConfigSource.Adaptive);
+        candidate.SearchDuration += 1;
+        await f.Db.SaveChangesAsync();
+
+        var replay = await f.Service.ResolvePreMatchAsync(
+            f.HostId, f.MatchId, request);
+
+        Assert.False(replay.IsSuccess);
+        Assert.Equal(ErrorCodes.ScenarioApplyConflict, replay.ErrorCode);
+        Assert.Single(await f.Db.ScenarioDecisions.ToArrayAsync());
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AdaptiveApply_RejectsModifiedCommittedConfig()
+    {
+        await using var f = await Fixture.CreateAsync();
+        await f.EnableApprovedReliefAsync();
+
+        var request = Request();
+        request.ResolutionMode = ScenarioResolutionMode.Adaptive;
+        var first = await f.Service.ResolvePreMatchAsync(
+            f.HostId, f.MatchId, request);
+        Assert.True(first.IsSuccess);
+
+        var candidate = f.Db.ScenarioConfigs.Single(
+            x => x.ConfigSource == ScenarioConfigSource.Adaptive);
+        candidate.SearchDuration += 1;
+        await f.Db.SaveChangesAsync();
+
+        var apply = await f.Service.ConfirmAppliedAsync(
+            f.HostId,
+            f.MatchId,
+            request.DecisionId,
+            new ConfirmScenarioAppliedRequest
+            {
+                ScenarioConfigId = first.Data!.Config.ScenarioConfigId,
+                ScenarioConfigVersion = first.Data.Config.ScenarioConfigVersion,
+                ScenarioConfigFingerprint = first.Data.Config.ContentFingerprint
+            });
+
+        Assert.False(apply.IsSuccess);
+        Assert.Equal(ErrorCodes.ScenarioApplyConflict, apply.ErrorCode);
+        Assert.Empty(await f.Db.ScenarioApplyReceipts.ToArrayAsync());
+    }
+
     [Fact, Trait("Category", "M4ScenarioService")]
     public async Task MissingOrIncompatibleProductionFallback_ReturnsConfigurationError()
     {

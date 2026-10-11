@@ -43,6 +43,8 @@ public sealed class ScenarioService(
                     return Fail("DecisionId has conflicting semantics", ErrorCodes.ScenarioDecisionIdentityConflict);
                 if (!await RosterStillMatchesAsync(existingById, cancellationToken))
                     return Fail("Decision snapshot roster is stale", ErrorCodes.ScenarioDecisionStaleRoster);
+                if (!CommittedConfigMatches(existingById))
+                    return Fail("Committed scenario config has changed", ErrorCodes.ScenarioApplyConflict);
                 await tx.RollbackAsync(cancellationToken);
                 return ServiceResult<ScenarioDecisionResponse>.Success(Map(existingById, true), "Scenario decision replayed");
             }
@@ -212,7 +214,9 @@ public sealed class ScenarioService(
             db.ChangeTracker.Clear();
             var stored = await LoadDecisionAsync(request.DecisionId, cancellationToken);
             if (stored is not null && stored.MatchId == matchId && stored.HostUserId == callerUserId
-                && string.Equals(stored.RequestFingerprint, requestFingerprint, StringComparison.Ordinal))
+                && string.Equals(stored.RequestFingerprint, requestFingerprint, StringComparison.Ordinal)
+                && await RosterStillMatchesAsync(stored, cancellationToken)
+                && CommittedConfigMatches(stored))
                 return ServiceResult<ScenarioDecisionResponse>.Success(Map(stored, true), "Scenario decision replayed");
             return Fail("Concurrent scenario decision conflict", ErrorCodes.ScenarioDecisionConflict);
         }
@@ -233,6 +237,8 @@ public sealed class ScenarioService(
             var decision = await LoadDecisionAsync(decisionId, cancellationToken);
             if (decision is null || decision.MatchId != matchId)
                 return Fail("Scenario decision was not found", ErrorCodes.ScenarioDecisionNotFound);
+            if (!CommittedConfigMatches(decision))
+                return Fail("Committed scenario config has changed", ErrorCodes.ScenarioApplyConflict);
             if (!decision.IsCurrent || !await RosterStillMatchesAsync(decision, cancellationToken))
                 return Fail("Scenario decision snapshot is stale", ErrorCodes.ScenarioDecisionStaleRoster);
             if (!Matches(decision, request))
@@ -258,7 +264,8 @@ public sealed class ScenarioService(
         {
             await tx.RollbackAsync(cancellationToken); db.ChangeTracker.Clear();
             var stored = await LoadDecisionAsync(decisionId, cancellationToken);
-            if (stored is not null && Matches(stored, request) && stored.ApplyReceipt is not null)
+            if (stored is not null && CommittedConfigMatches(stored)
+                && Matches(stored, request) && stored.ApplyReceipt is not null)
                 return ServiceResult<ScenarioDecisionResponse>.Success(Map(stored, true), "Scenario apply confirmation replayed");
             return Fail("Concurrent apply confirmation conflict", ErrorCodes.ScenarioApplyConflict);
         }
@@ -286,6 +293,12 @@ public sealed class ScenarioService(
         string.Equals(d.ScenarioConfigId, r.ScenarioConfigId, StringComparison.Ordinal)
         && string.Equals(d.ScenarioConfigVersion, r.ScenarioConfigVersion, StringComparison.Ordinal)
         && string.Equals(d.ScenarioConfigFingerprint, r.ScenarioConfigFingerprint, StringComparison.OrdinalIgnoreCase);
+    private static bool CommittedConfigMatches(ScenarioDecision decision) =>
+        decision.ScenarioConfig is not null &&
+        string.Equals(
+            decision.ScenarioConfigFingerprint,
+            ScenarioFingerprint.Config(decision.ScenarioConfig),
+            StringComparison.Ordinal);
     private static bool IsConcurrencyFailure(Exception exception)
     {
         var hasDbUpdateException = false;
