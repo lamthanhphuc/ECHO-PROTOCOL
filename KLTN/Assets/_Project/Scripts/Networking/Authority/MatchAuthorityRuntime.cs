@@ -195,6 +195,64 @@ namespace EchoProtocol.Networking.Authority
                 position.x, position.y, position.z);
         }
 
+        public void RecordPhase8ToolSpawn(
+            NetworkId instanceId, int toolId, int zone, long tick)
+        {
+            if (!HasStateAuthority) return;
+            if (!_telemetryMatchActive)
+            {
+                Debug.LogWarning($"[AED_P8][TOOL_SOURCE_MISSED] action=SPAWN id={instanceId} reason=MATCH_NOT_ACTIVE");
+                return;
+            }
+            try
+            {
+                _aedPhase8Source.RecordToolSpawn(
+                    instanceId.ToString(), toolId, zone, tick,
+                    $"p8:tool:{instanceId}:spawn");
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log($"[AED_P8][TOOL_SOURCE] action=SPAWN id={instanceId} tool={toolId} zone={zone} tick={tick}");
+#endif
+            }
+            catch (Exception ex)
+            {
+                _aedToolNoiseEvidence.MarkIncomplete();
+                Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action=SPAWN id={instanceId} reason={ex.Message}");
+            }
+        }
+
+        public void RecordPhase8ToolPickup(
+            NetworkId instanceId, PlayerRef player, long tick, int? remainingCharges)
+        {
+            if (!HasStateAuthority) return;
+            if (!_telemetryMatchActive)
+            {
+                Debug.LogWarning($"[AED_P8][TOOL_SOURCE_MISSED] action=PICKUP id={instanceId} reason=MATCH_NOT_ACTIVE");
+                return;
+            }
+            if (!player.IsRealPlayer ||
+                !TryResolveVerifiedBackendUserId(player, out var userId))
+            {
+                _aedToolNoiseEvidence.MarkIncomplete();
+                Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action=PICKUP id={instanceId} reason=OWNER_UNVERIFIED");
+                return;
+            }
+            try
+            {
+                _aedPhase8Source.RecordToolTransition(
+                    instanceId.ToString(), "Player", userId,
+                    remainingCharges, tick,
+                    $"p8:tool:{instanceId}:pickup");
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log($"[AED_P8][TOOL_SOURCE] action=PICKUP id={instanceId} owner={userId} tick={tick}");
+#endif
+            }
+            catch (Exception ex)
+            {
+                _aedToolNoiseEvidence.MarkIncomplete();
+                Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action=PICKUP id={instanceId} reason={ex.Message}");
+            }
+        }
+
         public void RecordPhase8MinionSpawn(NetworkId minionId, int zone, long tick)
         {
             if (!HasStateAuthority || !_telemetryMatchActive) return;

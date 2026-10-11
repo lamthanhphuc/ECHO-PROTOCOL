@@ -79,7 +79,10 @@ namespace EchoProtocol.AI.AED
             var previous = _tools[index];
             if (string.IsNullOrWhiteSpace(newLocation) ||
                 remainingCharges < 0 ||
-                tick <= previous.SourceTick) throw new InvalidOperationException("AED_P8_INVALID_TOOL_TRANSITION");
+                tick <= previous.SourceTick ||
+                (newLocation == "Player" &&
+                 (!Guid.TryParse(ownerUserId, out var ownerId) ||
+                  ownerId == Guid.Empty))) throw new InvalidOperationException("AED_P8_INVALID_TOOL_TRANSITION");
             RegisterOccurrence(occurrenceKey);
             _tools.Add(new AEDPhase8ToolSourceV1(instanceId, previous.ToolId, previous.Zone, previous.Origin, newLocation, ownerUserId, remainingCharges, tick, occurrenceKey));
         }

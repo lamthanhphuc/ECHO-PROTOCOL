@@ -71,4 +71,56 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
         Assert.Throws<InvalidOperationException>(() =>
             collector.RecordMinionSpawn("minion-2", 1, 11, "shared-key"));
     }
+
+    [Test]
+    public void ToolSpawnAndPickup_PreserveIdentityAndOwner()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var matchId = Guid.NewGuid();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(matchId);
+        collector.RecordToolSpawn("tool-1", 2, 1, 10, "tool-spawn-1");
+        collector.RecordToolTransition(
+            "tool-1", "Player", owner, 2, 20, "tool-pickup-1");
+        Assert.True(collector.TryFreeze(matchId, 1, out var snapshot));
+        Assert.AreEqual(2, snapshot.Tools.Count);
+        Assert.AreEqual("tool-1", snapshot.Tools[0].InstanceId);
+        Assert.AreEqual("World", snapshot.Tools[0].Location);
+        Assert.AreEqual("Player", snapshot.Tools[1].Location);
+        Assert.AreEqual(owner, snapshot.Tools[1].OwnerUserId);
+        Assert.AreEqual(2, snapshot.Tools[1].RemainingCharges);
+        Assert.False(snapshot.CoverageComplete);
+    }
+
+    [Test]
+    public void ToolPickup_RejectsUnverifiedOwner()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordToolSpawn("tool-1", 1, 1, 10, "spawn-1");
+        Assert.Throws<InvalidOperationException>(() =>
+            collector.RecordToolTransition(
+                "tool-1", "Player", "invalid", null, 20, "pickup-1"));
+    }
+
+    [Test]
+    public void ToolPickup_RejectsMissingSpawn()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        collector.BeginMatch(Guid.NewGuid());
+        Assert.Throws<InvalidOperationException>(() =>
+            collector.RecordToolTransition(
+                "missing-tool", "Player", Guid.NewGuid().ToString("D"),
+                null, 20, "pickup-1"));
+    }
+
+    [Test]
+    public void ToolOccurrence_CannotBeReused()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordToolSpawn("tool-1", 1, 1, 10, "shared-key");
+        Assert.Throws<InvalidOperationException>(() =>
+            collector.RecordToolSpawn("tool-2", 2, 1, 11, "shared-key"));
+    }
 }

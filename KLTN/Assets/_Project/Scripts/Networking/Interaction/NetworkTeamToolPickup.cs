@@ -1,4 +1,5 @@
 using Fusion;
+using EchoProtocol.Networking.Authority;
 using QuickOutline;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -194,6 +195,11 @@ namespace EchoProtocol.Networking
             playerState.SetGameplayToolId(
                 _toolId,
                 RemainingUses);
+            MatchAuthorityRuntime.Instance?.RecordPhase8ToolPickup(
+                Object.Id,
+                context.Player,
+                Runner.Tick.Raw,
+                RemainingUses > 0 ? RemainingUses : (int?)null);
         }
 
         public void SetRemainingUsesAuthoritative(

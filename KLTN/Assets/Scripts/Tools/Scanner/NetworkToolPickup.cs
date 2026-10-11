@@ -1,6 +1,7 @@
 using System;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
+using EchoProtocol.Networking.Authority;
 using Fusion;
 using QuickOutline;
 using UnityEngine;
@@ -253,6 +254,11 @@ namespace EchoProtocol.Tools.Scanner
             if (context.PlayerState != null && context.PlayerState.Object != null && context.PlayerState.Object.IsValid)
             {
                 context.PlayerState.SetGameplayToolId(_toolId);
+                MatchAuthorityRuntime.Instance?.RecordPhase8ToolPickup(
+                    Object.Id,
+                    context.Player,
+                    Runner.Tick.Raw,
+                    null);
             }
 
             try

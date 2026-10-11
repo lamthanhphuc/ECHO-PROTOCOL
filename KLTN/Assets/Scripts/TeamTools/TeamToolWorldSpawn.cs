@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Networking;
+using EchoProtocol.Networking.Authority;
 using EchoProtocol.Tools.Scanner;
 using Fusion;
 using UnityEngine;
@@ -294,6 +295,21 @@ namespace EchoProtocol.TeamTools
                     "were rolled back.");
 
                 return false;
+            }
+
+            var authority = MatchAuthorityRuntime.Instance;
+            if (authority != null)
+            {
+                for (int i = 0; i < spawnedObjects.Count; i++)
+                {
+                    var spawned = spawnedObjects[i];
+                    if (spawned == null || !spawned.Id.IsValid) continue;
+                    authority.RecordPhase8ToolSpawn(
+                        spawned.Id,
+                        completePlan[i].ToolId,
+                        (int)completePlan[i].Point.Zone,
+                        runner.Tick.Raw);
+                }
             }
 
             return true;
