@@ -1185,7 +1185,21 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            var pickupObject = Runner.Spawn(prefab, dropPosition, dropRotation);
+            var pickupObject = Runner.Spawn(prefab, dropPosition, dropRotation,
+                onBeforeSpawned: (_, spawned) =>
+                {
+                    if (toolId != LobbyPlayerState.CoreStabilizerToolId) return;
+                    // The drop pose is the floor plus clearance, not necessarily the mesh pivot.
+                    // Correct before Spawned captures the replicated world position.
+                    float bottom = float.PositiveInfinity;
+                    foreach (var renderer in spawned.GetComponentsInChildren<Renderer>(true))
+                    {
+                        if (!(renderer is MeshRenderer) && !(renderer is SkinnedMeshRenderer)) continue;
+                        bottom = Mathf.Min(bottom, renderer.bounds.min.y);
+                    }
+                    if (!float.IsInfinity(bottom))
+                        spawned.transform.position += Vector3.up * (dropPosition.y - bottom);
+                });
             if (pickupObject == null)
             {
                 return false;
