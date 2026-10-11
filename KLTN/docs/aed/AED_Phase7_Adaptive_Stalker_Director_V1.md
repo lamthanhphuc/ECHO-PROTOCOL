@@ -23,3 +23,48 @@ Host authority, current match/phase evidence, full roster verification, source v
 Phase 7 emits research proposals only. It does not call `AEDv2Authority`, `AEDv2BoundaryPolicy`, or `StalkerFusionRuntime`, and never applies gameplay. Phase 8 must provide verified evidence, authority/revision, action state, target receipts, and Backend approval. Phase 9 must calibrate thresholds and verify Host/Client behavior.
 
 `CanApplyGameplay = false`.
+
+## P7.6 — Integration Safety Integrity
+
+### Phase transition contract
+
+- CompletedEvidencePhaseOrdinal: ordinal of frozen evidence.
+- TargetPhaseOrdinal: ordinal of next phase.
+- TargetPhaseOrdinal = CompletedEvidencePhaseOrdinal + 1.
+- Both ordinals must be valid and nonzero.
+- MatchId must equal EvidenceMatchId.
+- Invalid, stale or skipped transitions => HOLD.
+
+At integration time:
+- Read CompletedEvidencePhaseOrdinal from the frozen
+  AEDv2CurrentMatchEvidence.PhaseOrdinal.
+- Read TargetPhaseOrdinal from the authoritative
+  NetworkMatchState transition.
+- Never substitute the target phase ordinal for the
+  completed evidence ordinal.
+
+### Unsafe Stalker state
+
+Research adjustment is forbidden during:
+- CHASE
+- ATTACK
+- RECOVER
+- Active Special Encounter
+
+Target fairness must not override these states.
+
+### Regression requirements
+
+- Valid completed-to-next phase
+- Same-phase mismatch
+- Skipped phase
+- Zero or overflowing phase ordinal
+- Cross-match evidence
+- Active CHASE/RECOVER/ATTACK/Special
+- Unverified skill and weakest-player protection
+- Safe Room and invalid target evidence
+- Special encounter and door escape-route safety
+
+Phase 7 remains research-only.
+
+CanApplyGameplay = false.

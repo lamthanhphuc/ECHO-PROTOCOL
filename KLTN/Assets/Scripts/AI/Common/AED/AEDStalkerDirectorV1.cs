@@ -8,17 +8,22 @@ namespace EchoProtocol.AI.Common.AED
 
     public sealed class AEDStalkerDirectorRequestV1
     {
-        public Guid MatchId { get; set; } public uint PhaseOrdinal { get; set; }
+        public Guid MatchId { get; set; }
+        public uint CompletedEvidencePhaseOrdinal { get; set; }
+        public uint TargetPhaseOrdinal { get; set; }
         public string Difficulty { get; set; } public string ResolutionMode { get; set; }
         public bool HostAuthority { get; set; } public bool SafeBoundary { get; set; }
         public bool FullRosterVerified { get; set; } public bool FullRosterObserved { get; set; }
-        public Guid EvidenceMatchId { get; set; } public uint EvidencePhaseOrdinal { get; set; }
+        public Guid EvidenceMatchId { get; set; }
         public bool EvidenceComplete { get; set; } public string EvidenceFingerprint { get; set; }
         public string ComparisonContextKey { get; set; } public bool PressureSourceVerified { get; set; }
         public AEDPressureLevelV1 PressureLevel { get; set; } public int RosterSize { get; set; }
         public int AlivePlayers { get; set; } public int DownedPlayers { get; set; }
         public int EliminatedPlayers { get; set; } public bool AnyPlayerStruggling { get; set; }
-        public bool ActiveAttack { get; set; } public bool ActiveSpecialEncounter { get; set; }
+        public bool ActiveChase { get; set; }
+        public bool ActiveAttack { get; set; }
+        public bool ActiveRecover { get; set; }
+        public bool ActiveSpecialEncounter { get; set; }
         public bool BackendMetricVerifierSupported { get; set; } public bool TeamConfidenceComplete { get; set; }
         public decimal? WeakestPlayerSkill { get; set; } public double SecondsSinceLastChange { get; set; }
         public AEDv2Key RequestedKey { get; set; }
@@ -27,13 +32,15 @@ namespace EchoProtocol.AI.Common.AED
     public sealed class AEDStalkerProposalV1
     {
         public const string Version = "AED_STALKER_DIRECTOR_V1_RESEARCH";
-        public Guid MatchId { get; } public uint PhaseOrdinal { get; }
+        public Guid MatchId { get; }
+        public uint CompletedEvidencePhaseOrdinal { get; }
+        public uint TargetPhaseOrdinal { get; }
         public AEDStalkerIntentV1 Intent { get; } public AEDv2Key? ChangedKey { get; }
         public double? TargetValue { get; } public AEDv2Plan Plan { get; }
         public string ReasonCode { get; } public string EvidenceFingerprint { get; }
         public bool ResearchOnly => true; public bool CanApplyGameplay => false;
         internal AEDStalkerProposalV1(AEDStalkerDirectorRequestV1 r, AEDStalkerIntentV1 intent, AEDv2Key? key, AEDv2Plan plan, string reason)
-        { MatchId = r.MatchId; PhaseOrdinal = r.PhaseOrdinal; Intent = intent; ChangedKey = key; Plan = plan; TargetValue = key.HasValue ? (double?)plan.Get(key.Value) : null; ReasonCode = reason; EvidenceFingerprint = r.EvidenceFingerprint; }
+        { MatchId = r.MatchId; CompletedEvidencePhaseOrdinal = r.CompletedEvidencePhaseOrdinal; TargetPhaseOrdinal = r.TargetPhaseOrdinal; Intent = intent; ChangedKey = key; Plan = plan; TargetValue = key.HasValue ? (double?)plan.Get(key.Value) : null; ReasonCode = reason; EvidenceFingerprint = r.EvidenceFingerprint; }
     }
 
     public static class AEDStalkerDirectorV1
@@ -52,14 +59,15 @@ namespace EchoProtocol.AI.Common.AED
         {
             if (r == null) throw new ArgumentNullException(nameof(r));
             AEDStalkerProposalV1 Hold(string reason) => new AEDStalkerProposalV1(r, AEDStalkerIntentV1.Hold, null, AEDv2Plan.Normal(), reason);
-            if (r.MatchId == Guid.Empty || r.PhaseOrdinal == 0) return Hold("HOLD_INVALID_MATCH");
+            if (r.MatchId == Guid.Empty || r.TargetPhaseOrdinal == 0) return Hold("HOLD_INVALID_MATCH");
+            if (r.CompletedEvidencePhaseOrdinal == 0 || r.CompletedEvidencePhaseOrdinal == uint.MaxValue || r.TargetPhaseOrdinal != r.CompletedEvidencePhaseOrdinal + 1u) return Hold("HOLD_PHASE_TRANSITION_MISMATCH");
             if (r.Difficulty != "Normal" || r.ResolutionMode != "Adaptive") return Hold("HOLD_FIXED_OR_NON_NORMAL");
             if (!r.HostAuthority || !r.SafeBoundary) return Hold("HOLD_UNSAFE_AUTHORITY_OR_BOUNDARY");
-            if (r.EvidenceMatchId != r.MatchId || r.EvidencePhaseOrdinal != r.PhaseOrdinal || !r.EvidenceComplete || string.IsNullOrWhiteSpace(r.EvidenceFingerprint)) return Hold("HOLD_STALE_OR_INCOMPLETE_EVIDENCE");
+            if (r.EvidenceMatchId != r.MatchId || !r.EvidenceComplete || string.IsNullOrWhiteSpace(r.EvidenceFingerprint)) return Hold("HOLD_STALE_OR_INCOMPLETE_EVIDENCE");
             if (r.RosterSize < 1 || r.RosterSize > 4 || r.AlivePlayers < 0 || r.DownedPlayers < 0 || r.EliminatedPlayers < 0 || r.AlivePlayers + r.DownedPlayers + r.EliminatedPlayers != r.RosterSize) return Hold("HOLD_INVALID_ROSTER");
             if (!r.FullRosterVerified || !r.FullRosterObserved) return Hold("HOLD_ROSTER_NOT_VERIFIED");
             if (!r.PressureSourceVerified || !Enum.IsDefined(typeof(AEDPressureLevelV1), r.PressureLevel) || r.PressureLevel == AEDPressureLevelV1.Unknown) return Hold("HOLD_PRESSURE_UNVERIFIED");
-            if (r.ActiveAttack || r.ActiveSpecialEncounter) return Hold("HOLD_ACTIVE_STALKER_ACTION");
+            if (r.ActiveChase || r.ActiveAttack || r.ActiveRecover || r.ActiveSpecialEncounter) return Hold("HOLD_ACTIVE_STALKER_ACTION");
             if (!IsWhitelisted(r.RequestedKey)) return Hold("HOLD_KEY_NOT_WHITELISTED");
             bool relief = r.PressureLevel == AEDPressureLevelV1.Critical || r.DownedPlayers > 0 || r.EliminatedPlayers > 0 || r.AlivePlayers <= 1 || r.AnyPlayerStruggling;
             if (!relief)
@@ -80,7 +88,7 @@ namespace EchoProtocol.AI.Common.AED
 
         public static bool Validate(AEDStalkerProposalV1 p)
         {
-            if (p == null || p.MatchId == Guid.Empty || p.PhaseOrdinal == 0 || p.Plan == null || !p.Plan.IsBounded() || !p.Plan.TrySingleBoundedChange(out var changed) || !Enum.IsDefined(typeof(AEDStalkerIntentV1), p.Intent) || p.CanApplyGameplay) return false;
+            if (p == null || p.MatchId == Guid.Empty || p.CompletedEvidencePhaseOrdinal == 0 || p.CompletedEvidencePhaseOrdinal == uint.MaxValue || p.TargetPhaseOrdinal != p.CompletedEvidencePhaseOrdinal + 1u || p.Plan == null || !p.Plan.IsBounded() || !p.Plan.TrySingleBoundedChange(out var changed) || !Enum.IsDefined(typeof(AEDStalkerIntentV1), p.Intent) || p.CanApplyGameplay) return false;
             if (p.Intent == AEDStalkerIntentV1.Hold) return !p.ChangedKey.HasValue && !p.TargetValue.HasValue && p.Plan.Fingerprint() == AEDv2Plan.Normal().Fingerprint();
             if (!p.ChangedKey.HasValue || !p.TargetValue.HasValue || !IsWhitelisted(p.ChangedKey.Value) || changed != p.ChangedKey.Value || string.IsNullOrWhiteSpace(p.EvidenceFingerprint)) return false;
             var spec = AEDv2Catalog.Find(p.ChangedKey.Value); var direction = p.Intent == AEDStalkerIntentV1.Relieve ? AdaptationIntent.Relieve : AdaptationIntent.IncreasePressure;

@@ -12,9 +12,9 @@ namespace EchoProtocol.AI.Common.Tests
             var id = Guid.NewGuid();
             return new AEDStalkerDirectorRequestV1
             {
-                MatchId = id, PhaseOrdinal = 2, Difficulty = "Normal", ResolutionMode = "Adaptive",
+                MatchId = id, CompletedEvidencePhaseOrdinal = 2, TargetPhaseOrdinal = 3, Difficulty = "Normal", ResolutionMode = "Adaptive",
                 HostAuthority = true, SafeBoundary = true, FullRosterVerified = true, FullRosterObserved = true,
-                EvidenceMatchId = id, EvidencePhaseOrdinal = 2, EvidenceComplete = true,
+                EvidenceMatchId = id, EvidenceComplete = true,
                 EvidenceFingerprint = "verified", ComparisonContextKey = "NORMAL:CONFIG_V1",
                 PressureSourceVerified = true, PressureLevel = AEDPressureLevelV1.Quiet,
                 RosterSize = 2, AlivePlayers = 2, BackendMetricVerifierSupported = true,
@@ -30,7 +30,7 @@ namespace EchoProtocol.AI.Common.Tests
         [Test] public void CriticalPressureProducesRelief()
         { var r = Request(AEDv2Key.ChaseSpeed); r.PressureLevel = AEDPressureLevelV1.Critical; var p = AEDStalkerDirectorV1.Evaluate(r); Assert.That(p.Intent, Is.EqualTo(AEDStalkerIntentV1.Relieve)); Assert.That(p.TargetValue, Is.EqualTo(7d)); }
         [Test] public void StalePhaseEvidenceCannotAdapt()
-        { var r = Request(); r.EvidencePhaseOrdinal = 1; Assert.That(AEDStalkerDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); }
+        { var r = Request(); r.CompletedEvidencePhaseOrdinal = 1; var result = AEDStalkerDirectorV1.Evaluate(r); Assert.That(result.Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); Assert.That(result.ReasonCode, Is.EqualTo("HOLD_PHASE_TRANSITION_MISMATCH")); }
         [Test] public void ActiveAttackCannotRetuneStalker()
         { var r = Request(); r.ActiveAttack = true; Assert.That(AEDStalkerDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); }
         [Test] public void AllWhitelistedKeysStayWithinCatalog()
@@ -55,5 +55,53 @@ namespace EchoProtocol.AI.Common.Tests
         { var r = AEDStalkerEncounterSafetyV1.EvaluateSpecial(Special()); Assert.That(r.EligibleForResearch, Is.True); Assert.That(r.CanApplyGameplay, Is.False); }
         [Test] public void SafeRoomDoorCannotBeBroken()
         { var r = AEDStalkerEncounterSafetyV1.EvaluateDoor(new AEDStalkerDoorCandidateV1 { HostVerified = true, DoorClosed = true, DoorBreakable = true, SameZone = true, OutsideSafeRoom = true, NotProtectedSafeRoomDoor = false, LegalNavMeshRoute = true, PlayerEscapeRoutePreserved = true }); Assert.That(r.EligibleForResearch, Is.False); }
+        [Test] public void ValidCompletedToNextPhaseTransitionIsAccepted()
+        { var p = AEDStalkerDirectorV1.Evaluate(Request()); Assert.That(p.Intent, Is.EqualTo(AEDStalkerIntentV1.IncreasePressure)); Assert.That(p.CompletedEvidencePhaseOrdinal, Is.EqualTo(2u)); Assert.That(p.TargetPhaseOrdinal, Is.EqualTo(3u)); Assert.That(AEDStalkerDirectorV1.Validate(p), Is.True); }
+        [Test] public void SameCompletedAndTargetPhaseIsRejected()
+        { var r = Request(); r.TargetPhaseOrdinal = 2; var p = AEDStalkerDirectorV1.Evaluate(r); Assert.That(p.Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); Assert.That(p.ReasonCode, Is.EqualTo("HOLD_PHASE_TRANSITION_MISMATCH")); }
+        [Test] public void SkippedPhaseTransitionIsRejected()
+        { var r = Request(); r.TargetPhaseOrdinal = 4; Assert.That(AEDStalkerDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); }
+        [Test] public void ZeroCompletedPhaseIsRejected()
+        { var r = Request(); r.CompletedEvidencePhaseOrdinal = 0; Assert.That(AEDStalkerDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); }
+        [Test] public void PhaseOrdinalOverflowIsRejected()
+        { var r = Request(); r.CompletedEvidencePhaseOrdinal = uint.MaxValue; r.TargetPhaseOrdinal = 1; Assert.That(AEDStalkerDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); }
+        [Test] public void CrossMatchEvidenceCannotAdapt()
+        { var r = Request(); r.EvidenceMatchId = Guid.NewGuid(); var p = AEDStalkerDirectorV1.Evaluate(r); Assert.That(p.Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); Assert.That(p.ReasonCode, Is.EqualTo("HOLD_STALE_OR_INCOMPLETE_EVIDENCE")); }
+        [Test] public void ActiveChaseCannotRetuneStalker()
+        { var r = Request(); r.ActiveChase = true; var p = AEDStalkerDirectorV1.Evaluate(r); Assert.That(p.Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); Assert.That(p.ReasonCode, Is.EqualTo("HOLD_ACTIVE_STALKER_ACTION")); }
+        [Test] public void ActiveRecoverCannotRetuneStalker()
+        { var r = Request(); r.ActiveRecover = true; Assert.That(AEDStalkerDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); }
+        [Test] public void ActiveSpecialCannotRetuneStalker()
+        { var r = Request(); r.ActiveSpecialEncounter = true; Assert.That(AEDStalkerDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); }
+        [Test] public void UnsafeBoundaryCannotRetuneStalker()
+        { var r = Request(); r.SafeBoundary = false; Assert.That(AEDStalkerDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); }
+        [Test] public void NonHostCannotRetuneStalker()
+        { var r = Request(); r.HostAuthority = false; Assert.That(AEDStalkerDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); }
+        [Test] public void BackendUnverifiedSkillCannotIncreaseStalkerPressure()
+        { var r = Request(); r.BackendMetricVerifierSupported = false; Assert.That(AEDStalkerDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); }
+        [Test] public void WeakestPlayerProtectionBlocksIncrease()
+        { var r = Request(); r.WeakestPlayerSkill = 0.5m; Assert.That(AEDStalkerDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); }
+        [Test] public void UnknownCatalogKeyCannotAdapt()
+        { var r = Request(); r.RequestedKey = (AEDv2Key)999; Assert.That(AEDStalkerDirectorV1.Evaluate(r).Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); }
+        [Test] public void FairnessCannotOverrideActiveRecover()
+        { var r = TargetRequest(Target(Guid.NewGuid())); r.ActiveRecover = true; Assert.That(AEDStalkerTargetFairnessV1.Evaluate(r).SuggestedUserId, Is.Null); }
+        [Test] public void FairnessCannotOverrideActiveSpecial()
+        { var r = TargetRequest(Target(Guid.NewGuid())); r.ActiveSpecialEncounter = true; Assert.That(AEDStalkerTargetFairnessV1.Evaluate(r).SuggestedUserId, Is.Null); }
+        [Test] public void FairnessRejectsIllegalLineOfSight()
+        { var target = Target(Guid.NewGuid()); target.LegalLineOfSight = false; Assert.That(AEDStalkerTargetFairnessV1.Evaluate(TargetRequest(target)).SuggestedUserId, Is.Null); }
+        [Test] public void FairnessRejectsDownedAndEliminatedPlayers()
+        { var downed = Target(Guid.NewGuid()); downed.Alive = false; downed.Downed = true; var eliminated = Target(Guid.NewGuid()); eliminated.Alive = false; eliminated.Eliminated = true; Assert.That(AEDStalkerTargetFairnessV1.Evaluate(TargetRequest(downed, eliminated)).SuggestedUserId, Is.Null); }
+        [Test] public void FairnessRejectsUnverifiedTarget()
+        { var target = Target(Guid.NewGuid()); target.HostVerified = false; Assert.That(AEDStalkerTargetFairnessV1.Evaluate(TargetRequest(target)).SuggestedUserId, Is.Null); }
+        [Test] public void FairnessRejectsInvalidPressure()
+        { var target = Target(Guid.NewGuid()); target.RecentPressure01 = double.NaN; Assert.That(AEDStalkerTargetFairnessV1.Evaluate(TargetRequest(target)).SuggestedUserId, Is.Null); }
+        [Test] public void SpecialRejectsHighRecentTargetPressure()
+        { var c = Special(); c.RecentTargetPressure01 = .9d; var p = AEDStalkerEncounterSafetyV1.EvaluateSpecial(c); Assert.That(p.EligibleForResearch, Is.False); Assert.That(p.CanApplyGameplay, Is.False); }
+        [Test] public void SpecialRejectsLastStandingPlayer()
+        { var c = Special(); c.OtherEligibleAlivePlayers = 0; Assert.That(AEDStalkerEncounterSafetyV1.EvaluateSpecial(c).EligibleForResearch, Is.False); }
+        [Test] public void SpecialRejectsInvalidJumpDistance()
+        { var c = Special(); c.DistanceFromTarget = 3d; Assert.That(AEDStalkerEncounterSafetyV1.EvaluateSpecial(c).EligibleForResearch, Is.False); }
+        [Test] public void DoorRejectsMissingEscapeRoute()
+        { var r = AEDStalkerEncounterSafetyV1.EvaluateDoor(new AEDStalkerDoorCandidateV1 { HostVerified = true, DoorClosed = true, DoorBreakable = true, SameZone = true, OutsideSafeRoom = true, NotProtectedSafeRoomDoor = true, LegalNavMeshRoute = true, PlayerEscapeRoutePreserved = false }); Assert.That(r.EligibleForResearch, Is.False); Assert.That(r.CanApplyGameplay, Is.False); }
     }
 }
