@@ -9,24 +9,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     [SerializeField] private Animator animator;
     [SerializeField] private Transform playerRoot;
     [SerializeField] private PlayerCamera playerCamera;
-    [SerializeField, Range(0f, 1f)] private float lookAtWeight = 0.82f;
-    [SerializeField, Range(0f, 1f)] private float bodyWeight = 0.24f;
-    [SerializeField, Range(0f, 1f)] private float headWeight = 0.74f;
-    [SerializeField, Range(0f, 1f)] private float eyesWeight = 0.45f;
-    [SerializeField, Range(0f, 1f)] private float clampWeight = 0.42f;
-    [SerializeField] private float lookAtDistance = 12f;
     [SerializeField] private bool driveRightHandWhenHolding = true;
-
-    [Header("Sprint Leg Anti-Cross")]
-    [SerializeField, Min(0f)] private float sprintFootHalfSpacing = 0.09f;
-    [SerializeField, Range(0f, 1f)] private float sprintLegCorrectionWeight = 0.85f;
-    private Vector2 _legSeparationOffset;
-    private Vector2 _legSeparationVelocity;
-    private Avatar _footAvatar;
-    private Quaternion _leftSoleBasis;
-    private Quaternion _rightSoleBasis;
-    private readonly RaycastHit[] _footGroundHits = new RaycastHit[8];
-    private Vector3 _leftGroundNormal = Vector3.up, _rightGroundNormal = Vector3.up;
 
     [Header("Carry (Two-Hand) Pose")]
     [SerializeField] private float carryForwardOffset = 0.30f;
@@ -54,8 +37,6 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     private static readonly int IsDownedHash = Animator.StringToHash("IsDowned");
     private static readonly int IsCrouchingHash = Animator.StringToHash("IsCrouching");
     private static readonly int IsPushingHash = Animator.StringToHash("IsPushing");
-    private static readonly int IsMovingHash = Animator.StringToHash("IsMoving");
-    private static readonly int IsSprintingHash = Animator.StringToHash("IsSprinting");
 
     [Header("Jammo Grip Clearance")]
     [SerializeField, Min(0f)] private float jammoGripHeightOffset = 0.32f;
@@ -137,104 +118,94 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         }
 
         ApplyArmPosingInLateUpdate();
-        ApplySprintLegSeparation();
-        StabilizeFootOrientation();
+        CorrectFootRoll();
     }
 
-    private void StabilizeFootOrientation()
+    private Avatar _soleAvatar;
+    private Quaternion _leftSole, _rightSole;
+    private float _footCorrectionWeight;
+    private void CorrectFootRoll()
     {
-        if (animator == null || !animator.isHuman || animator.avatar == null || !animator.avatar.isValid
-            || IsDowned() || IsReviving() || IsPushing()) return;
-        Transform left = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
-        Transform right = animator.GetBoneTransform(HumanBodyBones.RightFoot);
+        if (animator == null || !animator.isHuman || animator.avatar == null || !animator.avatar.isValid) return;
+        // Crouch keeps its clip-authored feet, including transitions into crouch.
+        bool crouching = animator.GetBool(IsCrouchingHash)
+            || animator.GetCurrentAnimatorStateInfo(0).IsName("Crouch Locomotion")
+            || animator.IsInTransition(0) && animator.GetNextAnimatorStateInfo(0).IsName("Crouch Locomotion");
+        if (crouching) { _footCorrectionWeight = 0f; return; }
+        // Keep correction through normal locomotion, carry and their idle transitions.
+        bool active = !IsDowned() && !IsReviving() && !IsPushing();
+        _footCorrectionWeight = Mathf.MoveTowards(_footCorrectionWeight, active ? 1f : 0f, Time.deltaTime / 0.12f);
+        if (_footCorrectionWeight <= 0f) return;
+        var left = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
+        var right = animator.GetBoneTransform(HumanBodyBones.RightFoot);
         if (left == null || right == null) return;
-        if (_footAvatar != animator.avatar)
+        if (_soleAvatar != animator.avatar)
         {
-            // Read the avatar's neutral skeleton, not the current (possibly already tilted) frame.
-            _leftSoleBasis = GetNeutralSoleBasis(left);
-            _rightSoleBasis = GetNeutralSoleBasis(right);
-            _footAvatar = animator.avatar;
+            _soleAvatar = animator.avatar;
+            _leftSole = NeutralFootBasis(left, animator.GetBoneTransform(HumanBodyBones.LeftToes));
+            _rightSole = NeutralFootBasis(right, animator.GetBoneTransform(HumanBodyBones.RightToes));
         }
-        StabilizeFoot(left, _leftSoleBasis, ref _leftGroundNormal);
-        StabilizeFoot(right, _rightSoleBasis, ref _rightGroundNormal);
+        BoundFootRoll(left, _leftSole);
+        BoundFootRoll(right, _rightSole);
     }
-
-    private Quaternion GetNeutralSoleBasis(Transform foot)
+    private Quaternion NeutralFootBasis(Transform foot, Transform toes)
     {
-        Quaternion rotation = Quaternion.identity;
         var skeleton = animator.avatar.humanDescription.skeleton;
-        // Follow actual parents while reading neutral rotations from the avatar description.
-        for (Transform current = foot; current != null && current != animator.transform; current = current.parent)
+        Quaternion rotation = Quaternion.identity;
+        for (var bone = foot; bone != null && bone != animator.transform; bone = bone.parent)
         {
-            int index = System.Array.FindIndex(skeleton, bone => bone.name == current.name);
-            if (index < 0) continue;
-            rotation = skeleton[index].rotation * rotation;
+            int index = System.Array.FindIndex(skeleton, entry => entry.name == bone.name);
+            if (index >= 0) rotation = skeleton[index].rotation * rotation;
         }
-        return Quaternion.Inverse(rotation);
+        // Calibrate each foot independently from its own toe direction; bone axes differ by rig/side.
+        Vector3 forward = Vector3.forward;
+        if (toes != null)
+        {
+            Vector3 localToe = foot.InverseTransformPoint(toes.position);
+            Vector3 neutralToe = Vector3.ProjectOnPlane(rotation * localToe, Vector3.up);
+            if (neutralToe.sqrMagnitude > 0.000001f) forward = neutralToe.normalized;
+        }
+        return Quaternion.Inverse(rotation) * Quaternion.LookRotation(forward, Vector3.up);
     }
-
-    private void StabilizeFoot(Transform foot, Quaternion soleBasis, ref Vector3 smoothedNormal)
+    private void BoundFootRoll(Transform foot, Quaternion basis)
     {
-        Transform root = playerRoot != null ? playerRoot : transform;
-        Vector3 up = root.up;
-        Quaternion sole = foot.rotation * soleBasis;
+        Vector3 up = playerRoot != null ? playerRoot.up : Vector3.up;
+        Quaternion sole = foot.rotation * basis;
         Vector3 forward = sole * Vector3.forward;
-        Vector3 flatForward = Vector3.ProjectOnPlane(forward, up);
-        if (flatForward.sqrMagnitude < 0.001f) flatForward = root.forward;
-        float yaw = Mathf.Clamp(Vector3.SignedAngle(root.forward, flatForward, up), -45f, 45f);
-        Vector3 heading = Quaternion.AngleAxis(yaw, up) * root.forward;
-        Vector3 normal = up;
-        float clearance = float.PositiveInfinity;
-        int count = Physics.RaycastNonAlloc(foot.position + up * 0.15f, -up, _footGroundHits,
-            0.5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
-        for (int i = 0; i < count; i++)
+        Vector3 heading = Vector3.ProjectOnPlane(forward, up);
+        if (heading.sqrMagnitude > 0.001f)
         {
-            var hit = _footGroundHits[i];
-            if (!GameplayEnvironmentPhysics.IsEnvironment(hit.collider)
-                || hit.transform == root || hit.transform.IsChildOf(root)
-                || Vector3.Dot(hit.normal, up) < 0.65f) continue;
-            float distance = hit.distance - 0.15f;
-            if (distance < clearance) { clearance = distance; normal = hit.normal; }
+            Vector3 facing = playerRoot != null ? playerRoot.forward : transform.forward;
+            float yaw = Vector3.SignedAngle(facing, heading, up);
+            float excessYaw = yaw - Mathf.Clamp(yaw, -35f, 35f);
+            sole = Quaternion.AngleAxis(-excessYaw * _footCorrectionWeight, up) * sole;
+            forward = sole * Vector3.forward;
         }
-        smoothedNormal = Vector3.Slerp(smoothedNormal, normal, 1f - Mathf.Exp(-Time.deltaTime / 0.12f)).normalized;
-        normal = smoothedNormal;
-        heading = Vector3.ProjectOnPlane(heading, normal).normalized;
-        Quaternion level = Quaternion.LookRotation(heading, normal);
-        // Keep a heel/toe lift in mid-step; planted feet have a smaller allowed tilt.
-        float plant = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.02f, 0.14f, clearance));
-        float maxTilt = Mathf.Lerp(35f, 12f, plant);
-        Quaternion boundedSole = Quaternion.RotateTowards(level, sole, maxTilt);
-        foot.rotation = boundedSole * Quaternion.Inverse(soleBasis);
+        Vector3 levelUp = Vector3.ProjectOnPlane(up, forward);
+        if (levelUp.sqrMagnitude < 0.001f) return;
+        float correction = Vector3.SignedAngle(sole * Vector3.up, levelUp, forward);
+        // Remove sideways roll completely around the toe axis. Pitch and heading remain clip-authored.
+        foot.rotation = Quaternion.AngleAxis(correction * _footCorrectionWeight, forward) * sole * Quaternion.Inverse(basis);
     }
 
+    private float _gameplayHeadWeight;
+    private PlayerCharacterPresenter _headCharacter;
     private void OnAnimatorIK(int layerIndex)
     {
-        if (IsLobbyPresentation || IsReviving() || IsDowned() || IsPushing())
+        if (layerIndex != 0 || animator == null || !animator.isHuman
+            || animator.avatar == null || !animator.avatar.isValid) return;
+        if (_headCharacter == null) _headCharacter = GetComponentInParent<PlayerCharacterPresenter>();
+        bool follow = !IsLobbyPresentation && _headCharacter != null && _headCharacter.IsJammo
+            && !IsDowned() && !IsReviving() && !IsPushing();
+        _gameplayHeadWeight = Mathf.MoveTowards(_gameplayHeadWeight, follow ? 0.85f : 0f, Time.deltaTime / 0.12f);
+        if (IsLobbyPresentation) _gameplayHeadWeight = 0f;
+        // Head only: body weight stays zero so locomotion and held-item arms are untouched.
+        animator.SetLookAtWeight(_gameplayHeadWeight, 0f, 1f, 0f, 0.6f);
+        if (_gameplayHeadWeight > 0f && TryGetAim(out _, out var forward, out _))
         {
-            if (animator != null && animator.isHuman) animator.SetLookAtWeight(0f);
-            return;
+            var head = animator.GetBoneTransform(HumanBodyBones.Head);
+            if (head != null) animator.SetLookAtPosition(head.position + forward * 8f);
         }
-        if (animator == null || (!TryGetAim(out Vector3 aimOrigin, out Vector3 aimForward, out Vector3 aimUp)))
-        {
-            return;
-        }
-
-        // Native crash prevention:
-        // Unity's native Humanoid IK solver crashes with 0xC0000005 (access violation at 0xFFFFFFFF00000000)
-        // if SetLookAt or SetIKPosition are called when the avatar is not humanoid or has no valid bone mapping.
-        if (!animator.isHuman || animator.avatar == null || !animator.avatar.isValid)
-        {
-            return;
-        }
-
-        Vector3 lookAt = aimOrigin + aimForward * lookAtDistance;
-
-        animator.SetLookAtWeight(lookAtWeight, bodyWeight, headWeight, eyesWeight, clampWeight);
-        animator.SetLookAtPosition(lookAt);
-
-        // Note: We deliberately do NOT call animator.SetIKPosition or animator.SetIKRotation for AvatarIKGoal
-        // because Unity's native Humanoid limb IK solver crashes with Access Violation (0xC0000005)
-        // on this model's rig. Hand and arm posing is handled safely via Transform rotation in LateUpdate().
     }
 
     private void ApplyArmPosingInLateUpdate()
@@ -324,102 +295,6 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
             SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, handTarget, rightElbowPole, rightHandPosWeight);
             character?.ApplyJammoGrip(rightHandBone, false, aimForward, aimUp);
-        }
-    }
-
-    private void ApplySprintLegSeparation()
-    {
-        if (animator == null
-            || !animator.isHuman
-            || animator.avatar == null
-            || !animator.avatar.isValid)
-        {
-            return;
-        }
-
-        if (IsReviving()
-            || IsDowned()
-            || IsPushing()
-            || animator.GetBool(IsCrouchingHash)
-            || Mathf.Abs(animator.GetFloat("MoveX")) > 0.15f
-            || !animator.GetBool(IsMovingHash)
-            || !animator.GetBool(IsSprintingHash))
-        {
-            _legSeparationOffset = Vector2.zero;
-            _legSeparationVelocity = Vector2.zero;
-            return;
-        }
-
-        Transform root = playerRoot != null ? playerRoot : transform;
-
-        Transform leftUpper = animator.GetBoneTransform(HumanBodyBones.LeftUpperLeg);
-        Transform leftLower = animator.GetBoneTransform(HumanBodyBones.LeftLowerLeg);
-        Transform leftFoot = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
-
-        Transform rightUpper = animator.GetBoneTransform(HumanBodyBones.RightUpperLeg);
-        Transform rightLower = animator.GetBoneTransform(HumanBodyBones.RightLowerLeg);
-        Transform rightFoot = animator.GetBoneTransform(HumanBodyBones.RightFoot);
-
-        if (leftUpper == null || leftLower == null || leftFoot == null
-            || rightUpper == null || rightLower == null || rightFoot == null)
-        {
-            return;
-        }
-
-        Vector3 leftLocal = root.InverseTransformPoint(leftFoot.position);
-        Vector3 rightLocal = root.InverseTransformPoint(rightFoot.position);
-
-        // Smooth the displacement, rather than switching a strong solver weight at a threshold.
-        // Limit correction to a small clearance so the authored gait remains intact.
-        Vector2 desiredOffset = new Vector2(
-            Mathf.Clamp(-sprintFootHalfSpacing - leftLocal.x, -0.06f, 0f),
-            Mathf.Clamp(sprintFootHalfSpacing - rightLocal.x, 0f, 0.06f));
-        _legSeparationOffset = Vector2.SmoothDamp(_legSeparationOffset, desiredOffset,
-            ref _legSeparationVelocity, 0.12f, Mathf.Infinity, Time.deltaTime);
-        bool fixLeft = Mathf.Abs(_legSeparationOffset.x) > 0.0001f;
-        bool fixRight = Mathf.Abs(_legSeparationOffset.y) > 0.0001f;
-
-        if (!fixLeft && !fixRight)
-        {
-            return;
-        }
-
-        if (fixLeft)
-        {
-            leftLocal.x += _legSeparationOffset.x;
-
-            Vector3 leftTarget = root.TransformPoint(leftLocal);
-            Vector3 leftPole =
-                leftLower.position + root.forward * 0.05f;
-
-            Quaternion footRotation = leftFoot.rotation;
-            SolveTwoBoneIK(
-                leftUpper,
-                leftLower,
-                leftFoot,
-                leftTarget,
-                leftPole,
-                sprintLegCorrectionWeight);
-            leftFoot.rotation = footRotation;
-        }
-
-        if (fixRight)
-        {
-            rightLocal.x += _legSeparationOffset.y;
-
-            Vector3 rightTarget = root.TransformPoint(rightLocal);
-            Vector3 rightPole =
-                rightLower.position + root.forward * 0.05f;
-
-            Quaternion footRotation = rightFoot.rotation;
-            SolveTwoBoneIK(
-                rightUpper,
-                rightLower,
-                rightFoot,
-                rightTarget,
-                rightPole,
-                sprintLegCorrectionWeight);
-            rightFoot.rotation = footRotation;
         }
     }
 
