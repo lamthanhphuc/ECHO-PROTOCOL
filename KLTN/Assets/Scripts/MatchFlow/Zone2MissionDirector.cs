@@ -603,7 +603,7 @@ namespace EchoProtocol.MatchFlow
 
         public bool RequestRelayBSurge(RelayBController controller,int cell,int attempt)=>
             TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller,out var slot)
-            && controller.Surge.Board!=null && matchState.RequestRelayBSurge(slot,cell,attempt,controller.Surge.Board.Seed);
+            && (controller.Surge.Board!=null || cell==-2) && matchState.RequestRelayBSurge(slot,cell,attempt,controller.Surge.Board!=null ? controller.Surge.Board.Seed : 0);
 
         public bool RequestRelayBSlot(RelayBController controller, int slotIndex, RelayBModuleType module) =>
             TryGetNetworkMatch(out var matchState) && TryGetRelaySlot(controller, out var slot)

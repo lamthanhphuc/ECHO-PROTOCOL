@@ -5,7 +5,7 @@ namespace EchoProtocol.RelayB
     public struct RelayBSurgeTelemetry : INetworkStruct
     {
         public int Seed, Attempt, Difficulty, Variant, PulseSequence;
-        public byte Phase;
+        public byte Phase, PreparationFailed;
         public ulong InfectedLow, InfectedHigh, InsulatedLow, InsulatedHigh;
         public float Elapsed, PulseRemaining, Cooldown;
         public static RelayBSurgeTelemetry From(RelayBSurgeSimulation sim) => sim.Board == null ? default : new RelayBSurgeTelemetry

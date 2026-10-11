@@ -131,6 +131,22 @@ namespace EchoProtocol.RelayB
 
     public static class RelayBSurgeGenerator
     {
+        public static RelayBSurgeBoard GenerateWithRecovery(int seed, int difficulty, int variant, int attempt,
+            Func<int, int, int, int, RelayBSurgeBoard> generate = null)
+        {
+            generate ??= Generate;
+            // All peers use the same recovery sequence, while retaining the network seed.
+            for (int retry = 0; ; retry++)
+            {
+                try
+                {
+                    var board = generate(unchecked(seed + retry * 104729), difficulty, variant, attempt);
+                    board.Seed = seed;
+                    return board;
+                }
+                catch (InvalidOperationException) when (retry < 2) { }
+            }
+        }
         public static RelayBSurgeBoard Generate(int seed, int difficulty, int variant, int attempt)
         {
             difficulty = Math.Max(0, Math.Min(2, difficulty));

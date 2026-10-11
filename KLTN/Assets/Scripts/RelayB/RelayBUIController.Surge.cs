@@ -78,8 +78,18 @@ namespace EchoProtocol.RelayB
         {
             if(_controller==null || !IsOpen || _controller.Snapshot.ActiveTab!=0)return;
             var sim=_controller.Surge;var b=sim.Board;EnsureSurgeUI(b);if(_surgeRoot==null)return;
+            if(_controller.SurgePreparationFailed) {
+                _surgeTitle.text=GameLanguage.Choose("Không chuẩn bị được mạch", "Circuit preparation failed");
+                _surgeHint.text=GameLanguage.Choose("Sẽ tự thử lại sau 30 giây. Bạn có thể thử lại ngay hoặc đóng bảng.", "Retrying automatically after 30 seconds. Retry now or close the panel.");
+                _surgeMetrics.text="";_surgeResult.text="";
+                if(_surgeCells!=null)foreach(var button in _surgeCells)button.interactable=false;
+                _surgeStart.gameObject.SetActive(true);_surgeStart.interactable=canOperate;
+                _surgeStart.GetComponentInChildren<TMP_Text>().text=GameLanguage.Choose("Thử lại", "Retry");
+                return;
+            }
             if(b==null) {
                 _surgeTitle.text=GameLanguage.Choose("Đang chuẩn bị mạch…","Preparing circuit…");
+                _surgeHint.text="";_surgeMetrics.text="";_surgeResult.text="";
                 _surgeStart.gameObject.SetActive(false);return;
             }
             bool ready=sim.Phase==RelayBSurgePhase.Ready,practice=ready && !_practiceDone;
@@ -129,6 +139,10 @@ namespace EchoProtocol.RelayB
         private void StartSurgeClicked()
         {
             if(_controller==null)return;
+            if(_controller.SurgePreparationFailed) {
+                if(TryGetNetworkDirector(out var recoveryDirector))recoveryDirector.RequestRelayBSurge(_controller,-2,_controller.Surge.Attempt);
+                _controller.RetrySurgePreparation();return;
+            }
             _practiceDone=true;_practiceCell=-1;PlayerPrefs.SetInt(SurgeTutorialKey,1);PlayerPrefs.Save();
             if(TryGetNetworkDirector(out var director))director.RequestRelayBSurge(_controller,-1,_controller.Surge.Attempt);
             else _controller.StartSurge();

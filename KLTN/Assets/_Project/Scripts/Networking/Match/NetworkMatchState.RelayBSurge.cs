@@ -21,6 +21,7 @@ namespace EchoProtocol.Networking
         private void CaptureRelayBSurge(RelaySlot slot,RelayBController controller)
         {
             var state=RelayBSurgeTelemetry.From(controller.Surge);
+            state.PreparationFailed=(byte)(controller.SurgePreparationFailed ? 1 : 0);
             var snapshot=controller.Snapshot;
             if(slot==RelaySlot.RelayB_1) {
                 RelayB1Surge=state;RelayB1Scanned=snapshot.HasScanned;RelayB1Channel=snapshot.SelectedChannelIndex;
@@ -45,6 +46,11 @@ namespace EchoProtocol.Networking
             if(!IsRelayBSlot(slot) || !TryValidateRelayCommand(player,slot,out var target)
                 || GetRelayOperator(slot)!=player)return false;
             var controller=(RelayBController)target;
+            if(cell==-2) {
+                if(!controller.SurgePreparationFailed || controller.Simulation.IsSignalFound)return false;
+                controller.RetrySurgePreparation();
+                CaptureRelayBSurge(slot,controller);return true;
+            }
             if(controller.Surge.Board==null || controller.Surge.Board.Seed!=seed
                 || controller.Surge.Attempt!=attempt || controller.Simulation.IsSignalFound)return false;
             bool accepted=cell==-1 ? controller.StartSurge() : controller.PlaceSurgeInsulation(cell,attempt);

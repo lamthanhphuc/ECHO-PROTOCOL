@@ -8,6 +8,36 @@ namespace EchoProtocol.Tests.EditMode.Controls
 {
     public sealed class RelayBSurgeTests
     {
+        [Test]
+        public void PreparationRecovery_UsesDeterministicFallbackAndRetainsNetworkSeed()
+        {
+            var seeds = new System.Collections.Generic.List<int>();
+            var board = RelayBSurgeGenerator.GenerateWithRecovery(42, 1, 0, 3, (seed, difficulty, variant, attempt) => {
+                seeds.Add(seed);
+                Assert.That(attempt, Is.EqualTo(3));
+                if (seeds.Count < 3) throw new InvalidOperationException("No validated board");
+                return new RelayBSurgeBoard { Seed = seed };
+            });
+            Assert.That(seeds, Is.EqualTo(new[] { 42, 104771, 209500 }));
+            Assert.That(board.Seed, Is.EqualTo(42));
+        }
+        [Test]
+        public void PreparationRecovery_StopsAfterThreeFailures()
+        {
+            int calls = 0;
+            Assert.Throws<InvalidOperationException>(() => RelayBSurgeGenerator.GenerateWithRecovery(42, 1, 0, 0,
+                (seed, difficulty, variant, attempt) => { calls++; throw new InvalidOperationException(); }));
+            Assert.That(calls, Is.EqualTo(3));
+        }
+        [Test]
+        public void PreparationRecovery_DoesNotHideUnexpectedErrors()
+        {
+            int calls = 0;
+            Assert.Throws<ArgumentException>(() => RelayBSurgeGenerator.GenerateWithRecovery(42, 1, 0, 0,
+                (seed, difficulty, variant, attempt) => { calls++; throw new ArgumentException(); }));
+            Assert.That(calls, Is.EqualTo(1));
+        }
+
         [TestCase(0,0)] [TestCase(0,1)] [TestCase(1,0)] [TestCase(1,1)] [TestCase(2,0)] [TestCase(2,1)]
         public void GeneratedBoards_HaveTimedSolutionsAndMatchDifficulty(int difficulty,int variant)
         {

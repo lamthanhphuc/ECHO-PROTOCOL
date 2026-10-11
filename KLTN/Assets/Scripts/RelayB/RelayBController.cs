@@ -38,6 +38,19 @@ namespace EchoProtocol.RelayB
         private readonly Dictionary<int, Task<RelayBSurgeBoard>> _preparedBoards = new Dictionary<int, Task<RelayBSurgeBoard>>();
         private int _preparedSeed, _preparedDifficulty=-1, _preparedVariant=-1;
         private bool _preparingSurge;
+        private float _generationRetryAt;
+        private bool _remotePreparationFailed;
+        private bool _localPreparationFailed;
+        private int _failedPreparationAttempt;
+        public bool SurgePreparationFailed => _localPreparationFailed || _remotePreparationFailed;
+        public void RetrySurgePreparation()
+        {
+            var failed = new List<int>();
+            foreach (var entry in _preparedBoards) if (entry.Value.IsFaulted || entry.Value.IsCanceled) failed.Add(entry.Key);
+            foreach (var attempt in failed) _preparedBoards.Remove(attempt);
+            _localPreparationFailed = false;
+            _generationRetryAt = 0;
+        }
         private Task<RelayBSurgeBoard> _reportedGenerationFailure;
         public bool IsPreparingSurge => _preparingSurge || (Surge.IsFailed
             && _preparedBoards.TryGetValue(Surge.Attempt+1,out var next) && !next.IsCompleted);
@@ -45,26 +58,36 @@ namespace EchoProtocol.RelayB
         private Task<RelayBSurgeBoard> PrepareSurge(int seed,int difficulty,int variant,int attempt)
         {
             if (_preparedSeed!=seed || _preparedDifficulty!=difficulty || _preparedVariant!=variant) {
-                _preparedBoards.Clear(); _preparedSeed=seed; _preparedDifficulty=difficulty; _preparedVariant=variant;
+                _preparedBoards.Clear(); _localPreparationFailed=false; _generationRetryAt=0; _preparedSeed=seed; _preparedDifficulty=difficulty; _preparedVariant=variant;
             }
             if (!_preparedBoards.TryGetValue(attempt,out var task)) {
-                task=Task.Run(()=>RelayBSurgeGenerator.Generate(seed,difficulty,variant,attempt));
+                task=Task.Run(()=>RelayBSurgeGenerator.GenerateWithRecovery(seed,difficulty,variant,attempt));
                 _preparedBoards.Add(attempt,task);
             }
             return task;
         }
         private bool EnsureSurge(int seed,int difficulty,int variant,int attempt)
         {
+            if (_localPreparationFailed && _failedPreparationAttempt!=attempt && _preparedSeed==seed
+                && _preparedDifficulty==difficulty && _preparedVariant==variant)
+                return EnsureSurge(seed,difficulty,variant,_failedPreparationAttempt);
+            if (_preparedBoards.TryGetValue(attempt, out var failed) && (failed.IsFaulted || failed.IsCanceled)
+                && Time.unscaledTime >= _generationRetryAt && _reportedGenerationFailure == failed)
+                _preparedBoards.Remove(attempt);
             var task=PrepareSurge(seed,difficulty,variant,attempt);
             _preparingSurge=!task.IsCompleted;
+            if (!task.IsCompleted) _localPreparationFailed=false;
             if (!task.IsCompleted) return false;
-            if (task.IsFaulted) {
-                _preparingSurge=true;
+            if (task.IsFaulted || task.IsCanceled) {
+                _preparingSurge=false;
+                _localPreparationFailed=true;_failedPreparationAttempt=attempt;
                 if (_reportedGenerationFailure!=task) {
-                    _reportedGenerationFailure=task;Debug.LogException(task.Exception,this);
+                    _reportedGenerationFailure=task;_generationRetryAt=Time.unscaledTime+30f;
+                    if(task.Exception!=null)Debug.LogException(task.Exception,this);
                 }
                 return false;
             }
+            _localPreparationFailed=false;
             if (Surge.Board==null || Surge.Board.Seed!=seed || Surge.Attempt!=attempt
                 || Surge.Board.Difficulty!=difficulty || Surge.Board.Variant!=variant) Surge.Reset(task.Result,attempt);
             // Keep only this board and one retry, not an ever-growing cache.
@@ -182,6 +205,7 @@ namespace EchoProtocol.RelayB
         }
         public void ApplyAuthoritativeSurge(RelayBSurgeTelemetry state)
         {
+            _remotePreparationFailed=state.PreparationFailed!=0;
             if(state.Seed==0)return;
             _surgeDifficulty=state.Difficulty;_surgeVariant=state.Variant;
             if(Surge.Board==null || Surge.Board.Seed!=state.Seed || Surge.Attempt!=state.Attempt
