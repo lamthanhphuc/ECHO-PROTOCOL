@@ -57,6 +57,7 @@ public sealed class AEDPreMatchCandidateV1Tests
 
         var result = AEDPreMatchCandidateV1.TrySelect(
             rule, baseline, candidates,
+            new double[] { 0, 1, 2 },
             out var selected, out var reason);
 
         Assert.True(result, reason);
@@ -80,6 +81,7 @@ public sealed class AEDPreMatchCandidateV1Tests
         var result = AEDPreMatchCandidateV1.TrySelect(
             "AED-PRE-030-BOTH-HIGH-INCREASE",
             baseline, candidates,
+            new double[] { 9, 10, 11 },
             out var selected, out var reason);
 
         Assert.True(result, reason);
@@ -95,6 +97,7 @@ public sealed class AEDPreMatchCandidateV1Tests
             "AED-PRE-040-MIXED-HOLD",
             Baseline(),
             new[] { Candidate(1, 9) },
+            new double[] { 0, 1, 2 },
             out var selected,
             out var reason);
 
@@ -113,6 +116,7 @@ public sealed class AEDPreMatchCandidateV1Tests
             "AED-PRE-010-SURVIVAL-LOW-RELIEVE",
             Baseline(),
             new[] { invalid },
+            new double[] { 0, 1, 2 },
             out var selected,
             out var reason);
 
@@ -132,6 +136,7 @@ public sealed class AEDPreMatchCandidateV1Tests
             "AED-PRE-010-SURVIVAL-LOW-RELIEVE",
             Baseline(),
             new[] { first, second },
+            new double[] { 0, 1, 2 },
             out var selected,
             out var reason);
 
@@ -150,10 +155,27 @@ public sealed class AEDPreMatchCandidateV1Tests
             "AED-PRE-010-SURVIVAL-LOW-RELIEVE",
             Baseline(),
             new[] { candidate },
+            new double[] { 0, 1, 2 },
             out var selected,
             out _);
 
         Assert.False(result);
         Assert.Null(selected);
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public void CannotSkipNextRegisteredValue()
+    {
+        var result = AEDPreMatchCandidateV1.TrySelect(
+            "AED-PRE-010-SURVIVAL-LOW-RELIEVE",
+            Baseline(),
+            new[] { Candidate(2, 9) },
+            new double[] { 0, 1, 2 },
+            out var selected,
+            out var reason);
+
+        Assert.False(result);
+        Assert.Null(selected);
+        Assert.Equal("NO_APPROVED_NEXT_VALUE", reason);
     }
 }

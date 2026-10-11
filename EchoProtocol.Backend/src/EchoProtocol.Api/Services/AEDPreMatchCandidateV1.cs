@@ -18,6 +18,7 @@ public static class AEDPreMatchCandidateV1
         string ruleId,
         ScenarioConfigDefinition baseline,
         IReadOnlyList<ScenarioConfigDefinition> approvedCandidates,
+        IReadOnlyList<double> registeredValues,
         out ScenarioConfigDefinition? selected,
         out string reason)
     {
@@ -59,17 +60,49 @@ public static class AEDPreMatchCandidateV1
             return false;
         }
 
+        if (registeredValues == null ||
+            registeredValues.Count == 0 ||
+            registeredValues.Any(x =>
+                !double.IsFinite(x) ||
+                (relief && (x < 0 || x != Math.Truncate(x)))) ||
+            registeredValues.Distinct().Count() != registeredValues.Count)
+        {
+            reason = "PARAMETER_REGISTRY_INVALID";
+            return false;
+        }
+
+        var current = relief
+            ? baseline.SupportItemBudget
+            : baseline.ChaseSpeed;
+
+        if (!registeredValues.Contains(current))
+        {
+            reason = "PARAMETER_REGISTRY_INVALID";
+            return false;
+        }
+
+        var higher = registeredValues
+            .Where(x => x > current)
+            .OrderBy(x => x)
+            .ToArray();
+
+        if (higher.Length == 0)
+        {
+            reason = "VALUE_LIMIT_REACHED";
+            return false;
+        }
+
+        var expectedNext = higher[0];
+
         var candidates = approvedCandidates
             .Where(x =>
                 x is not null &&
                 IsCompatible(x, baseline) &&
                 (relief
-                    ? x.SupportItemBudget > baseline.SupportItemBudget &&
+                    ? x.SupportItemBudget == expectedNext &&
                       x.ChaseSpeed == baseline.ChaseSpeed
-                    : x.ChaseSpeed > baseline.ChaseSpeed &&
+                    : x.ChaseSpeed == expectedNext &&
                       x.SupportItemBudget == baseline.SupportItemBudget))
-            .OrderBy(x =>
-                relief ? x.SupportItemBudget : x.ChaseSpeed)
             .ToArray();
 
         if (candidates.Length == 0)
@@ -78,13 +111,7 @@ public static class AEDPreMatchCandidateV1
             return false;
         }
 
-        var nextValue = relief
-            ? candidates[0].SupportItemBudget
-            : candidates[0].ChaseSpeed;
-
-        if (candidates.Count(x =>
-                (relief ? x.SupportItemBudget : x.ChaseSpeed)
-                == nextValue) != 1)
+        if (candidates.Length != 1)
         {
             reason = "AMBIGUOUS_CANDIDATE";
             return false;
