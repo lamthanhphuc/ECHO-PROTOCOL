@@ -27,29 +27,35 @@ public sealed class AEDPhase8SourceVerifierV1(AppDbContext db, ITelemetryEventRe
         var phaseName = ReadPhase(phaseStart.ValueJson);
         var phaseEnds = accepted.Where(x => x.MatchId == matchId && x.EventType == "PHASE_COMPLETED" && ReadPhase(x.ValueJson) == phaseName).ToArray();
         if (phaseEnds.Length != 1 || phaseStart.EventSequence >= phaseEnds[0].EventSequence) return new(true, false, false, false, false, "P8_SOURCE_PHASE_WINDOW_INVALID");
-        if (request.SourceEvents.Any(x => x == null || x.EventId == Guid.Empty || x.EventSequence <= 0 || string.IsNullOrWhiteSpace(x.EventType) || string.IsNullOrWhiteSpace(x.OccurrenceKey)) || request.SourceEvents.Select(x => x.EventId).Distinct().Count() != request.SourceEvents.Length)
+        if (request.SourceEvents.Length == 0 ||
+            request.SourceEvents.Any(x => x == null || x.EventId == Guid.Empty || x.EventSequence <= 0 || string.IsNullOrWhiteSpace(x.EventType) || string.IsNullOrWhiteSpace(x.OccurrenceKey)) ||
+            request.SourceEvents.Select(x => x.EventId).Distinct().Count() != request.SourceEvents.Length ||
+            request.SourceEvents.GroupBy(x => (x.EventType, x.OccurrenceKey)).Any(group => group.Count() > 1))
             return new(true, false, false, false, false, "P8_SOURCE_REFERENCE_INVALID");
         foreach (var source in request.SourceEvents)
         {
             if (!byId.TryGetValue(source.EventId, out var matches) || matches.Length != 1) return new(true, false, false, false, false, "P8_SOURCE_EVENT_NOT_ACCEPTED");
             var item = matches[0];
-            if (item.EventSequence != source.EventSequence || item.EventType != source.EventType || item.EventSequence < phaseStart.EventSequence || item.EventSequence > phaseEnds[0].EventSequence || (item.UserId.HasValue && !users.Contains(item.UserId.Value)) || !HasOccurrenceKey(item.ValueJson, source.OccurrenceKey))
+            if (item.EventSequence != source.EventSequence || item.EventType != source.EventType || item.EventSequence <= phaseStart.EventSequence || item.EventSequence >= phaseEnds[0].EventSequence || (item.UserId.HasValue && !users.Contains(item.UserId.Value)) || !HasOccurrenceKey(item.ValueJson, source.OccurrenceKey))
                 return new(true, false, false, false, false, "P8_SOURCE_EVENT_MISMATCH");
         }
         var references = request.SourceEvents.Select(x => x.OccurrenceKey).ToHashSet(StringComparer.Ordinal);
-        if (request.Metrics.Any(x => x == null || x.UserId == Guid.Empty || !users.Contains(x.UserId) || x.Eligible < 0 || x.ResolvedSuccess < 0 || x.ResolvedFailure < 0 || x.Censored < 0 || x.ResolvedSuccess + x.ResolvedFailure + x.Censored > x.Eligible || x.MetricVersion != "AED_METRIC_OPPORTUNITY_V1" || (x.NormalizedValue.HasValue && (x.NormalizedValue < 0m || x.NormalizedValue > 1m)) || (x.ResolvedSuccess + x.ResolvedFailure > 0 && !x.NormalizedValue.HasValue) || x.SourceOccurrenceKeys == null || x.SourceOccurrenceKeys.Any(key => !references.Contains(key))))
+        if (request.Metrics.Any(x => x == null || x.UserId == Guid.Empty || !users.Contains(x.UserId) || x.Eligible < 0 || x.ResolvedSuccess < 0 || x.ResolvedFailure < 0 || x.Censored < 0 || (long)x.ResolvedSuccess + x.ResolvedFailure + x.Censored > x.Eligible || x.MetricVersion != "AED_METRIC_OPPORTUNITY_V1" || (x.NormalizedValue.HasValue && (x.NormalizedValue < 0m || x.NormalizedValue > 1m)) || (x.ResolvedSuccess + x.ResolvedFailure > 0 && !x.NormalizedValue.HasValue) || x.SourceOccurrenceKeys == null || x.SourceOccurrenceKeys.Any(key => !references.Contains(key))))
             return new(true, false, false, false, false, "P8_SOURCE_METRIC_INVALID");
-        if (request.Supply.Select(x => x?.InstanceId).Distinct(StringComparer.Ordinal).Count() != request.Supply.Length || request.Supply.Any(x => x == null || string.IsNullOrWhiteSpace(x.InstanceId) || x.ToolId < 0 || x.Zone is < 0 or > 3 || x.SourceTick < 0 || string.IsNullOrWhiteSpace(x.SourceOccurrenceKey) || !references.Contains(x.SourceOccurrenceKey)))
+        if (request.Supply.Select(x => x?.InstanceId).Distinct(StringComparer.Ordinal).Count() != request.Supply.Length || request.Supply.Any(x => x == null || string.IsNullOrWhiteSpace(x.InstanceId) || x.ToolId is not (1 or 2 or 3 or 4 or 6) || x.Zone is < 0 or > 3 || x.SourceTick < 0 || string.IsNullOrWhiteSpace(x.SourceOccurrenceKey) || !references.Contains(x.SourceOccurrenceKey)))
             return new(true, false, false, false, false, "P8_SOURCE_SUPPLY_INVALID");
-        if (request.Minions.Any(x => x == null || string.IsNullOrWhiteSpace(x.NetworkInstanceId) || x.Zone is < 0 or > 3 || x.SourceTick < 0 || string.IsNullOrWhiteSpace(x.SourceOccurrenceKey) || !references.Contains(x.SourceOccurrenceKey)))
+        if (request.Minions.Any(x => x == null || string.IsNullOrWhiteSpace(x.NetworkInstanceId) || x.State is not ("SPAWNED" or "DESPAWNED") || x.Zone is < 0 or > 3 || x.SourceTick < 0 || string.IsNullOrWhiteSpace(x.SourceOccurrenceKey) || !references.Contains(x.SourceOccurrenceKey)))
             return new(true, false, false, false, false, "P8_SOURCE_MINION_INVALID");
         // Historical skill, pressure sidecars, complete supply origins, and minion state are not independently reconstructible yet.
         return new(true, false, false, false, false, "P8_SOURCE_AUTHORITATIVE_COVERAGE_INCOMPLETE");
     }
 
-    private static bool HasOccurrenceKey(BsonDocument document, string key) => document.Elements.Any(element =>
-        element.Name.Equals("occurrenceKey", StringComparison.OrdinalIgnoreCase) && element.Value.IsString && element.Value.AsString == key
-        || element.Value.IsBsonDocument && HasOccurrenceKey(element.Value.AsBsonDocument, key));
+    private static bool HasOccurrenceKey(BsonDocument document, string key) =>
+        document.TryGetValue("context", out var context) &&
+        context.IsBsonDocument &&
+        context.AsBsonDocument.TryGetValue("occurrenceKey", out var occurrence) &&
+        occurrence.IsString &&
+        string.Equals(occurrence.AsString, key, StringComparison.Ordinal);
 
     private static string ReadPhase(BsonDocument document) => document.TryGetValue("context", out var context) && context.IsBsonDocument && context.AsBsonDocument.TryGetValue("phase", out var phase) && phase.IsString ? phase.AsString : string.Empty;
 

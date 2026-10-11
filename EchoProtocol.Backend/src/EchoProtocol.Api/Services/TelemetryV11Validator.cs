@@ -57,7 +57,8 @@ internal static class TelemetryV11Validator
         "authorityTick",
         "scenarioConfigVersion",
         "policyVersion",
-        "configSource"
+        "configSource",
+        "occurrenceKey"
     ];
 
     private static readonly HashSet<string> MatchStartedOptionalContextFields =
@@ -836,6 +837,14 @@ internal static class TelemetryV11Validator
             !HasText(context, "scenarioConfigVersion") ||
             !HasText(context, "policyVersion") ||
             !HasOneOf(context, "configSource", ["FIXED", "ADAPTIVE"], out reason, "TELEMETRY_COMMON_CONTEXT_INVALID"))
+        {
+            reason = "TELEMETRY_COMMON_CONTEXT_INVALID";
+            return false;
+        }
+
+        if (context.TryGetProperty("occurrenceKey", out var occurrenceKey) &&
+            (occurrenceKey.ValueKind != JsonValueKind.String ||
+             string.IsNullOrWhiteSpace(occurrenceKey.GetString())))
         {
             reason = "TELEMETRY_COMMON_CONTEXT_INVALID";
             return false;

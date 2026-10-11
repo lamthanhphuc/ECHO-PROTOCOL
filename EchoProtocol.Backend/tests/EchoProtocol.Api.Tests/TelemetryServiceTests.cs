@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data.Telemetry;
@@ -15,6 +16,38 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed class TelemetryServiceTests
 {
+    [Theory]
+    [InlineData("match-start", true)]
+    [InlineData("", false)]
+    public async Task IngestBatchAsync_OccurrenceKeyContract(
+        string occurrenceKey,
+        bool shouldAccept)
+    {
+        var repository = new FakeTelemetryEventRepository();
+        var request = CreateMatchStarted();
+        var json = JsonNode.Parse(
+            request.Events[0].ValueJson.GetRawText())!;
+        json["context"]!["occurrenceKey"] = occurrenceKey;
+        request.Events[0].ValueJson =
+            JsonSerializer.SerializeToElement(json);
+
+        var result = await CreateService(repository)
+            .IngestBatchAsync(request, Guid.NewGuid(), CancellationToken.None);
+
+        if (shouldAccept)
+        {
+            Assert.True(result.IsSuccess);
+            var stored = Assert.Single(repository.InsertedEvents);
+            Assert.Equal(occurrenceKey,
+                stored.ValueJson["context"]["occurrenceKey"].AsString);
+        }
+        else
+        {
+            AssertReject(result, "TELEMETRY_COMMON_CONTEXT_INVALID");
+            Assert.Empty(repository.InsertedEvents);
+        }
+    }
+
     [Fact]
     public async Task IngestBatchAsync_CanonicalV11MatchStart_StoresValueJsonAndReturnsAcceptedAck()
     {

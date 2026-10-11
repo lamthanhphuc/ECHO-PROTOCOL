@@ -143,6 +143,34 @@ public sealed partial class ScenarioServiceTests
     }
 
     [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_SourceReferenceMustMatchAcceptedOccurrence()
+    {
+        await using var f = await ValidAEDv2Fixture();
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+
+        var events = PhaseEvidence(f);
+        var downEvent = events.Single(x => x.EventType == "PLAYER_DOWNED");
+        downEvent.ValueJson["context"].AsBsonDocument["occurrenceKey"] = "down-2";
+        var users = f.Db.MatchPlayerBindings.Where(x => x.MatchId == f.MatchId).Select(x => x.UserId).ToArray();
+        var roster = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(f.MatchId.ToString("D") + "|" + string.Join(",", users.Select(x => x.ToString("D")).Order(StringComparer.Ordinal))))).ToLowerInvariant();
+        var reference = new AEDPhase8SourceReferenceV1(downEvent.Id, downEvent.EventSequence, downEvent.EventType, "down-2");
+        var request = new AEDPhase8SourceUploadRequestV1(1, PhaseFingerprint(f, 1), roster, "TEST_CONTEXT", "P8_SOURCE_TEST_V1", new[] { reference }, Array.Empty<AEDPhase8MetricEvidenceV1>(), Array.Empty<AEDPhase8SupplyEvidenceV1>(), Array.Empty<AEDPhase8MinionEvidenceV1>());
+        var verifier = new AEDPhase8SourceVerifierV1(f.Db, new AcceptedEvidenceRepository(events), new AEDv2PhaseEvidenceVerifier(f.Db, new AcceptedEvidenceRepository(events)));
+
+        var valid = await verifier.VerifyAsync(f.MatchId, request);
+        Assert.True(valid.CanonicalVerified);
+        Assert.Equal("P8_SOURCE_AUTHORITATIVE_COVERAGE_INCOMPLETE", valid.ReasonCode);
+
+        var invalid = await verifier.VerifyAsync(f.MatchId, request with { SourceEvents = new[] { reference with { OccurrenceKey = "forged-occurrence" } } });
+        Assert.Equal("P8_SOURCE_EVENT_MISMATCH", invalid.ReasonCode);
+        var duplicated = await verifier.VerifyAsync(f.MatchId, request with { SourceEvents = new[] { reference, reference } });
+        Assert.Equal("P8_SOURCE_REFERENCE_INVALID", duplicated.ReasonCode);
+        var missing = await verifier.VerifyAsync(f.MatchId, request with { SourceEvents = Array.Empty<AEDPhase8SourceReferenceV1>() });
+        Assert.Equal("P8_SOURCE_REFERENCE_INVALID", missing.ReasonCode);
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
     public async Task AEDv2_PreMatchGameplayCommitIsRejected()
     {
         await using var f = await ValidAEDv2Fixture();

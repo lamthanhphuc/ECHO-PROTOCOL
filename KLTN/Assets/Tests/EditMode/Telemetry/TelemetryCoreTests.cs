@@ -48,6 +48,9 @@ namespace EchoProtocol.Telemetry.Tests
             Assert.That(retry.Id, Is.EqualTo(first.Id));
             Assert.That(retry.TimestampUtc, Is.EqualTo(first.TimestampUtc));
             StringAssert.Contains("\"eventSequence\":1", first.ContextJson);
+            StringAssert.Contains(
+                "\"occurrenceKey\":\"match-start\"",
+                first.ContextJson);
         }
 
         [Test]

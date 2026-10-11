@@ -116,7 +116,8 @@ namespace EchoProtocol.Telemetry
             context
                 .AddString("scenarioConfigVersion", provenance.ScenarioConfigVersion)
                 .AddString("policyVersion", provenance.PolicyVersion)
-                .AddString("configSource", provenance.ConfigSource == TelemetryConfigSource.Fixed ? "FIXED" : "ADAPTIVE");
+                .AddString("configSource", provenance.ConfigSource == TelemetryConfigSource.Fixed ? "FIXED" : "ADAPTIVE")
+                .AddString("occurrenceKey", request.SourceOccurrenceKey);
 
             TelemetryEventCatalog.TryGetStatus(request.EventType, out var eventStatus);
             if (eventStatus == TelemetryEventStatus.ResearchCapture)

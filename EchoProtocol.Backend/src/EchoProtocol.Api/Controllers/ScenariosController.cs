@@ -43,7 +43,18 @@ public sealed class ScenariosController(IScenarioService service,
             if (existing.SourceFingerprint != sourceFingerprint || existing.EvidenceFingerprint != request.EvidenceFingerprint || existing.RosterIdentity != request.RosterIdentity) return StatusCode(409);
             return Ok(ApiResponse<AEDPhase8SourceVerificationV1>.Ok(new(existing.CanonicalVerified, existing.HistoricalSkillVerified, existing.PressureVerified, existing.SupplyLedgerVerified, existing.MinionPopulationVerified, existing.ReasonCode), "AED Phase 8 source verification replay"));
         }
-        var verification = await new AEDPhase8SourceVerifierV1(db, telemetryEvents, phaseEvidenceVerifier).VerifyAsync(matchId, request, ct);
+        var verification = await new AEDPhase8SourceVerifierV1(
+            db, telemetryEvents, phaseEvidenceVerifier)
+            .VerifyAsync(matchId, request, ct);
+
+        if (verification.ReasonCode !=
+            "P8_SOURCE_AUTHORITATIVE_COVERAGE_INCOMPLETE")
+        {
+            return Conflict(ApiResponse<object>.Fail(
+                verification.ReasonCode,
+                ErrorCodes.ScenarioApplyConflict));
+        }
+
         db.AEDPhase8VerifiedSourcesV1.Add(new AEDPhase8VerifiedSourceV1
         {
             Id = Guid.NewGuid(), MatchId = matchId, CompletedPhaseOrdinal = request.CompletedPhaseOrdinal,
