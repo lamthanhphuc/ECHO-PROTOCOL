@@ -230,6 +230,7 @@ builder.Services.AddScoped<IScenarioService, ScenarioService>();
 builder.Services.AddScoped<IScenarioSnapshotReadService, ScenarioSnapshotReadService>();
 builder.Services.AddScoped<IScenarioAdaptivePlanV2Service, ScenarioAdaptivePlanV2Service>();
 builder.Services.AddScoped<IAEDv2PhaseEvidenceVerifier, AEDv2PhaseEvidenceVerifier>();
+builder.Services.AddScoped<IAEDDirectorApprovalV1Service, AEDDirectorApprovalV1Service>();
 builder.Services.AddScoped<IMatchProfilePostProcessingService, MatchProfilePostProcessingService>();
 builder.Services.AddHostedService<MatchProfilePostProcessingWorker>();
 builder.Services.AddScoped<IPaymentOrderService, PaymentOrderService>();

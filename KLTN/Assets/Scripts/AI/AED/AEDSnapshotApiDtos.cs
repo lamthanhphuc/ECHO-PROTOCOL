@@ -3,6 +3,52 @@ using System;
 namespace EchoProtocol.AI.AED
 {
     [Serializable]
+    public sealed class AEDPhase8ApprovalRequestV1
+    {
+        public string decisionId;
+        public int completedPhaseOrdinal;
+        public string directorKind;
+        public string policyVersion;
+        public string rosterIdentity;
+        public string snapshotFingerprint;
+        public string evidenceFingerprint;
+        public string sourceFingerprint;
+        public string payloadFingerprint;
+        public long expectedRevision;
+        public string payloadJson;
+    }
+
+    [Serializable]
+    public sealed class AEDPhase8ApprovalDataV1
+    {
+        public string matchId;
+        public string decisionId;
+        public int completedPhaseOrdinal;
+        public string directorKind;
+        public string policyVersion;
+        public string rosterIdentity;
+        public string snapshotFingerprint;
+        public string evidenceFingerprint;
+        public string sourceFingerprint;
+        public string payloadFingerprint;
+        public long expectedRevision;
+        public string approvalScope;
+        public string status;
+        public string reasonCode;
+        public bool isReplay;
+        public bool gameplayApproved;
+    }
+
+    [Serializable]
+    public sealed class AEDPhase8ApprovalResponseV1
+    {
+        public bool success;
+        public string message;
+        public string errorCode;
+        public AEDPhase8ApprovalDataV1 data;
+    }
+
+    [Serializable]
     public sealed class AEDPhase8EvidenceProbeRequestV1
     {
         public int completedEvidencePhaseOrdinal;

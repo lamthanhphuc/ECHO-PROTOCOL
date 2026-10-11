@@ -1845,6 +1845,10 @@ namespace EchoProtocol.Networking.Authority
                 _aedToolNoiseEvidence.MarkIncomplete();
             }
             _aedv2Evidence.Freeze(phase, _boundPlayers.Count, CurrentRosterIdentity(), nowUtc);
+            if (accepted && _telemetry != null && _telemetry.IsInitialized)
+            {
+                _telemetry.TryFlushNow();
+            }
             FreezeAEDv1Evidence(nowUtc);
             var frozen = _aedv2Evidence.LastFrozen;
             var players = _aedv2Evidence.LastFrozenPlayerEvidence;

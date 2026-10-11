@@ -5,6 +5,9 @@ using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services;
 using EchoProtocol.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using MongoDB.Bson;
+using System.Security.Cryptography;
+using System.Text;
 using Xunit;
 
 namespace EchoProtocol.Api.Tests;
@@ -45,6 +48,98 @@ public sealed partial class ScenarioServiceTests
         await f.Db.SaveChangesAsync();
         var verifier = new AEDv2PhaseEvidenceVerifier(f.Db, new NoAcceptedEvidenceRepository());
         Assert.False(await verifier.VerifyAsync(f.MatchId, 1, new string('a', 64)));
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_VerifiesPhaseOneBeforePhaseTwoStarts() => await AssertPhaseOneVerification(events => events);
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_VerifiesPhaseOneAfterPhaseTwoStarts() => await AssertPhaseOneVerification(events => events.Append(PhaseEvent(events[0].MatchId, "PHASE_STARTED", "PHASE_TWO", 4, 30)));
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_RejectsPhaseWithoutCompletion() => await AssertPhaseOneRejected(events => events.Where(e => e.EventType != "PHASE_COMPLETED"));
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_RejectsDuplicatePhaseCompletion() => await AssertPhaseOneRejected(events => events.Append(PhaseEvent(events[0].MatchId, "PHASE_COMPLETED", "PHASE_ONE", 4, 25)));
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_RejectsSequenceGapInsidePhase() => await AssertPhaseOneRejected(events => events.Select(e => e.EventSequence >= 2 && e.EventSequence <= 3 ? CopySequence(e, e.EventSequence + 1) : e));
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_RejectsWrongFingerprint() => await AssertPhaseOneRejected(events => events, fingerprintOverride: new string('f', 64));
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_RejectsWrongMatch()
+    {
+        await using var f = await ValidAEDv2Fixture();
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+        var repo = new AcceptedEvidenceRepository(PhaseEvidence(f));
+        Assert.False(await new AEDv2PhaseEvidenceVerifier(f.Db, repo).VerifyAsync(Guid.NewGuid(), 1, PhaseFingerprint(f, 1)));
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_RejectsCrossPhaseEvent() => await AssertPhaseOneRejected(events => events.Select(e => e.EventType == "PLAYER_DOWNED" ? PhaseEvent(e.MatchId, e.EventType, "PHASE_TWO", e.EventSequence, 15, e.UserId) : e));
+
+    private static async Task AssertPhaseOneVerification(Func<TelemetryEventDocument[], IEnumerable<TelemetryEventDocument>> mutate)
+    {
+        await using var f = await ValidAEDv2Fixture();
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+        var events = mutate(PhaseEvidence(f)).ToArray();
+        Assert.True(await new AEDv2PhaseEvidenceVerifier(f.Db, new AcceptedEvidenceRepository(events)).VerifyAsync(f.MatchId, 1, PhaseFingerprint(f, 1)));
+    }
+
+    private static async Task AssertPhaseOneRejected(Func<TelemetryEventDocument[], IEnumerable<TelemetryEventDocument>> mutate, string? fingerprintOverride = null)
+    {
+        await using var f = await ValidAEDv2Fixture();
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+        var events = mutate(PhaseEvidence(f)).ToArray();
+        Assert.False(await new AEDv2PhaseEvidenceVerifier(f.Db, new AcceptedEvidenceRepository(events)).VerifyAsync(f.MatchId, 1, fingerprintOverride ?? PhaseFingerprint(f, 1)));
+    }
+
+    private static TelemetryEventDocument[] PhaseEvidence(Fixture f)
+    {
+        var users = f.Db.MatchPlayerBindings.Where(x => x.MatchId == f.MatchId).Select(x => x.UserId).ToArray();
+        return new[]
+        {
+            PhaseEvent(f.MatchId, "PHASE_STARTED", "PHASE_ONE", 1, 0),
+            PhaseEvent(f.MatchId, "PLAYER_DOWNED", "PHASE_ONE", 2, 10, users[0]),
+            PhaseEvent(f.MatchId, "PHASE_COMPLETED", "PHASE_ONE", 3, 20)
+        };
+    }
+
+    private static string PhaseFingerprint(Fixture f, int ordinal)
+    {
+        var users = f.Db.MatchPlayerBindings.Where(x => x.MatchId == f.MatchId).Select(x => x.UserId).ToArray();
+        var roster = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(f.MatchId.ToString("D") + "|" + string.Join(',', users.Select(x => x.ToString("D")).Order(StringComparer.Ordinal))))).ToLowerInvariant();
+        return AEDv2PhaseEvidenceVerifier.ComputeCanonicalFingerprint(f.MatchId, "PHASE_ONE", ordinal, roster, DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(20), users.Length, 1, 0, 0, 0, 0, 0, true, Array.Empty<string>());
+    }
+
+    private static TelemetryEventDocument PhaseEvent(Guid matchId, string type, string phase, long sequence, int seconds, Guid? userId = null) => new()
+    {
+        Id = Guid.NewGuid(), MatchId = matchId, UserId = userId, EventType = type,
+        EventSequence = sequence, Ts = DateTime.UnixEpoch.AddSeconds(seconds), SchemaVersion = "1.1",
+        SemanticFingerprint = new string('a', 64), IngestedAt = DateTime.UnixEpoch,
+        ValueJson = new BsonDocument { ["context"] = new BsonDocument { ["phase"] = phase }, ["data"] = new BsonDocument() }
+    };
+
+    private static TelemetryEventDocument CopySequence(TelemetryEventDocument source, long sequence) => new()
+    {
+        Id = source.Id, MatchId = source.MatchId, UserId = source.UserId, EventType = source.EventType,
+        EventSequence = sequence, Ts = source.Ts, SchemaVersion = source.SchemaVersion,
+        SemanticFingerprint = source.SemanticFingerprint, IngestedAt = source.IngestedAt, ValueJson = source.ValueJson
+    };
+
+    private sealed class AcceptedEvidenceRepository(IReadOnlyList<TelemetryEventDocument> events) : ITelemetryEventRepository
+    {
+        public Task<IReadOnlyList<TelemetryEventDocument>> LoadAcceptedMatchEventsAsync(Guid matchId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<TelemetryEventDocument>>(events.Where(e => e.MatchId == matchId).ToArray());
+        public Task EnsureIndexesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<TelemetryWriteResult> AtomicCommitBatchAsync(IReadOnlyCollection<TelemetryEventDocument> events, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<TelemetryWriteResult> InsertBatchAsync(IReadOnlyCollection<TelemetryEventDocument> events, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyDictionary<Guid, TelemetryWriteItemResult>> LoadConflictsAsync(IReadOnlyCollection<TelemetryEventDocument> events, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyDictionary<Guid, TelemetryMatchBoundary>> LoadMatchBoundariesAsync(IReadOnlyCollection<Guid> matchIds, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     [Fact, Trait("Category", "AEDv2")]

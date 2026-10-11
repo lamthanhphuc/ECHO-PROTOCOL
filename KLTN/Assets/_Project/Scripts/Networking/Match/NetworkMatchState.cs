@@ -2741,7 +2741,8 @@ namespace EchoProtocol.Networking
         {
             try
             {
-                var receipt = await new AEDSnapshotApiService().ProbeDirectorEvidenceAsync(matchId, completedOrdinal, fingerprint, CancellationToken.None);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+                var receipt = await new AEDSnapshotApiService().ProbeDirectorEvidenceAsync(matchId, completedOrdinal, fingerprint, timeout.Token);
                 RuntimeLog.Log(RuntimeLogCategory.Aed, $"[AED_P8][BACKEND_EVIDENCE] match={matchId:D} phase={completedOrdinal} canonicalVerified={receipt?.canonicalEvidenceVerified == true} extendedVerified={receipt?.extendedMetricsVerified == true} ledgerVerified={receipt?.resourceLedgerVerified == true} gameplayApproved={receipt?.gameplayApproved == true} reason={receipt?.reasonCode ?? "UNVERIFIED"}");
             }
             catch (Exception exception)

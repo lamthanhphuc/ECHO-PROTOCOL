@@ -35,6 +35,8 @@ public class AppDbContext : DbContext
     public DbSet<ScenarioDecision> ScenarioDecisions => Set<ScenarioDecision>();
     public DbSet<ScenarioApplyReceipt> ScenarioApplyReceipts => Set<ScenarioApplyReceipt>();
     public DbSet<ScenarioAdaptivePlanV2> ScenarioAdaptivePlansV2 => Set<ScenarioAdaptivePlanV2>();
+    public DbSet<AEDDirectorDecisionV1> AEDDirectorDecisionsV1 => Set<AEDDirectorDecisionV1>();
+    public DbSet<AEDPhase8VerifiedSourceV1> AEDPhase8VerifiedSourcesV1 => Set<AEDPhase8VerifiedSourceV1>();
     public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
     public DbSet<PaymentCheckout> PaymentCheckouts => Set<PaymentCheckout>();
     public DbSet<PaymentProviderEvent> PaymentProviderEvents => Set<PaymentProviderEvent>();
@@ -935,6 +937,38 @@ public class AppDbContext : DbContext
             entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(e => e.MatchId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<User>().WithMany().HasForeignKey(e => e.HostUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<AdaptiveInputSnapshot>().WithMany().HasForeignKey(e => e.SnapshotId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AEDDirectorDecisionV1>(entity =>
+        {
+            entity.ToTable("AEDDirectorDecisionsV1");
+            entity.HasKey(x => x.DecisionId);
+            entity.Property(x => x.DirectorKind).IsRequired().HasMaxLength(30);
+            entity.Property(x => x.PolicyVersion).IsRequired().HasMaxLength(80);
+            entity.Property(x => x.RosterIdentity).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.SnapshotFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.EvidenceFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.SourceFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.PayloadFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.PayloadJson).IsRequired().HasColumnType("jsonb");
+            entity.Property(x => x.ApprovalScope).IsRequired().HasMaxLength(20);
+            entity.Property(x => x.Status).IsRequired().HasMaxLength(20);
+            entity.Property(x => x.ReasonCode).HasMaxLength(100);
+            entity.HasIndex(x => new { x.MatchId, x.CompletedPhaseOrdinal, x.DirectorKind }).IsUnique();
+            entity.HasIndex(x => new { x.MatchId, x.DirectorKind, x.Status });
+        });
+
+        modelBuilder.Entity<AEDPhase8VerifiedSourceV1>(entity =>
+        {
+            entity.ToTable("AEDPhase8VerifiedSourcesV1");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.MatchId, x.CompletedPhaseOrdinal, x.SourceVersion }).IsUnique();
+            entity.Property(x => x.SourceVersion).IsRequired().HasMaxLength(80);
+            entity.Property(x => x.EvidenceFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.SourceFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.RosterIdentity).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.ReasonCode).IsRequired().HasMaxLength(100);
+            entity.Property(x => x.VerifiedContentJson).IsRequired().HasColumnType("jsonb");
         });
     }
 }

@@ -22,17 +22,165 @@ namespace EchoProtocol.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchProfileProcessingJob", b =>
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AEDDirectorDecisionV1", b =>
                 {
-                    b.Property<Guid>("MatchId").HasColumnType("uuid");
-                    b.Property<int>("Attempts").HasColumnType("integer");
-                    b.Property<string>("LastError").IsRequired().HasMaxLength(200).HasColumnType("character varying(200)");
-                    b.Property<DateTime>("NextAttemptAtUtc").HasColumnType("timestamp with time zone");
-                    b.Property<DateTime?>("LeaseExpiresAtUtc").HasColumnType("timestamp with time zone");
-                    b.Property<string>("Status").IsRequired().HasMaxLength(20).HasColumnType("character varying(20)");
-                    b.HasKey("MatchId");
-                    b.HasIndex("Status", "NextAttemptAtUtc");
-                    b.ToTable("MatchProfileProcessingJobs");
+                    b.Property<Guid>("DecisionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AbortedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("AppliedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ApprovalScope")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("ApprovedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CompletedPhaseOrdinal")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DirectorKind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("EvidenceFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("ExpectedRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("HostUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PayloadFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ReasonCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("RosterIdentity")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SnapshotFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("DecisionId");
+
+                    b.HasIndex("MatchId", "CompletedPhaseOrdinal", "DirectorKind")
+                        .IsUnique();
+
+                    b.HasIndex("MatchId", "DirectorKind", "Status");
+
+                    b.ToTable("AEDDirectorDecisionsV1", (string)null);
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AEDPhase8VerifiedSourceV1", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("CanonicalVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("CompletedPhaseOrdinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EvidenceFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("HistoricalSkillVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("MinionPopulationVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PressureVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ReasonCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("RosterIdentity")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<bool>("SupplyLedgerVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("VerifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VerifiedContentJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatchId", "CompletedPhaseOrdinal", "SourceVersion")
+                        .IsUnique();
+
+                    b.ToTable("AEDPhase8VerifiedSourcesV1", (string)null);
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", b =>
@@ -385,6 +533,38 @@ namespace EchoProtocol.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("MatchPlayerBindings", (string)null);
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.MatchProfileProcessingJob", b =>
+                {
+                    b.Property<Guid>("MatchId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastError")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("LeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("MatchId");
+
+                    b.HasIndex("Status", "NextAttemptAtUtc");
+
+                    b.ToTable("MatchProfileProcessingJobs", (string)null);
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.MatchResult", b =>
@@ -978,7 +1158,6 @@ namespace EchoProtocol.Api.Migrations
                         .HasColumnType("integer");
 
                     b.Property<decimal>("NoiseScore")
-                        .ValueGeneratedOnAdd()
                         .HasPrecision(9, 6)
                         .HasColumnType("numeric(9,6)")
                         .HasDefaultValue(50m);
@@ -1040,7 +1219,6 @@ namespace EchoProtocol.Api.Migrations
                         .HasColumnType("integer");
 
                     b.Property<decimal>("SurvivalScore")
-                        .ValueGeneratedOnAdd()
                         .HasPrecision(9, 6)
                         .HasColumnType("numeric(9,6)")
                         .HasDefaultValue(50m);

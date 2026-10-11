@@ -33,17 +33,25 @@ namespace EchoProtocol.AI.AED
         {
             if (matchId == Guid.Empty || completedPhaseOrdinal == 0 || completedPhaseOrdinal > int.MaxValue || fingerprint == null || fingerprint.Length != 64)
                 return null;
+            for (int attempt = 0; attempt < 4; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var response = await ProbeDirectorEvidenceOnceAsync(matchId, completedPhaseOrdinal, fingerprint, cancellationToken);
+                var data = response?.Data?.data;
+                if (response?.IsSuccess == true && response.Data?.success == true && data != null && string.Equals(data.matchId, matchId.ToString("D"), StringComparison.OrdinalIgnoreCase) && data.completedEvidencePhaseOrdinal == (int)completedPhaseOrdinal && string.Equals(data.evidenceFingerprint, fingerprint, StringComparison.Ordinal) && data.canonicalEvidenceVerified && !data.extendedMetricsVerified && !data.resourceLedgerVerified && !data.gameplayApproved) return data;
+                if (response == null || response.StatusCode != 409) return null;
+                if (attempt < 3) await Task.Delay(attempt == 0 ? 1000 : attempt == 1 ? 2000 : 4000, cancellationToken);
+            }
+            return null;
+        }
+
+        private async Task<ApiResult<AEDPhase8EvidenceProbeResponseV1>> ProbeDirectorEvidenceOnceAsync(Guid matchId, uint ordinal, string fingerprint, CancellationToken cancellationToken)
+        {
             var completion = new TaskCompletionSource<ApiResult<AEDPhase8EvidenceProbeResponseV1>>(TaskCreationOptions.RunContinuationsAsynchronously);
             using (cancellationToken.Register(() => completion.TrySetCanceled()))
             {
-                AuthRuntime.EnsureExists().Client.PostJson<AEDPhase8EvidenceProbeRequestV1, AEDPhase8EvidenceProbeResponseV1>($"/api/matches/{matchId:D}/scenario/director-evidence-v1", new AEDPhase8EvidenceProbeRequestV1 { completedEvidencePhaseOrdinal = (int)completedPhaseOrdinal, evidenceFingerprint = fingerprint }, true, result => completion.TrySetResult(result));
-                try
-                {
-                    var response = await completion.Task;
-                    var data = response.Data?.data;
-                    if (!response.IsSuccess || response.Data?.success != true || data == null || !string.Equals(data.matchId, matchId.ToString("D"), StringComparison.OrdinalIgnoreCase) || data.completedEvidencePhaseOrdinal != (int)completedPhaseOrdinal || data.evidenceFingerprint != fingerprint || !data.canonicalEvidenceVerified || data.extendedMetricsVerified || data.resourceLedgerVerified || data.gameplayApproved) return null;
-                    return data;
-                }
+                AuthRuntime.EnsureExists().Client.PostJson<AEDPhase8EvidenceProbeRequestV1, AEDPhase8EvidenceProbeResponseV1>($"/api/matches/{matchId:D}/scenario/director-evidence-v1", new AEDPhase8EvidenceProbeRequestV1 { completedEvidencePhaseOrdinal = (int)ordinal, evidenceFingerprint = fingerprint }, true, result => completion.TrySetResult(result));
+                try { return await completion.Task; }
                 catch (TaskCanceledException) { return null; }
             }
         }
