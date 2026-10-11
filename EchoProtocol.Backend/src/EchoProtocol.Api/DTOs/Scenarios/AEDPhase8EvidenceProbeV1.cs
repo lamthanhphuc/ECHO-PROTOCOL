@@ -7,7 +7,9 @@ public sealed class AEDPhase8EvidenceProbeRequestV1
     [Range(1, int.MaxValue)]
     public int CompletedEvidencePhaseOrdinal { get; set; }
 
-    [Required, StringLength(64, MinimumLength = 64)]
+    [Required]
+    [StringLength(64, MinimumLength = 64)]
+    [RegularExpression("^[0-9a-fA-F]{64}$")]
     public string EvidenceFingerprint { get; set; } = string.Empty;
 }
 

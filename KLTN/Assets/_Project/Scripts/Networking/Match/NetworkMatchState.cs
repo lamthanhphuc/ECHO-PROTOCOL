@@ -2337,6 +2337,17 @@ namespace EchoProtocol.Networking
             RecordCompletedPhase(runtime, completedPhase, expected);
             var evidence = runtime.LastFrozenAEDv2Evidence;
             AEDv2E2ELog.State("EVIDENCE_FROZEN");
+            if (evidence == null
+                || !AEDPhase8OrdinalContractV1.TryCreate(
+                    evidence.PhaseOrdinal,
+                    PhaseOrdinal,
+                    out var ordinalContext)
+                || ordinalContext.BackendDecisionOrdinal != nextOrdinal)
+            {
+                _aedv2Boundary.Hold("P8_PHASE_ORDINAL_MISMATCH");
+                CompletePhaseTransition(expected, next, runtime, afterTransition);
+                return true;
+            }
             var previous = AEDv2Authority.TryGetApplied(matchId,
                 out var applied, out _) ? applied : AEDv2Plan.Normal();
             var point = next == NetworkMatchPhase.FinalHunt
@@ -2648,6 +2659,20 @@ namespace EchoProtocol.Networking
             var rosterSafety = AEDv2RosterSafety.FromEvidence(
                 authority.AEDv2BoundUserIds,
                 authority.LastFrozenAEDv2PlayerEvidence);
+            uint ordinalBeforeTransition = PhaseOrdinal == 0 ? uint.MaxValue : PhaseOrdinal - 1u;
+            var phase8Gate = AEDPhase8IntegrationGateV1.Evaluate(
+                authority.MatchId, authority.AEDv2RosterIdentity,
+                ordinalBeforeTransition, authority.LastFrozenAEDv2Evidence,
+                authority.LastFrozenAEDCurrentPressure, rosterSafety,
+                Object.HasStateAuthority,
+                authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive && authority.Difficulty == MatchDifficulty.Normal,
+                safe, stalkerUnsafe, playerUnsafe);
+            RuntimeLog.Log(RuntimeLogCategory.Aed, $"[AED_P8][LOCAL_GATE] eligible={phase8Gate.LocallyEligible} reason={phase8Gate.ReasonCode} canApply={phase8Gate.CanApplyGameplay}");
+            if (settings.ExtendedPolicyShadowEnabled && phase8Gate.LocallyEligible)
+            {
+                var frozenEvidence = authority.LastFrozenAEDv2Evidence;
+                _ = ProbePhase8CanonicalEvidenceAsync(authority.MatchId, frozenEvidence.PhaseOrdinal, frozenEvidence.EvidenceFingerprint);
+            }
             var holdContext = new AEDv2BoundaryHoldContext
             {
                 StalkerUnsafeState = stalkerUnsafe,
@@ -2709,6 +2734,19 @@ namespace EchoProtocol.Networking
                     planValues = values
                 };
                 _ = SubmitAEDv2BoundaryShadowAsync(authority.MatchId, request);
+            }
+        }
+
+        private static async Task ProbePhase8CanonicalEvidenceAsync(Guid matchId, uint completedOrdinal, string fingerprint)
+        {
+            try
+            {
+                var receipt = await new AEDSnapshotApiService().ProbeDirectorEvidenceAsync(matchId, completedOrdinal, fingerprint, CancellationToken.None);
+                RuntimeLog.Log(RuntimeLogCategory.Aed, $"[AED_P8][BACKEND_EVIDENCE] match={matchId:D} phase={completedOrdinal} canonicalVerified={receipt?.canonicalEvidenceVerified == true} extendedVerified={receipt?.extendedMetricsVerified == true} ledgerVerified={receipt?.resourceLedgerVerified == true} gameplayApproved={receipt?.gameplayApproved == true} reason={receipt?.reasonCode ?? "UNVERIFIED"}");
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[AED_P8][BACKEND_EVIDENCE] match={matchId:D} phase={completedOrdinal} failure={exception.GetType().Name}");
             }
         }
 

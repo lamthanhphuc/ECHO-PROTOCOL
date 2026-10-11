@@ -29,6 +29,25 @@ namespace EchoProtocol.AI.AED
     {
         public bool LastPlanSubmitRetryable { get; private set; }
 
+        public async Task<AEDPhase8EvidenceProbeDataV1> ProbeDirectorEvidenceAsync(Guid matchId, uint completedPhaseOrdinal, string fingerprint, CancellationToken cancellationToken)
+        {
+            if (matchId == Guid.Empty || completedPhaseOrdinal == 0 || completedPhaseOrdinal > int.MaxValue || fingerprint == null || fingerprint.Length != 64)
+                return null;
+            var completion = new TaskCompletionSource<ApiResult<AEDPhase8EvidenceProbeResponseV1>>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (cancellationToken.Register(() => completion.TrySetCanceled()))
+            {
+                AuthRuntime.EnsureExists().Client.PostJson<AEDPhase8EvidenceProbeRequestV1, AEDPhase8EvidenceProbeResponseV1>($"/api/matches/{matchId:D}/scenario/director-evidence-v1", new AEDPhase8EvidenceProbeRequestV1 { completedEvidencePhaseOrdinal = (int)completedPhaseOrdinal, evidenceFingerprint = fingerprint }, true, result => completion.TrySetResult(result));
+                try
+                {
+                    var response = await completion.Task;
+                    var data = response.Data?.data;
+                    if (!response.IsSuccess || response.Data?.success != true || data == null || !string.Equals(data.matchId, matchId.ToString("D"), StringComparison.OrdinalIgnoreCase) || data.completedEvidencePhaseOrdinal != (int)completedPhaseOrdinal || data.evidenceFingerprint != fingerprint || !data.canonicalEvidenceVerified || data.extendedMetricsVerified || data.resourceLedgerVerified || data.gameplayApproved) return null;
+                    return data;
+                }
+                catch (TaskCanceledException) { return null; }
+            }
+        }
+
         public async Task<AEDPlanV2Data> SubmitPlanAsync(Guid matchId,
             AEDPlanV2Request request, CancellationToken cancellationToken)
         {
