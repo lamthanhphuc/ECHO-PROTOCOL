@@ -137,6 +137,84 @@ public sealed partial class ScenarioServiceTests
         Assert.Equal("FIXED_FALLBACK", result.Data.ResolutionResult);
     }
 
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AdaptiveMixedHold_KeepsFixedBaseline()
+    {
+        await using var f = await Fixture.CreateAsync();
+        await f.EnableApprovedReliefAsync();
+
+        foreach (var profile in f.Db.PlayerAIProfiles)
+        {
+            profile.SurvivalScore = 50;
+            profile.NoiseScore = 50;
+        }
+
+        await f.Db.SaveChangesAsync();
+
+        var request = Request();
+        request.ResolutionMode = ScenarioResolutionMode.Adaptive;
+
+        var result = await f.Service.ResolvePreMatchAsync(
+            f.HostId, f.MatchId, request);
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.True(result.Data!.UsedFixedFallback);
+        Assert.Equal("HOLD_RULE", result.Data.FallbackReasonCode);
+        Assert.Equal("VALID", result.Data.CandidateValidationStatus);
+        Assert.Equal("FIXED_FALLBACK", result.Data.ResolutionResult);
+        Assert.Equal("FIXED", result.Data.Config.ConfigSource);
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AdaptivePartialSnapshot_FailsClosed()
+    {
+        await using var f = await Fixture.CreateAsync();
+        await f.EnableApprovedReliefAsync();
+
+        var player = f.Db.PlayerAIProfiles.Single(x => x.UserId == f.PlayerId);
+        player.NoiseSampleCount = 0;
+        await f.Db.SaveChangesAsync();
+
+        var request = Request();
+        request.ResolutionMode = ScenarioResolutionMode.Adaptive;
+
+        var result = await f.Service.ResolvePreMatchAsync(
+            f.HostId, f.MatchId, request);
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal("PARTIAL", result.Data!.SnapshotValidity);
+        Assert.True(result.Data.UsedFixedFallback);
+        Assert.Equal("INPUT_INVALID", result.Data.FallbackReasonCode);
+        Assert.Equal("INVALID", result.Data.CandidateValidationStatus);
+        Assert.Equal("FIXED", result.Data.Config.ConfigSource);
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AdaptiveCandidateWithUnauthorizedChange_IsRejected()
+    {
+        await using var f = await Fixture.CreateAsync();
+        await f.EnableApprovedReliefAsync();
+
+        var candidate = f.Db.ScenarioConfigs.Single(
+            x => x.ConfigSource == ScenarioConfigSource.Adaptive);
+        candidate.SearchDuration = 2;
+        await f.Db.SaveChangesAsync();
+
+        var request = Request();
+        request.ResolutionMode = ScenarioResolutionMode.Adaptive;
+
+        var result = await f.Service.ResolvePreMatchAsync(
+            f.HostId, f.MatchId, request);
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.True(result.Data!.UsedFixedFallback);
+        Assert.Equal(
+            "NO_APPROVED_NEXT_VALUE",
+            result.Data.FallbackReasonCode);
+        Assert.Equal("INVALID", result.Data.CandidateValidationStatus);
+        Assert.Equal("FIXED", result.Data.Config.ConfigSource);
+    }
+
     [Fact, Trait("Category", "M4ScenarioService")]
     public async Task MissingOrIncompatibleProductionFallback_ReturnsConfigurationError()
     {

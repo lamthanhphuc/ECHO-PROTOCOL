@@ -188,6 +188,8 @@ namespace EchoProtocol.AI.AED
         public string rosterIdentity;
         public string resolutionResult;
         public bool usedFixedFallback;
+        public string fallbackReasonCode;
+        public string candidateValidationStatus;
     }
 
     [Serializable]

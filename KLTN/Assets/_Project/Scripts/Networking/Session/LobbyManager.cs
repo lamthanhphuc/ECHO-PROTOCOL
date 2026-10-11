@@ -305,6 +305,23 @@ namespace EchoProtocol.Networking
                         ReportError("AED pre-match resolve failed; match remains in lobby.");
                         return;
                     }
+                    Debug.Log(
+                        $"[AED_P8][PREMATCH_BACKEND] " +
+                        $"match={matchId:D} " +
+                        $"result={decision.resolutionResult} " +
+                        $"fixedFallback={decision.usedFixedFallback} " +
+                        $"fallbackReason={decision.fallbackReasonCode} " +
+                        $"candidate={decision.candidateValidationStatus}");
+
+                    if (settings.ExtendedPolicyGameplayEnabled &&
+                        decision.usedFixedFallback)
+                    {
+                        ReportError(
+                            "AED gameplay rejected: Backend issued fixed fallback. " +
+                            decision.fallbackReasonCode);
+                        return;
+                    }
+
                     _snapshotProvider = new BackendAdaptiveInputSnapshotProvider();
                     if (!await _snapshotProvider.PrepareAsync(matchId, decisionId,
                             _preMatchCancellation.Token))
