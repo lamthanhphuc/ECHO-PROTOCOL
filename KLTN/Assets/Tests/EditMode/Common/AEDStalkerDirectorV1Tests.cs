@@ -103,5 +103,7 @@ namespace EchoProtocol.AI.Common.Tests
         { var c = Special(); c.DistanceFromTarget = 3d; Assert.That(AEDStalkerEncounterSafetyV1.EvaluateSpecial(c).EligibleForResearch, Is.False); }
         [Test] public void DoorRejectsMissingEscapeRoute()
         { var r = AEDStalkerEncounterSafetyV1.EvaluateDoor(new AEDStalkerDoorCandidateV1 { HostVerified = true, DoorClosed = true, DoorBreakable = true, SameZone = true, OutsideSafeRoom = true, NotProtectedSafeRoomDoor = true, LegalNavMeshRoute = true, PlayerEscapeRoutePreserved = false }); Assert.That(r.EligibleForResearch, Is.False); Assert.That(r.CanApplyGameplay, Is.False); }
+        [Test] public void HoldProposalIsValidButCannotApplyGameplay()
+        { var request = Request(); request.ResolutionMode = "Fixed"; var proposal = AEDStalkerDirectorV1.Evaluate(request); Assert.That(proposal.Intent, Is.EqualTo(AEDStalkerIntentV1.Hold)); Assert.That(AEDStalkerDirectorV1.Validate(proposal), Is.True); Assert.That(proposal.CanApplyGameplay, Is.False); }
     }
 }

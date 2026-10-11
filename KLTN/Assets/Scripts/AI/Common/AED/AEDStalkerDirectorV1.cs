@@ -88,8 +88,9 @@ namespace EchoProtocol.AI.Common.AED
 
         public static bool Validate(AEDStalkerProposalV1 p)
         {
-            if (p == null || p.MatchId == Guid.Empty || p.CompletedEvidencePhaseOrdinal == 0 || p.CompletedEvidencePhaseOrdinal == uint.MaxValue || p.TargetPhaseOrdinal != p.CompletedEvidencePhaseOrdinal + 1u || p.Plan == null || !p.Plan.IsBounded() || !p.Plan.TrySingleBoundedChange(out var changed) || !Enum.IsDefined(typeof(AEDStalkerIntentV1), p.Intent) || p.CanApplyGameplay) return false;
+            if (p == null || p.MatchId == Guid.Empty || p.CompletedEvidencePhaseOrdinal == 0 || p.CompletedEvidencePhaseOrdinal == uint.MaxValue || p.TargetPhaseOrdinal != p.CompletedEvidencePhaseOrdinal + 1u || p.Plan == null || !p.Plan.IsBounded() || !Enum.IsDefined(typeof(AEDStalkerIntentV1), p.Intent) || p.CanApplyGameplay) return false;
             if (p.Intent == AEDStalkerIntentV1.Hold) return !p.ChangedKey.HasValue && !p.TargetValue.HasValue && p.Plan.Fingerprint() == AEDv2Plan.Normal().Fingerprint();
+            if (!p.Plan.TrySingleBoundedChange(out var changed)) return false;
             if (!p.ChangedKey.HasValue || !p.TargetValue.HasValue || !IsWhitelisted(p.ChangedKey.Value) || changed != p.ChangedKey.Value || string.IsNullOrWhiteSpace(p.EvidenceFingerprint)) return false;
             var spec = AEDv2Catalog.Find(p.ChangedKey.Value); var direction = p.Intent == AEDStalkerIntentV1.Relieve ? AdaptationIntent.Relieve : AdaptationIntent.IncreasePressure;
             return !spec.PreMatchOnly && spec.HasTarget(direction) && p.TargetValue.Value == spec.Target(direction) && p.Plan.Get(p.ChangedKey.Value) == spec.Target(direction);

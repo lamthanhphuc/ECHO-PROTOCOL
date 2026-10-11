@@ -3,6 +3,35 @@ using System;
 namespace EchoProtocol.AI.AED
 {
     [Serializable]
+    public sealed class AEDPhase8EvidenceProbeRequestV1
+    {
+        public int completedEvidencePhaseOrdinal;
+        public string evidenceFingerprint;
+    }
+
+    [Serializable]
+    public sealed class AEDPhase8EvidenceProbeDataV1
+    {
+        public string matchId;
+        public int completedEvidencePhaseOrdinal;
+        public string evidenceFingerprint;
+        public bool canonicalEvidenceVerified;
+        public bool extendedMetricsVerified;
+        public bool resourceLedgerVerified;
+        public bool gameplayApproved;
+        public string reasonCode;
+    }
+
+    [Serializable]
+    public sealed class AEDPhase8EvidenceProbeResponseV1
+    {
+        public bool success;
+        public string message;
+        public string errorCode;
+        public AEDPhase8EvidenceProbeDataV1 data;
+    }
+
+    [Serializable]
     public sealed class AEDSnapshotApiResponse
     {
         public bool success;
