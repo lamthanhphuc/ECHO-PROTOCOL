@@ -757,6 +757,9 @@ namespace EchoProtocol.Networking
             }
 
             state.SetGameplayToolId(toolId);
+            MatchAuthorityRuntime.Instance?.MarkPhase8DebugEvidenceInvalid(
+                Object.InputAuthority,
+                "DEBUG_INVENTORY_OVERRIDE");
         }
 
         private static bool IsDebugTeamToolId(
@@ -815,6 +818,9 @@ namespace EchoProtocol.Networking
 
             if (DebugGodMode)
             {
+                MatchAuthorityRuntime.Instance?.MarkPhase8DebugEvidenceInvalid(
+                    Object.InputAuthority,
+                    "DEBUG_GOD_MODE_ENABLED");
                 ClearSurvivalTimers();
 
                 CatchTimer = TickTimer.None;

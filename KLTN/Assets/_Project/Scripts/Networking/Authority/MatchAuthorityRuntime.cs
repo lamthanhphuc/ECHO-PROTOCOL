@@ -69,6 +69,10 @@ namespace EchoProtocol.Networking.Authority
         private TelemetryRuntimeBehaviour _telemetry;
         private DateTime _matchStartedAtUtc;
         private bool _telemetryMatchActive;
+        private bool _phase8DebugEvidenceInvalidated;
+
+        public bool Phase8DebugEvidenceInvalidated =>
+            _phase8DebugEvidenceInvalidated;
         private bool _matchEndEmitted;
         private bool _pendingMatchEnd;
         private string _pendingMatchEndOccurrenceKey;
@@ -106,6 +110,30 @@ namespace EchoProtocol.Networking.Authority
         public void MarkAEDv2EvidenceIncomplete()
         {
             _aedv2Evidence.MarkIncomplete();
+        }
+
+        public void MarkPhase8DebugEvidenceInvalid(
+            PlayerRef player,
+            string reason)
+        {
+            if (!HasStateAuthority || MatchId == Guid.Empty ||
+                (!_telemetryMatchActive && !_pendingAuthoritativeTelemetryMatchStart))
+                return;
+
+            _phase8DebugEvidenceInvalidated = true;
+            ApplyPhase8DebugEvidenceInvalidation();
+            Debug.LogWarning($"[AED_P8][DEBUG_EVIDENCE_INVALIDATED] player={player} reason={reason}");
+        }
+
+        private void ApplyPhase8DebugEvidenceInvalidation()
+        {
+            if (!_phase8DebugEvidenceInvalidated) return;
+            _aedv2Evidence.MarkIncomplete();
+            _aedObjectiveEvidence.MarkIncomplete();
+            _aedSurvivalEvidence.MarkIncomplete();
+            _aedToolNoiseEvidence.MarkIncomplete();
+            _aedPursuitEvidence.MarkIncomplete();
+            _aedMinionEvidence.MarkIncomplete();
         }
 
         private long CurrentAuthorityTick => _bootstrap?.Runner != null
@@ -1097,6 +1125,7 @@ namespace EchoProtocol.Networking.Authority
             _objectiveContributors.Clear();
             _matchStartedAtUtc = default;
             _telemetryMatchActive = false;
+            _phase8DebugEvidenceInvalidated = false;
             _matchEndEmitted = false;
             _pendingMatchEnd = false;
             _pendingMatchEndOccurrenceKey = null;
@@ -1375,6 +1404,7 @@ namespace EchoProtocol.Networking.Authority
                 policyContext: BuildAEDMetricPolicyContext("CORE_COLLECTION"));
             _aedSurvivalEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION");
             _aedToolNoiseEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION");
+            ApplyPhase8DebugEvidenceInvalidation();
             if (phaseStarted)
                 CaptureExistingPhase8LobbyLoadouts();
             if (!phaseStarted)
@@ -2226,6 +2256,7 @@ namespace EchoProtocol.Networking.Authority
                 BuildAEDMetricPolicyContext(phase));
             _aedMinionEvidence.StartPhase(MatchId, phaseOrdinal, phase,
                 BuildAEDMetricPolicyContext(phase));
+            ApplyPhase8DebugEvidenceInvalidation();
             if (!emitted)
             {
                 _aedv2Evidence.MarkIncomplete();
