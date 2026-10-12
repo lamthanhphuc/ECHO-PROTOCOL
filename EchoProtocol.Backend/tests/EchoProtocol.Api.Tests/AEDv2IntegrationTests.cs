@@ -90,6 +90,41 @@ public sealed partial class ScenarioServiceTests
                 : e));
     }
 
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_RejectsAcceptedLifecycleWithMissingParent()
+    {
+        await using var f = await ValidAEDv2Fixture();
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+        var baseEvents = PhaseEvidence(f);
+        var down = baseEvents.Single(x => x.EventType == "PLAYER_DOWNED");
+        down.ValueJson["context"].AsBsonDocument["occurrenceKey"] = "down-2";
+        var invalid = new TelemetryEventDocument
+        {
+            Id = Guid.NewGuid(), MatchId = f.MatchId, EventType = "TEAM_TOOL_LIFECYCLE", EventSequence = 3,
+            Ts = DateTime.UnixEpoch.AddSeconds(15), SchemaVersion = "1.2",
+            ValueJson = new BsonDocument
+            {
+                ["context"] = new BsonDocument { ["phase"] = "PHASE_ONE", ["authorityTick"] = 15, ["occurrenceKey"] = "missing-parent" },
+                ["data"] = new BsonDocument { ["action"] = "PICKUP", ["instanceId"] = "unknown-tool", ["toolId"] = 2, ["zone"] = 1, ["ownerUserId"] = down.UserId.Value.ToString("D"), ["remainingCharges"] = 3 }
+            }
+        };
+        var events = new[] { baseEvents[0], down, invalid, CopySequence(baseEvents[2], 4) };
+        var repo = new AcceptedEvidenceRepository(events);
+        var canonical = new AEDv2PhaseEvidenceVerifier(f.Db, repo);
+        var users = f.Db.MatchPlayerBindings.Where(x => x.MatchId == f.MatchId).Select(x => x.UserId).ToArray();
+        var roster = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(f.MatchId.ToString("D") + "|" + string.Join(",", users.Select(x => x.ToString("D")).Order(StringComparer.Ordinal))))).ToLowerInvariant();
+        var request = new AEDPhase8SourceUploadRequestV1(1, PhaseFingerprint(f, 1), roster, "TEST_CONTEXT", "P8_SOURCE_TEST_V1",
+            new[] { new AEDPhase8SourceReferenceV1(down.Id, 2, "PLAYER_DOWNED", "down-2"), new AEDPhase8SourceReferenceV1(invalid.Id, 3, "TEAM_TOOL_LIFECYCLE", "missing-parent") },
+            Array.Empty<AEDPhase8MetricEvidenceV1>(), Array.Empty<AEDPhase8SupplyEvidenceV1>(), Array.Empty<AEDPhase8MinionEvidenceV1>());
+        Assert.True(await canonical.VerifyAsync(f.MatchId, 1, PhaseFingerprint(f, 1)));
+        var result = await new AEDPhase8SourceVerifierV1(f.Db, repo, canonical).VerifyAsync(f.MatchId, request);
+        Assert.True(result.CanonicalVerified);
+        Assert.Equal("P8_SOURCE_LIFECYCLE_INVALID", result.ReasonCode);
+        Assert.False(result.SupplyLedgerVerified);
+        Assert.False(result.MinionPopulationVerified);
+    }
+
     private static async Task AssertPhaseOneVerification(Func<TelemetryEventDocument[], IEnumerable<TelemetryEventDocument>> mutate)
     {
         await using var f = await ValidAEDv2Fixture();

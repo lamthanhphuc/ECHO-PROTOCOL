@@ -65,6 +65,8 @@ public sealed class AEDPhase8SourceVerifierV1(AppDbContext db, ITelemetryEventRe
             if (item.EventSequence != source.EventSequence || item.EventType != source.EventType || item.EventSequence <= phaseStart.EventSequence || item.EventSequence >= phaseEnds[0].EventSequence || (item.UserId.HasValue && !users.Contains(item.UserId.Value)) || !HasOccurrenceKey(item.ValueJson, source.OccurrenceKey) || ReadPhase(item.ValueJson) != phaseName)
                 return new(true, false, false, false, false, "P8_SOURCE_EVENT_MISMATCH");
         }
+        if (!AEDPhase8LifecycleReconcilerV1.TryVerify(accepted, matchId, phaseEnds[0].EventSequence, users.ToHashSet(), out var lifecycleReason))
+            return new(true, false, false, false, false, lifecycleReason);
         var references = request.SourceEvents.Select(x => x.OccurrenceKey).ToHashSet(StringComparer.Ordinal);
         if (request.Metrics.Any(x => x == null || x.UserId == Guid.Empty || !users.Contains(x.UserId) || x.Eligible < 0 || x.ResolvedSuccess < 0 || x.ResolvedFailure < 0 || x.Censored < 0 || (long)x.ResolvedSuccess + x.ResolvedFailure + x.Censored > x.Eligible || x.MetricVersion != "AED_METRIC_OPPORTUNITY_V1" || (x.NormalizedValue.HasValue && (x.NormalizedValue < 0m || x.NormalizedValue > 1m)) || (x.ResolvedSuccess + x.ResolvedFailure > 0 && !x.NormalizedValue.HasValue) || string.IsNullOrWhiteSpace(x.MetricId) || string.IsNullOrWhiteSpace(x.ComparisonContextKey) || string.IsNullOrWhiteSpace(x.ConfidenceStatus) || x.SourceOccurrenceKeys == null || x.SourceOccurrenceKeys.Any(key => string.IsNullOrWhiteSpace(key) || !references.Contains(key))))
             return new(true, false, false, false, false, "P8_SOURCE_METRIC_INVALID");
