@@ -254,4 +254,33 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
         Assert.Throws<InvalidOperationException>(() =>
             collector.RecordToolSpawn("scene-tool", 2, 1, 20, "world-spawn"));
     }
+
+    [Test]
+    public void ScenePlacedJammer_ConsumeWithoutKnownCharges_IsRejected()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordSceneToolSpawn("scene-jammer", 4, 10, "spawn");
+        collector.RecordToolTransition("scene-jammer", "Player", owner, null, 20, "pickup");
+        var error = Assert.Throws<InvalidOperationException>(() => collector.RecordToolUse(
+            "scene-jammer", owner, 4, 0, true, 30, "consume"));
+        Assert.AreEqual("AED_P8_TOOL_USE_CHARGES_UNKNOWN", error.Message);
+        Assert.True(collector.TryGetHeldTool(owner, out _));
+    }
+
+    [Test]
+    public void MultiUseTool_RejectsSkippedChargeReceipt()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordToolSpawn("tool-1", 4, 1, 10, "spawn");
+        collector.RecordToolTransition("tool-1", "Player", owner, 3, 20, "pickup");
+        var error = Assert.Throws<InvalidOperationException>(() => collector.RecordToolUse(
+            "tool-1", owner, 4, 1, false, 30, "skip-charge"));
+        Assert.AreEqual("AED_P8_TOOL_USE_CHARGES_INVALID", error.Message);
+        Assert.True(collector.TryGetHeldTool(owner, out var held));
+        Assert.AreEqual(3, held.RemainingCharges);
+    }
 }

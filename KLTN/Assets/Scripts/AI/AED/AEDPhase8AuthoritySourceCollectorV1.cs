@@ -129,9 +129,12 @@ namespace EchoProtocol.AI.AED
             if (!TryGetHeldTool(ownerUserId, out var previous) || previous.InstanceId != instanceId || previous.ToolId != toolId ||
                 _transferredToolInstances.Contains(instanceId) || tick <= previous.SourceTick)
                 throw new InvalidOperationException("AED_P8_TOOL_USE_SOURCE_INVALID");
-            if (!consumed && (toolId is not (2 or 4) || !previous.RemainingCharges.HasValue))
+            if (!consumed && toolId is not (2 or 4))
                 throw new InvalidOperationException("AED_P8_TOOL_USE_CHARGES_UNKNOWN");
-            if (previous.RemainingCharges.HasValue && remainingCharges >= previous.RemainingCharges.Value)
+            if ((toolId is 2 or 4) && !previous.RemainingCharges.HasValue)
+                throw new InvalidOperationException("AED_P8_TOOL_USE_CHARGES_UNKNOWN");
+            if (previous.RemainingCharges.HasValue &&
+                previous.RemainingCharges.Value - remainingCharges != 1)
                 throw new InvalidOperationException("AED_P8_TOOL_USE_CHARGES_INVALID");
             RegisterOccurrence(occurrenceKey);
             var source = new AEDPhase8ToolSourceV1(instanceId, toolId, previous.Zone, previous.Origin,

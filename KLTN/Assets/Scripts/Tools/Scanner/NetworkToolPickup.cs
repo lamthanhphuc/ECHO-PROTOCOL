@@ -256,11 +256,17 @@ namespace EchoProtocol.Tools.Scanner
             if (context.PlayerState != null && context.PlayerState.Object != null && context.PlayerState.Object.IsValid)
             {
                 context.PlayerState.SetGameplayToolId(_toolId);
+                int? remainingCharges = null;
+                if (_toolId == LobbyPlayerState.NoiseMakerToolId ||
+                    _toolId == LobbyPlayerState.DoorJammerToolId)
+                {
+                    remainingCharges = context.PlayerState.TeamToolUsesRemaining;
+                }
                 MatchAuthorityRuntime.Instance?.RecordPhase8ToolPickup(
                     Object.Id,
                     context.Player,
                     Runner.Tick.Raw,
-                    null);
+                    remainingCharges);
             }
 
             try
