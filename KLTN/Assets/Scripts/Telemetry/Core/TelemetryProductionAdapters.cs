@@ -600,4 +600,77 @@ namespace EchoProtocol.Telemetry
             }, out telemetryEvent, out failureReason);
         }
     }
+
+    public sealed class Phase8LifecycleTelemetryAdapter
+    {
+        private readonly TelemetryEmitter _emitter;
+
+        public Phase8LifecycleTelemetryAdapter(TelemetryEmitter emitter)
+        {
+            _emitter = emitter ?? throw new ArgumentNullException(nameof(emitter));
+        }
+
+        public bool EmitToolSpawn(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string instanceId, int toolId, int zone, out TelemetryEvent telemetryEvent,
+            out TelemetryBufferFailureReason failureReason)
+        {
+            ValidateTool(toolId, zone);
+            MatchTelemetryAdapter.RequireText(instanceId, nameof(instanceId));
+            return Emit(occurrenceKey, TelemetryEventTypes.TeamToolLifecycle, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddString("instanceId", instanceId).AddInteger("toolId", toolId)
+                    .AddInteger("zone", zone).AddString("action", "SPAWN"),
+                out telemetryEvent, out failureReason);
+        }
+
+        public bool EmitToolPickup(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string instanceId, int toolId, int zone, Guid ownerUserId, int? remainingCharges,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason)
+        {
+            ValidateTool(toolId, zone);
+            MatchTelemetryAdapter.RequireText(instanceId, nameof(instanceId));
+            MatchTelemetryAdapter.RequireUser(ownerUserId, nameof(ownerUserId));
+            if (remainingCharges < 0) throw new ArgumentOutOfRangeException(nameof(remainingCharges));
+
+            var data = new TelemetryJsonObject().AddString("instanceId", instanceId)
+                .AddInteger("toolId", toolId).AddInteger("zone", zone)
+                .AddString("action", "PICKUP").AddString("ownerUserId", ownerUserId.ToString("D"));
+            if (remainingCharges.HasValue) data.AddInteger("remainingCharges", remainingCharges.Value);
+            return Emit(occurrenceKey, TelemetryEventTypes.TeamToolLifecycle, occurredAtUtc, phase,
+                data, out telemetryEvent, out failureReason);
+        }
+
+        public bool EmitMinionLifecycle(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string networkInstanceId, int zone, string state, out TelemetryEvent telemetryEvent,
+            out TelemetryBufferFailureReason failureReason)
+        {
+            MatchTelemetryAdapter.RequireText(networkInstanceId, nameof(networkInstanceId));
+            MatchTelemetryAdapter.RequireOneOf(state, nameof(state), "SPAWNED", "DESPAWNED");
+            ValidateZone(zone);
+            return Emit(occurrenceKey, TelemetryEventTypes.MinionLifecycle, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddString("networkInstanceId", networkInstanceId)
+                    .AddInteger("zone", zone).AddString("state", state),
+                out telemetryEvent, out failureReason);
+        }
+
+        private bool Emit(string occurrenceKey, string eventType, DateTime occurredAtUtc, string phase,
+            TelemetryJsonObject data, out TelemetryEvent telemetryEvent,
+            out TelemetryBufferFailureReason failureReason) => _emitter.TryEmit(
+                new TelemetryEmissionRequest
+                {
+                    SourceOccurrenceKey = occurrenceKey, EventType = eventType, UserId = null,
+                    ReasonCode = null, OccurredAtUtc = occurredAtUtc,
+                    Context = MatchTelemetryAdapter.PhaseContext(phase), Data = data
+                }, out telemetryEvent, out failureReason);
+
+        private static void ValidateTool(int toolId, int zone)
+        {
+            if (toolId is not (1 or 2 or 3 or 4 or 6)) throw new ArgumentOutOfRangeException(nameof(toolId));
+            ValidateZone(zone);
+        }
+
+        private static void ValidateZone(int zone)
+        {
+            if (zone is < 0 or > 3) throw new ArgumentOutOfRangeException(nameof(zone));
+        }
+    }
 }

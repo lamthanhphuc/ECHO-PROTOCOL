@@ -7,6 +7,7 @@ namespace EchoProtocol.Telemetry
     {
         public const string LegacyV1 = "1.0";
         public const string CurrentV11 = "1.1";
+        public const string LifecycleV12 = "1.2";
     }
 
     public static class TelemetryEventTypes
@@ -27,6 +28,8 @@ namespace EchoProtocol.Telemetry
         public const string TeamToolUsed = "TEAM_TOOL_USED";
         public const string HelpPingUsed = "HELP_PING_USED";
         public const string NoiseEmitted = "NOISE_EMITTED";
+        public const string TeamToolLifecycle = "TEAM_TOOL_LIFECYCLE";
+        public const string MinionLifecycle = "MINION_LIFECYCLE";
 
         public const string MonsterInvestigateStarted = "MONSTER_INVESTIGATE_STARTED";
         public const string MonsterInvestigateResolved = "MONSTER_INVESTIGATE_RESOLVED";
@@ -122,7 +125,9 @@ namespace EchoProtocol.Telemetry
             TelemetryEventTypes.WardenTelegraphStarted,
             TelemetryEventTypes.WardenRouteActionApplied,
             TelemetryEventTypes.WardenRouteSafetyChecked,
-            TelemetryEventTypes.WardenRouteActionReleased
+            TelemetryEventTypes.WardenRouteActionReleased,
+            TelemetryEventTypes.TeamToolLifecycle,
+            TelemetryEventTypes.MinionLifecycle
         };
 
         public static bool TryGetStatus(string eventType, out TelemetryEventStatus status)

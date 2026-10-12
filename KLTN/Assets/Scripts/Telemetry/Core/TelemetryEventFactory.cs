@@ -138,6 +138,12 @@ namespace EchoProtocol.Telemetry
                 throw new ArgumentException("Telemetry occurrence timestamp must be UTC.", nameof(request));
             }
 
+            var schemaVersion = request.EventType is
+                TelemetryEventTypes.TeamToolLifecycle or
+                TelemetryEventTypes.MinionLifecycle
+                    ? TelemetrySchemaVersions.LifecycleV12
+                    : TelemetrySchemaVersions.CurrentV11;
+
             var telemetryEvent = new TelemetryEvent(
                 Guid.NewGuid(),
                 currentMatchId,
@@ -147,7 +153,7 @@ namespace EchoProtocol.Telemetry
                 context.ToJson(),
                 (request.Data ?? new TelemetryJsonObject()).ToJson(),
                 request.ReasonCode,
-                TelemetrySchemaVersions.CurrentV11);
+                schemaVersion);
 
             _eventsByOccurrence.Add(occurrenceKey, telemetryEvent);
             _sourceIdentities.Add(new TelemetrySourceIdentity(

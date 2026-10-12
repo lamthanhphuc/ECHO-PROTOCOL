@@ -95,6 +95,62 @@ namespace EchoProtocol.Telemetry.Tests
         }
 
         [Test]
+        public void Phase8ToolLifecycle_UsesV12AndPreservesIdentity()
+        {
+            var f = new Fixture(researchCaptureEnabled: true);
+            f.Factory.BeginMatch();
+            f.Emit(TelemetryEventTypes.MatchStarted, "start");
+            f.Emit(TelemetryEventTypes.PhaseStarted, "phase-start");
+            var adapter = new Phase8LifecycleTelemetryAdapter(f.Emitter);
+
+            Assert.That(adapter.EmitToolSpawn("p8:tool:1:spawn", DateTime.UtcNow, "CORE_COLLECTION", "tool-1", 2, 1, out var first, out _), Is.True);
+            Assert.That(first.SchemaVersion, Is.EqualTo(TelemetrySchemaVersions.LifecycleV12));
+            StringAssert.Contains("\"researchCaptureEnabled\":true", first.ContextJson);
+            Assert.That(adapter.EmitToolSpawn("p8:tool:1:spawn", DateTime.UtcNow, "CORE_COLLECTION", "tool-1", 2, 1, out var replay, out _), Is.True);
+            Assert.That(replay, Is.SameAs(first));
+            Assert.That(f.Allocator.LastAllocatedSequence, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void Phase8MinionLifecycle_UsesV12()
+        {
+            var f = new Fixture(researchCaptureEnabled: true);
+            f.Factory.BeginMatch();
+            f.Emit(TelemetryEventTypes.MatchStarted, "start");
+            var adapter = new Phase8LifecycleTelemetryAdapter(f.Emitter);
+
+            Assert.That(adapter.EmitMinionLifecycle("p8:minion:1:spawn", DateTime.UtcNow, "CORE_COLLECTION", "minion-1", 1, "SPAWNED", out var evt, out _), Is.True);
+            Assert.That(evt.SchemaVersion, Is.EqualTo(TelemetrySchemaVersions.LifecycleV12));
+            Assert.That(evt.UserId, Is.Null);
+            Assert.That(evt.ReasonCode, Is.Null);
+            Assert.That(evt.EventType, Is.EqualTo(TelemetryEventTypes.MinionLifecycle));
+        }
+
+        [Test]
+        public void Phase8Lifecycle_RequiresResearchCapture()
+        {
+            var f = new Fixture(researchCaptureEnabled: false);
+            f.Factory.BeginMatch();
+            f.Emit(TelemetryEventTypes.MatchStarted, "start");
+            var before = f.Allocator.LastAllocatedSequence;
+            var adapter = new Phase8LifecycleTelemetryAdapter(f.Emitter);
+
+            Assert.Throws<InvalidOperationException>(() => adapter.EmitToolSpawn("p8:tool:1:spawn", DateTime.UtcNow, "CORE_COLLECTION", "tool-1", 1, 1, out _, out _));
+            Assert.That(f.Allocator.LastAllocatedSequence, Is.EqualTo(before));
+        }
+
+        [Test]
+        public void ExistingProductionEvents_RemainV11()
+        {
+            var f = new Fixture(researchCaptureEnabled: true);
+            f.Factory.BeginMatch();
+            var matchEvent = f.Factory.CreateOrGet(f.Request(TelemetryEventTypes.MatchStarted, "start"), out _);
+            var phaseEvent = f.Factory.CreateOrGet(f.Request(TelemetryEventTypes.PhaseStarted, "phase"), out _);
+            Assert.That(matchEvent.SchemaVersion, Is.EqualTo(TelemetrySchemaVersions.CurrentV11));
+            Assert.That(phaseEvent.SchemaVersion, Is.EqualTo(TelemetrySchemaVersions.CurrentV11));
+        }
+
+        [Test]
         public void WireSerializer_UsesCanonicalV11FieldNamesAndStringVersion()
         {
             var fixture = new Fixture();
