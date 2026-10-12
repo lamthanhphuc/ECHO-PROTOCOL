@@ -6,6 +6,7 @@ using EchoProtocol.Core;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Auth;
 using EchoProtocol.Networking;
+using EchoProtocol.UI.MainMenu;
 using EchoProtocol.Networking.Authority;
 using TMPro;
 using UnityEngine;
@@ -28,6 +29,9 @@ namespace EchoProtocol.UI
         [SerializeField] private Button readyButton;
         [SerializeField] private Button characterButton;
         [SerializeField] private Button petButton;
+        private Button outfitButton;
+        private Button petOutfitButton;
+        private LobbyLoadoutCarousel loadoutCarousel;
         [SerializeField] private Button startButton;
         [SerializeField] private Button leaveButton;
         [SerializeField] private Button exitButton;
@@ -105,7 +109,11 @@ namespace EchoProtocol.UI
             if (hostButton != null) hostButton.onClick.AddListener(OnHostClicked);
             if (joinButton != null) joinButton.onClick.AddListener(OnJoinClicked);
             if (readyButton != null) readyButton.onClick.AddListener(OnReadyClicked);
+            EnsureOutfitButton();
             EnsurePetButton();
+            EnsurePetOutfitButton();
+            EnsureLoadoutCarousel();
+if (outfitButton != null) outfitButton.onClick.AddListener(OnOutfitClicked);
             if (petButton != null) petButton.onClick.AddListener(OnPetClicked);
             if (characterButton != null) characterButton.onClick.AddListener(OnCharacterClicked);
             if (startButton != null) startButton.onClick.AddListener(OnStartClicked);
@@ -114,7 +122,7 @@ namespace EchoProtocol.UI
             if (difficultyDropdown != null)
                 difficultyDropdown.onValueChanged.AddListener(OnDifficultyChanged);
             ResolveServices();
-            RefreshMemberList();
+RefreshMemberList();
             RefreshControls();
             RefreshVisuals();
         }
@@ -157,6 +165,7 @@ namespace EchoProtocol.UI
             if (hostButton != null) hostButton.onClick.RemoveListener(OnHostClicked);
             if (joinButton != null) joinButton.onClick.RemoveListener(OnJoinClicked);
             if (readyButton != null) readyButton.onClick.RemoveListener(OnReadyClicked);
+            if (outfitButton != null) outfitButton.onClick.RemoveListener(OnOutfitClicked);
             if (petButton != null) petButton.onClick.RemoveListener(OnPetClicked);
             if (characterButton != null) characterButton.onClick.RemoveListener(OnCharacterClicked);
             if (startButton != null) startButton.onClick.RemoveListener(OnStartClicked);
@@ -177,6 +186,9 @@ namespace EchoProtocol.UI
             // IsBusy may clear after the final session event, so derive controls every frame.
             RefreshControls();
             RefreshVisuals();
+            if (loadoutCarousel == null) RefreshCharacterThumbnail();
+            if (loadoutCarousel == null) RefreshOutfitSwatch();
+            if (loadoutCarousel == null) RefreshPetThumbnail();
         }
 
         private void ResolveServices()
@@ -406,25 +418,490 @@ namespace EchoProtocol.UI
             return "KHÔNG THỂ KẾT NỐI\nChưa xác định được nguyên nhân. Kiểm tra mạng, mã phòng rồi thử lại; nếu vẫn lỗi, khởi động lại game.";
         }
 
-        private void EnsurePetButton()
+        private void EnsureOutfitButton()
         {
-            if (petButton != null || characterButton == null) return;
-            petButton = Instantiate(characterButton, characterButton.transform.parent);
-            petButton.name = "PetSelectionButton";
-            petButton.onClick = new Button.ButtonClickedEvent();
-            var rect = (RectTransform)petButton.transform;
-            rect.anchoredPosition += Vector2.down * (rect.rect.height + 8f);
-        }
-        private void OnPetClicked()
-        {
-            if (lobbyManager != null && lobbyManager.TryGetLocalPlayerState(out var state, false))
-                state.RequestPet((state.PetId + 1) % 5);
+            if (outfitButton != null)
+                return;
+
+            if (characterButton == null)
+                return;
+
+            var target =
+                characterButton.transform.parent.Find(
+                    "OutfitSelectionButton");
+
+            if (target != null)
+            {
+                outfitButton =
+                    target.GetComponent<Button>();
+            }
         }
 
+
+        private static void PlaceRuntimeLoadoutButton(
+            Button button,
+            float y,
+            float height = 62f)
+        {
+            if (button == null)
+                return;
+
+            var rect =
+                button.transform as RectTransform;
+
+            if (rect == null)
+                return;
+
+            rect.anchorMin =
+                new Vector2(0f, 1f);
+
+            rect.anchorMax =
+                new Vector2(0f, 1f);
+
+            rect.pivot =
+                new Vector2(0f, 1f);
+
+            rect.anchoredPosition =
+                new Vector2(
+                    32f,
+                    -y);
+
+            rect.sizeDelta =
+                new Vector2(
+                    496f,
+                    height);
+
+            var image =
+                button.targetGraphic as Image
+                ?? button.GetComponent<Image>();
+
+            if (image != null)
+            {
+                image.color =
+                    new Color32(
+                        14,
+                        18,
+                        19,
+                        252);
+            }
+        }
+
+        private void EnsurePetButton()
+        {
+            if (petButton != null)
+                return;
+
+            if (characterButton == null)
+                return;
+
+            var target =
+                characterButton.transform.parent.Find(
+                    "PetSelectionButton");
+
+            if (target != null)
+            {
+                petButton =
+                    target.GetComponent<Button>();
+            }
+        }
+
+        private void EnsureLoadoutCarousel()
+        {
+            if (loadoutCarousel == null)
+            {
+                loadoutCarousel =
+                    GetComponent<LobbyLoadoutCarousel>();
+
+                if (loadoutCarousel == null)
+                {
+                    loadoutCarousel =
+                        gameObject.AddComponent<
+                            LobbyLoadoutCarousel>();
+                }
+            }
+
+            loadoutCarousel.Bind(
+                lobbyManager,
+                characterButton,
+                outfitButton,
+                petButton,
+                petOutfitButton);
+        }
+
+        private void OnOutfitClicked()
+        {
+            if (lobbyManager == null
+                || !lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                return;
+            }
+
+            var selector =
+                GetComponent<LobbyOutfitSelector>();
+
+            if (selector == null)
+            {
+                selector =
+                    gameObject.AddComponent<
+                        LobbyOutfitSelector>();
+            }
+
+            selector.Open(state);
+        }
+
+        private void EnsurePetOutfitButton()
+        {
+            if (petOutfitButton != null)
+                return;
+
+            if (characterButton == null)
+                return;
+
+            var target =
+                characterButton.transform.parent.Find(
+                    "PetOutfitSelectionButton");
+
+            if (target != null)
+            {
+                petOutfitButton =
+                    target.GetComponent<Button>();
+            }
+        }
+
+        private void OnPetOutfitClicked()
+        {
+            if (lobbyManager == null
+                || !lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                return;
+            }
+
+            var selector =
+                GetComponent<LobbyPetSkinSelector>();
+
+            if (selector == null)
+            {
+                selector =
+                    gameObject.AddComponent<
+                        LobbyPetSkinSelector>();
+            }
+
+            selector.Open(state);
+        }
+
+        private void OnPetClicked()
+        {
+            if (lobbyManager == null
+                || !lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                return;
+            }
+
+            var selector =
+                GetComponent<LobbyPetSelector>();
+
+            if (selector == null)
+            {
+                selector =
+                    gameObject.AddComponent<
+                        LobbyPetSelector>();
+            }
+
+            selector.Open(state);
+        }
+
+
+        private void EnsureOutfitSwatch()
+        {
+            if (outfitButton == null)
+                return;
+
+            var target =
+                outfitButton.transform.Find(
+                    "OutfitLobbySwatch");
+
+            Image image;
+
+            if (target == null)
+            {
+                var owner =
+                    new GameObject(
+                        "OutfitLobbySwatch",
+                        typeof(RectTransform),
+                        typeof(CanvasRenderer),
+                        typeof(Image));
+
+                owner.transform.SetParent(
+                    outfitButton.transform,
+                    false);
+
+                var rect =
+                    owner.GetComponent<RectTransform>();
+
+                rect.anchorMin =
+                    new Vector2(0f, 0.5f);
+
+                rect.anchorMax =
+                    new Vector2(0f, 0.5f);
+
+                rect.pivot =
+                    new Vector2(0f, 0.5f);
+
+                rect.anchoredPosition =
+                    new Vector2(10f, 0f);
+
+                rect.sizeDelta =
+                    new Vector2(34f, 34f);
+
+                image =
+                    owner.GetComponent<Image>();
+
+                image.raycastTarget =
+                    false;
+            }
+            else
+            {
+                image =
+                    target.GetComponent<Image>();
+            }
+
+            var label =
+                outfitButton.GetComponentInChildren<TMP_Text>(
+                    true);
+
+            if (label != null)
+            {
+                label.margin =
+                    new Vector4(
+                        54f,
+                        0f,
+                        16f,
+                        0f);
+
+                label.alignment =
+                    TextAlignmentOptions.Left;
+            }
+        }
+
+
+        private void RefreshOutfitSwatch()
+        {
+            if (outfitButton == null)
+                return;
+int characterId = 0;
+            int outfitId = 0;
+
+            if (lobbyManager != null
+                && lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                characterId =
+                    Mathf.Clamp(
+                        state.CharacterId,
+                        0,
+                        1);
+
+                outfitId =
+                    Mathf.Clamp(
+                        state.CharacterOutfitId,
+                        0,
+                        CharacterOutfitLibrary.OutfitCount - 1);
+            }
+
+            var target =
+                outfitButton.transform.Find(
+                    "OutfitLobbySwatch");
+
+            var image =
+                target != null
+                    ? target.GetComponent<Image>()
+                    : null;
+
+            if (image != null)
+            {
+                image.color =
+                    CharacterOutfitLibrary.GetSwatch(
+                        characterId,
+                        outfitId);
+            }
+
+            var label =
+                outfitButton.GetComponentInChildren<TMP_Text>(
+                    true);
+
+            if (label != null)
+            {
+                label.text =
+                    "OUTFIT: "
+                    + CharacterOutfitLibrary.GetName(
+                        characterId,
+                        outfitId);
+            }
+        }
+
+
+        private void EnsurePetThumbnail()
+        {
+            if (petButton == null)
+                return;
+
+            var target =
+                petButton.transform.Find(
+                    "PetLobbyThumbnail");
+
+            if (target == null)
+            {
+                var owner =
+                    new GameObject(
+                        "PetLobbyThumbnail",
+                        typeof(RectTransform),
+                        typeof(CanvasRenderer),
+                        typeof(RawImage));
+
+                owner.transform.SetParent(
+                    petButton.transform,
+                    false);
+
+                var rect =
+                    owner.GetComponent<RectTransform>();
+
+                rect.anchorMin =
+                    new Vector2(0f, 0.5f);
+
+                rect.anchorMax =
+                    new Vector2(0f, 0.5f);
+
+                rect.pivot =
+                    new Vector2(0f, 0.5f);
+
+                rect.anchoredPosition =
+                    new Vector2(8f, 0f);
+
+                rect.sizeDelta =
+                    new Vector2(38f, 38f);
+
+                var image =
+                    owner.GetComponent<RawImage>();
+
+                image.raycastTarget =
+                    false;
+            }
+
+            var label =
+                petButton.GetComponentInChildren<TMP_Text>(
+                    true);
+
+            if (label != null)
+            {
+                label.margin =
+                    new Vector4(
+                        54f,
+                        0f,
+                        16f,
+                        0f);
+
+                label.alignment =
+                    TextAlignmentOptions.Left;
+            }
+        }
+
+
+        private void RefreshPetThumbnail()
+        {
+            if (petButton == null)
+                return;
+int petId = 0;
+
+            if (lobbyManager != null
+                && lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                petId =
+                    state.PetId;
+            }
+
+            var target =
+                petButton.transform.Find(
+                    "PetLobbyThumbnail");
+
+            var image =
+                target != null
+                    ? target.GetComponent<RawImage>()
+                    : null;
+
+            if (image == null)
+                return;
+
+            if (petId <= 0)
+            {
+                image.texture = null;
+                image.color = Color.clear;
+                return;
+            }
+
+            image.texture =
+                Resources.Load<Texture2D>(
+                    PetShopThumbnailAssets
+                        .GetThumbnailResource(
+                            petId));
+
+            image.color =
+                image.texture != null
+                    ? Color.white
+                    : Color.clear;
+        }
+
+        private void RefreshCharacterThumbnail()
+        {
+            int characterId =
+                0;
+
+            if (lobbyManager != null
+                && lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                characterId =
+                    Mathf.Clamp(
+                        state.CharacterId,
+                        0,
+                        1);
+            }
+
+            LobbyCharacterSelector
+                .RefreshMainButtonThumbnail(
+                    characterButton,
+                    characterId);
+        }
         private void OnCharacterClicked()
         {
-            if (lobbyManager != null && lobbyManager.TryGetLocalPlayerState(out var state, false))
-                state.RequestCharacter(state.CharacterId == 0 ? 1 : 0);
+            if (lobbyManager == null
+                || !lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                return;
+            }
+
+            var selector =
+                GetComponent<LobbyCharacterSelector>();
+
+            if (selector == null)
+            {
+                selector =
+                    gameObject.AddComponent<
+                        LobbyCharacterSelector>();
+            }
+
+            selector.Open(state);
         }
 
         private void RefreshControls()
@@ -470,8 +947,24 @@ namespace EchoProtocol.UI
                     characterButton.interactable = inLobby && !local.IsReady;
                 }
                 var characterLabel = characterButton.GetComponentInChildren<TMP_Text>();
-                if (characterLabel != null) characterLabel.text = "CHARACTER: " + character;
+                if (characterLabel != null && loadoutCarousel == null) characterLabel.text = "CHARACTER: " + character;
             }
+            if (outfitButton != null)
+            {
+                outfitButton.interactable =
+                    false;
+
+                if (lobbyManager != null
+                    && lobbyManager.TryGetLocalPlayerState(
+                        out var outfitOwner,
+                        false))
+                {
+                    outfitButton.interactable =
+                        inLobby
+                        && !outfitOwner.IsReady;
+                }
+            }
+
             if (petButton != null)
             {
                 petButton.interactable = false;
@@ -482,7 +975,7 @@ namespace EchoProtocol.UI
                     petButton.interactable = inLobby && !petOwner.IsReady;
                 }
                 var label = petButton.GetComponentInChildren<TMP_Text>();
-                if (label != null) label.text = "PET: " + PetCatalog.Name(petId);
+                if (label != null && loadoutCarousel == null) label.text = "PET: " + PetCatalog.Name(petId);
             }
             if (readyButton != null)
             {

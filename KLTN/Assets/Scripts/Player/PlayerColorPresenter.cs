@@ -23,9 +23,9 @@ public sealed class PlayerColorPresenter : MonoBehaviour
     [Header("References")]
     [SerializeField] private LobbyPlayerState lobbyState;
 
-    private int _appliedTeamId = -1;
+    private int _appliedOutfitId = -1;
 
-    public int AppliedTeamId => _appliedTeamId;
+    public int AppliedOutfitId => _appliedOutfitId;
 
     private void Awake()
     {
@@ -54,8 +54,8 @@ public sealed class PlayerColorPresenter : MonoBehaviour
 
     private void LateUpdate()
     {
-        int currentTeamId = GetCurrentTeamId();
-        if (_appliedTeamId != currentTeamId)
+        int currentOutfitId = GetCurrentOutfitId();
+        if (_appliedOutfitId != currentOutfitId)
         {
             Refresh();
         }
@@ -78,30 +78,30 @@ public sealed class PlayerColorPresenter : MonoBehaviour
             return;
         }
 
-        int teamId = GetCurrentTeamId();
-        ApplyColor(teamId);
+        int outfitId = GetCurrentOutfitId();
+        ApplyColor(outfitId);
     }
 
-    private int GetCurrentTeamId()
+    private int GetCurrentOutfitId()
     {
         if (lobbyState == null || lobbyState.Object == null || !lobbyState.Object.IsValid)
         {
             return 0;
         }
 
-        return lobbyState.TeamId;
+        return lobbyState.CharacterOutfitId;
     }
 
-    public Color ResolveTeamTint(int teamId)
+    public Color ResolveOutfitTint(int outfitId)
     {
         EnsureColorSetsLoaded();
         if (colorSets == null || colorSets.Length == 0) return Color.white;
-        var material = colorSets[Mathf.Clamp(teamId, 0, colorSets.Length - 1)].suitMaterial;
+        var material = colorSets[Mathf.Clamp(outfitId, 0, colorSets.Length - 1)].suitMaterial;
         if (material == null) return Color.white;
         return material.HasProperty("_BaseColor") ? material.GetColor("_BaseColor") : material.color;
     }
 
-    public void ApplyColor(int teamId)
+    public void ApplyColor(int outfitId)
     {
         if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CharacterId == 1) return;
         EnsureColorSetsLoaded();
@@ -111,7 +111,7 @@ public sealed class PlayerColorPresenter : MonoBehaviour
             return;
         }
 
-        int index = Mathf.Clamp(teamId, 0, colorSets.Length - 1);
+        int index = Mathf.Clamp(outfitId, 0, colorSets.Length - 1);
         CharacterColorSet set = colorSets[index];
 
         if (set.suitMaterial == null && set.helmetBackpackMaterial == null)
@@ -176,7 +176,7 @@ public sealed class PlayerColorPresenter : MonoBehaviour
             }
         }
 
-        _appliedTeamId = teamId;
+        _appliedOutfitId = outfitId;
     }
 
     private void EnsureColorSetsLoaded()

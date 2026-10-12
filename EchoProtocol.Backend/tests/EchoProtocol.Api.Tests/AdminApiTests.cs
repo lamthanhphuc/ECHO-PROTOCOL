@@ -153,7 +153,109 @@ public sealed class AdminApiTests
         var purchase = Assert.Single(result.Data!.Items);
         Assert.Equal(50, purchase.PriceAtPurchase);
         Assert.Equal("Test Character", purchase.ShopItemName);
+    }    [Fact, Trait("Category", "AdminApiUnit")]
+    public async Task AdminCanGrantCreditsAndCreateLedgerEntry()
+    {
+        await using var harness =
+            await AdminHarness.CreateAsync();
+
+        var result =
+            await harness.Service.GrantCreditsAsync(
+                harness.AdminUserId,
+                new AdminGrantCreditsRequest
+                {
+                    Amount = 1_000,
+                    Reason = "Shop testing"
+                });
+
+        Assert.True(result.IsSuccess);
+
+        Assert.Equal(
+            550,
+            result.Data!.BalanceBefore);
+
+        Assert.Equal(
+            1_550,
+            result.Data.BalanceAfter);
+
+        Assert.Equal(
+            1_000,
+            result.Data.Amount);
+
+        var wallet =
+            await harness.Db.Wallets
+                .SingleAsync(
+                    item =>
+                        item.UserId ==
+                        harness.AdminUserId);
+
+        Assert.Equal(
+            1_550,
+            wallet.Balance);
+
+        harness.Db.ChangeTracker.Clear();
+
+        var ledger =
+            await harness.Service
+                .GetWalletTransactionsAsync(
+                    new AdminWalletTransactionsQuery
+                    {
+                        UserId =
+                            harness.AdminUserId,
+
+                        Type =
+                            WalletTransactionType.ADMIN_GRANT,
+
+                        Reference =
+                            result.Data.Reference
+                    });
+
+        var transaction =
+            Assert.Single(
+                ledger.Data!.Items);
+
+        Assert.Equal(
+            1_000,
+            transaction.Amount);
+
+        Assert.Equal(
+            550,
+            transaction.BalanceBefore);
+
+        Assert.Equal(
+            1_550,
+            transaction.BalanceAfter);
+
+        Assert.Contains(
+            "Shop testing",
+            transaction.Description);
     }
+
+    [Theory, Trait("Category", "AdminApiUnit")]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(100001)]
+    public async Task AdminGrantCreditsRejectsInvalidAmount(
+        int amount)
+    {
+        await using var harness =
+            await AdminHarness.CreateAsync();
+
+        var result =
+            await harness.Service.GrantCreditsAsync(
+                harness.AdminUserId,
+                new AdminGrantCreditsRequest
+                {
+                    Amount = amount
+                });
+
+        Assert.False(result.IsSuccess);
+
+        Assert.Equal(
+            ErrorCodes.ValidationError,
+            result.ErrorCode);
+    }
+
 
     [Fact, Trait("Category", "AdminApiUnit")]
     public async Task AdminContractsDoNotExposeSensitiveFields()
