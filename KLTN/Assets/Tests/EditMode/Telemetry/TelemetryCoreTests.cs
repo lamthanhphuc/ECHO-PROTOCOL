@@ -8,6 +8,23 @@ namespace EchoProtocol.Telemetry.Tests
     public sealed class TelemetryCoreTests
     {
         [Test]
+        public void RepeatedToolPickup_HasDistinctTelemetryIdentity()
+        {
+            var f = new Fixture(researchCaptureEnabled: true);
+            f.Factory.BeginMatch();
+            f.Emit(TelemetryEventTypes.MatchStarted, "start");
+            f.Emit(TelemetryEventTypes.PhaseStarted, "phase-start");
+            var adapter = new Phase8LifecycleTelemetryAdapter(f.Emitter);
+            var owner = Guid.NewGuid();
+
+            Assert.That(adapter.EmitToolPickup("p8:tool:1:pickup:20", DateTime.UtcNow, "CORE_COLLECTION", "tool-1", 2, 1, owner, 2, out var first, out _), Is.True);
+            Assert.That(adapter.EmitToolPickup("p8:tool:1:pickup:40", DateTime.UtcNow, "CORE_COLLECTION", "tool-1", 2, 1, owner, 1, out var second, out _), Is.True);
+            Assert.That(first.Id, Is.Not.EqualTo(second.Id));
+            Assert.That(first.SchemaVersion, Is.EqualTo(TelemetrySchemaVersions.LifecycleV12));
+            Assert.That(second.SchemaVersion, Is.EqualTo(TelemetrySchemaVersions.LifecycleV12));
+            Assert.That(f.Allocator.LastAllocatedSequence, Is.EqualTo(4));
+        }
+        [Test]
         public void SequenceAllocator_StartsAtOneAndNeverAllocatesAfterTerminal()
         {
             var allocator = new TelemetrySequenceAllocator();

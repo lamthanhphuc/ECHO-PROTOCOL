@@ -105,6 +105,12 @@ namespace EchoProtocol.AI.AED
             _minions.Add(new AEDPhase8MinionSourceV1(networkInstanceId, zone, "DESPAWNED", tick, occurrenceKey));
         }
 
+        public bool TryGetLatestTool(string instanceId, out AEDPhase8ToolSourceV1 source)
+        {
+            source = _tools.LastOrDefault(x => x.InstanceId == instanceId);
+            return _matchId != Guid.Empty && source != null;
+        }
+
         public bool TryFreeze(Guid matchId, uint phaseOrdinal, out AEDPhase8AuthoritySourceSnapshotV1 snapshot)
         {
             snapshot = null;

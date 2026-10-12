@@ -5,6 +5,24 @@ using NUnit.Framework;
 public sealed class AEDPhase8AuthoritySourceCollectorTests
 {
     [Test]
+    public void LatestTool_PreservesSpawnMetadata()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var matchId = Guid.NewGuid();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(matchId);
+        collector.RecordToolSpawn("tool-1", 2, 1, 10, "spawn-1");
+        collector.RecordToolTransition("tool-1", "Player", owner, 2, 20, "pickup-20");
+
+        Assert.True(collector.TryGetLatestTool("tool-1", out var tool));
+        Assert.AreEqual(2, tool.ToolId);
+        Assert.AreEqual(1, tool.Zone);
+        Assert.AreEqual("Player", tool.Location);
+        Assert.AreEqual(owner, tool.OwnerUserId);
+        Assert.AreEqual(2, tool.RemainingCharges);
+        Assert.AreEqual("pickup-20", tool.SourceOccurrenceKey);
+    }
+    [Test]
     public void UnknownTool_IsRejected()
     {
         var collector = new AEDPhase8AuthoritySourceCollectorV1();

@@ -195,6 +195,28 @@ namespace EchoProtocol.Networking.Authority
                 position.x, position.y, position.z);
         }
 
+        private void TryPublishPhase8Lifecycle(string occurrenceKey, Func<bool> enqueue)
+        {
+            if (!_researchCaptureEnabled) return;
+            if (!CanEmitProductionTelemetry() || _telemetry.Phase8LifecycleAdapter == null)
+            {
+                _aedv2Evidence.MarkIncomplete();
+                Debug.LogWarning($"[AED_P8][LIFECYCLE_NOT_READY] key={occurrenceKey}");
+                return;
+            }
+            try
+            {
+                if (enqueue()) return;
+                _aedv2Evidence.MarkIncomplete();
+                Debug.LogWarning($"[AED_P8][LIFECYCLE_ENQUEUE_FAILED] key={occurrenceKey}");
+            }
+            catch (Exception exception)
+            {
+                _aedv2Evidence.MarkIncomplete();
+                Debug.LogWarning($"[AED_P8][LIFECYCLE_INVALID] key={occurrenceKey} reason={exception.Message}");
+            }
+        }
+
         public void RecordPhase8ToolSpawn(
             NetworkId instanceId, int toolId, int zone, long tick)
         {
@@ -206,9 +228,15 @@ namespace EchoProtocol.Networking.Authority
             }
             try
             {
+                var occurrenceKey = $"p8:tool:{instanceId}:spawn";
                 _aedPhase8Source.RecordToolSpawn(
                     instanceId.ToString(), toolId, zone, tick,
-                    $"p8:tool:{instanceId}:spawn");
+                    occurrenceKey);
+                TryPublishPhase8Lifecycle(
+                    occurrenceKey,
+                    () => _telemetry.Phase8LifecycleAdapter.EmitToolSpawn(
+                        occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase,
+                        instanceId.ToString(), toolId, zone, out _, out _));
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 Debug.Log($"[AED_P8][TOOL_SOURCE] action=SPAWN id={instanceId} tool={toolId} zone={zone} tick={tick}");
 #endif
@@ -238,10 +266,23 @@ namespace EchoProtocol.Networking.Authority
             }
             try
             {
+                var occurrenceKey = $"p8:tool:{instanceId}:pickup:{tick}";
                 _aedPhase8Source.RecordToolTransition(
                     instanceId.ToString(), "Player", userId,
                     remainingCharges, tick,
-                    $"p8:tool:{instanceId}:pickup");
+                    occurrenceKey);
+                if (!_aedPhase8Source.TryGetLatestTool(instanceId.ToString(), out var tool) ||
+                    !Guid.TryParse(userId, out var ownerUserId))
+                {
+                    _aedToolNoiseEvidence.MarkIncomplete();
+                    return;
+                }
+                TryPublishPhase8Lifecycle(
+                    occurrenceKey,
+                    () => _telemetry.Phase8LifecycleAdapter.EmitToolPickup(
+                        occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase,
+                        tool.InstanceId, tool.ToolId, tool.Zone, ownerUserId,
+                        tool.RemainingCharges, out _, out _));
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 Debug.Log($"[AED_P8][TOOL_SOURCE] action=PICKUP id={instanceId} owner={userId} tick={tick}");
 #endif
@@ -258,9 +299,15 @@ namespace EchoProtocol.Networking.Authority
             if (!HasStateAuthority || !_telemetryMatchActive) return;
             try
             {
+                var occurrenceKey = $"p8:minion:{minionId}:spawn";
                 _aedPhase8Source.RecordMinionSpawn(
                     minionId.ToString(), zone, tick,
-                    $"p8:minion:{minionId}:spawn");
+                    occurrenceKey);
+                TryPublishPhase8Lifecycle(
+                    occurrenceKey,
+                    () => _telemetry.Phase8LifecycleAdapter.EmitMinionLifecycle(
+                        occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase,
+                        minionId.ToString(), zone, "SPAWNED", out _, out _));
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 Debug.Log($"[AED_P8][MINION_SOURCE] action=SPAWN id={minionId} zone={zone} tick={tick}");
 #endif
@@ -277,9 +324,15 @@ namespace EchoProtocol.Networking.Authority
             if (!HasStateAuthority || !_telemetryMatchActive) return;
             try
             {
+                var occurrenceKey = $"p8:minion:{minionId}:despawn";
                 _aedPhase8Source.RecordMinionDespawn(
                     minionId.ToString(), zone, tick,
-                    $"p8:minion:{minionId}:despawn");
+                    occurrenceKey);
+                TryPublishPhase8Lifecycle(
+                    occurrenceKey,
+                    () => _telemetry.Phase8LifecycleAdapter.EmitMinionLifecycle(
+                        occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase,
+                        minionId.ToString(), zone, "DESPAWNED", out _, out _));
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 Debug.Log($"[AED_P8][MINION_SOURCE] action=DESPAWN id={minionId} zone={zone} tick={tick}");
 #endif
