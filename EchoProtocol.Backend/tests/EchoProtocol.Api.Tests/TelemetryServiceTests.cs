@@ -27,7 +27,9 @@ public sealed class TelemetryServiceTests
         var response = await CreateService(repo).IngestBatchAsync(request, Guid.NewGuid(), CancellationToken.None);
         Assert.True(response.IsSuccess);
         Assert.Equal(TelemetryAckStatuses.Accepted, response.Data!.Items[2].Status);
-        var stored = Assert.Single(repo.InsertedEvents.Where(x => x.EventType == "TEAM_TOOL_LIFECYCLE"));
+        var stored = Assert.Single(
+            repo.InsertedEvents,
+            x => x.EventType == "TEAM_TOOL_LIFECYCLE");
         Assert.Equal("1.2", stored.SchemaVersion);
         Assert.Equal(3, stored.EventSequence);
     }
