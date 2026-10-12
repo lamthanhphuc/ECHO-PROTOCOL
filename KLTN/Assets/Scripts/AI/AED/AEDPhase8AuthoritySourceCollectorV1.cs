@@ -66,12 +66,24 @@ namespace EchoProtocol.AI.AED
 
         public void RecordToolSpawn(string instanceId, int toolId, int zone, long tick, string occurrenceKey)
         {
-            RequireActive(); RequireRow(instanceId, zone, tick, occurrenceKey);
+            RecordOriginToolSpawn(instanceId, toolId, zone, tick, occurrenceKey, "WorldSpawn");
+        }
+
+        public void RecordSceneToolSpawn(string instanceId, int toolId, long tick, string occurrenceKey)
+        {
+            RecordOriginToolSpawn(instanceId, toolId, 0, tick, occurrenceKey, "ScenePlaced");
+        }
+
+        private void RecordOriginToolSpawn(string instanceId, int toolId, int zone, long tick, string occurrenceKey, string origin)
+        {
+            RequireActive();
+            RequireRow(instanceId, zone, tick, occurrenceKey);
             if (toolId is not (1 or 2 or 3 or 4 or 6))
                 throw new ArgumentOutOfRangeException(nameof(toolId));
-            if (_tools.Any(x => x.InstanceId == instanceId)) throw new InvalidOperationException("AED_P8_DUPLICATE_TOOL_INSTANCE");
+            if (_tools.Any(x => x.InstanceId == instanceId))
+                throw new InvalidOperationException("AED_P8_DUPLICATE_TOOL_INSTANCE");
             RegisterOccurrence(occurrenceKey);
-            _tools.Add(new AEDPhase8ToolSourceV1(instanceId, toolId, zone, "WorldSpawn", "World", null, null, tick, occurrenceKey));
+            _tools.Add(new AEDPhase8ToolSourceV1(instanceId, toolId, zone, origin, "World", null, null, tick, occurrenceKey));
         }
 
         public void RecordToolTransition(string instanceId, string newLocation, string ownerUserId, int? remainingCharges, long tick, string occurrenceKey)

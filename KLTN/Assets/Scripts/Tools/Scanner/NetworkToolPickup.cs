@@ -45,6 +45,7 @@ namespace EchoProtocol.Tools.Scanner
         public Quaternion WorldRotation { get; private set; }
 
         private bool _localPickedUp;
+        private bool _phase8SceneSourceRegistered;
         public InventoryItemDefinition ToolItemDefinition => _toolItemDefinition;
         public int ToolId => _toolId;
 
@@ -96,6 +97,7 @@ namespace EchoProtocol.Tools.Scanner
             ApplyReplicatedPose();
             ConfigureWorldPickupShadows();
             OnReplicatedStateChanged();
+            TryRegisterPhase8SceneSpawn();
         }
 
         private void EnsureOutline()
@@ -273,8 +275,21 @@ namespace EchoProtocol.Tools.Scanner
             RuntimeLog.Log(RuntimeLogCategory.Inventory, $"[NetworkToolPickup] Player {context.Player} picked up tool '{_toolItemDefinition?.DisplayName ?? _toolId.ToString()}'.");
         }
 
+        private void TryRegisterPhase8SceneSpawn()
+        {
+            if (_phase8SceneSourceRegistered || Object == null || !Object.IsValid ||
+                !Object.HasStateAuthority || !Object.NetworkTypeId.IsSceneObject ||
+                IsPickedUp || Runner == null) return;
+
+            var authority = MatchAuthorityRuntime.Instance;
+            if (authority != null && authority.TryRecordPhase8SceneToolSpawn(
+                    Object.Id, _toolId, Runner.Tick.Raw))
+                _phase8SceneSourceRegistered = true;
+        }
+
         public override void FixedUpdateNetwork()
         {
+            TryRegisterPhase8SceneSpawn();
             if (IsPickedUp)
             {
                 foreach (var c in GetComponentsInChildren<Collider>(true))

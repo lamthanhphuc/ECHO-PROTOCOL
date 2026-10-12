@@ -217,6 +217,33 @@ namespace EchoProtocol.Networking.Authority
             }
         }
 
+        public bool TryRecordPhase8SceneToolSpawn(
+            NetworkId instanceId, int toolId, long tick)
+        {
+            if (!HasStateAuthority || !_telemetryMatchActive) return false;
+            try
+            {
+                var occurrenceKey = $"p8:tool:{instanceId}:scene-spawn";
+                _aedPhase8Source.RecordSceneToolSpawn(
+                    instanceId.ToString(), toolId, tick, occurrenceKey);
+                TryPublishPhase8Lifecycle(
+                    occurrenceKey,
+                    () => _telemetry.Phase8LifecycleAdapter.EmitToolSpawn(
+                        occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase,
+                        instanceId.ToString(), toolId, 0, "ScenePlaced", out _, out _));
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log($"[AED_P8][TOOL_SOURCE] action=SPAWN origin=ScenePlaced id={instanceId} tool={toolId} tick={tick}");
+#endif
+                return true;
+            }
+            catch (Exception exception)
+            {
+                _aedToolNoiseEvidence.MarkIncomplete();
+                Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action=SCENE_SPAWN id={instanceId} reason={exception.Message}");
+                return false;
+            }
+        }
+
         public void RecordPhase8ToolSpawn(
             NetworkId instanceId, int toolId, int zone, long tick)
         {

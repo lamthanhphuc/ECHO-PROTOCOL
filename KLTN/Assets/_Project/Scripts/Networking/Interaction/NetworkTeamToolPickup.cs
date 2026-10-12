@@ -16,6 +16,7 @@ namespace EchoProtocol.Networking
 
         private Outline _outline;
         private bool _visualsActive;
+        private bool _phase8SceneSourceRegistered;
 
         private static readonly Color TeamToolOutlineColor =
             new Color(1f, 0.05f, 0.05f, 1f);
@@ -54,6 +55,7 @@ namespace EchoProtocol.Networking
 
             ApplyReplicatedPose();
             SetVisualsAndCollidersActive(!IsConsumed);
+            TryRegisterPhase8SceneSpawn();
         }
 
         private void EnsureOutline()
@@ -222,8 +224,21 @@ namespace EchoProtocol.Networking
                     : 0;
         }
 
+        private void TryRegisterPhase8SceneSpawn()
+        {
+            if (_phase8SceneSourceRegistered || Object == null || !Object.IsValid ||
+                !Object.HasStateAuthority || !Object.NetworkTypeId.IsSceneObject ||
+                IsConsumed || Runner == null) return;
+
+            var authority = MatchAuthorityRuntime.Instance;
+            if (authority != null && authority.TryRecordPhase8SceneToolSpawn(
+                    Object.Id, _toolId, Runner.Tick.Raw))
+                _phase8SceneSourceRegistered = true;
+        }
+
         public override void FixedUpdateNetwork()
         {
+            TryRegisterPhase8SceneSpawn();
             if (IsConsumed)
             {
                 foreach (var c in GetComponentsInChildren<Collider>(true))

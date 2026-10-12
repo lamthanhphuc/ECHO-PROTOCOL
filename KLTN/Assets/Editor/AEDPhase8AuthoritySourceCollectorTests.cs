@@ -227,4 +227,31 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
         Assert.Throws<InvalidOperationException>(() =>
             collector.RecordToolSpawn("tool-2", 2, 1, 11, "shared-key"));
     }
+
+    [Test]
+    public void SceneToolSpawn_CanBePickedUpAndConsumed()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordSceneToolSpawn("scene-tool", 4, 10, "scene-spawn");
+        Assert.True(collector.TryGetLatestTool("scene-tool", out var spawned));
+        Assert.AreEqual("ScenePlaced", spawned.Origin);
+        Assert.AreEqual(0, spawned.Zone);
+        collector.RecordToolTransition("scene-tool", "Player", owner, 3, 20, "pickup");
+        collector.RecordToolUse("scene-tool", owner, 4, 2, false, 30, "use-1");
+        collector.RecordToolUse("scene-tool", owner, 4, 1, false, 40, "use-2");
+        collector.RecordToolUse("scene-tool", owner, 4, 0, true, 50, "consume");
+        Assert.False(collector.TryGetHeldTool(owner, out _));
+    }
+
+    [Test]
+    public void SceneToolSpawn_DuplicateInstanceRejected()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordSceneToolSpawn("scene-tool", 2, 10, "scene-spawn");
+        Assert.Throws<InvalidOperationException>(() =>
+            collector.RecordToolSpawn("scene-tool", 2, 1, 20, "world-spawn"));
+    }
 }

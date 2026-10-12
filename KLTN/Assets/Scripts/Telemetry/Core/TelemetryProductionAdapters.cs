@@ -614,11 +614,20 @@ namespace EchoProtocol.Telemetry
             string instanceId, int toolId, int zone, out TelemetryEvent telemetryEvent,
             out TelemetryBufferFailureReason failureReason)
         {
+            return EmitToolSpawn(occurrenceKey, occurredAtUtc, phase, instanceId, toolId, zone,
+                "WorldSpawn", out telemetryEvent, out failureReason);
+        }
+
+        public bool EmitToolSpawn(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string instanceId, int toolId, int zone, string origin,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason)
+        {
             ValidateTool(toolId, zone);
             MatchTelemetryAdapter.RequireText(instanceId, nameof(instanceId));
+            MatchTelemetryAdapter.RequireOneOf(origin, nameof(origin), "WorldSpawn", "ScenePlaced");
             return Emit(occurrenceKey, TelemetryEventTypes.TeamToolLifecycle, occurredAtUtc, phase,
                 new TelemetryJsonObject().AddString("instanceId", instanceId).AddInteger("toolId", toolId)
-                    .AddInteger("zone", zone).AddString("action", "SPAWN"),
+                    .AddInteger("zone", zone).AddString("action", "SPAWN").AddString("origin", origin),
                 out telemetryEvent, out failureReason);
         }
 

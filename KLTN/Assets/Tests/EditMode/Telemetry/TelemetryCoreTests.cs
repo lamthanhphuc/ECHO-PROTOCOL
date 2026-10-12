@@ -175,6 +175,20 @@ namespace EchoProtocol.Telemetry.Tests
         }
 
         [Test]
+        public void SceneToolSpawn_EmitsExplicitOrigin()
+        {
+            var f = new Fixture(researchCaptureEnabled: true);
+            f.Factory.BeginMatch();
+            f.Emit(TelemetryEventTypes.MatchStarted, "start");
+            f.Emit(TelemetryEventTypes.PhaseStarted, "phase-start");
+            var adapter = new Phase8LifecycleTelemetryAdapter(f.Emitter);
+            Assert.That(adapter.EmitToolSpawn("p8:tool:scene-1:scene-spawn", DateTime.UtcNow,
+                "CORE_COLLECTION", "scene-1", 4, 0, "ScenePlaced", out var evt, out _), Is.True);
+            Assert.That(evt.SchemaVersion, Is.EqualTo("1.2"));
+            StringAssert.Contains("\"origin\":\"ScenePlaced\"", evt.DataJson);
+        }
+
+        [Test]
         public void Phase8Lifecycle_RequiresResearchCapture()
         {
             var f = new Fixture(researchCaptureEnabled: false);
