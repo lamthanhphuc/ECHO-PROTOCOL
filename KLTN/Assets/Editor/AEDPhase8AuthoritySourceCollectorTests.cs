@@ -283,4 +283,36 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
         Assert.True(collector.TryGetHeldTool(owner, out var held));
         Assert.AreEqual(3, held.RemainingCharges);
     }
+
+    [Test]
+    public void LobbyLoadout_UseDropPickup_PreservesIdentity()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordLobbyToolLoadout("loadout-1", 2, owner, 3, 10, "loadout");
+        Assert.True(collector.TryGetHeldTool(owner, out var held));
+        Assert.AreEqual("LobbyLoadout", held.Origin);
+        Assert.AreEqual("Player", held.Location);
+        Assert.AreEqual(0, held.Zone);
+        collector.RecordToolUse("loadout-1", owner, 2, 2, false, 20, "use");
+        collector.RecordToolDrop("dropped-1", 2, owner, 2, 30, "drop");
+        collector.RecordToolTransition("dropped-1", "Player", owner, 2, 40, "pickup");
+        Assert.True(collector.TryGetHeldTool(owner, out var repicked));
+        Assert.AreEqual("loadout-1", repicked.ParentInstanceId);
+        Assert.AreEqual(2, repicked.RemainingCharges);
+    }
+
+    [Test]
+    public void LobbyLoadout_DuplicateOwner_IsRejected()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordLobbyToolLoadout("loadout-1", 2, owner, 3, 10, "loadout-1");
+        Assert.Throws<InvalidOperationException>(() => collector.RecordLobbyToolLoadout(
+            "loadout-2", 4, owner, 3, 20, "loadout-2"));
+        Assert.True(collector.TryGetHeldTool(owner, out var held));
+        Assert.AreEqual("loadout-1", held.InstanceId);
+    }
 }

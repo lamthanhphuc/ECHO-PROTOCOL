@@ -1331,6 +1331,8 @@ var toolId =
         : state.ToolId;
                 var teamId = state.TeamId > 0 ? state.TeamId : slot;
                 state.InitializeAuthoritativeSelection(teamId, toolId, gameplay);
+                if (gameplay && toolId != 0 && playerObject.HasStateAuthority && _bootstrap?.Runner != null)
+                    MatchAuthorityRuntime.Instance?.TryRecordPhase8LobbyLoadout(playerObject, _bootstrap.Runner.Tick.Raw);
             }
 
             if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && playerObject.HasStateAuthority)

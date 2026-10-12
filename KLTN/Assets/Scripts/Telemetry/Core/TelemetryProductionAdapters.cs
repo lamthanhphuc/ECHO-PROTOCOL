@@ -610,6 +610,30 @@ namespace EchoProtocol.Telemetry
             _emitter = emitter ?? throw new ArgumentNullException(nameof(emitter));
         }
 
+        public bool EmitToolLoadout(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string instanceId, int toolId, Guid ownerUserId, int? remainingCharges,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason)
+        {
+            ValidateTool(toolId, 0);
+            MatchTelemetryAdapter.RequireText(instanceId, nameof(instanceId));
+            MatchTelemetryAdapter.RequireUser(ownerUserId, nameof(ownerUserId));
+            if (toolId is 2 or 4)
+            {
+                if (!remainingCharges.HasValue || remainingCharges.Value is < 1 or > 3)
+                    throw new ArgumentException("AED_P8_LOADOUT_CHARGES_INVALID");
+            }
+            else if (remainingCharges.HasValue)
+                throw new ArgumentException("AED_P8_LOADOUT_CHARGES_INVALID");
+            var data = new TelemetryJsonObject()
+                .AddString("instanceId", instanceId).AddInteger("toolId", toolId)
+                .AddInteger("zone", 0).AddString("action", "LOADOUT")
+                .AddString("origin", "LobbyLoadout")
+                .AddString("ownerUserId", ownerUserId.ToString("D"));
+            if (remainingCharges.HasValue) data.AddInteger("remainingCharges", remainingCharges.Value);
+            return Emit(occurrenceKey, TelemetryEventTypes.TeamToolLifecycle, occurredAtUtc, phase,
+                data, out telemetryEvent, out failureReason);
+        }
+
         public bool EmitToolSpawn(string occurrenceKey, DateTime occurredAtUtc, string phase,
             string instanceId, int toolId, int zone, out TelemetryEvent telemetryEvent,
             out TelemetryBufferFailureReason failureReason)

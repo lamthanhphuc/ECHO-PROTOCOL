@@ -217,6 +217,60 @@ namespace EchoProtocol.Networking.Authority
             }
         }
 
+        public bool TryRecordPhase8LobbyLoadout(NetworkObject playerObject, long tick)
+        {
+            if (!HasStateAuthority || !_telemetryMatchActive || playerObject == null ||
+                !playerObject.IsValid || !playerObject.HasStateAuthority ||
+                !playerObject.InputAuthority.IsRealPlayer ||
+                !playerObject.TryGetComponent<LobbyPlayerState>(out var state) ||
+                !state.IsGameplayPlayer || state.ToolId == 0)
+                return false;
+            if (!TryResolveVerifiedBackendUserId(playerObject.InputAuthority, out var ownerUserId) ||
+                !Guid.TryParse(ownerUserId, out var ownerId) || ownerId == Guid.Empty)
+            {
+                _aedToolNoiseEvidence.MarkIncomplete();
+                return false;
+            }
+            var instanceId = $"loadout:{MatchId:D}:{playerObject.Id}";
+            int? charges = state.ToolId is 2 or 4 ? state.TeamToolUsesRemaining : (int?)null;
+            try
+            {
+                if (_aedPhase8Source.TryGetLatestTool(instanceId, out var existing))
+                {
+                    if (existing.Origin == "LobbyLoadout" && existing.ToolId == state.ToolId &&
+                        existing.OwnerUserId == ownerUserId && existing.RemainingCharges == charges &&
+                        existing.Location == "Player") return true;
+                    throw new InvalidOperationException("AED_P8_LOADOUT_IDENTITY_CONFLICT");
+                }
+                var occurrenceKey = $"p8:tool:{instanceId}:loadout";
+                _aedPhase8Source.RecordLobbyToolLoadout(instanceId, state.ToolId, ownerUserId, charges, tick, occurrenceKey);
+                TryPublishPhase8Lifecycle(occurrenceKey, () => _telemetry.Phase8LifecycleAdapter.EmitToolLoadout(
+                    occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase, instanceId, state.ToolId,
+                    ownerId, charges, out _, out _));
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log($"[AED_P8][TOOL_SOURCE] action=LOADOUT id={instanceId} owner={ownerUserId} tool={state.ToolId} tick={tick}");
+#endif
+                return true;
+            }
+            catch (Exception exception)
+            {
+                _aedToolNoiseEvidence.MarkIncomplete();
+                Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action=LOADOUT player={playerObject.Id} reason={exception.Message}");
+                return false;
+            }
+        }
+
+        private void CaptureExistingPhase8LobbyLoadouts()
+        {
+            var runner = _bootstrap?.Runner;
+            if (runner == null || !HasStateAuthority || !_telemetryMatchActive) return;
+            foreach (var player in runner.ActivePlayers)
+            {
+                if (runner.TryGetPlayerObject(player, out var playerObject) && playerObject != null)
+                    TryRecordPhase8LobbyLoadout(playerObject, runner.Tick.Raw);
+            }
+        }
+
         public bool TryRecordPhase8SceneToolSpawn(
             NetworkId instanceId, int toolId, long tick)
         {
@@ -1321,6 +1375,8 @@ namespace EchoProtocol.Networking.Authority
                 policyContext: BuildAEDMetricPolicyContext("CORE_COLLECTION"));
             _aedSurvivalEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION");
             _aedToolNoiseEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION");
+            if (phaseStarted)
+                CaptureExistingPhase8LobbyLoadouts();
             if (!phaseStarted)
             {
                 _aedv2Evidence.MarkIncomplete();

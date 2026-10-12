@@ -189,6 +189,23 @@ namespace EchoProtocol.Telemetry.Tests
         }
 
         [Test]
+        public void LobbyLoadout_EmitsExplicitV12Identity()
+        {
+            var f = new Fixture(researchCaptureEnabled: true);
+            f.Factory.BeginMatch();
+            f.Emit(TelemetryEventTypes.MatchStarted, "start");
+            f.Emit(TelemetryEventTypes.PhaseStarted, "phase-start");
+            var adapter = new Phase8LifecycleTelemetryAdapter(f.Emitter);
+            var owner = Guid.NewGuid();
+            Assert.That(adapter.EmitToolLoadout("loadout-1", DateTime.UtcNow, "CORE_COLLECTION",
+                "loadout:test", 2, owner, 3, out var evt, out _), Is.True);
+            Assert.That(evt.SchemaVersion, Is.EqualTo("1.2"));
+            StringAssert.Contains("\"action\":\"LOADOUT\"", evt.DataJson);
+            StringAssert.Contains("\"origin\":\"LobbyLoadout\"", evt.DataJson);
+            StringAssert.Contains(owner.ToString("D"), evt.DataJson);
+        }
+
+        [Test]
         public void Phase8Lifecycle_RequiresResearchCapture()
         {
             var f = new Fixture(researchCaptureEnabled: false);

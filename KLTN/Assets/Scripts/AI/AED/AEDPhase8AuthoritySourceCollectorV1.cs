@@ -86,6 +86,28 @@ namespace EchoProtocol.AI.AED
             _tools.Add(new AEDPhase8ToolSourceV1(instanceId, toolId, zone, origin, "World", null, null, tick, occurrenceKey));
         }
 
+        public void RecordLobbyToolLoadout(string instanceId, int toolId, string ownerUserId, int? remainingCharges, long tick, string occurrenceKey)
+        {
+            RequireActive();
+            RequireRow(instanceId, 0, tick, occurrenceKey);
+            if (toolId is not (1 or 2 or 3 or 4 or 6) ||
+                !Guid.TryParse(ownerUserId, out var owner) || owner == Guid.Empty)
+                throw new InvalidOperationException("AED_P8_LOADOUT_INVALID");
+            if (toolId is 2 or 4)
+            {
+                if (!remainingCharges.HasValue || remainingCharges.Value is < 1 or > 3)
+                    throw new InvalidOperationException("AED_P8_LOADOUT_CHARGES_INVALID");
+            }
+            else if (remainingCharges.HasValue)
+                throw new InvalidOperationException("AED_P8_LOADOUT_CHARGES_INVALID");
+            if (_tools.Any(x => x.InstanceId == instanceId) || _heldToolByOwner.ContainsKey(ownerUserId))
+                throw new InvalidOperationException("AED_P8_LOADOUT_IDENTITY_CONFLICT");
+            RegisterOccurrence(occurrenceKey);
+            _tools.Add(new AEDPhase8ToolSourceV1(instanceId, toolId, 0, "LobbyLoadout", "Player", ownerUserId,
+                remainingCharges, tick, occurrenceKey));
+            _heldToolByOwner.Add(ownerUserId, instanceId);
+        }
+
         public void RecordToolTransition(string instanceId, string newLocation, string ownerUserId, int? remainingCharges, long tick, string occurrenceKey)
         {
             RequireActive(); RequireRow(instanceId, 0, tick, occurrenceKey);
