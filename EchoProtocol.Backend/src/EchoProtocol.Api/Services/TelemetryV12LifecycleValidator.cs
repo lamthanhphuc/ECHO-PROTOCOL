@@ -15,7 +15,7 @@ internal static class TelemetryV12LifecycleValidator
     ];
 
     private static readonly HashSet<string> ToolFields =
-    ["instanceId", "toolId", "zone", "action", "ownerUserId", "remainingCharges"];
+        ["instanceId", "parentInstanceId", "toolId", "zone", "action", "ownerUserId", "remainingCharges"];
 
     private static readonly HashSet<string> MinionFields =
     ["networkInstanceId", "zone", "state"];
@@ -80,12 +80,20 @@ internal static class TelemetryV12LifecycleValidator
             !Text(data, "action")) return false;
 
         var action = data.GetProperty("action").GetString();
-        if (action is not ("SPAWN" or "PICKUP")) return false;
+        if (action is not ("SPAWN" or "PICKUP" or "DROP")) return false;
 
         if (data.TryGetProperty("remainingCharges", out var charges) &&
             charges.ValueKind != JsonValueKind.Null &&
             (charges.ValueKind != JsonValueKind.Number || !charges.TryGetInt32(out var count) || count < 0))
             return false;
+
+        if (action == "DROP")
+            return Text(data, "parentInstanceId") && Text(data, "ownerUserId") &&
+                   data.GetProperty("parentInstanceId").GetString() != data.GetProperty("instanceId").GetString() &&
+                   Guid.TryParse(data.GetProperty("ownerUserId").GetString(), out var dropOwner) &&
+                   dropOwner != Guid.Empty;
+
+        if (data.TryGetProperty("parentInstanceId", out _)) return false;
 
         if (action == "PICKUP")
             return Text(data, "ownerUserId") && Guid.TryParse(
