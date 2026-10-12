@@ -59,6 +59,37 @@ public sealed class TelemetryServiceTests
         Assert.DoesNotContain(repo.InsertedEvents, x => x.EventType == "TEAM_TOOL_LIFECYCLE");
     }
 
+    [Theory, Trait("Category", "AEDv2")]
+    [InlineData("USE", 1)]
+    [InlineData("CONSUME", 0)]
+    public async Task P8ToolUse_ValidLifecycle_IsAccepted(string action, int charges)
+    {
+        var repo = new FakeTelemetryEventRepository();
+        var request = CreateMatchStarted(researchCaptureEnabled: true);
+        var matchId = request.Events[0].MatchId;
+        request.Events.Add(CreatePhaseStarted(matchId, 2));
+        request.Events.Add(CreateP8UseEvent(matchId, action, charges));
+        var response = await CreateService(repo).IngestBatchAsync(request, Guid.NewGuid(), CancellationToken.None);
+        Assert.True(response.IsSuccess);
+        Assert.Equal(TelemetryAckStatuses.Accepted, response.Data!.Items[2].Status);
+    }
+
+    [Theory, Trait("Category", "AEDv2")]
+    [InlineData("USE", 0)]
+    [InlineData("CONSUME", 1)]
+    public async Task P8ToolUse_InvalidCharges_IsRejected(string action, int charges)
+    {
+        var repo = new FakeTelemetryEventRepository();
+        var request = CreateMatchStarted(researchCaptureEnabled: true);
+        var matchId = request.Events[0].MatchId;
+        request.Events.Add(CreatePhaseStarted(matchId, 2));
+        request.Events.Add(CreateP8UseEvent(matchId, action, charges));
+        var response = await CreateService(repo).IngestBatchAsync(request, Guid.NewGuid(), CancellationToken.None);
+        Assert.True(response.IsSuccess);
+        Assert.Equal(TelemetryAckStatuses.PermanentlyRejected, response.Data!.Items[2].Status);
+        Assert.Equal("P8_TELEMETRY_V12_INVALID", response.Data.Items[2].RejectReason);
+    }
+
     [Fact, Trait("Category", "AEDv2")]
     public async Task P8Lifecycle_V12AcceptedWithResearchCapture()
     {
@@ -877,6 +908,18 @@ public sealed class TelemetryServiceTests
         json["data"]!["instanceId"] = "tool-child";
         json["data"]!["parentInstanceId"] = "tool-parent";
         json["data"]!["ownerUserId"] = Guid.NewGuid().ToString("D");
+        item.ValueJson = JsonSerializer.SerializeToElement(json);
+        return item;
+    }
+
+    private static TelemetryEventRequest CreateP8UseEvent(Guid matchId, string action, int charges)
+    {
+        var item = CreateP8ToolEvent(matchId);
+        var json = JsonNode.Parse(item.ValueJson.GetRawText())!;
+        json["context"]!["occurrenceKey"] = $"p8:tool:tool-1:{action.ToLowerInvariant()}:42";
+        json["data"]!["action"] = action;
+        json["data"]!["ownerUserId"] = Guid.NewGuid().ToString("D");
+        json["data"]!["remainingCharges"] = charges;
         item.ValueJson = JsonSerializer.SerializeToElement(json);
         return item;
     }
