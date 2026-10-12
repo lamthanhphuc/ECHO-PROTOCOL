@@ -56,12 +56,25 @@ namespace EchoProtocol.AI.AED
         private readonly Dictionary<string, string> _heldToolByOwner = new(StringComparer.Ordinal);
         private readonly HashSet<string> _transferredToolInstances = new(StringComparer.Ordinal);
         private Guid _matchId;
+        private uint _currentPhaseOrdinal;
+        private readonly Dictionary<string, uint> _occurrencePhases = new(StringComparer.Ordinal);
 
         public void BeginMatch(Guid matchId)
         {
             ResetMatch();
             if (matchId == Guid.Empty) throw new ArgumentException("AED_P8_MATCH_ID_REQUIRED", nameof(matchId));
             _matchId = matchId;
+            _currentPhaseOrdinal = 1;
+        }
+
+        public void StartPhase(uint phaseOrdinal)
+        {
+            RequireActive();
+            if (phaseOrdinal == 0 ||
+                (phaseOrdinal != _currentPhaseOrdinal &&
+                 (ulong)phaseOrdinal != (ulong)_currentPhaseOrdinal + 1))
+                throw new InvalidOperationException("AED_P8_PHASE_ORDINAL_INVALID");
+            _currentPhaseOrdinal = phaseOrdinal;
         }
 
         public void RecordToolSpawn(string instanceId, int toolId, int zone, long tick, string occurrenceKey)
@@ -222,19 +235,27 @@ namespace EchoProtocol.AI.AED
         public bool TryFreeze(Guid matchId, uint phaseOrdinal, out AEDPhase8AuthoritySourceSnapshotV1 snapshot)
         {
             snapshot = null;
-            if (matchId == Guid.Empty || matchId != _matchId || phaseOrdinal == 0) return false;
-            // Lobby, drop, recovery, support spawn, and canonical event reconciliation are not connected yet.
-            snapshot = new AEDPhase8AuthoritySourceSnapshotV1(matchId, phaseOrdinal, false, _tools, _minions);
+            if (matchId == Guid.Empty || matchId != _matchId || phaseOrdinal == 0 || phaseOrdinal > _currentPhaseOrdinal)
+                return false;
+            var tools = _tools.Where(x => _occurrencePhases.TryGetValue(x.SourceOccurrenceKey, out var phase) && phase == phaseOrdinal);
+            var minions = _minions.Where(x => _occurrencePhases.TryGetValue(x.SourceOccurrenceKey, out var phase) && phase == phaseOrdinal);
+            snapshot = new AEDPhase8AuthoritySourceSnapshotV1(matchId, phaseOrdinal, false, tools, minions);
             return true;
         }
 
         public void ResetMatch()
-        { _matchId = Guid.Empty; _tools.Clear(); _minions.Clear(); _occurrenceKeys.Clear(); _heldToolByOwner.Clear(); _transferredToolInstances.Clear(); }
+        {
+            _matchId = Guid.Empty;
+            _currentPhaseOrdinal = 0;
+            _tools.Clear(); _minions.Clear(); _occurrenceKeys.Clear(); _occurrencePhases.Clear();
+            _heldToolByOwner.Clear(); _transferredToolInstances.Clear();
+        }
 
         private void RegisterOccurrence(string occurrenceKey)
         {
             if (!_occurrenceKeys.Add(occurrenceKey))
                 throw new InvalidOperationException("AED_P8_DUPLICATE_OCCURRENCE");
+            _occurrencePhases.Add(occurrenceKey, _currentPhaseOrdinal);
         }
 
         private void RequireActive()

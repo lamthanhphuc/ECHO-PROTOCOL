@@ -374,4 +374,45 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
         collector.RecordToolTransition("first-aid", "Player", owner, null, 30, "valid-pickup");
         Assert.True(collector.TryGetHeldTool(owner, out _));
     }
+
+    [Test]
+    public void PhaseWindows_FilterRowsAndPreserveCrossPhaseLineage()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var matchId = Guid.NewGuid();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(matchId);
+        collector.RecordToolSpawn("tool-1", 2, 1, 10, "spawn-1");
+        collector.RecordMinionSpawn("minion-1", 1, 11, "minion-spawn");
+        collector.StartPhase(2);
+        collector.RecordToolTransition("tool-1", "Player", owner, 3, 20, "pickup-2");
+        collector.RecordMinionDespawn("minion-1", 1, 21, "minion-despawn");
+        Assert.True(collector.TryFreeze(matchId, 1, out var first));
+        Assert.True(collector.TryFreeze(matchId, 2, out var second));
+        Assert.AreEqual(1, first.Tools.Count);
+        Assert.AreEqual("spawn-1", first.Tools[0].SourceOccurrenceKey);
+        Assert.AreEqual(1, first.Minions.Count);
+        Assert.AreEqual(1, second.Tools.Count);
+        Assert.AreEqual("pickup-2", second.Tools[0].SourceOccurrenceKey);
+        Assert.AreEqual("Player", second.Tools[0].Location);
+        Assert.AreEqual(1, second.Minions.Count);
+        Assert.AreEqual("DESPAWNED", second.Minions[0].State);
+        Assert.False(first.CoverageComplete);
+        Assert.False(second.CoverageComplete);
+    }
+
+    [Test]
+    public void PhaseWindows_RejectSkippedAndFutureOrdinals()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var matchId = Guid.NewGuid();
+        collector.BeginMatch(matchId);
+        Assert.False(collector.TryFreeze(matchId, 2, out _));
+        Assert.Throws<InvalidOperationException>(() => collector.StartPhase(3));
+        collector.StartPhase(2);
+        collector.StartPhase(2);
+        Assert.Throws<InvalidOperationException>(() => collector.StartPhase(1));
+        Assert.True(collector.TryFreeze(matchId, 2, out var snapshot));
+        Assert.False(snapshot.CoverageComplete);
+    }
 }

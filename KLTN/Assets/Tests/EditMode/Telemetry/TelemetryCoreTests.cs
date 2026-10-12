@@ -206,6 +206,42 @@ namespace EchoProtocol.Telemetry.Tests
         }
 
         [Test]
+        public void PhaseReferences_SeparateTwoLifecycleWindows()
+        {
+            var f = new Fixture(researchCaptureEnabled: true);
+            f.Factory.BeginMatch();
+            f.Emit(TelemetryEventTypes.MatchStarted, "start");
+            f.Emit(TelemetryEventTypes.PhaseStarted, "phase-1-start");
+            var adapter = new Phase8LifecycleTelemetryAdapter(f.Emitter);
+            Assert.That(adapter.EmitToolSpawn("tool-spawn", DateTime.UtcNow, "CORE_COLLECTION", "tool-1", 2, 1, out _, out _), Is.True);
+            f.Emit(TelemetryEventTypes.PhaseCompleted, "phase-1-end");
+            f.Emit(TelemetryEventTypes.PhaseStarted, "phase-2-start");
+            Assert.That(adapter.EmitMinionLifecycle("minion-spawn", DateTime.UtcNow, "FINAL_HUNT", "minion-1", 2, "SPAWNED", out _, out _), Is.True);
+            f.Emit(TelemetryEventTypes.PhaseCompleted, "phase-2-end");
+            Assert.True(f.Factory.TryGetPhaseSourceReferences(1, out var first));
+            Assert.True(f.Factory.TryGetPhaseSourceReferences(2, out var second));
+            Assert.That(first.Length, Is.EqualTo(1));
+            Assert.That(second.Length, Is.EqualTo(1));
+            Assert.That(first[0].OccurrenceKey, Is.EqualTo("tool-spawn"));
+            Assert.That(second[0].OccurrenceKey, Is.EqualTo("minion-spawn"));
+        }
+
+        [Test]
+        public void PhaseReferences_RejectIncompletePhaseWindow()
+        {
+            var f = new Fixture();
+            f.Factory.BeginMatch();
+            f.Emit(TelemetryEventTypes.MatchStarted, "start");
+            f.Emit(TelemetryEventTypes.PhaseStarted, "phase-1-start");
+            f.Emit(TelemetryEventTypes.HelpPingUsed, "ping");
+            f.Emit(TelemetryEventTypes.PhaseStarted, "phase-2-start");
+            f.Emit(TelemetryEventTypes.PhaseCompleted, "phase-2-end");
+            Assert.False(f.Factory.TryGetPhaseSourceReferences(1, out _));
+            Assert.True(f.Factory.TryGetPhaseSourceReferences(2, out var second));
+            Assert.That(second.Length, Is.EqualTo(0));
+        }
+
+        [Test]
         public void Phase8Lifecycle_RequiresResearchCapture()
         {
             var f = new Fixture(researchCaptureEnabled: false);

@@ -2295,6 +2295,16 @@ namespace EchoProtocol.Networking.Authority
                 reasonCode);
             _currentTelemetryPhase = phase;
             var phaseOrdinal = (_aedv2Evidence.LastFrozen?.PhaseOrdinal ?? 0) + 1;
+            bool phaseSourceWindowValid = true;
+            try
+            {
+                _aedPhase8Source.StartPhase(phaseOrdinal);
+            }
+            catch (Exception exception)
+            {
+                phaseSourceWindowValid = false;
+                Debug.LogWarning($"[AED_P8][PHASE_WINDOW_INVALID] phase={phase} ordinal={phaseOrdinal} reason={exception.Message}");
+            }
             _aedv2Evidence.StartPhase(MatchId, CurrentRosterIdentity(),
                 phase, phaseOrdinal, nowUtc);
             _aedObjectiveEvidence.StartPhase(MatchId, phaseOrdinal, phase,
@@ -2308,6 +2318,11 @@ namespace EchoProtocol.Networking.Authority
                 BuildAEDMetricPolicyContext(phase));
             ApplyPhase8DebugEvidenceInvalidation();
             ApplyPhase8InventoryEvidenceInvalidation();
+            if (!phaseSourceWindowValid)
+            {
+                MarkPhase8InventoryEvidenceIncomplete("PHASE_WINDOW_INVALID");
+                _aedMinionEvidence.MarkIncomplete();
+            }
             if (!emitted)
             {
                 _aedv2Evidence.MarkIncomplete();
