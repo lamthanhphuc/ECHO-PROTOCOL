@@ -128,6 +128,14 @@ namespace EchoProtocol.AI.AED
                 (previous.Location != "World" ||
                  (_heldToolByOwner.TryGetValue(ownerUserId, out var held) && held != instanceId)))
                 throw new InvalidOperationException("AED_P8_OWNER_INVENTORY_CONFLICT");
+            if (previous.ToolId is 2 or 4)
+            {
+                if (!remainingCharges.HasValue || remainingCharges.Value is < 1 or > 3 ||
+                    (previous.RemainingCharges.HasValue && remainingCharges.Value != previous.RemainingCharges.Value))
+                    throw new InvalidOperationException("AED_P8_TOOL_PICKUP_CHARGES_INVALID");
+            }
+            else if (remainingCharges.HasValue)
+                throw new InvalidOperationException("AED_P8_TOOL_PICKUP_CHARGES_INVALID");
             RegisterOccurrence(occurrenceKey);
             _tools.Add(new AEDPhase8ToolSourceV1(instanceId, previous.ToolId, previous.Zone, previous.Origin, newLocation, ownerUserId, remainingCharges, tick, occurrenceKey, previous.ParentInstanceId));
             if (newLocation == "Player") _heldToolByOwner[ownerUserId] = instanceId;
@@ -179,8 +187,7 @@ namespace EchoProtocol.AI.AED
                 parent.ToolId != toolId || tick <= parent.SourceTick || newInstanceId == parentId ||
                 _tools.Any(x => x.InstanceId == newInstanceId))
                 throw new InvalidOperationException("AED_P8_DROP_LINEAGE_INVALID");
-            if (parent.RemainingCharges.HasValue &&
-                (!remainingCharges.HasValue || remainingCharges.Value > parent.RemainingCharges.Value))
+            if (parent.RemainingCharges != remainingCharges)
                 throw new InvalidOperationException("AED_P8_DROP_CHARGES_INVALID");
             RegisterOccurrence(occurrenceKey);
             _transferredToolInstances.Add(parentId);

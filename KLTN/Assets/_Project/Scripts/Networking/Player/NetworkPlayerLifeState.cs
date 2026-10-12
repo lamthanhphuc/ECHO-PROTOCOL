@@ -508,6 +508,23 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        private void DropHeldItemsForForcedTransition(string reason)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
+            var state = GetComponent<LobbyPlayerState>();
+            if (state == null)
+            {
+                MatchAuthorityRuntime.Instance?.MarkPhase8InventoryEvidenceIncomplete(
+                    "FORCED_DROP_PLAYER_STATE_MISSING:" + reason);
+                return;
+            }
+            if (state.ToolId == 0 && !state.CarriedCoreId.IsValid) return;
+            GetComponent<NetworkPlayerInteractor>()?.DropHeldItemsAuthoritative(Object.InputAuthority);
+            if (state.ToolId != 0 || state.CarriedCoreId.IsValid)
+                MatchAuthorityRuntime.Instance?.MarkPhase8InventoryEvidenceIncomplete(
+                    "FORCED_DROP_UNRECONCILED:" + reason);
+        }
+
         private void CommitDown(string sourceType, Vector3 hitPosition)
         {
             var nextDownCount = DownCount + 1;
@@ -521,7 +538,7 @@ namespace EchoProtocol.Networking
                 BleedoutTimer = TickTimer.None;
                 IsCrawling = false;
                 DownCount = nextDownCount;
-                GetComponent<NetworkPlayerInteractor>()?.DropHeldItemsAuthoritative(Object.InputAuthority);
+                DropHeldItemsForForcedTransition("DOWN");
                 CommitEliminated(NetworkPlayerLifeTransitionCause.ReviveLimit,
                     "REVIVE_LIMIT_REACHED", directFromHit: true);
                 return;
@@ -535,7 +552,7 @@ namespace EchoProtocol.Networking
             BleedoutTimer = TickTimer.CreateFromSeconds(Runner, _bleedoutSeconds);
             IsCrawling = true;
             DownCount = nextDownCount;
-            GetComponent<NetworkPlayerInteractor>()?.DropHeldItemsAuthoritative(Object.InputAuthority);
+            DropHeldItemsForForcedTransition("DOWN");
             CommitStatus(NetworkPlayerLifeStatus.Downed, NetworkPlayerLifeTransitionCause.Damage);
             MatchAuthorityRuntime.Instance?.RecordPlayerDowned(
                 Object.InputAuthority,
@@ -651,6 +668,9 @@ namespace EchoProtocol.Networking
             {
                 return false;
             }
+
+            if (!directFromHit)
+                DropHeldItemsForForcedTransition("ELIMINATED");
 
             Health = 0f;
             IsCrawling = false;

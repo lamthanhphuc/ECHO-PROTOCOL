@@ -32,14 +32,14 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
         collector.BeginMatch(matchId);
         collector.RecordToolSpawn("tool-original", 2, 1, 10, "spawn");
         collector.RecordToolTransition("tool-original", "Player", owner, 2, 20, "pickup");
-        collector.RecordToolDrop("tool-dropped", 2, owner, 1, 30, "drop");
+        collector.RecordToolDrop("tool-dropped", 2, owner, 2, 30, "drop");
 
         Assert.True(collector.TryGetLatestTool("tool-dropped", out var dropped));
         Assert.AreEqual("PlayerDrop", dropped.Origin);
         Assert.AreEqual("tool-original", dropped.ParentInstanceId);
         Assert.AreEqual("World", dropped.Location);
-        Assert.AreEqual(1, dropped.RemainingCharges);
-        collector.RecordToolTransition("tool-dropped", "Player", owner, 1, 40, "repickup");
+        Assert.AreEqual(2, dropped.RemainingCharges);
+        collector.RecordToolTransition("tool-dropped", "Player", owner, 2, 40, "repickup");
         Assert.True(collector.TryGetLatestTool("tool-dropped", out var repicked));
         Assert.AreEqual("tool-original", repicked.ParentInstanceId);
         Assert.True(collector.TryFreeze(matchId, 1, out var snapshot));
@@ -256,17 +256,16 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
     }
 
     [Test]
-    public void ScenePlacedJammer_ConsumeWithoutKnownCharges_IsRejected()
+    public void ScenePlacedJammer_PickupWithoutKnownCharges_IsRejected()
     {
         var collector = new AEDPhase8AuthoritySourceCollectorV1();
         var owner = Guid.NewGuid().ToString("D");
         collector.BeginMatch(Guid.NewGuid());
         collector.RecordSceneToolSpawn("scene-jammer", 4, 10, "spawn");
-        collector.RecordToolTransition("scene-jammer", "Player", owner, null, 20, "pickup");
-        var error = Assert.Throws<InvalidOperationException>(() => collector.RecordToolUse(
-            "scene-jammer", owner, 4, 0, true, 30, "consume"));
-        Assert.AreEqual("AED_P8_TOOL_USE_CHARGES_UNKNOWN", error.Message);
-        Assert.True(collector.TryGetHeldTool(owner, out _));
+        var error = Assert.Throws<InvalidOperationException>(() => collector.RecordToolTransition(
+            "scene-jammer", "Player", owner, null, 20, "pickup"));
+        Assert.AreEqual("AED_P8_TOOL_PICKUP_CHARGES_INVALID", error.Message);
+        Assert.False(collector.TryGetHeldTool(owner, out _));
     }
 
     [Test]
@@ -314,5 +313,65 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
             "loadout-2", 4, owner, 3, 20, "loadout-2"));
         Assert.True(collector.TryGetHeldTool(owner, out var held));
         Assert.AreEqual("loadout-1", held.InstanceId);
+    }
+
+    [Test]
+    public void Drop_RejectsChargeLossWithoutUse()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordToolSpawn("parent", 2, 1, 10, "spawn");
+        collector.RecordToolTransition("parent", "Player", owner, 3, 20, "pickup");
+        var error = Assert.Throws<InvalidOperationException>(() => collector.RecordToolDrop("child", 2, owner, 2, 30, "drop"));
+        Assert.AreEqual("AED_P8_DROP_CHARGES_INVALID", error.Message);
+        Assert.False(collector.TryGetLatestTool("child", out _));
+        Assert.True(collector.TryGetHeldTool(owner, out _));
+    }
+
+    [Test]
+    public void Drop_RejectsChargeIncrease()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordToolSpawn("parent", 4, 1, 10, "spawn");
+        collector.RecordToolTransition("parent", "Player", owner, 2, 20, "pickup");
+        Assert.Throws<InvalidOperationException>(() => collector.RecordToolDrop("child", 4, owner, 3, 30, "drop"));
+    }
+
+    [Test]
+    public void Repickup_RejectsChangedCharges()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordToolSpawn("parent", 2, 1, 10, "spawn");
+        collector.RecordToolTransition("parent", "Player", owner, 3, 20, "pickup");
+        collector.RecordToolDrop("child", 2, owner, 3, 30, "drop");
+        var error = Assert.Throws<InvalidOperationException>(() => collector.RecordToolTransition("child", "Player", owner, 2, 40, "repickup"));
+        Assert.AreEqual("AED_P8_TOOL_PICKUP_CHARGES_INVALID", error.Message);
+    }
+
+    [Test]
+    public void MultiUsePickup_RequiresCharges()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordToolSpawn("tool", 4, 1, 10, "spawn");
+        Assert.Throws<InvalidOperationException>(() => collector.RecordToolTransition("tool", "Player", owner, null, 20, "pickup"));
+    }
+
+    [Test]
+    public void SingleUsePickup_RejectsExtraCharges()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordToolSpawn("first-aid", 3, 1, 10, "spawn");
+        Assert.Throws<InvalidOperationException>(() => collector.RecordToolTransition("first-aid", "Player", owner, 3, 20, "pickup"));
+        collector.RecordToolTransition("first-aid", "Player", owner, null, 30, "valid-pickup");
+        Assert.True(collector.TryGetHeldTool(owner, out _));
     }
 }

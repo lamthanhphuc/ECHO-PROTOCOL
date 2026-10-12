@@ -70,6 +70,10 @@ namespace EchoProtocol.Networking.Authority
         private DateTime _matchStartedAtUtc;
         private bool _telemetryMatchActive;
         private bool _phase8DebugEvidenceInvalidated;
+        private bool _phase8InventoryEvidenceInvalidated;
+
+        public bool Phase8InventoryEvidenceInvalidated =>
+            _phase8InventoryEvidenceInvalidated;
 
         public bool Phase8DebugEvidenceInvalidated =>
             _phase8DebugEvidenceInvalidated;
@@ -110,6 +114,24 @@ namespace EchoProtocol.Networking.Authority
         public void MarkAEDv2EvidenceIncomplete()
         {
             _aedv2Evidence.MarkIncomplete();
+        }
+
+        public void MarkPhase8InventoryEvidenceIncomplete(string reason)
+        {
+            if (!HasStateAuthority || MatchId == Guid.Empty ||
+                (!_telemetryMatchActive && !_pendingAuthoritativeTelemetryMatchStart))
+                return;
+            _phase8InventoryEvidenceInvalidated = true;
+            ApplyPhase8InventoryEvidenceInvalidation();
+            Debug.LogWarning($"[AED_P8][INVENTORY_EVIDENCE_INCOMPLETE] reason={reason}");
+        }
+
+        private void ApplyPhase8InventoryEvidenceInvalidation()
+        {
+            if (!_phase8InventoryEvidenceInvalidated) return;
+            _aedv2Evidence.MarkIncomplete();
+            _aedObjectiveEvidence.MarkIncomplete();
+            _aedToolNoiseEvidence.MarkIncomplete();
         }
 
         public void MarkPhase8DebugEvidenceInvalid(
@@ -228,21 +250,30 @@ namespace EchoProtocol.Networking.Authority
             if (!_researchCaptureEnabled) return;
             if (!CanEmitProductionTelemetry() || _telemetry.Phase8LifecycleAdapter == null)
             {
-                _aedv2Evidence.MarkIncomplete();
+                MarkPhase8LifecycleReceiptFailure(occurrenceKey);
                 Debug.LogWarning($"[AED_P8][LIFECYCLE_NOT_READY] key={occurrenceKey}");
                 return;
             }
             try
             {
                 if (enqueue()) return;
-                _aedv2Evidence.MarkIncomplete();
+                MarkPhase8LifecycleReceiptFailure(occurrenceKey);
                 Debug.LogWarning($"[AED_P8][LIFECYCLE_ENQUEUE_FAILED] key={occurrenceKey}");
             }
             catch (Exception exception)
             {
-                _aedv2Evidence.MarkIncomplete();
+                MarkPhase8LifecycleReceiptFailure(occurrenceKey);
                 Debug.LogWarning($"[AED_P8][LIFECYCLE_INVALID] key={occurrenceKey} reason={exception.Message}");
             }
+        }
+
+        private void MarkPhase8LifecycleReceiptFailure(string occurrenceKey)
+        {
+            _aedv2Evidence.MarkIncomplete();
+            if (occurrenceKey.StartsWith("p8:tool:", StringComparison.Ordinal))
+                MarkPhase8InventoryEvidenceIncomplete("LIFECYCLE_RECEIPT_FAILED");
+            else if (occurrenceKey.StartsWith("p8:minion:", StringComparison.Ordinal))
+                _aedMinionEvidence.MarkIncomplete();
         }
 
         public bool TryRecordPhase8LobbyLoadout(NetworkObject playerObject, long tick)
@@ -257,6 +288,7 @@ namespace EchoProtocol.Networking.Authority
                 !Guid.TryParse(ownerUserId, out var ownerId) || ownerId == Guid.Empty)
             {
                 _aedToolNoiseEvidence.MarkIncomplete();
+                MarkPhase8InventoryEvidenceIncomplete("LOADOUT_OWNER_UNVERIFIED");
                 return false;
             }
             var instanceId = $"loadout:{MatchId:D}:{playerObject.Id}";
@@ -283,6 +315,7 @@ namespace EchoProtocol.Networking.Authority
             catch (Exception exception)
             {
                 _aedToolNoiseEvidence.MarkIncomplete();
+                MarkPhase8InventoryEvidenceIncomplete("LOADOUT_SOURCE_INVALID");
                 Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action=LOADOUT player={playerObject.Id} reason={exception.Message}");
                 return false;
             }
@@ -321,6 +354,7 @@ namespace EchoProtocol.Networking.Authority
             catch (Exception exception)
             {
                 _aedToolNoiseEvidence.MarkIncomplete();
+                MarkPhase8InventoryEvidenceIncomplete("SCENE_SPAWN_INVALID");
                 Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action=SCENE_SPAWN id={instanceId} reason={exception.Message}");
                 return false;
             }
@@ -332,6 +366,7 @@ namespace EchoProtocol.Networking.Authority
             if (!HasStateAuthority) return;
             if (!_telemetryMatchActive)
             {
+                MarkPhase8InventoryEvidenceIncomplete("LIFECYCLE_BEFORE_TELEMETRY_MATCH_START");
                 Debug.LogWarning($"[AED_P8][TOOL_SOURCE_MISSED] action=SPAWN id={instanceId} reason=MATCH_NOT_ACTIVE");
                 return;
             }
@@ -353,6 +388,7 @@ namespace EchoProtocol.Networking.Authority
             catch (Exception ex)
             {
                 _aedToolNoiseEvidence.MarkIncomplete();
+                MarkPhase8InventoryEvidenceIncomplete("WORLD_SPAWN_INVALID");
                 Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action=SPAWN id={instanceId} reason={ex.Message}");
             }
         }
@@ -363,6 +399,7 @@ namespace EchoProtocol.Networking.Authority
             if (!HasStateAuthority) return;
             if (!_telemetryMatchActive)
             {
+                MarkPhase8InventoryEvidenceIncomplete("LIFECYCLE_BEFORE_TELEMETRY_MATCH_START");
                 Debug.LogWarning($"[AED_P8][TOOL_SOURCE_MISSED] action=PICKUP id={instanceId} reason=MATCH_NOT_ACTIVE");
                 return;
             }
@@ -370,6 +407,7 @@ namespace EchoProtocol.Networking.Authority
                 !TryResolveVerifiedBackendUserId(player, out var userId))
             {
                 _aedToolNoiseEvidence.MarkIncomplete();
+                MarkPhase8InventoryEvidenceIncomplete("PICKUP_OWNER_UNVERIFIED");
                 Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action=PICKUP id={instanceId} reason=OWNER_UNVERIFIED");
                 return;
             }
@@ -384,6 +422,7 @@ namespace EchoProtocol.Networking.Authority
                     !Guid.TryParse(userId, out var ownerUserId))
                 {
                     _aedToolNoiseEvidence.MarkIncomplete();
+                    MarkPhase8InventoryEvidenceIncomplete("PICKUP_SOURCE_MISSING");
                     return;
                 }
                 TryPublishPhase8Lifecycle(
@@ -399,6 +438,7 @@ namespace EchoProtocol.Networking.Authority
             catch (Exception ex)
             {
                 _aedToolNoiseEvidence.MarkIncomplete();
+                MarkPhase8InventoryEvidenceIncomplete("PICKUP_SOURCE_INVALID");
                 Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action=PICKUP id={instanceId} reason={ex.Message}");
             }
         }
@@ -407,7 +447,7 @@ namespace EchoProtocol.Networking.Authority
         {
             if (!HasStateAuthority || !_telemetryMatchActive) return;
             if (!player.IsRealPlayer || !TryResolveVerifiedBackendUserId(player, out var userId) || !Guid.TryParse(userId, out var ownerId))
-            { _aedToolNoiseEvidence.MarkIncomplete(); return; }
+            { _aedToolNoiseEvidence.MarkIncomplete(); MarkPhase8InventoryEvidenceIncomplete("USE_OWNER_UNVERIFIED"); return; }
             try
             {
                 if (!_aedPhase8Source.TryGetHeldTool(userId, out var held))
@@ -426,6 +466,7 @@ namespace EchoProtocol.Networking.Authority
             catch (Exception exception)
             {
                 _aedToolNoiseEvidence.MarkIncomplete();
+                MarkPhase8InventoryEvidenceIncomplete("USE_SOURCE_INVALID");
                 Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action={(consumed ? "CONSUME" : "USE")} reason={exception.Message}");
             }
         }
@@ -437,6 +478,7 @@ namespace EchoProtocol.Networking.Authority
                 !Guid.TryParse(userId, out var ownerId))
             {
                 _aedToolNoiseEvidence.MarkIncomplete();
+                MarkPhase8InventoryEvidenceIncomplete("DROP_OWNER_UNVERIFIED");
                 return;
             }
             try
@@ -448,6 +490,7 @@ namespace EchoProtocol.Networking.Authority
                     string.IsNullOrWhiteSpace(source.ParentInstanceId))
                 {
                     _aedToolNoiseEvidence.MarkIncomplete();
+                    MarkPhase8InventoryEvidenceIncomplete("DROP_SOURCE_MISSING");
                     return;
                 }
                 TryPublishPhase8Lifecycle(occurrenceKey, () => _telemetry.Phase8LifecycleAdapter.EmitToolDrop(
@@ -461,6 +504,7 @@ namespace EchoProtocol.Networking.Authority
             catch (Exception exception)
             {
                 _aedToolNoiseEvidence.MarkIncomplete();
+                MarkPhase8InventoryEvidenceIncomplete("DROP_SOURCE_INVALID");
                 Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action=DROP id={newInstanceId} reason={exception.Message}");
             }
         }
@@ -1038,7 +1082,9 @@ namespace EchoProtocol.Networking.Authority
         public async void MarkPlayerDisconnected(int actorNumber)
         {
             if (!IsHostBinding || !HasBinding || actorNumber < 1) return;
-            var result = await _api.DisconnectPlayerAsync(MatchId, actorNumber);
+            var disconnectedMatchId = MatchId;
+            var result = await _api.DisconnectPlayerAsync(disconnectedMatchId, actorNumber);
+            if (MatchId != disconnectedMatchId) return;
             if (!IsSuccessful(result))
             {
                 Debug.LogWarning($"[MatchAuthority] Disconnect binding failed: {Describe(result)}");
@@ -1049,6 +1095,8 @@ namespace EchoProtocol.Networking.Authority
             if (_boundPlayers.TryGetValue(actorNumber, out var disconnectedUser))
             {
                 var userId = disconnectedUser.ToString("D");
+                if (_telemetryMatchActive && _aedPhase8Source.TryGetHeldTool(userId, out _))
+                    MarkPhase8InventoryEvidenceIncomplete("PLAYER_DISCONNECTED_WITH_HELD_TOOL");
                 _aedPursuitEvidence.CensorTarget(userId, "PLAYER_DISCONNECTED", CurrentAuthorityTick);
                 _aedMinionEvidence.CensorTarget(userId, "PLAYER_DISCONNECTED", CurrentAuthorityTick);
             }
@@ -1125,6 +1173,7 @@ namespace EchoProtocol.Networking.Authority
             _objectiveContributors.Clear();
             _matchStartedAtUtc = default;
             _telemetryMatchActive = false;
+            _phase8InventoryEvidenceInvalidated = false;
             _phase8DebugEvidenceInvalidated = false;
             _matchEndEmitted = false;
             _pendingMatchEnd = false;
@@ -1405,6 +1454,7 @@ namespace EchoProtocol.Networking.Authority
             _aedSurvivalEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION");
             _aedToolNoiseEvidence.StartPhase(MatchId, 1, "CORE_COLLECTION");
             ApplyPhase8DebugEvidenceInvalidation();
+            ApplyPhase8InventoryEvidenceInvalidation();
             if (phaseStarted)
                 CaptureExistingPhase8LobbyLoadouts();
             if (!phaseStarted)
@@ -2257,6 +2307,7 @@ namespace EchoProtocol.Networking.Authority
             _aedMinionEvidence.StartPhase(MatchId, phaseOrdinal, phase,
                 BuildAEDMetricPolicyContext(phase));
             ApplyPhase8DebugEvidenceInvalidation();
+            ApplyPhase8InventoryEvidenceInvalidation();
             if (!emitted)
             {
                 _aedv2Evidence.MarkIncomplete();
