@@ -16,6 +16,48 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed class TelemetryServiceTests
 {
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task P8Lifecycle_V12AcceptedWithResearchCapture()
+    {
+        var repo = new FakeTelemetryEventRepository();
+        var request = CreateMatchStarted(researchCaptureEnabled: true);
+        var matchId = request.Events[0].MatchId;
+        request.Events.Add(CreatePhaseStarted(matchId, 2));
+        request.Events.Add(CreateP8ToolEvent(matchId));
+        var response = await CreateService(repo).IngestBatchAsync(request, Guid.NewGuid(), CancellationToken.None);
+        Assert.True(response.IsSuccess);
+        Assert.Equal(TelemetryAckStatuses.Accepted, response.Data!.Items[2].Status);
+        var stored = Assert.Single(repo.InsertedEvents.Where(x => x.EventType == "TEAM_TOOL_LIFECYCLE"));
+        Assert.Equal("1.2", stored.SchemaVersion);
+        Assert.Equal(3, stored.EventSequence);
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task P8Lifecycle_V11RemainsUnsupported()
+    {
+        var repo = new FakeTelemetryEventRepository();
+        var request = CreateMatchStarted(researchCaptureEnabled: true);
+        var matchId = request.Events[0].MatchId;
+        request.Events.Add(CreatePhaseStarted(matchId, 2));
+        request.Events.Add(CreateP8ToolEvent(matchId, "1.1"));
+        var response = await CreateService(repo).IngestBatchAsync(request, Guid.NewGuid(), CancellationToken.None);
+        Assert.Equal("TELEMETRY_EVENT_TYPE_UNSUPPORTED", response.Data!.Items[2].RejectReason);
+        Assert.DoesNotContain(repo.InsertedEvents, x => x.EventType == "TEAM_TOOL_LIFECYCLE");
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task P8Lifecycle_ResearchCaptureRequired()
+    {
+        var repo = new FakeTelemetryEventRepository();
+        var request = CreateMatchStarted(researchCaptureEnabled: false);
+        var matchId = request.Events[0].MatchId;
+        request.Events.Add(CreatePhaseStarted(matchId, 2));
+        request.Events.Add(CreateP8ToolEvent(matchId));
+        var response = await CreateService(repo).IngestBatchAsync(request, Guid.NewGuid(), CancellationToken.None);
+        Assert.Equal("TELEMETRY_RESEARCH_CAPTURE_NOT_ENABLED", response.Data!.Items[2].RejectReason);
+        Assert.DoesNotContain(repo.InsertedEvents, x => x.EventType == "TEAM_TOOL_LIFECYCLE");
+    }
+
     [Theory]
     [InlineData("match-start", true)]
     [InlineData("", false)]
@@ -769,6 +811,17 @@ public sealed class TelemetryServiceTests
                 "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'",
                 CultureInfo.InvariantCulture));
     }
+
+    private static TelemetryEventRequest CreateP8ToolEvent(Guid matchId, string schemaVersion = "1.2") => new()
+    {
+        Id = Guid.NewGuid(), MatchId = matchId, UserId = null, EventType = "TEAM_TOOL_LIFECYCLE",
+        Ts = UtcTs(), SchemaVersion = schemaVersion, ReasonCode = null,
+        ValueJson = JsonSerializer.SerializeToElement(new
+        {
+            context = new { eventSequence = 3, authorityTick = 42, scenarioConfigVersion = "TEST-SCENARIO-1", policyVersion = "TEST-POLICY-1", configSource = "FIXED", occurrenceKey = "p8:tool:1:spawn", phase = "CORE_COLLECTION", researchCaptureEnabled = true },
+            data = new { instanceId = "tool-1", toolId = 2, zone = 1, action = "SPAWN" }
+        })
+    };
 
     private static TelemetryEventRequest WithValueJson(TelemetryEventRequest item, JsonElement valueJson)
     {

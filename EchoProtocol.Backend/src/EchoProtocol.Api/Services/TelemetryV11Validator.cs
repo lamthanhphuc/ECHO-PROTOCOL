@@ -12,9 +12,16 @@ internal sealed record TelemetryValidationResult(
 
 internal static class TelemetrySchemaDispatcher
 {
-    public static bool IsResearchCaptureEvent(TelemetryEventRequest telemetryEvent) =>
-        telemetryEvent.SchemaVersion == "1.1" &&
-        TelemetryV11Validator.IsResearchCaptureEvent(telemetryEvent.EventType);
+    public static bool IsResearchCaptureEvent(
+        TelemetryEventRequest telemetryEvent) =>
+        telemetryEvent.SchemaVersion switch
+        {
+            "1.1" => TelemetryV11Validator.IsResearchCaptureEvent(
+                telemetryEvent.EventType),
+            "1.2" => TelemetryV12LifecycleValidator.IsLifecycleEvent(
+                telemetryEvent.EventType),
+            _ => false
+        };
 
     public static bool TryValidate(
         TelemetryEventRequest telemetryEvent,
@@ -25,6 +32,8 @@ internal static class TelemetrySchemaDispatcher
         return telemetryEvent.SchemaVersion switch
         {
             "1.1" => TelemetryV11Validator.TryValidate(
+                telemetryEvent, researchCaptureAllowed, out result, out rejectReason),
+            "1.2" => TelemetryV12LifecycleValidator.TryValidate(
                 telemetryEvent, researchCaptureAllowed, out result, out rejectReason),
             "1.0" => Reject("TELEMETRY_LEGACY_V10_UNSUPPORTED", out result, out rejectReason),
             _ => Reject("TELEMETRY_SCHEMA_UNSUPPORTED", out result, out rejectReason)
