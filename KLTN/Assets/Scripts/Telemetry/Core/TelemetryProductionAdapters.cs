@@ -639,6 +639,26 @@ namespace EchoProtocol.Telemetry
                 data, out telemetryEvent, out failureReason);
         }
 
+        public bool EmitToolDrop(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string newInstanceId, string parentInstanceId, int toolId, int zone, Guid ownerUserId,
+            int? remainingCharges, out TelemetryEvent telemetryEvent,
+            out TelemetryBufferFailureReason failureReason)
+        {
+            ValidateTool(toolId, zone);
+            MatchTelemetryAdapter.RequireText(newInstanceId, nameof(newInstanceId));
+            MatchTelemetryAdapter.RequireText(parentInstanceId, nameof(parentInstanceId));
+            MatchTelemetryAdapter.RequireUser(ownerUserId, nameof(ownerUserId));
+            if (newInstanceId == parentInstanceId || remainingCharges < 0)
+                throw new ArgumentException("AED_P8_DROP_LINEAGE_INVALID");
+            var data = new TelemetryJsonObject().AddString("instanceId", newInstanceId)
+                .AddString("parentInstanceId", parentInstanceId)
+                .AddString("ownerUserId", ownerUserId.ToString("D"))
+                .AddString("action", "DROP").AddInteger("toolId", toolId).AddInteger("zone", zone);
+            if (remainingCharges.HasValue) data.AddInteger("remainingCharges", remainingCharges.Value);
+            return Emit(occurrenceKey, TelemetryEventTypes.TeamToolLifecycle, occurredAtUtc, phase,
+                data, out telemetryEvent, out failureReason);
+        }
+
         public bool EmitMinionLifecycle(string occurrenceKey, DateTime occurredAtUtc, string phase,
             string networkInstanceId, int zone, string state, out TelemetryEvent telemetryEvent,
             out TelemetryBufferFailureReason failureReason)

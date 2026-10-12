@@ -528,11 +528,13 @@ namespace EchoProtocol.Networking
                 if (TrySpawnDroppedTeamToolAuthoritative(
                         toolId,
                         remainingUses,
-                        out _))
+                        out var pickupId))
                 {
                     state.SetGameplayToolId(0);
 
                     ResetTeamToolRuntimeAuthoritative();
+                    MatchAuthorityRuntime.Instance?.RecordPhase8ToolDrop(
+                        pickupId, actor, toolId, remainingUses, Runner.Tick.Raw);
 
                     return true;
                 }
@@ -562,7 +564,7 @@ namespace EchoProtocol.Networking
                     remainingUses,
                     forcedDropPosition,
                     dropRotation,
-                    out _))
+                    out var pickupId))
             {
                 return false;
             }
@@ -570,6 +572,8 @@ namespace EchoProtocol.Networking
             state.SetGameplayToolId(0);
 
             ResetTeamToolRuntimeAuthoritative();
+            MatchAuthorityRuntime.Instance?.RecordPhase8ToolDrop(
+                pickupId, actor, toolId, remainingUses, Runner.Tick.Raw);
 
             return true;
         }
@@ -1123,6 +1127,8 @@ namespace EchoProtocol.Networking
             var result = ValidateRequester(requester, sequence);
             var state = GetComponent<LobbyPlayerState>();
             var targetId = default(NetworkId);
+            var droppedToolId = state != null ? state.ToolId : 0;
+            var droppedUses = state != null ? state.TeamToolUsesRemaining : 0;
             if (result == InteractionValidationResult.Accepted)
             {
                 var lifeState = GetComponent<NetworkPlayerLifeState>();
@@ -1150,6 +1156,8 @@ namespace EchoProtocol.Networking
                     state.SetGameplayToolId(0);
 
                     ResetTeamToolRuntimeAuthoritative();
+                    MatchAuthorityRuntime.Instance?.RecordPhase8ToolDrop(
+                        targetId, requester, droppedToolId, droppedUses, Runner.Tick.Raw);
                 }
             }
 

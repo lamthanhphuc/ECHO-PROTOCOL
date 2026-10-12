@@ -24,6 +24,7 @@ namespace EchoProtocol.AI.AED
     public sealed class AEDPhase8ToolSourceV1
     {
         public string InstanceId { get; }
+        public string ParentInstanceId { get; }
         public int ToolId { get; }
         public int Zone { get; }
         public string Origin { get; }
@@ -32,8 +33,8 @@ namespace EchoProtocol.AI.AED
         public int? RemainingCharges { get; }
         public long SourceTick { get; }
         public string SourceOccurrenceKey { get; }
-        internal AEDPhase8ToolSourceV1(string id, int tool, int zone, string origin, string location, string owner, int? charges, long tick, string key)
-        { InstanceId = id; ToolId = tool; Zone = zone; Origin = origin; Location = location; OwnerUserId = owner; RemainingCharges = charges; SourceTick = tick; SourceOccurrenceKey = key; }
+        internal AEDPhase8ToolSourceV1(string id, int tool, int zone, string origin, string location, string owner, int? charges, long tick, string key, string parentInstanceId = null)
+        { InstanceId = id; ParentInstanceId = parentInstanceId; ToolId = tool; Zone = zone; Origin = origin; Location = location; OwnerUserId = owner; RemainingCharges = charges; SourceTick = tick; SourceOccurrenceKey = key; }
     }
 
     public sealed class AEDPhase8MinionSourceV1
@@ -52,6 +53,7 @@ namespace EchoProtocol.AI.AED
         private readonly List<AEDPhase8ToolSourceV1> _tools = new();
         private readonly List<AEDPhase8MinionSourceV1> _minions = new();
         private readonly HashSet<string> _occurrenceKeys = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _heldToolByOwner = new(StringComparer.Ordinal);
         private Guid _matchId;
 
         public void BeginMatch(Guid matchId)
@@ -83,8 +85,34 @@ namespace EchoProtocol.AI.AED
                 (newLocation == "Player" &&
                  (!Guid.TryParse(ownerUserId, out var ownerId) ||
                   ownerId == Guid.Empty))) throw new InvalidOperationException("AED_P8_INVALID_TOOL_TRANSITION");
+            if (newLocation == "Player" &&
+                (previous.Location != "World" ||
+                 (_heldToolByOwner.TryGetValue(ownerUserId, out var held) && held != instanceId)))
+                throw new InvalidOperationException("AED_P8_OWNER_INVENTORY_CONFLICT");
             RegisterOccurrence(occurrenceKey);
             _tools.Add(new AEDPhase8ToolSourceV1(instanceId, previous.ToolId, previous.Zone, previous.Origin, newLocation, ownerUserId, remainingCharges, tick, occurrenceKey));
+            if (newLocation == "Player") _heldToolByOwner[ownerUserId] = instanceId;
+        }
+
+        public void RecordToolDrop(string newInstanceId, int toolId, string ownerUserId, int? remainingCharges, long tick, string occurrenceKey)
+        {
+            RequireActive();
+            RequireRow(newInstanceId, 0, tick, occurrenceKey);
+            if (!Guid.TryParse(ownerUserId, out var owner) || owner == Guid.Empty || remainingCharges < 0)
+                throw new InvalidOperationException("AED_P8_DROP_INVALID_OWNER");
+            if (!_heldToolByOwner.TryGetValue(ownerUserId, out var parentId))
+                throw new InvalidOperationException("AED_P8_DROP_PARENT_MISSING");
+            var parent = _tools.LastOrDefault(x => x.InstanceId == parentId);
+            if (parent == null || parent.Location != "Player" || parent.OwnerUserId != ownerUserId ||
+                parent.ToolId != toolId || tick <= parent.SourceTick || newInstanceId == parentId ||
+                _tools.Any(x => x.InstanceId == newInstanceId))
+                throw new InvalidOperationException("AED_P8_DROP_LINEAGE_INVALID");
+            if (parent.RemainingCharges.HasValue &&
+                (!remainingCharges.HasValue || remainingCharges.Value > parent.RemainingCharges.Value))
+                throw new InvalidOperationException("AED_P8_DROP_CHARGES_INVALID");
+            RegisterOccurrence(occurrenceKey);
+            _tools.Add(new AEDPhase8ToolSourceV1(newInstanceId, toolId, parent.Zone, "PlayerDrop", "World", null, remainingCharges, tick, occurrenceKey, parentId));
+            _heldToolByOwner.Remove(ownerUserId);
         }
 
         public void RecordMinionSpawn(string networkInstanceId, int zone, long tick, string occurrenceKey)
@@ -121,7 +149,7 @@ namespace EchoProtocol.AI.AED
         }
 
         public void ResetMatch()
-        { _matchId = Guid.Empty; _tools.Clear(); _minions.Clear(); _occurrenceKeys.Clear(); }
+        { _matchId = Guid.Empty; _tools.Clear(); _minions.Clear(); _occurrenceKeys.Clear(); _heldToolByOwner.Clear(); }
 
         private void RegisterOccurrence(string occurrenceKey)
         {

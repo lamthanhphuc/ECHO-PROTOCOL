@@ -22,6 +22,36 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
         Assert.AreEqual(2, tool.RemainingCharges);
         Assert.AreEqual("pickup-20", tool.SourceOccurrenceKey);
     }
+
+    [Test]
+    public void DropAndRepickup_PreservesLineage()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var matchId = Guid.NewGuid();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(matchId);
+        collector.RecordToolSpawn("tool-original", 2, 1, 10, "spawn");
+        collector.RecordToolTransition("tool-original", "Player", owner, 2, 20, "pickup");
+        collector.RecordToolDrop("tool-dropped", 2, owner, 1, 30, "drop");
+
+        Assert.True(collector.TryGetLatestTool("tool-dropped", out var dropped));
+        Assert.AreEqual("PlayerDrop", dropped.Origin);
+        Assert.AreEqual("tool-original", dropped.ParentInstanceId);
+        Assert.AreEqual("World", dropped.Location);
+        Assert.AreEqual(1, dropped.RemainingCharges);
+        collector.RecordToolTransition("tool-dropped", "Player", owner, 1, 40, "repickup");
+        Assert.True(collector.TryFreeze(matchId, 1, out var snapshot));
+        Assert.False(snapshot.CoverageComplete);
+    }
+
+    [Test]
+    public void DropWithoutVerifiedParent_IsRejected()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        collector.BeginMatch(Guid.NewGuid());
+        Assert.Throws<InvalidOperationException>(() => collector.RecordToolDrop(
+            "new-tool", 2, Guid.NewGuid().ToString("D"), 1, 30, "drop"));
+    }
     [Test]
     public void UnknownTool_IsRejected()
     {

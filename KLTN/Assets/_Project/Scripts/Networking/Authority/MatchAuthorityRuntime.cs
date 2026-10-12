@@ -294,6 +294,41 @@ namespace EchoProtocol.Networking.Authority
             }
         }
 
+        public void RecordPhase8ToolDrop(NetworkId newInstanceId, PlayerRef player, int toolId, int remainingUses, long tick)
+        {
+            if (!HasStateAuthority || !_telemetryMatchActive) return;
+            if (!player.IsRealPlayer || !TryResolveVerifiedBackendUserId(player, out var userId) ||
+                !Guid.TryParse(userId, out var ownerId))
+            {
+                _aedToolNoiseEvidence.MarkIncomplete();
+                return;
+            }
+            try
+            {
+                var occurrenceKey = $"p8:tool:{newInstanceId}:drop:{tick}";
+                int? charges = remainingUses > 0 ? remainingUses : (int?)null;
+                _aedPhase8Source.RecordToolDrop(newInstanceId.ToString(), toolId, userId, charges, tick, occurrenceKey);
+                if (!_aedPhase8Source.TryGetLatestTool(newInstanceId.ToString(), out var source) ||
+                    string.IsNullOrWhiteSpace(source.ParentInstanceId))
+                {
+                    _aedToolNoiseEvidence.MarkIncomplete();
+                    return;
+                }
+                TryPublishPhase8Lifecycle(occurrenceKey, () => _telemetry.Phase8LifecycleAdapter.EmitToolDrop(
+                    occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase, source.InstanceId,
+                    source.ParentInstanceId, source.ToolId, source.Zone, ownerId,
+                    source.RemainingCharges, out _, out _));
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log($"[AED_P8][TOOL_SOURCE] action=DROP id={newInstanceId} parent={source.ParentInstanceId} owner={userId} tick={tick}");
+#endif
+            }
+            catch (Exception exception)
+            {
+                _aedToolNoiseEvidence.MarkIncomplete();
+                Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action=DROP id={newInstanceId} reason={exception.Message}");
+            }
+        }
+
         public void RecordPhase8MinionSpawn(NetworkId minionId, int zone, long tick)
         {
             if (!HasStateAuthority || !_telemetryMatchActive) return;
@@ -441,6 +476,8 @@ namespace EchoProtocol.Networking.Authority
 
         private void Awake()
         {
+            _researchCaptureEnabled = true;
+
             if (_instance != null && _instance != this)
             {
                 Destroy(gameObject);
