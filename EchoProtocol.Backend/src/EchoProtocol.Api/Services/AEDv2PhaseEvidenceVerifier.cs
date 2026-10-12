@@ -41,10 +41,12 @@ public sealed class AEDv2PhaseEvidenceVerifier(
         var start = starts[phaseOrdinal - 1];
         var phase = ReadPhase(start);
         if (string.IsNullOrWhiteSpace(phase)) return false;
-        var ends = all.Where(item => item.EventType == "PHASE_COMPLETED" && ReadPhase(item) == phase).ToArray();
-        if (ends.Length != 1 || start.EventSequence <= 0 || ends[0].EventSequence <= start.EventSequence
-            || ends[0].Ts < start.Ts
-            || starts.Any(item => item.EventSequence > start.EventSequence && item.EventSequence < ends[0].EventSequence)) return false;
+        var nextStart = starts.Skip(phaseOrdinal).FirstOrDefault();
+        var ends = all.Where(item => item.EventType == "PHASE_COMPLETED" &&
+            item.EventSequence > start.EventSequence &&
+            (nextStart == null || item.EventSequence < nextStart.EventSequence)).ToArray();
+        if (ends.Length != 1 || start.EventSequence <= 0 || ReadPhase(ends[0]) != phase || ends[0].Ts < start.Ts)
+            return false;
         var end = ends[0];
         var phaseWindow = all.Where(item => item.EventSequence >= start.EventSequence
             && item.EventSequence <= end.EventSequence).ToArray();

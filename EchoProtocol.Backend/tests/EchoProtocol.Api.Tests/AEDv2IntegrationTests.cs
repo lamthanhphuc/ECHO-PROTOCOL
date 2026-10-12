@@ -81,6 +81,15 @@ public sealed partial class ScenarioServiceTests
     [Fact, Trait("Category", "AEDv2")]
     public async Task AEDv2_RejectsCrossPhaseEvent() => await AssertPhaseOneRejected(events => events.Select(e => e.EventType == "PLAYER_DOWNED" ? PhaseEvent(e.MatchId, e.EventType, "PHASE_TWO", e.EventSequence, 15, e.UserId) : e));
 
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_RejectsWrongPhaseCompletionInsideWindow()
+    {
+        await AssertPhaseOneRejected(events => events.Select(e =>
+            e.EventType == "PHASE_COMPLETED"
+                ? PhaseEvent(e.MatchId, e.EventType, "PHASE_TWO", e.EventSequence, 20)
+                : e));
+    }
+
     private static async Task AssertPhaseOneVerification(Func<TelemetryEventDocument[], IEnumerable<TelemetryEventDocument>> mutate)
     {
         await using var f = await ValidAEDv2Fixture();
