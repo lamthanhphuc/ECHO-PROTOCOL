@@ -73,6 +73,41 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
         Assert.True(collector.TryGetLatestTool("child", out var source));
         Assert.AreEqual("parent", source.ParentInstanceId);
     }
+
+    [Test]
+    public void ToolUse_DecrementsChargesAndConsumesTerminal()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordToolSpawn("tool-1", 2, 1, 10, "spawn");
+        collector.RecordToolTransition("tool-1", "Player", owner, 3, 20, "pickup");
+        collector.RecordToolUse("tool-1", owner, 2, 2, false, 30, "use-1");
+        collector.RecordToolUse("tool-1", owner, 2, 1, false, 40, "use-2");
+        collector.RecordToolUse("tool-1", owner, 2, 0, true, 50, "consume");
+        Assert.True(collector.TryGetLatestTool("tool-1", out var source));
+        Assert.AreEqual("Consumed", source.Location);
+        Assert.AreEqual(0, source.RemainingCharges);
+        Assert.False(collector.TryGetHeldTool(owner, out _));
+        collector.RecordToolSpawn("tool-2", 3, 1, 60, "spawn-2");
+        collector.RecordToolTransition("tool-2", "Player", owner, null, 70, "pickup-2");
+        Assert.True(collector.TryGetHeldTool(owner, out var next));
+        Assert.AreEqual("tool-2", next.InstanceId);
+    }
+
+    [Test]
+    public void ToolUse_RejectsChargeIncreaseAndWrongOwner()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordToolSpawn("tool-1", 4, 1, 10, "spawn");
+        collector.RecordToolTransition("tool-1", "Player", owner, 3, 20, "pickup");
+        Assert.Throws<InvalidOperationException>(() => collector.RecordToolUse("tool-1", owner, 4, 3, false, 30, "bad-use"));
+        Assert.Throws<InvalidOperationException>(() => collector.RecordToolUse("tool-1", Guid.NewGuid().ToString("D"), 4, 2, false, 30, "wrong-owner"));
+        Assert.True(collector.TryGetHeldTool(owner, out var source));
+        Assert.AreEqual(3, source.RemainingCharges);
+    }
     [Test]
     public void UnknownTool_IsRejected()
     {

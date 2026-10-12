@@ -99,6 +99,36 @@ namespace EchoProtocol.AI.AED
             if (newLocation == "Player") _heldToolByOwner[ownerUserId] = instanceId;
         }
 
+        public bool TryGetHeldTool(string ownerUserId, out AEDPhase8ToolSourceV1 source)
+        {
+            source = null;
+            if (_matchId == Guid.Empty || !_heldToolByOwner.TryGetValue(ownerUserId, out var id)) return false;
+            var latest = _tools.LastOrDefault(x => x.InstanceId == id);
+            if (latest == null || latest.Location != "Player" || latest.OwnerUserId != ownerUserId) return false;
+            source = latest;
+            return true;
+        }
+
+        public AEDPhase8ToolSourceV1 RecordToolUse(string instanceId, string ownerUserId, int toolId, int remainingCharges, bool consumed, long tick, string occurrenceKey)
+        {
+            RequireActive(); RequireRow(instanceId, 0, tick, occurrenceKey);
+            if (!Guid.TryParse(ownerUserId, out var owner) || owner == Guid.Empty || remainingCharges < 0 || consumed != (remainingCharges == 0))
+                throw new InvalidOperationException("AED_P8_TOOL_USE_INVALID");
+            if (!TryGetHeldTool(ownerUserId, out var previous) || previous.InstanceId != instanceId || previous.ToolId != toolId ||
+                _transferredToolInstances.Contains(instanceId) || tick <= previous.SourceTick)
+                throw new InvalidOperationException("AED_P8_TOOL_USE_SOURCE_INVALID");
+            if (!consumed && (toolId is not (2 or 4) || !previous.RemainingCharges.HasValue))
+                throw new InvalidOperationException("AED_P8_TOOL_USE_CHARGES_UNKNOWN");
+            if (previous.RemainingCharges.HasValue && remainingCharges >= previous.RemainingCharges.Value)
+                throw new InvalidOperationException("AED_P8_TOOL_USE_CHARGES_INVALID");
+            RegisterOccurrence(occurrenceKey);
+            var source = new AEDPhase8ToolSourceV1(instanceId, toolId, previous.Zone, previous.Origin,
+                consumed ? "Consumed" : "Player", ownerUserId, remainingCharges, tick, occurrenceKey, previous.ParentInstanceId);
+            _tools.Add(source);
+            if (consumed) _heldToolByOwner.Remove(ownerUserId);
+            return source;
+        }
+
         public void RecordToolDrop(string newInstanceId, int toolId, string ownerUserId, int? remainingCharges, long tick, string occurrenceKey)
         {
             RequireActive();

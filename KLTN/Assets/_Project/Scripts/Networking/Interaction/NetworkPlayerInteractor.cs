@@ -2003,12 +2003,21 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            int consumedToolId = state.ToolId;
             if (!state.ConsumeTeamToolUseAuthoritative())
             {
                 return;
             }
 
-            if (state.ToolId != 0)
+            bool fullyConsumed = state.ToolId == 0;
+            if (Object != null && Object.IsValid && Object.HasStateAuthority && Runner != null)
+            {
+                MatchAuthorityRuntime.Instance?.RecordPhase8ToolUse(
+                    Object.InputAuthority, consumedToolId, state.TeamToolUsesRemaining,
+                    fullyConsumed, Runner.Tick.Raw);
+            }
+
+            if (!fullyConsumed)
             {
                 return;
             }

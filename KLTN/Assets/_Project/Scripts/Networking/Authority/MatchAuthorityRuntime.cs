@@ -294,6 +294,33 @@ namespace EchoProtocol.Networking.Authority
             }
         }
 
+        public void RecordPhase8ToolUse(PlayerRef player, int toolId, int remainingCharges, bool consumed, long tick)
+        {
+            if (!HasStateAuthority || !_telemetryMatchActive) return;
+            if (!player.IsRealPlayer || !TryResolveVerifiedBackendUserId(player, out var userId) || !Guid.TryParse(userId, out var ownerId))
+            { _aedToolNoiseEvidence.MarkIncomplete(); return; }
+            try
+            {
+                if (!_aedPhase8Source.TryGetHeldTool(userId, out var held))
+                    throw new InvalidOperationException("AED_P8_TOOL_USE_PARENT_MISSING");
+                var instanceId = held.InstanceId;
+                var action = consumed ? "consume" : "use";
+                var occurrenceKey = $"p8:tool:{instanceId}:{action}:{tick}";
+                var source = _aedPhase8Source.RecordToolUse(instanceId, userId, toolId, remainingCharges, consumed, tick, occurrenceKey);
+                TryPublishPhase8Lifecycle(occurrenceKey, () => _telemetry.Phase8LifecycleAdapter.EmitToolUse(
+                    occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase, source.InstanceId, source.ToolId,
+                    source.Zone, ownerId, remainingCharges, consumed, out _, out _));
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log($"[AED_P8][TOOL_SOURCE] action={(consumed ? "CONSUME" : "USE")} id={instanceId} charges={remainingCharges} tick={tick}");
+#endif
+            }
+            catch (Exception exception)
+            {
+                _aedToolNoiseEvidence.MarkIncomplete();
+                Debug.LogWarning($"[AED_P8][TOOL_SOURCE_INVALID] action={(consumed ? "CONSUME" : "USE")} reason={exception.Message}");
+            }
+        }
+
         public void RecordPhase8ToolDrop(NetworkId newInstanceId, PlayerRef player, int toolId, int remainingUses, long tick)
         {
             if (!HasStateAuthority || !_telemetryMatchActive) return;

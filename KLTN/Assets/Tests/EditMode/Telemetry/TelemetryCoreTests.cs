@@ -37,6 +37,24 @@ namespace EchoProtocol.Telemetry.Tests
             Assert.That(evt.SchemaVersion, Is.EqualTo(TelemetrySchemaVersions.LifecycleV12));
             StringAssert.Contains("\"parentInstanceId\":\"tool-original\"", evt.DataJson);
         }
+
+        [Test]
+        public void ToolUseAndConsume_EmitDistinctV12Events()
+        {
+            var f = new Fixture(researchCaptureEnabled: true);
+            f.Factory.BeginMatch();
+            f.Emit(TelemetryEventTypes.MatchStarted, "start");
+            f.Emit(TelemetryEventTypes.PhaseStarted, "phase-start");
+            var adapter = new Phase8LifecycleTelemetryAdapter(f.Emitter);
+            var owner = Guid.NewGuid();
+            Assert.That(adapter.EmitToolUse("use-1", DateTime.UtcNow, "CORE_COLLECTION", "tool-1", 2, 1, owner, 1, false, out var useEvent, out _), Is.True);
+            Assert.That(adapter.EmitToolUse("consume-1", DateTime.UtcNow, "CORE_COLLECTION", "tool-1", 2, 1, owner, 0, true, out var consumeEvent, out _), Is.True);
+            Assert.That(useEvent.Id, Is.Not.EqualTo(consumeEvent.Id));
+            Assert.That(useEvent.SchemaVersion, Is.EqualTo("1.2"));
+            Assert.That(consumeEvent.SchemaVersion, Is.EqualTo("1.2"));
+            StringAssert.Contains("\"action\":\"USE\"", useEvent.DataJson);
+            StringAssert.Contains("\"action\":\"CONSUME\"", consumeEvent.DataJson);
+        }
         [Test]
         public void SequenceAllocator_StartsAtOneAndNeverAllocatesAfterTerminal()
         {

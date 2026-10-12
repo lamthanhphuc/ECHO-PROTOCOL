@@ -639,6 +639,22 @@ namespace EchoProtocol.Telemetry
                 data, out telemetryEvent, out failureReason);
         }
 
+        public bool EmitToolUse(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string instanceId, int toolId, int zone, Guid ownerUserId, int remainingCharges, bool consumed,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason)
+        {
+            ValidateTool(toolId, zone);
+            MatchTelemetryAdapter.RequireText(instanceId, nameof(instanceId));
+            MatchTelemetryAdapter.RequireUser(ownerUserId, nameof(ownerUserId));
+            if (remainingCharges < 0 || consumed != (remainingCharges == 0) || (!consumed && toolId is not (2 or 4)))
+                throw new ArgumentException("AED_P8_TOOL_USE_INVALID");
+            var data = new TelemetryJsonObject().AddString("instanceId", instanceId)
+                .AddString("ownerUserId", ownerUserId.ToString("D"))
+                .AddString("action", consumed ? "CONSUME" : "USE")
+                .AddInteger("toolId", toolId).AddInteger("zone", zone).AddInteger("remainingCharges", remainingCharges);
+            return Emit(occurrenceKey, TelemetryEventTypes.TeamToolLifecycle, occurredAtUtc, phase, data, out telemetryEvent, out failureReason);
+        }
+
         public bool EmitToolDrop(string occurrenceKey, DateTime occurredAtUtc, string phase,
             string newInstanceId, string parentInstanceId, int toolId, int zone, Guid ownerUserId,
             int? remainingCharges, out TelemetryEvent telemetryEvent,
