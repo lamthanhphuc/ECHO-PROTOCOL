@@ -16,6 +16,26 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed class TelemetryServiceTests
 {
+    [Theory, Trait("Category", "AEDv2")]
+    [InlineData("ScenePlaced", true)]
+    [InlineData("UnknownSource", false)]
+    public async Task P8Spawn_OriginValidated(string origin, bool accepted)
+    {
+        var repo = new FakeTelemetryEventRepository();
+        var request = CreateMatchStarted(researchCaptureEnabled: true);
+        var matchId = request.Events[0].MatchId;
+        request.Events.Add(CreatePhaseStarted(matchId, 2));
+        var item = CreateP8ToolEvent(matchId);
+        var json = JsonNode.Parse(item.ValueJson.GetRawText())!;
+        json["data"]!["origin"] = origin;
+        item.ValueJson = JsonSerializer.SerializeToElement(json);
+        request.Events.Add(item);
+        var response = await CreateService(repo).IngestBatchAsync(request, Guid.NewGuid(), CancellationToken.None);
+        Assert.True(response.IsSuccess);
+        Assert.Equal(accepted ? TelemetryAckStatuses.Accepted : TelemetryAckStatuses.PermanentlyRejected,
+            response.Data!.Items[2].Status);
+    }
+
     [Fact, Trait("Category", "AEDv2")]
     public async Task P8Drop_V12ValidPayload_IsAccepted()
     {

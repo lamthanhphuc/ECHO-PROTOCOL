@@ -15,7 +15,7 @@ internal static class TelemetryV12LifecycleValidator
     ];
 
     private static readonly HashSet<string> ToolFields =
-        ["instanceId", "parentInstanceId", "toolId", "zone", "action", "ownerUserId", "remainingCharges"];
+        ["instanceId", "parentInstanceId", "toolId", "zone", "action", "ownerUserId", "remainingCharges", "origin"];
 
     private static readonly HashSet<string> MinionFields =
     ["networkInstanceId", "zone", "state"];
@@ -86,6 +86,14 @@ internal static class TelemetryV12LifecycleValidator
             charges.ValueKind != JsonValueKind.Null &&
             (charges.ValueKind != JsonValueKind.Number || !charges.TryGetInt32(out var count) || count < 0))
             return false;
+
+        if (action == "SPAWN")
+        {
+            return !data.TryGetProperty("origin", out _) ||
+                   StringIn(data, "origin", "WorldSpawn", "ScenePlaced");
+        }
+
+        if (data.TryGetProperty("origin", out _)) return false;
 
         if (action is "USE" or "CONSUME")
         {
