@@ -85,6 +85,56 @@ public static class ShopCatalogSeeder
             "Premium flying cosmetic companion.",
             "Assets/Resources/Pets/PF_Pet_DragonUsurper.prefab"),
 
+        // Astronaut alternate outfits.
+        new(
+            Guid.Parse("13100000-0000-0000-0000-000000000001"),
+            "Astronaut Orange",
+            "CHARACTER_OUTFIT",
+            150,
+            "Orange outfit for Astronaut.",
+            "Assets/Resources/Shop/LobbyVariants/Characters/character-0-outfit-1.png"),
+
+        new(
+            Guid.Parse("13100000-0000-0000-0000-000000000002"),
+            "Astronaut Green",
+            "CHARACTER_OUTFIT",
+            150,
+            "Green outfit for Astronaut.",
+            "Assets/Resources/Shop/LobbyVariants/Characters/character-0-outfit-2.png"),
+
+        new(
+            Guid.Parse("13100000-0000-0000-0000-000000000003"),
+            "Astronaut Purple",
+            "CHARACTER_OUTFIT",
+            150,
+            "Purple outfit for Astronaut.",
+            "Assets/Resources/Shop/LobbyVariants/Characters/character-0-outfit-3.png"),
+
+        // Jammo alternate outfits.
+        new(
+            Guid.Parse("13100000-0000-0000-0000-000000000101"),
+            "Jammo Black",
+            "CHARACTER_OUTFIT",
+            150,
+            "Black outfit for Jammo.",
+            "Assets/Resources/Shop/LobbyVariants/Characters/character-1-outfit-1.png"),
+
+        new(
+            Guid.Parse("13100000-0000-0000-0000-000000000102"),
+            "Jammo Blue",
+            "CHARACTER_OUTFIT",
+            150,
+            "Blue outfit for Jammo.",
+            "Assets/Resources/Shop/LobbyVariants/Characters/character-1-outfit-2.png"),
+
+        new(
+            Guid.Parse("13100000-0000-0000-0000-000000000103"),
+            "Jammo Yellow",
+            "CHARACTER_OUTFIT",
+            150,
+            "Yellow outfit for Jammo.",
+            "Assets/Resources/Shop/LobbyVariants/Characters/character-1-outfit-3.png"),
+
         // Nightmare alternate skins.
         new(
             Guid.Parse("14100000-0000-0000-0000-000000000101"),

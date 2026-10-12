@@ -128,16 +128,17 @@ public sealed class ShopCatalogServiceTests
 
         // 4 production Team Tools
         // + 1 Jammo Character
+        // + 6 production Character Outfits
         // + 4 Pets
         // + 12 alternate Pet Skins
         // + 2 development-only items
-        // = 23 unique catalog entries.
+        // = 29 unique catalog entries.
         Assert.Equal(
-            23,
+            29,
             await harness.Db.ShopItems.CountAsync());
 
         Assert.Equal(
-            23,
+            29,
             await harness.Db.ShopItems
                 .Select(item => item.ItemId)
                 .Distinct()

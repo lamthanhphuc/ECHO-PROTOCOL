@@ -54,7 +54,8 @@ public sealed class ShopCatalogService : IShopCatalogService
             (item.Category == ShopItemCategories.Character ||
              item.Category == ShopItemCategories.TeamTool ||
              item.Category == ShopItemCategories.Pet ||
-             item.Category == ShopItemCategories.PetSkin));
+             item.Category == ShopItemCategories.PetSkin ||
+             item.Category == ShopItemCategories.CharacterOutfit));
         if (normalizedCategory is not null)
         {
             query = query.Where(item => item.Category == normalizedCategory);
