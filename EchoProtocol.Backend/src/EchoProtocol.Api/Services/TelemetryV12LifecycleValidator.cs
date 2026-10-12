@@ -80,12 +80,29 @@ internal static class TelemetryV12LifecycleValidator
             !Text(data, "action")) return false;
 
         var action = data.GetProperty("action").GetString();
-        if (action is not ("SPAWN" or "PICKUP" or "DROP" or "USE" or "CONSUME")) return false;
+        if (action is not ("SPAWN" or "PICKUP" or "DROP" or "USE" or "CONSUME" or "LOADOUT")) return false;
 
         if (data.TryGetProperty("remainingCharges", out var charges) &&
             charges.ValueKind != JsonValueKind.Null &&
             (charges.ValueKind != JsonValueKind.Number || !charges.TryGetInt32(out var count) || count < 0))
             return false;
+
+        if (action == "LOADOUT")
+        {
+            if (zone != 0 ||
+                !StringIn(data, "origin", "LobbyLoadout") ||
+                data.TryGetProperty("parentInstanceId", out _) ||
+                !Text(data, "ownerUserId") ||
+                !Guid.TryParse(data.GetProperty("ownerUserId").GetString(), out var loadoutOwner) ||
+                loadoutOwner == Guid.Empty)
+                return false;
+
+            if (toolId is 2 or 4)
+                return Int(data, "remainingCharges", out var loadoutCharges) &&
+                       loadoutCharges is >= 1 and <= 3;
+
+            return !data.TryGetProperty("remainingCharges", out _);
+        }
 
         if (action == "SPAWN")
         {

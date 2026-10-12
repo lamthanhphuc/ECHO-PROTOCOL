@@ -16,6 +16,50 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed class TelemetryServiceTests
 {
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task P8LobbyLoadout_Valid_IsAccepted()
+    {
+        var repo = new FakeTelemetryEventRepository();
+        var request = CreateMatchStarted(researchCaptureEnabled: true);
+        var matchId = request.Events[0].MatchId;
+        var owner = Guid.NewGuid().ToString("D");
+        request.Events.Add(CreatePhaseStarted(matchId, 2));
+        request.Events.Add(CreateP8LoadoutEvent(matchId, owner));
+        var response = await CreateService(repo).IngestBatchAsync(request, Guid.NewGuid(), CancellationToken.None);
+        Assert.True(response.IsSuccess);
+        Assert.Equal(TelemetryAckStatuses.Accepted, response.Data!.Items[2].Status);
+    }
+
+    [Theory, Trait("Category", "AEDv2")]
+    [InlineData("invalid-owner")]
+    [InlineData("invalid-origin")]
+    [InlineData("invalid-zone")]
+    [InlineData("missing-charges")]
+    [InlineData("unexpected-parent")]
+    public async Task P8LobbyLoadout_Invalid_IsRejected(string caseName)
+    {
+        var repo = new FakeTelemetryEventRepository();
+        var request = CreateMatchStarted(researchCaptureEnabled: true);
+        var matchId = request.Events[0].MatchId;
+        request.Events.Add(CreatePhaseStarted(matchId, 2));
+        var item = CreateP8LoadoutEvent(matchId, Guid.NewGuid().ToString("D"));
+        var json = JsonNode.Parse(item.ValueJson.GetRawText())!;
+        switch (caseName)
+        {
+            case "invalid-owner": json["data"]!["ownerUserId"] = "invalid"; break;
+            case "invalid-origin": json["data"]!["origin"] = "WorldSpawn"; break;
+            case "invalid-zone": json["data"]!["zone"] = 2; break;
+            case "missing-charges": json["data"]!.AsObject().Remove("remainingCharges"); break;
+            case "unexpected-parent": json["data"]!["parentInstanceId"] = "parent"; break;
+        }
+        item.ValueJson = JsonSerializer.SerializeToElement(json);
+        request.Events.Add(item);
+        var response = await CreateService(repo).IngestBatchAsync(request, Guid.NewGuid(), CancellationToken.None);
+        Assert.True(response.IsSuccess);
+        Assert.Equal(TelemetryAckStatuses.PermanentlyRejected, response.Data!.Items[2].Status);
+        Assert.Equal("P8_TELEMETRY_V12_INVALID", response.Data.Items[2].RejectReason);
+    }
+
     [Theory, Trait("Category", "AEDv2")]
     [InlineData("ScenePlaced", true)]
     [InlineData("UnknownSource", false)]
@@ -918,6 +962,23 @@ public sealed class TelemetryServiceTests
             data = new { instanceId = "tool-1", toolId = 2, zone = 1, action = "SPAWN" }
         })
     };
+
+    private static TelemetryEventRequest CreateP8LoadoutEvent(Guid matchId, string ownerUserId, int toolId = 2, int? charges = 3)
+    {
+        var item = CreateP8ToolEvent(matchId);
+        var json = JsonNode.Parse(item.ValueJson.GetRawText())!;
+        json["context"]!["occurrenceKey"] = "p8:tool:loadout:test:loadout";
+        json["data"]!["instanceId"] = "loadout:test";
+        json["data"]!["action"] = "LOADOUT";
+        json["data"]!["origin"] = "LobbyLoadout";
+        json["data"]!["zone"] = 0;
+        json["data"]!["toolId"] = toolId;
+        json["data"]!["ownerUserId"] = ownerUserId;
+        if (charges.HasValue) json["data"]!["remainingCharges"] = charges.Value;
+        else json["data"]!.AsObject().Remove("remainingCharges");
+        item.ValueJson = JsonSerializer.SerializeToElement(json);
+        return item;
+    }
 
     private static TelemetryEventRequest CreateP8DropEvent(Guid matchId)
     {
