@@ -60,8 +60,14 @@ namespace EchoProtocol.UI.MainMenu
                     gameObject.scene);
             }
 
+            // Keep the complete preview rig physically isolated from
+            // the Lobby world. Camera/model/lights all live together
+            // here so preview rendering is unchanged.
             _rig.transform.position =
-                PreviewWorldPosition;
+                new Vector3(
+                    10000f,
+                    10000f,
+                    10000f);
 
             var spinOwner =
                 CreateRigObject(
@@ -106,6 +112,16 @@ namespace EchoProtocol.UI.MainMenu
             _target.texture =
                 _renderTexture;
 
+            _target.uvRect =
+                new Rect(
+                    0f,
+                    0f,
+                    1f,
+                    1f);
+
+            _target.raycastTarget =
+                false;
+
             _target.color =
                 Color.white;
 
@@ -117,6 +133,9 @@ namespace EchoProtocol.UI.MainMenu
             {
                 _camera.enabled =
                     true;
+
+                SetPreviewLightsEnabled(
+                    true);
 
                 enabled =
                     true;
@@ -164,6 +183,18 @@ namespace EchoProtocol.UI.MainMenu
             _currentModel.transform.localRotation =
                 Quaternion.identity;
 
+            _currentResource =
+                resourcePath;
+
+            // STORE_LIVE_PREVIEW_FREEZE_GAMEPLAY
+            // Preview prefabs can be real gameplay prefabs. Prevent physics
+            // and gameplay scripts from moving individual child objects
+            // while the common spin root is rotating.
+            PrepareCurrentModelForPreview();
+
+            // STORE_TEAM_TOOL_PREVIEW_STABILIZE
+            StabilizeTeamToolPreviewRendering();
+
             SetLayerRecursively(
                 _currentModel,
                 PreviewLayer);
@@ -191,16 +222,321 @@ namespace EchoProtocol.UI.MainMenu
                 return false;
             }
 
-            _currentResource =
-                resourcePath;
-
             _camera.enabled =
                 true;
+
+            SetPreviewLightsEnabled(
+                true);
 
             enabled =
                 true;
 
             return true;
+        }
+
+        public bool ApplyMaterial(
+            Material material)
+        {
+            if (_currentModel == null
+                || material == null)
+            {
+                return false;
+            }
+
+            var renderers =
+                _currentModel
+                    .GetComponentsInChildren<SkinnedMeshRenderer>(
+                        true);
+
+            if (renderers == null
+                || renderers.Length == 0)
+            {
+                return false;
+            }
+
+            bool applied = false;
+
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var renderer =
+                    renderers[i];
+
+                if (renderer == null)
+                    continue;
+
+                var materials =
+                    renderer.sharedMaterials;
+
+                if (materials == null
+                    || materials.Length == 0)
+                {
+                    continue;
+                }
+
+                for (int slot = 0;
+                     slot < materials.Length;
+                     slot++)
+                {
+                    materials[slot] =
+                        material;
+                }
+
+                renderer.sharedMaterials =
+                    materials;
+
+                applied = true;
+            }
+
+            return applied;
+        }
+
+        // STORE_V2_CHARACTER_OUTFIT_MATERIALS
+        // Applies Store-only visual variants to the currently rendered
+        // Character model without rebuilding the preview rig or touching
+        // gameplay material assets.
+        public bool ApplyCharacterOutfit(
+            int characterId,
+            int outfitId)
+        {
+            if (_currentModel == null)
+                return false;
+
+            if (characterId
+                == CharacterShopAssets.JammoCharacterId)
+            {
+                return ApplyJammoOutfit(
+                    outfitId);
+            }
+
+            if (characterId
+                == CharacterShopAssets.AstronautCharacterId)
+            {
+                return ApplyAstronautOutfit(
+                    outfitId);
+            }
+
+            return false;
+        }
+
+        private bool ApplyJammoOutfit(
+            int outfitId)
+        {
+            int safeId =
+                Mathf.Clamp(
+                    outfitId,
+                    0,
+                    3);
+
+            Material replacement =
+                Resources.Load<Material>(
+                    "Characters/JammoSkins/M_JammoSkin_"
+                    + safeId);
+
+            if (replacement == null)
+            {
+                Debug.LogWarning(
+                    "[StoreLivePreview] Missing Jammo outfit material: "
+                    + safeId,
+                    this);
+
+                return false;
+            }
+
+            bool applied =
+                false;
+
+            Renderer[] renderers =
+                _currentModel.GetComponentsInChildren<Renderer>(
+                    true);
+
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null)
+                    continue;
+
+                Material[] materials =
+                    renderer.sharedMaterials;
+
+                bool changed =
+                    false;
+
+                for (int i = 0;
+                     i < materials.Length;
+                     i++)
+                {
+                    Material current =
+                        materials[i];
+
+                    if (current == null)
+                        continue;
+
+                    string materialName =
+                        current.name;
+
+                    // The Jammo preview may start on the original
+                    // body material or on a previously selected
+                    // Store skin. Both represent the same body slot.
+                    bool isJammoBody =
+                        materialName.Contains(
+                            "M_Jammo_m_jammo_metal")
+                        || materialName.Contains(
+                            "M_JammoSkin_");
+
+                    if (!isJammoBody)
+                        continue;
+
+                    materials[i] =
+                        replacement;
+
+                    changed =
+                        true;
+                }
+
+                if (!changed)
+                    continue;
+
+                renderer.sharedMaterials =
+                    materials;
+
+                applied =
+                    true;
+            }
+
+            if (!applied)
+            {
+                Debug.LogWarning(
+                    "[StoreLivePreview] No Jammo body material slot found "
+                    + "for outfit "
+                    + safeId
+                    + ".",
+                    this);
+            }
+
+            return applied;
+        }
+
+        private bool ApplyAstronautOutfit(
+            int outfitId)
+        {
+            string[] variants =
+            {
+                "M_PF_PlayerCharacter_P1_Default",
+                "M_PF_PlayerCharacter_P2_Orange",
+                "M_PF_PlayerCharacter_P3_Green",
+                "M_PF_PlayerCharacter_P4_Purple"
+            };
+
+            int safeId =
+                Mathf.Clamp(
+                    outfitId,
+                    0,
+                    variants.Length - 1);
+
+            string root =
+                "Shop/LivePreview/CharacterOutfits/Astronaut/"
+                + variants[safeId];
+
+            Material suit =
+                Resources.Load<Material>(
+                    root + "_Suit");
+
+            Material equipment =
+                Resources.Load<Material>(
+                    root + "_HelmetBackpackBase");
+
+            Material visor =
+                Resources.Load<Material>(
+                    root + "_Visor");
+
+            if (suit == null
+                || equipment == null
+                || visor == null)
+            {
+                Debug.LogWarning(
+                    "[StoreLivePreview] Missing Astronaut outfit materials: "
+                    + safeId,
+                    this);
+
+                return false;
+            }
+
+            bool applied =
+                false;
+
+            Renderer[] renderers =
+                _currentModel.GetComponentsInChildren<Renderer>(
+                    true);
+
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null)
+                    continue;
+
+                Material[] materials =
+                    renderer.sharedMaterials;
+
+                bool changed =
+                    false;
+
+                for (int i = 0;
+                     i < materials.Length;
+                     i++)
+                {
+                    Material current =
+                        materials[i];
+
+                    if (current == null)
+                        continue;
+
+                    string materialName =
+                        current.name;
+
+                    if (materialName.IndexOf(
+                            "_HelmetBackpackBase",
+                            System.StringComparison.OrdinalIgnoreCase)
+                        >= 0)
+                    {
+                        materials[i] =
+                            equipment;
+
+                        changed =
+                            true;
+                    }
+                    else if (materialName.IndexOf(
+                                 "_Suit",
+                                 System.StringComparison.OrdinalIgnoreCase)
+                             >= 0)
+                    {
+                        materials[i] =
+                            suit;
+
+                        changed =
+                            true;
+                    }
+                    else if (materialName.IndexOf(
+                                 "_Visor",
+                                 System.StringComparison.OrdinalIgnoreCase)
+                             >= 0)
+                    {
+                        materials[i] =
+                            visor;
+
+                        changed =
+                            true;
+                    }
+                }
+
+                if (!changed)
+                    continue;
+
+                renderer.sharedMaterials =
+                    materials;
+
+                applied =
+                    true;
+            }
+
+            return applied;
         }
 
         public void Clear(
@@ -229,9 +565,12 @@ namespace EchoProtocol.UI.MainMenu
                 _camera.enabled =
                     false;
             }
+
+            SetPreviewLightsEnabled(
+                false);
         }
 
-        private void Update()
+        private void LateUpdate()
         {
             if (_currentModel == null
                 || _spinRoot == null)
@@ -247,6 +586,143 @@ namespace EchoProtocol.UI.MainMenu
                 Space.Self);
         }
 
+        private void PrepareCurrentModelForPreview()
+        {
+            if (_currentModel == null)
+                return;
+
+            // Gameplay logic must never drive the Store preview.
+            foreach (MonoBehaviour behaviour in
+                     _currentModel.GetComponentsInChildren<
+                         MonoBehaviour>(
+                             true))
+            {
+                if (behaviour == null)
+                    continue;
+
+                behaviour.enabled =
+                    false;
+            }
+
+            // Physics on a real pickup/tool prefab can make separate
+            // pieces drift while the Store rotates the common parent.
+            foreach (Rigidbody body in
+                     _currentModel.GetComponentsInChildren<
+                         Rigidbody>(
+                             true))
+            {
+                if (body == null)
+                    continue;
+
+                body.linearVelocity =
+                    Vector3.zero;
+
+                body.angularVelocity =
+                    Vector3.zero;
+
+                body.useGravity =
+                    false;
+
+                body.detectCollisions =
+                    false;
+
+                body.isKinematic =
+                    true;
+            }
+
+            foreach (Collider collider in
+                     _currentModel.GetComponentsInChildren<
+                         Collider>(
+                             true))
+            {
+                if (collider != null)
+                {
+                    collider.enabled =
+                        false;
+                }
+            }
+        }
+        private void StabilizeTeamToolPreviewRendering()
+        {
+            if (_currentModel == null)
+                return;
+
+            if (string.IsNullOrEmpty(
+                    _currentResource))
+            {
+                return;
+            }
+
+            // Character/Pet previews are already correct.
+            // Restrict this rendering workaround to Team Tools.
+            if (!_currentResource.StartsWith(
+                    "Shop/LivePreview/Tool_"))
+            {
+                return;
+            }
+
+            Renderer[] renderers =
+                _currentModel
+                    .GetComponentsInChildren<
+                        Renderer>(
+                            true);
+
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null)
+                    continue;
+
+                // Store preview does not need real-world shadows.
+                renderer.shadowCastingMode =
+                    UnityEngine.Rendering
+                        .ShadowCastingMode
+                        .Off;
+
+                renderer.receiveShadows =
+                    false;
+
+                // Use runtime-only material instances.
+                // The real gameplay material asset is NOT modified.
+                Material[] materials =
+                    renderer.materials;
+
+                foreach (Material material in materials)
+                {
+                    if (material == null)
+                        continue;
+
+                    // URP/Lit imported meshes can contain thin or
+                    // reversed faces. When rotating, back-face
+                    // culling can make parts visually disappear.
+                    if (material.HasProperty("_Cull"))
+                    {
+                        material.SetFloat(
+                            "_Cull",
+                            0f);
+                    }
+
+                    if (material.HasProperty("_AlphaClip"))
+                    {
+                        material.SetFloat(
+                            "_AlphaClip",
+                            0f);
+                    }
+
+                    if (material.HasProperty("_Surface"))
+                    {
+                        material.SetFloat(
+                            "_Surface",
+                            0f);
+                    }
+
+                    material.renderQueue =
+                        2000;
+
+                    material.enableInstancing =
+                        false;
+                }
+            }
+        }
         private bool CenterAndFrameCurrentModel()
         {
             var renderers =
@@ -423,37 +899,62 @@ namespace EchoProtocol.UI.MainMenu
         private void CreateLights()
         {
             _keyLight =
-                CreateDirectionalLight(
+                CreatePreviewPointLight(
                     "Key Light",
                     new Vector3(
-                        35f,
-                        -35f,
-                        0f),
-                    2.4f);
+                        2.4f,
+                        2.8f,
+                        -2.8f),
+                    4.5f,
+                    10f,
+                    true);
 
             _fillLight =
-                CreateDirectionalLight(
+                CreatePreviewPointLight(
                     "Fill Light",
                     new Vector3(
-                        330f,
-                        145f,
-                        0f),
-                    1.25f);
+                        -2.6f,
+                        1.5f,
+                        -1.8f),
+                    2.4f,
+                    10f,
+                    false);
 
             _rimLight =
-                CreateDirectionalLight(
+                CreatePreviewPointLight(
                     "Rim Light",
                     new Vector3(
-                        20f,
-                        155f,
-                        0f),
-                    0.85f);
+                        0.5f,
+                        2.8f,
+                        2.8f),
+                    2.8f,
+                    10f,
+                    false);
+
+            SetPreviewLightsEnabled(false);
         }
 
         private Light CreateDirectionalLight(
             string name,
             Vector3 rotation,
             float intensity)
+        {
+            // Kept only for source compatibility.
+            // Store preview must never use an infinite Directional Light.
+            return CreatePreviewPointLight(
+                name,
+                Vector3.zero,
+                intensity,
+                10f,
+                false);
+        }
+
+        private Light CreatePreviewPointLight(
+            string name,
+            Vector3 localPosition,
+            float intensity,
+            float range,
+            bool shadows)
         {
             var owner =
                 CreateRigObject(
@@ -464,26 +965,52 @@ namespace EchoProtocol.UI.MainMenu
                 _rig.transform,
                 false);
 
-            owner.transform.localRotation =
-                Quaternion.Euler(
-                    rotation);
+            owner.transform.localPosition =
+                localPosition;
 
             var light =
                 owner.GetComponent<Light>();
 
             light.type =
-                LightType.Directional;
+                LightType.Point;
 
             light.intensity =
                 intensity;
 
-            light.shadows =
-                LightShadows.Soft;
+            light.range =
+                range;
 
+            light.shadows =
+                shadows
+                    ? LightShadows.Soft
+                    : LightShadows.None;
+
+            // Standard GameObject-layer isolation.
             light.cullingMask =
                 1 << PreviewLayer;
 
+            // SRP/URP rendering-layer isolation.
+            // Bit 30 is reserved locally for Store preview rendering.
+            light.renderingLayerMask =
+                1 << 30;
+
+            light.enabled =
+                false;
+
             return light;
+        }
+
+        private void SetPreviewLightsEnabled(
+            bool value)
+        {
+            if (_keyLight != null)
+                _keyLight.enabled = value;
+
+            if (_fillLight != null)
+                _fillLight.enabled = value;
+
+            if (_rimLight != null)
+                _rimLight.enabled = value;
         }
 
         private void CreateRenderTexture()
@@ -506,6 +1033,12 @@ namespace EchoProtocol.UI.MainMenu
 
             _renderTexture.antiAliasing =
                 1;
+
+            _renderTexture.filterMode =
+                FilterMode.Bilinear;
+
+            _renderTexture.wrapMode =
+                TextureWrapMode.Clamp;
 
             _renderTexture.Create();
         }
@@ -547,7 +1080,7 @@ namespace EchoProtocol.UI.MainMenu
             _currentModel.SetActive(
                 false);
 
-            DestroyObject(
+            DestroyPreviewObject(
                 _currentModel);
 
             _currentModel =
@@ -567,6 +1100,15 @@ namespace EchoProtocol.UI.MainMenu
             root.layer =
                 layer;
 
+            var renderer =
+                root.GetComponent<Renderer>();
+
+            if (renderer != null)
+            {
+                renderer.renderingLayerMask =
+                    1u << 30;
+            }
+
             foreach (Transform child
                      in root.transform)
             {
@@ -578,13 +1120,19 @@ namespace EchoProtocol.UI.MainMenu
 
         private void OnEnable()
         {
-            if (_camera != null
+            bool activePreview =
+                _camera != null
                 && _currentModel != null
-                && _target != null)
+                && _target != null;
+
+            if (_camera != null)
             {
                 _camera.enabled =
-                    true;
+                    activePreview;
             }
+
+            SetPreviewLightsEnabled(
+                activePreview);
         }
 
         private void OnDisable()
@@ -594,6 +1142,9 @@ namespace EchoProtocol.UI.MainMenu
                 _camera.enabled =
                     false;
             }
+
+            SetPreviewLightsEnabled(
+                false);
         }
 
         private void OnDestroy()
@@ -602,9 +1153,26 @@ namespace EchoProtocol.UI.MainMenu
 
             if (_renderTexture != null)
             {
+                // Detach the RT before releasing it. This prevents
+                // stale/invalid camera output when leaving or rebuilding
+                // the Store preview.
+                if (_camera != null &&
+                    _camera.targetTexture == _renderTexture)
+                {
+                    _camera.targetTexture =
+                        null;
+                }
+
+                if (_target != null &&
+                    _target.texture == _renderTexture)
+                {
+                    _target.texture =
+                        null;
+                }
+
                 _renderTexture.Release();
 
-                DestroyObject(
+                DestroyPreviewObject(
                     _renderTexture);
 
                 _renderTexture =
@@ -613,7 +1181,7 @@ namespace EchoProtocol.UI.MainMenu
 
             if (_rig != null)
             {
-                DestroyObject(
+                DestroyPreviewObject(
                     _rig);
 
                 _rig =
@@ -621,7 +1189,7 @@ namespace EchoProtocol.UI.MainMenu
             }
         }
 
-        private static void DestroyObject(
+        private static void DestroyPreviewObject(
             Object target)
         {
             if (target == null)

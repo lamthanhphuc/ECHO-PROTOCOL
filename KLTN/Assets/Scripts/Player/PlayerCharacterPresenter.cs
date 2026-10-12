@@ -64,7 +64,7 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
     private float _jammoScale = 1f;
     private RuntimeAnimatorController _jammoController;
     private int _applied = -1;
-    private int _appliedTeam = -1;
+    private int _appliedOutfit = -1;
     private MaterialPropertyBlock _teamTint;
     private readonly Material[] _jammoSkins = new Material[4];
 
@@ -86,15 +86,15 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
     private void LateUpdate()
     {
         Refresh();
-        RefreshTeamTint();
+        RefreshOutfit();
     }
-    private void RefreshTeamTint()
+    private void RefreshOutfit()
     {
         if (_applied != 1) return;
-        int team = _state != null && _state.Object != null && _state.Object.IsValid ? _state.TeamId : 0;
-        if (_appliedTeam == team) return;
+        int outfit = _state != null && _state.Object != null && _state.Object.IsValid ? _state.CharacterOutfitId : 0;
+        if (_appliedOutfit == outfit) return;
         if (_teamTint == null) _teamTint = new MaterialPropertyBlock();
-        int skinIndex = Mathf.Clamp(team, 0, 3);
+        int skinIndex = Mathf.Clamp(outfit, 0, 3);
         if (_jammoSkins[skinIndex] == null)
             _jammoSkins[skinIndex] = Resources.Load<Material>("Characters/JammoSkins/M_JammoSkin_" + skinIndex);
         var skin = _jammoSkins[skinIndex];
@@ -113,7 +113,7 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
                 renderer.SetPropertyBlock(_teamTint);
             }
         }
-        _appliedTeam = team;
+        _appliedOutfit = outfit;
     }
     public void Refresh()
     {
@@ -131,8 +131,8 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         _applied = id;
         foreach (var anchor in GetComponentsInChildren<PlayerHeldItemAnchor>(true)) anchor.RefreshCharacterRig(animator);
         _applied = id;
-        _appliedTeam = -1;
-        RefreshTeamTint();
+        _appliedOutfit = -1;
+        RefreshOutfit();
         GetComponent<QuickOutline.Outline>()?.RefreshRenderers();
         if (id == 0) GetComponent<PlayerColorPresenter>()?.Refresh();
     }

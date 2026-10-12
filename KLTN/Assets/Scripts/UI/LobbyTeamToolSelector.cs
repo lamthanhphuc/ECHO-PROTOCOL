@@ -14,6 +14,7 @@ namespace EchoProtocol.UI
         [SerializeField] private Button previousButton;
         [SerializeField] private Button nextButton;
         [SerializeField] private TMP_Text valueText;
+        [SerializeField] private RawImage thumbnail;
         [SerializeField] private TMP_Text feedbackText;
 
         [Header("Networking")]
@@ -301,15 +302,23 @@ namespace EchoProtocol.UI
         private void RefreshValue(
             LobbyPlayerState playerState)
         {
-            if (valueText == null)
-                return;
-
             int toolId =
                 GetLocalToolId();
 
             if (toolId == 0)
             {
-                valueText.text = "NONE";
+                if (valueText != null)
+                {
+                    valueText.text =
+                        "TEAM TOOL: NONE";
+                }
+
+                if (thumbnail != null)
+                {
+                    thumbnail.texture = null;
+                    thumbnail.color = Color.clear;
+                }
+
                 return;
             }
 
@@ -318,20 +327,61 @@ namespace EchoProtocol.UI
                 foreach (var definition
                          in playerState.ToolDefinitions)
                 {
-                    if (definition != null
-                        && definition.Id == toolId)
+                    if (definition == null
+                        || definition.Id != toolId)
+                    {
+                        continue;
+                    }
+
+                    if (valueText != null)
                     {
                         valueText.text =
-                            definition.DisplayName
+                            "TEAM TOOL: "
+                            + definition.DisplayName
                                 .ToUpperInvariant();
-
-                        return;
                     }
+
+                    RefreshThumbnail(
+                        toolId);
+
+                    return;
                 }
             }
 
-            valueText.text =
-                $"TOOL {toolId}";
+            if (valueText != null)
+            {
+                valueText.text =
+                    $"TEAM TOOL: TOOL {toolId}";
+            }
+
+            RefreshThumbnail(
+                toolId);
+        }
+
+
+        private void RefreshThumbnail(
+            int toolId)
+        {
+            if (thumbnail == null)
+                return;
+
+            if (!TeamToolShopAssets.TryGetByToolId(
+                    toolId,
+                    out var item))
+            {
+                thumbnail.texture = null;
+                thumbnail.color = Color.clear;
+                return;
+            }
+
+            thumbnail.texture =
+                Resources.Load<Texture2D>(
+                    item.ThumbnailResource);
+
+            thumbnail.color =
+                thumbnail.texture != null
+                    ? Color.white
+                    : Color.clear;
         }
 
         private void HandleSelectionResult(

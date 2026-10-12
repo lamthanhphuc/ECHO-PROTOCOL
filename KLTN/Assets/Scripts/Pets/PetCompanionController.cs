@@ -16,8 +16,9 @@ public sealed class PetCompanionController : MonoBehaviour {
  private Animator _animator;
  private Transform[] _feet = System.Array.Empty<Transform>();
  private int _id = -1, _authorityId = -1;
+ private int _skinId = -1;
  private PetMotion _motion = PetMotion.Hidden;
- private readonly NavMeshPath _path = new NavMeshPath();
+ private NavMeshPath _path;
  private Vector3 _goal, _ground;
  private float _nextPath, _phaseEnd, _nextFlight, _idleTime, _height;
  private bool _initialized;
@@ -29,6 +30,7 @@ public sealed class PetCompanionController : MonoBehaviour {
  private Vector3 _renderPositionVelocity;
  private PetMotion _renderMotion=PetMotion.Hidden;
  private void Awake() {
+  _path=new NavMeshPath();
   _owner=GetComponent<LobbyPlayerState>(); _movement=GetComponent<NetworkPlayerMovement>();
   _life=GetComponent<NetworkPlayerLifeState>(); _catalog=Resources.Load<PetCatalog>("Pets/PetCatalog");
  }
@@ -106,7 +108,7 @@ public sealed class PetCompanionController : MonoBehaviour {
   if(_owner==null || _owner.Object==null || !_owner.Object.IsValid)return;
   if(_catalog==null){if(Time.unscaledTime<_nextRetry)return;_nextRetry=Time.unscaledTime+1;_catalog=Resources.Load<PetCatalog>("Pets/PetCatalog");if(_catalog==null)return;}
   if(_id!=_owner.PetId || (_visual==null && _owner.PetId>0)) {
-   if(_visual!=null)Destroy(_visual);_id=_owner.PetId;
+   if(_visual!=null)Destroy(_visual);_id=_owner.PetId;_skinId=-1;
    var entry=_catalog.Get(_id);
    if(entry!=null && entry.prefab!=null) {
     _renderInitialized=false;_renderMotion=PetMotion.Hidden;_groundingOffset=0;_groundingVelocity=0;
@@ -124,6 +126,7 @@ public sealed class PetCompanionController : MonoBehaviour {
    }
   }
   if(_visual==null)return;
+  ApplySelectedSkin();
   bool interpolated=_owner.GetPetRenderPose(out var posePosition,out var poseRotation,out var motion,out var startTime,out var renderTime);
   bool show=Visible && motion!=PetMotion.Hidden;
   _visual.SetActive(show);if(!show){_renderInitialized=false;return;}
@@ -148,6 +151,20 @@ public sealed class PetCompanionController : MonoBehaviour {
    _renderMotion=motion;
    _animator.CrossFadeInFixedTime(motion.ToString(),0.25f,0,Mathf.Max(0,renderTime-startTime));
   }
+ }
+ private void ApplySelectedSkin() {
+  if(_visual==null || _owner==null || _id<=0)return;
+  int skinId=Mathf.Clamp(_owner.PetSkinId,0,PetSkinLibrary.SkinCount-1);
+  if(_skinId==skinId)return;
+  var material=PetSkinLibrary.Load(_id,skinId);
+  if(material==null)return;
+  foreach(var renderer in _visual.GetComponentsInChildren<SkinnedMeshRenderer>(true)) {
+   var materials=renderer.sharedMaterials;
+   if(materials==null || materials.Length==0)continue;
+   for(int i=0;i<materials.Length;i++)materials[i]=material;
+   renderer.sharedMaterials=materials;
+  }
+  _skinId=skinId;
  }
  private void OnEnable(){SceneManager.activeSceneChanged+=OnSceneChanged;}
  private void OnSceneChanged(Scene previous,Scene current){_initialized=false;_nextPath=0;}

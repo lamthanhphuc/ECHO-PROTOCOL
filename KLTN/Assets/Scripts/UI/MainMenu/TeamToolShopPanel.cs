@@ -55,32 +55,14 @@ namespace EchoProtocol.UI.MainMenu
             public string message;
         }
 
-        private static readonly Color WindowBackground =
-            new Color32(10, 13, 14, 250);
 
-        private static readonly Color PanelBackground =
-            new Color32(14, 18, 19, 238);
 
-        private static readonly Color CardBackground =
-            new Color32(19, 23, 24, 245);
 
-        private static readonly Color Border =
-            new Color32(58, 66, 66, 230);
 
-        private static readonly Color TextPrimary =
-            new Color32(222, 224, 219, 255);
 
-        private static readonly Color TextSecondary =
-            new Color32(128, 136, 133, 255);
 
-        private static readonly Color Accent =
-            new Color32(132, 37, 33, 255);
 
-        private static readonly Color AccentSoft =
-            new Color32(50, 24, 23, 235);
 
-        private static readonly Color Credits =
-            new Color32(193, 178, 130, 255);
 
         private RectTransform _window;
         private RectTransform _teamTools;
@@ -129,6 +111,9 @@ namespace EchoProtocol.UI.MainMenu
             if (!_built)
                 Build();
 
+            if (!_built)
+                return;
+
             ShowCategory(
                 StoreCategory.TeamTool);
 
@@ -145,6 +130,9 @@ namespace EchoProtocol.UI.MainMenu
 
             if (!_built)
                 Build();
+
+            if (!_built)
+                return;
 
             ShowCategory(
                 StoreCategory.TeamTool);
@@ -175,6 +163,9 @@ namespace EchoProtocol.UI.MainMenu
         }
         private void Build()
         {
+            if (_built)
+                return;
+
             _window =
                 transform.Find("Window")
                 as RectTransform;
@@ -188,12 +179,143 @@ namespace EchoProtocol.UI.MainMenu
                 return;
             }
 
-            _built = true;
+            // EDITABLE PREFAB PATH:
+            // If the Store hierarchy already exists in the prefab/scene,
+            // bind it instead of rebuilding layout from hard-coded values.
+            if (TryBindExistingView())
+            {
+                _built = true;
 
-            BuildHeader();
-            BuildCategoryNavigation();
-            BuildContent();
-            BuildFooter();
+                WireExistingView();
+
+                EnsureCharacterStore();
+
+                ShowCategory(
+                    StoreCategory.TeamTool);
+
+                return;
+            }
+
+            // STORE_V2_PREFAB_REQUIRED
+            // Store V2 visual hierarchy is prefab-authored. Do not rebuild
+            // header/navigation/content/footer from runtime C#.
+            Debug.LogError(
+                "[StoreV2] Prefab-authored Store hierarchy is incomplete. " +
+                "Fix StoreV2Popup.prefab; runtime fallback UI has been removed.",
+                this);
+        }
+
+        private bool TryBindExistingView()
+        {
+            _credits =
+                transform.Find(
+                    "Window/CreditsBox/Amount")
+                    ?.GetComponent<Text>();
+
+            _sectionTitle =
+                transform.Find(
+                    "Window/Content/SectionTitle")
+                    ?.GetComponent<Text>();
+
+            _sectionSubtitle =
+                transform.Find(
+                    "Window/Content/SectionSubtitle")
+                    ?.GetComponent<Text>();
+
+            _status =
+                transform.Find(
+                    "Window/Content/Status")
+                    ?.GetComponent<Text>();
+
+            _characterButton =
+                transform.Find(
+                    "Window/Categories/CharacterButton")
+                    ?.GetComponent<Button>();
+
+            _teamToolButton =
+                transform.Find(
+                    "Window/Categories/TeamToolButton")
+                    ?.GetComponent<Button>();
+
+            _petButton =
+                transform.Find(
+                    "Window/Categories/PetButton")
+                    ?.GetComponent<Button>();
+
+            _teamTools =
+                transform.Find(
+                    "Window/Content/TeamTools")
+                as RectTransform;
+
+            _selectedPreview =
+                transform.Find(
+                    "Window/Content/TeamTools/SelectedPreviewBox/SelectedPreview")
+                    ?.GetComponent<RawImage>();
+
+            _grid =
+                transform.Find(
+                    "Window/Content/TeamTools/ItemGrid")
+                as RectTransform;
+
+            _selectedName =
+                transform.Find(
+                    "Window/Content/TeamTools/SelectedName")
+                    ?.GetComponent<Text>();
+
+            _selectedDescription =
+                transform.Find(
+                    "Window/Content/TeamTools/SelectedDescription")
+                    ?.GetComponent<Text>();
+
+            _selectedPrice =
+                transform.Find(
+                    "Window/Content/TeamTools/SelectedPrice")
+                    ?.GetComponent<Text>();
+
+            _buyButton =
+                transform.Find(
+                    "Window/Content/TeamTools/BuyButton")
+                    ?.GetComponent<Button>();
+
+            _closeButton =
+                transform.Find(
+                    "Window/CloseButton")
+                    ?.GetComponent<Button>();
+
+            return
+                _credits != null &&
+                _sectionTitle != null &&
+                _sectionSubtitle != null &&
+                _status != null &&
+                _characterButton != null &&
+                _teamToolButton != null &&
+                _petButton != null &&
+                _teamTools != null &&
+                _selectedPreview != null &&
+                _grid != null &&
+                _selectedName != null &&
+                _selectedDescription != null &&
+                _selectedPrice != null &&
+                _buyButton != null &&
+                _closeButton != null;
+        }
+
+        private void WireExistingView()
+        {
+            // StoreV2CategoryRouter is the only category-click authority.
+            // This controller owns only its Buy/Close actions here.
+            _buyButton.onClick.RemoveAllListeners();
+            _closeButton.onClick.RemoveAllListeners();
+
+            _buyButton.onClick.AddListener(
+                PurchaseSelected);
+
+            _closeButton.onClick.AddListener(
+                Close);
+        }
+
+        private CharacterShopController EnsureCharacterStore()
+        {
             var characterStore =
                 GetComponent<CharacterShopController>();
 
@@ -205,443 +327,13 @@ namespace EchoProtocol.UI.MainMenu
 
             characterStore.EnsureBuilt();
 
-            ShowCategory(
-                StoreCategory.TeamTool);
+            return characterStore;
         }
 
-        private void BuildHeader()
-        {
-            var title =
-                Label(
-                    "StoreTitle",
-                    _window,
-                    "STORE",
-                    30);
 
-            PlaceTopLeft(
-                title.rectTransform,
-                38f,
-                24f,
-                500f,
-                42f);
 
-            title.fontStyle =
-                FontStyle.Bold;
 
-            title.color =
-                TextPrimary;
 
-            var subtitle =
-                Label(
-                    "StoreSubtitle",
-                    _window,
-                    "ECHO PROTOCOL // SUPPLY TERMINAL",
-                    10);
-
-            PlaceTopLeft(
-                subtitle.rectTransform,
-                40f,
-                60f,
-                480f,
-                22f);
-
-            subtitle.color =
-                TextSecondary;
-
-            var creditsBox =
-                Box(
-                    "CreditsBox",
-                    _window);
-
-            PlaceTopLeft(
-                creditsBox,
-                900f,
-                20f,
-                188f,
-                56f);
-
-            var amount =
-                Label(
-                    "Amount",
-                    creditsBox,
-                    "0",
-                    18);
-
-            PlaceTopLeft(
-                amount.rectTransform,
-                14f,
-                6f,
-                158f,
-                24f);
-
-            amount.fontStyle =
-                FontStyle.Bold;
-
-            amount.color =
-                Credits;
-
-            _credits =
-                amount;
-
-            var caption =
-                Label(
-                    "Caption",
-                    creditsBox,
-                    "CREDITS",
-                    10);
-
-            PlaceTopLeft(
-                caption.rectTransform,
-                14f,
-                30f,
-                158f,
-                18f);
-
-            caption.color =
-                TextSecondary;
-
-            var line =
-                Box(
-                    "HeaderDivider",
-                    _window);
-
-            PlaceTopLeft(
-                line,
-                38f,
-                91f,
-                1048f,
-                1f);
-
-            line.GetComponent<Image>().color =
-                Border;
-        }
-
-        private void BuildCategoryNavigation()
-        {
-            var nav =
-                Box(
-                    "Categories",
-                    _window);
-
-            PlaceTopLeft(
-                nav,
-                38f,
-                116f,
-                184f,
-                474f);
-
-            _characterButton =
-                CategoryButton(
-                    nav,
-                    "CharacterButton",
-                    "CHARACTER",
-                    18f);
-
-            _teamToolButton =
-                CategoryButton(
-                    nav,
-                    "TeamToolButton",
-                    "TEAM TOOL",
-                    84f);
-
-            _petButton =
-                CategoryButton(
-                    nav,
-                    "PetButton",
-                    "PET",
-                    150f);
-
-            _characterButton.onClick.AddListener(
-                () => ShowCategory(
-                    StoreCategory.Character));
-
-            _teamToolButton.onClick.AddListener(
-                () => ShowCategory(
-                    StoreCategory.TeamTool));
-
-            _petButton.onClick.AddListener(
-                () => ShowCategory(
-                    StoreCategory.Pet));
-
-            var hint =
-                Label(
-                    "NavigationHint",
-                    nav,
-                    "PURCHASED CHARACTERS AND\nTEAM TOOLS CAN BE SELECTED\nIN LOBBY.",
-                    10);
-
-            PlaceTopLeft(
-                hint.rectTransform,
-                14f,
-                392f,
-                156f,
-                50f);
-
-            hint.color =
-                TextSecondary;
-
-            hint.horizontalOverflow =
-                HorizontalWrapMode.Wrap;
-
-            hint.verticalOverflow =
-                VerticalWrapMode.Overflow;
-        }
-
-        private void BuildContent()
-        {
-            var content =
-                Box(
-                    "Content",
-                    _window);
-
-            PlaceTopLeft(
-                content,
-                242f,
-                116f,
-                846f,
-                474f);
-
-            _sectionTitle =
-                Label(
-                    "SectionTitle",
-                    content,
-                    "TEAM TOOL",
-                    20);
-
-            PlaceTopLeft(
-                _sectionTitle.rectTransform,
-                20f,
-                14f,
-                500f,
-                30f);
-
-            _sectionTitle.fontStyle =
-                FontStyle.Bold;
-
-            _sectionSubtitle =
-                Label(
-                    "SectionSubtitle",
-                    content,
-                    "FIELD EQUIPMENT // PERMANENT UNLOCK",
-                    9);
-
-            PlaceTopLeft(
-                _sectionSubtitle.rectTransform,
-                20f,
-                42f,
-                500f,
-                18f);
-
-            _sectionSubtitle.color =
-                TextSecondary;
-
-            _teamTools =
-                Box(
-                    "TeamTools",
-                    content);
-
-            Stretch(
-                _teamTools,
-                new Vector2(18f, 18f),
-                new Vector2(-18f, -70f));
-
-            _teamTools.GetComponent<Image>().color =
-                Color.clear;
-
-            BuildTeamToolContent();
-
-            _status =
-                Label(
-                    "Status",
-                    content,
-                    string.Empty,
-                    10);
-
-            PlaceTopLeft(
-                _status.rectTransform,
-                20f,
-                434f,
-                780f,
-                22f);
-
-            _status.color =
-                TextSecondary;
-        }
-
-        private void BuildTeamToolContent()
-        {
-            var previewBox =
-                Box(
-                    "SelectedPreviewBox",
-                    _teamTools);
-
-            PlaceTopLeft(
-                previewBox,
-                0f,
-                60f,
-                392f,
-                228f);
-
-            var previewObject =
-                new GameObject(
-                    "SelectedPreview",
-                    typeof(RectTransform),
-                    typeof(CanvasRenderer),
-                    typeof(RawImage));
-
-            previewObject.transform.SetParent(
-                previewBox,
-                false);
-
-            var previewRect =
-                previewObject.transform
-                as RectTransform;
-
-            PlaceTopLeft(
-                previewRect,
-                12f,
-                12f,
-                368f,
-                204f);
-
-            _selectedPreview =
-                previewObject.GetComponent<RawImage>();
-
-            _selectedPreview.raycastTarget =
-                false;
-
-            _selectedPreview.color =
-                Color.clear;
-
-            _grid =
-                Box(
-                    "ItemGrid",
-                    _teamTools);
-
-            PlaceTopLeft(
-                _grid,
-                408f,
-                60f,
-                392f,
-                228f);
-
-            _grid.GetComponent<Image>().color =
-                Color.clear;
-
-            var layout =
-                _grid.gameObject
-                    .AddComponent<GridLayoutGroup>();
-
-            layout.cellSize =
-                new Vector2(190f, 108f);
-
-            layout.spacing =
-                new Vector2(12f, 12f);
-
-            layout.constraint =
-                GridLayoutGroup.Constraint.FixedColumnCount;
-
-            layout.constraintCount = 2;
-
-            _selectedName =
-                Label(
-                    "SelectedName",
-                    _teamTools,
-                    "SELECT A TEAM TOOL",
-                    17);
-
-            PlaceTopLeft(
-                _selectedName.rectTransform,
-                0f,
-                304f,
-                470f,
-                28f);
-
-            _selectedName.fontStyle =
-                FontStyle.Bold;
-
-            _selectedDescription =
-                Label(
-                    "SelectedDescription",
-                    _teamTools,
-                    string.Empty,
-                    11);
-
-            PlaceTopLeft(
-                _selectedDescription.rectTransform,
-                0f,
-                334f,
-                530f,
-                42f);
-
-            _selectedDescription.color =
-                new Color32(150, 158, 155, 255);
-
-            _selectedDescription.horizontalOverflow =
-                HorizontalWrapMode.Wrap;
-
-            _selectedDescription.verticalOverflow =
-                VerticalWrapMode.Overflow;
-
-            _selectedPrice =
-                Label(
-                    "SelectedPrice",
-                    _teamTools,
-                    "-- CR",
-                    15);
-
-            PlaceTopLeft(
-                _selectedPrice.rectTransform,
-                544f,
-                332f,
-                110f,
-                34f);
-
-            _selectedPrice.alignment =
-                TextAnchor.MiddleRight;
-
-            _selectedPrice.color =
-                Credits;
-
-            _buyButton =
-                CreateButton(
-                    "BuyButton",
-                    _teamTools,
-                    "BUY");
-
-            PlaceTopLeft(
-                _buyButton.transform
-                    as RectTransform,
-                668f,
-                326f,
-                132f,
-                44f);
-
-            _buyButton.onClick.AddListener(
-                PurchaseSelected);
-
-            SetBuyState();
-        }
-
-        private void BuildFooter()
-        {
-            _closeButton =
-                CreateButton(
-                    "CloseButton",
-                    _window,
-                    "BACK");
-
-            PlaceTopLeft(
-                _closeButton.transform
-                    as RectTransform,
-                900f,
-                610f,
-                188f,
-                40f);
-
-            _closeButton.onClick.AddListener(
-                Close);
-        }
 
         private void ShowCategory(
             StoreCategory category)
@@ -677,10 +369,10 @@ namespace EchoProtocol.UI.MainMenu
                         "PET";
 
                     _sectionSubtitle.text =
-                        "UNDER DEVELOPMENT";
+                        "COMPANIONS // PERMANENT UNLOCKS";
 
                     _status.text =
-                        "PET STORE IS NOT AVAILABLE IN THIS BUILD.";
+                        "SELECT A PET.";
                     break;
 
                 default:
@@ -706,6 +398,15 @@ namespace EchoProtocol.UI.MainMenu
             {
                 characterStore.SetVisible(
                     category == StoreCategory.Character,
+                    _previewMode);
+            }
+            var petStore =
+                GetComponent<PetShopController>();
+
+            if (petStore != null)
+            {
+                petStore.SetVisible(
+                    category == StoreCategory.Pet,
                     _previewMode);
             }
             StyleCategoryButton(
@@ -838,124 +539,37 @@ namespace EchoProtocol.UI.MainMenu
             TeamToolShopAssets.Item expected,
             ShopItem item)
         {
-            var card =
-                Box(
-                    "Tool_" + expected.ToolId,
-                    _grid);
+            GameObject card =
+                StoreV2PrefabCardFactory
+                    .CreateCatalogCard(
+                        transform,
+                        _grid,
+                        "Tool_"
+                        + expected.ToolId,
+                        expected.ThumbnailResource,
+                        this);
 
-            card.GetComponent<Image>().color =
-                CardBackground;
+            if (card == null)
+                return;
 
-            var button =
-                card.gameObject
-                    .AddComponent<Button>();
-
-            button.targetGraphic =
-                card.GetComponent<Image>();
-
-            var imageObject =
-                new GameObject(
-                    "Thumbnail",
-                    typeof(RectTransform),
-                    typeof(CanvasRenderer),
-                    typeof(RawImage));
-
-            imageObject.transform.SetParent(
-                card,
-                false);
-
-            var imageRect =
-                imageObject.transform
-                as RectTransform;
-
-            PlaceTopLeft(
-                imageRect,
-                10f,
-                14f,
-                78f,
-                78f);
-
-            var thumbnail =
-                imageObject.GetComponent<RawImage>();
-
-            thumbnail.texture =
-                Resources.Load<Texture2D>(
-                    expected.ThumbnailResource);
-
-            thumbnail.color =
-                thumbnail.texture != null
-                    ? Color.white
-                    : Color.clear;
-
-            thumbnail.raycastTarget =
-                false;
-
-            var name =
-                Label(
-                    "Name",
-                    card,
-                    expected.Name,
-                    11);
-
-            PlaceTopLeft(
-                name.rectTransform,
-                96f,
-                16f,
-                84f,
-                36f);
-
-            name.fontStyle =
-                FontStyle.Bold;
-
-            name.resizeTextForBestFit =
-                true;
-
-            name.resizeTextMinSize = 9;
-            name.resizeTextMaxSize = 11;
-
-            string state =
-                item == null
-                    ? "UNAVAILABLE"
-                    : TeamToolOwnershipSession
-                        .OwnsItem(item.itemId)
-                            ? "OWNED"
-                            : $"{item.price:N0} CR";
-
-            var stateText =
-                Label(
-                    "State",
-                    card,
-                    state,
-                    10);
-
-            PlaceTopLeft(
-                stateText.rectTransform,
-                96f,
-                70f,
-                84f,
-                18f);
-
-            stateText.color =
-                item != null
-                && TeamToolOwnershipSession
-                    .OwnsItem(item.itemId)
-                    ? new Color32(122, 170, 127, 255)
-                    : Credits;
+            Button button =
+                card.GetComponent<Button>();
 
             if (item == null)
             {
                 button.interactable =
                     false;
-            }
-            else
-            {
-                var selected =
-                    item;
 
-                button.onClick.AddListener(
-                    () => SelectItem(
-                        selected));
+                return;
             }
+
+            var selected =
+                item;
+
+            button.onClick.AddListener(
+                () =>
+                    SelectItem(
+                        selected));
         }
 
         private void SelectItem(
@@ -1439,6 +1053,8 @@ namespace EchoProtocol.UI.MainMenu
             return null;
         }
 
+
+
         private static void StyleCategoryButton(
             Button button,
             bool selected)
@@ -1446,232 +1062,27 @@ namespace EchoProtocol.UI.MainMenu
             if (button == null)
                 return;
 
-            var image =
-                button.targetGraphic as Image;
+            // STORE_V2_PREFAB_CATEGORY_STATE
+            // Color/size/position are authored in the prefab. Runtime only
+            // toggles the already-authored Accent state.
+            Transform accent =
+                button.transform.Find("Accent");
 
-            if (image != null)
+            if (accent != null)
             {
-                image.color =
-                    selected
-                        ? AccentSoft
-                        : CardBackground;
+                accent.gameObject.SetActive(
+                    selected);
             }
-
-            var text =
-                button.GetComponentInChildren<Text>();
-
-            if (text != null)
-            {
-                text.color =
-                    selected
-                        ? TextPrimary
-                        : TextSecondary;
-            }
-
-            var accent =
-                button.transform.Find("Accent")
-                as RectTransform;
-
-            if (accent == null)
-            {
-                var go =
-                    new GameObject(
-                        "Accent",
-                        typeof(RectTransform),
-                        typeof(CanvasRenderer),
-                        typeof(Image));
-
-                go.transform.SetParent(
-                    button.transform,
-                    false);
-
-                accent =
-                    go.transform
-                    as RectTransform;
-
-                PlaceTopLeft(
-                    accent,
-                    0f,
-                    0f,
-                    4f,
-                    52f);
-
-                go.GetComponent<Image>().raycastTarget =
-                    false;
-            }
-
-            accent.GetComponent<Image>().color =
-                selected
-                    ? Accent
-                    : Color.clear;
         }
 
-        private static Button CategoryButton(
-            Transform parent,
-            string name,
-            string caption,
-            float y)
-        {
-            var button =
-                CreateButton(
-                    name,
-                    parent,
-                    caption);
 
-            PlaceTopLeft(
-                button.transform
-                    as RectTransform,
-                10f,
-                y,
-                164f,
-                52f);
 
-            return button;
-        }
+        /// <summary>
+        /// Removes only decorative chrome from Store preview regions.
+        /// Keeps RawImage/model rendering and thumbnail cards untouched.
+        /// </summary>
 
-        private static Button CreateButton(
-            string name,
-            Transform parent,
-            string caption)
-        {
-            var rect =
-                Box(
-                    name,
-                    parent);
 
-            var button =
-                rect.gameObject
-                    .AddComponent<Button>();
-
-            button.targetGraphic =
-                rect.GetComponent<Image>();
-
-            var colors =
-                button.colors;
-
-            colors.normalColor =
-                CardBackground;
-
-            colors.highlightedColor =
-                new Color32(
-                    38, 43, 43, 255);
-
-            colors.pressedColor =
-                new Color32(
-                    64, 34, 31, 255);
-
-            colors.selectedColor =
-                colors.highlightedColor;
-
-            colors.disabledColor =
-                new Color32(
-                    12, 15, 15, 170);
-
-            colors.fadeDuration =
-                0.08f;
-
-            button.colors =
-                colors;
-
-            var label =
-                Label(
-                    "Caption",
-                    rect,
-                    caption,
-                    12);
-
-            Stretch(
-                label.rectTransform,
-                new Vector2(10f, 0f),
-                new Vector2(-10f, 0f));
-
-            label.alignment =
-                TextAnchor.MiddleCenter;
-
-            label.fontStyle =
-                FontStyle.Bold;
-
-            return button;
-        }
-
-        private static RectTransform Box(
-            string name,
-            Transform parent)
-        {
-            var go =
-                new GameObject(
-                    name,
-                    typeof(RectTransform),
-                    typeof(CanvasRenderer),
-                    typeof(Image));
-
-            go.transform.SetParent(
-                parent,
-                false);
-
-            var rect =
-                go.transform
-                as RectTransform;
-
-            var image =
-                go.GetComponent<Image>();
-
-            image.color =
-                PanelBackground;
-
-            var outline =
-                go.AddComponent<Outline>();
-
-            outline.effectColor =
-                Border;
-
-            outline.effectDistance =
-                new Vector2(1f, -1f);
-
-            return rect;
-        }
-
-        private static Text Label(
-            string name,
-            Transform parent,
-            string value,
-            int fontSize)
-        {
-            var go =
-                new GameObject(
-                    name,
-                    typeof(RectTransform),
-                    typeof(CanvasRenderer),
-                    typeof(Text));
-
-            go.transform.SetParent(
-                parent,
-                false);
-
-            var text =
-                go.GetComponent<Text>();
-
-            text.font =
-                Resources.GetBuiltinResource<Font>(
-                    "LegacyRuntime.ttf");
-
-            text.fontSize =
-                fontSize;
-
-            text.text =
-                value;
-
-            text.color =
-                TextPrimary;
-
-            text.alignment =
-                TextAnchor.MiddleLeft;
-
-            text.raycastTarget =
-                false;
-
-            return text;
-        }
 
         private static void ClearChildren(
             Transform parent)
@@ -1694,47 +1105,6 @@ namespace EchoProtocol.UI.MainMenu
             }
         }
 
-        private static void Stretch(
-            RectTransform rect,
-            Vector2 minimum,
-            Vector2 maximum)
-        {
-            rect.anchorMin =
-                Vector2.zero;
 
-            rect.anchorMax =
-                Vector2.one;
-
-            rect.offsetMin =
-                minimum;
-
-            rect.offsetMax =
-                maximum;
-        }
-
-        private static void PlaceTopLeft(
-            RectTransform rect,
-            float x,
-            float y,
-            float width,
-            float height)
-        {
-            rect.anchorMin =
-                new Vector2(0f, 1f);
-
-            rect.anchorMax =
-                new Vector2(0f, 1f);
-
-            rect.pivot =
-                new Vector2(0f, 1f);
-
-            rect.anchoredPosition =
-                new Vector2(x, -y);
-
-            rect.sizeDelta =
-                new Vector2(
-                    width,
-                    height);
-        }
     }
 }

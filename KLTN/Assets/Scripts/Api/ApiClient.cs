@@ -19,6 +19,9 @@ namespace EchoProtocol.Api
     public const string PaymentsCatalog = "/api/payments/catalog";
     public const string ShopCharacters = "/api/shop/items?category=CHARACTER&pageSize=100";
     public const string ShopTeamTools = "/api/shop/items?category=TEAM_TOOL&pageSize=100";
+    public const string ShopPets = "/api/shop/items?category=PET&pageSize=100";
+    public const string ShopPetSkins = "/api/shop/items?category=PET_SKIN&pageSize=100";
+    public const string ShopCharacterOutfits = "/api/shop/items?category=CHARACTER_OUTFIT&pageSize=100";
     public const string ShopPurchase = "/api/shop/purchase";
     public const string InventoryMe = "/api/inventory/me";
     public const string TelemetryBatch = "/api/telemetry/batch";

@@ -202,50 +202,21 @@ namespace EchoProtocol.UI
             // changes presentation.
         }
 
-        private void RefreshActions(
-            bool connected,
-            bool isHost)
-        {
-            if (startButton != null)
-            {
-                startButton.gameObject.SetActive(
-                    connected && isHost);
+       private void RefreshActions(
+    bool connected,
+    bool isHost)
+{
+    // Only control visibility here.
+    // Position and size are authored in Lobby.unity.
+    if (startButton != null)
+    {
+        startButton.gameObject.SetActive(
+            connected && isHost);
+    }
 
-                SetTopLeft(
-                    startButton.transform as RectTransform,
-                    32f,
-                    580f,
-                    390f,
-                    64f);
-            }
-
-            if (readyButton == null)
-            {
-                return;
-            }
-
-            // Host has READY + START MISSION.
-            if (connected && isHost)
-            {
-                SetTopLeft(
-                    readyButton.transform as RectTransform,
-                    32f,
-                    510f,
-                    390f,
-                    52f);
-            }
-            else
-            {
-                // For Client, READY becomes the main action
-                // in the space normally occupied by START.
-                SetTopLeft(
-                    readyButton.transform as RectTransform,
-                    32f,
-                    580f,
-                    390f,
-                    64f);
-            }
-        }
+    // Do not move or resize ReadyButton here.
+    // NetworkLobbyUI remains responsible for its state.
+}
 
         private static void SetTopLeft(
             RectTransform rect,

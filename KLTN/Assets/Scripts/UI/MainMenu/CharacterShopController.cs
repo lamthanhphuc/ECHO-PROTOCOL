@@ -48,26 +48,18 @@ namespace EchoProtocol.UI.MainMenu
             public string message;
         }
 
-        private static readonly Color PanelBackground =
-            new Color32(14, 18, 19, 238);
 
-        private static readonly Color CardBackground =
-            new Color32(19, 23, 24, 245);
 
-        private static readonly Color Border =
-            new Color32(58, 66, 66, 230);
 
-        private static readonly Color TextPrimary =
-            new Color32(222, 224, 219, 255);
 
-        private static readonly Color TextSecondary =
-            new Color32(128, 136, 133, 255);
 
-        private static readonly Color Credits =
-            new Color32(193, 178, 130, 255);
 
-        private static readonly Color Owned =
-            new Color32(122, 170, 127, 255);
+
+        private enum PurchaseTarget
+        {
+            Character,
+            Outfit
+        }
 
         private RectTransform _root;
         private RectTransform _grid;
@@ -84,10 +76,107 @@ namespace EchoProtocol.UI.MainMenu
         private ShopItem[] _catalog =
             Array.Empty<ShopItem>();
 
+        private ShopItem[] _outfitCatalog =
+            Array.Empty<ShopItem>();
+
         private CharacterShopAssets.Item _selectedDefinition;
         private ShopItem _selectedItem;
+        private ShopItem _selectedOutfitItem;
 
         private int _selectedCharacterId = -1;
+        private int _selectedOutfitId;
+
+        private PurchaseTarget _purchaseTarget =
+            PurchaseTarget.Character;
+
+        // STORE_V2_CHARACTER_OUTFIT_SELECTION_API
+        // The Character controller owns Store outfit selection state.
+        // The visible outfit strip only sends a requested outfit id.
+        public int SelectedCharacterId =>
+            _selectedCharacterId;
+
+        public int SelectedOutfitId =>
+            _selectedOutfitId;
+
+        public int SelectedOutfitCount
+        {
+            get
+            {
+                if (!CharacterShopAssets.TryGetByCharacterId(
+                        _selectedCharacterId,
+                        out var definition))
+                {
+                    return 0;
+                }
+
+                return ResolveOutfitCount(
+                    definition);
+            }
+        }
+
+        public bool TrySelectOutfitFromVariant(
+            int outfitId)
+        {
+            if (!CharacterShopAssets.TryGetByCharacterId(
+                    _selectedCharacterId,
+                    out var definition))
+            {
+                return false;
+            }
+
+            int outfitCount =
+                ResolveOutfitCount(
+                    definition);
+
+            if (outfitId < 0
+                || outfitId >= outfitCount)
+            {
+                return false;
+            }
+
+            StoreLivePreviewRenderer livePreview =
+                ResolveLivePreviewRenderer();
+
+            if (livePreview == null
+                || !livePreview.ApplyCharacterOutfit(
+                    definition.CharacterId,
+                    outfitId))
+            {
+                return false;
+            }
+
+            _selectedOutfitId =
+                outfitId;
+
+            ApplyOutfitPurchaseContext(
+                definition);
+
+            SetBuyState();
+
+            return true;
+        }
+
+        private static int ResolveOutfitCount(
+            CharacterShopAssets.Item definition)
+        {
+            // Both current Store characters have four authored visual
+            // variants/thumbnails. Keep the definition value extensible,
+            // but never hide a known Store V2 outfit because an older
+            // CharacterShopAssets entry still reports 1.
+            if (definition.CharacterId
+                    == CharacterShopAssets.AstronautCharacterId
+                || definition.CharacterId
+                    == CharacterShopAssets.JammoCharacterId)
+            {
+                return Mathf.Max(
+                    4,
+                    definition.OutfitCount);
+            }
+
+            return Mathf.Max(
+                1,
+                definition.OutfitCount);
+        }
 
         private bool _built;
         private bool _loading;
@@ -123,24 +212,114 @@ namespace EchoProtocol.UI.MainMenu
                     "Window/CreditsBox/Amount")
                     ?.GetComponent<Text>();
 
+            // Prefer the prefab-authored hierarchy.
+            if (TryBindExistingCharacterView())
+            {
+                WireExistingCharacterView();
+
+                _root.gameObject.SetActive(false);
+
+                _built = true;
+
+                return;
+            }
+
+            // STORE_V2_PREFAB_REQUIRED
+            // Store V2 no longer creates visual hierarchy at runtime.
+            // Missing nodes are an authoring error and must be fixed in
+            // StoreV2Popup.prefab / Inspector.
+            Debug.LogError(
+                "[CharacterStore] Prefab-authored CharacterContent is incomplete. " +
+                "Fix StoreV2Popup.prefab; runtime fallback UI has been removed.",
+                this);
+        }
+
+        private bool TryBindExistingCharacterView()
+        {
             _root =
-                Box(
-                    "CharacterContent",
-                    content);
+                transform.Find(
+                    "Window/Content/CharacterContent")
+                as RectTransform;
 
-            Stretch(
-                _root,
-                new Vector2(18f, 18f),
-                new Vector2(-18f, -70f));
+            _preview =
+                transform.Find(
+                    "Window/Content/CharacterContent/CharacterPreviewBox/CharacterPreview")
+                    ?.GetComponent<RawImage>();
 
-            _root.GetComponent<Image>().color =
-                Color.clear;
+            _grid =
+                transform.Find(
+                    "Window/Content/CharacterContent/CharacterGrid")
+                as RectTransform;
 
-            BuildCharacterContent();
+            _selectedName =
+                transform.Find(
+                    "Window/Content/CharacterContent/SelectedCharacterName")
+                    ?.GetComponent<Text>();
 
-            _root.gameObject.SetActive(false);
+            _selectedDescription =
+                transform.Find(
+                    "Window/Content/CharacterContent/SelectedCharacterDescription")
+                    ?.GetComponent<Text>();
 
-            _built = true;
+            _selectedPrice =
+                transform.Find(
+                    "Window/Content/CharacterContent/SelectedCharacterPrice")
+                    ?.GetComponent<Text>();
+
+            _buyButton =
+                transform.Find(
+                    "Window/Content/CharacterContent/CharacterBuyButton")
+                    ?.GetComponent<Button>();
+
+            return
+                _root != null &&
+                _preview != null &&
+                _grid != null &&
+                _selectedName != null &&
+                _selectedDescription != null &&
+                _selectedPrice != null &&
+                _buyButton != null;
+        }
+
+        private void WireExistingCharacterView()
+        {
+            SetPassiveGraphic(
+                _root);
+
+            SetPassiveGraphic(
+                _grid);
+
+            SetPassiveGraphic(
+                _root != null
+                    ? _root.Find("CharacterPreviewBox")
+                    : null);
+
+            if (_preview != null)
+            {
+                _preview.raycastTarget =
+                    false;
+            }
+
+            _buyButton.onClick.RemoveAllListeners();
+
+            _buyButton.onClick.AddListener(
+                PurchaseSelected);
+        }
+
+        private static void SetPassiveGraphic(
+            Transform target)
+        {
+            if (target == null)
+                return;
+
+            Graphic graphic =
+                target.GetComponent<Graphic>();
+
+            if (graphic != null)
+            {
+                graphic.raycastTarget =
+                    false;
+            }
         }
 
         public void SetVisible(
@@ -178,158 +357,6 @@ namespace EchoProtocol.UI.MainMenu
             LoadCatalog();
         }
 
-        private void BuildCharacterContent()
-        {
-            var previewBox =
-                Box(
-                    "CharacterPreviewBox",
-                    _root);
-
-            PlaceTopLeft(
-                previewBox,
-                0f,
-                60f,
-                392f,
-                228f);
-
-            var previewObject =
-                new GameObject(
-                    "CharacterPreview",
-                    typeof(RectTransform),
-                    typeof(CanvasRenderer),
-                    typeof(RawImage));
-
-            previewObject.transform.SetParent(
-                previewBox,
-                false);
-
-            var previewRect =
-                previewObject.transform
-                as RectTransform;
-
-            PlaceCentered(
-                previewRect,
-                184f,
-                184f);
-
-            _preview =
-                previewObject
-                    .GetComponent<RawImage>();
-
-            _preview.raycastTarget =
-                false;
-
-            _preview.color =
-                Color.clear;
-
-            _grid =
-                Box(
-                    "CharacterGrid",
-                    _root);
-
-            PlaceTopLeft(
-                _grid,
-                408f,
-                60f,
-                392f,
-                228f);
-
-            _grid.GetComponent<Image>().color =
-                Color.clear;
-
-            var layout =
-                _grid.gameObject
-                    .AddComponent<GridLayoutGroup>();
-
-            layout.cellSize =
-                new Vector2(190f, 108f);
-
-            layout.spacing =
-                new Vector2(12f, 12f);
-
-            layout.constraint =
-                GridLayoutGroup.Constraint.FixedColumnCount;
-
-            layout.constraintCount = 2;
-
-            _selectedName =
-                Label(
-                    "SelectedCharacterName",
-                    _root,
-                    "SELECT A CHARACTER",
-                    17);
-
-            PlaceTopLeft(
-                _selectedName.rectTransform,
-                0f,
-                304f,
-                470f,
-                28f);
-
-            _selectedName.fontStyle =
-                FontStyle.Bold;
-
-            _selectedDescription =
-                Label(
-                    "SelectedCharacterDescription",
-                    _root,
-                    string.Empty,
-                    11);
-
-            PlaceTopLeft(
-                _selectedDescription.rectTransform,
-                0f,
-                334f,
-                530f,
-                42f);
-
-            _selectedDescription.color =
-                new Color32(
-                    150, 158, 155, 255);
-
-            _selectedDescription.horizontalOverflow =
-                HorizontalWrapMode.Wrap;
-
-            _selectedDescription.verticalOverflow =
-                VerticalWrapMode.Overflow;
-
-            _selectedPrice =
-                Label(
-                    "SelectedCharacterPrice",
-                    _root,
-                    "-- CR",
-                    15);
-
-            PlaceTopLeft(
-                _selectedPrice.rectTransform,
-                544f,
-                332f,
-                110f,
-                34f);
-
-            _selectedPrice.alignment =
-                TextAnchor.MiddleRight;
-
-            _selectedPrice.color =
-                Credits;
-
-            _buyButton =
-                CreateButton(
-                    "CharacterBuyButton",
-                    _root,
-                    "BUY");
-
-            PlaceTopLeft(
-                _buyButton.transform
-                    as RectTransform,
-                668f,
-                326f,
-                132f,
-                44f);
-
-            _buyButton.onClick.AddListener(
-                PurchaseSelected);
-        }
 
         private void LoadCatalog()
         {
@@ -390,19 +417,48 @@ namespace EchoProtocol.UI.MainMenu
                         result.Data.data.items
                         ?? Array.Empty<ShopItem>();
 
-                    TeamToolOwnershipSession.Refresh(
-                        success =>
+                    runtime.Client.GetJson<CatalogResponse>(
+                        ApiEndpoints.ShopCharacterOutfits,
+                        true,
+                        outfitResult =>
                         {
                             if (this == null)
                                 return;
 
-                            ShowCharacters(
-                                _selectedCharacterId);
+                            bool outfitCatalogAvailable =
+                                outfitResult.IsSuccess
+                                && outfitResult.Data != null
+                                && outfitResult.Data.success
+                                && outfitResult.Data.data != null;
 
-                            SetStatus(
-                                success
-                                    ? "SELECT A CHARACTER."
-                                    : "INVENTORY STATUS UNAVAILABLE.");
+                            _outfitCatalog =
+                                outfitCatalogAvailable
+                                    ? outfitResult.Data.data.items
+                                        ?? Array.Empty<ShopItem>()
+                                    : Array.Empty<ShopItem>();
+
+                            TeamToolOwnershipSession.Refresh(
+                                success =>
+                                {
+                                    if (this == null)
+                                        return;
+
+                                    ShowCharacters(
+                                        _selectedCharacterId);
+
+                                    if (!outfitCatalogAvailable)
+                                    {
+                                        SetStatus(
+                                            "CHARACTER OUTFIT CATALOG UNAVAILABLE.");
+                                    }
+                                    else
+                                    {
+                                        SetStatus(
+                                            success
+                                                ? "SELECT A CHARACTER."
+                                                : "INVENTORY STATUS UNAVAILABLE.");
+                                    }
+                                });
                         });
                 });
         }
@@ -484,127 +540,27 @@ namespace EchoProtocol.UI.MainMenu
             CharacterShopAssets.Item definition,
             ShopItem item)
         {
-            var card =
-                Box(
-                    "Character_" +
-                    definition.CharacterId,
-                    _grid);
+            string thumbnailResource =
+                definition.CharacterId
+                    == CharacterShopAssets.JammoCharacterId
+                    ? "Shop/LobbyVariants/Characters/character-1-outfit-0"
+                    : "Shop/LobbyVariants/Characters/character-0-outfit-0";
 
-            card.GetComponent<Image>().color =
-                CardBackground;
+            GameObject card =
+                StoreV2PrefabCardFactory
+                    .CreateCatalogCard(
+                        transform,
+                        _grid,
+                        "Character_"
+                        + definition.CharacterId,
+                        thumbnailResource,
+                        this);
 
-            var button =
-                card.gameObject
-                    .AddComponent<Button>();
+            if (card == null)
+                return;
 
-            button.targetGraphic =
-                card.GetComponent<Image>();
-
-            var imageObject =
-                new GameObject(
-                    "Thumbnail",
-                    typeof(RectTransform),
-                    typeof(CanvasRenderer),
-                    typeof(RawImage));
-
-            imageObject.transform.SetParent(
-                card,
-                false);
-
-            var imageRect =
-                imageObject.transform
-                as RectTransform;
-
-            PlaceTopLeft(
-                imageRect,
-                10f,
-                18f,
-                72f,
-                72f);
-
-            var thumbnail =
-                imageObject
-                    .GetComponent<RawImage>();
-
-            thumbnail.texture =
-                Resources.Load<Texture2D>(
-                    definition.ThumbnailResource);
-
-            thumbnail.color =
-                thumbnail.texture != null
-                    ? Color.white
-                    : Color.clear;
-
-            thumbnail.raycastTarget =
-                false;
-
-            var name =
-                Label(
-                    "Name",
-                    card,
-                    definition.Name,
-                    11);
-
-            PlaceTopLeft(
-                name.rectTransform,
-                96f,
-                14f,
-                86f,
-                34f);
-
-            name.fontStyle =
-                FontStyle.Bold;
-
-            name.resizeTextForBestFit =
-                true;
-
-            name.resizeTextMinSize = 9;
-            name.resizeTextMaxSize = 11;
-
-            bool owned =
-                IsOwned(
-                    definition);
-
-            string state;
-
-            if (owned)
-            {
-                state =
-                    definition.DefaultOwned
-                        ? "DEFAULT"
-                        : "OWNED";
-            }
-            else if (item == null)
-            {
-                state =
-                    "UNAVAILABLE";
-            }
-            else
-            {
-                state =
-                    $"{item.price:N0} CR";
-            }
-
-            var stateText =
-                Label(
-                    "State",
-                    card,
-                    state,
-                    10);
-
-            PlaceTopLeft(
-                stateText.rectTransform,
-                96f,
-                70f,
-                86f,
-                18f);
-
-            stateText.color =
-                owned
-                    ? Owned
-                    : item == null
-                        ? TextSecondary
-                        : Credits;
+            Button button =
+                card.GetComponent<Button>();
 
             var capturedDefinition =
                 definition;
@@ -629,8 +585,17 @@ namespace EchoProtocol.UI.MainMenu
             _selectedCharacterId =
                 definition.CharacterId;
 
+            _selectedOutfitId =
+                0;
+
             _selectedItem =
                 item;
+
+            _selectedOutfitItem =
+                null;
+
+            _purchaseTarget =
+                PurchaseTarget.Character;
 
             _selectedName.text =
                 definition.Name;
@@ -679,6 +644,17 @@ namespace EchoProtocol.UI.MainMenu
                         definition.LivePreviewResource,
                         _preview);
 
+                if (liveShown)
+                {
+                    // STORE_V2_CHARACTER_OUTFIT_PREVIEW
+                    // Always reapply outfit 0 when a Character card is
+                    // selected so a previously selected color cannot leak
+                    // across repeated Character selections.
+                    livePreview.ApplyCharacterOutfit(
+                        definition.CharacterId,
+                        _selectedOutfitId);
+                }
+
                 if (!liveShown)
                 {
                     _preview.texture =
@@ -694,6 +670,53 @@ namespace EchoProtocol.UI.MainMenu
             SetBuyState();
         }
 
+        private void ApplyOutfitPurchaseContext(
+            CharacterShopAssets.Item character)
+        {
+            _purchaseTarget =
+                PurchaseTarget.Outfit;
+
+            if (!CharacterOutfitShopAssets.TryGet(
+                    character.CharacterId,
+                    _selectedOutfitId,
+                    out var outfit))
+            {
+                _selectedOutfitItem =
+                    null;
+
+                _selectedName.text =
+                    character.Name + " // OUTFIT";
+
+                _selectedDescription.text =
+                    "Character outfit unavailable.";
+
+                _selectedPrice.text =
+                    "--";
+
+                return;
+            }
+
+            _selectedOutfitItem =
+                outfit.DefaultOwned
+                    ? null
+                    : FindItem(
+                        _outfitCatalog,
+                        outfit.ItemId);
+
+            _selectedName.text =
+                character.Name
+                + " // "
+                + outfit.Name;
+
+            _selectedDescription.text =
+                outfit.DefaultOwned
+                    ? "Default outfit included with this character."
+                    : outfit.Name
+                        + " cosmetic outfit for "
+                        + character.Name
+                        + ".";
+        }
+
         private void SetBuyState()
         {
             if (_buyButton == null)
@@ -705,12 +728,119 @@ namespace EchoProtocol.UI.MainMenu
 
             if (_selectedCharacterId < 0)
             {
-                _buyButton.interactable =
-                    false;
+                _selectedPrice.text = "--";
+                _buyButton.interactable = false;
 
                 if (caption != null)
+                    caption.text = "UNAVAILABLE";
+
+                return;
+            }
+
+            if (_purchaseTarget == PurchaseTarget.Outfit)
+            {
+                if (!CharacterOutfitShopAssets.TryGet(
+                        _selectedCharacterId,
+                        _selectedOutfitId,
+                        out var outfit))
+                {
+                    _selectedPrice.text = "--";
+                    _buyButton.interactable = false;
+
+                    if (caption != null)
+                        caption.text = "UNAVAILABLE";
+
+                    return;
+                }
+
+                if (!CharacterShopAssets.IsOwned(
+                        _selectedCharacterId))
+                {
+                    if (outfit.DefaultOwned)
+                    {
+                        _selectedPrice.text = "DEFAULT";
+                    }
+                    else
+                    {
+                        int lockedOutfitPrice =
+                            _selectedOutfitItem != null
+                                ? _selectedOutfitItem.price
+                                : outfit.PreviewPrice;
+
+                        _selectedPrice.text =
+                            $"{lockedOutfitPrice:N0} CR";
+                    }
+
+                    _buyButton.interactable = false;
+
+                    if (caption != null)
+                        caption.text = "REQUIRES CHARACTER";
+
+                    return;
+                }
+
+                if (outfit.DefaultOwned)
+                {
+                    _selectedPrice.text = "DEFAULT";
+                    _buyButton.interactable = false;
+
+                    if (caption != null)
+                        caption.text = "DEFAULT";
+
+                    return;
+                }
+
+                if (CharacterOutfitShopAssets.IsOwned(
+                        _selectedCharacterId,
+                        _selectedOutfitId))
+                {
+                    _selectedPrice.text = "OWNED";
+                    _buyButton.interactable = false;
+
+                    if (caption != null)
+                        caption.text = "OWNED";
+
+                    return;
+                }
+
+                int outfitPrice =
+                    _selectedOutfitItem != null
+                        ? _selectedOutfitItem.price
+                        : outfit.PreviewPrice;
+
+                _selectedPrice.text =
+                    $"{outfitPrice:N0} CR";
+
+                if (_previewMode)
+                {
+                    _buyButton.interactable = true;
+
+                    if (caption != null)
+                        caption.text = "BUY";
+
+                    return;
+                }
+
+                if (_selectedOutfitItem == null)
+                {
+                    _buyButton.interactable = false;
+
+                    if (caption != null)
+                        caption.text = "UNAVAILABLE";
+
+                    return;
+                }
+
+                _buyButton.interactable =
+                    !_purchasing;
+
+                if (caption != null)
+                {
                     caption.text =
-                        "UNAVAILABLE";
+                        _purchasing
+                            ? "PURCHASING..."
+                            : "BUY";
+                }
 
                 return;
             }
@@ -719,26 +849,42 @@ namespace EchoProtocol.UI.MainMenu
                 IsOwned(
                     _selectedDefinition);
 
-            if (owned)
+            if (_selectedDefinition.DefaultOwned)
             {
-                _buyButton.interactable =
-                    false;
+                _selectedPrice.text = "DEFAULT";
+                _buyButton.interactable = false;
 
                 if (caption != null)
-                {
-                    caption.text =
-                        _selectedDefinition.DefaultOwned
-                            ? "DEFAULT"
-                            : "OWNED";
-                }
+                    caption.text = "DEFAULT";
 
                 return;
             }
 
+            if (owned)
+            {
+                _selectedPrice.text = "OWNED";
+                _buyButton.interactable = false;
+
+                if (caption != null)
+                    caption.text = "OWNED";
+
+                return;
+            }
+
+            if (_selectedItem != null)
+            {
+                _selectedPrice.text =
+                    $"{_selectedItem.price:N0} CR";
+            }
+            else
+            {
+                _selectedPrice.text =
+                    $"{_selectedDefinition.PreviewPrice:N0} CR";
+            }
+
             if (_previewMode)
             {
-                _buyButton.interactable =
-                    true;
+                _buyButton.interactable = true;
 
                 if (caption != null)
                     caption.text = "BUY";
@@ -748,12 +894,10 @@ namespace EchoProtocol.UI.MainMenu
 
             if (_selectedItem == null)
             {
-                _buyButton.interactable =
-                    false;
+                _buyButton.interactable = false;
 
                 if (caption != null)
-                    caption.text =
-                        "UNAVAILABLE";
+                    caption.text = "UNAVAILABLE";
 
                 return;
             }
@@ -780,12 +924,75 @@ namespace EchoProtocol.UI.MainMenu
                 return;
             }
 
-            if (_purchasing
-                || _selectedItem == null
-                || _selectedDefinition.DefaultOwned
-                || IsOwned(_selectedDefinition))
-            {
+            if (_purchasing)
                 return;
+
+            ShopItem purchasingItem;
+            string purchasingName;
+            bool purchasingOutfit =
+                _purchaseTarget == PurchaseTarget.Outfit;
+
+            int purchasingCharacterId =
+                _selectedCharacterId;
+
+            int purchasingOutfitId =
+                _selectedOutfitId;
+
+            if (purchasingOutfit)
+            {
+                if (!CharacterShopAssets.IsOwned(
+                        _selectedCharacterId))
+                {
+                    SetStatus(
+                        "PURCHASE THE CHARACTER FIRST.");
+
+                    SetBuyState();
+                    return;
+                }
+
+                if (!CharacterOutfitShopAssets.TryGet(
+                        _selectedCharacterId,
+                        _selectedOutfitId,
+                        out var outfit)
+                    || outfit.DefaultOwned
+                    || CharacterOutfitShopAssets.IsOwned(
+                        _selectedCharacterId,
+                        _selectedOutfitId))
+                {
+                    return;
+                }
+
+                if (_selectedOutfitItem == null)
+                {
+                    SetStatus(
+                        "CHARACTER OUTFIT UNAVAILABLE.");
+
+                    SetBuyState();
+                    return;
+                }
+
+                purchasingItem =
+                    _selectedOutfitItem;
+
+                purchasingName =
+                    _selectedDefinition.Name
+                    + " "
+                    + outfit.Name;
+            }
+            else
+            {
+                if (_selectedItem == null
+                    || _selectedDefinition.DefaultOwned
+                    || IsOwned(_selectedDefinition))
+                {
+                    return;
+                }
+
+                purchasingItem =
+                    _selectedItem;
+
+                purchasingName =
+                    _selectedDefinition.Name;
             }
 
             var runtime =
@@ -800,19 +1007,13 @@ namespace EchoProtocol.UI.MainMenu
                 return;
             }
 
-            var purchasingItem =
-                _selectedItem;
-
-            int purchasingCharacterId =
-                _selectedCharacterId;
-
             _purchasing =
                 true;
 
             SetStatus(
-                "PURCHASING " +
-                _selectedDefinition.Name +
-                "...");
+                "PURCHASING "
+                + purchasingName
+                + "...");
 
             SetBuyState();
 
@@ -850,7 +1051,6 @@ namespace EchoProtocol.UI.MainMenu
                                     .ToUpperInvariant());
 
                         SetBuyState();
-
                         return;
                     }
 
@@ -858,11 +1058,27 @@ namespace EchoProtocol.UI.MainMenu
                         purchasingItem.itemId);
 
                     SetStatus(
-                        _selectedDefinition.Name +
-                        " PURCHASED.");
+                        purchasingName
+                        + " PURCHASED.");
 
-                    ShowCharacters(
-                        purchasingCharacterId);
+                    if (purchasingOutfit)
+                    {
+                        if (_selectedCharacterId
+                                == purchasingCharacterId
+                            && _selectedOutfitId
+                                == purchasingOutfitId)
+                        {
+                            ApplyOutfitPurchaseContext(
+                                _selectedDefinition);
+                        }
+
+                        SetBuyState();
+                    }
+                    else
+                    {
+                        ShowCharacters(
+                            purchasingCharacterId);
+                    }
 
                     runtime.PlayerProfileService
                         .GetCurrentProfile(
@@ -999,145 +1215,8 @@ namespace EchoProtocol.UI.MainMenu
             return null;
         }
 
-        private static RectTransform Box(
-            string name,
-            Transform parent)
-        {
-            var go =
-                new GameObject(
-                    name,
-                    typeof(RectTransform),
-                    typeof(CanvasRenderer),
-                    typeof(Image));
 
-            go.transform.SetParent(
-                parent,
-                false);
 
-            var rect =
-                go.transform
-                    as RectTransform;
-
-            var image =
-                go.GetComponent<Image>();
-
-            image.color =
-                PanelBackground;
-
-            var outline =
-                go.AddComponent<Outline>();
-
-            outline.effectColor =
-                Border;
-
-            outline.effectDistance =
-                new Vector2(
-                    1f,
-                    -1f);
-
-            return rect;
-        }
-
-        private static Button CreateButton(
-            string name,
-            Transform parent,
-            string caption)
-        {
-            var rect =
-                Box(
-                    name,
-                    parent);
-
-            var button =
-                rect.gameObject
-                    .AddComponent<Button>();
-
-            button.targetGraphic =
-                rect.GetComponent<Image>();
-
-            var colors =
-                button.colors;
-
-            colors.normalColor =
-                CardBackground;
-
-            colors.highlightedColor =
-                new Color32(
-                    38, 43, 43, 255);
-
-            colors.pressedColor =
-                new Color32(
-                    64, 34, 31, 255);
-
-            colors.disabledColor =
-                new Color32(
-                    12, 15, 15, 170);
-
-            button.colors =
-                colors;
-
-            var label =
-                Label(
-                    "Caption",
-                    rect,
-                    caption,
-                    12);
-
-            Stretch(
-                label.rectTransform,
-                new Vector2(10f, 0f),
-                new Vector2(-10f, 0f));
-
-            label.alignment =
-                TextAnchor.MiddleCenter;
-
-            label.fontStyle =
-                FontStyle.Bold;
-
-            return button;
-        }
-
-        private static Text Label(
-            string name,
-            Transform parent,
-            string value,
-            int fontSize)
-        {
-            var go =
-                new GameObject(
-                    name,
-                    typeof(RectTransform),
-                    typeof(CanvasRenderer),
-                    typeof(Text));
-
-            go.transform.SetParent(
-                parent,
-                false);
-
-            var text =
-                go.GetComponent<Text>();
-
-            text.font =
-                Resources.GetBuiltinResource<Font>(
-                    "LegacyRuntime.ttf");
-
-            text.fontSize =
-                fontSize;
-
-            text.text =
-                value;
-
-            text.color =
-                TextPrimary;
-
-            text.alignment =
-                TextAnchor.MiddleLeft;
-
-            text.raycastTarget =
-                false;
-
-            return text;
-        }
 
         private static void ClearChildren(
             Transform parent)
@@ -1160,69 +1239,6 @@ namespace EchoProtocol.UI.MainMenu
             }
         }
 
-        private static void Stretch(
-            RectTransform rect,
-            Vector2 minimum,
-            Vector2 maximum)
-        {
-            rect.anchorMin =
-                Vector2.zero;
 
-            rect.anchorMax =
-                Vector2.one;
-
-            rect.offsetMin =
-                minimum;
-
-            rect.offsetMax =
-                maximum;
-        }
-
-        private static void PlaceCentered(
-            RectTransform rect,
-            float width,
-            float height)
-        {
-            rect.anchorMin =
-                new Vector2(0.5f, 0.5f);
-
-            rect.anchorMax =
-                new Vector2(0.5f, 0.5f);
-
-            rect.pivot =
-                new Vector2(0.5f, 0.5f);
-
-            rect.anchoredPosition =
-                Vector2.zero;
-
-            rect.sizeDelta =
-                new Vector2(
-                    width,
-                    height);
-        }
-        private static void PlaceTopLeft(
-            RectTransform rect,
-            float x,
-            float y,
-            float width,
-            float height)
-        {
-            rect.anchorMin =
-                new Vector2(0f, 1f);
-
-            rect.anchorMax =
-                new Vector2(0f, 1f);
-
-            rect.pivot =
-                new Vector2(0f, 1f);
-
-            rect.anchoredPosition =
-                new Vector2(x, -y);
-
-            rect.sizeDelta =
-                new Vector2(
-                    width,
-                    height);
-        }
     }
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace EchoProtocol.UI.MainMenu
 {
@@ -69,10 +69,10 @@ namespace EchoProtocol.UI.MainMenu
                 "ASTRONAUT",
                 "Standard expedition operator suit.",
                 "Assets/Prefabs/Player/Variants/PF_PlayerCharacter_P1_Default.prefab",
-                "Shop/Characters/astronaut",
+                "Shop/LobbyVariants/Characters/character-0-outfit-0",
                 "Shop/LivePreview/Character_Astronaut",
                 0,
-                1,
+                4,
                 true),
 
             new Item(
@@ -81,7 +81,7 @@ namespace EchoProtocol.UI.MainMenu
                 "JAMMO",
                 "Compact expedition unit configured for hazardous operations.",
                 "Assets/Resources/Characters/PF_JammoVisual.prefab",
-                "Shop/Characters/jammo",
+                "Shop/LobbyVariants/Characters/character-1-outfit-0",
                 "Shop/LivePreview/Character_Jammo",
                 600,
                 4,
