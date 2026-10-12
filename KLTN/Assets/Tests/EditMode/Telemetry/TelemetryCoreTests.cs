@@ -24,6 +24,19 @@ namespace EchoProtocol.Telemetry.Tests
             Assert.That(second.SchemaVersion, Is.EqualTo(TelemetrySchemaVersions.LifecycleV12));
             Assert.That(f.Allocator.LastAllocatedSequence, Is.EqualTo(4));
         }
+
+        [Test]
+        public void ToolDrop_UsesV12AndCarriesParentIdentity()
+        {
+            var f = new Fixture(researchCaptureEnabled: true);
+            f.Factory.BeginMatch();
+            f.Emit(TelemetryEventTypes.MatchStarted, "start");
+            f.Emit(TelemetryEventTypes.PhaseStarted, "phase-start");
+            var adapter = new Phase8LifecycleTelemetryAdapter(f.Emitter);
+            Assert.That(adapter.EmitToolDrop("drop", DateTime.UtcNow, "CORE_COLLECTION", "tool-dropped", "tool-original", 2, 1, Guid.NewGuid(), 1, out var evt, out _), Is.True);
+            Assert.That(evt.SchemaVersion, Is.EqualTo(TelemetrySchemaVersions.LifecycleV12));
+            StringAssert.Contains("\"parentInstanceId\":\"tool-original\"", evt.DataJson);
+        }
         [Test]
         public void SequenceAllocator_StartsAtOneAndNeverAllocatesAfterTerminal()
         {
