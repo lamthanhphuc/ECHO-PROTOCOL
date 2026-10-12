@@ -54,6 +54,7 @@ namespace EchoProtocol.AI.AED
         private readonly List<AEDPhase8MinionSourceV1> _minions = new();
         private readonly HashSet<string> _occurrenceKeys = new(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _heldToolByOwner = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _transferredToolInstances = new(StringComparer.Ordinal);
         private Guid _matchId;
 
         public void BeginMatch(Guid matchId)
@@ -79,6 +80,10 @@ namespace EchoProtocol.AI.AED
             var index = _tools.FindLastIndex(x => x.InstanceId == instanceId);
             if (index < 0) throw new InvalidOperationException("AED_P8_TOOL_INSTANCE_MISSING");
             var previous = _tools[index];
+            if (_transferredToolInstances.Contains(instanceId))
+                throw new InvalidOperationException("AED_P8_TOOL_INSTANCE_TRANSFERRED");
+            if (newLocation != "Player")
+                throw new InvalidOperationException("AED_P8_TOOL_TRANSITION_UNSUPPORTED");
             if (string.IsNullOrWhiteSpace(newLocation) ||
                 remainingCharges < 0 ||
                 tick <= previous.SourceTick ||
@@ -90,7 +95,7 @@ namespace EchoProtocol.AI.AED
                  (_heldToolByOwner.TryGetValue(ownerUserId, out var held) && held != instanceId)))
                 throw new InvalidOperationException("AED_P8_OWNER_INVENTORY_CONFLICT");
             RegisterOccurrence(occurrenceKey);
-            _tools.Add(new AEDPhase8ToolSourceV1(instanceId, previous.ToolId, previous.Zone, previous.Origin, newLocation, ownerUserId, remainingCharges, tick, occurrenceKey));
+            _tools.Add(new AEDPhase8ToolSourceV1(instanceId, previous.ToolId, previous.Zone, previous.Origin, newLocation, ownerUserId, remainingCharges, tick, occurrenceKey, previous.ParentInstanceId));
             if (newLocation == "Player") _heldToolByOwner[ownerUserId] = instanceId;
         }
 
@@ -111,6 +116,7 @@ namespace EchoProtocol.AI.AED
                 (!remainingCharges.HasValue || remainingCharges.Value > parent.RemainingCharges.Value))
                 throw new InvalidOperationException("AED_P8_DROP_CHARGES_INVALID");
             RegisterOccurrence(occurrenceKey);
+            _transferredToolInstances.Add(parentId);
             _tools.Add(new AEDPhase8ToolSourceV1(newInstanceId, toolId, parent.Zone, "PlayerDrop", "World", null, remainingCharges, tick, occurrenceKey, parentId));
             _heldToolByOwner.Remove(ownerUserId);
         }
@@ -149,7 +155,7 @@ namespace EchoProtocol.AI.AED
         }
 
         public void ResetMatch()
-        { _matchId = Guid.Empty; _tools.Clear(); _minions.Clear(); _occurrenceKeys.Clear(); _heldToolByOwner.Clear(); }
+        { _matchId = Guid.Empty; _tools.Clear(); _minions.Clear(); _occurrenceKeys.Clear(); _heldToolByOwner.Clear(); _transferredToolInstances.Clear(); }
 
         private void RegisterOccurrence(string occurrenceKey)
         {

@@ -17,6 +17,49 @@ namespace EchoProtocol.Api.Tests;
 public sealed class TelemetryServiceTests
 {
     [Fact, Trait("Category", "AEDv2")]
+    public async Task P8Drop_V12ValidPayload_IsAccepted()
+    {
+        var repo = new FakeTelemetryEventRepository();
+        var request = CreateMatchStarted(researchCaptureEnabled: true);
+        var matchId = request.Events[0].MatchId;
+        request.Events.Add(CreatePhaseStarted(matchId, 2));
+        request.Events.Add(CreateP8DropEvent(matchId));
+        var response = await CreateService(repo).IngestBatchAsync(request, Guid.NewGuid(), CancellationToken.None);
+        Assert.True(response.IsSuccess);
+        Assert.Equal(TelemetryAckStatuses.Accepted, response.Data!.Items[2].Status);
+        var stored = Assert.Single(repo.InsertedEvents, x => x.EventType == "TEAM_TOOL_LIFECYCLE");
+        Assert.Equal("1.2", stored.SchemaVersion);
+        Assert.Equal("DROP", stored.ValueJson["data"]["action"].AsString);
+    }
+
+    [Theory, Trait("Category", "AEDv2")]
+    [InlineData("same-parent")]
+    [InlineData("invalid-owner")]
+    [InlineData("missing-parent")]
+    public async Task P8Drop_InvalidLineagePayload_IsRejected(string caseName)
+    {
+        var repo = new FakeTelemetryEventRepository();
+        var request = CreateMatchStarted(researchCaptureEnabled: true);
+        var matchId = request.Events[0].MatchId;
+        request.Events.Add(CreatePhaseStarted(matchId, 2));
+        var item = CreateP8DropEvent(matchId);
+        var json = JsonNode.Parse(item.ValueJson.GetRawText())!;
+        switch (caseName)
+        {
+            case "same-parent": json["data"]!["parentInstanceId"] = "tool-child"; break;
+            case "invalid-owner": json["data"]!["ownerUserId"] = "not-a-guid"; break;
+            case "missing-parent": json["data"]!.AsObject().Remove("parentInstanceId"); break;
+        }
+        item.ValueJson = JsonSerializer.SerializeToElement(json);
+        request.Events.Add(item);
+        var response = await CreateService(repo).IngestBatchAsync(request, Guid.NewGuid(), CancellationToken.None);
+        Assert.True(response.IsSuccess);
+        Assert.Equal(TelemetryAckStatuses.PermanentlyRejected, response.Data!.Items[2].Status);
+        Assert.Equal("P8_TELEMETRY_V12_INVALID", response.Data.Items[2].RejectReason);
+        Assert.DoesNotContain(repo.InsertedEvents, x => x.EventType == "TEAM_TOOL_LIFECYCLE");
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
     public async Task P8Lifecycle_V12AcceptedWithResearchCapture()
     {
         var repo = new FakeTelemetryEventRepository();
@@ -824,6 +867,19 @@ public sealed class TelemetryServiceTests
             data = new { instanceId = "tool-1", toolId = 2, zone = 1, action = "SPAWN" }
         })
     };
+
+    private static TelemetryEventRequest CreateP8DropEvent(Guid matchId)
+    {
+        var item = CreateP8ToolEvent(matchId);
+        var json = JsonNode.Parse(item.ValueJson.GetRawText())!;
+        json["context"]!["occurrenceKey"] = "p8:tool:child:drop:42";
+        json["data"]!["action"] = "DROP";
+        json["data"]!["instanceId"] = "tool-child";
+        json["data"]!["parentInstanceId"] = "tool-parent";
+        json["data"]!["ownerUserId"] = Guid.NewGuid().ToString("D");
+        item.ValueJson = JsonSerializer.SerializeToElement(json);
+        return item;
+    }
 
     private static TelemetryEventRequest WithValueJson(TelemetryEventRequest item, JsonElement valueJson)
     {

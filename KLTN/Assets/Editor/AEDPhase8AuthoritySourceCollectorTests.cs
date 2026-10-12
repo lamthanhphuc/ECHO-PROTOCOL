@@ -40,6 +40,8 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
         Assert.AreEqual("World", dropped.Location);
         Assert.AreEqual(1, dropped.RemainingCharges);
         collector.RecordToolTransition("tool-dropped", "Player", owner, 1, 40, "repickup");
+        Assert.True(collector.TryGetLatestTool("tool-dropped", out var repicked));
+        Assert.AreEqual("tool-original", repicked.ParentInstanceId);
         Assert.True(collector.TryFreeze(matchId, 1, out var snapshot));
         Assert.False(snapshot.CoverageComplete);
     }
@@ -51,6 +53,25 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
         collector.BeginMatch(Guid.NewGuid());
         Assert.Throws<InvalidOperationException>(() => collector.RecordToolDrop(
             "new-tool", 2, Guid.NewGuid().ToString("D"), 1, 30, "drop"));
+    }
+
+    [Test]
+    public void TransferredParent_CannotBeReactivated()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        var owner = Guid.NewGuid().ToString("D");
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordToolSpawn("parent", 2, 1, 10, "spawn");
+        collector.RecordToolTransition("parent", "Player", owner, 3, 20, "pickup");
+        collector.RecordToolDrop("child", 2, owner, 3, 30, "drop");
+
+        var error = Assert.Throws<InvalidOperationException>(() => collector.RecordToolTransition(
+            "parent", "Player", owner, 3, 40, "invalid-repickup"));
+        Assert.AreEqual("AED_P8_TOOL_INSTANCE_TRANSFERRED", error.Message);
+
+        collector.RecordToolTransition("child", "Player", owner, 3, 50, "valid-repickup");
+        Assert.True(collector.TryGetLatestTool("child", out var source));
+        Assert.AreEqual("parent", source.ParentInstanceId);
     }
     [Test]
     public void UnknownTool_IsRejected()
