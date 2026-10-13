@@ -179,6 +179,31 @@ namespace EchoProtocol.AI.AED
     }
 
     [Serializable]
+    public sealed class AEDBackendScenarioConfigDto
+    {
+        public string scenarioConfigId;
+        public string scenarioConfigVersion;
+        public string schemaVersion;
+        public string policyVersion;
+        public string configSource;
+        public string mapId;
+        public string monsterType;
+        public string objectiveSpawnSetId;
+        public int supportItemBudget;
+        public double detectionFillRate;
+        public double detectionDecayRate;
+        public double chaseSpeed;
+        public double searchDuration;
+        public string routeModifier;
+        public double escapeDoorTimerSeconds;
+        public string fallbackConfigId;
+        public string fallbackConfigVersion;
+        public string contentWhitelistVersion;
+        public string unityCompatibilityVersion;
+        public string contentFingerprint;
+    }
+
+    [Serializable]
     public sealed class AEDResolvePreMatchData
     {
         public string decisionId;
@@ -190,6 +215,17 @@ namespace EchoProtocol.AI.AED
         public bool usedFixedFallback;
         public string fallbackReasonCode;
         public string candidateValidationStatus;
+        public string decisionStatus;
+        public string unityApplyStatus;
+        public AEDBackendScenarioConfigDto config;
+    }
+
+    [Serializable]
+    public sealed class AEDConfirmScenarioAppliedRequest
+    {
+        public string scenarioConfigId;
+        public string scenarioConfigVersion;
+        public string scenarioConfigFingerprint;
     }
 
     [Serializable]

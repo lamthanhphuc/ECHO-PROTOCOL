@@ -280,9 +280,12 @@ namespace EchoProtocol.Networking
                 }
 
                 var settings = ScenarioConfigAuthorityRuntime.EnsureExists().RuntimeSettings;
-                var needsSnapshot = settings != null
-                    && (settings.ExtendedPolicyShadowEnabled
-                        || settings.ExtendedPolicyGameplayEnabled);
+                var needsSnapshot =
+                    authority.RequestedScenarioResolutionMode ==
+                        ScenarioResolutionMode.Adaptive &&
+                    settings != null &&
+                    (settings.ExtendedPolicyShadowEnabled ||
+                     settings.ExtendedPolicyGameplayEnabled);
                 if (needsSnapshot)
                 {
                     if (authority.MatchId == Guid.Empty || !authority.IsHostBinding
@@ -367,6 +370,24 @@ namespace EchoProtocol.Networking
                         $"validity={snapshot.SnapshotValidity} " +
                         $"missing={snapshot.MissingProfileUserIds.Count} " +
                         $"plan={AEDv2Plan.Normal().Fingerprint()}");
+
+                    if (decision.resolutionResult == "ADAPTIVE_CONFIG_ISSUED")
+                    {
+                        if (!ScenarioConfigAuthorityRuntime.EnsureExists()
+                                .TryStageBackendPreMatch(matchId, decision))
+                        {
+                            ReportError(
+                                "AED Backend candidate rejected by Unity validation.");
+                            return;
+                        }
+
+                        Debug.Log(
+                            $"[AED_P8][PREMATCH_STAGED] " +
+                            $"match={matchId:D} " +
+                            $"config={decision.config.scenarioConfigId} " +
+                            $"version={decision.config.scenarioConfigVersion} " +
+                            $"budget={decision.config.supportItemBudget}");
+                    }
                 }
 
                 var (accepted, error) =
@@ -408,8 +429,14 @@ namespace EchoProtocol.Networking
             }
             finally
             {
-                if (_bootstrap == null || _bootstrap.State != NetworkSessionState.InMatch)
+                if (_bootstrap == null ||
+                    _bootstrap.State != NetworkSessionState.InMatch)
+                {
                     ClearPreparedSnapshot();
+
+                    ScenarioConfigAuthorityRuntime.Instance
+                        ?.ClearStagedBackendPreMatch(Guid.Empty);
+                }
                 _preMatchCancellation?.Dispose();
                 _preMatchCancellation = null;
                 _matchStartInProgress = false;

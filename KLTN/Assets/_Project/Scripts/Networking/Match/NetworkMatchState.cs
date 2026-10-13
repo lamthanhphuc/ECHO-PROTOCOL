@@ -488,13 +488,19 @@ namespace EchoProtocol.Networking
                     var difficulty = MatchAuthorityRuntime.Instance != null
                         ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
                     var toolsPerZone = MatchDifficultyProfiles.Get(difficulty).TeamToolsPerZone;
-                    int supportBonus = 0;
+                    var baselinePerZone = Mathf.Max(
+                        TeamToolWorldSpawn.RequiredToolCountPerZone,
+                        toolsPerZone);
+
+                    int supportBonus = ScenarioSupportItemBudget;
                     if (difficulty == MatchDifficulty.Normal &&
                         MatchAuthorityRuntime.Instance != null &&
                         MatchAuthorityRuntime.Instance.TryGetMatchId(out var tuningMatchId) &&
                         AEDv2Authority.TryGetApplied(tuningMatchId, out var tuning, out _))
                     {
-                        supportBonus = tuning.SupportBonus;
+                        supportBonus = Math.Max(
+                            supportBonus,
+                            tuning.SupportBonus);
                     }
                     // The bonus is TOTAL per match, distributed deterministically.
                     var extraZone1 = Math.Min(1, supportBonus);
@@ -502,10 +508,23 @@ namespace EchoProtocol.Networking
                     var extraZone3 = Math.Max(0, supportBonus - 2);
                     TeamToolWorldSpawnInitialized = TeamToolWorldSpawn.TrySpawnInitial(
                         Runner, _teamToolPickupCatalog,
-                        toolsPerZone + extraZone1,
-                        toolsPerZone + extraZone2,
-                        toolsPerZone + extraZone3,
-                        _teamToolSpawnMinimumSpacing, supportBonus > 0);
+                        baselinePerZone + extraZone1,
+                        baselinePerZone + extraZone2,
+                        baselinePerZone + extraZone3,
+                        _teamToolSpawnMinimumSpacing,
+                        supportBonus > 0);
+
+                    if (TeamToolWorldSpawnInitialized &&
+                        MatchAuthorityRuntime.Instance != null &&
+                        MatchAuthorityRuntime.Instance.TryGetMatchId(
+                            out var backendMatchId) &&
+                        ScenarioConfigAuthorityRuntime.Instance != null)
+                    {
+                        _ = ScenarioConfigAuthorityRuntime.Instance
+                            .ConfirmStagedBackendPreMatchAsync(
+                                backendMatchId,
+                                CurrentAppliedScenarioConfig);
+                    }
                 }
             }
 
@@ -4258,11 +4277,6 @@ namespace EchoProtocol.Networking
                 : ScenarioResolutionMode.Fixed;
             var scenarioRuntime =
                 ScenarioConfigAuthorityRuntime.EnsureExists();
-            if (scenarioRuntime.RuntimeSettings != null
-                && (scenarioRuntime.RuntimeSettings.ExtendedPolicyShadowEnabled
-                    || scenarioRuntime.RuntimeSettings.ExtendedPolicyGameplayEnabled))
-                mode = ScenarioResolutionMode.Adaptive;
-
             var experimentCondition =
                 authority != null
                     ? authority.ExperimentCondition
@@ -4321,6 +4335,25 @@ namespace EchoProtocol.Networking
                 result,
                 Object != null
                 && Object.HasStateAuthority);
+
+            if (decisionPoint == ScenarioDecisionPoint.PreMatch &&
+                mode == ScenarioResolutionMode.Adaptive &&
+                !result.IsPrecommitRejected &&
+                result.CommitDisposition ==
+                    ScenarioResolutionCommitDisposition.NewDecision &&
+                scenarioRuntime.TryGetStagedBackendPreMatch(
+                    matchId, out var backendDecision, out var backendConfig))
+            {
+                ApplyScenarioConfigAuthoritative(backendConfig, matchId);
+
+                Debug.Log(
+                    $"[AED_P8][PREMATCH_HOST_COMMIT] " +
+                    $"match={matchId:D} " +
+                    $"config={backendDecision.config.scenarioConfigId} " +
+                    $"version={backendConfig.ScenarioConfigVersion} " +
+                    $"budget={ScenarioSupportItemBudget} " +
+                    $"revision={ScenarioConfigRevision}");
+            }
 
             if (AEDv2Authority.TryGetApplied(matchId, out var v2Plan, out var v2Revision))
             {

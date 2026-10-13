@@ -8,6 +8,76 @@ namespace EchoProtocol.Networking.Tests
     public sealed class NetworkMatchStateTests
     {
         [Test]
+        public void AEDBackendPreMatch_UsesHostCommitAndRealApplyReceipt()
+        {
+            var match = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs");
+
+            var lobby = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Session/LobbyManager.cs");
+
+            var runtime = File.ReadAllText(
+                "Assets/Scripts/AI/AED/ScenarioConfigAuthorityRuntime.cs");
+
+            var api = File.ReadAllText(
+                "Assets/Scripts/AI/AED/AEDSnapshotApiService.cs");
+
+            var dto = File.ReadAllText(
+                "Assets/Scripts/AI/AED/AEDSnapshotApiDtos.cs");
+
+            StringAssert.Contains(
+                "TryStageBackendPreMatch(matchId, decision)", lobby);
+
+            StringAssert.Contains(
+                "ApplyScenarioConfigAuthoritative(backendConfig, matchId)",
+                match);
+
+            StringAssert.Contains(
+                "int supportBonus = ScenarioSupportItemBudget;",
+                match);
+
+            StringAssert.Contains(
+                "baselinePerZone + extraZone1",
+                match);
+
+            StringAssert.Contains(
+                "Math.Max(\n                            supportBonus,",
+                match.Replace("\r\n", "\n"));
+
+            StringAssert.Contains(
+                "ConfirmStagedBackendPreMatchAsync(",
+                match);
+
+            StringAssert.Contains(
+                "TeamToolWorldSpawnInitialized &&",
+                match);
+
+            StringAssert.Contains(
+                "ConfirmScenarioAppliedAsync(",
+                runtime);
+
+            StringAssert.Contains(
+                "/scenario/decisions/{decisionId:D}/applied",
+                api);
+
+            StringAssert.Contains(
+                "scenarioConfigFingerprint = config.contentFingerprint",
+                api);
+
+            StringAssert.Contains(
+                "public AEDBackendScenarioConfigDto config;",
+                dto);
+
+            StringAssert.Contains(
+                "ScenarioResolutionMode.Adaptive",
+                lobby);
+
+            StringAssert.Contains(
+                "ClearStagedBackendPreMatch(oldMatchId)",
+                runtime);
+        }
+
+        [Test]
         public void Zone1Completion_DoesNotTeleportPlayersToZone2()
         {
             string source = File.ReadAllText(

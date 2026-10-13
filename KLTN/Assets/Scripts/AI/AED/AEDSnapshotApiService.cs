@@ -233,6 +233,67 @@ namespace EchoProtocol.AI.AED
             }
         }
 
+        public async Task<bool> ConfirmScenarioAppliedAsync(
+            Guid matchId,
+            Guid decisionId,
+            AEDBackendScenarioConfigDto config,
+            CancellationToken cancellationToken)
+        {
+            if (matchId == Guid.Empty ||
+                decisionId == Guid.Empty ||
+                config == null ||
+                string.IsNullOrWhiteSpace(config.scenarioConfigId) ||
+                string.IsNullOrWhiteSpace(config.scenarioConfigVersion) ||
+                string.IsNullOrWhiteSpace(config.contentFingerprint))
+            {
+                return false;
+            }
+
+            var completion =
+                new TaskCompletionSource<ApiResult<AEDResolvePreMatchResponse>>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+
+            using (cancellationToken.Register(
+                () => completion.TrySetCanceled()))
+            {
+                AuthRuntime.EnsureExists().Client
+                    .PutJson<AEDConfirmScenarioAppliedRequest,
+                        AEDResolvePreMatchResponse>(
+                        $"/api/matches/{matchId:D}/scenario/decisions/{decisionId:D}/applied",
+                        new AEDConfirmScenarioAppliedRequest
+                        {
+                            scenarioConfigId = config.scenarioConfigId,
+                            scenarioConfigVersion = config.scenarioConfigVersion,
+                            scenarioConfigFingerprint = config.contentFingerprint
+                        },
+                        true,
+                        result => completion.TrySetResult(result));
+
+                try
+                {
+                    var response = await completion.Task;
+                    var data = response.Data?.data;
+
+                    return response.IsSuccess &&
+                           response.Data?.success == true &&
+                           data != null &&
+                           data.decisionId == decisionId.ToString("D") &&
+                           data.unityApplyStatus == "APPLIED" &&
+                           data.config != null &&
+                           data.config.scenarioConfigId == config.scenarioConfigId &&
+                           data.config.scenarioConfigVersion == config.scenarioConfigVersion &&
+                           string.Equals(
+                               data.config.contentFingerprint,
+                               config.contentFingerprint,
+                               StringComparison.OrdinalIgnoreCase);
+                }
+                catch (TaskCanceledException)
+                {
+                    return false;
+                }
+            }
+        }
+
         public async Task<AEDSnapshotFetchResult> GetAsync(Guid matchId, Guid decisionId,
             CancellationToken cancellationToken)
         {

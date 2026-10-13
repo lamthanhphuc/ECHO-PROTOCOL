@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EchoProtocol.AI.Common.AED;
@@ -34,6 +35,9 @@ namespace EchoProtocol.AI.AED
 
         private readonly ScenarioResolutionEngine _engine = new ScenarioResolutionEngine();
         private AdaptiveDecisionLocalAuditStore _auditStore;
+        private Guid _backendPreMatchId;
+        private AEDResolvePreMatchData _backendPreMatchDecision;
+        private ScenarioConfig _backendPreMatchConfig;
 
         public static ScenarioConfigAuthorityRuntime Instance => _instance;
         public AEDRuntimeSettings RuntimeSettings => runtimeSettings;
@@ -79,6 +83,193 @@ namespace EchoProtocol.AI.AED
                 runtimeSettings = Resources.Load<AEDRuntimeSettings>("AED/AEDRuntimeSettings");
             _auditStore ??= new AdaptiveDecisionLocalAuditStore(
                 System.IO.Path.Combine(Application.persistentDataPath, "aed-scenario-resolution.jsonl"));
+        }
+
+        public bool TryStageBackendPreMatch(
+            Guid matchId,
+            AEDResolvePreMatchData decision)
+        {
+            ClearStagedBackendPreMatch(Guid.Empty);
+
+            if (matchId == Guid.Empty ||
+                decision?.config == null ||
+                decision.matchId != matchId.ToString("D") ||
+                !Guid.TryParse(decision.decisionId, out var decisionId) ||
+                decisionId != CreateDecisionId(
+                    matchId, ScenarioDecisionPoint.PreMatch, "PRE_MATCH", 0) ||
+                decision.resolutionResult != "ADAPTIVE_CONFIG_ISSUED" ||
+                decision.usedFixedFallback ||
+                decision.candidateValidationStatus != "VALID" ||
+                decision.decisionStatus != "COMMITTED" ||
+                decision.config.configSource != "ADAPTIVE" ||
+                decision.config.unityCompatibilityVersion != Application.version)
+            {
+                return false;
+            }
+
+            var c = decision.config;
+            var baseline = FixedDirector.CreateFixedBaseline();
+
+            if (string.IsNullOrWhiteSpace(c.scenarioConfigId) ||
+                string.IsNullOrWhiteSpace(c.scenarioConfigVersion) ||
+                c.scenarioConfigVersion.Length > 64 ||
+                string.IsNullOrWhiteSpace(c.contentFingerprint) ||
+                c.contentFingerprint.Length != 64 ||
+                !c.contentFingerprint.All(Uri.IsHexDigit) ||
+                c.policyVersion != baseline.PolicyVersion ||
+                c.mapId != baseline.MapId ||
+                c.monsterType != baseline.MonsterType ||
+                c.objectiveSpawnSetId != baseline.ObjectiveSpawnSetId ||
+                c.routeModifier != baseline.RouteModifier ||
+                c.fallbackConfigId != baseline.FallbackConfigId ||
+                c.fallbackConfigVersion != FixedDirector.FixedBaselineScenarioVersion ||
+                c.contentWhitelistVersion != FixedDirector.FixedBaselineContentWhitelistVersion ||
+                c.detectionFillRate != baseline.MonsterParameters.DetectionFillRate ||
+                c.detectionDecayRate != baseline.MonsterParameters.DetectionDecayRate ||
+                c.searchDuration != baseline.MonsterParameters.SearchDuration ||
+                c.escapeDoorTimerSeconds != baseline.FinalHuntParameters.EscapeDoorTimerSeconds ||
+                c.supportItemBudget < 0 ||
+                !double.IsFinite(c.chaseSpeed))
+            {
+                return false;
+            }
+
+            if (runtimeSettings == null ||
+                !runtimeSettings.TryBuildParameterRegistry(out var registry, out _) ||
+                !registry.TryGetRule(
+                    ScenarioConfigKey.SupportItemBudget, out var supportRule) ||
+                !registry.TryGetRule(
+                    ScenarioConfigKey.ChaseSpeed, out var chaseRule))
+            {
+                return false;
+            }
+
+            bool supportChanged = c.supportItemBudget != baseline.SupportItemBudget;
+            bool chaseChanged = c.chaseSpeed != baseline.MonsterParameters.ChaseSpeed;
+
+            if (supportChanged == chaseChanged ||
+                !supportRule.CandidateValues.Contains((double)c.supportItemBudget) ||
+                !chaseRule.CandidateValues.Contains(c.chaseSpeed))
+            {
+                return false;
+            }
+
+            try
+            {
+                var config = new ScenarioConfig(
+                    c.scenarioConfigVersion,
+                    c.policyVersion,
+                    ScenarioConfigSource.Adaptive,
+                    c.mapId,
+                    c.monsterType,
+                    c.objectiveSpawnSetId,
+                    c.supportItemBudget,
+                    new ScenarioMonsterParameters(
+                        c.detectionFillRate,
+                        c.detectionDecayRate,
+                        c.chaseSpeed,
+                        c.searchDuration),
+                    c.routeModifier,
+                    new ScenarioFinalHuntParameters(c.escapeDoorTimerSeconds),
+                    c.fallbackConfigId);
+
+                if (!AEDGameplayContentContract.TryValidate(config, out _))
+                    return false;
+
+                _backendPreMatchId = matchId;
+                _backendPreMatchDecision = decision;
+                _backendPreMatchConfig = config;
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
+
+        public bool TryGetStagedBackendPreMatch(
+            Guid matchId,
+            out AEDResolvePreMatchData decision,
+            out ScenarioConfig config)
+        {
+            decision = null;
+            config = null;
+
+            if (matchId == Guid.Empty ||
+                matchId != _backendPreMatchId ||
+                _backendPreMatchDecision == null ||
+                _backendPreMatchConfig == null)
+            {
+                return false;
+            }
+
+            decision = _backendPreMatchDecision;
+            config = _backendPreMatchConfig;
+            return true;
+        }
+
+        public void ClearStagedBackendPreMatch(Guid matchId)
+        {
+            if (matchId != Guid.Empty && matchId != _backendPreMatchId)
+                return;
+
+            _backendPreMatchId = Guid.Empty;
+            _backendPreMatchDecision = null;
+            _backendPreMatchConfig = null;
+        }
+
+        public async Task<bool> ConfirmStagedBackendPreMatchAsync(
+            Guid matchId,
+            ScenarioConfig appliedConfig)
+        {
+            if (!TryGetStagedBackendPreMatch(
+                    matchId, out var decision, out var stagedConfig) ||
+                appliedConfig == null ||
+                appliedConfig.ConfigSource != ScenarioConfigSource.Adaptive ||
+                appliedConfig.ScenarioConfigVersion != stagedConfig.ScenarioConfigVersion ||
+                ScenarioConfigFingerprint.Compute(appliedConfig) !=
+                    ScenarioConfigFingerprint.Compute(stagedConfig) ||
+                !Guid.TryParse(decision.decisionId, out var decisionId))
+            {
+                return false;
+            }
+
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                try
+                {
+                    if (await new AEDSnapshotApiService()
+                            .ConfirmScenarioAppliedAsync(
+                                matchId,
+                                decisionId,
+                                decision.config,
+                                CancellationToken.None))
+                    {
+                        Debug.Log(
+                            $"[AED_P8][PREMATCH_APPLIED] " +
+                            $"match={matchId:D} " +
+                            $"config={decision.config.scenarioConfigId} " +
+                            $"version={decision.config.scenarioConfigVersion} " +
+                            $"budget={stagedConfig.SupportItemBudget}");
+
+                        ClearStagedBackendPreMatch(matchId);
+                        return true;
+                    }
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning(
+                        "[AED_P8][PREMATCH_RECEIPT] " +
+                        exception.GetType().Name);
+                }
+
+                if (attempt < 2)
+                    await Task.Delay(1000 * (attempt + 1));
+            }
+
+            Debug.LogError(
+                $"[AED_P8][PREMATCH_RECEIPT_FAILED] match={matchId:D}");
+            return false;
         }
 
         public ScenarioResolutionEngineResult Resolve(
@@ -324,6 +515,7 @@ namespace EchoProtocol.AI.AED
         {
             if (oldMatchId != Guid.Empty) ScenarioConfigRuntimeRegistry.Clear(oldMatchId);
             AEDv2Authority.Reset(oldMatchId);
+            ClearStagedBackendPreMatch(oldMatchId);
             CurrentAppliedScenarioConfig = null;
             LastAdaptiveDecision = null;
             LastDebugSnapshot = null;
