@@ -103,6 +103,9 @@ namespace EchoProtocol.AI.Stalker.Tests
             beam.SetParent(player, true);
             beam.forward = Vector3.forward;
             Cube("Locker front", new Vector3(0f, 1f, 5.5f), new Vector3(2f, 2f, 0.2f));
+            Cube("Locker closed door",
+                new Vector3(0f, 1f, 4.6f),
+                new Vector3(3f, 3f, 0.2f));
             Physics.SyncTransforms();
 
             Assert.That(TryClue(fixture.Sensor, beam, player, out _), Is.False);
@@ -116,9 +119,15 @@ namespace EchoProtocol.AI.Stalker.Tests
             Transform player = Create("Hidden player", new Vector3(2f, 0f, 5f)).transform;
             Transform beam = Create("Beam", new Vector3(2f, 1f, 5f)).transform;
             beam.SetParent(player, true);
-            beam.forward = new Vector3(-0.4f, 0f, -1f);
-            Cube("Visible illuminated surface", new Vector3(0f, 1f, 2f), new Vector3(2f, 2f, 0.2f));
+            beam.forward = Vector3.forward;
+            Cube("Hidden player cover",
+                new Vector3(1.2f, 1f, 3f),
+                new Vector3(0.25f, 2f, 0.3f));
+            Cube("Visible illuminated surface",
+                new Vector3(2f, 1f, 7f),
+                new Vector3(2f, 2f, 0.2f));
             Physics.SyncTransforms();
+            Assert.That(BodyVisible(fixture.Sensor, player), Is.False);
 
             Assert.That(TryClue(fixture.Sensor, beam, player, out Vector3 clue), Is.True);
             Assert.That(CanSeePoint(fixture.Sensor, clue), Is.True);

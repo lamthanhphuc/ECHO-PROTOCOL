@@ -59,7 +59,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static readonly Vector3 ChaseDestinationC = new Vector3(1.2f, 0f, 0f);
         private static readonly Vector3 ChaseDestinationD = new Vector3(1.3f, 0f, 0f);
         private static readonly Vector3 ChaseDestinationE = new Vector3(1.4f, 0f, 0f);
-        private static readonly Vector3 ChaseDestinationF = new Vector3(1.5f, 0f, 0f);
+        private static readonly Vector3 ChaseDestinationF = new Vector3(1.55f, 0f, 0f);
 
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
         private NavMeshDataInstance _navMeshDataInstance;
@@ -2021,7 +2021,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static void InstallRoomSweepRecoveryDestination(object stalkerController, Vector3 destination)
         {
             var node = Activator.CreateInstance(ResolveType(SpatialNodeTypeName),
-                0, destination, 0, 0, 0, 0, 0, 0, new List<int>());
+                0, destination, 0, 0, 0, 0, 0, new List<int>());
             var nodes = Array.CreateInstance(ResolveType(SpatialNodeTypeName), 1);
             nodes.SetValue(node, 0);
             var graph = Activator.CreateInstance(ResolveType(NavMeshSpatialGraphTypeName), nodes);
