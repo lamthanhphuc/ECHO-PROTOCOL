@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Threading;
 using EchoProtocol.Auth;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Gameplay;
 using Fusion;
 using Fusion.Matchmaking;
@@ -105,13 +106,15 @@ namespace EchoProtocol.Networking
 
         public Task<bool> CreateRoomAsync(
             string sessionName, int maxPlayers = 4,
-            MatchDifficulty difficulty = MatchDifficulty.Normal)
+            MatchDifficulty difficulty = MatchDifficulty.Normal,
+            ScenarioResolutionMode resolutionMode = ScenarioResolutionMode.Fixed)
         {
             if (maxPlayers is < 2 or > 4)
                 return FailWithoutStarting("A room must allow between 2 and 4 players.");
 
             _matchAuthority ??= MatchAuthorityRuntime.EnsureExists(this);
             _matchAuthority.RequestDifficulty(difficulty);
+            _matchAuthority.RequestScenarioResolutionMode(resolutionMode);
             return StartSessionAsync(GameMode.Host, sessionName, maxPlayers);
         }
 

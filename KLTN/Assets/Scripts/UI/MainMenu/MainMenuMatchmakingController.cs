@@ -1,4 +1,5 @@
 using EchoProtocol.Auth;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Networking;
 using EchoProtocol.Profile;
@@ -23,6 +24,9 @@ namespace EchoProtocol.UI.MainMenu
         [SerializeField] private GameObject difficultyRow;
         [SerializeField] private Button difficultyButton;
         [SerializeField] private Text difficultyValueText;
+        [SerializeField] private GameObject resolutionModeRow;
+        [SerializeField] private Button resolutionModeButton;
+        [SerializeField] private Text resolutionModeValueText;
         [SerializeField] private Button confirmButton;
         [SerializeField] private Button backButton;
 
@@ -33,6 +37,7 @@ namespace EchoProtocol.UI.MainMenu
 
         private MatchDifficulty _difficulty =
             MatchDifficulty.Normal;
+        private ScenarioResolutionMode _resolutionMode = ScenarioResolutionMode.Fixed;
 
         private bool _hostMode;
         private bool _busy;
@@ -41,6 +46,7 @@ namespace EchoProtocol.UI.MainMenu
         {
             ResolveServices();
             RefreshDifficultyText();
+            RefreshResolutionModeText();
 
             if (dialog != null)
             {
@@ -58,6 +64,8 @@ namespace EchoProtocol.UI.MainMenu
 
             if (difficultyButton != null)
                 difficultyButton.onClick.AddListener(CycleDifficulty);
+            if (resolutionModeButton != null)
+                resolutionModeButton.onClick.AddListener(CycleResolutionMode);
 
             if (confirmButton != null)
                 confirmButton.onClick.AddListener(Submit);
@@ -81,6 +89,8 @@ namespace EchoProtocol.UI.MainMenu
 
             if (difficultyButton != null)
                 difficultyButton.onClick.RemoveListener(CycleDifficulty);
+            if (resolutionModeButton != null)
+                resolutionModeButton.onClick.RemoveListener(CycleResolutionMode);
 
             if (confirmButton != null)
                 confirmButton.onClick.RemoveListener(Submit);
@@ -115,6 +125,8 @@ namespace EchoProtocol.UI.MainMenu
 
             if (difficultyRow != null)
                 difficultyRow.SetActive(true);
+            if (resolutionModeRow != null)
+                resolutionModeRow.SetActive(true);
 
             SetConfirmLabel("CREATE ROOM");
             SetStatus(string.Empty);
@@ -133,6 +145,8 @@ namespace EchoProtocol.UI.MainMenu
 
             if (difficultyRow != null)
                 difficultyRow.SetActive(false);
+            if (resolutionModeRow != null)
+                resolutionModeRow.SetActive(false);
 
             SetConfirmLabel("JOIN ROOM");
             SetStatus(string.Empty);
@@ -188,6 +202,20 @@ namespace EchoProtocol.UI.MainMenu
                 difficultyValueText.text =
                     $"<  {_difficulty.ToString().ToUpperInvariant()}  >";
             }
+        }
+
+        private void CycleResolutionMode()
+        {
+            if (_busy || !_hostMode) return;
+            _resolutionMode = _resolutionMode == ScenarioResolutionMode.Fixed
+                ? ScenarioResolutionMode.Adaptive : ScenarioResolutionMode.Fixed;
+            RefreshResolutionModeText();
+        }
+
+        private void RefreshResolutionModeText()
+        {
+            if (resolutionModeValueText != null)
+                resolutionModeValueText.text = $"<  {_resolutionMode.ToString().ToUpperInvariant()}  >";
         }
 
         private async void Submit()
@@ -247,7 +275,8 @@ namespace EchoProtocol.UI.MainMenu
                         ? await bootstrap.CreateRoomAsync(
                             roomCode,
                             maxPlayers,
-                            _difficulty)
+                            _difficulty,
+                            _resolutionMode)
                         : await bootstrap.JoinRoomAsync(
                             roomCode);
             }

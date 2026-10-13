@@ -282,12 +282,14 @@ namespace EchoProtocol.Networking
                 var settings = ScenarioConfigAuthorityRuntime.EnsureExists().RuntimeSettings;
                 var needsSnapshot =
                     authority.RequestedScenarioResolutionMode ==
-                        ScenarioResolutionMode.Adaptive &&
-                    settings != null &&
-                    (settings.ExtendedPolicyShadowEnabled ||
-                     settings.ExtendedPolicyGameplayEnabled);
+                        ScenarioResolutionMode.Adaptive;
                 if (needsSnapshot)
                 {
+                    if (settings == null)
+                    {
+                        ReportError("AED pre-match rejected: AEDRuntimeSettings is missing.");
+                        return;
+                    }
                     if (authority.MatchId == Guid.Empty || !authority.IsHostBinding
                         || !BuildStateFromRunner().CanStartMatch
                         || authority.BoundPlayerCount != BuildStateFromRunner().CurrentPlayers)

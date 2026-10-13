@@ -606,7 +606,7 @@ namespace EchoProtocol.Networking.Authority
         private bool _runtimeNoiseTelemetryCapacityWarningLogged;
         private bool _runtimeNoiseTelemetryInactiveWarningLogged;
         [SerializeField] private bool _researchCaptureEnabled;
-        [SerializeField] private ScenarioResolutionMode requestedScenarioResolutionMode = ScenarioResolutionMode.Adaptive;
+        [SerializeField] private ScenarioResolutionMode requestedScenarioResolutionMode = ScenarioResolutionMode.Fixed;
         [SerializeField] private MatchDifficulty requestedDifficulty = MatchDifficulty.Normal;
         [SerializeField] private string experimentCondition;
         [SerializeField]
@@ -815,7 +815,14 @@ namespace EchoProtocol.Networking.Authority
                 return false;
             }
 
+            var runner = _bootstrap?.Runner;
+            var mode = runner != null && runner.SessionInfo.IsValid
+                ? ReadScenarioResolutionMode(runner) : requestedScenarioResolutionMode;
+            var difficulty = runner != null && runner.SessionInfo.IsValid
+                ? ReadMatchDifficulty(runner) : requestedDifficulty;
             ResetBinding();
+            RequestScenarioResolutionMode(mode);
+            RequestDifficulty(difficulty);
 
             return await PrepareHostAsync(
                 sessionName,
