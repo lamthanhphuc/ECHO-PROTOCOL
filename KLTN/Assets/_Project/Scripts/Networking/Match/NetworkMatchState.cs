@@ -375,6 +375,7 @@ namespace EchoProtocol.Networking
             string.Empty;
         private uint _lastPublishedScenarioConfigRevision;
         private Guid _lastPublishedScenarioConfigMatchId;
+        private uint _lastLoggedFusionScenarioConfigRevision;
         private bool _endingForTeamDowned;
         private string _serverGeneratedAuthCode;
         private readonly AEDv2BoundaryCoordinator _aedv2Boundary =
@@ -416,6 +417,7 @@ namespace EchoProtocol.Networking
         {
             EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             Instance = this;
+            _lastLoggedFusionScenarioConfigRevision = 0;
             NetworkPlayerLifeState.StateChanged += HandlePlayerLifeStateChanged;
             ResolveLegacyPresentation();
             if (Object.HasStateAuthority)
@@ -542,6 +544,7 @@ namespace EchoProtocol.Networking
             NetworkPlayerLifeState.StateChanged -= HandlePlayerLifeStateChanged;
             _lastPublishedScenarioConfigRevision = 0;
             _lastPublishedScenarioConfigMatchId = Guid.Empty;
+            _lastLoggedFusionScenarioConfigRevision = 0;
         }
 
         public override void FixedUpdateNetwork()
@@ -677,6 +680,8 @@ namespace EchoProtocol.Networking
             {
                 TryPublishReplicatedScenarioConfigToRegistry();
             }
+
+            TryLogFusionScenarioConfig();
 
             ApplyPresentation(
                 notifyListeners: false);
@@ -4302,9 +4307,31 @@ namespace EchoProtocol.Networking
 
                 if (result.ShouldApplyConfig)
                 {
-                    ApplyScenarioConfigAuthoritative(
-                        result.Decision.AppliedConfig,
-                        matchId);
+                    if (decisionPoint == ScenarioDecisionPoint.PreMatch &&
+                        mode == ScenarioResolutionMode.Adaptive &&
+                        result.CommitDisposition ==
+                            ScenarioResolutionCommitDisposition.NewDecision &&
+                        scenarioRuntime.TryGetStagedBackendPreMatch(
+                            matchId,
+                            out var backendDecision,
+                            out var backendConfig))
+                    {
+                        ApplyScenarioConfigAuthoritative(backendConfig, matchId);
+
+                        Debug.Log(
+                            $"[AED_P8][PREMATCH_HOST_COMMIT] " +
+                            $"match={matchId:D} " +
+                            $"config={backendDecision.config.scenarioConfigId} " +
+                            $"version={backendConfig.ScenarioConfigVersion} " +
+                            $"budget={ScenarioSupportItemBudget} " +
+                            $"revision={ScenarioConfigRevision}");
+                    }
+                    else
+                    {
+                        ApplyScenarioConfigAuthoritative(
+                            result.Decision.AppliedConfig,
+                            matchId);
+                    }
                 }
                 else if (result.IsPrecommitRejected
                          && decisionPoint
@@ -4335,25 +4362,6 @@ namespace EchoProtocol.Networking
                 result,
                 Object != null
                 && Object.HasStateAuthority);
-
-            if (decisionPoint == ScenarioDecisionPoint.PreMatch &&
-                mode == ScenarioResolutionMode.Adaptive &&
-                !result.IsPrecommitRejected &&
-                result.CommitDisposition ==
-                    ScenarioResolutionCommitDisposition.NewDecision &&
-                scenarioRuntime.TryGetStagedBackendPreMatch(
-                    matchId, out var backendDecision, out var backendConfig))
-            {
-                ApplyScenarioConfigAuthoritative(backendConfig, matchId);
-
-                Debug.Log(
-                    $"[AED_P8][PREMATCH_HOST_COMMIT] " +
-                    $"match={matchId:D} " +
-                    $"config={backendDecision.config.scenarioConfigId} " +
-                    $"version={backendConfig.ScenarioConfigVersion} " +
-                    $"budget={ScenarioSupportItemBudget} " +
-                    $"revision={ScenarioConfigRevision}");
-            }
 
             if (AEDv2Authority.TryGetApplied(matchId, out var v2Plan, out var v2Revision))
             {
@@ -4540,6 +4548,52 @@ namespace EchoProtocol.Networking
                     fallbackConfigId);
 
             return true;
+        }
+
+        private void TryLogFusionScenarioConfig()
+        {
+            if (Object == null ||
+                !Object.IsValid ||
+                !HasAppliedScenarioConfig ||
+                ScenarioConfigRevision == 0 ||
+                _lastLoggedFusionScenarioConfigRevision ==
+                    ScenarioConfigRevision)
+            {
+                return;
+            }
+
+            if (!TryBuildReplicatedScenarioConfig(out var config) ||
+                config == null)
+            {
+                return;
+            }
+
+            var role = Object.HasStateAuthority
+                ? "Host"
+                : "Client";
+
+            var matchId = "unknown";
+            var authority = MatchAuthorityRuntime.Instance;
+
+            if (authority != null &&
+                authority.TryGetMatchId(out var resolvedMatchId))
+            {
+                matchId = resolvedMatchId.ToString("D");
+            }
+
+            Debug.Log(
+                $"[AED_P8][FUSION_CONFIG] " +
+                $"role={role} " +
+                $"match={matchId} " +
+                $"object={Object.Id} " +
+                $"source={ScenarioConfigSourceValue} " +
+                $"budget={ScenarioSupportItemBudget} " +
+                $"version={config.ScenarioConfigVersion} " +
+                $"revision={ScenarioConfigRevision} " +
+                $"unityFingerprint={ScenarioConfigFingerprint.Compute(config)}");
+
+            _lastLoggedFusionScenarioConfigRevision =
+                ScenarioConfigRevision;
         }
 
         private bool TryPublishReplicatedScenarioConfigToRegistry()

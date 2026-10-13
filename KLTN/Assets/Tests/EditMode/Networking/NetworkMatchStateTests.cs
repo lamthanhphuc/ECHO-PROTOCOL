@@ -8,6 +8,98 @@ namespace EchoProtocol.Networking.Tests
     public sealed class NetworkMatchStateTests
     {
         [Test]
+        public void AEDBackendPreMatch_CommitsCandidateBeforeFinalization()
+        {
+            var source = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs");
+
+            int start = source.IndexOf(
+                "private void ResolveScenarioConfigAuthoritative(");
+
+            int end = source.IndexOf(
+                "private void ApplyScenarioConfigAuthoritative(",
+                start);
+
+            Assert.That(start, Is.GreaterThanOrEqualTo(0));
+            Assert.That(end, Is.GreaterThan(start));
+
+            var method = source.Substring(start, end - start);
+
+            int backendCommit = method.IndexOf(
+                "ApplyScenarioConfigAuthoritative(backendConfig, matchId)");
+
+            int finalize = method.IndexOf(
+                "scenarioRuntime.FinalizeResolution(");
+
+            Assert.That(backendCommit, Is.GreaterThanOrEqualTo(0));
+            Assert.That(finalize, Is.GreaterThan(backendCommit));
+
+            Assert.That(
+                method.IndexOf(
+                    "ApplyScenarioConfigAuthoritative(backendConfig, matchId)",
+                    backendCommit + 1),
+                Is.EqualTo(-1));
+
+            StringAssert.Contains(
+                "result.CommitDisposition ==",
+                method);
+
+            StringAssert.Contains(
+                "TryGetStagedBackendPreMatch(",
+                method);
+
+            StringAssert.Contains(
+                "TryApplyPreMatchFixedFallbackAuthoritative(",
+                method);
+        }
+
+        [Test]
+        public void AEDFusionConfig_DiagnosticRunsOncePerRevision()
+        {
+            var source = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs");
+
+            StringAssert.Contains(
+                "private void TryLogFusionScenarioConfig()",
+                source);
+
+            StringAssert.Contains(
+                "[AED_P8][FUSION_CONFIG]",
+                source);
+
+            StringAssert.Contains(
+                "_lastLoggedFusionScenarioConfigRevision ==",
+                source);
+
+            StringAssert.Contains(
+                "_lastLoggedFusionScenarioConfigRevision =\n" +
+                "                ScenarioConfigRevision;",
+                source.Replace("\r\n", "\n"));
+
+            int renderStart = source.IndexOf(
+                "public override void Render()");
+
+            int renderEnd = source.IndexOf(
+                "public void InitializeAuthoritative(",
+                renderStart);
+
+            Assert.That(renderStart, Is.GreaterThanOrEqualTo(0));
+            Assert.That(renderEnd, Is.GreaterThan(renderStart));
+
+            var render = source.Substring(
+                renderStart,
+                renderEnd - renderStart);
+
+            StringAssert.Contains(
+                "TryLogFusionScenarioConfig();",
+                render);
+
+            StringAssert.Contains(
+                "TryPublishReplicatedScenarioConfigToRegistry();",
+                render);
+        }
+
+        [Test]
         public void AEDBackendPreMatch_UsesHostCommitAndRealApplyReceipt()
         {
             var match = File.ReadAllText(
