@@ -223,7 +223,7 @@ namespace EchoProtocol.RelayA
                 TextAlignmentOptions.TopLeft, IdleLine);
             _board = new GameObject("CircuitBoard", typeof(RectTransform)).GetComponent<RectTransform>();
             _board.SetParent(_surface, false);
-            SetRect(_board, new Vector2(0.32f, 0.21f), new Vector2(0.955f, 0.74f));
+            SetRect(_board, new Vector2(0.18f, 0.21f), new Vector2(0.82f, 0.74f));
             _status = AddText(_surface, "Status", "Sẵn sàng kiểm tra",
                 new Vector2(0.045f, 0.135f), new Vector2(0.91f, 0.05f), 16,
                 TextAlignmentOptions.Left, LiveLine);

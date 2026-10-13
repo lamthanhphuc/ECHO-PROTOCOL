@@ -66,7 +66,7 @@ namespace EchoProtocol.RelayA
                 _breakerCounts = AddText(_breakerSurface, "Counts", "", new Vector2(0.15f, 0.19f),
                     new Vector2(0.70f, 0.05f), 19, TextAlignmentOptions.Center, Color.white);
                 _breakerRule = AddText(_breakerSurface, "Rule", "Đưa mọi ô về màu xanh.\nNhấn đổi ô hiện tại và 4 ô cạnh nó.",
-                    new Vector2(0.045f, 0.13f), new Vector2(0.91f, 0.055f), 16, TextAlignmentOptions.Left, IdleLine);
+                    new Vector2(0.045f, 0.12f), new Vector2(0.91f, 0.075f), 17, TextAlignmentOptions.Left, IdleLine);
                 _breakerReset = AddIndustrialButton(_breakerSurface, "ResetMatrix", "Đặt lại ma trận",
                     new Vector2(0.045f, 0.045f), new Vector2(0.20f, 0.075f), stabilizationButtonSprite);
                 _breakerClose = AddIndustrialButton(_breakerSurface, "Close", "CLOSE",

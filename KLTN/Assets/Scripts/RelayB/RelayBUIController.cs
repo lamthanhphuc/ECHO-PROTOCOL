@@ -203,6 +203,11 @@ namespace EchoProtocol.RelayB
 
             // 3. Sync Tab
             RefreshSyncTab(snapshot, readOnly, canOperate);
+            if(relayLabel!=null)relayLabel.color=new Color(0.9f,0.94f,0.93f);
+            if(stageLabel!=null)stageLabel.color=new Color(0.65f,0.77f,0.75f);
+            if(snapshot.ActiveTab==2 && !snapshot.IsSynchronized && snapshot.Status!=RelayBStatus.Synchronizing)
+                SetText(statusLabel,EchoProtocol.Settings.GameLanguage.Choose("Chỉnh sóng để đồng bộ","Align waves to synchronize"));
+
 
             // System Log
             if (systemLogText != null && snapshot.SystemLog != null && snapshot.SystemLog.Length > 0)
@@ -282,6 +287,8 @@ namespace EchoProtocol.RelayB
                 currentWaveformRenderer.SetNoise(snapshot.IsSynchronized ? 0.05f : 0.25f);
             }
 
+            StyleSignalSlider(frequencySlider);
+            StyleSignalSlider(phaseSlider);
             SetText(referenceSignalLabel, "Sóng tham chiếu");
             SetText(currentSignalLabel, "Sóng hiện tại");
             float frequencyTolerance = _controller != null && _controller.Config != null
@@ -290,8 +297,8 @@ namespace EchoProtocol.RelayB
                 ? _controller.Simulation.PhaseToleranceDegrees : 12f;
             bool frequencyAligned = snapshot.FrequencyErrorPercent <= frequencyTolerance;
             bool phaseAligned = snapshot.PhaseErrorDegrees <= phaseTolerance;
-            SetText(frequencyValueText, frequencyAligned ? "Tần số · Khớp" : "Tần số");
-            SetText(phaseValueText, phaseAligned ? "Pha · Khớp" : "Pha");
+            SetText(frequencyValueText, EchoProtocol.Settings.GameLanguage.Choose($"Tần số {snapshot.CurrentFrequency:0.0} Hz", $"Frequency {snapshot.CurrentFrequency:0.0} Hz") + (frequencyAligned ? EchoProtocol.Settings.GameLanguage.Choose(" · Khớp", " · Aligned") : ""));
+            SetText(phaseValueText, EchoProtocol.Settings.GameLanguage.Choose($"Pha {snapshot.CurrentPhase:0.0}°", $"Phase {snapshot.CurrentPhase:0.0}°") + (phaseAligned ? EchoProtocol.Settings.GameLanguage.Choose(" · Khớp", " · Aligned") : ""));
             if (frequencyValueText != null) { frequencyValueText.enableAutoSizing = true; frequencyValueText.fontSizeMin = 12f; frequencyValueText.fontSizeMax = 16f; frequencyValueText.fontSize = 16f; frequencyValueText.color = frequencyAligned ? safeColor : warningColor; }
             if (phaseValueText != null) { phaseValueText.enableAutoSizing = true; phaseValueText.fontSizeMin = 12f; phaseValueText.fontSizeMax = 16f; phaseValueText.fontSize = 16f; phaseValueText.color = phaseAligned ? safeColor : warningColor; }
 
@@ -487,12 +494,27 @@ namespace EchoProtocol.RelayB
             }
         }
 
+        private static void StyleSignalSlider(Slider slider)
+        {
+            if(slider==null)return;
+            var background=slider.transform.Find("Background")?.GetComponent<Image>();
+            if(background==null)background=slider.transform.Find("SignalTrack")?.GetComponent<Image>();
+            if(background==null) {
+                var track=new GameObject("SignalTrack",typeof(RectTransform),typeof(Image));
+                track.transform.SetParent(slider.transform,false);track.transform.SetAsFirstSibling();
+                var rect=track.GetComponent<RectTransform>();rect.anchorMin=new Vector2(0,0.5f);rect.anchorMax=new Vector2(1,0.5f);rect.sizeDelta=new Vector2(0,8);
+                background=track.GetComponent<Image>();background.raycastTarget=false;
+            }
+            background.color=new Color(0.22f,0.28f,0.3f);
+            if(slider.fillRect!=null && slider.fillRect.TryGetComponent<Image>(out var fill))fill.color=new Color(0.34f,0.67f,0.65f);
+            if(slider.handleRect!=null && slider.handleRect.TryGetComponent<Image>(out var handle))handle.color=new Color(0.86f,0.94f,0.92f);
+        }
         private static void SetText(TMP_Text text, string value)
         {
             if (text != null)
             {
                 text.gameObject.SetActive(true);
-                text.text = value;
+                text.text = EchoProtocol.Settings.GameLanguage.Translate(value);
             }
         }
 

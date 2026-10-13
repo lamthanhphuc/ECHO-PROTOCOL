@@ -124,6 +124,44 @@ namespace EchoProtocol.Settings
         }
 
         private const string Catalog = @"
+Mạng an ninh chưa hoạt động|EMERGENCY NETWORK OFFLINE
+Khôi phục Relay A và Relay B|RESTORE POWER RELAY A AND DATA RELAY B
+trước khi xác thực bảo mật|BEFORE INITIATING SECURITY AUTHENTICATION
+Đóng [ESC]|CLOSE [ESC]
+02 Giải mã|02 DECODE
+03 Đồng bộ|03 SYNC
+Phân tích tín hiệu|SIGNAL ANALYZER
+Lịch sử kiểm tra|TRANSMISSION LOG
+Chọn chữ số|SIGNAL BANK
+Xóa mã nhập|RESET INPUT
+Căn chỉnh sóng|CARRIER ALIGNMENT
+Relay A · Nguồn điện|POWER RELAY A
+02 · Ma trận cầu dao|02 / BREAKER MATRIX
+03 · Ổn định đầu ra|03 / STABILIZE OUTPUT
+Đang điều chỉnh|ACTIVE
+Đặt lại ma trận|RESET MATRIX
+Theo dõi hệ thống|SYSTEM MONITORING
+Điện áp|VOLTAGE
+Tần số|FREQUENCY
+Cân bằng tải|LOAD BALANCE
+Điều chỉnh đầu ra|MANUAL CONTROL
+Độ ổn định|STABILITY
+Công suất máy phát|Generator Output
+Bộ điều chỉnh tần số|Frequency Regulator
+Phân phối tải|Load Distribution
+Bắt đầu ổn định|START STABILIZATION
+Làm mát|COOLING
+An ninh|SECURITY
+Hỗ trợ sự sống|LIFE SUPPORT
+Lọc không khí|AIR FILTER
+Khu vực 01|ZONE 01
+Khu vực 02|ZONE 02
+Khu vực 03|ZONE 03
+Sửa Relay A|Stabilize Power Relay A
+Relay A · Hoạt động|Power Relay A - Online
+Đồng bộ Relay B|Synchronize Data Relay B
+Relay B · Hoạt động|Data Relay B - Online
+
 CÀI ĐẶT|SETTINGS
 CHUNG|GENERAL
 ĐỒ HỌA|GRAPHICS

@@ -400,6 +400,7 @@ namespace EchoProtocol.Visuals
 
         public void SetHighlightActive(bool active)
         {
+            if(Application.isPlaying && PlayerInteractionControlLock.HasModal)active=false;
             if (active && outlineMode != Outline.Mode.OutlineAll)
             {
                 active = IsWithinDistance(maxVisibleDistance);

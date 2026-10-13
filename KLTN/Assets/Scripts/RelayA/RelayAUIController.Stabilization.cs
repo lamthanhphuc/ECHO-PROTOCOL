@@ -128,7 +128,7 @@ namespace EchoProtocol.RelayA
                 _stabilizationHoldState = AddText(_stabilizationStabilityPanel, "HoldState", "",
                     new Vector2(0.06f, 0.14f), new Vector2(0.88f, 0.13f), 17, TextAlignmentOptions.Left, IdleLine);
                 _stabilizationRecovery = AddText(_stabilizationStabilityPanel, "Recovery", "",
-                    new Vector2(0.06f, 0.71f), new Vector2(0.88f, 0.08f), 14, TextAlignmentOptions.Left, LiveLine);
+                    new Vector2(0.06f, 0.71f), new Vector2(0.88f, 0.08f), 18, TextAlignmentOptions.Left, LiveLine);
                 _recoverySegments = new Image[3];
                 for (int i = 0; i < 3; i++)
                 {
@@ -278,6 +278,8 @@ namespace EchoProtocol.RelayA
             _stabilizationStatus.color = statusColor;
             _stabilizationProgressText.text = $"{state.StabilitySeconds:0.0} / {state.StabilityRequiredSeconds:0.0} s";
             _stabilizationProgressText.color = statusColor;
+            _stabilizationProgressText.text=EchoProtocol.Settings.GameLanguage.Choose($"Ổn định {state.StabilitySeconds:0.0} / {state.StabilityRequiredSeconds:0.0} giây",$"Stable {state.StabilitySeconds:0.0} / {state.StabilityRequiredSeconds:0.0} seconds");
+
             _stabilizationRecovery.text = config.RequireFaultRecovery
                 ? state.RecoveredFaults > 0 ? "Đã qua kiểm tra tải" : "Kiểm tra tải 0/1" : "";
             for (int i = 0; i < _recoverySegments.Length; i++)
