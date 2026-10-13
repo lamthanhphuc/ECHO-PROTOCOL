@@ -2180,6 +2180,11 @@ namespace EchoProtocol.Networking
                     seconds);
         }
 
+        private void ResetTeamToolRuntimeAuthoritative()
+        {
+            ResetTeamToolRuntimeAuthoritative(false);
+        }
+
         private void ResetTeamToolRuntimeAuthoritative(
             bool preserveCooldown = false)
         {
