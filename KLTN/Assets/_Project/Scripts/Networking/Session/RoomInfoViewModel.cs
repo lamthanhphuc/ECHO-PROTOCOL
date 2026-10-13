@@ -25,7 +25,9 @@ namespace EchoProtocol.Networking
         public bool IsReady;
         public int TeamId;
         public int CharacterId;
+        public int CharacterOutfitId;
         public int PetId;
+        public int PetSkinId;
         public int ToolId;
 
         public string OperatorName;
