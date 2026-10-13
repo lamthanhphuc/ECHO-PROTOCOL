@@ -65,22 +65,22 @@ namespace EchoProtocol.RelayA
                 _stabilizationSurface = AddIndustrialPanel(panelRoot.transform, "StabilizeOutput",
                     Vector2.zero, Vector2.one, stabilizationPanelSprite);
                 Transform root = _stabilizationSurface;
-                AddText(root, "Title", "POWER RELAY A", new Vector2(0.045f, 0.865f),
-                    new Vector2(0.62f, 0.06f), 30, TextAlignmentOptions.Left, Color.white);
-                AddText(root, "Stage", "03 / STABILIZE OUTPUT", new Vector2(0.045f, 0.815f),
+                AddText(root, "Title", "Relay A · Nguồn điện", new Vector2(0.045f, 0.865f),
+                    new Vector2(0.62f, 0.06f), 24, TextAlignmentOptions.Left, Color.white);
+                AddText(root, "Stage", "03 · Ổn định đầu ra", new Vector2(0.045f, 0.815f),
                     new Vector2(0.62f, 0.04f), 17, TextAlignmentOptions.Left, LiveLine);
-                _stabilizationStatus = AddText(root, "Status", "OFFLINE", new Vector2(0.72f, 0.845f),
+                _stabilizationStatus = AddText(root, "Status", "Chưa hoạt động", new Vector2(0.72f, 0.845f),
                     new Vector2(0.23f, 0.065f), 22, TextAlignmentOptions.Right, LiveLine);
 
                 var monitoring = AddIndustrialPanel(root, "SystemMonitoring", new Vector2(0.045f, 0.42f),
                     new Vector2(0.49f, 0.80f), stabilizationFrameSprite);
-                AddText(monitoring, "Title", "SYSTEM MONITORING", new Vector2(0.045f, 0.875f),
+                AddText(monitoring, "Title", "Theo dõi hệ thống", new Vector2(0.045f, 0.875f),
                     new Vector2(0.91f, 0.095f), 17, TextAlignmentOptions.Left, Color.white);
                 _stabilizationReadings = new TMP_Text[3];
                 _stabilizationSafeLabels = new TMP_Text[3];
                 _stabilizationGauges = new Image[3];
                 _stabilizationSafeBands = new Image[3];
-                string[] labels = { "VOLTAGE", "FREQUENCY", "LOAD BALANCE" };
+                string[] labels = { "VOLTAGE", "Tần số", "Cân bằng tải" };
                 for (int i = 0; i < 3; i++)
                 {
                     var row = new GameObject(labels[i], typeof(RectTransform)).GetComponent<RectTransform>();
@@ -100,11 +100,11 @@ namespace EchoProtocol.RelayA
 
                 var manual = AddIndustrialPanel(root, "ManualControl", new Vector2(0.045f, 0.16f),
                     new Vector2(0.49f, 0.395f), stabilizationFrameSprite);
-                AddText(manual, "Title", "MANUAL CONTROL", new Vector2(0.045f, 0.80f),
+                AddText(manual, "Title", "Điều chỉnh", new Vector2(0.045f, 0.80f),
                     new Vector2(0.91f, 0.15f), 17, TextAlignmentOptions.Left, Color.white);
                 _stabilizationSliders = new Slider[3];
                 _stabilizationControlValues = new TMP_Text[3];
-                string[] names = { "Generator Output", "Frequency Regulator", "Load Distribution" };
+                string[] names = { "Đầu ra máy phát", "Điều chỉnh tần số", "Phân phối tải" };
                 for (int i = 0; i < 3; i++)
                 {
                     float y = 0.55f - i * 0.225f;
@@ -147,9 +147,9 @@ namespace EchoProtocol.RelayA
                     new Vector2(0.23f, 0.14f), new Vector2(0.71f, 0.71f), 19, TextAlignmentOptions.TopLeft, WarningYellow);
                 _stabilizationWarningPanel.gameObject.SetActive(false);
 
-                _stabilizationStart = AddIndustrialButton(root, "StartStabilization", "START STABILIZATION",
+                _stabilizationStart = AddIndustrialButton(root, "StartStabilization", "Bắt đầu ổn định",
                     new Vector2(0.045f, 0.045f), new Vector2(0.32f, 0.075f), stabilizationButtonSprite);
-                _stabilizationStop = AddIndustrialButton(root, "EmergencyStop", "EMERGENCY STOP",
+                _stabilizationStop = AddIndustrialButton(root, "EmergencyStop", "Dừng khẩn cấp",
                     new Vector2(0.395f, 0.045f), new Vector2(0.30f, 0.075f), stabilizationDangerSprite);
                 _stabilizationClose = AddIndustrialButton(root, "Close", "CLOSE",
                     new Vector2(0.805f, 0.045f), new Vector2(0.15f, 0.075f), stabilizationButtonSprite);
@@ -212,13 +212,7 @@ namespace EchoProtocol.RelayA
                     : primary ? new Color(0.07f, 0.23f, 0.25f, 1f) : new Color(0.085f, 0.13f, 0.15f, 1f));
             body.transform.SetAsFirstSibling();
             button.targetGraphic = body;
-            var colors = button.colors;
-            colors.highlightedColor = new Color(1.25f, 1.35f, 1.4f, 1f);
-            colors.selectedColor = colors.highlightedColor;
-            colors.pressedColor = new Color(0.65f, 0.8f, 0.85f, 1f);
-            colors.disabledColor = new Color(0.35f, 0.38f, 0.4f, 1f);
-            colors.fadeDuration = 0.08f;
-            button.colors = colors;
+            EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayControl(button);
             var buttonLabel = button.GetComponentInChildren<TMP_Text>();
             if (buttonLabel != null) { buttonLabel.fontSize = 16f; buttonLabel.fontSizeMax = 16f; }
             return button;
@@ -264,7 +258,7 @@ namespace EchoProtocol.RelayA
                 _stabilizationControlValues[i].text = $"{controls[i]:0}%";
                 _stabilizationReadings[i].text = $"{readings[i]:0.0}{units[i]}";
                 _stabilizationReadings[i].color = color;
-            _stabilizationSafeLabels[i].text = $"{(isSafe ? "SAFE" : readings[i] < safe[i].x ? "RAISE" : "LOWER")} {safe[i].x:0.#}-{safe[i].y:0.#}{units[i]}";
+            _stabilizationSafeLabels[i].text = $"{(isSafe ? "An toàn" : readings[i] < safe[i].x ? "Tăng" : "Giảm")} {safe[i].x:0.#}-{safe[i].y:0.#}{units[i]}";
                 float padding = Mathf.Max(1f, (danger[i].y - danger[i].x) * 0.2f);
                 float min = danger[i].x - padding;
                 float span = Mathf.Max(0.01f, danger[i].y - danger[i].x + padding * 2f);
@@ -279,13 +273,13 @@ namespace EchoProtocol.RelayA
             Color statusColor = _controller.IsOnline || state.IsStable && state.IsRunning ? Green
                 : state.IsDangerous || state.ActiveFault != RelayAFaultType.None ? Red
                 : state.IsRunning || state.WarningFault != RelayAFaultType.None ? WarningYellow : LiveLine;
-            _stabilizationStatus.text = _controller.IsOnline ? "ONLINE" : state.ActiveFault != RelayAFaultType.None || state.IsDangerous
-                ? "FAULT" : state.IsRunning ? "STABILIZING" : "OFFLINE";
+            _stabilizationStatus.text = _controller.IsOnline ? "Hoạt động" : state.ActiveFault != RelayAFaultType.None || state.IsDangerous
+                ? "Lỗi" : state.IsRunning ? "Đang ổn định" : "Chưa hoạt động";
             _stabilizationStatus.color = statusColor;
             _stabilizationProgressText.text = $"{state.StabilitySeconds:0.0} / {state.StabilityRequiredSeconds:0.0} s";
             _stabilizationProgressText.color = statusColor;
             _stabilizationRecovery.text = config.RequireFaultRecovery
-                ? state.RecoveredFaults > 0 ? "LOAD TEST PASSED - KEEP OUTPUT SAFE" : "LOAD TEST 0 / 1 - CORRECT THE FAULT" : "";
+                ? state.RecoveredFaults > 0 ? "Đã qua kiểm tra tải" : "Kiểm tra tải 0/1" : "";
             for (int i = 0; i < _recoverySegments.Length; i++)
             {
                 _recoverySegments[i].gameObject.SetActive(config.RequireFaultRecovery && i == 0);
@@ -293,11 +287,12 @@ namespace EchoProtocol.RelayA
                     : i == state.RecoveredFaults && state.IsRunning ? WarningYellow : TileBack;
             }
             _stabilizationProgress.rectTransform.anchorMax = new Vector2(state.Stability01, 1f);
-            _stabilizationHoldState.text = _controller.IsOnline ? "STABLE" : !state.IsRunning ? "PAUSED"
+            _stabilizationHoldState.text = _controller.IsOnline ? "Ổn định" : !state.IsRunning ? "Tạm dừng"
                 : config.RequireFaultRecovery && state.RecoveredFaults < 1
-                    ? state.ActiveFault != RelayAFaultType.None ? "COMPENSATE FAULT" : "LOAD TEST PENDING"
-                    : state.IsStable ? "STABLE" : "OUTPUT UNSTABLE";
+                    ? state.ActiveFault != RelayAFaultType.None ? "Bù lỗi" : "Chờ kiểm tra tải"
+                    : state.IsStable ? "Ổn định" : "Đầu ra chưa ổn định";
             _stabilizationHoldState.color = statusColor;
+            _stabilizationHoldState.gameObject.SetActive(false);
             bool active = state.ActiveFault != RelayAFaultType.None || state.IsDangerous;
             Color alertColor = active ? Red : WarningYellow;
             _stabilizationWarningPanel.GetComponent<Image>().color = active
@@ -307,11 +302,11 @@ namespace EchoProtocol.RelayA
             _stabilizationWarningText.text = state.ActiveFault != RelayAFaultType.None
                 ? config.RequireFaultRecovery
                     ? state.IsStable
-                        ? $"{FaultName(state.ActiveFault)}\nHOLD SAFE OUTPUT\n{state.FaultActiveRemaining:0.0} s HOLD LEFT"
-                        : $"{FaultName(state.ActiveFault)}\n{FaultHint(state.ActiveFault)}\nSAFE HOLD {config.FaultRecoveryHoldSeconds:0.0} s"
-                    : $"FAULT ACTIVE\n{FaultName(state.ActiveFault)}\n{state.FaultActiveRemaining:0.0} s"
+                        ? $"{FaultName(state.ActiveFault)}\nCòn {state.FaultActiveRemaining:0.0} giây"
+                        : $"{FaultName(state.ActiveFault)}\n{FaultHint(state.ActiveFault)}\nGiữ an toàn {config.FaultRecoveryHoldSeconds:0.0} s"
+                    : $"Lỗi đang tác động\n{FaultName(state.ActiveFault)}\n{state.FaultActiveRemaining:0.0} s"
                 : state.WarningFault != RelayAFaultType.None
-                    ? $"WARNING\n{FaultName(state.WarningFault)}\nFAULT IN {state.FaultWarningRemaining:0.0} s" : "OVERLOAD";
+                    ? $"Cảnh báo\n{FaultName(state.WarningFault)}\nLỗi xuất hiện sau {state.FaultWarningRemaining:0.0} s" : "Quá tải";
             _stabilizationStart.interactable = !state.IsRunning && !_controller.IsOnline;
             _stabilizationStop.gameObject.SetActive(state.IsRunning && !_controller.IsOnline);
             _stabilizationStop.interactable = state.IsRunning && !_controller.IsOnline;
@@ -331,11 +326,11 @@ namespace EchoProtocol.RelayA
         }
 
         private static string FaultName(RelayAFaultType fault) => fault == RelayAFaultType.Overvoltage
-            ? "OVERVOLTAGE" : fault == RelayAFaultType.FrequencyDesynchronization ? "FREQUENCY DESYNC" : "LOAD IMBALANCE";
+            ? "Quá áp" : fault == RelayAFaultType.FrequencyDesynchronization ? "Lệch tần số" : "Mất cân bằng tải";
 
         private static string FaultHint(RelayAFaultType fault) => fault == RelayAFaultType.Overvoltage
-            ? "LOWER GENERATOR; CHECK Hz / LOAD" : fault == RelayAFaultType.FrequencyDesynchronization
-            ? "LOWER FREQUENCY; CHECK V / LOAD" : "LOWER LOAD; CHECK V / Hz";
+            ? "Giảm máy phát; kiểm tra tần số và tải" : fault == RelayAFaultType.FrequencyDesynchronization
+            ? "Giảm tần số; kiểm tra điện áp và tải" : "Giảm tải; kiểm tra điện áp và tần số";
 
         private void SendStabilizationControls()
         {

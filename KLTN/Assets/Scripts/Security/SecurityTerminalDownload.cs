@@ -61,6 +61,8 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
 
     private void Awake()
     {
+            EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
+            EchoProtocol.Audio.GameAudioRuntime.RegisterEnvironmentOwner(this);
         if (GetComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>() == null)
         {
             gameObject.AddComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>();
@@ -160,7 +162,7 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
             }
 
             string prompt = string.IsNullOrWhiteSpace(startPrompt) || startPrompt == "Download Access Code" || startPrompt == "Giữ để Tải Dữ Liệu"
-                ? "Giữ [E] để Bắt đầu Security Hold"
+                ? "Giữ [E] để Bắt đầu xác thực bảo mật"
                 : startPrompt;
             return prompt;
         }

@@ -69,6 +69,7 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             if (Object.HasStateAuthority)
             {
                 InitializeAuthoritativePose(transform.position, transform.rotation);

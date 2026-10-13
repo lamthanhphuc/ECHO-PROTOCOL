@@ -200,6 +200,7 @@ namespace EchoProtocol.Networking
 
         private void Awake()
         {
+            EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             _controller = GetComponent<NetworkCharacterController>();
             _unityCharacterController = GetComponent<CharacterController>();
             _offlineCurrentStamina = _maxStamina;

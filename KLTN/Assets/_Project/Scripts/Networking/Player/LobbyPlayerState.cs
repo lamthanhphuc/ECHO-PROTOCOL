@@ -1,3 +1,4 @@
+using EchoProtocol.Pets;
 using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
@@ -39,7 +40,7 @@ namespace EchoProtocol.Networking
         }
     }
 
-    public enum LobbySelectionKind { Team = 1, Tool = 2, Character = 3 }
+    public enum LobbySelectionKind { Team = 1, Tool = 2, Character = 3, Pet = 4, PetSkin = 5, CharacterOutfit = 6 }
 
     public enum LobbySelectionError
     {
@@ -101,6 +102,8 @@ namespace EchoProtocol.Networking
 
         [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
         public int CharacterId { get; private set; }
+        [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
+        public int CharacterOutfitId { get; private set; }
 
         [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
         public int ToolId { get; private set; }
@@ -280,8 +283,30 @@ namespace EchoProtocol.Networking
                 ? MultiUseTeamToolUses
                 : 0;
 
+        [Networked] public Vector2 LobbyLookAngles { get; private set; }
+        public void RequestLobbyLook(Vector2 angles)
+        {
+            if(Object==null || !Object.IsValid || !Object.HasInputAuthority || IsGameplayPlayer)return;
+            if(Object.HasStateAuthority) ApplyLobbyLook(angles);
+            else RpcLobbyLook(angles);
+        }
+        private void ApplyLobbyLook(Vector2 angles)
+        {
+            if(IsGameplayPlayer || float.IsNaN(angles.x) || float.IsNaN(angles.y)
+                || float.IsInfinity(angles.x) || float.IsInfinity(angles.y))return;
+            LobbyLookAngles=new Vector2(Mathf.Clamp(angles.x,-28f,28f),Mathf.Clamp(angles.y,-16f,16f));
+        }
+        [Rpc(RpcSources.InputAuthority,RpcTargets.StateAuthority)]
+        private void RpcLobbyLook(Vector2 angles,RpcInfo info=default)
+        {
+            if(!TryResolveOwnedRequester(info.Source,out _))return;
+            ApplyLobbyLook(angles);
+        }
+
         public override void Spawned()
         {
+            _pet = GetComponent<PetCompanionController>();
+            if (_pet == null) _pet = gameObject.AddComponent<PetCompanionController>();
             AnyStateChanged?.Invoke();
             if (Object.HasInputAuthority)
             {
@@ -310,6 +335,7 @@ namespace EchoProtocol.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            if (_pet != null) Destroy(_pet);
             AnyStateChanged?.Invoke();
         }
 
@@ -347,56 +373,285 @@ namespace EchoProtocol.Networking
             return result.ToString().Trim();
         }
 
-        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+[Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestOperatorName(string name, RpcInfo info = default)
         {
             if (!TryResolveOwnedRequester(info.Source, out _)) return;
-            var normalized = NormalizeOperatorName(name);
+
+            var normalized =
+                NormalizeOperatorName(name);
+
             if (normalized.Length == 0) return;
-            OperatorName = normalized;
+
+            OperatorName =
+                normalized;
+
             AnyStateChanged?.Invoke();
         }
 
-        public void SubmitJoinProof(string proof, int actorNumber)
+        public void SubmitJoinProof(
+            string proof,
+            int actorNumber)
         {
-            if (!Object.HasInputAuthority || string.IsNullOrWhiteSpace(proof)) return;
-            RpcSubmitJoinProof(proof, actorNumber);
+            if (!Object.HasInputAuthority
+                || string.IsNullOrWhiteSpace(proof))
+            {
+                return;
+            }
+
+            RpcSubmitJoinProof(
+                proof,
+                actorNumber);
         }
 
-        public void ApplyVerifiedBackendIdentity(string userId)
+        public void ApplyVerifiedBackendIdentity(
+            string userId)
         {
-            if (!Object.HasStateAuthority || !Guid.TryParse(userId, out _)) return;
-            BackendUserId = userId;
+            if (!Object.HasStateAuthority
+                || !Guid.TryParse(userId, out _))
+            {
+                return;
+            }
+
+            BackendUserId =
+                userId;
+
             AnyStateChanged?.Invoke();
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-        private void RpcSubmitJoinProof(string proof, int actorNumber, RpcInfo info = default)
+        private void RpcSubmitJoinProof(
+            string proof,
+            int actorNumber,
+            RpcInfo info = default)
         {
-            if (!TryResolveOwnedRequester(info.Source, out var requester)) return;
-            var actualActor = Runner.GetPlayerActorId(requester) ?? requester.PlayerId;
-            if (actualActor != actorNumber)
+            if (!TryResolveOwnedRequester(
+                    info.Source,
+                    out var requester))
             {
-                Debug.LogWarning($"[LobbyPlayerState] Join proof actor mismatch for {requester}.");
                 return;
             }
 
-            MatchAuthorityRuntime.EnsureExists(NetworkBootstrap.Instance)
-                .BindPlayerFromProof(this, actorNumber, proof);
+            var actualActor =
+                Runner.GetPlayerActorId(requester)
+                ?? requester.PlayerId;
+
+            if (actualActor != actorNumber)
+            {
+                Debug.LogWarning(
+                    $"[LobbyPlayerState] Join proof actor mismatch for {requester}.");
+
+                return;
+            }
+
+            MatchAuthorityRuntime
+                .EnsureExists(NetworkBootstrap.Instance)
+                .BindPlayerFromProof(
+                    this,
+                    actorNumber,
+                    proof);
         }
 
         public bool RequestTeam(int teamId)
         {
-            if (!CanSendSelectionRequest(LobbySelectionKind.Team, teamId)) return false;
+            if (!CanSendSelectionRequest(
+                    LobbySelectionKind.Team,
+                    teamId))
+            {
+                return false;
+            }
+
             RpcRequestTeam(teamId);
             return true;
         }
 
         public bool RequestTool(int toolId)
         {
-            if (!CanSendSelectionRequest(LobbySelectionKind.Tool, toolId)) return false;
+            if (!CanSendSelectionRequest(
+                    LobbySelectionKind.Tool,
+                    toolId))
+            {
+                return false;
+            }
+
             RpcRequestTool(toolId);
             return true;
+        }
+
+        public bool RequestPet(int petId)
+        {
+            if (!CanSendSelectionRequest(
+                    LobbySelectionKind.Pet,
+                    petId))
+            {
+                return false;
+            }
+
+            RpcRequestPet(petId);
+            return true;
+        }
+
+        [Rpc(
+            RpcSources.InputAuthority,
+            RpcTargets.StateAuthority,
+            HostMode = RpcHostMode.SourceIsHostPlayer)]
+        private void RpcRequestPet(
+            int petId,
+            RpcInfo info = default)
+        {
+            if (!TryResolveRequester(
+                    info.Source,
+                    out var requester))
+            {
+                return;
+            }
+
+            var error =
+                ValidateOwnedRequest(requester);
+
+            if (error == LobbySelectionError.None
+                && (IsReady || IsGameplayPlayer))
+            {
+                error =
+                    LobbySelectionError.SelectionLockedWhileReady;
+            }
+
+            if (error == LobbySelectionError.None
+                && (petId < 0 || petId > 4))
+            {
+                error =
+                    LobbySelectionError.InvalidSelection;
+            }
+
+            if (error == LobbySelectionError.None)
+            {
+                if (PetId != petId)
+                {
+                    PetSkinId = 0;
+                }
+
+                PetId =
+                    petId;
+
+                if (PetId == 0)
+                {
+                    PetSkinId = 0;
+                }
+
+                AnyStateChanged?.Invoke();
+            }
+
+            SendSelectionResult(
+                requester,
+                LobbySelectionKind.Pet,
+                petId,
+                error);
+        }
+
+        public bool RequestPetSkin(int skinId)
+        {
+            if (!CanSendSelectionRequest(
+                    LobbySelectionKind.PetSkin,
+                    skinId))
+            {
+                return false;
+            }
+
+            RpcRequestPetSkin(skinId);
+            return true;
+        }
+
+        [Rpc(
+            RpcSources.InputAuthority,
+            RpcTargets.StateAuthority,
+            HostMode = RpcHostMode.SourceIsHostPlayer)]
+        private void RpcRequestPetSkin(
+            int skinId,
+            RpcInfo info = default)
+        {
+            if (!TryResolveRequester(
+                    info.Source,
+                    out var requester))
+            {
+                return;
+            }
+
+            var error =
+                ValidateOwnedRequest(requester);
+
+            if (error == LobbySelectionError.None
+                && (IsReady || IsGameplayPlayer))
+            {
+                error =
+                    LobbySelectionError.SelectionLockedWhileReady;
+            }
+
+            if (error == LobbySelectionError.None
+                && PetId <= 0)
+            {
+                error =
+                    LobbySelectionError.InvalidSelection;
+            }
+
+            if (error == LobbySelectionError.None
+                && (skinId < 0
+                    || skinId >= PetSkinLibrary.SkinCount))
+            {
+                error =
+                    LobbySelectionError.InvalidSelection;
+            }
+
+            if (error == LobbySelectionError.None)
+            {
+                PetSkinId =
+                    skinId;
+
+                AnyStateChanged?.Invoke();
+            }
+
+            SendSelectionResult(
+                requester,
+                LobbySelectionKind.PetSkin,
+                skinId,
+                error);
+        }
+
+        [Networked, OnChangedRender(nameof(HandleSelectionChanged))] public int PetId { get; private set; }
+        [Networked, OnChangedRender(nameof(HandleSelectionChanged))] public int PetSkinId { get; private set; }
+        [Networked] public Vector3 PetPosition { get; private set; }
+        [Networked] public Quaternion PetRotation { get; private set; }
+        [Networked] public PetMotion PetMotion { get; private set; }
+        [Networked] public float PetAnimationStartTime { get; private set; }
+        public bool GetPetRenderPose(out Vector3 position, out Quaternion rotation, out PetMotion motion, out float startTime, out float renderTime)
+        {
+            position=PetPosition; rotation=PetRotation; motion=PetMotion; startTime=PetAnimationStartTime;
+            // Snapshot endpoints can remain unchanged for stationary lobby pets.
+            // Fusion's render clock keeps advancing between network updates.
+            renderTime=Object.HasStateAuthority ? Runner.LocalRenderTime : Runner.RemoteRenderTime;
+            if (!TryGetSnapshotsBuffers(out var from, out var to, out var alpha)) return false;
+            var ids=GetPropertyReader<int>(nameof(PetId));
+            if(ids.Read(from)!=PetId || ids.Read(to)!=PetId) return false;
+            var positions=GetPropertyReader<Vector3>(nameof(PetPosition));
+            var rotations=GetPropertyReader<Quaternion>(nameof(PetRotation));
+            var motions=GetPropertyReader<PetMotion>(nameof(PetMotion));
+            var starts=GetPropertyReader<float>(nameof(PetAnimationStartTime));
+            var first=positions.Read(from); var last=positions.Read(to);
+            bool teleport=Vector3.Distance(first,last)>5f;
+            position=teleport ? last : Vector3.Lerp(first,last,alpha);
+            rotation=Quaternion.Slerp(rotations.Read(from),rotations.Read(to),alpha);
+            motion=motions.Read(teleport ? to : from); startTime=starts.Read(teleport ? to : from);
+            return true;
+        }
+        private PetCompanionController _pet;
+        public void SetPetPose(Vector3 position, Quaternion rotation, PetMotion motion)
+        {
+            if (Object == null || !Object.HasStateAuthority) return;
+            if (PetMotion != motion) PetAnimationStartTime = (float)Runner.SimulationTime;
+            PetPosition = position; PetRotation = rotation; PetMotion = motion;
+        }
+        public override void FixedUpdateNetwork()
+        {
+            if (Object.HasStateAuthority && _pet != null) _pet.TickAuthority(Runner.DeltaTime);
         }
 
         public bool RequestCharacter(int characterId)
@@ -409,20 +664,111 @@ namespace EchoProtocol.Networking
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcRequestCharacter(int characterId, RpcInfo info = default)
         {
-            if (!TryResolveRequester(info.Source, out var requester)) return;
-            var error = ValidateOwnedRequest(requester);
-            if (error == LobbySelectionError.None && (IsReady || IsGameplayPlayer))
-                error = LobbySelectionError.SelectionLockedWhileReady;
-            if (error == LobbySelectionError.None && (characterId < 0 || characterId > 1))
-                error = LobbySelectionError.InvalidSelection;
+            if (!TryResolveRequester(info.Source, out var requester))
+                return;
+
+            var error =
+                ValidateOwnedRequest(requester);
+
+            if (error == LobbySelectionError.None
+                && (IsReady || IsGameplayPlayer))
+            {
+                error =
+                    LobbySelectionError.SelectionLockedWhileReady;
+            }
+
+            if (error == LobbySelectionError.None
+                && (characterId < 0 || characterId > 1))
+            {
+                error =
+                    LobbySelectionError.InvalidSelection;
+            }
+
             if (error == LobbySelectionError.None)
             {
-                CharacterId = characterId;
+                if (CharacterId != characterId)
+                    CharacterOutfitId = 0;
+
+                CharacterId =
+                    characterId;
+
                 AnyStateChanged?.Invoke();
             }
-            SendSelectionResult(requester, LobbySelectionKind.Character, characterId, error);
+
+            SendSelectionResult(
+                requester,
+                LobbySelectionKind.Character,
+                characterId,
+                error);
         }
 
+
+        public bool RequestCharacterOutfit(int outfitId)
+        {
+            if (!CanSendSelectionRequest(
+                    LobbySelectionKind.CharacterOutfit,
+                    outfitId))
+            {
+                return false;
+            }
+
+            RpcRequestCharacterOutfit(outfitId);
+            return true;
+        }
+
+        [Rpc(
+            RpcSources.InputAuthority,
+            RpcTargets.StateAuthority,
+            HostMode = RpcHostMode.SourceIsHostPlayer)]
+        private void RpcRequestCharacterOutfit(
+            int outfitId,
+            RpcInfo info = default)
+        {
+            if (!TryResolveRequester(
+                    info.Source,
+                    out var requester))
+            {
+                return;
+            }
+
+            var error =
+                ValidateOwnedRequest(requester);
+
+            if (error == LobbySelectionError.None
+                && (IsReady || IsGameplayPlayer))
+            {
+                error =
+                    LobbySelectionError.SelectionLockedWhileReady;
+            }
+
+            if (error == LobbySelectionError.None
+                && (CharacterId < 0 || CharacterId > 1))
+            {
+                error =
+                    LobbySelectionError.InvalidSelection;
+            }
+
+            if (error == LobbySelectionError.None
+                && (outfitId < 0 || outfitId > 3))
+            {
+                error =
+                    LobbySelectionError.InvalidSelection;
+            }
+
+            if (error == LobbySelectionError.None)
+            {
+                CharacterOutfitId =
+                    outfitId;
+
+                AnyStateChanged?.Invoke();
+            }
+
+            SendSelectionResult(
+                requester,
+                LobbySelectionKind.CharacterOutfit,
+                outfitId,
+                error);
+        }
         private bool CanSendSelectionRequest(LobbySelectionKind kind, int requestedId)
         {
             if (Object.HasInputAuthority) return true;

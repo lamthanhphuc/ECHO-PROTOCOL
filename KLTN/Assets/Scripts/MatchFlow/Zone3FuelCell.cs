@@ -12,7 +12,12 @@ namespace EchoProtocol.MatchFlow
     {
         private static readonly HashSet<Zone3FuelCell> ActiveCells = new HashSet<Zone3FuelCell>();
         private void OnEnable() => ActiveCells.Add(this);
-        private void OnDisable() => ActiveCells.Remove(this);
+        private void OnDisable()
+        {
+            ActiveCells.Remove(this);
+            if (_renderers != null)
+                foreach (var renderer in _renderers) HeldVisualShadowOverride.SetActive(renderer, false);
+        }
         [SerializeField] private Vector3 carryLocalOffset = new Vector3(0.25f, 1.15f, 0.55f);
         [Networked] public NetworkBool Selected { get; private set; }
         [Networked] public NetworkBool Consumed { get; private set; }
@@ -34,7 +39,7 @@ namespace EchoProtocol.MatchFlow
             }
         }
         public bool IsCarried => Online ? Holder.IsRealPlayer : _offlineCarrier != null;
-        public string InteractionPrompt => "E - PICK UP CONVOY FUEL CELL";
+        public string InteractionPrompt => EchoProtocol.Settings.GameLanguage.Choose("Nhặt pin nhiên liệu", "Pick up fuel cell");
 
         private Vector3 _originalVisualScale;
         private void Awake()
@@ -178,7 +183,12 @@ namespace EchoProtocol.MatchFlow
         private void ApplyVisuals()
         {
             if (_renderers == null) return;
-            foreach (var renderer in _renderers) if (renderer != null) renderer.enabled = IsAvailable;
+            foreach (var renderer in _renderers)
+            {
+                if (renderer == null) continue;
+                renderer.enabled = IsAvailable;
+                HeldVisualShadowOverride.SetActive(renderer, IsCarried && IsAvailable);
+            }
             if (_collider != null) _collider.enabled = IsAvailable && !IsCarried;
             var player = Carrier;
             transform.localScale = _originalVisualScale * (IsCarried && player != null ? player.GetComponent<PlayerCharacterPresenter>()?.HeldItemScale ?? 1f : 1f);

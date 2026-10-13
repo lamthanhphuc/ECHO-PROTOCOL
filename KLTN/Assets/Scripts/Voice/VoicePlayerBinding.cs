@@ -12,7 +12,6 @@ namespace EchoProtocol.Voice
         private AudioSource _source;
         private Speaker _speaker;
         private NetworkObject _player;
-        private bool _bound;
         private float _deadline;
         public string Key => _key;
         public bool IsSpeaking => _speaker != null && _speaker.IsPlaying && !_source.mute;
@@ -30,11 +29,11 @@ namespace EchoProtocol.Voice
             if (player == null)
             {
                 _source.mute = true;
-                if (_bound || Time.unscaledTime > _deadline) Destroy(gameObject);
+                if (Time.unscaledTime > _deadline) Destroy(gameObject);
                 return;
             }
             _player = player;
-            _bound = true;
+            _deadline = Time.unscaledTime + 10;
             transform.position = _player.transform.position + Vector3.up * 1.6f;
             bool isLobby = SceneManager.GetActiveScene().name == "Lobby";
             _source.spatialBlend = isLobby ? 0f : 1f;

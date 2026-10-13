@@ -73,6 +73,9 @@ namespace EchoProtocol.UI.MainMenu
 
     private void OnEnable()
     {
+      if (optionsButton == null)
+        foreach (var button in FindObjectsByType<Button>(FindObjectsInactive.Include))
+          if (button.name == "OptionsButton" && button.gameObject.scene == gameObject.scene) { optionsButton = button; break; }
       if (playButton != null)
       {
         playButton.onClick.AddListener(OnClickPlay);
@@ -232,7 +235,8 @@ namespace EchoProtocol.UI.MainMenu
 
     public void OnClickOptions()
     {
-      Debug.Log("[MainMenu] OPTIONS selected. Settings UI will be connected later.");
+      EchoProtocol.Voice.VoiceManager.EnsureExists();
+      EchoProtocol.Voice.VoiceManager.Instance.GetComponent<EchoProtocol.Voice.VoiceSettingsPanel>().OpenFromMainMenu();
     }
     public void OnClickLogout()
     {
@@ -319,7 +323,7 @@ namespace EchoProtocol.UI.MainMenu
 
       if (walletText != null)
       {
-        walletText.text = $"{amount}\nECHO CREDITS";
+        walletText.text = $"{amount}\nEcho Credits";
       }
 
       if (coinAmountText != null)
@@ -330,7 +334,7 @@ namespace EchoProtocol.UI.MainMenu
       if (topUpBalanceText != null)
       {
         topUpBalanceText.text =
-          $"CURRENT BALANCE: {amount} COINS";
+          EchoProtocol.Settings.GameLanguage.Choose($"Số dư: {amount} Echo Credits", $"Balance: {amount} Echo Credits");
       }
     }
 
@@ -417,7 +421,7 @@ namespace EchoProtocol.UI.MainMenu
             if (label == null) continue;
             var item = available ? _packages[i] : null;
             label.text = available
-              ? $"{item.walletCredit:N0} COINS\n{item.amount:N0} {item.currency}"
+              ? $"{item.walletCredit:N0} Echo Credits\n{item.amount:N0} {item.currency}"
               : "Không có gói";
           }
         });

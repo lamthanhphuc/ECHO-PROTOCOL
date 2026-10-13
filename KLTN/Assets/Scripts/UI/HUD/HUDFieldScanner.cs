@@ -264,13 +264,13 @@ namespace EchoProtocol.UI.HUD
             int count = offsets != null ? offsets.Count : 0;
             float nearest = float.PositiveInfinity;
             for (int i = 0; i < count; i++) nearest = Mathf.Min(nearest, offsets[i].magnitude);
-            Color accent = motion ? new Color(0.94f, 0.43f, 0.29f) : new Color(0.35f, 0.78f, 0.76f);
+            Color accent = motion ? HUDPresentationStyle.Danger : HUDPresentationStyle.Accent;
 
-            SetText(titleText, motion ? "⚠  STALKER" : $"◈  {coreTargetLabel}");
+            SetText(titleText, motion ? "STALKER" : coreTargetLabel);
             SetText(modeBadgeText, "[Chuột phải] Đổi chế độ");
             SetText(controlsText, "");
-            SetText(detectedText, motion ? $"<size=23>{count}</size>\nPHÁT HIỆN" : $"<size=23>{count}</size>  {coreTargetLabel}");
-            SetText(signalDetailText, "GẦN NHẤT\n<size=21>" + (count > 0 ? $"{nearest:F0}m" : "—") + "</size>");
+            SetText(detectedText, motion ? $"<size=18>{count}</size>\nPHÁT HIỆN" : $"<size=18>{count}</size>  {coreTargetLabel}");
+            SetText(signalDetailText, "GẦN NHẤT\n<size=16>" + (count > 0 ? $"{nearest:F0}m" : "—") + "</size>");
             int bars = connected && count > 0 ? (int)FieldScannerCoreDetector.ResolveSignalBars(nearest, _boundScanner.Tuning) : 0;
             if (motion)
             {
@@ -278,14 +278,14 @@ namespace EchoProtocol.UI.HUD
                 string signal = "";
                 const string glyphs = "▂▄▆█";
                 for (int i = 0; i < 4; i++) signal += (i < intensity ? glyphs[i].ToString() : $"<color=#503E3A>{glyphs[i]}</color>") + " ";
-                SetText(signalBarsText, "CƯỜNG ĐỘ\n<size=21>" + (count > 0 ? signal : "—") + "</size>");
+                SetText(signalBarsText, "CƯỜNG ĐỘ\n<size=16>" + (count > 0 ? signal : "—") + "</size>");
             }
             else
             {
                 string signal = "";
                 const string glyphs = "▂▄▆█";
                 for (int i = 0; i < 4; i++) signal += (i < bars ? glyphs[i].ToString() : $"<color=#3E5050>{glyphs[i]}</color>") + " ";
-                SetText(signalBarsText, "TÍN HIỆU\n<size=21>" + signal + "</size>");
+                SetText(signalBarsText, "TÍN HIỆU\n<size=16>" + signal + "</size>");
             }
 
             if (!active || !hasResult || count > 0) _emptySince = -1f;
@@ -370,7 +370,7 @@ namespace EchoProtocol.UI.HUD
         {
             var root = (RectTransform)transform;
             root.anchorMin = root.anchorMax = root.pivot = Vector2.one;
-            root.anchoredPosition = new Vector2(-32f, -100f);
+            root.anchoredPosition = new Vector2(-32f, -276f);
             root.sizeDelta = new Vector2(380f, 390f);
             parentCanvas = GetComponentInParent<Canvas>();
             if (panelBackground != null)

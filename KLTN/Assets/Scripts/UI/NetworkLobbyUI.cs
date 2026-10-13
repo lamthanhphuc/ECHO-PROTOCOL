@@ -1,3 +1,4 @@
+using EchoProtocol.Pets;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -5,6 +6,7 @@ using EchoProtocol.Core;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Auth;
 using EchoProtocol.Networking;
+using EchoProtocol.UI.MainMenu;
 using EchoProtocol.Networking.Authority;
 using TMPro;
 using UnityEngine;
@@ -26,6 +28,10 @@ namespace EchoProtocol.UI
         [SerializeField] private Button joinButton;
         [SerializeField] private Button readyButton;
         [SerializeField] private Button characterButton;
+        [SerializeField] private Button petButton;
+        private Button outfitButton;
+        private Button petOutfitButton;
+        private LobbyLoadoutCarousel loadoutCarousel;
         [SerializeField] private Button startButton;
         [SerializeField] private Button leaveButton;
         [SerializeField] private Button exitButton;
@@ -54,11 +60,24 @@ namespace EchoProtocol.UI
         private bool _inputsInitialized;
         private float _nextResolve;
         private RoomInfoViewModel _room = new RoomInfoViewModel();
+        private readonly Vector3[] _panelCorners = new Vector3[4];
+        public float PresentationRightEdge
+        {
+            get
+            {
+                if(startButton==null || Screen.width<=0)return 0.74f;
+                var canvas=startButton.GetComponentInParent<Canvas>();
+                ((RectTransform)startButton.transform).GetWorldCorners(_panelCorners);
+                var camera=canvas!=null && canvas.renderMode!=RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+                return Mathf.Clamp(RectTransformUtility.WorldToScreenPoint(camera,_panelCorners[0]).x/Screen.width-0.03f,0.25f,0.9f);
+            }
+        }
         private bool Connected => bootstrap != null && bootstrap.HasRunningRunner;
         private bool Busy => _busy || (bootstrap != null && bootstrap.IsBusy);
 
         private void OnEnable()
         {
+            EchoProtocol.Settings.GameLanguage.Changed += RefreshMemberList;
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
             _configured = playerNameInput != null && sessionNameInput != null && hostButton != null
@@ -79,10 +98,23 @@ namespace EchoProtocol.UI
                 _inputsInitialized = true;
             }
             if (statusText != null) statusText.richText = false;
+            if (networkMessage != null)
+            {
+                networkMessage.richText = false;
+                networkMessage.enableAutoSizing = false;
+                networkMessage.fontSize = 13;
+                networkMessage.textWrappingMode = TextWrappingModes.Normal;
+            }
             if (memberListText != null) memberListText.richText = false;
             if (hostButton != null) hostButton.onClick.AddListener(OnHostClicked);
             if (joinButton != null) joinButton.onClick.AddListener(OnJoinClicked);
             if (readyButton != null) readyButton.onClick.AddListener(OnReadyClicked);
+            EnsureOutfitButton();
+            EnsurePetButton();
+            EnsurePetOutfitButton();
+            EnsureLoadoutCarousel();
+if (outfitButton != null) outfitButton.onClick.AddListener(OnOutfitClicked);
+            if (petButton != null) petButton.onClick.AddListener(OnPetClicked);
             if (characterButton != null) characterButton.onClick.AddListener(OnCharacterClicked);
             if (startButton != null) startButton.onClick.AddListener(OnStartClicked);
             if (leaveButton != null) leaveButton.onClick.AddListener(OnLeaveClicked);
@@ -90,7 +122,7 @@ namespace EchoProtocol.UI
             if (difficultyDropdown != null)
                 difficultyDropdown.onValueChanged.AddListener(OnDifficultyChanged);
             ResolveServices();
-            RefreshMemberList();
+RefreshMemberList();
             RefreshControls();
             RefreshVisuals();
         }
@@ -129,9 +161,12 @@ namespace EchoProtocol.UI
 
         private void OnDisable()
         {
+            EchoProtocol.Settings.GameLanguage.Changed -= RefreshMemberList;
             if (hostButton != null) hostButton.onClick.RemoveListener(OnHostClicked);
             if (joinButton != null) joinButton.onClick.RemoveListener(OnJoinClicked);
             if (readyButton != null) readyButton.onClick.RemoveListener(OnReadyClicked);
+            if (outfitButton != null) outfitButton.onClick.RemoveListener(OnOutfitClicked);
+            if (petButton != null) petButton.onClick.RemoveListener(OnPetClicked);
             if (characterButton != null) characterButton.onClick.RemoveListener(OnCharacterClicked);
             if (startButton != null) startButton.onClick.RemoveListener(OnStartClicked);
             if (leaveButton != null) leaveButton.onClick.RemoveListener(OnLeaveClicked);
@@ -151,6 +186,9 @@ namespace EchoProtocol.UI
             // IsBusy may clear after the final session event, so derive controls every frame.
             RefreshControls();
             RefreshVisuals();
+            if (loadoutCarousel == null) RefreshCharacterThumbnail();
+            if (loadoutCarousel == null) RefreshOutfitSwatch();
+            if (loadoutCarousel == null) RefreshPetThumbnail();
         }
 
         private void ResolveServices()
@@ -279,14 +317,25 @@ namespace EchoProtocol.UI
                     if (member == null) continue;
                     if (list.Length > 0) list.AppendLine().AppendLine();
                     list.Append("> ").Append(member.DisplayName);
-                    if (member.IsLocal) list.Append(_room.IsHost ? " [YOU / HOST]" : " [YOU]");
-                    list.AppendLine().Append("  ").Append(member.IsReady ? "READY" : "NOT READY")
-                        .Append("  |  TOOL ").Append(member.ToolId)
-                        .Append("  |  ").Append(member.CharacterId == 1 ? "JAMMO" : "ASTRONAUT");
+                    if (member.IsLocal) list.Append(EchoProtocol.Settings.GameLanguage.Choose(_room.IsHost ? " [BẠN / CHỦ PHÒNG]" : " [BẠN]", _room.IsHost ? " [YOU / HOST]" : " [YOU]"));
+                    list.AppendLine().Append("  ").Append(EchoProtocol.Settings.GameLanguage.Choose(member.IsReady ? "SẴN SÀNG" : "CHƯA SẴN SÀNG", member.IsReady ? "READY" : "NOT READY"))
+                        .Append(EchoProtocol.Settings.GameLanguage.Choose("  |  CÔNG CỤ: ", "  |  TOOL: ")).Append(MemberToolName(member.ToolId))
+                        .Append("  |  ").Append(member.CharacterId == 1 ? "JAMMO" : EchoProtocol.Settings.GameLanguage.Choose("PHI HÀNH GIA", "ASTRONAUT"))
+                        .AppendLine().Append(EchoProtocol.Settings.GameLanguage.Choose("  THÚ ĐỒNG HÀNH: ", "  PET: ")).Append(member.PetId == 0 ? EchoProtocol.Settings.GameLanguage.Choose("Không có", "None") : PetCatalog.Name(member.PetId));
                 }
             if (emptyMemberText != null) emptyMemberText.gameObject.SetActive(list.Length == 0);
-            memberListText.text = list.Length == 0 ? (emptyMemberText == null ? "NO PLAYERS YET" : string.Empty) : list.ToString();
+            memberListText.text = list.Length == 0 ? (emptyMemberText == null ? EchoProtocol.Settings.GameLanguage.Choose("Chưa có người chơi", "No players yet") : string.Empty) : list.ToString();
         }
+
+        private static string MemberToolName(int toolId) => toolId switch
+        {
+            LobbyPlayerState.FieldScannerToolId => EchoProtocol.Settings.GameLanguage.Choose("Máy quét", "Field Scanner"),
+            LobbyPlayerState.NoiseMakerToolId => EchoProtocol.Settings.GameLanguage.Choose("Máy tạo tiếng động", "Noise Maker"),
+            LobbyPlayerState.FirstAidKitToolId => EchoProtocol.Settings.GameLanguage.Choose("Bộ sơ cứu", "First Aid Kit"),
+            LobbyPlayerState.DoorJammerToolId => EchoProtocol.Settings.GameLanguage.Choose("Thiết bị chặn cửa", "Door Jammer"),
+            LobbyPlayerState.CoreStabilizerToolId => EchoProtocol.Settings.GameLanguage.Choose("Bộ ổn định lõi", "Core Stabilizer"),
+            _ => EchoProtocol.Settings.GameLanguage.Choose("Chưa chọn", "Not selected"),
+        };
 
         private void OnRoomUpdated(RoomInfoViewModel state) => RefreshMemberList();
 
@@ -318,18 +367,541 @@ namespace EchoProtocol.UI
 
         private void ReportError(string message)
         {
-            var detail = string.IsNullOrWhiteSpace(message) ? "Check Console for connection details." : message;
-            SetStatus("CONNECTION FAILED");
+            var detail = message ?? string.Empty;
+            var feedback = ConnectionFeedback(detail);
+            SetStatus(feedback);
+            if (networkMessage != null) networkMessage.color = Neutral;
             if (statusText != null) statusText.color = Offline;
             if (statusIndicator != null) statusIndicator.color = Offline;
             _blinkSignal = true;
             Debug.LogError($"[NetworkLobbyUI] {detail}", this);
         }
 
+        // Only safe, player-facing descriptions reach the UI; raw service errors stay in Console.
+        internal static string ConnectionFeedback(string detail) => EchoProtocol.Settings.GameLanguage.Translate(ConnectionFeedbackSource(detail));
+
+        private static string ConnectionFeedbackSource(string detail)
+        {
+            string error = (detail ?? string.Empty).ToLowerInvariant();
+            if (error.Contains("authenticated user"))
+                return "PHIÊN ĐĂNG NHẬP KHÔNG HỢP LỆ\nVề menu chính và đăng nhập lại, sau đó thử kết nối.";
+            if (error.Contains("session is busy") || error.Contains("operation is already in progress"))
+                return "ĐANG CÓ THAO TÁC KẾT NỐI\nChờ thao tác hiện tại hoàn tất rồi thử lại.";
+            if (error.Contains("room code required") || error.Contains("room name is required"))
+                return "THIẾU MÃ PHÒNG\nNhập mã phòng, rồi chọn Tạo phòng hoặc Vào phòng.";
+            if (error.Contains("your name required") || error.Contains("player name unavailable"))
+                return "THIẾU TÊN NGƯỜI CHƠI\nNhập tên của bạn trước khi kết nối.";
+            if (error.Contains("gamenotfound"))
+                return "KHÔNG TÌM THẤY PHÒNG\nKiểm tra mã phòng và hỏi host đã mở phòng chưa. Sau đó chọn Vào phòng để thử lại.";
+            if (error.Contains("gameisfull"))
+                return "PHÒNG ĐÃ ĐẦY\nNhờ host kiểm tra chỗ trống hoặc dùng mã phòng khác.";
+            if (error.Contains("gameclosed"))
+                return "PHÒNG ĐÃ ĐÓNG\nTrận có thể đã bắt đầu. Nhờ host mở phòng mới rồi nhập lại mã.";
+            if (error.Contains("host disconnected"))
+                return EchoProtocol.Settings.GameLanguage.Choose("Host đã ngắt kết nối. Trận đã kết thúc vì chưa hỗ trợ chuyển host. Về menu và tạo hoặc vào phòng mới.", "The host disconnected. The match ended because host migration is not supported. Return to the menu and create or join a new room.");
+            if (error.Contains("timeout") || error.Contains("timedout"))
+                return "KẾT NỐI QUÁ THỜI GIAN\nKiểm tra mạng và mã phòng. Chọn Tạo phòng hoặc Vào phòng để thử lại.";
+            if (error.Contains("authentication") || error.Contains("invalidregion") || error.Contains("maxccu"))
+                return "DỊCH VỤ CHƯA CHO PHÉP KẾT NỐI\nThử lại sau ít phút. Nếu vẫn lỗi, liên hệ người quản lý game.";
+            if (error.Contains("services unavailable") || error.Contains("service lost"))
+                return "DỊCH VỤ KẾT NỐI CHƯA SẴN SÀNG\nVề menu chính và mở lại lobby. Nếu vẫn lỗi, khởi động lại game.";
+            if (error.Contains("every player must be ready"))
+                return "CHƯA THỂ BẮT ĐẦU\nTất cả người chơi cần bật Sẵn sàng trước khi host bắt đầu.";
+            if (error.Contains("only the authoritative host"))
+                return "CHỈ HOST CÓ THỂ BẮT ĐẦU\nNhờ chủ phòng bắt đầu trận.";
+            if (Application.internetReachability == NetworkReachability.NotReachable)
+                return "KHÔNG CÓ KẾT NỐI MẠNG\nBật Wi-Fi hoặc cắm mạng rồi chọn Tạo phòng / Vào phòng để thử lại.";
+            if (error.Contains("connection failed") || error.Contains("disconnect") || error.Contains("connectionrefused"))
+                return "KẾT NỐI BỊ GIÁN ĐOẠN\nKiểm tra mạng và hỏi host phòng còn mở không. Sau đó thử kết nối lại.";
+            if (error.Contains("start") || error.Contains("ready") || error.Contains("scene load"))
+                return "CHƯA THỂ THỰC HIỆN\nKiểm tra trạng thái Sẵn sàng và kết nối của phòng rồi thử lại. Nếu vẫn lỗi, mở lại phòng.";
+            return "KHÔNG THỂ KẾT NỐI\nChưa xác định được nguyên nhân. Kiểm tra mạng, mã phòng rồi thử lại; nếu vẫn lỗi, khởi động lại game.";
+        }
+
+        private void EnsureOutfitButton()
+        {
+            if (outfitButton != null)
+                return;
+
+            if (characterButton == null)
+                return;
+
+            var target =
+                characterButton.transform.parent.Find(
+                    "OutfitSelectionButton");
+
+            if (target != null)
+            {
+                outfitButton =
+                    target.GetComponent<Button>();
+            }
+        }
+
+
+        private static void PlaceRuntimeLoadoutButton(
+            Button button,
+            float y,
+            float height = 62f)
+        {
+            if (button == null)
+                return;
+
+            var rect =
+                button.transform as RectTransform;
+
+            if (rect == null)
+                return;
+
+            rect.anchorMin =
+                new Vector2(0f, 1f);
+
+            rect.anchorMax =
+                new Vector2(0f, 1f);
+
+            rect.pivot =
+                new Vector2(0f, 1f);
+
+            rect.anchoredPosition =
+                new Vector2(
+                    32f,
+                    -y);
+
+            rect.sizeDelta =
+                new Vector2(
+                    496f,
+                    height);
+
+            var image =
+                button.targetGraphic as Image
+                ?? button.GetComponent<Image>();
+
+            if (image != null)
+            {
+                image.color =
+                    new Color32(
+                        14,
+                        18,
+                        19,
+                        252);
+            }
+        }
+
+        private void EnsurePetButton()
+        {
+            if (petButton != null)
+                return;
+
+            if (characterButton == null)
+                return;
+
+            var target =
+                characterButton.transform.parent.Find(
+                    "PetSelectionButton");
+
+            if (target != null)
+            {
+                petButton =
+                    target.GetComponent<Button>();
+            }
+        }
+
+        private void EnsureLoadoutCarousel()
+        {
+            if (loadoutCarousel == null)
+            {
+                loadoutCarousel =
+                    GetComponent<LobbyLoadoutCarousel>();
+
+                if (loadoutCarousel == null)
+                {
+                    loadoutCarousel =
+                        gameObject.AddComponent<
+                            LobbyLoadoutCarousel>();
+                }
+            }
+
+            loadoutCarousel.Bind(
+                lobbyManager,
+                characterButton,
+                outfitButton,
+                petButton,
+                petOutfitButton);
+        }
+
+        private void OnOutfitClicked()
+        {
+            if (lobbyManager == null
+                || !lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                return;
+            }
+
+            var selector =
+                GetComponent<LobbyOutfitSelector>();
+
+            if (selector == null)
+            {
+                selector =
+                    gameObject.AddComponent<
+                        LobbyOutfitSelector>();
+            }
+
+            selector.Open(state);
+        }
+
+        private void EnsurePetOutfitButton()
+        {
+            if (petOutfitButton != null)
+                return;
+
+            if (characterButton == null)
+                return;
+
+            var target =
+                characterButton.transform.parent.Find(
+                    "PetOutfitSelectionButton");
+
+            if (target != null)
+            {
+                petOutfitButton =
+                    target.GetComponent<Button>();
+            }
+        }
+
+        private void OnPetOutfitClicked()
+        {
+            if (lobbyManager == null
+                || !lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                return;
+            }
+
+            var selector =
+                GetComponent<LobbyPetSkinSelector>();
+
+            if (selector == null)
+            {
+                selector =
+                    gameObject.AddComponent<
+                        LobbyPetSkinSelector>();
+            }
+
+            selector.Open(state);
+        }
+
+        private void OnPetClicked()
+        {
+            if (lobbyManager == null
+                || !lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                return;
+            }
+
+            var selector =
+                GetComponent<LobbyPetSelector>();
+
+            if (selector == null)
+            {
+                selector =
+                    gameObject.AddComponent<
+                        LobbyPetSelector>();
+            }
+
+            selector.Open(state);
+        }
+
+
+        private void EnsureOutfitSwatch()
+        {
+            if (outfitButton == null)
+                return;
+
+            var target =
+                outfitButton.transform.Find(
+                    "OutfitLobbySwatch");
+
+            Image image;
+
+            if (target == null)
+            {
+                var owner =
+                    new GameObject(
+                        "OutfitLobbySwatch",
+                        typeof(RectTransform),
+                        typeof(CanvasRenderer),
+                        typeof(Image));
+
+                owner.transform.SetParent(
+                    outfitButton.transform,
+                    false);
+
+                var rect =
+                    owner.GetComponent<RectTransform>();
+
+                rect.anchorMin =
+                    new Vector2(0f, 0.5f);
+
+                rect.anchorMax =
+                    new Vector2(0f, 0.5f);
+
+                rect.pivot =
+                    new Vector2(0f, 0.5f);
+
+                rect.anchoredPosition =
+                    new Vector2(10f, 0f);
+
+                rect.sizeDelta =
+                    new Vector2(34f, 34f);
+
+                image =
+                    owner.GetComponent<Image>();
+
+                image.raycastTarget =
+                    false;
+            }
+            else
+            {
+                image =
+                    target.GetComponent<Image>();
+            }
+
+            var label =
+                outfitButton.GetComponentInChildren<TMP_Text>(
+                    true);
+
+            if (label != null)
+            {
+                label.margin =
+                    new Vector4(
+                        54f,
+                        0f,
+                        16f,
+                        0f);
+
+                label.alignment =
+                    TextAlignmentOptions.Left;
+            }
+        }
+
+
+        private void RefreshOutfitSwatch()
+        {
+            if (outfitButton == null)
+                return;
+int characterId = 0;
+            int outfitId = 0;
+
+            if (lobbyManager != null
+                && lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                characterId =
+                    Mathf.Clamp(
+                        state.CharacterId,
+                        0,
+                        1);
+
+                outfitId =
+                    Mathf.Clamp(
+                        state.CharacterOutfitId,
+                        0,
+                        CharacterOutfitLibrary.OutfitCount - 1);
+            }
+
+            var target =
+                outfitButton.transform.Find(
+                    "OutfitLobbySwatch");
+
+            var image =
+                target != null
+                    ? target.GetComponent<Image>()
+                    : null;
+
+            if (image != null)
+            {
+                image.color =
+                    CharacterOutfitLibrary.GetSwatch(
+                        characterId,
+                        outfitId);
+            }
+
+            var label =
+                outfitButton.GetComponentInChildren<TMP_Text>(
+                    true);
+
+            if (label != null)
+            {
+                label.text =
+                    "OUTFIT: "
+                    + CharacterOutfitLibrary.GetName(
+                        characterId,
+                        outfitId);
+            }
+        }
+
+
+        private void EnsurePetThumbnail()
+        {
+            if (petButton == null)
+                return;
+
+            var target =
+                petButton.transform.Find(
+                    "PetLobbyThumbnail");
+
+            if (target == null)
+            {
+                var owner =
+                    new GameObject(
+                        "PetLobbyThumbnail",
+                        typeof(RectTransform),
+                        typeof(CanvasRenderer),
+                        typeof(RawImage));
+
+                owner.transform.SetParent(
+                    petButton.transform,
+                    false);
+
+                var rect =
+                    owner.GetComponent<RectTransform>();
+
+                rect.anchorMin =
+                    new Vector2(0f, 0.5f);
+
+                rect.anchorMax =
+                    new Vector2(0f, 0.5f);
+
+                rect.pivot =
+                    new Vector2(0f, 0.5f);
+
+                rect.anchoredPosition =
+                    new Vector2(8f, 0f);
+
+                rect.sizeDelta =
+                    new Vector2(38f, 38f);
+
+                var image =
+                    owner.GetComponent<RawImage>();
+
+                image.raycastTarget =
+                    false;
+            }
+
+            var label =
+                petButton.GetComponentInChildren<TMP_Text>(
+                    true);
+
+            if (label != null)
+            {
+                label.margin =
+                    new Vector4(
+                        54f,
+                        0f,
+                        16f,
+                        0f);
+
+                label.alignment =
+                    TextAlignmentOptions.Left;
+            }
+        }
+
+
+        private void RefreshPetThumbnail()
+        {
+            if (petButton == null)
+                return;
+int petId = 0;
+
+            if (lobbyManager != null
+                && lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                petId =
+                    state.PetId;
+            }
+
+            var target =
+                petButton.transform.Find(
+                    "PetLobbyThumbnail");
+
+            var image =
+                target != null
+                    ? target.GetComponent<RawImage>()
+                    : null;
+
+            if (image == null)
+                return;
+
+            if (petId <= 0)
+            {
+                image.texture = null;
+                image.color = Color.clear;
+                return;
+            }
+
+            image.texture =
+                Resources.Load<Texture2D>(
+                    PetShopThumbnailAssets
+                        .GetThumbnailResource(
+                            petId));
+
+            image.color =
+                image.texture != null
+                    ? Color.white
+                    : Color.clear;
+        }
+
+        private void RefreshCharacterThumbnail()
+        {
+            int characterId =
+                0;
+
+            if (lobbyManager != null
+                && lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                characterId =
+                    Mathf.Clamp(
+                        state.CharacterId,
+                        0,
+                        1);
+            }
+
+            LobbyCharacterSelector
+                .RefreshMainButtonThumbnail(
+                    characterButton,
+                    characterId);
+        }
         private void OnCharacterClicked()
         {
-            if (lobbyManager != null && lobbyManager.TryGetLocalPlayerState(out var state, false))
-                state.RequestCharacter(state.CharacterId == 0 ? 1 : 0);
+            if (lobbyManager == null
+                || !lobbyManager.TryGetLocalPlayerState(
+                    out var state,
+                    false))
+            {
+                return;
+            }
+
+            var selector =
+                GetComponent<LobbyCharacterSelector>();
+
+            if (selector == null)
+            {
+                selector =
+                    gameObject.AddComponent<
+                        LobbyCharacterSelector>();
+            }
+
+            selector.Open(state);
         }
 
         private void RefreshControls()
@@ -375,7 +947,35 @@ namespace EchoProtocol.UI
                     characterButton.interactable = inLobby && !local.IsReady;
                 }
                 var characterLabel = characterButton.GetComponentInChildren<TMP_Text>();
-                if (characterLabel != null) characterLabel.text = "CHARACTER: " + character;
+                if (characterLabel != null && loadoutCarousel == null) characterLabel.text = "CHARACTER: " + character;
+            }
+            if (outfitButton != null)
+            {
+                outfitButton.interactable =
+                    false;
+
+                if (lobbyManager != null
+                    && lobbyManager.TryGetLocalPlayerState(
+                        out var outfitOwner,
+                        false))
+                {
+                    outfitButton.interactable =
+                        inLobby
+                        && !outfitOwner.IsReady;
+                }
+            }
+
+            if (petButton != null)
+            {
+                petButton.interactable = false;
+                int petId = 0;
+                if (lobbyManager != null && lobbyManager.TryGetLocalPlayerState(out var petOwner, false))
+                {
+                    petId = petOwner.PetId;
+                    petButton.interactable = inLobby && !petOwner.IsReady;
+                }
+                var label = petButton.GetComponentInChildren<TMP_Text>();
+                if (label != null && loadoutCarousel == null) label.text = "PET: " + PetCatalog.Name(petId);
             }
             if (readyButton != null)
             {
@@ -447,7 +1047,15 @@ namespace EchoProtocol.UI
             if (!Busy && lobbyManager != null && _room.CanStartMatch) lobbyManager.TryStartMatch();
         }
 
-        private async void OnLeaveClicked()
+        private void OnLeaveClicked()
+        {
+            if (Busy || !Connected) return;
+            GameUIFeedback.Instance.Confirm(EchoProtocol.Settings.GameLanguage.Choose("Rời phòng?", "Leave room?"),
+                GameUIFeedback.LeaveWarning, LeaveConfirmed,
+                EchoProtocol.Settings.GameLanguage.Choose("Rời phòng", "Leave room"));
+        }
+
+        private async void LeaveConfirmed()
         {
             if (Busy || !Connected) return;
             _busy = true;
@@ -461,7 +1069,15 @@ namespace EchoProtocol.UI
             finally { if (this != null) { _busy = false; if (isActiveAndEnabled) RefreshControls(); } }
         }
 
-        private async void OnExitClicked()
+        private void OnExitClicked()
+        {
+            if (Busy) return;
+            GameUIFeedback.Instance.Confirm(EchoProtocol.Settings.GameLanguage.Choose("Về menu chính?", "Return to main menu?"),
+                () => Connected ? GameUIFeedback.LeaveWarning() : EchoProtocol.Settings.GameLanguage.Choose("Bạn muốn về menu chính?", "Return to the main menu?"),
+                ExitConfirmed, EchoProtocol.Settings.GameLanguage.Choose("Về menu", "Return to menu"));
+        }
+
+        private async void ExitConfirmed()
         {
             if (Busy) return;
 
@@ -471,9 +1087,8 @@ namespace EchoProtocol.UI
             try
             {
                 if (bootstrap != null)
-                    await bootstrap.ShutdownRunnerAsync();
-
-                SceneManager.LoadScene(GameConstants.SceneMainMenu);
+                    await bootstrap.LeaveToMainMenuAsync();
+                else SceneManager.LoadScene(GameConstants.SceneMainMenu);
             }
             catch (Exception exception)
             {

@@ -6,8 +6,8 @@ namespace EchoProtocol.Voice
     /// <summary>Standalone Photon Voice client. Fusion only supplies player/session identity.</summary>
     public sealed class EchoVoiceClient : UnityVoiceClient
     {
-        private const float GameplayVoiceMinDistance = 2f;
-        private const float GameplayVoiceMaxDistance = 15f;
+        private const float GameplayVoiceMinDistance = 10f;
+        private const float GameplayVoiceMaxDistance = 30f;
 
         public VoiceManager Owner { get; set; }
 

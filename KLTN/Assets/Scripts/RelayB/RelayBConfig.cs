@@ -8,8 +8,8 @@ namespace EchoProtocol.RelayB
     public sealed class RelayBConfig : ScriptableObject
     {
         [Header("Tolerances (HARD Difficulty)")]
-        [SerializeField, Range(0.5f, 10f)] private float frequencyTolerancePercent = 2f;
-        [SerializeField, Range(1f, 30f)] private float phaseToleranceDegrees = 8f;
+        [SerializeField, Range(0.5f, 10f)] private float frequencyTolerancePercent = 3f;
+        [SerializeField, Range(1f, 30f)] private float phaseToleranceDegrees = 12f;
         [SerializeField, Min(1f)] private float holdRequiredSeconds = 8f;
         [SerializeField, Min(0f)] private float instabilityGraceSeconds = 0.5f;
         [SerializeField, Min(0f)] private float instabilityDecaySecondsPerSecond = 2f;

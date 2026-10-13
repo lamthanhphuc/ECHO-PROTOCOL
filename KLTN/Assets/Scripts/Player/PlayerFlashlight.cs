@@ -189,7 +189,7 @@ public class PlayerFlashlight : MonoBehaviour
         flashlight.innerSpotAngle = Mathf.Min(beamInnerSpotAngle, beamSpotAngle);
         flashlight.renderMode = LightRenderMode.ForcePixel;
         flashlight.bounceIntensity = 0.4f;
-        flashlight.shadows = LightShadows.Soft;
+        flashlight.shadows = LightShadows.None;
 
         RemoveBeamVisual();
     }

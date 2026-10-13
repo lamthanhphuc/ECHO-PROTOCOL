@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using Unity.Profiling;
 using EchoProtocol.Networking;
 using EchoProtocol.AI.Stalker.Networking;
 using UnityEngine;
@@ -18,7 +20,10 @@ namespace EchoProtocol.Audio
         private AudioSource _dangerMusic;
         private string _roomKey;
         private bool _roomTransitioning;
-        private float _nextDiscovery;
+        private float _nextEnvironmentUpdate;
+        private readonly HashSet<GameAudioEnvironmentSource> _environmentSources = new HashSet<GameAudioEnvironmentSource>();
+        private static readonly ProfilerMarker EnvironmentMarker = new ProfilerMarker("Echo.Audio.Environment");
+        private static readonly ProfilerMarker ButtonRegistrationMarker = new ProfilerMarker("Echo.Audio.SceneButtons");
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatic() => _instance = null;
@@ -44,6 +49,7 @@ namespace EchoProtocol.Audio
             _instance._dangerMusic = CreateSource(root, false);
             GameAudioSettings.RouteMusic(_instance._dangerMusic);
             SceneManager.activeSceneChanged += _instance.OnSceneChanged;
+            SceneManager.sceneLoaded += _instance.OnSceneLoaded;
             NetworkPlayerInteractor.LocalRequestCompleted += _instance.OnInteractionCompleted;
             EchoProtocol.Tools.Scanner.NetworkToolPickup.ToolPickedUp += _instance.OnToolPickedUp;
         }
@@ -133,7 +139,7 @@ namespace EchoProtocol.Audio
 
         private void OnSceneChanged(Scene previous, Scene current)
         {
-            _nextDiscovery = 0f;
+            _nextEnvironmentUpdate = 0f;
             _roomKey = null;
             _roomTransitioning = false;
             _roomCurrent.Stop();
@@ -148,23 +154,38 @@ namespace EchoProtocol.Audio
         private void Update()
         {
             UpdateRoomFade();
-            // Also discover objects spawned by Fusion after scene load.
-            if (Time.unscaledTime < _nextDiscovery) return;
-            _nextDiscovery = Time.unscaledTime + 1f;
-            UpdateEnvironment();
-            Attach<NetworkPlayerMovement>();
-            Attach<NetworkSlidingDoor>();
-            Attach<NetworkDoor>();
-            Attach<NetworkPickupItem>();
-            Attach<NetworkSectorBox>();
-            Attach<NetworkPowerPuzzle>();
-            Attach<NetworkMatchState>();
-            Attach<SecurityTerminalDownload>();
-            Attach<Zone3ChargeStation>();
-            Attach<EchoProtocol.Gameplay.PushableObject>();
-            Attach<NoiseMakerBeacon>();
-            foreach (var button in FindObjectsByType<Button>())
-                if (button.GetComponent<GameAudioButton>() == null) button.gameObject.AddComponent<GameAudioButton>();
+            if (Time.unscaledTime < _nextEnvironmentUpdate) return;
+            _nextEnvironmentUpdate = Time.unscaledTime + 1f;
+            using (EnvironmentMarker.Auto()) UpdateEnvironment();
+        }
+
+        // Existing scene buttons are discovered once per load, including initially hidden panels.
+        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            using (ButtonRegistrationMarker.Auto())
+                foreach (var root in scene.GetRootGameObjects())
+                    foreach (var button in root.GetComponentsInChildren<Button>(true)) RegisterButton(button);
+        }
+        public static void RegisterButton(Button button)
+        {
+            if (button!=null && button.GetComponent<GameAudioButton>()==null) button.gameObject.AddComponent<GameAudioButton>();
+        }
+        public static void RegisterEmitter(Component owner)
+        {
+            if (owner!=null && owner.GetComponent<GameAudioEmitter>()==null) owner.gameObject.AddComponent<GameAudioEmitter>();
+        }
+        public static void RegisterEnvironmentOwner(Component owner)
+        {
+            if (owner!=null && owner.GetComponent<GameAudioEnvironmentSource>()==null) owner.gameObject.AddComponent<GameAudioEnvironmentSource>();
+        }
+        public static void RegisterEnvironment(GameAudioEnvironmentSource source)
+        {
+            EnsureInitialized();
+            if (_instance!=null) _instance._environmentSources.Add(source);
+        }
+        public static void UnregisterEnvironment(GameAudioEnvironmentSource source)
+        {
+            if (_instance!=null) _instance._environmentSources.Remove(source);
         }
 
         private void UpdateEnvironment()
@@ -174,12 +195,9 @@ namespace EchoProtocol.Audio
             if (camera == null) return;
             float nearest = 16f;
             string room = null;
-            foreach (var relay in FindObjectsByType<EchoProtocol.RelayA.RelayAController>())
-                ConsiderRoom(relay.transform, "map_ambience/electrical_room_loop", camera.transform.position, ref nearest, ref room);
-            foreach (var relay in FindObjectsByType<EchoProtocol.RelayB.RelayBController>())
-                ConsiderRoom(relay.transform, "map_ambience/server_room_loop", camera.transform.position, ref nearest, ref room);
-            foreach (var terminal in FindObjectsByType<SecurityTerminalDownload>())
-                ConsiderRoom(terminal.transform, "map_ambience/hvac_loop", camera.transform.position, ref nearest, ref room);
+            foreach (var source in _environmentSources)
+                if (source!=null && source.isActiveAndEnabled && source.RoomKey!=null)
+                    ConsiderRoom(source.transform,source.RoomKey,camera.transform.position,ref nearest,ref room);
 
             if (_roomKey != room)
             {
@@ -201,8 +219,10 @@ namespace EchoProtocol.Audio
 
             float nearestDangerDistance = 34f;
             bool danger = false;
-            foreach (var stalker in FindObjectsByType<StalkerFusionRuntime>())
+            foreach (var source in _environmentSources)
             {
+                var stalker=source!=null && source.isActiveAndEnabled ? source.Stalker : null;
+                if (stalker==null || !stalker.isActiveAndEnabled || stalker.Object==null || !stalker.Object.IsValid) continue;
                 // StalkerAudioController already owns the spatial chase loop for this prefab.
                 // A second 2D drone makes the monster sound close regardless of its position.
                 if (stalker.GetComponent<EchoProtocol.AI.Stalker.Presentation.StalkerAudioController>() != null)
@@ -249,16 +269,10 @@ namespace EchoProtocol.Audio
             }
         }
 
-        private static void Attach<T>() where T : Component
-        {
-            foreach (var component in FindObjectsByType<T>())
-                if (component.GetComponent<GameAudioEmitter>() == null)
-                    component.gameObject.AddComponent<GameAudioEmitter>();
-        }
-
         private void OnDestroy()
         {
             SceneManager.activeSceneChanged -= OnSceneChanged;
+            SceneManager.sceneLoaded -= OnSceneLoaded;
             NetworkPlayerInteractor.LocalRequestCompleted -= OnInteractionCompleted;
             EchoProtocol.Tools.Scanner.NetworkToolPickup.ToolPickedUp -= OnToolPickedUp;
             if (_instance == this) _instance = null;

@@ -8,6 +8,7 @@ namespace EchoProtocol.RelayB
     {
         private readonly List<string> _systemLog = new List<string>();
         public RelayBDecoder Decoder { get; } = new RelayBDecoder();
+        public RelayBSurgeSimulation Surge { get; } = new RelayBSurgeSimulation();
         private RelayBConfig _config;
         private int _presetIndex;
         private RelayBPreset _attemptPreset;
@@ -39,8 +40,8 @@ namespace EchoProtocol.RelayB
         private float _attemptDriftPhaseOffset;
         private float _attemptDriftFrequencyPercent;
         private float _attemptDriftTriggerSeconds;
-        public float FrequencyTolerancePercent => (_config != null ? _config.FrequencyTolerancePercent : 2f) * (_presetIndex >= 2 ? 0.65f : 1f);
-        public float PhaseToleranceDegrees => (_config != null ? _config.PhaseToleranceDegrees : 8f) * (_presetIndex >= 2 ? 0.65f : 1f);
+        public float FrequencyTolerancePercent => (_config != null ? _config.FrequencyTolerancePercent : 3f);
+        public float PhaseToleranceDegrees => (_config != null ? _config.PhaseToleranceDegrees : 12f);
         private bool _driftWarningTriggered;
         private bool _mismatchPenaltyNotified;
         private float _scanDurationRemaining;
@@ -63,6 +64,13 @@ namespace EchoProtocol.RelayB
         public RelayBModuleType[] PipelineModules => _pipelineModules;
         public RelayBOutputDiagnostic OutputDiagnostic => _outputDiagnostic;
         public bool IsSignalFound => _hasScanned && _selectedChannelIndex >= 0;
+        public void CompleteSurge()
+        {
+            if (Surge.Phase != RelayBSurgePhase.Contained || _isOnline || IsSignalFound) return;
+            _hasScanned=true;_selectedChannelIndex=GetCurrentPreset()?.CorrectChannelIndex ?? 0;
+            _activeTab=1;_falseLockDetected=false;
+            AddSystemLog("SURGE CONTAINED - DECODER UNLOCKED");NotifyChanged();
+        }
         public bool IsSignalClean => IsSignalFound && Decoder.IsComplete;
         public int CleanProblems => _cleanProblems;
         public RelayBFilterMode FilterMode => _filterMode;
@@ -146,7 +154,8 @@ namespace EchoProtocol.RelayB
 
         public void ScanSpectrum()
         {
-            if (_isOnline || _hasScanned) return;
+            // The retired spectrum command must not bypass surge containment.
+            if (Surge.Phase != RelayBSurgePhase.Contained || _isOnline || _hasScanned) return;
             _isScanning = false;
             _hasScanned = true;
             AddSystemLog("SPECTRUM SCAN COMPLETE: CANDIDATES DETECTED");
@@ -155,6 +164,7 @@ namespace EchoProtocol.RelayB
 
         public void SelectChannel(int channelIndex)
         {
+            if(Surge.Phase!=RelayBSurgePhase.Contained)return;
             RelayBPreset preset = GetCurrentPreset();
             if (_isOnline || _isSyncing || _selectedChannelIndex >= 0 || !_hasScanned || preset == null || channelIndex < 0 || channelIndex >= preset.Candidates.Length) return;
             RelayBCandidate candidate = preset.GetCandidate(channelIndex);
@@ -163,11 +173,11 @@ namespace EchoProtocol.RelayB
             bool matches = candidate.Peaks[0] >= profile.FundamentalMinKhz
                 && candidate.Peaks[0] <= profile.FundamentalMaxKhz
                 && candidate.Waveform == preset.ReferenceWaveform
-                && candidate.PilotFrame == profile.ExpectedPilot && HasMatchingHarmonic(candidate, profile);
+                && candidate.PilotFrame == profile.ExpectedPilot;
             if (!matches)
             {
                 _falseLockDetected = _selectedChannelIndex < 0;
-                AddSystemLog("SIGNAL MISMATCH. REVIEW FREQUENCY, WAVEFORM, PILOT AND HARMONIC.");
+                AddSystemLog("SIGNAL MISMATCH. REVIEW FREQUENCY, WAVEFORM AND PILOT.");
                 SignalMismatchOccurred?.Invoke();
                 NotifyChanged();
                 return;
@@ -585,7 +595,7 @@ namespace EchoProtocol.RelayB
             var wave = (WaveformType)random.Next(0, 5);
             string pilot = MaskPilot(source.ReferenceProfile.ExpectedPilot, random.Next(1, 256));
             var profile = new RelayBReferenceProfile(frequency - 2f, frequency + 2f, frequency, phase,
-                true, source.ReferenceProfile.MaxDistortionPercent,
+                false, source.ReferenceProfile.MaxDistortionPercent,
                 source.ReferenceProfile.SymbolRateMin, source.ReferenceProfile.SymbolRateMax, pilot);
             var order = new[] { 0, 1, 2, 3 };
             for (int i = 3; i > 0; i--)
@@ -601,17 +611,16 @@ namespace EchoProtocol.RelayB
             {
                 int defect = order[i];
                 float fundamental = frequency + Range(random, -1.5f, 1.5f);
-                float harmonicRatio = 2f;
                 var candidateWave = wave;
                 string candidatePilot = pilot;
                 if (defect == 0) { correct = i; fundamental = frequency; }
                 else if (defect == 1) candidatePilot = MaskPilot(pilot, 1 << random.Next(8));
-                else if (defect == 2) harmonicRatio = random.Next(2) == 0 ? 1.90f : 2.10f;
+                else if (defect == 2) candidateWave = (WaveformType)(((int)wave + random.Next(1, 5)) % 5);
                 else if (random.Next(2) == 0) candidateWave = (WaveformType)(((int)wave + random.Next(1, 5)) % 5);
                 else fundamental = random.Next(2) == 0
                     ? profile.FundamentalMinKhz - Range(random, 0.3f, 0.9f)
                     : profile.FundamentalMaxKhz + Range(random, 0.3f, 0.9f);
-                candidates[i] = new RelayBCandidate(i, new[] { fundamental, fundamental * harmonicRatio },
+                candidates[i] = new RelayBCandidate(i, new[] { fundamental, fundamental * 2f },
                     nominal.DistortionPercent, nominal.SymbolRateKbaud, candidateWave, candidatePilot,
                     nominal.HasSpur, nominal.SpurFrequencyKhz, "");
                 channels[i] = new RelayBChannelDef("CHANNEL " + (i + 1).ToString("00"), candidateWave, nominal.DistortionPercent / 100f);
@@ -640,13 +649,6 @@ namespace EchoProtocol.RelayB
         {
             float frequency = GetCurrentPreset()?.TargetFrequency ?? 50f;
             return frequency * (1f + (_driftTriggered ? _attemptDriftFrequencyPercent : 0f) / 100f);
-        }
-
-        public static bool HasMatchingHarmonic(RelayBCandidate candidate, RelayBReferenceProfile profile)
-        {
-            if (!profile.SecondHarmonicRequired) return true;
-            return candidate.Peaks.Length >= 2 && candidate.Peaks[0] > 0f
-                && Mathf.Abs(candidate.Peaks[1] / candidate.Peaks[0] - 2f) <= 0.02f;
         }
 
         // Backward compatibility methods

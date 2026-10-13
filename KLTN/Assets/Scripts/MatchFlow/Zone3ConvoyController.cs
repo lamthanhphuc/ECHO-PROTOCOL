@@ -59,7 +59,7 @@ namespace EchoProtocol.Networking
         public float LowFuelThreshold01 => 0.5f;
         public bool RouteLocked => _routeLocked;
         public bool WasFuelRestoredRecently => Time.unscaledTime < _fuelRestoredUntil;
-        public string FuelDisplay => "FUEL " + (_fuelPointsRemaining > 0 ? "■" : "□") + " " + (_fuelPointsRemaining > 1 ? "■" : "□");
+        public string FuelDisplay => EchoProtocol.Settings.GameLanguage.Choose("Nhiên liệu ", "Fuel ") + (_fuelPointsRemaining > 0 ? "■" : "□") + " " + (_fuelPointsRemaining > 1 ? "■" : "□");
         public Zone3ConvoyRoutePoint CurrentPoint => _currentPoint;
         public Zone3ConvoyRoutePoint TargetPoint => _targetPoint;
 

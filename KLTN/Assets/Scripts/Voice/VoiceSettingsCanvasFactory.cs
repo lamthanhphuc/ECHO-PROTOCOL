@@ -77,10 +77,10 @@ namespace EchoProtocol.Voice
 
         private static void BuildVoice(Transform body)
         {
-            var card = Card("Voice", body, 0, 0, 780, 330, "Voice Chat", "◉");
-            Label("MicTitle", card, 34, 62, 400, 32, "Microphone");
+            var card = Card("Voice", body, 0, 0, 780, 330, "Trò chuyện thoại", "◉");
+            Label("MicTitle", card, 34, 62, 400, 32, "Micrô");
             Toggle("MicToggle", card, 520, 61);
-            Label("InputTitle", card, 34, 103, 390, 30, "Microphone (đầu vào)");
+            Label("InputTitle", card, 34, 103, 390, 30, "Đầu vào micrô");
             var meter = Rect("Meter", card, 443, 113, 285, 13);
             for (int i = 0; i < 24; i++)
                 Panel("Bar" + i, meter, i * 12, 0, 7, 13, new Color(0.19f, 0.21f, 0.20f)).GetComponent<Image>().raycastTarget = false;
@@ -111,7 +111,7 @@ namespace EchoProtocol.Voice
         {
             var card = Card("Audio", body, 0, 534, 780, 204, "Âm thanh", "♪");
             string[] names = { "Master", "Music", "Effects", "Voice" };
-            string[] titles = { "Tổng âm lượng", "Nhạc nền", "Hiệu ứng", "Voice Chat" };
+            string[] titles = { "Tổng âm lượng", "Nhạc nền", "Hiệu ứng", "Trò chuyện thoại" };
             for (int i = 0; i < names.Length; i++)
             {
                 float y = 58 + i * 33;
@@ -149,7 +149,7 @@ namespace EchoProtocol.Voice
             Button("Test", devices, 28, 284, 225, 42, "THỬ MICROPHONE", false, 16);
             Label("LevelText", devices, 272, 283, 380, 42, "Mức đầu vào: 0%", 18, Muted, TextAlignmentOptions.Right);
             var team = Card("Team", body, 800, 362, 680, 376, "Đồng đội", "◌");
-            Label("Status", team, 27, 62, 626, 31, "Vào phòng để kết nối voice", 18, Muted);
+            Label("Status", team, 27, 62, 626, 31, "Vào phòng để kết nối thoại", 18, Muted);
             Label("Hint", team, 27, 99, 626, 28, "Chọn một người để tắt / bật tiếng.", 18, Muted);
             ScrollArea("List", team, 23, 141, 634, 151);
             Button("Retry", team, 424, 314, 228, 37, "KẾT NỐI LẠI", false, 15);
@@ -186,8 +186,8 @@ namespace EchoProtocol.Voice
         {
             var note = Card("ControlsNote", body, 0, 196, 780, 280, "Tùy chỉnh điều khiển", "⌨");
             Label("Body", note, 34, 77, 705, 160,
-                "Chọn ô phím bên phải, sau đó nhấn phím mới.\n\nESC hủy thao tác đổi phím.\nPhím đã dùng cho hành động khác sẽ được giữ nguyên.",
-                21, Muted).textWrappingMode = TextWrappingModes.Normal;
+                EchoProtocol.Settings.GameLanguage.Choose("Chọn ô phím bên phải để đổi phím. ESC để hủy.\n\nPhím cố định:\nG · Thả đồ    J · Nhiệm vụ    F2 · Hướng dẫn công cụ\nH · Gọi hỗ trợ    1 / 2 · Chọn vật phẩm\nChuột trái · Dùng công cụ\nChuột phải · Xem trước vị trí đặt / Đổi chế độ quét", "Select a key on the right to rebind. ESC cancels.\n\nFixed controls:\nG · Drop    J · Missions    F2 · Tool guide\nH · Call for help    1 / 2 · Select item\nLeft click · Use tool\nRight click · Placement preview / Scanner mode"),
+                16, Muted).textWrappingMode = TextWrappingModes.Normal;
             note.gameObject.SetActive(false);
         }
 

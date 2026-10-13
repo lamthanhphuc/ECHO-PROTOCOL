@@ -17,7 +17,7 @@ namespace EchoProtocol.Auth
     {
       if (failureKind == ApiFailureKind.Network)
       {
-        return "Cannot connect to server. Check backend connection.";
+        return "Cannot connect to server. Check your connection and retry.";
       }
 
       if (failureKind == ApiFailureKind.Timeout)
@@ -27,9 +27,7 @@ namespace EchoProtocol.Auth
 
       if (failureKind == ApiFailureKind.Parse)
       {
-        return string.IsNullOrWhiteSpace(backendMessage)
-          ? "Something went wrong. Please try again."
-          : backendMessage;
+        return "Something went wrong. Please try again.";
       }
 
       return errorCode switch
@@ -42,9 +40,7 @@ namespace EchoProtocol.Auth
         "PASSWORD_TOO_LONG" => "Password must not exceed 72 UTF-8 bytes",
         "TOKEN_INVALID" => "Session expired. Please log in again.",
         "UNAUTHORIZED" => "Session expired. Please log in again.",
-        _ => string.IsNullOrWhiteSpace(backendMessage)
-          ? "Something went wrong. Please try again."
-          : backendMessage
+        _ => "Something went wrong. Please try again."
       };
     }
 

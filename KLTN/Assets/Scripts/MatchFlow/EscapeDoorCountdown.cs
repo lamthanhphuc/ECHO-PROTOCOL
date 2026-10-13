@@ -27,6 +27,7 @@ public class EscapeDoorCountdown : MonoBehaviour, IInteractable
     public bool IsCountingDown => _isCountingDown;
     public bool IsComplete => _isComplete;
     public float RemainingSeconds => _remainingSeconds;
+    public float DurationSeconds => Mathf.Max(1f, countdownSeconds);
 
     public string InteractionPrompt
     {

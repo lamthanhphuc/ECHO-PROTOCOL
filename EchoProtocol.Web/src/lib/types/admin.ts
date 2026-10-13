@@ -34,7 +34,7 @@ export interface AdminWalletTransaction {
   userId: string;
   username: string;
   displayName: string | null;
-  type: "MATCH_REWARD" | "PURCHASE" | "PAYMENT_FULFILLMENT";
+  type: "MATCH_REWARD" | "PURCHASE" | "PAYMENT_FULFILLMENT" | "ADMIN_GRANT";
   amount: number;
   balanceBefore: number;
   balanceAfter: number;

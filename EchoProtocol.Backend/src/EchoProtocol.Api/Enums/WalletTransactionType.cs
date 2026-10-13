@@ -4,5 +4,6 @@ public enum WalletTransactionType
 {
     MATCH_REWARD,
     PURCHASE,
-    PAYMENT_FULFILLMENT
+    PAYMENT_FULFILLMENT,
+    ADMIN_GRANT
 }

@@ -163,6 +163,9 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
                 firstPersonMesh.allowOcclusionWhenDynamic = false;
             }
 
+            HeldVisualShadowOverride.SetActive(renderer,
+                isLocalView && shouldShow && (IsFirstPersonRenderer(renderer) || IsFirstPersonOnlyRenderer(renderer)));
+
             if (renderer.enabled != shouldShow)
             {
                 renderer.enabled = shouldShow;
@@ -176,6 +179,7 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
         {
             if (pair.Key != null)
             {
+                HeldVisualShadowOverride.SetActive(pair.Key, false);
                 pair.Key.enabled = pair.Value;
             }
         }

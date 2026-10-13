@@ -65,7 +65,7 @@ namespace EchoProtocol.AI.Minions
 
         [Header("Combat")]
         [SerializeField] private float shootRange = 10f;
-        [SerializeField] private float stealToolRange = 30f;
+        [SerializeField] private float stealToolRange = 3f;
         [SerializeField, Min(0.1f)] private float attackCooldownSeconds = 0.65f;
         [SerializeField, Min(0.5f)] private float toolFleeSeconds = 1.6f;
 
@@ -76,8 +76,8 @@ namespace EchoProtocol.AI.Minions
         [SerializeField] private float coreCarryTimeoutSeconds = 3f;
         [SerializeField] private float coreCarryHeight = 0.65f;
         [SerializeField, Min(1f)] private float fleeMinDistance = 4f;
-        [SerializeField, Min(1f)] private float stolenToolDropMinDistance = 6f;
-        [SerializeField, Min(1f)] private float stolenToolDropMaxDistance = 30f;
+        [SerializeField, Min(1f)] private float stolenToolDropMinDistance = 12f;
+        [SerializeField, Min(1f)] private float stolenToolDropMaxDistance = 45f;
 
         [Header("Alert")]
         [SerializeField] private float alertCooldownSeconds = 4f;
@@ -108,6 +108,14 @@ namespace EchoProtocol.AI.Minions
         [Networked] public int ZoneValue { get; private set; }
         [Networked] public PlayerRef TargetPlayer { get; private set; }
         [Networked] public NetworkId StolenCoreId { get; private set; }
+        [Networked] public NetworkId StolenToolId { get; private set; }
+        [Networked] private int ToolDivePhase { get; set; }
+        [Networked] private TickTimer ToolDiveTimer { get; set; }
+        private float _diveDuration;
+        private float _diveStartHeight;
+        private bool _toolContactResolved;
+        private Transform _toolHand;
+        private float _renderFlightHeight = -1f;
         [Networked] public NetworkBool IsMoving { get; private set; }
         [Networked] public uint AttackSequence { get; private set; }
         [Networked] public int AttackKindValue { get; private set; }
@@ -144,6 +152,8 @@ namespace EchoProtocol.AI.Minions
         private float _distractionUntil;
         private Vector3 _lastKnownTargetPosition;
         private Vector3 _fleeDestination;
+        private int _toolRouteRetries;
+        private Vector3 _toolVictimPosition;
         private Vector3 _distractionPoint;
         private long _alertOrdinal;
         private long _attackAttemptOrdinal;
@@ -225,6 +235,9 @@ namespace EchoProtocol.AI.Minions
             _noiseMakerThreatTarget = PlayerRef.None;
             _noiseMakerReactionRecorded = false;
             StolenCoreId = default;
+            StolenToolId = default;
+            ToolDivePhase = 0;
+            ToolDiveTimer = TickTimer.None;
             AttackCooldown = TickTimer.None;
             AlertCooldown = TickTimer.None;
             FleeTimer = TickTimer.None;
@@ -298,7 +311,11 @@ namespace EchoProtocol.AI.Minions
                     runner.Tick.Raw);
             }
             if (_noiseService != null) _noiseService.RuntimeNoiseAccepted -= HandleRuntimeNoiseAccepted;
-            if (hasState && Object.HasStateAuthority) ReleaseStolenCoreAuthoritative();
+            if (hasState && Object.HasStateAuthority)
+            {
+                ReleaseStolenToolAuthoritative();
+                ReleaseStolenCoreAuthoritative();
+            }
         }
 
         private void HandleRuntimeNoiseAccepted(RuntimeNoiseEvent noiseEvent)
@@ -369,7 +386,7 @@ namespace EchoProtocol.AI.Minions
                 return;
             }
 
-            UpdateFlightHeightAuthoritative();
+            if (ToolDivePhase == 0) UpdateFlightHeightAuthoritative();
 
             bool illuminated =
                 TryGetFlashlightSource(out _);
@@ -411,6 +428,13 @@ namespace EchoProtocol.AI.Minions
                 return;
             }
 
+            if (ToolDivePhase != 0)
+            {
+                TickToolDive();
+                _navigation.TickAuthoritativeLocomotion(Runner.DeltaTime);
+                IsMoving = _navigation.AuthoritativeMoveSpeed > 0.2f;
+                return;
+            }
             if (State == CreepMinionState.Flee)
             {
                 _agent.speed = fleeSpeed;
@@ -420,8 +444,26 @@ namespace EchoProtocol.AI.Minions
                 {
                     core.TryUpdateMonsterCarryPoseAuthoritative(Object.Id, CarryPosition(), transform.rotation);
                 }
-                if (Vector3.Distance(transform.position, _fleeDestination) <= 1f || FleeTimer.Expired(Runner))
+                bool reachedDropPoint = Vector3.Distance(transform.position, _fleeDestination) <= 1f;
+                if (StolenToolId.IsValid && !reachedDropPoint && FleeTimer.Expired(Runner))
+                {
+                    // A blocked route must not drop the tool back in the victim's room.
+                    _agent.SetDestination(_fleeDestination);
+                    if (_toolRouteRetries++ < 2 && TryFindSabotageDropPosition(_toolVictimPosition, out var alternative))
+                        _fleeDestination = alternative;
+                    else
+                    {
+                        // No reachable destination remains: return the tool to a recoverable
+                        // world pickup instead of holding it indefinitely.
+                        ReleaseStolenToolAuthoritative();
+                    }
+                    FleeTimer = TickTimer.CreateFromSeconds(Runner, 15f);
+                }
+                if (reachedDropPoint || !StolenToolId.IsValid && FleeTimer.Expired(Runner))
+                {
+                    ReleaseStolenToolAuthoritative();
                     ReleaseStolenCoreAuthoritative();
+                }
             }
             else if (_distractionUntil > Time.time && !StolenCoreId.IsValid)
             {
@@ -530,7 +572,7 @@ namespace EchoProtocol.AI.Minions
                     && (targetLobby.CarriedCoreId.IsValid
                         || (targetLobby.ToolId >= 1
                             && targetLobby.ToolId <= 6));
-                float actionRange = wantsCloseAttack ? stealToolRange : shootRange;
+                float actionRange = wantsCloseAttack ? Mathf.Min(stealToolRange, 3f) : shootRange;
                 if (distance > actionRange)
                     _agent.SetDestination(targetObject.transform.position);
                 else if (_agent.hasPath)
@@ -820,69 +862,12 @@ namespace EchoProtocol.AI.Minions
 #endif
 
             float distance = Vector3.Distance(transform.position, playerObject.transform.position);
-            if (distance <= stealToolRange
-                && lobby != null
-                && lobby.CarriedCoreId.IsValid
-                && interactor != null
-                )
+            if (distance <= Mathf.Min(stealToolRange, 3f) && lobby != null
+                && (lobby.CarriedCoreId.IsValid || lobby.ToolId > 0) && interactor != null)
             {
-                var ordinal = ++_attackAttemptOrdinal;
-                var attempt = $"minion-attack:{Object.Id}:{ordinal}";
-                var coreId = lobby.CarriedCoreId.ToString();
-                var success = TryStealCore(playerObject, lobby, interactor,
-                    out var forcedDrop, out var stolen);
-                var authority = MatchAuthorityRuntime.Instance;
-                authority?.RecordMinionFact(AEDMinionFactKindV1.AttackAttempted,
-                    Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
-                    objectId: coreId, effectKind: "CORE", attemptOrdinal: ordinal,
-                    accepted: forcedDrop);
-                if (forcedDrop)
-                    authority?.RecordMinionFact(AEDMinionFactKindV1.CoreForcedDrop,
-                        Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
-                        objectId: coreId, effectKind: "CORE_FORCED_DROP",
-                        attemptOrdinal: ordinal, accepted: true);
-                if (stolen)
-                    authority?.RecordMinionFact(AEDMinionFactKindV1.CoreStolen,
-                        Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
-                        objectId: coreId, effectKind: "CORE_STOLEN",
-                        attemptOrdinal: ordinal, accepted: true);
-                if (success)
-                {
-                    CommitAttack(CreepMinionAttackKind.StealCore);
-                    return;
-                }
+                BeginToolDive(playerObject);
+                return;
             }
-
-            if (distance <= stealToolRange
-                && lobby != null
-                && lobby.ToolId >= 1
-                && lobby.ToolId <= 6
-                && interactor != null)
-            {
-                var ordinal = ++_attackAttemptOrdinal;
-                var attempt = $"minion-attack:{Object.Id}:{ordinal}";
-                var toolType = lobby.ToolId.ToString();
-                bool relocated = TryRelocateTeamTool(playerObject,
-                    interactor, out Vector3 toolDropPosition);
-                var authority = MatchAuthorityRuntime.Instance;
-                authority?.RecordMinionFact(AEDMinionFactKindV1.AttackAttempted,
-                    Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
-                    objectId: $"tool-type:{toolType}", effectKind: "TOOL",
-                    attemptOrdinal: ordinal, accepted: relocated,
-                    position: relocated ? toolDropPosition : default);
-                if (relocated)
-                {
-                    authority?.RecordMinionFact(AEDMinionFactKindV1.ToolRelocated,
-                        Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
-                        objectId: $"tool-type:{toolType}", effectKind: "TOOL_RELOCATED",
-                        attemptOrdinal: ordinal, accepted: true,
-                        position: toolDropPosition);
-                    CommitAttack(CreepMinionAttackKind.StealTool);
-                    BeginFleeTo(toolDropPosition, toolFleeSeconds);
-                    return;
-                }
-            }
-
             if (distance > shootRange)
                 return;
 
@@ -918,52 +903,178 @@ namespace EchoProtocol.AI.Minions
                 attackCooldownSeconds);
         }
 
-        private bool TryRelocateTeamTool(
-            NetworkObject playerObject,
-            NetworkPlayerInteractor interactor,
-            out Vector3 dropPosition)
+        private float StealClipSeconds()
         {
-            dropPosition = default;
-            if (!TryFindSabotageDropPosition(
-                    playerObject.transform.position,
-                    out dropPosition))
-            {
-                return false;
-            }
+            if (_animators != null)
+                foreach (var animator in _animators)
+                    if (animator != null && animator.runtimeAnimatorController != null)
+                        foreach (var clip in animator.runtimeAnimatorController.animationClips)
+                            if (clip != null && clip.name.IndexOf("Attack02", StringComparison.OrdinalIgnoreCase) >= 0)
+                                return clip.length / Mathf.Max(0.1f, animationSpeed) + 0.05f;
+            return 1f / Mathf.Max(0.1f, animationSpeed) + 0.05f;
+        }
 
-            bool success = interactor.DropTeamToolAuthoritative(
-                TargetPlayer,
-                dropPosition);
-#if false
-            // Debug.Log($"[CREEP_STEAL_TOOL] target={TargetPlayer} success={success} drop={dropPosition}", this);
-#endif
-            return success;
+        private void BeginToolDive(NetworkObject target)
+        {
+            _toolVictimPosition = target.transform.position;
+            if (!TryFindSabotageDropPosition(target.transform.position, out _fleeDestination))
+            {
+                AttackCooldown = TickTimer.CreateFromSeconds(Runner, 1f);
+                return;
+            }
+            _diveStartHeight = Mathf.Max(1.2f, FlightHeightValue);
+            _diveDuration = Mathf.Max(0.45f, (_diveStartHeight - 1.2f) / 8f);
+            ToolDivePhase = 1;
+            _toolContactResolved = false;
+            ToolDiveTimer = TickTimer.CreateFromSeconds(Runner, _diveDuration);
+            AttackCooldown = TickTimer.CreateFromSeconds(Runner, _diveDuration + StealClipSeconds() + attackCooldownSeconds);
+        }
+
+        private void TickToolDive()
+        {
+            if (!TryGetEligiblePlayer(TargetPlayer, out var target, out var lobby, out var life))
+            {
+                if (StolenToolId.IsValid)
+                {
+                    FlightHeightValue = 1.2f;
+                    if (!ToolDiveTimer.Expired(Runner)) return;
+                    BeginFleeTo(_fleeDestination, 12f);
+                }
+                ToolDivePhase = 0;
+                _agent.stoppingDistance = 0.4f;
+                return;
+            }
+            _agent.speed = harassSpeed;
+            _agent.stoppingDistance = 0.75f;
+            _agent.SetDestination(target.transform.position);
+            IsMoving = _agent.velocity.sqrMagnitude > 0.05f;
+            if (ToolDivePhase == 1)
+            {
+                float t = 1f - (ToolDiveTimer.RemainingTime(Runner) ?? 0f) / _diveDuration;
+                FlightHeightValue = Mathf.Lerp(_diveStartHeight, 1.2f, Mathf.SmoothStep(0f, 1f, t));
+                if (!ToolDiveTimer.Expired(Runner)) return;
+                ToolDivePhase = 2;
+                AttackKindValue = (int)(lobby.CarriedCoreId.IsValid ? CreepMinionAttackKind.StealCore : CreepMinionAttackKind.StealTool);
+                AttackSequence++;
+                ToolDiveTimer = TickTimer.CreateFromSeconds(Runner, StealClipSeconds());
+            }
+            FlightHeightValue = 1.2f;
+            if (!_toolContactResolved && (ToolDiveTimer.RemainingTime(Runner) ?? 0f) <= StealClipSeconds() * 0.45f)
+            {
+                _toolContactResolved = true;
+                if (Vector3.Distance(transform.position, target.transform.position) <= 2.5f
+                    && CanSeePlayer(target))
+                {
+                    var interactor = target.GetComponent<NetworkPlayerInteractor>();
+                    var ordinal = ++_attackAttemptOrdinal;
+                    var attempt = $"minion-attack:{Object.Id}:{ordinal}";
+                    var authority = MatchAuthorityRuntime.Instance;
+                    if (lobby.CarriedCoreId.IsValid)
+                    {
+                        var coreId = lobby.CarriedCoreId.ToString();
+                        var success = TryStealCore(target, lobby, interactor, out var forcedDrop, out var stolen);
+                        authority?.RecordMinionFact(AEDMinionFactKindV1.CoreForcedDrop,
+                            Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
+                            objectId: coreId, effectKind: "CORE_FORCED_DROP",
+                            attemptOrdinal: ordinal, accepted: forcedDrop);
+                        authority?.RecordMinionFact(AEDMinionFactKindV1.CoreStolen,
+                            Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
+                            objectId: coreId, effectKind: "CORE_STOLEN",
+                            attemptOrdinal: ordinal, accepted: stolen);
+                    }
+                    else if (interactor != null && interactor.TryTransferTeamToolToMonster(Object.Id, out var pickupId))
+                    {
+                        StolenToolId = pickupId;
+                        authority?.RecordMinionFact(AEDMinionFactKindV1.ToolRelocated,
+                            Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
+                            objectId: pickupId.ToString(), effectKind: "TOOL_RELOCATED",
+                            attemptOrdinal: ordinal, accepted: true);
+                    }
+                }
+            }
+            if (!ToolDiveTimer.Expired(Runner)) return;
+            ToolDivePhase = 0;
+            _agent.stoppingDistance = 0.4f;
+            if (StolenToolId.IsValid)
+                _toolRouteRetries = 0;
+                BeginFleeTo(_fleeDestination, Mathf.Max(toolFleeSeconds, 15f));
+        }
+
+        public void GetToolCarryPose(out Vector3 position, out Quaternion rotation)
+        {
+            if (_toolHand == null)
+            {
+                foreach (var bone in GetComponentsInChildren<Transform>(true))
+                {
+                    string name = bone.name.ToLowerInvariant();
+                    if ((name.Contains("hand") || name.Contains("wrist")) && (name.Contains("right") || name.EndsWith("_r") || name.EndsWith(".r")))
+                    { _toolHand = bone; break; }
+                }
+            }
+            position = _toolHand != null ? _toolHand.position : (_visualRoot != null ? _visualRoot.position : CarryPosition());
+            rotation = _toolHand != null ? _toolHand.rotation : transform.rotation;
+        }
+
+        private void ReleaseStolenToolAuthoritative()
+        {
+            if (!StolenToolId.IsValid) return;
+            if (Runner.TryFindObject(StolenToolId, out var pickup) && pickup.TryGetComponent<NetworkInteractable>(out var item))
+            {
+                Vector3 point = NavMesh.SamplePosition(transform.position, out var hit, 2f, NavMesh.AllAreas)
+                    ? hit.position + Vector3.up * 0.1f : transform.position;
+                item.EndMonsterCarryAuthoritative(point);
+            }
+            StolenToolId = default;
         }
 
         private bool TryFindSabotageDropPosition(Vector3 playerPosition, out Vector3 position)
         {
             position = default;
             if (!NavMesh.SamplePosition(playerPosition, out var playerHit, 2f, NavMesh.AllAreas)) return false;
-
+            if (!NavMesh.SamplePosition(transform.position, out var startHit, 2f, NavMesh.AllAreas)) return false;
+            var rooms = FindObjectsByType<RegionDefinition>();
+            var playerRoom = ResolveDropRoom(rooms, playerHit.position);
+            if (playerRoom == null) return false;
             var path = new NavMeshPath();
-            for (int i = 0; i < 8; i++)
+            float minDistance = Mathf.Max(12f, stolenToolDropMinDistance);
+            float maxDistance = Mathf.Max(minDistance + 10f, stolenToolDropMaxDistance);
+            for (int i = 0; i < 48; i++)
             {
                 Vector2 direction = UnityEngine.Random.insideUnitCircle;
                 if (direction.sqrMagnitude < 0.01f) continue;
                 direction.Normalize();
-                float distance = UnityEngine.Random.Range(stolenToolDropMinDistance, stolenToolDropMaxDistance);
+                float distance = UnityEngine.Random.Range(minDistance, maxDistance);
                 var candidate = playerPosition + new Vector3(direction.x, 0f, direction.y) * distance;
                 if (!NavMesh.SamplePosition(candidate, out var hit, 2.5f, NavMesh.AllAreas)) continue;
                 float actualDistance = Vector3.Distance(playerPosition, hit.position);
-                if (actualDistance < stolenToolDropMinDistance || actualDistance > stolenToolDropMaxDistance) continue;
-                if (!NavMesh.CalculatePath(playerHit.position, hit.position, NavMesh.AllAreas, path)
+                if (actualDistance < minDistance || actualDistance > maxDistance) continue;
+                var dropRoom = ResolveDropRoom(rooms, hit.position);
+                if (dropRoom == null || dropRoom.RegionId == playerRoom.RegionId) continue;
+                if (!NavMesh.CalculatePath(startHit.position, hit.position, NavMesh.AllAreas, path)
                     || path.status != NavMeshPathStatus.PathComplete) continue;
+                if (CalculatePathLength(path) < 18f) continue;
 
                 position = hit.position + Vector3.up * 0.05f;
                 return true;
             }
 
             return false;
+        }
+
+        private static RegionDefinition ResolveDropRoom(RegionDefinition[] rooms, Vector3 point)
+        {
+            RegionDefinition best = null;
+            float smallestArea = float.PositiveInfinity;
+            foreach (var room in rooms)
+            {
+                if (room == null || !room.RegionId.IsValid) continue;
+                var bounds = room.ToBakeData().WorldBounds;
+                if (Mathf.Abs(point.y - bounds.center.y) > 2f) continue;
+                var projected = new Vector3(point.x, bounds.center.y, point.z);
+                float area = bounds.size.x * bounds.size.z;
+                if (bounds.Contains(projected) && area < smallestArea) { best = room; smallestArea = area; }
+            }
+            return best;
         }
 
         private bool TryStealCore(NetworkObject playerObject, LobbyPlayerState lobby,
@@ -1006,6 +1117,12 @@ namespace EchoProtocol.AI.Minions
             return true;
         }
 
+        private bool TryStealCore(NetworkObject playerObject, LobbyPlayerState lobby,
+            NetworkPlayerInteractor interactor)
+        {
+            return TryStealCore(playerObject, lobby, interactor, out _, out _);
+        }
+
         private Vector3 CarryPosition()
         {
             float height =
@@ -1021,6 +1138,8 @@ namespace EchoProtocol.AI.Minions
         private void BeginFlashlightDeath()
         {
             if (!Object.HasStateAuthority || IsDying) return;
+            ToolDivePhase = 0;
+            ReleaseStolenToolAuthoritative();
 
             MatchAuthorityRuntime.Instance?.RecordMinionFact(
                 AEDMinionFactKindV1.TeamDeathReceipt, Object.Id,
@@ -1382,7 +1501,9 @@ namespace EchoProtocol.AI.Minions
                             Mathf.Abs(
                                 _visualRoot.parent.lossyScale.y))
                         : 1f;
-                float localHeight = resolvedHeight / parentScaleY;
+                if (_renderFlightHeight < 0f) _renderFlightHeight = resolvedHeight;
+                _renderFlightHeight = Mathf.MoveTowards(_renderFlightHeight, resolvedHeight, Time.deltaTime * 12f);
+                float localHeight = _renderFlightHeight / parentScaleY;
                 float localBob = bob / parentScaleY;
                 _visualRoot.localPosition =
                     _visualBaseLocalPosition
@@ -1393,16 +1514,17 @@ namespace EchoProtocol.AI.Minions
             if (AttackSequence != _renderedAttackSequence)
             {
                 _renderedAttackSequence = AttackSequence;
+                _currentLocomotionAnimation = null;
                     CrossFade(
                         AttackKind == CreepMinionAttackKind.StealTool
                         || AttackKind == CreepMinionAttackKind.StealCore
                         ? "Attack2"
                         : "Shoot");
-                _actionAnimationUntil = Time.time + attackAnimationLockSeconds;
+                _actionAnimationUntil = Time.time + Mathf.Max(attackAnimationLockSeconds, StealClipSeconds());
                 return;
             }
             if (Time.time < _actionAnimationUntil) return;
-            const string desired = "Run";
+            string desired = IsMoving ? "Run" : "Idle";
             if (desired == _currentLocomotionAnimation) return;
             _currentLocomotionAnimation = desired;
             CrossFade(desired);

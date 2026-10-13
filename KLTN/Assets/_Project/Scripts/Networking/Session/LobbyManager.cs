@@ -438,6 +438,9 @@ namespace EchoProtocol.Networking
                 var isReady = false;
                 var teamId = 0;
                 var characterId = 0;
+                var characterOutfitId = 0;
+                var petId = 0;
+                var petSkinId = 0;
                 var toolId = 0;
                 var operatorName = string.Empty;
                 if (runner.TryGetPlayerObject(player, out var playerObject)
@@ -446,6 +449,9 @@ namespace EchoProtocol.Networking
                     isReady = playerState.IsReady;
                     teamId = playerState.TeamId;
                     characterId = playerState.CharacterId;
+                    characterOutfitId = playerState.CharacterOutfitId;
+                    petId = playerState.PetId;
+                    petSkinId = playerState.PetSkinId;
                     toolId = playerState.ToolId;
                     operatorName = playerState.OperatorName.ToString();
                 }
@@ -460,6 +466,9 @@ namespace EchoProtocol.Networking
                     IsReady = isReady,
                     TeamId = teamId,
                     CharacterId = characterId,
+                    CharacterOutfitId = characterOutfitId,
+                    PetId = petId,
+                    PetSkinId = petSkinId,
                     ToolId = toolId,
                     OperatorName = operatorName,
                 });
