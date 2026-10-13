@@ -136,7 +136,18 @@ namespace EchoProtocol.Player.Tests
                 "Assets/Scripts/TeamTools/TeamToolPickupCatalog.cs");
 
             StringAssert.Contains("RpcSources.InputAuthority, RpcTargets.StateAuthority", source);
-            StringAssert.Contains("Runner.Spawn(prefab, dropPosition, dropRotation)", source);
+            StringAssert.Contains(
+                "Runner.Spawn(prefab, dropPosition, dropRotation,",
+                source);
+            StringAssert.Contains(
+                "onBeforeSpawned: (_, spawned) =>",
+                source);
+            StringAssert.Contains(
+                "pickupId = pickupObject.Id;",
+                source);
+            StringAssert.Contains(
+                "RecordPhase8ToolDrop(",
+                source);
             StringAssert.Contains("_teamToolPickupCatalog.GetPrefab(toolId)", source);
             StringAssert.Contains("LobbyPlayerState.FieldScannerToolId => fieldScannerPrefab", catalog);
             StringAssert.Contains("LobbyPlayerState.NoiseMakerToolId => noiseMakerPrefab", catalog);

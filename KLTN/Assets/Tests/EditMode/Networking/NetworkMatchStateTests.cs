@@ -11,21 +11,37 @@ namespace EchoProtocol.Networking.Tests
         public void Zone1Completion_DoesNotTeleportPlayersToZone2()
         {
             string source = File.ReadAllText(
-                    "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs")
-                .Replace("\r\n", "\n");
+                "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs");
+            int objectiveStart = source.IndexOf(
+                "public bool TryCompleteCoreObjective(");
+            int objectiveEnd = source.IndexOf(
+                "public bool TryDiscoverSecurityTerminal(", objectiveStart);
+            int transitionStart = source.IndexOf(
+                "private void CompletePhaseTransition(");
+            int transitionEnd = source.IndexOf(
+                "private bool RevalidateAEDv2Boundary(", transitionStart);
+            int debugStart = source.IndexOf(
+                "private bool DebugSkipToZone2(");
+            int debugEnd = source.IndexOf(
+                "public void RequestDebugSkipToZone2(", debugStart);
 
-            StringAssert.Contains(
-                "if (next != NetworkMatchPhase.Zone2Objective)",
-                source);
+            Assert.That(objectiveStart, Is.GreaterThanOrEqualTo(0));
+            Assert.That(objectiveEnd, Is.GreaterThan(objectiveStart));
+            Assert.That(transitionStart, Is.GreaterThanOrEqualTo(0));
+            Assert.That(transitionEnd, Is.GreaterThan(transitionStart));
+            Assert.That(debugStart, Is.GreaterThanOrEqualTo(0));
+            Assert.That(debugEnd, Is.GreaterThan(debugStart));
 
-            StringAssert.Contains(
-                "TeleportGameplayPlayersAuthoritative(next);",
-                source);
+            string objective = source.Substring(objectiveStart, objectiveEnd - objectiveStart);
+            string transition = source.Substring(transitionStart, transitionEnd - transitionStart);
+            string debugSkip = source.Substring(debugStart, debugEnd - debugStart);
 
-            StringAssert.Contains(
-                "TeleportGameplayPlayersAuthoritative(\n" +
-                "                NetworkMatchPhase.Zone2Objective);",
-                source);
+            StringAssert.Contains("NetworkMatchPhase.Zone2Objective", objective);
+            StringAssert.DoesNotContain("TeleportGameplayPlayersAuthoritative(", objective);
+            StringAssert.Contains("ResetPlayerReviveBudgetsAuthoritative()", transition);
+            StringAssert.DoesNotContain("TeleportGameplayPlayersAuthoritative(", transition);
+            StringAssert.Contains("TeleportGameplayPlayersAuthoritative(", debugSkip);
+            StringAssert.Contains("NetworkMatchPhase.Zone2Objective);", debugSkip);
         }
 
         private const string MatchSourcePath =
@@ -231,9 +247,10 @@ namespace EchoProtocol.Networking.Tests
         public void MATCH_NET_HudUsesEmergencyPowerTransferWording()
         {
             var source = File.ReadAllText(HudObjectiveTrackerPath);
-
-            StringAssert.Contains("INITIATE POWER TRANSFER", source);
-            StringAssert.Contains("Emergency power remaining", source);
+            StringAssert.Contains("SetObjective(\"Chuyển nguồn điện\"", source);
+            StringAssert.Contains("Cấp điện cho hệ thống sơ tán", source);
+            StringAssert.Contains("Thả tay sẽ làm giảm tiến độ", source);
+            StringAssert.Contains("GetEmergencyPowerRemainingSeconds()", source);
             StringAssert.DoesNotContain("CHARGE SPACEFRIGATE", source);
             StringAssert.DoesNotContain("Scifi Charge", source);
         }
