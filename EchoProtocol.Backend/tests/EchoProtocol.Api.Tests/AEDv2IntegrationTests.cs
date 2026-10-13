@@ -129,7 +129,7 @@ public sealed partial class ScenarioServiceTests
         var canonical = new AEDv2PhaseEvidenceVerifier(f.Db, repo);
         var users = f.Db.MatchPlayerBindings.Where(x => x.MatchId == f.MatchId).Select(x => x.UserId).ToArray();
         var roster = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(f.MatchId.ToString("D") + "|" + string.Join(",", users.Select(x => x.ToString("D")).Order(StringComparer.Ordinal))))).ToLowerInvariant();
-        var request = new AEDPhase8SourceUploadRequestV1(1, PhaseFingerprint(f, 1), roster, "TEST_CONTEXT", "P8_SOURCE_TEST_V1",
+        var request = new AEDPhase8SourceUploadRequestV1(1, PhaseFingerprint(f, 1), roster, "TEST_CONTEXT", "AED_PHASE8_SOURCE_REFERENCES_V1",
             new[] { new AEDPhase8SourceReferenceV1(down.Id, 2, "PLAYER_DOWNED", "down-2"), new AEDPhase8SourceReferenceV1(invalid.Id, 3, "TEAM_TOOL_LIFECYCLE", "missing-parent") },
             Array.Empty<AEDPhase8MetricEvidenceV1>(), Array.Empty<AEDPhase8SupplyEvidenceV1>(), Array.Empty<AEDPhase8MinionEvidenceV1>());
         Assert.True(await canonical.VerifyAsync(f.MatchId, 1, PhaseFingerprint(f, 1)));
@@ -214,7 +214,7 @@ public sealed partial class ScenarioServiceTests
         var users = f.Db.MatchPlayerBindings.Where(x => x.MatchId == f.MatchId).Select(x => x.UserId).ToArray();
         var roster = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(f.MatchId.ToString("D") + "|" + string.Join(",", users.Select(x => x.ToString("D")).Order(StringComparer.Ordinal))))).ToLowerInvariant();
         var reference = new AEDPhase8SourceReferenceV1(downEvent.Id, downEvent.EventSequence, downEvent.EventType, "down-2");
-        var request = new AEDPhase8SourceUploadRequestV1(1, PhaseFingerprint(f, 1), roster, "TEST_CONTEXT", "P8_SOURCE_TEST_V1", new[] { reference }, Array.Empty<AEDPhase8MetricEvidenceV1>(), Array.Empty<AEDPhase8SupplyEvidenceV1>(), Array.Empty<AEDPhase8MinionEvidenceV1>());
+        var request = new AEDPhase8SourceUploadRequestV1(1, PhaseFingerprint(f, 1), roster, "TEST_CONTEXT", "AED_PHASE8_SOURCE_REFERENCES_V1", new[] { reference }, Array.Empty<AEDPhase8MetricEvidenceV1>(), Array.Empty<AEDPhase8SupplyEvidenceV1>(), Array.Empty<AEDPhase8MinionEvidenceV1>());
         var verifier = new AEDPhase8SourceVerifierV1(f.Db, new AcceptedEvidenceRepository(events), new AEDv2PhaseEvidenceVerifier(f.Db, new AcceptedEvidenceRepository(events)));
 
         var valid = await verifier.VerifyAsync(f.MatchId, request);
@@ -258,7 +258,7 @@ public sealed partial class ScenarioServiceTests
         var users = f.Db.MatchPlayerBindings.Where(x => x.MatchId == f.MatchId).Select(x => x.UserId).ToArray();
         var roster = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(f.MatchId.ToString("D") + "|" + string.Join(",", users.Select(x => x.ToString("D")).Order(StringComparer.Ordinal))))).ToLowerInvariant();
         var fingerprint = AEDv2PhaseEvidenceVerifier.ComputeCanonicalFingerprint(f.MatchId, "PHASE_ONE", 1, roster, DateTime.UnixEpoch, DateTime.UnixEpoch.AddSeconds(20), users.Length, 0, 0, 0, 0, 0, 0, true, Array.Empty<string>());
-        var request = new AEDPhase8SourceUploadRequestV1(1, fingerprint, roster, "TEST_CONTEXT", "P8_SOURCE_TEST_V1", Array.Empty<AEDPhase8SourceReferenceV1>(), Array.Empty<AEDPhase8MetricEvidenceV1>(), Array.Empty<AEDPhase8SupplyEvidenceV1>(), Array.Empty<AEDPhase8MinionEvidenceV1>());
+        var request = new AEDPhase8SourceUploadRequestV1(1, fingerprint, roster, "TEST_CONTEXT", "AED_PHASE8_SOURCE_REFERENCES_V1", Array.Empty<AEDPhase8SourceReferenceV1>(), Array.Empty<AEDPhase8MetricEvidenceV1>(), Array.Empty<AEDPhase8SupplyEvidenceV1>(), Array.Empty<AEDPhase8MinionEvidenceV1>());
         var repository = new AcceptedEvidenceRepository(events);
         var verifier = new AEDPhase8SourceVerifierV1(f.Db, repository, new AEDv2PhaseEvidenceVerifier(f.Db, repository));
 
