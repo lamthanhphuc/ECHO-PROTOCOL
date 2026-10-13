@@ -2,6 +2,8 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using EchoProtocol.AI.Common.AED;
@@ -116,6 +118,8 @@ namespace EchoProtocol.AI.AED
                 string.IsNullOrWhiteSpace(c.contentFingerprint) ||
                 c.contentFingerprint.Length != 64 ||
                 !c.contentFingerprint.All(Uri.IsHexDigit) ||
+                !string.Equals(c.contentFingerprint, ComputeBackendContentFingerprint(c),
+                    StringComparison.OrdinalIgnoreCase) ||
                 c.policyVersion != baseline.PolicyVersion ||
                 c.mapId != baseline.MapId ||
                 c.monsterType != baseline.MonsterType ||
@@ -149,7 +153,13 @@ namespace EchoProtocol.AI.AED
 
             if (supportChanged == chaseChanged ||
                 !supportRule.CandidateValues.Contains((double)c.supportItemBudget) ||
-                !chaseRule.CandidateValues.Contains(c.chaseSpeed))
+                !chaseRule.CandidateValues.Contains(c.chaseSpeed) ||
+                (supportChanged && c.supportItemBudget != supportRule.CandidateValues
+                    .Where(value => value > baseline.SupportItemBudget)
+                    .DefaultIfEmpty(double.NaN).Min()) ||
+                (chaseChanged && c.chaseSpeed != chaseRule.CandidateValues
+                    .Where(value => value > baseline.MonsterParameters.ChaseSpeed)
+                    .DefaultIfEmpty(double.NaN).Min()))
             {
                 return false;
             }
@@ -185,6 +195,29 @@ namespace EchoProtocol.AI.AED
             {
                 return false;
             }
+        }
+
+        private static string ComputeBackendContentFingerprint(AEDBackendScenarioConfigDto c)
+        {
+            string[] parts =
+            {
+                c.scenarioConfigId, c.scenarioConfigVersion, c.schemaVersion,
+                c.policyVersion, c.configSource, c.mapId, c.monsterType,
+                c.objectiveSpawnSetId,
+                c.supportItemBudget.ToString(CultureInfo.InvariantCulture),
+                c.detectionFillRate.ToString("R", CultureInfo.InvariantCulture),
+                c.detectionDecayRate.ToString("R", CultureInfo.InvariantCulture),
+                c.chaseSpeed.ToString("R", CultureInfo.InvariantCulture),
+                c.searchDuration.ToString("R", CultureInfo.InvariantCulture),
+                c.routeModifier,
+                c.escapeDoorTimerSeconds.ToString("R", CultureInfo.InvariantCulture),
+                c.fallbackConfigId, c.fallbackConfigVersion,
+                c.contentWhitelistVersion, c.unityCompatibilityVersion
+            };
+            var payload = string.Join("|", parts.Select(x => x ?? "<null>"));
+            using var sha = SHA256.Create();
+            return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(payload)))
+                .Replace("-", string.Empty).ToLowerInvariant();
         }
 
         public bool TryGetStagedBackendPreMatch(
@@ -229,6 +262,10 @@ namespace EchoProtocol.AI.AED
                 appliedConfig.ScenarioConfigVersion != stagedConfig.ScenarioConfigVersion ||
                 ScenarioConfigFingerprint.Compute(appliedConfig) !=
                     ScenarioConfigFingerprint.Compute(stagedConfig) ||
+                decision.config == null ||
+                !string.Equals(decision.config.contentFingerprint,
+                    ComputeBackendContentFingerprint(decision.config),
+                    StringComparison.OrdinalIgnoreCase) ||
                 !Guid.TryParse(decision.decisionId, out var decisionId))
             {
                 return false;
