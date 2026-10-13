@@ -70,10 +70,17 @@ public sealed class AEDPhase8SourceVerifierV1(AppDbContext db, ITelemetryEventRe
         var references = request.SourceEvents.Select(x => x.OccurrenceKey).ToHashSet(StringComparer.Ordinal);
         if (request.Metrics.Any(x => x == null || x.UserId == Guid.Empty || !users.Contains(x.UserId) || x.Eligible < 0 || x.ResolvedSuccess < 0 || x.ResolvedFailure < 0 || x.Censored < 0 || (long)x.ResolvedSuccess + x.ResolvedFailure + x.Censored > x.Eligible || x.MetricVersion != "AED_METRIC_OPPORTUNITY_V1" || (x.NormalizedValue.HasValue && (x.NormalizedValue < 0m || x.NormalizedValue > 1m)) || (x.ResolvedSuccess + x.ResolvedFailure > 0 && !x.NormalizedValue.HasValue) || string.IsNullOrWhiteSpace(x.MetricId) || string.IsNullOrWhiteSpace(x.ComparisonContextKey) || string.IsNullOrWhiteSpace(x.ConfidenceStatus) || x.SourceOccurrenceKeys == null || x.SourceOccurrenceKeys.Any(key => string.IsNullOrWhiteSpace(key) || !references.Contains(key))))
             return new(true, false, false, false, false, "P8_SOURCE_METRIC_INVALID");
-        if (request.Supply.Select(x => x?.InstanceId).Distinct(StringComparer.Ordinal).Count() != request.Supply.Length || request.Supply.Any(x => x == null || string.IsNullOrWhiteSpace(x.InstanceId) || x.ToolId is not (1 or 2 or 3 or 4 or 6) || string.IsNullOrWhiteSpace(x.Origin) || string.IsNullOrWhiteSpace(x.Location) || (x.OwnerUserId.HasValue && !users.Contains(x.OwnerUserId.Value)) || (x.RemainingCharges.HasValue && x.RemainingCharges.Value < 0) || x.Zone is < 0 or > 3 || x.SourceTick < 0 || string.IsNullOrWhiteSpace(x.SourceOccurrenceKey) || !references.Contains(x.SourceOccurrenceKey)))
+        if (request.Supply.Any(x => x == null || string.IsNullOrWhiteSpace(x.InstanceId) || x.ToolId is not (1 or 2 or 3 or 4 or 6) || string.IsNullOrWhiteSpace(x.Origin) || string.IsNullOrWhiteSpace(x.Location) || (x.OwnerUserId.HasValue && !users.Contains(x.OwnerUserId.Value)) || (x.RemainingCharges.HasValue && x.RemainingCharges.Value < 0) || x.Zone is < 0 or > 3 || x.SourceTick < 0 || string.IsNullOrWhiteSpace(x.SourceOccurrenceKey) || !references.Contains(x.SourceOccurrenceKey)))
+            return new(true, false, false, false, false, "P8_SOURCE_SUPPLY_INVALID");
+        if (request.Supply.Select(x => x.SourceOccurrenceKey).Distinct(StringComparer.Ordinal).Count() != request.Supply.Length)
             return new(true, false, false, false, false, "P8_SOURCE_SUPPLY_INVALID");
         if (request.Minions.Any(x => x == null || string.IsNullOrWhiteSpace(x.NetworkInstanceId) || x.State is not ("SPAWNED" or "DESPAWNED") || x.Zone is < 0 or > 3 || x.SourceTick < 0 || string.IsNullOrWhiteSpace(x.SourceOccurrenceKey) || !references.Contains(x.SourceOccurrenceKey)))
             return new(true, false, false, false, false, "P8_SOURCE_MINION_INVALID");
+        if (request.Minions.Select(x => x.SourceOccurrenceKey).Distinct(StringComparer.Ordinal).Count() != request.Minions.Length)
+            return new(true, false, false, false, false, "P8_SOURCE_MINION_INVALID");
+        if (request.SourceVersion != "AED_PHASE8_SOURCE_REFERENCES_V1" &&
+            !AEDPhase8LifecycleReconcilerV1.TryMatchPhaseSidecars(accepted, matchId, phaseStart.EventSequence, phaseEnds[0].EventSequence, request.Supply, request.Minions, out var sidecarReason))
+            return new(true, false, false, false, false, sidecarReason);
         // Historical skill, pressure sidecars, complete supply origins, and minion state are not independently reconstructible yet.
         return new(true, false, false, false, false, "P8_SOURCE_AUTHORITATIVE_COVERAGE_INCOMPLETE");
     }

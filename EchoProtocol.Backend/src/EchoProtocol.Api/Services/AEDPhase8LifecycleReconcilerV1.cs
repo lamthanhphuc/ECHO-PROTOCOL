@@ -1,4 +1,5 @@
 using EchoProtocol.Api.Data.Telemetry;
+using EchoProtocol.Api.DTOs.Scenarios;
 using MongoDB.Bson;
 
 namespace EchoProtocol.Api.Services;
@@ -6,6 +7,89 @@ namespace EchoProtocol.Api.Services;
 public static class AEDPhase8LifecycleReconcilerV1
 {
     private sealed record Tool(int ToolId, int Zone, string Location, Guid? Owner, int? Charges, long Tick);
+
+    public static bool TryMatchPhaseSidecars(
+        IEnumerable<TelemetryEventDocument> accepted,
+        Guid matchId,
+        long phaseStartSequence,
+        long phaseEndSequence,
+        IReadOnlyCollection<AEDPhase8SupplyEvidenceV1> supply,
+        IReadOnlyCollection<AEDPhase8MinionEvidenceV1> minions,
+        out string reason)
+    {
+        reason = "P8_SOURCE_SIDECAR_INVALID";
+
+        if (accepted == null || matchId == Guid.Empty || phaseStartSequence <= 0 || phaseEndSequence <= phaseStartSequence || supply == null || minions == null)
+            return false;
+
+        var all = accepted.Where(x => x.MatchId == matchId && x.EventSequence <= phaseEndSequence).OrderBy(x => x.EventSequence).ToArray();
+        var phaseEvents = all.Where(x => x.EventSequence > phaseStartSequence && x.EventSequence < phaseEndSequence).ToArray();
+        var toolEvents = phaseEvents.Where(x => x.EventType == "TEAM_TOOL_LIFECYCLE").ToArray();
+        var minionEvents = phaseEvents.Where(x => x.EventType == "MINION_LIFECYCLE").ToArray();
+
+        if (supply.Count != toolEvents.Length || minions.Count != minionEvents.Length)
+        {
+            reason = "P8_SOURCE_SIDECAR_COVERAGE_MISMATCH";
+            return false;
+        }
+
+        if (supply.Any(x => x == null || string.IsNullOrWhiteSpace(x.SourceOccurrenceKey)) ||
+            minions.Any(x => x == null || string.IsNullOrWhiteSpace(x.SourceOccurrenceKey)) ||
+            supply.Select(x => x.SourceOccurrenceKey).Distinct(StringComparer.Ordinal).Count() != supply.Count ||
+            minions.Select(x => x.SourceOccurrenceKey).Distinct(StringComparer.Ordinal).Count() != minions.Count)
+            return false;
+
+        var supplyByKey = supply.ToDictionary(x => x.SourceOccurrenceKey, StringComparer.Ordinal);
+        var minionsByKey = minions.ToDictionary(x => x.SourceOccurrenceKey, StringComparer.Ordinal);
+        var origins = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var item in all)
+        {
+            if (item.EventType is not ("TEAM_TOOL_LIFECYCLE" or "MINION_LIFECYCLE")) continue;
+            if (!ReadContextText(item, "occurrenceKey", out var occurrence) || !ReadContextTick(item, out var tick) || !ReadData(item, out var data)) return false;
+            bool currentPhase = item.EventSequence > phaseStartSequence && item.EventSequence < phaseEndSequence;
+
+            if (item.EventType == "MINION_LIFECYCLE")
+            {
+                if (!currentPhase) continue;
+                if (!minionsByKey.TryGetValue(occurrence, out var row) || !Text(data, "networkInstanceId", out var instanceId) || !Text(data, "state", out var state) || !Integer(data, "zone", out var zone) || row.NetworkInstanceId != instanceId || row.State != state || row.Zone != zone || row.SourceTick != tick)
+                {
+                    reason = "P8_SOURCE_MINION_REPLAY_MISMATCH";
+                    return false;
+                }
+                continue;
+            }
+
+            if (!Text(data, "instanceId", out var id) || !Text(data, "action", out var action) || !Integer(data, "toolId", out var toolId) || !Integer(data, "zone", out var toolZone) || !Charges(data, out var charges)) return false;
+            if (action == "SPAWN")
+            {
+                if (data.Contains("origin") && !Text(data, "origin", out _)) return false;
+                origins[id] = data.Contains("origin") ? data["origin"].AsString : "WorldSpawn";
+            }
+            else if (action == "LOADOUT") origins[id] = "LobbyLoadout";
+            else if (action == "DROP") origins[id] = "PlayerDrop";
+            if (!currentPhase) continue;
+            if (!origins.TryGetValue(id, out var origin) || !supplyByKey.TryGetValue(occurrence, out var source))
+            {
+                reason = "P8_SOURCE_SUPPLY_REPLAY_MISMATCH";
+                return false;
+            }
+            string location = action switch { "SPAWN" or "DROP" => "World", "LOADOUT" or "PICKUP" or "USE" => "Player", "CONSUME" => "Consumed", _ => string.Empty };
+            Guid? expectedOwner = null;
+            if (action is "LOADOUT" or "PICKUP" or "USE" or "CONSUME")
+            {
+                if (!Text(data, "ownerUserId", out var ownerText) || !Guid.TryParse(ownerText, out var ownerId) || ownerId == Guid.Empty) return false;
+                expectedOwner = ownerId;
+            }
+            if (location.Length == 0 || source.InstanceId != id || source.ToolId != toolId || source.Zone != toolZone || source.Origin != origin || source.Location != location || source.OwnerUserId != expectedOwner || source.RemainingCharges != charges || source.SourceTick != tick)
+            {
+                reason = "P8_SOURCE_SUPPLY_REPLAY_MISMATCH";
+                return false;
+            }
+        }
+        reason = string.Empty;
+        return true;
+    }
 
     public static bool TryVerify(IEnumerable<TelemetryEventDocument> accepted, Guid matchId, long completedSequence,
         IReadOnlySet<Guid> roster, out string reason)
