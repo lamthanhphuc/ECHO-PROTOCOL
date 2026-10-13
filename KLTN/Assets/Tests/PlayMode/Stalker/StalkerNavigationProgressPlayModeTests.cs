@@ -673,10 +673,10 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             InvokeTickNavigationRecovery(fixture.StalkerController);
 
-            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
-            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Stuck"));
-            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Complete"));
-            AssertVectorApproximately(fixture.Agent.destination, fixture.Destination);
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.False);
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("NoDestination"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Idle"));
         }
 
         [UnityTest]
@@ -721,10 +721,10 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             InvokeTickNavigationRecovery(fixture.StalkerController);
 
-            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
-            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Stale"));
-            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Failed"));
-            AssertVectorApproximately(fixture.Agent.destination, fixture.Destination);
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.False);
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("NoDestination"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Idle"));
         }
 
         [UnityTest]
@@ -745,8 +745,9 @@ namespace EchoProtocol.AI.Stalker.Tests
             InvokeTickNavigationRecovery(fixture.StalkerController);
 
             Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
-            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Partial"));
-            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Failed"));
+            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.False);
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("NoDestination"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Idle"));
             Assert.That(HasArrived(fixture.Navigation), Is.False);
         }
 
