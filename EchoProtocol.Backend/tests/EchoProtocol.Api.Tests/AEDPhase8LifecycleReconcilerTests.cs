@@ -119,7 +119,14 @@ public sealed class AEDPhase8LifecycleReconcilerTests
         };
     }
 
-    private static BsonDocument Tool(string action, string id, int toolId, int zone, Guid? owner, int? charges, string parent)
+    private static BsonDocument Tool(
+        string action,
+        string id,
+        int toolId,
+        int zone,
+        Guid? owner,
+        int? charges,
+        string? parent)
     {
         var data = new BsonDocument { ["action"] = action, ["instanceId"] = id, ["toolId"] = toolId, ["zone"] = zone };
         if (owner.HasValue) data["ownerUserId"] = owner.Value.ToString("D");

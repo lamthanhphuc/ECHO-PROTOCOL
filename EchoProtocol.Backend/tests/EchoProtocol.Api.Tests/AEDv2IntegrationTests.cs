@@ -113,6 +113,9 @@ public sealed partial class ScenarioServiceTests
         await f.Db.SaveChangesAsync();
         var baseEvents = PhaseEvidence(f);
         var down = baseEvents.Single(x => x.EventType == "PLAYER_DOWNED");
+        var downUserId = down.UserId
+            ?? throw new InvalidOperationException(
+                "PLAYER_DOWNED must have a UserId.");
         down.ValueJson["context"].AsBsonDocument["occurrenceKey"] = "down-2";
         var invalid = new TelemetryEventDocument
         {
@@ -121,7 +124,7 @@ public sealed partial class ScenarioServiceTests
             ValueJson = new BsonDocument
             {
                 ["context"] = new BsonDocument { ["phase"] = "PHASE_ONE", ["authorityTick"] = 15, ["occurrenceKey"] = "missing-parent" },
-                ["data"] = new BsonDocument { ["action"] = "PICKUP", ["instanceId"] = "unknown-tool", ["toolId"] = 2, ["zone"] = 1, ["ownerUserId"] = down.UserId.Value.ToString("D"), ["remainingCharges"] = 3 }
+                ["data"] = new BsonDocument { ["action"] = "PICKUP", ["instanceId"] = "unknown-tool", ["toolId"] = 2, ["zone"] = 1, ["ownerUserId"] = downUserId.ToString("D"), ["remainingCharges"] = 3 }
             }
         };
         var events = new[] { baseEvents[0], down, invalid, CopySequence(baseEvents[2], 4) };
