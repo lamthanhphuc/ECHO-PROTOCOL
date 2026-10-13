@@ -104,7 +104,7 @@ public static class AEDPhase8LifecycleReconcilerV1
         var minions = new Dictionary<string, (int Zone, long Tick, bool Alive)>(StringComparer.Ordinal);
         var sequences = new HashSet<long>();
         var occurrences = new HashSet<string>(StringComparer.Ordinal);
-        string phase = null;
+        string? phase = null;
         foreach (var item in events)
         {
             if (item.EventSequence <= 0 || !sequences.Add(item.EventSequence)) return false;
@@ -209,15 +209,27 @@ public static class AEDPhase8LifecycleReconcilerV1
     }
     private static bool Text(BsonDocument data, string key, out string value)
     {
-        value = null; return data.TryGetValue(key, out var raw) && raw.IsString && !string.IsNullOrWhiteSpace(value = raw.AsString);
+        value = string.Empty;
+        return data.TryGetValue(key, out var raw)
+            && raw.IsString
+            && !string.IsNullOrWhiteSpace(value = raw.AsString);
     }
     private static bool ReadData(TelemetryEventDocument item, out BsonDocument data)
     {
-        data = null; return item.ValueJson.TryGetValue("data", out var raw) && raw.IsBsonDocument && (data = raw.AsBsonDocument) != null;
+        data = default!;
+        return item.ValueJson.TryGetValue("data", out var raw)
+            && raw.IsBsonDocument
+            && (data = raw.AsBsonDocument) != null;
     }
-    private static bool ReadContextText(TelemetryEventDocument item, string key, out string value)
+    private static bool ReadContextText(
+        TelemetryEventDocument item,
+        string key,
+        out string value)
     {
-        value = null; return item.ValueJson.TryGetValue("context", out var raw) && raw.IsBsonDocument && Text(raw.AsBsonDocument, key, out value);
+        value = string.Empty;
+        return item.ValueJson.TryGetValue("context", out var raw)
+            && raw.IsBsonDocument
+            && Text(raw.AsBsonDocument, key, out value);
     }
     private static bool ReadContextTick(TelemetryEventDocument item, out long tick)
     {
