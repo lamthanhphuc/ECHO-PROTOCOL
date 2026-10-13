@@ -23,6 +23,9 @@ namespace EchoProtocol.UI.MainMenu
         [SerializeField]
         private float rotationSpeed = 18f;
         private bool _dragging;
+        private Vector3 _framePosition;
+        private Quaternion _frameRotation;
+        private bool _frameTransition;
         private float _resumeRotationAt;
         public void DragPreview(Vector2 delta) { _dragging=true; _resumeRotationAt=Time.unscaledTime+2f; if(_spinRoot!=null)_spinRoot.Rotate(0f,-delta.x*0.35f,0f,Space.Self); }
         public void EndPreviewDrag() { _dragging=false; _resumeRotationAt=Time.unscaledTime+2f; }
@@ -114,7 +117,7 @@ namespace EchoProtocol.UI.MainMenu
             if(_target!=null && _target!=target){_target.texture=null;_target.color=Color.clear;}
             _target =
                 target;
-            ResizePreviewTexture();
+            bool resizedPreview = ResizePreviewTexture();
 
             _target.texture =
                 _renderTexture;
@@ -141,7 +144,7 @@ namespace EchoProtocol.UI.MainMenu
                     resourcePath,
                     System.StringComparison.Ordinal))
             {
-                CenterAndFrameCurrentModel();
+                if(resizedPreview)CenterAndFrameCurrentModel();
                 _camera.enabled =
                     true;
 
@@ -601,6 +604,15 @@ namespace EchoProtocol.UI.MainMenu
             }
 
             if (ResizePreviewTexture()) CenterAndFrameCurrentModel();
+            if(_frameTransition) {
+                float blend=1f-Mathf.Exp(-18f*Time.unscaledDeltaTime);
+                _camera.transform.position=Vector3.Lerp(_camera.transform.position,_framePosition,blend);
+                _camera.transform.rotation=Quaternion.Slerp(_camera.transform.rotation,_frameRotation,blend);
+                if((_camera.transform.position-_framePosition).sqrMagnitude<0.000001f && Quaternion.Angle(_camera.transform.rotation,_frameRotation)<0.05f) {
+                    _camera.transform.SetPositionAndRotation(_framePosition,_frameRotation);
+                    _frameTransition=false;
+                }
+            }
             if(_dragging || Time.unscaledTime<_resumeRotationAt)return;
             _spinRoot.Rotate(
                 0f,
@@ -879,23 +891,14 @@ namespace EchoProtocol.UI.MainMenu
                 }
             }
 
-            _camera.transform.position =
-                targetPoint +
-                viewDirection *
-                distance;
-
-            _camera.transform.LookAt(
-                targetPoint);
-
-            _camera.nearClipPlane =
-                Mathf.Max(
-                    0.01f,
-                    distance -
-                    radius * 2f);
-
-            _camera.farClipPlane =
-                distance +
-                radius * 4f;
+            _framePosition=targetPoint+viewDirection*distance;
+            _frameRotation=Quaternion.LookRotation(targetPoint-_framePosition,Vector3.up);
+            _frameTransition=Application.isPlaying && _camera.enabled;
+            if(!_frameTransition)_camera.transform.SetPositionAndRotation(_framePosition,_frameRotation);
+            // Include the previous camera distance while blending so the new model
+            // cannot disappear against a near/far plane during the transition.
+            _camera.nearClipPlane=0.01f;
+            _camera.farClipPlane=Mathf.Max(distance,Vector3.Distance(_camera.transform.position,targetPoint))+radius*4f;
 
             return true;
         }
@@ -1204,6 +1207,7 @@ namespace EchoProtocol.UI.MainMenu
 
         private void OnDisable()
         {
+            _frameTransition=false;
             if (_camera != null)
             {
                 _camera.enabled =
