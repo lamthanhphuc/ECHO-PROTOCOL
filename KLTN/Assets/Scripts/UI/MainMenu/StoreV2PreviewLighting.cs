@@ -73,8 +73,8 @@ namespace EchoProtocol.UI.MainMenu
 
             if (camera != null)
             {
-                camera.backgroundColor =
-                    previewBackground;
+                // Keep the model composited over the Store background.
+                camera.backgroundColor = new Color(previewBackground.r,previewBackground.g,previewBackground.b,0f);
 
                 camera.allowHDR = true;
                 camera.allowMSAA = true;

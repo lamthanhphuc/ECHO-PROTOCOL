@@ -101,6 +101,8 @@ namespace EchoProtocol.UI.MainMenu
         // STORE_V2_PET_SELECTION_API
         // Read-only state exposed for Store V2 presentation.
         // The controller remains authoritative for selection logic.
+        public bool IsBuyingSkin => _purchaseTarget == PurchaseTarget.Skin;
+
         public int SelectedPetId =>
             _selectedPetId;
 
@@ -542,8 +544,7 @@ namespace EchoProtocol.UI.MainMenu
             if (_purchaseTarget
                 == PurchaseTarget.Pet)
             {
-                _selectedName.text =
-                    _selectedPet.Name;
+                StoreReferencePresentation.SetName(_selectedName, _selectedPet.Name);
 
                 _selectedDescription.text =
                     _selectedPet.Description;
@@ -559,10 +560,9 @@ namespace EchoProtocol.UI.MainMenu
                 return;
             }
 
-            _selectedName.text =
-                _selectedPet.Name +
+            StoreReferencePresentation.SetName(_selectedName, _selectedPet.Name +
                 " // " +
-                _selectedSkin.Name;
+                _selectedSkin.Name);
 
             _selectedDescription.text =
                 _selectedSkin.DefaultOwned
@@ -572,7 +572,7 @@ namespace EchoProtocol.UI.MainMenu
             if (_selectedSkin.DefaultOwned)
             {
                 _selectedPrice.text =
-                    "INCLUDED";
+                    string.Empty;
             }
             else
             {
@@ -609,7 +609,7 @@ namespace EchoProtocol.UI.MainMenu
                     _buyButton.interactable = false;
 
                     if (caption != null)
-                        caption.text = "UNAVAILABLE";
+                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Chưa khả dụng", "Unavailable");
 
                     return;
                 }
@@ -619,11 +619,11 @@ namespace EchoProtocol.UI.MainMenu
                 {
                     // Do not continue showing 700 / 800 / etc.
                     // after the Pet is already in inventory.
-                    _selectedPrice.text = "OWNED";
+                    _selectedPrice.text = string.Empty;
                     _buyButton.interactable = false;
 
                     if (caption != null)
-                        caption.text = "OWNED";
+                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Đã sở hữu", "Owned");
 
                     return;
                 }
@@ -641,7 +641,7 @@ namespace EchoProtocol.UI.MainMenu
                     _buyButton.interactable = true;
 
                     if (caption != null)
-                        caption.text = "BUY";
+                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
 
                     return;
                 }
@@ -651,7 +651,7 @@ namespace EchoProtocol.UI.MainMenu
                     _buyButton.interactable = false;
 
                     if (caption != null)
-                        caption.text = "UNAVAILABLE";
+                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Chưa khả dụng", "Unavailable");
 
                     return;
                 }
@@ -663,8 +663,8 @@ namespace EchoProtocol.UI.MainMenu
                 {
                     caption.text =
                         _purchasing
-                            ? "PURCHASING..."
-                            : "BUY";
+                            ? EchoProtocol.Settings.GameLanguage.Choose("Đang mua…", "Purchasing…")
+                            : EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
                 }
 
                 return;
@@ -681,7 +681,7 @@ namespace EchoProtocol.UI.MainMenu
                 _buyButton.interactable = false;
 
                 if (caption != null)
-                    caption.text = "UNAVAILABLE";
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Chưa khả dụng", "Unavailable");
 
                 return;
             }
@@ -694,7 +694,7 @@ namespace EchoProtocol.UI.MainMenu
                 if (_selectedSkin.DefaultOwned)
                 {
                     _selectedPrice.text =
-                        "DEFAULT";
+                        string.Empty;
                 }
                 else
                 {
@@ -711,7 +711,7 @@ namespace EchoProtocol.UI.MainMenu
                     false;
 
                 if (caption != null)
-                    caption.text = "REQUIRES PET";
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Cần sở hữu thú cưng", "Requires pet");
 
                 return;
             }
@@ -719,13 +719,13 @@ namespace EchoProtocol.UI.MainMenu
             if (_selectedSkin.DefaultOwned)
             {
                 _selectedPrice.text =
-                    "DEFAULT";
+                    string.Empty;
 
                 _buyButton.interactable =
                     false;
 
                 if (caption != null)
-                    caption.text = "DEFAULT";
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mặc định", "Default");
 
                 return;
             }
@@ -736,13 +736,13 @@ namespace EchoProtocol.UI.MainMenu
             {
                 // Owned skin no longer displays its old price.
                 _selectedPrice.text =
-                    "OWNED";
+                    string.Empty;
 
                 _buyButton.interactable =
                     false;
 
                 if (caption != null)
-                    caption.text = "OWNED";
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Đã sở hữu", "Owned");
 
                 return;
             }
@@ -760,7 +760,7 @@ namespace EchoProtocol.UI.MainMenu
                 _buyButton.interactable = true;
 
                 if (caption != null)
-                    caption.text = "BUY";
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
 
                 return;
             }
@@ -770,7 +770,7 @@ namespace EchoProtocol.UI.MainMenu
                 _buyButton.interactable = false;
 
                 if (caption != null)
-                    caption.text = "UNAVAILABLE";
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Chưa khả dụng", "Unavailable");
 
                 return;
             }
@@ -782,8 +782,8 @@ namespace EchoProtocol.UI.MainMenu
             {
                 caption.text =
                     _purchasing
-                        ? "PURCHASING..."
-                        : "BUY";
+                        ? EchoProtocol.Settings.GameLanguage.Choose("Đang mua…", "Purchasing…")
+                        : EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
             }
         }
 
@@ -1224,6 +1224,8 @@ namespace EchoProtocol.UI.MainMenu
         private static void ClearChildren(
             RectTransform parent)
         {
+            if (StoreReferencePresentation.ClearCatalog(parent))return;
+
             if (parent == null)
                 return;
 

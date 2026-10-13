@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -18,10 +18,14 @@ namespace EchoProtocol.UI.MainMenu
         private static readonly Vector3 PreviewWorldPosition =
             new Vector3(0f, -10000f, 0f);
 
-        private const int TextureSize = 512;
+        private const int TextureSize = 1024;
 
         [SerializeField]
-        private float rotationSpeed = 28f;
+        private float rotationSpeed = 18f;
+        private bool _dragging;
+        private float _resumeRotationAt;
+        public void DragPreview(Vector2 delta) { _dragging=true; _resumeRotationAt=Time.unscaledTime+2f; if(_spinRoot!=null)_spinRoot.Rotate(0f,-delta.x*0.35f,0f,Space.Self); }
+        public void EndPreviewDrag() { _dragging=false; _resumeRotationAt=Time.unscaledTime+2f; }
 
         private GameObject _rig;
         private Transform _spinRoot;
@@ -98,6 +102,7 @@ namespace EchoProtocol.UI.MainMenu
             string resourcePath,
             RawImage target)
         {
+            if(StoreReferencePresentation.IsAwaitingSelection(transform)) { if(target!=null){target.texture=null;target.color=Color.clear;} return false; }
             EnsureInitialized();
 
             if (target == null
@@ -106,8 +111,10 @@ namespace EchoProtocol.UI.MainMenu
                 return false;
             }
 
+            if(_target!=null && _target!=target){_target.texture=null;_target.color=Color.clear;}
             _target =
                 target;
+            ResizePreviewTexture();
 
             _target.texture =
                 _renderTexture;
@@ -120,7 +127,10 @@ namespace EchoProtocol.UI.MainMenu
                     1f);
 
             _target.raycastTarget =
-                false;
+                true;
+            var drag=_target.GetComponent<StorePreviewDrag>();
+            if(drag==null)drag=_target.gameObject.AddComponent<StorePreviewDrag>();
+            drag.Renderer=this;
 
             _target.color =
                 Color.white;
@@ -131,6 +141,7 @@ namespace EchoProtocol.UI.MainMenu
                     resourcePath,
                     System.StringComparison.Ordinal))
             {
+                CenterAndFrameCurrentModel();
                 _camera.enabled =
                     true;
 
@@ -144,6 +155,9 @@ namespace EchoProtocol.UI.MainMenu
             }
 
             DestroyCurrentModel();
+            _spinRoot.localRotation=Quaternion.identity;
+            _dragging=false;
+            _resumeRotationAt=Time.unscaledTime+1f;
 
             var prefab =
                 Resources.Load<GameObject>(
@@ -180,8 +194,8 @@ namespace EchoProtocol.UI.MainMenu
             _currentModel.transform.localPosition =
                 Vector3.zero;
 
-            _currentModel.transform.localRotation =
-                Quaternion.identity;
+            _currentModel.transform.localRotation = resourcePath.StartsWith("Pets/") || resourcePath.Contains("Character_")
+                ? Quaternion.Euler(0f,180f,0f) : Quaternion.identity;
 
             _currentResource =
                 resourcePath;
@@ -203,9 +217,17 @@ namespace EchoProtocol.UI.MainMenu
                      _currentModel.GetComponentsInChildren<
                          Animator>(true))
             {
+                if (resourcePath.Contains("Character_Jammo") && animator.runtimeAnimatorController == null)
+                    animator.runtimeAnimatorController=Resources.Load<RuntimeAnimatorController>("Characters/AOC_JammoPlayer");
                 if (animator.runtimeAnimatorController != null)
                 {
-                    animator.Update(0f);
+                    animator.enabled=true;
+                    animator.cullingMode=AnimatorCullingMode.AlwaysAnimate;
+                    animator.applyRootMotion=false;
+                    animator.Rebind();
+                    if(resourcePath.Contains("Character_"))animator.Play("Locomotion",0,0.15f);
+                    else if(resourcePath.StartsWith("Pets/"))animator.Play("Idle",0,0.15f);
+                    animator.Update(1f/60f);
                 }
             }
 
@@ -578,6 +600,8 @@ namespace EchoProtocol.UI.MainMenu
                 return;
             }
 
+            if (ResizePreviewTexture()) CenterAndFrameCurrentModel();
+            if(_dragging || Time.unscaledTime<_resumeRotationAt)return;
             _spinRoot.Rotate(
                 0f,
                 rotationSpeed *
@@ -723,6 +747,31 @@ namespace EchoProtocol.UI.MainMenu
                 }
             }
         }
+        private static Bounds PreviewBounds(Renderer renderer)
+        {
+            if(!(renderer is SkinnedMeshRenderer skin))return renderer.bounds;
+            var mesh=new Mesh();
+            skin.BakeMesh(mesh,false);mesh.RecalculateBounds();
+            var local=mesh.bounds;
+            var imported=renderer.bounds;
+            Bounds scaled=TransformBounds(local,skin.transform.localToWorldMatrix);
+            Bounds unscaled=TransformBounds(local,Matrix4x4.TRS(skin.transform.position,skin.transform.rotation,Vector3.one));
+            DestroyPreviewObject(mesh);
+            // Imported parent scale can already be included in baked vertices. Choose the
+            // coordinate interpretation consistent with the renderer instead of multiplying it twice.
+            float Score(Bounds value) => Mathf.Abs(Mathf.Log(Mathf.Max(0.0001f,value.size.magnitude)
+                / Mathf.Max(0.0001f,imported.size.magnitude)))
+                + Vector3.Distance(value.center,imported.center)/Mathf.Max(0.1f,imported.extents.magnitude);
+            return Score(scaled)<=Score(unscaled) ? scaled : unscaled;
+        }
+        private static Bounds TransformBounds(Bounds local,Matrix4x4 matrix)
+        {
+            var world=new Bounds(matrix.MultiplyPoint3x4(local.center),Vector3.zero);
+            for(int i=0;i<8;i++)world.Encapsulate(matrix.MultiplyPoint3x4(local.center+Vector3.Scale(local.extents,
+                new Vector3((i&1)==0 ? -1 : 1,(i&2)==0 ? -1 : 1,(i&4)==0 ? -1 : 1))));
+            return world;
+        }
+
         private bool CenterAndFrameCurrentModel()
         {
             var renderers =
@@ -737,13 +786,13 @@ namespace EchoProtocol.UI.MainMenu
 
             foreach (var renderer in renderers)
             {
-                if (!renderer.enabled)
+                if (!renderer.enabled || !renderer.gameObject.activeInHierarchy)
                     continue;
 
                 if (!found)
                 {
                     bounds =
-                        renderer.bounds;
+                        PreviewBounds(renderer);
 
                     found =
                         true;
@@ -751,7 +800,7 @@ namespace EchoProtocol.UI.MainMenu
                 else
                 {
                     bounds.Encapsulate(
-                        renderer.bounds);
+                        PreviewBounds(renderer));
                 }
             }
 
@@ -784,13 +833,13 @@ namespace EchoProtocol.UI.MainMenu
 
             foreach (var renderer in renderers)
             {
-                if (!renderer.enabled)
+                if (!renderer.enabled || !renderer.gameObject.activeInHierarchy)
                     continue;
 
                 if (!found)
                 {
                     bounds =
-                        renderer.bounds;
+                        PreviewBounds(renderer);
 
                     found =
                         true;
@@ -798,42 +847,37 @@ namespace EchoProtocol.UI.MainMenu
                 else
                 {
                     bounds.Encapsulate(
-                        renderer.bounds);
+                        PreviewBounds(renderer));
                 }
             }
 
             if (!found)
                 return false;
 
-            // Bounding sphere remains safe while the object rotates.
-            float radius =
-                Mathf.Max(
-                    0.15f,
-                    bounds.extents.magnitude) *
-                1.12f;
-
-            float halfFov =
-                _camera.fieldOfView *
-                0.5f *
-                Mathf.Deg2Rad;
-
-            float distance =
-                radius /
-                Mathf.Sin(
-                    halfFov);
-
-            Vector3 viewDirection =
-                new Vector3(
-                    0.32f,
-                    0.10f,
-                    -1f)
-                .normalized;
-
-            Vector3 targetPoint =
-                _spinRoot.position +
-                Vector3.up *
-                bounds.size.y *
-                0.015f;
+            float radius = Mathf.Max(0.15f, bounds.extents.magnitude);
+            Vector3 viewDirection = (_currentResource != null && _currentResource.Contains("Character_")
+                ? new Vector3(0.04f,0.02f,-1f) : new Vector3(0.32f,0.10f,-1f)).normalized;
+            Vector3 targetPoint = _spinRoot.position + Vector3.up * bounds.size.y * 0.015f;
+            Quaternion view = Quaternion.LookRotation(-viewDirection,Vector3.up);
+            Vector3 right=view*Vector3.right, up=view*Vector3.up, forward=view*Vector3.forward;
+            float fill = _currentResource != null && _currentResource.Contains("Tool_") ? 0.72f : 0.92f;
+            float tangent=Mathf.Tan(_camera.fieldOfView*0.5f*Mathf.Deg2Rad);
+            float distance=0.1f;
+            // Fit each visible mesh in camera space. Deep tails and wide rest bounds no longer
+            // force a small body, and long tools retain their own proportions.
+            foreach(var renderer in renderers)
+            {
+                if(!renderer.enabled || !renderer.gameObject.activeInHierarchy)continue;
+                var meshBounds=PreviewBounds(renderer);
+                for(int i=0;i<8;i++)
+                {
+                    Vector3 point=meshBounds.center+Vector3.Scale(meshBounds.extents,
+                        new Vector3((i&1)==0 ? -1 : 1,(i&2)==0 ? -1 : 1,(i&4)==0 ? -1 : 1))-targetPoint;
+                    float depth=Vector3.Dot(point,forward);
+                    distance=Mathf.Max(distance,Mathf.Abs(Vector3.Dot(point,up))/(tangent*fill)-depth);
+                    distance=Mathf.Max(distance,Mathf.Abs(Vector3.Dot(point,right))/(tangent*_camera.aspect*fill)-depth);
+                }
+            }
 
             _camera.transform.position =
                 targetPoint +
@@ -876,12 +920,7 @@ namespace EchoProtocol.UI.MainMenu
             _camera.clearFlags =
                 CameraClearFlags.SolidColor;
 
-            _camera.backgroundColor =
-                new Color(
-                    0.018f,
-                    0.025f,
-                    0.027f,
-                    1f);
+            _camera.backgroundColor = Color.clear;
 
             _camera.fieldOfView =
                 28f;
@@ -1013,6 +1052,30 @@ namespace EchoProtocol.UI.MainMenu
                 _rimLight.enabled = value;
         }
 
+        private bool ResizePreviewTexture()
+        {
+            if (_target == null || _camera == null) return false;
+            var rect = _target.rectTransform.rect;
+            if (rect.width <= 1f || rect.height <= 1f) return false;
+            float ratio = rect.width / rect.height;
+            int width = ratio >= 1f ? TextureSize : Mathf.Max(128, Mathf.RoundToInt(TextureSize * ratio));
+            int height = ratio >= 1f ? Mathf.Max(128, Mathf.RoundToInt(TextureSize / ratio)) : TextureSize;
+            if (_renderTexture != null && _renderTexture.width == width && _renderTexture.height == height) return false;
+            _camera.targetTexture = null;
+            if (_renderTexture != null) { _renderTexture.Release(); DestroyPreviewObject(_renderTexture); }
+            _renderTexture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32)
+                { name = "StoreLivePreviewRT", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            _renderTexture.Create();
+            var previousTarget=RenderTexture.active;
+            RenderTexture.active=_renderTexture;
+            GL.Clear(true,true,Color.clear);
+            RenderTexture.active=previousTarget;
+            _camera.targetTexture = _renderTexture;
+            _camera.aspect = ratio;
+            _target.texture = _renderTexture;
+            return true;
+        }
+
         private void CreateRenderTexture()
         {
             _renderTexture =
@@ -1041,6 +1104,10 @@ namespace EchoProtocol.UI.MainMenu
                 TextureWrapMode.Clamp;
 
             _renderTexture.Create();
+            var previousTarget=RenderTexture.active;
+            RenderTexture.active=_renderTexture;
+            GL.Clear(true,true,Color.clear);
+            RenderTexture.active=previousTarget;
         }
 
         private GameObject CreateRigObject(

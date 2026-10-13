@@ -138,7 +138,7 @@ namespace EchoProtocol.UI.MainMenu
                     ? _controller.SelectedOutfitId
                     : 0;
 
-            for (int outfitId = 0;
+            for (int outfitId = 1;
                  outfitId < outfitCount;
                  outfitId++)
             {
