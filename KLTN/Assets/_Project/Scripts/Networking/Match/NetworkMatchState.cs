@@ -2693,17 +2693,17 @@ namespace EchoProtocol.Networking
                 $"canApply={phase8Gate.CanApplyGameplay} " +
                 $"minionUnsafe={minionUnsafe}");
             if (settings.ExtendedPolicyShadowEnabled &&
-                authority.LastFrozenAEDv2Evidence != null &&
-                authority.TryGetAEDPhase8SourceReferences(
-                    authority.LastFrozenAEDv2Evidence.PhaseOrdinal,
-                    out var sourceReferences))
+                authority.LastFrozenAEDv2Evidence != null)
             {
-                _ = UploadPhase8SourcesAsync(
-                    authority.MatchId,
-                    authority.LastFrozenAEDv2Evidence.PhaseOrdinal,
-                    authority.LastFrozenAEDv2Evidence.EvidenceFingerprint,
-                    authority.AEDv2RosterIdentity,
-                    sourceReferences);
+                var frozen = authority.LastFrozenAEDv2Evidence;
+                if (!authority.TryGetAEDPhase8SourceReferences(frozen.PhaseOrdinal, out var sourceReferences) ||
+                    !authority.TryGetAEDPhase8SourceSnapshot(frozen.PhaseOrdinal, out var sourceSnapshot))
+                    Debug.LogWarning("[AED_P8][SOURCE_UPLOAD_HOLD] reason=SOURCE_SNAPSHOT_UNAVAILABLE");
+                else if (!AEDPhase8SourceUploadBuilderV1.TryBuild(authority.MatchId, frozen.PhaseOrdinal, frozen.EvidenceFingerprint,
+                             authority.AEDv2RosterIdentity, sourceReferences, sourceSnapshot, out var sourceUpload, out var buildReason))
+                    Debug.LogWarning($"[AED_P8][SOURCE_UPLOAD_HOLD] reason={buildReason}");
+                else
+                    _ = UploadPhase8SourcesAsync(authority.MatchId, sourceUpload);
             }
             if (settings.ExtendedPolicyShadowEnabled && phase8Gate.LocallyEligible)
             {
@@ -2788,40 +2788,21 @@ namespace EchoProtocol.Networking
             }
         }
 
-        private static async Task UploadPhase8SourcesAsync(
-            Guid matchId, uint phaseOrdinal, string evidenceFingerprint,
-            string rosterIdentity, TelemetrySourceIdentity[] references)
+        private static async Task UploadPhase8SourcesAsync(Guid matchId, AEDPhase8SourceUploadDtoV1 request)
         {
+            if (matchId == Guid.Empty || request == null) return;
             try
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
                 var api = new AEDSnapshotApiService();
-                var probe = await api.ProbeDirectorEvidenceAsync(
-                    matchId, phaseOrdinal, evidenceFingerprint, timeout.Token);
+                var probe = await api.ProbeDirectorEvidenceAsync(matchId, (uint)request.completedPhaseOrdinal, request.evidenceFingerprint, timeout.Token);
                 if (probe?.canonicalEvidenceVerified != true)
                 {
-                    Debug.LogWarning("[AED_P8] Canonical evidence unavailable.");
+                    Debug.LogWarning("[AED_P8][SOURCE_UPLOAD_HOLD] reason=CANONICAL_EVIDENCE_UNAVAILABLE");
                     return;
                 }
-                var request = new AEDPhase8SourceUploadDtoV1
-                {
-                    completedPhaseOrdinal = (int)phaseOrdinal,
-                    evidenceFingerprint = evidenceFingerprint,
-                    rosterIdentity = rosterIdentity,
-                    comparisonContextKey = "AED_PHASE8_CANONICAL_V1",
-                    sourceVersion = "AED_PHASE8_SOURCE_REFERENCES_V1",
-                    sourceEvents = Array.ConvertAll(references, x => new AEDPhase8SourceReferenceDtoV1
-                    {
-                        eventId = x.EventId.ToString("D"), eventSequence = x.EventSequence,
-                        eventType = x.EventType, occurrenceKey = x.OccurrenceKey
-                    }),
-                    metrics = Array.Empty<AEDPhase8MetricDtoV1>(),
-                    supply = Array.Empty<AEDPhase8SupplyDtoV1>(),
-                    minions = Array.Empty<AEDPhase8MinionDtoV1>()
-                };
-                var result = await api.VerifyDirectorSourcesAsync(
-                    matchId, request, timeout.Token);
-                Debug.Log($"[AED_P8][SOURCE_UPLOAD] canonical={result?.canonicalVerified == true} reason={result?.reasonCode ?? "UNVERIFIED"}");
+                var result = await api.VerifyDirectorSourcesAsync(matchId, request, timeout.Token);
+                Debug.Log($"[AED_P8][SOURCE_UPLOAD] version={request.sourceVersion} phase={request.completedPhaseOrdinal} references={request.sourceEvents.Length} supply={request.supply.Length} minions={request.minions.Length} canonical={result?.canonicalVerified == true} supplyVerified={result?.supplyLedgerVerified == true} minionVerified={result?.minionPopulationVerified == true} reason={result?.reasonCode ?? "UNVERIFIED"}");
             }
             catch (Exception exception)
             {

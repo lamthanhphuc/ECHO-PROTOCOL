@@ -2281,6 +2281,16 @@ namespace EchoProtocol.Networking.Authority
                 (int)completedPhaseOrdinal, out references);
         }
 
+        public bool TryGetAEDPhase8SourceSnapshot(uint completedPhaseOrdinal,
+            out AEDPhase8AuthoritySourceSnapshotV1 snapshot)
+        {
+            snapshot = null;
+            if (!HasStateAuthority || !_telemetryMatchActive || MatchId == Guid.Empty || completedPhaseOrdinal == 0 ||
+                LastFrozenAEDv2Evidence == null || LastFrozenAEDv2Evidence.PhaseOrdinal != completedPhaseOrdinal)
+                return false;
+            return _aedPhase8Source.TryFreeze(MatchId, completedPhaseOrdinal, out snapshot);
+        }
+
         public bool RecordPhaseStarted(string occurrenceKey, string phase, string reasonCode)
         {
             var nowUtc = DateTime.UtcNow;
