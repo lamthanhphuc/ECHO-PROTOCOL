@@ -1,115 +1,238 @@
+using System.Collections.Generic;
 using EchoProtocol.Networking;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace EchoProtocol.UI
 {
     [DisallowMultipleComponent]
     public sealed class LobbyPlayerSpotlightController : MonoBehaviour
     {
+        [Header("Scene-authored lights")]
         [SerializeField] private Light[] spotlights;
-        [SerializeField, Min(0.1f)] private float playerMatchRadius = 0.55f;
-        [SerializeField, Min(0.05f)] private float refreshInterval = 0.15f;
+        [SerializeField] private Light[] bodyFillLights;
 
-        [SerializeField, Min(0f)] private float bodyFillIntensity = 3.5f;
-        [SerializeField, Min(0.1f)] private float bodyFillRange = 4f;
-        private Light[] _bodyFillLights;
+        [Header("Player matching")]
+        [SerializeField, Min(0.1f)]
+        private float playerMatchRadius = 0.55f;
+
+        [SerializeField, Min(0.05f)]
+        private float refreshInterval = 0.15f;
+
+        [Header("Light isolation")]
+        [SerializeField]
+        private string visualLayerName = "LocalPlayerVisual";
+
+        private readonly Dictionary<GameObject, int> _originalLayers =
+            new Dictionary<GameObject, int>();
+
         private float _nextRefreshAt;
+        private int _visualLayer = -1;
+        private bool _layerErrorLogged;
 
-        private void EnsureBodyFillLights()
-        {
-            if (!Application.isPlaying || spotlights == null || _bodyFillLights != null) return;
-            _bodyFillLights = new Light[spotlights.Length];
-            for (int i = 0; i < spotlights.Length; i++)
-            {
-                var overhead = spotlights[i];
-                if (overhead == null) continue;
-                var obj = new GameObject("Lobby Body Fill");
-                obj.transform.SetParent(overhead.transform, false);
-                obj.transform.position = overhead.transform.position + Vector3.down * 1.2f;
-                var fill = obj.AddComponent<Light>();
-                fill.type = LightType.Point;
-                fill.color = overhead.color;
-                fill.intensity = bodyFillIntensity;
-                fill.range = bodyFillRange;
-                fill.shadows = LightShadows.None;
-                fill.cullingMask = overhead.cullingMask;
-                fill.enabled = false;
-                _bodyFillLights[i] = fill;
-            }
-        }
-
-        private void OnDestroy()
-        {
-            if (_bodyFillLights == null) return;
-            foreach (var fill in _bodyFillLights) if (fill != null) Destroy(fill.gameObject);
-        }
 
         private void Awake()
         {
-            EnsureBodyFillLights();
+            ResolveVisualLayer();
             DisableAll();
         }
+
 
         private void OnEnable()
         {
-            EnsureBodyFillLights();
+            ResolveVisualLayer();
+
             DisableAll();
             Refresh();
         }
 
+
         private void Update()
         {
-            if (Time.unscaledTime < _nextRefreshAt) return;
+            if (Time.unscaledTime < _nextRefreshAt)
+                return;
 
-            _nextRefreshAt = Time.unscaledTime + refreshInterval;
+            _nextRefreshAt =
+                Time.unscaledTime + refreshInterval;
+
             Refresh();
         }
+
 
         private void OnDisable()
         {
             DisableAll();
+            RestoreVisualLayers();
         }
+
+
+        private void OnDestroy()
+        {
+            RestoreVisualLayers();
+        }
+
+
+        private bool ResolveVisualLayer()
+        {
+            if (_visualLayer >= 0)
+                return true;
+
+            _visualLayer =
+                LayerMask.NameToLayer(
+                    visualLayerName);
+
+            if (_visualLayer >= 0)
+            {
+                _layerErrorLogged = false;
+                return true;
+            }
+
+            if (!_layerErrorLogged)
+            {
+                Debug.LogError(
+                    "[LobbyLighting] Layer '"
+                    + visualLayerName
+                    + "' does not exist.",
+                    this);
+
+                _layerErrorLogged = true;
+            }
+
+            return false;
+        }
+
 
         private void Refresh()
         {
-            if (SceneManager.GetActiveScene().name != "Lobby")
+            if (!ResolveVisualLayer())
             {
                 DisableAll();
                 return;
             }
 
-            if (spotlights == null) return;
-            EnsureBodyFillLights();
-            LobbyPlayerState[] players = FindObjectsByType<LobbyPlayerState>(
-                FindObjectsInactive.Exclude);
+            if (spotlights == null)
+                return;
 
-            for (int i = 0; i < spotlights.Length; i++)
+            LobbyPlayerState[] players =
+                FindObjectsByType<LobbyPlayerState>(
+                    FindObjectsInactive.Exclude);
+
+            for (int index = 0;
+                 index < spotlights.Length;
+                 index++)
             {
-                Light spotlight = spotlights[i];
-                if (spotlight == null) continue;
+                Light spotlight =
+                    spotlights[index];
 
-                spotlight.enabled = HasLobbyPlayerUnderLight(spotlight, players, out var matchedPlayer);
-                if (_bodyFillLights != null && _bodyFillLights[i] != null)
+                if (spotlight == null)
+                    continue;
+
+                LobbyPlayerState matchedPlayer;
+
+                bool occupied =
+                    HasLobbyPlayerUnderLight(
+                        spotlight,
+                        players,
+                        out matchedPlayer);
+
+                if (occupied
+                    && matchedPlayer != null)
                 {
-                    var fill = _bodyFillLights[i];
-                    fill.enabled = spotlight.enabled;
-                    if (matchedPlayer != null)
-                        fill.transform.position = matchedPlayer.transform.position
-                            + matchedPlayer.transform.forward * 1.4f + Vector3.up * 1f;
+                    ApplyVisualLayer(
+                        matchedPlayer);
+                }
+
+                spotlight.enabled =
+                    occupied;
+
+                if (bodyFillLights != null
+                    && index < bodyFillLights.Length
+                    && bodyFillLights[index] != null)
+                {
+                    bodyFillLights[index].enabled =
+                        occupied;
                 }
             }
         }
 
-        private bool HasLobbyPlayerUnderLight(Light spotlight, LobbyPlayerState[] players, out LobbyPlayerState matchedPlayer)
+
+        private void ApplyVisualLayer(
+            LobbyPlayerState player)
+        {
+            if (player == null
+                || _visualLayer < 0)
+            {
+                return;
+            }
+
+            Renderer[] renderers =
+                player.GetComponentsInChildren<Renderer>(
+                    true);
+
+            for (int index = 0;
+                 index < renderers.Length;
+                 index++)
+            {
+                Renderer renderer =
+                    renderers[index];
+
+                if (renderer == null)
+                    continue;
+
+                GameObject owner =
+                    renderer.gameObject;
+
+                if (!_originalLayers.ContainsKey(
+                        owner))
+                {
+                    _originalLayers.Add(
+                        owner,
+                        owner.layer);
+                }
+
+                owner.layer =
+                    _visualLayer;
+            }
+        }
+
+
+        private void RestoreVisualLayers()
+        {
+            foreach (
+                KeyValuePair<GameObject, int> entry
+                in _originalLayers)
+            {
+                if (entry.Key != null)
+                {
+                    entry.Key.layer =
+                        entry.Value;
+                }
+            }
+
+            _originalLayers.Clear();
+        }
+
+
+        private bool HasLobbyPlayerUnderLight(
+            Light spotlight,
+            LobbyPlayerState[] players,
+            out LobbyPlayerState matchedPlayer)
         {
             matchedPlayer = null;
-            Vector3 lightPosition = spotlight.transform.position;
-            float sqrRadius = playerMatchRadius * playerMatchRadius;
 
-            for (int i = 0; i < players.Length; i++)
+            Vector3 lightPosition =
+                spotlight.transform.position;
+
+            float sqrRadius =
+                playerMatchRadius
+                * playerMatchRadius;
+
+            for (int index = 0;
+                 index < players.Length;
+                 index++)
             {
-                LobbyPlayerState player = players[i];
+                LobbyPlayerState player =
+                    players[index];
+
                 if (player == null
                     || player.Object == null
                     || !player.Object.IsValid
@@ -118,13 +241,24 @@ namespace EchoProtocol.UI
                     continue;
                 }
 
-                Vector3 playerPosition = player.transform.position;
-                float deltaX = playerPosition.x - lightPosition.x;
-                float deltaZ = playerPosition.z - lightPosition.z;
+                Vector3 playerPosition =
+                    player.transform.position;
 
-                if (deltaX * deltaX + deltaZ * deltaZ <= sqrRadius)
+                float deltaX =
+                    playerPosition.x
+                    - lightPosition.x;
+
+                float deltaZ =
+                    playerPosition.z
+                    - lightPosition.z;
+
+                if (deltaX * deltaX
+                    + deltaZ * deltaZ
+                    <= sqrRadius)
                 {
-                    matchedPlayer = player;
+                    matchedPlayer =
+                        player;
+
                     return true;
                 }
             }
@@ -132,16 +266,36 @@ namespace EchoProtocol.UI
             return false;
         }
 
+
         private void DisableAll()
         {
-            if (spotlights == null) return;
-
-            for (int i = 0; i < spotlights.Length; i++)
+            if (spotlights != null)
             {
-                if (spotlights[i] != null) spotlights[i].enabled = false;
-                if (_bodyFillLights != null && _bodyFillLights[i] != null) _bodyFillLights[i].enabled = false;
+                for (int index = 0;
+                     index < spotlights.Length;
+                     index++)
+                {
+                    if (spotlights[index] != null)
+                    {
+                        spotlights[index].enabled =
+                            false;
+                    }
+                }
+            }
+
+            if (bodyFillLights != null)
+            {
+                for (int index = 0;
+                     index < bodyFillLights.Length;
+                     index++)
+                {
+                    if (bodyFillLights[index] != null)
+                    {
+                        bodyFillLights[index].enabled =
+                            false;
+                    }
+                }
             }
         }
     }
 }
-

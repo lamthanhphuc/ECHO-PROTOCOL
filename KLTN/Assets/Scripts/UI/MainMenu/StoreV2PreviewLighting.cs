@@ -19,12 +19,7 @@ namespace EchoProtocol.UI.MainMenu
         [SerializeField]
         [Range(0.5f, 8f)]
         private float rimIntensity = 2.1f;
-
-        [SerializeField]
-        [Range(0f, 6f)]
-        private float frontFillIntensity = 2.0f;
-
-        [SerializeField]
+[SerializeField]
         private Color previewBackground =
             new Color(
                 0.025f,
@@ -34,11 +29,7 @@ namespace EchoProtocol.UI.MainMenu
 
         private const string RigName =
             "[Store Live Preview Rig]";
-
-        private const string FrontFillName =
-            "Store Front Fill";
-
-        private GameObject _rig;
+private GameObject _rig;
 
         private float _nextApply;
 
@@ -141,18 +132,7 @@ namespace EchoProtocol.UI.MainMenu
                         LightShadows.None;
                 }
             }
-
-            Light front =
-                ResolveFrontFill(
-                    camera);
-
-            if (front != null)
-            {
-                front.intensity =
-                    frontFillIntensity;
-            }
-
-            Renderer[] renderers =
+Renderer[] renderers =
                 _rig.GetComponentsInChildren<
                     Renderer>(
                     true);
@@ -191,61 +171,6 @@ namespace EchoProtocol.UI.MainMenu
                     return;
                 }
             }
-        }
-
-        private Light ResolveFrontFill(
-            Camera camera)
-        {
-            Transform existing =
-                FindRecursive(
-                    _rig.transform,
-                    FrontFillName);
-
-            Light light =
-                existing != null
-                    ? existing.GetComponent<Light>()
-                    : null;
-
-            if (light == null)
-            {
-                GameObject owner =
-                    new GameObject(
-                        FrontFillName,
-                        typeof(Light));
-
-                owner.hideFlags =
-                    HideFlags.DontSave;
-
-                owner.transform.SetParent(
-                    _rig.transform,
-                    false);
-
-                owner.transform.localRotation =
-                    Quaternion.Euler(
-                        10f,
-                        180f,
-                        0f);
-
-                light =
-                    owner.GetComponent<Light>();
-
-                light.type =
-                    LightType.Directional;
-
-                light.color =
-                    Color.white;
-
-                light.shadows =
-                    LightShadows.None;
-            }
-
-            if (camera != null)
-                light.cullingMask = camera.cullingMask;
-
-            FixRenderingLayer(
-                light);
-
-            return light;
         }
 
         private static Transform FindRecursive(
@@ -300,7 +225,7 @@ namespace EchoProtocol.UI.MainMenu
                 {
                     property.SetValue(
                         component,
-                        1u);
+                        1u << 30);
                 }
                 else if (
                     property.PropertyType
@@ -308,7 +233,7 @@ namespace EchoProtocol.UI.MainMenu
                 {
                     property.SetValue(
                         component,
-                        1);
+                        1 << 30);
                 }
             }
             catch
