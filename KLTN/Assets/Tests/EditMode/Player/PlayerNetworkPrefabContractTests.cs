@@ -160,6 +160,36 @@ namespace EchoProtocol.Player.Tests
         }
 
         [Test]
+        public void TEAM_TOOL_DroppedNetworkToolPreservesRemainingUses()
+        {
+            var pickup = File.ReadAllText(
+                "Assets/Scripts/Tools/Scanner/NetworkToolPickup.cs");
+
+            var interactor = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
+
+            StringAssert.Contains(
+                "public int RemainingUses { get; private set; }",
+                pickup);
+
+            StringAssert.Contains(
+                "public void SetRemainingUsesAuthoritative(int remainingUses)",
+                pickup);
+
+            StringAssert.Contains(
+                "context.PlayerState.SetGameplayToolId(",
+                pickup);
+
+            StringAssert.Contains(
+                "RemainingUses);",
+                pickup);
+
+            StringAssert.Contains(
+                "scannerPickup.SetRemainingUsesAuthoritative(remainingUses);",
+                interactor);
+        }
+
+        [Test]
         public void TEAM_TOOL_GameplayStateMutationIsStateAuthorityOnly()
         {
             var source = File.ReadAllText(

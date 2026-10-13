@@ -1223,8 +1223,13 @@ namespace EchoProtocol.Networking
 
                 teamToolPickup.SetRemainingUsesAuthoritative(remainingUses);
             }
-            else if (!pickupObject.TryGetComponent<NetworkToolPickup>(out var scannerPickup)
-                     || scannerPickup.ToolId != toolId)
+            else if (pickupObject.TryGetComponent<NetworkToolPickup>(
+                         out var scannerPickup) &&
+                     scannerPickup.ToolId == toolId)
+            {
+                scannerPickup.SetRemainingUsesAuthoritative(remainingUses);
+            }
+            else
             {
                 Runner.Despawn(pickupObject);
                 return false;

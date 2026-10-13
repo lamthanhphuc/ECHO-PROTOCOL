@@ -44,6 +44,9 @@ namespace EchoProtocol.Tools.Scanner
         [Networked, OnChangedRender(nameof(ApplyReplicatedPose))]
         public Quaternion WorldRotation { get; private set; }
 
+        [Networked]
+        public int RemainingUses { get; private set; }
+
         private bool _localPickedUp;
         private bool _phase8SceneSourceRegistered;
         public InventoryItemDefinition ToolItemDefinition => _toolItemDefinition;
@@ -115,6 +118,25 @@ namespace EchoProtocol.Tools.Scanner
             ConfigureWorldPickupShadows();
             OnReplicatedStateChanged();
             TryRegisterPhase8SceneSpawn();
+        }
+
+        public void SetRemainingUsesAuthoritative(int remainingUses)
+        {
+            if (Object == null ||
+                !Object.IsValid ||
+                !Object.HasStateAuthority)
+            {
+                return;
+            }
+
+            RemainingUses =
+                _toolId == LobbyPlayerState.NoiseMakerToolId ||
+                _toolId == LobbyPlayerState.DoorJammerToolId
+                    ? Mathf.Clamp(
+                        remainingUses,
+                        1,
+                        LobbyPlayerState.MultiUseTeamToolUses)
+                    : 0;
         }
 
         private void EnsureOutline()
@@ -273,13 +295,23 @@ namespace EchoProtocol.Tools.Scanner
             // Set authoritative tool ID on player
             if (context.PlayerState != null && context.PlayerState.Object != null && context.PlayerState.Object.IsValid)
             {
-                context.PlayerState.SetGameplayToolId(_toolId);
+                if (RemainingUses > 0 &&
+                    (_toolId == LobbyPlayerState.NoiseMakerToolId ||
+                     _toolId == LobbyPlayerState.DoorJammerToolId))
+                {
+                    context.PlayerState.SetGameplayToolId(
+                        _toolId,
+                        RemainingUses);
+                }
+                else
+                {
+                    context.PlayerState.SetGameplayToolId(_toolId);
+                }
+
                 int? remainingCharges = null;
                 if (_toolId == LobbyPlayerState.NoiseMakerToolId ||
                     _toolId == LobbyPlayerState.DoorJammerToolId)
-                {
                     remainingCharges = context.PlayerState.TeamToolUsesRemaining;
-                }
                 MatchAuthorityRuntime.Instance?.RecordPhase8ToolPickup(
                     Object.Id,
                     context.Player,
