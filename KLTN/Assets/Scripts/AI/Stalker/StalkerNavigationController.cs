@@ -92,6 +92,12 @@ namespace EchoProtocol.AI.Stalker
             }
 
             var direction = toCorner.normalized;
+
+            if (direction == Vector3.zero)
+            {
+                return;
+            }
+
             _agent.nextPosition = position;
             _agent.Move(direction * distance);
             _agent.transform.position = _agent.nextPosition;

@@ -532,7 +532,8 @@ namespace EchoProtocol.Networking
                 {
                     state.SetGameplayToolId(0);
 
-                    ResetTeamToolRuntimeAuthoritative();
+                    ResetTeamToolRuntimeAuthoritative(
+                        preserveCooldown: toolId == LobbyPlayerState.CoreStabilizerToolId);
                     MatchAuthorityRuntime.Instance?.RecordPhase8ToolDrop(
                         pickupId, actor, toolId, remainingUses, Runner.Tick.Raw);
 
@@ -571,7 +572,8 @@ namespace EchoProtocol.Networking
 
             state.SetGameplayToolId(0);
 
-            ResetTeamToolRuntimeAuthoritative();
+            ResetTeamToolRuntimeAuthoritative(
+                preserveCooldown: toolId == LobbyPlayerState.CoreStabilizerToolId);
             MatchAuthorityRuntime.Instance?.RecordPhase8ToolDrop(
                 pickupId, actor, toolId, remainingUses, Runner.Tick.Raw);
 
@@ -1155,7 +1157,8 @@ namespace EchoProtocol.Networking
                 {
                     state.SetGameplayToolId(0);
 
-                    ResetTeamToolRuntimeAuthoritative();
+                    ResetTeamToolRuntimeAuthoritative(
+                        preserveCooldown: droppedToolId == LobbyPlayerState.CoreStabilizerToolId);
                     MatchAuthorityRuntime.Instance?.RecordPhase8ToolDrop(
                         targetId, requester, droppedToolId, droppedUses, Runner.Tick.Raw);
                 }
@@ -1254,8 +1257,11 @@ namespace EchoProtocol.Networking
                 return false;
             }
             interactable.BeginMonsterCarryAuthoritative(monsterId);
+            bool preserveCooldown =
+                state.ToolId == LobbyPlayerState.CoreStabilizerToolId;
             state.SetGameplayToolId(0);
-            ResetTeamToolRuntimeAuthoritative();
+            ResetTeamToolRuntimeAuthoritative(
+                preserveCooldown: preserveCooldown);
             return true;
         }
 
@@ -2174,10 +2180,14 @@ namespace EchoProtocol.Networking
                     seconds);
         }
 
-        private void ResetTeamToolRuntimeAuthoritative()
+        private void ResetTeamToolRuntimeAuthoritative(
+            bool preserveCooldown = false)
         {
-            TeamToolCooldown =
-                TickTimer.None;
+            if (!preserveCooldown)
+            {
+                TeamToolCooldown =
+                    TickTimer.None;
+            }
 
             CoreStabilizerActiveTimer =
                 TickTimer.None;

@@ -148,6 +148,12 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains(
                 "RecordPhase8ToolDrop(",
                 source);
+            StringAssert.Contains(
+                "preserveCooldown: toolId == LobbyPlayerState.CoreStabilizerToolId",
+                source);
+            StringAssert.Contains(
+                "if (!preserveCooldown)",
+                source);
             StringAssert.Contains("_teamToolPickupCatalog.GetPrefab(toolId)", source);
             StringAssert.Contains("LobbyPlayerState.FieldScannerToolId => fieldScannerPrefab", catalog);
             StringAssert.Contains("LobbyPlayerState.NoiseMakerToolId => noiseMakerPrefab", catalog);
