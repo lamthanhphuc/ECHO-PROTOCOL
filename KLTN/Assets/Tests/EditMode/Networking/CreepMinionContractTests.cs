@@ -116,7 +116,7 @@ namespace EchoProtocol.Networking.Tests
                 null, new[] { System.Enum.Parse(difficultyType, "Normal") });
             Assert.That((int)normal.GetType().GetProperty("Zone1MinionCap").GetValue(normal), Is.EqualTo(1));
             Assert.That((int)normal.GetType().GetProperty("Zone2MinionCap").GetValue(normal), Is.EqualTo(2));
-            Assert.That((int)normal.GetType().GetProperty("Zone3MinionCap").GetValue(normal), Is.EqualTo(1));
+            Assert.That((int)normal.GetType().GetProperty("Zone3MinionCap").GetValue(normal), Is.EqualTo(0));
 
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
                 "Assets/Resources/PF_CreepMinionNetwork.prefab");
@@ -130,6 +130,10 @@ namespace EchoProtocol.Networking.Tests
             Assert.That(serialized.FindProperty("harassSpeed").floatValue, Is.EqualTo(10f));
             Assert.That(serialized.FindProperty("attackCooldownSeconds").floatValue, Is.EqualTo(0.65f));
             Assert.That(serialized.FindProperty("alertCooldownSeconds").floatValue, Is.EqualTo(4f));
+            Assert.That(serialized.FindProperty("stealToolRange").floatValue, Is.EqualTo(3f));
+            Assert.That(serialized.FindProperty("toolFleeSeconds").floatValue, Is.EqualTo(15f));
+            Assert.That(serialized.FindProperty("stolenToolDropMinDistance").floatValue, Is.EqualTo(12f));
+            Assert.That(serialized.FindProperty("stolenToolDropMaxDistance").floatValue, Is.EqualTo(45f));
         }
 
         [Test]
@@ -141,6 +145,25 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("NavMeshPathStatus.PathComplete", source);
             StringAssert.Contains("TryGetCreepMinionSpawnAnchor(zone, out var stalker)", source);
             StringAssert.Contains("IsCreepMinionSpawnFarFromPlayers", source);
+        }
+
+        [Test]
+        public void ToolDivePreservesAEDEvidenceAndFleeGuard()
+        {
+            string source = File.ReadAllText(MinionSource);
+            string dive = ExtractMethod(source, "private void TickToolDive()", "public void GetToolCarryPose");
+            string networkTick = ExtractMethod(source, "public override void FixedUpdateNetwork()", "private void UpdateTargetAndMovement()");
+            StringAssert.Contains("AEDMinionFactKindV1.AttackAttempted", dive);
+            StringAssert.Contains("effectKind: \"CORE\"", dive);
+            StringAssert.Contains("effectKind: \"TOOL\"", dive);
+            StringAssert.Contains("accepted: forcedDrop", dive);
+            StringAssert.Contains("accepted: relocated", dive);
+            StringAssert.Contains("PublishAEDSnapshot();", networkTick);
+            StringAssert.Contains("|| StolenToolId.IsValid", source);
+            StringAssert.Contains("if (StolenToolId.IsValid)\n" +
+                "            {\n" +
+                "                _toolRouteRetries = 0;\n" +
+                "                BeginFleeTo(", dive.Replace("\r\n", "\n"));
         }
 
         private static Component FindComponentByTypeName(GameObject root, string fullTypeName)

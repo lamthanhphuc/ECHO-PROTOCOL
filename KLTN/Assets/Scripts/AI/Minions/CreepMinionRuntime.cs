@@ -320,8 +320,11 @@ namespace EchoProtocol.AI.Minions
 
         private void HandleRuntimeNoiseAccepted(RuntimeNoiseEvent noiseEvent)
         {
-            if (!Object.HasStateAuthority || noiseEvent.NoiseType != RuntimeNoiseType.NOISE_MAKER
-                || StolenCoreId.IsValid || Vector3.Distance(transform.position, noiseEvent.WorldPosition) > noiseEvent.HearingRadius)
+            if (!Object.HasStateAuthority
+                || noiseEvent.NoiseType != RuntimeNoiseType.NOISE_MAKER
+                || StolenCoreId.IsValid
+                || StolenToolId.IsValid
+                || Vector3.Distance(transform.position, noiseEvent.WorldPosition) > noiseEvent.HearingRadius)
             {
                 return;
             }
@@ -433,6 +436,7 @@ namespace EchoProtocol.AI.Minions
                 TickToolDive();
                 _navigation.TickAuthoritativeLocomotion(Runner.DeltaTime);
                 IsMoving = _navigation.AuthoritativeMoveSpeed > 0.2f;
+                PublishAEDSnapshot();
                 return;
             }
             if (State == CreepMinionState.Flee)
@@ -972,23 +976,49 @@ namespace EchoProtocol.AI.Minions
                     if (lobby.CarriedCoreId.IsValid)
                     {
                         var coreId = lobby.CarriedCoreId.ToString();
-                        var success = TryStealCore(target, lobby, interactor, out var forcedDrop, out var stolen);
-                        authority?.RecordMinionFact(AEDMinionFactKindV1.CoreForcedDrop,
+                        TryStealCore(target, lobby, interactor,
+                            out var forcedDrop, out var stolen);
+                        authority?.RecordMinionFact(
+                            AEDMinionFactKindV1.AttackAttempted,
+                            Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
+                            objectId: coreId, effectKind: "CORE",
+                            attemptOrdinal: ordinal, accepted: forcedDrop);
+                        authority?.RecordMinionFact(
+                            AEDMinionFactKindV1.CoreForcedDrop,
                             Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
                             objectId: coreId, effectKind: "CORE_FORCED_DROP",
                             attemptOrdinal: ordinal, accepted: forcedDrop);
-                        authority?.RecordMinionFact(AEDMinionFactKindV1.CoreStolen,
+                        authority?.RecordMinionFact(
+                            AEDMinionFactKindV1.CoreStolen,
                             Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
                             objectId: coreId, effectKind: "CORE_STOLEN",
                             attemptOrdinal: ordinal, accepted: stolen);
                     }
-                    else if (interactor != null && interactor.TryTransferTeamToolToMonster(Object.Id, out var pickupId))
+                    else if (lobby.ToolId > 0)
                     {
-                        StolenToolId = pickupId;
-                        authority?.RecordMinionFact(AEDMinionFactKindV1.ToolRelocated,
+                        int toolId = lobby.ToolId;
+                        NetworkId pickupId = default;
+                        bool relocated = interactor != null
+                            && interactor.TryTransferTeamToolToMonster(
+                                Object.Id, out pickupId);
+                        authority?.RecordMinionFact(
+                            AEDMinionFactKindV1.AttackAttempted,
                             Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
-                            objectId: pickupId.ToString(), effectKind: "TOOL_RELOCATED",
-                            attemptOrdinal: ordinal, accepted: true);
+                            objectId: $"tool-type:{toolId}",
+                            effectKind: "TOOL",
+                            attemptOrdinal: ordinal,
+                            accepted: relocated);
+                        if (relocated)
+                        {
+                            StolenToolId = pickupId;
+                            authority?.RecordMinionFact(
+                                AEDMinionFactKindV1.ToolRelocated,
+                                Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
+                                objectId: pickupId.ToString(),
+                                effectKind: "TOOL_RELOCATED",
+                                attemptOrdinal: ordinal,
+                                accepted: true);
+                        }
                     }
                 }
             }
@@ -996,8 +1026,10 @@ namespace EchoProtocol.AI.Minions
             ToolDivePhase = 0;
             _agent.stoppingDistance = 0.4f;
             if (StolenToolId.IsValid)
+            {
                 _toolRouteRetries = 0;
                 BeginFleeTo(_fleeDestination, Mathf.Max(toolFleeSeconds, 15f));
+            }
         }
 
         public void GetToolCarryPose(out Vector3 position, out Quaternion rotation)
@@ -1115,12 +1147,6 @@ namespace EchoProtocol.AI.Minions
             // Debug.Log($"[CREEP_STEAL_CORE][SUCCESS] core={coreId} destination={_fleeDestination}", this);
 #endif
             return true;
-        }
-
-        private bool TryStealCore(NetworkObject playerObject, LobbyPlayerState lobby,
-            NetworkPlayerInteractor interactor)
-        {
-            return TryStealCore(playerObject, lobby, interactor, out _, out _);
         }
 
         private Vector3 CarryPosition()
