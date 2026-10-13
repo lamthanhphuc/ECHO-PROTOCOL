@@ -13,6 +13,8 @@ public sealed class AEDPhase8SourceVerifierV1(AppDbContext db, ITelemetryEventRe
     {
         if (matchId == Guid.Empty || request == null || request.CompletedPhaseOrdinal < 1 || request.CompletedPhaseOrdinal == int.MaxValue || request.SourceEvents == null || request.Metrics == null || request.Supply == null || request.Minions == null || string.IsNullOrWhiteSpace(request.SourceVersion) || string.IsNullOrWhiteSpace(request.ComparisonContextKey) || request.SourceVersion.Length > 80 || request.ComparisonContextKey.Length > 128 || !ValidHash(request.EvidenceFingerprint) || !ValidHash(request.RosterIdentity))
             return new(false, false, false, false, false, "P8_SOURCE_REQUEST_INVALID");
+        if (request.SourceVersion is not ("AED_PHASE8_SOURCE_REFERENCES_V1" or "AED_PHASE8_LIFECYCLE_SIDECARS_V1"))
+            return new(false, false, false, false, false, "P8_SOURCE_REQUEST_INVALID");
         if (request.SourceVersion == "AED_PHASE8_SOURCE_REFERENCES_V1" &&
             (request.Metrics.Length != 0 || request.Supply.Length != 0 || request.Minions.Length != 0))
             return new(false, false, false, false, false, "P8_SOURCE_REFERENCE_ONLY");

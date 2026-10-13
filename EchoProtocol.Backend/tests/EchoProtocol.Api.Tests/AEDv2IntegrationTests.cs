@@ -14,6 +14,21 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed partial class ScenarioServiceTests
 {
+    [Theory, Trait("Category", "AEDv2")]
+    [InlineData("AED_PHASE8_SOURCE_UNKNOWN_V1")]
+    [InlineData("AED_PHASE8_SOURCE_REFERENCES_V2")]
+    public async Task Phase8_UnsupportedSourceVersion_IsRejected(string sourceVersion)
+    {
+        var request = new AEDPhase8SourceUploadRequestV1(1, new string('a', 64), new string('b', 64), "TEST_CONTEXT", sourceVersion,
+            Array.Empty<AEDPhase8SourceReferenceV1>(), Array.Empty<AEDPhase8MetricEvidenceV1>(),
+            Array.Empty<AEDPhase8SupplyEvidenceV1>(), Array.Empty<AEDPhase8MinionEvidenceV1>());
+        var verifier = new AEDPhase8SourceVerifierV1(null!, null!, null!);
+        var result = await verifier.VerifyAsync(Guid.NewGuid(), request);
+        Assert.False(result.CanonicalVerified);
+        Assert.False(result.SupplyLedgerVerified);
+        Assert.False(result.MinionPopulationVerified);
+        Assert.Equal("P8_SOURCE_REQUEST_INVALID", result.ReasonCode);
+    }
     [Fact, Trait("Category", "AEDv2")]
     public void AEDv2_BackendFingerprintMatchesUnityCatalog()
     {
