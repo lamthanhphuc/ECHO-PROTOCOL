@@ -206,18 +206,7 @@ public sealed class ScenarioAdaptivePlanV2Service(
             await tx.RollbackAsync(ct);
             return ServiceResult<ScenarioAdaptivePlanV2Dto>.Success(Map(plan, true), "AED v2 apply replayed");
         }
-        var scenario = await db.ScenarioDecisions.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.MatchId == matchId && x.IsCurrent, ct);
-        if (scenario is null || scenario.ResolutionMode != ScenarioResolutionMode.Adaptive ||
-            scenario.UsedFixedFallback ||
-            scenario.SnapshotId != plan.SnapshotId)
-            return Fail("AED v2 snapshot is stale", ErrorCodes.ScenarioDecisionStaleRoster);
-        var read = await snapshots.GetAsync(callerUserId, matchId, scenario.DecisionId, ct);
-        if (!read.IsSuccess || read.Data is null || read.Data.SnapshotValidity != "VALID" ||
-            read.Data.SnapshotId != plan.SnapshotId ||
-            read.Data.SnapshotContentFingerprint != plan.SnapshotFingerprint ||
-            read.Data.RosterIdentity != plan.RosterIdentity)
-            return Fail("AED v2 snapshot is stale", ErrorCodes.ScenarioDecisionStaleRoster);
+        // Receipt reconciles the stored Host commit after profiles and the phase advance.
         plan.ApplyStatus = "APPLIED";
         plan.AppliedAtUtc = clock.GetUtcNow().UtcDateTime;
         try

@@ -558,7 +558,7 @@ public sealed partial class ScenarioServiceTests
     }
 
     [Fact, Trait("Category", "AEDv2")]
-    public async Task AEDv2_ReceiptRejectsProfileRevisionChangedAfterApproval()
+    public async Task AEDv2_ReceiptReconcilesAfterProfileAndScenarioAdvance()
     {
         await using var f = await ValidAEDv2Fixture();
         var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
@@ -570,12 +570,37 @@ public sealed partial class ScenarioServiceTests
         var service = V2(f);
         Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, request)).IsSuccess);
         f.Db.PlayerAIProfiles.Single(x => x.UserId == f.PlayerId).ProfileRevision++;
+        f.Db.ScenarioDecisions.Single(x => x.MatchId == f.MatchId && x.IsCurrent).IsCurrent = false;
         await f.Db.SaveChangesAsync();
 
         var receipt = await service.ConfirmAppliedAsync(f.HostId, f.MatchId,
             request.DecisionId, request.ResultingPlanFingerprint);
 
-        Assert.Equal(ErrorCodes.ScenarioDecisionStaleRoster, receipt.ErrorCode);
+        Assert.True(receipt.IsSuccess);
+        Assert.Equal("APPLIED", (await f.Db.ScenarioAdaptivePlansV2.SingleAsync()).ApplyStatus);
+        var replay = await service.ConfirmAppliedAsync(f.HostId, f.MatchId,
+            request.DecisionId, request.ResultingPlanFingerprint);
+        Assert.True(replay.IsSuccess);
+        Assert.True(replay.Data!.IsReplay);
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_ReceiptRejectsWrongPlanFingerprintAfterApproval()
+    {
+        await using var f = await ValidAEDv2Fixture();
+        var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+        var request = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
+            "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
+        await MarkPhase8VerifiedAsync(f, request);
+        var service = V2(f);
+        Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, request)).IsSuccess);
+
+        var receipt = await service.ConfirmAppliedAsync(f.HostId, f.MatchId,
+            request.DecisionId, new string('f', 32));
+
+        Assert.Equal(ErrorCodes.ScenarioApplyConflict, receipt.ErrorCode);
         Assert.Equal("PENDING", (await f.Db.ScenarioAdaptivePlansV2.SingleAsync()).ApplyStatus);
     }
 
