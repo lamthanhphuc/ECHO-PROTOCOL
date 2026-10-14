@@ -143,8 +143,8 @@ namespace EchoProtocol.AI.AED.Tests
         }
 
         [TestCase("Assets/Scenes/MainMenu.unity", "EchoProtocol.UI.MainMenu.MainMenuMatchmakingController", "resolutionModeButton")]
-        [TestCase("Assets/Scenes/Lobby.unity", "EchoProtocol.UI.NetworkLobbyUI", "resolutionModeDropdown")]
-        public void HostModeSelectorIsBoundInScene(string path, string typeName, string fieldName)
+        [TestCase("Assets/Scenes/Lobby.unity", "EchoProtocol.UI.LobbyRuntimeBindingsController", "startButton")]
+        public void SceneModeSelectionAndStartControlsAreBound(string path, string typeName, string fieldName)
         {
             var scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
             try
