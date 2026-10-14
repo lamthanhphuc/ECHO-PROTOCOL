@@ -83,6 +83,10 @@ public sealed class AEDPhase8SourceVerifierV1(AppDbContext db, ITelemetryEventRe
         if (request.SourceVersion != "AED_PHASE8_SOURCE_REFERENCES_V1" &&
             !AEDPhase8LifecycleReconcilerV1.TryMatchPhaseSidecars(accepted, matchId, phaseStart.EventSequence, phaseEnds[0].EventSequence, request.Supply, request.Minions, out var sidecarReason))
             return new(true, false, false, false, false, sidecarReason);
+        if (request.Metrics.Length != 0)
+            return new(true, false, false, false, false, "P8_SOURCE_METRIC_UNSUPPORTED");
+        if (request.Supply.Any(x => x.Reachable))
+            return new(true, false, false, false, false, "P8_SOURCE_REACHABILITY_UNSUPPORTED");
         // Historical skill, pressure sidecars, complete supply origins, and minion state are not independently reconstructible yet.
         return new(true, false, false, false, false, "P8_SOURCE_AUTHORITATIVE_COVERAGE_INCOMPLETE");
     }

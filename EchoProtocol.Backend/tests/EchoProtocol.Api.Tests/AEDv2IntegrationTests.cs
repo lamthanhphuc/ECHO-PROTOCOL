@@ -306,6 +306,93 @@ public sealed partial class ScenarioServiceTests
     }
 
     [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_RealCanonicalAndLifecycleEvidenceStillBlocksUnsupportedGameplayApproval()
+    {
+        await using var f = await ValidAEDv2Fixture();
+        var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+
+        var phase = PhaseEvidence(f);
+        var down = phase.Single(x => x.EventType == "PLAYER_DOWNED");
+        down.ValueJson["context"].AsBsonDocument["occurrenceKey"] = "down-2";
+        var tool = Phase8LifecycleEvent(f.MatchId, "TEAM_TOOL_LIFECYCLE", 3, 12, "tool-spawn",
+            new BsonDocument { ["action"] = "SPAWN", ["instanceId"] = "tool-1", ["toolId"] = 2,
+                ["zone"] = 1, ["origin"] = "WorldSpawn", ["remainingCharges"] = BsonNull.Value });
+        var minion = Phase8LifecycleEvent(f.MatchId, "MINION_LIFECYCLE", 4, 14, "minion-spawn",
+            new BsonDocument { ["state"] = "SPAWNED", ["networkInstanceId"] = "minion-1", ["zone"] = 1 });
+        var accepted = new[] { phase[0], down, tool, minion, CopySequence(phase[2], 5) };
+        var repository = new AcceptedEvidenceRepository(accepted);
+        var canonical = new AEDv2PhaseEvidenceVerifier(f.Db, repository);
+        var fingerprint = PhaseFingerprint(f, 1);
+        var roster = scenario.RosterIdentity;
+        var request = new AEDPhase8SourceUploadRequestV1(1, fingerprint, roster,
+            "AED_PHASE8_CANONICAL_V1", "AED_PHASE8_LIFECYCLE_SIDECARS_V1",
+            new[] { down, tool, minion }.Select(x => new AEDPhase8SourceReferenceV1(
+                x.Id, x.EventSequence, x.EventType,
+                x.ValueJson["context"].AsBsonDocument["occurrenceKey"].AsString)).ToArray(),
+            Array.Empty<AEDPhase8MetricEvidenceV1>(),
+            new[] { new AEDPhase8SupplyEvidenceV1("tool-1", 2, 1, "WorldSpawn", "World", null,
+                null, false, 12, "tool-spawn") },
+            new[] { new AEDPhase8MinionEvidenceV1("minion-1", 1, "SPAWNED", 14, "minion-spawn") });
+
+        Assert.True(await canonical.VerifyAsync(f.MatchId, 1, fingerprint));
+        var verifier = new AEDPhase8SourceVerifierV1(f.Db, repository, canonical);
+        var verified = await verifier.VerifyAsync(f.MatchId, request);
+        Assert.True(verified.CanonicalVerified);
+        Assert.Equal("P8_SOURCE_AUTHORITATIVE_COVERAGE_INCOMPLETE", verified.ReasonCode);
+        Assert.False(verified.HistoricalSkillVerified);
+        Assert.False(verified.PressureVerified);
+        Assert.False(verified.SupplyLedgerVerified);
+        Assert.False(verified.MinionPopulationVerified);
+        Assert.Equal("P8_SOURCE_SUPPLY_REPLAY_MISMATCH", (await verifier.VerifyAsync(f.MatchId,
+            request with { Supply = new[] { request.Supply[0] with { Location = "Player" } } })).ReasonCode);
+        Assert.Equal("P8_SOURCE_MINION_REPLAY_MISMATCH", (await verifier.VerifyAsync(f.MatchId,
+            request with { Minions = new[] { request.Minions[0] with { State = "DESPAWNED" } } })).ReasonCode);
+        Assert.Equal("P8_SOURCE_REACHABILITY_UNSUPPORTED", (await verifier.VerifyAsync(f.MatchId,
+            request with { Supply = new[] { request.Supply[0] with { Reachable = true } } })).ReasonCode);
+        var userId = down.UserId!.Value;
+        Assert.Equal("P8_SOURCE_METRIC_UNSUPPORTED", (await verifier.VerifyAsync(f.MatchId,
+            request with { Metrics = new[] { new AEDPhase8MetricEvidenceV1(userId,
+                "Survival.DownPerThreatMinute", "AED_METRIC_OPPORTUNITY_V1", "AED_PHASE8_CANONICAL_V1",
+                1, 1, 0, 0, 1m, "Available", new[] { "down-2" }) } })).ReasonCode);
+
+        f.Db.AEDPhase8VerifiedSourcesV1.Add(new AEDPhase8VerifiedSourceV1
+        {
+            Id = Guid.NewGuid(), MatchId = f.MatchId, CompletedPhaseOrdinal = 1,
+            SourceVersion = request.SourceVersion, EvidenceFingerprint = fingerprint,
+            SourceFingerprint = new string('c', 64), RosterIdentity = roster,
+            CanonicalVerified = verified.CanonicalVerified, HistoricalSkillVerified = verified.HistoricalSkillVerified,
+            PressureVerified = verified.PressureVerified, SupplyLedgerVerified = verified.SupplyLedgerVerified,
+            MinionPopulationVerified = verified.MinionPopulationVerified, ReasonCode = verified.ReasonCode,
+            VerifiedContentJson = System.Text.Json.JsonSerializer.Serialize(request), VerifiedAtUtc = Now
+        });
+        await f.Db.SaveChangesAsync();
+        var decision = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY", "DetectionAcquireSeconds",
+            1.25, 1.5, "RELIEVE", "COMMITTED");
+        decision.EvidenceFingerprint = fingerprint;
+        var service = new ScenarioAdaptivePlanV2Service(f.Db,
+            new ScenarioSnapshotReadService(f.Db, new FixedClock(Now)), new FixedClock(Now), canonical);
+        var result = await service.SubmitAsync(f.HostId, f.MatchId, decision);
+        Assert.Equal(ErrorCodes.ScenarioApplyConflict, result.ErrorCode);
+        Assert.Empty(await f.Db.ScenarioAdaptivePlansV2.ToArrayAsync());
+    }
+
+    private static TelemetryEventDocument Phase8LifecycleEvent(Guid matchId, string type,
+        long sequence, long tick, string occurrence, BsonDocument data) => new()
+    {
+        Id = Guid.NewGuid(), MatchId = matchId, EventType = type, EventSequence = sequence,
+        Ts = DateTime.UnixEpoch.AddSeconds(tick), SchemaVersion = "1.2",
+        SemanticFingerprint = new string('a', 64), IngestedAt = DateTime.UnixEpoch,
+        ValueJson = new BsonDocument
+        {
+            ["context"] = new BsonDocument { ["phase"] = "PHASE_ONE", ["authorityTick"] = tick,
+                ["occurrenceKey"] = occurrence },
+            ["data"] = data
+        }
+    };
+
+    [Fact, Trait("Category", "AEDv2")]
     public async Task AEDv2_PreMatchGameplayCommitIsRejected()
     {
         await using var f = await ValidAEDv2Fixture();

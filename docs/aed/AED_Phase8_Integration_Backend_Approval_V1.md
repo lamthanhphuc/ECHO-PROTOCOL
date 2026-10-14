@@ -18,6 +18,19 @@ Do not subtract one when calling the existing `AEDv2PhaseEvidenceVerifier`.
 
 Historical Skill, Team Skill, pressure sidecars, TeamTool Supply, Minion Population, and Target Fairness remain unverified or research-only.
 
+### Source verification boundary (2026-10-14)
+
+`AED_PHASE8_LIFECYCLE_SIDECARS_V1` can reconcile accepted phase events, Tool ownership/charges/drop lineage, and Minion spawn/despawn transitions against Host sidecars. This proves the submitted lifecycle rows match accepted telemetry; it does not prove every world object or threat episode was emitted. `AEDPhase8AuthoritySourceCollectorV1.CoverageComplete` remains false for that reason.
+
+| Approval input | Current authoritative evidence | Missing contract or source | Approval status |
+|---|---|---|---|
+| Historical skill | Canonical down/revive/objective/noise counts and match-scoped profiles | Production metric observations with resolved opportunity, comparable cross-match context, profile lineage and calibrated confidence; several episode metrics are explicitly Unsupported in `AED_Metric_Opportunity_Contract_V1` | Unsupported |
+| Current pressure | Host gameplay state and research Minion/Stalker facts; canonical consequences | Versioned Host threat windows, causal joins, source coverage and calibrated policy; raw noise count and phase DownCount are insufficient | Unsupported |
+| Supply reachability | Accepted Tool lifecycle and charges, including `WorldSpawn`, `ScenePlaced`, and `LobbyLoadout` origins | Complete world census, NavMesh path to required objective/resource, immutable placement and accessibility receipts | Unsupported |
+| Minion population | Accepted spawn/despawn lifecycle with identity, zone and tick | Host world census at boundary, including zero-population evidence and reconciliation with all live Fusion objects; population adaptation remains research-only under Phase 6 | Unsupported |
+
+The Backend must reject a submitted metric row or `reachable=true` claim under this source version because neither can be reconstructed independently. A valid lifecycle upload may return `P8_SOURCE_AUTHORITATIVE_COVERAGE_INCOMPLETE`; it must not set the four extended verification flags. Gameplay approval remains blocked until the missing contracts and versioned producers/verifiers are approved together. The existing plan-authorization tests that seed all flags verify the downstream gate in isolation; they are not proof that live evidence can reach it.
+
 ## Canonical probe
 
 - Endpoint: `POST director-evidence-v1`
