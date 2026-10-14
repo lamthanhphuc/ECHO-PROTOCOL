@@ -1,4 +1,4 @@
-using EchoProtocol.Auth;
+﻿using EchoProtocol.Auth;
 using EchoProtocol.Profile;
 using EchoProtocol.UI.MainMenu;
 using TMPro;
@@ -11,9 +11,12 @@ namespace EchoProtocol.UI
     public sealed class LobbyUtilityBarController : MonoBehaviour
     {
         [SerializeField] private TMP_Text creditsText;
+
         [SerializeField] private Button creditsButton;
         [SerializeField] private Button shopButton;
         [SerializeField] private Button webButton;
+
+        [SerializeField] private TeamToolShopPanel storePanel;
 
         [SerializeField]
         private string topUpWebUrl =
@@ -23,14 +26,25 @@ namespace EchoProtocol.UI
         private string webUrl =
             "https://web.3.1.238.6.sslip.io/";
 
-        private Canvas _canvas;
         private float _nextRefreshAt;
 
-        private void Awake()
+
+        public void Configure(
+            TMP_Text amountText,
+            Button credits,
+            Button shop,
+            Button web,
+            TeamToolShopPanel store)
         {
-            _canvas =
-                GetComponentInParent<Canvas>();
+            creditsText = amountText;
+
+            creditsButton = credits;
+            shopButton = shop;
+            webButton = web;
+
+            storePanel = store;
         }
+
 
         private void OnEnable()
         {
@@ -46,6 +60,7 @@ namespace EchoProtocol.UI
             RefreshCredits();
         }
 
+
         private void OnDisable()
         {
             if (creditsButton != null)
@@ -58,6 +73,7 @@ namespace EchoProtocol.UI
                 webButton.onClick.RemoveListener(OpenWebsite);
         }
 
+
         private void Update()
         {
             if (Time.unscaledTime < _nextRefreshAt)
@@ -68,6 +84,7 @@ namespace EchoProtocol.UI
 
             RefreshCredits();
         }
+
 
         public void RefreshCredits()
         {
@@ -83,74 +100,40 @@ namespace EchoProtocol.UI
                 $"{balance:N0}";
         }
 
+
         private void OpenTopUp()
         {
-            if (!string.IsNullOrWhiteSpace(topUpWebUrl))
-                Application.OpenURL(topUpWebUrl);
+            if (!string.IsNullOrWhiteSpace(
+                    topUpWebUrl))
+            {
+                Application.OpenURL(
+                    topUpWebUrl);
+            }
         }
+
 
         private void OpenWebsite()
         {
-            if (!string.IsNullOrWhiteSpace(webUrl))
-                Application.OpenURL(webUrl);
+            if (!string.IsNullOrWhiteSpace(
+                    webUrl))
+            {
+                Application.OpenURL(
+                    webUrl);
+            }
         }
+
 
         private void OpenShop()
         {
-            if (_canvas == null)
-                _canvas = GetComponentInParent<Canvas>();
-
-            if (_canvas == null)
+            if (storePanel == null)
             {
                 Debug.LogWarning(
-                    "[Lobby] Lobby Canvas is missing.");
+                    "[Lobby] StoreV2Popup reference is missing.");
 
                 return;
             }
 
-            TeamToolShopPanel store = null;
-
-            foreach (var root
-                     in gameObject.scene.GetRootGameObjects())
-            {
-                var panels =
-                    root.GetComponentsInChildren<
-                        TeamToolShopPanel>(true);
-
-                if (panels.Length == 0)
-                    continue;
-
-                store = panels[0];
-                break;
-            }
-
-            if (store == null)
-            {
-                Debug.LogWarning(
-                    "[Lobby] StoreV2Popup is missing.");
-
-                return;
-            }
-
-            var popup = store.transform;
-
-            if (popup.parent != _canvas.transform)
-            {
-                popup.SetParent(
-                    _canvas.transform,
-                    false);
-
-                if (popup is RectTransform rect)
-                {
-                    rect.anchorMin = Vector2.zero;
-                    rect.anchorMax = Vector2.one;
-                    rect.offsetMin = Vector2.zero;
-                    rect.offsetMax = Vector2.zero;
-                }
-            }
-
-            popup.SetAsLastSibling();
-            store.Open();
+            storePanel.Open();
         }
     }
 }

@@ -31,7 +31,7 @@ namespace EchoProtocol.UI.MainMenu
         private Coroutine _dynamicRoutine;
 
         private StoreCategory _selected =
-            StoreCategory.TeamTool;
+            StoreCategory.Character;
 
         private void OnEnable()
         {
@@ -101,7 +101,7 @@ namespace EchoProtocol.UI.MainMenu
             FixRaycastOrder();
 
             ApplyCategory(
-                StoreCategory.TeamTool,
+                StoreCategory.Character,
                 true);
 
             _bindRoutine = null;
@@ -435,6 +435,7 @@ namespace EchoProtocol.UI.MainMenu
                 _teamTools
                     .gameObject
                     .SetActive(true);
+                GetComponent<TeamToolShopPanel>()?.RefreshSelectedTeamToolPreview();
             }
             else if (showCharacter)
             {
@@ -590,64 +591,9 @@ namespace EchoProtocol.UI.MainMenu
                 _lighting.ApplyNow();
         }
 
-        private static void SetCategorySelected(
-            Button button,
-            bool selected)
+        private static void SetCategorySelected(Button button,bool selected)
         {
-            if (button == null)
-                return;
-
-            Image image =
-                button.targetGraphic
-                as Image;
-
-            if (image != null)
-            {
-                image.color =
-                    selected
-                        ? new Color(
-                            0.16f,
-                            0.05f,
-                            0.045f,
-                            1f)
-                        : new Color(
-                            0.025f,
-                            0.030f,
-                            0.032f,
-                            0.98f);
-            }
-
-            Outline outline =
-                button.GetComponent<Outline>();
-
-            if (outline == null)
-            {
-                outline =
-                    button.gameObject
-                        .AddComponent<Outline>();
-            }
-
-            outline.effectColor =
-                selected
-                    ? new Color(
-                        0.92f,
-                        0.24f,
-                        0.19f,
-                        1f)
-                    : new Color(
-                        0.20f,
-                        0.22f,
-                        0.23f,
-                        0.85f);
-
-            outline.effectDistance =
-                selected
-                    ? new Vector2(
-                        2f,
-                        -2f)
-                    : new Vector2(
-                        1f,
-                        -1f);
+            StoreReferencePresentation.SelectCategory(button,selected);
         }
 
         private Button FindButton(

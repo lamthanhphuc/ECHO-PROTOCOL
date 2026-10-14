@@ -139,7 +139,7 @@ namespace EchoProtocol.UI.HUD
             bool isZone1 = director != null
                 ? director.CurrentStage == EchoProtocol.MatchFlow.Zone2MissionStage.Zone1CoreObjective
                 : matchFlow == null || matchFlow.Phase == MatchPhase.ExploreCore;
-            bool visible = !_hideZone1Objective || !isZone1;
+            bool visible = (! _hideZone1Objective || !isZone1) && !PlayerInteractionControlLock.HasModal;
             _visibilityGroup.alpha = visible ? 1f : 0f;
             _visibilityGroup.blocksRaycasts = visible;
         }
@@ -374,7 +374,7 @@ namespace EchoProtocol.UI.HUD
                 : badge.StartsWith("FINAL HUNT") || badge.StartsWith("ESCAPE") ? "THOÁT HIỂM"
                 : badge == "MISSION ACCOMPLISHED" ? "HOÀN THÀNH"
                 : badge == "MISSION FAILED" ? "THẤT BẠI" : badge;
-            SetText(phaseBadgeTmp, phaseBadgeText, label);
+            SetText(phaseBadgeTmp, phaseBadgeText, EchoProtocol.Settings.GameLanguage.Translate(label));
         }
 
         private static string RelayTimeText(EchoProtocol.MatchFlow.Zone2MissionDirector director)

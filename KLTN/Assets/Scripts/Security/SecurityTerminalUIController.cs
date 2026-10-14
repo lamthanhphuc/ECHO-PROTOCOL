@@ -141,24 +141,18 @@ public class SecurityTerminalUIController : MonoBehaviour
                     statusBannerText.text = "<color=#D0685F>Relay chưa hoạt động</color>";
                 }
 
+                if(offlineDetailText==null && offlineWarningPanel!=null)
+                    foreach(var label in offlineWarningPanel.GetComponentsInChildren<TMPro.TMP_Text>(true))
+                        if(label.text.Contains("RESTORE") || label.text.Contains("BEFORE INITIATING")){offlineDetailText=label;break;}
                 // Clean structured diagnostic details inside the offline warning panel
                 if (offlineDetailText != null)
                 {
-                    string powerStatus = powerCount >= 2
-                        ? "<color=#86AD91><b>2 / 2 hoạt động</b></color>"
-                        : $"<color=#D0685F><b>{powerCount} / 2 chưa hoạt động</b></color>";
-                    string dataStatus = dataCount >= 2
-                        ? "<color=#86AD91><b>2 / 2 hoạt động</b></color>"
-                        : $"<color=#D0685F><b>{dataCount} / 2 chưa hoạt động</b></color>";
-                    string totalStatus = totalRelays >= 4
-                        ? "<color=#86AD91><b>4 / 4 đã khôi phục</b></color>"
-                        : $"<color=#D8A85E><b>{totalRelays} / 4 hoạt động</b></color>";
+                    offlineDetailText.text=EchoProtocol.Settings.GameLanguage.Choose(
+                        $"Khôi phục các relay để mở xác thực bảo mật.\n\nNguồn điện · Relay A: {powerCount}/2\nDữ liệu · Relay B: {dataCount}/2\n\nTổng tiến độ: {totalRelays}/4",
+                        $"Restore the relays to unlock security authentication.\n\nPower · Relay A: {powerCount}/2\nData · Relay B: {dataCount}/2\n\nTotal progress: {totalRelays}/4");
+                    offlineDetailText.fontSize=20;offlineDetailText.enableAutoSizing=true;offlineDetailText.fontSizeMin=15;offlineDetailText.fontSizeMax=20;
+                    offlineDetailText.alignment=TMPro.TextAlignmentOptions.Center;
 
-                    offlineDetailText.text =
-                        $"<size=17><color=#90A4AE>Trạng thái hệ thống relay</color></size>\n\n" +
-                        $"  • Nguồn điện · Relay A:   {powerStatus}\n" +
-                        $"  • Dữ liệu · Relay B:   {dataStatus}\n\n" +
-                        $"<size=19>Tổng tiến độ: {totalStatus}</size>";
                 }
                 return;
             }

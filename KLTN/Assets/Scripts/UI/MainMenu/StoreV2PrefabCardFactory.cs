@@ -78,6 +78,7 @@ namespace EchoProtocol.UI.MainMenu
                 return null;
             }
 
+            if(templatePath==CatalogTemplatePath)parent=StoreReferencePresentation.CatalogParent(parent);
             GameObject card =
                 Object.Instantiate(
                     template.gameObject,
@@ -121,6 +122,9 @@ namespace EchoProtocol.UI.MainMenu
             thumbnail.texture = texture;
 
             button.onClick.RemoveAllListeners();
+            if(templatePath==CatalogTemplatePath)button.onClick.AddListener(()=>StoreReferencePresentation.ChooseModel(storeRoot));
+            EchoProtocol.Audio.GameAudioRuntime.RegisterButton(button);
+            StoreReferencePresentation.BindCard(card);
 
             return card;
         }

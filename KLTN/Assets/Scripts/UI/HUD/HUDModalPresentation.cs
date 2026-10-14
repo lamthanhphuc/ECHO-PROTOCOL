@@ -70,7 +70,8 @@ namespace EchoProtocol.UI.HUD
                 text.fontSizeMin = 12f;
                 text.fontSizeMax = text.fontSize;
                 text.enableAutoSizing = true;
-                text.color = title ? HUDPresentationStyle.Ink : HUDPresentationStyle.Muted;
+                text.color = title ? new Color(0.9f,0.94f,0.93f) : new Color(0.68f,0.75f,0.74f);
+                text.text=EchoProtocol.Settings.GameLanguage.Translate(text.text);
                 text.fontStyle = title ? FontStyles.Bold : FontStyles.Normal;
             }
             foreach (var image in root.GetComponentsInChildren<Image>(true))

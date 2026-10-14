@@ -67,7 +67,10 @@ namespace EchoProtocol.UI.MainMenu
 
             if (OwnedItemIds.Add(itemId))
             {
-                IsLoaded = true;
+                // This is an optimistic purchase delta, not a
+                // complete /api/inventory/me snapshot. Preserve
+                // IsLoaded so an unloaded session still performs
+                // an authoritative inventory refresh later.
                 Changed?.Invoke();
             }
         }

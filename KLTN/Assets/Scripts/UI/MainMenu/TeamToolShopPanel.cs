@@ -106,6 +106,7 @@ namespace EchoProtocol.UI.MainMenu
             _profile = profile;
             _previewMode = false;
 
+            StoreReferencePresentation.BeginSelection(transform);
             gameObject.SetActive(true);
 
             if (!_built)
@@ -115,7 +116,7 @@ namespace EchoProtocol.UI.MainMenu
                 return;
 
             ShowCategory(
-                StoreCategory.TeamTool);
+                StoreCategory.Character);
 
             RefreshCredits();
             LoadCatalog();
@@ -178,6 +179,8 @@ namespace EchoProtocol.UI.MainMenu
 
                 return;
             }
+
+            StoreReferencePresentation.Apply(transform);
 
             // EDITABLE PREFAB PATH:
             // If the Store hierarchy already exists in the prefab/scene,
@@ -581,8 +584,7 @@ namespace EchoProtocol.UI.MainMenu
 
             if (item == null)
             {
-                _selectedName.text =
-                    "NO ITEM AVAILABLE";
+                StoreReferencePresentation.SetName(_selectedName, "NO ITEM AVAILABLE");
 
                 _selectedDescription.text =
                     string.Empty;
@@ -609,11 +611,10 @@ namespace EchoProtocol.UI.MainMenu
                 return;
             }
 
-            _selectedName.text =
-                string.IsNullOrWhiteSpace(
+            StoreReferencePresentation.SetName(_selectedName, string.IsNullOrWhiteSpace(
                     item.name)
                     ? "TEAM TOOL"
-                    : item.name.ToUpperInvariant();
+                    : item.name.ToUpperInvariant());
 
             _selectedDescription.text =
                 item.description
@@ -695,7 +696,7 @@ namespace EchoProtocol.UI.MainMenu
 
                 if (caption != null)
                     caption.text =
-                        "UNAVAILABLE";
+                        EchoProtocol.Settings.GameLanguage.Choose("Chưa khả dụng", "Unavailable");
 
                 return;
             }
@@ -705,13 +706,14 @@ namespace EchoProtocol.UI.MainMenu
                     .OwnsItem(
                         _selected.itemId);
 
+            _selectedPrice.text=owned ? string.Empty : $"{_selected.price:N0} CR";
             if (_previewMode)
             {
                 _buyButton.interactable =
                     true;
 
                 if (caption != null)
-                    caption.text = "BUY";
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
 
                 return;
             }
@@ -724,10 +726,10 @@ namespace EchoProtocol.UI.MainMenu
             {
                 caption.text =
                     owned
-                        ? "OWNED"
+                        ? EchoProtocol.Settings.GameLanguage.Choose("Đã sở hữu", "Owned")
                         : _purchasing
-                            ? "PURCHASING..."
-                            : "BUY";
+                            ? EchoProtocol.Settings.GameLanguage.Choose("Đang mua…", "Purchasing…")
+                            : EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
             }
         }
 
@@ -852,8 +854,9 @@ namespace EchoProtocol.UI.MainMenu
             return renderer;
         }
 
-        private void RefreshSelectedTeamToolPreview()
+        public void RefreshSelectedTeamToolPreview()
         {
+            if(StoreReferencePresentation.IsAwaitingSelection(transform))return;
             if (_selected == null
                 || _selectedPreview == null)
             {
@@ -1088,6 +1091,8 @@ namespace EchoProtocol.UI.MainMenu
         private static void ClearChildren(
             Transform parent)
         {
+            if (StoreReferencePresentation.ClearCatalog(parent))return;
+
             for (int i =
                      parent.childCount - 1;
                  i >= 0;

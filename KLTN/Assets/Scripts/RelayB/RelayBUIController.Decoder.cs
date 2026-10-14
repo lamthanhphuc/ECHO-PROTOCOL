@@ -216,6 +216,13 @@ namespace EchoProtocol.RelayB
                         : Color.Lerp(new Color(0.055f, 0.065f, 0.07f), DecodeColor(result), 0.12f);
                 }
             }
+            if(transmitButton!=null) {
+                var rect=transmitButton.GetComponent<RectTransform>();
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,40f);
+                EchoProtocol.UI.HUD.HUDModalPresentation.StyleRelayAction(transmitButton,true);
+                var label=transmitButton.GetComponentInChildren<TMP_Text>();
+                if(label!=null){label.rectTransform.anchorMin=Vector2.zero;label.rectTransform.anchorMax=Vector2.one;label.rectTransform.offsetMin=new Vector2(6,3);label.rectTransform.offsetMax=new Vector2(-6,-3);label.alignment=TextAlignmentOptions.Center;}
+            }
             SetInteractable(transmitButton, edit && completeInput);
             if (resetInputButton != null) { resetInputButton.gameObject.SetActive(stage2 && !state.IsComplete); resetInputButton.interactable = edit && hasInput; }
             if (transmitButton != null) transmitButton.gameObject.SetActive(!state.IsComplete);
@@ -268,9 +275,11 @@ namespace EchoProtocol.RelayB
         {
             var label = processingTabPanel.transform.Find(name)?.GetComponent<TMP_Text>();
             if (label == null) return;
-            label.text = explanation;
+            label.text = EchoProtocol.Settings.GameLanguage.Translate(explanation);
             label.enableAutoSizing = true;
-            label.fontSizeMin = 12f;
+            label.fontSizeMin = 11f;
+            label.fontSizeMax = 13f;
+            label.alignment=TextAlignmentOptions.TopLeft;
             label.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 36f);
         }
 

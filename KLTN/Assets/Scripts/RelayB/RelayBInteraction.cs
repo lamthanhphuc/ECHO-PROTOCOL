@@ -13,7 +13,7 @@ namespace EchoProtocol.RelayB
         [SerializeField] private string onlinePrompt = "Data Relay B - Online";
         [SerializeField] private bool allowInspectWhenOnline = true;
 
-        public string InteractionPrompt => controller != null && controller.IsOnline ? onlinePrompt : prompt;
+        public string InteractionPrompt => EchoProtocol.Settings.GameLanguage.Translate(controller != null && controller.IsOnline ? onlinePrompt : prompt);
 
         private void Awake()
         {
