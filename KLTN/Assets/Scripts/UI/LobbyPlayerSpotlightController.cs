@@ -14,6 +14,7 @@ namespace EchoProtocol.UI
         [SerializeField, Min(0f)] private float bodyFillIntensity = 3.5f;
         [SerializeField, Min(0.1f)] private float bodyFillRange = 4f;
         private Light[] _bodyFillLights;
+        private bool[] _ownsBodyFillLights;
         private float _nextRefreshAt;
         private Camera _presentationCamera;
         private Vector3 _cameraPosition;
@@ -53,10 +54,29 @@ namespace EchoProtocol.UI
         {
             if (!Application.isPlaying || spotlights == null || _bodyFillLights != null) return;
             _bodyFillLights = new Light[spotlights.Length];
+            _ownsBodyFillLights = new bool[spotlights.Length];
+            var sceneLights = FindObjectsByType<Light>(FindObjectsInactive.Include);
             for (int i = 0; i < spotlights.Length; i++)
             {
                 var overhead = spotlights[i];
                 if (overhead == null) continue;
+                // Reuse the authored fill for this slot; do not leave it on and
+                // create a second, independently lit pool in the environment.
+                foreach (var existing in sceneLights)
+                    if (existing.gameObject.scene == gameObject.scene && existing.name == "Lobby Body Fill " + (i + 1))
+                    {
+                        _bodyFillLights[i] = existing;
+                        existing.enabled = false;
+                        break;
+                    }
+                if (_bodyFillLights[i] != null)
+                {
+                    _bodyFillLights[i].intensity = bodyFillIntensity;
+                    _bodyFillLights[i].range = bodyFillRange;
+                    _bodyFillLights[i].color = overhead.color;
+                    _bodyFillLights[i].cullingMask = overhead.cullingMask;
+                    continue;
+                }
                 var obj = new GameObject("Lobby Body Fill");
                 obj.transform.SetParent(overhead.transform, false);
                 obj.transform.position = overhead.transform.position + Vector3.down * 1.2f;
@@ -69,13 +89,15 @@ namespace EchoProtocol.UI
                 fill.cullingMask = overhead.cullingMask;
                 fill.enabled = false;
                 _bodyFillLights[i] = fill;
+                _ownsBodyFillLights[i] = true;
             }
         }
 
         private void OnDestroy()
         {
             if (_bodyFillLights == null) return;
-            foreach (var fill in _bodyFillLights) if (fill != null) Destroy(fill.gameObject);
+            for (int i=0;i<_bodyFillLights.Length;i++)
+                if (_ownsBodyFillLights[i] && _bodyFillLights[i] != null) Destroy(_bodyFillLights[i].gameObject);
         }
 
         private void Awake()
