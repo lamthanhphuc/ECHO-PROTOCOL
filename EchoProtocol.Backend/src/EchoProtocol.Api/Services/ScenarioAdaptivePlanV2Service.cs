@@ -80,6 +80,7 @@ public sealed class ScenarioAdaptivePlanV2Service(
         var scenario = await db.ScenarioDecisions.AsNoTracking()
             .SingleOrDefaultAsync(x => x.MatchId == matchId && x.IsCurrent, ct);
         if (scenario is null || scenario.ResolutionMode != ScenarioResolutionMode.Adaptive
+            || scenario.UsedFixedFallback
             || scenario.SnapshotId != request.SnapshotId)
             return Fail("AED v2 snapshot is stale", ErrorCodes.ScenarioDecisionStaleRoster);
         var read = await snapshots.GetAsync(callerUserId, matchId, scenario.DecisionId, ct);
@@ -90,7 +91,7 @@ public sealed class ScenarioAdaptivePlanV2Service(
         var allowedColdStartReasons = data.ReasonCodes is { Length: > 0 }
             && data.ReasonCodes.All(r => r is "PROFILE_MISSING" or "INSUFFICIENT_OBSERVED_PROFILE_EVIDENCE");
         var coldStartSnapshot = boundary && data.SnapshotValidity == "PARTIAL" && allowedColdStartReasons;
-        if ((!validSnapshot && !coldStartSnapshot)
+        if ((!validSnapshot && !(request.CommitStatus != "COMMITTED" && coldStartSnapshot))
             || data.SnapshotId != request.SnapshotId
             || data.SnapshotContentFingerprint != request.SnapshotFingerprint
             || data.RosterIdentity != request.RosterIdentity)
@@ -108,6 +109,15 @@ public sealed class ScenarioAdaptivePlanV2Service(
         if (boundary && !await evidenceVerifier.VerifyAsync(
                 matchId, request.PhaseOrdinal, request.EvidenceFingerprint, ct))
             return Fail("AED v2 phase evidence is not verified", ErrorCodes.ScenarioApplyConflict);
+        if (boundary && request.CommitStatus == "COMMITTED" &&
+            !await db.AEDPhase8VerifiedSourcesV1.AsNoTracking().AnyAsync(x =>
+                x.MatchId == matchId && x.CompletedPhaseOrdinal == request.PhaseOrdinal &&
+                x.SourceVersion == "AED_PHASE8_LIFECYCLE_SIDECARS_V1" &&
+                x.EvidenceFingerprint == request.EvidenceFingerprint &&
+                x.RosterIdentity == request.RosterIdentity &&
+                x.CanonicalVerified && x.HistoricalSkillVerified && x.PressureVerified &&
+                x.SupplyLedgerVerified && x.MinionPopulationVerified, ct))
+            return Fail("AED v2 Phase 8 source evidence is not verified", ErrorCodes.ScenarioApplyConflict);
 
         var hasPending = await db.Set<ScenarioAdaptivePlanV2>()
             .AnyAsync(x => x.MatchId == matchId
@@ -198,8 +208,15 @@ public sealed class ScenarioAdaptivePlanV2Service(
         }
         var scenario = await db.ScenarioDecisions.AsNoTracking()
             .SingleOrDefaultAsync(x => x.MatchId == matchId && x.IsCurrent, ct);
-        if (scenario is null || scenario.SnapshotId != plan.SnapshotId ||
-            !(await snapshots.GetAsync(callerUserId, matchId, scenario.DecisionId, ct)).IsSuccess)
+        if (scenario is null || scenario.ResolutionMode != ScenarioResolutionMode.Adaptive ||
+            scenario.UsedFixedFallback ||
+            scenario.SnapshotId != plan.SnapshotId)
+            return Fail("AED v2 snapshot is stale", ErrorCodes.ScenarioDecisionStaleRoster);
+        var read = await snapshots.GetAsync(callerUserId, matchId, scenario.DecisionId, ct);
+        if (!read.IsSuccess || read.Data is null || read.Data.SnapshotValidity != "VALID" ||
+            read.Data.SnapshotId != plan.SnapshotId ||
+            read.Data.SnapshotContentFingerprint != plan.SnapshotFingerprint ||
+            read.Data.RosterIdentity != plan.RosterIdentity)
             return Fail("AED v2 snapshot is stale", ErrorCodes.ScenarioDecisionStaleRoster);
         plan.ApplyStatus = "APPLIED";
         plan.AppliedAtUtc = clock.GetUtcNow().UtcDateTime;

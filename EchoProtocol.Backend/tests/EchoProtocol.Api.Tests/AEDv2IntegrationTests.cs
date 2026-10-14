@@ -2,6 +2,7 @@ using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Data.Telemetry;
 using EchoProtocol.Api.DTOs.Scenarios;
 using EchoProtocol.Api.Enums;
+using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Services;
 using EchoProtocol.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -366,6 +367,7 @@ public sealed partial class ScenarioServiceTests
         await f.Db.SaveChangesAsync();
         var boundary = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY", "DetectionAcquireSeconds",
             1.25, 1.5, "RELIEVE", "COMMITTED");
+        await MarkPhase8VerifiedAsync(f, boundary);
         Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, boundary)).IsSuccess);
         Assert.Single(await f.Db.ScenarioAdaptivePlansV2.ToArrayAsync());
         var boundaryApplied = await service.ConfirmAppliedAsync(
@@ -376,6 +378,41 @@ public sealed partial class ScenarioServiceTests
             7.5, 8, "INCREASE_PRESSURE", "COMMITTED");
         Assert.Equal(ErrorCodes.ScenarioDecisionConflict,
             (await service.SubmitAsync(f.HostId, f.MatchId, stale)).ErrorCode);
+    }
+
+    [Theory, Trait("Category", "AEDv2")]
+    [InlineData("missing")]
+    [InlineData("incomplete")]
+    [InlineData("wrong-match")]
+    [InlineData("wrong-phase")]
+    [InlineData("wrong-fingerprint")]
+    [InlineData("wrong-roster")]
+    public async Task AEDv2_GameplayCommitRequiresMatchingCompletePhase8Source(string failure)
+    {
+        await using var f = await ValidAEDv2Fixture();
+        var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+        var request = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
+            "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
+        if (failure != "missing")
+        {
+            var source = await MarkPhase8VerifiedAsync(f, request);
+            switch (failure)
+            {
+                case "incomplete": source.MinionPopulationVerified = false; break;
+                case "wrong-match": source.MatchId = Guid.NewGuid(); break;
+                case "wrong-phase": source.CompletedPhaseOrdinal++; break;
+                case "wrong-fingerprint": source.EvidenceFingerprint = new string('b', 64); break;
+                case "wrong-roster": source.RosterIdentity = new string('b', 64); break;
+            }
+            await f.Db.SaveChangesAsync();
+        }
+
+        var result = await V2(f).SubmitAsync(f.HostId, f.MatchId, request);
+
+        Assert.Equal(ErrorCodes.ScenarioApplyConflict, result.ErrorCode);
+        Assert.Empty(await f.Db.ScenarioAdaptivePlansV2.ToArrayAsync());
     }
 
     [Fact, Trait("Category", "AEDv2")]
@@ -389,6 +426,7 @@ public sealed partial class ScenarioServiceTests
         await f.Db.SaveChangesAsync();
         var first = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
             "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
+        await MarkPhase8VerifiedAsync(f, first);
         Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, first)).IsSuccess);
         var boundary = V2Request(scenario, 2, "ALLOWED_PHASE_BOUNDARY",
             "ChaseSpeed", 7.5, 8, "INCREASE_PRESSURE", "COMMITTED");
@@ -409,6 +447,7 @@ public sealed partial class ScenarioServiceTests
         await f.Db.SaveChangesAsync();
         var request = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
             "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
+        await MarkPhase8VerifiedAsync(f, request);
         Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, request)).IsSuccess);
         Assert.True((await service.AbortPendingAsync(
             f.HostId, f.MatchId, request.DecisionId)).IsSuccess);
@@ -432,10 +471,12 @@ public sealed partial class ScenarioServiceTests
 
         var aborted = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
             "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
+        await MarkPhase8VerifiedAsync(f, aborted);
         Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, aborted)).IsSuccess);
         Assert.True((await service.AbortPendingAsync(f.HostId, f.MatchId, aborted.DecisionId)).IsSuccess);
         var boundary = V2Request(scenario, 2, "ALLOWED_PHASE_BOUNDARY",
             "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
+        await MarkPhase8VerifiedAsync(f, boundary);
         var result = await service.SubmitAsync(f.HostId, f.MatchId, boundary);
 
         Assert.True(result.IsSuccess, $"{result.ErrorCode}: {result.Message}");
@@ -455,6 +496,7 @@ public sealed partial class ScenarioServiceTests
         await f.Db.SaveChangesAsync();
         var request = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
             "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
+        await MarkPhase8VerifiedAsync(f, request);
         Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, request)).IsSuccess);
 
         var aborted = await service.AbortPendingAsync(f.HostId, f.MatchId, request.DecisionId);
@@ -478,6 +520,7 @@ public sealed partial class ScenarioServiceTests
         await f.Db.SaveChangesAsync();
         var request = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
             "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
+        await MarkPhase8VerifiedAsync(f, request);
         Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, request)).IsSuccess);
         Assert.True((await service.ConfirmAppliedAsync(f.HostId, f.MatchId,
             request.DecisionId, request.ResultingPlanFingerprint)).IsSuccess);
@@ -499,20 +542,74 @@ public sealed partial class ScenarioServiceTests
         Assert.Empty(await f.Db.ScenarioAdaptivePlansV2.ToArrayAsync());
     }
 
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_FixedFallbackCannotAuthorizeShadowPlan()
+    {
+        await using var f = await ValidAEDv2Fixture();
+        var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
+        var current = f.Db.ScenarioDecisions.Single(x => x.MatchId == f.MatchId && x.IsCurrent);
+        current.UsedFixedFallback = true;
+        await f.Db.SaveChangesAsync();
+
+        var request = V2Request(scenario, 0, "PRE_MATCH", "SupportBonus", 0, 2, "RELIEVE", "SHADOW_ONLY");
+        Assert.Equal(ErrorCodes.ScenarioDecisionStaleRoster,
+            (await V2(f).SubmitAsync(f.HostId, f.MatchId, request)).ErrorCode);
+        Assert.Empty(await f.Db.ScenarioAdaptivePlansV2.ToArrayAsync());
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AEDv2_ReceiptRejectsProfileRevisionChangedAfterApproval()
+    {
+        await using var f = await ValidAEDv2Fixture();
+        var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        await f.Db.SaveChangesAsync();
+        var request = V2Request(scenario, 1, "ALLOWED_PHASE_BOUNDARY",
+            "DetectionAcquireSeconds", 1.25, 1.5, "RELIEVE", "COMMITTED");
+        await MarkPhase8VerifiedAsync(f, request);
+        var service = V2(f);
+        Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, request)).IsSuccess);
+        f.Db.PlayerAIProfiles.Single(x => x.UserId == f.PlayerId).ProfileRevision++;
+        await f.Db.SaveChangesAsync();
+
+        var receipt = await service.ConfirmAppliedAsync(f.HostId, f.MatchId,
+            request.DecisionId, request.ResultingPlanFingerprint);
+
+        Assert.Equal(ErrorCodes.ScenarioDecisionStaleRoster, receipt.ErrorCode);
+        Assert.Equal("PENDING", (await f.Db.ScenarioAdaptivePlansV2.SingleAsync()).ApplyStatus);
+    }
+
     private static async Task<Fixture> ValidAEDv2Fixture()
     {
         var f = await Fixture.CreateAsync();
-        var player = f.Db.PlayerAIProfiles.Single(x => x.UserId == f.PlayerId);
-        player.SurvivalStatus = ProfileDimensionStatus.Active;
-        player.NoiseStatus = ProfileDimensionStatus.Active;
-        player.SurvivalSampleCount = 2;
-        player.NoiseSampleCount = 2;
-        await f.Db.SaveChangesAsync();
+        await f.EnableApprovedReliefAsync();
         return f;
     }
 
     private static ScenarioAdaptivePlanV2Service V2(Fixture f) =>
         new(f.Db, new ScenarioSnapshotReadService(f.Db, new FixedClock(Now)), new FixedClock(Now), new AcceptEvidenceVerifier());
+
+    private static async Task<AEDPhase8VerifiedSourceV1> MarkPhase8VerifiedAsync(
+        Fixture f, SubmitScenarioAdaptivePlanV2Request request)
+    {
+        // This fixture isolates plan authorization; source reconstruction is tested separately.
+        var source = new AEDPhase8VerifiedSourceV1
+        {
+            Id = Guid.NewGuid(), MatchId = f.MatchId,
+            CompletedPhaseOrdinal = request.PhaseOrdinal,
+            SourceVersion = "AED_PHASE8_LIFECYCLE_SIDECARS_V1",
+            EvidenceFingerprint = request.EvidenceFingerprint,
+            SourceFingerprint = new string('c', 64),
+            RosterIdentity = request.RosterIdentity,
+            CanonicalVerified = true, HistoricalSkillVerified = true,
+            PressureVerified = true, SupplyLedgerVerified = true,
+            MinionPopulationVerified = true, ReasonCode = "VERIFIED",
+            VerifiedContentJson = "{}", VerifiedAtUtc = Now
+        };
+        f.Db.AEDPhase8VerifiedSourcesV1.Add(source);
+        await f.Db.SaveChangesAsync();
+        return source;
+    }
 
     private sealed class AcceptEvidenceVerifier : IAEDv2PhaseEvidenceVerifier
     {
