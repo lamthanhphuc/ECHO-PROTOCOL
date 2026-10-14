@@ -35,6 +35,12 @@ namespace EchoProtocol.AI.Common.AED
         private AEDMetricPolicyContextV1 _policyContext;
 
         public AEDMinionEvidenceSnapshotV1 LastFrozen { get; private set; }
+        public bool TryGetActiveEpisodeId(string minionId, string targetId, out string episodeId)
+        {
+            episodeId = null;
+            if (_frozen || !_active.TryGetValue(minionId, out var active) || active.TargetId != targetId) return false;
+            episodeId = active.Id; return true;
+        }
         public bool IsIncomplete => _incomplete;
         public bool IsInvalid => _invalid;
 

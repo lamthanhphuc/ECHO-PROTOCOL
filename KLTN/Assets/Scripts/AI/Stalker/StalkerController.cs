@@ -373,6 +373,7 @@ namespace EchoProtocol.AI.Stalker
         public float DetectionMeter => detectionMeter;
         public Transform DetectionTarget => detectionTarget;
         public Transform CurrentTarget => currentTarget;
+        public bool HasActiveHideSpotInvestigation => _hidingInvestigation?.HasActiveCandidate == true;
         public Vector3 LastKnownPosition => lastKnownPosition;
         public float SearchElapsedTime => searchElapsedTime;
         public float AttackElapsedTime => attackElapsedTime;
@@ -418,6 +419,8 @@ namespace EchoProtocol.AI.Stalker
         public double AppliedDetectionDecayRate => GetDetectionDecayRate();
         public double AppliedChaseSpeed => GetChaseSpeed();
         public double AppliedSearchDuration => GetSearchDuration();
+        public float AppliedDetectionAcquireSeconds => detectionDurationSeconds;
+        public float AppliedPostChaseCooldownSeconds => smartPatrolSettings?.PostChaseCooldownSeconds ?? 18f;
         public bool SmartPatrolEnabled => useSmartPatrolDirector;
         public float SmartPatrolOccupancySampleIntervalSeconds =>
             smartPatrolSettings != null
@@ -2125,7 +2128,8 @@ namespace EchoProtocol.AI.Stalker
 
             foreach (StalkerFlashlightObservation clue in _currentFlashlightObservations)
             {
-                if (clue.HasHideSpot && TryBeginKnownHideSpotFlashlightInvestigation(clue))
+                if (clue.HasHideSpot && !_hideSpotAdapter.SuppressProtectedFlashlight(clue.HideSpotId)
+                    && TryBeginKnownHideSpotFlashlightInvestigation(clue))
                 {
                     return;
                 }
@@ -2136,7 +2140,7 @@ namespace EchoProtocol.AI.Stalker
             float bestDistance = float.PositiveInfinity;
             foreach (StalkerFlashlightObservation clue in _currentFlashlightObservations)
             {
-                if (clue.IsHidden)
+                if (clue.IsHidden || clue.HasHideSpot && _hideSpotAdapter.SuppressProtectedFlashlight(clue.HideSpotId))
                 {
                     continue;
                 }
@@ -2172,7 +2176,8 @@ namespace EchoProtocol.AI.Stalker
 
             foreach (StalkerHideSpotCandidate candidate in _hideSpotCandidates)
             {
-                if (!candidate.IsValid || candidate.StableId != clue.HideSpotId)
+                if (!candidate.IsValid || candidate.StableId != clue.HideSpotId
+                    || !_hideSpotMemory.CanInspect(candidate.StableId, CurrentSimulationTimeSeconds))
                 {
                     continue;
                 }
@@ -3496,6 +3501,8 @@ namespace EchoProtocol.AI.Stalker
                     selection.Candidate;
             }
 
+            if (!_hideSpotMemory.CanInspect(selectedCandidate.StableId, CurrentSimulationTimeSeconds)) return false;
+
             RuntimeLog.Log(
                 RuntimeLogCategory.StalkerHideFlow,
                 $"[STK_HIDE_FLOW][SELECTED] " +
@@ -3654,6 +3661,12 @@ namespace EchoProtocol.AI.Stalker
                     HandleOccupiedHideSpotInspection(result);
                     _hideSpotInspectionLogged = false;
                     return true;
+                case StalkerHidingInvestigationTickStatus.Protected:
+                    _navigation?.Stop();
+                    ClearNavigationObjective();
+                    _searchCandidatePlanningExhausted = true;
+                    _hideSpotInspectionLogged = false;
+                    return false;
                 case StalkerHidingInvestigationTickStatus.Invalid:
                     RuntimeLog.Log(
                         RuntimeLogCategory.StalkerHideFlow,

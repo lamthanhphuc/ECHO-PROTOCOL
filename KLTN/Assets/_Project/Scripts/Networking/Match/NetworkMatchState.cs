@@ -456,6 +456,7 @@ namespace EchoProtocol.Networking
                 ScenarioConfigRevision = 0;
                 AEDv2PlanRevision = 0;
                 AEDv2PlanFingerprint = string.Empty;
+                ResetV02ReplicatedState();
                 ScenarioConfigSourceValue = 0;
                 AppliedScenarioConfigVersion = default;
                 AppliedScenarioPolicyVersion = default;
@@ -485,6 +486,7 @@ namespace EchoProtocol.Networking
                     CloseScenarioDecisionWindow();
                 }
 
+                MatchAuthorityRuntime.Instance?.CommitStagedV02PreMatch(this);
                 if (!TeamToolWorldSpawnInitialized)
                 {
                     var difficulty = MatchAuthorityRuntime.Instance != null
@@ -682,6 +684,7 @@ namespace EchoProtocol.Networking
             }
 
             TryLogFusionScenarioConfig();
+            LogV02ReplicatedPlan();
 
             ApplyPresentation(
                 notifyListeners: false);
@@ -2341,6 +2344,23 @@ namespace EchoProtocol.Networking
 
             var runtime = MatchAuthorityRuntime.Instance;
             var settings = ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings;
+            if (NetworkMatchStateRules.CanApplyAEDv2Gameplay(settings?.PacingV02GameplayEnabled == true,
+                runtime?.RequestedScenarioResolutionMode ?? ScenarioResolutionMode.Fixed, runtime?.Difficulty ?? MatchDifficulty.Normal))
+            {
+                if (_v02BoundaryPending) return true;
+                var match = runtime.MatchId;
+                _v02BoundaryPending = true; _v02BoundaryTarget = PhaseName(next);
+                Action continuation = () =>
+                {
+                    _v02BoundaryPending = false; _v02BoundaryTarget = null;
+                    if (runtime == null || runtime.MatchId != match || Object == null || !Object.IsValid || !Object.HasStateAuthority ||
+                        Status != NetworkMatchStatus.Running || CurrentPhase != expected) return;
+                    RecordCompletedPhase(runtime, completedPhase, expected);
+                    CompletePhaseTransition(expected, next, runtime, afterTransition);
+                };
+                if (!runtime.BeginV02Boundary(this, PhaseName(next), continuation)) continuation();
+                return true;
+            }
             var gameplayEnabled = NetworkMatchStateRules.CanApplyAEDv2Gameplay(
                 settings?.ExtendedPolicyGameplayEnabled == true,
                 runtime?.RequestedScenarioResolutionMode ?? ScenarioResolutionMode.Fixed,

@@ -43,6 +43,12 @@ namespace EchoProtocol.AI.Common.AED
 
         public AEDPursuitEvidenceSnapshotV1 LastFrozen { get; private set; }
         public bool IsIncomplete => _incomplete;
+        public bool TryGetActiveEpisodeId(string stalkerId, string targetId, out string episodeId)
+        {
+            episodeId = null;
+            if (_frozen || !_activeByStalker.TryGetValue(stalkerId, out var active) || active.TargetId != targetId) return false;
+            episodeId = active.Id; return true;
+        }
         public void MarkIncomplete() { if (!_frozen) _incomplete = true; }
 
         public void ResetMatch(Guid matchId)

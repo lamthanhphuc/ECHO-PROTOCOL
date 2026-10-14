@@ -51,6 +51,32 @@ namespace EchoProtocol.AI.Stalker.Networking
         private bool _objectiveInvestigationEnabled = true;
         private bool _flashlightReactionEnabled = true;
         private uint _aedv2AppliedRevision;
+        public int V02AppliedRevision { get; private set; }
+        public bool IsV02SafeForApply => controller != null && controller.CurrentState is StalkerState.PATROL or StalkerState.SEARCH
+            && !controller.SpecialEncounterOverrideActive && !controller.HasActiveHideSpotInvestigation;
+        public bool TryReadV02ConsumerValue(AEDV02Key key, out double value)
+        {
+            value = 0;
+            if (controller == null) return false;
+            switch (key)
+            {
+                case AEDV02Key.DetectionAcquireSeconds: value = controller.AppliedDetectionAcquireSeconds; return true;
+                case AEDV02Key.PostChaseCooldownSeconds: value = controller.AppliedPostChaseCooldownSeconds; return true;
+                case AEDV02Key.HearingMultiplier: value = hearingRangeMultiplier; return true;
+                case AEDV02Key.SearchSeconds: value = controller.AppliedSearchDuration; return true;
+                case AEDV02Key.ChaseSpeed: value = controller.AppliedChaseSpeed; return true;
+                case AEDV02Key.SpecialCooldownSeconds:
+                    if (specialEncounterRuntime == null) return false;
+                    value = specialEncounterRuntime.AppliedCooldownSeconds; return true;
+                default: return false;
+            }
+        }
+        public bool ApplyV02AtSafeWindow(Guid matchId)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority || !IsV02SafeForApply ||
+                MatchAuthorityRuntime.Instance?.MatchId != matchId || !AEDv2Authority.TryGetV02(matchId, out _, out var revision)) return false;
+            ApplyMatchDifficulty(); return V02AppliedRevision == revision;
+        }
         private bool _aedv2Applied;
         private bool _aedv2CorePressureEnabled = true;
 
@@ -1185,6 +1211,12 @@ namespace EchoProtocol.AI.Stalker.Networking
             var authority = MatchAuthorityRuntime.Instance;
             if (authority == null || !authority.TryGetMatchId(out var matchId))
                 return;
+            if (authority.Difficulty == MatchDifficulty.Normal && AEDv2Authority.TryGetV02(matchId, out _, out var v02Revision))
+            {
+                if (V02AppliedRevision != v02Revision && IsV02SafeForApply)
+                    ApplyMatchDifficulty();
+                return;
+            }
             uint revision = 0;
             bool active = authority.Difficulty == MatchDifficulty.Normal &&
                 AEDv2Authority.TryGetApplied(matchId, out _, out revision);
@@ -1210,9 +1242,15 @@ namespace EchoProtocol.AI.Stalker.Networking
             bool useAEDv2 = difficulty == MatchDifficulty.Normal &&
                 authority != null && authority.TryGetMatchId(out var matchId) &&
                 AEDv2Authority.TryGetApplied(matchId, out tuning, out revision);
+            AEDV02Plan v02 = null;
+            int v02Revision = 0;
+            bool useV02 = difficulty == MatchDifficulty.Normal && authority != null && authority.TryGetMatchId(out var v02Match)
+                && AEDv2Authority.TryGetV02(v02Match, out v02, out v02Revision);
+            if (useV02) useAEDv2 = false;
             if (useAEDv2) profile = AEDv2GameplayBridge.ToNormalDifficultyProfile(tuning);
+            if (useV02) profile = AEDv2GameplayBridge.ToV02NormalDifficultyProfile(v02);
 
-            controller?.SetAEDv2ProfileOwnership(useAEDv2);
+            controller?.SetAEDv2ProfileOwnership(useAEDv2 || useV02);
             controller?.ApplyMatchDifficulty(profile);
             coreCarrierPursuitDelaySeconds = profile.CoreCarrierPursuitDelaySeconds;
             hearingRangeMultiplier = profile.HearingRangeMultiplier;
@@ -1225,7 +1263,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             specialEncounterRuntime?.SetCooldownSeconds(profile.SpecialEncounterCooldownSeconds);
 
             controller?.ApplyAEDv2Pacing(
-                useAEDv2 ? (float)tuning.Get(AEDv2Key.PostChaseCooldownSeconds) : 18f,
+                useV02 ? (float)v02.Get(AEDV02Key.PostChaseCooldownSeconds) : useAEDv2 ? (float)tuning.Get(AEDv2Key.PostChaseCooldownSeconds) : 18f,
                 useAEDv2 ? (float)tuning.Get(AEDv2Key.PostAttackCooldownSeconds) : 22f,
                 useAEDv2 ? (float)tuning.Get(AEDv2Key.SameRoomCooldownSeconds) : 15f);
             specialEncounterRuntime?.SetAEDv2Pacing(
@@ -1233,6 +1271,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 useAEDv2 ? (float)tuning.Get(AEDv2Key.PostSpecialCooldownSeconds) : 20f);
             _aedv2Applied = useAEDv2;
             _aedv2AppliedRevision = useAEDv2 ? revision : 0;
+            V02AppliedRevision = useV02 ? v02Revision : 0;
             if (useAEDv2)
                 AEDv2E2ELog.State("STALKER_TUNING_APPLIED");
             _hearingSensor = null;

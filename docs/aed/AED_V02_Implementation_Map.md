@@ -8,15 +8,19 @@ Feature: `feature/aed-v02-full-integration`. Owner approved A–G for the pilot 
 | Slice | Existing paths to extend | Verification | Status |
 |---|---|---|---|
 | W0 baseline and tooling | `scripts/`, Unity Test Runner, `Test-KLTNBackend` | Full backend / EditMode / PlayMode; artifacts | Backend 486/486; EditMode 1203/1203; PlayMode 190/190 |
-| W1 versioned sources / decision ledger / receipts | `AppDbContext`, `ScenariosController`, `ScenarioAdaptivePlanV2Service`, Phase8 verifier and accepted telemetry repository | Real verifier, SQLite/PostgreSQL migration, replay/stale/timeout | In progress |
-| W2 pilot policy / pressure / budget / windows | Existing AED common models, `AEDv2Authority`, `AEDv2BoundaryCoordinator`, `NetworkMatchState`, `MatchAuthorityRuntime` | Deterministic policy/simulation, two same-phase windows, progression fault injection | Pending |
-| W3 Stalker fairness / P4 / sensory | `AdaptiveStalkerTargetPolicy`, sensors, `StalkerUnityHideSpotAdapter`, `StalkerHidingInvestigation`, `NetworkPlayerMovement` | PF/VH/HB/HT/CC/SK, protection zero-call tests, Fixed regression | Pending |
+| W1 versioned sources / decision ledger / receipts | `AppDbContext`, v0.2 controller/services, Phase8 lifecycle and accepted telemetry repository | Real verifier, SQLite/PostgreSQL migration, replay/stale/timeout | Backend source/approval/receipt tested; full Backend 540/540; native source and coordinator wired; aggregate pressure remains partial |
+| W2 pilot policy / pressure / budget / windows | Existing AED common models, `AEDv2Authority`, `AEDv2BoundaryCoordinator`, `NetworkMatchState`, `MatchAuthorityRuntime` | Deterministic policy/simulation, two same-phase windows, progression fault injection | PreMatch/Boundary/SafeWindow coordinator wired; Backend chain and Host guards tested; live transaction remains UNVERIFIED |
+| W3 Stalker fairness / P4 / sensory | `AdaptiveStalkerTargetPolicy`, sensors, `StalkerUnityHideSpotAdapter`, `StalkerHidingInvestigation`, `NetworkPlayerMovement` | PF/VH/HB/HT/CC/SK, protection zero-call tests, Fixed regression | P4 guards/ledger implemented and unit tested; full pressure/fairness integration unfinished |
 | W4 Cabinet Ambush | `StalkerController`, existing Special / jump entry / route / presentation paths | JP/CAB/SIM, cue/route abort, idempotency, client rendering | Pending |
 | W5 Minion / Tool / markers | `PlayerSpawner`, `AEDv2GameplayBridge`, `TeamToolWorldSpawn`, scene marker and route authoring | MN/TT, 5 required tools, optional reservations, real census, NavMesh/door tests | Pending |
 | W6 delivery | feature PR into LTP, reproducible local config / player build / trace artifacts | ACC and 12 E2E IDs; no merge | Pending |
 
 The approved Rev02 sections XV–XVIII override earlier candidate values. Canonical Telemetry 1.1 and `AED_V2_PHASE_EVIDENCE_V2` retain their meanings. New evidence and decisions require a new version; V1/V2 verification stays fail-closed.
 
+Checkpoint after native source/coordinator changes: Backend 540/540, Unity EditMode 1265/1265, Unity PlayMode 191/191 (includes one real Fusion Single storage/reconstruction test), zero failures/skips. These are automated logic/regression results, not Host/Client or complete v0.2 runtime proof. See `AED_V02_Source_Contract_Rev02.md` for supported source semantics and outstanding gaps.
+
 ## Final human checks
 
 `E2E-P4-01..03`, `E2E-CAB-01..03`, `E2E-PP-01..02`, `E2E-Z3-01`, `E2E-TT-01`, `E2E-F4-01`, `E2E-AED-01` remain NOT RUN until actual Host/Client scene evidence exists. Automated tests do not imply these checks passed.
+
+Native Minion caps now use the v0.2 bridge, preserve Fixed Zone3=0 and report actual maintenance/spawn observation before receipt. Tool reservation/support and Cabinet Ambush integration remain unfinished; this checkpoint is not E2E ready.

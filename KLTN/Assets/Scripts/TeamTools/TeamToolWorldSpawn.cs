@@ -576,6 +576,8 @@ namespace EchoProtocol.TeamTools
                     spawned,
                     plan.ToolId))
             {
+                if (spawned.TryGetComponent<NetworkTeamToolPickup>(out var pickup))
+                    pickup.BindV02SpawnMarker(EchoProtocol.AI.AED.AEDV02SceneSource.MarkerId(plan.Point.transform));
                 return spawned;
             }
 

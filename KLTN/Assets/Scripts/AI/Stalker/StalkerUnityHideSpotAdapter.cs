@@ -166,6 +166,13 @@ namespace EchoProtocol.AI.Stalker
                 var preExitPosition =
                     movement.transform.position;
 
+                if (movement.BlocksAEDV02HideForceExit())
+                {
+                    result = StalkerHideSpotInspectionResult.ProtectedBy(playerId, movement.AEDV02HideProtectionRemaining);
+                    Debug.Log($"[AED_V02][PROTECT_P4_HIDE_WINDOW] actor={movement.Object.InputAuthority.PlayerId} spot={candidate.StableId} token={movement.AEDV02HideTokenId} remaining={movement.AEDV02HideProtectionRemaining:F2}");
+                    return true;
+                }
+
                 var forceExitSucceeded =
                     movement.TryForceExitHidingAuthoritative(
                         exitPoint.position,
@@ -267,6 +274,15 @@ namespace EchoProtocol.AI.Stalker
                 localObservedDirection);
 
             return true;
+        }
+
+        public bool SuppressProtectedFlashlight(ulong clueHideSpotId)
+        {
+            if (clueHideSpotId == 0) return false;
+            // Only a sensed flashlight clue identifies this spot; occupancy never feeds the selector.
+            foreach (var movement in UnityEngine.Object.FindObjectsByType<NetworkPlayerMovement>(FindObjectsInactive.Exclude))
+                if (movement.IsHidden && movement.CurrentHideSpotId == clueHideSpotId && movement.BlocksAEDV02HideForceExit()) return true;
+            return false;
         }
 
         private static bool TryResolvePlayerId(

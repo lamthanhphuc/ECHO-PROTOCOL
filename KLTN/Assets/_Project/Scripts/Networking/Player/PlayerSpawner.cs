@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using EchoProtocol.AI.AED;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Minions;
 using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Spatial;
@@ -10,6 +13,7 @@ using Fusion;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.SceneManagement;
+using Random = UnityEngine.Random;
 
 namespace EchoProtocol.Networking
 {
@@ -580,6 +584,10 @@ namespace EchoProtocol.Networking
             var profile = MatchDifficultyProfiles.Get(difficulty);
             var authority = MatchAuthorityRuntime.Instance;
             if (difficulty == MatchDifficulty.Normal && authority != null &&
+                authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive &&
+                AEDv2Authority.TryGetV02(authority.MatchId, out var v02, out _))
+                profile = AEDv2GameplayBridge.ToV02NormalDifficultyProfile(v02);
+            else if (difficulty == MatchDifficulty.Normal && authority != null &&
                 authority.TryGetMatchId(out var aedMatchId) &&
                 AEDv2Authority.TryGetApplied(aedMatchId, out var plan, out _))
                 profile = AEDv2GameplayBridge.ToNormalDifficultyProfile(plan);
@@ -591,6 +599,9 @@ namespace EchoProtocol.Networking
                 : zone == RegionSemanticZone.Zone02
                     ? profile.Zone2MinionCap
                     : profile.Zone3MinionCap;
+            _v02ObservedMinionZone = (int)zone;
+            _v02ObservedMinionCap = cap;
+            _v02ObservedMinionRevision = authority != null && AEDv2Authority.TryGetV02(authority.MatchId, out _, out var observedRevision) ? observedRevision : 0;
             int count = 0;
             foreach (var obj in _creepMinionInstances)
             {
@@ -609,6 +620,20 @@ namespace EchoProtocol.Networking
                 || !TryFindCreepMinionSpawnPosition(runner, stalker, out var position)) return;
 
             SpawnCreepMinion(runner, position, zone);
+        }
+
+        private int _v02ObservedMinionZone;
+        private int _v02ObservedMinionCap;
+        private int _v02ObservedMinionRevision;
+        public bool TryReadV02MinionCap(Guid matchId, int revision, AEDV02Key key, out double value, out string[] objectIds)
+        {
+            value = 0; objectIds = Array.Empty<string>();
+            int zone = key == AEDV02Key.Zone1MinionCap ? 1 : key == AEDV02Key.Zone2MinionCap ? 2 : key == AEDV02Key.Zone3AdaptiveMinionCap ? 3 : 0;
+            if (zone == 0 || MatchAuthorityRuntime.Instance?.MatchId != matchId || _v02ObservedMinionRevision != revision || _v02ObservedMinionZone != zone) return false;
+            value = _v02ObservedMinionCap;
+            objectIds = _creepMinionInstances.Where(x => IsValidNetworkObject(x) && x.TryGetComponent<CreepMinionRuntime>(out var minion) &&
+                (int)minion.Zone == zone && !minion.IsDying).Select(x => x.Id.ToString()).ToArray();
+            return key != AEDV02Key.Zone3AdaptiveMinionCap || value != 1 || objectIds.Length != 0;
         }
 
         private bool TryGetCreepMinionSpawnAnchor(

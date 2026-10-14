@@ -339,13 +339,16 @@ namespace EchoProtocol.Networking.Authority
             try
             {
                 var occurrenceKey = $"p8:tool:{instanceId}:scene-spawn";
-                _aedPhase8Source.RecordSceneToolSpawn(
-                    instanceId.ToString(), toolId, tick, occurrenceKey);
+                int? charges = null;
+                if (toolId is 2 or 4 && _bootstrap.Runner.TryFindObject(instanceId, out var toolObject) && toolObject.TryGetComponent<NetworkTeamToolPickup>(out var pickup))
+                    charges = pickup.RemainingUses;
+                _aedPhase8Source.RecordSceneToolSpawnWithCharges(
+                    instanceId.ToString(), toolId, tick, occurrenceKey, charges);
                 TryPublishPhase8Lifecycle(
                     occurrenceKey,
-                    () => _telemetry.Phase8LifecycleAdapter.EmitToolSpawn(
+                    () => _telemetry.Phase8LifecycleAdapter.EmitToolSpawnWithCharges(
                         occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase,
-                        instanceId.ToString(), toolId, 0, "ScenePlaced", out _, out _));
+                        instanceId.ToString(), toolId, 0, "ScenePlaced", out _, out _, charges));
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 Debug.Log($"[AED_P8][TOOL_SOURCE] action=SPAWN origin=ScenePlaced id={instanceId} tool={toolId} tick={tick}");
 #endif
@@ -373,14 +376,17 @@ namespace EchoProtocol.Networking.Authority
             try
             {
                 var occurrenceKey = $"p8:tool:{instanceId}:spawn";
-                _aedPhase8Source.RecordToolSpawn(
+                int? charges = null;
+                if (toolId is 2 or 4 && _bootstrap.Runner.TryFindObject(instanceId, out var toolObject) && toolObject.TryGetComponent<NetworkTeamToolPickup>(out var pickup))
+                    charges = pickup.RemainingUses;
+                _aedPhase8Source.RecordToolSpawnWithCharges(
                     instanceId.ToString(), toolId, zone, tick,
-                    occurrenceKey);
+                    occurrenceKey, charges);
                 TryPublishPhase8Lifecycle(
                     occurrenceKey,
-                    () => _telemetry.Phase8LifecycleAdapter.EmitToolSpawn(
+                    () => _telemetry.Phase8LifecycleAdapter.EmitToolSpawnWithCharges(
                         occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase,
-                        instanceId.ToString(), toolId, zone, out _, out _));
+                        instanceId.ToString(), toolId, zone, "WorldSpawn", out _, out _, charges));
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 Debug.Log($"[AED_P8][TOOL_SOURCE] action=SPAWN id={instanceId} tool={toolId} zone={zone} tick={tick}");
 #endif
@@ -703,6 +709,8 @@ namespace EchoProtocol.Networking.Authority
             TickResultOutbox();
             var matchState = NetworkMatchState.Instance;
             SampleAEDv2PlayerObservation(matchState);
+            TickV02Coordinator(matchState);
+            TickV02WorldSource(matchState);
             if (HasBinding
                 && matchState != null
                 && matchState.IsEnded
@@ -1210,6 +1218,9 @@ namespace EchoProtocol.Networking.Authority
             _aedPursuitEvidence.Clear();
             _aedMinionEvidence.Clear();
             _aedPhase8Source.ResetMatch();
+            ResetV02WorldSource();
+            ResetV02Coordinator();
+            AEDv2Authority.Reset(oldMatchId);
             LastFrozenAEDCurrentPressure = null;
             BackendAdaptiveInputSnapshotProvider.Current?.ClearForMatch(oldMatchId);
             ScenarioConfigRuntimeRegistry.Clear(oldMatchId);

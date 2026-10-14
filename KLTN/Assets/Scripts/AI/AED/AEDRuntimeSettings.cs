@@ -31,7 +31,14 @@ namespace EchoProtocol.AI.AED
         [SerializeField] private bool extendedPolicyShadowEnabled = false;
         [SerializeField] private bool extendedPolicyGameplayEnabled = false;
         public bool ExtendedPolicyShadowEnabled => extendedPolicyShadowEnabled;
-        public bool ExtendedPolicyGameplayEnabled => extendedPolicyGameplayEnabled;
+        public bool ExtendedPolicyGameplayEnabled => extendedPolicyGameplayEnabled && !pacingV02GameplayEnabled;
+        [Header("AED v0.2 Rev02 pilot (production defaults off)")]
+        [SerializeField] private bool pacingV02ShadowEnabled = false;
+        [SerializeField] private bool pacingV02GameplayEnabled = false;
+        [SerializeField] private bool cabinetAmbushEnabled = false;
+        public bool PacingV02ShadowEnabled => pacingV02ShadowEnabled;
+        public bool PacingV02GameplayEnabled => pacingV02GameplayEnabled;
+        public bool CabinetAmbushEnabled => cabinetAmbushEnabled;
 
         public bool TryBuildPolicyConfig(out AEDPolicyConfig config, out string reason)
         {

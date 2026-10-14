@@ -35,6 +35,7 @@ namespace EchoProtocol.AI.Stalker
                 {
                     continue;
                 }
+                if (!memory.CanInspect(candidate.StableId, currentTimeSeconds)) continue;
 
                 var distance = Vector3.Distance(searchAnchor, candidate.Position);
                 if (distance > config.SearchRadius)

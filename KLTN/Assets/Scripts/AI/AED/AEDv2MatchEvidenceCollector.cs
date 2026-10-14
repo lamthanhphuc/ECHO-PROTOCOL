@@ -25,6 +25,7 @@ namespace EchoProtocol.AI.AED
         private bool _frozen;
 
         public AEDv2CurrentMatchEvidence LastFrozen { get; private set; }
+        public uint CurrentPhaseOrdinal => _phaseOrdinal;
         public IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence> PlayerEvidence => _playerEvidence;
         public IReadOnlyDictionary<string, AEDv2PlayerPhaseEvidence> LastFrozenPlayerEvidence { get; private set; }
 

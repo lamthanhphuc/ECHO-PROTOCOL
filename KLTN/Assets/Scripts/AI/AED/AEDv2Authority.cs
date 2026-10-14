@@ -6,7 +6,7 @@ namespace EchoProtocol.AI.AED
 {
     // Authority-only sidecar. Never writes to gameplay unless an explicit opt-in
     // has been configured AND valid observed profile evidence passes AEDInputGate.
-    public static class AEDv2Authority
+    public static partial class AEDv2Authority
     {
         private static Guid _matchId;
         private static Guid _pendingMatchId;
@@ -218,6 +218,7 @@ namespace EchoProtocol.AI.AED
 
         public static void Reset(Guid matchId)
         {
+            ResetV02(matchId);
             if (matchId == Guid.Empty || _matchId == matchId)
             {
                 _matchId = Guid.Empty;

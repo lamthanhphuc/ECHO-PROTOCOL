@@ -242,6 +242,40 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
+        public void AEDV02_ProtectedInspectionDefersOnlyThisSpotWithoutRecordingAReveal()
+        {
+            var memory = CreateMemory();
+            var protectedResult = ResolveType(InspectionResultTypeName).GetMethod("ProtectedBy")
+                .Invoke(null, new object[] { new PlayerId(7), 3f });
+            var investigation = CreateInvestigation(memory, CreateResolverProxy(protectedResult));
+            Invoke(investigation, "Begin", Candidate(10, Vector3.zero));
+            var result = Invoke(investigation, "Tick", Vector3.zero, 1f, TimeAt(14d), CreateInspectionConfig(1, 0));
+
+            Assert.That(StatusName(result), Is.EqualTo("Protected"));
+            Assert.That(Invoke(memory, "CanInspect", 10UL, 16.99d), Is.False);
+            Assert.That(Invoke(memory, "CanInspect", 10UL, 17d), Is.True);
+            Assert.That(Invoke(memory, "CanInspect", 20UL, 14d), Is.True);
+            var snapshot = Invoke(memory, "GetSnapshot", 10UL);
+            Assert.That(GetProperty(snapshot, "ConfirmedUseCount"), Is.EqualTo(0));
+            Assert.That(GetProperty(snapshot, "ConsecutiveEmptyInspections"), Is.EqualTo(0));
+            var selection = Select(Vector3.zero, memory, CreateSelectorConfig(20), 15f,
+                Candidate(10, Vector3.zero), Candidate(20, new Vector3(2, 0, 0)));
+            Assert.That(StableId(GetProperty(selection, "Candidate")), Is.EqualTo(20UL));
+            Invoke(memory, "Reset");
+            Assert.That(Invoke(memory, "CanInspect", 10UL, 15d), Is.True);
+        }
+
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        [TestCase(0f)]
+        public void AEDV02_ProtectionRejectsUnboundedOrExpiredWindows(float remaining)
+        {
+            var error = Assert.Throws<TargetInvocationException>(() => ResolveType(InspectionResultTypeName)
+                .GetMethod("ProtectedBy").Invoke(null, new object[] { new PlayerId(7), remaining }));
+            Assert.That(error.InnerException, Is.TypeOf<ArgumentException>());
+        }
+
+        [Test]
         public void STK_HIDE_INSPECT_IneligibleOccupiedPlayerDoesNotBecomeChaseTarget()
         {
             var gameObject = new GameObject("StalkerPhase1EligibilityTest");

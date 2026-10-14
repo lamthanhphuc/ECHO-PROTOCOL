@@ -27,6 +27,13 @@ namespace EchoProtocol.Networking
         [Networked] public int RemainingUses { get; private set; }
 
         public int ToolId => _toolId;
+        public bool IsAvailableWorldSource => !IsConsumed;
+        public string V02SourceMarkerId { get; private set; }
+        public void BindV02SpawnMarker(string markerId)
+        {
+            if (Object != null && Object.IsValid && Object.HasStateAuthority && EchoProtocol.AI.Common.AED.AEDV02WorldSample.Hash(markerId))
+                V02SourceMarkerId = markerId;
+        }
 
         public override string InteractionPrompt =>
             string.IsNullOrWhiteSpace(_toolDisplayName)

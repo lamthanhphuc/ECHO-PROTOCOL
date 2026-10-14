@@ -77,26 +77,31 @@ namespace EchoProtocol.AI.AED
             _currentPhaseOrdinal = phaseOrdinal;
         }
 
-        public void RecordToolSpawn(string instanceId, int toolId, int zone, long tick, string occurrenceKey)
+        public void RecordToolSpawn(string instanceId, int toolId, int zone, long tick, string occurrenceKey) =>
+            RecordToolSpawnWithCharges(instanceId, toolId, zone, tick, occurrenceKey, null);
+        public void RecordToolSpawnWithCharges(string instanceId, int toolId, int zone, long tick, string occurrenceKey, int? remainingCharges)
         {
-            RecordOriginToolSpawn(instanceId, toolId, zone, tick, occurrenceKey, "WorldSpawn");
+            RecordOriginToolSpawn(instanceId, toolId, zone, tick, occurrenceKey, "WorldSpawn", remainingCharges);
         }
 
-        public void RecordSceneToolSpawn(string instanceId, int toolId, long tick, string occurrenceKey)
+        public void RecordSceneToolSpawn(string instanceId, int toolId, long tick, string occurrenceKey) =>
+            RecordSceneToolSpawnWithCharges(instanceId, toolId, tick, occurrenceKey, null);
+        public void RecordSceneToolSpawnWithCharges(string instanceId, int toolId, long tick, string occurrenceKey, int? remainingCharges)
         {
-            RecordOriginToolSpawn(instanceId, toolId, 0, tick, occurrenceKey, "ScenePlaced");
+            RecordOriginToolSpawn(instanceId, toolId, 0, tick, occurrenceKey, "ScenePlaced", remainingCharges);
         }
 
-        private void RecordOriginToolSpawn(string instanceId, int toolId, int zone, long tick, string occurrenceKey, string origin)
+        private void RecordOriginToolSpawn(string instanceId, int toolId, int zone, long tick, string occurrenceKey, string origin, int? remainingCharges)
         {
             RequireActive();
             RequireRow(instanceId, zone, tick, occurrenceKey);
             if (toolId is not (1 or 2 or 3 or 4 or 6))
                 throw new ArgumentOutOfRangeException(nameof(toolId));
+            if (remainingCharges.HasValue && (toolId is not (2 or 4) || remainingCharges.Value is < 1 or > 3)) throw new ArgumentException("AED_P8_SPAWN_CHARGES_INVALID");
             if (_tools.Any(x => x.InstanceId == instanceId))
                 throw new InvalidOperationException("AED_P8_DUPLICATE_TOOL_INSTANCE");
             RegisterOccurrence(occurrenceKey);
-            _tools.Add(new AEDPhase8ToolSourceV1(instanceId, toolId, zone, origin, "World", null, null, tick, occurrenceKey));
+            _tools.Add(new AEDPhase8ToolSourceV1(instanceId, toolId, zone, origin, "World", null, remainingCharges, tick, occurrenceKey));
         }
 
         public void RecordLobbyToolLoadout(string instanceId, int toolId, string ownerUserId, int? remainingCharges, long tick, string occurrenceKey)
@@ -231,6 +236,8 @@ namespace EchoProtocol.AI.AED
             source = _tools.LastOrDefault(x => x.InstanceId == instanceId);
             return _matchId != Guid.Empty && source != null;
         }
+        public IReadOnlyList<AEDPhase8ToolSourceV1> CurrentLiveTools => _tools.GroupBy(x => x.InstanceId)
+            .Select(x => x.Last()).Where(x => x.Location != "Consumed" && !_transferredToolInstances.Contains(x.InstanceId)).ToArray();
 
         public bool TryFreeze(Guid matchId, uint phaseOrdinal, out AEDPhase8AuthoritySourceSnapshotV1 snapshot)
         {

@@ -390,6 +390,7 @@ namespace EchoProtocol.Networking
                             $"version={decision.config.scenarioConfigVersion} " +
                             $"budget={decision.config.supportItemBudget}");
                     }
+                    await authority.StageV02PreMatchAsync(_preMatchCancellation.Token);
                 }
 
                 var (accepted, error) =
@@ -438,6 +439,7 @@ namespace EchoProtocol.Networking
 
                     ScenarioConfigAuthorityRuntime.Instance
                         ?.ClearStagedBackendPreMatch(Guid.Empty);
+                    MatchAuthorityRuntime.Instance?.ClearStagedV02PreMatch();
                 }
                 _preMatchCancellation?.Dispose();
                 _preMatchCancellation = null;

@@ -8,6 +8,19 @@ namespace EchoProtocol.AI.AED
     // EchoProtocol.AI.Common assembly.
     public static class AEDv2GameplayBridge
     {
+        public static MatchDifficultyProfile ToV02NormalDifficultyProfile(AEDV02Plan plan)
+        {
+            if (plan == null || !IsNormalCompatible()) throw new InvalidOperationException("AED_V02_BASELINE_DRIFT");
+            var n = MatchDifficultyProfiles.Get(MatchDifficulty.Normal);
+            return new MatchDifficultyProfile(n.TeamToolsPerZone, n.PatrolSpeed, (float)plan.Get(AEDV02Key.ChaseSpeed),
+                (float)plan.Get(AEDV02Key.DetectionAcquireSeconds), n.DetectionDecayDurationSeconds,
+                (float)plan.Get(AEDV02Key.SearchSeconds), n.AttackRange, n.AttackWindupSeconds, n.AttackRecoverySeconds,
+                n.DoorBreakDurationSeconds, n.SeekPlayersAfterSeconds, n.CoreCarrierPursuitDelaySeconds,
+                (float)plan.Get(AEDV02Key.HearingMultiplier), (float)plan.Get(AEDV02Key.SpecialCooldownSeconds),
+                (int)plan.Get(AEDV02Key.Zone1MinionCap), (int)plan.Get(AEDV02Key.Zone2MinionCap),
+                (int)plan.Get(AEDV02Key.Zone3AdaptiveMinionCap), n.MaximumRevivesPerZone, n.ObjectiveInvestigationEnabled);
+        }
+
         public static bool IsNormalCompatible()
         {
             var n = MatchDifficultyProfiles.Get(MatchDifficulty.Normal);
