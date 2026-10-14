@@ -7,6 +7,23 @@ using NUnit.Framework;
 public sealed class AEDPhase8SourceUploadBuilderTests
 {
     [Test]
+    public void GameplayApproval_RequiresEveryIndependentSourceFlag()
+    {
+        var verified = new AEDPhase8SourceVerificationDtoV1
+        {
+            canonicalVerified = true, historicalSkillVerified = true,
+            pressureVerified = true, supplyLedgerVerified = true,
+            minionPopulationVerified = true
+        };
+        Assert.True(verified.CompleteForGameplay);
+        verified.minionPopulationVerified = false;
+        Assert.False(verified.CompleteForGameplay);
+        verified.minionPopulationVerified = true;
+        verified.canonicalVerified = false;
+        Assert.False(verified.CompleteForGameplay);
+    }
+
+    [Test]
     public void CompleteLocalReceipts_BuildTypedUpload()
     {
         var (matchId, snapshot, references) = Fixture();

@@ -2459,6 +2459,19 @@ namespace EchoProtocol.Networking
 
             LogAEDv2PolicyMetrics(evidence, key, previous, nextPlan);
 
+            var sourceReason = "SOURCE_SNAPSHOT_UNAVAILABLE";
+            if (!runtime.TryGetAEDPhase8SourceReferences(evidence.PhaseOrdinal, out var sourceReferences) ||
+                !runtime.TryGetAEDPhase8SourceSnapshot(evidence.PhaseOrdinal, out var sourceSnapshot) ||
+                !AEDPhase8SourceUploadBuilderV1.TryBuild(matchId, evidence.PhaseOrdinal,
+                    evidence.EvidenceFingerprint, runtime.AEDv2RosterIdentity,
+                    sourceReferences, sourceSnapshot, out var sourceUpload, out sourceReason))
+            {
+                _aedv2Boundary.Hold(sourceReason);
+                Debug.LogWarning($"[AED_P8][GAMEPLAY_HOLD] reason={sourceReason}");
+                CompletePhaseTransition(expected, next, runtime, afterTransition);
+                return true;
+            }
+
             var decisionId = ScenarioConfigAuthorityRuntime.CreateDecisionId(matchId,
                 point, PhaseName(next), nextOrdinal);
             var values = new double[AEDv2Catalog.All.Count];
@@ -2494,7 +2507,8 @@ namespace EchoProtocol.Networking
             AEDv2E2ELog.State("PROPOSAL", decisionId: decisionId);
             var api = new AEDSnapshotApiService();
             return _aedv2Boundary.TryBegin(transaction,
-                token => api.SubmitPlanAsync(matchId, request, token),
+                async token => await UploadPhase8SourcesAsync(matchId, sourceUpload, token)
+                    ? await api.SubmitPlanAsync(matchId, request, token) : null,
                 approval => RevalidateAEDv2Boundary(transaction, approval),
                 approval => CommitAEDv2Boundary(transaction, approval),
                 () => CompletePhaseTransition(expected, next,
@@ -2821,25 +2835,29 @@ namespace EchoProtocol.Networking
             }
         }
 
-        private static async Task UploadPhase8SourcesAsync(Guid matchId, AEDPhase8SourceUploadDtoV1 request)
+        private static async Task<bool> UploadPhase8SourcesAsync(Guid matchId, AEDPhase8SourceUploadDtoV1 request,
+            CancellationToken cancellationToken = default)
         {
-            if (matchId == Guid.Empty || request == null) return;
+            if (matchId == Guid.Empty || request == null) return false;
             try
             {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(TimeSpan.FromSeconds(25));
                 var api = new AEDSnapshotApiService();
                 var probe = await api.ProbeDirectorEvidenceAsync(matchId, (uint)request.completedPhaseOrdinal, request.evidenceFingerprint, timeout.Token);
                 if (probe?.canonicalEvidenceVerified != true)
                 {
                     Debug.LogWarning("[AED_P8][SOURCE_UPLOAD_HOLD] reason=CANONICAL_EVIDENCE_UNAVAILABLE");
-                    return;
+                    return false;
                 }
                 var result = await api.VerifyDirectorSourcesAsync(matchId, request, timeout.Token);
                 Debug.Log($"[AED_P8][SOURCE_UPLOAD] version={request.sourceVersion} phase={request.completedPhaseOrdinal} references={request.sourceEvents.Length} supply={request.supply.Length} minions={request.minions.Length} canonical={result?.canonicalVerified == true} supplyVerified={result?.supplyLedgerVerified == true} minionVerified={result?.minionPopulationVerified == true} reason={result?.reasonCode ?? "UNVERIFIED"}");
+                return result?.CompleteForGameplay == true;
             }
             catch (Exception exception)
             {
                 Debug.LogWarning($"[AED_P8][SOURCE_UPLOAD] {exception.GetType().Name}");
+                return false;
             }
         }
 
