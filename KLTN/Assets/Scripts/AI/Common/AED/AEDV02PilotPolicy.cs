@@ -33,7 +33,7 @@ namespace EchoProtocol.AI.Common.AED
         public static double TargetAdjustment(int tier) => tier == 0 ? .15 : tier == 1 ? .08 : tier == 3 ? -.15 : tier == 4 ? -.25 : 0;
         public static double RevealTrackSeconds(int tier) => tier == 0 ? .45 : tier == 1 ? .40 : tier == 3 ? .25 : tier == 4 ? .20 : .35;
         public static double RevealGraceSeconds(int tier) => tier == 0 ? 1.25 : tier == 1 ? 1.35 : tier == 3 ? 1.80 : tier == 4 ? 2.20 : 1.50;
-        internal static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+        public static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
     public enum AEDV02PressureChannel { Stalker, Minion, Down, Resource, Objective }
@@ -127,7 +127,8 @@ namespace EchoProtocol.AI.Common.AED
         private double _lastNow = -1;
         public int Update(AEDV02PressureSnapshot snapshot, double now)
         {
-            if (!snapshot.Complete || !AEDV02PilotPolicy.Finite(now) || now < _lastNow) return -1;
+            if (!snapshot.Complete || !AEDV02PilotPolicy.Finite(now) || now < _lastNow) { _lowerSince = double.NaN; return -1; }
+            if (now - _lastNow > AEDV02PilotPolicy.EvidenceMaxAgeSeconds) _lowerSince = double.NaN;
             _lastNow = now;
             int proposed = snapshot.Tier;
             if (_tier < 0 || proposed >= _tier) { _tier = proposed; _lowerSince = double.NaN; return _tier; }
@@ -137,6 +138,7 @@ namespace EchoProtocol.AI.Common.AED
             if (now - _lowerSince >= AEDV02PilotPolicy.TierDwellSeconds) { _tier = proposed; _lowerSince = double.NaN; }
             return _tier;
         }
+        public void InvalidateObservation() => _lowerSince = double.NaN;
     }
 
     public sealed class AEDV02HideProtectionToken
@@ -146,6 +148,7 @@ namespace EchoProtocol.AI.Common.AED
         public Guid UserId { get; internal set; }
         public ulong HideSpotId { get; internal set; }
         public int PlanRevision { get; internal set; }
+        public int GrantOrdinal { get; internal set; }
         public double GrantedSeconds { get; internal set; }
         public double ExpiresSeconds { get; internal set; }
         public double GraceUntilSeconds { get; internal set; }
@@ -181,7 +184,7 @@ namespace EchoProtocol.AI.Common.AED
             token = state.Token = new AEDV02HideProtectionToken
             {
                 TokenId = Guid.NewGuid(), MatchId = matchId, UserId = userId, HideSpotId = spotId,
-                PlanRevision = revision, GrantedSeconds = now, ExpiresSeconds = now + AEDV02PilotPolicy.ProtectionSeconds,
+                PlanRevision = revision, GrantOrdinal = state.Grants, GrantedSeconds = now, ExpiresSeconds = now + AEDV02PilotPolicy.ProtectionSeconds,
                 GraceUntilSeconds = now + AEDV02PilotPolicy.ProtectionSeconds + AEDV02PilotPolicy.ProtectionGraceSeconds
             };
             return true;
@@ -195,6 +198,19 @@ namespace EchoProtocol.AI.Common.AED
             if (now < state.Token.ExpiresSeconds && !state.Token.VoluntaryExit) { reason = "PROTECT_P4_HIDE_WINDOW"; return true; }
             if (now < state.Token.GraceUntilSeconds) { reason = "GRACE_AFTER_PROTECTION"; return true; }
             return false;
+        }
+
+        public bool TryGetCurrentToken(Guid matchId, Guid userId, ulong spotId, double now, out AEDV02HideProtectionToken? token)
+        {
+            token = null;
+            if (!BlocksForceExit(matchId, userId, spotId, now, out _) || !_players.TryGetValue(userId, out var state)) return false;
+            token = state.Token; return token != null;
+        }
+
+        public void ExitToken(Guid tokenId, ulong spotId, double now)
+        {
+            foreach (var item in _players)
+                if (item.Value.Token?.TokenId == tokenId) { Exit(item.Key, spotId, now); return; }
         }
 
         public void Exit(Guid userId, ulong spotId, double now)

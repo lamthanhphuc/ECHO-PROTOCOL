@@ -7,6 +7,12 @@ using System.Text;
 namespace EchoProtocol.AI.Common.AED
 {
     public enum AEDV02DecisionPoint { PRE_MATCH, PHASE_BOUNDARY, SAFE_WINDOW }
+    public static class AEDV02PhaseMap
+    {
+        public static int LogicalPhase(string phase) => phase == "CORE_COLLECTION" ? 1 :
+            phase == "ZONE_2_OBJECTIVE" || phase == "POWER_PUZZLE" || phase == "SECURITY_HOLD" ? 2 :
+            phase == "ZONE_3_FIND_FRIGATE" || phase == "ZONE_3_PUSH_FRIGATE" ? 3 : phase == "FINAL_HUNT" || phase == "ESCAPE" ? 4 : 0;
+    }
     public enum AEDV02Key
     {
         DetectionAcquireSeconds, PostChaseCooldownSeconds, HearingMultiplier, SearchSeconds,
@@ -32,6 +38,7 @@ namespace EchoProtocol.AI.Common.AED
             _values = (double[])values.Clone();
         }
         public static AEDV02Plan Normal() => new AEDV02Plan(NormalValues);
+        public static System.Collections.Generic.IReadOnlyList<double> AllowedValues(AEDV02Key key) => Array.AsReadOnly(Values[(int)key]);
         public double Get(AEDV02Key key) => _values[(int)key];
         public double[] ToArray() => (double[])_values.Clone();
         public AEDV02Plan With(AEDV02Key key, double value) { var values = ToArray(); values[(int)key] = value; return new AEDV02Plan(values); }

@@ -5,6 +5,19 @@ using NUnit.Framework;
 
 public sealed class AEDV02PilotPolicyTests
 {
+    [Test]
+    public void UnknownOrUnobservedGapCannotSatisfyTierDeclineDwell()
+    {
+        var memory = new AEDV02PressureTierMemory();
+        var high = new AEDV02PressureSnapshot(new[] { 1d, 1, 1, 1, 1 }, 1, true, "TEST");
+        var low = new AEDV02PressureSnapshot(new[] { 0d, 0, 0, 0, 0 }, 0, true, "TEST");
+        Assert.That(memory.Update(high, 0), Is.EqualTo(4));
+        Assert.That(memory.Update(low, 1), Is.EqualTo(4));
+        Assert.That(memory.Update(default, 2), Is.EqualTo(-1));
+        Assert.That(memory.Update(low, 14), Is.EqualTo(4));
+        Assert.That(memory.Update(low, 20), Is.EqualTo(4));
+        Assert.That(memory.Update(low, 26), Is.EqualTo(0));
+    }
     private readonly Guid _match = Guid.NewGuid();
     private readonly Guid _user = Guid.NewGuid();
     private static AEDV02PressureSnapshot Pressure(double value, bool complete = true) =>
@@ -86,6 +99,7 @@ public sealed class AEDV02PilotPolicyTests
         Assert.That(memory.Update(Pressure(.86), 0), Is.EqualTo(4));
         Assert.That(memory.Update(Pressure(.82), 1), Is.EqualTo(4));
         Assert.That(memory.Update(Pressure(.79), 2), Is.EqualTo(4));
+        Assert.That(memory.Update(Pressure(.79), 7), Is.EqualTo(4));
         Assert.That(memory.Update(Pressure(.79), 13), Is.EqualTo(4));
         Assert.That(memory.Update(Pressure(.79), 14), Is.EqualTo(3));
         Assert.That(memory.Update(Pressure(.79, false), 15), Is.EqualTo(-1));

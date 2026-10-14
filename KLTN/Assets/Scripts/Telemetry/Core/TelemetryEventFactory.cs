@@ -138,7 +138,8 @@ namespace EchoProtocol.Telemetry
                 throw new ArgumentException("Telemetry occurrence timestamp must be UTC.", nameof(request));
             }
 
-            var schemaVersion = request.EventType is
+            var schemaVersion = request.EventType is TelemetryEventTypes.AEDV02WorldSample or TelemetryEventTypes.AEDV02ActionEffect
+                ? TelemetrySchemaVersions.AEDV13 : request.EventType is
                 TelemetryEventTypes.TeamToolLifecycle or
                 TelemetryEventTypes.MinionLifecycle
                     ? TelemetrySchemaVersions.LifecycleV12

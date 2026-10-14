@@ -20,6 +20,7 @@ internal static class TelemetrySchemaDispatcher
                 telemetryEvent.EventType),
             "1.2" => TelemetryV12LifecycleValidator.IsLifecycleEvent(
                 telemetryEvent.EventType),
+            "1.3" => TelemetryV13AEDValidator.IsSourceEvent(telemetryEvent.EventType),
             _ => false
         };
 
@@ -34,6 +35,8 @@ internal static class TelemetrySchemaDispatcher
             "1.1" => TelemetryV11Validator.TryValidate(
                 telemetryEvent, researchCaptureAllowed, out result, out rejectReason),
             "1.2" => TelemetryV12LifecycleValidator.TryValidate(
+                telemetryEvent, researchCaptureAllowed, out result, out rejectReason),
+            "1.3" => TelemetryV13AEDValidator.TryValidate(
                 telemetryEvent, researchCaptureAllowed, out result, out rejectReason),
             "1.0" => Reject("TELEMETRY_LEGACY_V10_UNSUPPORTED", out result, out rejectReason),
             _ => Reject("TELEMETRY_SCHEMA_UNSUPPORTED", out result, out rejectReason)

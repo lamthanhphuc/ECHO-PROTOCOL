@@ -6,7 +6,7 @@ namespace EchoProtocol.Api.Services;
 
 public static class AEDPhase8LifecycleReconcilerV1
 {
-    private sealed record Tool(int ToolId, int Zone, string Location, Guid? Owner, int? Charges, long Tick);
+    public sealed record Tool(int ToolId, int Zone, string Location, Guid? Owner, int? Charges, long Tick, string Origin);
 
     public static bool TryMatchPhaseSidecars(
         IEnumerable<TelemetryEventDocument> accepted,
@@ -93,12 +93,19 @@ public static class AEDPhase8LifecycleReconcilerV1
 
     public static bool TryVerify(IEnumerable<TelemetryEventDocument> accepted, Guid matchId, long completedSequence,
         IReadOnlySet<Guid> roster, out string reason)
+        => TryReconstruct(accepted, matchId, completedSequence, roster, true, out _, out _, out reason);
+
+    public static bool TryReconstruct(IEnumerable<TelemetryEventDocument> accepted, Guid matchId, long completedSequence,
+        IReadOnlySet<Guid> roster, bool requireCompletedPhase, out IReadOnlyDictionary<string, Tool> toolState,
+        out IReadOnlyDictionary<string, int> liveMinions, out string reason)
     {
+        toolState = new Dictionary<string, Tool>(); liveMinions = new Dictionary<string, int>();
         reason = "P8_SOURCE_LIFECYCLE_INVALID";
         if (accepted == null || matchId == Guid.Empty || completedSequence <= 0 || roster == null || roster.Count == 0) return false;
         var events = accepted.Where(x => x.MatchId == matchId && x.EventSequence <= completedSequence)
             .OrderBy(x => x.EventSequence).ToArray();
-        if (events.Length == 0 || events[^1].EventSequence != completedSequence || events[^1].EventType != "PHASE_COMPLETED") return false;
+        if (events.Length == 0 || events[^1].EventSequence != completedSequence ||
+            (requireCompletedPhase && events[^1].EventType != "PHASE_COMPLETED")) return false;
         var tools = new Dictionary<string, Tool>(StringComparer.Ordinal);
         var held = new Dictionary<Guid, string>();
         var minions = new Dictionary<string, (int Zone, long Tick, bool Alive)>(StringComparer.Ordinal);
@@ -129,7 +136,9 @@ public static class AEDPhase8LifecycleReconcilerV1
             }
             else if (!ReplayMinion(data, tick, minions)) return false;
         }
-        if (phase != null) return false;
+        if (requireCompletedPhase && phase != null) return false;
+        toolState = tools.Where(x => x.Value.Location is "World" or "Player").ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
+        liveMinions = minions.Where(x => x.Value.Alive).ToDictionary(x => x.Key, x => x.Value.Zone, StringComparer.Ordinal);
         reason = string.Empty;
         return true;
     }
@@ -144,13 +153,14 @@ public static class AEDPhase8LifecycleReconcilerV1
         {
             if (tools.ContainsKey(id) || charges.HasValue || data.Contains("ownerUserId") || data.Contains("parentInstanceId")) return false;
             if (data.Contains("origin") && (!Text(data, "origin", out var origin) || origin is not ("WorldSpawn" or "ScenePlaced"))) return false;
-            tools.Add(id, new Tool(toolId, zone, "World", null, null, tick)); return true;
+            tools.Add(id, new Tool(toolId, zone, "World", null, null, tick,
+                data.Contains("origin") ? data["origin"].AsString : "WorldSpawn")); return true;
         }
         if (action == "LOADOUT")
         {
             if (zone != 0 || !Text(data, "origin", out var origin) || origin != "LobbyLoadout" || data.Contains("parentInstanceId") ||
                 !Owner(data, roster, out var owner) || tools.ContainsKey(id) || held.ContainsKey(owner) || !ValidInitialCharges(toolId, charges)) return false;
-            tools.Add(id, new Tool(toolId, zone, "Player", owner, charges, tick)); held.Add(owner, id); return true;
+            tools.Add(id, new Tool(toolId, zone, "Player", owner, charges, tick, "LobbyLoadout")); held.Add(owner, id); return true;
         }
         if (action == "DROP")
         {
@@ -159,7 +169,7 @@ public static class AEDPhase8LifecycleReconcilerV1
                 !tools.TryGetValue(parentId, out var parent) || parent.Location != "Player" || parent.Owner != owner ||
                 parent.ToolId != toolId || parent.Zone != zone || parent.Charges != charges || tick <= parent.Tick) return false;
             tools[parentId] = parent with { Location = "Transferred", Owner = null, Tick = tick }; held.Remove(owner);
-            tools.Add(id, new Tool(toolId, zone, "World", null, charges, tick)); return true;
+            tools.Add(id, new Tool(toolId, zone, "World", null, charges, tick, "PlayerDrop")); return true;
         }
         if (!tools.TryGetValue(id, out var previous) || previous.ToolId != toolId || previous.Zone != zone ||
             data.Contains("origin") || data.Contains("parentInstanceId") || tick <= previous.Tick || !Owner(data, roster, out var actor)) return false;

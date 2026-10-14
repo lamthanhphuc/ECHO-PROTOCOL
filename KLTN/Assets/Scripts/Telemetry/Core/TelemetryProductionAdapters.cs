@@ -644,14 +644,20 @@ namespace EchoProtocol.Telemetry
 
         public bool EmitToolSpawn(string occurrenceKey, DateTime occurredAtUtc, string phase,
             string instanceId, int toolId, int zone, string origin,
-            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason)
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            EmitToolSpawnWithCharges(occurrenceKey, occurredAtUtc, phase, instanceId, toolId, zone, origin, out telemetryEvent, out failureReason, null);
+        public bool EmitToolSpawnWithCharges(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string instanceId, int toolId, int zone, string origin,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason, int? remainingCharges)
         {
             ValidateTool(toolId, zone);
             MatchTelemetryAdapter.RequireText(instanceId, nameof(instanceId));
             MatchTelemetryAdapter.RequireOneOf(origin, nameof(origin), "WorldSpawn", "ScenePlaced");
-            return Emit(occurrenceKey, TelemetryEventTypes.TeamToolLifecycle, occurredAtUtc, phase,
-                new TelemetryJsonObject().AddString("instanceId", instanceId).AddInteger("toolId", toolId)
-                    .AddInteger("zone", zone).AddString("action", "SPAWN").AddString("origin", origin),
+            if (remainingCharges.HasValue && (toolId is not (2 or 4) || remainingCharges.Value is < 1 or > 3)) throw new ArgumentException("AED_P8_SPAWN_CHARGES_INVALID");
+            var data = new TelemetryJsonObject().AddString("instanceId", instanceId).AddInteger("toolId", toolId)
+                .AddInteger("zone", zone).AddString("action", "SPAWN").AddString("origin", origin);
+            if (remainingCharges.HasValue) data.AddInteger("remainingCharges", remainingCharges.Value);
+            return Emit(occurrenceKey, TelemetryEventTypes.TeamToolLifecycle, occurredAtUtc, phase, data,
                 out telemetryEvent, out failureReason);
         }
 
@@ -720,6 +726,16 @@ namespace EchoProtocol.Telemetry
                     .AddInteger("zone", zone).AddString("state", state),
                 out telemetryEvent, out failureReason);
         }
+
+        public bool EmitAEDV02World(string occurrenceKey, DateTime occurredAtUtc, string phase, string worldJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02WorldSample, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("world", worldJson), out telemetryEvent, out failureReason);
+
+        public bool EmitAEDV02Effect(string occurrenceKey, DateTime occurredAtUtc, string phase, string effectJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02ActionEffect, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("effect", effectJson), out telemetryEvent, out failureReason);
 
         private bool Emit(string occurrenceKey, string eventType, DateTime occurredAtUtc, string phase,
             TelemetryJsonObject data, out TelemetryEvent telemetryEvent,

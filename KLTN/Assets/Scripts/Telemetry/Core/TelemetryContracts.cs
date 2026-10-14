@@ -8,6 +8,7 @@ namespace EchoProtocol.Telemetry
         public const string LegacyV1 = "1.0";
         public const string CurrentV11 = "1.1";
         public const string LifecycleV12 = "1.2";
+        public const string AEDV13 = "1.3";
     }
 
     public static class TelemetryEventTypes
@@ -30,6 +31,8 @@ namespace EchoProtocol.Telemetry
         public const string NoiseEmitted = "NOISE_EMITTED";
         public const string TeamToolLifecycle = "TEAM_TOOL_LIFECYCLE";
         public const string MinionLifecycle = "MINION_LIFECYCLE";
+        public const string AEDV02WorldSample = "AED_V02_WORLD_SAMPLE";
+        public const string AEDV02ActionEffect = "AED_V02_ACTION_EFFECT";
 
         public const string MonsterInvestigateStarted = "MONSTER_INVESTIGATE_STARTED";
         public const string MonsterInvestigateResolved = "MONSTER_INVESTIGATE_RESOLVED";
@@ -127,7 +130,9 @@ namespace EchoProtocol.Telemetry
             TelemetryEventTypes.WardenRouteSafetyChecked,
             TelemetryEventTypes.WardenRouteActionReleased,
             TelemetryEventTypes.TeamToolLifecycle,
-            TelemetryEventTypes.MinionLifecycle
+            TelemetryEventTypes.MinionLifecycle,
+            TelemetryEventTypes.AEDV02WorldSample,
+            TelemetryEventTypes.AEDV02ActionEffect
         };
 
         public static bool TryGetStatus(string eventType, out TelemetryEventStatus status)

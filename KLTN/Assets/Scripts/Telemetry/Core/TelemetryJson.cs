@@ -22,6 +22,23 @@ namespace EchoProtocol.Telemetry
             return AddRaw(name, value.ToString(CultureInfo.InvariantCulture));
         }
 
+
+        public TelemetryJsonObject AddArray(string name, IEnumerable<TelemetryJsonObject> values)
+        {
+            if (values == null) throw new ArgumentNullException(nameof(values));
+            var items = new List<string>();
+            foreach (var value in values) items.Add((value ?? throw new ArgumentException("JSON array contains null.", nameof(values))).ToJson());
+            return AddRaw(name, "[" + string.Join(",", items) + "]");
+        }
+
+        public TelemetryJsonObject AddStringArray(string name, IEnumerable<string> values)
+        {
+            if (values == null) throw new ArgumentNullException(nameof(values));
+            var items = new List<string>();
+            foreach (var value in values) items.Add("\"" + Escape(value ?? throw new ArgumentException("JSON array contains null.", nameof(values))) + "\"");
+            return AddRaw(name, "[" + string.Join(",", items) + "]");
+        }
+
         public TelemetryJsonObject AddNumber(string name, double value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value))

@@ -183,6 +183,258 @@ namespace EchoProtocol.Api.Migrations
                     b.ToTable("AEDPhase8VerifiedSourcesV1", (string)null);
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AEDV02Decision", b =>
+                {
+                    b.Property<Guid>("DecisionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AppliedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("AppliedTick")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ApplyStatus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ApprovalStatus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CatalogVersion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ChangedKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecisionPoint")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("TargetPhaseName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("EffectEventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ExpectedPlanRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("HostUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("InitialOptionalBudget")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PhaseOrdinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlanFingerprint")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("PlanRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlanValuesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PreviousPlanFingerprint")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReasonCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ReceiptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestFingerprint")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RosterIdentity")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SceneManifestFingerprint")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SnapshotFingerprint")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SnapshotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceFingerprint")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("WindowId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("WindowSequence")
+                        .HasColumnType("integer");
+
+                    b.HasKey("DecisionId");
+
+                    b.HasIndex("ReceiptId")
+                        .IsUnique();
+
+                    b.HasIndex("MatchId", "PlanRevision")
+                        .IsUnique();
+
+                    b.HasIndex("MatchId", "PhaseOrdinal", "DecisionPoint", "WindowSequence")
+                        .IsUnique();
+
+                    b.ToTable("AEDV02Decisions");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AEDV02SceneContent", b =>
+                {
+                    b.Property<string>("Fingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ManifestJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RegisteredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SceneVersion")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Fingerprint");
+
+                    b.ToTable("AEDV02SceneContents");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AEDV02SkillObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Censored")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ComparisonContextKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Dimension")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("Eligible")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ResolvedFailure")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ResolvedSuccess")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceFingerprint")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("VerifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("MatchId", "UserId", "Dimension", "ComparisonContextKey")
+                        .IsUnique();
+
+                    b.ToTable("AEDV02SkillObservations");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AEDV02VerifiedSource", b =>
+                {
+                    b.Property<string>("Fingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("EndEventSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("EndTick")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PhaseOrdinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReconstructedJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RosterIdentity")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SceneManifestFingerprint")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("SourceEndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("StartTick")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("VerifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Fingerprint");
+
+                    b.HasIndex("MatchId", "PhaseOrdinal", "EndTick");
+
+                    b.ToTable("AEDV02VerifiedSources");
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", b =>
                 {
                     b.Property<Guid>("SnapshotId")
@@ -2321,6 +2573,39 @@ namespace EchoProtocol.Api.Migrations
 
                             t.HasCheckConstraint("CK_WalletTransactions_Balances_NonNegative", "\"BalanceBefore\" >= 0 AND \"BalanceAfter\" >= 0");
                         });
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AEDV02Decision", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.MatchAuthorityBinding", null)
+                        .WithMany()
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AEDV02SkillObservation", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.MatchAuthorityBinding", null)
+                        .WithMany()
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AEDV02VerifiedSource", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.MatchAuthorityBinding", null)
+                        .WithMany()
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", b =>

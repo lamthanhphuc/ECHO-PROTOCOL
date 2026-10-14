@@ -37,6 +37,10 @@ public class AppDbContext : DbContext
     public DbSet<ScenarioAdaptivePlanV2> ScenarioAdaptivePlansV2 => Set<ScenarioAdaptivePlanV2>();
     public DbSet<AEDDirectorDecisionV1> AEDDirectorDecisionsV1 => Set<AEDDirectorDecisionV1>();
     public DbSet<AEDPhase8VerifiedSourceV1> AEDPhase8VerifiedSourcesV1 => Set<AEDPhase8VerifiedSourceV1>();
+    public DbSet<AEDV02Decision> AEDV02Decisions => Set<AEDV02Decision>();
+    public DbSet<AEDV02VerifiedSource> AEDV02VerifiedSources => Set<AEDV02VerifiedSource>();
+    public DbSet<AEDV02SceneContent> AEDV02SceneContents => Set<AEDV02SceneContent>();
+    public DbSet<AEDV02SkillObservation> AEDV02SkillObservations => Set<AEDV02SkillObservation>();
     public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
     public DbSet<PaymentCheckout> PaymentCheckouts => Set<PaymentCheckout>();
     public DbSet<PaymentProviderEvent> PaymentProviderEvents => Set<PaymentProviderEvent>();
@@ -45,6 +49,39 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<AEDV02Decision>(entity =>
+        {
+            entity.HasKey(x => x.DecisionId);
+            entity.HasIndex(x => new { x.MatchId, x.PlanRevision }).IsUnique();
+            entity.HasIndex(x => new { x.MatchId, x.PhaseOrdinal, x.DecisionPoint, x.WindowSequence }).IsUnique();
+            entity.HasIndex(x => x.ReceiptId).IsUnique();
+            entity.Property(x => x.DecisionPoint).HasMaxLength(24);
+            entity.Property(x => x.WindowId).HasMaxLength(64);
+            entity.Property(x => x.PlanValuesJson).HasColumnType("text");
+            entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(x => x.MatchId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<AEDV02VerifiedSource>(entity =>
+        {
+            entity.HasKey(x => x.Fingerprint); entity.Property(x => x.Fingerprint).HasMaxLength(64);
+            entity.HasIndex(x => new { x.MatchId, x.PhaseOrdinal, x.EndTick });
+            entity.Property(x => x.ReconstructedJson).HasColumnType("text");
+            entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(x => x.MatchId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<AEDV02SceneContent>(entity =>
+        {
+            entity.HasKey(x => x.Fingerprint); entity.Property(x => x.Fingerprint).HasMaxLength(64);
+            entity.Property(x => x.SceneVersion).HasMaxLength(128);
+            entity.Property(x => x.ManifestJson).HasColumnType("text");
+        });
+        modelBuilder.Entity<AEDV02SkillObservation>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Dimension).HasMaxLength(32);
+            entity.Property(x => x.ComparisonContextKey).HasMaxLength(128);
+            entity.HasIndex(x => new { x.MatchId, x.UserId, x.Dimension, x.ComparisonContextKey }).IsUnique();
+            entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(x => x.MatchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
         modelBuilder.Entity<User>(entity =>
         {
             entity.ToTable("Users");

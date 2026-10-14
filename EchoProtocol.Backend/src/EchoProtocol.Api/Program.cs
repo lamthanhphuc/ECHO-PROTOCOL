@@ -235,6 +235,9 @@ builder.Services.AddScoped<IAdaptiveInputSnapshotBuilder, AdaptiveInputSnapshotB
 builder.Services.AddScoped<IScenarioService, ScenarioService>();
 builder.Services.AddScoped<IScenarioSnapshotReadService, ScenarioSnapshotReadService>();
 builder.Services.AddScoped<IScenarioAdaptivePlanV2Service, ScenarioAdaptivePlanV2Service>();
+builder.Services.Configure<AEDV02PilotSettings>(builder.Configuration.GetSection("AEDV02Pilot"));
+builder.Services.AddScoped<AEDV02SourceVerifier>();
+builder.Services.AddScoped<AEDV02DecisionService>();
 builder.Services.AddScoped<IAEDv2PhaseEvidenceVerifier, AEDv2PhaseEvidenceVerifier>();
 builder.Services.AddScoped<IAEDDirectorApprovalV1Service, AEDDirectorApprovalV1Service>();
 builder.Services.AddScoped<IMatchProfilePostProcessingService, MatchProfilePostProcessingService>();
@@ -297,6 +300,10 @@ if (app.Environment.IsDevelopment())
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.Database.MigrateAsync();
+        if (scope.ServiceProvider.GetRequiredService<IOptions<AEDV02PilotSettings>>().Value.Enabled)
+            await AEDV02SceneRegistry.RegisterPilotAsync(db,
+                await File.ReadAllTextAsync(Path.Combine(app.Environment.ContentRootPath, "Content/AEDV02/Rev02SceneManifest.json")),
+                scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime);
 
         await DbInitializer.InitializeAsync(
             db,

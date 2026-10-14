@@ -14,7 +14,7 @@ using Xunit;
 
 namespace EchoProtocol.Api.Tests;
 
-public sealed class TelemetryServiceTests
+public sealed partial class TelemetryServiceTests
 {
     [Fact, Trait("Category", "AEDv2")]
     public async Task P8LobbyLoadout_Valid_IsAccepted()
