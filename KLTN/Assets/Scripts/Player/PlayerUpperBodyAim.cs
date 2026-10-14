@@ -1,5 +1,7 @@
 using EchoProtocol.Networking;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 [DisallowMultipleComponent]
 public sealed class PlayerUpperBodyAim : MonoBehaviour
@@ -7,19 +9,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     [SerializeField] private Animator animator;
     [SerializeField] private Transform playerRoot;
     [SerializeField] private PlayerCamera playerCamera;
-    [SerializeField, Range(0f, 1f)] private float lookAtWeight = 0.82f;
-    [SerializeField, Range(0f, 1f)] private float bodyWeight = 0.24f;
-    [SerializeField, Range(0f, 1f)] private float headWeight = 0.74f;
-    [SerializeField, Range(0f, 1f)] private float eyesWeight = 0.45f;
-    [SerializeField, Range(0f, 1f)] private float clampWeight = 0.42f;
-    [SerializeField] private float lookAtDistance = 12f;
     [SerializeField] private bool driveRightHandWhenHolding = true;
-
-    [Header("Sprint Leg Anti-Cross")]
-    [SerializeField, Min(0f)] private float sprintFootHalfSpacing = 0.09f;
-    [SerializeField, Range(0f, 1f)] private float sprintLegCorrectionWeight = 0.85f;
-    [SerializeField, Min(0f)] private float sprintKneePoleForwardOffset = 0.45f;
-    [SerializeField, Min(0f)] private float sprintKneePoleSideOffset = 0.12f;
 
     [Header("Carry (Two-Hand) Pose")]
     [SerializeField] private float carryForwardOffset = 0.30f;
@@ -47,8 +37,6 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
     private static readonly int IsDownedHash = Animator.StringToHash("IsDowned");
     private static readonly int IsCrouchingHash = Animator.StringToHash("IsCrouching");
     private static readonly int IsPushingHash = Animator.StringToHash("IsPushing");
-    private static readonly int IsMovingHash = Animator.StringToHash("IsMoving");
-    private static readonly int IsSprintingHash = Animator.StringToHash("IsSprinting");
 
     [Header("Jammo Grip Clearance")]
     [SerializeField, Min(0f)] private float jammoGripHeightOffset = 0.32f;
@@ -76,46 +64,148 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         _heldItemAnchor = GetComponentInParent<PlayerHeldItemAnchor>();
     }
 
+    private Vector2 _lobbyLookAngles, _lobbyLookVelocity, _lastLobbyLookSent;
+    private float _nextLobbyLookSend;
+    private Transform _lobbyHead;
+    private Quaternion _lobbyAppliedRotation, _lobbyHeadResult;
+    private bool _lobbyRotationApplied;
+    private bool IsLobbyPresentation => _lobbyState != null && _lobbyState.Object!=null && _lobbyState.Object.IsValid && !_lobbyState.IsGameplayPlayer
+        && SceneManager.GetActiveScene().name == "Lobby";
+
+    private void UpdateLobbyLook()
+    {
+        if (animator == null || !animator.isHuman || animator.avatar == null || !animator.avatar.isValid) return;
+        var head=animator.GetBoneTransform(HumanBodyBones.Head);
+        if(head==null)return;
+        // Strip the previous offset when the Animator was culled and did not write a fresh pose.
+        if(_lobbyRotationApplied && _lobbyHead==head && Quaternion.Angle(head.rotation,_lobbyHeadResult)<0.01f)
+            head.rotation=Quaternion.Inverse(_lobbyAppliedRotation)*head.rotation;
+        var camera=Camera.main;
+        bool local=_lobbyState.Object.HasInputAuthority;
+        Vector2 target=local ? Vector2.zero : _lobbyState.LobbyLookAngles;
+        if(local && camera!=null && Mouse.current!=null && Application.isFocused && Screen.width>0 && Screen.height>0) {
+            var mouse=Mouse.current.position.ReadValue();
+            if(mouse.x>=0 && mouse.x<=Screen.width && mouse.y>=0 && mouse.y<=Screen.height) {
+                var headScreen=camera.WorldToScreenPoint(head.position);
+                target=new Vector2(Mathf.Clamp((mouse.x-headScreen.x)/(Screen.width*0.35f),-1f,1f)*28f,
+                    Mathf.Clamp((mouse.y-headScreen.y)/(Screen.height*0.35f),-1f,1f)*16f);
+            }
+        }
+        if(local && Time.unscaledTime>=_nextLobbyLookSend && (target-_lastLobbyLookSent).sqrMagnitude>0.04f) {
+            _nextLobbyLookSend=Time.unscaledTime+0.05f;
+            _lastLobbyLookSent=target;_lobbyState.RequestLobbyLook(target);
+        }
+        _lobbyLookAngles=Vector2.SmoothDamp(_lobbyLookAngles,target,ref _lobbyLookVelocity,0.16f,Mathf.Infinity,Time.unscaledDeltaTime);
+        var up=playerRoot!=null ? playerRoot.up : Vector3.up;
+        var right=camera!=null ? camera.transform.right : Vector3.right;
+        // Camera screen-right is opposite the character's facing-right in the lobby.
+        _lobbyAppliedRotation=Quaternion.AngleAxis(-_lobbyLookAngles.x,up)*Quaternion.AngleAxis(_lobbyLookAngles.y,right);
+        head.rotation=_lobbyAppliedRotation*head.rotation;
+        _lobbyHead=head;_lobbyHeadResult=head.rotation;_lobbyRotationApplied=true;
+    }
+
     private void LateUpdate()
     {
         if (playerRoot == null) playerRoot = ResolvePlayerRoot();
+        if (IsLobbyPresentation) { UpdateLobbyLook(); return; }
+        if (_lobbyRotationApplied && _lobbyHead!=null && Quaternion.Angle(_lobbyHead.rotation,_lobbyHeadResult)<0.01f)
+            _lobbyHead.rotation=Quaternion.Inverse(_lobbyAppliedRotation)*_lobbyHead.rotation;
+        _lobbyRotationApplied=false;_lobbyLookAngles=Vector2.zero;_lobbyLookVelocity=Vector2.zero;
+
         if (!_hasExternalAim && (playerCamera == null || !IsCameraTargetForThisPlayer(playerCamera.Target)))
         {
             playerCamera = FindBoundCamera();
         }
 
         ApplyArmPosingInLateUpdate();
-        ApplySprintLegSeparation();
+        CorrectFootRoll();
     }
 
+    private Avatar _soleAvatar;
+    private Quaternion _leftSole, _rightSole;
+    private float _footCorrectionWeight;
+    private void CorrectFootRoll()
+    {
+        if (animator == null || !animator.isHuman || animator.avatar == null || !animator.avatar.isValid) return;
+        // Crouch keeps its clip-authored feet, including transitions into crouch.
+        bool crouching = animator.GetBool(IsCrouchingHash)
+            || animator.GetCurrentAnimatorStateInfo(0).IsName("Crouch Locomotion")
+            || animator.IsInTransition(0) && animator.GetNextAnimatorStateInfo(0).IsName("Crouch Locomotion");
+        if (crouching) { _footCorrectionWeight = 0f; return; }
+        // Keep correction through normal locomotion, carry and their idle transitions.
+        bool active = !IsDowned() && !IsReviving() && !IsPushing();
+        _footCorrectionWeight = Mathf.MoveTowards(_footCorrectionWeight, active ? 1f : 0f, Time.deltaTime / 0.12f);
+        if (_footCorrectionWeight <= 0f) return;
+        var left = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
+        var right = animator.GetBoneTransform(HumanBodyBones.RightFoot);
+        if (left == null || right == null) return;
+        if (_soleAvatar != animator.avatar)
+        {
+            _soleAvatar = animator.avatar;
+            _leftSole = NeutralFootBasis(left, animator.GetBoneTransform(HumanBodyBones.LeftToes));
+            _rightSole = NeutralFootBasis(right, animator.GetBoneTransform(HumanBodyBones.RightToes));
+        }
+        BoundFootRoll(left, _leftSole);
+        BoundFootRoll(right, _rightSole);
+    }
+    private Quaternion NeutralFootBasis(Transform foot, Transform toes)
+    {
+        var skeleton = animator.avatar.humanDescription.skeleton;
+        Quaternion rotation = Quaternion.identity;
+        for (var bone = foot; bone != null && bone != animator.transform; bone = bone.parent)
+        {
+            int index = System.Array.FindIndex(skeleton, entry => entry.name == bone.name);
+            if (index >= 0) rotation = skeleton[index].rotation * rotation;
+        }
+        // Calibrate each foot independently from its own toe direction; bone axes differ by rig/side.
+        Vector3 forward = Vector3.forward;
+        if (toes != null)
+        {
+            Vector3 localToe = foot.InverseTransformPoint(toes.position);
+            Vector3 neutralToe = Vector3.ProjectOnPlane(rotation * localToe, Vector3.up);
+            if (neutralToe.sqrMagnitude > 0.000001f) forward = neutralToe.normalized;
+        }
+        return Quaternion.Inverse(rotation) * Quaternion.LookRotation(forward, Vector3.up);
+    }
+    private void BoundFootRoll(Transform foot, Quaternion basis)
+    {
+        Vector3 up = playerRoot != null ? playerRoot.up : Vector3.up;
+        Quaternion sole = foot.rotation * basis;
+        Vector3 forward = sole * Vector3.forward;
+        Vector3 heading = Vector3.ProjectOnPlane(forward, up);
+        if (heading.sqrMagnitude > 0.001f)
+        {
+            Vector3 facing = playerRoot != null ? playerRoot.forward : transform.forward;
+            float yaw = Vector3.SignedAngle(facing, heading, up);
+            float excessYaw = yaw - Mathf.Clamp(yaw, -35f, 35f);
+            sole = Quaternion.AngleAxis(-excessYaw * _footCorrectionWeight, up) * sole;
+            forward = sole * Vector3.forward;
+        }
+        Vector3 levelUp = Vector3.ProjectOnPlane(up, forward);
+        if (levelUp.sqrMagnitude < 0.001f) return;
+        float correction = Vector3.SignedAngle(sole * Vector3.up, levelUp, forward);
+        // Remove sideways roll completely around the toe axis. Pitch and heading remain clip-authored.
+        foot.rotation = Quaternion.AngleAxis(correction * _footCorrectionWeight, forward) * sole * Quaternion.Inverse(basis);
+    }
+
+    private float _gameplayHeadWeight;
+    private PlayerCharacterPresenter _headCharacter;
     private void OnAnimatorIK(int layerIndex)
     {
-        if (IsReviving() || IsDowned() || IsPushing())
+        if (layerIndex != 0 || animator == null || !animator.isHuman
+            || animator.avatar == null || !animator.avatar.isValid) return;
+        if (_headCharacter == null) _headCharacter = GetComponentInParent<PlayerCharacterPresenter>();
+        bool follow = !IsLobbyPresentation && _headCharacter != null && _headCharacter.IsJammo
+            && !IsDowned() && !IsReviving() && !IsPushing();
+        _gameplayHeadWeight = Mathf.MoveTowards(_gameplayHeadWeight, follow ? 0.85f : 0f, Time.deltaTime / 0.12f);
+        if (IsLobbyPresentation) _gameplayHeadWeight = 0f;
+        // Head only: body weight stays zero so locomotion and held-item arms are untouched.
+        animator.SetLookAtWeight(_gameplayHeadWeight, 0f, 1f, 0f, 0.6f);
+        if (_gameplayHeadWeight > 0f && TryGetAim(out _, out var forward, out _))
         {
-            if (animator != null && animator.isHuman) animator.SetLookAtWeight(0f);
-            return;
+            var head = animator.GetBoneTransform(HumanBodyBones.Head);
+            if (head != null) animator.SetLookAtPosition(head.position + forward * 8f);
         }
-        if (animator == null || (!TryGetAim(out Vector3 aimOrigin, out Vector3 aimForward, out Vector3 aimUp)))
-        {
-            return;
-        }
-
-        // Native crash prevention:
-        // Unity's native Humanoid IK solver crashes with 0xC0000005 (access violation at 0xFFFFFFFF00000000)
-        // if SetLookAt or SetIKPosition are called when the avatar is not humanoid or has no valid bone mapping.
-        if (!animator.isHuman || animator.avatar == null || !animator.avatar.isValid)
-        {
-            return;
-        }
-
-        Vector3 lookAt = aimOrigin + aimForward * lookAtDistance;
-
-        animator.SetLookAtWeight(lookAtWeight, bodyWeight, headWeight, eyesWeight, clampWeight);
-        animator.SetLookAtPosition(lookAt);
-
-        // Note: We deliberately do NOT call animator.SetIKPosition or animator.SetIKRotation for AvatarIKGoal
-        // because Unity's native Humanoid limb IK solver crashes with Access Violation (0xC0000005)
-        // on this model's rig. Hand and arm posing is handled safely via Transform rotation in LateUpdate().
     }
 
     private void ApplyArmPosingInLateUpdate()
@@ -205,92 +295,6 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
             SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, handTarget, rightElbowPole, rightHandPosWeight);
             character?.ApplyJammoGrip(rightHandBone, false, aimForward, aimUp);
-        }
-    }
-
-    private void ApplySprintLegSeparation()
-    {
-        if (animator == null
-            || !animator.isHuman
-            || animator.avatar == null
-            || !animator.avatar.isValid)
-        {
-            return;
-        }
-
-        if (IsReviving()
-            || IsDowned()
-            || IsPushing()
-            || animator.GetBool(IsCrouchingHash)
-            || !animator.GetBool(IsMovingHash)
-            || !animator.GetBool(IsSprintingHash))
-        {
-            return;
-        }
-
-        Transform root = playerRoot != null ? playerRoot : transform;
-
-        Transform leftUpper = animator.GetBoneTransform(HumanBodyBones.LeftUpperLeg);
-        Transform leftLower = animator.GetBoneTransform(HumanBodyBones.LeftLowerLeg);
-        Transform leftFoot = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
-
-        Transform rightUpper = animator.GetBoneTransform(HumanBodyBones.RightUpperLeg);
-        Transform rightLower = animator.GetBoneTransform(HumanBodyBones.RightLowerLeg);
-        Transform rightFoot = animator.GetBoneTransform(HumanBodyBones.RightFoot);
-
-        if (leftUpper == null || leftLower == null || leftFoot == null
-            || rightUpper == null || rightLower == null || rightFoot == null)
-        {
-            return;
-        }
-
-        Vector3 leftLocal = root.InverseTransformPoint(leftFoot.position);
-        Vector3 rightLocal = root.InverseTransformPoint(rightFoot.position);
-
-        bool fixLeft = leftLocal.x > -sprintFootHalfSpacing;
-        bool fixRight = rightLocal.x < sprintFootHalfSpacing;
-
-        if (!fixLeft && !fixRight)
-        {
-            return;
-        }
-
-        if (fixLeft)
-        {
-            leftLocal.x = -sprintFootHalfSpacing;
-
-            Vector3 leftTarget = root.TransformPoint(leftLocal);
-            Vector3 leftPole =
-                leftUpper.position
-                + root.forward * sprintKneePoleForwardOffset
-                - root.right * sprintKneePoleSideOffset;
-
-            SolveTwoBoneIK(
-                leftUpper,
-                leftLower,
-                leftFoot,
-                leftTarget,
-                leftPole,
-                sprintLegCorrectionWeight);
-        }
-
-        if (fixRight)
-        {
-            rightLocal.x = sprintFootHalfSpacing;
-
-            Vector3 rightTarget = root.TransformPoint(rightLocal);
-            Vector3 rightPole =
-                rightUpper.position
-                + root.forward * sprintKneePoleForwardOffset
-                + root.right * sprintKneePoleSideOffset;
-
-            SolveTwoBoneIK(
-                rightUpper,
-                rightLower,
-                rightFoot,
-                rightTarget,
-                rightPole,
-                sprintLegCorrectionWeight);
         }
     }
 

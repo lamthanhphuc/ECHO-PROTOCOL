@@ -83,7 +83,8 @@ public class PlayerAnimatorDriver : MonoBehaviour
         if (networkLifeState == null) networkLifeState = GetComponent<NetworkPlayerLifeState>() ?? GetComponentInParent<NetworkPlayerLifeState>();
         if (downState == null) downState = GetComponent<PlayerDownState>() ?? GetComponentInParent<PlayerDownState>();
 
-        bool isCarryingCore = (coreCarrier != null && coreCarrier.IsCarrying)
+        bool isCarryingCore = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null
+            || (coreCarrier != null && coreCarrier.IsCarrying)
             || (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid);
         bool useCarryPose = isCarryingCore || IsHoldingCoreStabilizer();
         bool isCrouching = !useCarryPose && (movement != null
@@ -309,11 +310,6 @@ public class PlayerAnimatorDriver : MonoBehaviour
         }
 
         input = input.sqrMagnitude > 1f ? input.normalized : input;
-
-        if (isSprinting && !isCarrying && !isDowned)
-        {
-            return Vector2.up;
-        }
 
         return input;
     }

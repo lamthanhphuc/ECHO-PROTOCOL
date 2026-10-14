@@ -8,16 +8,16 @@ namespace EchoProtocol.UI.MainMenu
             switch (petId)
             {
                 case 1:
-                    return "Shop/Pets/nightmare";
+                    return "Shop/LobbyVariants/Pets/pet-1-skin-0";
 
                 case 2:
-                    return "Shop/Pets/soul-eater";
+                    return "Shop/LobbyVariants/Pets/pet-2-skin-0";
 
                 case 3:
-                    return "Shop/Pets/terror-bringer";
+                    return "Shop/LobbyVariants/Pets/pet-3-skin-0";
 
                 case 4:
-                    return "Shop/Pets/usurper";
+                    return "Shop/LobbyVariants/Pets/pet-4-skin-0";
 
                 default:
                     return null;

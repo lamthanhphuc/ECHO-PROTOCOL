@@ -5,6 +5,8 @@ namespace EchoProtocol.Networking
     [RequireComponent(typeof(Collider))]
     public sealed class Zone3ChargeStation : MonoBehaviour, IHoldInteractable
     {
+        private void Awake() { EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this); }
+
         [SerializeField, Range(20f, 30f)] private float chargeDurationSeconds = 25f;
         [SerializeField, Range(0.05f, 1f)] private float decaySecondsPerSecond = 0.2f;
 

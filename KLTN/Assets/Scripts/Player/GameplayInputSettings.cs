@@ -91,7 +91,7 @@ namespace EchoProtocol.Settings
             for (int i = 0; i < Keys.Length; i++)
             {
                 Key saved = (Key)PlayerPrefs.GetInt(Prefix + (GameplayAction)i, (int)DefaultKeys[i]);
-                Keys[i] = IsAssignableKey(saved) ? saved : DefaultKeys[i];
+                Keys[i] = IsAssignableKey(saved) && !IsFixedGameplayKey(saved) ? saved : DefaultKeys[i];
             }
         }
 
@@ -132,6 +132,7 @@ namespace EchoProtocol.Settings
             EnsureLoaded();
             if (IsFixedGameplayKey(key)) return true;
             for (int i = 0; i < Keys.Length; i++)
+                if ((GameplayAction)i != GameplayAction.Inventory)
                 if (Keys[i] == key || IsDefaultAlternate((GameplayAction)i, key)) return true;
             return false;
         }
@@ -155,7 +156,7 @@ namespace EchoProtocol.Settings
             }
             for (int i = 0; i < Keys.Length; i++)
             {
-                if (i != (int)action && (Keys[i] == key || IsDefaultAlternate((GameplayAction)i, key)
+                if ((GameplayAction)i != GameplayAction.Inventory && i != (int)action && (Keys[i] == key || IsDefaultAlternate((GameplayAction)i, key)
                     || IsDefaultAlternate(action, key, Keys[i])))
                 {
                     error = "Phím này đang dùng cho: " + ActionLabels[i] + ".";
@@ -183,8 +184,8 @@ namespace EchoProtocol.Settings
 
         private static bool IsFixedGameplayKey(Key key)
         {
-            return key == Key.G || key == Key.H || key == Key.Q || key == Key.Digit1 || key == Key.Digit2
-                || key == Key.F1 || key == Key.Backquote;
+            return key == Key.J || key == Key.G || key == Key.H || key == Key.Q || key == Key.Digit1 || key == Key.Digit2
+                || key == Key.F1 || key == Key.F2 || key == Key.Backquote;
         }
 
         private static bool IsDefaultAlternate(GameplayAction action, Key key)

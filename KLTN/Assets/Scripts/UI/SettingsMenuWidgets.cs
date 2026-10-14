@@ -55,7 +55,7 @@ namespace EchoProtocol.UI
             var rect = Rect(name, parent, x, y, w, h);
             var label = rect.gameObject.AddComponent<TextMeshProUGUI>();
             label.font = TMP_Settings.defaultFontAsset;
-            label.text = text;
+            label.text = EchoProtocol.Settings.GameLanguage.Translate(text);
             label.fontSize = size;
             label.color = tint ?? Foreground;
             label.alignment = align;
@@ -71,6 +71,7 @@ namespace EchoProtocol.UI
         {
             var rect = Frame(name, parent, x, y, w, h, accent);
             var button = rect.gameObject.AddComponent<Button>();
+            EchoProtocol.Audio.GameAudioRuntime.RegisterButton(button);
             button.targetGraphic = rect.GetComponent<HorrorFrameGraphic>();
             var colors = button.colors;
             colors.normalColor = Color.white;

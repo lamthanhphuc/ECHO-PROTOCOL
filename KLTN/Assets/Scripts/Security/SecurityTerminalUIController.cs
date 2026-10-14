@@ -67,6 +67,7 @@ public class SecurityTerminalUIController : MonoBehaviour
 
         public void Open(GameObject interactor)
         {
+            EchoProtocol.UI.HUD.HUDModalPresentation.Apply(rootCanvas);
             Zone2MinigameUIFocus.CloseOthers(this);
             _controlLock.Acquire(interactor, Close);
             if (!_controlLock.IsLocked) return;
@@ -105,7 +106,7 @@ public class SecurityTerminalUIController : MonoBehaviour
 
             if (headerTitleText != null)
             {
-                headerTitleText.text = "ECHO PROTOCOL // SECURITY TERMINAL [ZONE 2]";
+            headerTitleText.text = EchoProtocol.Settings.GameLanguage.Choose("Trạm an ninh", "Security terminal");
             }
 
             if (!relaysOnline && !isComplete)
@@ -137,27 +138,21 @@ public class SecurityTerminalUIController : MonoBehaviour
                 // Clean single-line status badge on header
                 if (statusBannerText != null)
                 {
-                    statusBannerText.text = "<color=#FF1744>● STATUS: NETWORK OFFLINE</color>";
+                    statusBannerText.text = "<color=#D0685F>Relay chưa hoạt động</color>";
                 }
 
+                if(offlineDetailText==null && offlineWarningPanel!=null)
+                    foreach(var label in offlineWarningPanel.GetComponentsInChildren<TMPro.TMP_Text>(true))
+                        if(label.text.Contains("RESTORE") || label.text.Contains("BEFORE INITIATING")){offlineDetailText=label;break;}
                 // Clean structured diagnostic details inside the offline warning panel
                 if (offlineDetailText != null)
                 {
-                    string powerStatus = powerCount >= 2
-                        ? "<color=#00E676><b>2 / 2 ONLINE</b></color>"
-                        : $"<color=#FF5252><b>{powerCount} / 2 OFFLINE</b></color>";
-                    string dataStatus = dataCount >= 2
-                        ? "<color=#00E676><b>2 / 2 ONLINE</b></color>"
-                        : $"<color=#FF5252><b>{dataCount} / 2 OFFLINE</b></color>";
-                    string totalStatus = totalRelays >= 4
-                        ? "<color=#00E676><b>4 / 4 RESTORED</b></color>"
-                        : $"<color=#FFD54F><b>{totalRelays} / 4 ACTIVE</b></color>";
+                    offlineDetailText.text=EchoProtocol.Settings.GameLanguage.Choose(
+                        $"Khôi phục các relay để mở xác thực bảo mật.\n\nNguồn điện · Relay A: {powerCount}/2\nDữ liệu · Relay B: {dataCount}/2\n\nTổng tiến độ: {totalRelays}/4",
+                        $"Restore the relays to unlock security authentication.\n\nPower · Relay A: {powerCount}/2\nData · Relay B: {dataCount}/2\n\nTotal progress: {totalRelays}/4");
+                    offlineDetailText.fontSize=20;offlineDetailText.enableAutoSizing=true;offlineDetailText.fontSizeMin=15;offlineDetailText.fontSizeMax=20;
+                    offlineDetailText.alignment=TMPro.TextAlignmentOptions.Center;
 
-                    offlineDetailText.text =
-                        $"<size=17><color=#90A4AE>FACILITY RELAY GRID DIAGNOSTIC</color></size>\n\n" +
-                        $"  • POWER RELAYS (RELAY A):   {powerStatus}\n" +
-                        $"  • DATA RELAYS  (RELAY B):   {dataStatus}\n\n" +
-                        $"<size=19>SYSTEM INTEGRITY: {totalStatus}</size>";
                 }
                 return;
             }
@@ -174,17 +169,17 @@ public class SecurityTerminalUIController : MonoBehaviour
 
                 if (statusBannerText != null)
                 {
-                    statusBannerText.text = "<color=#00E676>● STATUS: ACCESS GRANTED</color>";
+                    statusBannerText.text = "<color=#86AD91>Đã cấp quyền truy cập</color>";
                 }
 
                 if (codeDisplayText != null)
                 {
-                    codeDisplayText.text = $"ZONE 2 EXIT AUTHORIZATION CODE:\n<size=56><color=#00FF99><b>{code}</b></color></size>";
+                    codeDisplayText.text = $"Mã mở cửa Khu vực 2:\n<size=32><color=#7EA6A4><b>{code}</b></color></size>";
                 }
 
                 if (instructionText != null)
                 {
-                    instructionText.text = "<color=#FFEB3B><b>OBJECTIVE UPDATED:</b></color> ENTER ACCESS CODE AT ZONE DOOR\n<color=#90A4AE>Input code at either of the two exit distribution panels to unlock doors.</color>";
+                    instructionText.text = "Nhập mã tại một trong hai bảng mở cửa để mở cửa.";
                 }
             }
             else
@@ -198,8 +193,8 @@ public class SecurityTerminalUIController : MonoBehaviour
                 if (statusBannerText != null)
                 {
                     statusBannerText.text = terminal != null && terminal.IsDownloading
-                        ? $"<color=#FFB300>● DOWNLOADING... ({percent}%)</color>"
-                        : "<color=#00E5FF>● STATUS: READY FOR AUTHENTICATION</color>";
+                        ? $"<color=#D8A85E>Đang xác thực ({percent}%)</color>"
+                        : "<color=#7EA6A4>Sẵn sàng xác thực</color>";
                 }
 
                 if (progressText != null)
@@ -207,13 +202,14 @@ public class SecurityTerminalUIController : MonoBehaviour
                     float remaining = director != null ? director.RelayRepairRemainingSeconds : 0f;
                     int seconds = Mathf.CeilToInt(remaining);
                     progressText.text = remaining > 0f
-                        ? $"AUTHENTICATION: {percent}% | RELAYS RESET IN {seconds / 60:00}:{seconds % 60:00}"
-                        : $"AUTHENTICATION PROGRESS: {percent}%";
+                        ? $"Xác thực: {percent}% · Relay đặt lại sau {seconds / 60:00}:{seconds % 60:00}"
+                        : $"Tiến độ xác thực: {percent}%";
                 }
 
                 if (progressBarFill != null)
                 {
                     progressBarFill.fillAmount = progress;
+                    progressBarFill.color = EchoProtocol.UI.HUD.HUDPresentationStyle.Accent;
                 }
             }
         }

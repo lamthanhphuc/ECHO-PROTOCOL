@@ -1,4 +1,5 @@
-﻿using EchoProtocol.Networking;
+using EchoProtocol.Networking;
+using EchoProtocol.Settings;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -29,6 +30,7 @@ namespace EchoProtocol.UI
 
         private string _displayedName;
         private bool _displayedReady;
+        private GameLocale _displayedLocale;
 
         private void Awake()
         {
@@ -63,13 +65,7 @@ namespace EchoProtocol.UI
                     $"Player {_playerState.Object.InputAuthority.PlayerId}";
             }
 
-            bool localPlayer =
-                _playerState.Object.HasInputAuthority;
-
-            string displayName =
-                localPlayer
-                    ? $"{name}   YOU"
-                    : name;
+            string displayName = name;
 
             if (_displayedName != displayName)
             {
@@ -80,14 +76,16 @@ namespace EchoProtocol.UI
             bool ready = _playerState.IsReady;
 
             if (_displayedReady != ready
+                || _displayedLocale != GameLanguage.Current
                 || _stateText.text.Length == 0)
             {
                 _displayedReady = ready;
+                _displayedLocale = GameLanguage.Current;
 
                 _stateText.text =
                     ready
-                        ? "READY"
-                        : "NOT READY";
+                        ? GameLanguage.Choose("SẴN SÀNG", "READY")
+                        : GameLanguage.Choose("CHƯA SẴN SÀNG", "NOT READY");
 
                 _stateText.color =
                     ready
@@ -137,7 +135,7 @@ namespace EchoProtocol.UI
                 Vector3.one * 0.01f;
 
             _canvasRect.sizeDelta =
-                new Vector2(160f, 48f);
+                new Vector2(125f, 48f);
 
             _canvas =
                 canvasObject.GetComponent<Canvas>();

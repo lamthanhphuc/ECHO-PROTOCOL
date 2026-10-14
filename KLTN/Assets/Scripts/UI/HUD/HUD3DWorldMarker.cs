@@ -31,6 +31,9 @@ namespace EchoProtocol.UI.HUD
         [SerializeField] private Color terminalColor = new Color(0f, 0.95f, 1f, 1f);
         [SerializeField] private Color distributionPanelColor = new Color(0.2f, 1f, 0.4f, 1f);
 
+        private float _nextTargetRefresh;
+        private readonly Dictionary<PlayerDownState, (int Seconds, EchoProtocol.Settings.GameLocale Locale, string Title)> _rescueTitles = new();
+        private readonly List<PlayerDownState> _staleRescueTitles = new();
         private Camera _mainCamera;
         private MatchFlowController _matchFlow;
         private EscapeDoorCountdown _escapeDoor;
@@ -45,6 +48,11 @@ namespace EchoProtocol.UI.HUD
 
         private void Awake()
         {
+            downedTeammateColor = HUDPresentationStyle.Danger;
+            escapeDoorColor = HUDPresentationStyle.Accent;
+            sectorBoxColor = HUDPresentationStyle.Warning;
+            terminalColor = HUDPresentationStyle.Accent;
+            distributionPanelColor = HUDPresentationStyle.Accent;
             if (markerPool != null)
             {
                 for (int i = 0; i < markerPool.Length; i++)
@@ -72,7 +80,11 @@ namespace EchoProtocol.UI.HUD
                 if (_mainCamera == null) return;
             }
 
-            CollectTargets();
+            if (Time.unscaledTime >= _nextTargetRefresh)
+            {
+                _nextTargetRefresh = Time.unscaledTime + 0.2f;
+                CollectTargets();
+            }
             RenderMarkers();
         }
 
@@ -83,10 +95,12 @@ namespace EchoProtocol.UI.HUD
             _targetColors.Clear();
 
             // 1. Downed Teammates (Need Help)
-            PlayerDownState[] players = FindObjectsByType<PlayerDownState>();
-            for (int i = 0; i < players.Length; i++)
+            _staleRescueTitles.Clear();
+            foreach (var entry in _rescueTitles)
+                if (entry.Key == null || !entry.Key.isActiveAndEnabled || !entry.Key.IsDowned) _staleRescueTitles.Add(entry.Key);
+            foreach (var player in _staleRescueTitles) _rescueTitles.Remove(player);
+            foreach (var p in PlayerDownState.RegisteredPlayers)
             {
-                PlayerDownState p = players[i];
                 if (p == null || !p.IsDowned) continue;
 
                 // Check if this is not local player (or if local player is downed, local player doesn't need 3D offscreen marker)
@@ -94,7 +108,14 @@ namespace EchoProtocol.UI.HUD
                     continue;
 
                 _targetTransforms.Add(p.transform);
-                _targetTitles.Add($"CỨU ĐỒNG ĐỘI ({p.BleedoutRemaining:F0}s)");
+                int seconds = Mathf.CeilToInt(p.BleedoutRemaining);
+                var locale = EchoProtocol.Settings.GameLanguage.Current;
+                if (!_rescueTitles.TryGetValue(p, out var cached) || cached.Seconds != seconds || cached.Locale != locale)
+                {
+                    cached = (seconds, locale, EchoProtocol.Settings.GameLanguage.Choose($"Cứu đồng đội ({seconds}s)", $"Revive teammate ({seconds}s)"));
+                    _rescueTitles[p] = cached;
+                }
+                _targetTitles.Add(cached.Title);
                 _targetColors.Add(downedTeammateColor);
             }
 
@@ -168,7 +189,7 @@ namespace EchoProtocol.UI.HUD
             if (target != null && !isComplete)
             {
                 _targetTransforms.Add(target);
-                _targetTitles.Add("TRẠM NẠP ĐIỆN (SECTOR BOX)");
+                _targetTitles.Add("Trạm cấp điện");
                 _targetColors.Add(sectorBoxColor);
             }
         }
@@ -189,7 +210,7 @@ namespace EchoProtocol.UI.HUD
                     if (terminal != null && !terminal.IsComplete)
                     {
                         _targetTransforms.Add(terminal.transform);
-                        _targetTitles.Add("MÁY BẢO MẬT (SECURITY TERMINAL)");
+                        _targetTitles.Add("Security Terminal");
                         _targetColors.Add(terminalColor);
                     }
                 }
@@ -199,7 +220,7 @@ namespace EchoProtocol.UI.HUD
                     if (panel != null)
                     {
                         _targetTransforms.Add(panel.transform);
-                        _targetTitles.Add("BẢNG ĐIỀU KHIỂN CỬA (DISTRIBUTION PANEL)");
+                        _targetTitles.Add("Access Panel");
                         _targetColors.Add(distributionPanelColor);
                     }
                 }
@@ -210,7 +231,7 @@ namespace EchoProtocol.UI.HUD
                 if (terminal != null && !terminal.IsComplete)
                 {
                     _targetTransforms.Add(terminal.transform);
-                    _targetTitles.Add("MÁY BẢO MẬT (SECURITY TERMINAL)");
+                    _targetTitles.Add("Trạm an ninh");
                     _targetColors.Add(terminalColor);
                 }
             }
@@ -223,7 +244,7 @@ namespace EchoProtocol.UI.HUD
                 (_matchFlow.Phase == MatchPhase.FinalHunt || _matchFlow.Phase == MatchPhase.ExitCountdown))
             {
                 _targetTransforms.Add(zone3Exit);
-                _targetTitles.Add("DOOREXIT");
+                _targetTitles.Add("Cửa thoát");
                 _targetColors.Add(escapeDoorColor);
                 return;
             }
@@ -233,7 +254,7 @@ namespace EchoProtocol.UI.HUD
                 (_matchFlow.Phase == MatchPhase.FinalHunt || _matchFlow.Phase == MatchPhase.ExitCountdown))
             {
                 _targetTransforms.Add(_escapeDoor.transform);
-                string doorTitle = _escapeDoor.IsComplete ? "CỬA THOÁT HIỂM [SẴN SÀNG]" : "CỬA THOÁT HIỂM [ĐANG MỞ]";
+                string doorTitle = _escapeDoor.IsComplete ? "Cửa thoát" : "Cửa thoát · Đang mở";
                 _targetTitles.Add(doorTitle);
                 _targetColors.Add(escapeDoorColor);
             }
@@ -349,12 +370,11 @@ namespace EchoProtocol.UI.HUD
                     marker.distanceText.text = $"{distance:F0}m";
                 }
 
-                // Pulsate ring
+                // A fixed marker keeps the target readable without competing with gameplay.
                 if (marker.pulseRing != null)
                 {
-                    float pulse = Mathf.PingPong(Time.time * 2.5f, 1f);
-                    marker.pulseRing.transform.localScale = Vector3.one * Mathf.Lerp(0.85f, 1.4f, pulse);
-                    marker.pulseRing.color = new Color(color.r, color.g, color.b, Mathf.Lerp(0.9f, 0.1f, pulse));
+                    marker.pulseRing.transform.localScale = Vector3.one;
+                    marker.pulseRing.color = new Color(color.r, color.g, color.b, 0.2f);
                 }
             }
         }

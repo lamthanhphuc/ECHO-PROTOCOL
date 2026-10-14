@@ -96,7 +96,7 @@ namespace EchoProtocol.Networking
 
     /// <summary>Host-owned match FSM. Objective state stays in its authoritative source object.</summary>
     [DisallowMultipleComponent]
-    public sealed class NetworkMatchState : NetworkBehaviour
+    public sealed partial class NetworkMatchState : NetworkBehaviour
     {
         public const float DefaultMatchDurationSeconds = 7200f;
         public const float DefaultEscapeDurationSeconds = 45f;
@@ -276,6 +276,7 @@ namespace EchoProtocol.Networking
         [Networked] public uint PhaseOrdinal { get; private set; }
         [Networked] public uint EndOrdinal { get; private set; }
         [Networked] private TickTimer EscapeTimer { get; set; }
+        [Networked] public float EscapeDurationSeconds { get; private set; }
         [Networked] private TickTimer MatchTimer { get; set; }
         [Networked] private TickTimer ReturnToLobbyTimer { get; set; }
         [Networked] private NetworkBool ReturnToLobbyRequested { get; set; }
@@ -397,6 +398,7 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             Instance = this;
             NetworkPlayerLifeState.StateChanged += HandlePlayerLifeStateChanged;
             ResolveLegacyPresentation();
@@ -422,6 +424,7 @@ namespace EchoProtocol.Networking
                 PhaseOrdinal = 0;
                 EndOrdinal = 0;
                 EscapeTimer = TickTimer.None;
+                EscapeDurationSeconds = 0f;
                 MatchTimer = TickTimer.CreateFromSeconds(Runner, _matchDurationSeconds);
                 ReturnToLobbyTimer = TickTimer.None;
                 ReturnToLobbyRequested = false;
@@ -528,7 +531,10 @@ namespace EchoProtocol.Networking
 
             if (MatchTimer.Expired(Runner))
             {
-                TryEndMatch(NetworkMatchResult.Lose, NetworkMatchEndReason.MatchTimeout, PlayerRef.None);
+                CountFinalPlayers(out var escapedPlayers, out _, out _);
+                TryEndMatch(escapedPlayers > 0 ? NetworkMatchResult.Win : NetworkMatchResult.Lose,
+                    escapedPlayers > 0 ? NetworkMatchEndReason.PlayerEscaped : NetworkMatchEndReason.MatchTimeout,
+                    PlayerRef.None);
                 return;
             }
 
@@ -556,6 +562,7 @@ namespace EchoProtocol.Networking
                         CaptureRelayACircuitState(RelaySlot.RelayA_2, relayDirector.RelayA2);
                     if (relayDirector.RelayB1 != null)
                     {
+                        TickRelayBSurgeAuthoritative(RelaySlot.RelayB_1,relayDirector.RelayB1);
                         var b1Sync = relayDirector.RelayB1.Snapshot;
                         RelayB1SyncProgress = b1Sync.SyncProgressSeconds;
                         RelayB1Decoder = RelayBDecodeTelemetry.From(b1Sync.Decoder);
@@ -564,6 +571,7 @@ namespace EchoProtocol.Networking
                     }
                     if (relayDirector.RelayB2 != null)
                     {
+                        TickRelayBSurgeAuthoritative(RelaySlot.RelayB_2,relayDirector.RelayB2);
                         var b2Sync = relayDirector.RelayB2.Snapshot;
                         RelayB2SyncProgress = b2Sync.SyncProgressSeconds;
                         RelayB2Decoder = RelayBDecodeTelemetry.From(b2Sync.Decoder);
@@ -1244,6 +1252,7 @@ namespace EchoProtocol.Networking
                 || !TryValidateRelayCommand(requester, slot, out var target)) return false;
             var controller = (RelayBController)target;
             if (controller.Simulation.IsSynchronizing && channel != controller.Snapshot.SelectedChannelIndex) return false;
+            if(controller.Surge.Phase!=RelayBSurgePhase.Contained || !controller.Snapshot.Decoder.IsComplete)return false;
             if (!ClaimRelayOperator(requester, slot)) return false;
             var before = controller.Snapshot;
             if (before.SelectedChannelIndex >= 0 && channel != before.SelectedChannelIndex) return false;
@@ -1287,6 +1296,7 @@ namespace EchoProtocol.Networking
 
         private bool TryRelayBActionAuthoritative(PlayerRef requester, RelaySlot slot, RelayBAction action)
         {
+            if(action==RelayBAction.Scan)return false;
             if (!IsRelayBSlot(slot) || !TryValidateRelayCommand(requester, slot, out var target)) return false;
             var controller = (RelayBController)target;
             if (action == RelayBAction.StartSync
@@ -2035,6 +2045,7 @@ namespace EchoProtocol.Networking
                 ? Mathf.Max(MinimumPowerTransferEscapeDurationSeconds, CurrentScenarioEscapeDoorTimerSeconds)
                 : CurrentScenarioEscapeDoorTimerSeconds;
             EscapeTimer = TickTimer.CreateFromSeconds(Runner, duration);
+            EscapeDurationSeconds = duration;
             HandleReplicatedStateChanged();
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchState,
@@ -2284,10 +2295,8 @@ namespace EchoProtocol.Networking
             {
                 ResetPlayerReviveBudgetsAuthoritative();
 
-                if (next != NetworkMatchPhase.Zone2Objective)
-                {
-                    TeleportGameplayPlayersAuthoritative(next);
-                }
+                // Normal zone progression opens the route; players keep their position.
+                // Debug skips explicitly teleport through their own entry points.
             }
 
             if (next != NetworkMatchPhase.Escape
@@ -2355,6 +2364,7 @@ namespace EchoProtocol.Networking
             LastActor = actor;
             FinalSurvivorCount = survivorCount;
             EscapeTimer = TickTimer.None;
+            EscapeDurationSeconds = 0f;
             MatchTimer = TickTimer.None;
             ReturnToLobbyTimer = TickTimer.CreateFromSeconds(
                 Runner,
@@ -2548,6 +2558,7 @@ namespace EchoProtocol.Networking
             RelayA2AttemptSeed = 0;
             RelayB1AttemptSeed = 0;
             RelayB2AttemptSeed = 0;
+            RelayB1Surge=default;RelayB2Surge=default;
             RelayB1PresetIndex = 0;
             RelayB2PresetIndex = 0;
             RelayB1Channel = -1;

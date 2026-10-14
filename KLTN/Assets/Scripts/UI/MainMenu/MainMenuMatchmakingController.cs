@@ -2,6 +2,7 @@ using EchoProtocol.Auth;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Networking;
 using EchoProtocol.Profile;
+using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -198,13 +199,13 @@ namespace EchoProtocol.UI.MainMenu
 
             if (bootstrap == null || lobbyManager == null)
             {
-                SetStatus("NETWORK SERVICES UNAVAILABLE");
+                ReportConnectionError("NETWORK SERVICES UNAVAILABLE");
                 return;
             }
 
             if (bootstrap.HasRunningRunner || bootstrap.IsBusy)
             {
-                SetStatus("NETWORK SESSION IS BUSY");
+                ReportConnectionError("NETWORK SESSION IS BUSY");
                 return;
             }
 
@@ -215,7 +216,7 @@ namespace EchoProtocol.UI.MainMenu
 
             if (roomCode.Length == 0)
             {
-                SetStatus("ROOM CODE REQUIRED");
+                ReportConnectionError("ROOM CODE REQUIRED");
                 return;
             }
 
@@ -224,7 +225,7 @@ namespace EchoProtocol.UI.MainMenu
 
             if (!lobbyManager.SetLocalOperatorName(operatorName))
             {
-                SetStatus("PLAYER NAME UNAVAILABLE");
+                ReportConnectionError("PLAYER NAME UNAVAILABLE");
                 return;
             }
 
@@ -237,6 +238,7 @@ namespace EchoProtocol.UI.MainMenu
                     : "JOINING ROOM...");
 
             bool success;
+            string failureDetail = null;
 
             try
             {
@@ -253,9 +255,10 @@ namespace EchoProtocol.UI.MainMenu
             {
                 Debug.LogException(exception);
                 success = false;
+                failureDetail = exception.Message;
 
                 if (this != null)
-                    SetStatus(exception.Message);
+                    SetStatus(NetworkLobbyUI.ConnectionFeedback(exception.Message));
             }
 
             if (this == null)
@@ -266,8 +269,8 @@ namespace EchoProtocol.UI.MainMenu
 
             if (!success)
             {
-                SetStatus(
-                    string.IsNullOrWhiteSpace(bootstrap.LastError)
+                ReportConnectionError(
+                    !string.IsNullOrWhiteSpace(failureDetail) ? failureDetail : bootstrap == null || string.IsNullOrWhiteSpace(bootstrap.LastError)
                         ? "CONNECTION FAILED"
                         : bootstrap.LastError);
 
@@ -314,10 +317,8 @@ namespace EchoProtocol.UI.MainMenu
             }
             else if (state == NetworkSessionState.Failed)
             {
-                SetStatus(
-                    string.IsNullOrWhiteSpace(message)
-                        ? "CONNECTION FAILED"
-                        : message);
+                string feedback = NetworkLobbyUI.ConnectionFeedback(message);
+                SetStatus(feedback.Split('\n')[0]);
             }
         }
 
@@ -337,7 +338,17 @@ namespace EchoProtocol.UI.MainMenu
         private void SetStatus(string value)
         {
             if (statusText != null)
-                statusText.text = value ?? string.Empty;
+                statusText.text = GameLanguage.Translate(value ?? string.Empty);
+        }
+
+        private void ReportConnectionError(string detail)
+        {
+            string message = NetworkLobbyUI.ConnectionFeedback(detail);
+            int split = message.IndexOf('\n');
+            SetStatus(split >= 0 ? message.Substring(0, split) : message);
+            GameUIFeedback.Instance.Confirm(split >= 0 ? message.Substring(0, split) : message,
+                () => { string current = NetworkLobbyUI.ConnectionFeedback(detail); int line = current.IndexOf('\n'); return line >= 0 ? current.Substring(line + 1) : current; },
+                Submit, GameLanguage.Choose("Thử lại", "Retry"));
         }
 
         private void RefreshInteractableState()

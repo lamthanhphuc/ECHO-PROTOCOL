@@ -89,6 +89,13 @@ public class PlayerDownState : MonoBehaviour
         _bleedoutRemaining = bleedoutSeconds;
     }
 
+    private static readonly System.Collections.Generic.HashSet<PlayerDownState> ActivePlayers = new();
+    public static System.Collections.Generic.IEnumerable<PlayerDownState> RegisteredPlayers => ActivePlayers;
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetRegistry() => ActivePlayers.Clear();
+    private void OnEnable() => ActivePlayers.Add(this);
+    private void OnDisable() => ActivePlayers.Remove(this);
+
     private void Update()
     {
         if (_networkAuthorityPresentationOnly) return;

@@ -8,6 +8,7 @@ namespace EchoProtocol.RelayB
     {
         private readonly List<string> _systemLog = new List<string>();
         public RelayBDecoder Decoder { get; } = new RelayBDecoder();
+        public RelayBSurgeSimulation Surge { get; } = new RelayBSurgeSimulation();
         private RelayBConfig _config;
         private int _presetIndex;
         private RelayBPreset _attemptPreset;
@@ -63,6 +64,13 @@ namespace EchoProtocol.RelayB
         public RelayBModuleType[] PipelineModules => _pipelineModules;
         public RelayBOutputDiagnostic OutputDiagnostic => _outputDiagnostic;
         public bool IsSignalFound => _hasScanned && _selectedChannelIndex >= 0;
+        public void CompleteSurge()
+        {
+            if (Surge.Phase != RelayBSurgePhase.Contained || _isOnline || IsSignalFound) return;
+            _hasScanned=true;_selectedChannelIndex=GetCurrentPreset()?.CorrectChannelIndex ?? 0;
+            _activeTab=1;_falseLockDetected=false;
+            AddSystemLog("SURGE CONTAINED - DECODER UNLOCKED");NotifyChanged();
+        }
         public bool IsSignalClean => IsSignalFound && Decoder.IsComplete;
         public int CleanProblems => _cleanProblems;
         public RelayBFilterMode FilterMode => _filterMode;
@@ -146,7 +154,8 @@ namespace EchoProtocol.RelayB
 
         public void ScanSpectrum()
         {
-            if (_isOnline || _hasScanned) return;
+            // The retired spectrum command must not bypass surge containment.
+            if (Surge.Phase != RelayBSurgePhase.Contained || _isOnline || _hasScanned) return;
             _isScanning = false;
             _hasScanned = true;
             AddSystemLog("SPECTRUM SCAN COMPLETE: CANDIDATES DETECTED");
@@ -155,6 +164,7 @@ namespace EchoProtocol.RelayB
 
         public void SelectChannel(int channelIndex)
         {
+            if(Surge.Phase!=RelayBSurgePhase.Contained)return;
             RelayBPreset preset = GetCurrentPreset();
             if (_isOnline || _isSyncing || _selectedChannelIndex >= 0 || !_hasScanned || preset == null || channelIndex < 0 || channelIndex >= preset.Candidates.Length) return;
             RelayBCandidate candidate = preset.GetCandidate(channelIndex);

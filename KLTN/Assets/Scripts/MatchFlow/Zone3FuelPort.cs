@@ -22,9 +22,9 @@ namespace EchoProtocol.MatchFlow
             }
         }
         public string InteractionPrompt => Convoy == null || !Convoy.IsFuelEmpty
-            ? "FUEL RESERVE NOT EMPTY"
-            : Progress01 > 0f ? $"INSERTING FUEL CELL {Mathf.RoundToInt(Progress01 * 100f)}%"
-            : "HOLD E - INSERT FUEL CELL";
+            ? EchoProtocol.Settings.GameLanguage.Choose("Chưa cần nạp nhiên liệu", "No refueling needed")
+            : Progress01 > 0f ? EchoProtocol.Settings.GameLanguage.Choose($"Nạp nhiên liệu · {Mathf.RoundToInt(Progress01 * 100f)}%", $"Refueling · {Mathf.RoundToInt(Progress01 * 100f)}%")
+            : EchoProtocol.Settings.GameLanguage.Choose("Nạp nhiên liệu", "Refuel");
         public bool IsInRange(Vector3 position) =>
             Vector3.Distance(position, GetComponent<Collider>().ClosestPoint(position)) <= interactionDistance;
         public bool CanInteract(GameObject player)

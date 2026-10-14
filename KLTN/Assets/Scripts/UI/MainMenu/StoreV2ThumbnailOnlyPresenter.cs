@@ -154,7 +154,7 @@ namespace EchoProtocol.UI.MainMenu
                     ? _petController.SelectedSkinId
                     : 0;
 
-            for (int skinId = 0;
+            for (int skinId = 1;
                  skinId < 4;
                  skinId++)
             {
@@ -271,6 +271,7 @@ namespace EchoProtocol.UI.MainMenu
         {
             yield return null;
             yield return null;
+            if(StoreReferencePresentation.IsAwaitingSelection(transform)){_teamPreviewRoutine=null;yield break;}
 
             RectTransform grid =
                 transform.Find(
@@ -283,26 +284,10 @@ namespace EchoProtocol.UI.MainMenu
                 yield break;
             }
 
-            for (int i = 0;
-                 i < grid.childCount;
-                 i++)
-            {
-                Button button =
-                    grid.GetChild(i)
-                        .GetComponent<Button>();
-
-                if (button == null
-                    || !button.interactable)
-                {
-                    continue;
-                }
-
+            if (!grid.gameObject.activeInHierarchy) { _teamPreviewRoutine=null; yield break; }
+            foreach (var button in grid.GetComponentsInChildren<Button>(false)) {
+                if(!button.interactable)continue;
                 button.onClick.Invoke();
-
-                Debug.Log(
-                    "[StoreV2] Team Tool preview resynchronized.",
-                    this);
-
                 break;
             }
 

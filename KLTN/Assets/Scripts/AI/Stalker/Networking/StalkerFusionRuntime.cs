@@ -190,6 +190,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private void Awake()
         {
+            EchoProtocol.Audio.GameAudioRuntime.RegisterEnvironmentOwner(this);
             if (acousticBlockerMask.value == 0)
             {
                 // Debug.LogWarning(

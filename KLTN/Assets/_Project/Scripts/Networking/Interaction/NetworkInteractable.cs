@@ -16,6 +16,75 @@ namespace EchoProtocol.Networking
         [SerializeField] private Transform _runtimeInteractionNoiseOrigin;
 
         [Networked] private TickTimer Cooldown { get; set; }
+        [Networked] public NetworkId MonsterToolCarrierId { get; private set; }
+        [Networked] private NetworkBool HasMonsterDropPose { get; set; }
+        [Networked] private Vector3 MonsterDropPosition { get; set; }
+        [Networked] private Quaternion MonsterDropRotation { get; set; }
+        private Collider[] _carryColliders;
+        private bool[] _carryColliderStates;
+        private bool _carryPresentationActive;
+
+        public void BeginMonsterCarryAuthoritative(NetworkId monsterId)
+        {
+            if (!Object.HasStateAuthority || !monsterId.IsValid) return;
+            MonsterToolCarrierId = monsterId;
+            HasMonsterDropPose = false;
+            ApplyMonsterCarryPresentation();
+        }
+
+        public void EndMonsterCarryAuthoritative(Vector3 position)
+        {
+            if (!Object.HasStateAuthority) return;
+            MonsterDropPosition = position;
+            MonsterDropRotation = Quaternion.identity;
+            HasMonsterDropPose = true;
+            MonsterToolCarrierId = default;
+            ApplyMonsterCarryPresentation();
+        }
+
+        public override void Render() => ApplyMonsterCarryPresentation();
+        private void LateUpdate()
+        {
+            if (Object != null && Object.IsValid) ApplyMonsterCarryPresentation();
+        }
+
+        private void ApplyMonsterCarryPresentation()
+        {
+            bool held = MonsterToolCarrierId.IsValid;
+            if (held != _carryPresentationActive)
+            {
+                if (held)
+                {
+                    _carryColliders = GetComponentsInChildren<Collider>(true);
+                    _carryColliderStates = new bool[_carryColliders.Length];
+                    for (int i = 0; i < _carryColliders.Length; i++)
+                    {
+                        _carryColliderStates[i] = _carryColliders[i].enabled;
+                        _carryColliders[i].enabled = false;
+                    }
+                }
+                else if (_carryColliders != null)
+                    for (int i = 0; i < _carryColliders.Length; i++)
+                        if (_carryColliders[i] != null) _carryColliders[i].enabled = _carryColliderStates[i];
+                _carryPresentationActive = held;
+            }
+            var outline = GetComponent<QuickOutline.Outline>();
+            if (outline != null && held) outline.enabled = false;
+            if (!held && HasMonsterDropPose)
+            {
+                if (outline != null) outline.enabled = true;
+                transform.SetPositionAndRotation(MonsterDropPosition, MonsterDropRotation);
+                return;
+            }
+            if (!held) return;
+            // Resolve again in LateUpdate so the held model follows the animated hand on every peer.
+            if (Runner.TryFindObject(MonsterToolCarrierId, out var carrier)
+                && carrier.TryGetComponent<EchoProtocol.AI.Minions.CreepMinionRuntime>(out var holder))
+            {
+                holder.GetToolCarryPose(out var carryPosition, out var carryRotation);
+                transform.SetPositionAndRotation(carryPosition, carryRotation);
+            }
+        }
 
         public float InteractionDistance => _interactionDistance;
         public virtual string InteractionPrompt => _interactionPrompt;
@@ -31,6 +100,7 @@ namespace EchoProtocol.Networking
         public InteractionValidationResult ValidateInteraction(in InteractionContext context)
         {
             if (!Object.HasStateAuthority) return InteractionValidationResult.InvalidTarget;
+            if (MonsterToolCarrierId.IsValid) return InteractionValidationResult.InvalidTargetState;
 
             var requesterPosition = context.Requester.transform.position;
             var targetPosition = GetClosestInteractionPoint(requesterPosition);

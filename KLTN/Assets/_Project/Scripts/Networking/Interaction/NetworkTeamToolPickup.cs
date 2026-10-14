@@ -109,6 +109,17 @@ namespace EchoProtocol.Networking
 
             foreach (var c in GetComponentsInChildren<Collider>(true))
             {
+                if (_toolId == LobbyPlayerState.CoreStabilizerToolId)
+                {
+                    // Keep pickup queries working without blocking player movement.
+                    if (c is MeshCollider mesh && !mesh.convex)
+                    {
+                        c.enabled = false;
+                        continue;
+                    }
+
+                    c.isTrigger = true;
+                }
                 c.enabled = active;
             }
 

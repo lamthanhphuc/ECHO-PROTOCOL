@@ -92,6 +92,8 @@ namespace EchoProtocol.UI.MainMenu
         // STORE_V2_CHARACTER_OUTFIT_SELECTION_API
         // The Character controller owns Store outfit selection state.
         // The visible outfit strip only sends a requested outfit id.
+        public bool IsBuyingSkin => _purchaseTarget == PurchaseTarget.Outfit;
+
         public int SelectedCharacterId =>
             _selectedCharacterId;
 
@@ -597,8 +599,7 @@ namespace EchoProtocol.UI.MainMenu
             _purchaseTarget =
                 PurchaseTarget.Character;
 
-            _selectedName.text =
-                definition.Name;
+            StoreReferencePresentation.SetName(_selectedName, definition.Name);
 
             _selectedDescription.text =
                 !string.IsNullOrWhiteSpace(
@@ -609,7 +610,7 @@ namespace EchoProtocol.UI.MainMenu
             if (definition.DefaultOwned)
             {
                 _selectedPrice.text =
-                    "DEFAULT";
+                    string.Empty;
             }
             else if (item != null)
             {
@@ -620,6 +621,10 @@ namespace EchoProtocol.UI.MainMenu
             {
                 _selectedPrice.text =
                     "-- CR";
+            }
+
+            if(StoreReferencePresentation.IsAwaitingSelection(transform)) {
+                _preview.texture=null;_preview.color=Color.clear;SetBuyState();return;
             }
 
             var fallbackTexture =
@@ -684,8 +689,7 @@ namespace EchoProtocol.UI.MainMenu
                 _selectedOutfitItem =
                     null;
 
-                _selectedName.text =
-                    character.Name + " // OUTFIT";
+                StoreReferencePresentation.SetName(_selectedName, character.Name + " // OUTFIT");
 
                 _selectedDescription.text =
                     "Character outfit unavailable.";
@@ -703,10 +707,9 @@ namespace EchoProtocol.UI.MainMenu
                         _outfitCatalog,
                         outfit.ItemId);
 
-            _selectedName.text =
-                character.Name
+            StoreReferencePresentation.SetName(_selectedName, character.Name
                 + " // "
-                + outfit.Name;
+                + outfit.Name);
 
             _selectedDescription.text =
                 outfit.DefaultOwned
@@ -732,7 +735,7 @@ namespace EchoProtocol.UI.MainMenu
                 _buyButton.interactable = false;
 
                 if (caption != null)
-                    caption.text = "UNAVAILABLE";
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Chưa khả dụng", "Unavailable");
 
                 return;
             }
@@ -748,7 +751,7 @@ namespace EchoProtocol.UI.MainMenu
                     _buyButton.interactable = false;
 
                     if (caption != null)
-                        caption.text = "UNAVAILABLE";
+                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Chưa khả dụng", "Unavailable");
 
                     return;
                 }
@@ -758,7 +761,7 @@ namespace EchoProtocol.UI.MainMenu
                 {
                     if (outfit.DefaultOwned)
                     {
-                        _selectedPrice.text = "DEFAULT";
+                        _selectedPrice.text = string.Empty;
                     }
                     else
                     {
@@ -774,18 +777,18 @@ namespace EchoProtocol.UI.MainMenu
                     _buyButton.interactable = false;
 
                     if (caption != null)
-                        caption.text = "REQUIRES CHARACTER";
+                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Cần sở hữu nhân vật", "Requires character");
 
                     return;
                 }
 
                 if (outfit.DefaultOwned)
                 {
-                    _selectedPrice.text = "DEFAULT";
+                    _selectedPrice.text = string.Empty;
                     _buyButton.interactable = false;
 
                     if (caption != null)
-                        caption.text = "DEFAULT";
+                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mặc định", "Default");
 
                     return;
                 }
@@ -794,11 +797,11 @@ namespace EchoProtocol.UI.MainMenu
                         _selectedCharacterId,
                         _selectedOutfitId))
                 {
-                    _selectedPrice.text = "OWNED";
+                    _selectedPrice.text = string.Empty;
                     _buyButton.interactable = false;
 
                     if (caption != null)
-                        caption.text = "OWNED";
+                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Đã sở hữu", "Owned");
 
                     return;
                 }
@@ -816,7 +819,7 @@ namespace EchoProtocol.UI.MainMenu
                     _buyButton.interactable = true;
 
                     if (caption != null)
-                        caption.text = "BUY";
+                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
 
                     return;
                 }
@@ -826,7 +829,7 @@ namespace EchoProtocol.UI.MainMenu
                     _buyButton.interactable = false;
 
                     if (caption != null)
-                        caption.text = "UNAVAILABLE";
+                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Chưa khả dụng", "Unavailable");
 
                     return;
                 }
@@ -838,8 +841,8 @@ namespace EchoProtocol.UI.MainMenu
                 {
                     caption.text =
                         _purchasing
-                            ? "PURCHASING..."
-                            : "BUY";
+                            ? EchoProtocol.Settings.GameLanguage.Choose("Đang mua…", "Purchasing…")
+                            : EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
                 }
 
                 return;
@@ -851,22 +854,22 @@ namespace EchoProtocol.UI.MainMenu
 
             if (_selectedDefinition.DefaultOwned)
             {
-                _selectedPrice.text = "DEFAULT";
+                _selectedPrice.text = string.Empty;
                 _buyButton.interactable = false;
 
                 if (caption != null)
-                    caption.text = "DEFAULT";
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mặc định", "Default");
 
                 return;
             }
 
             if (owned)
             {
-                _selectedPrice.text = "OWNED";
+                _selectedPrice.text = string.Empty;
                 _buyButton.interactable = false;
 
                 if (caption != null)
-                    caption.text = "OWNED";
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Đã sở hữu", "Owned");
 
                 return;
             }
@@ -887,7 +890,7 @@ namespace EchoProtocol.UI.MainMenu
                 _buyButton.interactable = true;
 
                 if (caption != null)
-                    caption.text = "BUY";
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
 
                 return;
             }
@@ -897,7 +900,7 @@ namespace EchoProtocol.UI.MainMenu
                 _buyButton.interactable = false;
 
                 if (caption != null)
-                    caption.text = "UNAVAILABLE";
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Chưa khả dụng", "Unavailable");
 
                 return;
             }
@@ -909,8 +912,8 @@ namespace EchoProtocol.UI.MainMenu
             {
                 caption.text =
                     _purchasing
-                        ? "PURCHASING..."
-                        : "BUY";
+                        ? EchoProtocol.Settings.GameLanguage.Choose("Đang mua…", "Purchasing…")
+                        : EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
             }
         }
 
@@ -1221,6 +1224,8 @@ namespace EchoProtocol.UI.MainMenu
         private static void ClearChildren(
             Transform parent)
         {
+            if (StoreReferencePresentation.ClearCatalog(parent))return;
+
             for (int i =
                      parent.childCount - 1;
                  i >= 0;

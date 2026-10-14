@@ -39,7 +39,7 @@ namespace EchoProtocol.MatchFlow
             }
         }
         public bool IsCarried => Online ? Holder.IsRealPlayer : _offlineCarrier != null;
-        public string InteractionPrompt => "E - PICK UP CONVOY FUEL CELL";
+        public string InteractionPrompt => EchoProtocol.Settings.GameLanguage.Choose("Nhặt pin nhiên liệu", "Pick up fuel cell");
 
         private Vector3 _originalVisualScale;
         private void Awake()

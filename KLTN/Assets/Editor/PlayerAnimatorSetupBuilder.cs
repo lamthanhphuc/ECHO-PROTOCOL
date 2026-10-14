@@ -82,11 +82,13 @@ public static class PlayerAnimatorSetupBuilder
         EnsureHumanoidAnimationImport(PushFbxPath, loop: true);
 
         AnimationClip idle = LoadRequiredClip("Player_Idle", IdleFbxPath, "Idle");
-        AnimationClip walkForward = LoadRequiredClip("Player_Walk_Forward", WalkForwardFbxPath, "Walking");
+        AnimationClip walkForward = AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/Resources/Characters/a_Walking_Jammo_Humanoid.anim");
+        if (walkForward == null) throw new System.InvalidOperationException("Shared Jammo walk clip is missing. Build Jammo Character first.");
         AnimationClip walkBackward = LoadRequiredClip("Player_Walk_Backward", WalkBackwardFbxPath);
         AnimationClip walkLeft = LoadRequiredClip("Player_Walk_Left", WalkLeftFbxPath, "Left Strafe Walk");
         AnimationClip walkRight = LoadRequiredClip("Player_Walk_Right", WalkRightFbxPath, "Right Strafe Walk");
-        AnimationClip runForward = LoadRequiredClip("Player_Run_Forward", RunForwardFbxPath, "Fast Run");
+        AnimationClip runForward = AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/Resources/Characters/a_Running_Jammo_Humanoid.anim");
+        if (runForward == null) throw new System.InvalidOperationException("Shared Jammo run clip is missing. Build Jammo Character first.");
         AnimationClip crouchIdle = LoadRequiredClip("Player_Crouch_Idle", CrouchIdleFbxPath, "Crouch Idle");
         AnimationClip crouchWalkForward = LoadRequiredClip("Player_Crouch_Walk_Forward", CrouchWalkForwardFbxPath, "Crouch Walk Forward");
         AnimationClip crouchWalkBackward = LoadRequiredClip("Player_Crouch_Walk_Backward", CrouchWalkBackwardFbxPath, "Crouch Walk Back");
@@ -100,6 +102,8 @@ public static class PlayerAnimatorSetupBuilder
         AnimationClip revive = LoadRequiredClip("Player_Revive", ReviveFbxPath, "Reviving");
         AnimationClip pushing = LoadRequiredClip("Player_Pushing", PushFbxPath, "Pushing");
 
+        walkForward = AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/Resources/Characters/a_Walking_Jammo_Humanoid.anim") ?? walkForward;
+        runForward = AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/Resources/Characters/a_Running_Jammo_Humanoid.anim") ?? runForward;
         PlayerClips clips = new PlayerClips
         {
             Idle = idle,
@@ -143,9 +147,17 @@ public static class PlayerAnimatorSetupBuilder
     {
         ClearEditorSelection();
 
-        if (AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath) != null)
+        var existing = AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath);
+        if (existing != null)
         {
-            AssetDatabase.DeleteAsset(ControllerPath);
+            // Preserve the controller GUID used by prefabs and the Jammo override.
+            existing.layers = System.Array.Empty<AnimatorControllerLayer>();
+            existing.parameters = System.Array.Empty<AnimatorControllerParameter>();
+            foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(ControllerPath))
+                if (asset != null && asset != existing) Object.DestroyImmediate(asset, true);
+            existing.AddLayer("Base Layer");
+            EditorUtility.SetDirty(existing);
+            return existing;
         }
 
         return AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
@@ -174,7 +186,7 @@ public static class PlayerAnimatorSetupBuilder
 
         AnimatorStateMachine stateMachine = controller.layers[0].stateMachine;
         AnimatorState locomotion = AddState(stateMachine, "Locomotion", CreateLocomotionTree(controller, clips), new Vector3(260f, 80f, 0f));
-        AnimatorState runForward = AddState(stateMachine, "Run Forward", clips.RunForward, new Vector3(260f, -90f, 0f));
+        AnimatorState runForward = AddState(stateMachine, "Run Forward", CreateRunTree(controller, clips), new Vector3(260f, -90f, 0f));
         AnimatorState crouch = AddState(stateMachine, "Crouch Locomotion", CreateCrouchTree(controller, clips), new Vector3(560f, 80f, 0f));
         AnimatorState carry = AddState(stateMachine, "Carry Locomotion", CreateCarryTree(controller, clips), new Vector3(260f, 260f, 0f));
         AnimatorState downed = AddState(stateMachine, "Downed Crawl", CreateDownedTree(controller, clips), new Vector3(560f, 260f, 0f));
@@ -213,9 +225,20 @@ public static class PlayerAnimatorSetupBuilder
         BlendTree tree = CreateDirectionalTree(controller, "BT_Locomotion");
         AddChild(tree, clips.Idle, Vector2.zero);
         AddChild(tree, clips.WalkForward, new Vector2(0f, 1f));
-        AddChild(tree, clips.WalkBackward, new Vector2(0f, -1f));
+        AddChild(tree, clips.WalkForward, new Vector2(0f, -1f), timeScale: -1f);
         AddChild(tree, clips.WalkLeft, new Vector2(-1f, 0f));
         AddChild(tree, clips.WalkRight, new Vector2(1f, 0f));
+        return tree;
+    }
+
+    private static Motion CreateRunTree(AnimatorController controller, PlayerClips clips)
+    {
+        var tree = CreateDirectionalTree(controller, "BT_RunDirectional");
+        AddChild(tree, clips.Idle, Vector2.zero);
+        AddChild(tree, clips.RunForward, Vector2.up);
+        AddChild(tree, clips.WalkForward, Vector2.down, timeScale: -1f);
+        AddChild(tree, clips.WalkLeft, Vector2.left);
+        AddChild(tree, clips.WalkRight, Vector2.right);
         return tree;
     }
 
@@ -235,9 +258,9 @@ public static class PlayerAnimatorSetupBuilder
         BlendTree tree = CreateDirectionalTree(controller, "BT_CarryLocomotion");
         AddChild(tree, clips.CarryIdle, Vector2.zero);
         AddChild(tree, clips.CarryWalk, new Vector2(0f, 1f));
-        AddChild(tree, clips.CarryWalk, new Vector2(0f, -1f));
+        AddChild(tree, clips.CarryWalk, new Vector2(0f, -1f), timeScale: -1f);
         AddChild(tree, clips.CarryWalk, new Vector2(-1f, 0f));
-        AddChild(tree, clips.CarryWalk, new Vector2(1f, 0f), mirror: true);
+        AddChild(tree, clips.CarryWalk, new Vector2(1f, 0f));
         AddChild(tree, clips.CarryRun, new Vector2(0f, 2f));
         return tree;
     }
@@ -250,12 +273,13 @@ public static class PlayerAnimatorSetupBuilder
         return tree;
     }
 
-    private static void AddChild(BlendTree tree, Motion motion, Vector2 position, bool mirror = false)
+    private static void AddChild(BlendTree tree, Motion motion, Vector2 position, bool mirror = false, float timeScale = 1f)
     {
         tree.AddChild(motion, position);
         ChildMotion[] children = tree.children;
         ChildMotion child = children[children.Length - 1];
         child.mirror = mirror;
+        child.timeScale = timeScale;
         children[children.Length - 1] = child;
         tree.children = children;
     }
@@ -426,8 +450,6 @@ public static class PlayerAnimatorSetupBuilder
             SetObject(aimSo, "animator", animator);
             SetObject(aimSo, "playerRoot", prefabRoot.transform);
 
-            SetFloat(aimSo, "sprintFootHalfSpacing", 0.09f);
-            SetFloat(aimSo, "sprintLegCorrectionWeight", 0.85f);
             SetFloat(aimSo, "sprintKneePoleForwardOffset", 0.45f);
             SetFloat(aimSo, "sprintKneePoleSideOffset", 0.12f);
 

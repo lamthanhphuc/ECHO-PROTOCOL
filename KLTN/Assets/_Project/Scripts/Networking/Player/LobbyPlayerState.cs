@@ -283,6 +283,26 @@ namespace EchoProtocol.Networking
                 ? MultiUseTeamToolUses
                 : 0;
 
+        [Networked] public Vector2 LobbyLookAngles { get; private set; }
+        public void RequestLobbyLook(Vector2 angles)
+        {
+            if(Object==null || !Object.IsValid || !Object.HasInputAuthority || IsGameplayPlayer)return;
+            if(Object.HasStateAuthority) ApplyLobbyLook(angles);
+            else RpcLobbyLook(angles);
+        }
+        private void ApplyLobbyLook(Vector2 angles)
+        {
+            if(IsGameplayPlayer || float.IsNaN(angles.x) || float.IsNaN(angles.y)
+                || float.IsInfinity(angles.x) || float.IsInfinity(angles.y))return;
+            LobbyLookAngles=new Vector2(Mathf.Clamp(angles.x,-28f,28f),Mathf.Clamp(angles.y,-16f,16f));
+        }
+        [Rpc(RpcSources.InputAuthority,RpcTargets.StateAuthority)]
+        private void RpcLobbyLook(Vector2 angles,RpcInfo info=default)
+        {
+            if(!TryResolveOwnedRequester(info.Source,out _))return;
+            ApplyLobbyLook(angles);
+        }
+
         public override void Spawned()
         {
             _pet = GetComponent<PetCompanionController>();
@@ -605,7 +625,9 @@ namespace EchoProtocol.Networking
         public bool GetPetRenderPose(out Vector3 position, out Quaternion rotation, out PetMotion motion, out float startTime, out float renderTime)
         {
             position=PetPosition; rotation=PetRotation; motion=PetMotion; startTime=PetAnimationStartTime;
-            renderTime=(float)Runner.SimulationTime;
+            // Snapshot endpoints can remain unchanged for stationary lobby pets.
+            // Fusion's render clock keeps advancing between network updates.
+            renderTime=Object.HasStateAuthority ? Runner.LocalRenderTime : Runner.RemoteRenderTime;
             if (!TryGetSnapshotsBuffers(out var from, out var to, out var alpha)) return false;
             var ids=GetPropertyReader<int>(nameof(PetId));
             if(ids.Read(from)!=PetId || ids.Read(to)!=PetId) return false;
@@ -618,7 +640,6 @@ namespace EchoProtocol.Networking
             position=teleport ? last : Vector3.Lerp(first,last,alpha);
             rotation=Quaternion.Slerp(rotations.Read(from),rotations.Read(to),alpha);
             motion=motions.Read(teleport ? to : from); startTime=starts.Read(teleport ? to : from);
-            renderTime=((int)from.Tick+((int)to.Tick-(int)from.Tick)*alpha)*Runner.DeltaTime;
             return true;
         }
         private PetCompanionController _pet;

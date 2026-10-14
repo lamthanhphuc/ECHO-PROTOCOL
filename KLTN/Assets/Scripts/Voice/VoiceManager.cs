@@ -38,6 +38,8 @@ namespace EchoProtocol.Voice
         private int _attempts;
         private bool _connecting, _joinRequested, _focused = true, _paused;
         private bool _pushToTalkHeld;
+        private bool _outageNotified;
+        public float RetryInSeconds => Joined || _connecting ? 0f : Mathf.Max(0f,_nextAttempt-Time.unscaledTime);
 
         public static void EnsureExists()
         {
@@ -52,7 +54,6 @@ namespace EchoProtocol.Voice
             _focused = Application.isFocused;
             DontDestroyOnLoad(gameObject);
             Devices = gameObject.AddComponent<VoiceDeviceController>();
-            Devices.DeviceChanged += StopCapture;
             Devices.DeviceChanged += StopCapture;
             _recorder = gameObject.AddComponent<Recorder>();
             _recorder.RecordingEnabled = false;
@@ -71,7 +72,6 @@ namespace EchoProtocol.Voice
                 var groups = mixer.FindMatchingGroups("Master");
                 if (groups.Length > 0) _outputMixer = groups[0];
             }
-            MicrophoneEnabled = PlayerPrefs.GetInt("Echo.Voice.Enabled", 1) != 0;
             MicrophoneEnabled = PlayerPrefs.GetInt("Echo.Voice.Enabled", 1) != 0;
             SelfMuted = PlayerPrefs.GetInt("Echo.Voice.Muted", 0) != 0;
             PushToTalk = PlayerPrefs.GetInt("Echo.Voice.PushToTalk", 0) != 0;
@@ -115,13 +115,18 @@ namespace EchoProtocol.Voice
                 ResetConnection();
                 _muted.Clear();
                 _runner = runner; _room = room; _region = region; _localKey = key;
-                _attempts = 0; _nextAttempt = 0;
+                _attempts = 0; _nextAttempt = 0; _outageNotified=false;
             }
             if (!valid) { Status = "Waiting for a Fusion session and local player"; UpdateCapture(false); return; }
             if (Joined)
             {
                 if (_connecting) { _connecting = false; _attempts = 0; }
                 Status = "Voice connected";
+                if (_outageNotified) {
+                    _outageNotified=false;
+                    EchoProtocol.UI.GameUIFeedback.Instance.Toast(GameLanguage.Choose(
+                        "Đã kết nối lại thoại", "Voice reconnected"));
+                }
             }
             else if (_connecting)
             {
@@ -138,7 +143,7 @@ namespace EchoProtocol.Voice
             }
             else if (_client.ClientState == ClientState.Disconnected || _client.ClientState == ClientState.PeerCreated)
             {
-                if (_attempts < 3 && Time.unscaledTime >= _nextAttempt) Connect();
+                if (Time.unscaledTime >= _nextAttempt) Connect();
             }
             else if (!Joined && _client.ClientState != ClientState.Disconnecting)
             {
@@ -155,14 +160,14 @@ namespace EchoProtocol.Voice
                 || fusionSettings == null)
             {
                 Status = "Photon settings are unavailable.";
-                _attempts = 3;
+                ScheduleRetry();
                 return;
             }
             fusionSettings.AppSettings.CopyTo(settings);
             if (!Guid.TryParse(settings.AppIdVoice, out _))
             {
                 Status = "Voice App ID is missing. Configure AppIdVoice in Fusion PhotonAppSettings.";
-                _attempts = 3;
+                ScheduleRetry();
                 return;
             }
             if (string.IsNullOrEmpty(_region))
@@ -174,10 +179,10 @@ namespace EchoProtocol.Voice
             settings.FixedRegion = _region;
             settings.AppVersion = "EchoProtocol.Voice.1";
             _recorder.UserData = _localKey;
-            _attempts++;
+            _attempts=Mathf.Min(_attempts+1,5);
             _connecting = true; _joinRequested = false;
             _deadline = Time.unscaledTime + 20;
-            Status = "Connecting voice (attempt " + _attempts + "/3)";
+            Status = _attempts <= 3 ? "Connecting voice (attempt " + _attempts + "/3)" : "Reconnecting voice...";
             if (!_client.ConnectUsingSettings(settings)) FailAttempt();
         }
 
@@ -187,8 +192,20 @@ namespace EchoProtocol.Voice
             _connecting = false; _joinRequested = false;
             _client.Client.Disconnect();
             ClearSpeakers();
-            _nextAttempt = Time.unscaledTime + Mathf.Pow(2, _attempts);
-            Status = _attempts >= 3 ? "Voice connection failed. Retry when ready." : "Voice disconnected; retrying...";
+            ScheduleRetry();
+            Status = "Voice disconnected; retrying...";
+        }
+
+        private void ScheduleRetry()
+        {
+            // Missing service configuration also backs off instead of retrying every frame.
+            if (_attempts==0) _attempts=3;
+            _nextAttempt=Time.unscaledTime+VoiceRetryPolicy.DelaySeconds(_attempts);
+            if (!_outageNotified) {
+                _outageNotified=true;
+                EchoProtocol.UI.GameUIFeedback.Instance.Toast(GameLanguage.Choose(
+                    "Thoại mất kết nối · Đang tự kết nối lại", "Voice disconnected · Reconnecting automatically"));
+            }
         }
 
         private void UpdateCapture(bool connected)

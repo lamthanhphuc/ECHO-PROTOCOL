@@ -19,7 +19,12 @@ namespace EchoProtocol.UI.MainMenu
         [SerializeField]
         [Range(0.5f, 8f)]
         private float rimIntensity = 2.1f;
-[SerializeField]
+
+        [SerializeField]
+        [Range(0f, 6f)]
+        private float frontFillIntensity = 2.0f;
+
+        [SerializeField]
         private Color previewBackground =
             new Color(
                 0.025f,
@@ -29,7 +34,11 @@ namespace EchoProtocol.UI.MainMenu
 
         private const string RigName =
             "[Store Live Preview Rig]";
-private GameObject _rig;
+
+        private const string FrontFillName =
+            "Store Front Fill";
+
+        private GameObject _rig;
 
         private float _nextApply;
 
@@ -64,8 +73,8 @@ private GameObject _rig;
 
             if (camera != null)
             {
-                camera.backgroundColor =
-                    previewBackground;
+                // Keep the model composited over the Store background.
+                camera.backgroundColor = new Color(previewBackground.r,previewBackground.g,previewBackground.b,0f);
 
                 camera.allowHDR = true;
                 camera.allowMSAA = true;
@@ -132,7 +141,18 @@ private GameObject _rig;
                         LightShadows.None;
                 }
             }
-Renderer[] renderers =
+
+            Light front =
+                ResolveFrontFill(
+                    camera);
+
+            if (front != null)
+            {
+                front.intensity =
+                    frontFillIntensity;
+            }
+
+            Renderer[] renderers =
                 _rig.GetComponentsInChildren<
                     Renderer>(
                     true);
@@ -171,6 +191,61 @@ Renderer[] renderers =
                     return;
                 }
             }
+        }
+
+        private Light ResolveFrontFill(
+            Camera camera)
+        {
+            Transform existing =
+                FindRecursive(
+                    _rig.transform,
+                    FrontFillName);
+
+            Light light =
+                existing != null
+                    ? existing.GetComponent<Light>()
+                    : null;
+
+            if (light == null)
+            {
+                GameObject owner =
+                    new GameObject(
+                        FrontFillName,
+                        typeof(Light));
+
+                owner.hideFlags =
+                    HideFlags.DontSave;
+
+                owner.transform.SetParent(
+                    _rig.transform,
+                    false);
+
+                owner.transform.localRotation =
+                    Quaternion.Euler(
+                        10f,
+                        180f,
+                        0f);
+
+                light =
+                    owner.GetComponent<Light>();
+
+                light.type =
+                    LightType.Directional;
+
+                light.color =
+                    Color.white;
+
+                light.shadows =
+                    LightShadows.None;
+            }
+
+            if (camera != null)
+                light.cullingMask = camera.cullingMask;
+
+            FixRenderingLayer(
+                light);
+
+            return light;
         }
 
         private static Transform FindRecursive(
@@ -225,7 +300,7 @@ Renderer[] renderers =
                 {
                     property.SetValue(
                         component,
-                        1u << 30);
+                        1u);
                 }
                 else if (
                     property.PropertyType
@@ -233,7 +308,7 @@ Renderer[] renderers =
                 {
                     property.SetValue(
                         component,
-                        1 << 30);
+                        1);
                 }
             }
             catch

@@ -30,6 +30,7 @@ public sealed class NoiseMakerBeacon : MonoBehaviour
 
     private void Awake()
     {
+            EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
         _networkObject = GetComponent<NetworkObject>();
 
         if (warningLight == null)

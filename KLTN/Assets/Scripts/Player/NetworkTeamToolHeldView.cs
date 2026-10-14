@@ -165,6 +165,8 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             }
 
             DisableToolShadows(_visual);
+            foreach (var outline in _visual.GetComponentsInChildren<QuickOutline.Outline>(true))
+                outline.enabled = false;
             _visual.name = "Held_TeamTool_" + _shownToolId;
             _visual.transform.localPosition = ResolveToolPosition(_shownToolId);
             _visual.transform.localRotation = Quaternion.Euler(ResolveToolEulerAngles(_shownToolId));
@@ -401,6 +403,11 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             return;
         }
 
+        foreach (var outline in root.GetComponentsInChildren<QuickOutline.Outline>(true))
+            outline.enabled = false;
+        foreach (var highlight in root.GetComponentsInChildren<EchoProtocol.Visuals.ObjectiveGlowHighlight>(true))
+            highlight.enabled = false;
+
         Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
 
         for (int i = 0; i < renderers.Length; i++)
@@ -410,6 +417,11 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             {
                 continue;
             }
+            // A visual-only clone has no Outline component, but may have copied its
+            // appended materials from an already highlighted world pickup.
+            renderer.sharedMaterials = System.Array.FindAll(renderer.sharedMaterials,
+                material => material == null || (!material.name.StartsWith("OutlineMask")
+                    && !material.name.StartsWith("OutlineFill")));
 
             HeldVisualShadowOverride.SetActive(renderer, true);
         }

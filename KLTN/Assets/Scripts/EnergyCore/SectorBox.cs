@@ -4,8 +4,8 @@ using UnityEngine;
 public class SectorBox : MonoBehaviour, IInteractable
 {
     [SerializeField] private EnergyCoreObjectiveProgress objectiveProgress;
-    [SerializeField] private string placePrompt = "Nạp Energy Core vào Sector Box";
-    [SerializeField] private string completePrompt = "Đã nạp đủ Energy Core";
+    [SerializeField] private string placePrompt = "Nạp lõi năng lượng vào trạm cấp điện";
+    [SerializeField] private string completePrompt = "Đã nạp đủ lõi năng lượng";
 
     [Header("Core Visual Sockets")]
     [SerializeField] private GameObject[] _coreVisuals = System.Array.Empty<GameObject>();
@@ -25,10 +25,10 @@ public class SectorBox : MonoBehaviour, IInteractable
         {
             if (objectiveProgress != null && objectiveProgress.IsComplete)
             {
-                return string.IsNullOrWhiteSpace(completePrompt) || completePrompt == "Sector Box complete" ? "Đã nạp đủ Energy Core" : completePrompt;
+                return string.IsNullOrWhiteSpace(completePrompt) || completePrompt == "Sector Box complete" ? "Đã nạp đủ lõi năng lượng" : completePrompt;
             }
 
-            return string.IsNullOrWhiteSpace(placePrompt) || placePrompt == "Place Energy Core" ? "Nạp Energy Core vào Sector Box" : placePrompt;
+            return string.IsNullOrWhiteSpace(placePrompt) || placePrompt == "Place Energy Core" ? "Nạp lõi năng lượng vào trạm cấp điện" : placePrompt;
         }
     }
 

@@ -25,7 +25,7 @@ namespace EchoProtocol.Networking.Authority
     /// Bridges the authenticated backend identity to Fusion's Host authority.
     /// Proofs stay off replicated state; only the verified backend user id is replicated.
     /// </summary>
-    public sealed class MatchAuthorityRuntime : MonoBehaviour,
+    public sealed partial class MatchAuthorityRuntime : MonoBehaviour,
         IUnityTelemetryAuthorityProvider,
         IUnityTelemetryProvenanceProvider
     {
@@ -137,6 +137,7 @@ namespace EchoProtocol.Networking.Authority
             }
 
             _instance = this;
+            LoadResultOutbox();
             DontDestroyOnLoad(gameObject);
         }
 
@@ -171,6 +172,7 @@ namespace EchoProtocol.Networking.Authority
 
         private async void Update()
         {
+            TickResultOutbox();
             var matchState = NetworkMatchState.Instance;
             if (HasBinding
                 && matchState != null
@@ -361,6 +363,12 @@ namespace EchoProtocol.Networking.Authority
 
         public async Task<bool> EndAsync(string reason)
         {
+            if (HasQueuedResult(MatchId))
+            {
+                // Sending /end first would abort the backend match before its result is saved.
+                ResetBinding();
+                return true;
+            }
             if (!HasBinding || !IsHostBinding)
             {
                 ResetBinding();
@@ -1131,6 +1139,7 @@ namespace EchoProtocol.Networking.Authority
                 Mathf.Clamp01(objectiveCompletion);
 
             _pendingBackendMatchResult = true;
+            CaptureResultOutbox();
 
             float remainingDelay = 0f;
 
@@ -1156,79 +1165,10 @@ namespace EchoProtocol.Networking.Authority
             }
         }
 
-        private async void TrySubmitPendingMatchResult()
+        private void TrySubmitPendingMatchResult()
         {
-            if (!_pendingBackendMatchResult
-                || _backendEndRequestInProgress
-                || !HasBinding
-                || !IsHostBinding)
-            {
-                return;
-            }
-
-            if (!TryBuildMatchResultRequest(out var request))
-            {
-                _nextBackendMatchResultRetryAt = Time.unscaledTime + 1f;
-                return;
-            }
-
-            _backendEndRequestInProgress = true;
-            var result = await _api.SubmitResultAsync(MatchId, request);
-            _backendEndRequestInProgress = false;
-
-            if (!IsSuccessful(result))
-            {
-                bool durationTooEarly =
-                    result != null
-                    && result.FailureKind ==
-                        EchoProtocol.Api.ApiFailureKind.Business
-                    && string.Equals(
-                        result.ErrorCode,
-                        "MATCH_RESULT_INVALID_DURATION",
-                        StringComparison.Ordinal)
-                    && _backendMatchStartedAtRealtime >= 0f
-                    && Time.realtimeSinceStartup
-                        - _backendMatchStartedAtRealtime
-                        < MinimumBackendMatchResultAgeSeconds;
-
-                if (durationTooEarly)
-                {
-                    _nextBackendMatchResultRetryAt =
-                        Time.unscaledTime + 1f;
-
-                    Debug.LogWarning(
-                        "[MatchAuthority] Match result is waiting for the backend minimum duration.");
-
-                    return;
-                }
-
-                if (result != null
-                    && result.FailureKind ==
-                        EchoProtocol.Api.ApiFailureKind.Business)
-                {
-                    _pendingBackendMatchResult = false;
-
-                    Debug.LogError(
-                        $"[MatchAuthority] Match result rejected and will not be retried: {Describe(result)}");
-
-                    return;
-                }
-
-                _nextBackendMatchResultRetryAt =
-                    Time.unscaledTime + 2f;
-
-                Debug.LogWarning(
-                    $"[MatchAuthority] Match result submission failed; retrying safely: {Describe(result)}");
-
-                return;
-            }
-
-            _pendingBackendMatchResult = false;
-            IsHostBinding = false;
-            RuntimeLog.Log(
-                RuntimeLogCategory.MatchAuthority,
-                $"[MatchAuthority] Backend confirmed match result. Match={MatchId:D}, " +
-                $"RewardStatus={result.Data.data.rewardStatus}, Replay={result.Data.data.isReplay}.");
+            CaptureResultOutbox();
+            TickResultOutbox();
         }
 
         private bool TryBuildMatchResultRequest(out SubmitMatchResultRequestDto request)

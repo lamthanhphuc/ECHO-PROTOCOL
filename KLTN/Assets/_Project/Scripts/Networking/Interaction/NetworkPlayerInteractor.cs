@@ -1185,7 +1185,21 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            var pickupObject = Runner.Spawn(prefab, dropPosition, dropRotation);
+            var pickupObject = Runner.Spawn(prefab, dropPosition, dropRotation,
+                onBeforeSpawned: (_, spawned) =>
+                {
+                    if (toolId != LobbyPlayerState.CoreStabilizerToolId) return;
+                    // The drop pose is the floor plus clearance, not necessarily the mesh pivot.
+                    // Correct before Spawned captures the replicated world position.
+                    float bottom = float.PositiveInfinity;
+                    foreach (var renderer in spawned.GetComponentsInChildren<Renderer>(true))
+                    {
+                        if (!(renderer is MeshRenderer) && !(renderer is SkinnedMeshRenderer)) continue;
+                        bottom = Mathf.Min(bottom, renderer.bounds.min.y);
+                    }
+                    if (!float.IsInfinity(bottom))
+                        spawned.transform.position += Vector3.up * (dropPosition.y - bottom);
+                });
             if (pickupObject == null)
             {
                 return false;
@@ -1209,6 +1223,26 @@ namespace EchoProtocol.Networking
             }
 
             pickupId = pickupObject.Id;
+            return true;
+        }
+
+        public bool TryTransferTeamToolToMonster(NetworkId monsterId, out NetworkId pickupId)
+        {
+            pickupId = default;
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority || !monsterId.IsValid) return false;
+            var state = GetComponent<LobbyPlayerState>();
+            if (state == null || state.ToolId <= 0) return false;
+            if (!TrySpawnDroppedTeamToolAuthoritative(state.ToolId, state.TeamToolUsesRemaining,
+                    transform.position, Quaternion.identity, out pickupId)) return false;
+            if (!Runner.TryFindObject(pickupId, out var pickup) || !pickup.TryGetComponent<NetworkInteractable>(out var interactable))
+            {
+                if (pickup != null) Runner.Despawn(pickup);
+                pickupId = default;
+                return false;
+            }
+            interactable.BeginMonsterCarryAuthoritative(monsterId);
+            state.SetGameplayToolId(0);
+            ResetTeamToolRuntimeAuthoritative();
             return true;
         }
 
