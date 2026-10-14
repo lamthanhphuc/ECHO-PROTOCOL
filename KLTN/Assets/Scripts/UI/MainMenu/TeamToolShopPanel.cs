@@ -581,6 +581,9 @@ namespace EchoProtocol.UI.MainMenu
         {
             _selected =
                 item;
+            var guide=GetComponent<TeamToolShopGuide>() ?? gameObject.AddComponent<TeamToolShopGuide>();
+            int guideToolId=item!=null && TeamToolShopAssets.TryGetByItemId(item.itemId,out var guideItem) ? guideItem.ToolId : 0;
+            guide.Configure(_selectedName,guideToolId);
 
             if (item == null)
             {
