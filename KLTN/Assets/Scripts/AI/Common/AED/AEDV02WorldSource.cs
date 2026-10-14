@@ -9,6 +9,8 @@ namespace EchoProtocol.AI.Common.AED
     {
         public Guid UserId { get; set; }
         public string LifeState { get; set; } = string.Empty;
+        public bool IsCaught { get; set; }
+        public bool IsReviving { get; set; }
         public string HeldToolInstanceId { get; set; } = string.Empty;
         public string ObjectiveUnitId { get; set; } = string.Empty;
         public string ObjectiveState { get; set; } = "NONE";
@@ -164,20 +166,26 @@ namespace EchoProtocol.AI.Common.AED
         }
 
         public bool HasReachableGeometry(double[] from, double[] to, AEDV02DoorSource[] doors)
+            => TryReachableGeometry(from, to, doors, out var reachable) && reachable;
+
+        public bool TryReachableGeometry(double[] from, double[] to, AEDV02DoorSource[] doors, out bool reachable)
         {
+            reachable = false;
             if (from == null || to == null || doors == null || NavCells.Length == 0) return false;
             var starts = NavCells.Where(x => x.Contains(from)).Select(x => x.Id).ToHashSet();
             var ends = NavCells.Where(x => x.Contains(to)).Select(x => x.Id).ToHashSet();
             if (starts.Count == 0 || ends.Count == 0) return false;
+            var doorIds = doors.Select(x => x.DoorId).ToHashSet(StringComparer.Ordinal);
+            if (NavLinks.Any(x => x.DoorIds.Any(d => !doorIds.Contains(d)))) return false;
             var open = doors.Where(x => x.State is "OPEN" or "BROKEN" or "CLOSED_UNLOCKED").Select(x => x.DoorId).ToHashSet(StringComparer.Ordinal);
             var links = NavLinks.Where(x => x.DoorIds.All(open.Contains)).GroupBy(x => x.From).ToDictionary(x => x.Key, x => x.Select(l => l.To).ToArray());
             var queue = new Queue<int>(starts);
             while (queue.Count != 0)
             {
-                int cell = queue.Dequeue(); if (ends.Contains(cell)) return true;
+                int cell = queue.Dequeue(); if (ends.Contains(cell)) { reachable = true; return true; }
                 if (links.TryGetValue(cell, out var next)) foreach (var id in next) if (starts.Add(id)) queue.Enqueue(id);
             }
-            return false;
+            return true;
         }
 
         public bool TryRoute(string from, string to, string[] edgeIds, AEDV02DoorSource[] doors, out double meters)

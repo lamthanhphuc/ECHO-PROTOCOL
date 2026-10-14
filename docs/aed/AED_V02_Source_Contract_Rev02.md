@@ -8,7 +8,7 @@ This document records the implementation of the owner-approved pilot. It does no
 
 The producer uses the existing Match authority, actual Fusion objects, verified backend player bindings and existing pursuit/Minion episode collectors. It does not upgrade V1 coverage flags. Missing objects, receipts, identities, unsupported action attribution and invalidated debug/inventory evidence prevent verification.
 
-The Backend independently replays accepted lifecycle events, checks census equality including zero Minions, validates life transitions and down ticks, requires complete event sequences and bounded tick/UTC cadence, and reconstructs the five Rev02 pressure channels. A source window needs 30 observed seconds and expires after 10 seconds. Current observations remain distinct from historical skill.
+The Backend independently replays accepted lifecycle events, checks census equality including zero Minions, validates life transitions and down ticks, requires complete event sequences and bounded tick/UTC cadence, and reconstructs S/M/D plus revive scarcity. A source window needs 30 observed seconds and expires after 10 seconds. The aggregate remains partial (pressureComplete=false, tier -1) while broader resource need and objective interruption coverage is absent. Revive completion is matched to the reviver First Aid consume receipt; known Noise Maker/Door Jammer spawn charges survive replay. Current observations remain distinct from historical skill.
 
 ## Trusted geometry
 
@@ -16,11 +16,11 @@ The Backend independently replays accepted lifecycle events, checks census equal
 
 The JSON is copied byte-for-byte to the Unity resource and Backend build content; `scripts/Sync-AEDV02Contract.ps1 -Check` checks equality. Only the shipped content is registered automatically, only in Development with `AEDV02Pilot:Enabled=true`. Client requests cannot register manifests.
 
-Backend reachability follows actual mesh portals and requires each crossed door to be open, broken or usable while closed/unlocked. Unknown/locked/jammed doors, positions outside the mesh, another floor, and disallowed spawn types fail closed. The Host must still revalidate live NavMesh, doors and safety at apply time; the exported graph does not prove transient physics conditions.
+Backend reachability follows actual mesh portals and requires each crossed door to be open, broken or usable while closed/unlocked. Known locked/jammed routes are verified as inaccessible. Missing door state, positions outside the mesh, another floor, and disallowed spawn types fail closed. Revive scarcity uses living helpers, usable First Aid and paths to the tool and downed player. The Host must still revalidate live NavMesh, doors and safety at apply time; the exported graph does not prove transient physics conditions.
 
 ## Decision ledger
 
-The v0.2 ledger is separate from the existing V2 ledger. It binds the authenticated Host/lease, current scenario snapshot, roster, scene/source fingerprints, parameter versions, previous plan, revision and `(phase, point, window sequence)`. PreMatch is one atomic composite; subsequent transactions change one key. Ordered plan revisions distinguish multiple SafeWindows in one phase.
+The v0.2 ledger is separate from the existing V2 ledger. It binds the authenticated Host/lease, current scenario snapshot, roster, scene/source fingerprints, parameter versions, previous plan, revision and `(phase, point, window sequence)`. PreMatch is one atomic composite; subsequent transactions change one key and one tier. Ordered plan revisions distinguish multiple SafeWindows in one phase.
 
 PreMatch approval expires with its authority lease because scene loading consumes time and no current gameplay source is used. In-match approval expires after at most 10 seconds or with the lease. Both require Host revalidation. This does not extend source freshness.
 
@@ -34,7 +34,9 @@ An apply receipt requires an accepted effect emitted by the named consumer and a
 | M exposure/population | HARASS windows and lifecycle/census reconciliation, including zero population | Transfer and counterplay attribution remain incomplete |
 | D consequences | Canonical down/revive/eliminate ordering and tick joins | Live binding proof still required |
 | Supply geometry | Real exported mesh, placement masks and door-sensitive verification tested | Live dynamic route revalidation and producer scenarios remain incomplete |
-| R/O pressure | Backend reconstruction exists; producer holds unsupported active objective/transfer attribution | Authoritative opportunity/need/interruption collection is unfinished |
+| R/O pressure | Revive scarcity is reconstructed; active objective ownership is collected; full aggregate remains partial/Unknown | Broader need mapping and causal opportunity/interruption replay remain unfinished |
 | Historical skill | Unsupported observations remain Unsupported | Approved normalized competence mapping and complete resolved opportunity sources are still missing; `UNVERIFIED_ESCAPE` is not success |
 
 These limits prevent claiming Gameplay E2E readiness. They are not resolved by seeding verified flags, disabling validation or treating a missing opportunity as skill evidence.
+
+Late receipts after Backend closure require accepted effect and world records preceding the canonical MATCH_ENDED boundary. Wrong host, missing terminal proof and post-terminal effects fail closed. No new effect/world is emitted after terminal gameplay state.

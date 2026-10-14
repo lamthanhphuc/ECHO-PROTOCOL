@@ -85,7 +85,7 @@ public sealed class AEDV02DecisionService(AppDbContext db, AEDV02SourceVerifier 
                 (source.Zone != 3 || source.PhaseName != "ZONE_3_FIND_FRIGATE")) hold = "HOLD_ZONE3_SAFE_ENTRY_REQUIRED";
             if (adverse)
             {
-                if (source.PlayerPressure.Values.Any(x => x >= .25) || source.RecentDownUsers.Length != 0) hold = "HOLD_TEAM_OVERLOADED";
+                if (source.PressureComplete && source.PlayerPressure.Values.Any(x => x >= .25) || source.RecentDownUsers.Length != 0) hold = "HOLD_TEAM_OVERLOADED";
                 // Pressure/census evidence cannot certify the unsupported historical competence mapping.
                 else hold = "HOLD_HISTORICAL_OPPORTUNITIES_REQUIRED";
             }
@@ -137,7 +137,8 @@ public sealed class AEDV02DecisionService(AppDbContext db, AEDV02SourceVerifier 
     {
         var binding = await db.MatchAuthorityBindings.AsNoTracking().SingleOrDefaultAsync(x => x.MatchId == matchId, ct);
         if (binding == null || binding.HostUserId != caller) return Fail("AED_V02_HOST_REQUIRED", ErrorCodes.MatchAuthorityForbidden);
-        if (binding.LeaseExpiresAtUtc <= clock.GetUtcNow().UtcDateTime || binding.Status != MatchAuthorityStatus.InMatch) return Fail("HOLD_AUTHORITY_NOT_CURRENT");
+        bool closed = binding.Status == MatchAuthorityStatus.Ended;
+        if (!closed && (binding.LeaseExpiresAtUtc <= clock.GetUtcNow().UtcDateTime || binding.Status != MatchAuthorityStatus.InMatch)) return Fail("HOLD_AUTHORITY_NOT_CURRENT");
         await using var transaction = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
         var decision = await db.AEDV02Decisions.SingleOrDefaultAsync(x => x.DecisionId == decisionId && x.MatchId == matchId, ct);
         if (decision == null || receipt == null || receipt.ReceiptId == Guid.Empty || receipt.EffectEventId == Guid.Empty || receipt.AppliedTick < 0 ||
@@ -145,8 +146,11 @@ public sealed class AEDV02DecisionService(AppDbContext db, AEDV02SourceVerifier 
         if (decision.ApplyStatus == "APPLIED") return decision.ReceiptId == receipt.ReceiptId && decision.EffectEventId == receipt.EffectEventId && decision.AppliedTick == receipt.AppliedTick
             ? ServiceResult<AEDV02DecisionResult>.Success(Map(decision, true)) : Fail("AED_V02_RECEIPT_IDENTITY_CONFLICT");
         var events = await telemetry.LoadAcceptedMatchEventsAsync(matchId, ct);
+        var terminal = closed ? events.SingleOrDefault(x => x.MatchId == matchId && x.EventType == "MATCH_ENDED" && x.SchemaVersion == "1.1") : null;
+        if (closed && terminal == null) return Fail("HOLD_MATCH_TERMINAL_PROOF_MISSING");
         var effectEvent = events.SingleOrDefault(x => x.Id == receipt.EffectEventId && x.MatchId == matchId && x.SchemaVersion == "1.3" && x.EventType == "AED_V02_ACTION_EFFECT");
         if (effectEvent == null || effectEvent.Ts < decision.CreatedAtUtc || effectEvent.Ts > decision.ExpiresAtUtc.AddSeconds(20)) return Fail("HOLD_EFFECT_NOT_ACCEPTED");
+        if (terminal != null && (effectEvent.EventSequence >= terminal.EventSequence || effectEvent.Ts > terminal.Ts)) return Fail("HOLD_EFFECT_AFTER_MATCH_END");
         AEDV02EffectSource? effect;
         try { effect = JsonSerializer.Deserialize<AEDV02EffectSource>(effectEvent.ValueJson["data"]["effect"].ToJson()); } catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidCastException) { return Fail("AED_V02_EFFECT_INVALID"); }
         var plan = new AEDV02Plan(JsonSerializer.Deserialize<double[]>(decision.PlanValuesJson)!);
@@ -156,6 +160,7 @@ public sealed class AEDV02DecisionService(AppDbContext db, AEDV02SourceVerifier 
         if (decision.ChangedKey.Length == 0 && effect.Consumer != "AEDPolicyEnvelope") return Fail("AED_V02_EFFECT_MISMATCH");
         var samples = events.Where(x => x.SchemaVersion == "1.3" && x.EventType == "AED_V02_WORLD_SAMPLE" &&
                 x.EventSequence > effectEvent.EventSequence && x.Ts >= effectEvent.Ts)
+            .Where(x => terminal == null || x.EventSequence < terminal.EventSequence && x.Ts <= terminal.Ts)
             .Select(x => JsonSerializer.Deserialize<AEDV02WorldSample>(x.ValueJson["data"]["world"].ToJson()))
             .Where(x => x != null && x.IsValid() && x.EvidenceExclusion.Length == 0 && x.Tick >= effect.ObservedTick &&
                 x.PlanRevision == decision.PlanRevision && x.PlanFingerprint == decision.PlanFingerprint && x.RosterIdentity == decision.RosterIdentity &&

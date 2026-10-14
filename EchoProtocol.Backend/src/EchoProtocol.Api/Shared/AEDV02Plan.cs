@@ -38,6 +38,34 @@ namespace EchoProtocol.AI.Common.AED
             _values = (double[])values.Clone();
         }
         public static AEDV02Plan Normal() => new AEDV02Plan(NormalValues);
+        public bool TryProposeRelief(double[][] components, double[] scores, bool recentDown, int zone, out AEDV02Plan next)
+        {
+            next = null!;
+            if (components == null || scores == null || components.Length == 0 || components.Length != scores.Length ||
+                scores.Any(x => !AEDV02PilotPolicy.Finite(x) || x < 0 || x > 1) ||
+                components.Any(x => x == null || x.Length != 5 || x.Any(y => !AEDV02PilotPolicy.Finite(y) || y < 0 || y > 1)) ||
+                !recentDown && scores.All(x => x < .65)) return false;
+            if (components.Any(x => x[0] > 0))
+            {
+                foreach (var key in new[] { AEDV02Key.ChaseSpeed, AEDV02Key.DetectionAcquireSeconds, AEDV02Key.PostChaseCooldownSeconds,
+                    AEDV02Key.HearingMultiplier, AEDV02Key.SearchSeconds, AEDV02Key.SpecialCooldownSeconds })
+                {
+                    var value = key is AEDV02Key.DetectionAcquireSeconds or AEDV02Key.PostChaseCooldownSeconds or AEDV02Key.SpecialCooldownSeconds
+                        ? Values[(int)key].Last() : Values[(int)key].First();
+                    if (Get(key) != value)
+                    {
+                        int index = Array.IndexOf(Values[(int)key], Get(key));
+                        next = With(key, Values[(int)key][index + Math.Sign(Array.IndexOf(Values[(int)key], value) - index)]); return true;
+                    }
+                }
+            }
+            if (zone >= 1 && zone <= 3 && components.Any(x => x[1] > 0))
+            {
+                var key = zone == 1 ? AEDV02Key.Zone1MinionCap : zone == 2 ? AEDV02Key.Zone2MinionCap : AEDV02Key.Zone3AdaptiveMinionCap;
+                if (Get(key) != Values[(int)key][0]) { next = With(key, Values[(int)key][0]); return true; }
+            }
+            return false;
+        }
         public static System.Collections.Generic.IReadOnlyList<double> AllowedValues(AEDV02Key key) => Array.AsReadOnly(Values[(int)key]);
         public double Get(AEDV02Key key) => _values[(int)key];
         public double[] ToArray() => (double[])_values.Clone();
@@ -58,6 +86,8 @@ namespace EchoProtocol.AI.Common.AED
             if (previous == null || initialOptionalBudget < 0 || initialOptionalBudget > 2 || !Enum.IsDefined(typeof(AEDV02DecisionPoint), point)) return false;
             var changed = Enumerable.Range(0, _values.Length).Where(i => _values[i] != previous._values[i]).ToArray();
             if (point != AEDV02DecisionPoint.PRE_MATCH && changed.Length != 1) { reason = "HOLD_SINGLE_DELTA_REQUIRED"; return false; }
+            if (point != AEDV02DecisionPoint.PRE_MATCH && changed.Any(i => Math.Abs(Array.IndexOf(Values[i], _values[i]) - Array.IndexOf(Values[i], previous._values[i])) > 1))
+            { reason = "HOLD_SINGLE_TIER_REQUIRED"; return false; }
             if (point == AEDV02DecisionPoint.PRE_MATCH && changed.Count(i => i < 6) > 1) { reason = "HOLD_STALKER_COMPOSITE_BUDGET"; return false; }
             if (PositiveTokens(initialOptionalBudget) > 1) { reason = "HOLD_GLOBAL_PRESSURE_BUDGET"; return false; }
             if (point == AEDV02DecisionPoint.PRE_MATCH && Get(AEDV02Key.Zone3AdaptiveMinionCap) != 0) { reason = "HOLD_ZONE3_OBSERVATION_REQUIRED"; return false; }

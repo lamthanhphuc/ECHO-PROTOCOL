@@ -12,6 +12,7 @@ namespace EchoProtocol.Api.Services;
 
 public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventRepository telemetry, TimeProvider clock)
 {
+    public const string VerificationVersion = "AED_V02_SOURCE_VERIFICATION_REV02_V1";
     public async Task<ServiceResult<AEDV02SourceResult>> VerifyAsync(Guid matchId, AEDV02SourceRequest request, CancellationToken ct = default)
     {
         if (request == null || matchId == Guid.Empty || request.PhaseOrdinal < 1 || request.StartTick < 0 ||
@@ -22,11 +23,29 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
         try { manifest = JsonSerializer.Deserialize<AEDV02SceneManifest>(content.ManifestJson); }
         catch (JsonException) { return Hold("HOLD_UNTRUSTED_SCENE_MANIFEST"); }
         if (manifest == null || !manifest.IsValid()) return Hold("HOLD_UNTRUSTED_SCENE_MANIFEST");
-        var geometryResults = new Dictionary<string, bool>(StringComparer.Ordinal);
+        var geometryResults = new Dictionary<string, bool?>(StringComparer.Ordinal);
         var users = await db.MatchPlayerBindings.AsNoTracking().Where(x => x.MatchId == matchId).Select(x => x.UserId).ToArrayAsync(ct);
         if (users.Length == 0 || await db.MatchPlayerBindings.AnyAsync(x => x.MatchId == matchId && x.DisconnectedAtUtc != null, ct)) return Hold("HOLD_ROSTER_NOT_CURRENT");
         var roster = AEDV02Plan.Hash(matchId.ToString("D") + "|" + string.Join(',', users.Order().Select(x => x.ToString("D"))));
         var accepted = await telemetry.LoadAcceptedMatchEventsAsync(matchId, ct);
+        var usedReviveTools = new HashSet<Guid>();
+        foreach (var revived in accepted.Where(x => x.MatchId == matchId && x.EventType == "PLAYER_REVIVED").OrderBy(x => x.EventSequence))
+        {
+            if (!revived.UserId.HasValue || !users.Contains(revived.UserId.Value) ||
+                !revived.ValueJson["data"].AsBsonDocument.TryGetValue("reviverPlayerId", out var actor) || !actor.IsString ||
+                !Guid.TryParse(actor.AsString, out var reviver) || !users.Contains(reviver) || reviver == revived.UserId.Value ||
+                !revived.ValueJson["data"].AsBsonDocument.TryGetValue("usedFirstAidKit", out var kit) || !kit.IsBoolean || !kit.AsBoolean)
+                return Hold("HOLD_REVIVE_TOOL_SOURCE_MISMATCH");
+            var down = accepted.Where(x => x.MatchId == matchId && x.UserId == revived.UserId && x.EventType == "PLAYER_DOWNED" &&
+                x.EventSequence < revived.EventSequence).OrderByDescending(x => x.EventSequence).FirstOrDefault();
+            var consume = accepted.Where(x => x.MatchId == matchId && x.EventType == "TEAM_TOOL_LIFECYCLE" &&
+                x.EventSequence > (down?.EventSequence ?? long.MaxValue) && x.EventSequence < revived.EventSequence &&
+                x.Ts <= revived.Ts && revived.Ts - x.Ts <= TimeSpan.FromSeconds(2)).OrderByDescending(x => x.EventSequence)
+                .FirstOrDefault(x => x.ValueJson["data"]["action"] == "CONSUME" && x.ValueJson["data"]["toolId"] == 3 &&
+                    x.ValueJson["data"]["ownerUserId"] == reviver.ToString("D") && x.ValueJson["data"]["remainingCharges"] == 0);
+            if (consume == null || !usedReviveTools.Add(consume.Id) || consume.ValueJson["context"]["authorityTick"] != revived.ValueJson["context"]["authorityTick"])
+                return Hold("HOLD_REVIVE_TOOL_SOURCE_MISMATCH");
+        }
         var frames = new List<(TelemetryEventDocument Event, AEDV02WorldSample Sample)>();
         foreach (var item in accepted.Where(x => x.MatchId == matchId && x.EventType == "AED_V02_WORLD_SAMPLE").OrderBy(x => x.EventSequence))
         {
@@ -57,6 +76,7 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
         for (int i = 0; i < frames.Count; i++)
         {
             var frame = frames[i]; var sample = frame.Sample;
+            if (sample.Stalkers.Length == 0) return Hold("HOLD_STALKER_CENSUS_MISSING");
             var phaseStarts = accepted.Where(x => x.MatchId == matchId && x.EventType == "PHASE_STARTED" && x.EventSequence < frame.Event.EventSequence)
                 .OrderBy(x => x.EventSequence).ToArray();
             if (phaseStarts.Length != sample.PhaseOrdinal || phaseStarts[^1].ValueJson["context"]["phase"].AsString != sample.PhaseName ||
@@ -83,10 +103,7 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
                 {
                     var entry = manifest.Markers.SingleOrDefault(x => x.Id == "Z" + (marker?.Zone ?? tool.Zone) + "_ENTRY");
                     if (entry == null) return Hold("HOLD_SUPPLY_ROUTE_INVALID");
-                    string identity = JsonSerializer.Serialize(new { entry.Id, tool.X, tool.Y, tool.Z, sample.Doors });
-                    if (!geometryResults.TryGetValue(identity, out var reachable)) geometryResults.Add(identity, reachable = manifest.HasReachableGeometry(
-                        [entry.X, entry.Y, entry.Z], [tool.X, tool.Y, tool.Z], sample.Doors));
-                    if (!reachable) return Hold("HOLD_SUPPLY_ROUTE_INVALID");
+                    if (!Reach([entry.X, entry.Y, entry.Z], [tool.X, tool.Y, tool.Z], sample.Doors).HasValue) return Hold("HOLD_SUPPLY_ROUTE_INVALID");
                 }
                 else if (marker == null || marker.Zone != tool.Zone || tool.Origin == "PlayerDrop" ||
                     Math.Abs(marker.X - tool.X) > .5 || Math.Abs(marker.Y - tool.Y) > 1 || Math.Abs(marker.Z - tool.Z) > .5 ||
@@ -111,19 +128,16 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
                 Add(threat.TargetUserId!.Value, threat.EpisodeId, "S:" + threat.NetworkId, AEDV02PressureChannel.Stalker, previous.Tick, sample.Tick);
             foreach (var threat in previous.Minions.Where(x => x.TargetUserId.HasValue && x.State == "HARASS"))
                 Add(threat.TargetUserId!.Value, threat.EpisodeId, "M:" + threat.NetworkId, AEDV02PressureChannel.Minion, previous.Tick, sample.Tick);
-            foreach (var player in previous.Players.Where(x => x.ObjectiveState == "THREAT_INTERRUPTED"))
+            // A threat target alone does not independently prove an interrupted opportunity or a tool need.
+            if (previous.Players.Any(x => x.ObjectiveState == "THREAT_INTERRUPTED")) return Hold("HOLD_OBJECTIVE_OPPORTUNITY_SOURCE_REQUIRED");
+            if (previous.Players.Any(x => x.RequiredToolId != 0)) return Hold("HOLD_RESOURCE_NEED_CONTRACT_REQUIRED");
+            foreach (var player in previous.Players.Where(x => x.LifeState == "DOWNED" && !x.IsReviving))
             {
-                var cause = previous.Stalkers.Concat(previous.Minions).SingleOrDefault(x => x.NetworkId == player.ObjectiveCauseEntityId && x.TargetUserId == player.UserId && x.State is "CHASE" or "ATTACK" or "HARASS");
-                if (cause == null || !manifest.Markers.Any(x => x.Id == player.ObjectiveUnitId && x.Kind == "OBJECTIVE")) return Hold("HOLD_OBJECTIVE_CAUSE_UNVERIFIED");
-                Add(player.UserId, player.ObjectiveUnitId + ":" + cause.EpisodeId, "O:" + player.ObjectiveUnitId,
-                    AEDV02PressureChannel.Objective, previous.Tick, sample.Tick, cause.EpisodeId);
-            }
-            foreach (var player in previous.Players.Where(x => x.RequiredToolId != 0))
-            {
-                if (!manifest.Markers.Any(x => x.Id == player.ObjectiveUnitId && x.Kind == "OBJECTIVE")) return Hold("HOLD_RESOURCE_NEED_UNVERIFIED");
-                if (!previous.Tools.Any(x => x.ToolId == player.RequiredToolId && x.RemainingCharges != 0 && x.Location is "World" or "Player"))
-                    Add(player.UserId, "need:" + player.ObjectiveUnitId, "R:" + player.ObjectiveUnitId,
-                        AEDV02PressureChannel.Resource, previous.Tick, sample.Tick);
+                var down = accepted.Where(x => x.MatchId == matchId && x.UserId == player.UserId && x.EventType == "PLAYER_DOWNED" &&
+                    x.EventSequence < frames[i - 1].Event.EventSequence).OrderByDescending(x => x.EventSequence).First();
+                var access = UsableSupply(previous, player, 3);
+                if (!access.HasValue) return Hold("HOLD_RESOURCE_ACCESS_UNVERIFIED");
+                if (!access.Value) Add(player.UserId, "revive:" + down.Id, "R:revive", AEDV02PressureChannel.Resource, previous.Tick, sample.Tick);
             }
             void Add(Guid user, string episode, string identity, AEDV02PressureChannel channel, long start, long end, string? cause = null)
             {
@@ -148,8 +162,8 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
             request.StartTick / (double)tickRate, Enumerable.Repeat(now, 5).ToArray(), x.Value));
         if (pressure.Values.Any(x => !x.Complete)) return Hold("HOLD_INSUFFICIENT_EVIDENCE");
         var safe = last.Sample.Stalkers.All(x => x.State is "PATROL" or "SEARCH") &&
-            last.Sample.Minions.All(x => x.State is not ("TRACK" or "HARASS")) && last.Sample.Players.All(x => x.LifeState == "ALIVE" && x.ObjectiveState == "NONE");
-        var fingerprint = AEDV02Plan.Hash(AEDV02WorldSample.SourceVersion + "|" + roster + "|" + content.Fingerprint + "|" +
+            last.Sample.Minions.All(x => x.State is not ("TRACK" or "HARASS")) && last.Sample.Players.All(x => x.LifeState == "ALIVE" && !x.IsCaught && !x.IsReviving && x.ObjectiveState == "NONE");
+        var fingerprint = AEDV02Plan.Hash(VerificationVersion + "|" + AEDV02PilotPolicy.Version + "|" + AEDV02WorldSample.SourceVersion + "|" + roster + "|" + content.Fingerprint + "|" +
             string.Join('|', sourceRange.Select(x => x.Id + ":" + x.EventSequence + ":" + x.SemanticFingerprint + ":" + x.ValueJson.ToJson())));
         var result = new AEDV02SourceResult(fingerprint, request.PhaseOrdinal, request.StartTick, request.EndTick, roster,
             content.Fingerprint, pressure.ToDictionary(x => x.Key, x => x.Value.Score),
@@ -159,7 +173,8 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
             accepted.Where(x => x.MatchId == matchId && x.UserId.HasValue && x.EventType is "PLAYER_DOWNED" or "PLAYER_REVIVED" &&
                 x.Ts >= last.Event.Ts.AddSeconds(-AEDV02PilotPolicy.DownRecoverySeconds) && x.EventSequence <= last.Event.EventSequence)
                 .Select(x => x.UserId!.Value).Distinct().ToArray(), safe, last.Sample.LogicalPhase, last.Sample.Zone, last.Sample.PhaseName,
-            last.Sample.PlanRevision, last.Sample.PlanFingerprint, last.Event.Ts);
+            last.Sample.PlanRevision, last.Sample.PlanFingerprint, last.Event.Ts, false,
+            ["ResourceNeedOutsideRevive", "ObjectiveThreatInterruption"]);
         if (!await db.AEDV02VerifiedSources.AnyAsync(x => x.Fingerprint == fingerprint, ct))
         {
             db.AEDV02VerifiedSources.Add(new AEDV02VerifiedSource { Fingerprint = fingerprint, MatchId = matchId,
@@ -169,6 +184,31 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
             await db.SaveChangesAsync(ct);
         }
         return ServiceResult<AEDV02SourceResult>.Success(result, "AED v0.2 source reconstructed");
+
+        bool? Reach(double[] from, double[] to, AEDV02DoorSource[] doors)
+        {
+            string identity = JsonSerializer.Serialize(new { from, to, doors });
+            if (!geometryResults.TryGetValue(identity, out var reachable))
+                geometryResults.Add(identity, reachable = manifest.TryReachableGeometry(from, to, doors, out bool found) ? found : null);
+            return reachable;
+        }
+        bool? UsableSupply(AEDV02WorldSample sample, AEDV02PlayerSource need, int toolId)
+        {
+            var candidates = sample.Tools.Where(x => x.ToolId == toolId && x.RemainingCharges != 0 && x.Location is "World" or "Player").ToArray();
+            if (candidates.Length == 0) return false;
+            if (candidates.Any(x => x.Location == "Player" && x.OwnerUserId == need.UserId && need.LifeState == "ALIVE" && !need.IsCaught)) return true;
+            var helpers = sample.Players.Where(x => x.LifeState == "ALIVE" && !x.IsCaught && x.UserId != need.UserId).ToArray();
+            if (need.LifeState == "ALIVE" && !need.IsCaught) helpers = helpers.Append(need).ToArray();
+            bool unknown = false;
+            foreach (var helper in helpers) foreach (var tool in candidates.Where(x => x.Location == "World" || x.OwnerUserId == helper.UserId))
+            {
+                var toTool = tool.Location == "Player" ? true : Reach([helper.X, helper.Y, helper.Z], [tool.X, tool.Y, tool.Z], sample.Doors);
+                var toNeed = Reach([tool.X, tool.Y, tool.Z], [need.X, need.Y, need.Z], sample.Doors);
+                if (toTool == true && toNeed == true) return true;
+                unknown |= !toTool.HasValue || !toNeed.HasValue;
+            }
+            return unknown ? null : false;
+        }
     }
     private static ServiceResult<AEDV02SourceResult> Hold(string reason) => ServiceResult<AEDV02SourceResult>.Failure(reason, ErrorCodes.ScenarioApplyConflict);
 }

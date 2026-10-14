@@ -151,9 +151,9 @@ public static class AEDPhase8LifecycleReconcilerV1
             !Integer(data, "zone", out var zone) || zone > 3 || !Charges(data, out var charges)) return false;
         if (action == "SPAWN")
         {
-            if (tools.ContainsKey(id) || charges.HasValue || data.Contains("ownerUserId") || data.Contains("parentInstanceId")) return false;
+            if (tools.ContainsKey(id) || charges.HasValue && !ValidInitialCharges(toolId, charges) || data.Contains("ownerUserId") || data.Contains("parentInstanceId")) return false;
             if (data.Contains("origin") && (!Text(data, "origin", out var origin) || origin is not ("WorldSpawn" or "ScenePlaced"))) return false;
-            tools.Add(id, new Tool(toolId, zone, "World", null, null, tick,
+            tools.Add(id, new Tool(toolId, zone, "World", null, charges, tick,
                 data.Contains("origin") ? data["origin"].AsString : "WorldSpawn")); return true;
         }
         if (action == "LOADOUT")

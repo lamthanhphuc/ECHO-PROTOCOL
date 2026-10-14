@@ -32,8 +32,9 @@ public sealed class AEDV02Controller(AppDbContext db, AEDV02SourceVerifier sourc
         var source = result.Data!;
         return Ok(ApiResponse<AEDV02SourceRead>.Ok(new(source.Fingerprint, source.PhaseOrdinal, source.StartTick, source.EndTick,
             source.RosterIdentity, source.SceneManifestFingerprint, source.PlayerPressure.Select(x => new AEDV02PlayerPressureRead(x.Key, x.Value,
-                source.PressureComponents[x.Key], EchoProtocol.AI.Common.AED.AEDV02PilotPolicy.Tier(x.Value), source.PressureEpisodeIds[x.Key])).ToArray(), source.RecentDownUsers,
-            source.SafeWindow, source.LogicalPhase, source.Zone, source.PhaseName, source.PlanRevision, source.PlanFingerprint, source.SourceEndedAtUtc)));
+                source.PressureComponents[x.Key], source.PressureComplete ? EchoProtocol.AI.Common.AED.AEDV02PilotPolicy.Tier(x.Value) : -1, source.PressureEpisodeIds[x.Key])).ToArray(), source.RecentDownUsers,
+            source.SafeWindow, source.LogicalPhase, source.Zone, source.PhaseName, source.PlanRevision, source.PlanFingerprint, source.SourceEndedAtUtc,
+            source.PressureComplete, source.MissingChannels)));
     }
     [HttpPost("decisions")]
     public async Task<IActionResult> Submit(Guid matchId, AEDV02DecisionRequest request, CancellationToken ct) =>

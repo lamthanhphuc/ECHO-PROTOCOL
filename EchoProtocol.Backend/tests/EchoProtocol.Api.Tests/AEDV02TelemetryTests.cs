@@ -3,12 +3,43 @@ using System.Text.Json.Nodes;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Api.DTOs.Telemetry;
 using EchoProtocol.Api.Data.Telemetry;
+using MongoDB.Bson;
 using Xunit;
 
 namespace EchoProtocol.Api.Tests;
 
 public sealed partial class TelemetryServiceTests
 {
+    internal static async Task<TelemetryEventDocument[]> IngestV02Trace(Guid match, IEnumerable<TelemetryEventDocument> documents, DateTime asOf,
+        EchoProtocol.Api.Services.Interfaces.IMatchAuthorityService? authority = null, Guid caller = default)
+    {
+        var repository = new FakeTelemetryEventRepository();
+        var rows = documents.OrderBy(x => x.EventSequence).ToArray();
+        var batch = new TelemetryBatchRequest();
+        if (!rows.Any(x => x.EventType == "MATCH_STARTED"))
+        {
+            batch = CreateMatchStarted(match, researchCaptureEnabled: true);
+            batch.Events[0].Ts = JsonSerializer.SerializeToElement(asOf.AddSeconds(-61).ToString("O"));
+        }
+        int offset = batch.Events.Count;
+        foreach (var row in rows)
+        {
+            var value = row.ValueJson.DeepClone().AsBsonDocument;
+            value["context"]["eventSequence"] = row.EventSequence + offset;
+            batch.Events.Add(new TelemetryEventRequest { Id = row.Id, MatchId = match, UserId = row.UserId, EventType = row.EventType,
+                Ts = JsonSerializer.SerializeToElement(row.Ts.ToString("O")), SchemaVersion = row.SchemaVersion, ReasonCode = row.ReasonCode,
+                ValueJson = JsonSerializer.Deserialize<JsonElement>(value.ToJson()) });
+        }
+        var service = new EchoProtocol.Api.Services.TelemetryService(repository, authority ?? new FakeMatchAuthorityService { IsTelemetryDelegationAllowed = true },
+            Microsoft.Extensions.Options.Options.Create(new EchoProtocol.Api.Configurations.MongoDbSettings {
+                MaxBatchSize = 500, MaxValueJsonBytes = 32768, MaxFutureSkewMinutes = 5, MaxEventAgeDays = 7 }), new V02TraceClock(asOf));
+        var result = await service.IngestBatchAsync(batch, caller == Guid.Empty ? Guid.NewGuid() : caller, CancellationToken.None);
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.All(result.Data!.Items, item => Assert.True(item.Status == TelemetryAckStatuses.Accepted, item.Id + ":" + item.RejectReason));
+        return repository.InsertedEvents.OrderBy(x => x.EventSequence).ToArray();
+    }
+    private sealed class V02TraceClock(DateTime now) : TimeProvider { public override DateTimeOffset GetUtcNow() => new(now); }
+
     [Theory, Trait("Category", "AEDV02")]
     [InlineData("WORLD")]
     [InlineData("EFFECT")]
@@ -45,6 +76,8 @@ public sealed partial class TelemetryServiceTests
     [InlineData("null-player")]
     [InlineData("invalid-door")]
     [InlineData("effect-future-tick")]
+    [InlineData("missing-objective-state")]
+    [InlineData("missing-caught-state")]
     public async Task V02_Ingestion_RejectsMalformedSources(string failure)
     {
         var repo = new FakeTelemetryEventRepository();
@@ -66,6 +99,8 @@ public sealed partial class TelemetryServiceTests
             case "null-player": json["data"]!["world"]!["Players"]![0] = null; break;
             case "invalid-door": json["data"]!["world"]!["Doors"] = new JsonArray(new JsonObject { ["DoorId"] = "door", ["State"] = "TRUST_ME" }); break;
             case "effect-future-tick": json["data"]!["effect"]!["ObservedTick"] = 43; break;
+            case "missing-objective-state": json["data"]!["world"]!["Players"]![0]!.AsObject().Remove("ObjectiveState"); break;
+            case "missing-caught-state": json["data"]!["world"]!["Players"]![0]!.AsObject().Remove("IsCaught"); break;
         }
         item.ValueJson = JsonSerializer.SerializeToElement(json);
         batch.Events.Add(item);

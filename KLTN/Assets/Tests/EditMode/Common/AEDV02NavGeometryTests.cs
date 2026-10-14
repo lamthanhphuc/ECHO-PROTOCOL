@@ -36,6 +36,16 @@ public sealed class AEDV02NavGeometryTests
     }
 
     [Test]
+    public void KnownBlockedRouteIsDifferentFromMissingProof()
+    {
+        var manifest = Manifest(); var from = new[] { 1d, 0, 1 }; var to = new[] { 9d, 0, 9 };
+        Assert.That(manifest.TryReachableGeometry(from, to, new[] { new AEDV02DoorSource { DoorId = "door", State = "LOCKED" } }, out var reachable), Is.True);
+        Assert.That(reachable, Is.False);
+        Assert.That(manifest.TryReachableGeometry(from, to, Array.Empty<AEDV02DoorSource>(), out _), Is.False);
+        Assert.That(manifest.TryReachableGeometry(from, new[] { 9d, 3, 9 }, new[] { new AEDV02DoorSource { DoorId = "door", State = "OPEN" } }, out _), Is.False);
+    }
+
+    [Test]
     public void ForgedPortalBetweenDisconnectedTrianglesMakesManifestInvalid()
     {
         var manifest = Manifest(); manifest.NavCells[1].A[0] = 100;

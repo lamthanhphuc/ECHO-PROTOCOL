@@ -120,6 +120,24 @@ public sealed class AEDV02PilotPolicyTests
         Assert.That(ledger.BlocksForceExit(_match, _user, 1, 13, out _), Is.False);
     }
 
+    [TestCase(false, .64, 1d, 0d, 1, false, AEDV02Key.ChaseSpeed)]
+    [TestCase(false, .65, 1d, 0d, 1, true, AEDV02Key.ChaseSpeed)]
+    [TestCase(true, .2, 1d, 0d, 1, true, AEDV02Key.ChaseSpeed)]
+    [TestCase(true, .2, 0d, 0d, 1, false, AEDV02Key.ChaseSpeed)]
+    [TestCase(false, .7, 0d, 1d, 1, true, AEDV02Key.Zone1MinionCap)]
+    [TestCase(false, .7, 0d, 1d, 2, true, AEDV02Key.Zone2MinionCap)]
+    [TestCase(false, .7, 0d, 1d, 3, false, AEDV02Key.Zone3AdaptiveMinionCap)]
+    public void ReliefUsesVerifiedCauseAndChangesOneKey(bool down, double score, double stalker, double minion, int zone, bool expected, AEDV02Key key)
+    {
+        var previous = AEDV02Plan.Normal();
+        Assert.That(previous.TryProposeRelief(new[] { new[] { stalker, minion, 0d, 0, 0 } }, new[] { score }, down, zone, out var next), Is.EqualTo(expected));
+        if (!expected) return;
+        Assert.That(next.TryValidateChange(previous, AEDV02DecisionPoint.SAFE_WINDOW, false, 0, out var changed, out _), Is.True);
+        Assert.That(changed, Is.EqualTo(key));
+        Assert.That(AEDV02Plan.IsAdverse(key, previous.Get(key), next.Get(key)), Is.False);
+        Assert.That(previous.Fingerprint(), Is.EqualTo(AEDV02Plan.Normal().Fingerprint()));
+    }
+
     [Test]
     public void P4Token_QuotaCooldownIdentityExitAndReset()
     {

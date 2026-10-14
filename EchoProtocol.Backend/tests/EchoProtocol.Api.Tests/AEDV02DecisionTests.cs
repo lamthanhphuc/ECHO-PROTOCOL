@@ -15,6 +15,44 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed partial class ScenarioServiceTests
 {
+    [Theory, Trait("Category", "AEDV02")]
+    [InlineData("valid", null)]
+    [InlineData("missing-terminal", "HOLD_MATCH_TERMINAL_PROOF_MISSING")]
+    [InlineData("effect-after-terminal", "HOLD_EFFECT_AFTER_MATCH_END")]
+    [InlineData("wrong-host", "AED_V02_HOST_REQUIRED")]
+    public async Task V02_LateReceiptRequiresPreTerminalWorldProof(string mode, string? rejection)
+    {
+        await using var f = await ValidAEDv2Fixture();
+        var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
+        var (world, request) = await V02WorldEvidence(f);
+        var events = world.ToList(); var repository = new MutableV02Repository(events);
+        var service = new AEDV02DecisionService(f.Db, new AEDV02SourceVerifier(f.Db, repository, new FixedClock(Now)), repository,
+            new FixedClock(Now), Options.Create(new AEDV02PilotSettings { Enabled = true }));
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.Lobby; await f.Db.SaveChangesAsync();
+        var initial = (await service.SubmitAsync(f.HostId, f.MatchId, V02Request(f, scenario, request.SceneManifestFingerprint, AEDV02Plan.Normal(), 0, null, 0))).Data!;
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch; await f.Db.SaveChangesAsync();
+        var effect = V02Effect(f, initial, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 2400, events.Count + 1, Now); events.Add(effect);
+        V02AppendWindow(f, events, AEDV02Plan.Normal(), 1, 2401, Now, 1);
+        if (mode != "missing-terminal") events.Add(V02Event(f.MatchId, "MATCH_ENDED", events.Count + 1, Now.AddSeconds(1), "1.1", new BsonDocument {
+            ["context"] = new BsonDocument { ["phase"] = "MATCH_END", ["authorityTick"] = 2460 },
+            ["data"] = new BsonDocument { ["outcome"] = "SUCCESS", ["durationSeconds"] = 61, ["survivorCount"] = 2 } }));
+        var accepted = await TelemetryServiceTests.IngestV02Trace(f.MatchId, events, Now.AddSeconds(1), V02TelemetryAuthority(f), f.HostId);
+        events.Clear(); events.AddRange(accepted);
+        if (mode == "effect-after-terminal")
+        {
+            events.RemoveAll(x => x.Id == effect.Id);
+            effect = V02Effect(f, initial, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 2461, events.Last().EventSequence + 1, Now.AddSeconds(2));
+            events.Add(effect);
+        }
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.Ended;
+        f.Db.MatchAuthorityBindings.Single().LeaseExpiresAtUtc = Now; await f.Db.SaveChangesAsync();
+        var receipt = new AEDV02ReceiptRequest(Guid.NewGuid(), effect.Id, 1, initial.PlanFingerprint, 2400);
+        var result = await service.ConfirmAsync(mode == "wrong-host" ? Guid.NewGuid() : f.HostId, f.MatchId, initial.DecisionId, receipt);
+        if (rejection != null) { Assert.False(result.IsSuccess); Assert.Equal(rejection, result.Message); return; }
+        Assert.True(result.IsSuccess, result.Message); Assert.Equal("APPLIED", result.Data!.ApplyStatus);
+        Assert.True((await service.ConfirmAsync(f.HostId, f.MatchId, initial.DecisionId, receipt)).Data!.IsReplay);
+    }
+
     [Fact, Trait("Category", "AEDV02")]
     public async Task V02_VerifiedPressureAndClaimedSkillRows_CannotCertifyUnsupportedHistoricalCompetence()
     {
@@ -124,8 +162,8 @@ public sealed partial class ScenarioServiceTests
     {
         await using var f = await ValidAEDv2Fixture();
         var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
-        var (world, sourceRequest) = await V02WorldEvidence(f);
-        var events = V02PressureTrace(f, world).ToList();
+        var (world, sourceRequest) = await V02WorldEvidence(f, geometry: true);
+        var events = (await TelemetryServiceTests.IngestV02Trace(f.MatchId, V02PressureTrace(f, world), Now, V02TelemetryAuthority(f), f.HostId)).ToList();
         var storage = new MutableV02Repository(events);
         var clock = new MutableV02Clock(Now);
         var verifier = new AEDV02SourceVerifier(f.Db, storage, clock);
@@ -201,6 +239,7 @@ public sealed partial class ScenarioServiceTests
     private static TelemetryEventDocument[] V02PressureTrace(Fixture f, TelemetryEventDocument[] events)
     {
         var user = f.Db.MatchPlayerBindings.First(x => x.MatchId == f.MatchId).UserId;
+        var reviver = f.Db.MatchPlayerBindings.First(x => x.MatchId == f.MatchId && x.UserId != user).UserId;
         var trace = events.ToList();
         foreach (var item in trace.Where(x => x.EventType == "AED_V02_WORLD_SAMPLE"))
         {
@@ -209,10 +248,22 @@ public sealed partial class ScenarioServiceTests
                 State = item.Ts < Now.AddSeconds(-10) ? "CHASE" : "SEARCH", EpisodeId = "chase:1",
                 TargetUserId = item.Ts < Now.AddSeconds(-10) ? user : null } };
             sample.Players.Single(x => x.UserId == user).LifeState = item.Ts >= Now.AddSeconds(-10) && item.Ts < Now.AddSeconds(-5) ? "DOWNED" : "ALIVE";
+            if (item.Ts < Now.AddSeconds(-5))
+            {
+                sample.Players.Single(x => x.UserId == reviver).HeldToolInstanceId = "loadout:aid";
+                sample.Tools = sample.Tools.Append(new AEDV02ToolSource { InstanceId = "loadout:aid", ToolId = 3, Zone = 0, Location = "Player", Origin = "LobbyLoadout", OwnerUserId = reviver }).ToArray();
+            }
             item.ValueJson["data"]["world"] = BsonDocument.Parse(JsonSerializer.Serialize(sample));
         }
+        trace.Add(V02Event(f.MatchId, "TEAM_TOOL_LIFECYCLE", 0, Now.AddSeconds(-32), "1.2", new BsonDocument {
+            ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 598 },
+            ["data"] = new BsonDocument { ["action"] = "LOADOUT", ["instanceId"] = "loadout:aid", ["toolId"] = 3, ["zone"] = 0, ["origin"] = "LobbyLoadout", ["ownerUserId"] = reviver.ToString("D") } }));
         trace.Add(V02Event(f.MatchId, "PLAYER_DOWNED", 0, Now.AddSeconds(-10), "1.1", new BsonDocument { ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 1800 }, ["data"] = new BsonDocument() }, user));
-        trace.Add(V02Event(f.MatchId, "PLAYER_REVIVED", 0, Now.AddSeconds(-5), "1.1", new BsonDocument { ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 2100 }, ["data"] = new BsonDocument() }, user));
+        trace.Add(V02Event(f.MatchId, "TEAM_TOOL_LIFECYCLE", 0, Now.AddSeconds(-5), "1.2", new BsonDocument {
+            ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 2100 },
+            ["data"] = new BsonDocument { ["action"] = "CONSUME", ["instanceId"] = "loadout:aid", ["toolId"] = 3, ["zone"] = 0, ["remainingCharges"] = 0, ["ownerUserId"] = reviver.ToString("D") } }));
+        trace.Add(V02Event(f.MatchId, "PLAYER_REVIVED", 0, Now.AddSeconds(-5), "1.1", new BsonDocument { ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 2100 },
+            ["data"] = new BsonDocument { ["reviverPlayerId"] = f.Db.MatchPlayerBindings.First(x => x.MatchId == f.MatchId && x.UserId != user).UserId.ToString("D"), ["usedFirstAidKit"] = true } }, user));
         return trace.OrderBy(x => x.Ts).ThenBy(x => x.EventType == "AED_V02_WORLD_SAMPLE" ? 1 : 0).Select((x, i) => V02Event(f.MatchId, x.EventType, i + 1, x.Ts, x.SchemaVersion, x.ValueJson, x.UserId)).ToArray();
     }
     private static TelemetryEventDocument V02Effect(Fixture f, AEDV02DecisionResult approval, string consumer, AEDV02Key key, long tick, long sequence, DateTime time)
@@ -227,14 +278,31 @@ public sealed partial class ScenarioServiceTests
     {
         var previous = events.Last(x => x.EventType == "AED_V02_WORLD_SAMPLE");
         var user = f.Db.MatchPlayerBindings.First(x => x.MatchId == f.MatchId).UserId;
+        var reviver = f.Db.MatchPlayerBindings.First(x => x.MatchId == f.MatchId && x.UserId != user).UserId;
+        if (count > 1) events.Add(V02Event(f.MatchId, "TEAM_TOOL_LIFECYCLE", events.Count + 1, started, "1.2", new BsonDocument {
+            ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = startTick },
+            ["data"] = new BsonDocument { ["action"] = "PICKUP", ["instanceId"] = "tool:3", ["toolId"] = 3, ["zone"] = 1, ["ownerUserId"] = reviver.ToString("D") } }));
         for (int i = 0; i < count; i++)
         {
             var sample = JsonSerializer.Deserialize<AEDV02WorldSample>(previous.ValueJson["data"]["world"].ToJson())!;
             sample.Tick = startTick + i * 60; sample.PlanRevision = revision; sample.PlanFingerprint = plan.Fingerprint();
             sample.Stalkers[0].State = count > 1 && i < 20 ? "CHASE" : "SEARCH";
             sample.Stalkers[0].EpisodeId = "chase:2"; sample.Stalkers[0].TargetUserId = count > 1 && i < 20 ? user : null;
+            if (count > 1)
+            {
+                sample.Players.Single(x => x.UserId == reviver).HeldToolInstanceId = i < 25 ? "tool:3" : string.Empty;
+                if (i < 25)
+                {
+                    var aid = sample.Tools.Single(x => x.InstanceId == "tool:3"); aid.Location = "Player"; aid.OwnerUserId = reviver; aid.MarkerId = string.Empty;
+                }
+                else sample.Tools = sample.Tools.Where(x => x.InstanceId != "tool:3").ToArray();
+            }
+            if (i == 25) events.Add(V02Event(f.MatchId, "TEAM_TOOL_LIFECYCLE", events.Count + 1, started.AddSeconds(i), "1.2", new BsonDocument {
+                ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = sample.Tick },
+                ["data"] = new BsonDocument { ["action"] = "CONSUME", ["instanceId"] = "tool:3", ["toolId"] = 3, ["zone"] = 1, ["remainingCharges"] = 0, ["ownerUserId"] = reviver.ToString("D") } }));
             if (i == 20 || i == 25) events.Add(V02Event(f.MatchId, i == 20 ? "PLAYER_DOWNED" : "PLAYER_REVIVED", events.Count + 1,
-                started.AddSeconds(i), "1.1", new BsonDocument { ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = sample.Tick }, ["data"] = new BsonDocument() }, user));
+                started.AddSeconds(i), "1.1", new BsonDocument { ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = sample.Tick },
+                    ["data"] = i == 25 ? new BsonDocument { ["reviverPlayerId"] = f.Db.MatchPlayerBindings.First(x => x.MatchId == f.MatchId && x.UserId != user).UserId.ToString("D"), ["usedFirstAidKit"] = true } : new BsonDocument() }, user));
             sample.Players.Single(x => x.UserId == user).LifeState = i >= 20 && i < 25 ? "DOWNED" : "ALIVE";
             events.Add(V02Event(f.MatchId, "AED_V02_WORLD_SAMPLE", events.Count + 1, started.AddSeconds(i), "1.3", BsonDocument.Parse(JsonSerializer.Serialize(new
                 { context = new { phase = "CORE_COLLECTION", authorityTick = sample.Tick, occurrenceKey = "world:" + sample.Tick }, data = new { world = sample } }))));

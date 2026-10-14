@@ -14,6 +14,7 @@ namespace EchoProtocol.AI.AED
         public string rosterIdentity; public string sceneManifestFingerprint; public AEDV02PlayerPressureDto[] players;
         public string[] recentDownUsers; public bool safeWindow; public int logicalPhase; public int zone;
         public string phaseName; public int planRevision; public string planFingerprint; public string sourceEndedAtUtc;
+        public bool pressureComplete; public string[] missingChannels;
     }
     [Serializable] public sealed class AEDV02DecisionRequestDto
     {

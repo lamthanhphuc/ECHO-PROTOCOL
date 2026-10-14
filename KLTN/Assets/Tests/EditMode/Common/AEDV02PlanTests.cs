@@ -51,6 +51,18 @@ public sealed class AEDV02PlanTests
         Assert.That(first, Is.Not.EqualTo(AEDV02Plan.WindowId(match, 1, AEDV02DecisionPoint.SAFE_WINDOW, 2, 20, 30, "source")));
     }
     [Test]
+    public void InMatchCannotSkipTierAndReliefReturnsPressureToBaselineFirst()
+    {
+        var pressured = AEDV02Plan.Normal().With(AEDV02Key.ChaseSpeed, 8);
+        Assert.That(pressured.With(AEDV02Key.ChaseSpeed, 7).TryValidateChange(pressured, AEDV02DecisionPoint.SAFE_WINDOW, false, 0,
+            out _, out var reason), Is.False);
+        Assert.That(reason, Is.EqualTo("HOLD_SINGLE_TIER_REQUIRED"));
+        Assert.That(pressured.TryProposeRelief(new[] { new[] { 1d, 0, 0, 0, 0 } }, new[] { .7 }, false, 1, out var relief), Is.True);
+        Assert.That(relief.Get(AEDV02Key.ChaseSpeed), Is.EqualTo(7.5));
+        Assert.That(relief.TryValidateChange(pressured, AEDV02DecisionPoint.SAFE_WINDOW, false, 0, out _, out _), Is.True);
+        Assert.That(relief.PositiveTokens(0), Is.Zero);
+    }
+    [Test]
     public void Plan_RejectsOutOfWhitelistAndProtectsValues()
     {
         Assert.Throws<ArgumentException>(() => AEDV02Plan.Normal().With(AEDV02Key.Zone3AdaptiveMinionCap, 2));

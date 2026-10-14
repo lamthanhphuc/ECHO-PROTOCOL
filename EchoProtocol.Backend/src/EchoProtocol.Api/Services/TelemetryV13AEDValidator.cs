@@ -30,12 +30,17 @@ internal static class TelemetryV13AEDValidator
             if (item.EventType == "AED_V02_WORLD_SAMPLE")
             {
                 if (!data.TryGetProperty("world", out var world)) return false;
+                if (!Complete<AEDV02WorldSample>(world) ||
+                    !CompleteArray<AEDV02PlayerSource>(world, "Players") || !CompleteArray<AEDV02ThreatSource>(world, "Stalkers") ||
+                    !CompleteArray<AEDV02ThreatSource>(world, "Minions") || !CompleteArray<AEDV02ToolSource>(world, "Tools") ||
+                    !CompleteArray<AEDV02DoorSource>(world, "Doors")) return false;
                 var sample = JsonSerializer.Deserialize<AEDV02WorldSample>(world.GetRawText(), Json);
                 if (sample == null || !sample.IsValid() || sample.Tick != authorityTick || sample.PhaseName != phase) return false;
             }
             else
             {
                 if (!data.TryGetProperty("effect", out var effect)) return false;
+                if (!Complete<AEDV02EffectSource>(effect)) return false;
                 var receipt = JsonSerializer.Deserialize<AEDV02EffectSource>(effect.GetRawText(), Json);
                 if (receipt == null || !receipt.IsValid() || receipt.ObservedTick > authorityTick) return false;
             }
@@ -45,6 +50,11 @@ internal static class TelemetryV13AEDValidator
     }
     private static bool Fields(JsonElement value, string[] allowed) => value.EnumerateObject().All(x => allowed.Contains(x.Name)) &&
         value.EnumerateObject().Select(x => x.Name).Distinct(StringComparer.Ordinal).Count() == value.EnumerateObject().Count();
+    private static bool Complete<T>(JsonElement value) => value.ValueKind == JsonValueKind.Object &&
+        value.EnumerateObject().Count() == typeof(T).GetProperties().Length &&
+        typeof(T).GetProperties().Select(x => x.Name).ToHashSet(StringComparer.Ordinal).SetEquals(value.EnumerateObject().Select(x => x.Name));
+    private static bool CompleteArray<T>(JsonElement value, string key) => value.TryGetProperty(key, out var array) &&
+        array.ValueKind == JsonValueKind.Array && array.EnumerateArray().All(Complete<T>);
     private static bool Text(JsonElement parent, string key, out string value)
     {
         value = string.Empty;
