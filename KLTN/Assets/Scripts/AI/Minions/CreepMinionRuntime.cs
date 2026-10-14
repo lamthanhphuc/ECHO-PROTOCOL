@@ -86,18 +86,7 @@ namespace EchoProtocol.AI.Minions
         [SerializeField, Min(0.1f)] private float animationSpeed = 1.6f;
         [SerializeField, Min(0.1f)] private float attackAnimationLockSeconds = 0.35f;
 
-        [Header("Counterplay")]
-        [FormerlySerializedAs("flashlightRepelRange")]
-        [SerializeField, Min(1f)]
-        private float flashlightKillRange = 25f;
-
-        [FormerlySerializedAs("flashlightExposureRequiredSeconds")]
-        [SerializeField, Min(0.1f)]
-        private float flashlightKillExposureSeconds = 1f;
-
-        [SerializeField, Min(0f)]
-        private float flashlightExposureDecayPerSecond = 2f;
-
+        [Header("Resonance counterplay")]
         [SerializeField, Min(0.1f)]
         private float deathVanishSeconds = 0.5f;
         [SerializeField] private float noiseMakerDistractionSeconds = 6f;
@@ -145,6 +134,10 @@ namespace EchoProtocol.AI.Minions
         private float _trackSeconds;
         private float _lostSightSeconds;
         private float _flashlightExposureSeconds;
+        private float _resonanceGrace;
+        private int _resonanceContributors;
+        private float ResonanceSpeedMultiplier => _resonanceContributors > 0 ? .6f : 1f;
+        [Networked] public float ResonanceProgress { get; private set; }
         private float _nextTargetRefreshAt;
         private float _nextRoamRetargetAt;
         private float _distractionUntil;
@@ -326,26 +319,16 @@ namespace EchoProtocol.AI.Minions
 
             if (ToolDivePhase == 0) UpdateFlightHeightAuthoritative();
 
-            bool illuminated =
-                TryGetFlashlightSource(out _);
+            _resonanceContributors=0;
+            foreach(var player in Runner.ActivePlayers)
+                if(Runner.TryGetPlayerObject(player,out var playerObject) && playerObject!=null
+                    && playerObject.TryGetComponent<NetworkPlayerFlashlight>(out var emitter)
+                    && emitter.ResonanceActive && emitter.ResonanceTarget==this) _resonanceContributors++;
+            bool illuminated = _resonanceContributors>0;
 
-            if (illuminated)
-            {
-                _flashlightExposureSeconds =
-                    Mathf.Min(
-                        flashlightKillExposureSeconds,
-                        _flashlightExposureSeconds
-                        + Runner.DeltaTime);
-            }
-            else
-            {
-                _flashlightExposureSeconds =
-                    Mathf.Max(
-                        0f,
-                        _flashlightExposureSeconds
-                        - Runner.DeltaTime
-                          * flashlightExposureDecayPerSecond);
-            }
+            var exposure=ResonanceRules.TickExposure(new ResonanceExposureState { Seconds=_flashlightExposureSeconds,Grace=_resonanceGrace },_resonanceContributors,Runner.DeltaTime);
+            _flashlightExposureSeconds=exposure.Seconds;
+            _resonanceGrace=exposure.Grace;
 
 #if false
             if (illuminated)
@@ -354,13 +337,13 @@ namespace EchoProtocol.AI.Minions
                     // $"[CREEP_FLASHLIGHT][EXPOSURE] " +
                     // $"id={Object.Id} " +
                     // $"exposure={_flashlightExposureSeconds:F2}/" +
-                    // $"{flashlightKillExposureSeconds:F2}",
+                    // $"{2f:F2}",
                     // this);
             }
 #endif
 
-            if (_flashlightExposureSeconds
-                >= flashlightKillExposureSeconds)
+            ResonanceProgress=Mathf.Clamp01(_flashlightExposureSeconds/2f);
+            if (_flashlightExposureSeconds >= 2f)
             {
                 BeginFlashlightDeath();
                 return;
@@ -375,7 +358,7 @@ namespace EchoProtocol.AI.Minions
             }
             if (State == CreepMinionState.Flee)
             {
-                _agent.speed = fleeSpeed;
+                _agent.speed = fleeSpeed * ResonanceSpeedMultiplier;
                 _agent.SetDestination(_fleeDestination);
                 if (StolenCoreId.IsValid && Runner.TryFindObject(StolenCoreId, out var coreObject)
                     && coreObject != null && coreObject.TryGetComponent<NetworkPickupItem>(out var core))
@@ -405,7 +388,7 @@ namespace EchoProtocol.AI.Minions
             }
             else if (_distractionUntil > Time.time && !StolenCoreId.IsValid)
             {
-                _agent.speed = trackSpeed;
+                _agent.speed = trackSpeed * ResonanceSpeedMultiplier;
                 _agent.SetDestination(_distractionPoint);
                 if (Vector3.Distance(transform.position, _distractionPoint) <= noiseMakerArrivalDistance)
                     _distractionUntil = 0f;
@@ -452,7 +435,7 @@ namespace EchoProtocol.AI.Minions
                 }
                 else
                 {
-                    _agent.speed = trackSpeed;
+                    _agent.speed = trackSpeed * ResonanceSpeedMultiplier;
                     _agent.SetDestination(_lastKnownTargetPosition);
                 }
                 return;
@@ -464,7 +447,7 @@ namespace EchoProtocol.AI.Minions
             {
                 StateValue = (int)CreepMinionState.Track;
                 _trackSeconds += Runner.DeltaTime;
-                _agent.speed = trackSpeed;
+                _agent.speed = trackSpeed * ResonanceSpeedMultiplier;
                 if (Vector3.Distance(transform.position, _lastKnownTargetPosition) > trackStandOffDistance)
                     _agent.SetDestination(_lastKnownTargetPosition);
                 else if (_agent.hasPath)
@@ -487,7 +470,7 @@ namespace EchoProtocol.AI.Minions
                         _stalkerAlertDeliveredForTarget ? alertCooldownSeconds : alertRetrySeconds);
                 }
 
-                _agent.speed = harassSpeed;
+                _agent.speed = harassSpeed * ResonanceSpeedMultiplier;
                 float distance = Vector3.Distance(transform.position, targetObject.transform.position);
                 bool wantsCloseAttack =
                     targetLobby != null
@@ -508,7 +491,7 @@ namespace EchoProtocol.AI.Minions
         private void Roam()
         {
             StateValue = (int)CreepMinionState.Roam;
-            _agent.speed = roamSpeed;
+            _agent.speed = roamSpeed * ResonanceSpeedMultiplier;
 
             bool stillTravelling = _agent.pathPending
                 || (_agent.hasPath
@@ -842,7 +825,7 @@ namespace EchoProtocol.AI.Minions
                 _agent.stoppingDistance = 0.4f;
                 return;
             }
-            _agent.speed = harassSpeed;
+            _agent.speed = harassSpeed * ResonanceSpeedMultiplier;
             _agent.stoppingDistance = 0.75f;
             _agent.SetDestination(target.transform.position);
             IsMoving = _agent.velocity.sqrMagnitude > 0.05f;
@@ -1055,7 +1038,7 @@ namespace EchoProtocol.AI.Minions
 #endif
             }
 
-            _agent.speed = fleeSpeed;
+            _agent.speed = fleeSpeed * ResonanceSpeedMultiplier;
             StateValue = (int)CreepMinionState.Flee;
             FleeTimer = TickTimer.CreateFromSeconds(Runner, seconds);
         }
@@ -1077,7 +1060,7 @@ namespace EchoProtocol.AI.Minions
                 _fleeDestination = destination;
             }
 
-            _agent.speed = fleeSpeed;
+            _agent.speed = fleeSpeed * ResonanceSpeedMultiplier;
             StateValue = (int)CreepMinionState.Flee;
             FleeTimer = TickTimer.CreateFromSeconds(Runner, seconds);
             _agent.SetDestination(_fleeDestination);
@@ -1141,159 +1124,7 @@ namespace EchoProtocol.AI.Minions
             _stalkerAlertDeliveredForTarget = false;
         }
 
-        private bool TryGetFlashlightSource(
-            out Vector3 source)
-        {
-            source = default;
 
-            foreach (var player
-                     in Runner.ActivePlayers)
-            {
-                if (!Runner.TryGetPlayerObject(
-                        player,
-                        out var playerObject)
-                    || playerObject == null
-                    || !playerObject.TryGetComponent<
-                        NetworkPlayerFlashlight>(
-                        out var flashlight)
-                    || !flashlight.IsEmittingLight)
-                {
-                    continue;
-                }
-
-                Transform beam =
-                    flashlight.BeamTransform;
-
-                if (beam == null)
-                {
-                    continue;
-                }
-
-                // Ponytail:
-                // vị trí đèn có thể reuse từ child hiện tại,
-                // nhưng hướng gameplay phải lấy từ state authoritative,
-                // không lấy rotation do Render/LateUpdate điều khiển.
-                Vector3 beamOrigin =
-                    beam.position;
-
-                Vector3 beamForward =
-                    beam.forward;
-
-                if (playerObject.TryGetComponent<
-                        NetworkPlayerMovement>(
-                        out var movement))
-                {
-                    beamForward =
-                        Quaternion.Euler(
-                            movement.CurrentPitch,
-                            playerObject.transform.eulerAngles.y,
-                            0f)
-                        * Vector3.forward;
-                }
-
-                // Aim vào chính giữa collider Minion.
-                Vector3 targetPoint =
-                    _bodyCollider != null
-                        ? _bodyCollider.bounds.center
-                        : transform.position
-                          + Vector3.up * 0.6f;
-
-                Vector3 ray =
-                    targetPoint - beamOrigin;
-
-                float distance =
-                    ray.magnitude;
-
-                if (distance <= 0.01f)
-                {
-                    continue;
-                }
-
-                float maxRange =
-                    Mathf.Min(
-                        flashlight.BeamRange,
-                        flashlightKillRange);
-
-                if (distance > maxRange)
-                {
-                    continue;
-                }
-
-                float angle =
-                    Vector3.Angle(
-                        beamForward,
-                        ray);
-
-                float halfAngle =
-                    flashlight.BeamSpotAngle
-                    * 0.5f;
-
-                if (angle > halfAngle)
-                {
-                    continue;
-                }
-
-                var hits =
-                    Physics.RaycastAll(
-                        beamOrigin,
-                        ray.normalized,
-                        distance + 0.5f,
-                        ~0,
-                        QueryTriggerInteraction.Ignore);
-
-                Array.Sort(
-                    hits,
-                    (left, right) =>
-                        left.distance.CompareTo(
-                            right.distance));
-
-                foreach (var hit in hits)
-                {
-                    // Bỏ collider của chính Player
-                    // đang cầm flashlight.
-                    if (hit.collider.transform
-                        .IsChildOf(
-                            playerObject.transform))
-                    {
-                        continue;
-                    }
-
-                    // Collider đầu tiên sau Player là Minion
-                    // => flashlight thực sự có line of sight.
-                    var hitMinion =
-                        hit.collider
-                            .GetComponentInParent<
-                                CreepMinionRuntime>();
-
-                    if (hitMinion == this)
-                    {
-                        source =
-                            playerObject
-                                .transform.position;
-
-#if false
-                        // Debug.Log(
-                            $"[CREEP_FLASHLIGHT][HIT] " +
-                            $"id={Object.Id} " +
-                            $"state={State} " +
-                            $"player={player} " +
-                            $"distance={distance:F1}/" +
-                            $"{maxRange:F1} " +
-                            $"angle={angle:F1}/" +
-                            $"{halfAngle:F1}",
-                            this);
-#endif
-
-                        return true;
-                    }
-
-                    // Vật khác chắn beam.
-                    break;
-                }
-            }
-
-            return false;
-        }
 
         public override void Render()
         {

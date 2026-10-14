@@ -475,6 +475,7 @@ namespace EchoProtocol.Tools.Scanner
 
         private bool CanUseScannerAuthoritative()
         {
+            if (NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
             if (!IsScannerEquipped() || IsCarryingCore()) return false;
             var life = GetComponent<NetworkPlayerLifeState>();
             if (life != null && life.Object != null && life.Object.IsValid && !life.CanInitiateAction) return false;

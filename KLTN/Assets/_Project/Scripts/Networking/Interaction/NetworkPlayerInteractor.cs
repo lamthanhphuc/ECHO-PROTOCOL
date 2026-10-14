@@ -266,7 +266,7 @@ namespace EchoProtocol.Networking
             }
 
             var lifeState = GetComponent<NetworkPlayerLifeState>();
-            if (lifeState != null && !lifeState.CanInitiateAction)
+            if (NetworkPlayerFlashlight.IsResonating(gameObject) || lifeState != null && !lifeState.CanInitiateAction)
             {
                 CurrentCandidate = null;
                 IsTeamToolPickupBlocked = false;
@@ -576,6 +576,7 @@ namespace EchoProtocol.Networking
 
         public bool CanStartFirstAidReviveAuthoritative(LobbyPlayerState state)
         {
+            if (NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
             if (Object == null
                 || !Object.IsValid
                 || !Object.HasStateAuthority
@@ -604,6 +605,7 @@ namespace EchoProtocol.Networking
 
         public bool RequestUseTeamTool()
         {
+            if (NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
             bool isOnline = Runner != null && Runner.IsRunning && Object != null && Object.IsValid;
             if (isOnline && !Object.HasInputAuthority) return false;
 
@@ -787,6 +789,7 @@ namespace EchoProtocol.Networking
 
         public bool RequestInteraction(NetworkInteractable target)
         {
+            if (NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
             if (!Object.HasInputAuthority)
             {
                 CompleteLocally(default, 0, InteractionValidationResult.NotInputAuthority);
@@ -2363,6 +2366,7 @@ namespace EchoProtocol.Networking
 
         private InteractionValidationResult ValidateRequester(PlayerRef source, uint sequence)
         {
+            if (NetworkPlayerFlashlight.IsResonating(gameObject)) return InteractionValidationResult.InvalidRequester;
             if (!Object.HasStateAuthority || !source.IsValid || source != Object.InputAuthority)
             {
                 return InteractionValidationResult.InvalidRequester;

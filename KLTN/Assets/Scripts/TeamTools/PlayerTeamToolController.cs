@@ -45,6 +45,11 @@ public sealed class PlayerTeamToolController : MonoBehaviour
 
     private void Update()
     {
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby")
+        {
+            if (equippedObject != null) ClearEquippedTool();
+            return;
+        }
         bool pushing = IsPushing() || EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null;
         if (pushing != _wasPushing)
         {
@@ -53,7 +58,7 @@ public sealed class PlayerTeamToolController : MonoBehaviour
         }
 
         if (PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return;
-        if (!pushing && Keyboard.current != null && Keyboard.current[fallbackUseKey].wasPressedThisFrame)
+        if (fallbackUseKey != Key.Q && !pushing && Keyboard.current != null && Keyboard.current[fallbackUseKey].wasPressedThisFrame)
         {
             UseEquippedTool();
         }
@@ -61,6 +66,7 @@ public sealed class PlayerTeamToolController : MonoBehaviour
 
     public bool UseEquippedTool()
     {
+        if (NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
         return inventory != null
             && !inventory.IsTeamToolLocked
             && !IsPushing()
@@ -71,6 +77,11 @@ public sealed class PlayerTeamToolController : MonoBehaviour
 
     public void RefreshEquippedTool()
     {
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby")
+        {
+            ClearEquippedTool();
+            return;
+        }
         InventoryItemDefinition definition = inventory != null ? inventory.TeamToolSlot : null;
         if (definition == equippedDefinition && equippedObject != null) return;
         ClearEquippedTool();

@@ -10,7 +10,7 @@ namespace EchoProtocol.Networking
     /// Networked flashlight behaviour for PlayerNetwork.
     /// Synchronizes flashlight state across clients via Fusion.
     /// </summary>
-    public sealed class NetworkPlayerFlashlight : NetworkBehaviour
+    public sealed partial class NetworkPlayerFlashlight : NetworkBehaviour
     {
         [Header("References")]
         [SerializeField] private Light _flashlight;
@@ -45,7 +45,7 @@ namespace EchoProtocol.Networking
             }
         }
 
-        public bool IsEmittingLight => IsOn && CanUseFlashlight();
+        public bool IsEmittingLight => (IsOn || Object != null && Object.IsValid && ResonanceActive) && CanUseFlashlight();
 
         public Transform BeamTransform
         {
@@ -56,7 +56,7 @@ namespace EchoProtocol.Networking
             }
         }
 
-        public float BeamRange => Mathf.Max(0f, _beamRange);
+        public float BeamRange => Object != null && Object.IsValid && ResonanceActive ? ResonanceRange : Mathf.Max(0f, _beamRange);
         public float BeamSpotAngle => Mathf.Clamp(_beamSpotAngle, 1f, 179f);
 
         private bool HasLocalControl()
@@ -123,6 +123,7 @@ namespace EchoProtocol.Networking
             if (Object.HasStateAuthority)
             {
                 IsFlashlightOn = _startOn;
+                ResonanceEnergy = 100f;
             }
 
             if (HasLocalControl())
@@ -131,6 +132,8 @@ namespace EchoProtocol.Networking
             }
 
             ApplyVisuals();
+            if (Object.HasInputAuthority && GetComponent<ResonanceHUD>() == null)
+                gameObject.AddComponent<ResonanceHUD>();
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -145,6 +148,7 @@ namespace EchoProtocol.Networking
 
         private void OnDestroy()
         {
+            if (_resonanceMaterial != null) Destroy(_resonanceMaterial);
             GameplayInputSettings.UnregisterAction(_flashlightAction);
             _flashlightAction?.Dispose();
         }
@@ -335,7 +339,7 @@ namespace EchoProtocol.Networking
                 bool isOn;
                 if (Runner != null && Object != null && Object.IsValid)
                 {
-                    isOn = IsFlashlightOn && CanUseFlashlight();
+                    isOn = (IsFlashlightOn || ResonanceActive) && CanUseFlashlight();
                 }
                 else
                 {
@@ -343,6 +347,7 @@ namespace EchoProtocol.Networking
                 }
 
                 _flashlight.enabled = isOn;
+                ApplyResonanceVisuals();
                 RemoveBeamVisual();
             }
         }

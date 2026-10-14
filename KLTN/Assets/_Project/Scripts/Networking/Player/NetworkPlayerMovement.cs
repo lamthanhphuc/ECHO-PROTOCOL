@@ -17,6 +17,7 @@ namespace EchoProtocol.Networking
         public NetworkBool JumpPressed;
         public NetworkBool SprintHeld;
         public NetworkBool CrouchHeld;
+        public NetworkBool ResonanceHeld;
     }
 
     [RequireComponent(typeof(NetworkCharacterController))]
@@ -486,8 +487,8 @@ namespace EchoProtocol.Networking
             bool canInitiateAction = lifeState == null || lifeState.CanInitiateAction;
             bool wantsCrouch = input.CrouchHeld
                 && canInitiateAction
-                && CoreStabilizerRules.AllowsCrouch(isCarryingCore,
-                    lobbyState != null && lobbyState.ToolId == LobbyPlayerState.CoreStabilizerToolId);
+                && (NetworkPlayerFlashlight.IsResonating(gameObject) || CoreStabilizerRules.AllowsCrouch(isCarryingCore,
+                    lobbyState != null && lobbyState.ToolId == LobbyPlayerState.CoreStabilizerToolId));
             if (Object.HasStateAuthority)
             {
                 IsCrouching = wantsCrouch;
@@ -500,6 +501,7 @@ namespace EchoProtocol.Networking
                 canInitiateAction
                 && !effectiveCrouch
                 && coreAllowsSprint
+                && !NetworkPlayerFlashlight.IsResonating(gameObject)
                 && !StaminaExhausted
                 && input.SprintHeld
                 && NetworkCurrentStamina
@@ -1219,8 +1221,10 @@ namespace EchoProtocol.Networking
                     : 0f,
                 JumpPressed = _allowJump && (_jumpAction?.WasPressedThisFrame() ?? false),
                 SprintHeld = _sprintAction?.IsPressed() ?? false,
-                CrouchHeld = CoreStabilizerRules.AllowsCrouch(
-                    IsCarryingCore(), IsHoldingCoreStabilizer()) && IsCrouchPressed(),
+                ResonanceHeld = Application.isFocused && Keyboard.current != null && Keyboard.current.qKey.isPressed
+                    && !PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject),
+                CrouchHeld = (NetworkPlayerFlashlight.IsResonating(gameObject) || CoreStabilizerRules.AllowsCrouch(
+                    IsCarryingCore(), IsHoldingCoreStabilizer())) && IsCrouchPressed(),
             };
         }
 
