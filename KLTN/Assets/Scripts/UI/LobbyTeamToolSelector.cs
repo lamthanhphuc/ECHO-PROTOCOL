@@ -310,7 +310,7 @@ namespace EchoProtocol.UI
                 if (valueText != null)
                 {
                     valueText.text =
-                        "TEAM TOOL: NONE";
+                        EchoProtocol.Settings.GameLanguage.Choose("Không có", "None");
                 }
 
                 if (thumbnail != null)
@@ -336,9 +336,7 @@ namespace EchoProtocol.UI
                     if (valueText != null)
                     {
                         valueText.text =
-                            "TEAM TOOL: "
-                            + definition.DisplayName
-                                .ToUpperInvariant();
+                            EchoProtocol.Settings.GameLanguage.Translate(definition.DisplayName);
                     }
 
                     RefreshThumbnail(
@@ -351,7 +349,7 @@ namespace EchoProtocol.UI
             if (valueText != null)
             {
                 valueText.text =
-                    $"TEAM TOOL: TOOL {toolId}";
+                    EchoProtocol.Settings.GameLanguage.Choose($"Công cụ {toolId}", $"Tool {toolId}");
             }
 
             RefreshThumbnail(

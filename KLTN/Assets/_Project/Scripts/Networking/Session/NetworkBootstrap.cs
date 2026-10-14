@@ -111,7 +111,7 @@ namespace EchoProtocol.Networking
                 return FailWithoutStarting("A room must allow between 2 and 4 players.");
 
             _matchAuthority ??= MatchAuthorityRuntime.EnsureExists(this);
-            _matchAuthority.RequestDifficulty(difficulty);
+            _matchAuthority.RequestDifficulty((MatchDifficulty)EchoProtocol.UI.LobbySelectionMemory.Read("difficulty", (int)difficulty));
             return StartSessionAsync(GameMode.Host, sessionName, maxPlayers);
         }
 
@@ -122,6 +122,7 @@ namespace EchoProtocol.Networking
         private async Task ShutdownAsync(bool returnToLobby, string destinationScene = null)
         {
             if (State == NetworkSessionState.ShuttingDown) return;
+            EchoProtocol.UI.LobbySelectionMemory.SaveBeforeLeaving();
             SetState(NetworkSessionState.ShuttingDown, "Leaving room...");
             _reconnectSessionName = null;
             IsReconnecting = false;

@@ -725,6 +725,8 @@ namespace EchoProtocol.UI.MainMenu
             if (_buyButton == null)
                 return;
 
+            if(StoreLobbyEquipment.ShowAction(_buyButton,_selectedPrice,false,_selectedCharacterId,(_purchaseTarget == PurchaseTarget.Outfit ? _selectedOutfitId : 0),(_purchaseTarget == PurchaseTarget.Outfit ? CharacterOutfitShopAssets.IsOwned(_selectedCharacterId,_selectedOutfitId) && CharacterShopAssets.IsOwned(_selectedCharacterId) : CharacterShopAssets.IsOwned(_selectedCharacterId))))return;
+
             var caption =
                 _buyButton
                     .GetComponentInChildren<Text>();
@@ -819,7 +821,7 @@ namespace EchoProtocol.UI.MainMenu
                     _buyButton.interactable = true;
 
                     if (caption != null)
-                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
+                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua", "Buy");
 
                     return;
                 }
@@ -842,7 +844,7 @@ namespace EchoProtocol.UI.MainMenu
                     caption.text =
                         _purchasing
                             ? EchoProtocol.Settings.GameLanguage.Choose("Đang mua…", "Purchasing…")
-                            : EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
+                            : EchoProtocol.Settings.GameLanguage.Choose("Mua", "Buy");
                 }
 
                 return;
@@ -890,7 +892,7 @@ namespace EchoProtocol.UI.MainMenu
                 _buyButton.interactable = true;
 
                 if (caption != null)
-                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua", "Buy");
 
                 return;
             }
@@ -913,12 +915,14 @@ namespace EchoProtocol.UI.MainMenu
                 caption.text =
                     _purchasing
                         ? EchoProtocol.Settings.GameLanguage.Choose("Đang mua…", "Purchasing…")
-                        : EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
+                        : EchoProtocol.Settings.GameLanguage.Choose("Mua", "Buy");
             }
         }
 
         private void PurchaseSelected()
         {
+            if(StoreLobbyEquipment.Equip(transform,false,_selectedCharacterId,(_purchaseTarget == PurchaseTarget.Outfit ? _selectedOutfitId : 0),(_purchaseTarget == PurchaseTarget.Outfit ? CharacterOutfitShopAssets.IsOwned(_selectedCharacterId,_selectedOutfitId) && CharacterShopAssets.IsOwned(_selectedCharacterId) : CharacterShopAssets.IsOwned(_selectedCharacterId))))return;
+
             if (_previewMode)
             {
                 SetStatus(
@@ -1059,6 +1063,7 @@ namespace EchoProtocol.UI.MainMenu
 
                     TeamToolOwnershipSession.MarkOwned(
                         purchasingItem.itemId);
+                    StoreLobbyEquipment.Equip(transform,false,purchasingCharacterId,purchasingOutfit ? purchasingOutfitId : 0,true);
 
                     SetStatus(
                         purchasingName

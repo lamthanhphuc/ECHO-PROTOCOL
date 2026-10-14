@@ -36,7 +36,7 @@ namespace EchoProtocol.Voice
             _deadline = Time.unscaledTime + 10;
             transform.position = _player.transform.position + Vector3.up * 1.6f;
             bool isLobby = SceneManager.GetActiveScene().name == "Lobby";
-            _source.spatialBlend = isLobby ? 0f : 1f;
+            _source.spatialBlend = isLobby || !EchoProtocol.UI.LobbyGameplaySettings.Enabled("proximityVoice") ? 0f : 1f;
             _source.volume = _manager.OutputVolume;
             _source.outputAudioMixerGroup = _manager.OutputMixer;
             _source.mute = _player.HasInputAuthority || _manager.IsPlayerMuted(_key);

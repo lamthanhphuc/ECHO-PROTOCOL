@@ -310,6 +310,8 @@ namespace EchoProtocol.Networking
             AnyStateChanged?.Invoke();
             if (Object.HasInputAuthority)
             {
+                if (!IsGameplayPlayer && GetComponent<EchoProtocol.UI.LobbySelectionMemory>() == null)
+                    gameObject.AddComponent<EchoProtocol.UI.LobbySelectionMemory>();
                 MatchAuthorityRuntime.EnsureExists(NetworkBootstrap.Instance)
                     .TrySubmitLocalIdentity(this, NetworkBootstrap.Instance?.ReconnectIdentityPending == true);
             }

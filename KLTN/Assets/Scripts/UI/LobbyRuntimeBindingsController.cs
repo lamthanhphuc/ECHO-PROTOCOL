@@ -439,6 +439,7 @@ namespace EchoProtocol.UI
                 .EnsureExists(bootstrap)
                 .RequestDifficulty(
                     difficulty);
+            LobbySelectionMemory.Write("difficulty", (int)difficulty);
         }
 
 

@@ -213,6 +213,9 @@ namespace EchoProtocol.TeamTools
                 new List<int>(
                     RequiredToolIds);
 
+            if (!EchoProtocol.UI.LobbyGameplaySettings.Enabled("medkits"))
+                required.Remove(LobbyPlayerState.FirstAidKitToolId);
+
             Shuffle(required);
 
             for (int i = 0;
@@ -250,6 +253,9 @@ namespace EchoProtocol.TeamTools
                 var extras =
                     new List<int>(
                         useAEDSupportPool ? AEDSupportIds : RequiredToolIds);
+
+                if (!EchoProtocol.UI.LobbyGameplaySettings.Enabled("medkits"))
+                    extras.Remove(LobbyPlayerState.FirstAidKitToolId);
 
                 Shuffle(extras);
 

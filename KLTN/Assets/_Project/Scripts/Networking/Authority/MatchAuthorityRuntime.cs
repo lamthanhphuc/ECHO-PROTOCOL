@@ -267,7 +267,10 @@ namespace EchoProtocol.Networking.Authority
                     requestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive
                         ? "ADAPTIVE"
                         : "FIXED",
-                [MatchDifficultySessionProperty] = requestedDifficulty.ToString().ToUpperInvariant()
+                [MatchDifficultySessionProperty] = requestedDifficulty.ToString().ToUpperInvariant(),
+                ["playerCollisions"] = EchoProtocol.UI.LobbySelectionMemory.Read("playerCollisions", 1),
+                ["proximityVoice"] = EchoProtocol.UI.LobbySelectionMemory.Read("proximityVoice", 1),
+                ["medkits"] = EchoProtocol.UI.LobbySelectionMemory.Read("medkits", 1)
             };
 
         public bool AttachJoinedSession(NetworkRunner runner)

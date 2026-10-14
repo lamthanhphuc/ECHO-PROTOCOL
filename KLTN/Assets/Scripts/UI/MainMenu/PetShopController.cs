@@ -594,6 +594,8 @@ namespace EchoProtocol.UI.MainMenu
                 return;
             }
 
+            if(StoreLobbyEquipment.ShowAction(_buyButton,_selectedPrice,true,_selectedPetId,(_purchaseTarget == PurchaseTarget.Skin ? _selectedSkinId : 0),(_purchaseTarget == PurchaseTarget.Skin ? PetShopAssets.IsSkinOwned(_selectedPetId,_selectedSkinId) && PetShopAssets.IsPetOwned(_selectedPetId) : PetShopAssets.IsPetOwned(_selectedPetId))))return;
+
             Text caption =
                 _buyButton
                     .GetComponentInChildren<Text>();
@@ -641,7 +643,7 @@ namespace EchoProtocol.UI.MainMenu
                     _buyButton.interactable = true;
 
                     if (caption != null)
-                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
+                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua", "Buy");
 
                     return;
                 }
@@ -664,7 +666,7 @@ namespace EchoProtocol.UI.MainMenu
                     caption.text =
                         _purchasing
                             ? EchoProtocol.Settings.GameLanguage.Choose("Đang mua…", "Purchasing…")
-                            : EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
+                            : EchoProtocol.Settings.GameLanguage.Choose("Mua", "Buy");
                 }
 
                 return;
@@ -760,7 +762,7 @@ namespace EchoProtocol.UI.MainMenu
                 _buyButton.interactable = true;
 
                 if (caption != null)
-                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua", "Buy");
 
                 return;
             }
@@ -783,7 +785,7 @@ namespace EchoProtocol.UI.MainMenu
                 caption.text =
                     _purchasing
                         ? EchoProtocol.Settings.GameLanguage.Choose("Đang mua…", "Purchasing…")
-                        : EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
+                        : EchoProtocol.Settings.GameLanguage.Choose("Mua", "Buy");
             }
         }
 
@@ -804,6 +806,8 @@ namespace EchoProtocol.UI.MainMenu
 
         private void PurchaseSelected()
         {
+            if(StoreLobbyEquipment.Equip(transform,true,_selectedPetId,(_purchaseTarget == PurchaseTarget.Skin ? _selectedSkinId : 0),(_purchaseTarget == PurchaseTarget.Skin ? PetShopAssets.IsSkinOwned(_selectedPetId,_selectedSkinId) && PetShopAssets.IsPetOwned(_selectedPetId) : PetShopAssets.IsPetOwned(_selectedPetId))))return;
+
             if (_previewMode)
             {
                 SetStatus(
@@ -926,6 +930,7 @@ namespace EchoProtocol.UI.MainMenu
 
                     TeamToolOwnershipSession.MarkOwned(
                         item.itemId);
+                    StoreLobbyEquipment.Equip(transform,true,purchasingPetId,purchasingSkin ? purchasingSkinId : 0,true);
 
                     SetStatus(
                         displayName +

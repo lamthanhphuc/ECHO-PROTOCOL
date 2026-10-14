@@ -124,6 +124,14 @@ namespace EchoProtocol.Settings
         }
 
         private const string Catalog = @"
+Trang phục|OUTFIT
+Va chạm người chơi:|Player Collisions:
+Thoại gần:|Proximity Voice:
+Túi cứu thương:|Medkits:
+Nhân vật:|Character:
+Độ khó:|Difficulty:
+Công cụ đội:|Team tool:
+Công cụ đội: Không có|TEAM TOOL: NONE
 Mạng an ninh chưa hoạt động|EMERGENCY NETWORK OFFLINE
 Khôi phục Relay A và Relay B|RESTORE POWER RELAY A AND DATA RELAY B
 trước khi xác thực bảo mật|BEFORE INITIATING SECURITY AUTHENTICATION
