@@ -14,6 +14,8 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
     private Vector3 _defaultScale;
     private float _defaultVisualHeight;
     private Quaternion _defaultRightPalm = Quaternion.identity;
+    private Quaternion _lobbyBaseRotation;
+    private bool _facingLobbyCamera;
     private Quaternion _jammoRightPalm = Quaternion.identity;
     private Quaternion _jammoLeftPalm = Quaternion.identity;
     [SerializeField, Min(0.1f)] private float jammoHeldItemScale = 1.4f;
@@ -87,6 +89,27 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
     {
         Refresh();
         RefreshOutfit();
+        FaceLobbyCamera();
+    }
+    private void FaceLobbyCamera()
+    {
+        if (animator == null || animator.transform == transform) return;
+        bool inLobby = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby";
+        if (!inLobby) {
+            if (_facingLobbyCamera) animator.transform.localRotation = _lobbyBaseRotation;
+            _facingLobbyCamera = false;
+            return;
+        }
+        var camera = Camera.main;
+        if (camera == null) return;
+        if (!_facingLobbyCamera) {
+            _lobbyBaseRotation = animator.transform.localRotation;
+            _facingLobbyCamera = true;
+        }
+        var direction = camera.transform.position - animator.transform.position;
+        direction.y = 0f;
+        if (direction.sqrMagnitude > .001f)
+            animator.transform.rotation = Quaternion.LookRotation(direction, Vector3.up);
     }
     private void RefreshOutfit()
     {

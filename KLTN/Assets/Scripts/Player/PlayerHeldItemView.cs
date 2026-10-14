@@ -85,6 +85,11 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     private bool _wasCarryingFuel;
     private void LateUpdate()
     {
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby")
+        {
+            if (_currentVisual != null) ClearVisual();
+            return;
+        }
         bool carryingFuel = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null;
         if (carryingFuel != _wasCarryingFuel)
         {
@@ -234,6 +239,7 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
     private InventoryItemDefinition ResolveDesiredHeldItem()
     {
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby") return null;
         if (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null) return null;
         if (IsPushing())
         {

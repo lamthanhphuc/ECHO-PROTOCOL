@@ -102,6 +102,11 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
 
     private void Update()
     {
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby")
+        {
+            if (_visual != null) Clear();
+            return;
+        }
         if (_visual != null) _visual.transform.localScale = ResolveToolScale(_shownToolId) * (GetComponentInParent<PlayerCharacterPresenter>()?.ToolHeldScale(_shownToolId) ?? 1f);
         bool pushing = IsPushing();
         if (pushing == _wasPushing)
@@ -115,6 +120,11 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
 
     private void Refresh()
     {
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby")
+        {
+            Clear();
+            return;
+        }
         if (lobbyState == null) lobbyState = GetComponentInParent<LobbyPlayerState>();
         if (lobbyState == null)
         {
@@ -324,6 +334,8 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         {
             return true;
         }
+
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby") return false;
 
         return _networkObject != null
             && _networkObject.IsValid
