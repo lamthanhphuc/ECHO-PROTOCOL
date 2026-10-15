@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using EchoProtocol.Networking;
 using UnityEngine;
 
@@ -14,6 +14,7 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
     private Vector3 _defaultScale;
     private float _defaultVisualHeight;
     private Quaternion _defaultRightPalm = Quaternion.identity;
+    private Quaternion _defaultLeftPalm = Quaternion.identity;
     private Quaternion _lobbyBaseRotation;
     private bool _facingLobbyCamera;
     private Quaternion _jammoRightPalm = Quaternion.identity;
@@ -59,6 +60,83 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         hand.rotation = Quaternion.LookRotation(forward, left ? right : -right)
             * Quaternion.Inverse(left ? _jammoLeftPalm : _jammoRightPalm);
     }
+    public void ApplyCarryGrip(Transform hand, bool left, Vector3 forward, Vector3 up)
+    {
+        if(IsJammo){ApplyJammoGrip(hand,left,forward,up);return;}
+        if(hand==null)return;
+        Vector3 right=Vector3.Cross(up,forward).normalized;
+        if(right.sqrMagnitude<.01f)return;
+        hand.rotation=Quaternion.LookRotation(forward,left ? right:-right)
+            * Quaternion.Inverse(left ? _defaultLeftPalm:_defaultRightPalm);
+    }
+    public Vector3 FuelCellWristTarget(Transform hand, bool left, Vector3 handle, Vector3 forward, Vector3 up)
+    {
+        if (hand == null || animator == null) return handle;
+        ApplyCarryGrip(hand, left, forward, up);
+        var middle = animator.GetBoneTransform(left ? HumanBodyBones.LeftMiddleProximal : HumanBodyBones.RightMiddleProximal);
+        // IK solves the wrist, while the handle belongs in the palm. Measure the
+        // active rig in world space so the same correction works for both avatars.
+        Vector3 palmOffset = middle != null ? (middle.position - hand.position) * .7f : Vector3.zero;
+        Vector3 outward = Vector3.Cross(up, forward).normalized * (left ? -1f : 1f);
+        // Keep the bulky glove outside the bar while the curled fingers wrap inward.
+        return handle - palmOffset + outward * .075f;
+    }
+    public Vector3 FuelCellHandlePoint(Transform hand, bool left, Vector3 forward, Vector3 up)
+    {
+        var middle = animator != null ? animator.GetBoneTransform(left ? HumanBodyBones.LeftMiddleProximal : HumanBodyBones.RightMiddleProximal) : null;
+        Vector3 palmOffset = middle != null ? (middle.position - hand.position) * .7f : Vector3.zero;
+        Vector3 outward = Vector3.Cross(up, forward).normalized * (left ? -1f : 1f);
+        return hand.position + palmOffset - outward * .075f;
+    }
+    private struct FingerPoseOverride
+    {
+        public Transform Bone;
+        public Quaternion Before;
+        public Quaternion Applied;
+    }
+    private readonly List<FingerPoseOverride> _fuelCellFingers = new List<FingerPoseOverride>(30);
+
+    public void RestoreFuelCellFingerPose()
+    {
+        foreach (var pose in _fuelCellFingers)
+        {
+            // Do not undo a fresh pose that the Animator has already written.
+            if (pose.Bone != null && Quaternion.Angle(pose.Bone.localRotation, pose.Applied) < .01f)
+                pose.Bone.localRotation = pose.Before;
+        }
+        _fuelCellFingers.Clear();
+    }
+
+    public void ApplyFuelCellFingerPose(Vector3 forward, Vector3 up, bool rightHandOnly = false)
+    {
+        if (animator == null || !animator.isHuman) return;
+        RestoreFuelCellFingerPose();
+        Vector3 right = Vector3.Cross(up, forward).normalized;
+        for (int side = rightHandOnly ? 1 : 0; side < 2; side++)
+        {
+            bool left = side == 0;
+            Vector3 inward = left ? right : -right;
+            Vector3 curlAxis = Vector3.Cross(forward, inward).normalized;
+            // The avatar skeleton supplies each rig's neutral finger orientation;
+            // world-space bend axes avoid assuming identical local axes on Jammo.
+            int first = (int)(left ? HumanBodyBones.LeftThumbProximal : HumanBodyBones.RightThumbProximal);
+            for (int finger = 0; finger < 5; finger++)
+            {
+                for (int joint = 0; joint < 3; joint++)
+                {
+                    var bone = animator.GetBoneTransform((HumanBodyBones)(first + finger * 3 + joint));
+                    if (bone == null) continue;
+                    Quaternion before = bone.localRotation;
+                    foreach (var neutral in animator.avatar.humanDescription.skeleton)
+                        if (neutral.name == bone.name) { bone.localRotation = neutral.rotation; break; }
+                    float angle = finger == 0 ? (joint == 0 ? 20f : 35f)
+                        : joint == 0 ? 48f : joint == 1 ? 72f : 42f;
+                    bone.rotation = Quaternion.AngleAxis(angle, curlAxis) * bone.rotation;
+                    _fuelCellFingers.Add(new FingerPoseOverride { Bone = bone, Before = before, Applied = bone.localRotation });
+                }
+            }
+        }
+    }
     private readonly Dictionary<GameObject, bool> _defaultChildren = new Dictionary<GameObject, bool>();
     private readonly List<GameObject> _jammoChildren = new List<GameObject>();
     private GameObject _jammoRoot;
@@ -82,6 +160,7 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         _defaultScale = animator.transform.localScale;
         _defaultVisualHeight = MeasureVisualHeight(animator.gameObject);
         _defaultRightPalm = PalmBasis(animator, false);
+        _defaultLeftPalm = PalmBasis(animator, true);
         foreach (Transform child in animator.transform) _defaultChildren.Add(child.gameObject, child.gameObject.activeSelf);
     }
     private void Start() => Refresh();

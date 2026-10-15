@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using QuickOutline;
 using EchoProtocol.RelayA;
 using EchoProtocol.RelayB;
@@ -18,7 +18,8 @@ namespace EchoProtocol.Visuals
             Relay,
             EnergyCore,
             SectorBox,
-            Terminal
+            Terminal,
+            FuelCell
         }
 
         [Header("Objective Configuration")]
@@ -43,6 +44,7 @@ namespace EchoProtocol.Visuals
         private RelayAController _relayA;
         private RelayBController _relayB;
         private EnergyCorePickup _energyCore;
+        private Zone3FuelCell _fuelCell;
         private NetworkPickupItem _networkPickup;
         private SectorBox _sectorBox;
         private NetworkSectorBox _networkSectorBox;
@@ -135,6 +137,7 @@ namespace EchoProtocol.Visuals
         {
             _relayA = GetComponentInParent<RelayAController>() ?? GetComponentInChildren<RelayAController>();
             _relayB = GetComponentInParent<RelayBController>() ?? GetComponentInChildren<RelayBController>();
+            _fuelCell = GetComponentInParent<Zone3FuelCell>() ?? GetComponentInChildren<Zone3FuelCell>();
             _energyCore = GetComponentInParent<EnergyCorePickup>() ?? GetComponentInChildren<EnergyCorePickup>();
             _networkPickup = GetComponentInParent<NetworkPickupItem>() ?? GetComponentInChildren<NetworkPickupItem>();
             _sectorBox = GetComponentInParent<SectorBox>() ?? GetComponentInChildren<SectorBox>();
@@ -160,6 +163,12 @@ namespace EchoProtocol.Visuals
                     objectiveType = ObjectiveType.Relay;
                     outlineMode = Outline.Mode.OutlineVisible; // Cannot see through walls
                     _isHighlighted = true;
+                }
+                else if (_fuelCell != null)
+                {
+                    objectiveType = ObjectiveType.FuelCell;
+                    outlineMode = Outline.Mode.OutlineVisible;
+                    _isHighlighted = false;
                 }
                 else if (_energyCore != null || _networkPickup != null)
                 {
@@ -200,6 +209,9 @@ namespace EchoProtocol.Visuals
                 case ObjectiveType.Relay:
                     CheckRelayState();
                     break;
+                case ObjectiveType.FuelCell:
+                    CheckFuelCellState();
+                    break;
                 case ObjectiveType.EnergyCore:
                     CheckEnergyCoreState();
                     break;
@@ -211,6 +223,7 @@ namespace EchoProtocol.Visuals
                     break;
                 default:
                     if (_relayA != null || _relayB != null) CheckRelayState();
+                    else if (_fuelCell != null) CheckFuelCellState();
                     else if (_energyCore != null || _networkPickup != null) CheckEnergyCoreState();
                     else if (_sectorBox != null || _networkSectorBox != null) CheckSectorBoxState();
                     else if (_terminal != null) CheckTerminalState();
@@ -223,6 +236,12 @@ namespace EchoProtocol.Visuals
             bool isOnline = (_relayA != null && _relayA.IsOnline) || (_relayB != null && _relayB.IsOnline);
             bool inRange = IsWithinDistance(maxVisibleDistance);
             SetHighlightActive(!isOnline && inRange);
+        }
+
+        private void CheckFuelCellState()
+        {
+            SetHighlightActive(_fuelCell != null && _fuelCell.IsAvailable && !_fuelCell.IsCarried
+                && IsWithinDistance(maxVisibleDistance));
         }
 
         private void CheckEnergyCoreState()
@@ -400,6 +419,7 @@ namespace EchoProtocol.Visuals
 
         public void SetHighlightActive(bool active)
         {
+            if (_fuelCell != null && (_fuelCell.IsCarried || !_fuelCell.IsAvailable)) active = false;
             if(Application.isPlaying && PlayerInteractionControlLock.HasModal)active=false;
             if (active && outlineMode != Outline.Mode.OutlineAll)
             {

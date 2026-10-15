@@ -1,9 +1,10 @@
-using EchoProtocol.Networking;
+﻿using EchoProtocol.Networking;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 
-[DisallowMultipleComponent]
+// Pose after PlayerCamera has applied this frame's yaw to the player root.
+[DisallowMultipleComponent, DefaultExecutionOrder(50)]
 public sealed class PlayerUpperBodyAim : MonoBehaviour
 {
     [SerializeField] private Animator animator;
@@ -106,6 +107,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
     private void LateUpdate()
     {
+        GetComponentInParent<PlayerCharacterPresenter>()?.RestoreFuelCellFingerPose();
         if (playerRoot == null) playerRoot = ResolvePlayerRoot();
         if (IsLobbyPresentation) { UpdateLobbyLook(); return; }
         if (_lobbyRotationApplied && _lobbyHead!=null && Quaternion.Angle(_lobbyHead.rotation,_lobbyHeadResult)<0.01f)
@@ -120,6 +122,8 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         ApplyArmPosingInLateUpdate();
         CorrectFootRoll();
     }
+
+    private void OnDisable() => GetComponentInParent<PlayerCharacterPresenter>()?.RestoreFuelCellFingerPose();
 
     private Avatar _soleAvatar;
     private Quaternion _leftSole, _rightSole;
@@ -242,6 +246,31 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
         var character = GetComponentInParent<PlayerCharacterPresenter>();
         bool jammo = character != null && character.IsJammo;
+        var fuelCell = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject);
+        if (fuelCell != null)
+        {
+            if (rightHandBone == null || rightUpperArm == null || rightForeArm == null) return;
+            Vector3 handle = chestOrigin
+                + aimForward * (handForwardOffset.z + (jammo ? jammoGripForwardClearance : 0f))
+                + aimRight * (handForwardOffset.x + (jammo ? jammoToolLateralClearance : 0f))
+                + aimUp * (handForwardOffset.y + (jammo ? jammoGripHeightOffset : 0f));
+            Vector3 gripForward = Vector3.ProjectOnPlane(aimForward, Vector3.up).normalized;
+            if (gripForward.sqrMagnitude < .001f) gripForward = transform.forward;
+            Vector3 gripUp = Vector3.up;
+            Vector3 wrist = character != null
+                ? character.FuelCellWristTarget(rightHandBone, false, handle, gripForward, gripUp) : handle;
+            Vector3 pole = rightUpperArm.position + aimRight * .35f - aimUp * .25f - aimForward * .10f;
+            SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, wrist, pole, 1f);
+            character?.ApplyCarryGrip(rightHandBone, false, gripForward, gripUp);
+            Vector3 actualHandle = character != null
+                ? character.FuelCellHandlePoint(rightHandBone, false, gripForward, gripUp) : rightHandBone.position;
+            // Place the two bars fore/aft along the player's facing direction.
+            // Rotate around the held bar, preserving its contact with the hand.
+            fuelCell.AttachToRightHandGrip(rightHandBone, actualHandle,
+                Quaternion.LookRotation(gripForward, gripUp) * Quaternion.Euler(0f, 90f, 0f));
+            character?.ApplyFuelCellFingerPose(gripForward, gripUp, true);
+            return;
+        }
         bool isCarryingCore = IsCarryingCore();
         bool isHoldingCoreStabilizer = IsHoldingCoreStabilizer();
         if (isCarryingCore || isHoldingCoreStabilizer)

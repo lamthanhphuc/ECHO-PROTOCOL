@@ -1,4 +1,4 @@
-using EchoProtocol.Networking;
+﻿using EchoProtocol.Networking;
 using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -87,6 +87,7 @@ public class PlayerAnimatorDriver : MonoBehaviour
             || (coreCarrier != null && coreCarrier.IsCarrying)
             || (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid);
         bool useCarryPose = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != "Lobby"
+            && EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) == null
             && (isCarryingCore || IsHoldingCoreStabilizer());
         bool isCrouching = !useCarryPose && (movement != null
             ? movement.IsCrouching
