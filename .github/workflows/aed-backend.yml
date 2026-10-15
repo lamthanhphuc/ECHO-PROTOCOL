@@ -1,0 +1,55 @@
+name: AED Backend regression
+on:
+  pull_request:
+    branches: [LTP]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: echo_protocol_test
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d echo_protocol_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      ECHO_M4_POSTGRES_CONNECTION: Host=127.0.0.1;Port=5432;Username=postgres;Database=echo_protocol_test
+      ECHO_PHASE6R_MONGO_URI: mongodb://127.0.0.1:27017/?directConnection=true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Start isolated MongoDB replica set
+        run: |
+          docker run -d --name aed_mongo_ci -p 127.0.0.1:27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          for attempt in $(seq 1 30); do
+            if docker exec aed_mongo_ci mongosh --quiet --eval 'db.adminCommand({ping:1})' >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          docker exec aed_mongo_ci mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]})'
+          for attempt in $(seq 1 30); do
+            if docker exec aed_mongo_ci mongosh --quiet --eval 'db.hello().isWritablePrimary' | grep -q true; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Check mirrored contract and scene manifest
+        shell: pwsh
+        run: ./scripts/Sync-AEDV02Contract.ps1 -Check
+      # RTK is unavailable on the hosted runner; execute the SDK directly.
+      - name: Run all Backend tests with isolated PostgreSQL schemas
+        run: dotnet test EchoProtocol.Backend/tests/EchoProtocol.Api.Tests/EchoProtocol.Api.Tests.csproj --verbosity minimal --logger 'trx;LogFileName=backend.trx' --results-directory TestResults
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: backend-test-results
+          path: TestResults/*.trx

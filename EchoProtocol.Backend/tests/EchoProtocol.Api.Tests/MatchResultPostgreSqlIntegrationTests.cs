@@ -36,6 +36,31 @@ public sealed class M4PostgreSqlCollectionDefinition;
 [Collection("M4 PostgreSQL")]
 public sealed class MatchResultPostgreSqlIntegrationTests
 {
+    [Fact, Trait("Category", "M4PostgreSqlIntegration"), Trait("Feature", "AEDV02")]
+    public async Task AEDV02PilotMigrationRoundTripPreservesExistingMatchAndUserRows()
+    {
+        const string previous = "20261011053603_AddAEDPhase8DirectorApprovals";
+        const string pilot = "20261014102100_AddAEDV02PilotLedger";
+        await using var scope = await PostgresScope.CreateAsync(previous);
+        var seed = await scope.SeedMatchAsync();
+        await using var db = scope.CreateDbContext();
+        int users = await db.Users.CountAsync();
+        await db.GetService<IMigrator>().MigrateAsync();
+        Assert.Contains(pilot, await db.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(0, await db.AEDV02Decisions.CountAsync());
+        Assert.Equal(0, await db.AEDV02VerifiedSources.CountAsync());
+        Assert.Equal(0, await db.AEDV02SkillObservations.CountAsync());
+        Assert.Equal(0, await db.AEDV02SceneContents.CountAsync());
+        await db.GetService<IMigrator>().MigrateAsync(previous);
+        Assert.Contains(pilot, await db.Database.GetPendingMigrationsAsync());
+        Assert.Equal(users, await db.Users.CountAsync());
+        Assert.True(await db.MatchAuthorityBindings.AnyAsync(x => x.MatchId == seed.MatchId));
+        await db.GetService<IMigrator>().MigrateAsync();
+        await db.GetService<IMigrator>().MigrateAsync();
+        Assert.Equal(0, await db.AEDV02Decisions.CountAsync());
+        Assert.Equal(users, await db.Users.CountAsync());
+        Assert.Empty(await db.Database.GetPendingMigrationsAsync());
+    }
     private static readonly DateTimeOffset Now =
         new(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
 
