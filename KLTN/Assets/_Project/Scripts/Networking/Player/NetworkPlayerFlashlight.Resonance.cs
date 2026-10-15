@@ -1,4 +1,4 @@
-using EchoProtocol.AI.Minions;
+﻿using EchoProtocol.AI.Minions;
 using EchoProtocol.Settings;
 using Fusion;
 using UnityEngine;
@@ -18,10 +18,6 @@ namespace EchoProtocol.Networking
         [Networked] private float ResonanceRechargeDelay { get; set; }
         [Networked] public Vector3 ResonanceEndpoint { get; private set; }
         private CreepMinionRuntime _resonanceTarget;
-        private LineRenderer _resonanceBeam;
-        private Material _resonanceMaterial;
-        private LineRenderer _resonanceHalo;
-        private Texture2D _resonanceBeamTexture;
         private bool _resonanceWasVisible;
         private float _resonanceStartedAt;
         private float _resonanceDistanceGain = 1f;
@@ -87,7 +83,7 @@ namespace EchoProtocol.Networking
             float pulse=1f+.12f*Mathf.Sin(Time.time*13f);
             float ignition=1f+.45f*Mathf.Clamp01(1f-(Time.time-_resonanceStartedAt)/.2f);
             float lowEnergy=active && ResonanceEnergy<=15f ? .55f+.45f*Mathf.Abs(Mathf.Sin(Time.time*30f)):1f;
-            _flashlight.color=active ? new Color(.05f,.72f,1f):new Color(1f,.96f,.88f);
+            _flashlight.color=active ? new Color(.55f,.12f,1f):new Color(1f,.96f,.88f);
             // Spot lights fade well before their range limit. Keep illumination
             // separate from the gameplay query so mid-range targets
             // remain readable without increasing disruption reach.
@@ -99,38 +95,7 @@ namespace EchoProtocol.Networking
             // Reduce immediately near a wall; increase smoothly when aiming farther.
             _resonanceDistanceGain=Mathf.Min(distanceGain,Mathf.MoveTowards(_resonanceDistanceGain,distanceGain,Time.deltaTime*6f));
             _flashlight.intensity=_beamIntensity*(active ? 2.4f*_resonanceDistanceGain*pulse*ignition*lowEnergy:1f);
-            if(active && _resonanceBeam==null) {
-                var beam=new GameObject("ResonanceBeam");beam.transform.SetParent(_flashlight.transform,false);
-                _resonanceBeam=beam.AddComponent<LineRenderer>();_resonanceBeam.positionCount=2;
-                _resonanceBeam.startWidth=.055f;_resonanceBeam.endWidth=.12f;
-                _resonanceBeam.shadowCastingMode=UnityEngine.Rendering.ShadowCastingMode.Off;
-                _resonanceBeam.receiveShadows=false;
-                var shader=Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
-                if(shader!=null){
-                    _resonanceMaterial=new Material(shader);
-                    _resonanceMaterial.SetFloat("_Surface",1f);
-                    _resonanceMaterial.SetFloat("_SrcBlend",(float)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                    _resonanceMaterial.SetFloat("_DstBlend",(float)UnityEngine.Rendering.BlendMode.One);
-                    _resonanceMaterial.SetFloat("_ZWrite",0f);
-                    _resonanceMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-                    _resonanceMaterial.renderQueue=(int)UnityEngine.Rendering.RenderQueue.Transparent;
-                    _resonanceBeamTexture=new Texture2D(32,32,TextureFormat.RGBA32,false){name="ResonanceSoftBeam",wrapMode=TextureWrapMode.Clamp};
-                    var pixels=new Color[32*32];
-                    for(int y=0;y<32;y++)for(int x=0;x<32;x++)pixels[y*32+x]=new Color(1f,1f,1f,Mathf.Pow(Mathf.Clamp01(1f-Mathf.Abs(y/31f*2f-1f)),2f));
-                    _resonanceBeamTexture.SetPixels(pixels);_resonanceBeamTexture.Apply(false,true);
-                    _resonanceMaterial.mainTexture=_resonanceBeamTexture;
-                    _resonanceMaterial.color=new Color(.2f,2.5f,4f,.85f);
-                    _resonanceBeam.sharedMaterial=_resonanceMaterial;
-                    var halo=new GameObject("ResonanceHalo");halo.transform.SetParent(_flashlight.transform,false);
-                    _resonanceHalo=halo.AddComponent<LineRenderer>();_resonanceHalo.positionCount=2;
-                    _resonanceHalo.sharedMaterial=_resonanceMaterial;
-                    _resonanceHalo.startWidth=.18f;_resonanceHalo.endWidth=.5f;
-                    _resonanceHalo.startColor=_resonanceHalo.endColor=new Color(1f,1f,1f,.14f);
-                    _resonanceHalo.shadowCastingMode=UnityEngine.Rendering.ShadowCastingMode.Off;_resonanceHalo.receiveShadows=false;
-                }
-            }
-            if(_resonanceBeam!=null){_resonanceBeam.enabled=active;if(active){_resonanceBeam.SetPosition(0,_flashlight.transform.position);_resonanceBeam.SetPosition(1,ResonanceEndpoint);}}
-            if(_resonanceHalo!=null){_resonanceHalo.enabled=active;if(active){_resonanceHalo.widthMultiplier=pulse*lowEnergy;_resonanceHalo.SetPosition(0,_flashlight.transform.position);_resonanceHalo.SetPosition(1,ResonanceEndpoint);}}
+            // UV is communicated by the purple spot on surfaces, without a laser line.
         }
     }
 

@@ -276,8 +276,8 @@ namespace EchoProtocol.UI.HUD
             if (statusLabelTmp != null) statusLabelTmp.rectTransform.sizeDelta = new Vector2(288f, 23f);
             SetText(statusLabelTmp, statusLabelText,
                 Time.unscaledTime < _resonanceNoticeUntil
-                    ? EchoProtocol.Settings.GameLanguage.Choose("CỘNG HƯỞNG · CẠN NĂNG LƯỢNG", "RESONANCE · DEPLETED")
-                    : EchoProtocol.Settings.GameLanguage.Choose("CỘNG HƯỞNG", "RESONANCE")
+                    ? EchoProtocol.Settings.GameLanguage.Choose("ĐÈN UV · CẠN NĂNG LƯỢNG", "UV LIGHT · DEPLETED")
+                    : EchoProtocol.Settings.GameLanguage.Choose("ĐÈN UV", "UV LIGHT")
                         + " [Q]    " + (available ? $"{Mathf.CeilToInt(amount * 100f)}%" : "—"));
         }
 

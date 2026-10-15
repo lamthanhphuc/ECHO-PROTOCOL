@@ -1,4 +1,4 @@
-using EchoProtocol.Settings;
+﻿using EchoProtocol.Settings;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -149,8 +149,6 @@ namespace EchoProtocol.Networking
 
         private void OnDestroy()
         {
-            if (_resonanceMaterial != null) Destroy(_resonanceMaterial);
-            if (_resonanceBeamTexture != null) Destroy(_resonanceBeamTexture);
             GameplayInputSettings.UnregisterAction(_flashlightAction);
             _flashlightAction?.Dispose();
         }
