@@ -39,6 +39,14 @@ namespace EchoProtocol.Telemetry
             return AddRaw(name, "[" + string.Join(",", items) + "]");
         }
 
+        public TelemetryJsonObject AddIntegerArray(string name, IEnumerable<int> values)
+        {
+            if (values == null) throw new ArgumentNullException(nameof(values));
+            var items = new List<string>();
+            foreach (var value in values) items.Add(value.ToString(CultureInfo.InvariantCulture));
+            return AddRaw(name, "[" + string.Join(",", items) + "]");
+        }
+
         public TelemetryJsonObject AddNumber(string name, double value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value))

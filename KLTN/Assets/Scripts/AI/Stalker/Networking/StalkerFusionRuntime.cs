@@ -26,7 +26,7 @@ namespace EchoProtocol.AI.Stalker.Networking
     [RequireComponent(typeof(StalkerController))]
     [RequireComponent(typeof(StalkerVisionSensor))]
     [RequireComponent(typeof(StalkerSpecialEncounterRuntime))]
-    public sealed class StalkerFusionRuntime : NetworkBehaviour
+    public sealed partial class StalkerFusionRuntime : NetworkBehaviour
     {
         [SerializeField] private StalkerController controller;
         [SerializeField] private StalkerVisionSensor visionSensor;
@@ -52,6 +52,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         private bool _flashlightReactionEnabled = true;
         private uint _aedv2AppliedRevision;
         public int V02AppliedRevision { get; private set; }
+        public bool HasActiveSpecialEncounter => specialEncounterRuntime != null && specialEncounterRuntime.IsActive;
         public bool IsV02SafeForApply => controller != null && controller.CurrentState is StalkerState.PATROL or StalkerState.SEARCH
             && !controller.SpecialEncounterOverrideActive && !controller.HasActiveHideSpotInvestigation;
         public bool TryReadV02ConsumerValue(AEDV02Key key, out double value)
@@ -130,6 +131,12 @@ namespace EchoProtocol.AI.Stalker.Networking
             new List<StalkerTargetStatus>();
         private readonly List<StalkerTargetCandidate> _visibleCandidates =
             new List<StalkerTargetCandidate>();
+        private readonly Dictionary<PlayerId, int> _v02PerceptionTiers = new Dictionary<PlayerId, int>();
+        private readonly Dictionary<PlayerId, int> _v02ScoringTiers = new Dictionary<PlayerId, int>();
+        private Guid _v02PerceptionMatch;
+        private double _v02NextPerceptionRefresh;
+        private PlayerId _v02EncounterPlayer;
+        private int _v02EncounterTier = -1;
         private readonly List<StalkerFlashlightObservation> _flashlightObservations =
             new List<StalkerFlashlightObservation>();
         private readonly List<PlayerId> _visibleObjectiveCarrierIds =
@@ -244,6 +251,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         public override void Spawned()
         {
+            ResetCabinetNetwork();
             _coreCarryStartedAt.Clear();
             _networkSimulationOwned = true;
             ResolveLocalDependencies();
@@ -282,6 +290,8 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            ResetCabinetNetwork();
+            ResetV02Perception();
             if (hasState && runner != null && runner.IsServer
                 && Object != null && Object.HasStateAuthority)
                 MatchAuthorityRuntime.Instance?.RecordStalkerDespawn(
@@ -368,6 +378,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         public override void Render()
         {
+            if (Object != null && Object.IsValid) RenderCabinetWarning();
             if (Object != null && !Object.HasStateAuthority)
             {
                 ConsumeReplicatedPresentationState();
@@ -552,6 +563,60 @@ namespace EchoProtocol.AI.Stalker.Networking
                 null;
         }
 
+        private void ResetV02Perception()
+        {
+            _v02PerceptionMatch = Guid.Empty; _v02PerceptionTiers.Clear(); _v02ScoringTiers.Clear();
+            _v02NextPerceptionRefresh = 0; _v02EncounterPlayer = PlayerId.Invalid; _v02EncounterTier = -1;
+            controller?.ResetV02PlayerFairness();
+        }
+        private void RefreshV02Perception(double seconds)
+        {
+            var authority = MatchAuthorityRuntime.Instance;
+            if (authority == null || !authority.HasStateAuthority || Object == null || !Object.HasStateAuthority ||
+                authority.Difficulty != MatchDifficulty.Normal || authority.RequestedScenarioResolutionMode != ScenarioResolutionMode.Adaptive ||
+                ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings?.PacingV02GameplayEnabled != true ||
+                !AEDv2Authority.TryGetV02(authority.MatchId, out _, out _)) { ResetV02Perception(); return; }
+            if (_v02PerceptionMatch != authority.MatchId) { ResetV02Perception(); _v02PerceptionMatch = authority.MatchId; }
+            var locked = controller.CurrentState is StalkerState.DETECT or StalkerState.CHASE or StalkerState.ATTACK or StalkerState.RECOVER
+                ? (controller.CurrentTargetId.IsValid ? controller.CurrentTargetId : controller.DetectionTargetId) : PlayerId.Invalid;
+            if (locked != _v02EncounterPlayer)
+            {
+                _v02EncounterPlayer = locked;
+                _v02EncounterTier = locked.IsValid && _v02ScoringTiers.TryGetValue(locked, out int captured) ? captured : -1;
+            }
+            if (IsV02SafeForApply && seconds >= _v02NextPerceptionRefresh)
+            {
+                _v02NextPerceptionRefresh = seconds + AEDV02PilotPolicy.SensoryRefreshSeconds;
+                _v02PerceptionTiers.Clear();
+                foreach (var target in _perceptionSnapshots)
+                    if (lifecycle.IdentityRegistry.TryGetPlayerRef(target.PlayerId, out var player) &&
+                        authority.TryResolveVerifiedBackendUserId(player, out var identity) && Guid.TryParse(identity, out var user))
+                        _v02PerceptionTiers[target.PlayerId] = AEDv2Authority.V02StableTier(authority.MatchId, user, DateTime.UtcNow, seconds);
+            }
+            _v02ScoringTiers.Clear();
+            foreach (var target in _perceptionSnapshots) _v02ScoringTiers[target.PlayerId] = ResolveV02PerceptionTier(target.PlayerId);
+            controller.V02TargetTiers = _v02ScoringTiers;
+        }
+        private int ResolveV02PerceptionTier(PlayerId id)
+        {
+            if (_v02PerceptionMatch == Guid.Empty) return -1;
+            if (id == _v02EncounterPlayer && id.IsValid) return _v02EncounterTier;
+            var authority = MatchAuthorityRuntime.Instance;
+            if (authority == null || authority.MatchId != _v02PerceptionMatch || lifecycle?.IdentityRegistry == null ||
+                !lifecycle.IdentityRegistry.TryGetPlayerRef(id, out var player) ||
+                !authority.TryResolveVerifiedBackendUserId(player, out var identity) || !Guid.TryParse(identity, out var user) ||
+                !AEDv2Authority.TryGetV02Pressure(authority.MatchId, user, DateTime.UtcNow, out _)) return -1;
+            return _v02PerceptionTiers.TryGetValue(id, out int tier) ? tier : -1;
+        }
+        private int ResolveV02NoiseTier(RuntimeNoiseEvent noise)
+        {
+            if (string.IsNullOrEmpty(noise.SourcePlayerId) || lifecycle?.IdentityRegistry == null) return -1;
+            foreach (var target in _perceptionSnapshots)
+                if (lifecycle.IdentityRegistry.TryGetPlayerRef(target.PlayerId, out var player) && player.ToString() == noise.SourcePlayerId)
+                    return ResolveV02PerceptionTier(target.PlayerId);
+            return -1;
+        }
+
         private bool RunAuthoritativePipeline(AiSimulationStep step)
         {
             if (!step.IsValid || controller == null || visionSensor == null)
@@ -574,11 +639,13 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return false;
             }
 
-            StalkerPerceptionEvaluator.CollectVisibleTargetCandidates(
+            RefreshV02Perception(step.Time.Seconds);
+            StalkerPerceptionEvaluator.CollectV02VisibleTargetCandidates(
                 visionSensor,
                 _perceptionSnapshots,
                 step.Time,
-                _visibleCandidates);
+                _visibleCandidates,
+                ResolveV02PerceptionTier);
             BuildAuthoritativeFlashlightFrame(step.Time);
 
             StalkerPerceptionTargetSnapshot? sustainedCoreCarrier = null;
@@ -624,10 +691,12 @@ namespace EchoProtocol.AI.Stalker.Networking
             // Perception frames have already been built above, so Vision,
             // Hearing and target-status information remain fresh.
             //
+            TickCabinetCandidate(step);
             specialEncounterRuntime?.TickAuthoritative(
                 Runner,
                 lifecycle,
                 step);
+            PublishCabinetState();
 
             if (specialEncounterRuntime != null
                 && specialEncounterRuntime.IsActive)
@@ -917,10 +986,11 @@ namespace EchoProtocol.AI.Stalker.Networking
                 }
 
                 var heard =
-                    _hearingSensor.TryEvaluate(
+                    _hearingSensor.TryEvaluateV02(
                         noiseEvent,
                         origin,
                         heardAtUtc,
+                        ResolveV02NoiseTier(noiseEvent),
                         out var observation,
                         out var rejectReason);
 

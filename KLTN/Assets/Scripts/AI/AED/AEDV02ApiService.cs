@@ -15,6 +15,8 @@ namespace EchoProtocol.AI.AED
         public string[] recentDownUsers; public bool safeWindow; public int logicalPhase; public int zone;
         public string phaseName; public int planRevision; public string planFingerprint; public string sourceEndedAtUtc;
         public bool pressureComplete; public string[] missingChannels;
+        public string[] cabinetClueEventIds;
+        public string teamPressureStatus;
     }
     [Serializable] public sealed class AEDV02DecisionRequestDto
     {

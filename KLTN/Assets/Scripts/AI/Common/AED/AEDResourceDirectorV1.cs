@@ -114,23 +114,10 @@ namespace EchoProtocol.AI.Common.AED
                 string.IsNullOrWhiteSpace(input.EvidenceFingerprint))
                 return Hold("HOLD_SKILL_CONFIDENCE_INSUFFICIENT");
 
-            var zone1 = new List<int>
-            {
-                AEDResourceToolIdsV1.Scanner, AEDResourceToolIdsV1.NoiseMaker,
-                AEDResourceToolIdsV1.FirstAid, AEDResourceToolIdsV1.DoorJammer
-            };
-            if (input.LobbyToolIds?.Contains(AEDResourceToolIdsV1.CoreStabilizer) != true)
-                zone1.Add(AEDResourceToolIdsV1.CoreStabilizer);
-
-            int[] laterZone =
-            {
-                AEDResourceToolIdsV1.Scanner, AEDResourceToolIdsV1.NoiseMaker,
-                AEDResourceToolIdsV1.FirstAid, AEDResourceToolIdsV1.DoorJammer
-            };
             return new AEDResourceProposalV1(
                 input.MatchId, AEDResourceIntentV1.ConstrainSupply,
                 "VERIFIED_STRONG_TEAM_RESOURCE_CANDIDATE", input,
-                zone1, laterZone, laterZone, true);
+                Baseline(), Baseline(), Baseline(), true);
         }
 
         public static bool ValidateFairness(AEDResourceProposalV1 plan)
@@ -139,10 +126,7 @@ namespace EchoProtocol.AI.Common.AED
             var zones = new[] { plan.Zone1, plan.Zone2, plan.Zone3 };
             if (zones.Any(zone => zone == null || zone.Count == 0 ||
                 zone.Any(id => !AEDResourceToolIdsV1.All.Contains(id)) ||
-                !zone.Contains(AEDResourceToolIdsV1.FirstAid))) return false;
-            if (plan.Intent == AEDResourceIntentV1.ConstrainSupply &&
-                zones.Sum(z => z.Count(id => id == AEDResourceToolIdsV1.CoreStabilizer)) > 1)
-                return false;
+                !AEDResourceToolIdsV1.All.All(zone.Contains))) return false;
             return true;
         }
     }

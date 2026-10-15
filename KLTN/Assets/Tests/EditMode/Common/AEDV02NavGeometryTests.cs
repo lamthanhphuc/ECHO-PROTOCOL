@@ -4,6 +4,28 @@ using NUnit.Framework;
 
 public sealed class AEDV02NavGeometryTests
 {
+    [TestCase("OPEN", true)]
+    [TestCase("LOCKED", false)]
+    [TestCase("MISSING", false)]
+    public void AEDV02_DoorFootprintInsideOneTriangleCannotBypassDoorState(string state, bool expected)
+    {
+        var manifest = Manifest();
+        manifest.DoorIds = new[] { "gate" };
+        manifest.NavCells[0].DoorIds = new[] { "gate" };
+        var doors = state == "MISSING" ? new[] { new AEDV02DoorSource { DoorId = "door", State = "OPEN" } } :
+            new[] { new AEDV02DoorSource { DoorId = "door", State = "OPEN" }, new AEDV02DoorSource { DoorId = "gate", State = state } };
+        Assert.That(manifest.HasReachableGeometry(new[] { 1d, 0, 1 }, new[] { 2d, 0, 1 }, doors), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void AEDV02_TriangleClippingPreservesRealDoorFootprintAndRejectsOtherFloorOrBoundingBoxOnlyOverlap()
+    {
+        var cell = Manifest().NavCells[0];
+        Assert.That(cell.IntersectsBounds(new[] { 1d, -.1, 1 }, new[] { 2d, .1, 2 }), Is.True);
+        Assert.That(cell.IntersectsBounds(new[] { 1d, 2, 1 }, new[] { 2d, 3, 2 }), Is.False);
+        Assert.That(cell.IntersectsBounds(new[] { 8d, -.1, 8 }, new[] { 9d, .1, 9 }), Is.False);
+        Assert.That(cell.IntersectsBounds(new[] { double.NaN, 0, 0 }, new[] { 1d, 1, 1 }), Is.False);
+    }
     private static AEDV02SceneManifest Manifest() => new AEDV02SceneManifest
     {
         SceneVersion = "NAV_TEST", Markers = new[] { new AEDV02SceneMarker { Id = "Z1_ENTRY", Zone = 1, Kind = "ENTRY" } },

@@ -340,8 +340,9 @@ namespace EchoProtocol.Networking.Authority
             {
                 var occurrenceKey = $"p8:tool:{instanceId}:scene-spawn";
                 int? charges = null;
-                if (toolId is 2 or 4 && _bootstrap.Runner.TryFindObject(instanceId, out var toolObject) && toolObject.TryGetComponent<NetworkTeamToolPickup>(out var pickup))
-                    charges = pickup.RemainingUses;
+                if (toolId is 2 or 4 && _bootstrap.Runner.TryFindObject(instanceId, out var toolObject))
+                    charges = toolObject.TryGetComponent<NetworkTeamToolPickup>(out var pickup) ? pickup.RemainingUses :
+                        toolObject.TryGetComponent<EchoProtocol.Tools.Scanner.NetworkToolPickup>(out var scannerPickup) ? scannerPickup.RemainingUses : (int?)null;
                 _aedPhase8Source.RecordSceneToolSpawnWithCharges(
                     instanceId.ToString(), toolId, tick, occurrenceKey, charges);
                 TryPublishPhase8Lifecycle(
@@ -377,8 +378,9 @@ namespace EchoProtocol.Networking.Authority
             {
                 var occurrenceKey = $"p8:tool:{instanceId}:spawn";
                 int? charges = null;
-                if (toolId is 2 or 4 && _bootstrap.Runner.TryFindObject(instanceId, out var toolObject) && toolObject.TryGetComponent<NetworkTeamToolPickup>(out var pickup))
-                    charges = pickup.RemainingUses;
+                if (toolId is 2 or 4 && _bootstrap.Runner.TryFindObject(instanceId, out var toolObject))
+                    charges = toolObject.TryGetComponent<NetworkTeamToolPickup>(out var pickup) ? pickup.RemainingUses :
+                        toolObject.TryGetComponent<EchoProtocol.Tools.Scanner.NetworkToolPickup>(out var scannerPickup) ? scannerPickup.RemainingUses : (int?)null;
                 _aedPhase8Source.RecordToolSpawnWithCharges(
                     instanceId.ToString(), toolId, zone, tick,
                     occurrenceKey, charges);

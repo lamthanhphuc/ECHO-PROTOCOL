@@ -33,6 +33,8 @@ namespace EchoProtocol.Telemetry
         public const string MinionLifecycle = "MINION_LIFECYCLE";
         public const string AEDV02WorldSample = "AED_V02_WORLD_SAMPLE";
         public const string AEDV02ActionEffect = "AED_V02_ACTION_EFFECT";
+        public const string AEDV02ToolCarrier = "AED_V02_TOOL_CARRIER";
+        public const string AEDV02CabinetClue = "AED_V02_CABINET_CLUE";
 
         public const string MonsterInvestigateStarted = "MONSTER_INVESTIGATE_STARTED";
         public const string MonsterInvestigateResolved = "MONSTER_INVESTIGATE_RESOLVED";
@@ -132,7 +134,9 @@ namespace EchoProtocol.Telemetry
             TelemetryEventTypes.TeamToolLifecycle,
             TelemetryEventTypes.MinionLifecycle,
             TelemetryEventTypes.AEDV02WorldSample,
-            TelemetryEventTypes.AEDV02ActionEffect
+            TelemetryEventTypes.AEDV02ActionEffect,
+            TelemetryEventTypes.AEDV02ToolCarrier,
+            TelemetryEventTypes.AEDV02CabinetClue
         };
 
         public static bool TryGetStatus(string eventType, out TelemetryEventStatus status)

@@ -510,7 +510,12 @@ namespace EchoProtocol.Networking
                     var extraZone1 = Math.Min(1, supportBonus);
                     var extraZone2 = Math.Min(1, Math.Max(0, supportBonus - 1));
                     var extraZone3 = Math.Max(0, supportBonus - 2);
-                    TeamToolWorldSpawnInitialized = TeamToolWorldSpawn.TrySpawnInitial(
+                    TeamToolWorldSpawnInitialized = AEDV02PlanRevision > 0 &&
+                        MatchAuthorityRuntime.Instance != null &&
+                        AEDv2Authority.TryGetV02(MatchAuthorityRuntime.Instance.MatchId, out var v02Plan, out _)
+                        ? TeamToolWorldSpawn.TrySpawnV02Zone(Runner, _teamToolPickupCatalog, MatchAuthorityRuntime.Instance.MatchId,
+                            v02Plan, 1, _teamToolSpawnMinimumSpacing)
+                        : TeamToolWorldSpawn.TrySpawnInitial(
                         Runner, _teamToolPickupCatalog,
                         baselinePerZone + extraZone1,
                         baselinePerZone + extraZone2,
@@ -580,6 +585,8 @@ namespace EchoProtocol.Networking
                 }
                 return;
             }
+
+            TickV02Supply();
 
             if (MatchTimer.Expired(Runner))
             {

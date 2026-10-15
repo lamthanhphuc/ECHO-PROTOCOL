@@ -67,6 +67,7 @@ namespace EchoProtocol.AI.AED
             if (_v02Match != matchId || matchId == Guid.Empty || _v02Plan == null) return false;
             plan = _v02Plan; revision = _v02Revision; return true;
         }
+        public static int V02PositiveTokens(Guid matchId) => TryGetV02(matchId, out var plan, out _) ? plan.PositiveTokens(_v02InitialOptional) : int.MaxValue;
 
         public static bool AcceptV02Source(Guid matchId, AEDV02SourceResultDto source, string currentRoster,
             IEnumerable<Guid> users, DateTime nowUtc)

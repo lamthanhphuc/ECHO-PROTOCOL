@@ -737,6 +737,16 @@ namespace EchoProtocol.Telemetry
             Emit(occurrenceKey, TelemetryEventTypes.AEDV02ActionEffect, occurredAtUtc, phase,
                 new TelemetryJsonObject().AddRawObject("effect", effectJson), out telemetryEvent, out failureReason);
 
+        public bool EmitAEDV02Carrier(string occurrenceKey, DateTime occurredAtUtc, string phase, string carrierJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02ToolCarrier, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("carrier", carrierJson), out telemetryEvent, out failureReason);
+
+        public bool EmitAEDV02CabinetClue(string occurrenceKey, DateTime occurredAtUtc, string phase, string clueJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02CabinetClue, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("clue", clueJson), out telemetryEvent, out failureReason);
+
         private bool Emit(string occurrenceKey, string eventType, DateTime occurredAtUtc, string phase,
             TelemetryJsonObject data, out TelemetryEvent telemetryEvent,
             out TelemetryBufferFailureReason failureReason) => _emitter.TryEmit(

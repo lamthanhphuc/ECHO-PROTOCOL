@@ -875,6 +875,10 @@ namespace EchoProtocol.Networking
 
                 hideSpotId = authoritativeSpotId;
 
+                if (!IsHidden)
+                    foreach (var stalker in FindObjectsByType<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>())
+                        if (stalker.Runner == Runner) stalker.ObserveCabinetEntry(this, authoritativeSpot);
+
                 Transform hidePoint = authoritativeSpot.HidePoint;
                 position = hidePoint.position;
                 rotation = authoritativeSpot.FacingRotation;

@@ -13,6 +13,7 @@ namespace EchoProtocol.AI.Stalker
     {
         private const float InspectPointNavMeshSampleRadius = 1.5f;
         private const float RevealedHideSpotLockoutSeconds = 15f;
+        public NetworkRunner RunnerScope { get; set; }
 
         private readonly Dictionary<ulong, global::HidingSpot> _spotsById =
             new Dictionary<ulong, global::HidingSpot>();
@@ -136,6 +137,7 @@ namespace EchoProtocol.AI.Stalker
 
             for (var i = 0; i < networkMovements.Length; i++)
             {
+                if (RunnerScope != null && networkMovements[i].Runner != RunnerScope) continue;
                 var movement = networkMovements[i];
 
                 if (movement == null
@@ -235,6 +237,7 @@ namespace EchoProtocol.AI.Stalker
                 return true;
             }
 
+            if (RunnerScope != null) { result = StalkerHideSpotInspectionResult.Empty(); return true; }
             // Preserve non-network/offline hiding behavior.
             if (!spot.TryInspectOccupant(out var occupant)
                 || occupant == null)

@@ -21,6 +21,7 @@ namespace EchoProtocol.AI.Stalker
         public bool IsCandidateVisible => isCandidateVisible;
         public Vector3 LastObservedPosition => lastObservedPosition;
         public Transform Candidate => temporaryCandidate != null ? temporaryCandidate : candidate;
+        public Transform VisionOrigin => visionOrigin;
 
         public bool TrySetTemporaryCandidate(Transform target, UnityEngine.Object owner)
         {
@@ -73,6 +74,14 @@ namespace EchoProtocol.AI.Stalker
             Transform targetSample,
             Transform targetHierarchyRoot,
             out StalkerPhysicalVisionObservation observation)
+            => EvaluateCandidate(targetSample, targetHierarchyRoot, 1f, out observation);
+
+        public bool TryEvaluateV02Candidate(Transform targetSample, Transform targetHierarchyRoot, int tier,
+            out StalkerPhysicalVisionObservation observation) => EvaluateCandidate(targetSample, targetHierarchyRoot,
+                (float)EchoProtocol.AI.Common.AED.AEDV02PilotPolicy.Sensory(tier), out observation);
+
+        private bool EvaluateCandidate(Transform targetSample, Transform targetHierarchyRoot, float rangeMultiplier,
+            out StalkerPhysicalVisionObservation observation)
         {
             observation = default;
 
@@ -92,6 +101,7 @@ namespace EchoProtocol.AI.Stalker
 
             var originPosition = visionOrigin.position;
             var candidatePosition = targetSample.position;
+            float range = visionDistance * rangeMultiplier;
 
             // Observation geometry must always describe the actual candidate sample.
             if (!TryGetVisibleDirection(
@@ -99,7 +109,7 @@ namespace EchoProtocol.AI.Stalker
                     candidatePosition,
                     false,
                     out var observedDirection,
-                    out var distance))
+                    out var distance, range))
             {
                 return false;
             }
@@ -121,7 +131,7 @@ namespace EchoProtocol.AI.Stalker
                 if (!HasVisibleCharacterControllerSample(
                         targetHierarchyRoot,
                         characterController,
-                        originPosition))
+                        originPosition, range))
                 {
                     return false;
                 }
@@ -137,7 +147,7 @@ namespace EchoProtocol.AI.Stalker
                         chestPosition,
                         false,
                         out var chestDirection,
-                        out var chestDistance)
+                        out var chestDistance, range)
                     && !HasLineOfSightBlocker(
                         targetHierarchyRoot,
                         originPosition,
@@ -328,14 +338,15 @@ namespace EchoProtocol.AI.Stalker
             Vector3 targetPosition,
             bool allowOriginPoint,
             out Vector3 direction,
-            out float distance)
+            out float distance, float range = -1f)
         {
             direction = default;
             distance = 0f;
 
             var toTarget = targetPosition - originPosition;
             var sqrDistance = toTarget.sqrMagnitude;
-            var maxSqrDistance = visionDistance * visionDistance;
+            float effectiveDistance = range > 0 ? range : visionDistance;
+            var maxSqrDistance = effectiveDistance * effectiveDistance;
 
             if (sqrDistance > maxSqrDistance)
             {
@@ -361,7 +372,7 @@ namespace EchoProtocol.AI.Stalker
         private bool HasVisibleCharacterControllerSample(
             Transform targetHierarchyRoot,
             CharacterController characterController,
-            Vector3 originPosition)
+            Vector3 originPosition, float range)
         {
             var bounds =
                 characterController.bounds;
@@ -411,7 +422,7 @@ namespace EchoProtocol.AI.Stalker
             if (IsLineOfSightSampleVisible(
                     targetHierarchyRoot,
                     originPosition,
-                    center))
+                    center, range))
             {
                 return true;
             }
@@ -422,7 +433,7 @@ namespace EchoProtocol.AI.Stalker
             if (IsLineOfSightSampleVisible(
                     targetHierarchyRoot,
                     originPosition,
-                    center + Vector3.up * verticalOffset))
+                    center + Vector3.up * verticalOffset, range))
             {
                 return true;
             }
@@ -430,7 +441,7 @@ namespace EchoProtocol.AI.Stalker
             if (IsLineOfSightSampleVisible(
                     targetHierarchyRoot,
                     originPosition,
-                    center - Vector3.up * verticalOffset))
+                    center - Vector3.up * verticalOffset, range))
             {
                 return true;
             }
@@ -441,7 +452,7 @@ namespace EchoProtocol.AI.Stalker
             if (IsLineOfSightSampleVisible(
                     targetHierarchyRoot,
                     originPosition,
-                    center + right * horizontalRadius))
+                    center + right * horizontalRadius, range))
             {
                 return true;
             }
@@ -449,7 +460,7 @@ namespace EchoProtocol.AI.Stalker
             if (IsLineOfSightSampleVisible(
                     targetHierarchyRoot,
                     originPosition,
-                    center - right * horizontalRadius))
+                    center - right * horizontalRadius, range))
             {
                 return true;
             }
@@ -465,7 +476,7 @@ namespace EchoProtocol.AI.Stalker
             if (IsLineOfSightSampleVisible(
                     targetHierarchyRoot,
                     originPosition,
-                    upperBody + right * horizontalRadius))
+                    upperBody + right * horizontalRadius, range))
             {
                 return true;
             }
@@ -473,20 +484,20 @@ namespace EchoProtocol.AI.Stalker
             return IsLineOfSightSampleVisible(
                 targetHierarchyRoot,
                 originPosition,
-                upperBody - right * horizontalRadius);
+                upperBody - right * horizontalRadius, range);
         }
 
         private bool IsLineOfSightSampleVisible(
             Transform targetHierarchyRoot,
             Vector3 originPosition,
-            Vector3 samplePosition)
+            Vector3 samplePosition, float range = -1f)
         {
             if (!TryGetVisibleDirection(
                     originPosition,
                     samplePosition,
                     false,
                     out var direction,
-                    out var distance))
+                    out var distance, range))
             {
                 return false;
             }

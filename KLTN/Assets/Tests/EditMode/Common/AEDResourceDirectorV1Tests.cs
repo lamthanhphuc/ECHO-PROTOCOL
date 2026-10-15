@@ -25,10 +25,10 @@ namespace EchoProtocol.AI.Common.Tests
         { var p = AEDResourceDirectorV1.Evaluate(Request(strong: true, adaptive: false)); Assert.That(p.Intent, Is.EqualTo(AEDResourceIntentV1.Hold)); Assert.That(p.Zone1.Count, Is.EqualTo(5)); Assert.That(p.Zone2.Count, Is.EqualTo(5)); Assert.That(p.Zone3.Count, Is.EqualTo(5)); Assert.That(p.CanApplyGameplay, Is.False); }
         [Test] public void ColdStartDoesNotRemoveCoreStabilizer()
         { var p = AEDResourceDirectorV1.Evaluate(Request()); Assert.That(p.Intent, Is.EqualTo(AEDResourceIntentV1.Hold)); Assert.That(new[] { p.Zone1, p.Zone2, p.Zone3 }.Sum(z => z.Count(id => id == AEDResourceToolIdsV1.CoreStabilizer)), Is.EqualTo(3)); }
-        [Test] public void VerifiedStrongTeamCapsWorldCoreStabilizer()
-        { var p = AEDResourceDirectorV1.Evaluate(Request(strong: true)); Assert.That(p.Intent, Is.EqualTo(AEDResourceIntentV1.ConstrainSupply)); Assert.That(new[] { p.Zone1, p.Zone2, p.Zone3 }.Sum(z => z.Count(id => id == AEDResourceToolIdsV1.CoreStabilizer)), Is.EqualTo(1)); Assert.That(p.PreferDistantScanner, Is.True); Assert.That(AEDResourceDirectorV1.ValidateFairness(p), Is.True); }
-        [Test] public void LobbyCorePreventsAdditionalWorldCoreForStrongTeam()
-        { var p = AEDResourceDirectorV1.Evaluate(Request(strong: true, coreInLobby: true)); Assert.That(new[] { p.Zone1, p.Zone2, p.Zone3 }.Sum(z => z.Count(id => id == AEDResourceToolIdsV1.CoreStabilizer)), Is.Zero); }
+        [Test] public void VerifiedStrongTeamPreservesAllRequiredSupply()
+        { var p = AEDResourceDirectorV1.Evaluate(Request(strong: true)); Assert.That(p.Intent, Is.EqualTo(AEDResourceIntentV1.ConstrainSupply)); foreach (var zone in new[] { p.Zone1, p.Zone2, p.Zone3 }) CollectionAssert.AreEquivalent(AEDResourceToolIdsV1.All, zone); Assert.That(p.PreferDistantScanner, Is.True); Assert.That(AEDResourceDirectorV1.ValidateFairness(p), Is.True); }
+        [Test] public void LobbyCoreNeverSubstitutesRequiredWorldCore()
+        { var p = AEDResourceDirectorV1.Evaluate(Request(strong: true, coreInLobby: true)); Assert.That(new[] { p.Zone1, p.Zone2, p.Zone3 }.Sum(z => z.Count(id => id == AEDResourceToolIdsV1.CoreStabilizer)), Is.EqualTo(3)); }
         [Test] public void UnverifiedProfileCannotConstrainResources()
         { var p = AEDResourceDirectorV1.Evaluate(Request(strong: true, verified: false)); Assert.That(p.Intent, Is.EqualTo(AEDResourceIntentV1.Hold)); Assert.That(p.Zone2, Does.Contain(AEDResourceToolIdsV1.CoreStabilizer)); }
         [Test] public void CriticalPressureProposesSupportWithoutRemovingFloor()
@@ -57,9 +57,9 @@ namespace EchoProtocol.AI.Common.Tests
             Add(1, "C", 2, 30, AEDResourceToolIdsV1.Scanner, AEDResourceToolIdsV1.NoiseMaker);
             Add(1, "D", 3, 40, AEDResourceToolIdsV1.DoorJammer);
             Add(1, "E", 4, 50, AEDResourceToolIdsV1.CoreStabilizer);
-            for (int zone = 2; zone <= 3; zone++) { Add(zone, "scanner", 0, 30, AEDResourceToolIdsV1.Scanner); Add(zone, "firstaid", 1, 10, AEDResourceToolIdsV1.FirstAid); Add(zone, "noise", 2, 20, AEDResourceToolIdsV1.NoiseMaker); Add(zone, "door", 3, 40, AEDResourceToolIdsV1.DoorJammer); }
+            for (int zone = 2; zone <= 3; zone++) { Add(zone, "scanner", 0, 30, AEDResourceToolIdsV1.Scanner); Add(zone, "firstaid", 1, 10, AEDResourceToolIdsV1.FirstAid); Add(zone, "noise", 2, 20, AEDResourceToolIdsV1.NoiseMaker); Add(zone, "door", 3, 40, AEDResourceToolIdsV1.DoorJammer); Add(zone, "core", 4, 50, AEDResourceToolIdsV1.CoreStabilizer); }
             Assert.That(AEDResourcePlacementV1.TryPlan(plan, points, 6, out var receipts), Is.True);
-            Assert.That(receipts.Count, Is.EqualTo(13));
+            Assert.That(receipts.Count, Is.EqualTo(15));
             Assert.That(receipts.Single(r => r.Zone == 1 && r.ToolId == AEDResourceToolIdsV1.FirstAid).PointId, Is.EqualTo("z1-A"));
             Assert.That(receipts.Single(r => r.Zone == 1 && r.ToolId == AEDResourceToolIdsV1.Scanner).PointId, Is.EqualTo("z1-B"));
             Assert.That(receipts.Single(r => r.Zone == 1 && r.ToolId == AEDResourceToolIdsV1.NoiseMaker).PointId, Is.EqualTo("z1-C"));
@@ -104,7 +104,7 @@ namespace EchoProtocol.AI.Common.Tests
             Add(1, "C", 2, 40, AEDResourceToolIdsV1.Scanner, AEDResourceToolIdsV1.NoiseMaker);
             Add(1, "D", 3, 50, AEDResourceToolIdsV1.DoorJammer);
             Add(1, "E", 4, 60, AEDResourceToolIdsV1.CoreStabilizer);
-            for (int zone = 2; zone <= 3; zone++) { Add(zone, "S", 0, 30, AEDResourceToolIdsV1.Scanner); Add(zone, "F", 1, 10, AEDResourceToolIdsV1.FirstAid); Add(zone, "N", 2, 20, AEDResourceToolIdsV1.NoiseMaker); Add(zone, "D", 3, 40, AEDResourceToolIdsV1.DoorJammer); }
+            for (int zone = 2; zone <= 3; zone++) { Add(zone, "S", 0, 30, AEDResourceToolIdsV1.Scanner); Add(zone, "F", 1, 10, AEDResourceToolIdsV1.FirstAid); Add(zone, "N", 2, 20, AEDResourceToolIdsV1.NoiseMaker); Add(zone, "D", 3, 40, AEDResourceToolIdsV1.DoorJammer); Add(zone, "C", 4, 50, AEDResourceToolIdsV1.CoreStabilizer); }
             Assert.That(AEDResourcePlacementV1.TryPlan(plan, points, 6, out var result), Is.True);
             Assert.That(result.Single(x => x.Zone == 1 && x.ToolId == AEDResourceToolIdsV1.FirstAid).PointId, Is.EqualTo("z1-B"));
             Assert.That(result.Where(x => x.Zone == 1).Select(x => x.PointId).Distinct().Count(), Is.EqualTo(5));

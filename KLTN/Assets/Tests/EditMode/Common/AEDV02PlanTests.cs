@@ -5,6 +5,21 @@ using NUnit.Framework;
 public sealed class AEDV02PlanTests
 {
     [Test]
+    public void HandoffWaitsForRealZone3DespawnBeforeAllocatingAnotherPositiveAxis()
+    {
+        var normal = AEDV02Plan.Normal();
+        Assert.That(normal.HasWorldPressureSlot(0, 1), Is.True, "Lowering a cap must not force despawn.");
+        var stalker = normal.With(AEDV02Key.ChaseSpeed, 8);
+        Assert.That(stalker.HasWorldPressureSlot(0, 1), Is.False, "A revised cap does not prove the previous Minion pressure disappeared.");
+        Assert.That(stalker.HasWorldPressureSlot(0, 0), Is.True);
+        var minion = normal.With(AEDV02Key.Zone3AdaptiveMinionCap, 1);
+        Assert.That(minion.HasWorldPressureSlot(0, 0), Is.True);
+        Assert.That(minion.HasWorldPressureSlot(0, 1), Is.True);
+        Assert.That(minion.HasWorldPressureSlot(0, 2), Is.False);
+        Assert.That(minion.With(AEDV02Key.ChaseSpeed, 8).HasWorldPressureSlot(0, 0), Is.False);
+        Assert.That(normal.HasWorldPressureSlot(0, -1), Is.False);
+    }
+    [Test]
     public void Normal_KeepsZone3ZeroAndOptionalZero()
     {
         var plan = AEDV02Plan.Normal();

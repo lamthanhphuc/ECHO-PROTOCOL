@@ -14,6 +14,13 @@ namespace EchoProtocol.AI.Stalker
             StalkerHideSpotSelectorConfig config,
             out StalkerHideSpotSelection selection)
         {
+            return TrySelectV02(searchAnchor, candidates, memory, currentTimeSeconds, config, null, out selection);
+        }
+
+        public bool TrySelectV02(Vector3 searchAnchor, IReadOnlyList<StalkerHideSpotCandidate> candidates,
+            StalkerHideSpotMemory memory, float currentTimeSeconds, StalkerHideSpotSelectorConfig config,
+            Func<ulong, int> knownPlayerTier, out StalkerHideSpotSelection selection)
+        {
             if (candidates == null)
             {
                 throw new ArgumentNullException(nameof(candidates));
@@ -63,6 +70,10 @@ namespace EchoProtocol.AI.Stalker
                     score += config.EmptyInspectionPenalty
                         * history.ConsecutiveEmptyInspections;
                 }
+
+                // Only a previously observed identity can reduce priority; occupancy never supplies one.
+                if (knownPlayerTier?.Invoke(candidate.StableId) == 3)
+                    score += Mathf.Max(0, config.SearchRadius - score) * .25f;
 
                 if (!hasSelection
                     || score < bestScore - config.DistanceTieEpsilon

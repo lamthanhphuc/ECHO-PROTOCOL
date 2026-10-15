@@ -93047,12 +93047,20 @@ PrefabInstance:
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
-    m_AddedGameObjects: []
+    m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: 6935417351677981081, guid: d324de115c4dff845bee7b7f166883c4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1813291267}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: d324de115c4dff845bee7b7f166883c4, type: 3}
 --- !u!4 &425582575 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1430841697005043554, guid: d324de115c4dff845bee7b7f166883c4, type: 3}
+  m_PrefabInstance: {fileID: 425582574}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &425582576 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 6935417351677981081, guid: d324de115c4dff845bee7b7f166883c4, type: 3}
   m_PrefabInstance: {fileID: 425582574}
   m_PrefabAsset: {fileID: 0}
 --- !u!1001 &426239492
@@ -129001,6 +129009,7 @@ GameObject:
   - component: {fileID: 600319180}
   - component: {fileID: 600319181}
   - component: {fileID: 600319182}
+  - component: {fileID: 600319183}
   m_Layer: 0
   m_Name: StalkerZone2EntryTrigger_EMPTY
   m_TagString: Untagged
@@ -129058,6 +129067,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.StalkerZone2EntryTrigger
   _spawner: {fileID: 0}
   _spawnMarker: {fileID: 253522563}
+--- !u!114 &600319183
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 600319179}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dbf3f2c0eda7b9540b1b3f932773144c, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.AED.AEDZoneEntryMarker
+  zone: 2
 --- !u!1001 &600434360
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -371079,6 +371101,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1747594145}
+  - component: {fileID: 1747594146}
   m_Layer: 0
   m_Name: AED_Z1_RESOURCE_ENTRY
   m_TagString: Untagged
@@ -371101,6 +371124,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 96140077}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1747594146
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1747594144}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dbf3f2c0eda7b9540b1b3f932773144c, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.AED.AEDZoneEntryMarker
+  zone: 1
 --- !u!1001 &1747595006
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -385489,6 +385525,51 @@ Transform:
   - {fileID: 1862635519}
   m_Father: {fileID: 503331850}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1813291266
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1813291267}
+  - component: {fileID: 1813291268}
+  m_Layer: 0
+  m_Name: AED_Z3_RESOURCE_ENTRY
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1813291267
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1813291266}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.82112885, y: 0.053303927, z: -0.000009539073}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 425582576}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1813291268
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1813291266}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dbf3f2c0eda7b9540b1b3f932773144c, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.AED.AEDZoneEntryMarker
+  zone: 3
 --- !u!1001 &1813753115
 PrefabInstance:
   m_ObjectHideFlags: 0

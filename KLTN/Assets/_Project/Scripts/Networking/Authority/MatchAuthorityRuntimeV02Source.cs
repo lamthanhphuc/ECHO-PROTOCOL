@@ -7,6 +7,7 @@ using EchoProtocol.AI.Minions;
 using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Networking;
 using EchoProtocol.Auth;
+using EchoProtocol.Tools.Scanner;
 using Fusion;
 using UnityEngine;
 
@@ -23,6 +24,33 @@ namespace EchoProtocol.Networking.Authority
         private readonly Queue<long> _v02WorldTicks = new Queue<long>();
         public AEDV02SourceResultDto LastVerifiedV02Source { get; private set; }
         public string V02SourceHoldReason { get; private set; }
+        private bool _v02CarrierEvidenceInvalid;
+        private int _v02CarrierOrdinal;
+        private int _v02CabinetClueOrdinal;
+        public bool RecordV02CabinetClue(AEDV02CabinetClueSource clue, out Guid eventId)
+        {
+            eventId = Guid.Empty;
+            var settings = ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings;
+            if (!HasStateAuthority || !_telemetryMatchActive || !_researchCaptureEnabled || RequestedScenarioResolutionMode != ScenarioResolutionMode.Adaptive ||
+                Difficulty != EchoProtocol.Gameplay.MatchDifficulty.Normal || settings == null || !settings.PacingV02GameplayEnabled && !settings.PacingV02ShadowEnabled ||
+                clue == null || !clue.IsValid() || !_boundPlayers.Values.Contains(clue.UserId) || _telemetry.Phase8LifecycleAdapter == null) return false;
+            if (!_telemetry.Phase8LifecycleAdapter.EmitAEDV02CabinetClue("v02:cabinet-clue:" + ++_v02CabinetClueOrdinal, DateTime.UtcNow,
+                _currentTelemetryPhase, AEDV02SourceJson.CabinetClue(clue), out var occurrence, out _)) return false;
+            eventId = occurrence.Id; _v02NextWorldTick = 0; _v02NextSourcePollTick = _bootstrap.Runner.Tick.Raw + _bootstrap.Runner.TickRate * 2;
+            _telemetry.TryFlushNow(); return true;
+        }
+
+        public void RecordV02ToolCarrier(NetworkInteractable item, NetworkId minion, bool stolen)
+        {
+            var settings = ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings;
+            if (!HasStateAuthority || !_telemetryMatchActive || !_researchCaptureEnabled || RequestedScenarioResolutionMode != ScenarioResolutionMode.Adaptive ||
+                Difficulty != EchoProtocol.Gameplay.MatchDifficulty.Normal || settings == null || !settings.PacingV02GameplayEnabled && !settings.PacingV02ShadowEnabled ||
+                item == null || item.Runner != _bootstrap.Runner || item is not NetworkTeamToolPickup && item is not NetworkToolPickup) return;
+            var carrier = new AEDV02ToolCarrierSource { ToolInstanceId = item.Object.Id.ToString(), MinionNetworkId = minion.ToString(),
+                Action = stolen ? "STEAL" : "DROP", Tick = _bootstrap.Runner.Tick.Raw };
+            if (!_telemetry.Phase8LifecycleAdapter.EmitAEDV02Carrier("v02:carrier:" + ++_v02CarrierOrdinal, DateTime.UtcNow, _currentTelemetryPhase,
+                AEDV02SourceJson.Carrier(carrier), out _, out _)) _v02CarrierEvidenceInvalid = true;
+        }
 
         private void TickV02WorldSource(NetworkMatchState matchState)
         {
@@ -92,16 +120,19 @@ namespace EchoProtocol.Networking.Authority
         }
         private void ResetV02WorldSource()
         {
+            EchoProtocol.TeamTools.TeamToolWorldSpawn.ResetV02(_v02CaptureMatch);
             _v02SourceGeneration++; _v02CaptureMatch = Guid.Empty; _v02CaptureContext = null; _v02NextWorldTick = 0;
             _v02NextSourcePollTick = 0; _v02SourcePolling = false; _v02WorldTicks.Clear(); LastVerifiedV02Source = null;
             V02SourceHoldReason = null;
+            _v02CarrierEvidenceInvalid = false; _v02CarrierOrdinal = 0;
+            _v02CabinetClueOrdinal = 0;
         }
 
         private bool TryBuildV02World(NetworkMatchState matchState, out AEDV02WorldSample sample, out string reason)
         {
             sample = null; reason = "HOLD_WORLD_CENSUS_INCOMPLETE";
             var runner = _bootstrap.Runner;
-            if (!_researchCaptureEnabled || _telemetry.Phase8LifecycleAdapter == null || Phase8InventoryEvidenceInvalidated || Phase8DebugEvidenceInvalidated ||
+            if (!_researchCaptureEnabled || _v02CarrierEvidenceInvalid || _telemetry.Phase8LifecycleAdapter == null || Phase8InventoryEvidenceInvalidated || Phase8DebugEvidenceInvalidated ||
                 !AEDV02SceneSource.TryLoad(out var manifest, out var sceneFingerprint)) return false;
             if (!UnityEngine.SceneManagement.SceneManager.GetSceneByPath(manifest.ScenePath).isLoaded) { reason = "HOLD_SCENE_CONTENT_MISMATCH"; return false; }
             int logical = AEDV02PhaseMap.LogicalPhase(_currentTelemetryPhase);
@@ -141,27 +172,29 @@ namespace EchoProtocol.Networking.Authority
             foreach (var pickup in FindObjectsByType<NetworkTeamToolPickup>(FindObjectsInactive.Exclude).Where(x => x.Runner == runner && x.Object != null && x.Object.IsValid && x.IsAvailableWorldSource))
             {
                 if (!pickup.Object.HasStateAuthority || !_aedPhase8Source.TryGetLatestTool(pickup.Object.Id.ToString(), out var source) || source.Location != "World") return false;
-                if (pickup.MonsterToolCarrierId.IsValid) { reason = "HOLD_MINION_TOOL_TRANSFER_SOURCE_REQUIRED"; return false; }
                 if (source.ToolId is 2 or 4 && source.RemainingCharges != pickup.RemainingUses) return false;
-                tools.Add(Tool(source, pickup.transform.position, pickup.V02SourceMarkerId ?? AEDV02SceneSource.MarkerId(pickup.transform)));
+                var tool = Tool(source, pickup.V02WorldSourcePosition, pickup.V02SourceMarkerId ?? AEDV02SceneSource.MarkerId(pickup.transform));
+                tool.CarrierMinionId = pickup.MonsterToolCarrierId.IsValid ? pickup.MonsterToolCarrierId.ToString() : string.Empty;
+                tools.Add(tool);
+            }
+            foreach (var pickup in FindObjectsByType<NetworkToolPickup>(FindObjectsInactive.Exclude).Where(x => x.Runner == runner && x.Object != null && x.Object.IsValid && !x.IsPickedUp))
+            {
+                if (!pickup.Object.HasStateAuthority || !_aedPhase8Source.TryGetLatestTool(pickup.Object.Id.ToString(), out var source) || source.Location != "World") return false;
+                if (source.ToolId is 2 or 4 && source.RemainingCharges != pickup.RemainingUses) return false;
+                var tool = Tool(source, pickup.V02WorldSourcePosition, pickup.V02SourceMarkerId ?? AEDV02SceneSource.MarkerId(pickup.transform));
+                tool.CarrierMinionId = pickup.MonsterToolCarrierId.IsValid ? pickup.MonsterToolCarrierId.ToString() : string.Empty;
+                tools.Add(tool);
             }
             if (!tools.Select(x => x.InstanceId).ToHashSet().SetEquals(_aedPhase8Source.CurrentLiveTools.Select(x => x.InstanceId))) return false;
             var minions = FindObjectsByType<CreepMinionRuntime>(FindObjectsInactive.Exclude).Where(x => x.Runner == runner && x.Object != null && x.Object.IsValid).ToArray();
-            var doors = new List<AEDV02DoorSource>();
-            foreach (var door in FindObjectsByType<NetworkBehaviour>(FindObjectsInactive.Exclude).Where(x => x is INetworkDoorStateProvider && x.Runner == runner))
-            {
-                if (door.Object == null || !door.Object.IsValid || !door.Object.HasStateAuthority) return false;
-                bool broken = door is NetworkSlidingDoor sliding && sliding.IsBroken || door is NetworkDoor normal && normal.IsBroken;
-                bool jammed = door is NetworkSlidingDoor slidingDoor && slidingDoor.HasActiveJammer;
-                var state = ((INetworkDoorStateProvider)door).State;
-                doors.Add(new AEDV02DoorSource { DoorId = AEDV02SceneSource.MarkerId(door.transform), State = jammed ? "LOCKED" : broken ? "BROKEN" :
-                    state == NetworkDoorState.Open ? "OPEN" : state == NetworkDoorState.Locked ? "LOCKED" : "CLOSED_UNLOCKED" });
-            }
+            if (!AEDV02SceneSource.TryGetDoorSources(runner, matchState, out var doors))
+            { reason = "HOLD_DOOR_SOURCE_REQUIRED"; return false; }
             sample = new AEDV02WorldSample { ResolutionMode = "Adaptive", Difficulty = "Normal", Tick = runner.Tick.Raw, TickRate = runner.TickRate,
                 PhaseOrdinal = (int)V02EvidencePhaseOrdinal, PhaseName = _currentTelemetryPhase, LogicalPhase = logical, Zone = Math.Min(logical, 3),
                 PlanRevision = revision, PlanFingerprint = plan.Fingerprint(), RosterIdentity = CurrentRosterIdentity(), SceneManifestFingerprint = sceneFingerprint,
-                Players = players.ToArray(), Tools = tools.ToArray(), Doors = doors.ToArray(),
-                Stalkers = stalkers.Select(x => Threat(x.Object, x.ReplicatedState == StalkerState.DETECT ? "DETECTION" : x.ReplicatedState.ToString(), x.TargetPlayer, Math.Min(logical, 3))).ToArray(),
+                Players = players.ToArray(), Tools = tools.ToArray(), Doors = doors,
+                Supply = EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(runner, MatchId),
+                Stalkers = stalkers.Select(x => Threat(x.Object, x.HasActiveSpecialEncounter ? "SPECIAL" : x.ReplicatedState == StalkerState.DETECT ? "DETECTION" : x.ReplicatedState.ToString(), x.TargetPlayer, Math.Min(logical, 3))).ToArray(),
                 Minions = minions.Select(x => Threat(x.Object, x.IsDying ? "DYING" : x.State == CreepMinionState.Roam ? "IDLE" : x.State.ToString().ToUpperInvariant(), x.TargetPlayer, (int)x.Zone)).ToArray() };
             return sample.IsValid();
         }

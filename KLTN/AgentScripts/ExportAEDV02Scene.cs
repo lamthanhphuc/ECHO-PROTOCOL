@@ -7,6 +7,10 @@ using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Networking;
 using EchoProtocol.TeamTools;
+using EchoProtocol.Tools.Scanner;
+using EchoProtocol.AI.Stalker;
+using EchoProtocol.AI.Stalker.Spatial;
+using EchoProtocol.AI.Stalker.Special;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -27,22 +31,63 @@ public static class ExportAEDV02Scene
             var roots = scene.GetRootGameObjects();
             var points = roots.SelectMany(x => x.GetComponentsInChildren<TeamToolSpawnPoint>(true)).ToArray();
             if (points.Length < 15) throw new InvalidOperationException("Required TeamTool content is missing.");
-            var all = roots.SelectMany(x => x.GetComponentsInChildren<Transform>(true)).ToArray();
-            var zone1 = all.Single(x => x.name == "AED_Z1_RESOURCE_ENTRY").position;
-            var zone2 = roots.SelectMany(x => x.GetComponentsInChildren<StalkerZone2EntryTrigger>(true)).Single().transform.position;
-            // Scene authoring uses the existing Zone3 teleport position; no gameplay constant is changed.
-            var zone3 = new Vector3(88.66215f, 2.080028f, -399.027f);
-            var entries = new[] { zone1, zone2, zone3 };
+            var authored = roots.SelectMany(x => x.GetComponentsInChildren<AEDZoneEntryMarker>(true)).ToArray();
+            var entries = Enumerable.Range(1, 3).Select(zone => authored.Single(x => x.Zone == zone).transform.position).ToArray();
             var markers = entries.Select((x, i) => Marker("Z" + (i + 1) + "_ENTRY", i + 1, "ENTRY", x)).ToList();
+            var stalkerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/StalkerNetwork.prefab");
+            var controller = stalkerPrefab.GetComponent<StalkerController>();
+            var graphAsset = new SerializedObject(controller).FindProperty("regionGraphAsset").objectReferenceValue as RegionGraphAsset;
+            if (graphAsset == null) throw new InvalidOperationException("Production Stalker semantic graph is missing.");
+            var graph = graphAsset.BuildRuntimeGraph();
+            var spatial = NavMeshSpatialGraphBuilder.Build();
+            if (RegionGraph.Validate(graph, spatial) != RegionGraphValidationFailure.None)
+                throw new InvalidOperationException("Production Stalker semantic graph does not match the loaded mesh.");
+            int ZoneAt(Vector3 position)
+            {
+                var node = spatial.Nodes.OrderBy(x => (x.Position - position).sqrMagnitude).ThenBy(x => x.Id).First();
+                return graph.TryGetNodeSemanticMetadata(node.Id, out var metadata) && (int)metadata.Zone is >= 1 and <= 3 ? (int)metadata.Zone : 0;
+            }
+            foreach (var spot in roots.SelectMany(x => x.GetComponentsInChildren<global::HidingSpot>(true)))
+            {
+                if (spot.InspectPoint == null || spot.ExitPoint == null || spot.transform.parent?.GetComponentInParent<global::HidingSpot>() != null) continue;
+                if (!NavMesh.SamplePosition(spot.InspectPoint.position, out var inspect, 1.5f, NavMesh.AllAreas)) continue;
+                int zone = ZoneAt(inspect.position);
+                if (zone == 0) continue;
+                var marker = Marker(AEDV02SceneSource.MarkerId(spot.transform), zone, "CABINET", inspect.position);
+                var colliders = spot.GetComponentsInChildren<Collider>(true);
+                if (colliders.Length == 0) continue;
+                var bounds = colliders[0].bounds; foreach (var collider in colliders.Skip(1)) bounds.Encapsulate(collider.bounds);
+                marker.InteractionBounds = new[] { (double)bounds.min.x, bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.y, bounds.max.z };
+                marker.HideSpotId = spot.StableId.ToString(); markers.Add(marker);
+            }
+            foreach (var entry in roots.SelectMany(x => x.GetComponentsInChildren<StalkerJumpEntryPoint>(true)))
+            {
+                int zone = ZoneAt(entry.EntryPosition);
+                if (zone != 0 && entry.JumpInAllowed) markers.Add(Marker(AEDV02SceneSource.MarkerId(entry.transform), zone, "AMBUSH_ENTRY", entry.EntryPosition));
+            }
+            var vision = stalkerPrefab.GetComponent<StalkerVisionSensor>();
+            double maximumVisionRange = new SerializedObject(vision).FindProperty("visionDistance").floatValue;
+            var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/PlayerNetwork.prefab");
+            double maximumInteractionDistance = playerPrefab.GetComponent<global::PlayerInteraction>().InteractionDistance;
             markers.AddRange(points.Select(x => Marker(AEDV02SceneSource.MarkerId(x.transform), (int)x.Zone, "TOOL", x.transform.position,
                 new[] { 1, 2, 3, 4, 6 }.Where(x.Allows).ToArray())));
-            foreach (var pickup in roots.SelectMany(x => x.GetComponentsInChildren<NetworkTeamToolPickup>(true)))
+            foreach (var pickup in roots.SelectMany(x => x.GetComponentsInChildren<NetworkInteractable>(true)).Where(x => x is NetworkTeamToolPickup or NetworkToolPickup))
             {
                 var nearest = points.OrderBy(x => (x.transform.position - pickup.transform.position).sqrMagnitude).First();
-                markers.Add(Marker(AEDV02SceneSource.MarkerId(pickup.transform), (int)nearest.Zone, "TOOL", pickup.transform.position, new[] { pickup.ToolId }));
+                int toolId = pickup is NetworkTeamToolPickup teamTool ? teamTool.ToolId : ((NetworkToolPickup)pickup).ToolId;
+                markers.Add(Marker(AEDV02SceneSource.MarkerId(pickup.transform), (int)nearest.Zone, "TOOL", pickup.transform.position, new[] { toolId }));
             }
             var doors = roots.SelectMany(x => x.GetComponentsInChildren<MonoBehaviour>(true)).Where(x => x is INetworkDoorStateProvider)
-                .Select(x => (Id: AEDV02SceneSource.MarkerId(x.transform), Bounds: DoorBounds(x))).ToArray();
+                .Select(x => (Id: AEDV02SceneSource.MarkerId(x.transform), Bounds: DoorBounds(x))).ToList();
+            var gates = AEDV02SceneSource.Zone2ExitGates(scene);
+            if (gates.Length != 2) throw new InvalidOperationException("Production Zone2 gates are missing.");
+            foreach (var gate in gates)
+            {
+                var wall = gate.parent.Find("LP_Bay_Door_Wall_snaps");
+                var blocker = wall?.GetComponents<BoxCollider>().OrderByDescending(x => x.size.z).FirstOrDefault();
+                if (blocker == null) throw new InvalidOperationException("Zone2 gate passage collider is missing.");
+                doors.Add((AEDV02SceneSource.MarkerId(gate), BoxBounds(blocker)));
+            }
             var triangulation = NavMesh.CalculateTriangulation();
             if (triangulation.indices.Length == 0) throw new InvalidOperationException("No baked NavMesh loaded.");
             var cells = new List<AEDV02SceneManifestData.Cell>();
@@ -54,6 +99,8 @@ public static class ExportAEDV02Scene
                     C = Position(triangulation.vertices[triangulation.indices[i + 2]]) };
                 var model = new AEDV02NavCell { Id = cell.Id, A = cell.A, B = cell.B, C = cell.C };
                 if (!model.IsValid()) continue;
+                // Blocking footprints apply inside a triangle too, not only between triangle centres.
+                cell.DoorIds = doors.Where(x => model.IntersectsBounds(Position(x.Bounds.min), Position(x.Bounds.max))).Select(x => x.Id).ToArray();
                 cells.Add(cell);
                 foreach (var pair in new[] { (cell.A, cell.B), (cell.B, cell.C), (cell.C, cell.A) })
                 {
@@ -73,7 +120,9 @@ public static class ExportAEDV02Scene
                     links.Add(new AEDV02SceneManifestData.Link { From = a.Id, To = b.Id, DoorIds = crossed });
                 }
             var data = new AEDV02SceneManifestData { SceneVersion = "SCIFI_NAV_REV02_" + AssetDatabase.AssetPathToGUID(path),
-                ScenePath = path, Markers = markers.ToArray(), NavCells = cells.ToArray(), NavLinks = links.GroupBy(x => (x.From, x.To)).Select(x => x.First()).ToArray() };
+                ScenePath = path, MaximumVisionRange = maximumVisionRange, MaximumCabinetInteractionDistance = maximumInteractionDistance,
+                DoorIds = doors.Select(x => x.Id).Distinct().ToArray(), Markers = markers.ToArray(), NavCells = cells.ToArray(),
+                NavLinks = links.GroupBy(x => (x.From, x.To)).Select(x => x.First()).ToArray() };
             if (!data.ToModel().IsValid()) throw new InvalidOperationException("Exported graph failed independent structural validation.");
             var json = JsonUtility.ToJson(data);
             var resource = Path.GetFullPath(Path.Combine(Application.dataPath, "Resources/AED/Rev02SceneManifest.json"));
@@ -84,7 +133,7 @@ public static class ExportAEDV02Scene
                 File.WriteAllText(target, json, new UTF8Encoding(false));
             }
             AssetDatabase.Refresh();
-            return "fingerprint=" + AEDV02Plan.Hash(json) + " markers=" + markers.Count + " triangles=" + cells.Count + " links=" + data.NavLinks.Length + " doors=" + doors.Length;
+            return "fingerprint=" + AEDV02Plan.Hash(json) + " markers=" + markers.Count + " triangles=" + cells.Count + " links=" + data.NavLinks.Length + " doors=" + doors.Count;
         }
         finally { if (opened) EditorSceneManager.CloseScene(scene, true); }
     }
@@ -97,16 +146,17 @@ public static class ExportAEDV02Scene
     private static Bounds DoorBounds(MonoBehaviour door)
     {
         var blocker = new SerializedObject(door).FindProperty("_blockingCollider")?.objectReferenceValue as BoxCollider;
-        if (blocker != null)
-        {
-            var bounds = new Bounds(blocker.transform.TransformPoint(blocker.center), Vector3.zero);
-            foreach (int x in new[] { -1, 1 }) foreach (int y in new[] { -1, 1 }) foreach (int z in new[] { -1, 1 })
-                bounds.Encapsulate(blocker.transform.TransformPoint(blocker.center + Vector3.Scale(blocker.size * .5f, new Vector3(x, y, z))));
-            return bounds;
-        }
+        if (blocker != null) return BoxBounds(blocker);
         var colliders = door.GetComponentsInChildren<Collider>(true).Where(x => !x.isTrigger).ToArray();
         if (colliders.Length == 0) throw new InvalidOperationException("Door has no authored traversal collider: " + door.name);
         var result = colliders[0].bounds; foreach (var collider in colliders.Skip(1)) result.Encapsulate(collider.bounds);
         return result;
+    }
+    private static Bounds BoxBounds(BoxCollider blocker)
+    {
+        var bounds = new Bounds(blocker.transform.TransformPoint(blocker.center), Vector3.zero);
+        foreach (int x in new[] { -1, 1 }) foreach (int y in new[] { -1, 1 }) foreach (int z in new[] { -1, 1 })
+            bounds.Encapsulate(blocker.transform.TransformPoint(blocker.center + Vector3.Scale(blocker.size * .5f, new Vector3(x, y, z))));
+        return bounds;
     }
 }

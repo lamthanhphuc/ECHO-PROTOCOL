@@ -36,7 +36,12 @@ namespace EchoProtocol.Networking.Authority
             var snapshot = BackendAdaptiveInputSnapshotProvider.Current;
             if (snapshot == null || snapshot.SnapshotValidity != "Valid") { V02Log("PREMATCH_HOLD", "HOLD_INVALID_SNAPSHOT"); return; }
             var match = MatchId;
-            var request = BuildV02Request(AEDV02Plan.Normal(), AEDV02Plan.Normal(), 0, AEDV02DecisionPoint.PRE_MATCH, 0, "CORE_COLLECTION", null, scene);
+            var runtime = ScenarioConfigAuthorityRuntime.Instance;
+            int optional = runtime.TryGetStagedBackendPreMatch(match, out _, out var candidate) ? candidate.SupportItemBudget : 0;
+            if (optional < 0 || optional > 2) { V02Log("PREMATCH_HOLD", "HOLD_UNREGISTERED_INITIAL_SUPPLY"); return; }
+            var plan = AEDV02Plan.Normal().With(AEDV02Key.OptionalToolBudget, optional)
+                .With(AEDV02Key.CabinetAmbushEnabled, runtime.RuntimeSettings.CabinetAmbushEnabled ? 1 : 0);
+            var request = BuildV02Request(AEDV02Plan.Normal(), plan, 0, AEDV02DecisionPoint.PRE_MATCH, 0, "CORE_COLLECTION", null, scene);
             var approval = await RequestV02ApprovalAsync(match, request);
             if (cancellation.IsCancellationRequested || !V02GameplayActive || MatchId != match || request.rosterIdentity != AEDv2RosterIdentity)
             { QueueV02Abort(match, request); return; }
@@ -50,8 +55,7 @@ namespace EchoProtocol.Networking.Authority
             var request = _v02StagedRequest; var approval = _v02StagedApproval;
             _v02StagedRequest = null; _v02StagedApproval = null;
             if (request == null) return;
-            // A baseline envelope must not overwrite a separately issued v1 chase candidate.
-            if (!V02GameplayActive || Math.Abs(state.ScenarioChaseSpeed - AEDV02Plan.Normal().Get(AEDV02Key.ChaseSpeed)) > .000001 ||
+            if (!V02GameplayActive || state.ScenarioSupportItemBudget != request.planValues[(int)AEDV02Key.OptionalToolBudget] ||
                 !state.TryCommitV02Authoritative(request, approval, out var reason))
             { V02Log("PREMATCH_HOLD", "HOLD_PREMATCH_REVALIDATION"); QueueV02Abort(MatchId, request); return; }
             AwaitV02Consumer(request, approval, AEDV02Plan.Normal());
@@ -169,10 +173,16 @@ namespace EchoProtocol.Networking.Authority
                 var changed = _v02PendingChangedKeys;
                 string consumer = "AEDPolicyEnvelope"; var key = AEDV02Key.CabinetAmbushEnabled; double value = plan.Get(key);
                 var ids = Array.Empty<string>();
+                if (_v02PendingRequest.decisionPoint == "PRE_MATCH" && plan.Get(AEDV02Key.OptionalToolBudget) > 0)
+                {
+                    var supply = EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(_bootstrap.Runner, MatchId);
+                    if (supply == null || !supply.IsValid() || supply.InitialOptionalBudget != plan.Get(AEDV02Key.OptionalToolBudget) ||
+                        supply.OptionalBudget != plan.Get(AEDV02Key.OptionalToolBudget) || !supply.SpawnedZones.Contains(1)) return;
+                }
                 if (changed.Length == 1 && (int)changed[0] < 6)
                 {
                     key = changed[0]; consumer = "StalkerFusionRuntime";
-                    var stalkers = FindObjectsByType<StalkerFusionRuntime>(FindObjectsSortMode.None).Where(x => x.Runner == _bootstrap.Runner).ToArray();
+                    var stalkers = FindObjectsByType<StalkerFusionRuntime>().Where(x => x.Runner == _bootstrap.Runner).ToArray();
                     if (stalkers.Length == 0 || stalkers.Any(x => x.V02AppliedRevision != _v02PendingApproval.planRevision ||
                         !x.TryReadV02ConsumerValue(key, out var observed) || Math.Abs(observed - plan.Get(key)) > .000001)) return;
                     value = plan.Get(key); ids = stalkers.Select(x => x.Object.Id.ToString()).ToArray();
@@ -184,7 +194,20 @@ namespace EchoProtocol.Networking.Authority
                     if (spawner == null || !spawner.TryReadV02MinionCap(MatchId, _v02PendingApproval.planRevision, key, out value, out ids) ||
                         Math.Abs(value - plan.Get(key)) > .000001) return;
                 }
-                else if (changed.Length != 0) return;
+                else if (changed.Length == 1 && changed[0] == AEDV02Key.CabinetAmbushEnabled)
+                {
+                    if (!state.TryReadV02Plan(MatchId, out var envelope, out var observedRevision) ||
+                        observedRevision != _v02PendingApproval.planRevision || envelope.Fingerprint() != plan.Fingerprint()) return;
+                    key = changed[0]; value = envelope.Get(key);
+                }
+                else if (changed.Length == 1 && changed[0] == AEDV02Key.OptionalToolBudget)
+                {
+                    var supply = EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(_bootstrap.Runner, MatchId);
+                    if (supply == null || !supply.IsValid() || supply.OptionalBudget != plan.Get(AEDV02Key.OptionalToolBudget)) return;
+                    key = changed[0]; value = supply.OptionalBudget; consumer = "TeamToolWorldSpawn";
+                }
+                else if (changed.Length != 0 && !(_v02PendingRequest.decisionPoint == "PRE_MATCH" &&
+                    changed.All(x => x is AEDV02Key.OptionalToolBudget or AEDV02Key.CabinetAmbushEnabled))) return;
                 var tick = _bootstrap.Runner.Tick.Raw;
                 var effect = new AEDV02EffectSource { DecisionId = Guid.Parse(_v02PendingApproval.decisionId), PlanRevision = _v02PendingApproval.planRevision,
                     PlanFingerprint = plan.Fingerprint(), Consumer = consumer, Key = key.ToString(), ObservedValue = value, ObservedTick = tick, NetworkObjectIds = ids };

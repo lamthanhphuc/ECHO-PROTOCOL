@@ -10,7 +10,7 @@ namespace EchoProtocol.AI.AED
         public static string World(AEDV02WorldSample sample)
         {
             if (sample == null || !sample.IsValid()) throw new ArgumentException("AED_V02_WORLD_SOURCE_INVALID");
-            return new TelemetryJsonObject().AddString("Version", sample.Version).AddString("ResolutionMode", sample.ResolutionMode).AddString("Difficulty", sample.Difficulty)
+            var json = new TelemetryJsonObject().AddString("Version", sample.Version).AddString("ResolutionMode", sample.ResolutionMode).AddString("Difficulty", sample.Difficulty)
                 .AddInteger("Tick", sample.Tick).AddInteger("TickRate", sample.TickRate)
                 .AddInteger("PhaseOrdinal", sample.PhaseOrdinal).AddString("PhaseName", sample.PhaseName).AddInteger("LogicalPhase", sample.LogicalPhase)
                 .AddInteger("Zone", sample.Zone).AddInteger("PlanRevision", sample.PlanRevision).AddString("PlanFingerprint", sample.PlanFingerprint)
@@ -26,11 +26,19 @@ namespace EchoProtocol.AI.AED
                 {
                     var item = new TelemetryJsonObject().AddString("InstanceId", x.InstanceId).AddInteger("ToolId", x.ToolId).AddInteger("Zone", x.Zone)
                         .AddString("Location", x.Location).AddString("Origin", x.Origin).AddString("OwnerUserId", x.OwnerUserId?.ToString("D"))
+                        .AddString("CarrierMinionId", x.CarrierMinionId)
                         .AddString("MarkerId", x.MarkerId).AddStringArray("RouteEdgeIds", x.RouteEdgeIds);
                     Position(item, x.X, x.Y, x.Z);
                     return x.RemainingCharges.HasValue ? item.AddInteger("RemainingCharges", x.RemainingCharges.Value) : item.AddNull("RemainingCharges");
-                })).AddArray("Doors", sample.Doors.Select(x => new TelemetryJsonObject().AddString("DoorId", x.DoorId).AddString("State", x.State))).ToJson();
+                })).AddArray("Doors", sample.Doors.Select(x => new TelemetryJsonObject().AddString("DoorId", x.DoorId).AddString("State", x.State)));
+            return (sample.Supply == null ? json.AddNull("Supply") : json.AddObject("Supply", Supply(sample.Supply))).ToJson();
         }
+        public static TelemetryJsonObject Supply(AEDV02SupplySource source) => new TelemetryJsonObject()
+            .AddInteger("InitialOptionalBudget", source.InitialOptionalBudget).AddInteger("OptionalBudget", source.OptionalBudget)
+            .AddInteger("OptionalMaterialized", source.OptionalMaterialized)
+            .AddIntegerArray("SpawnedZones", source.SpawnedZones)
+            .AddArray("Reservations", source.Reservations.Select(x => new TelemetryJsonObject().AddInteger("Zone", x.Zone)
+                .AddInteger("ToolId", x.ToolId).AddString("MarkerId", x.MarkerId)));
         public static string Effect(AEDV02EffectSource effect)
         {
             if (effect == null || !effect.IsValid()) throw new ArgumentException("AED_V02_EFFECT_INVALID");
@@ -38,6 +46,21 @@ namespace EchoProtocol.AI.AED
                 .AddString("PlanFingerprint", effect.PlanFingerprint).AddString("Consumer", effect.Consumer).AddString("Key", effect.Key)
                 .AddNumber("ObservedValue", effect.ObservedValue).AddInteger("ObservedTick", effect.ObservedTick)
                 .AddStringArray("NetworkObjectIds", effect.NetworkObjectIds).ToJson();
+        }
+        public static string Carrier(AEDV02ToolCarrierSource carrier)
+        {
+            if (carrier == null || !carrier.IsValid()) throw new ArgumentException("AED_V02_TOOL_CARRIER_INVALID");
+            return new TelemetryJsonObject().AddString("ToolInstanceId", carrier.ToolInstanceId).AddString("MinionNetworkId", carrier.MinionNetworkId)
+                .AddString("Action", carrier.Action).AddInteger("Tick", carrier.Tick).ToJson();
+        }
+        public static string CabinetClue(AEDV02CabinetClueSource clue)
+        {
+            if (clue == null || !clue.IsValid()) throw new ArgumentException("AED_V02_CABINET_CLUE_INVALID");
+            return new TelemetryJsonObject().AddString("UserId", clue.UserId.ToString("D")).AddString("StalkerNetworkId", clue.StalkerNetworkId)
+                .AddString("HideSpotId", clue.HideSpotId).AddString("SceneMarkerId", clue.SceneMarkerId).AddString("SceneManifestFingerprint", clue.SceneManifestFingerprint)
+                .AddInteger("Tick", clue.Tick).AddNumber("OriginX", clue.OriginX).AddNumber("OriginY", clue.OriginY).AddNumber("OriginZ", clue.OriginZ)
+                .AddNumber("TargetX", clue.TargetX).AddNumber("TargetY", clue.TargetY).AddNumber("TargetZ", clue.TargetZ).AddNumber("ObservedDistance", clue.ObservedDistance)
+                .AddNumber("PlayerX", clue.PlayerX).AddNumber("PlayerY", clue.PlayerY).AddNumber("PlayerZ", clue.PlayerZ).ToJson();
         }
         private static TelemetryJsonObject Threat(AEDV02ThreatSource x) => Position(new TelemetryJsonObject().AddString("NetworkId", x.NetworkId)
             .AddString("State", x.State).AddString("EpisodeId", x.EpisodeId).AddString("TargetUserId", x.TargetUserId?.ToString("D"))

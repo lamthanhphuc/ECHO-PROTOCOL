@@ -24,6 +24,22 @@ namespace EchoProtocol.Networking
         private string _v02BoundaryTarget;
         private Guid _v02LoggedMatch;
         private int _v02LoggedRevision;
+        private long _v02NextSupplyAttempt;
+        private int _v02SupplyZone;
+        private void TickV02Supply()
+        {
+            var authority = MatchAuthorityRuntime.Instance;
+            if (authority == null || Status != NetworkMatchStatus.Running ||
+                ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings?.PacingV02GameplayEnabled != true ||
+                !TryReadV02Plan(authority.MatchId, out var plan, out _)) return;
+            int zone = AEDV02PhaseMap.LogicalPhase(authority.V02EvidencePhaseName);
+            if (zone < 1 || zone > 3) return;
+            if (zone != _v02SupplyZone) { _v02SupplyZone = zone; _v02NextSupplyAttempt = 0; }
+            if (Runner.Tick.Raw < _v02NextSupplyAttempt) return;
+            _v02NextSupplyAttempt = Runner.Tick.Raw + Runner.TickRate * 3;
+            if (EchoProtocol.TeamTools.TeamToolWorldSpawn.TrySpawnV02Zone(Runner, _teamToolPickupCatalog,
+                authority.MatchId, plan, zone, _teamToolSpawnMinimumSpacing)) TeamToolWorldSpawnInitialized = true;
+        }
         private void LogV02ReplicatedPlan()
         {
             var authority = MatchAuthorityRuntime.Instance;
@@ -57,6 +73,7 @@ namespace EchoProtocol.Networking
             AEDV02PlanRevision = 0; AEDV02PlanFingerprint = default; AEDV02RosterIdentity = default;
             _v02BoundaryPending = false; _v02BoundaryTarget = null;
             _v02LoggedMatch = Guid.Empty; _v02LoggedRevision = 0;
+            _v02NextSupplyAttempt = 0; _v02SupplyZone = 0;
             AEDV02SceneFingerprint = default; AEDV02MatchId = default; AEDV02DecisionId = default;
             for (int i = 0; i < 12; i++) AEDV02Values.Set(i, 0);
         }
@@ -73,13 +90,13 @@ namespace EchoProtocol.Networking
         public bool IsV02SafeWindow()
         {
             if (Runner == null || Object == null || !Object.IsValid || !Object.HasStateAuthority || Status != NetworkMatchStatus.Running ||
-                FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>(FindObjectsSortMode.None).Any(x => x.Runner == Runner &&
+                FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>().Any(x => x.Runner == Runner &&
                     x.State is EchoProtocol.AI.Minions.CreepMinionState.Track or EchoProtocol.AI.Minions.CreepMinionState.Harass) ||
                 IsSecurityHoldRunning || IsZone3Charging) return false;
             var authority = MatchAuthorityRuntime.Instance;
             if (authority == null || Runner.ActivePlayers.Count() != authority.BoundPlayerCount || RelayA1Operator.IsRealPlayer || RelayA2Operator.IsRealPlayer ||
                 RelayB1Operator.IsRealPlayer || RelayB2Operator.IsRealPlayer || Zone3Pusher.IsRealPlayer || Zone3RefuelOperator.IsRealPlayer) return false;
-            var stalkers = FindObjectsByType<StalkerFusionRuntime>(FindObjectsSortMode.None).Where(x => x.Runner == Runner).ToArray();
+            var stalkers = FindObjectsByType<StalkerFusionRuntime>().Where(x => x.Runner == Runner).ToArray();
             if (stalkers.Length == 0 || stalkers.Any(x => !x.IsV02SafeForApply)) return false;
             foreach (var player in Runner.ActivePlayers)
                 if (!Runner.TryGetPlayerObject(player, out var obj) || !obj.TryGetComponent<NetworkPlayerLifeState>(out var life) ||
@@ -99,6 +116,9 @@ namespace EchoProtocol.Networking
                 snapshot == null || request.snapshotId != snapshot.SnapshotId.ToString("D") || request.snapshotFingerprint != snapshot.SnapshotFingerprint ||
                 request.expectedPlanRevision != AEDV02PlanRevision) return false;
             if (!AEDv2GameplayBridge.IsNormalCompatible()) { reason = "HOLD_FIXED_BASELINE_DRIFT"; return false; }
+            if (request.planValues == null) return false;
+            if (request.planValues.Length != 12 || request.planValues[(int)AEDV02Key.ResourceGrade] != 0)
+            { reason = "HOLD_RESOURCE_PLACEMENT_SOURCE_REQUIRED"; return false; }
             bool preMatch = request.decisionPoint == "PRE_MATCH";
             if (preMatch ? TeamToolWorldSpawnInitialized || AEDV02PlanRevision != 0
                 : request.phaseOrdinal != authority.V02EvidencePhaseOrdinal ||
@@ -106,6 +126,16 @@ namespace EchoProtocol.Networking
                         : request.targetPhaseName != authority.V02EvidencePhaseName) || !IsV02SafeWindow()) return false;
             if (!preMatch)
             {
+                var proposed = new AEDV02Plan(request.planValues);
+                int initialBudget = EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(Runner, authority.MatchId)?.InitialOptionalBudget ?? ScenarioSupportItemBudget;
+                int population = FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>()
+                    .Count(x => x.Runner == Runner && x.Zone == EchoProtocol.AI.Stalker.Spatial.RegionSemanticZone.Zone03);
+                if (!proposed.HasWorldPressureSlot(initialBudget, population))
+                { reason = "HOLD_PRESSURE_HANDOFF_WORLD_NOT_REVERTED"; return false; }
+                if (TryReadV02Plan(authority.MatchId, out var currentPlan, out _) &&
+                    request.planValues[(int)AEDV02Key.OptionalToolBudget] != currentPlan.Get(AEDV02Key.OptionalToolBudget) &&
+                    !EchoProtocol.TeamTools.TeamToolWorldSpawn.CanSetV02SupplyBudget(Runner, authority.MatchId, (int)request.planValues[(int)AEDV02Key.OptionalToolBudget]))
+                { reason = "HOLD_OPTIONAL_ALREADY_MATERIALIZED"; return false; }
                 var source = authority.LastVerifiedV02Source;
                 if (source == null || source.fingerprint != request.sourceFingerprint || source.planRevision != AEDV02PlanRevision ||
                     source.planFingerprint != request.previousPlanFingerprint || source.rosterIdentity != authority.AEDv2RosterIdentity ||
@@ -122,7 +152,7 @@ namespace EchoProtocol.Networking
             AEDV02MatchId = authority.MatchId.ToString("D"); AEDV02DecisionId = approval.decisionId;
             AEDV02PlanFingerprint = plan.Fingerprint(); AEDV02RosterIdentity = approval.rosterIdentity;
             AEDV02SceneFingerprint = approval.sceneManifestFingerprint; AEDV02PlanRevision = revision;
-            if (!preMatch) foreach (var stalker in FindObjectsByType<StalkerFusionRuntime>(FindObjectsSortMode.None).Where(x => x.Runner == Runner))
+            if (!preMatch) foreach (var stalker in FindObjectsByType<StalkerFusionRuntime>().Where(x => x.Runner == Runner))
                 stalker.ApplyV02AtSafeWindow(authority.MatchId);
             Debug.Log($"[AED_V02][HOST_COMMIT] match={authority.MatchId:D} decision={approval.decisionId} revision={revision} fingerprint={plan.Fingerprint()} point={request.decisionPoint} window={request.windowSequence}");
             return true;

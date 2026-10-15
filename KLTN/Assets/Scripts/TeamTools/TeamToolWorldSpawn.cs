@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace EchoProtocol.TeamTools
 {
-    public static class TeamToolWorldSpawn
+    public static partial class TeamToolWorldSpawn
     {
         private static readonly int[] RequiredToolIds =
         {
@@ -576,7 +576,7 @@ namespace EchoProtocol.TeamTools
                     spawned,
                     plan.ToolId))
             {
-                if (spawned.TryGetComponent<NetworkTeamToolPickup>(out var pickup))
+                if (spawned.TryGetComponent<NetworkInteractable>(out var pickup))
                     pickup.BindV02SpawnMarker(EchoProtocol.AI.AED.AEDV02SceneSource.MarkerId(plan.Point.transform));
                 return spawned;
             }
