@@ -59,6 +59,10 @@ Still unsupported: normalized historical competence, complete Resource need/oppo
 - Gameplay toggles default OFF. User RuntimeLogSettings and TMP fallback edits remain uncommitted. No .env, credentials, Docker local override, production API/database change or deploy.
 - Migration `20261014102100_AddAEDV02PilotLedger` adds four v0.2 tables/indexes; a tested deployment migration still requires normal review before any production release. No production migration was run.
 
+### Main advanced during final fetch
+
+Final fetch found `origin/main=31ca1603a8572387cc437536256079745ada53dd`, five commits beyond the comparison SHA above; `origin/LTP` remains `10391b1d`. Those changes are not merged into this LTP-based feature. They add Resonance/Minion disruption, new Lobby presentation/settings, Voice and player changes. Shared files include CreepMinionRuntime, TeamToolWorldSpawn, MatchAuthorityRuntime and NetworkPlayerMovement. In particular, main's new `medkits` Lobby setting can omit FirstAid, whereas the approved Adaptive pilot requires five mandatory types. Future main/LTP synchronization needs an explicit Adaptive-versus-Fixed policy reconciliation for that setting; this feature does not silently override it. Prefab tuning is still unchanged, but parity with the newly advanced main gameplay is **UNVERIFIED**, not PASS. No claim that all current main/LTP differences are AED-only is made.
+
 ## Reproduce and trace
 
 From `D:\Bin\KLTN` with local Docker and an idle Unity Editor:

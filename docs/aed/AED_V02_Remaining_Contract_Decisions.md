@@ -30,5 +30,6 @@ The following are **not** replaced by a contract decision or by green automated 
 3. Non-R0 resource placement and regular/emergency support implementation after the missing semantics above are fixed. These features remain unfinished, rather than being called completed behind a disabled flag.
 4. Actual Photon reconnect/late join/Host shutdown, Voice initialization and input-buffer behavior with matched feature builds. Existing lower-level regression coverage is not a transport E2E result.
 5. Pilot activation and the twelve owner acceptance scenarios. Keep all gameplay defaults OFF; do not ask the owner to accept this checkpoint as an E2E-ready pilot.
+6. Final fetch: main advanced to `31ca1603` while LTP remains `10391b1d`. Its Resonance/Minion changes and new medkits Lobby toggle are not in this feature base. Future synchronization must preserve Fixed's new settings while formally reconciling the Adaptive five-required-types invariant. Current-main gameplay parity is UNVERIFIED; no automatic merge was performed.
 
 The existing V1 Phase8 verifier remains fail-closed. Nothing in the new source protocol changes Telemetry 1.1 or AED_V2_PHASE_EVIDENCE_V2 semantics.
