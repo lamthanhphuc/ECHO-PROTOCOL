@@ -2130,6 +2130,10 @@ namespace EchoProtocol.Networking
             }
         }
 
+        public long V02StabilizerUntilTick => IsCoreStabilizerActive
+            ? (long)Runner.Tick.Raw + (CoreStabilizerActiveTimer.RemainingTicks(Runner) ?? 0) : 0;
+        public uint V02StabilizerActivationOrdinal => IsCoreStabilizerActive ? TeamToolOrdinal : 0;
+
         public bool IsCoreStabilizerCovering(Vector3 worldPosition)
         {
             if (!IsCoreStabilizerActive)

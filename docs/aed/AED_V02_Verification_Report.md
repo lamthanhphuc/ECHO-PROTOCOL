@@ -2,9 +2,21 @@
 
 **Release decision: NOT E2E READY. Keep gameplay OFF.** This is a reviewable implementation checkpoint, not completion of W0–W6. [Outstanding contract and engineering gates](AED_V02_Remaining_Contract_Decisions.md) are part of this report.
 
+## Current candidate and Stage B repair status
+
+Remote CI [38700470494](https://github.com/lamthanhphuc/ECHO-PROTOCOL/actions/runs/38700470494), source `d074a260`: Backend compile succeeded; **654 passed, 3 failed, 0 skipped, 657 total**. Failures are the historical composite approval fixture, legacy-source versus historical Hold precedence, and PostgreSQL historical-schema seed using the latest binding model. The detailed repair queue is in the execution checklist. No Unity, Windows or native result for d074a260 follows from this CI run.
+
+Current uncommitted Stage B repairs are **NOT RUN / UNVERIFIED**: corrected Cabinet pilot settings in the composite test; complete/partial protocol cases without weakening guards; explicit pre-column PostgreSQL binding seed plus up/down/up/default assertions; process-only native credential handoff with no password in configuration files; actual six-key Host consumer replication and Client movement/Animator consumption proof; phase/window binding and partial-append-safe evidence reading. The native proof comparator has sixteen behavioral fixture cases and two file-reader cases authored, not executed. These fixtures are not native gameplay evidence.
+
+Noise Maker source collection and independent reconstruction are now authored against actual Stalker heard-noise navigation, canonical activation/pulses, consumed-charge lineage, registered geometry and measured diversion. Eight ingested positive/negative cases are authored, **NOT RUN**. Scanner, Door Jammer and Core Stabilizer outcome producers remain implementation work. Stage B is not complete; scene re-export, native lifecycle controls and the full campaign remain pending.
+
+Subsequent Stage B source work also adds actual Core Stabilizer timer/activation/buff collection, exported online tuning and independent protected-opportunity reconstruction with canonical core ownership. Ten ingested cases are authored, NOT RUN. Its missing manifest tuning remains Unsupported. Scanner and Door Jammer outcomes still require implementation; no general Tool competence or native success is claimed.
+
+The executed results below belong only to their older source checkpoint. They do **not** supersede the three current CI failures or certify the new code.
+
 Base LTP: `10391b1d820a9f25d2352d925dbf5bfc39962e50`. Gameplay source/build: `91d8aba`; test infrastructure: `6658ae0`. Final documentation commits do not change tested source. See Git history/PR for full SHAs and previous four foundation commits. All work is on `feature/aed-v02-full-integration`; main and LTP were not modified.
 
-## Executed tests
+## Historical executed tests — older checkpoint
 
 | Suite | PASS | FAIL | SKIP | Evidence |
 |---|---:|---:|---:|---|

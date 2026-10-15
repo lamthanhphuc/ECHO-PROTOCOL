@@ -12,7 +12,7 @@ namespace EchoProtocol.Api.Services;
 
 public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventRepository telemetry, TimeProvider clock)
 {
-    public const string VerificationVersion = "AED_V02_SOURCE_VERIFICATION_REV02_V3";
+    public const string VerificationVersion = "AED_V02_SOURCE_VERIFICATION_REV02_V4";
     public async Task<ServiceResult<AEDV02SourceResult>> VerifyAsync(Guid matchId, AEDV02SourceRequest request, CancellationToken ct = default)
     {
         if (request == null || matchId == Guid.Empty || request.PhaseOrdinal < 1 || request.StartTick < 0 ||
@@ -83,6 +83,8 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
         var supportInstances = await AcceptedSupportInstances(matchId, accepted, ct);
         bool pilotOpportunities = frames.All(x => x.Sample.OpportunityContractVersion == AEDV02PilotOpportunities.Version);
         if (!TryReadImpacts(accepted, frames, out var impacts)) return Hold("HOLD_CAUSAL_IMPACT_LINEAGE_INVALID");
+        if (!TryResolveNoiseMakerOpportunities(accepted, frames, manifest, out _)) return Hold("HOLD_TOOL_NOISE_LINEAGE_INVALID");
+        if (!TryResolveStabilizerOpportunities(accepted, frames, manifest, out _, out var stabilizerReason)) return Hold(stabilizerReason);
         var carrierEvents = accepted.Where(x => x.MatchId == matchId && x.EventType == "AED_V02_TOOL_CARRIER").OrderBy(x => x.EventSequence).ToArray();
         var carriers = new Dictionary<string, string>(StringComparer.Ordinal); int carrierIndex = 0;
         for (int i = 0; i < frames.Count; i++)
@@ -186,8 +188,8 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
                     bool constrained = causal.Value != null && (player.LifeState == "DOWNED" || player.IsCaught || player.SlowUntilTick > previous.Tick ||
                         causal.Value.Kind == "MINION_CORE_DROP" && previous.Minions.Any(x => x.NetworkId == causal.Value.EntityId &&
                             x.TargetUserId == player.UserId && x.State is "TRACK" or "HARASS"));
-                    if (constrained && !previous.Players.Any(x => x.ObjectiveState == "OPERATING" && x.ObjectiveUnitId == causal.Value!.ObjectiveUnitId))
-                        Add(player.UserId, "objective:" + causal.Value.ObjectiveUnitId, "O:" + causal.Key, AEDV02PressureChannel.Objective,
+                    if (constrained && causal.Value is { } verifiedCause && !previous.Players.Any(x => x.ObjectiveState == "OPERATING" && x.ObjectiveUnitId == verifiedCause.ObjectiveUnitId))
+                        Add(player.UserId, "objective:" + verifiedCause.ObjectiveUnitId, "O:" + causal.Key, AEDV02PressureChannel.Objective,
                             previous.Tick, sample.Tick, causal.Key.ToString("D"));
                 }
                 if (player.RequiredToolId != 0)

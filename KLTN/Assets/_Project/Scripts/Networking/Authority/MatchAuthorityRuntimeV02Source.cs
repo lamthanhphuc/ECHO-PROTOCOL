@@ -225,6 +225,11 @@ namespace EchoProtocol.Networking.Authority
                 var observed = Threat(stalker.Object, stalker.HasActiveSpecialEncounter ? "SPECIAL" :
                     stalker.ReplicatedState == StalkerState.DETECT ? "DETECTION" : stalker.ReplicatedState.ToString(), stalker.TargetPlayer, Math.Min(logical, 3));
                 observed.ConsumerValues = new double[6];
+                if (stalker.TryReadV02NoiseDiversion(out var noiseId, out var destination))
+                {
+                    observed.InvestigationNoiseId = noiseId;
+                    observed.DestinationX = destination.x; observed.DestinationY = destination.y; observed.DestinationZ = destination.z;
+                }
                 for (int key = 0; key < observed.ConsumerValues.Length; key++)
                     if (!stalker.TryReadV02ConsumerValue((AEDV02Key)key, out observed.ConsumerValues[key]) ||
                         Math.Abs(observed.ConsumerValues[key] - plan.Get((AEDV02Key)key)) >= .000001)
@@ -248,6 +253,10 @@ namespace EchoProtocol.Networking.Authority
                     ObjectiveUnitId = objective, ObjectiveState = objective.Length == 0 ? "NONE" : "OPERATING",
                     HeldToolInstanceId = held?.InstanceId ?? string.Empty, HideSpotId = movement.CurrentHideSpotId.ToString(),
                     SlowUntilTick = movement.V02SlowUntilTick, X = position.x, Y = position.y, Z = position.z };
+                var interactor = obj.GetComponent<NetworkPlayerInteractor>();
+                playerSource.StabilizerUntilTick = interactor != null ? interactor.V02StabilizerUntilTick : 0;
+                playerSource.StabilizerActivationOrdinal = interactor != null ? interactor.V02StabilizerActivationOrdinal : 0;
+                playerSource.StabilizerBuffed = lobby.IsStabilizerBuffed;
                 if (objective.Length != 0) _v02ObservedObjectives[player] = (objective, runner.Tick.Raw);
                 if (_v02Impacts.TryGetValue(player, out var blocked))
                 {
@@ -300,7 +309,19 @@ namespace EchoProtocol.Networking.Authority
                 Supply = EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(runner, MatchId),
                 Stalkers = stalkerSources.ToArray(),
                 Minions = minions.Select(x => Threat(x.Object, x.IsDying ? "DYING" : x.State == CreepMinionState.Roam ? "IDLE" : x.State.ToString().ToUpperInvariant(), x.TargetPlayer, (int)x.Zone)).ToArray() };
-            return sample.IsValid();
+            if (!sample.IsValid()) return false;
+            var stabilizers = new List<NetworkPlayerInteractor>();
+            foreach (var player in runner.ActivePlayers)
+                if (runner.TryGetPlayerObject(player, out var playerObject) && playerObject.TryGetComponent<NetworkPlayerInteractor>(out var interactor) && interactor.IsCoreStabilizerActive)
+                    stabilizers.Add(interactor);
+            foreach (var player in sample.Players)
+            {
+                bool covered = player.LifeState == "ALIVE" && !player.IsCaught && stabilizers.Any(x =>
+                    x.IsCoreStabilizerCovering(new Vector3((float)player.X, (float)player.Y, (float)player.Z)));
+                if (covered != player.StabilizerBuffed)
+                { reason = "HOLD_STABILIZER_BUFF_NOT_RECONCILED"; sample = null; return false; }
+            }
+            return true;
         }
         private static AEDV02ToolSource Tool(AEDPhase8ToolSourceV1 source, Vector3 position, string marker) => new AEDV02ToolSource
         {

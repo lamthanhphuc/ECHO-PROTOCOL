@@ -4,6 +4,8 @@ Candidate start: 29491edab3adcc2c815773c1d9c576e2d6b8188f, PR #23 Draft -> LTP.
 Latest fetched main: 0b90b912; no whole-main merge authorized. Its additional Resonance change increases gameplay/visual range from 10 to 24 and adjusts beam/light presentation; it is not in this feature base.
 Protected local WIP: RuntimeLogSettings.asset and LiberationSans SDF - Fallback.asset.
 
+Current continuation base: **d074a260**. Remote CI compiled that checkpoint with **654 PASS / 3 FAIL / 0 SKIP**. New repairs and Noise Maker/Core Stabilizer source work are uncommitted and NOT RUN. Remaining Tool producer gaps are Scanner and Door Jammer; manifest export, native lifecycle/12-case controls and other unchecked B1–B8 work remain. No agent-run full suite/build is started before implementation is complete.
+
 ## A. One source audit
 
 - [x] Fetch/status/HEAD/PR; read Rev02 policy, existing source contract, remaining gates and previous verification.
@@ -83,3 +85,25 @@ Owner subsequently explicitly requested committing and pushing the current chang
 - The commit containing this section preserves the Development-only native harness, CLI/campaign scripts and pilot/checkpoint documentation — UNTESTED.
 - No compilation, migration execution, Backend/Unity suite, Windows build or native integration was run for these checkpoints. B1–B8 remain incomplete; this is not READY FOR OWNER E2E.
 - RuntimeLogSettings.asset, the TMP fallback asset, secrets, local overrides and generated artifacts are excluded. Production gameplay defaults remain unchanged.
+
+## CI evidence and grouped repair queue — candidate d074a260
+
+Observed CI run: https://github.com/lamthanhphuc/ECHO-PROTOCOL/actions/runs/38700470494 . Backend compiled; **654 PASS, 3 FAIL, 0 SKIP, 657 total**. This is remote CI evidence, not an agent-run Unity/native result. Backend emitted CS8602 at AEDV02SourceVerifier.cs:190. No full suite is rerun during Stage B.
+
+- [ ] Historical approval fixture: `V02_HistoryReconstructsIngestedEndedMatchesAndDoesNotTrustStoredOutcomeClaims(prematch-apply)` expected APPROVED, received HOLD. The composite enables Cabinet but its Backend pilot settings disable Cabinet; correct explicit fixture settings and retain approval/receipt assertions with diagnostic reason.
+- [ ] Source-contract precedence: `V02_VerifiedPressureAndClaimedSkillRows_CannotCertifyUnsupportedHistoricalCompetence` expected historical Hold but used legacy partial pressure, so the earlier legitimate result is HOLD_INSUFFICIENT_EVIDENCE. Exercise both legacy partial and current complete protocol; retain historical rejection for current evidence.
+- [ ] PostgreSQL historical-schema fixture: migration roundtrip seeds the pre-pilot schema with the latest EF model, whose new HadGameplayDisconnect column does not exist yet. Seed legacy binding columns explicitly, then assert column default, real up/down/up and preservation of players/match/users. Do not remove the test or move the previous migration forward.
+- [ ] Native credentials: remove plaintext password from Host/Client configuration, provide a one-use process credential handoff and validate missing credentials before launch. Keep secrets out of artifacts/logs.
+- [ ] Native Client consumer proof: a Client cannot certify the plan by reporting its replicated ChaseSpeed. Read actual remote runtime/presentation consumption and authoritative consumer state; require matching consumer evidence on both processes.
+- [ ] Complete the remaining four Tool outcome producers/reconstruction, manifest, lifecycle controls and all B1–B8 gates before Stage C. Repairs above are implemented in Stage B and verified together in the campaign; they are not marked PASS until actually run.
+
+### Continuation implementation (not retested)
+
+- CI fixture fixes are now authored: Cabinet explicitly enabled in the intended composite test; separate current/legacy protocol precedence cases; legacy PostgreSQL binding INSERT omits the not-yet-existing column, then checks real migrations and default/preservation behavior. CS8602 cause dereference was guarded. The three CI failures remain unresolved-by-execution until Stage C runs.
+- Native passwords are no longer serialized into Host/Client config. The launcher requires two SecureString inputs, passes each only to its child process, and the Development harness clears the inherited value after reading. No secret is placed in command arguments or proof files.
+- Stalker actual six-key consumer state has its own authoritative Fusion readback. Client proof additionally requires fresh matching revision/fingerprint, actual CHASE movement and an active Animator consumer. Client AI simulation remains disabled. Decision phase/point/window is replicated and checked against the receipt log.
+- Native comparison is extracted into an executable shared function; sixteen positive/negative fixture cases and two complete/partial JSONL reader cases are authored, NOT RUN. Fixture success cannot be reported as native E2E. The bot re-engages through actual movement after relief to obtain a real remote CHASE consumer observation.
+- Noise Maker producer/reconstruction is now authored against actual hearing memory/navigation, canonical activation/charge-use/pulse lineage and registered reachable geometry. Two seconds plus 0.5 m real diversion progress resolves success; pulse/retry dedup is per real threat episode. Missing/unheard/stationary/cut opportunities remain censored. Eight ingestion/verifier cases are authored, NOT RUN. Source version is now WORLD_SOURCE_REV02_5 / SOURCE_VERIFICATION_REV02_V4; rebuild both peers together. Other three Tool families remain unfinished and confer no general Tool entitlement.
+- Static checks only: PowerShell parser accepted four native/campaign/proof scripts. No test script, Backend suite/build, Unity process, migration or native player was executed in this continuation. Existing protected assets are preserved.
+- Core Stabilizer source/reconstruction is also now authored: actual timer/ordinal/held instance/buff beneficiaries, exported online radius/duration, independent coverage and canonical core lineage, useful protected seconds and activation dedup. Ten ingestion/verifier cases cover success, empty room, unknown onset, ownership, radius, missing buff/core, wrong core actor, expiry and unsupported tuning; NOT RUN. Collection skips unreconciled buff frames rather than falsifying flags. Current outcome producers still missing: **Scanner and Door Jammer**. General Tool competence remains fail-closed until every family has real eligible history.
+- The real scene export has not run. It must regenerate the resource-role/spacing manifest and now the online Core Stabilizer tuning before sealing the campaign candidate. Do not reuse the old manifest to claim these new placement/effect paths are Verified.

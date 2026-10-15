@@ -103,12 +103,14 @@ public sealed partial class ScenarioServiceTests
         Assert.True((await service.ConfirmAsync(f.HostId, f.MatchId, initial.DecisionId, receipt)).Data!.IsReplay);
     }
 
-    [Fact, Trait("Category", "AEDV02")]
-    public async Task V02_VerifiedPressureAndClaimedSkillRows_CannotCertifyUnsupportedHistoricalCompetence()
+    [Theory, Trait("Category", "AEDV02")]
+    [InlineData(false, "HOLD_INSUFFICIENT_EVIDENCE")]
+    [InlineData(true, "HOLD_HISTORICAL_OPPORTUNITIES_REQUIRED")]
+    public async Task V02_VerifiedPressureAndClaimedSkillRows_CannotCertifyUnsupportedHistoricalCompetence(bool pilot, string reason)
     {
         await using var f = await ValidV02Fixture();
         var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
-        var (world, sourceRequest) = await V02WorldEvidence(f, planRevision: 1);
+        var (world, sourceRequest) = await V02WorldEvidence(f, planRevision: 1, pilot: pilot);
         var events = world.ToList(); var repository = new MutableV02Repository(events);
         var verifier = new AEDV02SourceVerifier(f.Db, repository, new FixedClock(Now));
         var service = new AEDV02DecisionService(f.Db, verifier, repository, new FixedClock(Now), Options.Create(new AEDV02PilotSettings { Enabled = true }));
@@ -121,6 +123,7 @@ public sealed partial class ScenarioServiceTests
         var source = await verifier.VerifyAsync(f.MatchId, sourceRequest);
         Assert.True(source.IsSuccess, source.Message);
         var users = source.Data!.PlayerPressure.Keys.ToArray();
+        Assert.Equal(pilot, source.Data.PressureComplete);
         var context = source.Data.SceneManifestFingerprint + "|Normal|" + AEDV02Plan.CatalogVersion;
         for (int i = 0; i < 3; i++)
         {
@@ -155,7 +158,7 @@ public sealed partial class ScenarioServiceTests
             AEDV02Plan.Normal().With(AEDV02Key.ChaseSpeed, 8), 1, source.Data, 1));
         Assert.True(increase.IsSuccess, increase.Message);
         Assert.Equal("HOLD", increase.Data!.ApprovalStatus);
-        Assert.Equal("HOLD_HISTORICAL_OPPORTUNITIES_REQUIRED", increase.Data.ReasonCode);
+        Assert.Equal(reason, increase.Data.ReasonCode);
         Assert.Equal("NOT_APPLICABLE", increase.Data.ApplyStatus);
     }
 

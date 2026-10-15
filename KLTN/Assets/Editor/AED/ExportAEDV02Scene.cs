@@ -147,6 +147,7 @@ public static class ExportAEDV02Scene
             var data = new AEDV02SceneManifestData { SceneVersion = "SCIFI_NAV_REV02_" + AssetDatabase.AssetPathToGUID(path),
                 ScenePath = path, MaximumVisionRange = maximumVisionRange, MaximumCabinetInteractionDistance = maximumInteractionDistance,
                 MinimumToolSpacing = spacing.floatValue,
+                CoreStabilizerRadius = CoreStabilizerRules.SupportRadius, CoreStabilizerDurationSeconds = CoreStabilizerRules.DurationSeconds,
                 DoorIds = doors.Select(x => x.Id).Distinct().ToArray(), Markers = markers.ToArray(), NavCells = cells.ToArray(),
                 NavLinks = links.GroupBy(x => (x.From, x.To)).Select(x => x.First()).ToArray() };
             if (!data.ToModel().IsValid()) throw new InvalidOperationException("Exported graph failed independent structural validation.");

@@ -122,14 +122,14 @@ public sealed partial class ScenarioServiceTests
             var repository = new MutableV02Repository(all);
             var clock = new FixedClock(Now.AddSeconds(2));
             var service = new AEDV02DecisionService(current.Db, new AEDV02SourceVerifier(current.Db, repository, clock), repository,
-                clock, Options.Create(new AEDV02PilotSettings { Enabled = true }));
+                clock, Options.Create(new AEDV02PilotSettings { Enabled = true, CabinetAmbushEnabled = true }));
             current.Db.MatchAuthorityBindings.Single(x => x.MatchId == current.MatchId).Status = MatchAuthorityStatus.Lobby;
             await current.Db.SaveChangesAsync();
             var plan = AEDV02Plan.Normal().With(AEDV02Key.DetectionAcquireSeconds, 1).With(AEDV02Key.CabinetAmbushEnabled, 1);
             var request = V02Request(current, scenario, scene, plan, 0, null, 0);
             var approval = await service.SubmitAsync(current.HostId, current.MatchId, request);
             Assert.True(approval.IsSuccess, approval.Message);
-            Assert.Equal("APPROVED", approval.Data!.ApprovalStatus);
+            Assert.True(approval.Data!.ApprovalStatus == "APPROVED", approval.Data.ReasonCode);
             Assert.Equal(1, approval.Data.PlanRevision);
             current.Db.MatchAuthorityBindings.Single(x => x.MatchId == current.MatchId).Status = MatchAuthorityStatus.InMatch;
             await current.Db.SaveChangesAsync();

@@ -20,6 +20,9 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkString<_64> AEDV02MatchId { get; private set; }
         [Networked] public NetworkString<_64> AEDV02DecisionId { get; private set; }
         [Networked] public NetworkString<_64> AEDV02ActionFingerprint { get; private set; }
+        [Networked] public NetworkString<_64> AEDV02WindowId { get; private set; }
+        [Networked] public NetworkString<_32> AEDV02DecisionPoint { get; private set; }
+        [Networked] public int AEDV02DecisionPhaseOrdinal { get; private set; }
         [Networked, Capacity(12)] private NetworkArray<double> AEDV02Values => default;
         private bool _v02BoundaryPending;
         private string _v02BoundaryTarget;
@@ -77,6 +80,7 @@ namespace EchoProtocol.Networking
             _v02NextSupplyAttempt = 0; _v02SupplyZone = 0;
             AEDV02SceneFingerprint = default; AEDV02MatchId = default; AEDV02DecisionId = default;
             AEDV02ActionFingerprint = default;
+            AEDV02WindowId = default; AEDV02DecisionPoint = default; AEDV02DecisionPhaseOrdinal = 0;
             for (int i = 0; i < 12; i++) AEDV02Values.Set(i, 0);
         }
 
@@ -183,6 +187,7 @@ namespace EchoProtocol.Networking
             AEDV02PlanFingerprint = plan.Fingerprint(); AEDV02RosterIdentity = approval.rosterIdentity;
             AEDV02SceneFingerprint = approval.sceneManifestFingerprint; AEDV02PlanRevision = revision;
             AEDV02ActionFingerprint = approval.actionFingerprint ?? string.Empty;
+            AEDV02WindowId = approval.windowId; AEDV02DecisionPoint = approval.decisionPoint; AEDV02DecisionPhaseOrdinal = approval.phaseOrdinal;
             if (!preMatch) foreach (var stalker in FindObjectsByType<StalkerFusionRuntime>().Where(x => x.Runner == Runner))
                 stalker.ApplyV02AtSafeWindow(authority.MatchId);
             Debug.Log($"[AED_V02][HOST_COMMIT] match={authority.MatchId:D} decision={approval.decisionId} revision={revision} fingerprint={plan.Fingerprint()} point={request.decisionPoint} window={request.windowSequence}");

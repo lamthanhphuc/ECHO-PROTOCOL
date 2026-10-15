@@ -19,6 +19,9 @@ namespace EchoProtocol.AI.Common.AED
         public string ObjectiveCauseEventId { get; set; } = string.Empty;
         public string ResourceCauseEventId { get; set; } = string.Empty;
         public long SlowUntilTick { get; set; }
+        public long StabilizerUntilTick { get; set; }
+        public uint StabilizerActivationOrdinal { get; set; }
+        public bool StabilizerBuffed { get; set; }
         public int RequiredToolId { get; set; }
         public string HideSpotId { get; set; } = "0";
         public double X { get; set; }
@@ -32,6 +35,10 @@ namespace EchoProtocol.AI.Common.AED
         public string EpisodeId { get; set; } = string.Empty;
         public Guid? TargetUserId { get; set; }
         public double[] ConsumerValues { get; set; } = Array.Empty<double>();
+        public string InvestigationNoiseId { get; set; } = string.Empty;
+        public double DestinationX { get; set; }
+        public double DestinationY { get; set; }
+        public double DestinationZ { get; set; }
         public bool MatchesStalkerConsumer(AEDV02Plan plan) => plan != null && ConsumerValues != null && ConsumerValues.Length == 6 &&
             ConsumerValues.Select((value, index) => AEDV02PilotPolicy.Finite(value) && Math.Abs(value - plan.Get((AEDV02Key)index)) < .000001).All(matches => matches);
         public int Zone { get; set; }
@@ -85,7 +92,7 @@ namespace EchoProtocol.AI.Common.AED
     }
     public sealed class AEDV02WorldSample
     {
-        public const string SourceVersion = "AED_V02_WORLD_SOURCE_REV02_4";
+        public const string SourceVersion = "AED_V02_WORLD_SOURCE_REV02_5";
         public string Version { get; set; } = SourceVersion;
         public string OpportunityContractVersion { get; set; } = string.Empty;
         public string ResolutionMode { get; set; } = string.Empty;
@@ -126,6 +133,7 @@ namespace EchoProtocol.AI.Common.AED
                     OpportunityContractVersion == AEDV02PilotOpportunities.Version && x.IsReviving && !x.ReviverUserId.HasValue ||
                     !ulong.TryParse(x.HideSpotId, out _) || x.HeldToolInstanceId == null || x.ObjectiveUnitId == null || x.ObjectiveCauseEntityId == null ||
                     x.ObjectiveCauseEventId == null || x.ResourceCauseEventId == null || x.SlowUntilTick < 0 ||
+                    x.StabilizerUntilTick < 0 || (x.StabilizerUntilTick > Tick) != (x.StabilizerActivationOrdinal > 0) ||
                     !Position(x.X, x.Y, x.Z) ||
                     x.ObjectiveState != "NONE" && x.ObjectiveState != "OPERATING" && x.ObjectiveState != "THREAT_INTERRUPTED" ||
                     x.RequiredToolId != 0 && x.RequiredToolId != 1 && x.RequiredToolId != 2 && x.RequiredToolId != 3 && x.RequiredToolId != 4 && x.RequiredToolId != 6 ||
@@ -149,6 +157,8 @@ namespace EchoProtocol.AI.Common.AED
                 x.ConsumerValues != null && (x.ConsumerValues.Length == 0 || !minion && x.ConsumerValues.Length == 6 &&
                     x.ConsumerValues.Select((value, index) => AEDV02PilotPolicy.Finite(value) &&
                         AEDV02Plan.AllowedValues((AEDV02Key)index).Any(allowed => Math.Abs(allowed - value) < .000001)).All(valid => valid)) &&
+                x.InvestigationNoiseId != null && x.InvestigationNoiseId.Length <= 512 &&
+                (x.InvestigationNoiseId.Length == 0 || !minion && x.State == "SEARCH") && Position(x.DestinationX, x.DestinationY, x.DestinationZ) &&
                 Position(x.X, x.Y, x.Z) &&
                 (!x.TargetUserId.HasValue || users.Contains(x.TargetUserId.Value)) &&
                 (!x.TargetUserId.HasValue || x.State is not ("CHASE" or "ATTACK" or "TRACK" or "HARASS") ||
@@ -190,6 +200,8 @@ namespace EchoProtocol.AI.Common.AED
         public double MaximumVisionRange { get; set; }
         public double MaximumCabinetInteractionDistance { get; set; }
         public double MinimumToolSpacing { get; set; } = -1;
+        public double CoreStabilizerRadius { get; set; }
+        public double CoreStabilizerDurationSeconds { get; set; }
         public AEDV02SceneMarker[] Markers { get; set; } = Array.Empty<AEDV02SceneMarker>();
         public AEDV02RouteEdge[] Edges { get; set; } = Array.Empty<AEDV02RouteEdge>();
         public AEDV02NavCell[] NavCells { get; set; } = Array.Empty<AEDV02NavCell>();
@@ -203,6 +215,8 @@ namespace EchoProtocol.AI.Common.AED
                 !AEDV02PilotPolicy.Finite(MaximumVisionRange) || MaximumVisionRange < 0 || MaximumVisionRange > 10000 ||
                 !AEDV02PilotPolicy.Finite(MaximumCabinetInteractionDistance) || MaximumCabinetInteractionDistance < 0 || MaximumCabinetInteractionDistance > 100 ||
                 !AEDV02PilotPolicy.Finite(MinimumToolSpacing) || MinimumToolSpacing < -1 || MinimumToolSpacing > 100 ||
+                !AEDV02PilotPolicy.Finite(CoreStabilizerRadius) || CoreStabilizerRadius < 0 || CoreStabilizerRadius > 100 ||
+                !AEDV02PilotPolicy.Finite(CoreStabilizerDurationSeconds) || CoreStabilizerDurationSeconds < 0 || CoreStabilizerDurationSeconds > 300 ||
                 DoorIds == null || DoorIds.Length > 4096 || DoorIds.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 128) ||
                 DoorIds.Distinct(StringComparer.Ordinal).Count() != DoorIds.Length ||
                 Markers.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id) || x.Id.Length > 128) || NavCells.Any(x => x == null || !x.IsValid())) return false;

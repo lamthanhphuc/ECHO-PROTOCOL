@@ -120,6 +120,23 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private Vector3 _lastRootPosition;
 
         private bool _hasLastRootPosition;
+#if AED_V02_PILOT_HARNESS
+        private float _nativePresentedMoveSpeed;
+        private int _nativePresentationFrame = -10;
+        private int _nativeConsumerRevision;
+        private string _nativeConsumerFingerprint;
+        public bool TryReadNativePresentation(int revision, string fingerprint, out float speed, out int animatorState)
+        {
+            speed = _nativePresentedMoveSpeed; animatorState = 0;
+            if (!_hasPresented || !isActiveAndEnabled || animator == null || !animator.isActiveAndEnabled ||
+                animator.runtimeAnimatorController == null || Time.frameCount - _nativePresentationFrame > 2 ||
+                fusionRuntime == null || fusionRuntime.ReplicatedState != StalkerState.CHASE ||
+                _nativeConsumerRevision != revision || _nativeConsumerFingerprint != fingerprint ||
+                _presentedSemanticState != StalkerState.CHASE || speed <= .2f) return false;
+            animatorState = animator.GetCurrentAnimatorStateInfo(0).fullPathHash;
+            return animatorState != 0;
+        }
+#endif
 
         private void Awake()
         {
@@ -496,6 +513,12 @@ namespace EchoProtocol.AI.Stalker.Presentation
             animator.speed =
                 ResolvePlaybackSpeed(
                     presentation);
+#if AED_V02_PILOT_HARNESS
+            _nativePresentedMoveSpeed = moveSpeed;
+            _nativePresentationFrame = Time.frameCount;
+            _nativeConsumerRevision = fusionRuntime != null && fusionRuntime.Object != null && fusionRuntime.Object.IsValid ? fusionRuntime.V02ConsumerRevision : 0;
+            _nativeConsumerFingerprint = _nativeConsumerRevision > 0 ? fusionRuntime.V02ConsumerFingerprint.ToString() : null;
+#endif
 
             if (!forceRefresh
                 && !semanticChanged

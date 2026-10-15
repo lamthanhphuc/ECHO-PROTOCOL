@@ -52,7 +52,23 @@ namespace EchoProtocol.AI.Stalker.Networking
         private bool _flashlightReactionEnabled = true;
         private uint _aedv2AppliedRevision;
         public int V02AppliedRevision { get; private set; }
+        [Networked] public int V02ConsumerRevision { get; private set; }
+        [Networked] public NetworkString<_64> V02ConsumerFingerprint { get; private set; }
+        [Networked, Capacity(6)] private NetworkArray<double> V02ConsumerValues => default;
+        public bool TryReadReplicatedV02ConsumerValue(AEDV02Key key, out double value)
+        {
+            value = 0;
+            if (Object == null || !Object.IsValid || V02ConsumerRevision <= 0 || (int)key < 0 || (int)key >= 6) return false;
+            value = V02ConsumerValues[(int)key];
+            return AEDV02PilotPolicy.Finite(value);
+        }
         public bool HasActiveSpecialEncounter => specialEncounterRuntime != null && specialEncounterRuntime.IsActive;
+        public bool TryReadV02NoiseDiversion(out string noiseId, out Vector3 destination)
+        {
+            noiseId = string.Empty; destination = default;
+            return controller != null && Object != null && Object.IsValid && Object.HasStateAuthority &&
+                controller.TryReadV02NoiseDiversion(out noiseId, out destination);
+        }
         public bool IsV02SafeForApply => controller != null && controller.CurrentState is StalkerState.PATROL or StalkerState.SEARCH
             && !controller.SpecialEncounterOverrideActive && !controller.HasActiveHideSpotInvestigation;
         public bool TryReadV02ConsumerValue(AEDV02Key key, out double value)
@@ -1346,6 +1362,21 @@ namespace EchoProtocol.AI.Stalker.Networking
             _aedv2Applied = useAEDv2;
             _aedv2AppliedRevision = useAEDv2 ? revision : 0;
             V02AppliedRevision = useV02 ? v02Revision : 0;
+            if (Object != null && Object.IsValid && Object.HasStateAuthority)
+            {
+                V02ConsumerRevision = 0; V02ConsumerFingerprint = default;
+                if (useV02)
+                {
+                    bool observed = true;
+                    for (int index = 0; index < 6; index++)
+                    {
+                        if (!TryReadV02ConsumerValue((AEDV02Key)index, out var actual) || Math.Abs(actual - v02.Get((AEDV02Key)index)) >= .000001)
+                        { observed = false; break; }
+                        V02ConsumerValues.Set(index, actual);
+                    }
+                    if (observed) { V02ConsumerFingerprint = v02.Fingerprint(); V02ConsumerRevision = v02Revision; }
+                }
+            }
             if (useAEDv2)
                 AEDv2E2ELog.State("STALKER_TUNING_APPLIED");
             _hearingSensor = null;

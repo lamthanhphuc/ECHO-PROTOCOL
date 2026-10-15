@@ -30,6 +30,7 @@ $previousMongo=$env:ECHO_PHASE6R_MONGO_URI
 try {
     & rtk proxy powershell -NoProfile -File (Join-Path $PSScriptRoot 'Sync-AEDV02Contract.ps1') -Check
     if ($LASTEXITCODE -ne 0) { throw 'Source contracts or scene manifest differ; suites NOT RUN.' }
+    & (Join-Path $PSScriptRoot 'Test-AEDV02NativeProof.ps1')
     if ([IO.Path]::GetFullPath($stack.compose) -ne (Join-Path (Split-Path $stackPath -Parent) 'compose.json')) {
         throw 'Stack compose path does not belong to this isolated run.'
     }
@@ -73,6 +74,7 @@ try {
             New-Item -ItemType Directory -Path $nativeOutput -Force | Out-Null
             $session='aed-' + [Guid]::NewGuid().ToString('N').Substring(0,20)
             $configPaths=@()
+            $nativeCredentials=@()
             foreach ($role in @('Host','Client')) {
                 $username='aed' + $role.Substring(0,1).ToLowerInvariant() + [Guid]::NewGuid().ToString('N').Substring(0,12)
                 $password='AEDpilot!' + [Guid]::NewGuid().ToString('N')
@@ -80,14 +82,16 @@ try {
                 $registered=Invoke-RestMethod -Uri ($stack.apiUrl+'/api/auth/register') -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 30
                 if (!$registered.success) { throw "Native $role registration failed." }
                 $configPath=Join-Path $nativeOutput "$role-private-config.json"
-                @{role=$role;apiUrl=$stack.apiUrl;username=$username;password=$password;session=$session;output=$nativeOutput;
+                @{role=$role;apiUrl=$stack.apiUrl;username=$username;session=$session;output=$nativeOutput;
                     gameplay=$true;cabinet=$false;autoRelief=$true;timeoutSeconds=$NativeTimeoutSeconds} |
                     ConvertTo-Json | Set-Content -LiteralPath $configPath -Encoding UTF8
                 $configPaths += $configPath
+                $nativeCredentials += ConvertTo-SecureString -String $password -AsPlainText -Force
                 $password=$null;$body=$null
             }
             & (Join-Path $PSScriptRoot 'Invoke-AEDV02Native.ps1') -Executable (Join-Path $output 'Windows/EchoProtocol.exe') `
-                -HostConfig $configPaths[0] -ClientConfig $configPaths[1] -OutputDirectory $nativeOutput -TimeoutSeconds $NativeTimeoutSeconds
+                -HostConfig $configPaths[0] -ClientConfig $configPaths[1] -HostPassword $nativeCredentials[0] -ClientPassword $nativeCredentials[1] `
+                -OutputDirectory $nativeOutput -TimeoutSeconds $NativeTimeoutSeconds
             $report.native=Get-Content -LiteralPath (Join-Path $nativeOutput 'native-proof.json') -Raw | ConvertFrom-Json
         } catch { $report.native=@{status='FAIL';reason=$_.Exception.Message} }
     }
@@ -95,6 +99,7 @@ try {
     $report.status='GATES_RECORDED_NOT_OWNER_READY'
 }
 finally {
+    foreach ($credential in $nativeCredentials) { if ($credential) { $credential.Dispose() } }
     $env:ECHO_M4_POSTGRES_CONNECTION=$previousConnection;$env:ECHO_PHASE6R_MONGO_URI=$previousMongo
     $password=$null;$body=$null;$connection=$null;$compose=$null
     $report.finishedUtc=[DateTime]::UtcNow.ToString('O')

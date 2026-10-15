@@ -200,7 +200,7 @@ public sealed partial class ScenarioServiceTests
         Assert.Empty(f.Db.AEDV02VerifiedSources);
     }
 
-    private static async Task<(TelemetryEventDocument[] Events, AEDV02SourceRequest Request)> V02WorldEvidence(Fixture f, bool geometry = false, int planRevision = 0)
+    private static async Task<(TelemetryEventDocument[] Events, AEDV02SourceRequest Request)> V02WorldEvidence(Fixture f, bool geometry = false, int planRevision = 0, bool pilot = false)
     {
         f.Db.MatchAuthorityBindings.Single(x => x.MatchId == f.MatchId).Status = MatchAuthorityStatus.InMatch;
         var users = f.Db.MatchPlayerBindings.Where(x => x.MatchId == f.MatchId).Select(x => x.UserId).ToArray();
@@ -224,6 +224,7 @@ public sealed partial class ScenarioServiceTests
         for (int i = 0; i <= 30; i++)
         {
             var sample = new AEDV02WorldSample { ResolutionMode = "Adaptive", Difficulty = "Normal", Tick = 600 + i * 60, TickRate = 60, PhaseOrdinal = 1, PhaseName = "CORE_COLLECTION", LogicalPhase = 1, Zone = 1,
+                OpportunityContractVersion = pilot ? AEDV02PilotOpportunities.Version : string.Empty,
                 PlanRevision = planRevision, PlanFingerprint = AEDV02Plan.Normal().Fingerprint(), RosterIdentity = roster, SceneManifestFingerprint = fingerprint,
                 Players = users.Select(x => new AEDV02PlayerSource { UserId = x, LifeState = "ALIVE" }).ToArray(),
                 Stalkers = new[] { new AEDV02ThreatSource { NetworkId = "stalker", State = "PATROL", Zone = 1,

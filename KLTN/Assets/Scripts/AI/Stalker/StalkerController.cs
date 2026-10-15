@@ -413,6 +413,16 @@ namespace EchoProtocol.AI.Stalker
         public StalkerWorldInteractionKind CurrentWorldInteractionKind => _worldInteractionDriver.CurrentKind;
         public float WorldInteractionProgress01 => _worldInteractionDriver.InteractionProgress01;
         public Component CurrentWorldInteractionBlocker => _worldInteractionDriver.CurrentBlocker;
+        public bool TryReadV02NoiseDiversion(out string noiseId, out Vector3 destination)
+        {
+            noiseId = string.Empty; destination = default;
+            if (currentState != StalkerState.SEARCH || !_hasActiveHeardNoiseType || _activeHeardNoiseType != RuntimeNoiseType.NOISE_MAKER ||
+                !_hearingMemory.HasActiveNoiseInvestigation || _searchContext == null || _searchContext.Source != StalkerSearchSource.HeardNoise ||
+                _navigation == null || !_navigation.TryGetActiveDestination(out destination) ||
+                Vector3.Distance(destination, _hearingMemory.InvestigationPosition) > AEDV02PilotOpportunities.NoiseProjectionRadius) return false;
+            noiseId = _hearingMemory.ActiveNoiseEventId;
+            return !string.IsNullOrWhiteSpace(noiseId);
+        }
         public IPlayerAttackConsequenceSink AttackConsequenceSink { get; set; }
         public bool SuppressLegacyUpdateSimulation { get; set; }
         public IReadOnlyDictionary<PlayerId, int> V02TargetTiers { get; set; }

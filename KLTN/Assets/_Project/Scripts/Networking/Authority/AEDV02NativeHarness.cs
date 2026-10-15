@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Stalker.Networking;
+using EchoProtocol.AI.Stalker.Presentation;
 using EchoProtocol.Auth;
 using EchoProtocol.Gameplay;
 using UnityEngine;
@@ -19,7 +20,7 @@ namespace EchoProtocol.Networking.Authority
     {
         [Serializable] private sealed class Config
         {
-            public string role, apiUrl, username, password, session, output;
+            public string role, apiUrl, username, session, output;
             public bool gameplay = true, cabinet, autoRelief = true;
             public int timeoutSeconds = 600;
         }
@@ -29,8 +30,15 @@ namespace EchoProtocol.Networking.Authority
             public int revision, players;
             public bool consumerObserved;
             public double chaseSpeed;
+            public string consumerKind, consumerFingerprint, stalkerId;
+            public string windowId, decisionPoint;
+            public int decisionPhaseOrdinal;
+            public int consumerRevision, animatorState;
+            public float presentedSpeed;
+            public double[] consumerValues;
         }
         private static Config _config;
+        private static string _password;
         private float _deadline, _nextRead;
         private bool _started;
         private Vector3 _driveGoal;
@@ -49,9 +57,12 @@ namespace EchoProtocol.Networking.Authority
             try
             {
                 if (!Debug.isDebugBuild || index + 1 >= args.Length) throw new InvalidOperationException("Invalid harness launch.");
+                Application.runInBackground = true;
                 _config = JsonUtility.FromJson<Config>(File.ReadAllText(args[index + 1]));
+                _password = Environment.GetEnvironmentVariable("ECHO_AED_PILOT_PASSWORD");
+                Environment.SetEnvironmentVariable("ECHO_AED_PILOT_PASSWORD", null);
                 if (_config == null || _config.role is not ("Host" or "Client") || string.IsNullOrWhiteSpace(_config.output) ||
-                    string.IsNullOrWhiteSpace(_config.username) || string.IsNullOrWhiteSpace(_config.password) ||
+                    string.IsNullOrWhiteSpace(_config.username) || string.IsNullOrWhiteSpace(_password) ||
                     string.IsNullOrWhiteSpace(_config.session) || _config.timeoutSeconds < 30 || _config.timeoutSeconds > 1800)
                     throw new InvalidOperationException("Harness config incomplete.");
                 AEDPilotTokenPrefs.UseMemory = true;
@@ -79,7 +90,8 @@ namespace EchoProtocol.Networking.Authority
         {
             var auth = AuthRuntime.EnsureExists();
             bool done = false, success = false;
-            auth.AuthService.Login(_config.username, _config.password, result => { success = result.IsSuccess && result.Data?.success == true; done = true; });
+            auth.AuthService.Login(_config.username, _password, result => { success = result.IsSuccess && result.Data?.success == true; done = true; });
+            _password = null;
             float deadline = Time.realtimeSinceStartup + 30;
             while (!done && Time.realtimeSinceStartup < deadline) yield return null;
             if (!done || !success) { Fail("AUTH_FAILED"); yield break; }
@@ -126,14 +138,35 @@ namespace EchoProtocol.Networking.Authority
             var state = NetworkMatchState.Instance;
             if (state == null || state.Object == null || !state.Object.IsValid ||
                 !Guid.TryParse(state.AEDV02MatchId.ToString(), out var match) || !state.TryReadV02Plan(match, out var plan, out var revision)) return;
-            var stalkers = FindObjectsByType<StalkerFusionRuntime>(FindObjectsInactive.Exclude).Where(x => x.Runner == runner).ToArray();
-            bool observed = _config.role == "Host" && stalkers.Length > 0 && stalkers.All(x =>
-                x.V02AppliedRevision == revision && x.TryReadV02ConsumerValue(AEDV02Key.ChaseSpeed, out var speed) && Math.Abs(speed - plan.Get(AEDV02Key.ChaseSpeed)) < .000001);
+            var stalkers = FindObjectsByType<StalkerFusionRuntime>(FindObjectsInactive.Exclude).Where(x => x.Runner == runner && x.Object != null && x.Object.IsValid)
+                .OrderBy(x => x.Object.Id.ToString(), StringComparer.Ordinal).ToArray();
+            var values = new double[6];
+            bool observed = stalkers.Length > 0;
+            foreach (var stalker in stalkers)
+                for (int key = 0; key < values.Length; key++)
+                {
+                    bool read = _config.role == "Host" ? stalker.TryReadV02ConsumerValue((AEDV02Key)key, out values[key]) :
+                        stalker.TryReadReplicatedV02ConsumerValue((AEDV02Key)key, out values[key]);
+                    observed &= read && stalker.V02ConsumerRevision == revision && stalker.V02ConsumerFingerprint.ToString() == plan.Fingerprint() &&
+                        Math.Abs(values[key] - plan.Get((AEDV02Key)key)) < .000001;
+                }
+            float presentedSpeed = 0; int animatorState = 0;
+            if (_config.role == "Client")
+            {
+                var presenter = stalkers.FirstOrDefault()?.GetComponentInChildren<StalkerAnimatorPresenter>(true);
+                observed &= presenter != null && presenter.TryReadNativePresentation(revision, plan.Fingerprint(), out presentedSpeed, out animatorState);
+            }
             var record = new Observation { role = _config.role, utc = DateTime.UtcNow.ToString("O"), matchId = match.ToString("D"),
                 decisionId = state.AEDV02DecisionId.ToString(), revision = revision, fingerprint = plan.Fingerprint(),
                 actionFingerprint = state.AEDV02ActionFingerprint.ToString(), roster = state.AEDV02RosterIdentity.ToString(),
                 scene = state.AEDV02SceneFingerprint.ToString(), policy = AEDV02PilotPolicy.Version, phase = state.CurrentPhase.ToString(),
-                players = runner.ActivePlayers.Count(), consumerObserved = observed, chaseSpeed = plan.Get(AEDV02Key.ChaseSpeed) };
+                players = runner.ActivePlayers.Count(), consumerObserved = observed, chaseSpeed = values[(int)AEDV02Key.ChaseSpeed],
+                consumerValues = values, consumerKind = _config.role == "Host" ? "StalkerFusionRuntime" : "StalkerAnimatorPresenter",
+                consumerRevision = stalkers.FirstOrDefault()?.V02ConsumerRevision ?? 0,
+                consumerFingerprint = stalkers.FirstOrDefault()?.V02ConsumerFingerprint.ToString(), stalkerId = stalkers.FirstOrDefault()?.Object.Id.ToString(),
+                presentedSpeed = presentedSpeed, animatorState = animatorState };
+            record.windowId = state.AEDV02WindowId.ToString(); record.decisionPoint = state.AEDV02DecisionPoint.ToString();
+            record.decisionPhaseOrdinal = state.AEDV02DecisionPhaseOrdinal;
             File.AppendAllText(Path.Combine(_config.output, _config.role + "-readback.jsonl"), JsonUtility.ToJson(record) + Environment.NewLine);
             Debug.Log($"[AED_NATIVE][READBACK] role={record.role} match={record.matchId} decision={record.decisionId} revision={revision} fingerprint={record.fingerprint} consumer={observed}");
         }
@@ -150,7 +183,7 @@ namespace EchoProtocol.Networking.Authority
             var stalker = FindObjectsByType<StalkerFusionRuntime>(FindObjectsInactive.Exclude).FirstOrDefault(x => x.Runner == runner);
             if (stalker == null) return;
             var interactor = local.GetComponent<NetworkPlayerInteractor>();
-            if (_config.role == "Host" && !_wasDowned)
+            if (_config.role == "Host" && (!_wasDowned || NetworkMatchState.Instance?.AEDV02PlanRevision > 1))
             {
                 // Real movement into the existing AI's perception/attack path; no damage or telemetry injection.
                 _driveGoal = stalker.transform.position; _hasDriveGoal = true;

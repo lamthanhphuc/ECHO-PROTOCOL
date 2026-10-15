@@ -45,6 +45,8 @@ namespace EchoProtocol.AI.AED
                     .AddString("HeldToolInstanceId", x.HeldToolInstanceId).AddString("ObjectiveUnitId", x.ObjectiveUnitId)
                     .AddString("ObjectiveState", x.ObjectiveState).AddString("ObjectiveCauseEntityId", x.ObjectiveCauseEntityId)
                     .AddString("ObjectiveCauseEventId", x.ObjectiveCauseEventId).AddString("ResourceCauseEventId", x.ResourceCauseEventId).AddInteger("SlowUntilTick", x.SlowUntilTick)
+                    .AddInteger("StabilizerUntilTick", x.StabilizerUntilTick).AddInteger("StabilizerActivationOrdinal", x.StabilizerActivationOrdinal)
+                    .AddBoolean("StabilizerBuffed", x.StabilizerBuffed)
                     .AddInteger("RequiredToolId", x.RequiredToolId).AddString("HideSpotId", x.HideSpotId), x.X, x.Y, x.Z)))
                 .AddArray("Stalkers", sample.Stalkers.Select(Threat)).AddArray("Minions", sample.Minions.Select(Threat))
                 .AddArray("Tools", sample.Tools.Select(x =>
@@ -105,6 +107,8 @@ namespace EchoProtocol.AI.AED
         private static TelemetryJsonObject Threat(AEDV02ThreatSource x) => Position(new TelemetryJsonObject().AddString("NetworkId", x.NetworkId)
             .AddString("State", x.State).AddString("EpisodeId", x.EpisodeId).AddString("TargetUserId", x.TargetUserId?.ToString("D"))
             .AddNumberArray("ConsumerValues", x.ConsumerValues)
+            .AddString("InvestigationNoiseId", x.InvestigationNoiseId).AddNumber("DestinationX", x.DestinationX)
+            .AddNumber("DestinationY", x.DestinationY).AddNumber("DestinationZ", x.DestinationZ)
             .AddInteger("Zone", x.Zone), x.X, x.Y, x.Z);
         private static TelemetryJsonObject Position(TelemetryJsonObject json, double x, double y, double z) => json.AddNumber("X", x).AddNumber("Y", y).AddNumber("Z", z);
     }

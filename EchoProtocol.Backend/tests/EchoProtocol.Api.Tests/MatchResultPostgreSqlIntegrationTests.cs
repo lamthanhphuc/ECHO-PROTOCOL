@@ -42,11 +42,16 @@ public sealed class MatchResultPostgreSqlIntegrationTests
         const string previous = "20261011053603_AddAEDPhase8DirectorApprovals";
         const string pilot = "20261014102100_AddAEDV02PilotLedger";
         await using var scope = await PostgresScope.CreateAsync(previous);
-        var seed = await scope.SeedMatchAsync();
+        var seed = await scope.SeedMatchAsync(legacyBindings: true);
         await using var db = scope.CreateDbContext();
         int users = await db.Users.CountAsync();
         await db.GetService<IMigrator>().MigrateAsync();
         Assert.Contains(pilot, await db.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(2, await db.MatchPlayerBindings.CountAsync(x => x.MatchId == seed.MatchId));
+        Assert.All(await db.MatchPlayerBindings.Where(x => x.MatchId == seed.MatchId).ToArrayAsync(), x => Assert.False(x.HadGameplayDisconnect));
+        var disconnected = await db.MatchPlayerBindings.SingleAsync(x => x.MatchId == seed.MatchId && x.UserId == seed.HostId);
+        disconnected.HadGameplayDisconnect = true;
+        await db.SaveChangesAsync();
         Assert.Equal(0, await db.AEDV02Decisions.CountAsync());
         Assert.Equal(0, await db.AEDV02VerifiedSources.CountAsync());
         Assert.Equal(0, await db.AEDV02SkillObservations.CountAsync());
@@ -60,6 +65,9 @@ public sealed class MatchResultPostgreSqlIntegrationTests
         Assert.Equal(0, await db.AEDV02Decisions.CountAsync());
         Assert.Equal(users, await db.Users.CountAsync());
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());
+        db.ChangeTracker.Clear();
+        Assert.Equal(2, await db.MatchPlayerBindings.CountAsync(x => x.MatchId == seed.MatchId));
+        Assert.All(await db.MatchPlayerBindings.Where(x => x.MatchId == seed.MatchId).ToArrayAsync(), x => Assert.False(x.HadGameplayDisconnect));
     }
     private static readonly DateTimeOffset Now =
         new(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
@@ -1984,7 +1992,7 @@ public sealed class MatchResultPostgreSqlIntegrationTests
 
         public AppDbContext CreateDbContext() => new(_options);
 
-        public async Task<MatchSeed> SeedMatchAsync()
+        public async Task<MatchSeed> SeedMatchAsync(bool legacyBindings = false)
         {
             var hostId = Guid.NewGuid();
             var playerId = Guid.NewGuid();
@@ -2002,13 +2010,21 @@ public sealed class MatchResultPostgreSqlIntegrationTests
                 CreatedAtUtc = Now.AddMinutes(-3).UtcDateTime,
                 UpdatedAtUtc = Now.AddMinutes(-2).UtcDateTime,
                 StartedAtUtc = Now.AddMinutes(-2).UtcDateTime,
-                Players =
+                Players = legacyBindings ? [] :
                 [
                     CreateBinding(matchId, hostId, 1),
                     CreateBinding(matchId, playerId, 2)
                 ]
             });
             await db.SaveChangesAsync();
+            if (legacyBindings)
+                foreach (var binding in new[] { CreateBinding(matchId, hostId, 1), CreateBinding(matchId, playerId, 2) })
+                    await db.Database.ExecuteSqlInterpolatedAsync($"""
+                        INSERT INTO "MatchPlayerBindings"
+                            ("Id", "MatchId", "UserId", "FusionActorNumber", "JoinProofId", "BoundAtUtc", "LastSeenAtUtc")
+                        VALUES ({binding.Id}, {binding.MatchId}, {binding.UserId}, {binding.FusionActorNumber},
+                            {binding.JoinProofId}, {binding.BoundAtUtc}, {binding.LastSeenAtUtc})
+                        """);
             return new MatchSeed(matchId, hostId, playerId);
         }
 

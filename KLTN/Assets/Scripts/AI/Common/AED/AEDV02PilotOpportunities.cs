@@ -23,6 +23,11 @@ namespace EchoProtocol.AI.Common.AED
         public const int EmergencySupportQuota = 1;
         public const double SupportSeparationSeconds = 90;
         public const double Zone3EntryBufferSeconds = 30;
+        public const double NoiseProjectionRadius = 1.5;
+        public const double NoiseDiversionSeconds = 2;
+        public const double NoiseDiversionMeters = .5;
+        public const double StabilizerEffectSeconds = 2;
+        public const double ToolThreatContextSeconds = 30;
 
         public static string ComparisonContext(string scene, int rosterSize) => AEDV02Plan.Hash(
             Version + "|" + AEDV02PilotPolicy.Version + "|Adaptive|Normal|" + scene + "|" + rosterSize);

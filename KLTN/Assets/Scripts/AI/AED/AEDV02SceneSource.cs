@@ -70,6 +70,8 @@ namespace EchoProtocol.AI.AED
         public double MaximumVisionRange;
         public double MaximumCabinetInteractionDistance;
         public double MinimumToolSpacing = -1;
+        public double CoreStabilizerRadius;
+        public double CoreStabilizerDurationSeconds;
         public Marker[] Markers;
         public Edge[] Edges = Array.Empty<Edge>();
         public Cell[] NavCells;
@@ -87,6 +89,7 @@ namespace EchoProtocol.AI.AED
             MaximumVisionRange = MaximumVisionRange,
             MaximumCabinetInteractionDistance = MaximumCabinetInteractionDistance,
             MinimumToolSpacing = MinimumToolSpacing,
+            CoreStabilizerRadius = CoreStabilizerRadius, CoreStabilizerDurationSeconds = CoreStabilizerDurationSeconds,
             DoorIds = DoorIds,
             Markers = Markers?.Select(x => x == null ? null : new AEDV02SceneMarker { Id = x.Id, Zone = x.Zone, Kind = x.Kind, HideSpotId = x.HideSpotId,
                 InteractionBounds = x.InteractionBounds, ResourceRole = x.ResourceRole, AllowedToolIds = x.AllowedToolIds, X = x.X, Y = x.Y, Z = x.Z }).ToArray(),
