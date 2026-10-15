@@ -1,0 +1,85 @@
+# Full implementation campaign (owner request 2026-10-15)
+
+Candidate start: 29491edab3adcc2c815773c1d9c576e2d6b8188f, PR #23 Draft -> LTP.
+Latest fetched main: 0b90b912; no whole-main merge authorized. Its additional Resonance change increases gameplay/visual range from 10 to 24 and adjusts beam/light presentation; it is not in this feature base.
+Protected local WIP: RuntimeLogSettings.asset and LiberationSans SDF - Fallback.asset.
+
+## A. One source audit
+
+- [x] Fetch/status/HEAD/PR; read Rev02 policy, existing source contract, remaining gates and previous verification.
+- [x] Trace native authority/world -> ingestion -> independent reconstruction -> decision -> Fusion -> consumers -> receipt.
+- [x] Identify unconditional history/non-R0 holds, incomplete R/O, unsupported TP, missing adverse proposals and separate proof fragments.
+- [x] Inspect latest-main Resonance/Minion, medkits, movement and Voice changes. LTP does not contain those main commits; preserve LTP Fixed behavior and document selective compatibility requirements.
+- [x] Check process inventory without launching Unity or tests. No Editor process currently owns the project (CLI MCP/Hub processes are not Editor ownership).
+- [x] No suite, PlayMode or Windows build in Stage A.
+
+## B. Implement before testing (dependency order)
+
+- [ ] B1/B2 versioned pilot defaults, resolved-opportunity scoring, causal R/O source and independent reconstruction; historical context/recency/confidence/weakest guard; distinct team TP.
+- [ ] B6 authenticated causal ingestion/shape/currency/lineage; approval and adverse proposals use reconstructed data, no client confidence flags.
+- [ ] B3 long-chase recovery, current PP/TP gates, protection/reconnect lifecycle and Cabinet effects/audit.
+- [ ] B4 actual population/budget/readback; cross-axis handoff and Zone3 safe-entry buffering.
+- [ ] B5 all grades, registered route roles, ordinary/emergency support actions, quotas, immutable supply and independent receipts.
+- [ ] B7 whole native pipeline and lifecycle reconciliation; preserve legitimate progression on outages.
+- [ ] B8 executable positive/negative tests; background Unity test/build runner; isolated native Host/remote Client harness and test-only controls.
+- [ ] Finish all source/config/scene/DTO/mirror/test changes before Stage C. Do not treat OFF/TODO/stub as completion.
+
+## C/D. Single candidate campaign, then fixes in batches
+
+- [ ] Commit candidate; static mirror/manifest/migration checks.
+- [ ] Backend full + actual PostgreSQL/MongoDB.
+- [ ] Unity background EditMode and PlayMode, sequential project ownership.
+- [ ] Windows Development build and startup.
+- [ ] Actual Backend/Host/remote Client/effect/receipt transaction with shared identifiers.
+- [ ] Reconnect/retry/late join/Host lifecycle and Fixed/main compatibility.
+- [ ] Group failures by root cause; focused reruns while fixing; final full regression at final code HEAD.
+
+## E. Delivery
+
+- [ ] Update source contract, 323-ID traceability, proof, pilot defaults and twelve E2E controls/runbook.
+- [ ] Push feature only; PR #23 stays Draft. Production defaults stay OFF; no merge/deploy.
+- [ ] READY only if all mandatory implementation and native proof gates actually pass.
+
+## Stage B continuation checkpoint (not a test report)
+
+Implemented in source, all UNCOMPILED / UNTESTED:
+
+- Versioned causal impacts, full protocol world fields, independent R/O reconstruction, PP/TP projection and source-lineage gates.
+- Actual Stalker/Minion encounter outcomes, core transport outcomes, named revive-attempt outcomes; historical re-read from accepted Mongo events, match-balanced confidence/recency/context and weakest guard. General five-type Tool competence is still unsupported.
+- Future-zone ResourceGrade placement with actual NavMesh corner paths, registered semantic route roles and door checks. R0 restores the original pending reservations, rather than silently replacing the normal planner.
+- Ordinary/emergency support action fingerprints, real needs, quotas/cooldowns, actual spawn IDs, world proof and receipt. R3 requires a recent canonical Down or verified PP4.
+- Host commit events and authoritative action fingerprint replication; actual effect receipts cannot substitute for an accepted commit. Failed effects preserve committed revisions; terminal abort reconciliation requires terminal proof.
+- Pre-approval cancellation records prevent a timed-out request from later creating an orphan approval. Claimed commit without accepted proof stays Hold. Abort retry rotates across decisions.
+- Long Chase recovery and verified TP3/TP4 Cabinet gate. Zone3 entitlement remains tied to approved current FIND_FRIGATE/safe world state.
+- ColdStart-only PARTIAL snapshots may stage the neutral envelope; current-evidence relief is allowed by Rev02. Historical validity is never upgraded.
+- Tests authored for protocol coverage, real-verifier two-window approval/receipts, cold-start neutrality/adverse blocking, cancellation, terminal reconciliation, placement and fingerprints. They have NOT RUN.
+- Ended-match history integration cases now cover real ingestion/reconstruction across three matches, overlapping windows, forged stored outcomes, source corruption, missing terminal/seal, debug tail, abort, reconnect and context/recency failures. A composite PreMatch approval/commit/effect/receipt case uses that reconstructed history, not an injected verifier. These are simulated Backend traces, not native gameplay proof; NOT RUN.
+- World source revision 4 records actual six-key Stalker consumer readback. PreMatch composite Stalker/Cabinet changes have an explicit all-consumer receipt path; Backend rejects missing or mismatched readback despite a correct plan fingerprint. Added per-key Unity tests and Backend receipt negative cases; NOT RUN.
+- Minion historical failures now require verified causal Slow/CoreDrop/ToolLoss. Survival resolution requires actual threat-free recovery across all actors. Added ingested Minion positive/negative and Stalker re-detection/re-chase/caught cases; NOT RUN.
+- Placement approval now loads the exact current verified world and independently validates future-zone type multisets, registered roles, entry-to-marker geometry/doors, pairwise spacing and existing world supply. Export includes the real NetworkMatchState prefab minimum spacing; missing spacing remains unsupported. Added eleven executable placement cases; NOT RUN.
+- Cabinet transitions now log actual hidden/protection readback together with MatchId, encounter, clue/source, phase/tick, plan revision/fingerprint and policy. Audit confirmed existing shared Special cooldown and cue/inspection guards; native success/abort proof and twelve-case controls remain outstanding.
+- Real Editor batch export/build entrypoints and sequential CLI test runner. Native harness uses normal auth and separate Photon Host/Client, normal movement/pickup/revive requests, live replicated readback and actual consumer checks. No native process has run.
+- Isolated disposable Docker Development setup script and native evidence comparator. Runtime token storage is memory-only when the explicit harness config is present; production assets are unchanged.
+
+Static inspection at the preceding checkpoint: PowerShell parser accepted six orchestration/sync scripts. Task whitespace was clean then; the existing protected TMP fallback asset has 18 whitespace warnings and is preserved. This is not a compile or execution result.
+
+Latest continuation static checks: six mirrored sources and the existing manifest copies match (`Sync-AEDV02Contract.ps1 -Check`, exit 0); scoped working-tree `git diff --check` and cached diff check exit 0. HEAD/origin feature remain 29491eda; no new commit/push. The staged index predates later working-tree edits and must be reviewed/restaged explicitly. No test, build, Unity process, Docker startup or migration execution was performed during this continuation.
+
+Remaining implementation before Stage C:
+
+1. Complete ToolEffectiveness / ResourceManagement opportunity producers and independent verification for all five actual registered tool families. Existing use counts are insufficient and confer no Tool entitlement. Audit the existing typed ToolNoise effects rather than treating generic use as success.
+2. Historical ended-match/adversarial/composite-PreMatch tests are now authored, not executed. Add core/revive opportunity positive/negative tests and support/graded-placement full approval/effect/receipt tests.
+3. Finish the twelve deterministic owner scenario controls, native reconnect/retry/late-join orchestration and remaining Cabinet encounter effect audit. The current native bot only attempts a real relief transaction; startup or fixture results cannot satisfy native proof.
+4. Resolve scoped compatibility with newer main Resonance/Minion, medkits, Voice and movement. No main merge or production edits are authorized; do not assert latest-main parity.
+5. Export the real updated scene manifest using the batch entrypoint once the implementation is complete, synchronize both copies, and update source contract / remaining decisions / 323-ID traceability.
+6. Complete source review, seal a candidate HEAD, then begin the one comprehensive Stage C campaign. No Backend build, test suite, Unity process, Docker startup, migration or Windows build has run for these changes.
+
+Owner subsequently explicitly requested committing and pushing the current changes. Preserve this Stage B work as grouped WIP checkpoints marked UNTESTED on the feature branch; that push is not a candidate test gate or an E2E readiness claim. PR #23 stays Draft. Agent-run full tests/builds remain deferred until B1–B8 implementation is complete; remote CI may run automatically after the push.
+
+## Owner-requested WIP preservation
+
+- `5ba66290`: pilot contracts, Backend evidence/history/approval/receipt, migration, authoritative source collection and authored tests — UNTESTED.
+- `e3bcecf1`: Unity/Fusion gameplay consumers, composite readback, resource placement/support and scene export — UNTESTED.
+- The commit containing this section preserves the Development-only native harness, CLI/campaign scripts and pilot/checkpoint documentation — UNTESTED.
+- No compilation, migration execution, Backend/Unity suite, Windows build or native integration was run for these checkpoints. B1–B8 remain incomplete; this is not READY FOR OWNER E2E.
+- RuntimeLogSettings.asset, the TMP fallback asset, secrets, local overrides and generated artifacts are excluded. Production gameplay defaults remain unchanged.

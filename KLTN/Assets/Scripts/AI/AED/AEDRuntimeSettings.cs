@@ -39,6 +39,14 @@ namespace EchoProtocol.AI.AED
         public bool PacingV02ShadowEnabled => pacingV02ShadowEnabled;
         public bool PacingV02GameplayEnabled => pacingV02GameplayEnabled;
         public bool CabinetAmbushEnabled => cabinetAmbushEnabled;
+#if AED_V02_PILOT_HARNESS
+        public void ConfigurePilotHarness(bool gameplay, bool cabinet)
+        {
+            if (!Debug.isDebugBuild) throw new InvalidOperationException("Pilot harness requires Development build.");
+            pacingV02GameplayEnabled = gameplay; pacingV02ShadowEnabled = !gameplay;
+            cabinetAmbushEnabled = gameplay && cabinet;
+        }
+#endif
 
         public bool TryBuildPolicyConfig(out AEDPolicyConfig config, out string reason)
         {

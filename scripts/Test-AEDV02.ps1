@@ -1,7 +1,7 @@
-param([switch] $BackendOnly)
+param([switch] $BackendOnly, [string] $OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
-$output = Join-Path $repo ('KLTN/Temp/AEDV02/Runs/' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmssfff'))
+$output = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $repo ('KLTN/Temp/AEDV02/Runs/' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmssfff')) }
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 $result = [ordered]@{ head = ''; startedUtc = [DateTime]::UtcNow.ToString('O'); backend = 'NOT RUN'; editor = 'NOT RUN'; playmode = 'NOT RUN' }
 $previousConnection = $env:ECHO_M4_POSTGRES_CONNECTION
@@ -46,22 +46,12 @@ try {
     }
     if ($backendExit -ne 0 -or $result.backend.total -lt 1 -or $result.backend.notExecuted -gt 0) { throw 'Backend did not pass completely; inspect backend-full.trx.' }
     if (-not $BackendOnly) {
-        Set-Location (Join-Path $repo 'KLTN')
-        foreach ($mode in @('editor', 'playmode')) {
-            & rtk proxy unity command run_tests --mode $mode --async_tests true
-            if ($LASTEXITCODE -ne 0) { throw "Unity $mode could not start; NOT RUN." }
-            $deadline = [DateTime]::UtcNow.AddMinutes(20)
-            do {
-                Start-Sleep -Seconds 2
-                $raw = & rtk proxy unity command test_status --result-only | Out-String
-                if ($LASTEXITCODE -ne 0) { throw "Unity $mode test status unavailable." }
-                $status = $raw | ConvertFrom-Json
-                if ([DateTime]::UtcNow -gt $deadline) { throw "Unity $mode timed out; do not treat as PASS." }
-            } while ($status.status -in @('running', 'pending'))
-            $raw | Set-Content -LiteralPath (Join-Path $output "Unity-$mode.json") -Encoding UTF8
-            $result[$mode] = $status.summary
-            if ($status.status -ne 'completed' -or $status.summary.total -lt 1 -or $status.summary.failed -gt 0 -or
-                $status.summary.skipped -gt 0 -or $status.summary.inconclusive -gt 0) { throw "Unity $mode did not pass completely." }
+        foreach ($mode in @('EditMode', 'PlayMode')) {
+            & (Join-Path $PSScriptRoot 'Invoke-AEDV02UnityBatch.ps1') -Stage $mode -OutputDirectory $output
+            $status = Get-Content -LiteralPath (Join-Path $output ($mode + '-summary.json')) -Raw | ConvertFrom-Json
+            $key = if ($mode -eq 'EditMode') { 'editor' } else { 'playmode' }
+            $result[$key] = $status
+            if ($status.status -ne 'PASS') { throw ($mode + ' did not pass completely.') }
         }
     }
 }
