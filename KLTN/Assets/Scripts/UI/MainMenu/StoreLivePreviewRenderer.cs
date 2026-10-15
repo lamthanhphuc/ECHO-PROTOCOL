@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -947,7 +947,7 @@ namespace EchoProtocol.UI.MainMenu
                         2.4f,
                         2.8f,
                         -2.8f),
-                    4.5f,
+                    18.8f,
                     10f,
                     true);
 
@@ -958,7 +958,7 @@ namespace EchoProtocol.UI.MainMenu
                         -2.6f,
                         1.5f,
                         -1.8f),
-                    2.4f,
+                    12.8f,
                     10f,
                     false);
 
@@ -969,7 +969,7 @@ namespace EchoProtocol.UI.MainMenu
                         0.5f,
                         2.8f,
                         2.8f),
-                    2.8f,
+                    8.4f,
                     10f,
                     false);
 
@@ -1032,9 +1032,13 @@ namespace EchoProtocol.UI.MainMenu
                 1 << PreviewLayer;
 
             // SRP/URP rendering-layer isolation.
-            // Bit 30 is reserved locally for Store preview rendering.
+            // Bit 7 is reserved locally for Store preview rendering.
             light.renderingLayerMask =
-                1 << 30;
+                1 << 7;
+            var additional = light.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalLightData>();
+            if (additional == null)
+                additional = light.gameObject.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalLightData>();
+            additional.renderingLayers = 1u << 7;
 
             light.enabled =
                 false;
@@ -1045,6 +1049,12 @@ namespace EchoProtocol.UI.MainMenu
         private void SetPreviewLightsEnabled(
             bool value)
         {
+            // Includes the front fill created by StoreV2PreviewLighting, so closing
+            // the preview disables every shop light immediately.
+            if (_rig != null)
+                foreach (var previewLight in _rig.GetComponentsInChildren<Light>(true))
+                    previewLight.enabled = value;
+
             if (_keyLight != null)
                 _keyLight.enabled = value;
 
@@ -1176,7 +1186,7 @@ namespace EchoProtocol.UI.MainMenu
             if (renderer != null)
             {
                 renderer.renderingLayerMask =
-                    1u << 30;
+                    1u << 7;
             }
 
             foreach (Transform child

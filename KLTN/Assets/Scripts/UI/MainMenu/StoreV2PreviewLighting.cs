@@ -1,4 +1,6 @@
-using UnityEngine;
+﻿using UnityEngine;
+
+using UnityEngine.Rendering.Universal;
 
 namespace EchoProtocol.UI.MainMenu
 {
@@ -107,7 +109,7 @@ namespace EchoProtocol.UI.MainMenu
                 if (light.name == "Key Light")
                 {
                     light.intensity =
-                        keyIntensity;
+                        keyIntensity * 4f;
 
                     light.color =
                         new Color(
@@ -121,7 +123,7 @@ namespace EchoProtocol.UI.MainMenu
                 else if (light.name == "Fill Light")
                 {
                     light.intensity =
-                        fillIntensity;
+                        fillIntensity * 4f;
 
                     light.color =
                         new Color(
@@ -135,7 +137,7 @@ namespace EchoProtocol.UI.MainMenu
                 else if (light.name == "Rim Light")
                 {
                     light.intensity =
-                        rimIntensity;
+                        rimIntensity * 4f;
 
                     light.color =
                         new Color(
@@ -155,7 +157,7 @@ namespace EchoProtocol.UI.MainMenu
             if (front != null)
             {
                 front.intensity =
-                    frontFillIntensity;
+                    frontFillIntensity * 4f;
                 front.enabled = camera != null && camera.enabled && camera.gameObject.activeInHierarchy;
             }
 
@@ -293,8 +295,12 @@ namespace EchoProtocol.UI.MainMenu
             if (component == null)
                 return;
 
-            const uint previewMask = 1u << 30;
-            if (component is Light light) light.renderingLayerMask = (int)previewMask;
+            const uint previewMask = 1u << 7;
+            if (component is Light light)
+            {
+                light.renderingLayerMask = (int)previewMask;
+                light.GetUniversalAdditionalLightData().renderingLayers = previewMask;
+            }
             else if (component is Renderer renderer) renderer.renderingLayerMask = previewMask;
 
         }
