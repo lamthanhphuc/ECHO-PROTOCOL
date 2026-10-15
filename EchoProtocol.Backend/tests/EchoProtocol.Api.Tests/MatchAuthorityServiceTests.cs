@@ -132,8 +132,8 @@ public sealed class MatchAuthorityServiceTests
         Assert.False((await service.IssueJoinProofAsync(Guid.NewGuid(), matchId, request, CancellationToken.None)).IsSuccess);
 
         var boundPlayer = await db.MatchPlayerBindings.SingleAsync(item => item.UserId == playerId);
-        boundPlayer.DisconnectedAtUtc = Now.UtcDateTime;
-        await db.SaveChangesAsync();
+        Assert.True((await service.MarkPlayerDisconnectedAsync(hostId, matchId, 2, CancellationToken.None)).IsSuccess);
+        Assert.True(boundPlayer.HadGameplayDisconnect);
         var reconnectProof = await service.IssueJoinProofAsync(playerId, matchId, request, CancellationToken.None);
         Assert.True(reconnectProof.IsSuccess);
         Assert.False((await service.IssueJoinProofAsync(Guid.NewGuid(), matchId, request, CancellationToken.None)).IsSuccess);
@@ -141,6 +141,7 @@ public sealed class MatchAuthorityServiceTests
             new BindMatchPlayerRequest { FusionActorNumber = 2, JoinProof = reconnectProof.Data!.Proof },
             CancellationToken.None)).IsSuccess);
         Assert.Null((await db.MatchPlayerBindings.SingleAsync(item => item.UserId == playerId)).DisconnectedAtUtc);
+        Assert.True(boundPlayer.HadGameplayDisconnect);
     }
 
     [Fact]

@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $repository = Split-Path $PSScriptRoot -Parent
 $unitySource = Join-Path $repository 'KLTN/Assets/Scripts/AI/Common/AED'
 $backendSource = Join-Path $repository 'EchoProtocol.Backend/src/EchoProtocol.Api/Shared'
-foreach ($name in @('AEDV02PilotPolicy.cs', 'AEDV02Plan.cs', 'AEDV02WorldSource.cs')) {
+foreach ($name in @('AEDV02PilotPolicy.cs', 'AEDV02Plan.cs', 'AEDV02WorldSource.cs', 'AEDV02PilotOpportunities.cs', 'AEDV02ResourcePlacement.cs', 'AEDV02ActionContract.cs')) {
     $source = Join-Path $unitySource $name
     $target = Join-Path $backendSource $name
     if ($Check) {

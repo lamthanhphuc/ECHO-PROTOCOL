@@ -14,6 +14,9 @@ namespace EchoProtocol.AI.Common.AED
         public int InitialOptionalBudget { get; }
         public int OptionalBudget { get; private set; }
         public int OptionalMaterialized { get; private set; }
+        public int ResourceGrade { get; private set; }
+        public bool CanSetResourceGrade(int grade) => grade is >= -1 and <= 3 && (grade == ResourceGrade || !_spawned[0] || !_spawned[1] || !_spawned[2]);
+        public bool TrySetResourceGrade(int grade) { if (!CanSetResourceGrade(grade)) return false; ResourceGrade = grade; return true; }
         public bool HasSpawned(int zone) => zone >= 1 && zone <= 3 && _spawned[zone - 1];
         public int OptionalForZone(int zone) => zone >= 1 && zone <= 3 ? Math.Min(1, Math.Max(0, OptionalBudget - zone + 1)) : 0;
         public bool TrySetOptionalBudget(int budget)

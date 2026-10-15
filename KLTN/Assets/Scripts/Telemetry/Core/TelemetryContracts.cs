@@ -35,6 +35,10 @@ namespace EchoProtocol.Telemetry
         public const string AEDV02ActionEffect = "AED_V02_ACTION_EFFECT";
         public const string AEDV02ToolCarrier = "AED_V02_TOOL_CARRIER";
         public const string AEDV02CabinetClue = "AED_V02_CABINET_CLUE";
+        public const string AEDV02CausalImpact = "AED_V02_CAUSAL_IMPACT";
+        public const string AEDV02PlanCommit = "AED_V02_PLAN_COMMIT";
+        public const string AEDV02CaptureExcluded = "AED_V02_CAPTURE_EXCLUDED";
+        public const string AEDV02CaptureSeal = "AED_V02_CAPTURE_SEAL";
 
         public const string MonsterInvestigateStarted = "MONSTER_INVESTIGATE_STARTED";
         public const string MonsterInvestigateResolved = "MONSTER_INVESTIGATE_RESOLVED";
@@ -136,7 +140,11 @@ namespace EchoProtocol.Telemetry
             TelemetryEventTypes.AEDV02WorldSample,
             TelemetryEventTypes.AEDV02ActionEffect,
             TelemetryEventTypes.AEDV02ToolCarrier,
-            TelemetryEventTypes.AEDV02CabinetClue
+            TelemetryEventTypes.AEDV02CabinetClue,
+            TelemetryEventTypes.AEDV02CausalImpact,
+            TelemetryEventTypes.AEDV02PlanCommit,
+            TelemetryEventTypes.AEDV02CaptureExcluded,
+            TelemetryEventTypes.AEDV02CaptureSeal
         };
 
         public static bool TryGetStatus(string eventType, out TelemetryEventStatus status)

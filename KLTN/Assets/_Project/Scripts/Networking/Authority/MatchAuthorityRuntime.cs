@@ -197,6 +197,8 @@ namespace EchoProtocol.Networking.Authority
             }
             _aedPursuitEvidence.RecordConsequence(stalkerNetworkId, userId, kind,
                 occurrenceKey, tick, cause, directFromHit);
+            if (kind == AEDPursuitFactKindV1.Downed)
+                RecordV02CausalImpact(target, stalkerNetworkId, "STALKER_DOWN", occurrenceKey, tick);
         }
 
         public void RecordStalkerDespawn(string stalkerNetworkId, long tick)
@@ -243,6 +245,9 @@ namespace EchoProtocol.Networking.Authority
                 occurrenceKey, tick, userId, relatedUserId, objectId,
                 effectKind, attemptOrdinal, accepted, seconds, sourceEventId,
                 position.x, position.y, position.z);
+            if (accepted && kind is AEDMinionFactKindV1.SlowApplied or AEDMinionFactKindV1.CoreForcedDrop or AEDMinionFactKindV1.ToolRelocated)
+                RecordV02CausalImpact(user, minionId.ToString(), kind == AEDMinionFactKindV1.SlowApplied ? "MINION_SLOW" :
+                    kind == AEDMinionFactKindV1.CoreForcedDrop ? "MINION_CORE_DROP" : "MINION_TOOL_LOSS", occurrenceKey, tick, objectId);
         }
 
         private void TryPublishPhase8Lifecycle(string occurrenceKey, Func<bool> enqueue)
@@ -1650,6 +1655,7 @@ namespace EchoProtocol.Networking.Authority
 
             try
             {
+                TrySealV02Capture(occurredAtUtc);
                 if (!_telemetry.MatchAdapter.EmitMatchEnded(
                         "match-end:host-shutdown",
                         occurredAtUtc,
@@ -1742,6 +1748,7 @@ namespace EchoProtocol.Networking.Authority
             var durationSeconds = Math.Max(0d, (occurredAtUtc - _matchStartedAtUtc).TotalSeconds);
             try
             {
+                TrySealV02Capture(occurredAtUtc);
                 if (!_telemetry.MatchAdapter.EmitMatchEnded(
                         _pendingMatchEndOccurrenceKey,
                         occurredAtUtc,
@@ -2032,7 +2039,11 @@ namespace EchoProtocol.Networking.Authority
                 monsterType, false,
                 accepted ? telemetryEvent?.Id.ToString("D") : null,
                 "FusionStateAuthority");
-              if (accepted) _aedv2Evidence.RecordAcceptedDown(occurrenceKey, userId.ToString("D"));
+              if (accepted)
+              {
+                  _aedv2Evidence.RecordAcceptedDown(occurrenceKey, userId.ToString("D"));
+                  if (telemetryEvent != null) _v02DownEvents[userId] = telemetryEvent.Id;
+              }
               else
               {
                   _aedv2Evidence.MarkIncomplete();

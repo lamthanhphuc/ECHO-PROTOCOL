@@ -84,6 +84,8 @@ namespace EchoProtocol.Networking
         [Networked] private float ExternalSlowMultiplier { get; set; }
 
         public float CurrentPitch => LookPitch;
+        public long V02SlowUntilTick => Object != null && Object.IsValid && Runner != null && ExternalSlowTimer.IsRunning
+            ? Runner.Tick.Raw + System.Math.Max(0, ExternalSlowTimer.RemainingTicks(Runner) ?? 0) : 0;
         public float MaxStamina => _maxStamina;
         public float CurrentStamina
         {

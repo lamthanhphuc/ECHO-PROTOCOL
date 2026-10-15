@@ -255,6 +255,7 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         }
 
         player.DisconnectedAtUtc = UtcNow();
+        if (match.Status == MatchAuthorityStatus.InMatch) player.HadGameplayDisconnect = true;
         player.LastSeenAtUtc = player.DisconnectedAtUtc.Value;
         await _db.SaveChangesAsync(cancellationToken);
         return ServiceResult<MatchPlayerBindingResponse>.Success(Map(player), "Player marked disconnected");

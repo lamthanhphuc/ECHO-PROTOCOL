@@ -11,10 +11,14 @@ namespace EchoProtocol.AI.Common.AED
         public string LifeState { get; set; } = string.Empty;
         public bool IsCaught { get; set; }
         public bool IsReviving { get; set; }
+        public Guid? ReviverUserId { get; set; }
         public string HeldToolInstanceId { get; set; } = string.Empty;
         public string ObjectiveUnitId { get; set; } = string.Empty;
         public string ObjectiveState { get; set; } = "NONE";
         public string ObjectiveCauseEntityId { get; set; } = string.Empty;
+        public string ObjectiveCauseEventId { get; set; } = string.Empty;
+        public string ResourceCauseEventId { get; set; } = string.Empty;
+        public long SlowUntilTick { get; set; }
         public int RequiredToolId { get; set; }
         public string HideSpotId { get; set; } = "0";
         public double X { get; set; }
@@ -27,6 +31,9 @@ namespace EchoProtocol.AI.Common.AED
         public string State { get; set; } = string.Empty;
         public string EpisodeId { get; set; } = string.Empty;
         public Guid? TargetUserId { get; set; }
+        public double[] ConsumerValues { get; set; } = Array.Empty<double>();
+        public bool MatchesStalkerConsumer(AEDV02Plan plan) => plan != null && ConsumerValues != null && ConsumerValues.Length == 6 &&
+            ConsumerValues.Select((value, index) => AEDV02PilotPolicy.Finite(value) && Math.Abs(value - plan.Get((AEDV02Key)index)) < .000001).All(matches => matches);
         public int Zone { get; set; }
         public double X { get; set; }
         public double Y { get; set; }
@@ -58,25 +65,29 @@ namespace EchoProtocol.AI.Common.AED
         public int Zone { get; set; }
         public int ToolId { get; set; }
         public string MarkerId { get; set; } = string.Empty;
+        public double[][] EntryPath { get; set; } = Array.Empty<double[]>();
     }
     public sealed class AEDV02SupplySource
     {
         public int InitialOptionalBudget { get; set; }
         public int OptionalBudget { get; set; }
         public int OptionalMaterialized { get; set; }
+        public int ReservationGrade { get; set; }
         public int[] SpawnedZones { get; set; } = Array.Empty<int>();
         public AEDV02SupplyReservation[] Reservations { get; set; } = Array.Empty<AEDV02SupplyReservation>();
-        public bool IsValid() => InitialOptionalBudget is >= 0 and <= 2 && OptionalBudget >= OptionalMaterialized &&
+        public bool IsValid() => ReservationGrade is >= -1 and <= 3 && InitialOptionalBudget is >= 0 and <= 2 && OptionalBudget >= OptionalMaterialized &&
             OptionalBudget <= InitialOptionalBudget && OptionalMaterialized >= 0 && SpawnedZones != null &&
             SpawnedZones.All(x => x is >= 1 and <= 3) && SpawnedZones.Distinct().Count() == SpawnedZones.Length &&
-            Reservations != null && Reservations.Length <= 17 && Reservations.All(x => x != null && x.Zone is >= 1 and <= 3 &&
+            Reservations != null && Reservations.Length <= 17 && Reservations.All(x => x != null && x.EntryPath != null && x.EntryPath.Length <= 256 &&
+                x.EntryPath.All(p => p != null && p.Length == 3 && p.All(AEDV02PilotPolicy.Finite)) && x.Zone is >= 1 and <= 3 &&
                 !SpawnedZones.Contains(x.Zone) && x.ToolId is 1 or 2 or 3 or 4 or 6 && !string.IsNullOrWhiteSpace(x.MarkerId) && x.MarkerId.Length <= 128) &&
             Reservations.Select(x => x.MarkerId).Distinct(StringComparer.Ordinal).Count() == Reservations.Length;
     }
     public sealed class AEDV02WorldSample
     {
-        public const string SourceVersion = "AED_V02_WORLD_SOURCE_REV02_2";
+        public const string SourceVersion = "AED_V02_WORLD_SOURCE_REV02_4";
         public string Version { get; set; } = SourceVersion;
+        public string OpportunityContractVersion { get; set; } = string.Empty;
         public string ResolutionMode { get; set; } = string.Empty;
         public string Difficulty { get; set; } = string.Empty;
         public long Tick { get; set; }
@@ -100,6 +111,7 @@ namespace EchoProtocol.AI.Common.AED
         public bool IsValid()
         {
             if (Version != SourceVersion || ResolutionMode != "Adaptive" || Difficulty != "Normal" || Tick < 0 || TickRate < 1 || TickRate > 240 || PhaseOrdinal < 1 ||
+                OpportunityContractVersion == null || OpportunityContractVersion.Length != 0 && OpportunityContractVersion != AEDV02PilotOpportunities.Version ||
                 string.IsNullOrWhiteSpace(PhaseName) || PhaseName.Length > 80 || LogicalPhase < 1 || LogicalPhase > 4 || LogicalPhase != AEDV02PhaseMap.LogicalPhase(PhaseName) ||
                 Zone != Math.Min(LogicalPhase, 3) || PlanRevision < 0 || !Hash(PlanFingerprint) || !Hash(RosterIdentity) ||
                 !Hash(SceneManifestFingerprint) || EvidenceExclusion == null || EvidenceExclusion.Length > 80 ||
@@ -110,7 +122,10 @@ namespace EchoProtocol.AI.Common.AED
             var users = Players.Select(x => x?.UserId ?? Guid.Empty).ToHashSet();
             if (users.Contains(Guid.Empty) || users.Count != Players.Length ||
                 Players.Any(x => x.LifeState != "ALIVE" && x.LifeState != "DOWNED" && x.LifeState != "ELIMINATED" ||
+                    x.ReviverUserId.HasValue && (!x.IsReviving || x.ReviverUserId == x.UserId || !users.Contains(x.ReviverUserId.Value)) ||
+                    OpportunityContractVersion == AEDV02PilotOpportunities.Version && x.IsReviving && !x.ReviverUserId.HasValue ||
                     !ulong.TryParse(x.HideSpotId, out _) || x.HeldToolInstanceId == null || x.ObjectiveUnitId == null || x.ObjectiveCauseEntityId == null ||
+                    x.ObjectiveCauseEventId == null || x.ResourceCauseEventId == null || x.SlowUntilTick < 0 ||
                     !Position(x.X, x.Y, x.Z) ||
                     x.ObjectiveState != "NONE" && x.ObjectiveState != "OPERATING" && x.ObjectiveState != "THREAT_INTERRUPTED" ||
                     x.RequiredToolId != 0 && x.RequiredToolId != 1 && x.RequiredToolId != 2 && x.RequiredToolId != 3 && x.RequiredToolId != 4 && x.RequiredToolId != 6 ||
@@ -130,10 +145,14 @@ namespace EchoProtocol.AI.Common.AED
                 Doors.Select(x => x.DoorId).Distinct(StringComparer.Ordinal).Count() == Doors.Length;
         }
         private bool Threats(AEDV02ThreatSource[] threats, HashSet<Guid> users, bool minion) =>
-            threats.All(x => x != null && Text(x.NetworkId) && Text(x.State) && x.Zone >= 1 && x.Zone <= 3 &&
+            threats.All(x => x != null && Text(x.NetworkId) && Text(x.State) && x.EpisodeId != null && x.EpisodeId.Length <= 128 && x.Zone >= 1 && x.Zone <= 3 &&
+                x.ConsumerValues != null && (x.ConsumerValues.Length == 0 || !minion && x.ConsumerValues.Length == 6 &&
+                    x.ConsumerValues.Select((value, index) => AEDV02PilotPolicy.Finite(value) &&
+                        AEDV02Plan.AllowedValues((AEDV02Key)index).Any(allowed => Math.Abs(allowed - value) < .000001)).All(valid => valid)) &&
                 Position(x.X, x.Y, x.Z) &&
                 (!x.TargetUserId.HasValue || users.Contains(x.TargetUserId.Value)) &&
-                (!x.TargetUserId.HasValue || Players.Single(p => p.UserId == x.TargetUserId.Value).LifeState != "ALIVE" || Text(x.EpisodeId)) &&
+                (!x.TargetUserId.HasValue || x.State is not ("CHASE" or "ATTACK" or "TRACK" or "HARASS") ||
+                    Players.Single(p => p.UserId == x.TargetUserId.Value).LifeState != "ALIVE" || Text(x.EpisodeId)) &&
                 (minion ? x.State == "IDLE" || x.State == "TRACK" || x.State == "HARASS" || x.State == "FLEE" || x.State == "DYING"
                     : x.State == "PATROL" || x.State == "DETECTION" || x.State == "CHASE" || x.State == "ATTACK" || x.State == "RECOVER" || x.State == "SEARCH" || x.State == "SPECIAL")) &&
             threats.Select(x => x.NetworkId).Distinct(StringComparer.Ordinal).Count() == threats.Length;
@@ -158,17 +177,19 @@ namespace EchoProtocol.AI.Common.AED
         public string Kind { get; set; } = string.Empty;
         public string HideSpotId { get; set; } = string.Empty;
         public double[] InteractionBounds { get; set; } = Array.Empty<double>();
+        public string ResourceRole { get; set; } = "Unclassified";
         public int[] AllowedToolIds { get; set; } = Array.Empty<int>();
         public double X { get; set; }
         public double Y { get; set; }
         public double Z { get; set; }
     }
-    public sealed class AEDV02SceneManifest
+    public sealed partial class AEDV02SceneManifest
     {
         public string SceneVersion { get; set; } = string.Empty;
         public string ScenePath { get; set; } = string.Empty;
         public double MaximumVisionRange { get; set; }
         public double MaximumCabinetInteractionDistance { get; set; }
+        public double MinimumToolSpacing { get; set; } = -1;
         public AEDV02SceneMarker[] Markers { get; set; } = Array.Empty<AEDV02SceneMarker>();
         public AEDV02RouteEdge[] Edges { get; set; } = Array.Empty<AEDV02RouteEdge>();
         public AEDV02NavCell[] NavCells { get; set; } = Array.Empty<AEDV02NavCell>();
@@ -181,6 +202,7 @@ namespace EchoProtocol.AI.Common.AED
                 Edges == null || Edges.Length > 65536 || NavCells == null || NavCells.Length > 100000 || NavLinks == null || NavLinks.Length > 600000 ||
                 !AEDV02PilotPolicy.Finite(MaximumVisionRange) || MaximumVisionRange < 0 || MaximumVisionRange > 10000 ||
                 !AEDV02PilotPolicy.Finite(MaximumCabinetInteractionDistance) || MaximumCabinetInteractionDistance < 0 || MaximumCabinetInteractionDistance > 100 ||
+                !AEDV02PilotPolicy.Finite(MinimumToolSpacing) || MinimumToolSpacing < -1 || MinimumToolSpacing > 100 ||
                 DoorIds == null || DoorIds.Length > 4096 || DoorIds.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 128) ||
                 DoorIds.Distinct(StringComparer.Ordinal).Count() != DoorIds.Length ||
                 Markers.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id) || x.Id.Length > 128) || NavCells.Any(x => x == null || !x.IsValid())) return false;
@@ -189,7 +211,8 @@ namespace EchoProtocol.AI.Common.AED
             if (markers.Count != Markers.Length || cells.Count != NavCells.Length) return false;
             var cellById = NavCells.ToDictionary(x => x.Id);
             return markers.Count == Markers.Length && cells.Count == NavCells.Length &&
-            Markers.All(x => x.Zone >= 1 && x.Zone <= 3 && x.Kind is "ENTRY" or "TOOL" or "OBJECTIVE" or "CABINET" or "AMBUSH_ENTRY" or "ROUTE" &&
+            Markers.All(x => x.ResourceRole is "Unclassified" or "MainRoute" or "SideRoom" or "FirstRoom" or "ObjectiveRoute" &&
+                x.Zone >= 1 && x.Zone <= 3 && x.Kind is "ENTRY" or "TOOL" or "OBJECTIVE" or "CABINET" or "AMBUSH_ENTRY" or "ROUTE" &&
                 (x.Kind != "CABINET" || ulong.TryParse(x.HideSpotId, out var spot) && spot != 0 && x.InteractionBounds != null &&
                     x.InteractionBounds.Length == 6 && x.InteractionBounds.All(AEDV02PilotPolicy.Finite) &&
                     Enumerable.Range(0, 3).All(i => x.InteractionBounds[i] <= x.InteractionBounds[i + 3])) &&
@@ -326,7 +349,8 @@ namespace EchoProtocol.AI.Common.AED
         public string[] NetworkObjectIds { get; set; } = Array.Empty<string>();
         public bool IsValid() => DecisionId != Guid.Empty && PlanRevision >= 1 && AEDV02WorldSample.Hash(PlanFingerprint) &&
             (Consumer == "StalkerFusionRuntime" || Consumer == "PlayerSpawner" || Consumer == "TeamToolWorldSpawn" || Consumer == "AEDPolicyEnvelope") &&
-            Enum.TryParse<AEDV02Key>(Key, out var key) && Enum.IsDefined(typeof(AEDV02Key), key) && key.ToString() == Key && AEDV02PilotPolicy.Finite(ObservedValue) && ObservedTick >= 0 &&
+            (Key == "SupportTool" && Consumer == "TeamToolWorldSpawn" && ObservedValue is 1 or 2 or 3 or 4 or 6 ||
+                Enum.TryParse<AEDV02Key>(Key, out var key) && Enum.IsDefined(typeof(AEDV02Key), key) && key.ToString() == Key) && AEDV02PilotPolicy.Finite(ObservedValue) && ObservedTick >= 0 &&
             NetworkObjectIds != null && NetworkObjectIds.Length <= 64 && NetworkObjectIds.All(x => !string.IsNullOrWhiteSpace(x)) &&
             NetworkObjectIds.Distinct(StringComparer.Ordinal).Count() == NetworkObjectIds.Length;
     }

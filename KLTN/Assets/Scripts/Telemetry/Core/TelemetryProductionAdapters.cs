@@ -747,6 +747,23 @@ namespace EchoProtocol.Telemetry
             Emit(occurrenceKey, TelemetryEventTypes.AEDV02CabinetClue, occurredAtUtc, phase,
                 new TelemetryJsonObject().AddRawObject("clue", clueJson), out telemetryEvent, out failureReason);
 
+        public bool EmitAEDV02Commit(string occurrenceKey, DateTime occurredAtUtc, string phase, string commitJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02PlanCommit, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("commit", commitJson), out telemetryEvent, out failureReason);
+        public bool EmitAEDV02Impact(string occurrenceKey, DateTime occurredAtUtc, string phase, string impactJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02CausalImpact, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("impact", impactJson), out telemetryEvent, out failureReason);
+        public bool EmitAEDV02Exclusion(string occurrenceKey, DateTime occurredAtUtc, string phase, string kind,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02CaptureExcluded, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddString("exclusion", kind), out telemetryEvent, out failureReason);
+        public bool EmitAEDV02Seal(string occurrenceKey, DateTime occurredAtUtc, string phase, string kind,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02CaptureSeal, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddString("exclusion", kind), out telemetryEvent, out failureReason);
+
         private bool Emit(string occurrenceKey, string eventType, DateTime occurredAtUtc, string phase,
             TelemetryJsonObject data, out TelemetryEvent telemetryEvent,
             out TelemetryBufferFailureReason failureReason) => _emitter.TryEmit(

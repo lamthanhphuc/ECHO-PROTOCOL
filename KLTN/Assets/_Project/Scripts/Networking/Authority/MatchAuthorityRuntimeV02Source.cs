@@ -25,8 +25,65 @@ namespace EchoProtocol.Networking.Authority
         public AEDV02SourceResultDto LastVerifiedV02Source { get; private set; }
         public string V02SourceHoldReason { get; private set; }
         private bool _v02CarrierEvidenceInvalid;
+        private bool _v02ExclusionEnqueued, _v02SealEnqueued;
         private int _v02CarrierOrdinal;
         private int _v02CabinetClueOrdinal;
+        private readonly Dictionary<PlayerRef, (string Unit, long Tick)> _v02ObservedObjectives = new Dictionary<PlayerRef, (string, long)>();
+        private readonly Dictionary<PlayerRef, (Guid EventId, AEDV02CausalImpact Impact)> _v02Impacts = new Dictionary<PlayerRef, (Guid, AEDV02CausalImpact)>();
+        private readonly Dictionary<Guid, Guid> _v02DownEvents = new Dictionary<Guid, Guid>();
+        private string V02CaptureExclusion => Phase8DebugEvidenceInvalidated ? "DEBUG_GAMEPLAY" :
+            Phase8InventoryEvidenceInvalidated ? "INVENTORY_LINEAGE_INVALID" : _v02CarrierEvidenceInvalid ? "SOURCE_INCOMPLETE" : "NONE";
+        private void TrySealV02Capture(DateTime occurredAtUtc)
+        {
+            var settings = ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings;
+            if (_v02SealEnqueued || !_researchCaptureEnabled || !_telemetryMatchActive || !HasStateAuthority ||
+                RequestedScenarioResolutionMode != ScenarioResolutionMode.Adaptive || Difficulty != EchoProtocol.Gameplay.MatchDifficulty.Normal ||
+                settings == null || !settings.PacingV02GameplayEnabled && !settings.PacingV02ShadowEnabled || _telemetry.Phase8LifecycleAdapter == null) return;
+            _v02SealEnqueued = _telemetry.Phase8LifecycleAdapter.EmitAEDV02Seal("v02:capture-seal:" + MatchId.ToString("D"),
+                occurredAtUtc, _currentTelemetryPhase, V02CaptureExclusion, out _, out _);
+            // A missing seal prevents historical learning; it must not prevent baseline match closure.
+        }
+        public bool TryReadCurrentV02World(out AEDV02WorldSample world)
+        {
+            world = null;
+            return HasStateAuthority && NetworkMatchState.Instance != null && TryBuildV02World(NetworkMatchState.Instance, out world, out _);
+        }
+        public bool IsV02NeedCurrent(AEDV02SupportAction action)
+        {
+            if (action == null || action.UserId == Guid.Empty || action.CauseEventId == Guid.Empty || action.ToolId is not (1 or 2 or 3 or 4 or 6) ||
+                action.Zone is < 1 or > 3 || action.Kind is not ("EMERGENCY" or "ORDINARY") || _bootstrap?.Runner == null || !TryReadCurrentV02World(out var world)) return false;
+            var player = world.Players.SingleOrDefault(x => x.UserId == action.UserId);
+            if (player == null) return false;
+            if (action.Kind == "EMERGENCY") return player.LifeState == "DOWNED" && !player.IsReviving &&
+                _v02DownEvents.TryGetValue(action.UserId, out var cause) && cause == action.CauseEventId;
+            return player.LifeState == "ALIVE" && _v02Impacts.Values.Any(x => x.EventId == action.CauseEventId && x.Impact.UserId == action.UserId &&
+                x.Impact.Kind == "MINION_TOOL_LOSS" && x.Impact.ToolId == action.ToolId && x.Impact.UntilTick >= world.Tick);
+        }
+        private void RecordV02CausalImpact(PlayerRef player, string entity, string kind, string occurrence, long tick, string toolInstance = null)
+        {
+            var settings = ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings;
+            var runner = _bootstrap?.Runner;
+            if (!HasStateAuthority || !_telemetryMatchActive || !_researchCaptureEnabled || runner == null ||
+                RequestedScenarioResolutionMode != ScenarioResolutionMode.Adaptive || Difficulty != EchoProtocol.Gameplay.MatchDifficulty.Normal ||
+                settings == null || !settings.PacingV02GameplayEnabled && !settings.PacingV02ShadowEnabled ||
+                !TryResolveBackendUser(player, out var user) || !runner.TryGetPlayerObject(player, out var obj)) return;
+            long until = tick;
+            if (kind == "MINION_SLOW" && obj.TryGetComponent<NetworkPlayerMovement>(out var movement)) until = movement.V02SlowUntilTick;
+            var impact = new AEDV02CausalImpact { UserId = user, Kind = kind, EntityId = entity, Tick = tick, UntilTick = Math.Max(tick, until) };
+            if (_v02ObservedObjectives.TryGetValue(player, out var previous) && tick - previous.Tick <= runner.TickRate * 2)
+                impact.ObjectiveUnitId = previous.Unit;
+            if (kind == "MINION_TOOL_LOSS")
+            {
+                if (toolInstance == null || !_aedPhase8Source.TryGetLatestTool(toolInstance, out var tool)) { _v02CarrierEvidenceInvalid = true; return; }
+                impact.ToolId = tool.ToolId; impact.ToolInstanceId = toolInstance;
+                impact.UntilTick = tick + (long)(runner.TickRate * AEDV02PilotOpportunities.ResourceLossNeedSeconds);
+            }
+            if (!impact.IsValid() || _telemetry.Phase8LifecycleAdapter == null ||
+                !_telemetry.Phase8LifecycleAdapter.EmitAEDV02Impact("v02:impact:" + kind + ":" + occurrence, DateTime.UtcNow,
+                    _currentTelemetryPhase, AEDV02SourceJson.Impact(impact), out var emitted, out _))
+            { _v02CarrierEvidenceInvalid = true; return; }
+            _v02Impacts[player] = (emitted.Id, impact);
+        }
         public bool RecordV02CabinetClue(AEDV02CabinetClueSource clue, out Guid eventId)
         {
             eventId = Guid.Empty;
@@ -64,6 +121,14 @@ namespace EchoProtocol.Networking.Authority
             {
                 _v02CaptureMatch = MatchId; _v02CaptureContext = null; _v02NextWorldTick = 0; _v02NextSourcePollTick = 0;
                 _v02WorldTicks.Clear(); LastVerifiedV02Source = null;
+                _v02ExclusionEnqueued = false; _v02SealEnqueued = false;
+            }
+            if (V02CaptureExclusion != "NONE")
+            {
+                if (!_v02ExclusionEnqueued && _researchCaptureEnabled && _telemetry.Phase8LifecycleAdapter != null)
+                    _v02ExclusionEnqueued = _telemetry.Phase8LifecycleAdapter.EmitAEDV02Exclusion("v02:capture-excluded:" + MatchId.ToString("D"),
+                        DateTime.UtcNow, _currentTelemetryPhase, V02CaptureExclusion, out _, out _);
+                HoldV02Source("HOLD_SOURCE_CAPTURE_EXCLUDED", true); return;
             }
             if (tick < _v02NextWorldTick) return;
             _v02NextWorldTick = tick + runner.TickRate;
@@ -80,10 +145,11 @@ namespace EchoProtocol.Networking.Authority
             _telemetry.TryFlushNow();
             if (_v02SourcePolling || tick < _v02NextSourcePollTick) return;
             var end = _v02WorldTicks.Where(x => tick - x >= 2 * runner.TickRate).DefaultIfEmpty(-1).Max();
-            if (end < 0 || end - _v02WorldTicks.Peek() < runner.TickRate * AEDV02PilotPolicy.ObservationSeconds) return;
+            bool emergency = sample.Players.Any(x => x.LifeState == "DOWNED");
+            if (end < 0 || end - _v02WorldTicks.Peek() < runner.TickRate * (emergency ? AEDV02PilotOpportunities.ScarcityMinimumSeconds : AEDV02PilotPolicy.ObservationSeconds)) return;
             _v02NextSourcePollTick = tick + 5 * runner.TickRate;
             PollV02Source(MatchId, context, new AEDV02SourceRequestDto { phaseOrdinal = sample.PhaseOrdinal, startTick = _v02WorldTicks.Peek(),
-                endTick = end, sceneManifestFingerprint = sample.SceneManifestFingerprint });
+                endTick = end, sceneManifestFingerprint = sample.SceneManifestFingerprint, allowEmergencyWindow = emergency });
         }
 
         private async void PollV02Source(Guid match, string context, AEDV02SourceRequestDto request)
@@ -125,7 +191,9 @@ namespace EchoProtocol.Networking.Authority
             _v02NextSourcePollTick = 0; _v02SourcePolling = false; _v02WorldTicks.Clear(); LastVerifiedV02Source = null;
             V02SourceHoldReason = null;
             _v02CarrierEvidenceInvalid = false; _v02CarrierOrdinal = 0;
+            _v02ExclusionEnqueued = false; _v02SealEnqueued = false;
             _v02CabinetClueOrdinal = 0;
+            _v02ObservedObjectives.Clear(); _v02Impacts.Clear(); _v02DownEvents.Clear();
         }
 
         private bool TryBuildV02World(NetworkMatchState matchState, out AEDV02WorldSample sample, out string reason)
@@ -151,6 +219,18 @@ namespace EchoProtocol.Networking.Authority
                 }
             }
             else if (stalkers.Any(x => x.V02AppliedRevision != revision)) { reason = "HOLD_CONSUMER_NOT_OBSERVED"; return false; }
+            var stalkerSources = new List<AEDV02ThreatSource>();
+            foreach (var stalker in stalkers)
+            {
+                var observed = Threat(stalker.Object, stalker.HasActiveSpecialEncounter ? "SPECIAL" :
+                    stalker.ReplicatedState == StalkerState.DETECT ? "DETECTION" : stalker.ReplicatedState.ToString(), stalker.TargetPlayer, Math.Min(logical, 3));
+                observed.ConsumerValues = new double[6];
+                for (int key = 0; key < observed.ConsumerValues.Length; key++)
+                    if (!stalker.TryReadV02ConsumerValue((AEDV02Key)key, out observed.ConsumerValues[key]) ||
+                        Math.Abs(observed.ConsumerValues[key] - plan.Get((AEDV02Key)key)) >= .000001)
+                    { reason = "HOLD_CONSUMER_NOT_OBSERVED"; return false; }
+                stalkerSources.Add(observed);
+            }
             var players = new List<AEDV02PlayerSource>(); var tools = new List<AEDV02ToolSource>();
             foreach (var player in runner.ActivePlayers)
             {
@@ -162,10 +242,30 @@ namespace EchoProtocol.Networking.Authority
                 var position = obj.transform.position;
                 if (!matchState.TryGetV02ObjectiveSource(player, out var objective)) { reason = "HOLD_OBJECTIVE_SOURCE_REQUIRED"; return false; }
                 if (lobby.CarriedCoreId.IsValid) objective = "core:" + lobby.CarriedCoreId;
-                players.Add(new AEDV02PlayerSource { UserId = user, LifeState = life.IsEliminated ? "ELIMINATED" : life.IsDowned ? "DOWNED" : "ALIVE",
+                var playerSource = new AEDV02PlayerSource { UserId = user, LifeState = life.IsEliminated ? "ELIMINATED" : life.IsDowned ? "DOWNED" : "ALIVE",
                     IsCaught = life.IsCaught, IsReviving = life.IsReviveInProgress,
+                    ReviverUserId = life.IsReviveInProgress && TryResolveBackendUser(life.Reviver, out var reviver) ? reviver : (Guid?)null,
                     ObjectiveUnitId = objective, ObjectiveState = objective.Length == 0 ? "NONE" : "OPERATING",
-                    HeldToolInstanceId = held?.InstanceId ?? string.Empty, HideSpotId = movement.CurrentHideSpotId.ToString(), X = position.x, Y = position.y, Z = position.z });
+                    HeldToolInstanceId = held?.InstanceId ?? string.Empty, HideSpotId = movement.CurrentHideSpotId.ToString(),
+                    SlowUntilTick = movement.V02SlowUntilTick, X = position.x, Y = position.y, Z = position.z };
+                if (objective.Length != 0) _v02ObservedObjectives[player] = (objective, runner.Tick.Raw);
+                if (_v02Impacts.TryGetValue(player, out var blocked))
+                {
+                    var impact = blocked.Impact;
+                    bool constrained = life.IsDowned || life.IsCaught || movement.V02SlowUntilTick > runner.Tick.Raw ||
+                        impact.Kind == "MINION_CORE_DROP" && FindObjectsByType<CreepMinionRuntime>(FindObjectsInactive.Exclude)
+                            .Any(x => x.Runner == runner && x.Object != null && x.Object.IsValid && x.Object.Id.ToString() == impact.EntityId &&
+                                x.TargetPlayer == player && x.State is CreepMinionState.Track or CreepMinionState.Harass);
+                    if (objective.Length == 0 && impact.ObjectiveUnitId.Length != 0 && constrained &&
+                        !players.Any(x => x.ObjectiveUnitId == impact.ObjectiveUnitId && x.ObjectiveState == "OPERATING"))
+                    {
+                        playerSource.ObjectiveState = "THREAT_INTERRUPTED"; playerSource.ObjectiveUnitId = impact.ObjectiveUnitId;
+                        playerSource.ObjectiveCauseEntityId = impact.EntityId; playerSource.ObjectiveCauseEventId = blocked.EventId.ToString("D");
+                    }
+                    if (impact.Kind == "MINION_TOOL_LOSS" && runner.Tick.Raw <= impact.UntilTick)
+                    { playerSource.RequiredToolId = impact.ToolId; playerSource.ResourceCauseEventId = blocked.EventId.ToString("D"); }
+                }
+                players.Add(playerSource);
                 if (held != null) tools.Add(Tool(held, position, string.Empty));
             }
             if (!players.Select(x => x.UserId).ToHashSet().SetEquals(_boundPlayers.Values)) return false;
@@ -189,12 +289,16 @@ namespace EchoProtocol.Networking.Authority
             var minions = FindObjectsByType<CreepMinionRuntime>(FindObjectsInactive.Exclude).Where(x => x.Runner == runner && x.Object != null && x.Object.IsValid).ToArray();
             if (!AEDV02SceneSource.TryGetDoorSources(runner, matchState, out var doors))
             { reason = "HOLD_DOOR_SOURCE_REQUIRED"; return false; }
-            sample = new AEDV02WorldSample { ResolutionMode = "Adaptive", Difficulty = "Normal", Tick = runner.Tick.Raw, TickRate = runner.TickRate,
+            foreach (var interrupted in players.Where(x => x.ObjectiveState == "THREAT_INTERRUPTED" &&
+                players.Any(other => other.UserId != x.UserId && other.ObjectiveUnitId == x.ObjectiveUnitId && other.ObjectiveState == "OPERATING")))
+            { interrupted.ObjectiveState = "NONE"; interrupted.ObjectiveUnitId = string.Empty; interrupted.ObjectiveCauseEntityId = string.Empty; interrupted.ObjectiveCauseEventId = string.Empty; }
+            sample = new AEDV02WorldSample { OpportunityContractVersion = AEDV02PilotOpportunities.Version,
+                ResolutionMode = "Adaptive", Difficulty = "Normal", Tick = runner.Tick.Raw, TickRate = runner.TickRate,
                 PhaseOrdinal = (int)V02EvidencePhaseOrdinal, PhaseName = _currentTelemetryPhase, LogicalPhase = logical, Zone = Math.Min(logical, 3),
                 PlanRevision = revision, PlanFingerprint = plan.Fingerprint(), RosterIdentity = CurrentRosterIdentity(), SceneManifestFingerprint = sceneFingerprint,
                 Players = players.ToArray(), Tools = tools.ToArray(), Doors = doors,
                 Supply = EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(runner, MatchId),
-                Stalkers = stalkers.Select(x => Threat(x.Object, x.HasActiveSpecialEncounter ? "SPECIAL" : x.ReplicatedState == StalkerState.DETECT ? "DETECTION" : x.ReplicatedState.ToString(), x.TargetPlayer, Math.Min(logical, 3))).ToArray(),
+                Stalkers = stalkerSources.ToArray(),
                 Minions = minions.Select(x => Threat(x.Object, x.IsDying ? "DYING" : x.State == CreepMinionState.Roam ? "IDLE" : x.State.ToString().ToUpperInvariant(), x.TargetPlayer, (int)x.Zone)).ToArray() };
             return sample.IsValid();
         }
@@ -206,7 +310,7 @@ namespace EchoProtocol.Networking.Authority
         };
         private AEDV02ThreatSource Threat(NetworkObject obj, string state, PlayerRef target, int zone)
         {
-            Guid? user = state is "CHASE" or "ATTACK" or "TRACK" or "HARASS" && target.IsRealPlayer &&
+            Guid? user = state is "DETECTION" or "CHASE" or "ATTACK" or "SPECIAL" or "TRACK" or "HARASS" && target.IsRealPlayer &&
                 TryResolveVerifiedBackendUserId(target, out var identity) && Guid.TryParse(identity, out var resolved) ? resolved : (Guid?)null;
             var id = obj.Id.ToString();
             string episode = string.Empty;

@@ -51,7 +51,7 @@ public sealed partial class ScenarioServiceTests
         events.Add(V02Event(f.MatchId, "TEAM_TOOL_LIFECYCLE", events.Count + 1, Now.AddSeconds(2), "1.2", new BsonDocument {
             ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 599 },
             ["data"] = new BsonDocument { ["action"] = "SPAWN", ["instanceId"] = "optional:1", ["toolId"] = 3, ["zone"] = 1, ["origin"] = "WorldSpawn" } }));
-        var effect = V02Effect(f, approval.Data, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 600, events.Count + 1, Now.AddSeconds(3));
+        var effect = V02Effect(f, events, approval.Data, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 600, events.Count + 1, Now.AddSeconds(3));
         events.Add(effect);
         int ordinal = 0;
         foreach (var item in original.Where(x => x.EventType == "AED_V02_WORLD_SAMPLE"))

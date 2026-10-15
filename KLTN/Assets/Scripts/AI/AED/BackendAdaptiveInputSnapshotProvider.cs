@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EchoProtocol.AI.Common.AED;
@@ -17,6 +18,8 @@ namespace EchoProtocol.AI.AED
         public Guid SnapshotId => _snapshot?.SnapshotId ?? Guid.Empty;
         public string SnapshotFingerprint => _snapshot?.SnapshotContentFingerprint ?? string.Empty;
         public string SnapshotValidity => _snapshot?.SnapshotValidity.ToString() ?? "Unavailable";
+        public bool HasCurrentColdStartProfileOnly => _currency?.IsCurrent == true && _snapshot?.SnapshotValidity == EchoProtocol.AI.Common.Profile.SnapshotValidity.Partial &&
+            _snapshot.ReasonCodes.Count > 0 && _snapshot.ReasonCodes.All(x => x is "PROFILE_MISSING" or "INSUFFICIENT_OBSERVED_PROFILE_EVIDENCE");
         public int TeamSize => _snapshot?.TeamSize ?? 0;
         public double? SurvivalMean => _snapshot?.RosterProfileSummary.Survival.MeanObservedScore;
         public double? NoiseMean => _snapshot?.RosterProfileSummary.Noise.MeanObservedScore;

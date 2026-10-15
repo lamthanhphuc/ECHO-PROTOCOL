@@ -202,7 +202,7 @@ public sealed partial class ScenarioServiceTests
 
     private static async Task<(TelemetryEventDocument[] Events, AEDV02SourceRequest Request)> V02WorldEvidence(Fixture f, bool geometry = false, int planRevision = 0)
     {
-        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
+        f.Db.MatchAuthorityBindings.Single(x => x.MatchId == f.MatchId).Status = MatchAuthorityStatus.InMatch;
         var users = f.Db.MatchPlayerBindings.Where(x => x.MatchId == f.MatchId).Select(x => x.UserId).ToArray();
         var roster = AEDV02Plan.Hash(f.MatchId.ToString("D") + "|" + string.Join(',', users.Order().Select(x => x.ToString("D"))));
         var ids = new[] { 1, 2, 3, 4, 6 };
@@ -212,7 +212,8 @@ public sealed partial class ScenarioServiceTests
             Edges = ids.Select(x => new AEDV02RouteEdge { Id = "edge:" + x, From = "Z1_ENTRY", To = "marker:" + x, PathMeters = 10, DoorId = "door" }).ToArray() };
         if (geometry) manifest.NavCells = new[] { new AEDV02NavCell { Id = 0, A = new[] { 0d, 0, 0 }, B = new[] { 10d, 0, 0 }, C = new[] { 0d, 0, 10 } } };
         var json = JsonSerializer.Serialize(manifest); var fingerprint = AEDV02Plan.Hash(json);
-        f.Db.AEDV02SceneContents.Add(new AEDV02SceneContent { Fingerprint = fingerprint, SceneVersion = manifest.SceneVersion, ManifestJson = json, RegisteredAtUtc = Now });
+        if (!f.Db.AEDV02SceneContents.Any(x => x.Fingerprint == fingerprint))
+            f.Db.AEDV02SceneContents.Add(new AEDV02SceneContent { Fingerprint = fingerprint, SceneVersion = manifest.SceneVersion, ManifestJson = json, RegisteredAtUtc = Now });
         await f.Db.SaveChangesAsync();
         var events = new List<TelemetryEventDocument> { V02Event(f.MatchId, "PHASE_STARTED", 1, Now.AddSeconds(-60), "1.1",
             new BsonDocument { ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION" }, ["data"] = new BsonDocument() }) };
@@ -225,7 +226,8 @@ public sealed partial class ScenarioServiceTests
             var sample = new AEDV02WorldSample { ResolutionMode = "Adaptive", Difficulty = "Normal", Tick = 600 + i * 60, TickRate = 60, PhaseOrdinal = 1, PhaseName = "CORE_COLLECTION", LogicalPhase = 1, Zone = 1,
                 PlanRevision = planRevision, PlanFingerprint = AEDV02Plan.Normal().Fingerprint(), RosterIdentity = roster, SceneManifestFingerprint = fingerprint,
                 Players = users.Select(x => new AEDV02PlayerSource { UserId = x, LifeState = "ALIVE" }).ToArray(),
-                Stalkers = new[] { new AEDV02ThreatSource { NetworkId = "stalker", State = "PATROL", Zone = 1 } },
+                Stalkers = new[] { new AEDV02ThreatSource { NetworkId = "stalker", State = "PATROL", Zone = 1,
+                    ConsumerValues = Enumerable.Range(0, 6).Select(index => AEDV02Plan.Normal().Get((AEDV02Key)index)).ToArray() } },
                 Tools = ids.Select(x => new AEDV02ToolSource { InstanceId = "tool:" + x, ToolId = x, Zone = 1, Origin = "WorldSpawn", Location = "World", MarkerId = "marker:" + x, RouteEdgeIds = new[] { "edge:" + x } }).ToArray(),
                 Doors = new[] { new AEDV02DoorSource { DoorId = "door", State = "CLOSED_UNLOCKED" } } };
             var value = JsonSerializer.SerializeToElement(new { context = new { authorityTick = sample.Tick, phase = sample.PhaseName, occurrenceKey = "world:" + sample.Tick }, data = new { world = sample } });
@@ -235,7 +237,7 @@ public sealed partial class ScenarioServiceTests
     }
     private static MatchAuthorityService V02TelemetryAuthority(Fixture f) => new(f.Db, null!,
         Microsoft.Extensions.Options.Options.Create(new EchoProtocol.Api.Configurations.MatchAuthoritySettings()), new FixedClock(Now));
-    private static TelemetryEventDocument V02Event(Guid matchId, string type, long sequence, DateTime ts, string version, BsonDocument value, Guid? userId = null)
+    private static TelemetryEventDocument V02Event(Guid matchId, string type, long sequence, DateTime ts, string version, BsonDocument value, Guid? userId = null, string? reasonCode = null)
     {
         value["context"]["eventSequence"] = sequence;
         var context = value["context"].AsBsonDocument;
@@ -247,7 +249,7 @@ public sealed partial class ScenarioServiceTests
         if (version is "1.2" or "1.3") context["researchCaptureEnabled"] = true;
         if (type == "PLAYER_DOWNED") context["monsterType"] = "STALKER";
         return new TelemetryEventDocument { Id = Guid.NewGuid(), MatchId = matchId, UserId = userId, EventType = type,
-            ReasonCode = type == "MATCH_STARTED" ? "MATCH_READY" : type == "MATCH_ENDED" ? "TEAM_ESCAPED" : type == "PLAYER_DOWNED" ? "STALKER_ATTACK" : type == "PLAYER_REVIVED" ? "TEAMMATE_REVIVE" : null,
+            ReasonCode = reasonCode ?? (type == "MATCH_STARTED" ? "MATCH_READY" : type == "MATCH_ENDED" ? "TEAM_ESCAPED" : type == "PLAYER_DOWNED" ? "STALKER_ATTACK" : type == "PLAYER_REVIVED" ? "TEAMMATE_REVIVE" : null),
             EventSequence = sequence, Ts = ts, SchemaVersion = version,
             SemanticFingerprint = AEDV02Plan.Hash(value.ToJson()), IngestedAt = Now, ValueJson = value };
     }

@@ -41,9 +41,34 @@ public sealed partial class TelemetryServiceTests
     private sealed class V02TraceClock(DateTime now) : TimeProvider { public override DateTimeOffset GetUtcNow() => new(now); }
 
     [Theory, Trait("Category", "AEDV02")]
+    [InlineData("EXCLUSION", "NONE", false)]
+    [InlineData("EXCLUSION", "TRUST_ME", false)]
+    [InlineData("SEAL", "VERIFIED", false)]
+    [InlineData("SEAL", "NONE", true)]
+    public async Task V02_CaptureMetadataRejectsUnknownKindsAndSelfCertification(string kind, string exclusion, bool injectedFlag)
+    {
+        var repository = new FakeTelemetryEventRepository();
+        var batch = CreateMatchStarted(researchCaptureEnabled: true);
+        var match = batch.Events[0].MatchId;
+        batch.Events.Add(CreatePhaseStarted(match, 2));
+        var item = V02Telemetry(match, kind);
+        var root = JsonNode.Parse(item.ValueJson.GetRawText())!;
+        root["data"]!["exclusion"] = exclusion;
+        if (injectedFlag) root["data"]!["verified"] = true;
+        item.ValueJson = JsonSerializer.SerializeToElement(root);
+        batch.Events.Add(item);
+        var result = await CreateService(repository).IngestBatchAsync(batch, Guid.NewGuid(), CancellationToken.None);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(TelemetryAckStatuses.PermanentlyRejected, result.Data!.Items[2].Status);
+        Assert.DoesNotContain(repository.InsertedEvents, x => x.Id == item.Id);
+    }
+
+    [Theory, Trait("Category", "AEDV02")]
     [InlineData("WORLD")]
     [InlineData("EFFECT")]
     [InlineData("CARRIER")]
+    [InlineData("EXCLUSION")]
+    [InlineData("SEAL")]
     public async Task V02_Ingestion_AcceptsVersionedSourcesAndDeduplicatesReplay(string kind)
     {
         var repo = new FakeTelemetryEventRepository();
@@ -135,11 +160,16 @@ public sealed partial class TelemetryServiceTests
                 Consumer = "StalkerFusionRuntime", Key = "ChaseSpeed", ObservedValue = 7.5, ObservedTick = 42, NetworkObjectIds = ["stalker:1"]
             }) };
         }
-        else
+        else if (kind == "CARRIER")
         {
             item.EventType = "AED_V02_TOOL_CARRIER";
             root["data"] = new JsonObject { ["carrier"] = JsonSerializer.SerializeToNode(new AEDV02ToolCarrierSource {
                 ToolInstanceId = "drop:tool", MinionNetworkId = "minion:1", Action = "STEAL", Tick = 42 }) };
+        }
+        else
+        {
+            item.EventType = kind == "SEAL" ? "AED_V02_CAPTURE_SEAL" : "AED_V02_CAPTURE_EXCLUDED";
+            root["data"] = new JsonObject { ["exclusion"] = kind == "SEAL" ? "NONE" : "DEBUG_GAMEPLAY" };
         }
         item.ValueJson = JsonSerializer.SerializeToElement(root);
         return item;

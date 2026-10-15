@@ -29,6 +29,8 @@ public sealed partial class ScenarioServiceTests
     [InlineData("missing-tool")]
     [InlineData("forged-charges")]
     [InlineData("forged-minion")]
+    [InlineData("missing-consumer")]
+    [InlineData("wrong-consumer-value")]
     public async Task V02_ReceiptWorldMustIndependentlyReconcileRosterToolsAndMinionPopulation(string mutation)
     {
         await using var f = await ValidV02Fixture();
@@ -41,7 +43,7 @@ public sealed partial class ScenarioServiceTests
         var approval = (await service.SubmitAsync(f.HostId, f.MatchId, V02Request(f, scenario, request.SceneManifestFingerprint,
             AEDV02Plan.Normal(), 0, null, 0))).Data!;
         f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch; await f.Db.SaveChangesAsync();
-        var effect = V02Effect(f, approval, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 2400, events.Count + 1, Now);
+        var effect = V02Effect(f, events, approval, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 2400, events.Count + 1, Now);
         events.Add(effect); V02AppendWindow(f, events, AEDV02Plan.Normal(), 1, 2401, Now, 1);
         var sample = JsonSerializer.Deserialize<AEDV02WorldSample>(events.Last().ValueJson["data"]["world"].ToJson())!;
         switch (mutation)
@@ -50,6 +52,8 @@ public sealed partial class ScenarioServiceTests
             case "missing-tool": sample.Tools = sample.Tools.Skip(1).ToArray(); break;
             case "forged-charges": sample.Tools.Single(x => x.ToolId == 2).RemainingCharges = 2; break;
             case "forged-minion": sample.Minions = [new AEDV02ThreatSource { NetworkId = "unspawned:minion", State = "IDLE", Zone = 1 }]; break;
+            case "missing-consumer": sample.Stalkers[0].ConsumerValues = []; break;
+            case "wrong-consumer-value": sample.Stalkers[0].ConsumerValues[0] = 1.5; break;
         }
         events.Last().ValueJson["data"]["world"] = BsonDocument.Parse(JsonSerializer.Serialize(sample));
         var accepted = await TelemetryServiceTests.IngestV02Trace(f.MatchId, events, Now, V02TelemetryAuthority(f), f.HostId);
@@ -58,7 +62,8 @@ public sealed partial class ScenarioServiceTests
         var result = await service.ConfirmAsync(f.HostId, f.MatchId, approval.DecisionId, receipt);
         if (mutation == "valid")
         { Assert.True(result.IsSuccess, result.Message); Assert.True((await service.ConfirmAsync(f.HostId, f.MatchId, approval.DecisionId, receipt)).Data!.IsReplay); }
-        else { Assert.False(result.IsSuccess); Assert.Equal("HOLD_WORLD_EFFECT_NOT_OBSERVED", result.Message); }
+        else { Assert.False(result.IsSuccess); Assert.Equal(mutation is "missing-consumer" or "wrong-consumer-value"
+            ? "HOLD_STALKER_CONSUMER_NOT_OBSERVED" : "HOLD_WORLD_EFFECT_NOT_OBSERVED", result.Message); }
     }
     [Theory, Trait("Category", "AEDV02")]
     [InlineData("valid", null)]
@@ -76,7 +81,7 @@ public sealed partial class ScenarioServiceTests
         f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.Lobby; await f.Db.SaveChangesAsync();
         var initial = (await service.SubmitAsync(f.HostId, f.MatchId, V02Request(f, scenario, request.SceneManifestFingerprint, AEDV02Plan.Normal(), 0, null, 0))).Data!;
         f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch; await f.Db.SaveChangesAsync();
-        var effect = V02Effect(f, initial, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 2400, events.Count + 1, Now); events.Add(effect);
+        var effect = V02Effect(f, events, initial, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 2400, events.Count + 1, Now); events.Add(effect);
         V02AppendWindow(f, events, AEDV02Plan.Normal(), 1, 2401, Now, 1);
         if (mode != "missing-terminal") events.Add(V02Event(f.MatchId, "MATCH_ENDED", events.Count + 1, Now.AddSeconds(1), "1.1", new BsonDocument {
             ["context"] = new BsonDocument { ["phase"] = "MATCH_END", ["authorityTick"] = 2460 },
@@ -86,7 +91,7 @@ public sealed partial class ScenarioServiceTests
         if (mode == "effect-after-terminal")
         {
             events.RemoveAll(x => x.Id == effect.Id);
-            effect = V02Effect(f, initial, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 2461, events.Last().EventSequence + 1, Now.AddSeconds(2));
+            effect = V02Effect(f, events, initial, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 2461, events.Last().EventSequence + 1, Now.AddSeconds(2));
             events.Add(effect);
         }
         f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.Ended;
@@ -111,7 +116,7 @@ public sealed partial class ScenarioServiceTests
         var initialRequest = V02Request(f, scenario, sourceRequest.SceneManifestFingerprint, AEDV02Plan.Normal(), 0, null, 0);
         var initial = (await service.SubmitAsync(f.HostId, f.MatchId, initialRequest)).Data!;
         f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch; await f.Db.SaveChangesAsync();
-        var effect = V02Effect(f, initial, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 2400, events.Count + 1, Now);
+        var effect = V02Effect(f, events, initial, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 2400, events.Count + 1, Now);
         events.Add(effect);
         var source = await verifier.VerifyAsync(f.MatchId, sourceRequest);
         Assert.True(source.IsSuccess, source.Message);
@@ -205,13 +210,15 @@ public sealed partial class ScenarioServiceTests
         Assert.DoesNotContain(f.Db.AEDV02Decisions, x => x.ApplyStatus is "PENDING" or "APPLIED");
     }
 
-    [Fact, Trait("Category", "AEDV02")]
-    public async Task V02_RealApproval_PreMatchTwoSamePhaseWindowsAndObservedReceipts()
+    [Theory, Trait("Category", "AEDV02")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task V02_RealApproval_PreMatchTwoSamePhaseWindowsAndObservedReceipts(bool pilot)
     {
         await using var f = await ValidV02Fixture();
         var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
         var (world, sourceRequest) = await V02WorldEvidence(f, geometry: true, planRevision: 1);
-        var events = (await TelemetryServiceTests.IngestV02Trace(f.MatchId, V02PressureTrace(f, world), Now, V02TelemetryAuthority(f), f.HostId)).ToList();
+        var events = (await TelemetryServiceTests.IngestV02Trace(f.MatchId, V02PressureTrace(f, world, pilot), Now, V02TelemetryAuthority(f), f.HostId)).ToList();
         var storage = new MutableV02Repository(events);
         var clock = new MutableV02Clock(Now);
         var verifier = new AEDV02SourceVerifier(f.Db, storage, clock);
@@ -226,7 +233,7 @@ public sealed partial class ScenarioServiceTests
         Assert.True((await service.SubmitAsync(f.HostId, f.MatchId, initialRequest)).Data!.IsReplay);
         f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
         await f.Db.SaveChangesAsync();
-        var envelope = V02Effect(f, initial.Data, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 2400, events.Count + 1, Now);
+        var envelope = V02Effect(f, events, initial.Data, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 2400, events.Count + 1, Now);
         events.Add(envelope);
         var initialReceipt = new AEDV02ReceiptRequest(Guid.NewGuid(), envelope.Id, 1, initial.Data.PlanFingerprint, 2400);
         Assert.Equal("HOLD_WORLD_EFFECT_NOT_OBSERVED", (await service.ConfirmAsync(f.HostId, f.MatchId, initial.Data.DecisionId, initialReceipt)).Message);
@@ -235,6 +242,12 @@ public sealed partial class ScenarioServiceTests
 
         var source = await verifier.VerifyAsync(f.MatchId, sourceRequest);
         Assert.True(source.IsSuccess, source.Message);
+        Assert.Equal(pilot, source.Data!.PressureComplete);
+        if (pilot)
+        {
+            Assert.Contains(source.Data.ResolvedOpportunities!, x => x.Axis == "Teamwork" && x.Resolution == "Success");
+            Assert.Contains(source.Data.ResolvedOpportunities!, x => x.Axis == "Tool" && x.ToolId == 3 && x.Resolution == "Success");
+        }
         Assert.NotEmpty(source.Data!.RecentDownUsers);
         var plan2 = AEDV02Plan.Normal().With(AEDV02Key.DetectionAcquireSeconds, 1.5);
         var request2 = V02Request(f, scenario, sourceRequest.SceneManifestFingerprint, plan2, 1, source.Data, 1);
@@ -242,7 +255,7 @@ public sealed partial class ScenarioServiceTests
         Assert.True(approval2.IsSuccess, approval2.Message);
         Assert.Equal("APPROVED", approval2.Data!.ApprovalStatus);
         Assert.Equal(2, approval2.Data.PlanRevision);
-        var effect2 = V02Effect(f, approval2.Data, "StalkerFusionRuntime", AEDV02Key.DetectionAcquireSeconds, 2401, events.Count + 1, Now);
+        var effect2 = V02Effect(f, events, approval2.Data, "StalkerFusionRuntime", AEDV02Key.DetectionAcquireSeconds, 2401, events.Count + 1, Now);
         events.Add(effect2);
         var receipt2 = new AEDV02ReceiptRequest(Guid.NewGuid(), effect2.Id, 2, plan2.Fingerprint(), 2401);
         Assert.Equal("HOLD_WORLD_EFFECT_NOT_OBSERVED", (await service.ConfirmAsync(f.HostId, f.MatchId, request2.DecisionId, receipt2)).Message);
@@ -251,9 +264,9 @@ public sealed partial class ScenarioServiceTests
         Assert.True((await service.ConfirmAsync(f.HostId, f.MatchId, request2.DecisionId, receipt2)).Data!.IsReplay);
         Assert.Equal("AED_V02_RECEIPT_IDENTITY_CONFLICT", (await service.ConfirmAsync(f.HostId, f.MatchId, request2.DecisionId, receipt2 with { ReceiptId = Guid.NewGuid() })).Message);
 
-        clock.UtcNow = Now.AddSeconds(31);
-        V02AppendWindow(f, events, plan2, 2, 2460, Now.AddSeconds(1), 31);
-        var secondSource = await verifier.VerifyAsync(f.MatchId, sourceRequest with { StartTick = 2460, EndTick = 4260 });
+        clock.UtcNow = Now.AddSeconds(121);
+        V02AppendWindow(f, events, plan2, 2, 7860, Now.AddSeconds(91), 31);
+        var secondSource = await verifier.VerifyAsync(f.MatchId, sourceRequest with { StartTick = 7860, EndTick = 9660 });
         Assert.True(secondSource.IsSuccess, secondSource.Message);
         var plan3 = plan2.With(AEDV02Key.PostChaseCooldownSeconds, 28);
         var request3 = V02Request(f, scenario, sourceRequest.SceneManifestFingerprint, plan3, 2, secondSource.Data!, 2);
@@ -265,10 +278,10 @@ public sealed partial class ScenarioServiceTests
         Assert.Equal(approval2.Data.PhaseOrdinal, approval3.Data.PhaseOrdinal);
         Assert.Equal("HOLD_PREVIOUS_RECEIPT_PENDING", (await service.SubmitAsync(f.HostId, f.MatchId,
             request3 with { DecisionId = Guid.NewGuid(), WindowSequence = 3 })).Message);
-        var effect3 = V02Effect(f, approval3.Data, "StalkerFusionRuntime", AEDV02Key.PostChaseCooldownSeconds, 4261, events.Count + 1, clock.UtcNow);
+        var effect3 = V02Effect(f, events, approval3.Data, "StalkerFusionRuntime", AEDV02Key.PostChaseCooldownSeconds, 9661, events.Count + 1, clock.UtcNow);
         events.Add(effect3);
-        V02AppendWindow(f, events, plan3, 3, 4261, clock.UtcNow, 1);
-        var receipt3 = new AEDV02ReceiptRequest(Guid.NewGuid(), effect3.Id, 3, plan3.Fingerprint(), 4261);
+        V02AppendWindow(f, events, plan3, 3, 9661, clock.UtcNow, 1);
+        var receipt3 = new AEDV02ReceiptRequest(Guid.NewGuid(), effect3.Id, 3, plan3.Fingerprint(), 9661);
         Assert.True((await service.ConfirmAsync(f.HostId, f.MatchId, request3.DecisionId, receipt3)).IsSuccess);
         Assert.Equal("ABORT_STALE_SOURCE_REVISION", (await service.SubmitAsync(f.HostId, f.MatchId,
             request3 with { DecisionId = Guid.NewGuid(), ExpectedPlanRevision = 3, PreviousPlanFingerprint = plan3.Fingerprint(), WindowSequence = 3 })).Message);
@@ -284,7 +297,7 @@ public sealed partial class ScenarioServiceTests
             scenario.SnapshotContentFingerprint, scenario.RosterIdentity, source?.Fingerprint ?? string.Empty,
             source?.StartTick ?? 0, source?.EndTick ?? 0, manifest, AEDV02PilotPolicy.Version, AEDV02Plan.CatalogVersion, "Adaptive", "Normal", source?.PhaseName ?? "CORE_COLLECTION");
     }
-    private static TelemetryEventDocument[] V02PressureTrace(Fixture f, TelemetryEventDocument[] events)
+    private static TelemetryEventDocument[] V02PressureTrace(Fixture f, TelemetryEventDocument[] events, bool pilot = false)
     {
         var user = f.Db.MatchPlayerBindings.First(x => x.MatchId == f.MatchId).UserId;
         var reviver = f.Db.MatchPlayerBindings.First(x => x.MatchId == f.MatchId && x.UserId != user).UserId;
@@ -292,10 +305,13 @@ public sealed partial class ScenarioServiceTests
         foreach (var item in trace.Where(x => x.EventType == "AED_V02_WORLD_SAMPLE"))
         {
             var sample = JsonSerializer.Deserialize<AEDV02WorldSample>(item.ValueJson["data"]["world"].ToJson())!;
+            if (pilot) sample.OpportunityContractVersion = AEDV02PilotOpportunities.Version;
             sample.Stalkers = new[] { new AEDV02ThreatSource { NetworkId = "stalker:1", Zone = 1,
                 State = item.Ts < Now.AddSeconds(-10) ? "CHASE" : "SEARCH", EpisodeId = "chase:1",
                 TargetUserId = item.Ts < Now.AddSeconds(-10) ? user : null } };
             sample.Players.Single(x => x.UserId == user).LifeState = item.Ts >= Now.AddSeconds(-10) && item.Ts < Now.AddSeconds(-5) ? "DOWNED" : "ALIVE";
+            if (pilot && item.Ts >= Now.AddSeconds(-9) && item.Ts < Now.AddSeconds(-5))
+            { var victim = sample.Players.Single(x => x.UserId == user); victim.IsReviving = true; victim.ReviverUserId = reviver; }
             if (item.Ts < Now.AddSeconds(-5))
             {
                 sample.Players.Single(x => x.UserId == reviver).HeldToolInstanceId = "loadout:aid";
@@ -307,6 +323,7 @@ public sealed partial class ScenarioServiceTests
             ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 598 },
             ["data"] = new BsonDocument { ["action"] = "LOADOUT", ["instanceId"] = "loadout:aid", ["toolId"] = 3, ["zone"] = 0, ["origin"] = "LobbyLoadout", ["ownerUserId"] = reviver.ToString("D") } }));
         trace.Add(V02Event(f.MatchId, "PLAYER_DOWNED", 0, Now.AddSeconds(-10), "1.1", new BsonDocument { ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 1800 }, ["data"] = new BsonDocument() }, user));
+        if (pilot) trace.Add(V02ImpactEvent(f.MatchId, user, "stalker:1", 1800, 0, Now.AddSeconds(-10)));
         trace.Add(V02Event(f.MatchId, "TEAM_TOOL_LIFECYCLE", 0, Now.AddSeconds(-5), "1.2", new BsonDocument {
             ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 2100 },
             ["data"] = new BsonDocument { ["action"] = "CONSUME", ["instanceId"] = "loadout:aid", ["toolId"] = 3, ["zone"] = 0, ["remainingCharges"] = 0, ["ownerUserId"] = reviver.ToString("D") } }));
@@ -314,8 +331,12 @@ public sealed partial class ScenarioServiceTests
             ["data"] = new BsonDocument { ["reviverPlayerId"] = f.Db.MatchPlayerBindings.First(x => x.MatchId == f.MatchId && x.UserId != user).UserId.ToString("D"), ["usedFirstAidKit"] = true } }, user));
         return trace.OrderBy(x => x.Ts).ThenBy(x => x.EventType == "AED_V02_WORLD_SAMPLE" ? 1 : 0).Select((x, i) => V02Event(f.MatchId, x.EventType, i + 1, x.Ts, x.SchemaVersion, x.ValueJson, x.UserId)).ToArray();
     }
-    private static TelemetryEventDocument V02Effect(Fixture f, AEDV02DecisionResult approval, string consumer, AEDV02Key key, long tick, long sequence, DateTime time)
+    private static TelemetryEventDocument V02Effect(Fixture f, List<TelemetryEventDocument> events, AEDV02DecisionResult approval, string consumer, AEDV02Key key, long tick, long sequence, DateTime time)
     {
+        var commit = new AEDV02PlanCommitSource { DecisionId = approval.DecisionId, PlanRevision = approval.PlanRevision,
+            PlanFingerprint = approval.PlanFingerprint, ActionFingerprint = approval.ActionFingerprint, AppliedTick = tick };
+        events.Add(V02Event(f.MatchId, "AED_V02_PLAN_COMMIT", sequence++, time, "1.3", BsonDocument.Parse(JsonSerializer.Serialize(new
+            { context = new { phase = "CORE_COLLECTION", authorityTick = tick }, data = new { commit } }))));
         var effect = new AEDV02EffectSource { DecisionId = approval.DecisionId, PlanRevision = approval.PlanRevision,
             PlanFingerprint = approval.PlanFingerprint, Consumer = consumer, Key = key.ToString(), ObservedValue = new AEDV02Plan(approval.PlanValues).Get(key),
             ObservedTick = tick, NetworkObjectIds = consumer == "StalkerFusionRuntime" ? new[] { "stalker:1" } : Array.Empty<string>() };
@@ -334,6 +355,7 @@ public sealed partial class ScenarioServiceTests
         {
             var sample = JsonSerializer.Deserialize<AEDV02WorldSample>(previous.ValueJson["data"]["world"].ToJson())!;
             sample.Tick = startTick + i * 60; sample.PlanRevision = revision; sample.PlanFingerprint = plan.Fingerprint();
+            foreach (var stalker in sample.Stalkers) stalker.ConsumerValues = Enumerable.Range(0, 6).Select(index => plan.Get((AEDV02Key)index)).ToArray();
             sample.Stalkers[0].State = count > 1 && i < 20 ? "CHASE" : "SEARCH";
             sample.Stalkers[0].EpisodeId = "chase:2"; sample.Stalkers[0].TargetUserId = count > 1 && i < 20 ? user : null;
             if (count > 1)
@@ -351,11 +373,22 @@ public sealed partial class ScenarioServiceTests
             if (i == 20 || i == 25) events.Add(V02Event(f.MatchId, i == 20 ? "PLAYER_DOWNED" : "PLAYER_REVIVED", events.Count + 1,
                 started.AddSeconds(i), "1.1", new BsonDocument { ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = sample.Tick },
                     ["data"] = i == 25 ? new BsonDocument { ["reviverPlayerId"] = f.Db.MatchPlayerBindings.First(x => x.MatchId == f.MatchId && x.UserId != user).UserId.ToString("D"), ["usedFirstAidKit"] = true } : new BsonDocument() }, user));
+            if (i == 20 && sample.OpportunityContractVersion == AEDV02PilotOpportunities.Version)
+                events.Add(V02ImpactEvent(f.MatchId, user, sample.Stalkers[0].NetworkId, sample.Tick, events.Count + 1, started.AddSeconds(i)));
             sample.Players.Single(x => x.UserId == user).LifeState = i >= 20 && i < 25 ? "DOWNED" : "ALIVE";
+            if (sample.OpportunityContractVersion == AEDV02PilotOpportunities.Version)
+            {
+                var victim = sample.Players.Single(x => x.UserId == user);
+                victim.IsReviving = i >= 21 && i < 25; victim.ReviverUserId = victim.IsReviving ? reviver : null;
+            }
             events.Add(V02Event(f.MatchId, "AED_V02_WORLD_SAMPLE", events.Count + 1, started.AddSeconds(i), "1.3", BsonDocument.Parse(JsonSerializer.Serialize(new
                 { context = new { phase = "CORE_COLLECTION", authorityTick = sample.Tick, occurrenceKey = "world:" + sample.Tick }, data = new { world = sample } }))));
         }
     }
+    private static TelemetryEventDocument V02ImpactEvent(Guid match, Guid user, string entity, long tick, long sequence, DateTime time) =>
+        V02Event(match, "AED_V02_CAUSAL_IMPACT", sequence, time, "1.3", BsonDocument.Parse(JsonSerializer.Serialize(new {
+            context = new { phase = "CORE_COLLECTION", authorityTick = tick }, data = new { impact = new AEDV02CausalImpact {
+                UserId = user, Kind = "STALKER_DOWN", EntityId = entity, Tick = tick, UntilTick = tick } } })));
     private sealed class MutableV02Clock(DateTime value) : TimeProvider
     { public DateTime UtcNow = value; public override DateTimeOffset GetUtcNow() => new(UtcNow); }
     private sealed class MutableV02Repository(List<TelemetryEventDocument> events) : ITelemetryEventRepository

@@ -1,5 +1,13 @@
 namespace EchoProtocol.Api.Entities;
 
+public sealed class AEDV02Cancellation
+{
+    public Guid DecisionId { get; set; }
+    public Guid MatchId { get; set; }
+    public Guid HostUserId { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+}
+
 public sealed class AEDV02Decision
 {
     public Guid DecisionId { get; set; }
@@ -20,6 +28,8 @@ public sealed class AEDV02Decision
     public string SourceFingerprint { get; set; } = string.Empty;
     public string SceneManifestFingerprint { get; set; } = string.Empty;
     public string RequestFingerprint { get; set; } = string.Empty;
+    public string ProposalJson { get; set; } = string.Empty;
+    public string ActionFingerprint { get; set; } = string.Empty;
     public string PolicyVersion { get; set; } = string.Empty;
     public string CatalogVersion { get; set; } = string.Empty;
     public string PlanValuesJson { get; set; } = string.Empty;

@@ -7,7 +7,7 @@ namespace EchoProtocol.AI.Common.AED
 {
     public static class AEDV02PilotPolicy
     {
-        public const string Version = "AED_STALKER_POLICY_V0_2_REV02_PILOT";
+        public const string Version = "AED_STALKER_POLICY_V0_2_REV02_PILOT_DEFAULTS_1";
         public const double ObservationSeconds = 30;
         public const double WindowSeconds = 120;
         public const double EvidenceMaxAgeSeconds = 10;

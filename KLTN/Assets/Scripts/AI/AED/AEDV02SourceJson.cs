@@ -7,10 +7,33 @@ namespace EchoProtocol.AI.AED
 {
     public static class AEDV02SourceJson
     {
+        public static string Decision(AEDV02DecisionRequestDto request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            var json = new TelemetryJsonObject().AddString("decisionId", request.decisionId).AddInteger("phaseOrdinal", request.phaseOrdinal)
+                .AddString("decisionPoint", request.decisionPoint).AddInteger("windowSequence", request.windowSequence)
+                .AddString("windowId", request.windowId).AddInteger("expectedPlanRevision", request.expectedPlanRevision)
+                .AddString("previousPlanFingerprint", request.previousPlanFingerprint).AddNumberArray("planValues", request.planValues)
+                .AddString("snapshotId", request.snapshotId).AddString("snapshotFingerprint", request.snapshotFingerprint)
+                .AddString("rosterIdentity", request.rosterIdentity).AddString("sourceFingerprint", request.sourceFingerprint)
+                .AddInteger("startTick", request.startTick).AddInteger("endTick", request.endTick)
+                .AddString("sceneManifestFingerprint", request.sceneManifestFingerprint).AddString("policyVersion", request.policyVersion)
+                .AddString("catalogVersion", request.catalogVersion).AddString("resolutionMode", request.resolutionMode)
+                .AddString("difficulty", request.difficulty).AddString("targetPhaseName", request.targetPhaseName);
+            if (request.proposedReservations == null) json.AddNull("proposedReservations");
+            else json.AddArray("proposedReservations", request.proposedReservations.Select(x => new TelemetryJsonObject()
+                .AddInteger("zone", x.zone).AddInteger("toolId", x.toolId).AddString("markerId", x.markerId)));
+            if (request.support == null) json.AddNull("support");
+            else json.AddObject("support", new TelemetryJsonObject().AddString("kind", request.support.kind)
+                .AddString("userId", request.support.userId).AddString("causeEventId", request.support.causeEventId)
+                .AddInteger("toolId", request.support.toolId).AddInteger("zone", request.support.zone).AddString("markerId", request.support.markerId));
+            return json.ToJson();
+        }
         public static string World(AEDV02WorldSample sample)
         {
             if (sample == null || !sample.IsValid()) throw new ArgumentException("AED_V02_WORLD_SOURCE_INVALID");
-            var json = new TelemetryJsonObject().AddString("Version", sample.Version).AddString("ResolutionMode", sample.ResolutionMode).AddString("Difficulty", sample.Difficulty)
+            var json = new TelemetryJsonObject().AddString("Version", sample.Version).AddString("OpportunityContractVersion", sample.OpportunityContractVersion)
+                .AddString("ResolutionMode", sample.ResolutionMode).AddString("Difficulty", sample.Difficulty)
                 .AddInteger("Tick", sample.Tick).AddInteger("TickRate", sample.TickRate)
                 .AddInteger("PhaseOrdinal", sample.PhaseOrdinal).AddString("PhaseName", sample.PhaseName).AddInteger("LogicalPhase", sample.LogicalPhase)
                 .AddInteger("Zone", sample.Zone).AddInteger("PlanRevision", sample.PlanRevision).AddString("PlanFingerprint", sample.PlanFingerprint)
@@ -18,8 +41,10 @@ namespace EchoProtocol.AI.AED
                 .AddString("EvidenceExclusion", sample.EvidenceExclusion)
                 .AddArray("Players", sample.Players.Select(x => Position(new TelemetryJsonObject().AddString("UserId", x.UserId.ToString("D"))
                     .AddString("LifeState", x.LifeState).AddBoolean("IsCaught", x.IsCaught).AddBoolean("IsReviving", x.IsReviving)
+                    .AddString("ReviverUserId", x.ReviverUserId?.ToString("D"))
                     .AddString("HeldToolInstanceId", x.HeldToolInstanceId).AddString("ObjectiveUnitId", x.ObjectiveUnitId)
                     .AddString("ObjectiveState", x.ObjectiveState).AddString("ObjectiveCauseEntityId", x.ObjectiveCauseEntityId)
+                    .AddString("ObjectiveCauseEventId", x.ObjectiveCauseEventId).AddString("ResourceCauseEventId", x.ResourceCauseEventId).AddInteger("SlowUntilTick", x.SlowUntilTick)
                     .AddInteger("RequiredToolId", x.RequiredToolId).AddString("HideSpotId", x.HideSpotId), x.X, x.Y, x.Z)))
                 .AddArray("Stalkers", sample.Stalkers.Select(Threat)).AddArray("Minions", sample.Minions.Select(Threat))
                 .AddArray("Tools", sample.Tools.Select(x =>
@@ -35,10 +60,25 @@ namespace EchoProtocol.AI.AED
         }
         public static TelemetryJsonObject Supply(AEDV02SupplySource source) => new TelemetryJsonObject()
             .AddInteger("InitialOptionalBudget", source.InitialOptionalBudget).AddInteger("OptionalBudget", source.OptionalBudget)
-            .AddInteger("OptionalMaterialized", source.OptionalMaterialized)
+            .AddInteger("OptionalMaterialized", source.OptionalMaterialized).AddInteger("ReservationGrade", source.ReservationGrade)
             .AddIntegerArray("SpawnedZones", source.SpawnedZones)
             .AddArray("Reservations", source.Reservations.Select(x => new TelemetryJsonObject().AddInteger("Zone", x.Zone)
-                .AddInteger("ToolId", x.ToolId).AddString("MarkerId", x.MarkerId)));
+                .AddInteger("ToolId", x.ToolId).AddString("MarkerId", x.MarkerId).AddNumberMatrix("EntryPath", x.EntryPath)));
+        public static string Commit(AEDV02PlanCommitSource commit)
+        {
+            if (commit == null || !commit.IsValid()) throw new ArgumentException("AED_V02_COMMIT_INVALID");
+            return new TelemetryJsonObject().AddString("DecisionId", commit.DecisionId.ToString("D")).AddInteger("PlanRevision", commit.PlanRevision)
+                .AddString("PlanFingerprint", commit.PlanFingerprint).AddString("ActionFingerprint", commit.ActionFingerprint)
+                .AddInteger("AppliedTick", commit.AppliedTick).ToJson();
+        }
+        public static string Impact(AEDV02CausalImpact impact)
+        {
+            if (impact == null || !impact.IsValid()) throw new ArgumentException("AED_V02_CAUSAL_IMPACT_INVALID");
+            return new TelemetryJsonObject().AddString("Version", impact.Version).AddString("UserId", impact.UserId.ToString("D"))
+                .AddString("Kind", impact.Kind).AddString("EntityId", impact.EntityId).AddString("ObjectiveUnitId", impact.ObjectiveUnitId)
+                .AddString("ToolInstanceId", impact.ToolInstanceId).AddInteger("ToolId", impact.ToolId)
+                .AddInteger("Tick", impact.Tick).AddInteger("UntilTick", impact.UntilTick).ToJson();
+        }
         public static string Effect(AEDV02EffectSource effect)
         {
             if (effect == null || !effect.IsValid()) throw new ArgumentException("AED_V02_EFFECT_INVALID");
@@ -64,6 +104,7 @@ namespace EchoProtocol.AI.AED
         }
         private static TelemetryJsonObject Threat(AEDV02ThreatSource x) => Position(new TelemetryJsonObject().AddString("NetworkId", x.NetworkId)
             .AddString("State", x.State).AddString("EpisodeId", x.EpisodeId).AddString("TargetUserId", x.TargetUserId?.ToString("D"))
+            .AddNumberArray("ConsumerValues", x.ConsumerValues)
             .AddInteger("Zone", x.Zone), x.X, x.Y, x.Z);
         private static TelemetryJsonObject Position(TelemetryJsonObject json, double x, double y, double z) => json.AddNumber("X", x).AddNumber("Y", y).AddNumber("Z", z);
     }

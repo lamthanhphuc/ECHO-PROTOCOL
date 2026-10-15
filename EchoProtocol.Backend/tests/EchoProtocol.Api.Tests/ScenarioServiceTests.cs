@@ -392,8 +392,10 @@ public sealed partial class ScenarioServiceTests
             ChaseSpeedCandidateValues = [9, 10, 11]
         };
         private readonly TimeProvider clock = new FixedClock(Now);
-        private Fixture(SqliteConnection c, AppDbContext db)
+        private Fixture(SqliteConnection c, AppDbContext db, Guid? hostId = null, Guid? playerId = null)
         {
+            if (hostId.HasValue) HostId = hostId.Value;
+            if (playerId.HasValue) PlayerId = playerId.Value;
             connection = c; Db = db; Builder = new(db, clock);
             Service = new(
                 db,
@@ -401,6 +403,16 @@ public sealed partial class ScenarioServiceTests
                 Builder,
                 clock,
                 Options.Create(Policy));
+        }
+        public async Task<Fixture> ForkMatchAsync()
+        {
+            var next = new Fixture(connection, Db, HostId, PlayerId);
+            Db.MatchAuthorityBindings.Add(new MatchAuthorityBinding { MatchId = next.MatchId, HostUserId = HostId,
+                FusionSessionName = "history-" + next.MatchId.ToString("N"), MaxPlayers = 4, Status = MatchAuthorityStatus.InMatch,
+                LeaseExpiresAtUtc = Now.AddMinutes(5), CreatedAtUtc = Now, UpdatedAtUtc = Now,
+                Players = [next.Binding(HostId, 1), next.Binding(PlayerId, 2)] });
+            await Db.SaveChangesAsync();
+            return next;
         }
         public static async Task<Fixture> CreateAsync(bool includeFallback = true, bool includePlayerProfile = true)
         {

@@ -58,6 +58,14 @@ public class AppDbContext : DbContext
             entity.Property(x => x.DecisionPoint).HasMaxLength(24);
             entity.Property(x => x.WindowId).HasMaxLength(64);
             entity.Property(x => x.PlanValuesJson).HasColumnType("text");
+            entity.Property(x => x.ProposalJson).HasColumnType("text");
+            entity.Property(x => x.ActionFingerprint).HasMaxLength(64);
+            entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(x => x.MatchId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<AEDV02Cancellation>(entity =>
+        {
+            entity.ToTable("AEDV02Cancellations");
+            entity.HasKey(x => x.DecisionId);
             entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(x => x.MatchId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<AEDV02VerifiedSource>(entity =>
