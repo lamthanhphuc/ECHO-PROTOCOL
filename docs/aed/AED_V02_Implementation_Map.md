@@ -1,26 +1,25 @@
-# AED v0.2 Rev02 implementation
+# AED v0.2 Rev02 implementation checkpoint
 
-Base: `10391b1d820a9f25d2352d925dbf5bfc39962e50` (`origin/LTP`, fetched 2026-10-14).
-Feature: `feature/aed-v02-full-integration`. Owner approved A–G for the pilot in the implementation request. Production activation and merge are not authorized.
+Base: `10391b1d820a9f25d2352d925dbf5bfc39962e50` (`LTP`). Feature: `feature/aed-v02-full-integration`. A–G are approved for the pilot by the owner; merge and production activation are not authorized.
 
-## Work and verification map
+**Status: partial implementation, NOT E2E ready.** Green suites do not supply missing contract semantics. See [remaining decisions](AED_V02_Remaining_Contract_Decisions.md), [source contract](AED_V02_Source_Contract_Rev02.md), [verification report](AED_V02_Verification_Report.md) and [scenario traceability](AED_V02_Traceability.md).
 
-| Slice | Existing paths to extend | Verification | Status |
-|---|---|---|---|
-| W0 baseline and tooling | `scripts/`, Unity Test Runner, `Test-KLTNBackend` | Full backend / EditMode / PlayMode; artifacts | Backend 486/486; EditMode 1203/1203; PlayMode 190/190 |
-| W1 versioned sources / decision ledger / receipts | `AppDbContext`, v0.2 controller/services, Phase8 lifecycle and accepted telemetry repository | Real verifier, SQLite/PostgreSQL migration, replay/stale/timeout | Backend source/approval/receipt tested; full Backend 540/540; native source and coordinator wired; aggregate pressure remains partial |
-| W2 pilot policy / pressure / budget / windows | Existing AED common models, `AEDv2Authority`, `AEDv2BoundaryCoordinator`, `NetworkMatchState`, `MatchAuthorityRuntime` | Deterministic policy/simulation, two same-phase windows, progression fault injection | PreMatch/Boundary/SafeWindow coordinator wired; Backend chain and Host guards tested; live transaction remains UNVERIFIED |
-| W3 Stalker fairness / P4 / sensory | `AdaptiveStalkerTargetPolicy`, sensors, `StalkerUnityHideSpotAdapter`, `StalkerHidingInvestigation`, `NetworkPlayerMovement` | PF/VH/HB/HT/CC/SK, protection zero-call tests, Fixed regression | P4 guards/ledger implemented and unit tested; full pressure/fairness integration unfinished |
-| W4 Cabinet Ambush | `StalkerController`, existing Special / jump entry / route / presentation paths | JP/CAB/SIM, cue/route abort, idempotency, client rendering | Pending |
-| W5 Minion / Tool / markers | `PlayerSpawner`, `AEDv2GameplayBridge`, `TeamToolWorldSpawn`, scene marker and route authoring | MN/TT, 5 required tools, optional reservations, real census, NavMesh/door tests | Pending |
-| W6 delivery | feature PR into LTP, reproducible local config / player build / trace artifacts | ACC and 12 E2E IDs; no merge | Pending |
+| Work | Implemented | Proof / remaining gate |
+|---|---|---|
+| W0 | Reproducible local test script, isolated PostgreSQL/MongoDB, Backend PR workflow, Windows Development build | Real local suites executed; hosted CI separately reported |
+| W1 | Versioned API, SQL migration, distinct windows, independent world/custody/Minion/route/supply replay, approval/receipt reconciliation | Real Backend verifier integration; history and complete PP/TP remain unsupported |
+| W2 | PreMatch/Boundary/SafeWindow, one-key transactions, budget, actual-live-Minions handoff guard, Host revision/lease/roster guards, retries/reset | Separate Backend, Host consumer and Fusion Single proofs; joined remote-client transaction UNVERIFIED |
+| W3 | Physical Vision/Hearing, bounded target scoring, frozen encounter profile, reveal timing, known-clue PP3 priority, P4 guard/token lifecycle | Controlled-policy tests; real fully canonical pressure activation blocked; qualifying long-chase definition missing |
+| W4 | Cabinet FSM in existing Special runtime, observed entry clue, real client audio/visual ACK, path/escape checks, timed inspection, abort/recovery/quota and bidirectional shared cooldown | Mechanics and real ingestion tested; native success blocked by unsupported team TP/incomplete PP |
+| W5 | Adaptive Zone3 cap and population readback, no forced despawn; five required tools/zone, deferred R0 reservations, initial optional allowance, immutable materialized supply | Non-R0 placements and ordinary/emergency support unfinished pending formal semantics |
+| W6 | Feature source/test/report, draft PR into LTP, defaults OFF | Twelve E2E scenarios NOT RUN; no merge or pilot activation |
 
-The approved Rev02 sections XV–XVIII override earlier candidate values. Canonical Telemetry 1.1 and `AED_V2_PHASE_EVIDENCE_V2` retain their meanings. New evidence and decisions require a new version; V1/V2 verification stays fail-closed.
+## Boundaries
 
-Checkpoint after native source/coordinator changes: Backend 540/540, Unity EditMode 1265/1265, Unity PlayMode 191/191 (includes one real Fusion Single storage/reconstruction test), zero failures/skips. These are automated logic/regression results, not Host/Client or complete v0.2 runtime proof. See `AED_V02_Source_Contract_Rev02.md` for supported source semantics and outstanding gaps.
+- Telemetry 1.1 and `AED_V2_PHASE_EVIDENCE_V2` retain their meanings; old Phase8 verification remains fail-closed. Unsupported is never relabeled Verified.
+- Manifest `d3754db5cde76047c443b84a8fd5788076e00203cbeef57f66d155ce2f16e6c8`: 222 markers (112 tools, 107 cabinets, 3 zone entries), baked mesh and 20 doors.
+- Scene feature changes: three zone-entry components and one Zone3 marker child at the existing transition. Stalker and Minion prefabs have no tuning diff versus `origin/main`.
+- Fixed Normal Minion caps stay `1/2/0`. Feature gameplay requires Adaptive Normal. The Lobby scene/UI is preserved; LobbyManager adds v0.2 PreMatch staging/cleanup. Whole-tree LTP/main parity is not claimed.
+- User RuntimeLogSettings/TMP fallback edits are preserved and excluded. No secrets, local Docker override, production flags or production data changed.
 
-## Final human checks
-
-`E2E-P4-01..03`, `E2E-CAB-01..03`, `E2E-PP-01..02`, `E2E-Z3-01`, `E2E-TT-01`, `E2E-F4-01`, `E2E-AED-01` remain NOT RUN until actual Host/Client scene evidence exists. Automated tests do not imply these checks passed.
-
-Native Minion caps now use the v0.2 bridge, preserve Fixed Zone3=0 and report actual maintenance/spawn observation before receipt. Tool reservation/support and Cabinet Ambush integration remain unfinished; this checkpoint is not E2E ready.
+This checkpoint is not a completed pilot awaiting only human acceptance.

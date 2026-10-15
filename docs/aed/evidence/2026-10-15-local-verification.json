@@ -1,0 +1,161 @@
+{
+  "status": "PARTIAL_NOT_E2E_READY",
+  "base": "10391b1d820a9f25d2352d925dbf5bfc39962e50",
+  "branch": "feature/aed-v02-full-integration",
+  "suites": [
+    {
+      "name": "Backend full",
+      "artifact": "KLTN/Temp/AEDV02/Runs/20261015-005646759/backend-full.trx",
+      "sha256": "e0cd7fd27d9171d269fd104bf685c2f0c1207564314716612564cb03e873ba07",
+      "counters": {
+        "total": "575",
+        "executed": "575",
+        "passed": "575",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "nonPassingTests": []
+    },
+    {
+      "name": "Unity EditMode",
+      "artifact": "KLTN/Temp/AEDV02/UnityEditMode-final.json",
+      "sha256": "68ec4781344813eeabb4bf6e38d5a14a1b40a608c77714dedb73f211f491e75f",
+      "status": "completed",
+      "counters": {
+        "total": 1304,
+        "passed": 1304,
+        "failed": 0,
+        "skipped": 0,
+        "inconclusive": 0
+      },
+      "nonPassingTests": []
+    },
+    {
+      "name": "Unity PlayMode",
+      "artifact": "KLTN/Temp/AEDV02/UnityPlayMode-final.json",
+      "sha256": "b584e726675f4d17edae47406565f2e11afd2e4c1bafe21de978061c59124d1a",
+      "status": "completed",
+      "counters": {
+        "total": 194,
+        "passed": 194,
+        "failed": 0,
+        "skipped": 0,
+        "inconclusive": 0
+      },
+      "nonPassingTests": []
+    },
+    {
+      "name": "Mutation receipt guard (expected failure)",
+      "artifact": "KLTN/Temp/AEDV02/MutationReceipt_20261015/Results/mutation-receipt.trx",
+      "sha256": "e1bf462752c1d619d430fb37835046d0cd5d7a55db7a69bef26abc0879564f02",
+      "counters": {
+        "total": "5",
+        "executed": "5",
+        "passed": "4",
+        "failed": "1",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "nonPassingTests": [
+        {
+          "name": "EchoProtocol.Api.Tests.ScenarioServiceTests.V02_ReceiptWorldMustIndependentlyReconcileRosterToolsAndMinionPopulation(mutation: \"missing-player\")",
+          "outcome": "Failed"
+        }
+      ]
+    },
+    {
+      "name": "Missing Mongo environment (expected failure)",
+      "artifact": "KLTN/Temp/AEDV02/NegativeEnvironment/mongo-missing-env.trx",
+      "sha256": "1ac71570957571752361e8d51cecfd1dbe8afdf95da34adfeede5060f5189cb3",
+      "counters": {
+        "total": "5",
+        "executed": "5",
+        "passed": "0",
+        "failed": "5",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "nonPassingTests": [
+        {
+          "name": "EchoProtocol.Api.Tests.MongoTelemetryEventRepositoryIntegrationTests.AtomicCommitBatchAsync_ReverseSubmittedResearchAfterStart_UsesSequenceOrderAndPreservesResultOrder",
+          "outcome": "Failed"
+        },
+        {
+          "name": "EchoProtocol.Api.Tests.MongoTelemetryEventRepositoryIntegrationTests.AtomicCommitBatchAsync_MatchEndedBelowHighestAcceptedSequence_IsPermanentConflict",
+          "outcome": "Failed"
+        },
+        {
+          "name": "EchoProtocol.Api.Tests.MongoTelemetryEventRepositoryIntegrationTests.AtomicCommitBatchAsync_ReverseSubmittedPostTerminalEvent_RejectsPostTerminal",
+          "outcome": "Failed"
+        },
+        {
+          "name": "EchoProtocol.Api.Tests.MongoTelemetryEventRepositoryIntegrationTests.AtomicCommitBatchAsync_ConcurrentTerminalAndHigherSequence_NeverAcceptsBoth",
+          "outcome": "Failed"
+        },
+        {
+          "name": "EchoProtocol.Api.Tests.MongoTelemetryEventRepositoryIntegrationTests.AtomicCommitBatchAsync_BootstrapUsesEarliestStartMinimumTerminalAndHighestSequence",
+          "outcome": "Failed"
+        }
+      ]
+    }
+  ],
+  "buildReportArtifact": "KLTN/Temp/AEDV02/build-status-decoded.json",
+  "buildReportSha256": "96845e0370aafcc6223ee8e1709fffa1a9f082e08dd823c36035147e6ab9927b",
+  "boundaries": [
+    "No fake source verifier used for Backend v0.2 approval tests.",
+    "Fixture events pass real ingestion and independent replay; they are not a captured native gameplay session.",
+    "Backend approval, Host consumer and Fusion Single storage proofs are separate; remote Host/Client chain NOT RUN.",
+    "Complete canonical PP/TP/history, non-R0 placement and regular/emergency support remain blocked/unfinished.",
+    "All twelve canonical E2E scenarios NOT RUN. Production defaults remain OFF."
+  ],
+  "build": {
+    "buildId": "build_bac0e24f83a1",
+    "result": "Succeeded",
+    "platform": "StandaloneWindows64",
+    "totalWarnings": 6,
+    "totalErrors": 0,
+    "totalSizeBytes": 1792152422,
+    "buildTimeMs": 42588,
+    "localExecutable": "KLTN/Builds/AEDV02-Rev02-91d8aba/EchoProtocol.exe",
+    "executableSha256": "0fb7bc201bdef9341359db95c319b489c1c46d2f70a081bc548f46bf03df4c90"
+  },
+  "startupProbe": {
+    "durationSeconds": 15,
+    "aliveAfter15Seconds": true,
+    "exceptionMarkers": 0,
+    "errorMarkers": 0,
+    "gameplayExecuted": false,
+    "apiBaseUrl": "http://127.0.0.1:5042"
+  }
+}
