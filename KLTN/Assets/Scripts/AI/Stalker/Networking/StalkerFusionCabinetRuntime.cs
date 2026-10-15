@@ -96,7 +96,8 @@ namespace EchoProtocol.AI.Stalker.Networking
                 !AEDv2Authority.TryGetV02(authority.MatchId, out var plan, out var revision) || plan.Get(AEDV02Key.CabinetAmbushEnabled) != 1 ||
                 AEDv2Authority.V02PositiveTokens(authority.MatchId) != 0) { CabinetHold("HOLD_CABINET_POLICY"); return false; }
             var source = authority.LastVerifiedV02Source;
-            if (source?.teamPressureStatus != "Verified") { CabinetHold("HOLD_TEAM_PRESSURE_UNSUPPORTED"); return false; }
+            if (source?.teamPressureStatus != "Verified" || source.opportunityContractVersion != AEDV02PilotOpportunities.Version ||
+                source.teamPressureTier is < 3 or > 4) { CabinetHold("HOLD_TEAM_PRESSURE_UNSUPPORTED"); return false; }
             if (source == null || !source.pressureComplete || source.logicalPhase is < 1 or > 2 || source.phaseOrdinal != authority.V02EvidencePhaseOrdinal ||
                 source.rosterIdentity != authority.AEDv2RosterIdentity || source.planRevision != revision || source.planFingerprint != plan.Fingerprint() ||
                 source.sceneManifestFingerprint != clue.SceneManifestFingerprint || source.cabinetClueEventIds == null || !source.cabinetClueEventIds.Contains(eventId.ToString("D")) ||
@@ -168,6 +169,20 @@ namespace EchoProtocol.AI.Stalker.Networking
         private void PublishCabinetState()
         {
             if (specialEncounterRuntime == null || Runner == null || !Runner.IsRunning || Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
+            var encounter = specialEncounterRuntime.Cabinet;
+            if (CabinetPhaseValue != (int)encounter.Phase)
+            {
+                var authority = MatchAuthorityRuntime.Instance;
+                string hidden = "unknown", protectedExit = "unknown";
+                foreach (var player in Runner.ActivePlayers)
+                    if (authority != null && authority.TryResolveVerifiedBackendUserId(player, out var identity) &&
+                        Guid.TryParse(identity, out var user) && user == encounter.PlayerId && Runner.TryGetPlayerObject(player, out var obj) &&
+                        obj.TryGetComponent<NetworkPlayerMovement>(out var movement))
+                    { hidden = movement.IsHidden.ToString(); protectedExit = movement.BlocksAEDV02HideForceExit().ToString(); break; }
+                AEDV02Plan plan = null; int revision = 0;
+                if (authority != null) AEDv2Authority.TryGetV02(authority.MatchId, out plan, out revision);
+                Debug.Log($"[AED_V02][CABINET_WORLD_STATE] match={authority?.MatchId} encounter={encounter.EncounterId:D} phase={encounter.Phase} tick={Runner.Tick.Raw} phaseOrdinal={authority?.V02EvidencePhaseOrdinal} revision={revision} fingerprint={plan?.Fingerprint() ?? "unknown"} policy={AEDV02PilotPolicy.Version} source={encounter.SourceFingerprint} clue={_cabinetClueEvent:D} spot={encounter.SpotId} player={encounter.PlayerId:D} hidden={hidden} protectedExit={protectedExit} reason={encounter.Reason}");
+            }
             CabinetEncounterId = specialEncounterRuntime.Cabinet.IsActive ? specialEncounterRuntime.Cabinet.EncounterId.ToString("D") : string.Empty;
             CabinetPhaseValue = (int)specialEncounterRuntime.Cabinet.Phase;
         }

@@ -567,8 +567,10 @@ namespace EchoProtocol.AI.Stalker.Networking
         {
             _v02PerceptionMatch = Guid.Empty; _v02PerceptionTiers.Clear(); _v02ScoringTiers.Clear();
             _v02NextPerceptionRefresh = 0; _v02EncounterPlayer = PlayerId.Invalid; _v02EncounterTier = -1;
+            _v02LongChaseRecovery.Reset();
             controller?.ResetV02PlayerFairness();
         }
+        private readonly AEDV02LongChaseRecovery _v02LongChaseRecovery = new AEDV02LongChaseRecovery();
         private void RefreshV02Perception(double seconds)
         {
             var authority = MatchAuthorityRuntime.Instance;
@@ -577,6 +579,8 @@ namespace EchoProtocol.AI.Stalker.Networking
                 ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings?.PacingV02GameplayEnabled != true ||
                 !AEDv2Authority.TryGetV02(authority.MatchId, out _, out _)) { ResetV02Perception(); return; }
             if (_v02PerceptionMatch != authority.MatchId) { ResetV02Perception(); _v02PerceptionMatch = authority.MatchId; }
+            _v02LongChaseRecovery.Observe(controller.CurrentState == StalkerState.CHASE, seconds);
+            controller.V02ProactiveSeekPausedUntil = _v02LongChaseRecovery.SeekPausedUntil;
             var locked = controller.CurrentState is StalkerState.DETECT or StalkerState.CHASE or StalkerState.ATTACK or StalkerState.RECOVER
                 ? (controller.CurrentTargetId.IsValid ? controller.CurrentTargetId : controller.DetectionTargetId) : PlayerId.Invalid;
             if (locked != _v02EncounterPlayer)

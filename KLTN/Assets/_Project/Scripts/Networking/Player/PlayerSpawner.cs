@@ -619,6 +619,16 @@ namespace EchoProtocol.Networking
                 || !TryGetCreepMinionSpawnAnchor(zone, out var stalker)
                 || !TryFindCreepMinionSpawnPosition(runner, stalker, out var position)) return;
 
+            if (zone == RegionSemanticZone.Zone03 && _v02ObservedMinionRevision > 0)
+            {
+                var state = NetworkMatchState.Instance;
+                if (authority == null || !authority.V02Zone3SpawnEntitled || state == null ||
+                    state.CurrentPhase != NetworkMatchPhase.Zone3FindFrigate || !state.IsV02SafeWindow() ||
+                    !AEDV02SceneSource.TryLoad(out var manifest, out _) || !AEDV02SceneSource.TryGetDoorSources(runner, state, out var doors) ||
+                    !manifest.HasReachableGeometry(new[] { (double)stalker.transform.position.x, stalker.transform.position.y, stalker.transform.position.z },
+                        new[] { (double)position.x, position.y, position.z }, doors)) return;
+            }
+
             SpawnCreepMinion(runner, position, zone);
         }
 

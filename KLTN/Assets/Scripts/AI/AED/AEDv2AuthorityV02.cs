@@ -45,6 +45,11 @@ namespace EchoProtocol.AI.AED
                 point != AEDV02DecisionPoint.PRE_MATCH && (!safeWindow || !AEDV02WorldSample.Hash(request.sourceFingerprint))) return false;
             AEDV02Plan next;
             try { next = new AEDV02Plan(approval.planValues); } catch (ArgumentException) { return false; }
+            if (request.proposedReservations?.Any(x => x == null || !x.ToModel().IsValid()) == true ||
+                request.support != null && (request.proposedReservations != null || !request.support.ToModel().IsValid() || point != AEDV02DecisionPoint.SAFE_WINDOW)) return false;
+            var actionFingerprint = request.support?.ToModel().Fingerprint(decisionId) ??
+                AEDV02ProposedReservation.Fingerprint(request.proposedReservations?.Select(x => x.ToModel()));
+            if ((approval.actionFingerprint ?? string.Empty) != actionFingerprint) return false;
             if (request.planValues == null || !next.ToArray().SequenceEqual(request.planValues) || next.Fingerprint() != approval.planFingerprint ||
                 approval.windowId != AEDV02Plan.WindowId(matchId, request.phaseOrdinal, point, request.windowSequence, request.startTick, request.endTick, request.sourceFingerprint)) return false;
             if (_v02Match == matchId && _v02Decision == decisionId) { reason = "REPLAY"; return _v02Plan.Fingerprint() == next.Fingerprint(); }
@@ -53,8 +58,9 @@ namespace EchoProtocol.AI.AED
             if (_v02Match != Guid.Empty && _v02Match != matchId || request.expectedPlanRevision != _v02Revision ||
                 approval.expectedPlanRevision != _v02Revision || approval.planRevision <= _v02Revision ||
                 approval.previousPlanFingerprint != previous.Fingerprint() || request.previousPlanFingerprint != previous.Fingerprint() ||
-                !next.TryValidateChange(previous, point, AEDV02PhaseMap.LogicalPhase(request.targetPhaseName) == 4,
-                    optional, out _, out reason)) return false;
+                (!next.TryValidateChange(previous, point, AEDV02PhaseMap.LogicalPhase(request.targetPhaseName) == 4,
+                    optional, out _, out reason) && !(request.support != null && next.ToArray().SequenceEqual(previous.ToArray()) && reason == "HOLD_SINGLE_DELTA_REQUIRED"))) return false;
+            if (request.proposedReservations != null && next.Get(AEDV02Key.ResourceGrade) == previous.Get(AEDV02Key.ResourceGrade)) return false;
             if (_v02Match == Guid.Empty) V02Hide.Reset(matchId);
             _v02Match = matchId; _v02Decision = decisionId; _v02Plan = next; _v02Revision = approval.planRevision;
             _v02InitialOptional = optional; _v02Roster = currentRoster; _v02Scene = approval.sceneManifestFingerprint;

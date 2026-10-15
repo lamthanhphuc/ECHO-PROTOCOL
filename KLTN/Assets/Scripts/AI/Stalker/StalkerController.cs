@@ -420,7 +420,8 @@ namespace EchoProtocol.AI.Stalker
         public float AppliedHideRevealGraceSeconds => _v02HideRevealCaptured ? _v02HideRevealGrace : hideSpotRevealGraceSeconds;
         public StalkerHideSpotInspectionConfig V02CabinetInspectionConfig => GetHideSpotInspectionConfig();
         private readonly Dictionary<ulong, PlayerId> _v02KnownHidePlayers = new Dictionary<ulong, PlayerId>();
-        public void ResetV02PlayerFairness() { V02TargetTiers = null; _v02KnownHidePlayers.Clear(); }
+        public double V02ProactiveSeekPausedUntil { get; set; }
+        public void ResetV02PlayerFairness() { V02TargetTiers = null; _v02KnownHidePlayers.Clear(); V02ProactiveSeekPausedUntil = 0; }
         public void RecordV02SeenHideEntry(ulong spot, PlayerId player)
         {
             if (spot != 0 && player.IsValid) _v02KnownHidePlayers[spot] = player;
@@ -4464,7 +4465,7 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            if (!_strategicPatrolRuntime.ShouldSeekPlayers)
+            if (!_strategicPatrolRuntime.ShouldSeekPlayers || _currentSimulationStep.Time.Seconds < V02ProactiveSeekPausedUntil)
             {
                 var previousTarget = _crowdedPatrolTargetRegion;
                 _crowdedPatrolTargetRegion = RegionId.Invalid;

@@ -69,12 +69,13 @@ namespace EchoProtocol.AI.AED
         public string ScenePath;
         public double MaximumVisionRange;
         public double MaximumCabinetInteractionDistance;
+        public double MinimumToolSpacing = -1;
         public Marker[] Markers;
         public Edge[] Edges = Array.Empty<Edge>();
         public Cell[] NavCells;
         public Link[] NavLinks;
         public string[] DoorIds = Array.Empty<string>();
-        [Serializable] public sealed class Marker { public string Id; public int Zone; public string Kind; public string HideSpotId = string.Empty;
+        [Serializable] public sealed class Marker { public string Id; public int Zone; public string Kind; public string HideSpotId = string.Empty; public string ResourceRole = "Unclassified";
             public double[] InteractionBounds = Array.Empty<double>(); public int[] AllowedToolIds = Array.Empty<int>(); public double X, Y, Z; }
         [Serializable] public sealed class Edge { public string Id, From, To, DoorId; public double PathMeters; }
         [Serializable] public sealed class Cell { public int Id; public double[] A, B, C; public string[] DoorIds = Array.Empty<string>(); }
@@ -85,9 +86,10 @@ namespace EchoProtocol.AI.AED
             ScenePath = ScenePath,
             MaximumVisionRange = MaximumVisionRange,
             MaximumCabinetInteractionDistance = MaximumCabinetInteractionDistance,
+            MinimumToolSpacing = MinimumToolSpacing,
             DoorIds = DoorIds,
             Markers = Markers?.Select(x => x == null ? null : new AEDV02SceneMarker { Id = x.Id, Zone = x.Zone, Kind = x.Kind, HideSpotId = x.HideSpotId,
-                InteractionBounds = x.InteractionBounds, AllowedToolIds = x.AllowedToolIds, X = x.X, Y = x.Y, Z = x.Z }).ToArray(),
+                InteractionBounds = x.InteractionBounds, ResourceRole = x.ResourceRole, AllowedToolIds = x.AllowedToolIds, X = x.X, Y = x.Y, Z = x.Z }).ToArray(),
             Edges = Edges?.Select(x => x == null ? null : new AEDV02RouteEdge { Id = x.Id, From = x.From, To = x.To, DoorId = x.DoorId, PathMeters = x.PathMeters }).ToArray(),
             NavCells = NavCells?.Select(x => x == null ? null : new AEDV02NavCell { Id = x.Id, A = x.A, B = x.B, C = x.C, DoorIds = x.DoorIds }).ToArray(),
             NavLinks = NavLinks?.Select(x => x == null ? null : new AEDV02NavLink { From = x.From, To = x.To, DoorIds = x.DoorIds }).ToArray()

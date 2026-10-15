@@ -7,6 +7,7 @@ using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
 using Fusion;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace EchoProtocol.TeamTools
 {
@@ -15,16 +16,27 @@ namespace EchoProtocol.TeamTools
         private static AEDV02SupplyLedger _v02Supply;
         private static NetworkRunner _v02Runner;
         private static readonly Dictionary<int, List<SpawnPlan>> V02Reservations = new Dictionary<int, List<SpawnPlan>>();
+        private static readonly Dictionary<int, List<SpawnPlan>> V02NormalReservations = new Dictionary<int, List<SpawnPlan>>();
+        private static readonly Dictionary<TeamToolSpawnPoint, double[][]> V02EntryPaths = new Dictionary<TeamToolSpawnPoint, double[][]>();
+        private static AEDV02ProposedReservation[] _v02GradePreview;
+        public static bool PreviewV02ResourceGrade(NetworkRunner runner, TeamToolPickupCatalog catalog, Guid match, int grade, float spacing, out AEDV02ProposedReservation[] proposed)
+        {
+            _v02GradePreview = null;
+            bool ready = TryPrepareV02Grade(runner, catalog, match, grade, spacing, false);
+            proposed = _v02GradePreview; return ready && proposed != null;
+        }
         public static AEDV02SupplySource ReadV02Supply(NetworkRunner runner, Guid match)
         {
             if (_v02Supply == null || _v02Supply.MatchId != match || _v02Runner != runner ||
                 V02Reservations.Values.SelectMany(x => x).Any(x => x.Point == null)) return null;
             return new AEDV02SupplySource { InitialOptionalBudget = _v02Supply.InitialOptionalBudget,
                 OptionalBudget = _v02Supply.OptionalBudget, OptionalMaterialized = _v02Supply.OptionalMaterialized,
+                ReservationGrade = _v02Supply.ResourceGrade,
                 SpawnedZones = Enumerable.Range(1, 3).Where(_v02Supply.HasSpawned).ToArray(),
                 Reservations = V02Reservations.Where(x => !_v02Supply.HasSpawned(x.Key))
                     .SelectMany(x => x.Value.Take(5 + _v02Supply.OptionalForZone(x.Key)).Select(item => new AEDV02SupplyReservation
-                    { Zone = x.Key, ToolId = item.ToolId, MarkerId = AEDV02SceneSource.MarkerId(item.Point.transform) })).ToArray() };
+                    { Zone = x.Key, ToolId = item.ToolId, MarkerId = AEDV02SceneSource.MarkerId(item.Point.transform),
+                        EntryPath = V02EntryPaths.TryGetValue(item.Point, out var path) ? path : Array.Empty<double[]>() })).ToArray() };
         }
         public static bool CanSetV02SupplyBudget(NetworkRunner runner, Guid match, int budget) =>
             _v02Supply != null && _v02Supply.MatchId == match && _v02Runner == runner && _v02Supply.CanSetOptionalBudget(budget);
@@ -35,7 +47,74 @@ namespace EchoProtocol.TeamTools
         public static void ResetV02(Guid match)
         {
             if (_v02Supply != null && match != Guid.Empty && match != _v02Supply.MatchId) return;
-            _v02Supply = null; _v02Runner = null; V02Reservations.Clear();
+            _v02Supply = null; _v02Runner = null; V02Reservations.Clear(); V02NormalReservations.Clear(); V02EntryPaths.Clear(); V02SupportActions.Clear(); _v02GradePreview = null;
+        }
+        public static bool CanApplyV02ResourceGrade(NetworkRunner runner, TeamToolPickupCatalog catalog, Guid match, int grade, float spacing) =>
+            TryPrepareV02Grade(runner, catalog, match, grade, spacing, false);
+        private static bool TryPrepareV02Grade(NetworkRunner runner, TeamToolPickupCatalog catalog, Guid match, int grade, float spacing, bool commit)
+        {
+            if (_v02Supply == null || _v02Supply.MatchId != match || _v02Runner != runner || !_v02Supply.CanSetResourceGrade(grade) ||
+                catalog == null || !AEDV02SceneSource.TryLoad(out var manifest, out _) || !AEDV02SceneSource.TryGetDoorSources(runner, NetworkMatchState.Instance, out var doors)) return false;
+            if (grade == _v02Supply.ResourceGrade) return true;
+            var available = UnityEngine.Object.FindObjectsByType<TeamToolSpawnPoint>(FindObjectsInactive.Exclude)
+                .Where(x => x.gameObject.scene.path == manifest.ScenePath).ToDictionary(x => AEDV02SceneSource.MarkerId(x.transform));
+            var replacements = new Dictionary<int, List<SpawnPlan>>();
+            var paths = new Dictionary<TeamToolSpawnPoint, double[][]>();
+            foreach (var zone in Enumerable.Range(1, 3).Where(x => !_v02Supply.HasSpawned(x)))
+            {
+                var entry = manifest.Markers.Single(x => x.Id == "Z" + zone + "_ENTRY");
+                var entryPosition = new Vector3((float)entry.X, (float)entry.Y, (float)entry.Z);
+                var candidates = new List<AEDV02PlacementCandidate>();
+                foreach (var marker in manifest.Markers.Where(x => x.Kind == "TOOL" && x.Zone == zone && available.ContainsKey(x.Id)))
+                {
+                    var point = available[marker.Id];
+                    if (!point.TryGetReachablePosition(entryPosition, out var position, out var meters) || HasNearbyWorldTeamTool(position, spacing) ||
+                        !TryV02EntryPath(entryPosition, position, out var corners) || !manifest.TryValidatePlacementPath(corners, doors, out _)) continue;
+                    candidates.Add(new AEDV02PlacementCandidate { Marker = marker, Path = corners, PathMeters = meters });
+                }
+                var types = V02Reservations[zone].Take(5 + _v02Supply.OptionalForZone(zone)).Select(x => x.ToolId).ToArray();
+                AEDV02SupplyReservation[] reservations;
+                if (grade == 0)
+                {
+                    var original = V02NormalReservations[zone].Take(types.Length).ToArray();
+                    if (original.Any(x => x.Point == null || !candidates.Any(c => c.Marker.Id == AEDV02SceneSource.MarkerId(x.Point.transform)))) return false;
+                    reservations = original.Select(x => new AEDV02SupplyReservation { Zone = zone, ToolId = x.ToolId,
+                        MarkerId = AEDV02SceneSource.MarkerId(x.Point.transform),
+                        EntryPath = candidates.Single(c => c.Marker.Id == AEDV02SceneSource.MarkerId(x.Point.transform)).Path }).ToArray();
+                }
+                else if (!AEDV02ResourcePlacement.TryPlan(zone, grade, types, candidates, spacing, out reservations)) return false;
+                var plans = new List<SpawnPlan>();
+                foreach (var reservation in reservations)
+                {
+                    var point = available[reservation.MarkerId];
+                    if (!point.TryGetSpawnPosition(out var position) || !IsCorrectTool(catalog.GetPrefab(reservation.ToolId), reservation.ToolId)) return false;
+                    plans.Add(new SpawnPlan(point, position, catalog.GetPrefab(reservation.ToolId), reservation.ToolId)); paths[point] = reservation.EntryPath;
+                }
+                for (int i = 0; i < plans.Count; i++)
+                    for (int j = i + 1; j < plans.Count; j++)
+                        if (Vector3.Distance(plans[i].Position, plans[j].Position) < spacing) return false;
+                // Required entries remain first so optional reductions cannot remove a required type.
+                var ordered = new List<SpawnPlan>();
+                foreach (int type in RequiredToolIds) { int index = plans.FindIndex(x => x.ToolId == type); ordered.Add(plans[index]); plans.RemoveAt(index); }
+                ordered.AddRange(plans); replacements[zone] = ordered;
+            }
+            if (commit)
+            {
+                foreach (var replacement in replacements) V02Reservations[replacement.Key] = replacement.Value;
+                V02EntryPaths.Clear(); foreach (var path in paths) V02EntryPaths.Add(path.Key, path.Value);
+                return _v02Supply.TrySetResourceGrade(grade);
+            }
+            _v02GradePreview = replacements.SelectMany(x => x.Value.Select(p => new AEDV02ProposedReservation {
+                Zone = x.Key, ToolId = p.ToolId, MarkerId = AEDV02SceneSource.MarkerId(p.Point.transform) })).ToArray();
+            return true;
+        }
+        private static bool TryV02EntryPath(Vector3 from, Vector3 to, out double[][] corners)
+        {
+            corners = Array.Empty<double[]>();
+            if (!NavMesh.SamplePosition(from, out var start, 2, NavMesh.AllAreas) || !NavMesh.SamplePosition(to, out var end, 1.5f, NavMesh.AllAreas)) return false;
+            var path = new NavMeshPath();
+            if (!NavMesh.CalculatePath(start.position, end.position, NavMesh.AllAreas, path) || path.status != NavMeshPathStatus.PathComplete) return false;
+            corners = path.corners.Select(x => new[] { (double)x.x, x.y, x.z }).ToArray(); return corners.Length > 0;
         }
         public static bool TrySpawnV02Zone(NetworkRunner runner, TeamToolPickupCatalog catalog, Guid match, AEDV02Plan plan,
             int zone, float spacing)
@@ -47,7 +126,7 @@ namespace EchoProtocol.TeamTools
                 ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings?.PacingV02GameplayEnabled != true ||
                 !AEDv2Authority.TryGetV02(match, out var approved, out _) || approved.Fingerprint() != plan?.Fingerprint()) return false;
             if (runner == null || !runner.IsServer || catalog == null || match == Guid.Empty || plan == null || zone < 1 || zone > 3 ||
-                plan.Get(AEDV02Key.ResourceGrade) != 0 || !AEDV02SceneSource.TryLoad(out var manifest, out _) ||
+                !AEDV02SceneSource.TryLoad(out var manifest, out _) ||
                 !UnityEngine.SceneManagement.SceneManager.GetSceneByPath(manifest.ScenePath).isLoaded) return false;
             if (_v02Supply == null || _v02Supply.MatchId != match || _v02Runner != runner)
             {
@@ -61,9 +140,11 @@ namespace EchoProtocol.TeamTools
                     if (!TryBuildZonePlan(catalog, points, (TeamToolSpawnZone)reservedZone, count, spacing, true, out var reserved))
                     { ResetV02(match); return false; }
                     V02Reservations.Add(reservedZone, reserved);
+                    V02NormalReservations.Add(reservedZone, new List<SpawnPlan>(reserved));
                 }
             }
             if (!_v02Supply.TrySetOptionalBudget((int)plan.Get(AEDV02Key.OptionalToolBudget))) return false;
+            if (!TryPrepareV02Grade(runner, catalog, match, (int)plan.Get(AEDV02Key.ResourceGrade), spacing, true)) return false;
             if (_v02Supply.HasSpawned(zone)) return true;
             var plans = V02Reservations[zone].Take(RequiredToolCountPerZone + _v02Supply.OptionalForZone(zone)).ToArray();
             if (!AEDV02SceneSource.TryGetDoorSources(runner, NetworkMatchState.Instance, out var doors)) return false;
@@ -78,6 +159,7 @@ namespace EchoProtocol.TeamTools
                 manifest.HasReachableGeometry(new[] { entry.X, entry.Y, entry.Z }, new[] { (double)position.x, position.y, position.z }, doors);
             if (plans.Any(x => !CanPlace(x.Point)))
             {
+                if (_v02Supply.ResourceGrade != 0) return false;
                 var available = UnityEngine.Object.FindObjectsByType<TeamToolSpawnPoint>(FindObjectsInactive.Exclude)
                     .Where(x => x.gameObject.scene.path == manifest.ScenePath && (int)x.Zone == zone && CanPlace(x)).ToArray();
                 if (!TryBuildZonePlan(catalog, available, (TeamToolSpawnZone)zone, RequiredToolCountPerZone + _v02Supply.OptionalForZone(zone),
