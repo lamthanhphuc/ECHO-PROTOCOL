@@ -1,4 +1,4 @@
-using EchoProtocol.Networking;
+﻿using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
 using UnityEngine.UI;
@@ -307,7 +307,7 @@ namespace EchoProtocol.UI.HUD
                              || networkToolId == LobbyPlayerState.DoorJammerToolId))
                 {
                     toolNameText.text =
-                        ShortName(toolItem.DisplayName);
+                        EchoProtocol.Settings.GameLanguage.TeamToolName(networkToolId);
                     if (_usesLabel == null && toolContainer != null)
                     {
                         var go = new GameObject("RemainingUses", typeof(RectTransform), typeof(Text));

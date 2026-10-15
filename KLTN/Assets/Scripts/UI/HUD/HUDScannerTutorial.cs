@@ -280,7 +280,7 @@ namespace EchoProtocol.UI.HUD
                     description = "Ván chặn Stalker trong thời gian ngắn.\nStalker có thể phá ván để đi qua.";
                     break;
                 case 6:
-                    title = "Bộ ổn định lõi";
+                    title = "Máy ngụy trang";
                     controls = EchoProtocol.Settings.GameLanguage.Choose($"[Chuột trái] Kích hoạt\nBán kính {CoreStabilizerRules.SupportRadius:0.#} m · {CoreStabilizerRules.DurationSeconds:0.#} giây", $"[Left click] Activate\nRadius {CoreStabilizerRules.SupportRadius:0.#} m · {CoreStabilizerRules.DurationSeconds:0.#} seconds");
                     description = EchoProtocol.Settings.GameLanguage.Choose($"Hỗ trợ người mang lõi trong vùng.\nHồi chiêu {CoreStabilizerRules.CooldownSeconds:0.#} giây.", $"Supports core carriers in range.\nCooldown: {CoreStabilizerRules.CooldownSeconds:0.#} seconds.");
                     break;

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using EchoProtocol.Api;
 using EchoProtocol.Auth;
 using EchoProtocol.Profile;
@@ -614,10 +614,10 @@ namespace EchoProtocol.UI.MainMenu
                 return;
             }
 
-            StoreReferencePresentation.SetName(_selectedName, string.IsNullOrWhiteSpace(
-                    item.name)
-                    ? "TEAM TOOL"
-                    : item.name.ToUpperInvariant());
+            StoreReferencePresentation.SetName(_selectedName,
+                TeamToolShopAssets.TryGetByItemId(item.itemId, out var namedTool)
+                    ? EchoProtocol.Settings.GameLanguage.TeamToolName(namedTool.ToolId)
+                    : EchoProtocol.Settings.GameLanguage.Translate(item.name ?? "TEAM TOOL"));
 
             _selectedDescription.text =
                 item.description

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using EchoProtocol.Networking;
 using EchoProtocol.UI.MainMenu;
 using TMPro;
@@ -336,7 +336,7 @@ namespace EchoProtocol.UI
                     if (valueText != null)
                     {
                         valueText.text =
-                            EchoProtocol.Settings.GameLanguage.Translate(definition.DisplayName);
+                            EchoProtocol.Settings.GameLanguage.TeamToolName(toolId);
                     }
 
                     RefreshThumbnail(

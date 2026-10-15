@@ -1,4 +1,4 @@
-using EchoProtocol.Networking;
+﻿using EchoProtocol.Networking;
 using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -106,22 +106,22 @@ namespace EchoProtocol.UI.MainMenu
             string interact=GameplayInputSettings.GetKeyLabel(GameplayAction.Interact);
             switch(_toolId) {
                 case 1:
-                    title=GameLanguage.Choose("Máy quét hiện trường","Field Scanner");
+                    title=GameLanguage.TeamToolName(_toolId);
                     effect=GameLanguage.Choose("Tìm nguồn năng lượng gần bạn hoặc theo dõi Stalker trên radar.","Locate nearby energy sources or track the Stalker on radar.");
                     use=GameLanguage.Choose("Chuột trái: quét. Chuột phải: đổi chế độ Lõi / Stalker. Bạn nằm ở giữa radar.","Left click: scan. Right click: switch Core / Stalker modes. You are at the radar centre.");
                     note=GameLanguage.Choose("Chế độ Stalker chỉ phát hiện Stalker đang di chuyển. Đừng xem radar trống là dấu hiệu an toàn.","Stalker mode only detects a moving Stalker. An empty radar does not guarantee safety.");break;
                 case 2:
-                    title=GameLanguage.Choose("Máy tạo tiếng động","Noise Maker");
+                    title=GameLanguage.TeamToolName(_toolId);
                     effect=GameLanguage.Choose("Thu hút Stalker đến vị trí đặt thiết bị, tạo cơ hội cho đội di chuyển.","Draw the Stalker to the device location, giving your team a chance to move.");
                     use=GameLanguage.Choose("Chuột trái: đặt tại vị trí xem trước hợp lệ. Rời khu vực sau khi đặt.","Left click: place at the valid preview location. Leave the area after deployment.");
                     note=GameLanguage.Choose("Đèn đỏ nhấp nháy báo thiết bị đang thu hút Stalker. Không đứng chờ cạnh thiết bị.","A flashing red light indicates that the device is attracting the Stalker. Do not wait beside it.");break;
                 case 4:
-                    title=GameLanguage.Choose("Ván chèn cửa","Door Jammer");
+                    title=GameLanguage.TeamToolName(_toolId);
                     effect=GameLanguage.Choose("Chặn lối qua cửa đã bị phá để trì hoãn Stalker.","Block a broken doorway to delay the Stalker.");
                     use=GameLanguage.Choose($"Nhắm vào cửa đã bị phá, nhấn {interact} hoặc chuột trái để gắn ván.",$"Aim at a broken door and press {interact} or left click to attach the plank.");
                     note=GameLanguage.Choose("Chỉ dùng với cửa đã bị phá. Stalker có thể phá ván; đây là cách câu giờ, không phải nơi trú ẩn lâu dài.","Only works on broken doors. The Stalker can break the plank; it buys time rather than providing permanent shelter.");break;
                 case 6:
-                    title=GameLanguage.Choose("Bộ ổn định lõi","Core Stabilizer");
+                    title=GameLanguage.TeamToolName(_toolId);
                     effect=GameLanguage.Choose($"Hỗ trợ người mang lõi trong bán kính {CoreStabilizerRules.SupportRadius:0.#} m, tăng tốc độ mang lõi.",$"Support core carriers within {CoreStabilizerRules.SupportRadius:0.#} m, increasing their carrying speed.");
                     use=GameLanguage.Choose($"Chuột trái: kích hoạt trong {CoreStabilizerRules.DurationSeconds:0.#} giây. Đi cùng người mang lõi để giữ họ trong vùng hỗ trợ.",$"Left click: activate for {CoreStabilizerRules.DurationSeconds:0.#} seconds. Stay close to the core carrier to keep them in range.");
                     note=GameLanguage.Choose($"Hồi chiêu {CoreStabilizerRules.CooldownSeconds:0.#} giây. Không có tác dụng khi người mang lõi ở ngoài vùng hỗ trợ.",$"Cooldown: {CoreStabilizerRules.CooldownSeconds:0.#} seconds. Carriers outside the support area receive no benefit.");break;
