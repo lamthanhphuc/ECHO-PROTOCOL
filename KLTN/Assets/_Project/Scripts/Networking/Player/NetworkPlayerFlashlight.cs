@@ -32,6 +32,7 @@ namespace EchoProtocol.Networking
         private PlayerCamera _playerCamera;
         private NetworkPlayerMovement _networkMovement;
         private NetworkPlayerLifeState _lifeState;
+        private Light _configuredLight;
 
         public bool IsOn
         {
@@ -56,7 +57,7 @@ namespace EchoProtocol.Networking
             }
         }
 
-        public float BeamRange => Object != null && Object.IsValid && ResonanceActive ? ResonanceRange : Mathf.Max(0f, _beamRange);
+        public float BeamRange => Object != null && Object.IsValid && ResonanceActive ? ResonanceVisualRange : Mathf.Max(0f, _beamRange);
         public float BeamSpotAngle => Mathf.Clamp(_beamSpotAngle, 1f, 179f);
 
         private bool HasLocalControl()
@@ -149,6 +150,7 @@ namespace EchoProtocol.Networking
         private void OnDestroy()
         {
             if (_resonanceMaterial != null) Destroy(_resonanceMaterial);
+            if (_resonanceBeamTexture != null) Destroy(_resonanceBeamTexture);
             GameplayInputSettings.UnregisterAction(_flashlightAction);
             _flashlightAction?.Dispose();
         }
@@ -293,7 +295,14 @@ namespace EchoProtocol.Networking
                 _flashlight.color = new Color(1f, 0.96f, 0.88f);
             }
 
-            ApplyBeamTuning();
+            // Resolving the light also happens while aiming and querying beam
+            // position. Reapplying defaults here every time overwrote Resonance
+            // colour/intensity in LateUpdate, after Render had set them.
+            if (_configuredLight != _flashlight)
+            {
+                ApplyBeamTuning();
+                _configuredLight = _flashlight;
+            }
         }
 
         private void ResolveLifeState()
