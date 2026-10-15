@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.Diagnostics;
@@ -138,6 +138,7 @@ namespace EchoProtocol.Networking
             }
 
             FirstAidRevivesUsedThisMatch = 0;
+            GetComponent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>()?.ResetForMatchAuthoritative();
 
             ResetTeamToolRuntimeAuthoritative();
         }
@@ -154,6 +155,13 @@ namespace EchoProtocol.Networking
             _placementPreviewAction?.Disable();
             _helpPingAction?.Disable();
             ClearStabilizerBuffedPlayers();
+        }
+
+        private void OnDisable() => _toolInputArmed = false;
+
+        private void OnApplicationFocus(bool focused)
+        {
+            if (!focused) _toolInputArmed = false;
         }
 
         private void OnDestroy()
@@ -224,10 +232,17 @@ namespace EchoProtocol.Networking
             return null;
         }
 
+        private bool _toolInputArmed;
+        private string _toolInputScene;
+
         private void Update()
         {
+            string scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            if (_toolInputScene != scene) { _toolInputScene = scene; _toolInputArmed = false; }
+            if (scene == "Lobby") { _toolInputArmed = false; return; }
             if (_suppressInteractionPrompt || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject))
             {
+                _toolInputArmed = false;
                 if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
                 CurrentCandidate = null;
                 IsTeamToolPickupBlocked = false;
@@ -239,6 +254,7 @@ namespace EchoProtocol.Networking
 
             if (EchoProtocol.Voice.VoiceSettingsPanel.IsOpen)
             {
+                _toolInputArmed = false;
                 if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
                 CurrentCandidate = null;
                 IsTeamToolPickupBlocked = false;
@@ -250,12 +266,18 @@ namespace EchoProtocol.Networking
             var playerState = GetComponent<LobbyPlayerState>();
             if (isOnline && (!Object.HasInputAuthority || (playerState != null && playerState.Object != null && playerState.Object.IsValid && !playerState.IsGameplayPlayer)))
             {
+                _toolInputArmed = false;
                 CurrentCandidate = null;
                 IsTeamToolPickupBlocked = false;
                 IsDoorJammerPreviewActive = false;
                 IsNoiseMakerPreviewActive = false;
                 return;
             }
+
+            var mouse = Mouse.current;
+            if (!_toolInputArmed && mouse != null && !mouse.leftButton.isPressed
+                && !mouse.rightButton.isPressed && !mouse.leftButton.wasPressedThisFrame
+                && !mouse.rightButton.wasPressedThisFrame) _toolInputArmed = true;
 
             if (_helpPingAction?.WasPerformedThisFrame() == true) RequestHelpPing();
             if ((_interactAction?.WasReleasedThisFrame() == true
@@ -310,7 +332,7 @@ namespace EchoProtocol.Networking
                 IsNoiseMakerPreviewActive = false;
             }
 
-            if (_placementPreviewAction
+            if (_toolInputArmed && _placementPreviewAction
                     ?.WasPerformedThisFrame() == true)
             {
                 if (hasDoorJammer)
@@ -341,7 +363,7 @@ namespace EchoProtocol.Networking
             }
 
             bool useTeamToolPressed =
-                _teamToolAction?.WasPerformedThisFrame() == true;
+                _toolInputArmed && _teamToolAction?.WasPerformedThisFrame() == true;
             bool interactPressed =
                 _interactAction?.WasPressedThisFrame() == true;
 
@@ -605,12 +627,14 @@ namespace EchoProtocol.Networking
 
         public bool RequestUseTeamTool()
         {
+            if (!_toolInputArmed || UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby"
+                || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return false;
             if (NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
             bool isOnline = Runner != null && Runner.IsRunning && Object != null && Object.IsValid;
             if (isOnline && !Object.HasInputAuthority) return false;
 
             var playerState = GetComponent<LobbyPlayerState>();
-            if (isOnline && playerState != null && playerState.CarriedCoreId.IsValid) return false;
+            if (isOnline && (playerState == null || !playerState.IsGameplayPlayer || playerState.CarriedCoreId.IsValid)) return false;
             var scanner = GetComponent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>();
             if (scanner != null && scanner.IsScannerEquipped())
             {

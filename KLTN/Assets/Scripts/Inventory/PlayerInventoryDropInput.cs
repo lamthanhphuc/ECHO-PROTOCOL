@@ -1,4 +1,4 @@
-using Fusion;
+﻿using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -34,12 +34,27 @@ public class PlayerInventoryDropInput : MonoBehaviour
 
     }
 
+    private bool _mouseInputArmed;
+
     private void Update()
     {
-        if (!HasLocalControl() || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject))
+        var networkObject = GetComponentInParent<NetworkObject>();
+        // The network interactor owns all online use/drop input, including the lobby.
+        if ((networkObject != null && networkObject.IsValid && networkObject.Runner != null
+            && networkObject.Runner.IsRunning)
+            || UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby")
         {
+            _mouseInputArmed = false;
             return;
         }
+        if (!HasLocalControl() || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject))
+        {
+            _mouseInputArmed = false;
+            return;
+        }
+
+        if (!_mouseInputArmed && Mouse.current != null && !Mouse.current.leftButton.isPressed
+            && !Mouse.current.leftButton.wasPressedThisFrame) _mouseInputArmed = true;
 
         Keyboard keyboard = Keyboard.current;
         if (inventory == null)
@@ -68,7 +83,7 @@ public class PlayerInventoryDropInput : MonoBehaviour
         bool throwPressed = Mouse.current != null
             && Mouse.current.leftButton.wasPressedThisFrame;
 
-        if (throwPressed)
+        if (_mouseInputArmed && throwPressed)
         {
             TryUseOrThrowTeamTool();
         }
@@ -118,6 +133,9 @@ public class PlayerInventoryDropInput : MonoBehaviour
 
     public bool TryUseOrThrowTeamTool()
     {
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby") return false;
+        var state = GetComponentInParent<EchoProtocol.Networking.LobbyPlayerState>();
+        if (state != null && state.Object != null && state.Object.IsValid && !state.IsGameplayPlayer) return false;
         if (PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return false;
         if (coreCarrier != null && coreCarrier.IsCarrying)
         {

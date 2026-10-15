@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.MatchFlow;
@@ -473,8 +473,21 @@ namespace EchoProtocol.Tools.Scanner
             return CanUseScannerAuthoritative();
         }
 
+        public void ResetForMatchAuthoritative()
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
+            ScanCooldownTimer = TickTimer.None;
+            NetworkScanPulseOrdinal = 0;
+            _localActiveScanTimer = 0f;
+            _localCooldownTimer = 0f;
+            ClearLocalResult();
+        }
+
         private bool CanUseScannerAuthoritative()
         {
+            if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby") return false;
+            var state = GetComponent<LobbyPlayerState>();
+            if (state != null && state.Object != null && state.Object.IsValid && !state.IsGameplayPlayer) return false;
             if (NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
             if (!IsScannerEquipped() || IsCarryingCore()) return false;
             var life = GetComponent<NetworkPlayerLifeState>();
