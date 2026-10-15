@@ -20,6 +20,7 @@ namespace EchoProtocol.AI.Common.AED
         public const double ProtectionGraceSeconds = 3;
         public const double DownRecoverySeconds = 20;
         public const double SeekRecoverySeconds = 15;
+        public const double SensoryRefreshSeconds = 5;
         public const double AmbushWarningSeconds = 2.5;
         public const double AmbushCooldownSeconds = 420;
         public const double SharedSpecialSeparationSeconds = 300;

@@ -64,6 +64,11 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
         }
         if (frames.Count < 2 || frames[0].Sample.Tick != request.StartTick || frames[^1].Sample.Tick != request.EndTick) return Hold("HOLD_SOURCE_RANGE_MISSING");
         var last = frames[^1]; var tickRate = last.Sample.TickRate;
+        var planRow = last.Sample.PlanRevision == 0 ? null : await db.AEDV02Decisions.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.MatchId == matchId && x.PlanRevision == last.Sample.PlanRevision && x.ApprovalStatus == "APPROVED" && x.ApplyStatus != "ABORTED", ct);
+        var observedPlan = planRow == null ? AEDV02Plan.Normal() : new AEDV02Plan(JsonSerializer.Deserialize<double[]>(planRow.PlanValuesJson)!);
+        if (last.Sample.PlanFingerprint != observedPlan.Fingerprint() || last.Sample.PlanRevision > 0 && planRow == null)
+            return Hold("HOLD_PLAN_LINEAGE_MISMATCH");
         var sourceRange = accepted.Where(x => x.MatchId == matchId && x.EventSequence >= frames[0].Event.EventSequence &&
             x.EventSequence <= last.Event.EventSequence).OrderBy(x => x.EventSequence).ToArray();
         if (sourceRange.Length != last.Event.EventSequence - frames[0].Event.EventSequence + 1 ||
@@ -73,9 +78,13 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
             clock.GetUtcNow().UtcDateTime - last.Event.Ts > TimeSpan.FromSeconds(AEDV02PilotPolicy.EvidenceMaxAgeSeconds) ||
             last.Event.Ts > clock.GetUtcNow().UtcDateTime.AddSeconds(2)) return Hold("HOLD_STALE_SOURCE");
         var facts = users.ToDictionary(x => x, _ => new List<AEDV02PressureFact>());
+        var carrierEvents = accepted.Where(x => x.MatchId == matchId && x.EventType == "AED_V02_TOOL_CARRIER").OrderBy(x => x.EventSequence).ToArray();
+        var carriers = new Dictionary<string, string>(StringComparer.Ordinal); int carrierIndex = 0;
         for (int i = 0; i < frames.Count; i++)
         {
             var frame = frames[i]; var sample = frame.Sample;
+            if (sample.Supply != null && !VerifySupply(sample, manifest, observedPlan, planRow?.InitialOptionalBudget ?? 0, accepted, frame.Event.EventSequence))
+                return Hold("HOLD_SUPPLY_RESERVATION_MISMATCH");
             if (sample.Stalkers.Length == 0) return Hold("HOLD_STALKER_CENSUS_MISSING");
             var phaseStarts = accepted.Where(x => x.MatchId == matchId && x.EventType == "PHASE_STARTED" && x.EventSequence < frame.Event.EventSequence)
                 .OrderBy(x => x.EventSequence).ToArray();
@@ -88,15 +97,36 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
             if (!AEDPhase8LifecycleReconcilerV1.TryReconstruct(accepted, matchId, frame.Event.EventSequence, users.ToHashSet(), false,
                 out var tools, out var minions, out _)) return Hold("HOLD_LIFECYCLE_RECONCILIATION");
             var required = accepted.Where(x => x.MatchId == matchId && x.EventSequence < frame.Event.EventSequence && x.EventType == "TEAM_TOOL_LIFECYCLE")
-                .Select(x => x.ValueJson["data"].AsBsonDocument).Where(x => x["action"].AsString == "SPAWN" && x["zone"].AsInt32 == sample.Zone)
+                .Select(x => x.ValueJson["data"].AsBsonDocument).Where(x => x["action"].AsString == "SPAWN" && x["zone"].AsInt32 == sample.Zone &&
+                    x.TryGetValue("origin", out var origin) && origin == "WorldSpawn")
                 .Select(x => x["toolId"].AsInt32).ToHashSet();
             if (!new[] { 1, 2, 3, 4, 6 }.All(required.Contains)) return Hold("HOLD_REQUIRED_SUPPLY_RECEIPTS_MISSING");
             if (minions.Count != sample.Minions.Length || sample.Minions.Any(x => !minions.TryGetValue(x.NetworkId, out var zone) || zone != x.Zone)) return Hold("HOLD_MINION_CENSUS_MISMATCH");
             if (tools.Count != sample.Tools.Length || sample.Tools.Any(x => !tools.TryGetValue(x.InstanceId, out var tool) ||
                 tool.ToolId != x.ToolId || tool.Zone != x.Zone || tool.Location != x.Location || tool.Owner != x.OwnerUserId ||
                 tool.Charges != x.RemainingCharges || tool.Origin != x.Origin)) return Hold("HOLD_TOOL_CENSUS_MISMATCH");
+            while (carrierIndex < carrierEvents.Length && carrierEvents[carrierIndex].EventSequence < frame.Event.EventSequence)
+            {
+                var item = carrierEvents[carrierIndex++];
+                AEDV02ToolCarrierSource? transition;
+                try { transition = JsonSerializer.Deserialize<AEDV02ToolCarrierSource>(item.ValueJson["data"]["carrier"].ToJson()); }
+                catch (JsonException) { return Hold("HOLD_TOOL_CARRIER_SOURCE_INVALID"); }
+                if (item.SchemaVersion != "1.3" || transition == null || !transition.IsValid() || transition.Tick > sample.Tick || transition.Tick != item.ValueJson["context"]["authorityTick"].ToInt64() ||
+                    !AEDPhase8LifecycleReconcilerV1.TryReconstruct(accepted, matchId, item.EventSequence, users.ToHashSet(), false, out var priorTools, out var priorMinions, out _) ||
+                    !priorTools.TryGetValue(transition.ToolInstanceId, out var priorTool) || priorTool.Location != "World") return Hold("HOLD_TOOL_CARRIER_SOURCE_INVALID");
+                if (transition.Action == "STEAL")
+                {
+                    if (!priorMinions.ContainsKey(transition.MinionNetworkId) || carriers.ContainsKey(transition.ToolInstanceId) || carriers.Values.Contains(transition.MinionNetworkId))
+                        return Hold("HOLD_TOOL_CARRIER_SOURCE_INVALID");
+                    carriers.Add(transition.ToolInstanceId, transition.MinionNetworkId);
+                }
+                else if (!carriers.Remove(transition.ToolInstanceId, out var owner) || owner != transition.MinionNetworkId) return Hold("HOLD_TOOL_CARRIER_SOURCE_INVALID");
+            }
+            if (sample.Tools.Any(x => x.CarrierMinionId != carriers.GetValueOrDefault(x.InstanceId, string.Empty)) ||
+                carriers.Keys.Any(x => !tools.ContainsKey(x))) return Hold("HOLD_TOOL_CARRIER_CENSUS_MISMATCH");
             foreach (var tool in sample.Tools.Where(x => x.Location == "World"))
             {
+                if (tool.CarrierMinionId.Length != 0) continue;
                 var marker = manifest.Markers.SingleOrDefault(x => x.Id == tool.MarkerId && x.Kind == "TOOL");
                 if (tool.Origin is "WorldSpawn" or "ScenePlaced" && (marker == null || !marker.AllowedToolIds.Contains(tool.ToolId))) return Hold("HOLD_TOOL_PLACEMENT_WHITELIST");
                 if (manifest.NavCells.Length != 0)
@@ -124,9 +154,9 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
             }
             if (i == 0) continue;
             var previous = frames[i - 1].Sample;
-            foreach (var threat in previous.Stalkers.Where(x => x.TargetUserId.HasValue && x.State is "CHASE" or "ATTACK"))
+            foreach (var threat in previous.Stalkers.Where(x => x.TargetUserId.HasValue && previous.Players.Single(p => p.UserId == x.TargetUserId.Value).LifeState == "ALIVE" && x.State is "CHASE" or "ATTACK"))
                 Add(threat.TargetUserId!.Value, threat.EpisodeId, "S:" + threat.NetworkId, AEDV02PressureChannel.Stalker, previous.Tick, sample.Tick);
-            foreach (var threat in previous.Minions.Where(x => x.TargetUserId.HasValue && x.State == "HARASS"))
+            foreach (var threat in previous.Minions.Where(x => x.TargetUserId.HasValue && previous.Players.Single(p => p.UserId == x.TargetUserId.Value).LifeState == "ALIVE" && x.State == "HARASS"))
                 Add(threat.TargetUserId!.Value, threat.EpisodeId, "M:" + threat.NetworkId, AEDV02PressureChannel.Minion, previous.Tick, sample.Tick);
             // A threat target alone does not independently prove an interrupted opportunity or a tool need.
             if (previous.Players.Any(x => x.ObjectiveState == "THREAT_INTERRUPTED")) return Hold("HOLD_OBJECTIVE_OPPORTUNITY_SOURCE_REQUIRED");
@@ -157,6 +187,34 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
                 EventId = item.Id.ToString("D"), EpisodeId = "down:" + item.Id, Channel = AEDV02PressureChannel.Down,
                 StartedSeconds = seconds, EndedSeconds = seconds });
         }
+        var cabinetClues = new List<Guid>();
+        foreach (var occurrence in sourceRange.Where(x => x.EventType == "AED_V02_CABINET_CLUE"))
+        {
+            var clue = JsonSerializer.Deserialize<AEDV02CabinetClueSource>(occurrence.ValueJson["data"]["clue"].ToJson());
+            if (clue == null || !clue.IsValid() || clue.SceneManifestFingerprint != content.Fingerprint ||
+                clue.Tick != occurrence.ValueJson["context"]["authorityTick"].ToInt64() || !users.Contains(clue.UserId) ||
+                manifest.MaximumVisionRange <= 0 || clue.ObservedDistance > manifest.MaximumVisionRange * AEDV02PilotPolicy.Sensory(0) ||
+                !manifest.Markers.Any(x => x.Id == clue.SceneMarkerId && x.Kind == "CABINET" && x.HideSpotId == clue.HideSpotId))
+                return Hold("HOLD_CABINET_CLUE_SOURCE_INVALID");
+            var cabinet = manifest.Markers.Single(x => x.Id == clue.SceneMarkerId);
+            var position = new[] { clue.PlayerX, clue.PlayerY, clue.PlayerZ };
+            var distanceSquared = Enumerable.Range(0, 3).Sum(i => Math.Pow(Math.Max(0,
+                Math.Max(cabinet.InteractionBounds[i] - position[i], position[i] - cabinet.InteractionBounds[i + 3])), 2));
+            if (manifest.MaximumCabinetInteractionDistance <= 0 || distanceSquared > Math.Pow(manifest.MaximumCabinetInteractionDistance, 2))
+                return Hold("HOLD_CABINET_CLUE_SOURCE_INVALID");
+            var before = frames.LastOrDefault(x => x.Sample.Tick < clue.Tick);
+            var after = frames.FirstOrDefault(x => x.Sample.Tick >= clue.Tick);
+            if (before.Sample == null || after.Sample == null) continue;
+            var previousPlayer = before.Sample.Players.Single(x => x.UserId == clue.UserId);
+            var hiddenPlayer = after.Sample.Players.Single(x => x.UserId == clue.UserId);
+            if (previousPlayer.LifeState != "ALIVE" || previousPlayer.IsCaught || previousPlayer.HideSpotId != "0" ||
+                hiddenPlayer.LifeState != "ALIVE" || hiddenPlayer.HideSpotId != clue.HideSpotId ||
+                occurrence.ValueJson["context"]["phase"].AsString != before.Sample.PhaseName || after.Sample.PhaseName != before.Sample.PhaseName ||
+                !manifest.Markers.Any(x => x.Id == clue.SceneMarkerId && x.Zone == after.Sample.Zone) ||
+                !before.Sample.Stalkers.Any(x => x.NetworkId == clue.StalkerNetworkId) || !after.Sample.Stalkers.Any(x => x.NetworkId == clue.StalkerNetworkId))
+                return Hold("HOLD_CABINET_CLUE_LINEAGE_MISMATCH");
+            cabinetClues.Add(occurrence.Id);
+        }
         double now = request.EndTick / (double)tickRate;
         var pressure = facts.ToDictionary(x => x.Key, x => AEDV02PressureNormalizer.Project(matchId, x.Key, now,
             request.StartTick / (double)tickRate, Enumerable.Repeat(now, 5).ToArray(), x.Value));
@@ -174,7 +232,7 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
                 x.Ts >= last.Event.Ts.AddSeconds(-AEDV02PilotPolicy.DownRecoverySeconds) && x.EventSequence <= last.Event.EventSequence)
                 .Select(x => x.UserId!.Value).Distinct().ToArray(), safe, last.Sample.LogicalPhase, last.Sample.Zone, last.Sample.PhaseName,
             last.Sample.PlanRevision, last.Sample.PlanFingerprint, last.Event.Ts, false,
-            ["ResourceNeedOutsideRevive", "ObjectiveThreatInterruption"]);
+            ["ResourceNeedOutsideRevive", "ObjectiveThreatInterruption"], cabinetClues.ToArray(), "Unsupported", last.Sample.Supply, last.Sample.Minions.Count(x => x.Zone == 3));
         if (!await db.AEDV02VerifiedSources.AnyAsync(x => x.Fingerprint == fingerprint, ct))
         {
             db.AEDV02VerifiedSources.Add(new AEDV02VerifiedSource { Fingerprint = fingerprint, MatchId = matchId,
@@ -194,7 +252,7 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
         }
         bool? UsableSupply(AEDV02WorldSample sample, AEDV02PlayerSource need, int toolId)
         {
-            var candidates = sample.Tools.Where(x => x.ToolId == toolId && x.RemainingCharges != 0 && x.Location is "World" or "Player").ToArray();
+            var candidates = sample.Tools.Where(x => x.ToolId == toolId && x.RemainingCharges != 0 && x.CarrierMinionId.Length == 0 && x.Location is "World" or "Player").ToArray();
             if (candidates.Length == 0) return false;
             if (candidates.Any(x => x.Location == "Player" && x.OwnerUserId == need.UserId && need.LifeState == "ALIVE" && !need.IsCaught)) return true;
             var helpers = sample.Players.Where(x => x.LifeState == "ALIVE" && !x.IsCaught && x.UserId != need.UserId).ToArray();
@@ -209,6 +267,31 @@ public sealed class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventReposit
             }
             return unknown ? null : false;
         }
+    }
+    internal static bool VerifySupply(AEDV02WorldSample world, AEDV02SceneManifest manifest, AEDV02Plan plan,
+        int initialBudget, IEnumerable<TelemetryEventDocument> accepted, long sequence)
+    {
+        var supply = world.Supply;
+        if (supply == null || !supply.IsValid() || supply.InitialOptionalBudget != initialBudget ||
+            supply.OptionalBudget != plan.Get(AEDV02Key.OptionalToolBudget) || plan.Get(AEDV02Key.ResourceGrade) != 0) return false;
+        var spawns = accepted.Where(x => x.EventSequence < sequence && x.EventType == "TEAM_TOOL_LIFECYCLE")
+            .Select(x => x.ValueJson["data"].AsBsonDocument)
+            .Where(x => x["action"] == "SPAWN" && x.TryGetValue("origin", out var origin) && origin == "WorldSpawn").ToArray();
+        int materialized = 0;
+        for (int zone = 1; zone <= 3; zone++)
+        {
+            var actual = spawns.Where(x => x["zone"].ToInt32() == zone).Select(x => x["toolId"].ToInt32()).ToArray();
+            var reservations = supply.Reservations.Where(x => x.Zone == zone).ToArray();
+            bool spawned = supply.SpawnedZones.Contains(zone);
+            if (spawned && reservations.Length != 0 || !spawned && actual.Length != 0) return false;
+            var ids = spawned ? actual : reservations.Select(x => x.ToolId).ToArray();
+            int limit = 5 + Math.Min(1, Math.Max(0, (spawned ? initialBudget : supply.OptionalBudget) - zone + 1));
+            if (ids.Length < 5 || ids.Length > limit || !new[] { 1, 2, 3, 4, 6 }.All(ids.Contains)) return false;
+            if (spawned) materialized += actual.Length - 5;
+            foreach (var item in reservations)
+                if (!manifest.Markers.Any(x => x.Id == item.MarkerId && x.Zone == zone && x.Kind == "TOOL" && x.AllowedToolIds.Contains(item.ToolId))) return false;
+        }
+        return materialized == supply.OptionalMaterialized;
     }
     private static ServiceResult<AEDV02SourceResult> Hold(string reason) => ServiceResult<AEDV02SourceResult>.Failure(reason, ErrorCodes.ScenarioApplyConflict);
 }

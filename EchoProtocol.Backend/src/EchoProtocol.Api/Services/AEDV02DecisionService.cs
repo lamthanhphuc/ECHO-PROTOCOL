@@ -44,7 +44,7 @@ public sealed class AEDV02DecisionService(AppDbContext db, AEDV02SourceVerifier 
         var replay = await db.AEDV02Decisions.AsNoTracking().SingleOrDefaultAsync(x => x.DecisionId == request.DecisionId, ct);
         if (replay != null) return replay.MatchId == matchId && replay.HostUserId == caller && replay.RequestFingerprint == requestFingerprint
             ? ServiceResult<AEDV02DecisionResult>.Success(Map(replay, true)) : Fail("AED_V02_DECISION_IDENTITY_CONFLICT", ErrorCodes.ScenarioDecisionIdentityConflict);
-        var scenario = await db.ScenarioDecisions.AsNoTracking().Include(x => x.Snapshot).SingleOrDefaultAsync(x => x.MatchId == matchId && x.IsCurrent, ct);
+        var scenario = await db.ScenarioDecisions.AsNoTracking().Include(x => x.Snapshot).Include(x => x.ScenarioConfig).SingleOrDefaultAsync(x => x.MatchId == matchId && x.IsCurrent, ct);
         if (scenario == null || scenario.ResolutionMode != ScenarioResolutionMode.Adaptive || scenario.SnapshotId != request.SnapshotId ||
             scenario.Snapshot.SnapshotContentFingerprint != request.SnapshotFingerprint || scenario.Snapshot.RosterIdentity != request.RosterIdentity)
             return Fail("HOLD_STALE_SNAPSHOT", ErrorCodes.ScenarioDecisionStaleRoster);
@@ -78,24 +78,45 @@ public sealed class AEDV02DecisionService(AppDbContext db, AEDV02SourceVerifier 
         if (proposed.Get(AEDV02Key.CabinetAmbushEnabled) != 0 && !settings.Value.CabinetAmbushEnabled) hold = "HOLD_CABINET_AMBUSH_DISABLED";
         var changed = Enum.GetValues<AEDV02Key>().Where(x => previous.Get(x) != proposed.Get(x)).ToArray();
         bool adverse = changed.Any(x => AEDV02Plan.IsAdverse(x, previous.Get(x), proposed.Get(x)) && x != AEDV02Key.CabinetAmbushEnabled);
-        if (preMatch && changed.Any(x => x != AEDV02Key.CabinetAmbushEnabled)) hold = "HOLD_HISTORICAL_OPPORTUNITIES_REQUIRED";
+        if (preMatch)
+        {
+            var legacy = scenario.ScenarioConfig;
+            var baseline = await db.ScenarioConfigs.AsNoTracking().SingleOrDefaultAsync(x => x.ScenarioConfigId == legacy.FallbackConfigId, ct);
+            if (ScenarioFingerprint.Config(legacy) != scenario.ScenarioConfigFingerprint || baseline == null || !baseline.IsFixedFallback ||
+                legacy.DetectionFillRate != baseline.DetectionFillRate || legacy.DetectionDecayRate != baseline.DetectionDecayRate ||
+                legacy.ChaseSpeed != baseline.ChaseSpeed || legacy.SearchDuration != baseline.SearchDuration)
+                hold = "HOLD_PREMATCH_LEGACY_TUNING_UNMAPPED";
+            else if (legacy.SupportItemBudget is < 0 or > 2 || proposed.Get(AEDV02Key.OptionalToolBudget) != legacy.SupportItemBudget)
+                hold = "HOLD_PREMATCH_SUPPLY_MISMATCH";
+            else if (changed.Any(x => x is not (AEDV02Key.CabinetAmbushEnabled or AEDV02Key.OptionalToolBudget)))
+                hold = "HOLD_HISTORICAL_OPPORTUNITIES_REQUIRED";
+        }
+        if (proposed.Get(AEDV02Key.ResourceGrade) != 0) hold = "HOLD_RESOURCE_PLACEMENT_SOURCE_REQUIRED";
         if (!preMatch && source != null && hold.Length == 0)
         {
+            if (!proposed.HasWorldPressureSlot(initialOptional, source.Zone3MinionPopulation)) hold = "HOLD_PRESSURE_HANDOFF_WORLD_NOT_REVERTED";
+            if (changedKey == AEDV02Key.OptionalToolBudget && (source.Supply == null ||
+                proposed.Get(changedKey) < source.Supply.OptionalMaterialized || proposed.Get(changedKey) > source.Supply.InitialOptionalBudget))
+                hold = "HOLD_OPTIONAL_ALREADY_MATERIALIZED";
+            else if (changedKey == AEDV02Key.OptionalToolBudget && !source.Supply!.Reservations.GroupBy(x => x.Zone).Any(x =>
+                x.Count() > 5 && !source.Supply.SpawnedZones.Contains(x.Key) &&
+                Math.Min(1, Math.Max(0, previous.Get(changedKey) - x.Key + 1)) != Math.Min(1, Math.Max(0, proposed.Get(changedKey) - x.Key + 1))))
+                hold = "HOLD_NO_UNSPAWNED_OPTIONAL";
             if (changedKey == AEDV02Key.Zone3AdaptiveMinionCap && proposed.Get(changedKey) > previous.Get(changedKey) &&
                 (source.Zone != 3 || source.PhaseName != "ZONE_3_FIND_FRIGATE")) hold = "HOLD_ZONE3_SAFE_ENTRY_REQUIRED";
-            if (adverse)
+            if (hold.Length == 0 && adverse)
             {
                 if (source.PressureComplete && source.PlayerPressure.Values.Any(x => x >= .25) || source.RecentDownUsers.Length != 0) hold = "HOLD_TEAM_OVERLOADED";
                 // Pressure/census evidence cannot certify the unsupported historical competence mapping.
                 else hold = "HOLD_HISTORICAL_OPPORTUNITIES_REQUIRED";
             }
-            else if (proposed.PositiveTokens(initialOptional) >= previous.PositiveTokens(initialOptional))
+            else if (hold.Length == 0 && proposed.PositiveTokens(initialOptional) >= previous.PositiveTokens(initialOptional))
             {
                 int channel = (int)changedKey < 6 ? 0 : changedKey is AEDV02Key.Zone1MinionCap or AEDV02Key.Zone2MinionCap or AEDV02Key.Zone3AdaptiveMinionCap ? 1 : 3;
                 if ((source.RecentDownUsers.Length == 0 && source.PlayerPressure.Values.All(x => x < .65)) ||
                     source.PressureComponents.Values.All(x => x[channel] <= 0)) hold = "HOLD_RELIEF_CAUSE_UNVERIFIED";
             }
-            if (previousRow?.AppliedAtUtc != null && previousRow.ChangedKey.Length != 0 &&
+            if (hold.Length == 0 && previousRow?.AppliedAtUtc != null && previousRow.ChangedKey.Length != 0 &&
                 (adverse || source.RecentDownUsers.Length == 0) && now - previousRow.AppliedAtUtc.Value < TimeSpan.FromSeconds(adverse ? 180 : 90)) hold = "HOLD_PACING_COOLDOWN";
         }
         await using var transaction = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
@@ -154,18 +175,28 @@ public sealed class AEDV02DecisionService(AppDbContext db, AEDV02SourceVerifier 
         AEDV02EffectSource? effect;
         try { effect = JsonSerializer.Deserialize<AEDV02EffectSource>(effectEvent.ValueJson["data"]["effect"].ToJson()); } catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidCastException) { return Fail("AED_V02_EFFECT_INVALID"); }
         var plan = new AEDV02Plan(JsonSerializer.Deserialize<double[]>(decision.PlanValuesJson)!);
+        var content = await db.AEDV02SceneContents.AsNoTracking().SingleOrDefaultAsync(x => x.Fingerprint == decision.SceneManifestFingerprint, ct);
+        if (content == null || AEDV02Plan.Hash(content.ManifestJson) != content.Fingerprint) return Fail("HOLD_UNTRUSTED_SCENE_MANIFEST");
+        var manifest = JsonSerializer.Deserialize<AEDV02SceneManifest>(content.ManifestJson);
+        if (manifest == null || !manifest.IsValid()) return Fail("HOLD_UNTRUSTED_SCENE_MANIFEST");
         if (effect == null || !effect.IsValid() || effect.DecisionId != decisionId || effect.PlanRevision != decision.PlanRevision ||
             effect.PlanFingerprint != plan.Fingerprint() || effect.ObservedTick < receipt.AppliedTick ||
             (decision.ChangedKey.Length != 0 && (effect.Key != decision.ChangedKey || Math.Abs(effect.ObservedValue - plan.Get(Enum.Parse<AEDV02Key>(decision.ChangedKey))) > .000001))) return Fail("AED_V02_EFFECT_MISMATCH");
         if (decision.ChangedKey.Length == 0 && effect.Consumer != "AEDPolicyEnvelope") return Fail("AED_V02_EFFECT_MISMATCH");
-        var samples = events.Where(x => x.SchemaVersion == "1.3" && x.EventType == "AED_V02_WORLD_SAMPLE" &&
+        var observations = events.Where(x => x.SchemaVersion == "1.3" && x.EventType == "AED_V02_WORLD_SAMPLE" &&
                 x.EventSequence > effectEvent.EventSequence && x.Ts >= effectEvent.Ts)
             .Where(x => terminal == null || x.EventSequence < terminal.EventSequence && x.Ts <= terminal.Ts)
-            .Select(x => JsonSerializer.Deserialize<AEDV02WorldSample>(x.ValueJson["data"]["world"].ToJson()))
-            .Where(x => x != null && x.IsValid() && x.EvidenceExclusion.Length == 0 && x.Tick >= effect.ObservedTick &&
-                x.PlanRevision == decision.PlanRevision && x.PlanFingerprint == decision.PlanFingerprint && x.RosterIdentity == decision.RosterIdentity &&
-                x.SceneManifestFingerprint == decision.SceneManifestFingerprint).ToArray();
+            .Select(x => (Event: x, World: JsonSerializer.Deserialize<AEDV02WorldSample>(x.ValueJson["data"]["world"].ToJson())))
+            .Where(x => x.World != null && x.World.IsValid() && x.World.EvidenceExclusion.Length == 0 && x.World.Tick >= effect.ObservedTick &&
+                x.World.PlanRevision == decision.PlanRevision && x.World.PlanFingerprint == decision.PlanFingerprint && x.World.RosterIdentity == decision.RosterIdentity &&
+                x.World.SceneManifestFingerprint == decision.SceneManifestFingerprint && ObservedWorldLineage(events, matchId, x.Event, x.World))
+            .ToArray();
+        var samples = observations.Select(x => x.World!).ToArray();
         if (samples.Length == 0) return Fail("HOLD_WORLD_EFFECT_NOT_OBSERVED");
+        if ((decision.DecisionPoint == "PRE_MATCH" && plan.Get(AEDV02Key.OptionalToolBudget) > 0 || decision.ChangedKey == nameof(AEDV02Key.OptionalToolBudget)) &&
+            !observations.Any(x => x.World!.Supply?.SpawnedZones.Contains(1) == true && AEDV02SourceVerifier.VerifySupply(x.World, manifest, plan,
+                decision.InitialOptionalBudget, events.Where(e => e.MatchId == matchId), x.Event.EventSequence)))
+            return Fail("HOLD_SUPPLY_RESERVATION_SOURCE_REQUIRED");
         if (decision.ChangedKey.Length != 0)
         {
             var key = Enum.Parse<AEDV02Key>(decision.ChangedKey);
@@ -173,6 +204,7 @@ public sealed class AEDV02DecisionService(AppDbContext db, AEDV02SourceVerifier 
                 : key is AEDV02Key.OptionalToolBudget or AEDV02Key.ResourceGrade ? "TeamToolWorldSpawn"
                 : key == AEDV02Key.CabinetAmbushEnabled ? "AEDPolicyEnvelope" : "StalkerFusionRuntime";
             if (effect.Consumer != consumer) return Fail("AED_V02_EFFECT_MISMATCH");
+            if (consumer == "TeamToolWorldSpawn" && key == AEDV02Key.ResourceGrade) return Fail("HOLD_RESOURCE_PLACEMENT_SOURCE_REQUIRED");
             if (consumer == "StalkerFusionRuntime" && (effect.NetworkObjectIds.Length == 0 || !samples.Any(x => effect.NetworkObjectIds.All(id => x!.Stalkers.Any(s => s.NetworkId == id))))) return Fail("HOLD_WORLD_EFFECT_NOT_OBSERVED");
             if (consumer == "PlayerSpawner" && key == AEDV02Key.Zone3AdaptiveMinionCap && effect.ObservedValue == 1 &&
                 !samples.Any(x => x!.Minions.Any(m => m.Zone == 3 && effect.NetworkObjectIds.Contains(m.NetworkId)))) return Fail("HOLD_WORLD_EFFECT_NOT_OBSERVED");
@@ -183,6 +215,19 @@ public sealed class AEDV02DecisionService(AppDbContext db, AEDV02SourceVerifier 
         catch (Exception ex) when (ex is DbUpdateException || ex is Npgsql.PostgresException { SqlState: "40001" or "40P01" or "23505" })
         { db.Entry(decision).State = EntityState.Detached; return Fail("AED_V02_RECEIPT_CONFLICT"); }
         return ServiceResult<AEDV02DecisionResult>.Success(Map(decision, false));
+    }
+
+    private static bool ObservedWorldLineage(IEnumerable<TelemetryEventDocument> events, Guid matchId,
+        TelemetryEventDocument occurrence, AEDV02WorldSample world)
+    {
+        var users = world.Players.Select(x => x.UserId).ToHashSet();
+        var roster = AEDV02Plan.Hash(matchId.ToString("D") + "|" + string.Join(',', users.Order().Select(x => x.ToString("D"))));
+        if (roster != world.RosterIdentity || !AEDPhase8LifecycleReconcilerV1.TryReconstruct(events, matchId, occurrence.EventSequence, users, false,
+            out var tools, out var minions, out _)) return false;
+        return tools.Count == world.Tools.Length && world.Tools.All(x => tools.TryGetValue(x.InstanceId, out var item) &&
+            item.ToolId == x.ToolId && item.Zone == x.Zone && item.Location == x.Location && item.Origin == x.Origin &&
+            item.Charges == x.RemainingCharges && item.Owner == x.OwnerUserId) &&
+            minions.Count == world.Minions.Length && world.Minions.All(x => minions.TryGetValue(x.NetworkId, out var zone) && zone == x.Zone);
     }
 
     public async Task<ServiceResult<AEDV02DecisionResult>> AbortAsync(Guid caller, Guid matchId, Guid decisionId, CancellationToken ct = default)

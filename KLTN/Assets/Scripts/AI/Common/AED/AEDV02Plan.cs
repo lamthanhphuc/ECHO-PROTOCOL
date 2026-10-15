@@ -79,11 +79,18 @@ namespace EchoProtocol.AI.Common.AED
             if (Get(AEDV02Key.OptionalToolBudget) < initialOptionalBudget || Get(AEDV02Key.ResourceGrade) < 0) count++;
             return count;
         }
+        public bool HasWorldPressureSlot(int initialOptionalBudget, int liveZone3Minions)
+        {
+            if (initialOptionalBudget is < 0 or > 2 || liveZone3Minions < 0) return false;
+            int tokens = PositiveTokens(initialOptionalBudget);
+            return tokens <= 1 && (tokens == 0 || (Get(AEDV02Key.Zone3AdaptiveMinionCap) == 1 ? liveZone3Minions <= 1 : liveZone3Minions == 0));
+        }
         public bool TryValidateChange(AEDV02Plan previous, AEDV02DecisionPoint point, bool finalPhase,
             int initialOptionalBudget, out AEDV02Key key, out string reason)
         {
             key = default; reason = "AED_V02_PLAN_INVALID";
             if (previous == null || initialOptionalBudget < 0 || initialOptionalBudget > 2 || !Enum.IsDefined(typeof(AEDV02DecisionPoint), point)) return false;
+            if (Get(AEDV02Key.OptionalToolBudget) > initialOptionalBudget) { reason = "HOLD_INITIAL_OPTIONAL_BUDGET"; return false; }
             var changed = Enumerable.Range(0, _values.Length).Where(i => _values[i] != previous._values[i]).ToArray();
             if (point != AEDV02DecisionPoint.PRE_MATCH && changed.Length != 1) { reason = "HOLD_SINGLE_DELTA_REQUIRED"; return false; }
             if (point != AEDV02DecisionPoint.PRE_MATCH && changed.Any(i => Math.Abs(Array.IndexOf(Values[i], _values[i]) - Array.IndexOf(Values[i], previous._values[i])) > 1))

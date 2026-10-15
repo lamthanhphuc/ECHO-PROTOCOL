@@ -15,6 +15,51 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed partial class ScenarioServiceTests
 {
+    private static async Task<Fixture> ValidV02Fixture()
+    {
+        var fixture = await ValidAEDv2Fixture();
+        // Normal-envelope scenarios explicitly issue zero extras; support carry-over has its own integration case.
+        foreach (var candidate in fixture.Db.ScenarioConfigs.Where(x => !x.IsFixedFallback)) candidate.IsActive = false;
+        await fixture.Db.SaveChangesAsync();
+        return fixture;
+    }
+    [Theory, Trait("Category", "AEDV02")]
+    [InlineData("valid")]
+    [InlineData("missing-player")]
+    [InlineData("missing-tool")]
+    [InlineData("forged-charges")]
+    [InlineData("forged-minion")]
+    public async Task V02_ReceiptWorldMustIndependentlyReconcileRosterToolsAndMinionPopulation(string mutation)
+    {
+        await using var f = await ValidV02Fixture();
+        var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
+        var (world, request) = await V02WorldEvidence(f, planRevision: 1);
+        var events = world.ToList(); var repository = new MutableV02Repository(events);
+        var service = new AEDV02DecisionService(f.Db, new AEDV02SourceVerifier(f.Db, repository, new FixedClock(Now)), repository,
+            new FixedClock(Now), Options.Create(new AEDV02PilotSettings { Enabled = true }));
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.Lobby; await f.Db.SaveChangesAsync();
+        var approval = (await service.SubmitAsync(f.HostId, f.MatchId, V02Request(f, scenario, request.SceneManifestFingerprint,
+            AEDV02Plan.Normal(), 0, null, 0))).Data!;
+        f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch; await f.Db.SaveChangesAsync();
+        var effect = V02Effect(f, approval, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 2400, events.Count + 1, Now);
+        events.Add(effect); V02AppendWindow(f, events, AEDV02Plan.Normal(), 1, 2401, Now, 1);
+        var sample = JsonSerializer.Deserialize<AEDV02WorldSample>(events.Last().ValueJson["data"]["world"].ToJson())!;
+        switch (mutation)
+        {
+            case "missing-player": sample.Players = sample.Players.Take(1).ToArray(); break;
+            case "missing-tool": sample.Tools = sample.Tools.Skip(1).ToArray(); break;
+            case "forged-charges": sample.Tools.Single(x => x.ToolId == 2).RemainingCharges = 2; break;
+            case "forged-minion": sample.Minions = [new AEDV02ThreatSource { NetworkId = "unspawned:minion", State = "IDLE", Zone = 1 }]; break;
+        }
+        events.Last().ValueJson["data"]["world"] = BsonDocument.Parse(JsonSerializer.Serialize(sample));
+        var accepted = await TelemetryServiceTests.IngestV02Trace(f.MatchId, events, Now, V02TelemetryAuthority(f), f.HostId);
+        events.Clear(); events.AddRange(accepted);
+        var receipt = new AEDV02ReceiptRequest(Guid.NewGuid(), effect.Id, 1, approval.PlanFingerprint, 2400);
+        var result = await service.ConfirmAsync(f.HostId, f.MatchId, approval.DecisionId, receipt);
+        if (mutation == "valid")
+        { Assert.True(result.IsSuccess, result.Message); Assert.True((await service.ConfirmAsync(f.HostId, f.MatchId, approval.DecisionId, receipt)).Data!.IsReplay); }
+        else { Assert.False(result.IsSuccess); Assert.Equal("HOLD_WORLD_EFFECT_NOT_OBSERVED", result.Message); }
+    }
     [Theory, Trait("Category", "AEDV02")]
     [InlineData("valid", null)]
     [InlineData("missing-terminal", "HOLD_MATCH_TERMINAL_PROOF_MISSING")]
@@ -22,9 +67,9 @@ public sealed partial class ScenarioServiceTests
     [InlineData("wrong-host", "AED_V02_HOST_REQUIRED")]
     public async Task V02_LateReceiptRequiresPreTerminalWorldProof(string mode, string? rejection)
     {
-        await using var f = await ValidAEDv2Fixture();
+        await using var f = await ValidV02Fixture();
         var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
-        var (world, request) = await V02WorldEvidence(f);
+        var (world, request) = await V02WorldEvidence(f, planRevision: 1);
         var events = world.ToList(); var repository = new MutableV02Repository(events);
         var service = new AEDV02DecisionService(f.Db, new AEDV02SourceVerifier(f.Db, repository, new FixedClock(Now)), repository,
             new FixedClock(Now), Options.Create(new AEDV02PilotSettings { Enabled = true }));
@@ -56,9 +101,9 @@ public sealed partial class ScenarioServiceTests
     [Fact, Trait("Category", "AEDV02")]
     public async Task V02_VerifiedPressureAndClaimedSkillRows_CannotCertifyUnsupportedHistoricalCompetence()
     {
-        await using var f = await ValidAEDv2Fixture();
+        await using var f = await ValidV02Fixture();
         var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
-        var (world, sourceRequest) = await V02WorldEvidence(f);
+        var (world, sourceRequest) = await V02WorldEvidence(f, planRevision: 1);
         var events = world.ToList(); var repository = new MutableV02Repository(events);
         var verifier = new AEDV02SourceVerifier(f.Db, repository, new FixedClock(Now));
         var service = new AEDV02DecisionService(f.Db, verifier, repository, new FixedClock(Now), Options.Create(new AEDV02PilotSettings { Enabled = true }));
@@ -84,7 +129,8 @@ public sealed partial class ScenarioServiceTests
             var priorEvents = world.Select(item =>
             {
                 var json = item.ValueJson.DeepClone().AsBsonDocument;
-                if (item.EventType == "AED_V02_WORLD_SAMPLE") json["data"]["world"]["RosterIdentity"] = priorRoster;
+                if (item.EventType == "AED_V02_WORLD_SAMPLE")
+                { json["data"]["world"]["RosterIdentity"] = priorRoster; json["data"]["world"]["PlanRevision"] = 0; }
                 return V02Event(prior, item.EventType, item.EventSequence, item.Ts, item.SchemaVersion, json, item.UserId);
             }).ToArray();
             var reconstructed = await new AEDV02SourceVerifier(f.Db, new AcceptedEvidenceRepository(priorEvents), new FixedClock(Now)).VerifyAsync(prior, sourceRequest);
@@ -124,11 +170,12 @@ public sealed partial class ScenarioServiceTests
     [InlineData("phase", "HOLD_DECISION_WINDOW_CLOSED")]
     [InlineData("disconnect", "HOLD_ROSTER_NOT_CURRENT")]
     [InlineData("unsupported-history", "HOLD_HISTORICAL_OPPORTUNITIES_REQUIRED")]
+    [InlineData("unsupported-placement", "HOLD_RESOURCE_PLACEMENT_SOURCE_REQUIRED")]
     public async Task V02_RealApproval_FailsClosedBeforeAnyPendingApply(string failure, string reason)
     {
-        await using var f = await ValidAEDv2Fixture();
+        await using var f = await ValidV02Fixture();
         var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
-        var (events, source) = await V02WorldEvidence(f);
+        var (events, source) = await V02WorldEvidence(f, planRevision: 1);
         f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.Lobby;
         var request = V02Request(f, scenario, source.SceneManifestFingerprint, AEDV02Plan.Normal(), 0, null, 0);
         switch (failure)
@@ -145,6 +192,7 @@ public sealed partial class ScenarioServiceTests
             case "phase": f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch; break;
             case "disconnect": f.Db.MatchPlayerBindings.First().DisconnectedAtUtc = Now; break;
             case "unsupported-history": request = request with { PlanValues = AEDV02Plan.Normal().With(AEDV02Key.ChaseSpeed, 8).ToArray() }; break;
+            case "unsupported-placement": request = request with { PlanValues = AEDV02Plan.Normal().With(AEDV02Key.ResourceGrade, 1).ToArray() }; break;
         }
         await f.Db.SaveChangesAsync();
         var repository = new AcceptedEvidenceRepository(events);
@@ -160,9 +208,9 @@ public sealed partial class ScenarioServiceTests
     [Fact, Trait("Category", "AEDV02")]
     public async Task V02_RealApproval_PreMatchTwoSamePhaseWindowsAndObservedReceipts()
     {
-        await using var f = await ValidAEDv2Fixture();
+        await using var f = await ValidV02Fixture();
         var scenario = (await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, AdaptiveRequest())).Data!;
-        var (world, sourceRequest) = await V02WorldEvidence(f, geometry: true);
+        var (world, sourceRequest) = await V02WorldEvidence(f, geometry: true, planRevision: 1);
         var events = (await TelemetryServiceTests.IngestV02Trace(f.MatchId, V02PressureTrace(f, world), Now, V02TelemetryAuthority(f), f.HostId)).ToList();
         var storage = new MutableV02Repository(events);
         var clock = new MutableV02Clock(Now);

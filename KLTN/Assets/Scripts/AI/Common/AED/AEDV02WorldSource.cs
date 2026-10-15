@@ -41,6 +41,7 @@ namespace EchoProtocol.AI.Common.AED
         public string Origin { get; set; } = string.Empty;
         public Guid? OwnerUserId { get; set; }
         public int? RemainingCharges { get; set; }
+        public string CarrierMinionId { get; set; } = string.Empty;
         public double X { get; set; }
         public double Y { get; set; }
         public double Z { get; set; }
@@ -52,9 +53,29 @@ namespace EchoProtocol.AI.Common.AED
         public string DoorId { get; set; } = string.Empty;
         public string State { get; set; } = string.Empty;
     }
+    public sealed class AEDV02SupplyReservation
+    {
+        public int Zone { get; set; }
+        public int ToolId { get; set; }
+        public string MarkerId { get; set; } = string.Empty;
+    }
+    public sealed class AEDV02SupplySource
+    {
+        public int InitialOptionalBudget { get; set; }
+        public int OptionalBudget { get; set; }
+        public int OptionalMaterialized { get; set; }
+        public int[] SpawnedZones { get; set; } = Array.Empty<int>();
+        public AEDV02SupplyReservation[] Reservations { get; set; } = Array.Empty<AEDV02SupplyReservation>();
+        public bool IsValid() => InitialOptionalBudget is >= 0 and <= 2 && OptionalBudget >= OptionalMaterialized &&
+            OptionalBudget <= InitialOptionalBudget && OptionalMaterialized >= 0 && SpawnedZones != null &&
+            SpawnedZones.All(x => x is >= 1 and <= 3) && SpawnedZones.Distinct().Count() == SpawnedZones.Length &&
+            Reservations != null && Reservations.Length <= 17 && Reservations.All(x => x != null && x.Zone is >= 1 and <= 3 &&
+                !SpawnedZones.Contains(x.Zone) && x.ToolId is 1 or 2 or 3 or 4 or 6 && !string.IsNullOrWhiteSpace(x.MarkerId) && x.MarkerId.Length <= 128) &&
+            Reservations.Select(x => x.MarkerId).Distinct(StringComparer.Ordinal).Count() == Reservations.Length;
+    }
     public sealed class AEDV02WorldSample
     {
-        public const string SourceVersion = "AED_V02_WORLD_SOURCE_REV02";
+        public const string SourceVersion = "AED_V02_WORLD_SOURCE_REV02_2";
         public string Version { get; set; } = SourceVersion;
         public string ResolutionMode { get; set; } = string.Empty;
         public string Difficulty { get; set; } = string.Empty;
@@ -74,6 +95,7 @@ namespace EchoProtocol.AI.Common.AED
         public AEDV02ThreatSource[] Minions { get; set; } = Array.Empty<AEDV02ThreatSource>();
         public AEDV02ToolSource[] Tools { get; set; } = Array.Empty<AEDV02ToolSource>();
         public AEDV02DoorSource[] Doors { get; set; } = Array.Empty<AEDV02DoorSource>();
+        public AEDV02SupplySource? Supply { get; set; }
 
         public bool IsValid()
         {
@@ -82,7 +104,8 @@ namespace EchoProtocol.AI.Common.AED
                 Zone != Math.Min(LogicalPhase, 3) || PlanRevision < 0 || !Hash(PlanFingerprint) || !Hash(RosterIdentity) ||
                 !Hash(SceneManifestFingerprint) || EvidenceExclusion == null || EvidenceExclusion.Length > 80 ||
                 Players == null || Players.Length < 1 || Players.Length > 4 || Stalkers == null || Stalkers.Length > 8 ||
-                Minions == null || Minions.Length > 16 || Tools == null || Tools.Length > 128 || Doors == null || Doors.Length > 512)
+                Minions == null || Minions.Length > 16 || Tools == null || Tools.Length > 128 || Doors == null || Doors.Length > 512 ||
+                Supply != null && !Supply.IsValid())
                 return false;
             var users = Players.Select(x => x?.UserId ?? Guid.Empty).ToHashSet();
             if (users.Contains(Guid.Empty) || users.Count != Players.Length ||
@@ -97,18 +120,20 @@ namespace EchoProtocol.AI.Common.AED
             if (Tools.Any(x => x == null || !Text(x.InstanceId) || !Text(x.Origin) || x.Zone < 0 || x.Zone > 3 ||
                 x.ToolId != 1 && x.ToolId != 2 && x.ToolId != 3 && x.ToolId != 4 && x.ToolId != 6 ||
                 x.Location != "World" && x.Location != "Player" && x.Location != "Minion" ||
-                x.RemainingCharges < 0 || !Position(x.X, x.Y, x.Z) || (x.OwnerUserId.HasValue && !users.Contains(x.OwnerUserId.Value)) ||
+                x.RemainingCharges < 0 || x.CarrierMinionId == null || x.CarrierMinionId.Length > 128 ||
+                x.CarrierMinionId.Length != 0 && (x.Location != "World" || x.OwnerUserId.HasValue || !Minions.Any(m => m.NetworkId == x.CarrierMinionId)) ||
+                !Position(x.X, x.Y, x.Z) || (x.OwnerUserId.HasValue && !users.Contains(x.OwnerUserId.Value)) ||
                 x.RouteEdgeIds == null || x.RouteEdgeIds.Length > 128 || x.RouteEdgeIds.Any(y => !Text(y))) ||
                 Tools.Select(x => x.InstanceId).Distinct(StringComparer.Ordinal).Count() != Tools.Length) return false;
             return !Doors.Any(x => x == null || !Text(x.DoorId) ||
                 x.State != "OPEN" && x.State != "CLOSED_UNLOCKED" && x.State != "LOCKED" && x.State != "BROKEN") &&
                 Doors.Select(x => x.DoorId).Distinct(StringComparer.Ordinal).Count() == Doors.Length;
         }
-        private static bool Threats(AEDV02ThreatSource[] threats, HashSet<Guid> users, bool minion) =>
+        private bool Threats(AEDV02ThreatSource[] threats, HashSet<Guid> users, bool minion) =>
             threats.All(x => x != null && Text(x.NetworkId) && Text(x.State) && x.Zone >= 1 && x.Zone <= 3 &&
                 Position(x.X, x.Y, x.Z) &&
                 (!x.TargetUserId.HasValue || users.Contains(x.TargetUserId.Value)) &&
-                (!x.TargetUserId.HasValue || Text(x.EpisodeId)) &&
+                (!x.TargetUserId.HasValue || Players.Single(p => p.UserId == x.TargetUserId.Value).LifeState != "ALIVE" || Text(x.EpisodeId)) &&
                 (minion ? x.State == "IDLE" || x.State == "TRACK" || x.State == "HARASS" || x.State == "FLEE" || x.State == "DYING"
                     : x.State == "PATROL" || x.State == "DETECTION" || x.State == "CHASE" || x.State == "ATTACK" || x.State == "RECOVER" || x.State == "SEARCH" || x.State == "SPECIAL")) &&
             threats.Select(x => x.NetworkId).Distinct(StringComparer.Ordinal).Count() == threats.Length;
@@ -131,6 +156,8 @@ namespace EchoProtocol.AI.Common.AED
         public string Id { get; set; } = string.Empty;
         public int Zone { get; set; }
         public string Kind { get; set; } = string.Empty;
+        public string HideSpotId { get; set; } = string.Empty;
+        public double[] InteractionBounds { get; set; } = Array.Empty<double>();
         public int[] AllowedToolIds { get; set; } = Array.Empty<int>();
         public double X { get; set; }
         public double Y { get; set; }
@@ -140,15 +167,22 @@ namespace EchoProtocol.AI.Common.AED
     {
         public string SceneVersion { get; set; } = string.Empty;
         public string ScenePath { get; set; } = string.Empty;
+        public double MaximumVisionRange { get; set; }
+        public double MaximumCabinetInteractionDistance { get; set; }
         public AEDV02SceneMarker[] Markers { get; set; } = Array.Empty<AEDV02SceneMarker>();
         public AEDV02RouteEdge[] Edges { get; set; } = Array.Empty<AEDV02RouteEdge>();
         public AEDV02NavCell[] NavCells { get; set; } = Array.Empty<AEDV02NavCell>();
         public AEDV02NavLink[] NavLinks { get; set; } = Array.Empty<AEDV02NavLink>();
+        public string[] DoorIds { get; set; } = Array.Empty<string>();
 
         public bool IsValid()
         {
             if (string.IsNullOrWhiteSpace(SceneVersion) || SceneVersion.Length > 128 || Markers == null || Markers.Length is < 1 or > 4096 ||
                 Edges == null || Edges.Length > 65536 || NavCells == null || NavCells.Length > 100000 || NavLinks == null || NavLinks.Length > 600000 ||
+                !AEDV02PilotPolicy.Finite(MaximumVisionRange) || MaximumVisionRange < 0 || MaximumVisionRange > 10000 ||
+                !AEDV02PilotPolicy.Finite(MaximumCabinetInteractionDistance) || MaximumCabinetInteractionDistance < 0 || MaximumCabinetInteractionDistance > 100 ||
+                DoorIds == null || DoorIds.Length > 4096 || DoorIds.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 128) ||
+                DoorIds.Distinct(StringComparer.Ordinal).Count() != DoorIds.Length ||
                 Markers.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id) || x.Id.Length > 128) || NavCells.Any(x => x == null || !x.IsValid())) return false;
             var markers = Markers.Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
             var cells = NavCells.Select(x => x.Id).ToHashSet();
@@ -156,6 +190,9 @@ namespace EchoProtocol.AI.Common.AED
             var cellById = NavCells.ToDictionary(x => x.Id);
             return markers.Count == Markers.Length && cells.Count == NavCells.Length &&
             Markers.All(x => x.Zone >= 1 && x.Zone <= 3 && x.Kind is "ENTRY" or "TOOL" or "OBJECTIVE" or "CABINET" or "AMBUSH_ENTRY" or "ROUTE" &&
+                (x.Kind != "CABINET" || ulong.TryParse(x.HideSpotId, out var spot) && spot != 0 && x.InteractionBounds != null &&
+                    x.InteractionBounds.Length == 6 && x.InteractionBounds.All(AEDV02PilotPolicy.Finite) &&
+                    Enumerable.Range(0, 3).All(i => x.InteractionBounds[i] <= x.InteractionBounds[i + 3])) &&
                 x.AllowedToolIds != null && x.AllowedToolIds.All(t => t is 1 or 2 or 3 or 4 or 6) &&
                 AEDV02PilotPolicy.Finite(x.X) && AEDV02PilotPolicy.Finite(x.Y) && AEDV02PilotPolicy.Finite(x.Z)) &&
             Edges.All(x => x != null && !string.IsNullOrWhiteSpace(x.Id) &&
@@ -176,9 +213,13 @@ namespace EchoProtocol.AI.Common.AED
             var ends = NavCells.Where(x => x.Contains(to)).Select(x => x.Id).ToHashSet();
             if (starts.Count == 0 || ends.Count == 0) return false;
             var doorIds = doors.Select(x => x.DoorId).ToHashSet(StringComparer.Ordinal);
-            if (NavLinks.Any(x => x.DoorIds.Any(d => !doorIds.Contains(d)))) return false;
+            if (DoorIds.Any(x => !doorIds.Contains(x)) || NavCells.Any(x => x.DoorIds.Any(d => !doorIds.Contains(d))) ||
+                NavLinks.Any(x => x.DoorIds.Any(d => !doorIds.Contains(d)))) return false;
             var open = doors.Where(x => x.State is "OPEN" or "BROKEN" or "CLOSED_UNLOCKED").Select(x => x.DoorId).ToHashSet(StringComparer.Ordinal);
-            var links = NavLinks.Where(x => x.DoorIds.All(open.Contains)).GroupBy(x => x.From).ToDictionary(x => x.Key, x => x.Select(l => l.To).ToArray());
+            var usable = NavCells.Where(x => x.DoorIds.All(open.Contains)).Select(x => x.Id).ToHashSet();
+            starts.IntersectWith(usable); ends.IntersectWith(usable);
+            var links = NavLinks.Where(x => usable.Contains(x.From) && usable.Contains(x.To) && x.DoorIds.All(open.Contains))
+                .GroupBy(x => x.From).ToDictionary(x => x.Key, x => x.Select(l => l.To).ToArray());
             var queue = new Queue<int>(starts);
             while (queue.Count != 0)
             {
@@ -217,7 +258,37 @@ namespace EchoProtocol.AI.Common.AED
         public double[] A { get; set; } = Array.Empty<double>();
         public double[] B { get; set; } = Array.Empty<double>();
         public double[] C { get; set; } = Array.Empty<double>();
-        public bool IsValid() => Id >= 0 && Point(A) && Point(B) && Point(C) && AreaSquared() > .00000001;
+        public string[] DoorIds { get; set; } = Array.Empty<string>();
+        public bool IsValid() => Id >= 0 && Point(A) && Point(B) && Point(C) && AreaSquared() > .00000001 &&
+            DoorIds != null && DoorIds.Length <= 64 && DoorIds.All(x => !string.IsNullOrWhiteSpace(x) && x.Length <= 128) &&
+            DoorIds.Distinct(StringComparer.Ordinal).Count() == DoorIds.Length;
+        public bool IntersectsBounds(double[] min, double[] max)
+        {
+            if (!IsValid() || !Point(min) || !Point(max) || Enumerable.Range(0, 3).Any(i => min[i] > max[i])) return false;
+            var polygon = new List<double[]> { A, B, C };
+            for (int axis = 0; axis < 3; axis++)
+                for (int side = 0; side < 2; side++)
+                {
+                    double boundary = side == 0 ? min[axis] : max[axis];
+                    var clipped = new List<double[]>();
+                    if (polygon.Count == 0) return false;
+                    var previous = polygon[polygon.Count - 1];
+                    foreach (var current in polygon)
+                    {
+                        bool inside = side == 0 ? current[axis] >= boundary : current[axis] <= boundary;
+                        bool previousInside = side == 0 ? previous[axis] >= boundary : previous[axis] <= boundary;
+                        if (inside != previousInside)
+                        {
+                            double t = (boundary - previous[axis]) / (current[axis] - previous[axis]);
+                            clipped.Add(Enumerable.Range(0, 3).Select(i => previous[i] + t * (current[i] - previous[i])).ToArray());
+                        }
+                        if (inside) clipped.Add(current);
+                        previous = current;
+                    }
+                    polygon = clipped;
+                }
+            return polygon.Count != 0;
+        }
         private static bool Point(double[] p) => p != null && p.Length == 3 && p.All(x => AEDV02PilotPolicy.Finite(x) && Math.Abs(x) <= 10000);
         private double AreaSquared()
         {
@@ -258,5 +329,39 @@ namespace EchoProtocol.AI.Common.AED
             Enum.TryParse<AEDV02Key>(Key, out var key) && Enum.IsDefined(typeof(AEDV02Key), key) && key.ToString() == Key && AEDV02PilotPolicy.Finite(ObservedValue) && ObservedTick >= 0 &&
             NetworkObjectIds != null && NetworkObjectIds.Length <= 64 && NetworkObjectIds.All(x => !string.IsNullOrWhiteSpace(x)) &&
             NetworkObjectIds.Distinct(StringComparer.Ordinal).Count() == NetworkObjectIds.Length;
+    }
+    public sealed class AEDV02ToolCarrierSource
+    {
+        public string ToolInstanceId { get; set; } = string.Empty;
+        public string MinionNetworkId { get; set; } = string.Empty;
+        public string Action { get; set; } = string.Empty;
+        public long Tick { get; set; }
+        public bool IsValid() => !string.IsNullOrWhiteSpace(ToolInstanceId) && ToolInstanceId.Length <= 128 &&
+            !string.IsNullOrWhiteSpace(MinionNetworkId) && MinionNetworkId.Length <= 128 && Action is "STEAL" or "DROP" && Tick >= 0;
+    }
+    public sealed class AEDV02CabinetClueSource
+    {
+        public Guid UserId { get; set; }
+        public string StalkerNetworkId { get; set; } = string.Empty;
+        public string HideSpotId { get; set; } = string.Empty;
+        public string SceneMarkerId { get; set; } = string.Empty;
+        public string SceneManifestFingerprint { get; set; } = string.Empty;
+        public long Tick { get; set; }
+        public double OriginX { get; set; }
+        public double OriginY { get; set; }
+        public double OriginZ { get; set; }
+        public double TargetX { get; set; }
+        public double TargetY { get; set; }
+        public double TargetZ { get; set; }
+        public double ObservedDistance { get; set; }
+        public double PlayerX { get; set; }
+        public double PlayerY { get; set; }
+        public double PlayerZ { get; set; }
+        public bool IsValid() => UserId != Guid.Empty && !string.IsNullOrWhiteSpace(StalkerNetworkId) && StalkerNetworkId.Length <= 128 &&
+            ulong.TryParse(HideSpotId, out var spot) && spot != 0 && AEDV02WorldSample.Hash(SceneMarkerId) &&
+            AEDV02WorldSample.Hash(SceneManifestFingerprint) && Tick >= 0 &&
+            new[] { OriginX, OriginY, OriginZ, TargetX, TargetY, TargetZ, PlayerX, PlayerY, PlayerZ }.All(x => AEDV02PilotPolicy.Finite(x) && Math.Abs(x) <= 10000) &&
+            AEDV02PilotPolicy.Finite(ObservedDistance) && ObservedDistance > 0 &&
+            Math.Abs(ObservedDistance - Math.Sqrt(Math.Pow(OriginX - TargetX, 2) + Math.Pow(OriginY - TargetY, 2) + Math.Pow(OriginZ - TargetZ, 2))) <= .0001;
     }
 }

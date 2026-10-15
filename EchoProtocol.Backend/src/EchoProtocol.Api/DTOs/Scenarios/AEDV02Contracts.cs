@@ -7,7 +7,8 @@ public sealed record AEDV02SourceResult(string Fingerprint, int PhaseOrdinal, lo
     string RosterIdentity, string SceneManifestFingerprint, Dictionary<Guid, double> PlayerPressure,
     Dictionary<Guid, double[]> PressureComponents, Dictionary<Guid, string> PressureEpisodeIds, Guid[] RecentDownUsers,
     bool SafeWindow, int LogicalPhase, int Zone, string PhaseName, int PlanRevision, string PlanFingerprint, DateTime SourceEndedAtUtc,
-    bool PressureComplete, string[] MissingChannels);
+    bool PressureComplete, string[] MissingChannels, Guid[]? CabinetClueEventIds = null, string TeamPressureStatus = "Unsupported", AEDV02SupplySource? Supply = null,
+    int Zone3MinionPopulation = -1);
 public sealed record AEDV02DecisionRequest(Guid DecisionId, int PhaseOrdinal, string DecisionPoint, int WindowSequence,
     string WindowId, int ExpectedPlanRevision, string PreviousPlanFingerprint, double[] PlanValues,
     Guid SnapshotId, string SnapshotFingerprint, string RosterIdentity, string SourceFingerprint,
@@ -23,4 +24,4 @@ public sealed record AEDV02PlayerPressureRead(Guid UserId, double Score, double[
 public sealed record AEDV02SourceRead(string Fingerprint, int PhaseOrdinal, long StartTick, long EndTick,
     string RosterIdentity, string SceneManifestFingerprint, AEDV02PlayerPressureRead[] Players, Guid[] RecentDownUsers,
     bool SafeWindow, int LogicalPhase, int Zone, string PhaseName, int PlanRevision, string PlanFingerprint, DateTime SourceEndedAtUtc,
-    bool PressureComplete, string[] MissingChannels);
+    bool PressureComplete, string[] MissingChannels, Guid[]? CabinetClueEventIds = null, string TeamPressureStatus = "Unsupported");

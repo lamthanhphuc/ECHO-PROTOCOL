@@ -43,6 +43,7 @@ public sealed partial class TelemetryServiceTests
     [Theory, Trait("Category", "AEDV02")]
     [InlineData("WORLD")]
     [InlineData("EFFECT")]
+    [InlineData("CARRIER")]
     public async Task V02_Ingestion_AcceptsVersionedSourcesAndDeduplicatesReplay(string kind)
     {
         var repo = new FakeTelemetryEventRepository();
@@ -125,7 +126,7 @@ public sealed partial class TelemetryServiceTests
                 Players = [new AEDV02PlayerSource { UserId = Guid.NewGuid(), LifeState = "ALIVE", HideSpotId = ulong.MaxValue.ToString() }]
             }) };
         }
-        else
+        else if (kind == "EFFECT")
         {
             item.EventType = "AED_V02_ACTION_EFFECT";
             root["data"] = new JsonObject { ["effect"] = JsonSerializer.SerializeToNode(new AEDV02EffectSource
@@ -133,6 +134,12 @@ public sealed partial class TelemetryServiceTests
                 DecisionId = Guid.NewGuid(), PlanRevision = 1, PlanFingerprint = AEDV02Plan.Normal().Fingerprint(),
                 Consumer = "StalkerFusionRuntime", Key = "ChaseSpeed", ObservedValue = 7.5, ObservedTick = 42, NetworkObjectIds = ["stalker:1"]
             }) };
+        }
+        else
+        {
+            item.EventType = "AED_V02_TOOL_CARRIER";
+            root["data"] = new JsonObject { ["carrier"] = JsonSerializer.SerializeToNode(new AEDV02ToolCarrierSource {
+                ToolInstanceId = "drop:tool", MinionNetworkId = "minion:1", Action = "STEAL", Tick = 42 }) };
         }
         item.ValueJson = JsonSerializer.SerializeToElement(root);
         return item;

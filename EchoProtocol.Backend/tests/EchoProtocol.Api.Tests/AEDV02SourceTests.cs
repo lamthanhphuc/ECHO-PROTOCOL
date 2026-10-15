@@ -13,9 +13,33 @@ namespace EchoProtocol.Api.Tests;
 public sealed partial class ScenarioServiceTests
 {
     [Fact, Trait("Category", "AEDV02")]
+    public async Task V02_ScenePlacedSupplyDoesNotSubstituteRequiredRuntimeSpawnBudget()
+    {
+        await using var f = await ValidV02Fixture();
+        var (events, request) = await V02WorldEvidence(f);
+        foreach (var item in events)
+        {
+            if (item.EventType == "TEAM_TOOL_LIFECYCLE") item.ValueJson["data"]["origin"] = "ScenePlaced";
+            if (item.EventType == "AED_V02_WORLD_SAMPLE")
+                foreach (var tool in item.ValueJson["data"]["world"]["Tools"].AsBsonArray) tool["Origin"] = "ScenePlaced";
+        }
+        var accepted = await TelemetryServiceTests.IngestV02Trace(f.MatchId, events, Now, V02TelemetryAuthority(f), f.HostId);
+        var result = await new AEDV02SourceVerifier(f.Db, new AcceptedEvidenceRepository(accepted), new FixedClock(Now)).VerifyAsync(f.MatchId, request);
+        Assert.False(result.IsSuccess); Assert.Equal("HOLD_REQUIRED_SUPPLY_RECEIPTS_MISSING", result.Message);
+    }
+
+    [Fact, Trait("Category", "AEDV02")]
+    public async Task V02_UnissuedPlanRevisionCannotBecomeCanonicalSource()
+    {
+        await using var f = await ValidV02Fixture();
+        var (events, request) = await V02WorldEvidence(f, planRevision: 99);
+        var result = await new AEDV02SourceVerifier(f.Db, new AcceptedEvidenceRepository(events), new FixedClock(Now)).VerifyAsync(f.MatchId, request);
+        Assert.False(result.IsSuccess); Assert.Equal("HOLD_PLAN_LINEAGE_MISMATCH", result.Message);
+    }
+    [Fact, Trait("Category", "AEDV02")]
     public async Task V02_RealLifecycleAndWorldSamples_ReconstructVerifiedZeroMinionCensus()
     {
-        await using var f = await ValidAEDv2Fixture();
+        await using var f = await ValidV02Fixture();
         var (events, request) = await V02WorldEvidence(f);
         var verifier = new AEDV02SourceVerifier(f.Db, new AcceptedEvidenceRepository(events), new FixedClock(Now));
         var result = await verifier.VerifyAsync(f.MatchId, request);
@@ -35,7 +59,7 @@ public sealed partial class ScenarioServiceTests
     [Fact, Trait("Category", "AEDV02")]
     public async Task V02_CaughtPlayerRetainsSourceCoverageAndClosesSafeWindow()
     {
-        await using var f = await ValidAEDv2Fixture();
+        await using var f = await ValidV02Fixture();
         var (events, request) = await V02WorldEvidence(f);
         var world = events.Last().ValueJson["data"]["world"].AsBsonDocument;
         world["Players"][0]["IsCaught"] = true;
@@ -49,7 +73,7 @@ public sealed partial class ScenarioServiceTests
     [InlineData(4)]
     public async Task V02_KnownSpawnChargesSurviveIngestionAndIndependentReplay(int toolId)
     {
-        await using var f = await ValidAEDv2Fixture();
+        await using var f = await ValidV02Fixture();
         var (events, request) = await V02WorldEvidence(f);
         events.Single(x => x.EventType == "TEAM_TOOL_LIFECYCLE" && x.ValueJson["data"]["toolId"] == toolId).ValueJson["data"]["remainingCharges"] = 3;
         foreach (var item in events.Where(x => x.EventType == "AED_V02_WORLD_SAMPLE"))
@@ -62,7 +86,7 @@ public sealed partial class ScenarioServiceTests
     [Fact, Trait("Category", "AEDV02")]
     public async Task V02_CanonicalReviveWithoutConsumedFirstAidCannotCertifyLifecycle()
     {
-        await using var f = await ValidAEDv2Fixture();
+        await using var f = await ValidV02Fixture();
         var (world, request) = await V02WorldEvidence(f, geometry: true);
         var trace = V02PressureTrace(f, world).Where(x => x.EventType != "TEAM_TOOL_LIFECYCLE" || x.ValueJson["data"]["action"] != "CONSUME")
             .Select((x, i) => V02Event(f.MatchId, x.EventType, i + 1, x.Ts, x.SchemaVersion, x.ValueJson, x.UserId)).ToArray();
@@ -72,12 +96,40 @@ public sealed partial class ScenarioServiceTests
         Assert.Empty(f.Db.AEDV02VerifiedSources);
     }
 
+    [Fact, Trait("Category", "AEDV02")]
+    public async Task V02_PostDownAttackStateRetainsCoverageWithoutInventingAnotherEpisode()
+    {
+        await using var f = await ValidV02Fixture();
+        var (world, request) = await V02WorldEvidence(f, geometry: true);
+        var user = f.Db.MatchPlayerBindings.First(x => x.MatchId == f.MatchId).UserId;
+        var events = world.ToList();
+        foreach (var item in events.Where(x => x.EventType == "AED_V02_WORLD_SAMPLE"))
+        {
+            var sample = JsonSerializer.Deserialize<AEDV02WorldSample>(item.ValueJson["data"]["world"].ToJson())!;
+            bool down = sample.Tick >= 1200;
+            sample.Stalkers[0].State = down ? "ATTACK" : "CHASE"; sample.Stalkers[0].TargetUserId = user;
+            sample.Stalkers[0].EpisodeId = down ? string.Empty : "actual:chase";
+            sample.Players.Single(x => x.UserId == user).LifeState = down ? "DOWNED" : "ALIVE";
+            item.ValueJson["data"]["world"] = BsonDocument.Parse(JsonSerializer.Serialize(sample));
+        }
+        events.Add(V02Event(f.MatchId, "PLAYER_DOWNED", 0, Now.AddSeconds(-20), "1.1", new BsonDocument {
+            ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 1200 }, ["data"] = new BsonDocument() }, user));
+        var ordered = events.OrderBy(x => x.Ts).ThenBy(x => x.EventType == "AED_V02_WORLD_SAMPLE" ? 1 : 0)
+            .Select((x, i) => V02Event(f.MatchId, x.EventType, i + 1, x.Ts, x.SchemaVersion, x.ValueJson, x.UserId));
+        var accepted = await TelemetryServiceTests.IngestV02Trace(f.MatchId, ordered, Now, V02TelemetryAuthority(f), f.HostId);
+        var result = await new AEDV02SourceVerifier(f.Db, new AcceptedEvidenceRepository(accepted), new FixedClock(Now)).VerifyAsync(f.MatchId, request);
+        Assert.True(result.IsSuccess, result.Message); Assert.False(result.Data!.SafeWindow);
+        Assert.InRange(result.Data.PressureComponents[user][0], .01, .17);
+        Assert.True(result.Data.PressureComponents[user][2] > 0);
+        Assert.Contains(user, result.Data.RecentDownUsers);
+    }
+
     [Theory, Trait("Category", "AEDV02")]
     [InlineData("OPEN", 0d)]
     [InlineData("LOCKED", .5)]
     public async Task V02_ReviveScarcityUsesCanonicalDownAndRealReachability(string doorState, double scarcity)
     {
-        await using var f = await ValidAEDv2Fixture();
+        await using var f = await ValidV02Fixture();
         var (original, request) = await V02WorldEvidence(f);
         var content = f.Db.AEDV02SceneContents.Single();
         var manifest = JsonSerializer.Deserialize<AEDV02SceneManifest>(content.ManifestJson)!;
@@ -125,7 +177,7 @@ public sealed partial class ScenarioServiceTests
     [InlineData("missing-stalker", "HOLD_STALKER_CENSUS_MISSING")]
     public async Task V02_RealVerifier_RejectsCorruptIncompleteAndStaleSources(string failure, string reason)
     {
-        await using var f = await ValidAEDv2Fixture();
+        await using var f = await ValidV02Fixture();
         var (events, request) = await V02WorldEvidence(f);
         var sampleEvent = events.Last();
         var sample = JsonSerializer.Deserialize<AEDV02WorldSample>(sampleEvent.ValueJson["data"]["world"].ToJson())!;
@@ -148,7 +200,7 @@ public sealed partial class ScenarioServiceTests
         Assert.Empty(f.Db.AEDV02VerifiedSources);
     }
 
-    private static async Task<(TelemetryEventDocument[] Events, AEDV02SourceRequest Request)> V02WorldEvidence(Fixture f, bool geometry = false)
+    private static async Task<(TelemetryEventDocument[] Events, AEDV02SourceRequest Request)> V02WorldEvidence(Fixture f, bool geometry = false, int planRevision = 0)
     {
         f.Db.MatchAuthorityBindings.Single().Status = MatchAuthorityStatus.InMatch;
         var users = f.Db.MatchPlayerBindings.Where(x => x.MatchId == f.MatchId).Select(x => x.UserId).ToArray();
@@ -171,7 +223,7 @@ public sealed partial class ScenarioServiceTests
         for (int i = 0; i <= 30; i++)
         {
             var sample = new AEDV02WorldSample { ResolutionMode = "Adaptive", Difficulty = "Normal", Tick = 600 + i * 60, TickRate = 60, PhaseOrdinal = 1, PhaseName = "CORE_COLLECTION", LogicalPhase = 1, Zone = 1,
-                PlanRevision = 1, PlanFingerprint = AEDV02Plan.Normal().Fingerprint(), RosterIdentity = roster, SceneManifestFingerprint = fingerprint,
+                PlanRevision = planRevision, PlanFingerprint = AEDV02Plan.Normal().Fingerprint(), RosterIdentity = roster, SceneManifestFingerprint = fingerprint,
                 Players = users.Select(x => new AEDV02PlayerSource { UserId = x, LifeState = "ALIVE" }).ToArray(),
                 Stalkers = new[] { new AEDV02ThreatSource { NetworkId = "stalker", State = "PATROL", Zone = 1 } },
                 Tools = ids.Select(x => new AEDV02ToolSource { InstanceId = "tool:" + x, ToolId = x, Zone = 1, Origin = "WorldSpawn", Location = "World", MarkerId = "marker:" + x, RouteEdgeIds = new[] { "edge:" + x } }).ToArray(),
