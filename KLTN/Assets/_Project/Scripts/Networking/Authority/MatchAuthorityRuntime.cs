@@ -444,6 +444,7 @@ namespace EchoProtocol.Networking.Authority
                         occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase,
                         tool.InstanceId, tool.ToolId, tool.Zone, ownerUserId,
                         tool.RemainingCharges, out _, out _));
+                TryRecordV02ResourceAction(player, tool.ToolId, tool.InstanceId, "PICKUP", occurrenceKey, tick);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 Debug.Log($"[AED_P8][TOOL_SOURCE] action=PICKUP id={instanceId} owner={userId} tick={tick}");
 #endif
@@ -472,6 +473,7 @@ namespace EchoProtocol.Networking.Authority
                 TryPublishPhase8Lifecycle(occurrenceKey, () => _telemetry.Phase8LifecycleAdapter.EmitToolUse(
                     occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase, source.InstanceId, source.ToolId,
                     source.Zone, ownerId, remainingCharges, consumed, out _, out _));
+                TryRecordV02ResourceAction(player, source.ToolId, source.InstanceId, consumed ? "CONSUME" : "USE", occurrenceKey, tick);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 Debug.Log($"[AED_P8][TOOL_SOURCE] action={(consumed ? "CONSUME" : "USE")} id={instanceId} charges={remainingCharges} tick={tick}");
 #endif
@@ -510,6 +512,7 @@ namespace EchoProtocol.Networking.Authority
                     occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase, source.InstanceId,
                     source.ParentInstanceId, source.ToolId, source.Zone, ownerId,
                     source.RemainingCharges, out _, out _));
+                TryRecordV02ResourceAction(player, source.ToolId, source.InstanceId, "DROP", occurrenceKey, tick);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 Debug.Log($"[AED_P8][TOOL_SOURCE] action=DROP id={newInstanceId} parent={source.ParentInstanceId} owner={userId} tick={tick}");
 #endif

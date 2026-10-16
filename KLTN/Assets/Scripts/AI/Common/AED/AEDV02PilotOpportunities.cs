@@ -8,7 +8,7 @@ namespace EchoProtocol.AI.Common.AED
     // Pilot-only defaults authorized 2026-10-15; production calibration is a separate release decision.
     public static class AEDV02PilotOpportunities
     {
-        public const string Version = "AED_V02_PILOT_OPPORTUNITIES_1";
+        public const string Version = "AED_V02_PILOT_OPPORTUNITIES_2";
         public const double MinimumExposureSeconds = 5;
         public const double SafeResolutionSeconds = 10;
         public const double LongChaseSeconds = 20;
@@ -53,7 +53,7 @@ namespace EchoProtocol.AI.Common.AED
         public static AEDV02HistoricalCompetence Competence(Guid user, string axis, string context, DateTime now,
             IEnumerable<AEDV02HistoricalOpportunity> observations)
         {
-            if (user == Guid.Empty || axis is not ("Stalker" or "Minion" or "Objective" or "Tool" or "Teamwork") ||
+            if (user == Guid.Empty || axis is not ("Stalker" or "Minion" or "Objective" or "Tool" or "Teamwork" or "ResourceManagement") ||
                 !AEDV02WorldSample.Hash(context) || observations == null)
                 return new AEDV02HistoricalCompetence(null, 0, 0, 0, "Invalid");
             var all = observations.ToArray();
@@ -130,6 +130,25 @@ namespace EchoProtocol.AI.Common.AED
             (Kind == "MINION_TOOL_LOSS" ? ToolId is 1 or 2 or 3 or 4 or 6 && ToolInstanceId.Length != 0 : ToolId == 0);
     }
 
+    public sealed class AEDV02ResourceManagementAction
+    {
+        public string Version { get; set; } = AEDV02PilotOpportunities.Version;
+        public Guid CauseEventId { get; set; }
+        public Guid ActorUserId { get; set; }
+        public string Action { get; set; } = string.Empty;
+        public string ToolInstanceId { get; set; } = string.Empty;
+        public string LifecycleOccurrenceKey { get; set; } = string.Empty;
+        public int ToolId { get; set; }
+        public long Tick { get; set; }
+
+        public bool IsValid() => Version == AEDV02PilotOpportunities.Version &&
+            CauseEventId != Guid.Empty && ActorUserId != Guid.Empty &&
+            Action is "PICKUP" or "USE" or "CONSUME" or "DROP" &&
+            !string.IsNullOrWhiteSpace(ToolInstanceId) && ToolInstanceId.Length <= 128 &&
+            !string.IsNullOrWhiteSpace(LifecycleOccurrenceKey) && LifecycleOccurrenceKey.Length <= 256 &&
+            ToolId is 1 or 2 or 3 or 4 or 6 && Tick >= 0;
+    }
+
     public sealed class AEDV02LongChaseRecovery
     {
         private double _started = double.NaN;
@@ -160,7 +179,7 @@ namespace EchoProtocol.AI.Common.AED
         public long StartTick { get; set; }
         public long EndTick { get; set; }
         public bool IsValid() => !string.IsNullOrWhiteSpace(Id) && Id.Length <= 256 && UserId != Guid.Empty &&
-            Axis is "Stalker" or "Minion" or "Objective" or "Tool" or "Teamwork" &&
+            Axis is "Stalker" or "Minion" or "Objective" or "Tool" or "Teamwork" or "ResourceManagement" &&
             (Axis == "Tool" ? ToolId is 1 or 2 or 3 or 4 or 6 : ToolId == 0) &&
             Resolution is "Success" or "Failure" or "Censored" && StartTick >= 0 && EndTick > StartTick;
     }

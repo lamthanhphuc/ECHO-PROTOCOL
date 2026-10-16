@@ -133,7 +133,16 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
                 else if (source.TeamPressureTier < 3 || source.PlayerPressure.Values.Any(x => x >= .25) || source.RecentDownUsers.Length != 0) hold = "HOLD_TEAM_OVERLOADED";
                 else
                 {
-                    string axis = (int)changedKey < 6 ? "Stalker" : changedKey is AEDV02Key.Zone1MinionCap or AEDV02Key.Zone2MinionCap or AEDV02Key.Zone3AdaptiveMinionCap ? "Minion" : "Tool";
+                    string axis = (int)changedKey < 6
+                        ? "Stalker"
+                        : changedKey is AEDV02Key.Zone1MinionCap
+                            or AEDV02Key.Zone2MinionCap
+                            or AEDV02Key.Zone3AdaptiveMinionCap
+                                ? "Minion"
+                                : changedKey is AEDV02Key.ResourceGrade
+                                    or AEDV02Key.OptionalToolBudget
+                                    ? "ResourceManagement"
+                                    : "Tool";
                     var history = await new AEDV02HistoricalCompetenceService(db, telemetry, clock).ReadAsync(matchId,
                         source.PlayerPressure.Keys.ToArray(), request.SceneManifestFingerprint, axis, ct);
                     if (history.Values.Any(x => !x.ReadyForIncrease)) hold = "HOLD_HISTORICAL_OPPORTUNITIES_REQUIRED";

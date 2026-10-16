@@ -71,6 +71,12 @@ public sealed partial class AEDV02SourceVerifier
     {
         var results = new List<AEDV02ResolvedOpportunity>();
         if (frames.Count < 2 || !TryReadImpacts(accepted, frames, out var impacts)) return [];
+        if (manifest != null)
+        {
+            if (!TryResolveResourceManagementOpportunities(accepted, frames, manifest, out var resourceOutcomes))
+                return [];
+            results.AddRange(resourceOutcomes);
+        }
         var noiseOutcomes = Array.Empty<AEDV02ResolvedOpportunity>();
         if (manifest != null && !TryResolveNoiseMakerOpportunities(accepted, frames, manifest, out noiseOutcomes)) return [];
         results.AddRange(noiseOutcomes);

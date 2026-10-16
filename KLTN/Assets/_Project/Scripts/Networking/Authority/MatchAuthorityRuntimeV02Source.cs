@@ -87,6 +87,42 @@ namespace EchoProtocol.Networking.Authority
             { _v02CarrierEvidenceInvalid = true; return; }
             _v02Impacts[player] = (emitted.Id, impact);
         }
+        private void TryRecordV02ResourceAction(PlayerRef actor, int toolId, string toolInstanceId, string action,
+            string lifecycleOccurrenceKey, long tick)
+        {
+            if (!V02CollectToolOutcomes || _telemetry.Phase8LifecycleAdapter == null ||
+                !TryResolveBackendUser(actor, out var actorUserId) || !TryReadCurrentV02World(out var world)) return;
+            var needs = world.Players.Where(player => player.RequiredToolId == toolId &&
+                Guid.TryParse(player.ResourceCauseEventId, out var causeId) &&
+                _v02Impacts.Values.Any(impact => impact.EventId == causeId && impact.Impact.Kind == "MINION_TOOL_LOSS" &&
+                    impact.Impact.UserId == player.UserId && impact.Impact.ToolId == toolId && impact.Impact.UntilTick >= tick))
+                .ToArray();
+            if (needs.Length != 1) return;
+            var need = needs[0];
+            if (action != "PICKUP" && need.UserId != actorUserId) return;
+            if (!Guid.TryParse(need.ResourceCauseEventId, out var causeEventId) ||
+                !_v02Impacts.Values.Any(x => x.EventId == causeEventId && x.Impact.Tick <= tick && x.Impact.UntilTick >= tick))
+                return;
+            var resourceAction = new AEDV02ResourceManagementAction
+            {
+                CauseEventId = causeEventId,
+                ActorUserId = actorUserId,
+                Action = action,
+                ToolInstanceId = toolInstanceId,
+                LifecycleOccurrenceKey = lifecycleOccurrenceKey,
+                ToolId = toolId,
+                Tick = tick
+            };
+            if (!resourceAction.IsValid() || !_telemetry.Phase8LifecycleAdapter.EmitAEDV02ResourceAction(
+                    "v02:resource-action:" + AEDV02Plan.Hash(causeEventId.ToString("D") + "|" + lifecycleOccurrenceKey),
+                    DateTime.UtcNow, _currentTelemetryPhase, AEDV02SourceJson.ResourceManagementAction(resourceAction),
+                    out _, out _))
+            {
+                _v02CarrierEvidenceInvalid = true;
+                return;
+            }
+            _telemetry.TryFlushNow();
+        }
         public bool RecordV02CabinetClue(AEDV02CabinetClueSource clue, out Guid eventId)
         {
             eventId = Guid.Empty;

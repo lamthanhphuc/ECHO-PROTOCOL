@@ -5,7 +5,7 @@
 
 **IMPLEMENTATION INCOMPLETE — BLOCKERS REMAINING.** The source commits above are useful implementation progress, not a claim that all B1–B8 requirements are complete.
 
-1. **Historical ResourceManagement:** shared AEDV02PilotOpportunities.Competence accepts Stalker/Minion/Objective/Tool/Teamwork axes. AEDV02DecisionService selects Tool for resource/optional-supply adversity. All five actual Tool outcome producers now exist, but this is not a distinct reconstructed resource-management/cost-efficiency metric. Do not relabel Tool confidence as independent ResourceManagement Verified. Its eligible opportunity/cost/resolution semantics must be formally defined and implemented with independent source tests.
+1. **Historical ResourceManagement:** OPPORTUNITIES_2 now defines a separate ResourceManagement axis. Unity emits accepted Telemetry 1.3 resource actions, while Backend independently joins verified minion-loss causes, lifecycle custody and world samples into one deduplicated success/failure/censored opportunity per actor. Focused source tests are authored but compilation, ingestion and historical sufficiency remain unverified.
 2. **Protected-area / Safe Room lineage:** current manifest marker kinds and runtime Cabinet route/supply checks do not provide a canonical authored Safe Room registry. Zone, door, route, actor and objective checks are present, but they are not proof of protected-area exclusion. Establish authoritative protected-area identities/bounds and propagate authoring/export/Host/Backend checks. Do not infer this from room names or assume missing data means safe.
 3. **Full deterministic twelve-case orchestration:** Invoke-AEDV02AcceptanceScenario contains CAPTURE_REQUIRED branches for fairness, supply, Zone3 relief, final-phase progression and multiple-window audit. They help capture actual conditions but do not fully drive/verify those scenarios. Native controls exist, including four identities/reconnect/outage, but complete scenario stimuli and correlation/assertions remain implementation work. Existing genuine historical prerequisites cannot be replaced by a fake verifier or pressure flags.
 
@@ -16,7 +16,7 @@ No owner E2E acceptance is requested. The owner runbook is preparation for later
 
 ## Current implementation-only candidate (2026-10-16)
 
-Continuation begins at 243eceec on feature/aed-v02-full-integration. All Backend compilation/tests, Unity tests, Windows builds, migrations and native gameplay are **NOT RUN** by explicit owner instruction. Older test/build figures below are historical.
+This shell-only continuation adds ResourceManagement event validation/reconstruction and Safe Room source guards on feature/aed-v02-full-integration. All Backend compilation/tests, Unity tests, Windows builds, migrations, Unity Editor operations and native gameplay are **NOT RUN** by explicit owner instruction. Older test/build figures below are historical.
 
 | Gate | Current evidence |
 |---|---|
@@ -25,12 +25,12 @@ Continuation begins at 243eceec on feature/aed-v02-full-integration. All Backend
 | Windows Development build / startup | NOT RUN |
 | Native approval -> Host -> remote Client -> consumer -> receipt | NOT RUN / UNVERIFIED |
 | Twelve owner acceptance cases / Fixed runtime regression | NOT RUN / UNVERIFIED |
-| Real scene author/export | Executed in the already open stopped Editor; asset-generation evidence only |
-| Static review | Source/DTO/producer/verifier/consumer/receipt paths, scripts syntax, shared mirror, scene object diff, default flags and main differences; not runtime proof |
+| Real scene author/export | Not performed in this continuation; no Safe Room authoring or manifest regeneration |
+| Static review | ResourceManagement contract/producer/Backend validator/reconstruction wiring; Safe Room marker/exporter/manifest checks and runtime path guards; no runtime proof |
 
-Real export: manifest bd08701c7e61ea95fa938161ddfac50c3b53a3d3736e163edb72b212df3b96bc; 289 markers (112 Tool, 107 Cabinet, 67 Cabinet entries, 3 zone entries), 7,719 triangles, 15,732 links, 20 doors. Actual spacing/tuning and semantic Tool roles are included. Scene changes add only the owned pilot-entry root/children; serialization-only churn is removed. Bootstrap stayed clean; owner Editor settings and protected assets were preserved. The authoring mechanism executed an isolated Editor authoring script and later the loaded exporter; this is not project compilation or a test result.
+Previously exported scene data remains at the documented fingerprint bd08701c7e61ea95fa938161ddfac50c3b53a3d3736e163edb72b212df3b96bc, with 289 markers (112 Tool, 107 Cabinet, 67 Cabinet entries, 3 zone entries), 7,719 triangles, 15,732 links and 20 doors. That existing fingerprint contains no new Safe Room registry and was not regenerated here. The newly added exporter requires real authored Safe Room components; no volumes, coordinates or manifest data were fabricated. Adaptive V02 features guarded by the registry will Hold until an owner authors and exports them.
 
-Current source adds Scanner/Jammer independent reconstruction, canonical lifecycle/real-result producers, new regression cases, real scene assets, native controls/2–4-process topology, actual consumer MatchId, same-revision refresh/baseline restore, Scanner match reset and owner runbook. Pilot DEFAULTS_2 reserves Cabinet budget in Z1/2 without changing A–G numbers. All gameplay defaults stay OFF.
+Current source includes previous Scanner/Jammer and other pilot work plus this continuation's independent ResourceManagement axis, `AED_V02_RESOURCE_ACTION` event/schema validation and impact/lifecycle-linked reconstruction, and Safe Room registry/bounds/path guards. ResourceManagement regression tests are not yet authored; scene authoring/export, test execution and native behavior remain incomplete. Pilot DEFAULTS_2 reserves Cabinet budget in Z1/2 without changing A–G numbers. All gameplay defaults stay OFF.
 
 Prior CI 38700470494 at d074a260 reported Backend compile success, 654 PASS / 3 FAIL / 0 SKIP. The three retained regression repairs (composite settings, legacy-source precedence and PostgreSQL pre-column seed/up/down/up) are authored in 243eceec; execution is still outstanding. No old CI result is attributed to this source candidate.
 

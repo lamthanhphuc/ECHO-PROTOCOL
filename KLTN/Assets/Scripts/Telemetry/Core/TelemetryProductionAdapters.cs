@@ -755,6 +755,11 @@ namespace EchoProtocol.Telemetry
             out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
             Emit(occurrenceKey, TelemetryEventTypes.AEDV02CausalImpact, occurredAtUtc, phase,
                 new TelemetryJsonObject().AddRawObject("impact", impactJson), out telemetryEvent, out failureReason);
+
+        public bool EmitAEDV02ResourceAction(string occurrenceKey, DateTime occurredAtUtc, string phase, string actionJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02ResourceAction, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("action", actionJson), out telemetryEvent, out failureReason);
         public bool EmitAEDV02Exclusion(string occurrenceKey, DateTime occurredAtUtc, string phase, string kind,
             out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
             Emit(occurrenceKey, TelemetryEventTypes.AEDV02CaptureExcluded, occurredAtUtc, phase,

@@ -36,6 +36,7 @@ namespace EchoProtocol.Telemetry
         public const string AEDV02ToolCarrier = "AED_V02_TOOL_CARRIER";
         public const string AEDV02CabinetClue = "AED_V02_CABINET_CLUE";
         public const string AEDV02CausalImpact = "AED_V02_CAUSAL_IMPACT";
+        public const string AEDV02ResourceAction = "AED_V02_RESOURCE_ACTION";
         public const string AEDV02PlanCommit = "AED_V02_PLAN_COMMIT";
         public const string AEDV02CaptureExcluded = "AED_V02_CAPTURE_EXCLUDED";
         public const string AEDV02CaptureSeal = "AED_V02_CAPTURE_SEAL";
@@ -142,6 +143,7 @@ namespace EchoProtocol.Telemetry
             TelemetryEventTypes.AEDV02ToolCarrier,
             TelemetryEventTypes.AEDV02CabinetClue,
             TelemetryEventTypes.AEDV02CausalImpact,
+            TelemetryEventTypes.AEDV02ResourceAction,
             TelemetryEventTypes.AEDV02PlanCommit,
             TelemetryEventTypes.AEDV02CaptureExcluded,
             TelemetryEventTypes.AEDV02CaptureSeal

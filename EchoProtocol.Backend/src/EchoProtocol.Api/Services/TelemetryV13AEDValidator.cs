@@ -9,7 +9,7 @@ internal static class TelemetryV13AEDValidator
 {
     private static readonly JsonSerializerOptions Json = new() { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
     private static readonly string[] ContextFields = ["eventSequence", "authorityTick", "scenarioConfigVersion", "policyVersion", "configSource", "occurrenceKey", "phase", "researchCaptureEnabled"];
-    public static bool IsSourceEvent(string type) => type is "AED_V02_WORLD_SAMPLE" or "AED_V02_ACTION_EFFECT" or "AED_V02_TOOL_CARRIER" or "AED_V02_CABINET_CLUE" or "AED_V02_CAUSAL_IMPACT" or "AED_V02_PLAN_COMMIT" or "AED_V02_CAPTURE_EXCLUDED" or "AED_V02_CAPTURE_SEAL";
+    public static bool IsSourceEvent(string type) => type is "AED_V02_WORLD_SAMPLE" or "AED_V02_ACTION_EFFECT" or "AED_V02_TOOL_CARRIER" or "AED_V02_CABINET_CLUE" or "AED_V02_CAUSAL_IMPACT" or "AED_V02_RESOURCE_ACTION" or "AED_V02_PLAN_COMMIT" or "AED_V02_CAPTURE_EXCLUDED" or "AED_V02_CAPTURE_SEAL";
     public static bool TryValidate(TelemetryEventRequest item, bool? captureAllowed,
         out TelemetryValidationResult result, out string reason)
     {
@@ -18,7 +18,7 @@ internal static class TelemetryV13AEDValidator
             item.ValueJson.ValueKind != JsonValueKind.Object || !item.ValueJson.TryGetProperty("context", out var context) ||
             !item.ValueJson.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object || context.ValueKind != JsonValueKind.Object ||
             !Fields(item.ValueJson, ["context", "data"]) || !Fields(context, ContextFields) ||
-            !Fields(data, [item.EventType == "AED_V02_WORLD_SAMPLE" ? "world" : item.EventType == "AED_V02_ACTION_EFFECT" ? "effect" : item.EventType == "AED_V02_TOOL_CARRIER" ? "carrier" : item.EventType == "AED_V02_CAUSAL_IMPACT" ? "impact" : item.EventType == "AED_V02_PLAN_COMMIT" ? "commit" : item.EventType is "AED_V02_CAPTURE_EXCLUDED" or "AED_V02_CAPTURE_SEAL" ? "exclusion" : "clue"]) ||
+            !Fields(data, [item.EventType == "AED_V02_WORLD_SAMPLE" ? "world" : item.EventType == "AED_V02_ACTION_EFFECT" ? "effect" : item.EventType == "AED_V02_TOOL_CARRIER" ? "carrier" : item.EventType == "AED_V02_CAUSAL_IMPACT" ? "impact" : item.EventType == "AED_V02_RESOURCE_ACTION" ? "action" : item.EventType == "AED_V02_PLAN_COMMIT" ? "commit" : item.EventType is "AED_V02_CAPTURE_EXCLUDED" or "AED_V02_CAPTURE_SEAL" ? "exclusion" : "clue"]) ||
             !context.TryGetProperty("eventSequence", out var sequence) || !sequence.TryGetInt64(out var seq) || seq <= 0 ||
             !context.TryGetProperty("authorityTick", out var tick) || !tick.TryGetInt64(out var authorityTick) || authorityTick < 0 ||
             !Text(context, "occurrenceKey", out _) || !Text(context, "phase", out var phase) ||
@@ -63,6 +63,12 @@ internal static class TelemetryV13AEDValidator
             {
                 if (!data.TryGetProperty("impact", out var impact) || !Complete<AEDV02CausalImpact>(impact)) return false;
                 var observed = JsonSerializer.Deserialize<AEDV02CausalImpact>(impact.GetRawText(), Json);
+                if (observed == null || !observed.IsValid() || observed.Tick != authorityTick) return false;
+            }
+            else if (item.EventType == "AED_V02_RESOURCE_ACTION")
+            {
+                if (!data.TryGetProperty("action", out var action) || !Complete<AEDV02ResourceManagementAction>(action)) return false;
+                var observed = JsonSerializer.Deserialize<AEDV02ResourceManagementAction>(action.GetRawText(), Json);
                 if (observed == null || !observed.IsValid() || observed.Tick != authorityTick) return false;
             }
             else if (item.EventType is "AED_V02_CAPTURE_EXCLUDED" or "AED_V02_CAPTURE_SEAL")
