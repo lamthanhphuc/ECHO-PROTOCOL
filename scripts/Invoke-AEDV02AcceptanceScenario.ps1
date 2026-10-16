@@ -114,9 +114,38 @@ try {
             }
         }
         'E2E-PP-01' {
-            Wait-World { param($w,$r) $w.players.Count -eq 4 -and $w.verifiedSource.pressureComplete -and
-                @($w.verifiedSource.players.tier | Select-Object -Unique).Count -ge 2 } 'four real players with distinct canonical pressure' | Out-Null
-            Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'Four-player pressure tiers and target transitions were captured; owner must review fairness, forced-target/core-carrier exceptions and attack-freeze evidence.'
+            Wait-World {
+                param($w, $r)
+
+                if ($w.players.Count -ne 4 -or
+                    !$w.verifiedSource.pressureComplete) {
+                    return $false
+                }
+
+                $players = @($w.players)
+                $pressures = @($w.verifiedSource.players)
+                $userIds = @($players | ForEach-Object { $_.userId })
+
+                if (@($userIds | Sort-Object -Unique).Count -ne 4) {
+                    return $false
+                }
+
+                foreach ($userId in $userIds) {
+                    $matched = @($pressures | Where-Object {
+                        $_.userId -eq $userId -and
+                        $_.tier -ge 0 -and $_.tier -le 4
+                    })
+
+                    if ($matched.Count -ne 1) {
+                        return $false
+                    }
+                }
+
+                return @($pressures.tier | Sort-Object -Unique).Count -ge 2
+            } 'four distinct players with verified canonical pressure' | Out-Null
+
+            Save-Scenario 'MANUAL_REVIEW_REQUIRED' `
+                'Review target LOS, fairness, attack freeze and exceptions.'
         }
         'E2E-PP-02' {
             $w=Read-World 'Host';$minion=@($w.minions | Where-Object { $_.state -notin @('Dying','Flee') }) | Select-Object -First 1
@@ -127,8 +156,22 @@ try {
             Wait-World { param($w,$r) (Local-Player $r).life -eq 'DOWNED' } 'actual Stalker Down after Minion pressure' | Out-Null
         }
         'E2E-Z3-01' {
-            Wait-World { param($w,$r) $w.phase -eq 'Zone3FindFrigate' -and @($w.minions | Where-Object zone -eq 3).Count -eq 1 } 'approved Adaptive Zone3 actual Minion spawn' | Out-Null
-            Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'Adaptive cap and live census were captured; owner must observe relief 1->0 without force-despawn and repeat Fixed Normal with Zone3 at zero.'
+            Wait-World {
+                param($w, $r)
+
+                $zone3 = @($w.minions | Where-Object {
+                    $_.zone -eq 3
+                })
+
+                return $w.mode -eq 'Adaptive' -and
+                    $w.phase -eq 'Zone3FindFrigate' -and
+                    $w.plan.Count -gt 8 -and
+                    $w.plan[8] -eq 1 -and
+                    $zone3.Count -eq 1
+            } 'approved Adaptive Zone3 cap and one real Minion' | Out-Null
+
+            Save-Scenario 'MANUAL_REVIEW_REQUIRED' `
+                'Review cap relief 1->0, no forced despawn, and Fixed Zone3 cap 0.'
         }
         'E2E-TT-01' {
             $w = Wait-World {
@@ -150,17 +193,121 @@ try {
             Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'Verified five materialized Zone2 Tool types; owner reviews reservations, support effects and receipts.'
         }
         'E2E-F4-01' {
-            Wait-World { param($w,$r) $w.phase -in @('FinalHunt','Escape') } 'normal objectives reached final phase' | Out-Null
-            Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'Final phase was captured; owner must inspect decision audit for zero new positive pressure and confirm objective completion without softlock.'
+            # Start this driver before gameplay enters FinalHunt so both stages can be observed.
+            Wait-World {
+                param($w, $r)
+                $w.phase -eq 'FinalHunt'
+            } 'actual Final Hunt reached' | Out-Null
+
+            Wait-World {
+                param($w, $r)
+                $w.phase -eq 'Escape'
+            } 'actual Escape reached' | Out-Null
+
+            Save-Scenario 'MANUAL_REVIEW_REQUIRED' `
+                'Review no positive AED pressure, baseline events and mission completion.'
         }
         'E2E-AED-01' {
-            if (!$StackJson) { throw 'Owned disposable StackJson required for outage.' }
-            & (Join-Path $PSScriptRoot 'Stop-AEDV02NativeBackend.ps1') -StackJson $StackJson -Action BackendOffline | Out-Null
-            $offline=$true;Start-Sleep -Seconds 12
-            & (Join-Path $PSScriptRoot 'Stop-AEDV02NativeBackend.ps1') -StackJson $StackJson -Action BackendOnline | Out-Null
-            $offline=$false
-            Wait-World { param($w,$r) $w.verifiedSource.pressureComplete } 'canonical collection recovered after real HTTP outage' | Out-Null
-            Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'Backend recovery was observed; owner must correlate PreMatch/Boundary, two distinct same-phase SafeWindow IDs, retry identity, consumer readback and receipts.'
+            if ($Role -eq 'Host') {
+                throw 'Remote Client required.'
+            }
+
+            if (!$StackJson) {
+                throw 'Owned disposable StackJson required.'
+            }
+            & (Join-Path $PSScriptRoot 'Stop-AEDV02NativeBackend.ps1') `
+                -StackJson $StackJson -Action BackendOffline | Out-Null
+            $offline = $true
+            Start-Sleep -Seconds 12
+            & (Join-Path $PSScriptRoot 'Stop-AEDV02NativeBackend.ps1') `
+                -StackJson $StackJson -Action BackendOnline | Out-Null
+            $offline = $false
+            Wait-World {
+                param($w, $r)
+                $w.verifiedSource.pressureComplete
+            } 'verified source recovered after Backend outage' | Out-Null
+
+            $hostPath = Join-Path $output 'Host-readback.jsonl'
+            $clientPath = Join-Path $output "$Role-readback.jsonl"
+            $logPath = Join-Path $output 'Host.log'
+            $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+            $verified = $false
+            do {
+                if ((Test-Path $hostPath) -and (Test-Path $clientPath)) {
+                    $hosts = @(Read-AEDV02NativeRows -Path $hostPath)
+                    $clients = @(Read-AEDV02NativeRows -Path $clientPath)
+                    $receipts = @(Get-Content -LiteralPath $logPath)
+                    $prematch = @($hosts | Where-Object {
+                        $_.matchId -eq $record.match -and
+                        $_.revision -eq 1 -and
+                        $_.consumerObserved
+                    })
+                    $boundaries = @($hosts | Where-Object {
+                        $_.matchId -eq $record.match -and
+                        $_.decisionPoint -eq 'PHASE_BOUNDARY' -and
+                        $_.consumerObserved
+                    })
+                    if ($prematch.Count -gt 0 -and $boundaries.Count -gt 0) {
+                        $windows = @($hosts | Where-Object {
+                            $_.matchId -eq $record.match -and
+                            $_.decisionPoint -eq 'SAFE_WINDOW' -and
+                            $_.decisionPhaseOrdinal -gt 0 -and
+                            $_.revision -gt 1 -and
+                            $_.consumerObserved -and
+                            $_.consumerFingerprint -eq $_.fingerprint -and
+                            $_.windowId -match '^[a-fA-F0-9]{64}$'
+                        })
+                        foreach ($phase in @($windows | Group-Object decisionPhaseOrdinal)) {
+                            $accepted = @(
+                                foreach ($h in $phase.Group) {
+                                    $remote = @($clients | Where-Object {
+                                        $_.matchId -eq $h.matchId -and
+                                        $_.decisionId -eq $h.decisionId -and
+                                        $_.revision -eq $h.revision -and
+                                        $_.fingerprint -eq $h.fingerprint -and
+                                        $_.consumerFingerprint -eq $h.fingerprint -and
+                                        $_.windowId -eq $h.windowId -and
+                                        $_.roster -eq $h.roster -and
+                                        $_.scene -eq $h.scene -and
+                                        $_.policy -eq $h.policy -and
+                                        $_.actionFingerprint -eq $h.actionFingerprint -and
+                                        $_.consumerObserved
+                                    })
+                                    $receipt = @($receipts | Where-Object {
+                                        $_.Contains('[APPLY_RECEIPT]') -and
+                                        $_.Contains("match=$($h.matchId)") -and
+                                        $_.Contains("decision=$($h.decisionId)") -and
+                                        $_.Contains("revision=$($h.revision)") -and
+                                        $_.Contains("window=$($h.windowId)") -and
+                                        $_.Contains("fingerprint=$($h.fingerprint)")
+                                    })
+                                    if ($remote.Count -gt 0 -and $receipt.Count -gt 0) {
+                                        $h
+                                    }
+                                }
+                            )
+                            $revisions = @($accepted |
+                                Select-Object -ExpandProperty revision -Unique)
+                            $windowIds = @($accepted |
+                                Select-Object -ExpandProperty windowId -Unique)
+                            if ($revisions.Count -ge 2 -and $windowIds.Count -ge 2) {
+                                $verified = $true
+                                break
+                            }
+                        }
+                    }
+                }
+                if (!$verified) {
+                    Start-Sleep -Seconds 2
+                }
+            } while (!$verified -and [DateTime]::UtcNow -lt $deadline)
+            if (!$verified) {
+                throw 'Two same-phase SafeWindows with matching remote readback and receipts were not proven.'
+            }
+            Save-Scenario 'OBSERVED' `
+                'PreMatch, Boundary and two SafeWindows correlated.'
+            Save-Scenario 'MANUAL_REVIEW_REQUIRED' `
+                'Review actual gameplay effects, retry idempotency and objective progression.'
         }
     }
     Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'This driver records real conditions/actions; it does not certify human gameplay or audiovisual assertions.'
