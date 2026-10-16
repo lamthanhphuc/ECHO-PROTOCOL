@@ -3,10 +3,10 @@
 
 ## Mandatory implementation blockers — final static review
 
-**IMPLEMENTATION INCOMPLETE — BLOCKERS REMAINING.** The source commits above are useful implementation progress, not a claim that all B1–B8 requirements are complete.
+**IMPLEMENTATION INCOMPLETE — Backend CI 703 PASS; Unity/native NOT RUN.** The source commits above are useful implementation progress, not a claim that all B1–B8 requirements are complete.
 
-1. **Historical ResourceManagement:** OPPORTUNITIES_2 now defines a separate ResourceManagement axis. Unity emits accepted Telemetry 1.3 resource actions, while Backend independently joins verified minion-loss causes, lifecycle custody and world samples into one deduplicated success/failure/censored opportunity per actor. Focused source tests are authored but compilation, ingestion and historical sufficiency remain unverified.
-2. **Protected-area / Safe Room lineage:** current manifest marker kinds and runtime Cabinet route/supply checks do not provide a canonical authored Safe Room registry. Zone, door, route, actor and objective checks are present, but they are not proof of protected-area exclusion. Establish authoritative protected-area identities/bounds and propagate authoring/export/Host/Backend checks. Do not infer this from room names or assume missing data means safe.
+1. **Historical ResourceManagement:** OPPORTUNITIES_2 now defines a separate ResourceManagement axis. Backend CI covers canonical pickup/use, shortage, duplicate, lineage and reconnect cases; historical sufficiency and native producer ordering remain unverified.
+2. **Protected-area / Safe Room lineage:** Backend independently verifies canonical WorldSpawn coordinates/marker identity against registered SafeRoom bounds. ScenePlaced and PlayerDrop remain valid non-AED-spawn cases; live authoring/export and Host/native proof remain outstanding.
 3. **Full deterministic twelve-case orchestration:** Invoke-AEDV02AcceptanceScenario now records the five formerly capture-only cases as MANUAL_REVIEW_REQUIRED after real prerequisite assertions. They still do not fully drive/verify human fairness, relief, effect and multi-window judgments. Existing genuine historical prerequisites cannot be replaced by a fake verifier or pressure flags.
 
 No owner E2E acceptance is requested. The owner runbook is preparation for later verification, not an instruction to accept this incomplete candidate. Compilation/tests/build/native remain NOT RUN as explicitly requested.

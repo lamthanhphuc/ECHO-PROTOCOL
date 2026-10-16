@@ -38,9 +38,9 @@ public sealed partial class AEDV02DecisionService
             return "HOLD_SUPPORT_SAFE_ROOM_ROUTE";
         if (!world.Players.Where(x => x.LifeState == "ALIVE" && !x.IsCaught).Any(helper =>
             manifest.HasReachableGeometry(new[] { helper.X, helper.Y, helper.Z }, target, world.Doors) &&
-            !manifest.TryPathIntersectsSafeRoom(new[] { new[] { helper.X, helper.Y, helper.Z }, target }, out var approachIntersects) && !approachIntersects &&
+            manifest.TryPathIntersectsSafeRoom(new[] { new[] { helper.X, helper.Y, helper.Z }, target }, out var approachIntersects) && !approachIntersects &&
             manifest.HasReachableGeometry(target, new[] { victim.X, victim.Y, victim.Z }, world.Doors) &&
-            !manifest.TryPathIntersectsSafeRoom(new[] { target, new[] { victim.X, victim.Y, victim.Z } }, out var deliveryIntersects) && !deliveryIntersects))
+            manifest.TryPathIntersectsSafeRoom(new[] { target, new[] { victim.X, victim.Y, victim.Z } }, out var deliveryIntersects) && !deliveryIntersects))
             return "HOLD_SUPPORT_ROUTE_INVALID";
         return string.Empty;
     }

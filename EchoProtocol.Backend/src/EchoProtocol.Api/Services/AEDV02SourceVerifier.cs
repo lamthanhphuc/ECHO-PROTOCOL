@@ -140,6 +140,10 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
                 if (tool.CarrierMinionId.Length != 0) continue;
                 var marker = manifest.Markers.SingleOrDefault(x => x.Id == tool.MarkerId && x.Kind == "TOOL");
                 if (tool.Origin is "WorldSpawn" or "ScenePlaced" && (marker == null || !marker.AllowedToolIds.Contains(tool.ToolId))) return Hold("HOLD_TOOL_PLACEMENT_WHITELIST");
+                if (tool.Origin == "WorldSpawn" && (marker == null ||
+                    Math.Pow(tool.X - marker.X, 2) + Math.Pow(tool.Y - marker.Y, 2) + Math.Pow(tool.Z - marker.Z, 2) > 0.0001 ||
+                    !manifest.TryIsInsideSafeRoom(tool.X, tool.Y, tool.Z, out var insideSafeRoom) || insideSafeRoom))
+                    return Hold("HOLD_TOOL_PLACEMENT_SAFE_ROOM_INVALID");
                 if (manifest.NavCells.Length != 0)
                 {
                     var entry = manifest.Markers.SingleOrDefault(x => x.Id == "Z" + (marker?.Zone ?? tool.Zone) + "_ENTRY");

@@ -2,7 +2,7 @@
 
 ## 1. Status and environment
 
-This candidate is **IMPLEMENTATION INCOMPLETE — UNTESTED**. Resolve the mandatory blockers in Remaining Contract Decisions before treating the twelve recipes as an acceptance-ready implementation. Commands below are instructions for the owner's later verification, not a record of executed tests. The current task did not run Backend compilation/tests, Unity tests, a Player build, native multiplayer, migrations, or Unity Editor operations. The requested shell-only continuation skipped scene authoring/export; the newly required Safe Room registry is not present in the shipped manifests, so Adaptive V02 Safe Room guards will hold until the owner authors and exports valid volumes.
+This candidate is **IMPLEMENTATION INCOMPLETE — Backend CI 703 PASS**. The Backend validation and regression suite passed in CI; Unity/native verification still has not run. Commands below remain instructions for the owner's later verification, not multiplayer acceptance proof. The shipped manifests still require owner-authored Safe Room export for live scenes.
 
 Requirements: Windows, licensed Unity **6000.5.8f1** with Windows build support, .NET 8 SDK, local Docker Desktop, PowerShell, Git and RTK. Existing Fusion/Voice App IDs must be configured privately. Use the same commit for Backend, Host and every Client. Do not publish credentials or change production flags.
 
