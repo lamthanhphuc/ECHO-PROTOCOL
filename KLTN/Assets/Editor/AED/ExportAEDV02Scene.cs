@@ -19,11 +19,17 @@ using UnityEngine.SceneManagement;
 
 public static class ExportAEDV02Scene
 {
-    public static string Run()
+    public static string Run() => Export(false);
+    public static string AuthorPilotEntriesAndExport() => Export(true);
+    private static string Export(bool authorPilotEntries)
     {
+        if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
+            throw new InvalidOperationException("Author/export requires a stopped, idle Editor.");
         const string path = "Assets/Scenes/SciFi.unity";
         var scene = SceneManager.GetSceneByPath(path);
         bool opened = !scene.IsValid() || !scene.isLoaded;
+        if (!opened && SceneManager.sceneCount != 1) throw new InvalidOperationException("Loaded SciFi export requires an isolated scene.");
+        if (!opened && scene.isDirty) throw new InvalidOperationException("Preserve unsaved scene edits before author/export.");
         if (opened && NavMesh.CalculateTriangulation().indices.Length != 0) throw new InvalidOperationException("Another scene contributes NavMesh; export must be isolated.");
         if (opened) scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
         try
@@ -53,6 +59,54 @@ public static class ExportAEDV02Scene
                 var node = spatial.Nodes.OrderBy(x => (x.Position - position).sqrMagnitude).ThenBy(x => x.Id).First();
                 return graph.TryGetNodeSemanticMetadata(node.Id, out var metadata) && (int)metadata.Zone is >= 1 and <= 3 ? (int)metadata.Zone : 0;
             }
+            if (authorPilotEntries)
+            {
+                var root = roots.SingleOrDefault(x => x.name == "AEDRev02PilotEntries");
+                if (root == null) { root = new GameObject("AEDRev02PilotEntries"); SceneManager.MoveGameObjectToScene(root, scene); }
+                var mesh = NavMesh.CalculateTriangulation();
+                var candidates = Enumerable.Range(0, mesh.indices.Length / 3).Select(i =>
+                    (mesh.vertices[mesh.indices[i * 3]] + mesh.vertices[mesh.indices[i * 3 + 1]] + mesh.vertices[mesh.indices[i * 3 + 2]]) / 3f)
+                    .Select(p => new { Position = p, Zone = ZoneAt(p) }).ToArray();
+                foreach (var spot in roots.SelectMany(x => x.GetComponentsInChildren<global::HidingSpot>(true)).OrderBy(x => x.StableId))
+                {
+                    if (spot.InspectPoint == null || spot.ExitPoint == null || spot.transform.parent?.GetComponentInParent<global::HidingSpot>() != null ||
+                        !NavMesh.SamplePosition(spot.InspectPoint.position, out var inspect, 1.5f, NavMesh.AllAreas) ||
+                        !NavMesh.SamplePosition(spot.ExitPoint.position, out var exit, 1.5f, NavMesh.AllAreas)) continue;
+                    int zone = ZoneAt(inspect.position);
+                    if (zone is not (1 or 2)) continue;
+                    var escape = new NavMeshPath();
+                    if (!NavMesh.CalculatePath(exit.position, entries[zone - 1], NavMesh.AllAreas, escape) || escape.status != NavMeshPathStatus.PathComplete) continue;
+                    string name = "Cabinet_" + spot.StableId;
+                    var existing = root.transform.Find(name);
+                    if (existing != null && (existing.GetComponent<StalkerJumpEntryPoint>() == null ||
+                        existing.GetComponent<StalkerJumpEntryPoint>().StableId != "AED_REV02_" + name))
+                        throw new InvalidOperationException("Preserve non-exporter entry: " + name);
+                    foreach (var point in candidates.Where(x => x.Zone == zone && Vector3.Distance(x.Position, inspect.position) >= 8 && Vector3.Distance(x.Position, inspect.position) <= 12)
+                        .OrderBy(x => Mathf.Abs(Vector3.Distance(x.Position, inspect.position) - 10)).Select(x => x.Position))
+                    {
+                        var node = spatial.Nodes.OrderBy(x => (x.Position - point).sqrMagnitude).ThenBy(x => x.Id).First();
+                        if (!graph.TryGetNodeSemanticMetadata(node.Id, out var semantic) || semantic.Kind.ToString().IndexOf("Safe", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                        var approach = new NavMeshPath();
+                        if (!NavMesh.CalculatePath(point, inspect.position, NavMesh.AllAreas, approach) || approach.status != NavMeshPathStatus.PathComplete) continue;
+                        float length = 0; for (int i = 1; i < approach.corners.Length; i++) length += Vector3.Distance(approach.corners[i - 1], approach.corners[i]);
+                        if (length < 8 || length > 12) continue;
+                        var authoredEntry = existing != null ? existing.gameObject : new GameObject(name); authoredEntry.transform.SetParent(root.transform, false);
+                        authoredEntry.transform.position = point;
+                        var facing = Vector3.ProjectOnPlane(inspect.position - point, Vector3.up);
+                        if (facing.sqrMagnitude > .001f) authoredEntry.transform.rotation = Quaternion.LookRotation(facing);
+                        var component = authoredEntry.GetComponent<StalkerJumpEntryPoint>() ?? authoredEntry.AddComponent<StalkerJumpEntryPoint>(); var serialized = new SerializedObject(component);
+                        serialized.FindProperty("stableId").stringValue = "AED_REV02_" + name;
+                        serialized.FindProperty("minPlayerDistance").floatValue = 8; serialized.FindProperty("maxPlayerDistance").floatValue = 12;
+                        serialized.ApplyModifiedPropertiesWithoutUndo(); break;
+                    }
+                }
+                if (!root.GetComponentsInChildren<StalkerJumpEntryPoint>().Any(x => ZoneAt(x.EntryPosition) == 1) ||
+                    !root.GetComponentsInChildren<StalkerJumpEntryPoint>().Any(x => ZoneAt(x.EntryPosition) == 2))
+                    throw new InvalidOperationException("No eligible authored Cabinet approach in both pilot zones; scene not saved.");
+                // A separate root is absent from the legacy Special registry; Fixed entry selection is unchanged.
+                EditorSceneManager.MarkSceneDirty(scene);
+                roots = scene.GetRootGameObjects();
+            }
             foreach (var spot in roots.SelectMany(x => x.GetComponentsInChildren<global::HidingSpot>(true)))
             {
                 if (spot.InspectPoint == null || spot.ExitPoint == null || spot.transform.parent?.GetComponentInParent<global::HidingSpot>() != null) continue;
@@ -74,6 +128,13 @@ public static class ExportAEDV02Scene
             var vision = stalkerPrefab.GetComponent<StalkerVisionSensor>();
             double maximumVisionRange = new SerializedObject(vision).FindProperty("visionDistance").floatValue;
             var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/PlayerNetwork.prefab");
+            var scanner = playerPrefab.GetComponent<NetworkFieldScanner>();
+            if (scanner == null) throw new InvalidOperationException("Production Field Scanner is missing.");
+            var scan = new SerializedObject(scanner).FindProperty("_tuning");
+            if (scan == null) throw new InvalidOperationException("Production Field Scanner tuning is missing.");
+            var jammerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/Network/PF_DoorJammer.prefab");
+            var jammer = jammerPrefab != null ? jammerPrefab.GetComponent<NetworkDoorJammer>() : null;
+            if (jammer == null) throw new InvalidOperationException("Production Door Jammer is missing.");
             double maximumInteractionDistance = playerPrefab.GetComponent<global::PlayerInteraction>().InteractionDistance;
             markers.AddRange(points.Select(x => Marker(AEDV02SceneSource.MarkerId(x.transform), (int)x.Zone, "TOOL", x.transform.position,
                 new[] { 1, 2, 3, 4, 6 }.Where(x.Allows).ToArray())));
@@ -148,9 +209,19 @@ public static class ExportAEDV02Scene
                 ScenePath = path, MaximumVisionRange = maximumVisionRange, MaximumCabinetInteractionDistance = maximumInteractionDistance,
                 MinimumToolSpacing = spacing.floatValue,
                 CoreStabilizerRadius = CoreStabilizerRules.SupportRadius, CoreStabilizerDurationSeconds = CoreStabilizerRules.DurationSeconds,
+                JammerBreakSeconds = jammer.BreakDurationSeconds,
+                ScannerCoreRange = Math.Max(100, scan.FindPropertyRelative("CoreRange").floatValue),
+                ScannerMotionRange = Math.Max(100, scan.FindPropertyRelative("MotionRange").floatValue),
+                ScannerMovingThreshold = scan.FindPropertyRelative("MovingSpeedThreshold").floatValue,
+                ScannerOcclusionMultiplier = scan.FindPropertyRelative("OccludedSignalMultiplier").floatValue,
+                ScannerMaxTargets = scan.FindPropertyRelative("MaxMotionTargets").intValue,
+                ScannerActiveSeconds = Math.Max(20, scan.FindPropertyRelative("ActiveDuration").floatValue),
+                ScannerCycleSeconds = Math.Max(20, scan.FindPropertyRelative("ActiveDuration").floatValue) +
+                    (scan.FindPropertyRelative("ScanCooldown").floatValue < 10 ? 30 : scan.FindPropertyRelative("ScanCooldown").floatValue),
                 DoorIds = doors.Select(x => x.Id).Distinct().ToArray(), Markers = markers.ToArray(), NavCells = cells.ToArray(),
                 NavLinks = links.GroupBy(x => (x.From, x.To)).Select(x => x.First()).ToArray() };
             if (!data.ToModel().IsValid()) throw new InvalidOperationException("Exported graph failed independent structural validation.");
+            if (authorPilotEntries && !EditorSceneManager.SaveScene(scene)) throw new IOException("Pilot scene could not be saved.");
             var json = JsonUtility.ToJson(data);
             var resource = Path.GetFullPath(Path.Combine(Application.dataPath, "Resources/AED/Rev02SceneManifest.json"));
             var backend = Path.GetFullPath(Path.Combine(Application.dataPath, "../../EchoProtocol.Backend/src/EchoProtocol.Api/Content/AEDV02/Rev02SceneManifest.json"));
@@ -159,7 +230,6 @@ public static class ExportAEDV02Scene
                 Directory.CreateDirectory(Path.GetDirectoryName(target));
                 File.WriteAllText(target, json, new UTF8Encoding(false));
             }
-            AssetDatabase.Refresh();
             return "fingerprint=" + AEDV02Plan.Hash(json) + " markers=" + markers.Count + " triangles=" + cells.Count + " links=" + data.NavLinks.Length + " doors=" + doors.Count;
         }
         finally { if (opened) EditorSceneManager.CloseScene(scene, true); }

@@ -7481,6 +7481,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 290277099006970003, guid: d5ae87b7dbfdf5d4fb46ad152ff2a687, type: 3}
   m_PrefabInstance: {fileID: 28440238}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &28564183
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 28564184}
+  - component: {fileID: 28564185}
+  m_Layer: 0
+  m_Name: Cabinet_17289943791192231536
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &28564184
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 28564183}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9771685, z: -0, w: 0.21246588}
+  m_LocalPosition: {x: -27.805552, y: 1.083334, z: -165.21666}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &28564185
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 28564183}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_17289943791192231536
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &28665810
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -14098,6 +14149,57 @@ MonoBehaviour:
   m_IgnoreFromBuild: 0
   m_ApplyToChildren: 1
   m_AffectedAgents: ffffffff
+--- !u!1 &58342370
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 58342371}
+  - component: {fileID: 58342372}
+  m_Layer: 0
+  m_Name: Cabinet_10819355050292073932
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &58342371
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 58342370}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9966857, z: -0, w: -0.08134893}
+  m_LocalPosition: {x: 59.438885, y: 1.083334, z: -290.37775}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &58342372
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 58342370}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_10819355050292073932
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!213 &58534905
 Sprite:
   serializedVersion: 2
@@ -19132,6 +19234,57 @@ MonoBehaviour:
   allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
+--- !u!1 &79246612
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 79246613}
+  - component: {fileID: 79246614}
+  m_Layer: 0
+  m_Name: Cabinet_18146364626279721163
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &79246613
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 79246612}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.29109842, z: -0, w: 0.9566931}
+  m_LocalPosition: {x: 26.505554, y: 1.083334, z: -365.6333}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &79246614
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 79246612}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_18146364626279721163
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &79899080
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -19202,6 +19355,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1453485022173259434, guid: eb4b38db67a56dc469a2c2aafcc36add, type: 3}
   m_PrefabInstance: {fileID: 79899080}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &80006724
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 80006725}
+  - component: {fileID: 80006726}
+  m_Layer: 0
+  m_Name: Cabinet_445409562129199431
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &80006725
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 80006724}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.011207561, z: -0, w: 0.99993724}
+  m_LocalPosition: {x: 1.5166665, y: 1.083334, z: -54.716663}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &80006726
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 80006724}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_445409562129199431
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &80617346
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -29172,6 +29376,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 6954531691785998512, guid: cf8443763fc34314490f8a3e2f94dd37, type: 3}
   m_PrefabInstance: {fileID: 121723643}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &121827552
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 121827553}
+  - component: {fileID: 121827554}
+  m_Layer: 0
+  m_Name: Cabinet_17094327046648678002
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &121827553
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 121827552}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.72225755, z: -0, w: 0.69162416}
+  m_LocalPosition: {x: 37.627773, y: 1.083334, z: -395.82217}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &121827554
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 121827552}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_17094327046648678002
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &121884520
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -35048,6 +35303,57 @@ MonoBehaviour:
   m_IgnoreFromBuild: 0
   m_ApplyToChildren: 1
   m_AffectedAgents: ffffffff
+--- !u!1 &150880110
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 150880111}
+  - component: {fileID: 150880112}
+  m_Layer: 0
+  m_Name: Cabinet_12412811057961682035
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &150880111
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 150880110}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.8658459, z: -0, w: 0.5003108}
+  m_LocalPosition: {x: 86.30555, y: 1.083334, z: -146.36668}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &150880112
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 150880110}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_12412811057961682035
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &151149759
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -43654,6 +43960,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 3477663187008753093, guid: 1e3974e3db8c48c41b2604d2478e7e9e, type: 3}
   m_PrefabInstance: {fileID: 183548653}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &184371724
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 184371725}
+  - component: {fileID: 184371726}
+  m_Layer: 0
+  m_Name: Cabinet_5824853516239916486
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &184371725
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 184371724}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.31745306, z: -0, w: 0.948274}
+  m_LocalPosition: {x: -55.249996, y: 1.1194451, z: -350.17776}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &184371726
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 184371724}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_5824853516239916486
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &184468842
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -43997,6 +44354,57 @@ Transform:
   - {fileID: 381407344}
   m_Father: {fileID: 1668850533}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &186072176
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 186072177}
+  - component: {fileID: 186072178}
+  m_Layer: 0
+  m_Name: Cabinet_467090486581346668
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &186072177
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 186072176}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.75077057, z: -0, w: 0.66056305}
+  m_LocalPosition: {x: 6.7166657, y: 1.083334, z: -85.69999}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &186072178
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 186072176}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_467090486581346668
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &186164170
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -44351,6 +44759,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 816839028834127517, guid: 56553c59a52bf504aaac866c7f4030cd, type: 3}
   m_PrefabInstance: {fileID: 187429623}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &187437178
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 187437179}
+  - component: {fileID: 187437180}
+  m_Layer: 0
+  m_Name: Cabinet_16767547415719598199
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &187437179
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 187437178}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9986988, z: -0, w: -0.050997812}
+  m_LocalPosition: {x: -68.105545, y: 1.1916673, z: -302.51108}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &187437180
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 187437178}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_16767547415719598199
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &187676118
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -46820,6 +47279,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 9222408220077309190, guid: 1b2e0c15a34b5e24ea266246ee7534f8, type: 3}
   m_PrefabInstance: {fileID: 199612912}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &200036866
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 200036867}
+  - component: {fileID: 200036868}
+  m_Layer: 0
+  m_Name: Cabinet_1771606711150552963
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &200036867
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 200036866}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.09500454, z: -0, w: 0.99547684}
+  m_LocalPosition: {x: 29.466665, y: 1.3000007, z: -390.0444}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &200036868
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 200036866}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_1771606711150552963
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &200111700
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -53655,6 +54165,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 2553481404179805090, guid: eb2cfde91ad31bf4bad84b2c70e9816e, type: 3}
   m_PrefabInstance: {fileID: 230694204}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &230849205
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 230849206}
+  - component: {fileID: 230849207}
+  m_Layer: 0
+  m_Name: Cabinet_16723000022193251857
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &230849206
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 230849205}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.89173734, z: -0, w: -0.4525534}
+  m_LocalPosition: {x: 29.538887, y: 1.1555562, z: -310.45554}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &230849207
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 230849205}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_16723000022193251857
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &230926285
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -55624,6 +56185,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 816839028834127517, guid: 56553c59a52bf504aaac866c7f4030cd, type: 3}
   m_PrefabInstance: {fileID: 239499460}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &239616003
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 239616004}
+  - component: {fileID: 239616005}
+  m_Layer: 0
+  m_Name: Cabinet_5303907066773982931
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &239616004
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 239616003}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.4063577, z: -0, w: 0.9137141}
+  m_LocalPosition: {x: 12.638888, y: 1.083334, z: -111.772224}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &239616005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 239616003}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_5303907066773982931
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &239616704
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -57434,6 +58046,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 5725000371507048362, guid: b2452a5c2cd649a4db9eebcd16f7b155, type: 3}
   m_PrefabInstance: {fileID: 245749222}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &246045616
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 246045617}
+  - component: {fileID: 246045618}
+  m_Layer: 0
+  m_Name: Cabinet_3202946358329141897
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &246045617
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 246045616}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.98102146, z: -0, w: 0.19389921}
+  m_LocalPosition: {x: 98.51111, y: 1.083334, z: -297.9611}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &246045618
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 246045616}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_3202946358329141897
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &246047977
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -64382,6 +65045,57 @@ MonoBehaviour:
   m_IgnoreFromBuild: 1
   m_ApplyToChildren: 0
   m_AffectedAgents: ffffffff
+--- !u!1 &281032691
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 281032692}
+  - component: {fileID: 281032693}
+  m_Layer: 0
+  m_Name: Cabinet_15714725286568918733
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &281032692
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 281032691}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.8359239, z: -0, w: 0.5488454}
+  m_LocalPosition: {x: 15.094444, y: 1.3361117, z: -167.74445}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &281032693
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 281032691}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_15714725286568918733
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &281212210
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -65191,6 +65905,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1713100555195714247, guid: 573ef1f633878a64f8caef594c1c31d5, type: 3}
   m_PrefabInstance: {fileID: 283184935}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &283375593
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 283375594}
+  - component: {fileID: 283375595}
+  m_Layer: 0
+  m_Name: Cabinet_1479774151897431577
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &283375594
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283375593}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9993854, z: -0, w: 0.035054527}
+  m_LocalPosition: {x: 56.694443, y: 10.075, z: -220.32222}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &283375595
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283375593}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_1479774151897431577
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &283596941
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -65261,6 +66026,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1453485022173259434, guid: eb4b38db67a56dc469a2c2aafcc36add, type: 3}
   m_PrefabInstance: {fileID: 283596941}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &283966902
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 283966903}
+  - component: {fileID: 283966904}
+  m_Layer: 0
+  m_Name: Cabinet_3780384518391878036
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &283966903
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283966902}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.7258926, z: -0, w: 0.68780804}
+  m_LocalPosition: {x: 43.405552, y: 1.083334, z: -155.03333}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &283966904
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283966902}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_3780384518391878036
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1 &284291888
 GameObject:
   m_ObjectHideFlags: 0
@@ -65501,6 +66317,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1453485022173259434, guid: eb4b38db67a56dc469a2c2aafcc36add, type: 3}
   m_PrefabInstance: {fileID: 285046900}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &285048671
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 285048672}
+  - component: {fileID: 285048673}
+  m_Layer: 0
+  m_Name: Cabinet_9922351311242680943
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &285048672
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 285048671}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.39144805, z: -0, w: 0.9202002}
+  m_LocalPosition: {x: 5.633333, y: 1.1194451, z: -349.0944}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &285048673
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 285048671}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_9922351311242680943
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &285299398
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -65942,6 +66809,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 3691659005178554142, guid: aedebdaeae12a6743b39120d2f5156b0, type: 3}
   m_PrefabInstance: {fileID: 286130003}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &286277762
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 286277763}
+  - component: {fileID: 286277764}
+  m_Layer: 0
+  m_Name: Cabinet_11246236439440883192
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &286277763
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 286277762}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.3377929, z: -0, w: 0.94122046}
+  m_LocalPosition: {x: 28.31111, y: 1.083334, z: -426.22775}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &286277764
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 286277762}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_11246236439440883192
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &286412178
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -70540,6 +71458,57 @@ MonoBehaviour:
   allowedTools: -1
   requireNavMeshAccess: 1
   navMeshAccessRadius: 1.5
+--- !u!1 &309028865
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 309028866}
+  - component: {fileID: 309028867}
+  m_Layer: 0
+  m_Name: Cabinet_1777375932026108497
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &309028866
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 309028865}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.99230105, z: -0, w: -0.123849705}
+  m_LocalPosition: {x: 77.42222, y: 1.3361117, z: -335.6611}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &309028867
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 309028865}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_1777375932026108497
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1 &309731869
 GameObject:
   m_ObjectHideFlags: 0
@@ -74221,6 +75190,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1195415760139927943, guid: aae952dc76387e84287a598d901b120d, type: 3}
   m_PrefabInstance: {fileID: 327421348}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &328269990
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 328269991}
+  - component: {fileID: 328269992}
+  m_Layer: 0
+  m_Name: Cabinet_2302233887554492044
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &328269991
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 328269990}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9986995, z: -0, w: 0.050984316}
+  m_LocalPosition: {x: 29.177774, y: 14.516666, z: -161.09999}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &328269992
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 328269990}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_2302233887554492044
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &328771188
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -90343,6 +91363,57 @@ MonoBehaviour:
   m_IgnoreFromBuild: 0
   m_ApplyToChildren: 1
   m_AffectedAgents: ffffffff
+--- !u!1 &412745905
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 412745906}
+  - component: {fileID: 412745907}
+  m_Layer: 0
+  m_Name: Cabinet_10998873826261943934
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &412745906
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 412745905}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.997918, z: -0, w: 0.06449565}
+  m_LocalPosition: {x: -27.949997, y: 1.083334, z: -209.34444}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &412745907
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 412745905}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_10998873826261943934
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &412855499
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -90673,6 +91744,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 6954531691785998512, guid: cf8443763fc34314490f8a3e2f94dd37, type: 3}
   m_PrefabInstance: {fileID: 414388808}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &414775229
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 414775230}
+  - component: {fileID: 414775231}
+  m_Layer: 0
+  m_Name: Cabinet_16921128572944815098
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &414775230
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 414775229}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.6117549, z: -0, w: 0.7910474}
+  m_LocalPosition: {x: 72.43888, y: 1.083334, z: -278.60556}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &414775231
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 414775229}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_16921128572944815098
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &415127025
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -97812,6 +98934,57 @@ Transform:
   - {fileID: 577153122}
   m_Father: {fileID: 1375428026}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &444489518
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 444489519}
+  - component: {fileID: 444489520}
+  m_Layer: 0
+  m_Name: Cabinet_17310161356035852859
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &444489519
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 444489518}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.36411282, z: -0, w: 0.9313549}
+  m_LocalPosition: {x: -46.72778, y: 1.083334, z: -295.7222}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &444489520
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 444489518}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_17310161356035852859
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &444635705
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -107059,6 +108232,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1453485022173259434, guid: eb4b38db67a56dc469a2c2aafcc36add, type: 3}
   m_PrefabInstance: {fileID: 487689215}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &488066589
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 488066590}
+  - component: {fileID: 488066591}
+  m_Layer: 0
+  m_Name: Cabinet_16631195426641361966
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &488066590
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 488066589}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.06048124, z: -0, w: 0.99816936}
+  m_LocalPosition: {x: -24.844442, y: 1.1194451, z: -363.03333}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &488066591
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 488066589}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_16631195426641361966
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &488265000
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -111762,6 +112986,57 @@ MonoBehaviour:
   localBounds:
     m_Center: {x: 0, y: 0, z: 0}
     m_Extent: {x: 26.13333, y: 0.4041666, z: 17.033361}
+--- !u!1 &513058197
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 513058198}
+  - component: {fileID: 513058199}
+  m_Layer: 0
+  m_Name: Cabinet_2155170242294773759
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &513058198
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 513058197}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.057846718, z: -0, w: 0.99832547}
+  m_LocalPosition: {x: -25.277777, y: 1.3722229, z: -148.02779}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &513058199
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 513058197}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_2155170242294773759
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &513268378
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -148031,6 +149306,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1713100555195714247, guid: 573ef1f633878a64f8caef594c1c31d5, type: 3}
   m_PrefabInstance: {fileID: 682622467}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &683006905
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 683006906}
+  - component: {fileID: 683006907}
+  m_Layer: 0
+  m_Name: Cabinet_17164722286745978335
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &683006906
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 683006905}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.94478184, z: -0, w: -0.32770002}
+  m_LocalPosition: {x: -51.349995, y: 1.083334, z: -196.56111}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &683006907
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 683006905}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_17164722286745978335
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &683087318
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -149648,6 +150974,57 @@ Transform:
   - {fileID: 1781817659}
   m_Father: {fileID: 1310470282}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &688468206
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 688468207}
+  - component: {fileID: 688468208}
+  m_Layer: 0
+  m_Name: Cabinet_16235995069510346594
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &688468207
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 688468206}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.90584314, z: -0, w: -0.42361334}
+  m_LocalPosition: {x: -67.9611, y: 1.083334, z: -363.32217}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &688468208
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 688468206}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_16235995069510346594
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &689029839
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -151380,6 +152757,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 6954531691785998512, guid: cf8443763fc34314490f8a3e2f94dd37, type: 3}
   m_PrefabInstance: {fileID: 695592752}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &695992586
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 695992587}
+  - component: {fileID: 695992588}
+  m_Layer: 0
+  m_Name: Cabinet_8515425036212498326
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &695992587
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 695992586}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.06361627, z: -0, w: 0.99797446}
+  m_LocalPosition: {x: -27.444443, y: 1.083334, z: -405.1389}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &695992588
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 695992586}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_8515425036212498326
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &697303822
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -154534,6 +155962,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1453485022173259434, guid: eb4b38db67a56dc469a2c2aafcc36add, type: 3}
   m_PrefabInstance: {fileID: 713889282}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &714869485
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 714869486}
+  - component: {fileID: 714869487}
+  m_Layer: 0
+  m_Name: Cabinet_13124012391721582668
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &714869486
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 714869485}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.6655598, z: -0, w: 0.74634457}
+  m_LocalPosition: {x: 17.766665, y: 1.083334, z: -403.18884}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &714869487
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 714869485}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_13124012391721582668
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &715677271
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -158214,6 +159693,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 5725000371507048362, guid: b2452a5c2cd649a4db9eebcd16f7b155, type: 3}
   m_PrefabInstance: {fileID: 735817580}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &736120941
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 736120942}
+  - component: {fileID: 736120943}
+  m_Layer: 0
+  m_Name: Cabinet_1282626686951821720
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &736120942
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 736120941}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.27298146, z: -0, w: 0.9620193}
+  m_LocalPosition: {x: 11.555554, y: 1.083334, z: -167.74445}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &736120943
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 736120941}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_1282626686951821720
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &736574732
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -168015,6 +169545,57 @@ MonoBehaviour:
   localBounds:
     m_Center: {x: 0, y: 0, z: 0}
     m_Extent: {x: 0.025, y: 0.025, z: 0.025}
+--- !u!1 &780244918
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 780244919}
+  - component: {fileID: 780244920}
+  m_Layer: 0
+  m_Name: Cabinet_6485888582421959617
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &780244919
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 780244918}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9994423, z: -0, w: 0.033394493}
+  m_LocalPosition: {x: 32.427776, y: 1.083334, z: -113.216675}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &780244920
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 780244918}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_6485888582421959617
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &780252791
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -170713,6 +172294,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1453485022173259434, guid: eb4b38db67a56dc469a2c2aafcc36add, type: 3}
   m_PrefabInstance: {fileID: 795510596}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &795767526
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 795767527}
+  - component: {fileID: 795767528}
+  m_Layer: 0
+  m_Name: Cabinet_11341414512435901120
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &795767527
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 795767526}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9996078, z: -0, w: -0.028004417}
+  m_LocalPosition: {x: 67.094444, y: 10.075, z: -168.5389}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &795767528
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 795767526}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_11341414512435901120
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &797080438
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -184075,6 +185707,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 7546825811929379479, guid: 1a91b66dee996324fa51df60c547b29d, type: 3}
   m_PrefabInstance: {fileID: 871660258}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &871882734
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 871882735}
+  - component: {fileID: 871882736}
+  m_Layer: 0
+  m_Name: Cabinet_2703065578221795855
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &871882735
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 871882734}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.39714205, z: -0, w: 0.91775715}
+  m_LocalPosition: {x: -28.022219, y: 1.3361117, z: -335.6611}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &871882736
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 871882734}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_2703065578221795855
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &872133883
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -194566,6 +196249,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 816839028834127517, guid: 56553c59a52bf504aaac866c7f4030cd, type: 3}
   m_PrefabInstance: {fileID: 922733860}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &922804392
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 922804393}
+  - component: {fileID: 922804394}
+  m_Layer: 0
+  m_Name: Cabinet_16053368412958070912
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &922804393
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 922804392}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.8976235, z: -0, w: 0.44076315}
+  m_LocalPosition: {x: 30.694443, y: 1.3722229, z: -89.166664}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &922804394
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 922804392}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_16053368412958070912
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1 &922969564
 GameObject:
   m_ObjectHideFlags: 0
@@ -195657,6 +197391,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 5928300009178751915, guid: a57680777d3403843b1e6d4a5b05e5fd, type: 3}
   m_PrefabInstance: {fileID: 929397541}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &929463034
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 929463035}
+  - component: {fileID: 929463036}
+  m_Layer: 0
+  m_Name: Cabinet_7378281439273600881
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &929463035
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 929463034}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.85981107, z: -0, w: 0.51061237}
+  m_LocalPosition: {x: -72.14999, y: 1.1916673, z: -328.65555}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &929463036
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 929463034}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_7378281439273600881
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &930564651
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -196881,6 +198666,57 @@ Transform:
   - {fileID: 921569594}
   m_Father: {fileID: 52675444}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &935643605
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 935643606}
+  - component: {fileID: 935643607}
+  m_Layer: 0
+  m_Name: Cabinet_13110895694552987146
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &935643606
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 935643605}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.5129867, z: -0, w: 0.85839653}
+  m_LocalPosition: {x: 32.5, y: 1.083334, z: -151.56667}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &935643607
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 935643605}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_13110895694552987146
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &937379735
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -197714,6 +199550,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1453485022173259434, guid: eb4b38db67a56dc469a2c2aafcc36add, type: 3}
   m_PrefabInstance: {fileID: 941338379}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &941457225
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 941457226}
+  - component: {fileID: 941457227}
+  m_Layer: 0
+  m_Name: Cabinet_15514057909913084538
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &941457226
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 941457225}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.48964286, z: -0, w: 0.87192315}
+  m_LocalPosition: {x: -8.666667, y: 1.083334, z: -63.52777}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &941457227
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 941457225}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_15514057909913084538
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &941465364
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -229698,6 +231585,57 @@ MonoBehaviour:
   m_IgnoreFromBuild: 0
   m_ApplyToChildren: 1
   m_AffectedAgents: ffffffff
+--- !u!1 &1088056227
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1088056228}
+  - component: {fileID: 1088056229}
+  m_Layer: 0
+  m_Name: Cabinet_17164903512952521219
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1088056228
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1088056227}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.6432759, z: -0, w: 0.7656345}
+  m_LocalPosition: {x: 116.638885, y: 1.083334, z: -143.04445}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1088056229
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1088056227}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_17164903512952521219
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1088402196
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -235323,6 +237261,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1713100555195714247, guid: 573ef1f633878a64f8caef594c1c31d5, type: 3}
   m_PrefabInstance: {fileID: 1111808392}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1112364829
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1112364830}
+  - component: {fileID: 1112364831}
+  m_Layer: 0
+  m_Name: Cabinet_16349972237989067170
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1112364830
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1112364829}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9950801, z: -0, w: -0.099073485}
+  m_LocalPosition: {x: -85.72776, y: 1.083334, z: -345.69998}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1112364831
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1112364829}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_16349972237989067170
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1113265679
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -235934,6 +237923,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 2935968978905589459, guid: ead50481603138344b8c40cf80a27232, type: 3}
   m_PrefabInstance: {fileID: 1115537208}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1115654142
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1115654143}
+  - component: {fileID: 1115654144}
+  m_Layer: 0
+  m_Name: Cabinet_11764926693216685168
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1115654143
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1115654142}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.015909439, z: -0, w: 0.99987346}
+  m_LocalPosition: {x: 12.638888, y: 1.083334, z: -127.01111}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1115654144
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1115654142}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_11764926693216685168
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1 &1116383563
 GameObject:
   m_ObjectHideFlags: 0
@@ -242426,6 +244466,104 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 3452931867044665262, guid: 32467b8dc355cd04da356b17dbac4f29, type: 3}
   m_PrefabInstance: {fileID: 1141833158}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1142746386
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1142746387}
+  m_Layer: 0
+  m_Name: AEDRev02PilotEntries
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1142746387
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1142746386}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 80006725}
+  - {fileID: 186072177}
+  - {fileID: 1644306033}
+  - {fileID: 736120942}
+  - {fileID: 283375594}
+  - {fileID: 200036867}
+  - {fileID: 309028866}
+  - {fileID: 513058198}
+  - {fileID: 328269991}
+  - {fileID: 1991112313}
+  - {fileID: 1868326396}
+  - {fileID: 871882735}
+  - {fileID: 1657856315}
+  - {fileID: 2036074143}
+  - {fileID: 246045617}
+  - {fileID: 1968477259}
+  - {fileID: 1550385137}
+  - {fileID: 283966903}
+  - {fileID: 1881236629}
+  - {fileID: 1379886403}
+  - {fileID: 239616004}
+  - {fileID: 184371725}
+  - {fileID: 780244919}
+  - {fileID: 1628940184}
+  - {fileID: 929463035}
+  - {fileID: 2119913579}
+  - {fileID: 1500693879}
+  - {fileID: 1375769854}
+  - {fileID: 695992587}
+  - {fileID: 2064351395}
+  - {fileID: 1479178874}
+  - {fileID: 285048672}
+  - {fileID: 58342371}
+  - {fileID: 1608485822}
+  - {fileID: 412745906}
+  - {fileID: 286277763}
+  - {fileID: 795767527}
+  - {fileID: 1444033030}
+  - {fileID: 1191821649}
+  - {fileID: 1115654143}
+  - {fileID: 150880111}
+  - {fileID: 935643606}
+  - {fileID: 1864191437}
+  - {fileID: 714869486}
+  - {fileID: 2041107879}
+  - {fileID: 1757808867}
+  - {fileID: 1483978469}
+  - {fileID: 941457226}
+  - {fileID: 281032692}
+  - {fileID: 922804393}
+  - {fileID: 688468207}
+  - {fileID: 1112364830}
+  - {fileID: 488066590}
+  - {fileID: 230849206}
+  - {fileID: 187437179}
+  - {fileID: 414775230}
+  - {fileID: 121827553}
+  - {fileID: 683006906}
+  - {fileID: 1088056228}
+  - {fileID: 28564184}
+  - {fileID: 1177370298}
+  - {fileID: 444489519}
+  - {fileID: 1470284124}
+  - {fileID: 1777714591}
+  - {fileID: 1243792822}
+  - {fileID: 79246613}
+  - {fileID: 1462577292}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1143048916
 GameObject:
   m_ObjectHideFlags: 0
@@ -249702,6 +251840,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1453485022173259434, guid: eb4b38db67a56dc469a2c2aafcc36add, type: 3}
   m_PrefabInstance: {fileID: 1176430719}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1177370297
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1177370298}
+  - component: {fileID: 1177370299}
+  m_Layer: 0
+  m_Name: Cabinet_17308933899132106793
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1177370298
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1177370297}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.8408961, z: -0, w: 0.5411965}
+  m_LocalPosition: {x: -4.26111, y: 1.1194451, z: -404.12778}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1177370299
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1177370297}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_17308933899132106793
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1177640318
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -252071,6 +254260,57 @@ MonoBehaviour:
   localBounds:
     m_Center: {x: 0, y: 0, z: 0}
     m_Extent: {x: 1.7583374, y: 0.13333336, z: 0.49448243}
+--- !u!1 &1191821648
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1191821649}
+  - component: {fileID: 1191821650}
+  m_Layer: 0
+  m_Name: Cabinet_11755010586200034834
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1191821649
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1191821648}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9138761, z: -0, w: -0.40599316}
+  m_LocalPosition: {x: 51.277775, y: 1.083334, z: -287.6333}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1191821650
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1191821648}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_11755010586200034834
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1192275152
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -264151,6 +266391,57 @@ Transform:
   - {fileID: 1189708766}
   m_Father: {fileID: 2046923085}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1243792821
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1243792822}
+  - component: {fileID: 1243792823}
+  m_Layer: 0
+  m_Name: Cabinet_17843173544323780512
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1243792822
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1243792821}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.94634783, z: -0, w: 0.32314974}
+  m_LocalPosition: {x: 103.92777, y: 1.083334, z: -164.06111}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1243792823
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1243792821}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_17843173544323780512
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1243986255
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -290284,6 +292575,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 6954531691785998512, guid: cf8443763fc34314490f8a3e2f94dd37, type: 3}
   m_PrefabInstance: {fileID: 1375695026}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1375769853
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1375769854}
+  - component: {fileID: 1375769855}
+  m_Layer: 0
+  m_Name: Cabinet_8304343150555099439
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1375769854
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1375769853}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.22898413, z: -0, w: 0.97343016}
+  m_LocalPosition: {x: 90.92777, y: 1.2277784, z: -167.02222}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1375769855
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1375769853}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_8304343150555099439
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1376181908
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -291372,6 +293714,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 741942595625703189, guid: 047cc399d5f561b48902e8632947324a, type: 3}
   m_PrefabInstance: {fileID: 1379734795}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1379886402
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1379886403}
+  - component: {fileID: 1379886404}
+  m_Layer: 0
+  m_Name: Cabinet_4522615011354806550
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1379886403
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1379886402}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.79146844, z: -0, w: 0.6112101}
+  m_LocalPosition: {x: 36.905552, y: 1.2277784, z: -202.98888}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1379886404
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1379886402}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_4522615011354806550
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1380596102
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -304205,6 +306598,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1453485022173259434, guid: eb4b38db67a56dc469a2c2aafcc36add, type: 3}
   m_PrefabInstance: {fileID: 1443833045}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1444033029
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1444033030}
+  - component: {fileID: 1444033031}
+  m_Layer: 0
+  m_Name: Cabinet_11702107629860699704
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1444033030
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1444033029}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.42740023, z: -0, w: 0.9040625}
+  m_LocalPosition: {x: 10.905556, y: 1.083334, z: -140.58888}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1444033031
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1444033029}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_11702107629860699704
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1444154965
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -308915,6 +311359,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 6954531691785998512, guid: cf8443763fc34314490f8a3e2f94dd37, type: 3}
   m_PrefabInstance: {fileID: 1462515474}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1462577291
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1462577292}
+  - component: {fileID: 1462577293}
+  m_Layer: 0
+  m_Name: Cabinet_18284327194076800293
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1462577292
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1462577291}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.08184764, z: -0, w: 0.9966449}
+  m_LocalPosition: {x: 71.42777, y: 1.2277784, z: -336.16666}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1462577293
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1462577291}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_18284327194076800293
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1463111103
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -310687,6 +313182,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 6954531691785998512, guid: cf8443763fc34314490f8a3e2f94dd37, type: 3}
   m_PrefabInstance: {fileID: 1470040983}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1470284123
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1470284124}
+  - component: {fileID: 1470284125}
+  m_Layer: 0
+  m_Name: Cabinet_17381851718635837787
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1470284124
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1470284123}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.32747114, z: -0, w: 0.9448612}
+  m_LocalPosition: {x: 0.5055555, y: 1.083334, z: -87.28889}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1470284125
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1470284123}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_17381851718635837787
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1 &1470747621
 GameObject:
   m_ObjectHideFlags: 0
@@ -312845,6 +315391,57 @@ MonoBehaviour:
   m_IgnoreFromBuild: 0
   m_ApplyToChildren: 1
   m_AffectedAgents: ffffffff
+--- !u!1 &1479178873
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1479178874}
+  - component: {fileID: 1479178875}
+  m_Layer: 0
+  m_Name: Cabinet_9555673304035788052
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1479178874
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1479178873}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.2500548, z: -0, w: 0.9682317}
+  m_LocalPosition: {x: -64.27777, y: 1.083334, z: -394.5222}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1479178875
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1479178873}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_9555673304035788052
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1479193505
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -314107,6 +316704,57 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!1 &1483978468
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1483978469}
+  - component: {fileID: 1483978470}
+  m_Layer: 0
+  m_Name: Cabinet_15359259526060542322
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1483978469
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1483978468}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.8960444, z: -0, w: 0.44396454}
+  m_LocalPosition: {x: 82.76666, y: 10.075, z: -165.28888}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1483978470
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1483978468}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_15359259526060542322
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1484402609
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -317861,6 +320509,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1453485022173259434, guid: eb4b38db67a56dc469a2c2aafcc36add, type: 3}
   m_PrefabInstance: {fileID: 1500273833}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1500693878
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1500693879}
+  - component: {fileID: 1500693880}
+  m_Layer: 0
+  m_Name: Cabinet_8235895294287909109
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1500693879
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1500693878}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.86398757, z: -0, w: 0.50351316}
+  m_LocalPosition: {x: 67.094444, y: 1.083334, z: -107.944435}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1500693880
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1500693878}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_8235895294287909109
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1500929204
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -328856,6 +331555,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 816839028834127517, guid: 56553c59a52bf504aaac866c7f4030cd, type: 3}
   m_PrefabInstance: {fileID: 1549779215}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1550385136
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1550385137}
+  - component: {fileID: 1550385138}
+  m_Layer: 0
+  m_Name: Cabinet_3697530823728685802
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1550385137
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1550385136}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.983153, z: -0, w: 0.18278457}
+  m_LocalPosition: {x: 56.766663, y: 1.083334, z: -397.69995}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1550385138
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1550385136}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_3697530823728685802
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1550491013
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -340738,6 +343488,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1505956034637721244, guid: 407e4e65456601c4ba66e0697b1c325c, type: 3}
   m_PrefabInstance: {fileID: 1608276289}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1608485821
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1608485822}
+  - component: {fileID: 1608485823}
+  m_Layer: 0
+  m_Name: Cabinet_10905296218833367857
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1608485822
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1608485821}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.88013005, z: -0, w: -0.47473267}
+  m_LocalPosition: {x: 2.8888886, y: 1.083334, z: -117.18888}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1608485823
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1608485821}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_10905296218833367857
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1608643681
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -344911,6 +347712,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 5725000371507048362, guid: b2452a5c2cd649a4db9eebcd16f7b155, type: 3}
   m_PrefabInstance: {fileID: 1627947731}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1628940183
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1628940184}
+  - component: {fileID: 1628940185}
+  m_Layer: 0
+  m_Name: Cabinet_6768513102545915825
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1628940184
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1628940183}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.96037394, z: -0, w: 0.2787147}
+  m_LocalPosition: {x: 73.45, y: 10.075, z: -231.15556}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1628940185
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1628940183}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_6768513102545915825
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1629211956
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -348944,6 +351796,57 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1643909543}
   m_Mesh: {fileID: -4236988483122169320, guid: 401656ee5d01d524e8c8caf3d47e2be9, type: 3}
+--- !u!1 &1644306032
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1644306033}
+  - component: {fileID: 1644306034}
+  m_Layer: 0
+  m_Name: Cabinet_1026944399248196663
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1644306033
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1644306032}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.7037627, z: -0, w: 0.7104351}
+  m_LocalPosition: {x: -4.1888885, y: 1.444445, z: -294.49442}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1644306034
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1644306032}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_1026944399248196663
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1644365383
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -352087,6 +354990,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 816839028834127517, guid: 56553c59a52bf504aaac866c7f4030cd, type: 3}
   m_PrefabInstance: {fileID: 1657178095}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1657856314
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1657856315}
+  - component: {fileID: 1657856316}
+  m_Layer: 0
+  m_Name: Cabinet_2841257954352128902
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1657856315
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1657856314}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9728237, z: -0, w: 0.23154722}
+  m_LocalPosition: {x: 11.555554, y: 1.083334, z: -168.17778}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1657856316
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1657856314}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_2841257954352128902
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1657947610
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -373189,6 +376143,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1453485022173259434, guid: eb4b38db67a56dc469a2c2aafcc36add, type: 3}
   m_PrefabInstance: {fileID: 1757075151}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1757808866
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1757808867}
+  - component: {fileID: 1757808868}
+  m_Layer: 0
+  m_Name: Cabinet_14560417025893388082
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1757808867
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1757808866}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.6376278, z: -0, w: 0.7703446}
+  m_LocalPosition: {x: 70.488884, y: 10.075, z: -161.17223}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1757808868
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1757808866}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_14560417025893388082
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1758431448
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -376259,6 +379264,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 5725000371507048362, guid: b2452a5c2cd649a4db9eebcd16f7b155, type: 3}
   m_PrefabInstance: {fileID: 1776762656}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1777714590
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1777714591}
+  - component: {fileID: 1777714592}
+  m_Layer: 0
+  m_Name: Cabinet_17481282892307545194
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1777714591
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1777714590}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9471591, z: -0, w: 0.32076418}
+  m_LocalPosition: {x: 36.68889, y: 1.083334, z: -149.76111}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1777714592
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1777714590}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_17481282892307545194
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1778051007
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -397532,6 +400588,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 816839028834127517, guid: 56553c59a52bf504aaac866c7f4030cd, type: 3}
   m_PrefabInstance: {fileID: 1864189946}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1864191436
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1864191437}
+  - component: {fileID: 1864191438}
+  m_Layer: 0
+  m_Name: Cabinet_13116667660292265611
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1864191437
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1864191436}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.33395612, z: -0, w: 0.9425886}
+  m_LocalPosition: {x: 61.461105, y: 1.444445, z: -140.58888}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1864191438
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1864191436}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_13116667660292265611
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1864289626
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -398611,6 +401718,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 816839028834127517, guid: 56553c59a52bf504aaac866c7f4030cd, type: 3}
   m_PrefabInstance: {fileID: 1868152928}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1868326395
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1868326396}
+  - component: {fileID: 1868326397}
+  m_Layer: 0
+  m_Name: Cabinet_2634090191402528618
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1868326396
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1868326395}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9413153, z: -0, w: -0.33752868}
+  m_LocalPosition: {x: 59.87222, y: 1.3000007, z: -340.71664}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1868326397
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1868326395}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_2634090191402528618
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1868331230
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -401684,6 +404842,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 2866053586569123100, guid: 8d37e1f071804a54b8dbeddeb00dfbb9, type: 3}
   m_PrefabInstance: {fileID: 1880958784}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1881236628
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1881236629}
+  - component: {fileID: 1881236630}
+  m_Layer: 0
+  m_Name: Cabinet_4302694156183641576
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1881236629
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1881236628}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9999422, z: -0, w: 0.010754111}
+  m_LocalPosition: {x: 84.283325, y: 1.1555562, z: -172.15001}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1881236630
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1881236628}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_4302694156183641576
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1881523178
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -422370,6 +425579,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 8250113047921840432, guid: b76f846b3379607468a593969b575654, type: 3}
   m_PrefabInstance: {fileID: 1968179257}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1968477258
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1968477259}
+  - component: {fileID: 1968477260}
+  m_Layer: 0
+  m_Name: Cabinet_3539325972279072047
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1968477259
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1968477258}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.2854381, z: -0, w: 0.95839715}
+  m_LocalPosition: {x: -25.638885, y: 1.083334, z: -298.0333}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1968477260
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1968477258}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_3539325972279072047
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1968676909
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -426057,6 +429317,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 8616490787709139147, guid: d96e3ff0793bd824fb6771e987a80a35, type: 3}
   m_PrefabInstance: {fileID: 1990186251}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1991112312
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1991112313}
+  - component: {fileID: 1991112314}
+  m_Layer: 0
+  m_Name: Cabinet_2584367909010124113
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1991112313
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1991112312}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.85172206, z: -0, w: 0.52399385}
+  m_LocalPosition: {x: 76.12222, y: 1.083334, z: -388.7444}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1991112314
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1991112312}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_2584367909010124113
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &1991203674
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -434908,6 +438219,57 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: a4233f32c65a0f446b144f89b39f593c, type: 3}
+--- !u!1 &2036074142
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2036074143}
+  - component: {fileID: 2036074144}
+  m_Layer: 0
+  m_Name: Cabinet_3188136802052474047
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2036074143
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2036074142}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.009143815, z: -0, w: 0.9999582}
+  m_LocalPosition: {x: 28.67222, y: 5.525, z: -157.12779}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2036074144
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2036074142}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_3188136802052474047
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &2036108115
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -436305,6 +439667,57 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1624427676}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2041107878
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2041107879}
+  - component: {fileID: 2041107880}
+  m_Layer: 0
+  m_Name: Cabinet_13856312533195273511
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2041107879
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2041107878}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9744174, z: -0, w: 0.22474614}
+  m_LocalPosition: {x: -30.766663, y: 1.083334, z: -302.43887}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2041107880
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2041107878}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_13856312533195273511
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &2041391934
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -440416,6 +443829,57 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!1 &2064351394
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2064351395}
+  - component: {fileID: 2064351396}
+  m_Layer: 0
+  m_Name: Cabinet_8612333848901686113
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2064351395
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2064351394}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.8706962, z: -0, w: 0.49182132}
+  m_LocalPosition: {x: -3.7555568, y: 1.8416672, z: -188.47221}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2064351396
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2064351394}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_8612333848901686113
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &2065684199
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -452970,6 +456434,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 6954531691785998512, guid: cf8443763fc34314490f8a3e2f94dd37, type: 3}
   m_PrefabInstance: {fileID: 2119536854}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &2119913578
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2119913579}
+  - component: {fileID: 2119913580}
+  m_Layer: 0
+  m_Name: Cabinet_8214945399172627416
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2119913579
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2119913578}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.5834068, z: -0, w: 0.8121801}
+  m_LocalPosition: {x: 100.533325, y: 1.083334, z: -279.25552}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1142746387}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2119913580
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2119913578}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
+  stableId: AED_REV02_Cabinet_8214945399172627416
+  jumpInAllowed: 1
+  minPlayerDistance: 8
+  maxPlayerDistance: 12
+  frontFacingDotThreshold: 0.5
+  reuseCooldownSeconds: 120
+  facingOverride: {fileID: 0}
 --- !u!1001 &2119936085
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -458140,3 +461655,4 @@ SceneRoots:
   - {fileID: 1542048911}
   - {fileID: 578835764}
   - {fileID: 174959121}
+  - {fileID: 1142746387}
