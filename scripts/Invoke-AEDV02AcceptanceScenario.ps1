@@ -116,7 +116,7 @@ try {
         'E2E-PP-01' {
             Wait-World { param($w,$r) $w.players.Count -eq 4 -and $w.verifiedSource.pressureComplete -and
                 @($w.verifiedSource.players.tier | Select-Object -Unique).Count -ge 2 } 'four real players with distinct canonical pressure' | Out-Null
-            Save-Scenario 'CAPTURE_REQUIRED' 'Keep valid LOS encounters; review target-selection audit against current pressure and attack freeze.'
+            Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'Four-player pressure tiers and target transitions were captured; owner must review fairness, forced-target/core-carrier exceptions and attack-freeze evidence.'
         }
         'E2E-PP-02' {
             $w=Read-World 'Host';$minion=@($w.minions | Where-Object { $_.state -notin @('Dying','Flee') }) | Select-Object -First 1
@@ -128,15 +128,18 @@ try {
         }
         'E2E-Z3-01' {
             Wait-World { param($w,$r) $w.phase -eq 'Zone3FindFrigate' -and @($w.minions | Where-Object zone -eq 3).Count -eq 1 } 'approved Adaptive Zone3 actual Minion spawn' | Out-Null
-            Save-Scenario 'CAPTURE_REQUIRED' 'Continue real pressure until relief; compare cap 1->0 with live census (active Minion must not be force-despawned). Repeat in a Fixed Normal session: Zone3 stays zero.'
+            Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'Adaptive cap and live census were captured; owner must observe relief 1->0 without force-despawn and repeat Fixed Normal with Zone3 at zero.'
         }
         'E2E-TT-01' {
             Wait-World { param($w,$r) $w.phase -eq 'Zone2Objective' -and $w.tools.Count -ge 5 } 'materialized Zone2 supply' | Out-Null
-            Save-Scenario 'CAPTURE_REQUIRED' 'Keep actual spawned IDs; consume/pick up with interact/use-tool. Verify later optional reduction preserves materialized items and support has a new real spawn/effect/receipt.'
+            $ids=@($w.tools | ForEach-Object { [int]$_.toolId } | Sort-Object -Unique)
+            $required=@(1,2,3,4,6)
+            if (@($required | Where-Object { $ids -notcontains $_ }).Count -ne 0) { throw 'Required five Tool types are not all materialized in the authoritative world journal.' }
+            Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'Required Tool instances were captured; owner must correlate reservation/materialization IDs, optional-budget changes, support effect and receipt.'
         }
         'E2E-F4-01' {
             Wait-World { param($w,$r) $w.phase -in @('FinalHunt','Escape') } 'normal objectives reached final phase' | Out-Null
-            Save-Scenario 'CAPTURE_REQUIRED' 'Complete normal objectives; inspect decision audit for zero new positive pressure and no mission softlock.'
+            Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'Final phase was captured; owner must inspect decision audit for zero new positive pressure and confirm objective completion without softlock.'
         }
         'E2E-AED-01' {
             if (!$StackJson) { throw 'Owned disposable StackJson required for outage.' }
@@ -145,10 +148,10 @@ try {
             & (Join-Path $PSScriptRoot 'Stop-AEDV02NativeBackend.ps1') -StackJson $StackJson -Action BackendOnline | Out-Null
             $offline=$false
             Wait-World { param($w,$r) $w.verifiedSource.pressureComplete } 'canonical collection recovered after real HTTP outage' | Out-Null
-            Save-Scenario 'CAPTURE_REQUIRED' 'Inspect PreMatch/Boundary and two distinct same-phase SafeWindow IDs, retry identity, Host/Client consumer readback and Backend receipts.'
+            Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'Backend recovery was observed; owner must correlate PreMatch/Boundary, two distinct same-phase SafeWindow IDs, retry identity, consumer readback and receipts.'
         }
     }
-    Save-Scenario 'CAPTURED_OWNER_REVIEW_REQUIRED' 'This driver records real conditions/actions; it does not certify all acceptance assertions.'
+    Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'This driver records real conditions/actions; it does not certify human gameplay or audiovisual assertions.'
 } catch {
     Save-Scenario 'BLOCKED_OR_FAILED' $_.Exception.Message
     throw
