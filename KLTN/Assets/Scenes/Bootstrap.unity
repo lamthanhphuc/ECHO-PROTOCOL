@@ -178,8 +178,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.PlayerSpawner
   _bootstrap: {fileID: 970048216}
-  _lobbySpawnOrigin: {x: 0.15, y: 1, z: -5.5}
-  _lobbySpawnSpacing: 1.1
   _doorPrefab: {fileID: 11400000, guid: 10b56fe0b82947259da1a4b1e07407b3, type: 3}
   _pickupItemPrefab: {fileID: 4530120262622144617, guid: fbf86023a47ddf44dbcb7a0f384ba21d, type: 3}
   _energyCoreCount: 4
@@ -191,6 +189,13 @@ MonoBehaviour:
   _powerPuzzlePrefab: {fileID: 0}
   _powerPuzzleStationPrefab: {fileID: 0}
   _monsterPrefab: {fileID: 100002, guid: 3348269a897243f98149bb4f35656540, type: 3}
+  _monsterLizardPrefab: {fileID: 100002, guid: 218f37689db761648a3fe58c8bf143e2, type: 3}
+  _creepMinionPrefab: {fileID: 0}
+  _minionSpawnCheckInterval: 3
+  _minionSpawnMinDistanceFromStalker: 4
+  _minionSpawnMaxDistanceFromStalker: 10
+  _minionSpawnFallbackMaxDistanceFromStalker: 28
+  _minionSpawnMinDistanceFromPlayer: 18
 --- !u!1 &143094129
 GameObject:
   m_ObjectHideFlags: 0

@@ -40,6 +40,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _powerPuzzlePrefab;
         [SerializeField] private NetworkObject _powerPuzzleStationPrefab;
         [SerializeField] private NetworkObject _monsterPrefab;
+        [SerializeField] private NetworkObject _monsterLizardPrefab;
         [SerializeField] private NetworkObject _creepMinionPrefab;
         [Header("Creep Minion Spawn")]
         [SerializeField, Min(1f)] private float _minionSpawnCheckInterval = 3f;
@@ -71,6 +72,28 @@ namespace EchoProtocol.Networking
         private readonly List<NetworkObject> _creepMinionInstances = new List<NetworkObject>();
         private float _nextMinionSpawnCheckAt;
         private bool _zone2MinionsActive;
+
+        public const string StalkerModelSessionKey = "stalker_model";
+
+        public bool HasLizardPrefab => _monsterLizardPrefab != null;
+
+        public static int GetSelectedStalkerModel(NetworkRunner runner)
+        {
+            if (runner == null
+                || !runner.IsRunning
+                || !runner.SessionInfo.IsValid
+                || runner.SessionInfo.Properties == null
+                || !runner.SessionInfo.Properties.TryGetValue(
+                    StalkerModelSessionKey, out var selected))
+                return 0;
+
+            return (int)selected == 1 ? 1 : 0;
+        }
+
+        private NetworkObject SelectedMonsterPrefab =>
+            GetSelectedStalkerModel(_bootstrap != null ? _bootstrap.Runner : null) == 1
+                ? _monsterLizardPrefab
+                : _monsterPrefab;
 
         private bool _missingMinionPrefabLogged;
 
@@ -346,7 +369,7 @@ namespace EchoProtocol.Networking
             }
             // Zone 2 uses scene authorization panels with NetworkMatchState as
             // the authoritative multiplayer state. Keep the retired path dormant.
-            if (_monsterInstance == null && _monsterPrefab != null)
+            if (_monsterInstance == null && SelectedMonsterPrefab != null)
             {
                 var stalkerSpawn = GameObject.Find("MonsterSpawn_Stalker_EMPTY");
                 if (TryGetStalkerSpawnPosition(stalkerSpawn != null ? stalkerSpawn.transform : null, out var spawnPosition))
@@ -401,7 +424,7 @@ namespace EchoProtocol.Networking
                 RejectZone2Spawn(playerState, $"existing-instance:{_zone2MonsterInstance.Id}");
                 return;
             }
-            if (_monsterPrefab == null)
+            if (SelectedMonsterPrefab == null)
             {
                 RejectZone2Spawn(playerState, "monster-prefab-missing");
                 return;
@@ -500,7 +523,7 @@ namespace EchoProtocol.Networking
                 && phase != NetworkMatchPhase.FinalHunt
                 && phase != NetworkMatchPhase.Escape) return;
 
-            if (_monsterPrefab == null)
+            if (SelectedMonsterPrefab == null)
             {
                 LogZone3SpawnFailureOnce("monster-prefab-missing");
                 return;
@@ -792,7 +815,7 @@ namespace EchoProtocol.Networking
 
         private NetworkObject SpawnStalker(NetworkRunner runner, Vector3 position, Quaternion rotation, RegionSemanticZone zone)
         {
-            var spawned = runner.Spawn(_monsterPrefab, position, rotation, PlayerRef.None,
+            var spawned = runner.Spawn(SelectedMonsterPrefab, position, rotation, PlayerRef.None,
                 (_, obj) => obj.GetComponent<StalkerController>()?.ConfigurePatrolZone(zone));
             if (spawned != null)
             {

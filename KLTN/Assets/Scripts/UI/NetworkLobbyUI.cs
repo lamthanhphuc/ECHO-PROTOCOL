@@ -2,6 +2,7 @@ using EchoProtocol.Pets;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Fusion;
 using EchoProtocol.Core;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Auth;
@@ -25,6 +26,7 @@ namespace EchoProtocol.UI
         [Header("Difficulty")]
         [SerializeField] private TMP_Dropdown difficultyDropdown;
         [SerializeField] private TMP_Dropdown resolutionModeDropdown;
+        [SerializeField] private TMP_Dropdown stalkerModelDropdown;
         [Header("Buttons")]
         [SerializeField] private Button hostButton;
         [SerializeField] private Button joinButton;
@@ -88,6 +90,15 @@ namespace EchoProtocol.UI
             if (!_configured) Debug.LogError("[NetworkLobbyUI] Assign all Input, Host/Join, difficulty and text references.", this);
             ConfigureDifficultyDropdown();
             ConfigureResolutionModeDropdown();
+            if (stalkerModelDropdown != null)
+            {
+                stalkerModelDropdown.ClearOptions();
+                stalkerModelDropdown.AddOptions(
+                    new List<string> { "ORIGINAL", "LIZARD" });
+
+                stalkerModelDropdown.onValueChanged.AddListener(
+                    OnStalkerModelChanged);
+            }
             if (playerNameInput != null) playerNameInput.characterLimit = 32;
             if (sessionNameInput != null) sessionNameInput.characterLimit = 32;
             if (!_inputsInitialized)
@@ -187,7 +198,33 @@ RefreshMemberList();
             if (exitButton != null) exitButton.onClick.RemoveListener(OnExitClicked);
             if (difficultyDropdown != null)
                 difficultyDropdown.onValueChanged.RemoveListener(OnDifficultyChanged);
+            if (stalkerModelDropdown != null)
+                stalkerModelDropdown.onValueChanged.RemoveListener(
+                    OnStalkerModelChanged);
             Unsubscribe();
+        }
+
+        private void OnStalkerModelChanged(int modelId)
+        {
+            var spawner = FindAnyObjectByType<PlayerSpawner>();
+
+            if (modelId < 0
+                || modelId > 1
+                || bootstrap == null
+                || bootstrap.State != NetworkSessionState.InLobby
+                || !_room.IsHost
+                || (modelId == 1 &&
+                    (spawner == null || !spawner.HasLizardPrefab))
+                || !bootstrap.UpdateRoomProperties(
+                    new Dictionary<string, SessionProperty>
+                    {
+                        [PlayerSpawner.StalkerModelSessionKey] = modelId
+                    }))
+            {
+                stalkerModelDropdown.SetValueWithoutNotify(
+                    PlayerSpawner.GetSelectedStalkerModel(
+                        bootstrap != null ? bootstrap.Runner : null));
+            }
         }
 
         private void Update()
@@ -961,6 +998,18 @@ int petId = 0;
             }
             if (resolutionModeDropdown != null)
                 resolutionModeDropdown.interactable = canConnect;
+
+            if (stalkerModelDropdown != null)
+            {
+                stalkerModelDropdown.interactable =
+                    inLobby && _room.IsHost;
+
+                stalkerModelDropdown.SetValueWithoutNotify(
+                    PlayerSpawner.GetSelectedStalkerModel(
+                        bootstrap != null ? bootstrap.Runner : null));
+
+                stalkerModelDropdown.RefreshShownValue();
+            }
 
             if (characterButton != null)
             {
