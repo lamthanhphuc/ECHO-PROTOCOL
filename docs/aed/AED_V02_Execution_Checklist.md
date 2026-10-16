@@ -1,5 +1,17 @@
 # Current task checkpoint — implementation only (2026-10-16)
 
+
+## Mandatory implementation blockers — final static review
+
+**IMPLEMENTATION INCOMPLETE — BLOCKERS REMAINING.** The source commits above are useful implementation progress, not a claim that all B1–B8 requirements are complete.
+
+1. **Historical ResourceManagement:** shared AEDV02PilotOpportunities.Competence accepts Stalker/Minion/Objective/Tool/Teamwork axes. AEDV02DecisionService selects Tool for resource/optional-supply adversity. All five actual Tool outcome producers now exist, but this is not a distinct reconstructed resource-management/cost-efficiency metric. Do not relabel Tool confidence as independent ResourceManagement Verified. Its eligible opportunity/cost/resolution semantics must be formally defined and implemented with independent source tests.
+2. **Protected-area / Safe Room lineage:** current manifest marker kinds and runtime Cabinet route/supply checks do not provide a canonical authored Safe Room registry. Zone, door, route, actor and objective checks are present, but they are not proof of protected-area exclusion. Establish authoritative protected-area identities/bounds and propagate authoring/export/Host/Backend checks. Do not infer this from room names or assume missing data means safe.
+3. **Full deterministic twelve-case orchestration:** Invoke-AEDV02AcceptanceScenario contains CAPTURE_REQUIRED branches for fairness, supply, Zone3 relief, final-phase progression and multiple-window audit. They help capture actual conditions but do not fully drive/verify those scenarios. Native controls exist, including four identities/reconnect/outage, but complete scenario stimuli and correlation/assertions remain implementation work. Existing genuine historical prerequisites cannot be replaced by a fake verifier or pressure flags.
+
+No owner E2E acceptance is requested. The owner runbook is preparation for later verification, not an instruction to accept this incomplete candidate. Compilation/tests/build/native remain NOT RUN as explicitly requested.
+
+
 Owner supersedes the old Stage C campaign below: implement, inspect statically, document, commit/push. Do not run compilation/tests/simulation/build/native/migrations. Editor remains open; no restart/kill/cache deletion or Play was performed.
 
 - [x] Fetch confirmed local/origin feature 243eceec; preserve owner RuntimeLogSettings/TMP assets.
@@ -134,7 +146,7 @@ Observed CI run: https://github.com/lamthanhphuc/ECHO-PROTOCOL/actions/runs/3870
 
 ## Static review closure for the implementation-only candidate
 
-Source changes and real scene export are complete for this continuation; execution is explicitly deferred to the owner. Native recipes submit ordinary actions or wait for real prerequisites, never fabricate pressure/history/approval. Human audiovisual/fairness/objective judgments remain the twelve owner acceptance cases; capture-only output is not PASS.
+The committed source changes and real scene export preserve this continuation; the mandatory blockers above mean the whole implementation is incomplete; execution is explicitly deferred to the owner. Native recipes submit ordinary actions or wait for real prerequisites, never fabricate pressure/history/approval. Human audiovisual/fairness/objective judgments remain the twelve owner acceptance cases; capture-only output is not PASS.
 
 Static checks: six mirrored source files and manifests match; all AEDV02 PowerShell files parse; task-scoped diff whitespace is clean. Complete diff whitespace still includes the protected owner's existing TMP fallback warnings, which are not edited/staged. There is no newly executed suite/build/migration/native result.
 

@@ -1,5 +1,17 @@
 # AED v0.2 — remaining decisions and verification boundaries
 
+
+## Mandatory implementation blockers — final static review
+
+**IMPLEMENTATION INCOMPLETE — BLOCKERS REMAINING.** The source commits above are useful implementation progress, not a claim that all B1–B8 requirements are complete.
+
+1. **Historical ResourceManagement:** shared AEDV02PilotOpportunities.Competence accepts Stalker/Minion/Objective/Tool/Teamwork axes. AEDV02DecisionService selects Tool for resource/optional-supply adversity. All five actual Tool outcome producers now exist, but this is not a distinct reconstructed resource-management/cost-efficiency metric. Do not relabel Tool confidence as independent ResourceManagement Verified. Its eligible opportunity/cost/resolution semantics must be formally defined and implemented with independent source tests.
+2. **Protected-area / Safe Room lineage:** current manifest marker kinds and runtime Cabinet route/supply checks do not provide a canonical authored Safe Room registry. Zone, door, route, actor and objective checks are present, but they are not proof of protected-area exclusion. Establish authoritative protected-area identities/bounds and propagate authoring/export/Host/Backend checks. Do not infer this from room names or assume missing data means safe.
+3. **Full deterministic twelve-case orchestration:** Invoke-AEDV02AcceptanceScenario contains CAPTURE_REQUIRED branches for fairness, supply, Zone3 relief, final-phase progression and multiple-window audit. They help capture actual conditions but do not fully drive/verify those scenarios. Native controls exist, including four identities/reconnect/outage, but complete scenario stimuli and correlation/assertions remain implementation work. Existing genuine historical prerequisites cannot be replaced by a fake verifier or pressure flags.
+
+No owner E2E acceptance is requested. The owner runbook is preparation for later verification, not an instruction to accept this incomplete candidate. Compilation/tests/build/native remain NOT RUN as explicitly requested.
+
+
 Current source continuation: 243eceec -> this feature candidate. A–G are owner-approved for the pilot. New semantics are documented in Pilot Contract Defaults v2 and are not production approved.
 
 | Area | Contract/implementation now present | Remaining decision or evidence |

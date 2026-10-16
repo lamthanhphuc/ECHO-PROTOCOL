@@ -1,6 +1,6 @@
 # Rev02 scenario traceability
 
-All 323 scenario rows remain UNVERIFIED. Rows are implementation/test pointers, not executed acceptance proof. This implementation-only continuation did not run tests/build/native gameplay.
+All 323 scenario rows remain UNVERIFIED. Implementation is INCOMPLETE: separate ResourceManagement, canonical Safe Room coverage and full deterministic scenario orchestration remain mandatory blockers (see Remaining Contract Decisions). Rows are implementation/test pointers, not executed acceptance proof. This implementation-only continuation did not run tests/build/native gameplay.
 
 Current additions: Scanner -> NetworkFieldScanner / independent periodic Scannables / AEDV02ScannerVerification / twelve ingested cases; Jammer -> existing deploy gateway / actual driver progress / stable match-phase-user provenance / AEDV02JammerVerification / eight ingested cases. Tool shape/serialization adds seven cases and Cabinet reservation adds five. Native topology comparator adds six cases. All are authored, NOT RUN.
 

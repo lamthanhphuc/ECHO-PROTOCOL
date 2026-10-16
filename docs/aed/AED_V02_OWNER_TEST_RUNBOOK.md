@@ -2,7 +2,7 @@
 
 ## 1. Status and environment
 
-This candidate is **UNTESTED**. Commands below are instructions for the owner's later verification, not a record of executed tests. The current task did not run Backend compilation/tests, Unity tests, a Player build, native multiplayer or migrations. Asset authoring/export used the already open stopped Editor; no gameplay was started.
+This candidate is **IMPLEMENTATION INCOMPLETE — UNTESTED**. Resolve the mandatory blockers in Remaining Contract Decisions before treating the twelve recipes as an acceptance-ready implementation. Commands below are instructions for the owner's later verification, not a record of executed tests. The current task did not run Backend compilation/tests, Unity tests, a Player build, native multiplayer or migrations. Asset authoring/export used the already open stopped Editor; no gameplay was started.
 
 Requirements: Windows, licensed Unity **6000.5.8f1** with Windows build support, .NET 8 SDK, local Docker Desktop, PowerShell, Git and RTK. Existing Fusion/Voice App IDs must be configured privately. Use the same commit for Backend, Host and every Client. Do not publish credentials or change production flags.
 
