@@ -139,6 +139,7 @@ namespace EchoProtocol.AI.Minions
 
         public CreepMinionState State => StateValue >= 0 && StateValue <= 3
             ? (CreepMinionState)StateValue : CreepMinionState.Roam;
+        public float TrackStandOffDistance => trackStandOffDistance;
         public RegionSemanticZone Zone => ZoneValue == (int)RegionSemanticZone.Zone01
             || ZoneValue == (int)RegionSemanticZone.Zone02
             || ZoneValue == (int)RegionSemanticZone.Zone03

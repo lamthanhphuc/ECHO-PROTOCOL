@@ -245,7 +245,10 @@ namespace EchoProtocol.Networking
         }
 
         private bool IsVisuallyActive =>
-            State != NetworkDoorJammerState.Destroyed;
+            State != NetworkDoorJammerState.Destroyed
+            && (State == NetworkDoorJammerState.Active
+                || _forceActivePresentation
+                || (State == NetworkDoorJammerState.NotDeployed && Time.unscaledTime <= _spawnVisualGraceUntil));
 
         private void OnValidate()
         {

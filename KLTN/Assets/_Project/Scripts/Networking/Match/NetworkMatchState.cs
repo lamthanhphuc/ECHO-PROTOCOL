@@ -2656,8 +2656,7 @@ namespace EchoProtocol.Networking
         private static bool HasUnsafeAEDMinion()
         {
             return FindObjectsByType<
-                    EchoProtocol.AI.Minions.CreepMinionRuntime>(
-                    FindObjectsSortMode.None)
+                    EchoProtocol.AI.Minions.CreepMinionRuntime>()
                 .Any(minion =>
                     minion != null &&
                     minion.State is
