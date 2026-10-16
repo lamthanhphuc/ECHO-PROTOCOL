@@ -1,6 +1,4 @@
 using NUnit.Framework;
-using EchoProtocol.AI.Stalker.Presentation;
-using EchoProtocol.Networking;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
@@ -53,7 +51,11 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             Assert.That(prefab, Is.Not.Null);
 
-            var presenter = prefab.GetComponent<StalkerAnimatorPresenter>();
+            var presenter = System.Array.Find(
+                prefab.GetComponents<MonoBehaviour>(),
+                component => component != null
+                    && component.GetType().FullName ==
+                    "EchoProtocol.AI.Stalker.Presentation.StalkerAnimatorPresenter");
             Assert.That(presenter, Is.Not.Null);
 
             var animator = new SerializedObject(presenter)
@@ -94,9 +96,20 @@ namespace EchoProtocol.AI.Stalker.Tests
         [Test]
         public void StalkerModelSelection_DefaultsToOriginal()
         {
+            var spawnerType = System.Type.GetType(
+                "EchoProtocol.Networking.PlayerSpawner, Assembly-CSharp");
+
+            Assert.That(spawnerType, Is.Not.Null);
+
+            var method = spawnerType.GetMethod(
+                "GetSelectedStalkerModel",
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.Static);
+
+            Assert.That(method, Is.Not.Null);
             Assert.That(
-                PlayerSpawner.GetSelectedStalkerModel(null),
-                Is.Zero);
+                method.Invoke(null, new object[] { null }),
+                Is.EqualTo(0));
         }
     }
 }
