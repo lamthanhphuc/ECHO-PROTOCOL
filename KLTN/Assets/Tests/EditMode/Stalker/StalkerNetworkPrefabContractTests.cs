@@ -77,7 +77,7 @@ namespace EchoProtocol.AI.Stalker.Tests
                 ("Walk1", "walk"),
                 ("Walk2", "run"),
                 ("Bite", "attack1"),
-                ("Punch", "attack2")
+                ("Punch", "attack1")
             })
             {
                 var state = System.Array.Find(
