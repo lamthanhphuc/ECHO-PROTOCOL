@@ -402,7 +402,8 @@ namespace EchoProtocol.Networking
             Instance = this;
             NetworkPlayerLifeState.StateChanged += HandlePlayerLifeStateChanged;
             ResolveLegacyPresentation();
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority
+                && !NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 CurrentPhase = NetworkMatchPhase.CoreObjective;
                 Zone2Stage = Zone2MissionStage.Zone1CoreObjective;
@@ -489,6 +490,18 @@ namespace EchoProtocol.Networking
                         toolsPerZone + extraZone3,
                         _teamToolSpawnMinimumSpacing, supportBonus > 0);
                 }
+            }
+
+            if (Object != null
+                && Object.HasStateAuthority
+                && NetworkBootstrap.IsHostMigrationResumeActive
+                && PowerAuthorizationAvailable
+                && !string.IsNullOrEmpty(PowerAuthorizationCode.ToString()))
+            {
+                // Host Migration restores the replicated authorization code,
+                // but this server-only cache is not Networked.
+                _serverGeneratedAuthCode =
+                    PowerAuthorizationCode.ToString();
             }
 
             if (Object == null || !Object.HasStateAuthority)

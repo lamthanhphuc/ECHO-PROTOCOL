@@ -218,18 +218,21 @@ namespace EchoProtocol.AI.Minions
                 return;
             }
 
-            IsDying = false;
-            DeathTimer = TickTimer.None;
-            StateValue = (int)CreepMinionState.Roam;
-            FlightHeightValue = flightHeight;
-            TargetPlayer = PlayerRef.None;
-            StolenCoreId = default;
-            StolenToolId = default;
-            ToolDivePhase = 0;
-            ToolDiveTimer = TickTimer.None;
-            AttackCooldown = TickTimer.None;
-            AlertCooldown = TickTimer.None;
-            FleeTimer = TickTimer.None;
+            if (!global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
+            {
+                IsDying = false;
+                DeathTimer = TickTimer.None;
+                StateValue = (int)CreepMinionState.Roam;
+                FlightHeightValue = flightHeight;
+                TargetPlayer = PlayerRef.None;
+                StolenCoreId = default;
+                StolenToolId = default;
+                ToolDivePhase = 0;
+                ToolDiveTimer = TickTimer.None;
+                AttackCooldown = TickTimer.None;
+                AlertCooldown = TickTimer.None;
+                FleeTimer = TickTimer.None;
+            }
             _noiseService = HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance);
             _noiseService.RuntimeNoiseAccepted += HandleRuntimeNoiseAccepted;
             _agent.enabled = false;

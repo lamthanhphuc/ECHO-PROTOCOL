@@ -51,7 +51,7 @@ namespace EchoProtocol.MatchFlow
         }
         public override void Spawned()
         {
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 Holder = PlayerRef.None;
                 WorldPosition = transform.position;

@@ -222,7 +222,10 @@ namespace EchoProtocol.AI.Stalker.Networking
             ResolveLocalDependencies();
             if (Object != null && Object.HasStateAuthority)
                 ApplyMatchDifficulty();
-            specialEncounterRuntime?.ResetForMatch();
+            if (!EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
+            {
+                specialEncounterRuntime?.ResetForMatch();
+            }
             ResolveLifecycle();
             BindProductionConsequenceSink();
             BindProductionTelemetryProducer();
@@ -242,7 +245,10 @@ namespace EchoProtocol.AI.Stalker.Networking
 // #endif
             }
 
-            if (Object != null && Object.HasStateAuthority)
+            // Host Migration keeps the replicated Stalker state.
+            if (Object != null
+                && Object.HasStateAuthority
+                && !EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 ReplicatedState = controller != null ? controller.CurrentState : StalkerState.PATROL;
                 TargetPlayer = PlayerRef.None;

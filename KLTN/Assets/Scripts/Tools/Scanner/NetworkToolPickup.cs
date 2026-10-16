@@ -14,7 +14,7 @@ namespace EchoProtocol.Tools.Scanner
     /// and implements IInteractable for local prompt display and interaction.
     /// </summary>
     [RequireComponent(typeof(Collider))]
-    public class NetworkToolPickup : NetworkInteractable, IInteractable
+    public class NetworkToolPickup : NetworkInteractable, IInteractable, IAfterHostMigration
     {
         private const float MaxOutlineVisibleDistance = 20f;
 
@@ -96,7 +96,7 @@ namespace EchoProtocol.Tools.Scanner
 
         public override void Spawned()
         {
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 _isPickedUp = false;
                 _localPickedUp = false;
@@ -111,6 +111,14 @@ namespace EchoProtocol.Tools.Scanner
             EnsureOutline();
             ApplyReplicatedPose();
             ConfigureWorldPickupShadows();
+            OnReplicatedStateChanged();
+        }
+
+        public void AfterHostMigration()
+        {
+            // CopyStateFrom restores replicated values. Reapply only
+            // local pose/cache/visibility after the migration completes.
+            ApplyReplicatedPose();
             OnReplicatedStateChanged();
         }
 
