@@ -20,6 +20,11 @@ using UnityEngine.SceneManagement;
 public static class ExportAEDV02Scene
 {
     public static string Run() => Export(false);
+    [MenuItem("Tools/AED v0.2/Export SciFi Manifest")]
+    private static void ExportSciFiManifestMenu()
+    {
+        Debug.Log("[AED_V02][EXPORT] " + Run());
+    }
     public static string AuthorPilotEntriesAndExport() => Export(true);
     private static string Export(bool authorPilotEntries)
     {

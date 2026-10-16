@@ -44,8 +44,19 @@ namespace EchoProtocol.AI.AED
         }
 
         private static bool Finite(Vector3 value) =>
-            Finite(value.x) && Finite(value.y) && Finite(value.z);
 
+            Finite(value.x) && Finite(value.y) && Finite(value.z);
+        private void OnDrawGizmosSelected()
+        {
+            if (!TryGetWorldBounds(out var min, out var max))
+                return;
+
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawWireCube(
+                (min + max) * 0.5f,
+                max - min
+            );
+        }
         private static bool Finite(float value) =>
             !float.IsNaN(value) && !float.IsInfinity(value);
     }

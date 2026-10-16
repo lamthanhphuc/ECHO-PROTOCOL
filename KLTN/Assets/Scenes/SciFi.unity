@@ -7523,7 +7523,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_17289943791192231536
   jumpInAllowed: 1
@@ -14191,7 +14191,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_10819355050292073932
   jumpInAllowed: 1
@@ -19276,7 +19276,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_18146364626279721163
   jumpInAllowed: 1
@@ -19397,7 +19397,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_445409562129199431
   jumpInAllowed: 1
@@ -29418,7 +29418,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_17094327046648678002
   jumpInAllowed: 1
@@ -35345,7 +35345,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_12412811057961682035
   jumpInAllowed: 1
@@ -44002,7 +44002,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_5824853516239916486
   jumpInAllowed: 1
@@ -44396,7 +44396,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_467090486581346668
   jumpInAllowed: 1
@@ -44801,7 +44801,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_16767547415719598199
   jumpInAllowed: 1
@@ -47321,7 +47321,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_1771606711150552963
   jumpInAllowed: 1
@@ -54207,7 +54207,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_16723000022193251857
   jumpInAllowed: 1
@@ -56227,7 +56227,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_5303907066773982931
   jumpInAllowed: 1
@@ -58088,7 +58088,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_3202946358329141897
   jumpInAllowed: 1
@@ -65087,7 +65087,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_15714725286568918733
   jumpInAllowed: 1
@@ -65947,7 +65947,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_1479774151897431577
   jumpInAllowed: 1
@@ -66068,7 +66068,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_3780384518391878036
   jumpInAllowed: 1
@@ -66359,7 +66359,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_9922351311242680943
   jumpInAllowed: 1
@@ -66851,7 +66851,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_11246236439440883192
   jumpInAllowed: 1
@@ -71500,7 +71500,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_1777375932026108497
   jumpInAllowed: 1
@@ -75232,7 +75232,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_2302233887554492044
   jumpInAllowed: 1
@@ -91405,7 +91405,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_10998873826261943934
   jumpInAllowed: 1
@@ -91786,7 +91786,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_16921128572944815098
   jumpInAllowed: 1
@@ -98976,7 +98976,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_17310161356035852859
   jumpInAllowed: 1
@@ -108274,7 +108274,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_16631195426641361966
   jumpInAllowed: 1
@@ -113028,7 +113028,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_2155170242294773759
   jumpInAllowed: 1
@@ -116934,6 +116934,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 535659565}
+  - component: {fileID: 535659566}
   m_Layer: 0
   m_Name: Generated_StartRoom_FromPrefab
   m_TagString: Untagged
@@ -116958,6 +116959,22 @@ Transform:
   - {fileID: 865362511}
   m_Father: {fileID: 1732678335}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &535659566
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 535659564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 46214f9db7ae97f47a031cefec23c66b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.AED.AEDV02SafeRoomMarker
+  zone: 1
+  localCenter: {x: 0, y: 3.5, z: 0}
+  localSize: {x: 29, y: 11, z: 29}
+  stableTransformIdentity: f6e9bec83d7d42ab8e6816920b3318cc
 --- !u!1001 &535873721
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -130352,7 +130369,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dbf3f2c0eda7b9540b1b3f932773144c, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.AED.AEDZoneEntryMarker
   zone: 2
 --- !u!1001 &600434360
@@ -149348,7 +149365,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_17164722286745978335
   jumpInAllowed: 1
@@ -151016,7 +151033,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_16235995069510346594
   jumpInAllowed: 1
@@ -152799,7 +152816,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_8515425036212498326
   jumpInAllowed: 1
@@ -156004,7 +156021,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_13124012391721582668
   jumpInAllowed: 1
@@ -159735,7 +159752,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_1282626686951821720
   jumpInAllowed: 1
@@ -169587,7 +169604,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_6485888582421959617
   jumpInAllowed: 1
@@ -172336,7 +172353,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_11341414512435901120
   jumpInAllowed: 1
@@ -185749,7 +185766,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_2703065578221795855
   jumpInAllowed: 1
@@ -196291,7 +196308,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_16053368412958070912
   jumpInAllowed: 1
@@ -197433,7 +197450,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_7378281439273600881
   jumpInAllowed: 1
@@ -198708,7 +198725,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_13110895694552987146
   jumpInAllowed: 1
@@ -199592,7 +199609,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_15514057909913084538
   jumpInAllowed: 1
@@ -231627,7 +231644,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_17164903512952521219
   jumpInAllowed: 1
@@ -237303,7 +237320,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_16349972237989067170
   jumpInAllowed: 1
@@ -237965,7 +237982,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_11764926693216685168
   jumpInAllowed: 1
@@ -251882,7 +251899,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_17308933899132106793
   jumpInAllowed: 1
@@ -254302,7 +254319,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_11755010586200034834
   jumpInAllowed: 1
@@ -266433,7 +266450,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_17843173544323780512
   jumpInAllowed: 1
@@ -292617,7 +292634,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_8304343150555099439
   jumpInAllowed: 1
@@ -293756,7 +293773,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_4522615011354806550
   jumpInAllowed: 1
@@ -306640,7 +306657,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_11702107629860699704
   jumpInAllowed: 1
@@ -311401,7 +311418,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_18284327194076800293
   jumpInAllowed: 1
@@ -313224,7 +313241,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_17381851718635837787
   jumpInAllowed: 1
@@ -315433,7 +315450,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_9555673304035788052
   jumpInAllowed: 1
@@ -316746,7 +316763,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_15359259526060542322
   jumpInAllowed: 1
@@ -320551,7 +320568,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_8235895294287909109
   jumpInAllowed: 1
@@ -331597,7 +331614,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_3697530823728685802
   jumpInAllowed: 1
@@ -343530,7 +343547,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_10905296218833367857
   jumpInAllowed: 1
@@ -347754,7 +347771,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_6768513102545915825
   jumpInAllowed: 1
@@ -351838,7 +351855,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_1026944399248196663
   jumpInAllowed: 1
@@ -355032,7 +355049,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_2841257954352128902
   jumpInAllowed: 1
@@ -374088,7 +374105,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dbf3f2c0eda7b9540b1b3f932773144c, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.AED.AEDZoneEntryMarker
   zone: 1
 --- !u!1001 &1747595006
@@ -376185,7 +376202,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_14560417025893388082
   jumpInAllowed: 1
@@ -379306,7 +379323,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_17481282892307545194
   jumpInAllowed: 1
@@ -388623,7 +388640,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dbf3f2c0eda7b9540b1b3f932773144c, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.AED.AEDZoneEntryMarker
   zone: 3
 --- !u!1001 &1813753115
@@ -400630,7 +400647,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_13116667660292265611
   jumpInAllowed: 1
@@ -401760,7 +401777,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_2634090191402528618
   jumpInAllowed: 1
@@ -404884,7 +404901,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_4302694156183641576
   jumpInAllowed: 1
@@ -425621,7 +425638,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_3539325972279072047
   jumpInAllowed: 1
@@ -429359,7 +429376,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_2584367909010124113
   jumpInAllowed: 1
@@ -438261,7 +438278,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_3188136802052474047
   jumpInAllowed: 1
@@ -439709,7 +439726,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_13856312533195273511
   jumpInAllowed: 1
@@ -443871,7 +443888,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_8612333848901686113
   jumpInAllowed: 1
@@ -456476,7 +456493,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74da9e52587b08948a0d614f93b5d567, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Special.StalkerJumpEntryPoint
   stableId: AED_REV02_Cabinet_8214945399172627416
   jumpInAllowed: 1
