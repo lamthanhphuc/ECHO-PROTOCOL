@@ -39,6 +39,8 @@ namespace EchoProtocol.AI.Common.AED
         public double DestinationX { get; set; }
         public double DestinationY { get; set; }
         public double DestinationZ { get; set; }
+        public string JammerBlockerId { get; set; } = string.Empty;
+        public double JammerProgress { get; set; }
         public bool MatchesStalkerConsumer(AEDV02Plan plan) => plan != null && ConsumerValues != null && ConsumerValues.Length == 6 &&
             ConsumerValues.Select((value, index) => AEDV02PilotPolicy.Finite(value) && Math.Abs(value - plan.Get((AEDV02Key)index)) < .000001).All(matches => matches);
         public int Zone { get; set; }
@@ -67,6 +69,56 @@ namespace EchoProtocol.AI.Common.AED
         public string DoorId { get; set; } = string.Empty;
         public string State { get; set; } = string.Empty;
     }
+    public sealed class AEDV02JammerSource
+    {
+        public Guid MatchId { get; set; }
+        public string PhaseName { get; set; } = string.Empty;
+        public string NetworkId { get; set; } = string.Empty;
+        public Guid UserId { get; set; }
+        public string Occurrence { get; set; } = string.Empty;
+        public long DeploymentTick { get; set; }
+        public string DoorId { get; set; } = string.Empty;
+        public bool Active { get; set; }
+        public bool ColliderBlocking { get; set; }
+        public double BreakSeconds { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double Z { get; set; }
+    }
+    public sealed class AEDV02ScanCandidate
+    {
+        public int LocalId { get; set; }
+        public string Identity { get; set; } = string.Empty;
+        public string Kind { get; set; } = string.Empty;
+        public bool Available { get; set; }
+        public bool Moving { get; set; }
+        public bool Occluded { get; set; }
+        public double Speed { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double Z { get; set; }
+    }
+    public sealed class AEDV02ScanSource
+    {
+        public Guid MatchId { get; set; }
+        public Guid UserId { get; set; }
+        public uint Sequence { get; set; }
+        public string Occurrence { get; set; } = string.Empty;
+        public long Tick { get; set; }
+        public string PhaseName { get; set; } = string.Empty;
+        public string Mode { get; set; } = string.Empty;
+        public bool Presented { get; set; }
+        public long PresentedTick { get; set; }
+        public double Range { get; set; }
+        public double MovingThreshold { get; set; }
+        public double OcclusionMultiplier { get; set; }
+        public int MaxTargets { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double Z { get; set; }
+        public AEDV02ScanCandidate[] Candidates { get; set; } = Array.Empty<AEDV02ScanCandidate>();
+        public int[] ResultIds { get; set; } = Array.Empty<int>();
+    }
     public sealed class AEDV02SupplyReservation
     {
         public int Zone { get; set; }
@@ -92,7 +144,7 @@ namespace EchoProtocol.AI.Common.AED
     }
     public sealed class AEDV02WorldSample
     {
-        public const string SourceVersion = "AED_V02_WORLD_SOURCE_REV02_5";
+        public const string SourceVersion = "AED_V02_WORLD_SOURCE_REV02_6";
         public string Version { get; set; } = SourceVersion;
         public string OpportunityContractVersion { get; set; } = string.Empty;
         public string ResolutionMode { get; set; } = string.Empty;
@@ -113,6 +165,9 @@ namespace EchoProtocol.AI.Common.AED
         public AEDV02ThreatSource[] Minions { get; set; } = Array.Empty<AEDV02ThreatSource>();
         public AEDV02ToolSource[] Tools { get; set; } = Array.Empty<AEDV02ToolSource>();
         public AEDV02DoorSource[] Doors { get; set; } = Array.Empty<AEDV02DoorSource>();
+        public AEDV02JammerSource[] Jammers { get; set; } = Array.Empty<AEDV02JammerSource>();
+        public AEDV02ScanSource[] Scans { get; set; } = Array.Empty<AEDV02ScanSource>();
+        public AEDV02ScanCandidate[] Scannables { get; set; } = Array.Empty<AEDV02ScanCandidate>();
         public AEDV02SupplySource? Supply { get; set; }
 
         public bool IsValid()
@@ -139,7 +194,36 @@ namespace EchoProtocol.AI.Common.AED
                     x.RequiredToolId != 0 && x.RequiredToolId != 1 && x.RequiredToolId != 2 && x.RequiredToolId != 3 && x.RequiredToolId != 4 && x.RequiredToolId != 6 ||
                     (x.ObjectiveState != "NONE" && string.IsNullOrWhiteSpace(x.ObjectiveUnitId)) ||
                     (x.ObjectiveState == "THREAT_INTERRUPTED" && string.IsNullOrWhiteSpace(x.ObjectiveCauseEntityId)))) return false;
+            if (Doors.Any(x => x == null || !Text(x.DoorId) ||
+                x.State != "OPEN" && x.State != "CLOSED_UNLOCKED" && x.State != "LOCKED" && x.State != "BROKEN") ||
+                Doors.Select(x => x.DoorId).Distinct(StringComparer.Ordinal).Count() != Doors.Length) return false;
             if (!Threats(Stalkers, users, false) || !Threats(Minions, users, true)) return false;
+            if (Scannables == null || Scannables.Length > 256 || Scannables.Any(c => c == null || !Text(c.Identity) ||
+                c.Kind is not ("Core" or "Objective" or "Fuel" or "Stalker") || !Position(c.X, c.Y, c.Z) ||
+                !AEDV02PilotPolicy.Finite(c.Speed) || c.Speed < 0 || c.Speed > 100) ||
+                Scannables.Select(c => c.Identity).Distinct().Count() != Scannables.Length) return false;
+            if (Scans == null || Scans.Length > 4 || Scans.Any(x => x == null || x.MatchId == Guid.Empty || !users.Contains(x.UserId) || x.Sequence == 0 ||
+                !Text(x.Occurrence) || x.Tick < 0 || x.Tick > Tick || x.PresentedTick < 0 || x.PresentedTick > Tick ||
+                x.Presented && x.PresentedTick < x.Tick || !x.Presented && x.PresentedTick != 0 ||
+                x.PhaseName != PhaseName || x.Mode is not ("Core" or "Motion") ||
+                !Position(x.X, x.Y, x.Z) || !AEDV02PilotPolicy.Finite(x.Range) || x.Range <= 0 || x.Range > 10000 ||
+                !AEDV02PilotPolicy.Finite(x.MovingThreshold) || x.MovingThreshold < 0 || x.MovingThreshold > 100 ||
+                !AEDV02PilotPolicy.Finite(x.OcclusionMultiplier) || x.OcclusionMultiplier < 0 || x.OcclusionMultiplier > 1 ||
+                x.MaxTargets < 1 || x.MaxTargets > 3 || x.Candidates == null || x.Candidates.Length > 256 || x.Candidates.Any(c => c == null) || x.ResultIds == null || x.ResultIds.Length > x.MaxTargets ||
+                x.ResultIds.Distinct().Count() != x.ResultIds.Length || x.ResultIds.Any(id => !x.Candidates.Any(c => c.LocalId == id)) ||
+                x.Candidates.Any(c => c == null || !Text(c.Identity) || c.Kind is not ("Core" or "Objective" or "Fuel" or "Stalker") ||
+                    !Position(c.X, c.Y, c.Z) || !AEDV02PilotPolicy.Finite(c.Speed) || c.Speed < 0 || c.Speed > 100) ||
+                x.Candidates.Select(c => c.LocalId).Distinct().Count() != x.Candidates.Length ||
+                x.Candidates.Select(c => c.Identity).Distinct().Count() != x.Candidates.Length) ||
+                Scans.Select(x => x.UserId).Distinct().Count() != Scans.Length) return false;
+            if (Jammers == null || Jammers.Length > 128 || Jammers.Any(x => x == null || x.MatchId == Guid.Empty || !Text(x.PhaseName) || !Text(x.NetworkId) ||
+                !users.Contains(x.UserId) || !Text(x.Occurrence) || x.DeploymentTick < 0 || x.DeploymentTick > Tick ||
+                x.DoorId == null || x.DoorId.Length > 128 || x.DoorId.Length != 0 && !Doors.Any(d => d.DoorId == x.DoorId) ||
+                x.Active && x.DoorId.Length != 0 && !Doors.Any(d => d.DoorId == x.DoorId && d.State == "LOCKED") ||
+                !AEDV02PilotPolicy.Finite(x.BreakSeconds) || x.BreakSeconds <= 0 || x.BreakSeconds > 120 ||
+                x.ColliderBlocking != x.Active || !Position(x.X, x.Y, x.Z)) ||
+                Jammers.Select(x => x.NetworkId).Distinct(StringComparer.Ordinal).Count() != Jammers.Length ||
+                Stalkers.Any(x => x.JammerBlockerId.Length != 0 && !Jammers.Any(j => j.NetworkId == x.JammerBlockerId && j.Active))) return false;
             if (Tools.Any(x => x == null || !Text(x.InstanceId) || !Text(x.Origin) || x.Zone < 0 || x.Zone > 3 ||
                 x.ToolId != 1 && x.ToolId != 2 && x.ToolId != 3 && x.ToolId != 4 && x.ToolId != 6 ||
                 x.Location != "World" && x.Location != "Player" && x.Location != "Minion" ||
@@ -148,9 +232,7 @@ namespace EchoProtocol.AI.Common.AED
                 !Position(x.X, x.Y, x.Z) || (x.OwnerUserId.HasValue && !users.Contains(x.OwnerUserId.Value)) ||
                 x.RouteEdgeIds == null || x.RouteEdgeIds.Length > 128 || x.RouteEdgeIds.Any(y => !Text(y))) ||
                 Tools.Select(x => x.InstanceId).Distinct(StringComparer.Ordinal).Count() != Tools.Length) return false;
-            return !Doors.Any(x => x == null || !Text(x.DoorId) ||
-                x.State != "OPEN" && x.State != "CLOSED_UNLOCKED" && x.State != "LOCKED" && x.State != "BROKEN") &&
-                Doors.Select(x => x.DoorId).Distinct(StringComparer.Ordinal).Count() == Doors.Length;
+            return true;
         }
         private bool Threats(AEDV02ThreatSource[] threats, HashSet<Guid> users, bool minion) =>
             threats.All(x => x != null && Text(x.NetworkId) && Text(x.State) && x.EpisodeId != null && x.EpisodeId.Length <= 128 && x.Zone >= 1 && x.Zone <= 3 &&
@@ -158,6 +240,9 @@ namespace EchoProtocol.AI.Common.AED
                     x.ConsumerValues.Select((value, index) => AEDV02PilotPolicy.Finite(value) &&
                         AEDV02Plan.AllowedValues((AEDV02Key)index).Any(allowed => Math.Abs(allowed - value) < .000001)).All(valid => valid)) &&
                 x.InvestigationNoiseId != null && x.InvestigationNoiseId.Length <= 512 &&
+                x.JammerBlockerId != null && x.JammerBlockerId.Length <= 128 && (!minion || x.JammerBlockerId.Length == 0) &&
+                AEDV02PilotPolicy.Finite(x.JammerProgress) && x.JammerProgress >= 0 && x.JammerProgress <= 1 &&
+                (x.JammerBlockerId.Length != 0 || x.JammerProgress == 0) &&
                 (x.InvestigationNoiseId.Length == 0 || !minion && x.State == "SEARCH") && Position(x.DestinationX, x.DestinationY, x.DestinationZ) &&
                 Position(x.X, x.Y, x.Z) &&
                 (!x.TargetUserId.HasValue || users.Contains(x.TargetUserId.Value)) &&
@@ -202,6 +287,14 @@ namespace EchoProtocol.AI.Common.AED
         public double MinimumToolSpacing { get; set; } = -1;
         public double CoreStabilizerRadius { get; set; }
         public double CoreStabilizerDurationSeconds { get; set; }
+        public double JammerBreakSeconds { get; set; }
+        public double ScannerCoreRange { get; set; }
+        public double ScannerMotionRange { get; set; }
+        public double ScannerMovingThreshold { get; set; }
+        public double ScannerOcclusionMultiplier { get; set; }
+        public int ScannerMaxTargets { get; set; }
+        public double ScannerActiveSeconds { get; set; }
+        public double ScannerCycleSeconds { get; set; }
         public AEDV02SceneMarker[] Markers { get; set; } = Array.Empty<AEDV02SceneMarker>();
         public AEDV02RouteEdge[] Edges { get; set; } = Array.Empty<AEDV02RouteEdge>();
         public AEDV02NavCell[] NavCells { get; set; } = Array.Empty<AEDV02NavCell>();
@@ -217,6 +310,14 @@ namespace EchoProtocol.AI.Common.AED
                 !AEDV02PilotPolicy.Finite(MinimumToolSpacing) || MinimumToolSpacing < -1 || MinimumToolSpacing > 100 ||
                 !AEDV02PilotPolicy.Finite(CoreStabilizerRadius) || CoreStabilizerRadius < 0 || CoreStabilizerRadius > 100 ||
                 !AEDV02PilotPolicy.Finite(CoreStabilizerDurationSeconds) || CoreStabilizerDurationSeconds < 0 || CoreStabilizerDurationSeconds > 300 ||
+                !AEDV02PilotPolicy.Finite(JammerBreakSeconds) || JammerBreakSeconds < 0 || JammerBreakSeconds > 120 ||
+                !AEDV02PilotPolicy.Finite(ScannerCoreRange) || ScannerCoreRange < 0 || ScannerCoreRange > 10000 ||
+                !AEDV02PilotPolicy.Finite(ScannerMotionRange) || ScannerMotionRange < 0 || ScannerMotionRange > 10000 ||
+                !AEDV02PilotPolicy.Finite(ScannerMovingThreshold) || ScannerMovingThreshold < 0 || ScannerMovingThreshold > 100 ||
+                !AEDV02PilotPolicy.Finite(ScannerOcclusionMultiplier) || ScannerOcclusionMultiplier < 0 || ScannerOcclusionMultiplier > 1 ||
+                ScannerMaxTargets < 0 || ScannerMaxTargets > 3 ||
+                !AEDV02PilotPolicy.Finite(ScannerActiveSeconds) || ScannerActiveSeconds < 0 || ScannerActiveSeconds > 3600 ||
+                !AEDV02PilotPolicy.Finite(ScannerCycleSeconds) || ScannerCycleSeconds < ScannerActiveSeconds || ScannerCycleSeconds > 7200 ||
                 DoorIds == null || DoorIds.Length > 4096 || DoorIds.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 128) ||
                 DoorIds.Distinct(StringComparer.Ordinal).Count() != DoorIds.Length ||
                 Markers.Any(x => x == null || string.IsNullOrWhiteSpace(x.Id) || x.Id.Length > 128) || NavCells.Any(x => x == null || !x.IsValid())) return false;

@@ -15,6 +15,9 @@ namespace EchoProtocol.Networking.Authority
 {
     public sealed partial class MatchAuthorityRuntime
     {
+        public string V02CurrentSourcePhase => _currentTelemetryPhase;
+        public bool V02CollectToolOutcomes => HasStateAuthority && _telemetryMatchActive && _researchCaptureEnabled &&
+            RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive && Difficulty == EchoProtocol.Gameplay.MatchDifficulty.Normal;
         private Guid _v02CaptureMatch;
         private string _v02CaptureContext;
         private long _v02NextWorldTick;
@@ -218,13 +221,16 @@ namespace EchoProtocol.Networking.Authority
                     catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { reason = "HOLD_UNREGISTERED_RUNTIME_TUNING"; return false; }
                 }
             }
-            else if (stalkers.Any(x => x.V02AppliedRevision != revision)) { reason = "HOLD_CONSUMER_NOT_OBSERVED"; return false; }
+            else if (stalkers.Any(x => x.V02AppliedRevision != revision || x.V02ConsumerMatchId.ToString() != MatchId.ToString("D")))
+            { reason = "HOLD_CONSUMER_NOT_OBSERVED"; return false; }
             var stalkerSources = new List<AEDV02ThreatSource>();
             foreach (var stalker in stalkers)
             {
                 var observed = Threat(stalker.Object, stalker.HasActiveSpecialEncounter ? "SPECIAL" :
                     stalker.ReplicatedState == StalkerState.DETECT ? "DETECTION" : stalker.ReplicatedState.ToString(), stalker.TargetPlayer, Math.Min(logical, 3));
                 observed.ConsumerValues = new double[6];
+                if (stalker.TryReadV02JammerBlock(out var blocker, out var progress))
+                { observed.JammerBlockerId = blocker; observed.JammerProgress = progress; }
                 if (stalker.TryReadV02NoiseDiversion(out var noiseId, out var destination))
                 {
                     observed.InvestigationNoiseId = noiseId;
@@ -237,6 +243,8 @@ namespace EchoProtocol.Networking.Authority
                 stalkerSources.Add(observed);
             }
             var players = new List<AEDV02PlayerSource>(); var tools = new List<AEDV02ToolSource>();
+            var scans = new List<AEDV02ScanSource>();
+            AEDV02ScanCandidate[] scannables = null;
             foreach (var player in runner.ActivePlayers)
             {
                 if (!TryResolveVerifiedBackendUserId(player, out var identity) || !Guid.TryParse(identity, out var user) ||
@@ -275,6 +283,11 @@ namespace EchoProtocol.Networking.Authority
                     { playerSource.RequiredToolId = impact.ToolId; playerSource.ResourceCauseEventId = blocked.EventId.ToString("D"); }
                 }
                 players.Add(playerSource);
+                var scanner = obj.GetComponent<NetworkFieldScanner>();
+                if (scanner == null) { reason = "HOLD_SCANNER_WORLD_CENSUS_REQUIRED"; return false; }
+                if (scannables == null) scannables = scanner.ReadV02WorldTargets();
+                if (scanner != null && scanner.V02LastScan is { } scan && scan.MatchId == MatchId && scan.PhaseName == _currentTelemetryPhase)
+                { scan.UserId = user; scans.Add(scan); }
                 if (held != null) tools.Add(Tool(held, position, string.Empty));
             }
             if (!players.Select(x => x.UserId).ToHashSet().SetEquals(_boundPlayers.Values)) return false;
@@ -298,6 +311,24 @@ namespace EchoProtocol.Networking.Authority
             var minions = FindObjectsByType<CreepMinionRuntime>(FindObjectsInactive.Exclude).Where(x => x.Runner == runner && x.Object != null && x.Object.IsValid).ToArray();
             if (!AEDV02SceneSource.TryGetDoorSources(runner, matchState, out var doors))
             { reason = "HOLD_DOOR_SOURCE_REQUIRED"; return false; }
+            var jammers = new List<AEDV02JammerSource>();
+            foreach (var jammer in FindObjectsByType<NetworkDoorJammer>(FindObjectsInactive.Exclude)
+                .Where(x => x.Runner == runner && x.Object != null && x.Object.IsValid && x.V02Occurrence.Length != 0 && x.V02DeploymentMatch == MatchId))
+            {
+                if (!jammer.Object.HasStateAuthority || !players.Any(x => x.UserId == jammer.V02DeployerUser)) return false;
+                string door = string.Empty;
+                if (jammer.DoorId.IsValid)
+                {
+                    if (!runner.TryFindObject(jammer.DoorId, out var doorObject)) return false;
+                    door = AEDV02SceneSource.MarkerId(doorObject.transform);
+                }
+                var p = jammer.transform.position;
+                jammers.Add(new AEDV02JammerSource { MatchId = MatchId, PhaseName = jammer.V02DeploymentPhase,
+                    NetworkId = jammer.Object.Id.ToString(), UserId = jammer.V02DeployerUser,
+                    Occurrence = jammer.V02Occurrence, DeploymentTick = jammer.V02DeploymentTick, DoorId = door,
+                    Active = jammer.IsActive, ColliderBlocking = jammer.V02ColliderBlocking, BreakSeconds = jammer.BreakDurationSeconds,
+                    X = p.x, Y = p.y, Z = p.z });
+            }
             foreach (var interrupted in players.Where(x => x.ObjectiveState == "THREAT_INTERRUPTED" &&
                 players.Any(other => other.UserId != x.UserId && other.ObjectiveUnitId == x.ObjectiveUnitId && other.ObjectiveState == "OPERATING")))
             { interrupted.ObjectiveState = "NONE"; interrupted.ObjectiveUnitId = string.Empty; interrupted.ObjectiveCauseEntityId = string.Empty; interrupted.ObjectiveCauseEventId = string.Empty; }
@@ -305,7 +336,7 @@ namespace EchoProtocol.Networking.Authority
                 ResolutionMode = "Adaptive", Difficulty = "Normal", Tick = runner.Tick.Raw, TickRate = runner.TickRate,
                 PhaseOrdinal = (int)V02EvidencePhaseOrdinal, PhaseName = _currentTelemetryPhase, LogicalPhase = logical, Zone = Math.Min(logical, 3),
                 PlanRevision = revision, PlanFingerprint = plan.Fingerprint(), RosterIdentity = CurrentRosterIdentity(), SceneManifestFingerprint = sceneFingerprint,
-                Players = players.ToArray(), Tools = tools.ToArray(), Doors = doors,
+                Players = players.ToArray(), Tools = tools.ToArray(), Doors = doors, Jammers = jammers.ToArray(), Scans = scans.ToArray(), Scannables = scannables,
                 Supply = EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(runner, MatchId),
                 Stalkers = stalkerSources.ToArray(),
                 Minions = minions.Select(x => Threat(x.Object, x.IsDying ? "DYING" : x.State == CreepMinionState.Roam ? "IDLE" : x.State.ToString().ToUpperInvariant(), x.TargetPlayer, (int)x.Zone)).ToArray() };

@@ -138,6 +138,7 @@ namespace EchoProtocol.Networking
             }
 
             FirstAidRevivesUsedThisMatch = 0;
+            GetComponent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>()?.ResetForMatchAuthoritative();
 
             ResetTeamToolRuntimeAuthoritative();
         }
@@ -1741,6 +1742,7 @@ namespace EchoProtocol.Networking
 
             SetTeamToolCooldown(5f);
 
+            jammer.RecordV02Deployment(requester, $"player:{Object.Id}:tool:{TeamToolOrdinal}");
             ConsumeGameplayTeamTool(state);
 
             return InteractionValidationResult.Accepted;
@@ -1926,6 +1928,7 @@ namespace EchoProtocol.Networking
                 $"player:{Object.Id}:tool:{TeamToolOrdinal}",
                 "DOOR_JAMMER");
             SetTeamToolCooldown(5f);
+            jammer.RecordV02Deployment(requester, $"player:{Object.Id}:tool:{TeamToolOrdinal}");
             ConsumeGameplayTeamTool(state);
             return InteractionValidationResult.Accepted;
         }

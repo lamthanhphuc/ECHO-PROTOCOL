@@ -53,7 +53,7 @@ namespace EchoProtocol.Networking.Authority
             {
                 var profile = await profileRequest;
                 if (profile?.IsSuccess == true && profile.Data?.success == true && profile.Data.data?.contractVersion == AEDV02PilotOpportunities.Version &&
-                    profile.Data.data.increaseAxes?.Contains("Stalker") == true)
+                    profile.Data.data.increaseAxes?.Contains("Stalker") == true && !plan.ReservesCabinetBudget(1))
                     plan = plan.With(AEDV02Key.DetectionAcquireSeconds, 1);
             }
             if (MatchId != match || cancellation.IsCancellationRequested) return;
@@ -134,6 +134,8 @@ namespace EchoProtocol.Networking.Authority
             if (!source.pressureComplete || source.opportunityContractVersion != AEDV02PilotOpportunities.Version ||
                 source.teamPressureStatus != "Verified" || source.teamPressureTier < 3 || source.players.Any(x => x.score >= .25) ||
                 source.recentDownUsers?.Length > 0 || source.logicalPhase == 4 || source.increaseAxes == null) return false;
+            // Pilot Cabinet sessions keep their single positive slot available for the native encounter.
+            if (previous.ReservesCabinetBudget(source.zone)) return false;
             var supply = EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(_bootstrap.Runner, MatchId);
             int initial = supply?.InitialOptionalBudget ?? 0;
             var normal = AEDV02Plan.Normal();

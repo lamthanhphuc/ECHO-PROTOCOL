@@ -12,7 +12,7 @@ namespace EchoProtocol.Api.Services;
 
 public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEventRepository telemetry, TimeProvider clock)
 {
-    public const string VerificationVersion = "AED_V02_SOURCE_VERIFICATION_REV02_V4";
+    public const string VerificationVersion = "AED_V02_SOURCE_VERIFICATION_REV02_V5";
     public async Task<ServiceResult<AEDV02SourceResult>> VerifyAsync(Guid matchId, AEDV02SourceRequest request, CancellationToken ct = default)
     {
         if (request == null || matchId == Guid.Empty || request.PhaseOrdinal < 1 || request.StartTick < 0 ||
@@ -84,6 +84,8 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
         bool pilotOpportunities = frames.All(x => x.Sample.OpportunityContractVersion == AEDV02PilotOpportunities.Version);
         if (!TryReadImpacts(accepted, frames, out var impacts)) return Hold("HOLD_CAUSAL_IMPACT_LINEAGE_INVALID");
         if (!TryResolveNoiseMakerOpportunities(accepted, frames, manifest, out _)) return Hold("HOLD_TOOL_NOISE_LINEAGE_INVALID");
+        if (!TryResolveJammerOpportunities(accepted, frames, manifest, out _)) return Hold("HOLD_TOOL_JAMMER_LINEAGE_INVALID");
+        if (!TryResolveScannerOpportunities(accepted, frames, manifest, out _)) return Hold("HOLD_TOOL_SCANNER_LINEAGE_INVALID");
         if (!TryResolveStabilizerOpportunities(accepted, frames, manifest, out _, out var stabilizerReason)) return Hold(stabilizerReason);
         var carrierEvents = accepted.Where(x => x.MatchId == matchId && x.EventType == "AED_V02_TOOL_CARRIER").OrderBy(x => x.EventSequence).ToArray();
         var carriers = new Dictionary<string, string>(StringComparer.Ordinal); int carrierIndex = 0;

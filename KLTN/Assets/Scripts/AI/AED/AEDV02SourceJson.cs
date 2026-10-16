@@ -39,6 +39,7 @@ namespace EchoProtocol.AI.AED
                 .AddInteger("Zone", sample.Zone).AddInteger("PlanRevision", sample.PlanRevision).AddString("PlanFingerprint", sample.PlanFingerprint)
                 .AddString("RosterIdentity", sample.RosterIdentity).AddString("SceneManifestFingerprint", sample.SceneManifestFingerprint)
                 .AddString("EvidenceExclusion", sample.EvidenceExclusion)
+                .AddArray("Scannables", sample.Scannables.Select(ScanTarget))
                 .AddArray("Players", sample.Players.Select(x => Position(new TelemetryJsonObject().AddString("UserId", x.UserId.ToString("D"))
                     .AddString("LifeState", x.LifeState).AddBoolean("IsCaught", x.IsCaught).AddBoolean("IsReviving", x.IsReviving)
                     .AddString("ReviverUserId", x.ReviverUserId?.ToString("D"))
@@ -57,7 +58,18 @@ namespace EchoProtocol.AI.AED
                         .AddString("MarkerId", x.MarkerId).AddStringArray("RouteEdgeIds", x.RouteEdgeIds);
                     Position(item, x.X, x.Y, x.Z);
                     return x.RemainingCharges.HasValue ? item.AddInteger("RemainingCharges", x.RemainingCharges.Value) : item.AddNull("RemainingCharges");
-                })).AddArray("Doors", sample.Doors.Select(x => new TelemetryJsonObject().AddString("DoorId", x.DoorId).AddString("State", x.State)));
+                })).AddArray("Doors", sample.Doors.Select(x => new TelemetryJsonObject().AddString("DoorId", x.DoorId).AddString("State", x.State)))
+                .AddArray("Jammers", sample.Jammers.Select(x => Position(new TelemetryJsonObject().AddString("NetworkId", x.NetworkId)
+                    .AddString("MatchId", x.MatchId.ToString("D")).AddString("PhaseName", x.PhaseName)
+                    .AddString("UserId", x.UserId.ToString("D")).AddString("Occurrence", x.Occurrence).AddInteger("DeploymentTick", x.DeploymentTick)
+                    .AddString("DoorId", x.DoorId).AddBoolean("Active", x.Active).AddBoolean("ColliderBlocking", x.ColliderBlocking)
+                    .AddNumber("BreakSeconds", x.BreakSeconds), x.X, x.Y, x.Z)))
+                .AddArray("Scans", sample.Scans.Select(x => Position(new TelemetryJsonObject().AddString("MatchId", x.MatchId.ToString("D"))
+                    .AddString("UserId", x.UserId.ToString("D")).AddInteger("Sequence", x.Sequence).AddString("Occurrence", x.Occurrence)
+                    .AddInteger("Tick", x.Tick).AddString("PhaseName", x.PhaseName).AddString("Mode", x.Mode).AddBoolean("Presented", x.Presented).AddInteger("PresentedTick", x.PresentedTick)
+                    .AddNumber("Range", x.Range).AddNumber("MovingThreshold", x.MovingThreshold).AddNumber("OcclusionMultiplier", x.OcclusionMultiplier)
+                    .AddInteger("MaxTargets", x.MaxTargets).AddIntegerArray("ResultIds", x.ResultIds)
+                    .AddArray("Candidates", x.Candidates.Select(ScanTarget)), x.X, x.Y, x.Z)));
             return (sample.Supply == null ? json.AddNull("Supply") : json.AddObject("Supply", Supply(sample.Supply))).ToJson();
         }
         public static TelemetryJsonObject Supply(AEDV02SupplySource source) => new TelemetryJsonObject()
@@ -107,9 +119,13 @@ namespace EchoProtocol.AI.AED
         private static TelemetryJsonObject Threat(AEDV02ThreatSource x) => Position(new TelemetryJsonObject().AddString("NetworkId", x.NetworkId)
             .AddString("State", x.State).AddString("EpisodeId", x.EpisodeId).AddString("TargetUserId", x.TargetUserId?.ToString("D"))
             .AddNumberArray("ConsumerValues", x.ConsumerValues)
+            .AddString("JammerBlockerId", x.JammerBlockerId).AddNumber("JammerProgress", x.JammerProgress)
             .AddString("InvestigationNoiseId", x.InvestigationNoiseId).AddNumber("DestinationX", x.DestinationX)
             .AddNumber("DestinationY", x.DestinationY).AddNumber("DestinationZ", x.DestinationZ)
             .AddInteger("Zone", x.Zone), x.X, x.Y, x.Z);
+        private static TelemetryJsonObject ScanTarget(AEDV02ScanCandidate c) => Position(new TelemetryJsonObject().AddInteger("LocalId", c.LocalId)
+            .AddString("Identity", c.Identity).AddString("Kind", c.Kind).AddBoolean("Available", c.Available).AddBoolean("Moving", c.Moving)
+            .AddBoolean("Occluded", c.Occluded).AddNumber("Speed", c.Speed), c.X, c.Y, c.Z);
         private static TelemetryJsonObject Position(TelemetryJsonObject json, double x, double y, double z) => json.AddNumber("X", x).AddNumber("Y", y).AddNumber("Z", z);
     }
 }

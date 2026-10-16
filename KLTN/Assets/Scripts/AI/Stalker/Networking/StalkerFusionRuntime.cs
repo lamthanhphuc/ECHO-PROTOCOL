@@ -54,6 +54,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         public int V02AppliedRevision { get; private set; }
         [Networked] public int V02ConsumerRevision { get; private set; }
         [Networked] public NetworkString<_64> V02ConsumerFingerprint { get; private set; }
+        [Networked] public NetworkString<_64> V02ConsumerMatchId { get; private set; }
         [Networked, Capacity(6)] private NetworkArray<double> V02ConsumerValues => default;
         public bool TryReadReplicatedV02ConsumerValue(AEDV02Key key, out double value)
         {
@@ -63,6 +64,15 @@ namespace EchoProtocol.AI.Stalker.Networking
             return AEDV02PilotPolicy.Finite(value);
         }
         public bool HasActiveSpecialEncounter => specialEncounterRuntime != null && specialEncounterRuntime.IsActive;
+        public bool TryReadV02JammerBlock(out string id, out double progress)
+        {
+            id = string.Empty; progress = 0;
+            if (controller == null || Object == null || !Object.IsValid || !Object.HasStateAuthority ||
+                controller.CurrentWorldInteractionKind != StalkerWorldInteractionKind.BreakingJammer ||
+                !(controller.CurrentWorldInteractionBlocker is NetworkDoorJammer jammer) || !jammer.IsActive ||
+                jammer.Object == null || !jammer.Object.IsValid) return false;
+            id = jammer.Object.Id.ToString(); progress = controller.WorldInteractionProgress01; return true;
+        }
         public bool TryReadV02NoiseDiversion(out string noiseId, out Vector3 destination)
         {
             noiseId = string.Empty; destination = default;
@@ -1303,7 +1313,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return;
             if (authority.Difficulty == MatchDifficulty.Normal && AEDv2Authority.TryGetV02(matchId, out _, out var v02Revision))
             {
-                if (V02AppliedRevision != v02Revision && IsV02SafeForApply)
+                if ((V02AppliedRevision != v02Revision || V02ConsumerMatchId.ToString() != matchId.ToString("D")) && IsV02SafeForApply)
                     ApplyMatchDifficulty();
                 return;
             }
@@ -1311,7 +1321,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             bool active = authority.Difficulty == MatchDifficulty.Normal &&
                 AEDv2Authority.TryGetApplied(matchId, out _, out revision);
             if ((active && (!_aedv2Applied || revision != _aedv2AppliedRevision)) ||
-                (!active && _aedv2Applied))
+                (!active && (_aedv2Applied || V02AppliedRevision > 0)))
             {
                 if (controller == null ||
                     controller.CurrentState == StalkerState.ATTACK ||
@@ -1364,7 +1374,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             V02AppliedRevision = useV02 ? v02Revision : 0;
             if (Object != null && Object.IsValid && Object.HasStateAuthority)
             {
-                V02ConsumerRevision = 0; V02ConsumerFingerprint = default;
+                V02ConsumerRevision = 0; V02ConsumerFingerprint = default; V02ConsumerMatchId = default;
                 if (useV02)
                 {
                     bool observed = true;
@@ -1374,7 +1384,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                         { observed = false; break; }
                         V02ConsumerValues.Set(index, actual);
                     }
-                    if (observed) { V02ConsumerFingerprint = v02.Fingerprint(); V02ConsumerRevision = v02Revision; }
+                    if (observed) { V02ConsumerMatchId = authority.MatchId.ToString("D"); V02ConsumerFingerprint = v02.Fingerprint(); V02ConsumerRevision = v02Revision; }
                 }
             }
             if (useAEDv2)

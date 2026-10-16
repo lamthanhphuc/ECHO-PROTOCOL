@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using EchoProtocol.AI.Common.AED;
+using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.MatchFlow;
 using EchoProtocol.Networking;
@@ -22,6 +25,7 @@ namespace EchoProtocol.Tools.Scanner
         public event Action LocalScanCleared;
 
         [SerializeField] private FieldScannerTuning _tuning = new FieldScannerTuning();
+        public AEDV02ScanSource V02LastScan { get; private set; }
 
         [Networked, OnChangedRender(nameof(HandleModeChanged))]
         private FieldScannerMode NetworkMode { get; set; }
@@ -273,6 +277,7 @@ namespace EchoProtocol.Tools.Scanner
 
         public override void Spawned()
         {
+            V02LastScan = null;
             if (Object.HasStateAuthority)
             {
                 CurrentMode = FieldScannerMode.Core;
@@ -292,6 +297,7 @@ namespace EchoProtocol.Tools.Scanner
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            V02LastScan = null;
             _switchModeAction?.Disable();
             ClearLocalResult();
 
@@ -473,6 +479,14 @@ namespace EchoProtocol.Tools.Scanner
             return CanUseScannerAuthoritative();
         }
 
+        public void ResetForMatchAuthoritative()
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
+            ScanCooldownTimer = TickTimer.None; NetworkScanPulseOrdinal = 0;
+            _localActiveScanTimer = 0; _localCooldownTimer = 0; V02LastScan = null;
+            ClearLocalResult();
+        }
+
         private bool CanUseScannerAuthoritative()
         {
             if (!IsScannerEquipped() || IsCarryingCore()) return false;
@@ -652,14 +666,20 @@ namespace EchoProtocol.Tools.Scanner
             if (requestedMode == FieldScannerMode.Core)
             {
                 var coreCandidates = CollectCoreCandidates();
+                var occlusion = new Dictionary<int, bool>();
                 var result = FieldScannerCoreDetector.Evaluate(
                     transform.position,
                     transform.forward,
                     coreCandidates,
-                    _tuning);
+                    _tuning, observedCandidate: (candidate, blocked) => occlusion[candidate.TargetId] = blocked);
+                V02LastScan = CaptureV02Scan(sequence, requestedMode, coreCandidates.Select(c =>
+                    ScanCandidate(c.TargetId, SourceComponent(c), c.WorldPosition, c.IsAvailableInWorld, false, 0,
+                        occlusion.TryGetValue(c.TargetId, out var blocked) && blocked)).ToArray(),
+                    result.HasTarget ? new[] { result.TargetId } : Array.Empty<int>());
 
                 RpcReceiveCoreResult(
                     requester,
+                    V02LastScan?.Sequence ?? 0,
                     result.HasTarget,
                     (int)result.SignalBars,
                     (int)result.Direction,
@@ -679,9 +699,14 @@ namespace EchoProtocol.Tools.Scanner
                 var b0 = result.GetBlip(0);
                 var b1 = result.GetBlip(1);
                 var b2 = result.GetBlip(2);
+                V02LastScan = CaptureV02Scan(sequence, requestedMode, motionTargets.Select(c =>
+                    ScanCandidate(c.TargetId, c is Component component ? component : (c as StalkerMotionScannableAdapter)?.Source,
+                        c.WorldPosition, c.IsActiveTarget, c.IsMoving, c.CurrentSpeed, false)).ToArray(),
+                    new[] { b0, b1, b2 }.Where(b => b.IsValid).Select(b => b.TargetId).ToArray());
 
                 RpcReceiveMotionResult(
                     requester,
+                    V02LastScan?.Sequence ?? 0,
                     result.HasMotion,
                     result.BlipCount,
                     b0.IsValid, (int)b0.Direction, (int)b0.Intensity, b0.Distance, b0.TargetId,
@@ -693,6 +718,7 @@ namespace EchoProtocol.Tools.Scanner
         [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
         private void RpcReceiveCoreResult(
             [RpcTarget] PlayerRef targetPlayer,
+            uint sequence,
             bool hasTarget,
             int signalBars,
             int direction,
@@ -714,11 +740,14 @@ namespace EchoProtocol.Tools.Scanner
             _localResultTimer = _tuning.ResultLifetime;
 
             LocalCoreResultReceived?.Invoke(_lastLocalCoreResult);
+            if (sequence != 0 && EchoProtocol.UI.HUD.HUDFieldScanner.Instance != null && EchoProtocol.UI.HUD.HUDFieldScanner.Instance.isActiveAndEnabled)
+                RpcAcknowledgeScan(sequence);
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
         private void RpcReceiveMotionResult(
             [RpcTarget] PlayerRef targetPlayer,
+            uint sequence,
             bool hasMotion,
             int blipCount,
             bool b0Valid, int b0Dir, int b0Int, float b0Dist, int b0Id,
@@ -740,6 +769,53 @@ namespace EchoProtocol.Tools.Scanner
             _localResultTimer = _tuning.ResultLifetime;
 
             LocalMotionResultReceived?.Invoke(_lastLocalMotionResult);
+            if (sequence != 0 && EchoProtocol.UI.HUD.HUDFieldScanner.Instance != null && EchoProtocol.UI.HUD.HUDFieldScanner.Instance.isActiveAndEnabled)
+                RpcAcknowledgeScan(sequence);
+        }
+
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        private void RpcAcknowledgeScan(uint sequence, RpcInfo info = default)
+        {
+            if (!TryResolveRequester(info.Source, out _) || V02LastScan == null || V02LastScan.Sequence != sequence ||
+                MatchAuthorityRuntime.Instance == null || !MatchAuthorityRuntime.Instance.V02CollectToolOutcomes ||
+                MatchAuthorityRuntime.Instance.MatchId != V02LastScan.MatchId || MatchAuthorityRuntime.Instance.V02CurrentSourcePhase != V02LastScan.PhaseName ||
+                Runner.Tick.Raw - V02LastScan.Tick > Runner.TickRate * _tuning.ActiveDuration) return;
+            if (!V02LastScan.Presented) { V02LastScan.Presented = true; V02LastScan.PresentedTick = Runner.Tick.Raw; }
+        }
+
+        private AEDV02ScanSource CaptureV02Scan(uint sequence, FieldScannerMode mode, AEDV02ScanCandidate[] candidates, int[] results)
+        {
+            var authority = MatchAuthorityRuntime.Instance;
+            if (authority == null || !authority.V02CollectToolOutcomes) return null;
+            return new AEDV02ScanSource { MatchId = authority != null ? authority.MatchId : Guid.Empty,
+                Sequence = sequence, Occurrence = $"player:{Object.Id}:tool:FIELD_SCANNER:{sequence}",
+                Tick = Runner.Tick.Raw, PhaseName = authority != null ? authority.V02CurrentSourcePhase : string.Empty, Mode = mode.ToString(),
+                Range = mode == FieldScannerMode.Core ? _tuning.CoreRange : _tuning.MotionRange, MaxTargets = mode == FieldScannerMode.Core ? 1 : _tuning.MaxMotionTargets,
+                MovingThreshold = _tuning.MovingSpeedThreshold, OcclusionMultiplier = _tuning.OccludedSignalMultiplier,
+                X = transform.position.x, Y = transform.position.y, Z = transform.position.z, Candidates = candidates, ResultIds = results };
+        }
+
+        private static Component SourceComponent(ICoreScanCandidate candidate) => candidate is NetworkPickupItemCandidateAdapter core ? core.Source :
+            candidate is ObjectiveScanCandidateAdapter objective ? objective.Source : candidate is Zone3FuelCellScanCandidateAdapter fuel ? fuel.Source :
+            candidate is EnergyCorePickupCandidateAdapter pickup ? pickup.Source : null;
+
+        private static AEDV02ScanCandidate ScanCandidate(int id, Component source, Vector3 position, bool available, bool moving, float speed, bool occluded)
+        {
+            var stalker = source != null ? source.GetComponentInParent<EchoProtocol.AI.Stalker.StalkerController>() : null;
+            var network = stalker != null ? stalker.GetComponent<NetworkObject>() : source != null ? source.GetComponent<NetworkObject>() : null;
+            return new AEDV02ScanCandidate { LocalId = id,
+                Identity = network != null && network.IsValid ? network.Id.ToString() : source != null ? AEDV02SceneSource.MarkerId(source.transform) : string.Empty,
+                Kind = source != null && source.GetComponentInParent<EchoProtocol.AI.Stalker.StalkerController>() != null ? "Stalker" :
+                    source is NetworkPickupItem || source is EnergyCorePickup ? "Core" : source is Zone3FuelCell ? "Fuel" : "Objective",
+                Available = available, Moving = moving, Speed = speed, Occluded = occluded, X = position.x, Y = position.y, Z = position.z };
+        }
+
+        public AEDV02ScanCandidate[] ReadV02WorldTargets()
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return Array.Empty<AEDV02ScanCandidate>();
+            return CollectCoreCandidates().Select(c => ScanCandidate(c.TargetId, SourceComponent(c), c.WorldPosition, c.IsAvailableInWorld, false, 0, false))
+                .Concat(CollectMotionTargets().Select(c => ScanCandidate(c.TargetId, c is Component component ? component : (c as StalkerMotionScannableAdapter)?.Source,
+                    c.WorldPosition, c.IsActiveTarget, c.IsMoving, c.CurrentSpeed, false))).ToArray();
         }
 
         private void ClearLocalResult()
@@ -1010,6 +1086,7 @@ namespace EchoProtocol.Tools.Scanner
         private sealed class NetworkPickupItemCandidateAdapter : ICoreScanCandidate
         {
             private readonly NetworkPickupItem _item;
+            public Component Source => _item;
 
             public NetworkPickupItemCandidateAdapter(NetworkPickupItem item)
             {
@@ -1036,6 +1113,7 @@ namespace EchoProtocol.Tools.Scanner
             : ICoreScanCandidate
         {
             private readonly Component _target;
+            public Component Source => _target;
 
             public ObjectiveScanCandidateAdapter(
                 Component target)
@@ -1074,6 +1152,7 @@ namespace EchoProtocol.Tools.Scanner
         private sealed class Zone3FuelCellScanCandidateAdapter : ICoreScanCandidate
         {
             private readonly Zone3FuelCell _cell;
+            public Component Source => _cell;
 
             public Zone3FuelCellScanCandidateAdapter(Zone3FuelCell cell)
             {
@@ -1118,12 +1197,14 @@ namespace EchoProtocol.Tools.Scanner
             }
 
             public int TargetId => _pickup != null ? _pickup.gameObject.GetHashCode() : 0;
+            public Component Source => _pickup;
             public Vector3 WorldPosition => _pickup != null ? _pickup.transform.position : Vector3.zero;
             public bool IsAvailableInWorld => _pickup != null && _pickup.gameObject.activeInHierarchy;
         }
 
         private sealed class StalkerMotionScannableAdapter : IMotionScannable
         {
+            public Component Source => _stalker;
             private readonly EchoProtocol.AI.Stalker.StalkerController
                 _stalker;
 

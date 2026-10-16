@@ -27,6 +27,8 @@ namespace EchoProtocol.AI.Common.AED
         public const double NoiseDiversionSeconds = 2;
         public const double NoiseDiversionMeters = .5;
         public const double StabilizerEffectSeconds = 2;
+        public const double JammerDelaySeconds = 1;
+        public const double ScannerCensusPositionTolerance = 1.5;
         public const double ToolThreatContextSeconds = 30;
 
         public static string ComparisonContext(string scene, int rosterSize) => AEDV02Plan.Hash(

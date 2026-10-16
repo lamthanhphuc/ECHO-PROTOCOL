@@ -72,6 +72,14 @@ namespace EchoProtocol.AI.AED
         public double MinimumToolSpacing = -1;
         public double CoreStabilizerRadius;
         public double CoreStabilizerDurationSeconds;
+        public double JammerBreakSeconds;
+        public double ScannerCoreRange;
+        public double ScannerMotionRange;
+        public double ScannerMovingThreshold;
+        public double ScannerOcclusionMultiplier;
+        public int ScannerMaxTargets;
+        public double ScannerActiveSeconds;
+        public double ScannerCycleSeconds;
         public Marker[] Markers;
         public Edge[] Edges = Array.Empty<Edge>();
         public Cell[] NavCells;
@@ -90,6 +98,9 @@ namespace EchoProtocol.AI.AED
             MaximumCabinetInteractionDistance = MaximumCabinetInteractionDistance,
             MinimumToolSpacing = MinimumToolSpacing,
             CoreStabilizerRadius = CoreStabilizerRadius, CoreStabilizerDurationSeconds = CoreStabilizerDurationSeconds,
+            JammerBreakSeconds = JammerBreakSeconds, ScannerCoreRange = ScannerCoreRange, ScannerMotionRange = ScannerMotionRange,
+            ScannerMovingThreshold = ScannerMovingThreshold, ScannerOcclusionMultiplier = ScannerOcclusionMultiplier, ScannerMaxTargets = ScannerMaxTargets,
+            ScannerActiveSeconds = ScannerActiveSeconds, ScannerCycleSeconds = ScannerCycleSeconds,
             DoorIds = DoorIds,
             Markers = Markers?.Select(x => x == null ? null : new AEDV02SceneMarker { Id = x.Id, Zone = x.Zone, Kind = x.Kind, HideSpotId = x.HideSpotId,
                 InteractionBounds = x.InteractionBounds, ResourceRole = x.ResourceRole, AllowedToolIds = x.AllowedToolIds, X = x.X, Y = x.Y, Z = x.Z }).ToArray(),

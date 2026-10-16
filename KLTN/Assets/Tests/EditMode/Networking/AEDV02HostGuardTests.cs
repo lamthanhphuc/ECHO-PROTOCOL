@@ -94,6 +94,19 @@ namespace EchoProtocol.Networking.Tests
             foreach (var property in profile.GetType().GetProperties()) Assert.That(property.GetValue(profile), Is.EqualTo(property.GetValue(normal)), property.Name);
         }
 
+        [TestCase(0, 1, false)]
+        [TestCase(1, 1, true)]
+        [TestCase(1, 2, true)]
+        [TestCase(1, 3, false)]
+        [TestCase(1, 4, false)]
+        public void V02_PilotCabinetPermissionReservesOnlyTheTwoApprovedZones(int enabled, int zone, bool reserved)
+        {
+            var plan = AEDV02Plan.Normal().With(AEDV02Key.CabinetAmbushEnabled, enabled);
+            Assert.That(plan.ReservesCabinetBudget(zone), Is.EqualTo(reserved));
+            Assert.That(plan.PositiveTokens(0), Is.Zero); // Permission is not a fabricated active encounter.
+            Assert.That(plan.Get(AEDV02Key.DetectionAcquireSeconds), Is.EqualTo(1.25));
+        }
+
         private bool Commit((object Request, object Approval) data, bool host, bool adaptiveNormal, bool enabled, bool safe) =>
             (bool)Authority.GetMethod("CommitV02").Invoke(null, new object[] { _match, data.Request, data.Approval, _roster, host, adaptiveNormal, enabled, safe, _now, null });
         private (object Request, object Approval) Payload(AEDV02Plan plan, int previousRevision)

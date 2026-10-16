@@ -68,6 +68,7 @@ namespace EchoProtocol.AI.Common.AED
         }
         public static System.Collections.Generic.IReadOnlyList<double> AllowedValues(AEDV02Key key) => Array.AsReadOnly(Values[(int)key]);
         public double Get(AEDV02Key key) => _values[(int)key];
+        public bool ReservesCabinetBudget(int zone) => (zone is 1 or 2) && Get(AEDV02Key.CabinetAmbushEnabled) == 1;
         public double[] ToArray() => (double[])_values.Clone();
         public AEDV02Plan With(AEDV02Key key, double value) { var values = ToArray(); values[(int)key] = value; return new AEDV02Plan(values); }
         public string Fingerprint() => Hash(CatalogVersion + "|" + string.Join("|", _values.Select(x => x.ToString("R", CultureInfo.InvariantCulture))));
