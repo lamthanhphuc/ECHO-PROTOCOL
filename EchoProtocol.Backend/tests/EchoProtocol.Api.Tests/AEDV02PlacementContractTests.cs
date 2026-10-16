@@ -8,6 +8,7 @@ public sealed class AEDV02PlacementContractTests
     [Theory]
     [InlineData("valid", true)]
     [InlineData("carried-item", true)]
+    [InlineData("missing-safe-room", false)]
     [InlineData("unknown-spacing", false)]
     [InlineData("spacing", false)]
     [InlineData("existing-world-item", false)]
@@ -23,7 +24,26 @@ public sealed class AEDV02PlacementContractTests
         var markers = types.Select((type, index) => new AEDV02SceneMarker { Id = AEDV02Plan.Hash("placement:" + type),
             Zone = 2, Kind = "TOOL", ResourceRole = "MainRoute", AllowedToolIds = [type], X = 5 + index * 5, Z = 49 }).ToArray();
         var manifest = new AEDV02SceneManifest { SceneVersion = "placement-contract", MinimumToolSpacing = 4,
-            Markers = markers.Append(new AEDV02SceneMarker { Id = "Z2_ENTRY", Zone = 2, Kind = "ENTRY", X = 1, Z = 1 }).ToArray(),
+            Markers = markers
+                .Append(new AEDV02SceneMarker
+                {
+                    Id = "Z2_ENTRY",
+                    Zone = 2,
+                    Kind = "ENTRY",
+                    X = 1,
+                    Z = 1
+                })
+                .Append(new AEDV02SceneMarker
+                {
+                    Id = AEDV02Plan.Hash("test-safe-room"),
+                    Zone = 2,
+                    Kind = "SAFE_ROOM",
+                    X = 71,
+                    Y = 0,
+                    Z = 71,
+                    InteractionBounds = [70, -1, 70, 72, 3, 72]
+                })
+                .ToArray(),
             NavCells = [new() { Id = 0, A = [0, 0, 0], B = [50, 0, 0], C = [0, 0, 50] },
                 new() { Id = 1, A = [50, 0, 50], B = [0, 0, 50], C = [50, 0, 0] }],
             NavLinks = [new() { From = 0, To = 1, DoorIds = ["door"] }, new() { From = 1, To = 0, DoorIds = ["door"] }], DoorIds = ["door"] };
@@ -43,6 +63,11 @@ public sealed class AEDV02PlacementContractTests
             case "wrong-role": markers[0].ResourceRole = "SideRoom"; break;
             case "missing-required-type": proposal[0].ToolId = 2; break;
             case "already-materialized-zone": world.Supply.SpawnedZones = [2]; break;
+            case "missing-safe-room":
+                manifest.Markers = manifest.Markers
+                    .Where(x => x.Kind != "SAFE_ROOM")
+                    .ToArray();
+                break;
         }
         Assert.True(manifest.IsValid());
         Assert.Equal(accepted, AEDV02ResourcePlacement.ValidateProposed(manifest, world, proposal, 1));

@@ -104,34 +104,62 @@ public sealed partial class AEDV02SourceVerifier
                 bool disconnected = accepted.Any(x => x.MatchId == last.Event.MatchId &&
                     x.EventType == "PLAYER_DISCONNECTED" && x.UserId == impact.UserId &&
                     x.EventSequence >= causeEvent.EventSequence && x.EventSequence <= last.Event.EventSequence);
-                bool needObservedAtAction = observed.Before?.Players.Any(x => x.UserId == impact.UserId &&
-                    x.RequiredToolId == impact.ToolId && x.ResourceCauseEventId == causeId.ToString("D")) == true;
-                if (completeNeed && !disconnected && needFrames.Length != 0 && needObservedAtAction &&
-                    observed.Before != null && observed.After != null)
+                var beforeNeed = observed.Before?.Players
+                    .SingleOrDefault(x => x.UserId == impact.UserId);
+                var afterNeed = observed.After?.Players
+                    .SingleOrDefault(x => x.UserId == impact.UserId);
+                bool sameNeed =
+                    beforeNeed != null &&
+                    afterNeed != null &&
+                    beforeNeed.RequiredToolId == impact.ToolId &&
+                    afterNeed.RequiredToolId == impact.ToolId &&
+                    beforeNeed.ResourceCauseEventId == causeId.ToString("D") &&
+                    afterNeed.ResourceCauseEventId == causeId.ToString("D");
+
+                if (completeNeed && !disconnected &&
+                    needFrames.Length != 0 && sameNeed &&
+                    observed.Before != null &&
+                    observed.After != null &&
+                    observed.After.Tick >= observed.Action.Tick)
                 {
-                    var need = observed.After.Players.SingleOrDefault(x => x.UserId == impact.UserId);
-                    if (observed.Action.Action == "PICKUP" && need != null &&
-                        AEDV02ResourcePlacement.UsableSupply(manifest, observed.After, need, impact.ToolId) == true &&
-                        observed.After.Tick > observed.Action.Tick)
+                    bool? beforeSupply = AEDV02ResourcePlacement.UsableSupply(
+                        manifest, observed.Before, beforeNeed!, impact.ToolId);
+                    bool? afterSupply = AEDV02ResourcePlacement.UsableSupply(
+                        manifest, observed.After, afterNeed!, impact.ToolId);
+                    var beforeTool = observed.Before.Tools.SingleOrDefault(
+                        x => x.InstanceId == observed.Action.ToolInstanceId);
+                    var afterTool = observed.After.Tools.SingleOrDefault(
+                        x => x.InstanceId == observed.Action.ToolInstanceId);
+
+                    if (observed.Action.Action == "PICKUP" &&
+                        beforeSupply == false &&
+                        afterSupply == true)
                     {
                         resolution = "Success";
                         endTick = observed.After.Tick;
                     }
-                    else if (observed.Action.Action is "DROP" or "USE" or "CONSUME" && need != null)
+                    else if (observed.Action.Action is "DROP" or "USE" or "CONSUME" &&
+                        beforeSupply == true &&
+                        afterSupply == false)
                     {
-                        var observations = frames.Where(x => x.Sample.Tick >= observed.Action.Tick &&
-                            x.Sample.Tick <= impact.UntilTick).ToArray();
-                        var supply = observations.Select(x =>
-                        {
-                            var player = x.Sample.Players.SingleOrDefault(p => p.UserId == impact.UserId);
-                            return player?.RequiredToolId == impact.ToolId && player.ResourceCauseEventId == causeId.ToString("D")
-                                ? AEDV02ResourcePlacement.UsableSupply(manifest, x.Sample, player, impact.ToolId)
-                                : (bool?)null;
-                        }).ToArray();
-                        if (supply.Length != 0 && supply.All(x => x == false))
+                        bool actorOwnedBefore =
+                            beforeTool?.Location == "Player" &&
+                            beforeTool.OwnerUserId == observed.Action.ActorUserId;
+                        bool dropped = observed.Action.Action == "DROP" &&
+                            afterTool?.Location == "World" &&
+                            afterTool.OwnerUserId == null &&
+                            afterTool.CarrierMinionId.Length == 0;
+                        bool usedCharge = observed.Action.Action == "USE" &&
+                            beforeTool?.RemainingCharges.HasValue == true &&
+                            afterTool?.RemainingCharges.HasValue == true &&
+                            afterTool.RemainingCharges.Value < beforeTool.RemainingCharges.Value;
+                        bool consumed = observed.Action.Action == "CONSUME" &&
+                            (afterTool == null || afterTool.RemainingCharges == 0);
+
+                        if (actorOwnedBefore && (dropped || usedCharge || consumed))
                         {
                             resolution = "Failure";
-                            endTick = impact.UntilTick;
+                            endTick = observed.After.Tick;
                         }
                     }
                 }

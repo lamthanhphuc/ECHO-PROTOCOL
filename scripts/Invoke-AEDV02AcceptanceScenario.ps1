@@ -131,11 +131,23 @@ try {
             Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'Adaptive cap and live census were captured; owner must observe relief 1->0 without force-despawn and repeat Fixed Normal with Zone3 at zero.'
         }
         'E2E-TT-01' {
-            Wait-World { param($w,$r) $w.phase -eq 'Zone2Objective' -and $w.tools.Count -ge 5 } 'materialized Zone2 supply' | Out-Null
-            $ids=@($w.tools | ForEach-Object { [int]$_.toolId } | Sort-Object -Unique)
-            $required=@(1,2,3,4,6)
-            if (@($required | Where-Object { $ids -notcontains $_ }).Count -ne 0) { throw 'Required five Tool types are not all materialized in the authoritative world journal.' }
-            Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'Required Tool instances were captured; owner must correlate reservation/materialization IDs, optional-budget changes, support effect and receipt.'
+            $w = Wait-World {
+                param($world, $remote)
+                $zone2Tools = @($world.tools | Where-Object {
+                    [int]$_.zone -eq 2 -and $_.origin -eq 'WorldSpawn' -and
+                    $_.location -in @('World', 'Player', 'Minion')
+                })
+                $world.phase -eq 'Zone2Objective' -and $zone2Tools.Count -ge 5
+            } 'actual Zone2 materialized supply'
+            $zone2Tools = @($w.tools | Where-Object {
+                [int]$_.zone -eq 2 -and $_.origin -eq 'WorldSpawn' -and
+                $_.location -in @('World', 'Player', 'Minion')
+            })
+            $types = @($zone2Tools | ForEach-Object { [int]$_.toolId } | Sort-Object -Unique)
+            $required = @(1, 2, 3, 4, 6)
+            if (@($required | Where-Object { $types -notcontains $_ }).Count -ne 0) { throw 'Zone2 missing required materialized Tool types.' }
+            if (@($zone2Tools | Select-Object -ExpandProperty id -Unique).Count -lt 5) { throw 'Zone2 has fewer than five distinct Tool instances.' }
+            Save-Scenario 'MANUAL_REVIEW_REQUIRED' 'Verified five materialized Zone2 Tool types; owner reviews reservations, support effects and receipts.'
         }
         'E2E-F4-01' {
             Wait-World { param($w,$r) $w.phase -in @('FinalHunt','Escape') } 'normal objectives reached final phase' | Out-Null

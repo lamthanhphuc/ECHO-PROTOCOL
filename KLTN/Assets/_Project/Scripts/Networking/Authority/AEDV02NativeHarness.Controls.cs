@@ -177,7 +177,7 @@ namespace EchoProtocol.Networking.Authority
         }
         [Serializable] private sealed class ActorReadback
         {
-            public string id, state;
+            public string id, state, origin, location, markerId;
             public int zone, toolId, charges;
             public float x, y, z;
             public double[] actualConsumer;
@@ -222,6 +222,16 @@ namespace EchoProtocol.Networking.Authority
                 .Concat(FindObjectsByType<NetworkToolPickup>(FindObjectsInactive.Exclude)
                     .Where(x => x.Runner == runner && x.Object != null && x.Object.IsValid && !x.IsPickedUp).Select(x => new ActorReadback {
                         id = x.Object.Id.ToString(), toolId = x.ToolId, charges = x.RemainingUses, x = x.transform.position.x, y = x.transform.position.y, z = x.transform.position.z })).ToArray();
+            if (_config.role == "Host" && authority != null && authority.HasStateAuthority &&
+                authority.TryReadCurrentV02World(out var sourceWorld))
+            {
+                tools = sourceWorld.Tools.Select(x => new ActorReadback
+                {
+                    id = x.InstanceId, state = x.Location, location = x.Location, origin = x.Origin,
+                    markerId = x.MarkerId, zone = x.Zone, toolId = x.ToolId,
+                    charges = x.RemainingCharges ?? -1, x = (float)x.X, y = (float)x.Y, z = (float)x.Z
+                }).ToArray();
+            }
             double[] actualPlan = Array.Empty<double>();
             if (state != null && state.Object != null && state.Object.IsValid && Guid.TryParse(state.AEDV02MatchId.ToString(), out var match) &&
                 state.TryReadV02Plan(match, out var plan, out _))
