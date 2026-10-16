@@ -90,7 +90,9 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
         if (!TryResolveScannerOpportunities(accepted, frames, manifest, out _)) return Hold("HOLD_TOOL_SCANNER_LINEAGE_INVALID");
         if (!TryResolveStabilizerOpportunities(accepted, frames, manifest, out _, out var stabilizerReason)) return Hold(stabilizerReason);
         var carrierEvents = accepted.Where(x => x.MatchId == matchId && x.EventType == "AED_V02_TOOL_CARRIER").OrderBy(x => x.EventSequence).ToArray();
-        var carriers = new Dictionary<string, string>(StringComparer.Ordinal); int carrierIndex = 0;
+        var carriers = new Dictionary<string, string>(StringComparer.Ordinal);
+        var relocatedWorldSpawnTools = new HashSet<string>(StringComparer.Ordinal);
+        int carrierIndex = 0;
         for (int i = 0; i < frames.Count; i++)
         {
             var frame = frames[i]; var sample = frame.Sample;
@@ -131,7 +133,14 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
                         return Hold("HOLD_TOOL_CARRIER_SOURCE_INVALID");
                     carriers.Add(transition.ToolInstanceId, transition.MinionNetworkId);
                 }
-                else if (!carriers.Remove(transition.ToolInstanceId, out var owner) || owner != transition.MinionNetworkId) return Hold("HOLD_TOOL_CARRIER_SOURCE_INVALID");
+                else
+                {
+                    if (!carriers.Remove(transition.ToolInstanceId, out var owner) ||
+                        owner != transition.MinionNetworkId)
+                        return Hold("HOLD_TOOL_CARRIER_SOURCE_INVALID");
+
+                    relocatedWorldSpawnTools.Add(transition.ToolInstanceId);
+                }
             }
             if (sample.Tools.Any(x => x.CarrierMinionId != carriers.GetValueOrDefault(x.InstanceId, string.Empty)) ||
                 carriers.Keys.Any(x => !tools.ContainsKey(x))) return Hold("HOLD_TOOL_CARRIER_CENSUS_MISMATCH");
@@ -140,10 +149,27 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
                 if (tool.CarrierMinionId.Length != 0) continue;
                 var marker = manifest.Markers.SingleOrDefault(x => x.Id == tool.MarkerId && x.Kind == "TOOL");
                 if (tool.Origin is "WorldSpawn" or "ScenePlaced" && (marker == null || !marker.AllowedToolIds.Contains(tool.ToolId))) return Hold("HOLD_TOOL_PLACEMENT_WHITELIST");
-                if (tool.Origin == "WorldSpawn" && (marker == null ||
-                    Math.Pow(tool.X - marker.X, 2) + Math.Pow(tool.Y - marker.Y, 2) + Math.Pow(tool.Z - marker.Z, 2) > 0.0001 ||
-                    !manifest.TryIsInsideSafeRoom(tool.X, tool.Y, tool.Z, out var insideSafeRoom) || insideSafeRoom))
-                    return Hold("HOLD_TOOL_PLACEMENT_SAFE_ROOM_INVALID");
+                if (tool.Origin == "WorldSpawn")
+                {
+                    if (marker == null ||
+                        marker.Zone != tool.Zone ||
+                        !manifest.TryIsInsideSafeRoom(marker.X, marker.Y, marker.Z, out var markerInside) ||
+                        markerInside ||
+                        !manifest.TryIsInsideSafeRoom(tool.X, tool.Y, tool.Z, out var toolInside) ||
+                        toolInside)
+                        return Hold("HOLD_TOOL_PLACEMENT_SAFE_ROOM_INVALID");
+
+                    if (!relocatedWorldSpawnTools.Contains(tool.InstanceId))
+                    {
+                        double dx = tool.X - marker.X;
+                        double dz = tool.Z - marker.Z;
+                        double dy = Math.Abs(tool.Y - marker.Y);
+
+                        if (dx * dx + dz * dz > 0.75 * 0.75 ||
+                            dy > 1.0)
+                            return Hold("HOLD_TOOL_PLACEMENT_SAFE_ROOM_INVALID");
+                    }
+                }
                 if (manifest.NavCells.Length != 0)
                 {
                     var entry = manifest.Markers.SingleOrDefault(x => x.Id == "Z" + (marker?.Zone ?? tool.Zone) + "_ENTRY");

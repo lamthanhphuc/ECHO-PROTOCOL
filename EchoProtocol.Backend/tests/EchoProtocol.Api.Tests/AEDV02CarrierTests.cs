@@ -59,4 +59,42 @@ public sealed partial class ScenarioServiceTests
         if (rejection == null) { Assert.True(result.IsSuccess, result.Message); Assert.True(result.Data!.SafeWindow); return; }
         Assert.False(result.IsSuccess); Assert.Equal(rejection, result.Message); Assert.Empty(f.Db.AEDV02VerifiedSources);
     }
+
+    [Theory, Trait("Category", "AEDV02")]
+    [InlineData("valid", null)]
+    [InlineData("forged-move", "HOLD_TOOL_PLACEMENT_SAFE_ROOM_INVALID")]
+    [InlineData("missing-drop", "HOLD_TOOL_CARRIER_CENSUS_MISMATCH")]
+    [InlineData("inside-safe-room", "HOLD_TOOL_PLACEMENT_SAFE_ROOM_INVALID")]
+    public async Task V02_WorldSpawnRelocationRequiresVerifiedCarrierLineage(string mode, string? rejection)
+    {
+        await using var f = await ValidV02Fixture();
+        var (baseline, request) = await V02WorldEvidence(f, geometry: true);
+        var events = baseline.ToList();
+        foreach (var item in events.Where(x => x.EventType == "AED_V02_WORLD_SAMPLE"))
+        {
+            var sample = JsonSerializer.Deserialize<AEDV02WorldSample>(item.ValueJson["data"]["world"].ToJson())!;
+            sample.Minions = [new AEDV02ThreatSource { NetworkId = "minion:1", State = "IDLE", Zone = 1 }];
+            var tool = sample.Tools.Single(x => x.ToolId == 3);
+            if (mode != "forged-move" && sample.Tick >= 1200 && sample.Tick < 1800) tool.CarrierMinionId = "minion:1";
+            if (sample.Tick >= 1800) { tool.X = mode == "inside-safe-room" ? 71 : 2; tool.Z = mode == "inside-safe-room" ? 71 : 0; }
+            item.ValueJson["data"]["world"] = BsonDocument.Parse(JsonSerializer.Serialize(sample));
+        }
+        events.Add(V02Event(f.MatchId, "MINION_LIFECYCLE", 0, Now.AddSeconds(-31), "1.2", new BsonDocument {
+            ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 599 },
+            ["data"] = new BsonDocument { ["networkInstanceId"] = "minion:1", ["zone"] = 1, ["state"] = "SPAWNED" } }));
+        void Carrier(string action, long tick)
+        {
+            var source = new AEDV02ToolCarrierSource { ToolInstanceId = "tool:3", MinionNetworkId = "minion:1", Action = action, Tick = tick };
+            events.Add(V02Event(f.MatchId, "AED_V02_TOOL_CARRIER", 0, Now.AddSeconds((tick - 2400) / 60d), "1.3",
+                new BsonDocument { ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = tick },
+                    ["data"] = new BsonDocument { ["carrier"] = BsonDocument.Parse(JsonSerializer.Serialize(source)) } }));
+        }
+        if (mode != "forged-move") { Carrier("STEAL", 1200); if (mode != "missing-drop") Carrier("DROP", 1800); }
+        var ordered = events.OrderBy(x => x.Ts).ThenBy(x => x.EventType == "AED_V02_WORLD_SAMPLE" ? 1 : 0)
+            .Select((x, i) => V02Event(f.MatchId, x.EventType, i + 1, x.Ts, x.SchemaVersion, x.ValueJson, x.UserId));
+        var accepted = await TelemetryServiceTests.IngestV02Trace(f.MatchId, ordered, Now, V02TelemetryAuthority(f), f.HostId);
+        var result = await new AEDV02SourceVerifier(f.Db, new AcceptedEvidenceRepository(accepted), new FixedClock(Now)).VerifyAsync(f.MatchId, request);
+        if (rejection == null) Assert.True(result.IsSuccess, result.Message);
+        else { Assert.False(result.IsSuccess); Assert.Equal(rejection, result.Message); }
+    }
 }

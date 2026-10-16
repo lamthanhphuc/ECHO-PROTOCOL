@@ -138,6 +138,9 @@ public sealed partial class ScenarioServiceTests
             new AEDV02NavCell { Id = 1, A = new[] { 10d, 0, 0 }, B = new[] { 10d, 0, 10 }, C = new[] { 0d, 0, 10 } }
         };
         manifest.NavLinks = new[] { new AEDV02NavLink { From = 0, To = 1, DoorIds = new[] { "door" } }, new AEDV02NavLink { From = 1, To = 0, DoorIds = new[] { "door" } } };
+        var firstAidMarker = manifest.Markers.Single(x => x.Id == "marker:3");
+        firstAidMarker.X = 9;
+        firstAidMarker.Z = 9;
         var json = JsonSerializer.Serialize(manifest); var fingerprint = AEDV02Plan.Hash(json);
         f.Db.AEDV02SceneContents.Remove(content);
         f.Db.AEDV02SceneContents.Add(new AEDV02SceneContent { Fingerprint = fingerprint, ManifestJson = json, SceneVersion = manifest.SceneVersion, RegisteredAtUtc = Now });
@@ -207,8 +210,33 @@ public sealed partial class ScenarioServiceTests
         var roster = AEDV02Plan.Hash(f.MatchId.ToString("D") + "|" + string.Join(',', users.Order().Select(x => x.ToString("D"))));
         var ids = new[] { 1, 2, 3, 4, 6 };
         var manifest = new AEDV02SceneManifest { SceneVersion = "TEST_SCENE_REV02",
-            Markers = new[] { new AEDV02SceneMarker { Id = "Z1_ENTRY", Zone = 1, Kind = "ENTRY" } }
-                .Concat(ids.Select(x => new AEDV02SceneMarker { Id = "marker:" + x, Zone = 1, Kind = "TOOL", AllowedToolIds = new[] { x } })).ToArray(),
+            Markers = new[]
+            {
+                new AEDV02SceneMarker
+                {
+                    Id = "Z1_ENTRY",
+                    Zone = 1,
+                    Kind = "ENTRY"
+                }
+            }
+            .Concat(ids.Select(x => new AEDV02SceneMarker
+            {
+                Id = "marker:" + x,
+                Zone = 1,
+                Kind = "TOOL",
+                AllowedToolIds = new[] { x }
+            }))
+            .Append(new AEDV02SceneMarker
+            {
+                Id = AEDV02Plan.Hash("synthetic-safe-room"),
+                Zone = 1,
+                Kind = "SAFE_ROOM",
+                X = 71,
+                Y = 0,
+                Z = 71,
+                InteractionBounds = [70, -1, 70, 72, 3, 72]
+            })
+            .ToArray(),
             Edges = ids.Select(x => new AEDV02RouteEdge { Id = "edge:" + x, From = "Z1_ENTRY", To = "marker:" + x, PathMeters = 10, DoorId = "door" }).ToArray() };
         if (geometry) manifest.NavCells = new[] { new AEDV02NavCell { Id = 0, A = new[] { 0d, 0, 0 }, B = new[] { 10d, 0, 0 }, C = new[] { 0d, 0, 10 } } };
         var json = JsonSerializer.Serialize(manifest); var fingerprint = AEDV02Plan.Hash(json);

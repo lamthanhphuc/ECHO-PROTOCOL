@@ -41,7 +41,12 @@ public sealed partial class ScenarioServiceTests
         var corrupt = JsonSerializer.Deserialize<AEDV02WorldSample>(last.ValueJson["data"]["world"].ToJson())!;
         corrupt.Tools[0].Y += 20;
         last.ValueJson["data"]["world"] = BsonDocument.Parse(JsonSerializer.Serialize(corrupt));
-        Assert.Equal("HOLD_SUPPLY_ROUTE_INVALID", (await verifier.VerifyAsync(f.MatchId, request with { SceneManifestFingerprint = fingerprint })).Message);
+        Assert.Equal(
+            "HOLD_TOOL_PLACEMENT_SAFE_ROOM_INVALID",
+            (await verifier.VerifyAsync(
+                f.MatchId,
+                request with { SceneManifestFingerprint = fingerprint }
+            )).Message);
     }
 
     [Theory, Trait("Category", "AEDV02")]
