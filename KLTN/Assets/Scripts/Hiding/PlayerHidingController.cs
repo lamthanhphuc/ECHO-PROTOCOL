@@ -155,6 +155,69 @@ public class PlayerHidingController : MonoBehaviour
         ApplyAuthoritativeExitLocal();
     }
 
+    public bool RestoreMigratedHiding(
+        HidingSpot spot,
+        bool restoreLocalCamera)
+    {
+        if (spot == null)
+        {
+            return false;
+        }
+
+        if (_currentSpot != null && _currentSpot != spot)
+        {
+            _currentSpot.Release(this);
+            _currentSpot = null;
+        }
+
+        if (_currentSpot == null)
+        {
+            if (!spot.TryOccupy(this))
+            {
+                return false;
+            }
+
+            _currentSpot = spot;
+        }
+
+        _enteredFrame = Time.frameCount;
+
+        if (movement != null)
+        {
+            movement.enabled = false;
+        }
+
+        if (!restoreLocalCamera)
+        {
+            return true;
+        }
+
+        PlayerCamera cameraController =
+            EnsurePlayerCameraController();
+
+        if (cameraController != null)
+        {
+            float yaw =
+                spot.FacingRotation.eulerAngles.y;
+
+            cameraController.SetRotation(
+                yaw,
+                0f);
+
+            float limit =
+                spot.YawLimitDegrees > 0f
+                    ? spot.YawLimitDegrees
+                    : hidingYawLimitDegrees;
+
+            cameraController.SetYawLimit(
+                yaw,
+                limit);
+
+            cameraController.LockPitch(0f);
+        }
+
+        return true;
+    }
     public void ExitHiding()
     {
         if (_currentSpot == null)

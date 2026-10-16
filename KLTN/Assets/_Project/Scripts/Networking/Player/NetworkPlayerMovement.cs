@@ -363,28 +363,44 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
+            bool migrationResume =
+                NetworkBootstrap.IsHostMigrationResumeActive;
+
             if (Object.HasStateAuthority)
             {
-                IsHidden = false;
-                CurrentHideSpotId = 0UL;
+                if (!migrationResume)
+                {
+                    IsHidden = false;
+                    CurrentHideSpotId = 0UL;
 
-                NetworkCurrentStamina =
-                    _maxStamina;
+                    NetworkCurrentStamina =
+                        _maxStamina;
 
-                StaminaExhausted =
-                    false;
+                    StaminaExhausted =
+                        false;
 
-                ExternalSlowTimer =
-                    TickTimer.None;
+                    ExternalSlowTimer =
+                        TickTimer.None;
 
-                ExternalSlowMultiplier =
-                    1f;
+                    ExternalSlowMultiplier =
+                        1f;
+                }
+                else
+                {
+                    RestoreMigratedHidingAuthority();
+                }
             }
 
             if (!Object.HasInputAuthority) return;
 
-            var hiding = GetComponent<PlayerHidingController>();
-            if (hiding != null && hiding.IsHidden)
+            var hiding =
+                GetComponent<PlayerHidingController>();
+
+            if (migrationResume)
+            {
+                RestoreMigratedLocalHiding(hiding);
+            }
+            else if (hiding != null && hiding.IsHidden)
             {
                 hiding.ExitHiding();
             }
@@ -406,6 +422,78 @@ namespace EchoProtocol.Networking
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerMovement,
                 $"[NetworkMovement] Local input provider registered for {Object.InputAuthority}.");
+        }
+
+        private void RestoreMigratedHidingAuthority()
+        {
+            if (!IsHidden || CurrentHideSpotId == 0UL)
+            {
+                return;
+            }
+
+            if (!global::HidingSpot.TryResolveByStableId(
+                    CurrentHideSpotId,
+                    out var spot))
+            {
+                Debug.LogWarning(
+                    $"[NetworkMovement] Could not resolve migrated hiding spot {CurrentHideSpotId} for {Object.InputAuthority}.");
+                return;
+            }
+
+            if (!global::HidingSpot.TryReserveNetworkSpot(
+                    Runner,
+                    CurrentHideSpotId,
+                    Object.InputAuthority))
+            {
+                Debug.LogWarning(
+                    $"[NetworkMovement] Could not rebuild migrated hiding reservation spot={CurrentHideSpotId}, player={Object.InputAuthority}.");
+                return;
+            }
+
+            var hiding =
+                GetComponent<PlayerHidingController>();
+
+            if (hiding != null
+                && !hiding.RestoreMigratedHiding(
+                    spot,
+                    false))
+            {
+                Debug.LogWarning(
+                    $"[NetworkMovement] Could not rebuild Host hiding occupant spot={CurrentHideSpotId}, player={Object.InputAuthority}.");
+            }
+        }
+
+        private void RestoreMigratedLocalHiding(
+            PlayerHidingController hiding)
+        {
+            if (!IsHidden || CurrentHideSpotId == 0UL)
+            {
+                return;
+            }
+
+            if (hiding == null)
+            {
+                Debug.LogWarning(
+                    $"[NetworkMovement] Local migrated hidden player {Object.InputAuthority} has no PlayerHidingController.");
+                return;
+            }
+
+            if (!global::HidingSpot.TryResolveByStableId(
+                    CurrentHideSpotId,
+                    out var spot))
+            {
+                Debug.LogWarning(
+                    $"[NetworkMovement] Local migrated hiding spot {CurrentHideSpotId} could not be resolved.");
+                return;
+            }
+
+            if (!hiding.RestoreMigratedHiding(
+                    spot,
+                    true))
+            {
+                Debug.LogWarning(
+                    $"[NetworkMovement] Local hiding presentation could not be restored for spot={CurrentHideSpotId}.");
+            }
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)

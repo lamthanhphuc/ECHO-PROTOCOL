@@ -120,7 +120,7 @@ namespace EchoProtocol.Networking
         {
             ResolveLight();
 
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 IsFlashlightOn = _startOn;
             }
