@@ -56,6 +56,9 @@ namespace EchoProtocol.UI.MainMenu
 
         private void OnEnable()
         {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+
             if (hostButton != null)
                 hostButton.onClick.AddListener(OpenHost);
 

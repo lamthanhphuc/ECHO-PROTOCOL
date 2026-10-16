@@ -339,6 +339,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dac574e3f0bab3b4586bad95d1af9e2f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Stalker.Presentation.StalkerAnimatorPresenter
+  biteJumpscarePrefab: {fileID: 7231276278953155623, guid: 9d144e6b5dd9c904eaedd4da2b3c4efc, type: 3}
   animator: {fileID: 1996263679522455045}
   fusionRuntime: {fileID: 100007}
   controller: {fileID: 100006}

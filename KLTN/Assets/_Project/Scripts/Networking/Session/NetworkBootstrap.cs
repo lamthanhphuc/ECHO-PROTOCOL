@@ -317,6 +317,7 @@ namespace EchoProtocol.Networking
                 if (gameMode == GameMode.Host)
                 {
                     args.SessionProperties = _matchAuthority.BuildHostSessionProperties();
+                    args.SessionProperties[PlayerSpawner.StalkerModelSessionKey] = 0;
                 }
 
                 RuntimeLog.Log(

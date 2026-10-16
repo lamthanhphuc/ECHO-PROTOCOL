@@ -50,6 +50,10 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 "Base Layer.JumpIn");
 
         [Header("Dependencies")]
+        [SerializeField] private GameObject biteJumpscarePrefab;
+
+        public GameObject BiteJumpscarePrefab => biteJumpscarePrefab;
+
         [SerializeField]
         private Animator animator;
 
