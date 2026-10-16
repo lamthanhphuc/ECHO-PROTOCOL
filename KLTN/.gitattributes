@@ -34,14 +34,14 @@
 
 # Unity YAML files
 *.anim                  unity-yaml
-*.asset                 unity-yaml
+*.asset                 unity-yaml text=auto
 *.brush                 unity-yaml
 *.controller            unity-yaml
 *.flare                 unity-yaml
 *.fontsettings          unity-yaml
 *.giparams              unity-yaml
 *.guiskin               unity-yaml
-*.lighting              unity-yaml
+*.lighting              unity-yaml text=auto
 *.mask                  unity-yaml
 *.mat                   unity-yaml
 *.meta                  unity-yaml
@@ -166,3 +166,7 @@ Packages/packages-lock.json linguist-generated
 
 # Exceptions for .asset files such as lightning pre-baking
 LightingData.asset     binary
+
+# Native Unity serialized data must retain every byte, including CRLF sequences.
+*Terrain.asset          binary -eol
+*NavMesh*.asset         binary -eol
