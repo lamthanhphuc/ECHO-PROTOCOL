@@ -1,4 +1,4 @@
-using EchoProtocol.AI.Listener.Noise;
+﻿using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Settings;
 using Fusion;
@@ -438,7 +438,7 @@ namespace EchoProtocol.Networking
             var lobbyState = GetComponent<LobbyPlayerState>();
             if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid)
             {
-                if (!lobbyState.IsGameplayPlayer && SceneManager.GetActiveScene().name != LobbyManager.GameSceneName)
+                if (!lobbyState.IsGameplayPlayer && !LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name))
                 {
                     return;
                 }

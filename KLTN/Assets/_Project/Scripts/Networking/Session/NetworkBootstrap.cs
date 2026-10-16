@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -327,7 +327,7 @@ namespace EchoProtocol.Networking
                 }
                 var reconnecting = _reconnectSessionName == normalizedName;
                 SetState(gameMode == GameMode.Client
-                        && SceneManager.GetActiveScene().name == LobbyManager.GameSceneName
+                        && LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name)
                         ? NetworkSessionState.InMatch : NetworkSessionState.InLobby,
                     $"{(gameMode == GameMode.Host ? "Created" : "Joined")} room '{normalizedName}'.");
                 _reconnectSessionName = null;
@@ -720,7 +720,7 @@ namespace EchoProtocol.Networking
                     NetworkSessionState.InLobby,
                     "Match finished; room retained.");
             }
-            if (Runner == runner && sceneName == LobbyManager.GameSceneName
+            if (Runner == runner && LobbyMapCatalog.IsGameplayScene(sceneName)
                 && State == NetworkSessionState.InLobby)
                 SetState(NetworkSessionState.InMatch, "Match scene loaded.");
             NetworkSceneLoadDone?.Invoke(runner);

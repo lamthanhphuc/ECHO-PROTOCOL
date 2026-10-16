@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -18,6 +18,7 @@ namespace EchoProtocol.Networking
 
         [SerializeField] private NetworkBootstrap _bootstrap;
         private bool _matchStartInProgress;
+        public bool IsStartingMatch => _matchStartInProgress;
         private string _localOperatorName = string.Empty;
         private LobbyPlayerState _namedPlayer;
 
@@ -184,6 +185,7 @@ namespace EchoProtocol.Networking
 
         private async Task StartMatchAsync(NetworkRunner runner)
         {
+            string selectedScene = LobbyMapCatalog.SceneName(LobbyMapCatalog.Selected(runner));
             try
             {
                 var authority =
@@ -298,9 +300,9 @@ namespace EchoProtocol.Networking
 
                 RuntimeLog.Log(
                 RuntimeLogCategory.Lobby,
-                $"[LobbyManager] Backend confirmed match. Loading '{GameSceneName}'.");
+                $"[LobbyManager] Backend confirmed match. Loading '{selectedScene}'.");
                 await runner.LoadScene(
-                    GameSceneName,
+                    selectedScene,
                     UnityEngine.SceneManagement.LoadSceneMode.Single);
             }
             catch (Exception exception)

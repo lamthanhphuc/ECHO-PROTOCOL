@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Minions;
 using EchoProtocol.AI.Stalker;
@@ -176,7 +176,7 @@ namespace EchoProtocol.Networking
             var runner = _bootstrap?.Runner;
             if (runner == null || !runner.IsServer) return;
 
-            var gameplay = SceneManager.GetActiveScene().name == LobbyManager.GameSceneName;
+            var gameplay = LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name);
             TryAttachLifecycle(runner);
             GetOrAssignSlot(player);
             if (runner.TryGetPlayerObject(player, out var playerObject) && playerObject != null)
@@ -193,7 +193,7 @@ namespace EchoProtocol.Networking
 
         private void HandleNetworkSceneLoadDone(NetworkRunner runner)
         {
-            if (SceneManager.GetActiveScene().name != LobbyManager.GameSceneName)
+            if (!LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name))
             {
                 ClearAuthoritativeWorldStateReferences();
 
@@ -238,7 +238,9 @@ namespace EchoProtocol.Networking
                 ConfigureExistingPlayerObject(player, playerObject, gameplay: true);
             }
 
-            EnsureWorldStateExamples(runner);
+            // Scene_A is exploration-only: no facility objectives, pickups or monsters.
+            if (SceneManager.GetActiveScene().name == LobbyManager.GameSceneName)
+                EnsureWorldStateExamples(runner);
         }
 
         private void EnsureWorldStateExamples(NetworkRunner runner)
@@ -1296,7 +1298,7 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            var gameplay = SceneManager.GetActiveScene().name == LobbyManager.GameSceneName;
+            var gameplay = LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name);
             ConfigureExistingPlayerObject(commit.Player, commit.PlayerObject, gameplay);
         }
 

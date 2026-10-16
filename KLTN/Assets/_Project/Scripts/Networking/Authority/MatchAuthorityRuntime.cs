@@ -270,7 +270,8 @@ namespace EchoProtocol.Networking.Authority
                 [MatchDifficultySessionProperty] = requestedDifficulty.ToString().ToUpperInvariant(),
                 ["playerCollisions"] = EchoProtocol.UI.LobbySelectionMemory.Read("playerCollisions", 1),
                 ["proximityVoice"] = EchoProtocol.UI.LobbySelectionMemory.Read("proximityVoice", 1),
-                ["medkits"] = EchoProtocol.UI.LobbySelectionMemory.Read("medkits", 1)
+                ["medkits"] = EchoProtocol.UI.LobbySelectionMemory.Read("medkits", 1),
+                [LobbyMapCatalog.PropertyKey] = Mathf.Clamp(EchoProtocol.UI.LobbySelectionMemory.Read("map", 0), 0, 1)
             };
 
         public bool AttachJoinedSession(NetworkRunner runner)
