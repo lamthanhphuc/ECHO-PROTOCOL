@@ -85,10 +85,13 @@ namespace EchoProtocol.AI.Stalker.Tests
                     child => child.state.name == entry.Item1);
 
                 Assert.That(state.state, Is.Not.Null, entry.Item1);
+                var expectedPath = entry.Item1 == "Bite"
+                    ? "Assets/Animations/Stalker/LizardRetargeted/Lizard_Creep_Bite.anim"
+                    : $"Assets/Hatogame_new/Lizard/Animation/Lizard@{entry.Item2}.FBX";
+
                 Assert.That(
                     AssetDatabase.GetAssetPath(state.state.motion),
-                    Is.EqualTo(
-                        $"Assets/Hatogame_new/Lizard/Animation/Lizard@{entry.Item2}.FBX"),
+                    Is.EqualTo(expectedPath),
                     entry.Item1);
             }
         }
