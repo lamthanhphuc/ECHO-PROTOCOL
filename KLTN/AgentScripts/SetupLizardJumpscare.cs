@@ -44,11 +44,7 @@ public static class SetupLizardJumpscare
             string clipPath = Folder + "/LizardJumpscareLunge.anim";
             var lunge = AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath);
             if (lunge == null) { lunge = new AnimationClip { name = "LizardJumpscareLunge", frameRate = 60 }; AssetDatabase.CreateAsset(lunge, clipPath); }
-            float z = visual.transform.localPosition.z;
-            lunge.SetCurve("Visual", typeof(Transform), "localPosition.x", AnimationCurve.Constant(0, 1.9f, visual.transform.localPosition.x));
-            lunge.SetCurve("Visual", typeof(Transform), "localPosition.y", AnimationCurve.Constant(0, 1.9f, visual.transform.localPosition.y));
-            lunge.SetCurve("Visual", typeof(Transform), "localPosition.z", new AnimationCurve(
-                new Keyframe(0, z), new Keyframe(0.12f, z + 0.18f), new Keyframe(0.3f, z + 0.12f), new Keyframe(1.9f, z + 0.12f)));
+            FrameBite(visual, bite, lunge);
             var lungeController = AssetDatabase.LoadAssetAtPath<AnimatorController>(Folder + "/LizardJumpscare.controller");
             if (lungeController == null)
             {
@@ -84,6 +80,57 @@ public static class SetupLizardJumpscare
         finally { UnityEngine.Object.DestroyImmediate(root); }
     }
 
+    // Bake framing into this local presentation clip; gameplay/root motion stays unchanged.
+    static void FrameBite(GameObject visual, AnimationClip bite, AnimationClip lunge)
+    {
+        var head = visual.GetComponentsInChildren<Transform>(true).Single(x => x.name == "Bip01 Head");
+        var lip = visual.GetComponentsInChildren<Transform>(true).Single(x => x.name == "Bip01_Lip");
+        var curves = new[] { new AnimationCurve(), new AnimationCurve(), new AnimationCurve() };
+        var approach = new AnimationCurve(new Keyframe(0, 0), new Keyframe(0.12f, 0.18f),
+            new Keyframe(0.3f, 0.12f), new Keyframe(1.9f, 0.12f));
+        for (int frame = 0; frame <= 114; frame++)
+        {
+            float time = frame / 60f;
+            bite.SampleAnimation(visual, time);
+            var focus = visual.transform.InverseTransformPoint((head.position + lip.position) * 0.5f);
+            // Account for the player's (0,-1.5,1) mount and 180-degree model yaw.
+            curves[0].AddKey(time, -focus.x);
+            curves[1].AddKey(time, 1.5f - focus.y);
+            curves[2].AddKey(time, 0.15f + approach.Evaluate(time) - focus.z);
+        }
+        string[] properties = { "localPosition.x", "localPosition.y", "localPosition.z" };
+        for (int i = 0; i < properties.Length; i++)
+        {
+            for (int key = 0; key < curves[i].length; key++)
+            {
+                AnimationUtility.SetKeyLeftTangentMode(curves[i], key, AnimationUtility.TangentMode.Linear);
+                AnimationUtility.SetKeyRightTangentMode(curves[i], key, AnimationUtility.TangentMode.Linear);
+            }
+            lunge.SetCurve("Visual", typeof(Transform), properties[i], curves[i]);
+        }
+        visual.transform.localPosition = new Vector3(curves[0].Evaluate(0), curves[1].Evaluate(0), curves[2].Evaluate(0));
+        bite.SampleAnimation(visual, 0);
+        EditorUtility.SetDirty(lunge);
+    }
+
+    public static string FixFraming()
+    {
+        if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play mode first.");
+        var root = PrefabUtility.LoadPrefabContents(PrefabPath);
+        try
+        {
+            var visual = root.transform.Find("Visual").gameObject;
+            var controller = (AnimatorController)visual.GetComponent<Animator>().runtimeAnimatorController;
+            var bite = (AnimationClip)controller.layers[0].stateMachine.states.Single(x => x.state.name == "Bite").state.motion;
+            var lunge = AssetDatabase.LoadAssetAtPath<AnimationClip>(Folder + "/LizardJumpscareLunge.anim");
+            FrameBite(visual, bite, lunge);
+            PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
+            AssetDatabase.SaveAssets();
+            return "Framing rebaked from current Bite; prefab and lunge saved.";
+        }
+        finally { PrefabUtility.UnloadPrefabContents(root); }
+    }
+
     public static string Validate()
     {
         var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
@@ -117,7 +164,7 @@ public static class SetupLizardJumpscare
         UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(lightObject, scene);
         var camera = cameraObject.GetComponent<Camera>();
         camera.scene = scene;
-        camera.fieldOfView = 70;
+        camera.fieldOfView = 50;
         camera.nearClipPlane = 0.03f;
         camera.clearFlags = CameraClearFlags.SolidColor;
         camera.backgroundColor = new Color(0.12f, 0.14f, 0.17f);
@@ -136,7 +183,7 @@ public static class SetupLizardJumpscare
             var controller = (AnimatorController)visual.GetComponent<Animator>().runtimeAnimatorController;
             var bite = (AnimationClip)controller.layers[0].stateMachine.states.Single(x => x.state.name == "Bite").state.motion;
             var lunge = AssetDatabase.LoadAssetAtPath<AnimationClip>(Folder + "/LizardJumpscareLunge.anim");
-            float[] times = { 0, 0.12f, 0.5f, 1.2f };
+            float[] times = { 0, 0.4f, 0.8f, 1.2f };
             var positions = new System.Collections.Generic.List<string>();
             for (int i = 0; i < times.Length; i++)
             {
@@ -150,9 +197,22 @@ public static class SetupLizardJumpscare
                 sheet.SetPixels((i % 2) * 640, (1 - i / 2) * 360, 640, 360, tile.GetPixels());
             }
             sheet.Apply();
+            // Verify face framing through the full local effect, including FOV-punch margin.
+            camera.aspect = 16f / 9f;
+            foreach (var time in Enumerable.Range(0, 91).Select(i => i / 60f))
+            {
+                bite.SampleAnimation(visual, time);
+                lunge.SampleAnimation(model, time);
+                foreach (var bone in visual.GetComponentsInChildren<Transform>(true).Where(x => x.name == "Bip01 Head" || x.name == "Bip01_Lip"))
+                {
+                    var viewport = camera.WorldToViewportPoint(bone.position);
+                    if (viewport.z <= camera.nearClipPlane || viewport.x < 0.1f || viewport.x > 0.9f || viewport.y < 0.1f || viewport.y > 0.9f)
+                        throw new InvalidOperationException("Face outside safe viewport at " + time + ": " + bone.name + " " + viewport);
+                }
+            }
             System.IO.Directory.CreateDirectory("Temp/StalkerRetarget");
             System.IO.File.WriteAllBytes("Temp/StalkerRetarget/jumpscare.png", sheet.EncodeToPNG());
-            return "Temp/StalkerRetarget/jumpscare.png: 0, 0.12, 0.5, 1.2 seconds\n" + string.Join("\n", positions);
+            return "PASS: 91 frames keep head/lip in viewport at FOV 50. Temp/StalkerRetarget/jumpscare.png: 0, 0.4, 0.8, 1.2 seconds\n" + string.Join("\n", positions);
         }
         finally
         {
