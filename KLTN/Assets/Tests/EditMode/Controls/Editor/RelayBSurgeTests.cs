@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using EchoProtocol.RelayB;
 using NUnit.Framework;
@@ -44,8 +44,8 @@ namespace EchoProtocol.Tests.EditMode.Controls
             for(int seed=1;seed<=20;seed++) {
                 var board=RelayBSurgeGenerator.Generate(seed,difficulty,variant,0);
                 Assert.That(board.Width,Is.EqualTo(difficulty==0 ? 7 : difficulty==1 ? 9 : 10));
-                Assert.That(board.Budget,Is.EqualTo(difficulty==0 ? 3 : difficulty==1 ? 4 : 5));
-                Assert.That(board.Witness.Length,Is.InRange(difficulty==0 ? 2 : difficulty==1 ? 4 : 5,board.Budget));
+                Assert.That(board.Budget,Is.EqualTo(difficulty==0 ? 3 : difficulty==1 ? 6 : 5));
+                Assert.That(board.Witness.Length,Is.InRange(difficulty==0 ? 2 : 5,board.Budget));
                 if (difficulty > 0)
                     Assert.That(RelayBSurgeGenerator.HasDistributedCut(board, board.Witness), Is.True,
                         "Normal/hard solutions must require choices across multiple rows and columns");
@@ -75,6 +75,18 @@ namespace EchoProtocol.Tests.EditMode.Controls
                 Assert.That(boards[0].Walls.Low==boards[1].Walls.Low && boards[0].Walls.High==boards[1].Walls.High,Is.False);
             }
         }
+        [Test]
+        public void Normal_FirstPulseUsesFourSecondPreparationThenThreePointFiveSecondCadence()
+        {
+            var sim = new RelayBSurgeSimulation(); sim.Initialize(31, 1, 0); sim.Start();
+            Assert.That(sim.Board.MinimumSafety, Is.EqualTo(.5f));
+            Assert.That(sim.Board.PreparationSeconds, Is.EqualTo(4f));
+            Assert.That(RelayBSurgeGenerator.MinimumCut(sim.Board).Length, Is.InRange(5, 6));
+            sim.Tick(3.9f); Assert.That(sim.PulseSequence, Is.Zero);
+            sim.Tick(.11f); Assert.That(sim.PulseSequence, Is.EqualTo(1));
+            Assert.That(sim.PulseRemaining, Is.EqualTo(3.49f).Within(.001f));
+        }
+
         [Test]
         public void Placement_RejectsInvalidCellsDuplicateAndCooldown()
         {

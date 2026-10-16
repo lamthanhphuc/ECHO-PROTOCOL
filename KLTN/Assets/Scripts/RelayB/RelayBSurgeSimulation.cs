@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace EchoProtocol.RelayB
@@ -20,7 +20,7 @@ namespace EchoProtocol.RelayB
     public sealed class RelayBSurgeBoard
     {
         public int Width, Height, Budget, Difficulty, Variant, Seed, MinimumSeals;
-        public float PulseSeconds, TimeLimit, MinimumSafety = 0.38f;
+        public float PulseSeconds, TimeLimit, PreparationSeconds, MinimumSafety = 0.38f;
         public RelayBSurgeMask Walls, Sources, Cores, ProtectedRegion;
         // A timed, verified witness is retained for validation, never sent to the UI.
         public int[] Witness;
@@ -72,7 +72,7 @@ namespace EchoProtocol.RelayB
         internal void Reset(RelayBSurgeBoard board, int attempt)
         {
             Board = board; Attempt = attempt; Infected = board.Sources; Insulated = default;
-            Elapsed = Cooldown = 0; PulseRemaining = board.PulseSeconds; PulseSequence = 0;
+            Elapsed = Cooldown = 0; PulseRemaining = board.PreparationSeconds > 0 ? board.PreparationSeconds : board.PulseSeconds; PulseSequence = 0;
             Phase = RelayBSurgePhase.Ready; Changed?.Invoke();
             _criticalNotified=false;
         }
@@ -155,15 +155,22 @@ namespace EchoProtocol.RelayB
             {
                 var board = Build(random, difficulty, variant, seed, trial % 1024 < 960);
                 var cut = MinimumCut(board);
-                int minimum = difficulty == 0 ? 2 : difficulty == 1 ? 4 : 5;
+                int minimum = difficulty == 0 ? 2 : 5;
                 if (cut.Length < minimum || cut.Length > board.Budget || board.Sources.Count == 0) continue;
+                if (difficulty == 1)
+                {
+                    // Check the unrestricted minimum first; then choose a timed cut
+                    // farther from sources without accepting an easier hidden shortcut.
+                    cut = MinimumCut(board, false);
+                    if (cut.Length < minimum || cut.Length > board.Budget) continue;
+                }
                 // A single straight row/column of obvious gates should not solve normal/hard.
                 if (difficulty > 0 && !HasDistributedCut(board, cut)) continue;
                 // Exclude the universal 'seal all neighboring source cells' shortcut.
                 var preview = new RelayBSurgeSimulation(); preview.Reset(board, attempt);
                 if (difficulty > 0 && preview.Frontier.Count <= board.Budget) continue;
                 if (!VerifyTimedWitness(board, cut, out float seconds)) continue;
-                if(seconds < (difficulty==0 ? 10f : difficulty==1 ? 22.4f : trial % 1024 < 960 ? 19.9f : 15.9f))continue;
+                if(difficulty != 1 && seconds < (difficulty==0 ? 10f : trial % 1024 < 960 ? 19.9f : 15.9f))continue;
                 board.MinimumSeals = cut.Length; board.Witness = cut; board.WitnessSeconds = seconds;
                 return board;
             }
@@ -173,6 +180,7 @@ namespace EchoProtocol.RelayB
         }
         private static RelayBSurgeBoard Build(Random random, int difficulty, int variant, int seed, bool obstacles)
         {
+            if (difficulty == 1) return BuildNormal(random, variant, seed);
             var b = new RelayBSurgeBoard { Width = difficulty == 0 ? 7 : difficulty == 1 ? 9 : 10,
                 Height = difficulty == 2 ? 8 : 7, Budget = difficulty == 0 ? 3 : difficulty == 1 ? 4 : 5,
                 PulseSeconds = difficulty == 0 ? 5 : difficulty == 1 ? 4.5f : 4,
@@ -212,6 +220,27 @@ namespace EchoProtocol.RelayB
             b.ProtectedRegion = Reflect(b, b.ProtectedRegion, mirrorX, mirrorY);
             return b;
         }
+        private static RelayBSurgeBoard BuildNormal(Random random, int variant, int seed)
+        {
+            var board = new RelayBSurgeBoard { Width = 9, Height = 7, Budget = 6,
+                PulseSeconds = 3.5f, PreparationSeconds = 4f, TimeLimit = 60f,
+                MinimumSafety = .5f, Difficulty = 1, Variant = variant, Seed = seed };
+            // Opposing source clusters feed a branching circuit. No separator wall
+            // is authored: the solver must choose a distributed cut through the graph.
+            bool vertical = random.Next(2) == 0;
+            for (int cell = 0; cell < board.Count; cell++)
+            {
+                int x = cell % board.Width, y = cell / board.Width;
+                if (x >= 3 && x <= 5 && y >= 2 && y <= 4) board.ProtectedRegion.Add(cell);
+                else if (random.NextDouble() < (variant == 0 ? .18 : .22)) board.Walls.Add(cell);
+            }
+            board.Cores.Add(3 * board.Width + 4);
+            int[] sources = vertical ? new[] { 2, 3, 6 * 9 + 5, 6 * 9 + 6 }
+                : new[] { 9, 18, 4 * 9 + 8, 5 * 9 + 8 };
+            foreach (int cell in sources) { board.Sources.Add(cell); board.Walls.Remove(cell); }
+            return board;
+        }
+
         public static bool HasDistributedCut(RelayBSurgeBoard board, int[] cut)
         {
             if (cut == null || cut.Length < 2) return false;
@@ -234,14 +263,17 @@ namespace EchoProtocol.RelayB
         // Vertex splitting + Edmonds-Karp max-flow finds the minimum number of gray cells
         // separating every source from the protected region, not just the core's neighbors.
         // The resulting cut is accepted only after the timed containment simulation succeeds.
-        public static int[] MinimumCut(RelayBSurgeBoard b)
+        public static int[] MinimumCut(RelayBSurgeBoard b, bool allowSourceNeighbors = true)
         {
             int source = b.Count * 2, sink = source + 1, n = sink + 1;
             const int infinite = 1000;
             var residual = new int[n, n];
             for (int c = 0; c < b.Count; c++) if (!b.Walls.Has(c))
             {
-                residual[c * 2, c * 2 + 1] = b.Sources.Has(c) || b.ProtectedRegion.Has(c) ? infinite : 1;
+                bool nextToSource = false;
+                if (b.Difficulty == 1 && !allowSourceNeighbors)
+                    foreach (int neighbor in b.Neighbors(c)) if (b.Sources.Has(neighbor)) { nextToSource = true; break; }
+                residual[c * 2, c * 2 + 1] = b.Sources.Has(c) || b.ProtectedRegion.Has(c) || nextToSource ? infinite : 1;
                 if (b.Sources.Has(c)) residual[source, c * 2] = infinite;
                 if (b.ProtectedRegion.Has(c)) residual[c * 2 + 1, sink] = infinite;
                 foreach (int next in b.Neighbors(c)) if (!b.Walls.Has(next)) residual[c * 2 + 1, next * 2] = infinite;

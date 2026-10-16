@@ -1,4 +1,4 @@
-using EchoProtocol.Settings;
+﻿using EchoProtocol.Settings;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -15,9 +15,18 @@ namespace EchoProtocol.RelayB
         private Button _surgeStart;
         private int _surgeWidth, _surgeHeight, _practiceCell=-1;
         private bool _practiceDone;
-        private const string SurgeTutorialKey="Echo.RelayB.SurgeTutorial.v1";
+        private const string SurgeTutorialKey="Echo.RelayB.SurgeTutorial.v2";
         private static readonly Color SurgeRed=new Color(0.65f,0.22f,0.18f), SurgeBlue=new Color(0.19f,0.43f,0.62f),
             SurgeGreen=new Color(0.33f,0.61f,0.43f), SurgeGray=new Color(0.25f,0.29f,0.3f), SurgeWall=new Color(0.06f,0.075f,0.08f);
+
+        private static RelayBSurgeBoard CreatePracticeBoard()
+        {
+            var board = new RelayBSurgeBoard { Width = 5, Height = 5, Budget = 6 };
+            board.Sources.Add(10); board.Cores.Add(14);
+            foreach (int cell in new[] { 2, 7, 17, 22 }) board.Walls.Add(cell);
+            return board;
+        }
+        private readonly RelayBSurgeBoard _practiceBoard = CreatePracticeBoard();
 
         private void EnsureSurgeUI(RelayBSurgeBoard board)
         {
@@ -77,7 +86,12 @@ namespace EchoProtocol.RelayB
         private void RefreshSurgePresentation(bool canOperate)
         {
             if(_controller==null || !IsOpen || _controller.Snapshot.ActiveTab!=0)return;
-            var sim=_controller.Surge;var b=sim.Board;EnsureSurgeUI(b);if(_surgeRoot==null)return;
+            var sim=_controller.Surge;
+            bool ready=sim.Phase==RelayBSurgePhase.Ready;
+            EnsureSurgeUI(null);
+            bool practice=ready && !_practiceDone;
+            var b=practice ? _practiceBoard : sim.Board;
+            EnsureSurgeUI(b);if(_surgeRoot==null)return;
             if(_controller.SurgePreparationFailed) {
                 _surgeTitle.text=GameLanguage.Choose("Không chuẩn bị được mạch", "Circuit preparation failed");
                 _surgeHint.text=GameLanguage.Choose("Sẽ tự thử lại sau 30 giây. Bạn có thể thử lại ngay hoặc đóng bảng.", "Retrying automatically after 30 seconds. Retry now or close the panel.");
@@ -92,11 +106,11 @@ namespace EchoProtocol.RelayB
                 _surgeHint.text="";_surgeMetrics.text="";_surgeResult.text="";
                 _surgeStart.gameObject.SetActive(false);return;
             }
-            bool ready=sim.Phase==RelayBSurgePhase.Ready,practice=ready && !_practiceDone;
+            _surgeGrid.gameObject.SetActive(!ready || practice || b.Difficulty != 1);
             bool canPlace=canOperate && !_controller.IsPreparingSurge;
-            var frontier=sim.Frontier;
+            var frontier=practice ? default(RelayBSurgeMask) : sim.Frontier;
             for(int cell=0;cell<b.Count;cell++) {
-                bool wall=b.Walls.Has(cell),core=b.Cores.Has(cell),red=sim.Infected.Has(cell),seal=sim.Insulated.Has(cell) || practice && cell==_practiceCell;
+                bool wall=b.Walls.Has(cell),core=b.Cores.Has(cell),red=practice ? b.Sources.Has(cell) : sim.Infected.Has(cell),seal=practice ? cell==_practiceCell : sim.Insulated.Has(cell);
                 Color fill=red ? SurgeRed : core ? SurgeGreen : seal ? SurgeBlue : wall ? SurgeWall : SurgeGray;
                 _surgeFills[cell].color=fill;
                 _surgeEdges[cell].color=frontier.Has(cell) && sim.Phase==RelayBSurgePhase.Running
@@ -114,10 +128,18 @@ namespace EchoProtocol.RelayB
                 "! Overload · = Insulated · ● Core · × Nonconductive\nYellow border: next pulse · 1.2s between placements");
             _surgeResult.text=sim.IsFailed ? FailureText(sim.Phase) : sim.Phase==RelayBSurgePhase.Contained ? GameLanguage.Choose("Đã cô lập · Mở giải mã","Surge contained · Decoder unlocked")
                 : sim.Cooldown>0 ? GameLanguage.Choose($"Bộ đặt sẵn sàng sau {sim.Cooldown:0.0}s",$"Placement ready in {sim.Cooldown:0.0}s") : "";
+            if (ready && (practice || b.Difficulty == 1))
+            {
+                _surgeMetrics.text = practice ? GameLanguage.Choose("Mạch tập · Không tính lượt", "Practice circuit · No attempts used")
+                    : GameLanguage.Choose("Bàn thật sẽ hiện khi bắt đầu.", "The live board appears when you start.");
+                if (!practice) _surgeHint.text = GameLanguage.Choose("Bạn có 4 giây chuẩn bị trước xung đầu tiên.", "You have 4 seconds to prepare before the first pulse.");
+            }
+            else if (sim.Phase == RelayBSurgePhase.Running && sim.PulseSequence == 0 && b.PreparationSeconds > 0)
+                _surgeResult.text = GameLanguage.Choose($"Chuẩn bị · Xung đầu sau {sim.PulseRemaining:0.0}s", $"Prepare · First pulse in {sim.PulseRemaining:0.0}s");
             _surgeResult.color=sim.IsFailed ? dangerColor : safeColor;
             _surgeStart.gameObject.SetActive(ready || sim.IsFailed);
             _surgeStart.interactable=!_controller.IsPreparingSurge && canOperate && (!practice || _practiceCell>=0);
-            _surgeStart.GetComponentInChildren<TMP_Text>().text=_controller.IsPreparingSurge ? GameLanguage.Choose("Đang chuẩn bị…","Preparing…") : sim.IsFailed ? GameLanguage.Choose("Thử lại · Bản đồ mới","Retry · New board") : GameLanguage.Choose("Bắt đầu","Start");
+            _surgeStart.GetComponentInChildren<TMP_Text>().text=_controller.IsPreparingSurge ? GameLanguage.Choose("Đang chuẩn bị…","Preparing…") : sim.IsFailed ? GameLanguage.Choose("Thử lại · Bản đồ mới","Retry · New board") : practice ? GameLanguage.Choose("Xong lượt tập", "Finish practice") : GameLanguage.Choose("Bắt đầu","Start");
             if(_controller.Snapshot.ActiveTab==0) {
                 SetText(relayLabel,GameLanguage.Choose("Phong tỏa xung điện","Surge containment"));
                 SetText(statusLabel,sim.IsFailed ? GameLanguage.Choose("Quá tải","Overload") : ready ? GameLanguage.Choose("Chờ kích hoạt","Awaiting activation")
@@ -143,7 +165,12 @@ namespace EchoProtocol.RelayB
                 if(TryGetNetworkDirector(out var recoveryDirector))recoveryDirector.RequestRelayBSurge(_controller,-2,_controller.Surge.Attempt);
                 _controller.RetrySurgePreparation();return;
             }
-            _practiceDone=true;_practiceCell=-1;PlayerPrefs.SetInt(SurgeTutorialKey,1);PlayerPrefs.Save();
+            if (!_practiceDone)
+            {
+                _practiceDone=true;_practiceCell=-1;PlayerPrefs.SetInt(SurgeTutorialKey,1);PlayerPrefs.Save();
+                RefreshSurgePresentation(true);
+                return;
+            }
             if(TryGetNetworkDirector(out var director))director.RequestRelayBSurge(_controller,-1,_controller.Surge.Attempt);
             else _controller.StartSurge();
         }
