@@ -35,7 +35,8 @@ Shader "Flooded_Grounds/URP/Surface"
     }
     SubShader
     {
-        Tags { "RenderPipeline"="UniversalPipeline" "RenderType"="Opaque" }
+        // Object-space moss/triplanar/waves must retain each mesh's local coordinates.
+        Tags { "RenderPipeline"="UniversalPipeline" "RenderType"="Opaque" "DisableBatching"="True" }
         Pass
         {
             Name "ForwardLit"
@@ -48,6 +49,7 @@ Shader "Flooded_Grounds/URP/Surface"
             #pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #pragma multi_compile_fog
+            #pragma multi_compile_instancing
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             TEXTURE2D(_MainTex); SAMPLER(sampler_MainTex);
@@ -66,11 +68,13 @@ Shader "Flooded_Grounds/URP/Surface"
                 float _DetailInt, _DetailTiling, _TexScale, _BlendPlateau;
                 float _Smth, _Emis, _ScrollSpeed, _WaveFreq, _WaveHeight, _BumpLerp, _Cutoff;
             CBUFFER_END
-            struct Attributes { float4 positionOS:POSITION; float3 normalOS:NORMAL; float4 tangentOS:TANGENT; float2 uv:TEXCOORD0; };
-            struct Varyings { float4 positionCS:SV_POSITION; float3 positionWS:TEXCOORD0; half3 normalWS:TEXCOORD1; half4 tangentWS:TEXCOORD2; float2 uv:TEXCOORD3; float3 positionOS:TEXCOORD4; half fog:TEXCOORD5; };
+            struct Attributes { float4 positionOS:POSITION; float3 normalOS:NORMAL; float4 tangentOS:TANGENT; float2 uv:TEXCOORD0; UNITY_VERTEX_INPUT_INSTANCE_ID };
+            struct Varyings { float4 positionCS:SV_POSITION; float3 positionWS:TEXCOORD0; half3 normalWS:TEXCOORD1; half4 tangentWS:TEXCOORD2; float2 uv:TEXCOORD3; float3 positionOS:TEXCOORD4; half fog:TEXCOORD5; UNITY_VERTEX_INPUT_INSTANCE_ID };
             Varyings Vert(Attributes v)
             {
                 Varyings o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_TRANSFER_INSTANCE_ID(v, o);
                 if (_FGMode > 1.5) v.positionOS.y += sin(_Time.y / 20 * _WaveFreq + (v.positionOS.x + v.positionOS.z * 2) * 8) * _WaveHeight;
                 VertexPositionInputs p = GetVertexPositionInputs(v.positionOS.xyz);
                 VertexNormalInputs n = GetVertexNormalInputs(v.normalOS,v.tangentOS);
@@ -80,16 +84,20 @@ Shader "Flooded_Grounds/URP/Surface"
             }
             half4 Frag(Varyings i):SV_Target
             {
+                UNITY_SETUP_INSTANCE_ID(i);
                 half3 n=normalize(i.normalWS), t=normalize(i.tangentWS.xyz), b=cross(n,t)*i.tangentWS.w;
                 float2 uv=i.uv;
                 if (_FGMode>1.5) uv += _Time.y/20 * _ScrollSpeed * float2(1,.5);
-                half4 color=SAMPLE_TEXTURE2D(_MainTex,sampler_MainTex,uv);
-                half3 normalTS=UnpackNormal(SAMPLE_TEXTURE2D(_BumpMap,sampler_BumpMap,uv));
-                half4 spec=SAMPLE_TEXTURE2D(_Spc,sampler_Spc,uv);
-                half metallic=spec.r, smoothness=spec.a;
+                half4 color;
+                half3 normalTS;
+                half metallic, smoothness;
                 half ao=SAMPLE_TEXTURE2D(_AO,sampler_AO,uv).r;
                 if (_FGMode<.5)
                 {
+                    color=SAMPLE_TEXTURE2D(_MainTex,sampler_MainTex,uv);
+                    normalTS=UnpackNormal(SAMPLE_TEXTURE2D(_BumpMap,sampler_BumpMap,uv));
+                    half4 spec=SAMPLE_TEXTURE2D(_Spc,sampler_Spc,uv);
+                    metallic=spec.r; smoothness=spec.a;
                     float2 topUV=i.uv*_layer1Tiling;
                     half breakup=SAMPLE_TEXTURE2D(_layer1Breakup,sampler_layer1Breakup,topUV).r;
                     half blend=saturate(pow(max(0,n.y*_Power+_Shift)*lerp(1,breakup,_layer1BreakupAmnt),3));
@@ -108,6 +116,8 @@ Shader "Flooded_Grounds/URP/Surface"
                 }
                 else
                 {
+                    color=SAMPLE_TEXTURE2D(_MainTex,sampler_MainTex,uv);
+                    normalTS=UnpackNormal(SAMPLE_TEXTURE2D(_BumpMap,sampler_BumpMap,uv));
                     normalTS=normalize(lerp(normalTS,UnpackNormal(SAMPLE_TEXTURE2D(_BumpMap2,sampler_BumpMap2,i.uv-_Time.y*.01)),_BumpLerp));
                     color*=_Color; metallic=0; smoothness=_Smth;
                 }
