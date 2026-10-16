@@ -38,7 +38,7 @@ namespace EchoProtocol.Networking
                 gameObject.AddComponent<EchoProtocol.Visuals.ObjectiveGlowHighlight>();
             }
             ConfigurePresentation();
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 PlacedCoreCount = 0;
                 SecurityHoldWasInterrupted = false;
