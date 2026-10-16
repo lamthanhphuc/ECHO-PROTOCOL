@@ -41,7 +41,7 @@ namespace EchoProtocol.Voice.Tests
             _managerType.GetMethod("EnsureExists").Invoke(null, null);
             yield return null;
             Assert.That(_managerType.GetProperty("Instance").GetValue(null), Is.SameAs(_manager));
-            Assert.That(UnityEngine.Object.FindObjectsByType(_managerType, FindObjectsSortMode.None).Length, Is.EqualTo(1));
+            Assert.That(UnityEngine.Object.FindObjectsByType(_managerType).Length, Is.EqualTo(1));
             Assert.That(Read("MicrophoneEnabled"), Is.False);
             Assert.That(Read("Joined"), Is.False);
             Assert.That(Read("Speaking"), Is.False);

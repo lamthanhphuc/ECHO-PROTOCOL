@@ -166,6 +166,56 @@ namespace EchoProtocol.Networking.Tests
                 "                BeginFleeTo(", dive.Replace("\r\n", "\n"));
         }
 
+        [Test]
+        public void MinionAbilities_AreIndependent()
+        {
+            string source = File.ReadAllText(MinionSource);
+
+            string abilities = ExtractMethod(
+                source,
+                "private void TickIndependentAbilities()",
+                "private void UpdateTargetAndMovement()");
+
+            string attack = ExtractMethod(
+                source,
+                "private void AttackPlayer(",
+                "private void CommitAttack(");
+
+            StringAssert.Contains("EmitStalkerAlert()", abilities);
+            StringAssert.Contains("AttackPlayer(target, life)", abilities);
+            StringAssert.Contains("BeginToolDive(target)", abilities);
+
+            StringAssert.Contains(
+                "StealCooldown.ExpiredOrNotRunning(Runner)",
+                abilities);
+
+            StringAssert.DoesNotContain(
+                "BeginToolDive(", attack);
+
+            StringAssert.Contains(
+                "AttackCooldown = TickTimer.CreateFromSeconds(",
+                attack);
+        }
+
+        [Test]
+        public void MinionSteal_RequiresFrontView()
+        {
+            string source = File.ReadAllText(MinionSource);
+            string dive = ExtractMethod(source, "private void TickToolDive()", "public void GetToolCarryPose");
+
+            StringAssert.Contains(
+                "private bool IsInsidePlayerViewCone(",
+                source);
+
+            StringAssert.Contains(
+                "IsInsidePlayerViewCone(",
+                dive);
+
+            StringAssert.Contains(
+                "PlayerCanSeeMinion(",
+                dive);
+        }
+
         private static Component FindComponentByTypeName(GameObject root, string fullTypeName)
         {
             var components = root.GetComponents<Component>();
