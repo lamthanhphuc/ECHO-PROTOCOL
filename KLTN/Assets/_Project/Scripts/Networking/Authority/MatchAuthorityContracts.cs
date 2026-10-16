@@ -50,6 +50,13 @@ namespace EchoProtocol.Networking.Authority
     }
 
     [Serializable]
+    public sealed class TakeoverMatchAuthorityRequest
+    {
+        public string fusionSessionName;
+        public int fusionActorNumber;
+    }
+
+    [Serializable]
     public sealed class EndMatchAuthorityRequest
     {
         public string reason;

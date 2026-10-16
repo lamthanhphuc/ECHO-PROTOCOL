@@ -147,12 +147,27 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         }
 
         var actorBinding = match.Players.SingleOrDefault(
-            item => item.FusionActorNumber == request.FusionActorNumber);
-        var userBinding = match.Players.SingleOrDefault(item => item.UserId == proof.UserId);
-        if ((actorBinding is not null && actorBinding.UserId != proof.UserId)
-            || (userBinding is not null && actorBinding is not null && userBinding.Id != actorBinding.Id)
-            || (userBinding is not null && userBinding.DisconnectedAtUtc is null
-                && userBinding.FusionActorNumber != request.FusionActorNumber))
+            item => item.FusionActorNumber == request.FusionActorNumber
+                && item.DisconnectedAtUtc == null);
+        var userBinding = match.Players.SingleOrDefault(
+            item => item.UserId == proof.UserId);
+
+        var isCurrentHostActorRemap =
+            userBinding is not null
+            && proof.UserId == match.HostUserId
+            && userBinding.UserId == match.HostUserId
+            && userBinding.DisconnectedAtUtc == null
+            && userBinding.FusionActorNumber != request.FusionActorNumber;
+
+        if ((actorBinding is not null
+                && actorBinding.UserId != proof.UserId)
+            || (userBinding is not null
+                && actorBinding is not null
+                && userBinding.Id != actorBinding.Id)
+            || (userBinding is not null
+                && userBinding.DisconnectedAtUtc == null
+                && userBinding.FusionActorNumber != request.FusionActorNumber
+                && !isCurrentHostActorRemap))
         {
             return Failure<MatchPlayerBindingResponse>(
                 "Fusion actor or backend user is already bound to another player",
@@ -184,6 +199,176 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
 
         await _db.SaveChangesAsync(cancellationToken);
         return ServiceResult<MatchPlayerBindingResponse>.Success(Map(binding), "Player identity bound");
+    }
+
+    public async Task<ServiceResult<MatchAuthorityResponse>> TakeoverAsync(
+        Guid newHostUserId,
+        Guid matchId,
+        TakeoverMatchAuthorityRequest request,
+        CancellationToken cancellationToken)
+    {
+        var match = await _db.MatchAuthorityBindings
+            .Include(item => item.Players)
+            .SingleOrDefaultAsync(item => item.MatchId == matchId, cancellationToken);
+
+        if (match is null)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Match not found",
+                ErrorCodes.MatchNotFound);
+        }
+
+        if (match.Status == MatchAuthorityStatus.Ended)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Match already ended",
+                ErrorCodes.MatchAlreadyEnded);
+        }
+
+        var sessionName = request.FusionSessionName?.Trim() ?? string.Empty;
+        if (!string.Equals(
+                match.FusionSessionName,
+                sessionName,
+                StringComparison.Ordinal))
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Fusion session does not match",
+                ErrorCodes.MatchSessionConflict);
+        }
+
+        var candidate = match.Players.SingleOrDefault(item =>
+            item.UserId == newHostUserId
+            && item.DisconnectedAtUtc == null);
+
+        if (candidate is null)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Only a connected bound roster member can take over Host authority",
+                ErrorCodes.MatchAuthorityForbidden);
+        }
+
+        if (await HasOtherActiveMatchAsync(
+                newHostUserId,
+                matchId,
+                cancellationToken))
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Account is already participating in another active match",
+                ErrorCodes.AccountAlreadyInActiveMatch);
+        }
+
+        var now = UtcNow();
+
+        if (match.HostUserId == newHostUserId)
+        {
+            if (match.LeaseExpiresAtUtc <= now)
+            {
+                return Failure<MatchAuthorityResponse>(
+                    "Match authority lease expired",
+                    ErrorCodes.MatchLeaseExpired);
+            }
+
+            match.LeaseExpiresAtUtc =
+                now.AddSeconds(_settings.LeaseLifetimeSeconds);
+            match.UpdatedAtUtc = now;
+
+            await _db.SaveChangesAsync(cancellationToken);
+
+            return ServiceResult<MatchAuthorityResponse>.Success(
+                Map(match),
+                "Host authority already assigned");
+        }
+
+        if (match.LeaseExpiresAtUtc > now)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Current Host authority lease is still active",
+                ErrorCodes.MatchAuthorityTakeoverNotReady);
+        }
+        var previousHost = match.Players.SingleOrDefault(item =>
+            item.UserId == match.HostUserId
+            && item.DisconnectedAtUtc == null);
+
+        if (previousHost is not null)
+        {
+            previousHost.DisconnectedAtUtc = now;
+            previousHost.LastSeenAtUtc = now;
+        }
+
+        match.HostUserId = newHostUserId;
+        match.LeaseExpiresAtUtc =
+            now.AddSeconds(_settings.LeaseLifetimeSeconds);
+        match.UpdatedAtUtc = now;
+
+        try
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Host authority changed concurrently; retry against current authority state",
+                ErrorCodes.MatchAuthorityTakeoverNotReady);
+        }
+
+        return ServiceResult<MatchAuthorityResponse>.Success(
+            Map(match),
+            "Host authority transferred");
+    }
+
+    public async Task<ServiceResult<MatchAuthorityResponse>> RelinquishAsync(
+        Guid hostUserId,
+        Guid matchId,
+        CancellationToken cancellationToken)
+    {
+        var match = await _db.MatchAuthorityBindings
+            .Include(item => item.Players)
+            .SingleOrDefaultAsync(
+                item => item.MatchId == matchId,
+                cancellationToken);
+
+        var authorityFailure =
+            ValidateActiveHost(match, hostUserId);
+
+        if (authorityFailure is not null)
+        {
+            return Failure<MatchAuthorityResponse>(
+                authorityFailure.Value.Message,
+                authorityFailure.Value.Code);
+        }
+
+        var now = UtcNow();
+
+        var hostPlayer =
+            match!.Players.SingleOrDefault(item =>
+                item.UserId == hostUserId
+                && item.DisconnectedAtUtc == null);
+
+        if (hostPlayer is not null)
+        {
+            hostPlayer.DisconnectedAtUtc = now;
+            hostPlayer.LastSeenAtUtc = now;
+        }
+
+        // Preserve Lobby/InMatch status. Expiring only the Host lease
+        // lets a Fusion-promoted connected roster member take over.
+        match.LeaseExpiresAtUtc = now;
+        match.UpdatedAtUtc = now;
+
+        try
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Host authority changed concurrently; relinquish was not applied",
+                ErrorCodes.MatchAuthorityTakeoverNotReady);
+        }
+
+        return ServiceResult<MatchAuthorityResponse>.Success(
+            Map(match),
+            "Host authority relinquished");
     }
 
     public async Task<ServiceResult<MatchAuthorityResponse>> RenewLeaseAsync(
@@ -248,7 +433,9 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             return Failure<MatchPlayerBindingResponse>(authorityFailure.Value.Message, authorityFailure.Value.Code);
         }
 
-        var player = match!.Players.SingleOrDefault(item => item.FusionActorNumber == fusionActorNumber);
+        var player = match!.Players.SingleOrDefault(item =>
+            item.FusionActorNumber == fusionActorNumber
+            && item.DisconnectedAtUtc == null);
         if (player is null)
         {
             return Failure<MatchPlayerBindingResponse>("Player binding not found", ErrorCodes.NotFound);

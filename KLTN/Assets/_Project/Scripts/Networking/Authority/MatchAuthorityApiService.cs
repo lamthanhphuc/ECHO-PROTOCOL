@@ -48,6 +48,23 @@ namespace EchoProtocol.Networking.Authority
                 $"/api/matches/{matchId:D}/players/{actorNumber}/disconnect",
                 new EmptyMatchAuthorityRequest());
 
+        public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> TakeoverAsync(
+            Guid matchId,
+            string sessionName,
+            int actorNumber) =>
+            PostAsync<TakeoverMatchAuthorityRequest, MatchAuthorityDto>(
+                $"/api/matches/{matchId:D}/authority/takeover",
+                new TakeoverMatchAuthorityRequest
+                {
+                    fusionSessionName = sessionName,
+                    fusionActorNumber = actorNumber
+                });
+
+        public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> RelinquishAsync(Guid matchId) =>
+            PostAsync<EmptyMatchAuthorityRequest, MatchAuthorityDto>(
+                $"/api/matches/{matchId:D}/authority/relinquish",
+                new EmptyMatchAuthorityRequest());
+
         public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> RenewLeaseAsync(Guid matchId) =>
             PostAsync<EmptyMatchAuthorityRequest, MatchAuthorityDto>(
                 $"/api/matches/{matchId:D}/lease", new EmptyMatchAuthorityRequest());

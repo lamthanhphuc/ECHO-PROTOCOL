@@ -11,6 +11,13 @@ public interface IMatchAuthorityService
         Guid userId, Guid matchId, IssueJoinProofRequest request, CancellationToken cancellationToken);
     Task<ServiceResult<MatchPlayerBindingResponse>> BindPlayerAsync(
         Guid hostUserId, Guid matchId, BindMatchPlayerRequest request, CancellationToken cancellationToken);
+    Task<ServiceResult<MatchAuthorityResponse>> TakeoverAsync(
+        Guid newHostUserId, Guid matchId, TakeoverMatchAuthorityRequest request,
+        CancellationToken cancellationToken);
+
+    Task<ServiceResult<MatchAuthorityResponse>> RelinquishAsync(
+        Guid hostUserId, Guid matchId, CancellationToken cancellationToken);
+
     Task<ServiceResult<MatchAuthorityResponse>> RenewLeaseAsync(
         Guid hostUserId, Guid matchId, CancellationToken cancellationToken);
     Task<ServiceResult<MatchAuthorityResponse>> StartAsync(

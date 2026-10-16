@@ -37,6 +37,10 @@ namespace EchoProtocol.Networking.Authority
         private const int LocalRewardMaxAttempts = 8;
         private const int PlayerBindRetryAttempts = 8;
         private const int PlayerBindRetryDelayMs = 250;
+        private const string HostTakeoverNotReadyErrorCode =
+            "MATCH_AUTHORITY_TAKEOVER_NOT_READY";
+        private const int HostTakeoverRetryAttempts = 60;
+        private const int HostTakeoverRetryDelayMs = 1000;
         private const string PlayerBindingConflictErrorCode =
             "MATCH_PLAYER_BINDING_CONFLICT";
 
@@ -46,6 +50,12 @@ namespace EchoProtocol.Networking.Authority
         private float _nextLeaseRenewal;
         private bool _leaseRequestInProgress;
         private bool _identityRequestInProgress;
+
+        // Only one backend bind may run for the same player in the
+        // same match. Multiple local identity triggers may otherwise
+        // submit proofs concurrently before BackendUserId replicates.
+        private readonly HashSet<(Guid MatchId, int ActorNumber)>
+            _playerBindsInProgress = new();
         private bool _backendEndRequestInProgress;
         private bool _pendingBackendMatchResult;
         private float _nextBackendMatchResultRetryAt;
@@ -243,6 +253,150 @@ namespace EchoProtocol.Networking.Authority
             return true;
         }
 
+        public async Task<bool> TakeoverHostAuthorityAsync(
+            NetworkRunner runner)
+        {
+            if (!AuthSession.IsAuthenticated
+                || !Guid.TryParse(
+                    AuthSession.CurrentUserId,
+                    out var localUserId))
+            {
+                Debug.LogError("[MatchAuthority] An authenticated backend user is required for Host takeover.");
+                return false;
+            }
+
+            if (runner == null
+                || !runner.IsRunning
+                || !runner.IsServer
+                || !runner.SessionInfo.IsValid)
+            {
+                Debug.LogError("[MatchAuthority] Host takeover requires a running authoritative Fusion runner.");
+                return false;
+            }
+
+            if (runner.SessionInfo.Properties == null
+                || !runner.SessionInfo.Properties.TryGetValue(
+                    MatchIdSessionProperty,
+                    out var property)
+                || !Guid.TryParse(
+                    (string)property,
+                    out var sessionMatchId))
+            {
+                Debug.LogError("[MatchAuthority] Migrated Fusion session has no valid backend match binding.");
+                return false;
+            }
+
+            if (HasBinding && MatchId != sessionMatchId)
+            {
+                Debug.LogError($"[MatchAuthority] Host takeover rejected: local match {MatchId:D} does not match session {sessionMatchId:D}.");
+                return false;
+            }
+
+            var sessionName = runner.SessionInfo.Name;
+            var actorNumber =
+                runner.GetPlayerActorId(runner.LocalPlayer)
+                ?? runner.LocalPlayer.PlayerId;
+
+            if (actorNumber < 1)
+            {
+                Debug.LogError("[MatchAuthority] Host takeover could not resolve the local Fusion actor number.");
+                return false;
+            }
+
+            MatchId = sessionMatchId;
+            IsHostBinding = false;
+            requestedScenarioResolutionMode =
+                ReadScenarioResolutionMode(runner);
+            requestedDifficulty =
+                ReadMatchDifficulty(runner);
+
+            for (var attempt = 1;
+                 attempt <= HostTakeoverRetryAttempts;
+                 attempt++)
+            {
+                if (runner == null
+                    || !runner.IsRunning
+                    || !runner.IsServer
+                    || !runner.SessionInfo.IsValid)
+                {
+                    Debug.LogWarning("[MatchAuthority] Host takeover retry stopped because this Fusion runner is no longer authoritative.");
+                    return false;
+                }
+
+                var result =
+                    await _api.TakeoverAsync(
+                        sessionMatchId,
+                        sessionName,
+                        actorNumber);
+
+                if (IsSuccessful(result))
+                {
+                    break;
+                }
+
+                var takeoverErrorCode =
+                    result != null
+                    && !string.IsNullOrWhiteSpace(result.ErrorCode)
+                        ? result.ErrorCode
+                        : result?.Data?.errorCode;
+
+                bool retryable =
+                    string.Equals(
+                        takeoverErrorCode,
+                        HostTakeoverNotReadyErrorCode,
+                        StringComparison.Ordinal);
+
+                if (!retryable)
+                {
+                    Debug.LogError($"[MatchAuthority] Host takeover failed: {Describe(result)}");
+                    return false;
+                }
+
+                if (attempt >= HostTakeoverRetryAttempts)
+                {
+                    Debug.LogError($"[MatchAuthority] Host takeover timed out waiting for the previous Host lease: {Describe(result)}");
+                    return false;
+                }
+
+                if (attempt == 1
+                    || attempt % 5 == 0)
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.MatchAuthority,
+                        $"[MatchAuthority] Waiting for previous Host lease to expire. Attempt={attempt}/{HostTakeoverRetryAttempts}, Match={sessionMatchId:D}.");
+                }
+
+                await Task.Delay(
+                    HostTakeoverRetryDelayMs);
+            }
+
+            // The HTTP request may finish after this runner has already
+            // been replaced or disconnected. The backend operation is
+            // idempotent, so a later migration retry may reconcile it.
+            if (runner == null
+                || !runner.IsRunning
+                || !runner.IsServer
+                || !runner.SessionInfo.IsValid)
+            {
+                Debug.LogWarning("[MatchAuthority] Backend Host takeover succeeded, but the Fusion runner is no longer authoritative.");
+                return false;
+            }
+
+            IsHostBinding = true;
+            _nextLeaseRenewal =
+                Time.unscaledTime + LeaseRenewIntervalSeconds;
+
+            _boundPlayers[actorNumber] =
+                localUserId;
+            _disconnectedActors.Remove(actorNumber);
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+                $"[MatchAuthority] Host takeover confirmed. Match={MatchId:D}, Actor={actorNumber}, User={localUserId:D}, Session='{sessionName}'.");
+
+            return true;
+        }
+
         public async Task<bool> PrepareNextMatchAsync(
             string sessionName,
             int maxPlayers)
@@ -361,6 +515,56 @@ namespace EchoProtocol.Networking.Authority
                 ? difficulty : MatchDifficulty.Normal;
         }
 
+        public async Task<bool> RelinquishHostAuthorityAsync()
+        {
+            if (!HasBinding)
+            {
+                ResetBinding();
+                return true;
+            }
+
+            if (!IsHostBinding)
+            {
+                ResetBinding();
+                return true;
+            }
+
+            var matchId = MatchId;
+
+            // Stop scheduling additional renewals before relinquishing.
+            IsHostBinding = false;
+
+            // Do not race a lease renewal already in flight. If that request
+            // completed after relinquish it could otherwise extend the old
+            // Host lease again and delay takeover.
+            while (_leaseRequestInProgress)
+            {
+                await Task.Yield();
+            }
+
+            var result =
+                await _api.RelinquishAsync(matchId);
+
+            var success =
+                IsSuccessful(result);
+
+            if (!success)
+            {
+                Debug.LogWarning(
+                    $"[MatchAuthority] Host relinquish failed: {Describe(result)}. " +
+                    "Lease renewal remains stopped so authority can still expire naturally.");
+            }
+            else
+            {
+                RuntimeLog.Log(
+                    RuntimeLogCategory.MatchAuthority,
+                    $"[MatchAuthority] Host authority relinquished. Match={matchId:D}.");
+            }
+
+            ResetBinding();
+            return success;
+        }
+
         public async Task<bool> EndAsync(string reason)
         {
             if (HasQueuedResult(MatchId))
@@ -383,34 +587,103 @@ namespace EchoProtocol.Networking.Authority
             return success;
         }
 
-        public async void TrySubmitLocalIdentity(LobbyPlayerState knownState = null, bool force = false)
+        public async void TrySubmitLocalIdentity(
+            LobbyPlayerState knownState = null,
+            bool force = false)
         {
-            if (!HasBinding || _identityRequestInProgress || _bootstrap?.Runner == null
-                || string.IsNullOrWhiteSpace(_bootstrap.CurrentSessionName))
+            if (!HasBinding
+                || _identityRequestInProgress
+                || _bootstrap?.Runner == null
+                || string.IsNullOrWhiteSpace(
+                    _bootstrap.CurrentSessionName))
             {
                 return;
             }
-            var runner = _bootstrap.Runner;
-            var state = knownState;
-            if (state == null && runner.TryGetPlayerObject(runner.LocalPlayer, out var playerObject))
-            {
-                playerObject.TryGetComponent(out state);
-            }
-            if (state == null || !state.Object.HasInputAuthority
-                || (state.HasVerifiedBackendIdentity && !force)) return;
 
-            var actorNumber = runner.GetPlayerActorId(runner.LocalPlayer) ?? runner.LocalPlayer.PlayerId;
-            _identityRequestInProgress = true;
-            var result = await _api.IssueJoinProofAsync(MatchId, _bootstrap.CurrentSessionName, actorNumber);
-            _identityRequestInProgress = false;
+            var runner =
+                _bootstrap.Runner;
+
+            var state =
+                knownState;
+
+            if (state == null
+                && runner.TryGetPlayerObject(
+                    runner.LocalPlayer,
+                    out var playerObject))
+            {
+                playerObject.TryGetComponent(
+                    out state);
+            }
+
+            if (state == null
+                || !state.Object.HasInputAuthority
+                || (state.HasVerifiedBackendIdentity
+                    && !force))
+            {
+                return;
+            }
+
+            var directActor =
+                runner.GetPlayerActorId(
+                    runner.LocalPlayer);
+
+            var actorNumber = 0;
+
+            if (directActor.HasValue
+                && directActor.Value > 0)
+            {
+                actorNumber =
+                    directActor.Value;
+            }
+            else if (runner.IsServer
+                && runner.LocalPlayer.IsRealPlayer
+                && runner.LocalPlayer.PlayerId > 0)
+            {
+                // Fusion Host local PlayerRef can have no transport
+                // ActorNumber mapping. PlayerId is used only for this
+                // authoritative Host-local case.
+                actorNumber =
+                    runner.LocalPlayer.PlayerId;
+            }
+            else if (state.FusionActorNumber > 0)
+            {
+                // Regular clients use the actor replicated by
+                // State Authority.
+                actorNumber =
+                    state.FusionActorNumber;
+            }
+
+            if (actorNumber < 1)
+            {
+                return;
+            }
+
+            _identityRequestInProgress =
+                true;
+
+            var result =
+                await _api.IssueJoinProofAsync(
+                    MatchId,
+                    _bootstrap.CurrentSessionName,
+                    actorNumber);
+
+            _identityRequestInProgress =
+                false;
+
             if (!IsSuccessful(result))
             {
-                Debug.LogWarning($"[MatchAuthority] Join proof failed: {Describe(result)}.");
+                Debug.LogWarning(
+                    $"[MatchAuthority] Join proof failed: {Describe(result)}.");
+
                 return;
             }
 
-            state.SubmitJoinProof(result.Data.data.proof, actorNumber);
-            _bootstrap?.MarkReconnectProofSubmitted();
+            state.SubmitJoinProof(
+                result.Data.data.proof,
+                actorNumber);
+
+            _bootstrap
+                ?.MarkReconnectProofSubmitted();
         }
 
         public async void BindPlayerFromProof(
@@ -420,6 +693,7 @@ namespace EchoProtocol.Networking.Authority
         {
             if (!IsHostBinding
                 || !HasBinding
+                || actorNumber < 1
                 || playerState == null
                 || playerState.Object == null
                 || !playerState.Object.IsValid
@@ -428,99 +702,133 @@ namespace EchoProtocol.Networking.Authority
                 return;
             }
 
-            Guid bindingMatchId = MatchId;
+            Guid bindingMatchId =
+                MatchId;
+
             PlayerRef inputAuthority =
                 playerState.Object.InputAuthority;
 
-            for (int attempt = 1;
-                 attempt <= PlayerBindRetryAttempts;
-                 attempt++)
+            var bindKey =
+                (bindingMatchId, actorNumber);
+
+            // Identity can be triggered from Spawned, actor replication
+            // and the bounded retry path. While one backend bind is still
+            // in flight, later proofs for the exact same match/actor are
+            // redundant and must not create concurrent DB inserts.
+            if (!_playerBindsInProgress.Add(bindKey))
             {
-                if (!IsHostBinding
-                    || !HasBinding
-                    || MatchId != bindingMatchId
-                    || playerState == null
-                    || playerState.Object == null
-                    || !playerState.Object.IsValid
-                    || !playerState.Object.HasStateAuthority
-                    || playerState.Object.InputAuthority
-                        != inputAuthority)
-                {
-                    return;
-                }
+                return;
+            }
 
-                var result =
-                    await _api.BindPlayerAsync(
-                        bindingMatchId,
-                        actorNumber,
-                        proof);
-
-                if (IsSuccessful(result))
+            try
+            {
+                for (int attempt = 1;
+                     attempt <= PlayerBindRetryAttempts;
+                     attempt++)
                 {
-                    if (playerState == null
+                    if (!IsHostBinding
+                        || !HasBinding
+                        || MatchId != bindingMatchId
+                        || playerState == null
                         || playerState.Object == null
                         || !playerState.Object.IsValid
+                        || !playerState.Object.HasStateAuthority
                         || playerState.Object.InputAuthority
                             != inputAuthority)
                     {
                         return;
                     }
 
-                    playerState.ApplyVerifiedBackendIdentity(
-                        result.Data.data.userId);
+                    var result =
+                        await _api.BindPlayerAsync(
+                            bindingMatchId,
+                            actorNumber,
+                            proof);
 
-                    if (Guid.TryParse(
-                            result.Data.data.userId,
-                            out var boundUserId))
+                    if (IsSuccessful(result))
                     {
-                        _boundPlayers[actorNumber] =
-                            boundUserId;
+                        if (playerState == null
+                            || playerState.Object == null
+                            || !playerState.Object.IsValid
+                            || playerState.Object.InputAuthority
+                                != inputAuthority)
+                        {
+                            return;
+                        }
 
-                        _disconnectedActors.Remove(
-                            actorNumber);
+                        playerState.ApplyVerifiedBackendIdentity(
+                            result.Data.data.userId);
+
+                        if (Guid.TryParse(
+                                result.Data.data.userId,
+                                out var boundUserId))
+                        {
+                            _boundPlayers[actorNumber] =
+                                boundUserId;
+
+                            _disconnectedActors.Remove(
+                                actorNumber);
+                        }
+
+                        RuntimeLog.Log(
+                            RuntimeLogCategory.MatchAuthority,
+                            $"[MatchAuthority] Player verified. " +
+                            $"Actor={actorNumber}, " +
+                            $"User={result.Data.data.userId}, " +
+                            $"Match={bindingMatchId:D}.");
+
+                        return;
                     }
 
-                    RuntimeLog.Log(
-                        RuntimeLogCategory.MatchAuthority,
-                        $"[MatchAuthority] Player verified. " +
-                        $"Actor={actorNumber}, " +
-                        $"User={result.Data.data.userId}, " +
-                        $"Match={bindingMatchId:D}.");
-
-                    return;
-                }
-
-                bool retryable =
-                    result != null
-                    && string.Equals(
-                        result.ErrorCode,
-                        PlayerBindingConflictErrorCode,
-                        StringComparison.Ordinal);
-
-                if (!retryable
-                    || attempt >= PlayerBindRetryAttempts)
-                {
-                    Debug.LogWarning(
-                        $"[MatchAuthority] Player bind rejected: " +
-                        $"{Describe(result)}.");
-
-                    if (_bootstrap?.Runner != null
-                        && _bootstrap.Runner.IsRunning
-                        && playerState != null
+                    // A different identity attempt may already have
+                    // completed successfully while this request was in
+                    // flight. Never disconnect a player that is now verified.
+                    if (playerState != null
                         && playerState.Object != null
                         && playerState.Object.IsValid
-                        && playerState.Object.InputAuthority
-                            == inputAuthority)
+                        && playerState.HasVerifiedBackendIdentity)
                     {
-                        _bootstrap.Runner.Disconnect(
-                            inputAuthority);
+                        return;
                     }
 
-                    return;
-                }
+                    bool retryable =
+                        result != null
+                        && string.Equals(
+                            result.ErrorCode,
+                            PlayerBindingConflictErrorCode,
+                            StringComparison.Ordinal);
 
-                await Task.Delay(
-                    PlayerBindRetryDelayMs);
+                    if (!retryable
+                        || attempt >= PlayerBindRetryAttempts)
+                    {
+                        Debug.LogWarning(
+                            $"[MatchAuthority] Player bind rejected: " +
+                            $"{Describe(result)}.");
+
+                        if (_bootstrap?.Runner != null
+                            && _bootstrap.Runner.IsRunning
+                            && playerState != null
+                            && playerState.Object != null
+                            && playerState.Object.IsValid
+                            && !playerState.HasVerifiedBackendIdentity
+                            && playerState.Object.InputAuthority
+                                == inputAuthority)
+                        {
+                            _bootstrap.Runner.Disconnect(
+                                inputAuthority);
+                        }
+
+                        return;
+                    }
+
+                    await Task.Delay(
+                        PlayerBindRetryDelayMs);
+                }
+            }
+            finally
+            {
+                _playerBindsInProgress.Remove(
+                    bindKey);
             }
         }
 
@@ -597,6 +905,7 @@ namespace EchoProtocol.Networking.Authority
                 string.Empty;
             _leaseRequestInProgress = false;
             _identityRequestInProgress = false;
+            _playerBindsInProgress.Clear();
             _backendEndRequestInProgress = false;
             _pendingBackendMatchResult = false;
             _nextBackendMatchResultRetryAt = 0f;

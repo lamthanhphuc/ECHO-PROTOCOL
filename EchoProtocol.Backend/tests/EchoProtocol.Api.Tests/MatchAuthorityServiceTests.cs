@@ -324,6 +324,597 @@ public sealed class MatchAuthorityServiceTests
         Assert.True(binding.IsSuccess);
     }
 
+    [Fact]
+    public async Task ConnectedRosterMember_CannotTakeOverWhileCurrentHostLeaseIsActive()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+        var nextHostId = Guid.NewGuid();
+
+        var created = await service.CreateAsync(
+            hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "migration-room",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        Assert.True(created.IsSuccess);
+        var matchId = created.Data!.MatchId;
+
+        await BindAsync(service, hostId, hostId, matchId, "migration-room", 1);
+        await BindAsync(service, hostId, nextHostId, matchId, "migration-room", 2);
+
+        Assert.True((await service.StartAsync(
+            hostId, matchId, CancellationToken.None)).IsSuccess);
+
+        var takeover = await service.TakeoverAsync(
+            nextHostId,
+            matchId,
+            new TakeoverMatchAuthorityRequest
+            {
+                FusionSessionName = "migration-room",
+                FusionActorNumber = 2
+            },
+            CancellationToken.None);
+
+        Assert.False(takeover.IsSuccess);
+        Assert.Equal(
+            "MATCH_AUTHORITY_TAKEOVER_NOT_READY",
+            takeover.ErrorCode);
+
+        var unchanged =
+            await db.MatchAuthorityBindings
+                .SingleAsync(item => item.MatchId == matchId);
+
+        Assert.Equal(hostId, unchanged.HostUserId);
+        Assert.Equal(
+            Now.UtcDateTime.AddSeconds(45),
+            unchanged.LeaseExpiresAtUtc);
+    }
+
+    [Fact]
+    public async Task ConnectedRosterMember_CanTakeOverExpiredHostAuthority()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+        var nextHostId = Guid.NewGuid();
+
+        var created = await service.CreateAsync(
+            hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "migration-room",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        Assert.True(created.IsSuccess);
+        var matchId = created.Data!.MatchId;
+
+        await BindAsync(service, hostId, hostId, matchId, "migration-room", 1);
+        await BindAsync(service, hostId, nextHostId, matchId, "migration-room", 2);
+
+        Assert.True((await service.StartAsync(
+            hostId, matchId, CancellationToken.None)).IsSuccess);
+
+        var authority =
+            await db.MatchAuthorityBindings
+                .SingleAsync(item => item.MatchId == matchId);
+
+        authority.LeaseExpiresAtUtc =
+            Now.UtcDateTime.AddSeconds(-1);
+
+        await db.SaveChangesAsync();
+        var takeover = await service.TakeoverAsync(
+            nextHostId,
+            matchId,
+            new TakeoverMatchAuthorityRequest
+            {
+                FusionSessionName = "migration-room",
+                FusionActorNumber = 2
+            },
+            CancellationToken.None);
+
+        Assert.True(takeover.IsSuccess);
+        Assert.Equal(nextHostId, takeover.Data!.HostUserId);
+        Assert.Equal(
+            Now.UtcDateTime.AddSeconds(45),
+            takeover.Data.LeaseExpiresAtUtc);
+
+        var oldHostLease = await service.RenewLeaseAsync(
+            hostId, matchId, CancellationToken.None);
+        Assert.False(oldHostLease.IsSuccess);
+        Assert.Equal(
+            "MATCH_AUTHORITY_FORBIDDEN",
+            oldHostLease.ErrorCode);
+
+        Assert.True((await service.RenewLeaseAsync(
+            nextHostId, matchId, CancellationToken.None)).IsSuccess);
+
+        Assert.False(await service.CanSubmitSystemTelemetryAsync(
+            hostId, matchId, CancellationToken.None));
+        Assert.True(await service.CanSubmitSystemTelemetryAsync(
+            nextHostId, matchId, CancellationToken.None));
+
+        var oldHostBinding = await db.MatchPlayerBindings
+            .SingleAsync(item => item.UserId == hostId);
+
+        Assert.NotNull(oldHostBinding.DisconnectedAtUtc);
+    }
+
+    [Fact]
+    public async Task UnboundUser_CannotTakeOverHostAuthority()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+
+        var created = await service.CreateAsync(
+            hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "migration-room",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        Assert.True(created.IsSuccess);
+        var matchId = created.Data!.MatchId;
+
+        await BindAsync(service, hostId, hostId, matchId, "migration-room", 1);
+
+        var takeover = await service.TakeoverAsync(
+            Guid.NewGuid(),
+            matchId,
+            new TakeoverMatchAuthorityRequest
+            {
+                FusionSessionName = "migration-room",
+                FusionActorNumber = 2
+            },
+            CancellationToken.None);
+
+        Assert.False(takeover.IsSuccess);
+        Assert.Equal(
+            "MATCH_AUTHORITY_FORBIDDEN",
+            takeover.ErrorCode);
+        Assert.Equal(
+            hostId,
+            (await db.MatchAuthorityBindings.SingleAsync()).HostUserId);
+    }
+
+    [Fact]
+    public async Task Takeover_AllowsBoundRosterMemberToRemapActorAfterMigration()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+        var nextHostId = Guid.NewGuid();
+
+        var created = await service.CreateAsync(
+            hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "migration-room",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        Assert.True(created.IsSuccess);
+
+        var matchId = created.Data!.MatchId;
+
+        await BindAsync(
+            service,
+            hostId,
+            hostId,
+            matchId,
+            "migration-room",
+            1);
+
+        await BindAsync(
+            service,
+            hostId,
+            nextHostId,
+            matchId,
+            "migration-room",
+            2);
+
+        var authority =
+            await db.MatchAuthorityBindings
+                .SingleAsync();
+
+        authority.LeaseExpiresAtUtc =
+            Now.UtcDateTime.AddSeconds(-1);
+
+        await db.SaveChangesAsync();
+
+        var takeover =
+            await service.TakeoverAsync(
+                nextHostId,
+                matchId,
+                new TakeoverMatchAuthorityRequest
+                {
+                    FusionSessionName =
+                        "migration-room",
+
+                    FusionActorNumber = 1
+                },
+                CancellationToken.None);
+
+        Assert.True(takeover.IsSuccess);
+        Assert.Equal(
+            nextHostId,
+            takeover.Data!.HostUserId);
+
+        var proof =
+            await service.IssueJoinProofAsync(
+                nextHostId,
+                matchId,
+                new IssueJoinProofRequest
+                {
+                    FusionActorNumber = 1,
+                    FusionSessionName =
+                        "migration-room"
+                },
+                CancellationToken.None);
+
+        Assert.True(proof.IsSuccess);
+
+        var rebound =
+            await service.BindPlayerAsync(
+                nextHostId,
+                matchId,
+                new BindMatchPlayerRequest
+                {
+                    FusionActorNumber = 1,
+                    JoinProof = proof.Data!.Proof
+                },
+                CancellationToken.None);
+
+        Assert.True(rebound.IsSuccess);
+        Assert.Equal(
+            1,
+            rebound.Data!.FusionActorNumber);
+
+        var oldHost =
+            await db.MatchPlayerBindings
+                .SingleAsync(item =>
+                    item.UserId == hostId);
+
+        var newHost =
+            await db.MatchPlayerBindings
+                .SingleAsync(item =>
+                    item.UserId == nextHostId);
+
+        Assert.NotNull(
+            oldHost.DisconnectedAtUtc);
+
+        Assert.Null(
+            newHost.DisconnectedAtUtc);
+
+        Assert.Equal(
+            1,
+            newHost.FusionActorNumber);
+    }
+
+    [Fact]
+    public async Task Takeover_IsIdempotentForCurrentHost()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+
+        var created = await service.CreateAsync(
+            hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "migration-room",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        var matchId = created.Data!.MatchId;
+        await BindAsync(service, hostId, hostId, matchId, "migration-room", 1);
+
+        var takeover = await service.TakeoverAsync(
+            hostId,
+            matchId,
+            new TakeoverMatchAuthorityRequest
+            {
+                FusionSessionName = "migration-room",
+                FusionActorNumber = 1
+            },
+            CancellationToken.None);
+
+        Assert.True(takeover.IsSuccess);
+        Assert.Equal(hostId, takeover.Data!.HostUserId);
+
+        var binding = await db.MatchPlayerBindings
+            .SingleAsync(item => item.UserId == hostId);
+
+        Assert.Null(binding.DisconnectedAtUtc);
+    }
+
+    [Fact]
+    public async Task ExpiredCurrentHost_CannotResurrectAuthorityThroughTakeover()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+
+        var created = await service.CreateAsync(
+            hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "migration-room",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        var matchId = created.Data!.MatchId;
+        await BindAsync(service, hostId, hostId, matchId, "migration-room", 1);
+
+        var authority =
+            await db.MatchAuthorityBindings
+                .SingleAsync(item => item.MatchId == matchId);
+
+        authority.LeaseExpiresAtUtc =
+            Now.UtcDateTime.AddSeconds(-1);
+
+        await db.SaveChangesAsync();
+        var takeover = await service.TakeoverAsync(
+            hostId,
+            matchId,
+            new TakeoverMatchAuthorityRequest
+            {
+                FusionSessionName = "migration-room",
+                FusionActorNumber = 1
+            },
+            CancellationToken.None);
+
+        Assert.False(takeover.IsSuccess);
+        Assert.Equal(
+            "MATCH_LEASE_EXPIRED",
+            takeover.ErrorCode);
+    }
+
+    [Fact]
+    public async Task HealthyHost_CanRelinquishWithoutEndingMatch()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+        var playerId = Guid.NewGuid();
+
+        var created = await service.CreateAsync(
+            hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "relinquish-room",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        Assert.True(created.IsSuccess);
+        var matchId = created.Data!.MatchId;
+
+        await BindAsync(
+            service, hostId, hostId,
+            matchId, "relinquish-room", 1);
+
+        await BindAsync(
+            service, hostId, playerId,
+            matchId, "relinquish-room", 2);
+
+        var started = await service.StartAsync(
+            hostId, matchId, CancellationToken.None);
+
+        Assert.True(started.IsSuccess);
+
+        var relinquished = await service.RelinquishAsync(
+            hostId, matchId, CancellationToken.None);
+
+        Assert.True(relinquished.IsSuccess);
+        Assert.Equal(
+            MatchAuthorityStatus.InMatch,
+            relinquished.Data!.Status);
+        Assert.Equal(
+            Now.UtcDateTime,
+            relinquished.Data.LeaseExpiresAtUtc);
+
+        var authority =
+            await db.MatchAuthorityBindings
+                .Include(item => item.Players)
+                .SingleAsync(item => item.MatchId == matchId);
+
+        Assert.Equal(
+            MatchAuthorityStatus.InMatch,
+            authority.Status);
+        Assert.Null(authority.EndedAtUtc);
+        Assert.Equal(
+            Now.UtcDateTime,
+            authority.LeaseExpiresAtUtc);
+
+        var oldHost =
+            authority.Players.Single(
+                item => item.UserId == hostId);
+
+        Assert.NotNull(oldHost.DisconnectedAtUtc);
+        Assert.Equal(
+            Now.UtcDateTime,
+            oldHost.DisconnectedAtUtc!.Value);
+    }
+
+    [Fact]
+    public async Task RelinquishedAuthority_CanBeTakenOverImmediately()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+        var promotedHostId = Guid.NewGuid();
+
+        var created = await service.CreateAsync(
+            hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "relinquish-takeover-room",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        Assert.True(created.IsSuccess);
+        var matchId = created.Data!.MatchId;
+
+        await BindAsync(
+            service, hostId, hostId,
+            matchId, "relinquish-takeover-room", 1);
+
+        await BindAsync(
+            service, hostId, promotedHostId,
+            matchId, "relinquish-takeover-room", 2);
+
+        var started = await service.StartAsync(
+            hostId, matchId, CancellationToken.None);
+
+        Assert.True(started.IsSuccess);
+
+        var relinquished = await service.RelinquishAsync(
+            hostId, matchId, CancellationToken.None);
+
+        Assert.True(relinquished.IsSuccess);
+
+        var takeover = await service.TakeoverAsync(
+            promotedHostId,
+            matchId,
+            new TakeoverMatchAuthorityRequest
+            {
+                FusionSessionName = "relinquish-takeover-room",
+                FusionActorNumber = 2
+            },
+            CancellationToken.None);
+
+        Assert.True(takeover.IsSuccess);
+        Assert.Equal(
+            promotedHostId,
+            takeover.Data!.HostUserId);
+        Assert.Equal(
+            MatchAuthorityStatus.InMatch,
+            takeover.Data.Status);
+        Assert.True(
+            takeover.Data.LeaseExpiresAtUtc
+            > Now.UtcDateTime);
+
+        var authority =
+            await db.MatchAuthorityBindings
+                .Include(item => item.Players)
+                .SingleAsync(item => item.MatchId == matchId);
+
+        Assert.Equal(promotedHostId, authority.HostUserId);
+        Assert.Null(authority.EndedAtUtc);
+
+        var oldHost =
+            authority.Players.Single(
+                item => item.UserId == hostId);
+
+        var promotedHost =
+            authority.Players.Single(
+                item => item.UserId == promotedHostId);
+
+        Assert.NotNull(oldHost.DisconnectedAtUtc);
+        Assert.Null(promotedHost.DisconnectedAtUtc);
+    }
+
+    [Fact]
+    public async Task NonHost_CannotRelinquishHostAuthority()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+        var playerId = Guid.NewGuid();
+
+        var created = await service.CreateAsync(
+            hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "relinquish-forbidden-room",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        Assert.True(created.IsSuccess);
+        var matchId = created.Data!.MatchId;
+
+        await BindAsync(
+            service, hostId, hostId,
+            matchId, "relinquish-forbidden-room", 1);
+
+        await BindAsync(
+            service, hostId, playerId,
+            matchId, "relinquish-forbidden-room", 2);
+
+        var result = await service.RelinquishAsync(
+            playerId, matchId, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(
+            "MATCH_AUTHORITY_FORBIDDEN",
+            result.ErrorCode);
+
+        var authority =
+            await db.MatchAuthorityBindings
+                .SingleAsync(item => item.MatchId == matchId);
+
+        Assert.Equal(hostId, authority.HostUserId);
+        Assert.True(
+            authority.LeaseExpiresAtUtc
+            > Now.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task ExpiredHost_CannotRelinquishAuthority()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+
+        var created = await service.CreateAsync(
+            hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "relinquish-expired-room",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        Assert.True(created.IsSuccess);
+        var matchId = created.Data!.MatchId;
+
+        await BindAsync(
+            service, hostId, hostId,
+            matchId, "relinquish-expired-room", 1);
+
+        var authority =
+            await db.MatchAuthorityBindings
+                .SingleAsync(item => item.MatchId == matchId);
+
+        authority.LeaseExpiresAtUtc =
+            Now.UtcDateTime.AddSeconds(-1);
+
+        await db.SaveChangesAsync();
+
+        var result = await service.RelinquishAsync(
+            hostId, matchId, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(
+            "MATCH_LEASE_EXPIRED",
+            result.ErrorCode);
+    }
+
     private static async Task BindAsync(
         MatchAuthorityService service,
         Guid hostId,

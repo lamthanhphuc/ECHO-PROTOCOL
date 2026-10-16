@@ -149,6 +149,12 @@ namespace EchoProtocol.Networking
         [Networked]
         public NetworkString<_64> BackendUserId { get; private set; }
 
+        [Networked, OnChangedRender(nameof(HandleFusionActorNumberChanged))]
+        public int FusionActorNumber { get; private set; }
+
+        [Networked]
+        public int RuntimePlayerIdValue { get; private set; }
+
         [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
         public NetworkId CarriedCoreId { get; private set; }
 
@@ -163,8 +169,49 @@ namespace EchoProtocol.Networking
 
         public bool HasVerifiedBackendIdentity => BackendUserId.Length > 0;
 
+        private void HandleFusionActorNumberChanged()
+        {
+            AnyStateChanged?.Invoke();
+
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasInputAuthority
+                || FusionActorNumber < 1)
+            {
+                return;
+            }
+
+            MatchAuthorityRuntime
+                .EnsureExists(NetworkBootstrap.Instance)
+                .TrySubmitLocalIdentity(
+                    this,
+                    NetworkBootstrap.Instance?.ReconnectIdentityPending == true);
+        }
+
+
         public int TeamCount => _teamCount;
         public IReadOnlyList<LobbyToolDefinition> ToolDefinitions => _toolDefinitions;
+
+        public bool TrySetRuntimePlayerIdAuthoritative(
+            int playerIdValue)
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || playerIdValue <= 0)
+            {
+                return false;
+            }
+
+            if (RuntimePlayerIdValue > 0
+                && RuntimePlayerIdValue != playerIdValue)
+            {
+                return false;
+            }
+
+            RuntimePlayerIdValue = playerIdValue;
+            return true;
+        }
 
         public void InitializeAuthoritativeSelection(int teamId, int toolId, bool isGameplayPlayer)
         {
@@ -303,6 +350,9 @@ namespace EchoProtocol.Networking
             ApplyLobbyLook(angles);
         }
 
+        private const float IdentityRetryIntervalSeconds = 1f;
+        private float _nextIdentityRetryAt;
+
         public override void Spawned()
         {
             _pet = GetComponent<PetCompanionController>();
@@ -326,11 +376,30 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            MatchAuthorityRuntime
-                .EnsureExists(NetworkBootstrap.Instance)
-                .RefreshJoinedSessionBindingIfChanged(
-                    Runner,
-                    this);
+            var authority =
+                MatchAuthorityRuntime
+                    .EnsureExists(NetworkBootstrap.Instance);
+
+            authority.RefreshJoinedSessionBindingIfChanged(
+                Runner,
+                this);
+
+            // Spawn, actor discovery and backend session attachment can
+            // complete in different frames. Keep retrying the local identity
+            // at a bounded rate until BackendUserId has been verified.
+            if (!HasVerifiedBackendIdentity
+                && (Runner.IsServer || FusionActorNumber > 0)
+                && Time.unscaledTime >= _nextIdentityRetryAt)
+            {
+                _nextIdentityRetryAt =
+                    Time.unscaledTime
+                    + IdentityRetryIntervalSeconds;
+
+                authority.TrySubmitLocalIdentity(
+                    this,
+                    NetworkBootstrap.Instance
+                        ?.ReconnectIdentityPending == true);
+            }
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -651,6 +720,60 @@ namespace EchoProtocol.Networking
         }
         public override void FixedUpdateNetwork()
         {
+            // PlayerRef may remain stable after reconnect while the
+            // Photon transport ActorNumber changes. State Authority
+            // resolves the real current actor and replicates it.
+            if (Object != null
+                && Object.IsValid
+                && Object.HasStateAuthority
+                && Runner != null
+                && Runner.IsRunning
+                && Object.InputAuthority.IsRealPlayer)
+            {
+                var authoritativeActor =
+                    Runner.GetPlayerActorId(
+                        Object.InputAuthority);
+
+                var resolvedActor = 0;
+
+                if (authoritativeActor.HasValue
+                    && authoritativeActor.Value > 0)
+                {
+                    resolvedActor =
+                        authoritativeActor.Value;
+                }
+                else if (Runner.IsServer
+                    && Object.InputAuthority
+                        == Runner.LocalPlayer
+                    && Object.InputAuthority.IsRealPlayer
+                    && Object.InputAuthority.PlayerId > 0)
+                {
+                    // Host-local fallback only.
+                    resolvedActor =
+                        Object.InputAuthority.PlayerId;
+                }
+
+                if (resolvedActor > 0
+                    && FusionActorNumber
+                        != resolvedActor)
+                {
+                    FusionActorNumber =
+                        resolvedActor;
+
+                    if (Object.HasInputAuthority)
+                    {
+                        MatchAuthorityRuntime
+                            .EnsureExists(
+                                NetworkBootstrap.Instance)
+                            .TrySubmitLocalIdentity(
+                                this,
+                                NetworkBootstrap.Instance
+                                    ?.ReconnectIdentityPending
+                                    == true);
+                    }
+                }
+            }
+
             if (Object.HasStateAuthority && _pet != null) _pet.TickAuthority(Runner.DeltaTime);
         }
 

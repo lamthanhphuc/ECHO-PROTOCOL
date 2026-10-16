@@ -193,6 +193,33 @@ namespace EchoProtocol.Networking
 
         private void HandleNetworkSceneLoadDone(NetworkRunner runner)
         {
+            if (NetworkBootstrap.IsHostMigrationResumeActive)
+            {
+                TryAttachLifecycle(runner);
+
+                _spawnSlots.Clear();
+                foreach (var player in runner.ActivePlayers)
+                {
+                    GetOrAssignSlot(player);
+                }
+
+                if (runner.IsServer
+                    && SceneManager.GetActiveScene().name ==
+                        LobbyManager.GameSceneName)
+                {
+                    bool adopted =
+                        AdoptMigratedAuthoritativeWorldState(runner);
+
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.PlayerSpawner,
+                        $"PSP|MIGRATION_SCENE_ADOPT|success={adopted}");
+                }
+
+                // Existing player objects already contain the snapshot.
+                // Do not reset Lobby state, HP, tools or position, and do
+                // not run normal world-spawn fallback during migration.
+                return;
+            }
             if (SceneManager.GetActiveScene().name != LobbyManager.GameSceneName)
             {
                 ClearAuthoritativeWorldStateReferences();
@@ -239,6 +266,289 @@ namespace EchoProtocol.Networking
             }
 
             EnsureWorldStateExamples(runner);
+        }
+
+        public bool AdoptMigratedAuthoritativeWorldState(
+            NetworkRunner runner)
+        {
+            if (runner == null
+                || !runner.IsRunning
+                || !runner.IsServer
+                || SceneManager.GetActiveScene().name
+                    != LobbyManager.GameSceneName)
+            {
+                return false;
+            }
+
+            ClearAuthoritativeWorldStateReferences();
+
+            NetworkMatchState migratedMatch = null;
+
+            var matchStates =
+                FindObjectsByType<NetworkMatchState>(
+                    FindObjectsInactive.Include);
+
+            for (int i = 0; i < matchStates.Length; i++)
+            {
+                var candidate = matchStates[i];
+
+                if (candidate == null
+                    || candidate.Object == null
+                    || !candidate.Object.IsValid
+                    || !candidate.Object.HasStateAuthority)
+                {
+                    continue;
+                }
+
+                if (migratedMatch != null
+                    && migratedMatch != candidate)
+                {
+                    Debug.LogError("[PlayerSpawner] Host Migration restored more than one authoritative NetworkMatchState.");
+                    return false;
+                }
+
+                migratedMatch = candidate;
+            }
+
+            if (migratedMatch == null)
+            {
+                Debug.LogError("[PlayerSpawner] Host Migration restored no authoritative NetworkMatchState.");
+                return false;
+            }
+
+            _matchStateInstance =
+                migratedMatch.Object;
+
+
+            // Restore SectorBox references from the replicated objective
+            // source first, then retain every other valid box.
+            var sectorBoxes =
+                FindObjectsByType<NetworkSectorBox>(
+                    FindObjectsInactive.Include);
+
+            System.Array.Sort(
+                sectorBoxes,
+                (left, right) =>
+                    string.CompareOrdinal(
+                        left != null ? left.name : string.Empty,
+                        right != null ? right.name : string.Empty));
+
+            for (int i = 0; i < sectorBoxes.Length; i++)
+            {
+                var box = sectorBoxes[i];
+
+                if (box == null
+                    || box.Object == null
+                    || !box.Object.IsValid
+                    || !box.Object.HasStateAuthority)
+                {
+                    continue;
+                }
+
+                _sectorBoxInstances.Add(box.Object);
+            }
+
+            if (migratedMatch.ObjectiveSourceId.IsValid
+                && runner.TryFindObject(
+                    migratedMatch.ObjectiveSourceId,
+                    out var objectiveObject)
+                && objectiveObject != null
+                && objectiveObject.IsValid
+                && objectiveObject.TryGetComponent<NetworkSectorBox>(
+                    out _))
+            {
+                _sectorBoxInstance =
+                    objectiveObject;
+            }
+            else if (_sectorBoxInstances.Count > 0)
+            {
+                _sectorBoxInstance =
+                    _sectorBoxInstances[0];
+            }
+
+
+            // EscapeDoorId is already replicated by NetworkMatchState.
+            if (migratedMatch.EscapeDoorId.IsValid
+                && runner.TryFindObject(
+                    migratedMatch.EscapeDoorId,
+                    out var escapeDoorObject)
+                && escapeDoorObject != null
+                && escapeDoorObject.IsValid
+                && escapeDoorObject.TryGetComponent<NetworkDoor>(
+                    out _))
+            {
+                _doorInstance =
+                    escapeDoorObject;
+            }
+
+
+            var puzzles =
+                FindObjectsByType<NetworkPowerPuzzle>(
+                    FindObjectsInactive.Include);
+
+            for (int i = 0; i < puzzles.Length; i++)
+            {
+                var puzzle = puzzles[i];
+
+                if (puzzle != null
+                    && puzzle.Object != null
+                    && puzzle.Object.IsValid
+                    && puzzle.Object.HasStateAuthority)
+                {
+                    _powerPuzzleInstance =
+                        puzzle.Object;
+                    break;
+                }
+            }
+
+
+            var stations =
+                FindObjectsByType<NetworkPowerPuzzleStation>(
+                    FindObjectsInactive.Include);
+
+            System.Array.Sort(
+                stations,
+                (left, right) =>
+                    (left != null ? left.InputId : int.MaxValue)
+                        .CompareTo(
+                            right != null
+                                ? right.InputId
+                                : int.MaxValue));
+
+            for (int i = 0; i < stations.Length; i++)
+            {
+                var station = stations[i];
+
+                if (station != null
+                    && station.Object != null
+                    && station.Object.IsValid
+                    && station.Object.HasStateAuthority)
+                {
+                    _powerPuzzleStationInstances.Add(
+                        station.Object);
+                }
+            }
+
+
+            // NetworkPickupItem is the authoritative Energy Core runtime
+            // object in this flow. Preserve carried/placed cores as-is.
+            var cores =
+                FindObjectsByType<NetworkPickupItem>(
+                    FindObjectsInactive.Include);
+
+            System.Array.Sort(
+                cores,
+                (left, right) =>
+                    string.CompareOrdinal(
+                        left != null ? left.name : string.Empty,
+                        right != null ? right.name : string.Empty));
+
+            for (int i = 0; i < cores.Length; i++)
+            {
+                var core = cores[i];
+
+                if (core != null
+                    && core.Object != null
+                    && core.Object.IsValid
+                    && core.Object.HasStateAuthority)
+                {
+                    _energyCoreInstances.Add(
+                        core.Object);
+                }
+            }
+
+
+            var minions =
+                FindObjectsByType<CreepMinionRuntime>(
+                    FindObjectsInactive.Include);
+
+            for (int i = 0; i < minions.Length; i++)
+            {
+                var minion = minions[i];
+
+                if (minion != null
+                    && minion.Object != null
+                    && minion.Object.IsValid
+                    && minion.Object.HasStateAuthority)
+                {
+                    _creepMinionInstances.Add(
+                        minion.Object);
+                }
+            }
+
+
+            // Zone transitions despawn the previous Stalker. Therefore
+            // the surviving Stalker can be reattached from match phase
+            // without inventing a new runtime identity.
+            NetworkObject migratedStalker = null;
+
+            var stalkers =
+                FindObjectsByType<StalkerController>(
+                    FindObjectsInactive.Include);
+
+            for (int i = 0; i < stalkers.Length; i++)
+            {
+                var stalker = stalkers[i];
+                var stalkerObject =
+                    stalker != null
+                        ? stalker.GetComponentInParent<NetworkObject>()
+                        : null;
+
+                if (!IsValidNetworkObject(stalkerObject)
+                    || !stalkerObject.HasStateAuthority)
+                {
+                    continue;
+                }
+
+                if (migratedStalker == null)
+                {
+                    migratedStalker =
+                        stalkerObject;
+                }
+            }
+
+            if (migratedStalker != null)
+            {
+                switch (migratedMatch.CurrentPhase)
+                {
+                    case NetworkMatchPhase.CoreObjective:
+                        _monsterInstance =
+                            migratedStalker;
+                        break;
+
+                    case NetworkMatchPhase.Zone2Objective:
+                    case NetworkMatchPhase.Puzzle:
+                    case NetworkMatchPhase.SecurityHold:
+                        _zone2MonsterInstance =
+                            migratedStalker;
+                        _zone2MonsterSpawned = true;
+                        break;
+
+                    default:
+                        _zone3MonsterInstance =
+                            migratedStalker;
+                        _zone3MonsterSpawned = true;
+                        break;
+                }
+            }
+
+            _zone2MinionsActive =
+                migratedMatch.CurrentPhase ==
+                    NetworkMatchPhase.Zone2Objective
+                || migratedMatch.CurrentPhase ==
+                    NetworkMatchPhase.Puzzle
+                || migratedMatch.CurrentPhase ==
+                    NetworkMatchPhase.SecurityHold;
+
+            _zone3SpawnFailureLogged = false;
+            _nextMinionSpawnCheckAt =
+                Time.time + _minionSpawnCheckInterval;
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"PSP|MIGRATION_WORLD_ADOPT|match={_matchStateInstance.Id}|phase={migratedMatch.CurrentPhase}|cores={_energyCoreInstances.Count}|sectorBoxes={_sectorBoxInstances.Count}|stations={_powerPuzzleStationInstances.Count}|minions={_creepMinionInstances.Count}|stalker={(migratedStalker != null ? migratedStalker.Id.ToString() : "none")}");
+
+            return true;
         }
 
         private void EnsureWorldStateExamples(NetworkRunner runner)

@@ -71,6 +71,13 @@ namespace EchoProtocol.Networking
 
         public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
         {
+            if (NetworkBootstrap.IsHostMigrationResumeActive)
+            {
+                RuntimeLog.Log(
+                    RuntimeLogCategory.PlayerLifecycle,
+                    $"FPL|JOIN_MIGRATION_DEFER|player={player}");
+                return;
+            }
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerLifecycle,
                 $"FPL|JOIN_CALLBACK|player={player}|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
@@ -176,6 +183,15 @@ namespace EchoProtocol.Networking
                     throw new InvalidOperationException($"PlayerRuntimeIdentity rejected binding to {playerId}.");
                 }
 
+                if (!spawnedObject.TryGetComponent<LobbyPlayerState>(
+                        out var lobbyState)
+                    || !lobbyState.TrySetRuntimePlayerIdAuthoritative(
+                        playerId.Value))
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to persist logical PlayerId {playerId}.");
+                }
+
                 if (!_entityRegistry.TryRegister(identity))
                 {
                     throw new InvalidOperationException($"PlayerRuntimeEntityRegistry rejected {playerId}.");
@@ -211,6 +227,13 @@ namespace EchoProtocol.Networking
 
         public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
         {
+            if (NetworkBootstrap.IsHostMigrationResumeActive)
+            {
+                RuntimeLog.Log(
+                    RuntimeLogCategory.PlayerLifecycle,
+                    $"FPL|LEFT_MIGRATION_DEFER|player={player}");
+                return;
+            }
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerLifecycle,
                 $"FPL|LEFT_CALLBACK|player={player}|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
@@ -285,6 +308,109 @@ namespace EchoProtocol.Networking
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerLifecycle,
                 $"FPL|LEFT_COMMIT|player={player}|playerId={(oldPlayerId.IsValid ? oldPlayerId.Value.ToString() : "none")}|hadPlayerObject={playerObject != null}");
+        }
+
+        public bool RebuildAfterHostMigration(
+            NetworkRunner runner)
+        {
+            if (!CanMutateLifecycle(runner))
+            {
+                Debug.LogError("[FusionPlayerLifecycle] Host Migration rebuild requires the authoritative Runner.");
+                return false;
+            }
+
+            if (_identityRegistry.Count != 0
+                || _entityRegistry.Count != 0
+                || _playerObjects.Count != 0)
+            {
+                Debug.LogError("[FusionPlayerLifecycle] Host Migration rebuild expected clean local registries.");
+                return false;
+            }
+
+            _connectionTokens.Clear();
+            _expiring.Clear();
+
+            foreach (var timer in _graceTimers.Values)
+            {
+                if (timer != null)
+                {
+                    StopCoroutine(timer);
+                }
+            }
+
+            _graceTimers.Clear();
+
+            var rebuilt = 0;
+
+            foreach (var player in runner.ActivePlayers)
+            {
+                if (!runner.TryGetPlayerObject(
+                        player,
+                        out var playerObject)
+                    || playerObject == null
+                    || !playerObject.IsValid)
+                {
+                    Debug.LogError($"[FusionPlayerLifecycle] Migrated PlayerObject missing for {player}.");
+                    return false;
+                }
+
+                if (!playerObject.TryGetComponent<LobbyPlayerState>(
+                        out var lobbyState)
+                    || lobbyState.RuntimePlayerIdValue <= 0)
+                {
+                    Debug.LogError($"[FusionPlayerLifecycle] Migrated logical PlayerId missing for {player}.");
+                    return false;
+                }
+
+                var playerId =
+                    new PlayerId(
+                        lobbyState.RuntimePlayerIdValue);
+
+                var identity =
+                    playerObject.GetComponent<PlayerRuntimeIdentity>();
+
+                if (identity == null
+                    || !identity.TryBind(playerId))
+                {
+                    Debug.LogError($"[FusionPlayerLifecycle] Could not restore PlayerRuntimeIdentity for {player} -> {playerId}.");
+                    return false;
+                }
+
+                if (!_identityRegistry.TryRestore(
+                        player,
+                        playerId))
+                {
+                    Debug.LogError($"[FusionPlayerLifecycle] Could not restore identity registry for {player} -> {playerId}.");
+                    return false;
+                }
+
+                if (!_entityRegistry.TryRegister(identity))
+                {
+                    Debug.LogError($"[FusionPlayerLifecycle] Could not restore entity registry for {playerId}.");
+                    return false;
+                }
+
+                _playerObjects[player] =
+                    playerObject;
+
+                _connectionTokens[player] =
+                    runner.GetPlayerConnectionToken(player);
+
+                rebuilt++;
+
+                RuntimeLog.Log(
+                    RuntimeLogCategory.PlayerLifecycle,
+                    $"FPL|MIGRATION_REBUILD|player={player}|playerId={playerId.Value}|object={playerObject.Id}");
+            }
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|MIGRATION_REBUILD_COMPLETE|players={rebuilt}");
+
+            // Do not raise PlayerObjectCommitted here. These are existing
+            // snapshot-restored objects; normal commit observers may reset
+            // Lobby/gameplay presentation or teleport them as if newly spawned.
+            return rebuilt > 0;
         }
 
         public bool CanReconnect(byte[] token)
