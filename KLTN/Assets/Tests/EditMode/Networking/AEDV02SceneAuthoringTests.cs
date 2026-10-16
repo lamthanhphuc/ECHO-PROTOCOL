@@ -11,6 +11,28 @@ namespace EchoProtocol.Networking.Tests
     public sealed class AEDV02SceneAuthoringTests
     {
         [Test]
+        public void AEDV02_SafeRoomRegistryFailsClosedAndRejectsCrossingRoute()
+        {
+            var manifest = new AEDV02SceneManifest
+            {
+                SceneVersion = "safe-room-contract",
+                Markers = new[]
+                {
+                    new AEDV02SceneMarker { Id = AEDV02Plan.Hash("safe-room"), Kind = "SAFE_ROOM", Zone = 1,
+                        InteractionBounds = new[] { -2d, -1d, -2d, 2d, 3d, 2d } }
+                }
+            };
+
+            Assert.That(manifest.TryIsInsideSafeRoom(0, 0, 0, out var inside), Is.True);
+            Assert.That(inside, Is.True);
+            Assert.That(manifest.TryPathIntersectsSafeRoom(new[] { new[] { -4d, 0d, 0d }, new[] { 4d, 0d, 0d } }, out var crossing), Is.True);
+            Assert.That(crossing, Is.True);
+
+            manifest.Markers[0].InteractionBounds = null;
+            Assert.That(manifest.TryIsInsideSafeRoom(0, 0, 0, out _), Is.False);
+        }
+
+        [Test]
         public void AEDV02_SceneEntriesAndZoneGatesMatchExportAndProductionReferences()
         {
             const string path = "Assets/Scenes/SciFi.unity";

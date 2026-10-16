@@ -71,8 +71,10 @@ namespace EchoProtocol.TeamTools
                 if (point.gameObject.scene.path != manifest.ScenePath || (int)point.Zone != action.Zone || !point.Allows(action.ToolId)) continue;
                 var marker = manifest.Markers.SingleOrDefault(x => x.Id == AEDV02SceneSource.MarkerId(point.transform));
                 if (marker == null || action.MarkerId.Length != 0 && action.MarkerId != marker.Id ||
+                    !manifest.TryIsInsideSafeRoom(marker.X, marker.Y, marker.Z, out var inside) || inside ||
                     !AEDV02ResourcePlacement.AllowsRole(action.Kind == "EMERGENCY" ? 3 : 2, marker.ResourceRole) ||
                     !point.TryGetReachablePosition(entryPosition, out var position, out var meters) || HasNearbyWorldTeamTool(position, spacing) ||
+                    !manifest.TryIsInsideSafeRoom(position.x, position.y, position.z, out inside) || inside ||
                     IsV02Occupied(position, actors) || !TryV02EntryPath(entryPosition, position, out var path) || !manifest.TryValidatePlacementPath(path, world.Doors, out _)) continue;
                 if (!world.Players.Where(x => x.LifeState == "ALIVE" && !x.IsCaught).Any(helper =>
                     TryV02EntryPath(new Vector3((float)helper.X, (float)helper.Y, (float)helper.Z), position, out var approach) &&

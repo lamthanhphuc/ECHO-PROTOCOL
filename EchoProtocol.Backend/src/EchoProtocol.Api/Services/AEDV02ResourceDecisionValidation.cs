@@ -27,12 +27,21 @@ public sealed partial class AEDV02DecisionService
         if (marker == null) return "HOLD_SUPPORT_MARKER_INVALID";
         var world = await ReadSourceWorld(match, source, ct);
         if (world == null || world.Tools.Any(x => x.MarkerId == marker.Id)) return "HOLD_SUPPORT_MARKER_OCCUPIED";
+        if (!manifest.TryIsInsideSafeRoom(marker.X, marker.Y, marker.Z, out var markerInside) || markerInside)
+            return "HOLD_SUPPORT_SAFE_ROOM_REGISTRY_INVALID";
         if (!AEDV02ResourcePlacement.ClearOfSupply(marker, world, manifest.MinimumToolSpacing)) return "HOLD_SUPPORT_PLACEMENT_SOURCE_REQUIRED";
         var victim = world.Players.Single(x => x.UserId == support.UserId);
         var target = new[] { marker.X, marker.Y, marker.Z };
+        var entry = manifest.Markers.SingleOrDefault(x => x.Id == "Z" + support.Zone + "_ENTRY");
+        if (entry == null || !manifest.TryPathIntersectsSafeRoom(new[] {
+                new[] { entry.X, entry.Y, entry.Z }, target }, out var entryPathIntersects) || entryPathIntersects)
+            return "HOLD_SUPPORT_SAFE_ROOM_ROUTE";
         if (!world.Players.Where(x => x.LifeState == "ALIVE" && !x.IsCaught).Any(helper =>
             manifest.HasReachableGeometry(new[] { helper.X, helper.Y, helper.Z }, target, world.Doors) &&
-            manifest.HasReachableGeometry(target, new[] { victim.X, victim.Y, victim.Z }, world.Doors))) return "HOLD_SUPPORT_ROUTE_INVALID";
+            !manifest.TryPathIntersectsSafeRoom(new[] { new[] { helper.X, helper.Y, helper.Z }, target }, out var approachIntersects) && !approachIntersects &&
+            manifest.HasReachableGeometry(target, new[] { victim.X, victim.Y, victim.Z }, world.Doors) &&
+            !manifest.TryPathIntersectsSafeRoom(new[] { target, new[] { victim.X, victim.Y, victim.Z } }, out var deliveryIntersects) && !deliveryIntersects))
+            return "HOLD_SUPPORT_ROUTE_INVALID";
         return string.Empty;
     }
 

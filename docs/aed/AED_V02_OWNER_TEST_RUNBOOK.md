@@ -2,7 +2,7 @@
 
 ## 1. Status and environment
 
-This candidate is **IMPLEMENTATION INCOMPLETE — UNTESTED**. Resolve the mandatory blockers in Remaining Contract Decisions before treating the twelve recipes as an acceptance-ready implementation. Commands below are instructions for the owner's later verification, not a record of executed tests. The current task did not run Backend compilation/tests, Unity tests, a Player build, native multiplayer or migrations. Asset authoring/export used the already open stopped Editor; no gameplay was started.
+This candidate is **IMPLEMENTATION INCOMPLETE — UNTESTED**. Resolve the mandatory blockers in Remaining Contract Decisions before treating the twelve recipes as an acceptance-ready implementation. Commands below are instructions for the owner's later verification, not a record of executed tests. The current task did not run Backend compilation/tests, Unity tests, a Player build, native multiplayer, migrations, or Unity Editor operations. The requested shell-only continuation skipped scene authoring/export; the newly required Safe Room registry is not present in the shipped manifests, so Adaptive V02 Safe Room guards will hold until the owner authors and exports valid volumes.
 
 Requirements: Windows, licensed Unity **6000.5.8f1** with Windows build support, .NET 8 SDK, local Docker Desktop, PowerShell, Git and RTK. Existing Fusion/Voice App IDs must be configured privately. Use the same commit for Backend, Host and every Client. Do not publish credentials or change production flags.
 
@@ -16,7 +16,7 @@ rtk proxy git rev-parse HEAD
 rtk proxy powershell -NoProfile -File scripts/Sync-AEDV02Contract.ps1 -Check
 ```
 
-Current source identities: `AED_V02_WORLD_SOURCE_REV02_6`, `AED_V02_SOURCE_VERIFICATION_REV02_V5`, opportunity `AED_V02_PILOT_OPPORTUNITIES_1`, policy `AED_STALKER_POLICY_V0_2_REV02_PILOT_DEFAULTS_2`. The two manifest copies must be byte identical. Re-exporting content can change its fingerprint; resynchronize and rebuild both peers after any export. Do not mix an older build with a newer manifest.
+Current source identities: `AED_V02_WORLD_SOURCE_REV02_7`, `AED_V02_SOURCE_VERIFICATION_REV02_V6`, opportunity `AED_V02_PILOT_OPPORTUNITIES_2`, policy `AED_STALKER_POLICY_V0_2_REV02_PILOT_DEFAULTS_2`. The two manifest copies must be byte identical. Re-exporting content can change its fingerprint; resynchronize and rebuild both peers after any export. Do not mix an older build with a newer manifest. The current scene/manifests have not been exported with Safe Room volumes; do not invent bounds or hand-edit either JSON file.
 
 ## 3. Start an isolated local Backend and run Backend build/tests
 

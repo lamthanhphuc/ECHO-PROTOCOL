@@ -24,7 +24,10 @@ namespace EchoProtocol.AI.Common.AED
                 {
                     var marker = manifest.Markers.SingleOrDefault(x => x.Id == replacement.MarkerId && x.Zone == zone.Key &&
                         x.Kind == "TOOL" && x.AllowedToolIds.Contains(replacement.ToolId) && AllowsRole(grade, x.ResourceRole));
-                    if (marker == null || !manifest.HasReachableGeometry(new[] { entry.X, entry.Y, entry.Z },
+                    if (marker == null || !manifest.TryIsInsideSafeRoom(marker.X, marker.Y, marker.Z, out var inside) || inside ||
+                        !manifest.TryPathIntersectsSafeRoom(new[] { new[] { entry.X, entry.Y, entry.Z },
+                            new[] { marker.X, marker.Y, marker.Z } }, out var routeIntersects) || routeIntersects) return false;
+                    if (!manifest.HasReachableGeometry(new[] { entry.X, entry.Y, entry.Z },
                         new[] { marker.X, marker.Y, marker.Z }, world.Doors) || !ClearOfSupply(marker, world, manifest.MinimumToolSpacing) ||
                         placements.Any(other => Distance(marker, other.X, other.Y, other.Z) < manifest.MinimumToolSpacing)) return false;
                     placements.Add(marker);
@@ -116,7 +119,8 @@ namespace EchoProtocol.AI.Common.AED
         {
             meters = 0;
             if (path == null || path.Length is < 1 or > 256 || doors == null || NavCells.Length == 0 ||
-                path.Any(p => p == null || p.Length != 3 || p.Any(x => !AEDV02PilotPolicy.Finite(x) || Math.Abs(x) > 10000))) return false;
+                path.Any(p => p == null || p.Length != 3 || p.Any(x => !AEDV02PilotPolicy.Finite(x) || Math.Abs(x) > 10000)) ||
+                !TryPathIntersectsSafeRoom(path, out var intersectsSafeRoom) || intersectsSafeRoom) return false;
             var open = doors.Where(x => x.State is "OPEN" or "BROKEN" or "CLOSED_UNLOCKED").Select(x => x.DoorId).ToHashSet();
             if (DoorIds.Any(id => !doors.Any(x => x.DoorId == id))) return false;
             var cells = NavCells.Where(x => x.DoorIds.All(open.Contains)).ToArray();

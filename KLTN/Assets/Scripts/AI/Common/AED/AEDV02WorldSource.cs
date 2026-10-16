@@ -144,7 +144,7 @@ namespace EchoProtocol.AI.Common.AED
     }
     public sealed class AEDV02WorldSample
     {
-        public const string SourceVersion = "AED_V02_WORLD_SOURCE_REV02_6";
+        public const string SourceVersion = "AED_V02_WORLD_SOURCE_REV02_7";
         public string Version { get; set; } = SourceVersion;
         public string OpportunityContractVersion { get; set; } = string.Empty;
         public string ResolutionMode { get; set; } = string.Empty;
@@ -327,10 +327,13 @@ namespace EchoProtocol.AI.Common.AED
             var cellById = NavCells.ToDictionary(x => x.Id);
             return markers.Count == Markers.Length && cells.Count == NavCells.Length &&
             Markers.All(x => x.ResourceRole is "Unclassified" or "MainRoute" or "SideRoom" or "FirstRoom" or "ObjectiveRoute" &&
-                x.Zone >= 1 && x.Zone <= 3 && x.Kind is "ENTRY" or "TOOL" or "OBJECTIVE" or "CABINET" or "AMBUSH_ENTRY" or "ROUTE" &&
+                x.Zone >= 1 && x.Zone <= 3 && x.Kind is "ENTRY" or "TOOL" or "OBJECTIVE" or "CABINET" or "AMBUSH_ENTRY" or "ROUTE" or "SAFE_ROOM" &&
                 (x.Kind != "CABINET" || ulong.TryParse(x.HideSpotId, out var spot) && spot != 0 && x.InteractionBounds != null &&
                     x.InteractionBounds.Length == 6 && x.InteractionBounds.All(AEDV02PilotPolicy.Finite) &&
                     Enumerable.Range(0, 3).All(i => x.InteractionBounds[i] <= x.InteractionBounds[i + 3])) &&
+                (x.Kind != "SAFE_ROOM" || AEDV02WorldSample.Hash(x.Id) && x.InteractionBounds != null &&
+                    x.InteractionBounds.Length == 6 && x.InteractionBounds.All(AEDV02PilotPolicy.Finite) &&
+                    Enumerable.Range(0, 3).All(i => x.InteractionBounds[i] < x.InteractionBounds[i + 3])) &&
                 x.AllowedToolIds != null && x.AllowedToolIds.All(t => t is 1 or 2 or 3 or 4 or 6) &&
                 AEDV02PilotPolicy.Finite(x.X) && AEDV02PilotPolicy.Finite(x.Y) && AEDV02PilotPolicy.Finite(x.Z)) &&
             Edges.All(x => x != null && !string.IsNullOrWhiteSpace(x.Id) &&
@@ -338,6 +341,67 @@ namespace EchoProtocol.AI.Common.AED
                 AEDV02PilotPolicy.Finite(x.PathMeters) && x.PathMeters > 0) && Edges.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() == Edges.Length &&
             NavLinks.All(x => x != null && x.From != x.To && cells.Contains(x.From) && cells.Contains(x.To) &&
                 cellById[x.From].SharesPortal(cellById[x.To]) && x.DoorIds != null && x.DoorIds.All(d => !string.IsNullOrWhiteSpace(d) && d.Length <= 128));
+        }
+
+        public bool TryIsInsideSafeRoom(double x, double y, double z, out bool inside)
+        {
+            inside = false;
+            var rooms = Markers?.Where(m => m != null && m.Kind == "SAFE_ROOM").ToArray();
+            if (!AEDV02PilotPolicy.Finite(x) || !AEDV02PilotPolicy.Finite(y) || !AEDV02PilotPolicy.Finite(z) ||
+                !HasValidSafeRoomRegistry(rooms)) return false;
+            inside = rooms!.Any(m =>
+            {
+                var b = m.InteractionBounds;
+                return x >= b[0] && x <= b[3] &&
+                       y >= b[1] && y <= b[4] &&
+                       z >= b[2] && z <= b[5];
+            });
+            return true;
+        }
+
+        public bool TryPathIntersectsSafeRoom(double[][] path, out bool intersects)
+        {
+            intersects = false;
+            var rooms = Markers?.Where(m => m != null && m.Kind == "SAFE_ROOM").ToArray();
+            if (path == null || path.Length is < 1 or > 256 ||
+                path.Any(p => p == null || p.Length != 3 || p.Any(v => !AEDV02PilotPolicy.Finite(v))) ||
+                !HasValidSafeRoomRegistry(rooms)) return false;
+            if (path.Length == 1)
+                return TryIsInsideSafeRoom(path[0][0], path[0][1], path[0][2], out intersects);
+            for (int i = 1; i < path.Length; i++)
+                foreach (var room in rooms!)
+                    if (SegmentIntersectsSafeRoom(path[i - 1], path[i], room.InteractionBounds))
+                    {
+                        intersects = true;
+                        return true;
+                    }
+            return true;
+        }
+
+        private static bool HasValidSafeRoomRegistry(AEDV02SceneMarker[]? rooms) =>
+            rooms is { Length: > 0 } && rooms.All(m => AEDV02WorldSample.Hash(m.Id) && m.Zone is >= 1 and <= 3 &&
+                m.InteractionBounds is { Length: 6 } && m.InteractionBounds.All(AEDV02PilotPolicy.Finite) &&
+                Enumerable.Range(0, 3).All(i => m.InteractionBounds[i] < m.InteractionBounds[i + 3]));
+
+        private static bool SegmentIntersectsSafeRoom(double[] from, double[] to, double[] bounds)
+        {
+            double start = 0, end = 1;
+            for (int axis = 0; axis < 3; axis++)
+            {
+                double delta = to[axis] - from[axis];
+                if (Math.Abs(delta) < .0000001)
+                {
+                    if (from[axis] < bounds[axis] || from[axis] > bounds[axis + 3]) return false;
+                    continue;
+                }
+                double first = (bounds[axis] - from[axis]) / delta;
+                double second = (bounds[axis + 3] - from[axis]) / delta;
+                if (first > second) (first, second) = (second, first);
+                start = Math.Max(start, first);
+                end = Math.Min(end, second);
+                if (start > end) return false;
+            }
+            return true;
         }
 
         public bool HasReachableGeometry(double[] from, double[] to, AEDV02DoorSource[] doors)

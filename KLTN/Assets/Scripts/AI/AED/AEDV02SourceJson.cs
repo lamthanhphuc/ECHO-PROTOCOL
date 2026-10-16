@@ -78,6 +78,15 @@ namespace EchoProtocol.AI.AED
             .AddIntegerArray("SpawnedZones", source.SpawnedZones)
             .AddArray("Reservations", source.Reservations.Select(x => new TelemetryJsonObject().AddInteger("Zone", x.Zone)
                 .AddInteger("ToolId", x.ToolId).AddString("MarkerId", x.MarkerId).AddNumberMatrix("EntryPath", x.EntryPath)));
+        public static string ResourceManagementAction(AEDV02ResourceManagementAction action)
+        {
+            if (action == null || !action.IsValid()) throw new ArgumentException("AED_V02_RESOURCE_ACTION_INVALID");
+            return new TelemetryJsonObject().AddString("Version", action.Version)
+                .AddString("CauseEventId", action.CauseEventId.ToString("D"))
+                .AddString("ActorUserId", action.ActorUserId.ToString("D")).AddString("Action", action.Action)
+                .AddString("ToolInstanceId", action.ToolInstanceId).AddString("LifecycleOccurrenceKey", action.LifecycleOccurrenceKey)
+                .AddInteger("ToolId", action.ToolId).AddInteger("Tick", action.Tick).ToJson();
+        }
         public static string Commit(AEDV02PlanCommitSource commit)
         {
             if (commit == null || !commit.IsValid()) throw new ArgumentException("AED_V02_COMMIT_INVALID");

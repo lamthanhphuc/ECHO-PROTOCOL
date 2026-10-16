@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Common.AED;
@@ -594,6 +595,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             _v02PerceptionMatch = Guid.Empty; _v02PerceptionTiers.Clear(); _v02ScoringTiers.Clear();
             _v02NextPerceptionRefresh = 0; _v02EncounterPlayer = PlayerId.Invalid; _v02EncounterTier = -1;
             _v02LongChaseRecovery.Reset();
+            controller?.SetNavigationPathSafetyValidator(null);
             controller?.ResetV02PlayerFairness();
         }
         private readonly AEDV02LongChaseRecovery _v02LongChaseRecovery = new AEDV02LongChaseRecovery();
@@ -605,6 +607,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings?.PacingV02GameplayEnabled != true ||
                 !AEDv2Authority.TryGetV02(authority.MatchId, out _, out _)) { ResetV02Perception(); return; }
             if (_v02PerceptionMatch != authority.MatchId) { ResetV02Perception(); _v02PerceptionMatch = authority.MatchId; }
+            controller.SetNavigationPathSafetyValidator(IsV02SafeRoomClearPath);
             _v02LongChaseRecovery.Observe(controller.CurrentState == StalkerState.CHASE, seconds);
             controller.V02ProactiveSeekPausedUntil = _v02LongChaseRecovery.SeekPausedUntil;
             var locked = controller.CurrentState is StalkerState.DETECT or StalkerState.CHASE or StalkerState.ATTACK or StalkerState.RECOVER
@@ -626,6 +629,16 @@ namespace EchoProtocol.AI.Stalker.Networking
             _v02ScoringTiers.Clear();
             foreach (var target in _perceptionSnapshots) _v02ScoringTiers[target.PlayerId] = ResolveV02PerceptionTier(target.PlayerId);
             controller.V02TargetTiers = _v02ScoringTiers;
+        }
+        private static bool IsV02SafeRoomClearPath(Vector3[] corners)
+        {
+            var authority = MatchAuthorityRuntime.Instance;
+            if (authority == null || authority.RequestedScenarioResolutionMode != ScenarioResolutionMode.Adaptive ||
+                !AEDv2Authority.TryGetV02(authority.MatchId, out _, out _)) return true;
+            if (corners == null || corners.Length == 0 || !AEDV02SceneSource.TryLoad(out var manifest, out _) ||
+                !manifest.TryPathIntersectsSafeRoom(corners.Select(x => new[] { (double)x.x, x.y, x.z }).ToArray(),
+                    out var intersects)) return false;
+            return !intersects;
         }
         private int ResolveV02PerceptionTier(PlayerId id)
         {

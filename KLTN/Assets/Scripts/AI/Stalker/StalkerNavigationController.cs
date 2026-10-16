@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -15,6 +16,7 @@ namespace EchoProtocol.AI.Stalker
         private NavigationFailureReason _currentFailureReason;
         private NavigationRecoveryReason _currentRecoveryReason;
         private bool _authoritativeLocomotion;
+        private Func<Vector3[], bool> _pathSafetyValidator;
 
         public StalkerNavigationController(NavMeshAgent agent)
             : this(agent, NavigationProgressSettings.Default)
@@ -39,6 +41,11 @@ namespace EchoProtocol.AI.Stalker
         public bool IsUsable => _agent != null
             && _agent.enabled
             && _agent.isOnNavMesh;
+
+        public void SetPathSafetyValidator(Func<Vector3[], bool> validator)
+        {
+            _pathSafetyValidator = validator;
+        }
 
         public bool HasAuthoritativeLocomotion => _authoritativeLocomotion;
         public float AuthoritativeMoveSpeed { get; private set; }
@@ -249,6 +256,12 @@ namespace EchoProtocol.AI.Stalker
                             destination);
                     }
 
+                    if (!IsPathSafe(_evaluationPath))
+                    {
+                        _currentFailureReason = NavigationFailureReason.PathInvalid;
+                        return new NavigationEvaluationResult(NavigationEvaluationStatus.Invalid, destination);
+                    }
+
                     _currentFailureReason = NavigationFailureReason.None;
                     return new NavigationEvaluationResult(NavigationEvaluationStatus.Complete, destination);
                 case NavMeshPathStatus.PathPartial:
@@ -321,6 +334,16 @@ namespace EchoProtocol.AI.Stalker
                 return new NavigationPlanResult(NavigationPlanStatus.AlreadyActive, destination);
             }
 
+            if (_pathSafetyValidator != null &&
+                (!_agent.CalculatePath(destination, _evaluationPath) ||
+                 _evaluationPath.status != NavMeshPathStatus.PathComplete ||
+                 !DoesPathReachRequestedDestination(_evaluationPath, destination) ||
+                 !IsPathSafe(_evaluationPath)))
+            {
+                _currentFailureReason = NavigationFailureReason.PathInvalid;
+                return new NavigationPlanResult(NavigationPlanStatus.DestinationRequestFailed, destination);
+            }
+
             // SetDestination accepts a request; it does not prove the resulting path is complete.
             if (!_agent.SetDestination(destination))
             {
@@ -353,6 +376,15 @@ namespace EchoProtocol.AI.Stalker
 
         public void TickProgress(float deltaTime)
         {
+            if (_pathSafetyValidator != null && IsUsable && _agent.hasPath && !_agent.pathPending &&
+                _agent.pathStatus == NavMeshPathStatus.PathComplete && !IsPathSafe(_agent.path))
+            {
+                _agent.ResetPath();
+                ClearDestinationCache();
+                _currentFailureReason = NavigationFailureReason.PathInvalid;
+                return;
+            }
+
             var pathStatus = GetPathStatus();
             if (pathStatus == NavigationPathStatus.Pending)
             {
@@ -501,6 +533,9 @@ namespace EchoProtocol.AI.Stalker
             return Vector3.Distance(endpoint, requestedDestination)
                 <= endpointTolerance;
         }
+
+        private bool IsPathSafe(NavMeshPath path) =>
+            _pathSafetyValidator == null || path != null && _pathSafetyValidator(path.corners);
 
         private static bool IsFinite(Vector3 value)
         {

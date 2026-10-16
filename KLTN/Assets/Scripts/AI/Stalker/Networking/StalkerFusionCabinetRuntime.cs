@@ -134,10 +134,12 @@ namespace EchoProtocol.AI.Stalker.Networking
             if (spot.InspectPoint == null || !NavMesh.SamplePosition(spot.InspectPoint.position, out var floor, 1.5f, NavMesh.AllAreas) ||
                 !AEDV02SceneSource.TryLoad(out var manifest, out _)) return false;
             inspect = floor.position; var target = inspect;
+            if (!manifest.TryIsInsideSafeRoom(inspect.x, inspect.y, inspect.z, out var inspectInside) || inspectInside) return false;
             var candidates = manifest.Markers.Where(x => x.Kind == "AMBUSH_ENTRY").Select(x => new Vector3((float)x.X, (float)x.Y, (float)x.Z))
                 .Concat(manifest.NavCells.Select(x => new Vector3((float)((x.A[0] + x.B[0] + x.C[0]) / 3),
                     (float)((x.A[1] + x.B[1] + x.C[1]) / 3), (float)((x.A[2] + x.B[2] + x.C[2]) / 3))))
-                .Where(x => Vector3.Distance(x, target) <= 12 && players.All(p => Vector3.Distance(p.position, x) >= 7))
+                .Where(x => Vector3.Distance(x, target) <= 12 && players.All(p => Vector3.Distance(p.position, x) >= 7) &&
+                    manifest.TryIsInsideSafeRoom(x.x, x.y, x.z, out var inside) && !inside)
                 .OrderBy(x => (x - target).sqrMagnitude);
             foreach (var candidate in candidates)
                 if (controller.IsPositionInsidePatrolZone(candidate) && CabinetRouteStillValid(spot, candidate, inspect, null)) { entry = candidate; return true; }
@@ -149,14 +151,24 @@ namespace EchoProtocol.AI.Stalker.Networking
                 !AEDV02SceneSource.TryGetDoorSources(Runner, NetworkMatchState.Instance, out var doors)) return false;
             var marker = manifest.Markers.SingleOrDefault(x => x.Kind == "CABINET" && x.HideSpotId == spot.StableId.ToString());
             if (marker == null) return false;
+            if (!manifest.TryIsInsideSafeRoom(entry.x, entry.y, entry.z, out var entryInside) || entryInside ||
+                !manifest.TryIsInsideSafeRoom(inspect.x, inspect.y, inspect.z, out var inspectInside) || inspectInside)
+                return false;
             bool Reach(Vector3 a, Vector3 b) => manifest.HasReachableGeometry(new[] { (double)a.x, a.y, a.z }, new[] { (double)b.x, b.y, b.z }, doors);
             var path = new NavMeshPath();
             if (!Reach(entry, inspect) || !NavMesh.CalculatePath(entry, inspect, NavMesh.AllAreas, path) || path.status != NavMeshPathStatus.PathComplete) return false;
+            if (!manifest.TryPathIntersectsSafeRoom(path.corners.Select(x => new[] { (double)x.x, x.y, x.z }).ToArray(), out var entryRouteIntersects) ||
+                entryRouteIntersects) return false;
             float length = 0; for (int i = 1; i < path.corners.Length; i++) length += Vector3.Distance(path.corners[i - 1], path.corners[i]);
             if (length < 8 || length > 12) return false;
             var zoneEntry = manifest.Markers.Single(x => x.Id == "Z" + marker.Zone + "_ENTRY");
             var exit = spot.ExitPoint.position; var destination = new Vector3((float)zoneEntry.X, (float)zoneEntry.Y, (float)zoneEntry.Z);
+            if (!manifest.TryIsInsideSafeRoom(exit.x, exit.y, exit.z, out var exitInside) || exitInside ||
+                !manifest.TryIsInsideSafeRoom(destination.x, destination.y, destination.z, out var destinationInside) || destinationInside)
+                return false;
             if (!Reach(exit, destination) || !NavMesh.CalculatePath(exit, destination, NavMesh.AllAreas, path) || path.status != NavMeshPathStatus.PathComplete) return false;
+            if (!manifest.TryPathIntersectsSafeRoom(path.corners.Select(x => new[] { (double)x.x, x.y, x.z }).ToArray(), out var exitRouteIntersects) ||
+                exitRouteIntersects) return false;
             float separation = (_navigationAgent != null ? _navigationAgent.radius : 0) + (subject != null && subject.TryGetComponent<CharacterController>(out var body) ? body.radius : 0);
             for (int i = 1; i < path.corners.Length; i++)
             {

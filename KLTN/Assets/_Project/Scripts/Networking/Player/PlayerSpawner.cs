@@ -705,6 +705,13 @@ namespace EchoProtocol.Networking
             position = default;
 
             var path = new NavMeshPath();
+            var authority = MatchAuthorityRuntime.Instance;
+            bool adaptiveV02 = authority != null &&
+                authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive &&
+                AEDv2Authority.TryGetV02(authority.MatchId, out _, out _);
+            AEDV02SceneManifest safeRoomManifest = null;
+            if (adaptiveV02 && (!AEDV02SceneSource.TryLoad(out safeRoomManifest, out _) || safeRoomManifest == null))
+                return false;
 
             for (int attempt = 0; attempt < attempts; attempt++)
             {
@@ -738,6 +745,16 @@ namespace EchoProtocol.Networking
 
                 if (!NavMesh.CalculatePath(stalkerPosition, hit.position, NavMesh.AllAreas, path)
                     || path.status != NavMeshPathStatus.PathComplete)
+                {
+                    continue;
+                }
+
+                if (adaptiveV02 &&
+                    (!safeRoomManifest.TryIsInsideSafeRoom(hit.position.x, hit.position.y, hit.position.z, out var inside) ||
+                     inside ||
+                     !safeRoomManifest.TryPathIntersectsSafeRoom(
+                         path.corners.Select(x => new[] { (double)x.x, x.y, x.z }).ToArray(), out var routeIntersects) ||
+                     routeIntersects))
                 {
                     continue;
                 }

@@ -6786,6 +6786,12 @@ namespace EchoProtocol.AI.Stalker
             }
         }
 
+        public void SetNavigationPathSafetyValidator(Func<Vector3[], bool> validator)
+        {
+            InitializeNavigation();
+            _navigation.SetPathSafetyValidator(validator);
+        }
+
         public void SetAuthoritativeLocomotion(bool enabled)
         {
             InitializeNavigation();

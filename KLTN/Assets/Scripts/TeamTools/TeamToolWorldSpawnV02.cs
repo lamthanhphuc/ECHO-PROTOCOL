@@ -67,6 +67,7 @@ namespace EchoProtocol.TeamTools
                 var candidates = new List<AEDV02PlacementCandidate>();
                 foreach (var marker in manifest.Markers.Where(x => x.Kind == "TOOL" && x.Zone == zone && available.ContainsKey(x.Id)))
                 {
+                    if (!manifest.TryIsInsideSafeRoom(marker.X, marker.Y, marker.Z, out var inside) || inside) continue;
                     var point = available[marker.Id];
                     if (!point.TryGetReachablePosition(entryPosition, out var position, out var meters) || HasNearbyWorldTeamTool(position, spacing) ||
                         !TryV02EntryPath(entryPosition, position, out var corners) || !manifest.TryValidatePlacementPath(corners, doors, out _)) continue;
@@ -154,9 +155,19 @@ namespace EchoProtocol.TeamTools
                 .Where(x => x.Runner == runner && (x is NetworkPlayerLifeState || x is EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime ||
                     x is EchoProtocol.AI.Minions.CreepMinionRuntime)).Select(x => x.transform).ToArray();
             bool Occupied(Vector3 position) => IsV02Occupied(position, actors);
-            bool CanPlace(TeamToolSpawnPoint point) => point != null && point.TryGetReachablePosition(entryPosition, out var position, out _) &&
-                !HasNearbyWorldTeamTool(position, spacing) && !Occupied(position) &&
-                manifest.HasReachableGeometry(new[] { entry.X, entry.Y, entry.Z }, new[] { (double)position.x, position.y, position.z }, doors);
+            bool CanPlace(TeamToolSpawnPoint point)
+            {
+                if (point == null) return false;
+                var marker = manifest.Markers.SingleOrDefault(x => x.Id == AEDV02SceneSource.MarkerId(point.transform) &&
+                    x.Kind == "TOOL" && x.Zone == zone);
+                if (marker == null || !manifest.TryIsInsideSafeRoom(marker.X, marker.Y, marker.Z, out var inside) || inside ||
+                    !point.TryGetReachablePosition(entryPosition, out var position, out _) ||
+                    !manifest.TryIsInsideSafeRoom(position.x, position.y, position.z, out inside) || inside ||
+                    HasNearbyWorldTeamTool(position, spacing) || Occupied(position) ||
+                    !TryV02EntryPath(entryPosition, position, out var path) ||
+                    !manifest.TryValidatePlacementPath(path, doors, out _)) return false;
+                return true;
+            }
             if (plans.Any(x => !CanPlace(x.Point)))
             {
                 if (_v02Supply.ResourceGrade != 0) return false;
@@ -170,7 +181,9 @@ namespace EchoProtocol.TeamTools
                 if (item.Point == null || !item.Point.TryGetReachablePosition(entryPosition, out var current, out _) ||
                     (current - item.Position).sqrMagnitude > .0001f || HasNearbyWorldTeamTool(current, spacing) ||
                     Occupied(current) ||
-                    !manifest.HasReachableGeometry(new[] { entry.X, entry.Y, entry.Z }, new[] { (double)current.x, current.y, current.z }, doors)) return false;
+                    !manifest.TryIsInsideSafeRoom(current.x, current.y, current.z, out var inside) || inside ||
+                    !TryV02EntryPath(entryPosition, current, out var currentPath) ||
+                    !manifest.TryValidatePlacementPath(currentPath, doors, out _)) return false;
             var spawned = new List<NetworkObject>();
             foreach (var item in plans)
             {

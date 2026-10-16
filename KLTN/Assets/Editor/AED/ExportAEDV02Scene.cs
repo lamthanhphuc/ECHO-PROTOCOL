@@ -40,6 +40,22 @@ public static class ExportAEDV02Scene
             var authored = roots.SelectMany(x => x.GetComponentsInChildren<AEDZoneEntryMarker>(true)).ToArray();
             var entries = Enumerable.Range(1, 3).Select(zone => authored.Single(x => x.Zone == zone).transform.position).ToArray();
             var markers = entries.Select((x, i) => Marker("Z" + (i + 1) + "_ENTRY", i + 1, "ENTRY", x)).ToList();
+            var safeRooms = roots.SelectMany(x => x.GetComponentsInChildren<AEDV02SafeRoomMarker>(true))
+                .Where(x => x.gameObject.scene == scene).ToArray();
+            if (safeRooms.Length == 0 || safeRooms.Any(x => string.IsNullOrWhiteSpace(x.StableTransformIdentity)) ||
+                safeRooms.Select(x => x.StableTransformIdentity).Distinct(StringComparer.Ordinal).Count() != safeRooms.Length)
+                throw new InvalidOperationException("SciFi must contain a non-empty registry of uniquely identified Safe Rooms.");
+            foreach (var safeRoom in safeRooms)
+            {
+                if (safeRoom.Zone is < 1 or > 3 || !safeRoom.TryGetWorldBounds(out var min, out var max))
+                    throw new InvalidOperationException("A Safe Room has an invalid zone, transform identity, or world-space bounds.");
+                string id = AEDV02Plan.Hash(path + "|SAFE_ROOM|" + safeRoom.StableTransformIdentity);
+                var marker = Marker(id, safeRoom.Zone, "SAFE_ROOM", (min + max) * .5f);
+                marker.InteractionBounds = new[] { (double)min.x, min.y, min.z, max.x, max.y, max.z };
+                markers.Add(marker);
+            }
+            if (markers.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() != markers.Count)
+                throw new InvalidOperationException("Scene marker IDs must be unique.");
             var stalkerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/StalkerNetwork.prefab");
             var controller = stalkerPrefab.GetComponent<StalkerController>();
             var matchPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/Network/NetworkMatchState.prefab");
@@ -205,7 +221,7 @@ public static class ExportAEDV02Scene
                         .Select(x => x.Id).ToArray();
                     links.Add(new AEDV02SceneManifestData.Link { From = a.Id, To = b.Id, DoorIds = crossed });
                 }
-            var data = new AEDV02SceneManifestData { SceneVersion = "SCIFI_NAV_REV02_" + AssetDatabase.AssetPathToGUID(path),
+            var data = new AEDV02SceneManifestData { SceneVersion = "SCIFI_NAV_REV02_SAFE_ROOM_" + AssetDatabase.AssetPathToGUID(path),
                 ScenePath = path, MaximumVisionRange = maximumVisionRange, MaximumCabinetInteractionDistance = maximumInteractionDistance,
                 MinimumToolSpacing = spacing.floatValue,
                 CoreStabilizerRadius = CoreStabilizerRules.SupportRadius, CoreStabilizerDurationSeconds = CoreStabilizerRules.DurationSeconds,
