@@ -159,3 +159,63 @@ Relative to LTP base `10391b1d`. Includes the four foundation commits and this c
 | `scripts/Test-AEDV02.ps1` | Reproducible regression / CI / byte-identical mirror validation |
 
 Excluded user changes: RuntimeLogSettings.asset and LiberationSans SDF - Fallback.asset. No environment secrets/local Docker override are included.
+
+## Implementation-only continuation from 243eceec
+
+All entries are source/asset/docs changes, UNTESTED. Owner assets, credentials and artifacts are excluded.
+
+- EchoProtocol.Backend/src/EchoProtocol.Api/Content/AEDV02/Rev02SceneManifest.json
+- EchoProtocol.Backend/src/EchoProtocol.Api/Services/AEDV02JammerVerification.cs
+- EchoProtocol.Backend/src/EchoProtocol.Api/Services/AEDV02OpportunityReconstruction.cs
+- EchoProtocol.Backend/src/EchoProtocol.Api/Services/AEDV02ScannerVerification.cs
+- EchoProtocol.Backend/src/EchoProtocol.Api/Services/AEDV02SourceVerifier.cs
+- EchoProtocol.Backend/src/EchoProtocol.Api/Shared/AEDV02PilotOpportunities.cs
+- EchoProtocol.Backend/src/EchoProtocol.Api/Shared/AEDV02PilotPolicy.cs
+- EchoProtocol.Backend/src/EchoProtocol.Api/Shared/AEDV02Plan.cs
+- EchoProtocol.Backend/src/EchoProtocol.Api/Shared/AEDV02WorldSource.cs
+- EchoProtocol.Backend/tests/EchoProtocol.Api.Tests/AEDV02JammerOpportunityTests.cs
+- EchoProtocol.Backend/tests/EchoProtocol.Api.Tests/AEDV02ScannerOpportunityTests.cs
+- KLTN/Assets/Editor/AED/ExportAEDV02Scene.cs
+- KLTN/Assets/Resources/AED/Rev02SceneManifest.json
+- KLTN/Assets/Scenes/SciFi.unity
+- KLTN/Assets/Scripts/AI/AED/AEDV02SceneSource.cs
+- KLTN/Assets/Scripts/AI/AED/AEDV02SourceJson.cs
+- KLTN/Assets/Scripts/AI/Common/AED/AEDV02PilotOpportunities.cs
+- KLTN/Assets/Scripts/AI/Common/AED/AEDV02PilotPolicy.cs
+- KLTN/Assets/Scripts/AI/Common/AED/AEDV02Plan.cs
+- KLTN/Assets/Scripts/AI/Common/AED/AEDV02WorldSource.cs
+- KLTN/Assets/Scripts/AI/Stalker/Networking/StalkerFusionRuntime.cs
+- KLTN/Assets/Scripts/Tools/Scanner/FieldScannerCoreDetector.cs
+- KLTN/Assets/Scripts/Tools/Scanner/NetworkFieldScanner.cs
+- KLTN/Assets/Tests/EditMode/Networking/AEDV02HostGuardTests.cs
+- KLTN/Assets/Tests/EditMode/Networking/AEDV02SourceSerializationTests.cs
+- KLTN/Assets/_Project/Scripts/Networking/Authority/AEDV02NativeHarness.Controls.cs
+- KLTN/Assets/_Project/Scripts/Networking/Authority/AEDV02NativeHarness.Controls.cs.meta
+- KLTN/Assets/_Project/Scripts/Networking/Authority/AEDV02NativeHarness.cs
+- KLTN/Assets/_Project/Scripts/Networking/Authority/MatchAuthorityRuntimeV02Coordinator.cs
+- KLTN/Assets/_Project/Scripts/Networking/Authority/MatchAuthorityRuntimeV02Source.cs
+- KLTN/Assets/_Project/Scripts/Networking/Interaction/NetworkDoorJammer.cs
+- KLTN/Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs
+- KLTN/Assets/_Project/Scripts/Networking/Player/NetworkPlayerFlashlight.cs
+- KLTN/Assets/_Project/Scripts/Networking/Player/NetworkPlayerMovement.cs
+- KLTN/Assets/_Project/Scripts/Networking/Session/NetworkBootstrap.cs
+- docs/aed/AED_V02_Changed_Files.md
+- docs/aed/AED_V02_Execution_Checklist.md
+- docs/aed/AED_V02_Implementation_Map.md
+- docs/aed/AED_V02_OWNER_TEST_RUNBOOK.md
+- docs/aed/AED_V02_Pilot_Contract_Defaults.md
+- docs/aed/AED_V02_Remaining_Contract_Decisions.md
+- docs/aed/AED_V02_Source_Contract_Rev02.md
+- docs/aed/AED_V02_Traceability.md
+- docs/aed/AED_V02_Verification_Report.md
+- scripts/AEDV02NativeProof.ps1
+- scripts/Assert-AEDV02LocalDocker.ps1
+- scripts/Invoke-AEDV02AcceptanceScenario.ps1
+- scripts/Invoke-AEDV02Campaign.ps1
+- scripts/Invoke-AEDV02Native.ps1
+- scripts/New-AEDV02NativeSession.ps1
+- scripts/Send-AEDV02NativeCommand.ps1
+- scripts/Start-AEDV02NativeBackend.ps1
+- scripts/Stop-AEDV02NativeBackend.ps1
+- scripts/Test-AEDV02.ps1
+- scripts/Test-AEDV02NativeProof.ps1

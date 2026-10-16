@@ -1,3 +1,27 @@
+# Current task checkpoint — implementation only (2026-10-16)
+
+Owner supersedes the old Stage C campaign below: implement, inspect statically, document, commit/push. Do not run compilation/tests/simulation/build/native/migrations. Editor remains open; no restart/kill/cache deletion or Play was performed.
+
+- [x] Fetch confirmed local/origin feature 243eceec; preserve owner RuntimeLogSettings/TMP assets.
+- [x] Scanner real detector capture, separate periodic census, HUD ACK/tick, custody/tuning/cooldown/math verification and historical joins.
+- [x] Door Jammer real deployment/charge/blocker progress, phase carry-over and stable reconnect identity verification.
+- [x] Actual source JSON/shared DTO synchronization, policy DEFAULTS_2 and fail-closed handling.
+- [x] Consumer MatchId binding, same-revision new-match refresh, baseline restoration and inherited main Scanner reset.
+- [x] Actual SciFi author/export through stopped open Editor: 67 Cabinet entries, 289 markers, real roles/spacing/mesh/doors/tuning.
+- [x] Native normal-input controls, world/control journals, 2–4 independent identities, SessionOnly Fixed/Shadow capture, scoped Backend outage/reset.
+- [x] Twelve owner case recipes, source regression cases and complete owner runbook authored.
+- [x] Static review source paths, default flags, main differences, migration Up/Down and prior CI repair source; no tests deleted.
+- [ ] Owner compilation/full Backend/Unity/build/native/scenario verification: NOT RUN.
+- [ ] Production/merge authorization: not requested or performed.
+
+New regression source: eight Jammer cases, twelve Scanner cases, seven Tool serialization/shape cases, five Cabinet budget cases, six topology comparator cases. Authored only; none is a PASS claim.
+
+Known CI d074a260 evidence stays 654 PASS / 3 FAIL / 0 SKIP; source repairs are in 243eceec and have NOT been retested in this task. This does not certify the current candidate.
+
+The remaining sections are historical execution checkpoints and must not override this instruction or current source map.
+
+---
+
 # Full implementation campaign (owner request 2026-10-15)
 
 Candidate start: 29491edab3adcc2c815773c1d9c576e2d6b8188f, PR #23 Draft -> LTP.
@@ -107,3 +131,11 @@ Observed CI run: https://github.com/lamthanhphuc/ECHO-PROTOCOL/actions/runs/3870
 - Static checks only: PowerShell parser accepted four native/campaign/proof scripts. No test script, Backend suite/build, Unity process, migration or native player was executed in this continuation. Existing protected assets are preserved.
 - Core Stabilizer source/reconstruction is also now authored: actual timer/ordinal/held instance/buff beneficiaries, exported online radius/duration, independent coverage and canonical core lineage, useful protected seconds and activation dedup. Ten ingestion/verifier cases cover success, empty room, unknown onset, ownership, radius, missing buff/core, wrong core actor, expiry and unsupported tuning; NOT RUN. Collection skips unreconciled buff frames rather than falsifying flags. Current outcome producers still missing: **Scanner and Door Jammer**. General Tool competence remains fail-closed until every family has real eligible history.
 - The real scene export has not run. It must regenerate the resource-role/spacing manifest and now the online Core Stabilizer tuning before sealing the campaign candidate. Do not reuse the old manifest to claim these new placement/effect paths are Verified.
+
+## Static review closure for the implementation-only candidate
+
+Source changes and real scene export are complete for this continuation; execution is explicitly deferred to the owner. Native recipes submit ordinary actions or wait for real prerequisites, never fabricate pressure/history/approval. Human audiovisual/fairness/objective judgments remain the twelve owner acceptance cases; capture-only output is not PASS.
+
+Static checks: six mirrored source files and manifests match; all AEDV02 PowerShell files parse; task-scoped diff whitespace is clean. Complete diff whitespace still includes the protected owner's existing TMP fallback warnings, which are not edited/staged. There is no newly executed suite/build/migration/native result.
+
+Latest main is f849d45b. The narrow main Scanner reset hook is integrated; other main changes are documented as not generally integrated. Normal profile constants remain unchanged apart from the already approved explicit Zone3 cap property. No production default/secret/deployment change.

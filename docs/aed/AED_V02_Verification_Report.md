@@ -2,19 +2,27 @@
 
 **Release decision: NOT E2E READY. Keep gameplay OFF.** This is a reviewable implementation checkpoint, not completion of W0–W6. [Outstanding contract and engineering gates](AED_V02_Remaining_Contract_Decisions.md) are part of this report.
 
-## Current candidate and Stage B repair status
+## Current implementation-only candidate (2026-10-16)
 
-Remote CI [38700470494](https://github.com/lamthanhphuc/ECHO-PROTOCOL/actions/runs/38700470494), source `d074a260`: Backend compile succeeded; **654 passed, 3 failed, 0 skipped, 657 total**. Failures are the historical composite approval fixture, legacy-source versus historical Hold precedence, and PostgreSQL historical-schema seed using the latest binding model. The detailed repair queue is in the execution checklist. No Unity, Windows or native result for d074a260 follows from this CI run.
+Continuation begins at 243eceec on feature/aed-v02-full-integration. All Backend compilation/tests, Unity tests, Windows builds, migrations and native gameplay are **NOT RUN** by explicit owner instruction. Older test/build figures below are historical.
 
-Current uncommitted Stage B repairs are **NOT RUN / UNVERIFIED**: corrected Cabinet pilot settings in the composite test; complete/partial protocol cases without weakening guards; explicit pre-column PostgreSQL binding seed plus up/down/up/default assertions; process-only native credential handoff with no password in configuration files; actual six-key Host consumer replication and Client movement/Animator consumption proof; phase/window binding and partial-append-safe evidence reading. The native proof comparator has sixteen behavioral fixture cases and two file-reader cases authored, not executed. These fixtures are not native gameplay evidence.
+| Gate | Current evidence |
+|---|---|
+| Backend compile/unit/integration/PostgreSQL/MongoDB | NOT RUN |
+| Unity EditMode / PlayMode | NOT RUN |
+| Windows Development build / startup | NOT RUN |
+| Native approval -> Host -> remote Client -> consumer -> receipt | NOT RUN / UNVERIFIED |
+| Twelve owner acceptance cases / Fixed runtime regression | NOT RUN / UNVERIFIED |
+| Real scene author/export | Executed in the already open stopped Editor; asset-generation evidence only |
+| Static review | Source/DTO/producer/verifier/consumer/receipt paths, scripts syntax, shared mirror, scene object diff, default flags and main differences; not runtime proof |
 
-Noise Maker source collection and independent reconstruction are now authored against actual Stalker heard-noise navigation, canonical activation/pulses, consumed-charge lineage, registered geometry and measured diversion. Eight ingested positive/negative cases are authored, **NOT RUN**. Scanner, Door Jammer and Core Stabilizer outcome producers remain implementation work. Stage B is not complete; scene re-export, native lifecycle controls and the full campaign remain pending.
+Real export: manifest bd08701c7e61ea95fa938161ddfac50c3b53a3d3736e163edb72b212df3b96bc; 289 markers (112 Tool, 107 Cabinet, 67 Cabinet entries, 3 zone entries), 7,719 triangles, 15,732 links, 20 doors. Actual spacing/tuning and semantic Tool roles are included. Scene changes add only the owned pilot-entry root/children; serialization-only churn is removed. Bootstrap stayed clean; owner Editor settings and protected assets were preserved. The authoring mechanism executed an isolated Editor authoring script and later the loaded exporter; this is not project compilation or a test result.
 
-Subsequent Stage B source work also adds actual Core Stabilizer timer/activation/buff collection, exported online tuning and independent protected-opportunity reconstruction with canonical core ownership. Ten ingested cases are authored, NOT RUN. Its missing manifest tuning remains Unsupported. Scanner and Door Jammer outcomes still require implementation; no general Tool competence or native success is claimed.
+Current source adds Scanner/Jammer independent reconstruction, canonical lifecycle/real-result producers, new regression cases, real scene assets, native controls/2–4-process topology, actual consumer MatchId, same-revision refresh/baseline restore, Scanner match reset and owner runbook. Pilot DEFAULTS_2 reserves Cabinet budget in Z1/2 without changing A–G numbers. All gameplay defaults stay OFF.
 
-The executed results below belong only to their older source checkpoint. They do **not** supersede the three current CI failures or certify the new code.
+Prior CI 38700470494 at d074a260 reported Backend compile success, 654 PASS / 3 FAIL / 0 SKIP. The three retained regression repairs (composite settings, legacy-source precedence and PostgreSQL pre-column seed/up/down/up) are authored in 243eceec; execution is still outstanding. No old CI result is attributed to this source candidate.
 
-Base LTP: `10391b1d820a9f25d2352d925dbf5bfc39962e50`. Gameplay source/build: `91d8aba`; test infrastructure: `6658ae0`. Final documentation commits do not change tested source. See Git history/PR for full SHAs and previous four foundation commits. All work is on `feature/aed-v02-full-integration`; main and LTP were not modified.
+See OWNER_TEST_RUNBOOK and Remaining Contract Decisions. Actual historical eligibility, visual/audio/physics effects, remote replication and transport lifecycle are UNVERIFIED until owner execution.
 
 ## Historical executed tests — older checkpoint
 
@@ -53,7 +61,7 @@ Earlier checkpoints were superseded. In particular, an earlier apparent 575/575 
 
 Verified in executable source tests: actual spawn/despawn and zero-Minions census, player/tool custody and charge lineage, Minion steal/drop, revive/FirstAid consume correlation, closed-door mesh reachability, required runtime supply versus scene items, optional reservations/materialization, plan revision issuance, cabinet clue range/bounds/player/threat lineage.
 
-Still unsupported: normalized historical competence, complete Resource need/opportunity families, causal Objective interruption lifecycle, calibrated aggregate TP. Five-channel native pressure therefore remains incomplete/Unknown; Cabinet does not reinterpret it as PP0 or a valid team TP. Non-R0 placement and ordinary/emergency support are unfinished. No validation/fingerprint/approval bypass was added to make a test pass.
+At that historical checkpoint, normalized history, complete R/O and TP were unsupported; current producer/reconstruction code is described above and remains unexecuted. Five-channel native pressure therefore remains incomplete/Unknown; Cabinet does not reinterpret it as PP0 or a valid team TP. Non-R0 placement and support were unfinished at that older checkpoint; current source is present but unverified by execution. No validation/fingerprint/approval bypass was added to make a test pass.
 
 ## Build / startup
 
@@ -93,3 +101,13 @@ For review, use [323-ID traceability](AED_V02_Traceability.md), [implementation 
 The owner's canonical [acceptance document](rev02/AED_V02_FINAL_E2E_ACCEPTANCE.md) retains the twelve scenarios: E2E-P4-01/02/03, E2E-CAB-01/02/03, E2E-PP-01/02, E2E-Z3-01, E2E-TT-01, E2E-F4-01, E2E-AED-01. All are NOT RUN. Complete the listed contract/engineering gates before making a pilot build for those scenarios.
 
 When ready, capture one Editor Host + Windows Client with identical feature source. Compare `[AED_V02][FUSION_CONFIG]` MatchId, catalog version, revision, fingerprint, roster and scene hash on both peers; pair `[AED_V02][HOST_COMMIT]` decision/window identity with Backend approval and later receipt. Require actual consumer effect and exactly one revision change. Any mismatch, premature APPLIED, unsafe force-exit, missing cue/route, Fixed adaptation or stacked positive axes fails acceptance. Do not insert synthetic telemetry or change flags in production to obtain these logs.
+
+## Final static inspection notes
+
+- Shared six-file source and manifest copies compare byte identical.
+- PowerShell scripts are parsed only; no test/helper campaign is executed.
+- New independent Tool fixtures: 8 Jammer and 12 Scanner cases, including actual ingestion, positive/censored and fail-closed cases. Unity source adds 7 Tool serialization/shape cases and 5 Cabinet-budget cases. Native comparator adds 6 topology cases. All NOT RUN.
+- Source review found and addressed retained Jammer phase identity, reconnect PlayerRef identity, old-match consumer readback/same-revision refresh, lingering v0.2 baseline, Scanner match display, native aim pitch and manual input restoration.
+- Native session generation authenticates only to the same-candidate isolated loopback stack; passwords stay in memory and separate child environments. Owner can reuse actual test identities/history.
+- Latest main f849d45b is inspected but not merged. Scanner match reset is selectively carried over; broader UV/Resonance, medkits/Voice, movement/fuel/convoy/UI changes remain outside this feature synchronization.
+- No current compile/test/build/transport/physics/audio result follows from these static checks.

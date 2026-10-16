@@ -5,6 +5,7 @@ param(
     [int]$MongoPort = 27028
 )
 $ErrorActionPreference = 'Stop'
+& (Join-Path $PSScriptRoot 'Assert-AEDV02LocalDocker.ps1')
 if ($RunId -notmatch '^aedv02-[a-z0-9-]{1,48}$') { throw 'RunId must identify a new AED test stack.' }
 if (@($ApiPort,$PostgresPort,$MongoPort | Select-Object -Unique).Count -ne 3 -or
     @($ApiPort,$PostgresPort,$MongoPort | Where-Object { $_ -lt 1024 -or $_ -gt 65535 }).Count -gt 0) { throw 'Invalid test ports.' }
@@ -51,7 +52,7 @@ $composePath = Join-Path $directory 'compose.json'
 $compose | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $composePath -Encoding UTF8
 & rtk proxy docker compose -p $RunId -f $composePath up -d --wait postgres mongodb
 if ($LASTEXITCODE -ne 0) { throw 'Disposable databases failed to start. Preserve logs; native Backend NOT RUN.' }
-& rtk proxy docker compose -p $RunId -f $composePath exec -T mongodb mongosh --quiet --eval 'rs.initiate({_id:"aedpilot",members:[{_id:0,host:"mongodb:27017"}]})'
+& rtk proxy docker compose -p $RunId -f $composePath exec -T mongodb mongosh --quiet --eval "rs.initiate({_id:'aedpilot',members:[{_id:0,host:'mongodb:27017'}]})"
 if ($LASTEXITCODE -ne 0) { throw 'Disposable Mongo replica-set initialization failed.' }
 & rtk proxy docker compose -p $RunId -f $composePath up -d --build backend
 if ($LASTEXITCODE -ne 0) { throw 'Disposable Backend build/start failed.' }

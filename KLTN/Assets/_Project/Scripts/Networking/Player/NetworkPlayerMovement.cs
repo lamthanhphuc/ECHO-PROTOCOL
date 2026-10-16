@@ -1237,6 +1237,13 @@ namespace EchoProtocol.Networking
             _unityCharacterController.center = Vector3.up * ((_unityCharacterController.height - _standingHeight) * 0.5f);
         }
 
+#if AED_V02_PILOT_HARNESS
+        public void RestoreNativeInput()
+        {
+            if (Object != null && Object.IsValid && Object.HasInputAuthority)
+                _bootstrap?.RegisterLocalInputProvider(Object, ReadLocalInput);
+        }
+#endif
         private NetworkPlayerInput ReadLocalInput()
         {
             if (!Object.HasInputAuthority) return default;

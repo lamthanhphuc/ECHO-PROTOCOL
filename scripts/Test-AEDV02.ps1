@@ -1,5 +1,6 @@
 param([switch] $BackendOnly, [string] $OutputDirectory)
 $ErrorActionPreference = 'Stop'
+& (Join-Path $PSScriptRoot 'Assert-AEDV02LocalDocker.ps1')
 $repo = Split-Path $PSScriptRoot -Parent
 $output = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $repo ('KLTN/Temp/AEDV02/Runs/' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmssfff')) }
 New-Item -ItemType Directory -Path $output -Force | Out-Null

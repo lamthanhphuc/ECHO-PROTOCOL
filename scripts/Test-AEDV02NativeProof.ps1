@@ -36,6 +36,18 @@ foreach ($case in $cases) {
     if (($null -ne $proof) -ne ($case -eq 'valid')) { throw "Native proof comparator failed case $case." }
 }
 Write-Output "Native proof comparator: $($cases.Count) cases passed. UNIT FIXTURES ONLY; no native gameplay was run."
+foreach ($count in @(2,3,4)) {
+    $topologyHost=$hostRow | ConvertTo-Json -Depth 5 | ConvertFrom-Json
+    $topologyClient=$remoteRow | ConvertTo-Json -Depth 5 | ConvertFrom-Json
+    $topologyHost.players=$count;$topologyClient.players=$count
+    $receipt=@('[AED_V02][APPLY_RECEIPT] match=match decision=decision revision=2 fingerprint=plan window='+('a'*64)+' policy=policy')
+    $valid=Find-AEDV02NativeProof -HostRows @($baseline,$topologyHost) -ClientRows @($topologyClient) -ReceiptLines $receipt -ExpectedPlayers $count
+    if (!$valid) { throw "Matching $count-player topology was rejected." }
+    $topologyClient.players=1
+    if (Find-AEDV02NativeProof -HostRows @($baseline,$topologyHost) -ClientRows @($topologyClient) -ReceiptLines $receipt -ExpectedPlayers $count) {
+        throw 'A remote topology mismatch must not prove native integration.'
+    }
+}
 $fixturePath=Join-Path ([IO.Path]::GetTempPath()) ('aed-native-proof-'+[Guid]::NewGuid().ToString('N')+'.jsonl')
 try {
     [IO.File]::WriteAllText($fixturePath, '{"revision":2}'+"`n"+'{"revision":')

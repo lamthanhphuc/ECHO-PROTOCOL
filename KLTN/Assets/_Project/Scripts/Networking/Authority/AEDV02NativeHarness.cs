@@ -16,11 +16,13 @@ using UnityEngine.AI;
 
 namespace EchoProtocol.Networking.Authority
 {
-    public sealed class AEDV02NativeHarness : MonoBehaviour
+    public sealed partial class AEDV02NativeHarness : MonoBehaviour
     {
         [Serializable] private sealed class Config
         {
-            public string role, apiUrl, username, session, output;
+            public string role, apiUrl, username, session, output, commandsFile, label;
+            public string mode = "Adaptive";
+            public int playerCount = 2;
             public bool gameplay = true, cabinet, autoRelief = true;
             public int timeoutSeconds = 600;
         }
@@ -38,6 +40,7 @@ namespace EchoProtocol.Networking.Authority
             public double[] consumerValues;
         }
         private static Config _config;
+        private static string EvidenceRole => string.IsNullOrWhiteSpace(_config.label) ? _config.role : _config.label;
         private static string _password;
         private float _deadline, _nextRead;
         private bool _started;
@@ -65,6 +68,10 @@ namespace EchoProtocol.Networking.Authority
                     string.IsNullOrWhiteSpace(_config.username) || string.IsNullOrWhiteSpace(_password) ||
                     string.IsNullOrWhiteSpace(_config.session) || _config.timeoutSeconds < 30 || _config.timeoutSeconds > 1800)
                     throw new InvalidOperationException("Harness config incomplete.");
+                if (_config.mode is not ("Fixed" or "Adaptive") || _config.playerCount < 2 || _config.playerCount > 4)
+                    throw new InvalidOperationException("Harness mode/player count invalid.");
+                if (EvidenceRole is not ("Host" or "Client" or "Client2" or "Client3") ||
+                    (_config.role == "Host") != (EvidenceRole == "Host")) throw new InvalidOperationException("Invalid evidence role.");
                 AEDPilotTokenPrefs.UseMemory = true;
                 var api = Resources.Load<EchoProtocol.Api.ApiConfiguration>("ApiConfiguration");
                 if (api == null) throw new InvalidOperationException("ApiConfiguration missing.");
@@ -106,12 +113,12 @@ namespace EchoProtocol.Networking.Authority
             var bootstrap = NetworkBootstrap.Instance;
             if (bootstrap == null) { Fail("BOOTSTRAP_MISSING"); yield break; }
             Task<bool> session = _config.role == "Host"
-                ? bootstrap.CreateRoomAsync(_config.session, 2, MatchDifficulty.Normal, ScenarioResolutionMode.Adaptive)
+                ? bootstrap.CreateRoomAsync(_config.session, _config.playerCount, MatchDifficulty.Normal, _config.mode == "Fixed" ? ScenarioResolutionMode.Fixed : ScenarioResolutionMode.Adaptive)
                 : bootstrap.JoinRoomAsync(_config.session);
             deadline = Time.realtimeSinceStartup + 60;
             while (!session.IsCompleted && Time.realtimeSinceStartup < deadline) yield return null;
             if (!session.IsCompleted || session.IsFaulted || !session.Result) { Fail("SESSION_FAILED"); yield break; }
-            File.WriteAllText(Path.Combine(_config.output, _config.role + "-room-ready.txt"), _config.session);
+            File.WriteAllText(Path.Combine(_config.output, EvidenceRole + "-room-ready.txt"), _config.session);
             var harness = FindAnyObjectByType<AEDV02NativeHarness>();
             harness._deadline = Time.realtimeSinceStartup + _config.timeoutSeconds;
             harness._started = true;
@@ -123,6 +130,7 @@ namespace EchoProtocol.Networking.Authority
             if (Time.realtimeSinceStartup >= _deadline) { _started = false; Fail("TRANSACTION_NOT_PROVEN_BEFORE_DEADLINE"); return; }
             var bootstrap = NetworkBootstrap.Instance;
             var runner = bootstrap?.Runner;
+            PollNativeControls(bootstrap);
             if (runner == null || !runner.IsRunning) return;
             if (_config.autoRelief && bootstrap.State == NetworkSessionState.InMatch) DriveRelief(bootstrap);
             if (bootstrap.State == NetworkSessionState.InLobby)
@@ -130,11 +138,12 @@ namespace EchoProtocol.Networking.Authority
                 if (runner.TryGetPlayerObject(runner.LocalPlayer, out var local) && local.TryGetComponent<LobbyPlayerState>(out var lobby) && !lobby.IsReady)
                     lobby.RequestReady(true);
                 var members = FindObjectsByType<LobbyPlayerState>(FindObjectsInactive.Exclude).Where(x => x.Runner == runner).ToArray();
-                if (_config.role == "Host" && members.Length == 2 && members.All(x => x.IsReady))
+                if (_config.role == "Host" && members.Length == _config.playerCount && members.All(x => x.IsReady))
                     FindAnyObjectByType<LobbyManager>()?.TryStartMatch();
             }
             if (Time.realtimeSinceStartup < _nextRead) return;
             _nextRead = Time.realtimeSinceStartup + 1;
+            WriteNativeWorldReadback(bootstrap);
             var state = NetworkMatchState.Instance;
             if (state == null || state.Object == null || !state.Object.IsValid ||
                 !Guid.TryParse(state.AEDV02MatchId.ToString(), out var match) || !state.TryReadV02Plan(match, out var plan, out var revision)) return;
@@ -147,7 +156,8 @@ namespace EchoProtocol.Networking.Authority
                 {
                     bool read = _config.role == "Host" ? stalker.TryReadV02ConsumerValue((AEDV02Key)key, out values[key]) :
                         stalker.TryReadReplicatedV02ConsumerValue((AEDV02Key)key, out values[key]);
-                    observed &= read && stalker.V02ConsumerRevision == revision && stalker.V02ConsumerFingerprint.ToString() == plan.Fingerprint() &&
+                    observed &= read && stalker.V02ConsumerMatchId.ToString() == match.ToString("D") &&
+                        stalker.V02ConsumerRevision == revision && stalker.V02ConsumerFingerprint.ToString() == plan.Fingerprint() &&
                         Math.Abs(values[key] - plan.Get((AEDV02Key)key)) < .000001;
                 }
             float presentedSpeed = 0; int animatorState = 0;
@@ -167,7 +177,7 @@ namespace EchoProtocol.Networking.Authority
                 presentedSpeed = presentedSpeed, animatorState = animatorState };
             record.windowId = state.AEDV02WindowId.ToString(); record.decisionPoint = state.AEDV02DecisionPoint.ToString();
             record.decisionPhaseOrdinal = state.AEDV02DecisionPhaseOrdinal;
-            File.AppendAllText(Path.Combine(_config.output, _config.role + "-readback.jsonl"), JsonUtility.ToJson(record) + Environment.NewLine);
+            File.AppendAllText(Path.Combine(_config.output, EvidenceRole + "-readback.jsonl"), JsonUtility.ToJson(record) + Environment.NewLine);
             Debug.Log($"[AED_NATIVE][READBACK] role={record.role} match={record.matchId} decision={record.decisionId} revision={revision} fingerprint={record.fingerprint} consumer={observed}");
         }
 
@@ -240,27 +250,32 @@ namespace EchoProtocol.Networking.Authority
 
         private NetworkPlayerInput ReadDriveInput()
         {
-            if (_driver == null || !_hasDriveGoal) return default;
+            if (_driver == null) return default;
+            var camera = FindAnyObjectByType<PlayerCamera>();
+            var idle = new NetworkPlayerInput { LookYaw = camera != null ? camera.Yaw : _driver.transform.eulerAngles.y,
+                LookPitch = camera != null ? camera.Pitch : 0 };
+            if (!_hasDriveGoal) return idle;
             var start = _driver.transform.position;
             var path = new NavMeshPath();
             if (!NavMesh.SamplePosition(start, out var from, 2, NavMesh.AllAreas) ||
                 !NavMesh.SamplePosition(_driveGoal, out var to, 2, NavMesh.AllAreas) ||
                 !NavMesh.CalculatePath(from.position, to.position, NavMesh.AllAreas, path) || path.status != NavMeshPathStatus.PathComplete)
-                return new NetworkPlayerInput { LookYaw = _driver.transform.eulerAngles.y };
+                return idle;
             var next = path.corners.Skip(1).FirstOrDefault(x => Vector3.Distance(start, x) > .5f);
             var direction = next == default ? Vector3.zero : next - start;
             direction.y = 0;
             float yaw = direction.sqrMagnitude < .01f ? _driver.transform.eulerAngles.y : Quaternion.LookRotation(direction).eulerAngles.y;
             bool arrived = Vector3.Distance(start, _driveGoal) <= _driveStopDistance;
-            if (!arrived) FindAnyObjectByType<PlayerCamera>()?.SetRotation(yaw);
-            return new NetworkPlayerInput { Move = arrived || direction.sqrMagnitude < .01f ? Vector2.zero : Vector2.up, LookYaw = yaw, SprintHeld = true };
+            if (!arrived) camera?.SetRotation(yaw);
+            return new NetworkPlayerInput { Move = arrived || direction.sqrMagnitude < .01f ? Vector2.zero : Vector2.up,
+                LookYaw = arrived ? idle.LookYaw : yaw, LookPitch = camera != null ? camera.Pitch : idle.LookPitch, SprintHeld = true };
         }
 
         private static void Fail(string reason)
         {
             Debug.LogError("[AED_NATIVE][FAILED] " + reason);
             if (_config != null && !string.IsNullOrWhiteSpace(_config.output))
-                File.WriteAllText(Path.Combine(_config.output, _config.role + "-failure.txt"), reason);
+                File.WriteAllText(Path.Combine(_config.output, EvidenceRole + "-failure.txt"), reason);
             Application.Quit(3);
         }
     }

@@ -294,11 +294,22 @@ namespace EchoProtocol.Networking
                         ? _reconnectCancellation.Token : CancellationToken.None,
                 };
                 var tokenKey = $"EchoProtocol.ConnectionToken.{userId:D}";
-                if (!Guid.TryParse(PlayerPrefs.GetString(tokenKey), out var connectionId))
+                string savedToken;
+#if AED_V02_PILOT_HARNESS
+                savedToken = AEDPilotTokenPrefs.GetString(tokenKey, string.Empty);
+#else
+                savedToken = PlayerPrefs.GetString(tokenKey);
+#endif
+                if (!Guid.TryParse(savedToken, out var connectionId))
                 {
                     connectionId = Guid.NewGuid();
+#if AED_V02_PILOT_HARNESS
+                    AEDPilotTokenPrefs.SetString(tokenKey, connectionId.ToString("D"));
+                    AEDPilotTokenPrefs.Save();
+#else
                     PlayerPrefs.SetString(tokenKey, connectionId.ToString("D"));
                     PlayerPrefs.Save();
+#endif
                 }
                 args.ConnectionToken = connectionId.ToByteArray();
                 args.PlayerUniqueId = Math.Max(1L, BitConverter.ToInt64(args.ConnectionToken, 0) & long.MaxValue);
@@ -655,6 +666,14 @@ namespace EchoProtocol.Networking
             ReturnToBootstrapScene();
         }
 
+#if AED_V02_PILOT_HARNESS
+        public void ReleaseNativeInput()
+        {
+            ClearLocalInputProvider();
+            if (Runner != null && Runner.IsRunning && Runner.TryGetPlayerObject(Runner.LocalPlayer, out var local))
+                local.GetComponent<NetworkPlayerMovement>()?.RestoreNativeInput();
+        }
+#endif
         private void ClearLocalInputProvider()
         {
             _localInputOwner = null;

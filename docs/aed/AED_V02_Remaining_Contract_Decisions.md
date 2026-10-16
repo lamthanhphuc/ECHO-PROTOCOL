@@ -1,37 +1,27 @@
-# Rev02 pilot: unresolved contract and implementation gates
+# AED v0.2 — remaining decisions and verification boundaries
 
-This feature is **not ready for gameplay acceptance**. The owner's implementation-first master prompt authorizes explicit pilot defaults for uncalibrated formulas and thresholds. Those definitions now live in `AED_V02_Pilot_Contract_Defaults.md`; they are not production approval. The current source changes remain UNCOMPILED / UNTESTED. No entry below is converted to Verified by a fixture, an admin observation row or a client boolean.
+Current source continuation: 243eceec -> this feature candidate. A–G are owner-approved for the pilot. New semantics are documented in Pilot Contract Defaults v2 and are not production approved.
 
-| Gate | What is established | Missing definition / work | Current behavior |
-|---|---|---|---|
-| Historical competence | Versioned match-balanced scoring, context, recency, confidence and weakest-player protection; accepted source is reconstructed again after a clear capture seal and match termination | Scanner/Door Jammer outcome producers and independent joins; full campaign execution and actual manifest export | Stalker/Minion/core/revive, FAK, Noise Maker and Core Stabilizer reconstruction is authored. New Noise Maker/Stabilizer cases are NOT RUN. Missing families remain Unknown/Insufficient; existing families cannot grant general Tool entitlement. |
-| Player Resource pressure | Pilot needs are actual Down/FAK need and causally attributed typed Minion tool relocation; charges, custody and real helper/tool/victim reachability | Broader needs require actual authoritative causes, not an empty inventory proxy; support integration campaign remains unrun | Current pilot R coverage is protocol-gated. Legacy/missing source stays partial. |
-| Player Objective pressure | Prior actual operator/core carrier joined to accepted Down/Slow/CoreDrop/ToolLoss; interruption ends when the constraint or operation ends or another operator takes over | Core/revive positive and negative integration coverage and native source proof | Protocol-gated causal O reconstruction is implemented; progress alone confers no competence. |
-| Team pressure TP0–TP4 | Explicit pilot aggregate, reversed TP bands, weakest-member guard, completeness and freshness | Validate with real native source and acceptance cases | Implemented in source. Missing any required member/channel keeps TP unsupported; PP cannot bypass the gate. |
-| Long chase Seek pause | Pilot qualifying chase is 20 seconds; actual exit starts the approved 15-second pause | Native timing proof | Existing anonymous room-heat Seek pauses globally; fresh sensors and combat remain active. Fixed is unchanged. |
-| Placement R-1/R1/R2/R3 | Versioned role preferences, original R0 reservations, constrained future-zone planning, actual path corners, doors, spacing and independent effect joins | Execute the real scene exporter, synchronize the manifest, then run full placement transactions | Implemented in source, UNTESTED. No materialized item is moved or deleted. |
-| Support/emergency spawn | Explicit pilot quota/cooldown/need mapping, typed action fingerprint, live safety revalidation, normal authoritative spawn, world readback and receipt | Positive/negative approval/effect/receipt integration and native proof | Implemented in source, UNTESTED. No invented need or activation-only receipt is accepted. |
+| Area | Contract/implementation now present | Remaining decision or evidence |
+|---|---|---|
+| Historical competence | Comparable ended/sealed matches, resolved opportunities, sample/confidence/recency/match balance and weakest guard; all five Tool producer/reconstruction paths | Owner must execute authored tests and obtain actual comparable history; missing families stay Insufficient |
+| Scanner | Actual scan and independent periodic target census, canonical activation/custody, detector replay, registered tuning, bounded HUD ACK, first useful information per target/phase | Native receiver/rendering and actual fixture execution UNVERIFIED. No skill failure is invented for no target, infrastructure loss or unrelated Down; cut delivery is censored, contradictions rejected |
+| Door Jammer | Accepted deploy/custody/charge lineage, actual collider/door/progress, same-episode delay, causal failure and stable user/match/phase | Native attached/free-standing/reconnect/cross-phase effects UNVERIFIED |
+| Resource/Objectives | Real Down/typed loss/operation/impact joins; no AFK/progress-alone proxy | Native producer ordering and actual support/grade transactions UNVERIFIED |
+| PP/TP | Versioned five-channel PP and distinct TP, complete-roster/current evidence guards | Pilot calibration and gameplay acceptance; not production-approved statistics |
+| Cabinet scheduling | DEFAULTS_2 reserves the positive slot in Z1/2 when explicit Cabinet pilot permission is set; relief unchanged | Owner evaluates this conservative pilot arbitration during acceptance; no A–G numeric change |
+| Scene | Actual author/export now completed: 67 entries, 289 markers, real geometry/door/Tool roles/spacing/tuning | Live transient door/LOS/escape/physics validation and visible warning need owner verification |
+| Lifecycle/native | Separate real process launcher, up to four identities, actual consumer MatchId/revision/fingerprint, command/world journals, reconnect/outage/terminal controls | All native executions NOT RUN; a journal request is not approval or world effect |
+| Production release | Default gameplay remains OFF; feature PR stays Draft into LTP | Owner testing/review and explicit merge/release approval |
 
-## Evidence that can already be verified independently
+## Cases deliberately not upgraded to Verified
 
-- Live Tool and Minion population, including zero Minions; actual spawn/despawn and tool ownership/charge history.
-- Minion steal/drop joined to a real live actor and tool lineage, without treating a carried object as missing world supply.
-- Registered tool markers, the actual baked mesh, closed-door footprints and the two real Zone2 progression gates.
-- Required runtime supply separately from scene-placed items. Optional reservations, initial allowance and materialization counters are replayed against accepted spawn events.
-- Cabinet entry clue identity, authenticated Host ingestion, range and registered cabinet bounds, known Stalker/player before/after lineage. The actual Host sensor supplies FOV/LOS; Backend validation is not a second physics raycast or full physics replay.
-- Stalker/Minion exposure and canonical Down/revive consequences, with current freshness, roster, revision and source fingerprints.
+Legacy pressure without the pilot opportunity contract, incomplete/stale roster, missing raw target census, unknown tool custody/charge, missing scene constraints, no meaningful opportunity, missing capture seal, debug/reconnect-contaminated history and unsupported action attribution remain Unknown/Insufficient/Hold/Reject. V1 Phase8 coverage and frozen Telemetry 1.1/V2 meanings are unchanged. None of these is repaired by fabricated confidence or a fake verifier.
 
-## Engineering/runtime proof still outstanding
+## Owner verification prerequisites
 
-The following are **not** replaced by a contract decision or by green automated tests:
+Three comparable actual ended/sealed matches and at least eight resolved samples per required axis/Tool family are required before adverse historical entitlement. Fresh accounts can exercise neutral/relief only. The scenario driver never forges this history or pressure to reach a preferred verdict.
 
-1. A single native Host run joining real Backend approval, NetworkMatchState commit, actual gameplay effect, remote Client reconstruction and Backend receipt. Backend service integration, Host guard/consumer tests, physical sensor tests and Fusion Single storage tests are currently separate proofs.
-2. Live P4 grant and Cabinet success from canonical five-channel PP and the documented pilot TP contract. Controlled policy inputs are not native evidence. Cabinet encounter effect audit and deterministic controls remain implementation work.
-3. Real exported non-R0 route roles and regular/emergency support transactions. Source implementation and authored tests are not execution proof; they have NOT RUN at this checkpoint.
-4. Actual Photon reconnect/late join/Host shutdown, Voice initialization and input-buffer behavior with matched feature builds. Existing lower-level regression coverage is not a transport E2E result.
-5. Pilot activation and the twelve owner acceptance scenarios. Keep all gameplay defaults OFF; do not ask the owner to accept this checkpoint as an E2E-ready pilot.
-6. Final fetch: main advanced to `31ca1603` while LTP remains `10391b1d`. Its Resonance/Minion changes and new medkits Lobby toggle are not in this feature base. Future synchronization must preserve Fixed's new settings while formally reconciling the Adaptive five-required-types invariant. Current-main gameplay parity is UNVERIFIED; no automatic merge was performed.
+The twelve scenario helpers are control/capture tools, not automated human gameplay acceptance. PP fairness, final objective completion, real support strategy and audiovisual perception still require the owner's specified final gameplay judgments. See OWNER_TEST_RUNBOOK for exact commands, prerequisites and failure collection.
 
-The latest continuation fetch advances main further to `0b90b912`: Resonance range 10→24, stronger beam feedback and light reconfiguration fixes. These two additional files were inspected but not imported. The earlier parity warning therefore still applies; no latest-main regression result exists for this candidate.
-
-The existing V1 Phase8 verifier remains fail-closed. Nothing in the new source protocol changes Telemetry 1.1 or AED_V2_PHASE_EVIDENCE_V2 semantics.
+Latest main f849d45b contains additional gameplay work not generally integrated into this feature. Scanner lifecycle reset was selectively carried over; latest-main whole-tree/Fixed runtime parity remains UNVERIFIED. No broad merge is authorized or performed.

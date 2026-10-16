@@ -4,6 +4,7 @@ param(
     [int]$NativeTimeoutSeconds = 600
 )
 $ErrorActionPreference = 'Stop'
+& (Join-Path $PSScriptRoot 'Assert-AEDV02LocalDocker.ps1')
 $repo = Split-Path $PSScriptRoot -Parent
 $stackPath = [IO.Path]::GetFullPath($StackJson)
 $nativeRoot = [IO.Path]::GetFullPath((Join-Path $repo 'KLTN/Temp/AEDV02/Native')) + [IO.Path]::DirectorySeparatorChar
@@ -83,6 +84,7 @@ try {
                 if (!$registered.success) { throw "Native $role registration failed." }
                 $configPath=Join-Path $nativeOutput "$role-private-config.json"
                 @{role=$role;apiUrl=$stack.apiUrl;username=$username;session=$session;output=$nativeOutput;
+                    commandsFile=(Join-Path $nativeOutput "$role-commands.jsonl");mode='Adaptive';label=$role;playerCount=2;
                     gameplay=$true;cabinet=$false;autoRelief=$true;timeoutSeconds=$NativeTimeoutSeconds} |
                     ConvertTo-Json | Set-Content -LiteralPath $configPath -Encoding UTF8
                 $configPaths += $configPath
