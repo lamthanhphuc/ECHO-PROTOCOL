@@ -40,6 +40,8 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _powerPuzzlePrefab;
         [SerializeField] private NetworkObject _powerPuzzleStationPrefab;
         [SerializeField] private NetworkObject _monsterPrefab;
+        [SerializeField] private NetworkObject _map2LizardPrefab;
+        [SerializeField] private RegionGraphAsset _map2RegionGraph;
         [SerializeField] private NetworkObject _creepMinionPrefab;
         [Header("Creep Minion Spawn")]
         [SerializeField, Min(1f)] private float _minionSpawnCheckInterval = 3f;
@@ -238,9 +240,13 @@ namespace EchoProtocol.Networking
                 ConfigureExistingPlayerObject(player, playerObject, gameplay: true);
             }
 
-            // Scene_A is exploration-only: no facility objectives, pickups or monsters.
+            // Facility objectives and pickups belong to SciFi only.
             if (SceneManager.GetActiveScene().name == LobbyManager.GameSceneName)
                 EnsureWorldStateExamples(runner);
+            else if (_map2RegionGraph != null)
+                EnsureInitialStalker(runner, RegionSemanticZone.Zone01, _map2RegionGraph, _map2LizardPrefab);
+            else
+                Debug.LogError("[PlayerSpawner] Map2 Stalker requires its scene RegionGraph.");
         }
 
         private void EnsureWorldStateExamples(NetworkRunner runner)
@@ -350,15 +356,25 @@ namespace EchoProtocol.Networking
             }
             // Zone 2 uses scene authorization panels with NetworkMatchState as
             // the authoritative multiplayer state. Keep the retired path dormant.
-            if (_monsterInstance == null && _monsterPrefab != null)
+            EnsureInitialStalker(runner, RegionSemanticZone.Zone01);
+            BindAuthoritativeWorldState();
+        }
+
+        private void EnsureInitialStalker(
+            NetworkRunner runner,
+            RegionSemanticZone zone,
+            RegionGraphAsset graph = null,
+            NetworkObject prefab = null)
+        {
+            prefab ??= _monsterPrefab;
+            if (_monsterInstance == null && prefab != null)
             {
                 var stalkerSpawn = GameObject.Find("MonsterSpawn_Stalker_EMPTY");
                 if (TryGetStalkerSpawnPosition(stalkerSpawn != null ? stalkerSpawn.transform : null, out var spawnPosition))
                 {
-                    _monsterInstance = SpawnStalker(runner, spawnPosition, stalkerSpawn.transform.rotation, RegionSemanticZone.Zone01);
+                    _monsterInstance = SpawnStalker(runner, spawnPosition, stalkerSpawn.transform.rotation, zone, graph, prefab);
                 }
             }
-            BindAuthoritativeWorldState();
         }
 
         public void TrySpawnZone2Stalker(Collider entrant, Transform spawnMarker)
@@ -788,10 +804,22 @@ namespace EchoProtocol.Networking
             _creepMinionInstances.Clear();
         }
 
-        private NetworkObject SpawnStalker(NetworkRunner runner, Vector3 position, Quaternion rotation, RegionSemanticZone zone)
+        private NetworkObject SpawnStalker(
+            NetworkRunner runner,
+            Vector3 position,
+            Quaternion rotation,
+            RegionSemanticZone zone,
+            RegionGraphAsset graph = null,
+            NetworkObject prefab = null)
         {
-            var spawned = runner.Spawn(_monsterPrefab, position, rotation, PlayerRef.None,
-                (_, obj) => obj.GetComponent<StalkerController>()?.ConfigurePatrolZone(zone));
+            var spawned = runner.Spawn(prefab != null ? prefab : _monsterPrefab, position, rotation, PlayerRef.None,
+                (_, obj) =>
+                {
+                    var controller = obj.GetComponent<StalkerController>();
+                    if (controller == null) return;
+                    if (graph != null) controller.ConfigureRegionGraph(graph, zone);
+                    else controller.ConfigurePatrolZone(zone);
+                });
             if (spawned != null)
             {
                 RuntimeLog.Log(RuntimeLogCategory.PlayerSpawner,
