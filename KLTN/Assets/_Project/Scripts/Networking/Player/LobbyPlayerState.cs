@@ -149,6 +149,27 @@ namespace EchoProtocol.Networking
         [Networked]
         public NetworkString<_64> BackendUserId { get; private set; }
 
+        // Snapshot-safe reconnect identity. The raw Fusion connection
+        // token remains local and is never replicated.
+        [Networked]
+        public NetworkString<_64> ReconnectTokenHash { get; private set; }
+
+        public void SetReconnectTokenHashAuthoritative(
+            string tokenHash)
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || string.IsNullOrWhiteSpace(tokenHash)
+                || tokenHash.Length != 64)
+            {
+                return;
+            }
+
+            ReconnectTokenHash =
+                tokenHash;
+        }
+
         [Networked, OnChangedRender(nameof(HandleFusionActorNumberChanged))]
         public int FusionActorNumber { get; private set; }
 

@@ -2,6 +2,7 @@ using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using System.Collections;
+using System.Security.Cryptography;
 using EchoProtocol.AI.Common;
 using EchoProtocol.Player;
 using Fusion;
@@ -87,6 +88,17 @@ namespace EchoProtocol.Networking
                 RuntimeLog.Log(
                 RuntimeLogCategory.PlayerLifecycle,
                 $"FPL|JOIN_REJECT|player={player}|reason=Authority|isServer={IsServer(runner)}|isRunning={IsRunning(runner)}");
+                return;
+            }
+
+            var reconnectToken =
+                runner.GetPlayerConnectionToken(player);
+
+            if (TryReconnectRetainedPlayer(
+                    runner,
+                    player,
+                    reconnectToken))
+            {
                 return;
             }
 
@@ -217,12 +229,32 @@ namespace EchoProtocol.Networking
             }
 
             var commit = new FusionPlayerObjectCommit(player, spawnedObject, playerId);
-            _connectionTokens[player] = runner.GetPlayerConnectionToken(player);
-            _playerObjects[player] = spawnedObject;
+
+            var connectionToken =
+                runner.GetPlayerConnectionToken(player);
+
+            _connectionTokens[player] =
+                connectionToken;
+
+            _playerObjects[player] =
+                spawnedObject;
+
+            if (spawnedObject.TryGetComponent<LobbyPlayerState>(
+                    out var committedLobbyState))
+            {
+                committedLobbyState
+                    .SetReconnectTokenHashAuthoritative(
+                        ComputeConnectionTokenHash(
+                            connectionToken));
+            }
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerLifecycle,
                 $"FPL|JOIN_COMMIT|player={player}|playerId={playerId.Value}");
             NotifyPlayerObjectCommitted(commit);
+
+            NetworkBootstrap.Instance
+                ?.RequestHostMigrationSnapshotCheckpoint(
+                    "player-commit");
         }
 
         public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
@@ -311,11 +343,23 @@ namespace EchoProtocol.Networking
         }
 
         public bool RebuildAfterHostMigration(
-            NetworkRunner runner)
+            NetworkRunner runner,
+            IReadOnlyDictionary<PlayerRef, NetworkObject> restoredPlayerObjects)
         {
             if (!CanMutateLifecycle(runner))
             {
-                Debug.LogError("[FusionPlayerLifecycle] Host Migration rebuild requires the authoritative Runner.");
+                Debug.LogError(
+                    "[FusionPlayerLifecycle] Host Migration rebuild requires the authoritative Runner.");
+
+                return false;
+            }
+
+            if (restoredPlayerObjects == null
+                || restoredPlayerObjects.Count == 0)
+            {
+                Debug.LogError(
+                    "[FusionPlayerLifecycle] Host Migration rebuild received no PlayerObjects.");
+
                 return false;
             }
 
@@ -323,34 +367,49 @@ namespace EchoProtocol.Networking
                 || _entityRegistry.Count != 0
                 || _playerObjects.Count != 0)
             {
-                Debug.LogError("[FusionPlayerLifecycle] Host Migration rebuild expected clean local registries.");
+                Debug.LogError(
+                    "[FusionPlayerLifecycle] Host Migration rebuild expected clean local registries.");
+
                 return false;
             }
 
             _connectionTokens.Clear();
             _expiring.Clear();
 
-            foreach (var timer in _graceTimers.Values)
+            foreach (var timer in
+                     _graceTimers.Values)
             {
                 if (timer != null)
                 {
-                    StopCoroutine(timer);
+                    StopCoroutine(
+                        timer);
                 }
             }
 
             _graceTimers.Clear();
 
-            var rebuilt = 0;
+            var activePlayers =
+                new HashSet<PlayerRef>(
+                    runner.ActivePlayers);
 
-            foreach (var player in runner.ActivePlayers)
+            var rebuilt = 0;
+            var retained = 0;
+
+            foreach (var entry in
+                     restoredPlayerObjects)
             {
-                if (!runner.TryGetPlayerObject(
-                        player,
-                        out var playerObject)
-                    || playerObject == null
+                var player =
+                    entry.Key;
+
+                var playerObject =
+                    entry.Value;
+
+                if (playerObject == null
                     || !playerObject.IsValid)
                 {
-                    Debug.LogError($"[FusionPlayerLifecycle] Migrated PlayerObject missing for {player}.");
+                    Debug.LogError(
+                        $"[FusionPlayerLifecycle] Migrated PlayerObject missing for {player}.");
+
                     return false;
                 }
 
@@ -358,7 +417,9 @@ namespace EchoProtocol.Networking
                         out var lobbyState)
                     || lobbyState.RuntimePlayerIdValue <= 0)
                 {
-                    Debug.LogError($"[FusionPlayerLifecycle] Migrated logical PlayerId missing for {player}.");
+                    Debug.LogError(
+                        $"[FusionPlayerLifecycle] Migrated logical PlayerId missing for {player}.");
+
                     return false;
                 }
 
@@ -367,12 +428,16 @@ namespace EchoProtocol.Networking
                         lobbyState.RuntimePlayerIdValue);
 
                 var identity =
-                    playerObject.GetComponent<PlayerRuntimeIdentity>();
+                    playerObject
+                        .GetComponent<PlayerRuntimeIdentity>();
 
                 if (identity == null
-                    || !identity.TryBind(playerId))
+                    || !identity.TryBind(
+                        playerId))
                 {
-                    Debug.LogError($"[FusionPlayerLifecycle] Could not restore PlayerRuntimeIdentity for {player} -> {playerId}.");
+                    Debug.LogError(
+                        $"[FusionPlayerLifecycle] Could not restore PlayerRuntimeIdentity for {player} -> {playerId}.");
+
                     return false;
                 }
 
@@ -380,52 +445,372 @@ namespace EchoProtocol.Networking
                         player,
                         playerId))
                 {
-                    Debug.LogError($"[FusionPlayerLifecycle] Could not restore identity registry for {player} -> {playerId}.");
+                    Debug.LogError(
+                        $"[FusionPlayerLifecycle] Could not restore identity registry for {player} -> {playerId}.");
+
                     return false;
                 }
 
-                if (!_entityRegistry.TryRegister(identity))
+                if (!_entityRegistry.TryRegister(
+                        identity))
                 {
-                    Debug.LogError($"[FusionPlayerLifecycle] Could not restore entity registry for {playerId}.");
+                    Debug.LogError(
+                        $"[FusionPlayerLifecycle] Could not restore entity registry for {playerId}.");
+
                     return false;
                 }
 
                 _playerObjects[player] =
                     playerObject;
 
-                _connectionTokens[player] =
-                    runner.GetPlayerConnectionToken(player);
+                var isActive =
+                    activePlayers.Contains(
+                        player);
+
+                if (isActive)
+                {
+                    runner.SetPlayerObject(
+                        player,
+                        playerObject);
+
+                    playerObject
+                        .AssignInputAuthority(
+                            player);
+
+                    var token =
+                        runner.GetPlayerConnectionToken(
+                            player);
+
+                    _connectionTokens[player] =
+                        token;
+
+                    lobbyState
+                        .SetReconnectTokenHashAuthoritative(
+                            ComputeConnectionTokenHash(
+                                token));
+
+                    lobbyState
+                        .SetDisconnectedAuthoritative(
+                            false);
+                }
+                else
+                {
+                    // The player existed in the Host Migration snapshot
+                    // but was not connected when the new Host restored it.
+                    //
+                    // Keep the exact PlayerObject and all Networked state
+                    // alive for the bounded reconnect grace period.
+                    playerObject
+                        .RemoveInputAuthority();
+
+                    lobbyState
+                        .SetDisconnectedAuthoritative(
+                            true);
+
+                    _graceTimers[player] =
+                        StartCoroutine(
+                            ExpireDisconnectedPlayer(
+                                runner,
+                                player,
+                                playerObject));
+
+                    retained++;
+                }
 
                 rebuilt++;
 
                 RuntimeLog.Log(
                     RuntimeLogCategory.PlayerLifecycle,
-                    $"FPL|MIGRATION_REBUILD|player={player}|playerId={playerId.Value}|object={playerObject.Id}");
+                    $"FPL|MIGRATION_REBUILD|player={player}|playerId={playerId.Value}|object={playerObject.Id}|active={isActive}");
             }
 
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerLifecycle,
-                $"FPL|MIGRATION_REBUILD_COMPLETE|players={rebuilt}");
+                $"FPL|MIGRATION_REBUILD_COMPLETE|players={rebuilt}|retained={retained}");
 
-            // Do not raise PlayerObjectCommitted here. These are existing
-            // snapshot-restored objects; normal commit observers may reset
-            // Lobby/gameplay presentation or teleport them as if newly spawned.
+            // These are snapshot-restored objects. Do not raise
+            // PlayerObjectCommitted here; normal commit observers could
+            // reset presentation/gameplay state as if the player were new.
             return rebuilt > 0;
         }
-
-        public bool CanReconnect(byte[] token)
+        private bool TryReconnectRetainedPlayer(
+            NetworkRunner runner,
+            PlayerRef player,
+            byte[] token)
         {
-            if (token == null || token.Length == 0) return false;
-            foreach (var entry in _connectionTokens)
+            if (token == null
+                || token.Length == 0)
             {
-                if (!TokensMatch(entry.Value, token)) continue;
-                if (_playerObjects.TryGetValue(entry.Key, out var obj) && obj != null
-                    && obj.TryGetComponent<LobbyPlayerState>(out var state)
-                    && state.Disconnected) return true;
+                return false;
             }
+
+            var retainedPlayerRef =
+                PlayerRef.None;
+
+            NetworkObject retainedObject =
+                null;
+
+            LobbyPlayerState retainedState =
+                null;
+
+            foreach (var entry in
+                     _playerObjects)
+            {
+                var candidate =
+                    entry.Value;
+
+                if (candidate == null
+                    || !candidate.IsValid
+                    || !candidate.TryGetComponent<LobbyPlayerState>(
+                        out var state)
+                    || !state.Disconnected)
+                {
+                    continue;
+                }
+
+                var rawTokenMatches =
+                    _connectionTokens.TryGetValue(
+                        entry.Key,
+                        out var previousToken)
+                    && TokensMatch(
+                        previousToken,
+                        token);
+
+                if (!rawTokenMatches
+                    && !ReconnectTokenMatches(
+                        state,
+                        token))
+                {
+                    continue;
+                }
+
+                retainedPlayerRef =
+                    entry.Key;
+
+                retainedObject =
+                    candidate;
+
+                retainedState =
+                    state;
+
+                break;
+            }
+
+            if (retainedObject == null
+                || retainedState == null)
+            {
+                return false;
+            }
+
+            var identity =
+                retainedObject
+                    .GetComponent<PlayerRuntimeIdentity>();
+
+            if (identity == null
+                || !identity.PlayerId.IsValid)
+            {
+                Debug.LogError(
+                    $"FPL|RECONNECT_REJECT|player={player}|reason=MissingRuntimeIdentity");
+
+                runner.Disconnect(
+                    player);
+
+                return true;
+            }
+
+            var playerId =
+                identity.PlayerId;
+
+            // PlayerUniqueId normally preserves the same PlayerRef.
+            // If Fusion gives this client another PlayerRef after
+            // Host Migration, securely remap the logical player to
+            // the retained PlayerObject instead of spawning a duplicate.
+            if (retainedPlayerRef != player)
+            {
+                if (!_identityRegistry.Unregister(
+                        retainedPlayerRef))
+                {
+                    Debug.LogError(
+                        $"FPL|RECONNECT_REJECT|player={player}|reason=OldIdentityMissing");
+
+                    runner.Disconnect(
+                        player);
+
+                    return true;
+                }
+
+                if (!_identityRegistry.TryRestore(
+                        player,
+                        playerId))
+                {
+                    // Restore original registry ownership if remap failed.
+                    _identityRegistry.TryRestore(
+                        retainedPlayerRef,
+                        playerId);
+
+                    Debug.LogError(
+                        $"FPL|RECONNECT_REJECT|player={player}|reason=IdentityRemapFailed");
+
+                    runner.Disconnect(
+                        player);
+
+                    return true;
+                }
+
+                _playerObjects.Remove(
+                    retainedPlayerRef);
+
+                _connectionTokens.Remove(
+                    retainedPlayerRef);
+
+                if (_graceTimers.Remove(
+                        retainedPlayerRef,
+                        out var oldTimer)
+                    && oldTimer != null)
+                {
+                    StopCoroutine(
+                        oldTimer);
+                }
+
+                _expiring.Remove(
+                    retainedPlayerRef);
+
+                _playerObjects[player] =
+                    retainedObject;
+            }
+            else
+            {
+                if (_graceTimers.Remove(
+                        player,
+                        out var currentTimer)
+                    && currentTimer != null)
+                {
+                    StopCoroutine(
+                        currentTimer);
+                }
+            }
+
+            _connectionTokens[player] =
+                token;
+
+            retainedState
+                .SetReconnectTokenHashAuthoritative(
+                    ComputeConnectionTokenHash(
+                        token));
+
+            runner.SetPlayerObject(
+                player,
+                retainedObject);
+
+            retainedObject
+                .AssignInputAuthority(
+                    player);
+
+            retainedState
+                .SetDisconnectedAuthoritative(
+                    false);
+
+            NotifyPlayerObjectCommitted(
+                new FusionPlayerObjectCommit(
+                    player,
+                    retainedObject,
+                    playerId));
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|RECONNECT_COMMIT|player={player}|previousPlayer={retainedPlayerRef}|playerId={playerId.Value}|object={retainedObject.Id}");
+
+            NetworkBootstrap.Instance
+                ?.RequestHostMigrationSnapshotCheckpoint(
+                    "player-reconnect");
+
+            return true;
+        }
+
+        public bool CanReconnect(
+            byte[] token)
+        {
+            if (token == null
+                || token.Length == 0)
+            {
+                return false;
+            }
+
+            foreach (var entry in
+                     _playerObjects)
+            {
+                var playerObject =
+                    entry.Value;
+
+                if (playerObject == null
+                    || !playerObject.IsValid
+                    || !playerObject.TryGetComponent<LobbyPlayerState>(
+                        out var state)
+                    || !state.Disconnected)
+                {
+                    continue;
+                }
+
+                if (_connectionTokens.TryGetValue(
+                        entry.Key,
+                        out var previousToken)
+                    && TokensMatch(
+                        previousToken,
+                        token))
+                {
+                    return true;
+                }
+
+                if (ReconnectTokenMatches(
+                        state,
+                        token))
+                {
+                    return true;
+                }
+            }
+
             return false;
         }
 
+        private static bool ReconnectTokenMatches(
+            LobbyPlayerState state,
+            byte[] token)
+        {
+            if (state == null
+                || state.ReconnectTokenHash.Length == 0)
+            {
+                return false;
+            }
+
+            return string.Equals(
+                state.ReconnectTokenHash.ToString(),
+                ComputeConnectionTokenHash(
+                    token),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ComputeConnectionTokenHash(
+            byte[] token)
+        {
+            if (token == null
+                || token.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            using var sha256 =
+                SHA256.Create();
+
+            var hash =
+                sha256.ComputeHash(
+                    token);
+
+            return BitConverter
+                .ToString(hash)
+                .Replace(
+                    "-",
+                    string.Empty);
+        }
         private static bool TokensMatch(byte[] left, byte[] right)
         {
             if (left == null || right == null || left.Length != right.Length) return false;

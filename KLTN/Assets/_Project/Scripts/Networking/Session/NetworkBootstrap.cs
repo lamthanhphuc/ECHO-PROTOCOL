@@ -55,6 +55,10 @@ namespace EchoProtocol.Networking
         private bool _sceneTransitionDisconnectPending;
         private NetDisconnectReason _sceneTransitionDisconnectReason;
 
+        // Explicit checkpoints complement Fusion's periodic 10-second
+        // Host Migration snapshot update.
+        private bool _hostMigrationSnapshotPushInProgress;
+
         private CancellationTokenSource _reconnectCancellation;
         private float _reconnectDeadline;
         public bool IsReconnecting { get; private set; }
@@ -556,24 +560,66 @@ namespace EchoProtocol.Networking
             {
                 return;
             }
+
             // StartGame owns cleanup for failed / cancelled startup attempts.
-            if (_sessionOperationInProgress && State != NetworkSessionState.InMatch && State != NetworkSessionState.InLobby) return;
+            if (_sessionOperationInProgress
+                && State != NetworkSessionState.InMatch
+                && State != NetworkSessionState.InLobby)
+            {
+                return;
+            }
+
             RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
                 $"[NetworkSession] Runner shutdown: {reason}.");
-            if (Runner == runner && State != NetworkSessionState.ShuttingDown)
-            {
-                if (reason == ShutdownReason.Ok && State != NetworkSessionState.InMatch)
-                {
-                    CleanupTermination(runner);
-                    return;
-                }
 
-                CleanupUnexpectedTermination(runner,
-                    runner.IsClient && State == NetworkSessionState.InMatch
+            if (Runner != runner
+                || State == NetworkSessionState.ShuttingDown)
+            {
+                return;
+            }
+
+            // A disconnect/shutdown callback can arrive before Fusion
+            // provides OnHostMigration. Any pending migration/scene fence
+            // owns this Runner until it resolves.
+            if (_hostMigrationInProgress
+                || _hostMigrationDisconnectPending
+                || _sceneTransitionDisconnectPending)
+            {
+                RuntimeLog.Log(
+                    RuntimeLogCategory.NetworkSession,
+                    $"[NetworkSession] Shutdown deferred for Host Migration. Reason={reason}, State={State}, SceneLoading={IsSceneLoading}.");
+
+                return;
+            }
+
+            // Lobby is a migratable session too. Do not immediately destroy
+            // its Runner just because the shutdown callback won the race
+            // against OnHostMigration.
+            if (!_completedMatchObserved
+                && (State == NetworkSessionState.InLobby
+                    || State == NetworkSessionState.InMatch))
+            {
+                BeginHostMigrationGrace(
+                    runner,
+                    $"shutdown:{reason}");
+
+                return;
+            }
+
+            if (reason == ShutdownReason.Ok
+                && State != NetworkSessionState.InMatch)
+            {
+                CleanupTermination(runner);
+                return;
+            }
+
+            CleanupUnexpectedTermination(
+                runner,
+                runner.IsClient
+                    && State == NetworkSessionState.InMatch
                         ? "Host disconnected. Match ended. Create or join a new room."
                         : $"Session ended: {reason}");
-            }
         }
 
         void INetworkRunnerCallbacks.OnConnectedToServer(NetworkRunner runner) => RuntimeLog.Log(
@@ -602,11 +648,9 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            // V4.7A:
-            // Fusion's NetworkSceneManagerDefault still owns this Runner
-            // until OnSceneLoadDone. Destroying/replacing the Runner here
-            // can leave OnSceneLoaded executing with SceneManager.Runner
-            // already null and can also start overlapping reconnects.
+            // NetworkSceneManagerDefault still owns this Runner until
+            // OnSceneLoadDone. Never destroy it from a transport callback
+            // while its scene coroutine is still active.
             if (Runner == runner
                 && IsSceneLoading
                 && !_completedMatchObserved)
@@ -619,37 +663,23 @@ namespace EchoProtocol.Networking
                     Debug.LogWarning(
                         $"[NetworkSession] Transport disconnected while " +
                         $"network scene is loading: {reason}. " +
-                        $"Deferring cleanup until scene load completes.");
+                        $"Deferring Host Migration decision until scene load completes.");
                 }
 
                 return;
             }
 
-            // IMPORTANT:
-            // During an active match Fusion can report the transport
-            // disconnect immediately before it delivers OnHostMigration.
-            // Cleaning the runner here destroys the migration source before
-            // the HostMigrationToken can be consumed.
-            //
-            // Keep the old runner alive for a bounded grace window. The
-            // OnHostMigration callback cancels this pending cleanup as soon
-            // as Fusion supplies a valid migration token.
+            // Both Lobby and gameplay are Host-Migratable sessions.
+            // Fusion may report the transport loss immediately before
+            // delivering OnHostMigration.
             if (Runner == runner
-                && State == NetworkSessionState.InMatch
-                && !_completedMatchObserved)
+                && !_completedMatchObserved
+                && (State == NetworkSessionState.InLobby
+                    || State == NetworkSessionState.InMatch))
             {
-                if (!_hostMigrationDisconnectPending)
-                {
-                    _hostMigrationDisconnectPending = true;
-
-                    Debug.LogWarning(
-                        $"[NetworkSession] Transport disconnected during match: " +
-                        $"{reason}. Waiting for Host Migration token.");
-
-                    _ = WaitForHostMigrationOrCleanupAsync(
-                        runner,
-                        reason);
-                }
+                BeginHostMigrationGrace(
+                    runner,
+                    $"disconnect:{reason}");
 
                 return;
             }
@@ -671,28 +701,54 @@ namespace EchoProtocol.Networking
             }
         }
 
+        private void BeginHostMigrationGrace(
+            NetworkRunner runner,
+            string trigger,
+            bool forceReconnect = false)
+        {
+            if (Runner != runner
+                || State == NetworkSessionState.ShuttingDown
+                || _hostMigrationInProgress
+                || _hostMigrationDisconnectPending)
+            {
+                return;
+            }
+
+            _hostMigrationDisconnectPending = true;
+
+            Debug.LogWarning(
+                $"[NetworkSession] Waiting for Host Migration token. " +
+                $"State={State}, Trigger={trigger}.");
+
+            _ =
+                WaitForHostMigrationOrCleanupAsync(
+                    runner,
+                    trigger,
+                    forceReconnect);
+        }
+
         private async Task WaitForHostMigrationOrCleanupAsync(
             NetworkRunner disconnectedRunner,
-            NetDisconnectReason reason)
+            string trigger,
+            bool forceReconnect = false)
         {
             await Task.Delay(
                 HostMigrationDisconnectGraceMs);
 
-            // OnHostMigration already claimed this disconnect.
+            // OnHostMigration already claimed the termination.
             if (!_hostMigrationDisconnectPending)
             {
                 return;
             }
 
-            // Migration is now running. The migration path owns the runner.
+            // Migration now owns the session.
             if (_hostMigrationInProgress)
             {
                 _hostMigrationDisconnectPending = false;
                 return;
             }
 
-            // The old runner has already been replaced or another shutdown
-            // path has taken ownership.
+            // Another lifecycle path already replaced/closed this Runner.
             if (Runner != disconnectedRunner
                 || State == NetworkSessionState.ShuttingDown)
             {
@@ -703,22 +759,23 @@ namespace EchoProtocol.Networking
             _hostMigrationDisconnectPending = false;
 
             LastError =
-                $"Host migration token was not received after transport disconnect: {reason}";
+                $"Host migration token was not received after {trigger}.";
 
             Debug.LogWarning(
                 $"[NetworkSession] {LastError}");
 
             CleanupUnexpectedTermination(
                 disconnectedRunner,
-                LastError);
+                LastError,
+                forceReconnect: forceReconnect);
         }
 
         private async Task FinishSceneTransitionDisconnectAsync(
             NetworkRunner disconnectedRunner,
             NetDisconnectReason reason)
         {
-            // Let NetworkSceneManagerDefault.OnSceneLoaded return completely
-            // before any shutdown destroys its Runner reference.
+            // Let NetworkSceneManagerDefault.OnSceneLoaded finish before
+            // changing session ownership.
             await Task.Yield();
 
             if (!_sceneTransitionDisconnectPending
@@ -731,20 +788,84 @@ namespace EchoProtocol.Networking
 
             _sceneTransitionDisconnectPending = false;
 
-            LastError =
-                $"Disconnected during network scene transition: {reason}";
+            RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                $"[NetworkSession] Scene-transition disconnect reached Host Migration grace. Reason={reason}, State={State}.");
 
-            Debug.LogWarning(
-                $"[NetworkSession] {LastError}. " +
-                $"Scene load has completed; reconnect may now start safely.");
-
-            CleanupUnexpectedTermination(
+            BeginHostMigrationGrace(
                 disconnectedRunner,
-                LastError,
-                allowReconnect: true,
+                $"scene-transition:{reason}",
                 forceReconnect: true);
         }
 
+        public void RequestHostMigrationSnapshotCheckpoint(
+            string reason)
+        {
+            var runner =
+                Runner;
+
+            if (runner == null
+                || !runner.IsRunning
+                || !runner.IsServer
+                || State == NetworkSessionState.ShuttingDown
+                || State == NetworkSessionState.Disconnected
+                || _hostMigrationInProgress)
+            {
+                return;
+            }
+
+            _ =
+                PushHostMigrationSnapshotCheckpointAsync(
+                    runner,
+                    reason);
+        }
+
+        private async Task PushHostMigrationSnapshotCheckpointAsync(
+            NetworkRunner runner,
+            string reason)
+        {
+            if (_hostMigrationSnapshotPushInProgress)
+            {
+                return;
+            }
+
+            _hostMigrationSnapshotPushInProgress =
+                true;
+
+            try
+            {
+                // Let the current lifecycle / scene callback finish
+                // mutating authoritative state before capturing it.
+                await Task.Yield();
+
+                if (Runner != runner
+                    || !runner.IsRunning
+                    || !runner.IsServer
+                    || State == NetworkSessionState.ShuttingDown
+                    || State == NetworkSessionState.Disconnected
+                    || _hostMigrationInProgress)
+                {
+                    return;
+                }
+
+                await runner
+                    .PushHostMigrationSnapshot();
+
+                RuntimeLog.Log(
+                    RuntimeLogCategory.NetworkSession,
+                    $"[NetworkSession] Host Migration snapshot checkpoint pushed. Reason={reason}, State={State}, Scene={SceneManager.GetActiveScene().name}.");
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning(
+                    $"[NetworkSession] Host Migration snapshot checkpoint failed. Reason={reason}, Error={exception.Message}");
+            }
+            finally
+            {
+                _hostMigrationSnapshotPushInProgress =
+                    false;
+            }
+        }
         void INetworkRunnerCallbacks.OnConnectFailed(NetworkRunner runner, NetAddress address, NetConnectFailedReason reason)
         {
             LastError = $"Connection failed: {reason}";
@@ -1343,33 +1464,77 @@ namespace EchoProtocol.Networking
                 }
             }
 
-            var stalePlayersRemoved = 0;
+            var lifecyclePlayerObjects =
+                new Dictionary<PlayerRef, NetworkObject>();
 
-            foreach (var previousPlayerId in
-                     snapshotPlayerObjectIds)
+            // First register all PlayerObjects that Fusion already mapped
+            // to currently active players.
+            foreach (var player in
+                     migrationRunner.ActivePlayers)
             {
+                if (migrationRunner.TryGetPlayerObject(
+                        player,
+                        out var activePlayerObject)
+                    && activePlayerObject != null
+                    && activePlayerObject.IsValid)
+                {
+                    lifecyclePlayerObjects[player] =
+                        activePlayerObject;
+                }
+            }
+
+            var retainedPlayers = 0;
+            var conflictingPlayersRemoved = 0;
+
+            // A snapshot PlayerObject is NOT stale merely because its
+            // previous PlayerRef is absent from ActivePlayers. The client
+            // may still reconnect after the new Host is established.
+            foreach (var pair in
+                     oldPlayerObjects)
+            {
+                // This snapshot object was already mapped to an active
+                // Fusion player above.
                 if (mappedPlayerObjectIds.Contains(
-                        previousPlayerId))
+                        pair.Value))
                 {
                     continue;
                 }
 
                 if (!restoredObjects.TryGetValue(
-                        previousPlayerId,
-                        out var stalePlayer)
-                    || stalePlayer == null
-                    || !stalePlayer.IsValid)
+                        pair.Value,
+                        out var retainedPlayer)
+                    || retainedPlayer == null
+                    || !retainedPlayer.IsValid)
                 {
                     continue;
                 }
 
-                migrationRunner.Despawn(
-                    stalePlayer);
+                // We cannot keep two logical players under the same
+                // PlayerRef. Remove only this genuine collision case.
+                if (lifecyclePlayerObjects.ContainsKey(
+                        pair.Key))
+                {
+                    Debug.LogWarning(
+                        $"[NetworkSession] Conflicting migrated PlayerObject removed. Player={pair.Key}, Object={retainedPlayer.Id}.");
 
-                restoredObjects.Remove(
-                    previousPlayerId);
+                    migrationRunner.Despawn(
+                        retainedPlayer);
 
-                stalePlayersRemoved++;
+                    restoredObjects.Remove(
+                        pair.Value);
+
+                    conflictingPlayersRemoved++;
+
+                    continue;
+                }
+
+                retainedPlayer
+                    .RemoveInputAuthority();
+
+                lifecyclePlayerObjects[pair.Key] =
+                    retainedPlayer;
+
+                retainedPlayers++;
             }
 
             foreach (var sceneObject in
@@ -1385,12 +1550,12 @@ namespace EchoProtocol.Networking
 
             if (lifecycle == null
                 || !lifecycle.RebuildAfterHostMigration(
-                    migrationRunner))
+                    migrationRunner,
+                    lifecyclePlayerObjects))
             {
                 throw new InvalidOperationException(
                     "Failed to rebuild migrated player identity registries.");
             }
-
             if (migrationRunner.IsServer
                 && SceneManager.GetActiveScene().name ==
                     LobbyManager.GameSceneName)
@@ -1410,7 +1575,7 @@ namespace EchoProtocol.Networking
 
             RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
-                $"[NetworkSession] Host migration snapshot restored. DynamicObjects={restoredObjects.Count}, PlayerObjects={mappedPlayerObjectIds.Count}, StalePlayersRemoved={stalePlayersRemoved}.");
+                $"[NetworkSession] Host migration snapshot restored. DynamicObjects={restoredObjects.Count}, PlayerObjects={lifecyclePlayerObjects.Count}, RetainedPlayers={retainedPlayers}, ConflictsRemoved={conflictingPlayersRemoved}.");
         }
 
         void INetworkRunnerCallbacks.OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
@@ -1447,6 +1612,10 @@ namespace EchoProtocol.Networking
             // disconnect cleanup paths.
             _sceneTransitionDisconnectPending = false;
             _hostMigrationDisconnectPending = false;
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                $"[NetworkSession] Host Migration token received. State={State}, SceneLoading={IsSceneLoading}, Session='{CurrentSessionName}'.");
 
             _hostMigrationTask =
                 HandleHostMigrationAsync(
@@ -1494,6 +1663,13 @@ namespace EchoProtocol.Networking
                 && State == NetworkSessionState.InLobby)
                 SetState(NetworkSessionState.InMatch, "Match scene loaded.");
             NetworkSceneLoadDone?.Invoke(runner);
+
+            if (Runner == runner)
+            {
+                RequestHostMigrationSnapshotCheckpoint(
+                    $"scene-ready:{sceneName}");
+            }
+
             if (Runner == runner
                 && _reconnectIdentityPending
                 && runner.IsClient)
