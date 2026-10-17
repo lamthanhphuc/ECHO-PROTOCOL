@@ -238,9 +238,11 @@ namespace EchoProtocol.Networking
                 ConfigureExistingPlayerObject(player, playerObject, gameplay: true);
             }
 
-            // Scene_A is exploration-only: no facility objectives, pickups or monsters.
+            // Facility objectives and pickups belong to SciFi only.
             if (SceneManager.GetActiveScene().name == LobbyManager.GameSceneName)
                 EnsureWorldStateExamples(runner);
+            else
+                EnsureInitialStalker(runner, RegionSemanticZone.Unknown);
         }
 
         private void EnsureWorldStateExamples(NetworkRunner runner)
@@ -350,15 +352,20 @@ namespace EchoProtocol.Networking
             }
             // Zone 2 uses scene authorization panels with NetworkMatchState as
             // the authoritative multiplayer state. Keep the retired path dormant.
+            EnsureInitialStalker(runner, RegionSemanticZone.Zone01);
+            BindAuthoritativeWorldState();
+        }
+
+        private void EnsureInitialStalker(NetworkRunner runner, RegionSemanticZone zone)
+        {
             if (_monsterInstance == null && _monsterPrefab != null)
             {
                 var stalkerSpawn = GameObject.Find("MonsterSpawn_Stalker_EMPTY");
                 if (TryGetStalkerSpawnPosition(stalkerSpawn != null ? stalkerSpawn.transform : null, out var spawnPosition))
                 {
-                    _monsterInstance = SpawnStalker(runner, spawnPosition, stalkerSpawn.transform.rotation, RegionSemanticZone.Zone01);
+                    _monsterInstance = SpawnStalker(runner, spawnPosition, stalkerSpawn.transform.rotation, zone);
                 }
             }
-            BindAuthoritativeWorldState();
         }
 
         public void TrySpawnZone2Stalker(Collider entrant, Transform spawnMarker)
