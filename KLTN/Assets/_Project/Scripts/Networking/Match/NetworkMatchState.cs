@@ -2937,6 +2937,215 @@ namespace EchoProtocol.Networking
             }
         }
 
+        public void ReconcileAfterHostMigrationAuthoritative()
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || Runner == null
+                || !Runner.IsRunning
+                || !NetworkBootstrap.IsHostMigrationResumeActive)
+            {
+                return;
+            }
+
+            var changed = false;
+            var releasedRelayOperators = 0;
+            var restoredSecurityHoldLeases = 0;
+            var releasedSecurityHoldOperators = 0;
+
+            // Relay ownership is replicated, but a player that did not
+            // migrate as an active participant must not keep the machine
+            // locked on the new Host.
+            for (var index = 0; index < 4; index++)
+            {
+                var slot =
+                    (RelaySlot)index;
+
+                var relayOperator =
+                    GetRelayOperator(slot);
+
+                if (!relayOperator.IsRealPlayer)
+                {
+                    continue;
+                }
+
+                if (TryResolveActivePlayer(
+                        relayOperator,
+                        out _))
+                {
+                    continue;
+                }
+
+                SetRelayOperator(
+                    slot,
+                    PlayerRef.None);
+
+                releasedRelayOperators++;
+                changed = true;
+            }
+
+            // Security Hold participants are replicated but their short
+            // refresh leases are host-local. Restore the lease for active
+            // participants; remove disconnected/dead participants.
+            for (var index = 0; index < 4; index++)
+            {
+                var participant =
+                    GetSecurityHoldParticipant(index);
+
+                if (!participant.IsRealPlayer)
+                {
+                    _securityHoldLeases[index] =
+                        TickTimer.None;
+
+                    continue;
+                }
+
+                if (TryResolveActivePlayer(
+                        participant,
+                        out _))
+                {
+                    _securityHoldLeases[index] =
+                        TickTimer.CreateFromSeconds(
+                            Runner,
+                            1.25f);
+
+                    restoredSecurityHoldLeases++;
+                    continue;
+                }
+
+                SetSecurityHoldParticipant(
+                    index,
+                    PlayerRef.None);
+
+                releasedSecurityHoldOperators++;
+                changed = true;
+            }
+
+            if (Zone2Stage == Zone2MissionStage.SecurityHold
+                && SecurityHoldParticipantCount == 0
+                && !SecurityHoldCompleted)
+            {
+                Zone2Stage =
+                    Zone2MissionStage.SecurityHoldReady;
+
+                changed = true;
+            }
+
+            // Zone 3 push ownership may point at the old Host.
+            if (Zone3Pusher.IsRealPlayer
+                && !TryResolveActivePlayer(
+                    Zone3Pusher,
+                    out _))
+            {
+                Zone3Pusher =
+                    PlayerRef.None;
+
+                changed = true;
+            }
+
+            // Refuel timer is replicated. Its short anti-stale lease is
+            // local to the old authority, so recreate it on the new Host.
+            if (Zone3RefuelOperator.IsRealPlayer)
+            {
+                if (TryResolveActivePlayer(
+                        Zone3RefuelOperator,
+                        out _))
+                {
+                    _zone3RefuelLease =
+                        TickTimer.CreateFromSeconds(
+                            Runner,
+                            0.75f);
+                }
+                else
+                {
+                    Zone3RefuelOperator =
+                        PlayerRef.None;
+
+                    Zone3RefuelTimer =
+                        TickTimer.None;
+
+                    _zone3RefuelLease =
+                        TickTimer.None;
+
+                    changed = true;
+                }
+            }
+            else
+            {
+                _zone3RefuelLease =
+                    TickTimer.None;
+            }
+
+            // Same rule for Emergency Power Transfer.
+            if (Zone3ChargeOperator.IsRealPlayer)
+            {
+                if (TryResolveActivePlayer(
+                        Zone3ChargeOperator,
+                        out _))
+                {
+                    _zone3ChargeLease =
+                        TickTimer.CreateFromSeconds(
+                            Runner,
+                            1.25f);
+                }
+                else
+                {
+                    Zone3ChargeOperator =
+                        PlayerRef.None;
+
+                    _zone3ChargeLease =
+                        TickTimer.None;
+
+                    _zone3ChargeNoiseTimer =
+                        TickTimer.None;
+
+                    changed = true;
+                }
+            }
+            else
+            {
+                _zone3ChargeLease =
+                    TickTimer.None;
+
+                _zone3ChargeNoiseTimer =
+                    TickTimer.None;
+            }
+
+            // Zone3ConvoyController is scene-local authoritative runtime.
+            // Seed it from the replicated NetworkMatchState before the
+            // promoted Host starts ticking the convoy.
+            var zone3 =
+                Zone3MissionDirector.Instance;
+
+            if (zone3 != null
+                && zone3.Convoy != null
+                && Zone3ConvoyInitialized)
+            {
+                zone3.Convoy.ApplyReplicatedState(
+                    Zone3ConvoyInitialized,
+                    Zone3FuelPointsRemaining,
+                    (Zone3ConvoyRoutePoint)
+                        Zone3ConvoyCurrentPoint,
+                    (Zone3ConvoyRoutePoint)
+                        Zone3ConvoyTargetPoint,
+                    Zone3ConvoyRouteLocked,
+                    Zone3ConvoyWaitingForRoute);
+
+                zone3.Convoy.ApplyReplicatedPose(
+                    Zone3FrigatePosition,
+                    Zone3FrigateRotation);
+            }
+
+            if (changed)
+            {
+                HandleReplicatedStateChanged();
+            }
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchState,
+                $"[MatchState] Host Migration InMatch reconciliation complete. Phase={CurrentPhase}, RelayReleased={releasedRelayOperators}, SecurityLeases={restoredSecurityHoldLeases}, SecurityReleased={releasedSecurityHoldOperators}, Zone3Pusher={Zone3Pusher}, RefuelOperator={Zone3RefuelOperator}, ChargeOperator={Zone3ChargeOperator}.");
+        }
         public void ReleasePlayerOperationsAuthoritative(PlayerRef player)
         {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority || !player.IsRealPlayer) return;

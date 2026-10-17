@@ -544,6 +544,9 @@ namespace EchoProtocol.Networking
             _nextMinionSpawnCheckAt =
                 Time.time + _minionSpawnCheckInterval;
 
+            migratedMatch
+                .ReconcileAfterHostMigrationAuthoritative();
+
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerSpawner,
                 $"PSP|MIGRATION_WORLD_ADOPT|match={_matchStateInstance.Id}|phase={migratedMatch.CurrentPhase}|cores={_energyCoreInstances.Count}|sectorBoxes={_sectorBoxInstances.Count}|stations={_powerPuzzleStationInstances.Count}|minions={_creepMinionInstances.Count}|stalker={(migratedStalker != null ? migratedStalker.Id.ToString() : "none")}");
