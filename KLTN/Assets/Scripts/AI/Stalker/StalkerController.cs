@@ -6520,12 +6520,14 @@ namespace EchoProtocol.AI.Stalker
             ClearRoomSweepDestination();
             _rejectedRoomSweepGlobalRegionIds.Clear();
 
-            if (CurrentSimulationTimeSeconds >= _nextRoomSweepFallbackAttemptSeconds
-                && !TrySetRoomSweepLocalFallbackDestination())
-            {
+            if (CurrentSimulationTimeSeconds < _nextRoomSweepFallbackAttemptSeconds)
+                return;
+
+            _nextRoomSweepFallbackAttemptSeconds =
+                CurrentSimulationTimeSeconds + 2.5f;
+
+            if (!TrySetRoomSweepLocalFallbackDestination())
                 _rejectedRoomSweepFallbackNodeIds.Clear();
-                _nextRoomSweepFallbackAttemptSeconds = CurrentSimulationTimeSeconds + 2.5f;
-            }
         }
 
         private bool TrySetRoomSweepLocalFallbackDestination()
@@ -6628,7 +6630,6 @@ namespace EchoProtocol.AI.Stalker
         private void ResetRoomSweepFallbackState()
         {
             _roomSweepFallbackNodeId = -1;
-            _nextRoomSweepFallbackAttemptSeconds = 0f;
             _rejectedRoomSweepFallbackNodeIds.Clear();
             regionGraphFallbackReason = RegionGraphFallbackReason.None;
             _rejectedRoomSweepTransitNodeIds.Clear();
@@ -6672,16 +6673,18 @@ namespace EchoProtocol.AI.Stalker
             for (var i = 0; i < nodeIds.Count; i++)
             {
                 var nodeId = nodeIds[i];
-                if (!_spatialPatrolGraph.TryGetNode(nodeId, out var node))
-                {
-                    continue;
-                }
 
-                var observationPoint = visionSensor.GetObservationPointForGroundPoint(node.Position);
+                if (_roomSweepCoverageMemory.IsObserved(roomRegionId, nodeId))
+                    continue;
+
+                if (!_spatialPatrolGraph.TryGetNode(nodeId, out var node))
+                    continue;
+
+                var observationPoint =
+                    visionSensor.GetObservationPointForGroundPoint(node.Position);
+
                 if (visionSensor.CanSeePoint(observationPoint))
-                {
                     _roomSweepCoverageMemory.MarkObserved(roomRegionId, nodeId);
-                }
             }
         }
 

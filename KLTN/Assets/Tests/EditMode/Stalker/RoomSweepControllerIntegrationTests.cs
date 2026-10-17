@@ -13,6 +13,28 @@ namespace EchoProtocol.AI.Stalker.Tests
     {
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
 
+        [Test]
+        public void STK_RoomSweep_FallbackCooldownSurvivesDestinationReset()
+        {
+            var controller = CreateController();
+
+            SetPrivateField(
+                controller,
+                "_nextRoomSweepFallbackAttemptSeconds",
+                42f);
+
+            InvokePrivate(
+                controller,
+                "ResetRoomSweepFallbackState",
+                Type.EmptyTypes);
+
+            Assert.That(
+                (float)GetPrivateField(
+                    controller,
+                    "_nextRoomSweepFallbackAttemptSeconds"),
+                Is.EqualTo(42f));
+        }
+
         [TearDown]
         public void TearDown()
         {
