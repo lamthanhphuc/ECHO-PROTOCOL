@@ -9,6 +9,7 @@ using Fusion;
 using Fusion.Matchmaking;
 using Fusion.Sockets;
 using EchoProtocol.Networking.Authority;
+using EchoProtocol.UI.Result;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -122,6 +123,7 @@ namespace EchoProtocol.Networking
         private async Task ShutdownAsync(bool returnToLobby, string destinationScene = null)
         {
             if (State == NetworkSessionState.ShuttingDown) return;
+            ResultSession.Clear();
             EchoProtocol.UI.LobbySelectionMemory.SaveBeforeLeaving();
             SetState(NetworkSessionState.ShuttingDown, "Leaving room...");
             _reconnectSessionName = null;
@@ -520,6 +522,7 @@ namespace EchoProtocol.Networking
             if (_sessionOperationInProgress && State != NetworkSessionState.InMatch && State != NetworkSessionState.InLobby) return;
             if (State == NetworkSessionState.ShuttingDown) return;
             LastError = _completedMatchObserved
+                || SceneManager.GetActiveScene().name == EchoProtocol.Core.GameConstants.SceneResult
                 ? "Match finished. Create or join a new room."
                 : State == NetworkSessionState.InMatch
                 ? "Host disconnected – Match aborted."
@@ -547,6 +550,7 @@ namespace EchoProtocol.Networking
             if (Runner != runner) return;
             var matchFinished = State == NetworkSessionState.InMatch
                 && (_completedMatchObserved
+                    || SceneManager.GetActiveScene().name == EchoProtocol.Core.GameConstants.SceneResult
                     || SceneManager.GetActiveScene().name == LobbySceneName
                     || NetworkMatchState.Instance != null && NetworkMatchState.Instance.IsEnded);
             if (matchFinished) message = "Match finished. Create or join a new room.";
@@ -705,6 +709,7 @@ namespace EchoProtocol.Networking
                 && sceneName == LobbySceneName
                 && State == NetworkSessionState.InMatch)
             {
+                ResultSession.Clear();
                 PlayerInteractionControlLock.ReleaseAll();
                 ClearLocalInputProvider();
                 _completedMatchObserved = false;
@@ -720,6 +725,15 @@ namespace EchoProtocol.Networking
                     NetworkSessionState.InLobby,
                     "Match finished; room retained.");
             }
+            if (Runner == runner
+                && sceneName == EchoProtocol.Core.GameConstants.SceneResult
+                && State == NetworkSessionState.InMatch)
+            {
+                PlayerInteractionControlLock.ReleaseAll();
+                ClearLocalInputProvider();
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
             if (Runner == runner && LobbyMapCatalog.IsGameplayScene(sceneName)
                 && State == NetworkSessionState.InLobby)
                 SetState(NetworkSessionState.InMatch, "Match scene loaded.");
@@ -730,6 +744,7 @@ namespace EchoProtocol.Networking
         void INetworkRunnerCallbacks.OnSceneLoadStart(NetworkRunner runner)
         {
             if (Runner == runner) IsSceneLoading = true;
+            ResultSession.Capture(NetworkMatchState.Instance);
             RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
                 "[NetworkSession] Network scene load started.");

@@ -9,6 +9,7 @@ using EchoProtocol.Networking.Authority;
 using EchoProtocol.RelayA;
 using EchoProtocol.RelayB;
 using EchoProtocol.TeamTools;
+using EchoProtocol.UI.Result;
 using Fusion;
 using UnityEngine;
 
@@ -106,7 +107,7 @@ namespace EchoProtocol.Networking
 
         [SerializeField, Min(1f)] private float _escapeDurationSeconds = DefaultEscapeDurationSeconds;
         [SerializeField, Min(1f)] private float _matchDurationSeconds = DefaultMatchDurationSeconds;
-        [SerializeField, Min(0.1f)] private float _returnToLobbyDelaySeconds = 4f;
+        [SerializeField, Min(0.1f)] private float _resultTransitionDelaySeconds = 1f;
         [SerializeField, Min(0.1f)] private float _zone2InteractionDistance = 3f;
         [SerializeField, Min(0.1f)] private float _zoneAccessCooldownSeconds = 5f;
         [SerializeField, Min(1)] private int _zoneAccessFailuresBeforeCooldown = 3;
@@ -275,11 +276,13 @@ namespace EchoProtocol.Networking
         [Networked] public float Zone3ChargeAccumulatedSeconds { get; private set; }
         [Networked] public uint PhaseOrdinal { get; private set; }
         [Networked] public uint EndOrdinal { get; private set; }
+        [Networked] public float FinalDurationSeconds { get; private set; }
+        [Networked] public float FinalObjectiveCompletion { get; private set; }
         [Networked] private TickTimer EscapeTimer { get; set; }
         [Networked] public float EscapeDurationSeconds { get; private set; }
         [Networked] private TickTimer MatchTimer { get; set; }
-        [Networked] private TickTimer ReturnToLobbyTimer { get; set; }
-        [Networked] private NetworkBool ReturnToLobbyRequested { get; set; }
+        [Networked] private TickTimer ReturnToResultTimer { get; set; }
+        [Networked] private NetworkBool ReturnToResultRequested { get; set; }
         [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
         public uint ScenarioConfigRevision { get; private set; }
         [Networked] public NetworkBool HasAppliedScenarioConfig { get; private set; }
@@ -400,6 +403,7 @@ namespace EchoProtocol.Networking
         {
             EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             Instance = this;
+            ResultSession.Clear();
             NetworkPlayerLifeState.StateChanged += HandlePlayerLifeStateChanged;
             ResolveLegacyPresentation();
             if (Object.HasStateAuthority)
@@ -423,11 +427,13 @@ namespace EchoProtocol.Networking
                 Zone3ChargeAccumulatedSeconds = 0f;
                 PhaseOrdinal = 0;
                 EndOrdinal = 0;
+                FinalDurationSeconds = -1f;
+                FinalObjectiveCompletion = -1f;
                 EscapeTimer = TickTimer.None;
                 EscapeDurationSeconds = 0f;
                 MatchTimer = TickTimer.CreateFromSeconds(Runner, _matchDurationSeconds);
-                ReturnToLobbyTimer = TickTimer.None;
-                ReturnToLobbyRequested = false;
+                ReturnToResultTimer = TickTimer.None;
+                ReturnToResultRequested = false;
                 _serverGeneratedAuthCode = UnityEngine.Random.Range(0, 10000).ToString("D4");
                 PowerAuthorizationCode = string.Empty;
                 SecurityHoldCompleted = false;
@@ -500,6 +506,7 @@ namespace EchoProtocol.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            ResultSession.Capture(this);
             if (Instance == this) Instance = null;
             NetworkPlayerLifeState.StateChanged -= HandlePlayerLifeStateChanged;
             _lastPublishedScenarioConfigRevision = 0;
@@ -512,18 +519,14 @@ namespace EchoProtocol.Networking
 
             if (IsEnded)
             {
-                if (!ReturnToLobbyRequested && ReturnToLobbyTimer.Expired(Runner))
+                ResultSession.Capture(this);
+                if (!ReturnToResultRequested && ReturnToResultTimer.Expired(Runner))
                 {
-                    ReturnToLobbyRequested = true;
                     if (Runner != null && Runner.IsSceneAuthority)
                     {
-                        if (Runner.SessionInfo.IsValid)
-                        {
-                            Runner.SessionInfo.IsOpen = true;
-                            Runner.SessionInfo.IsVisible = true;
-                        }
-
-                        _ = Runner.LoadScene(NetworkBootstrap.LobbySceneName, UnityEngine.SceneManagement.LoadSceneMode.Single);
+                        ReturnToResultRequested = true;
+                        _ = Runner.LoadScene(EchoProtocol.Core.GameConstants.SceneResult,
+                            UnityEngine.SceneManagement.LoadSceneMode.Single);
                     }
                 }
                 return;
@@ -623,6 +626,7 @@ namespace EchoProtocol.Networking
 
         public override void Render()
         {
+            ResultSession.Capture(this);
             if (Object != null
                 && !Object.HasStateAuthority
                 && HasAppliedScenarioConfig
@@ -2348,6 +2352,9 @@ namespace EchoProtocol.Networking
 
             CountFinalPlayers(out var survivorCount, out _, out _);
             var objectiveCompletion = CalculateObjectiveCompletion(CurrentPhase, result);
+            FinalDurationSeconds = Mathf.Clamp(
+                _matchDurationSeconds - Remaining(MatchTimer), 0f, _matchDurationSeconds);
+            FinalObjectiveCompletion = objectiveCompletion;
             if (result == NetworkMatchResult.Win
                 && CurrentPhase == NetworkMatchPhase.FinalHunt
                 && Zone3MissionDirector.IsSciFiSceneLoaded)
@@ -2366,10 +2373,10 @@ namespace EchoProtocol.Networking
             EscapeTimer = TickTimer.None;
             EscapeDurationSeconds = 0f;
             MatchTimer = TickTimer.None;
-            ReturnToLobbyTimer = TickTimer.CreateFromSeconds(
+            ReturnToResultTimer = TickTimer.CreateFromSeconds(
                 Runner,
-                Mathf.Max(0.1f, _returnToLobbyDelaySeconds));
-            ReturnToLobbyRequested = false;
+                Mathf.Max(0.1f, _resultTransitionDelaySeconds));
+            ReturnToResultRequested = false;
             EndOrdinal++;
             if (EndOrdinal == 0) EndOrdinal = 1;
             AdvancePhaseOrdinal();
@@ -3479,6 +3486,7 @@ namespace EchoProtocol.Networking
 
         private void HandleReplicatedStateChanged()
         {
+            ResultSession.Capture(this);
             if (Object == null || !Object.HasStateAuthority)
             {
                 TryPublishReplicatedScenarioConfigToRegistry();
