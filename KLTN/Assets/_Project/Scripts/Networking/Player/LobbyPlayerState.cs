@@ -374,6 +374,9 @@ namespace EchoProtocol.Networking
         private const float IdentityRetryIntervalSeconds = 1f;
         private float _nextIdentityRetryAt;
 
+        private bool _pendingReadyRequest;
+        private NetworkBool _pendingReadyValue;
+
         public override void Spawned()
         {
             _pet = GetComponent<PetCompanionController>();
@@ -405,6 +408,23 @@ namespace EchoProtocol.Networking
                 Runner,
                 this);
 
+            if (_pendingReadyRequest
+                && HasVerifiedBackendIdentity)
+            {
+                var pendingReadyValue =
+                    _pendingReadyValue;
+
+                _pendingReadyRequest =
+                    false;
+
+                RuntimeLog.Log(
+                    RuntimeLogCategory.Lobby,
+                    $"LPS|READY_FLUSH|player={Object.InputAuthority}|value={pendingReadyValue}");
+
+                RpcRequestReady(
+                    pendingReadyValue);
+            }
+
             // Spawn, actor discovery and backend session attachment can
             // complete in different frames. Keep retrying the local identity
             // at a bounded rate until BackendUserId has been verified.
@@ -425,22 +445,54 @@ namespace EchoProtocol.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            _pendingReadyRequest = false;
+
             if (_pet != null) Destroy(_pet);
             AnyStateChanged?.Invoke();
         }
 
         public bool RequestReady(bool isReady)
         {
-            if (!Object.HasInputAuthority)
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasInputAuthority)
             {
-                Debug.LogWarning("[LobbyPlayerState] Rejected local ready request: object has no input authority.");
+                Debug.LogWarning(
+                    "[LobbyPlayerState] Rejected local ready request: object has no input authority.");
+
                 return false;
             }
 
-            RpcRequestReady(isReady);
+            if (!HasVerifiedBackendIdentity)
+            {
+                _pendingReadyRequest =
+                    true;
+
+                _pendingReadyValue =
+                    isReady;
+
+                MatchAuthorityRuntime
+                    .EnsureExists(
+                        NetworkBootstrap.Instance)
+                    .TrySubmitLocalIdentity(
+                        this,
+                        force: true);
+
+                RuntimeLog.Log(
+                    RuntimeLogCategory.Lobby,
+                    $"LPS|READY_QUEUED|player={Object.InputAuthority}|value={isReady}");
+
+                return true;
+            }
+
+            _pendingReadyRequest =
+                false;
+
+            RpcRequestReady(
+                isReady);
+
             return true;
         }
-
         public bool RequestOperatorName(string name)
         {
             if (Object == null || !Object.IsValid || !Object.HasInputAuthority) return false;

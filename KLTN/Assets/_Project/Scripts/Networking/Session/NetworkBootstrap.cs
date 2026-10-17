@@ -22,6 +22,8 @@ namespace EchoProtocol.Networking
         public const string RunnerObjectName = "EchoNetworkRunner";
         public const string LobbySceneName = "Lobby";
         public const string BootstrapSceneName = "Bootstrap";
+        private const string HostMigrationTransitionSceneName =
+            "__EchoHostMigrationTransition";
 
         [SerializeField] private NetworkRunner _runnerPrefab;
         [SerializeField] private string _hostSessionName = "EchoProtocol";
@@ -42,6 +44,19 @@ namespace EchoProtocol.Networking
         private Task _hostMigrationTask;
         private bool _hostMigrationInProgress;
 
+        // Disconnected PlayerObjects must survive migration while a match
+        // is running so their owners can reclaim the exact gameplay state.
+        // Lobby players do not need that retention and keeping them there
+        // produces ghost avatars/nameplates and stale input ownership.
+        private bool _hostMigrationRetainDisconnectedPlayers;
+        private bool _hostMigrationSceneFencePending;
+        private const float HostMigrationSceneFenceTimeoutSeconds = 30f;
+
+        // Old actor numbers for snapshot players that did not survive
+        // Fusion migration as active participants.
+        private readonly HashSet<int>
+            _hostMigrationRetainedBackendActors = new();
+
         // A client transport timeout can arrive slightly before Fusion
         // delivers OnHostMigration. Do not destroy the old session during
         // that short race window.
@@ -58,6 +73,8 @@ namespace EchoProtocol.Networking
         // Explicit checkpoints complement Fusion's periodic 10-second
         // Host Migration snapshot update.
         private bool _hostMigrationSnapshotPushInProgress;
+        private bool _hostMigrationSnapshotPushQueued;
+        private string _hostMigrationSnapshotQueuedReason;
 
         private CancellationTokenSource _reconnectCancellation;
         private float _reconnectDeadline;
@@ -583,6 +600,7 @@ namespace EchoProtocol.Networking
             // provides OnHostMigration. Any pending migration/scene fence
             // owns this Runner until it resolves.
             if (_hostMigrationInProgress
+                || _hostMigrationSceneFencePending
                 || _hostMigrationDisconnectPending
                 || _sceneTransitionDisconnectPending)
             {
@@ -630,6 +648,12 @@ namespace EchoProtocol.Networking
             NetworkRunner runner,
             NetDisconnectReason reason)
         {
+            if (_hostMigrationSceneFencePending
+                && Runner == runner)
+            {
+                return;
+            }
+
             if (_hostMigrationInProgress
                 && Runner != runner)
             {
@@ -709,6 +733,7 @@ namespace EchoProtocol.Networking
             if (Runner != runner
                 || State == NetworkSessionState.ShuttingDown
                 || _hostMigrationInProgress
+                || _hostMigrationSceneFencePending
                 || _hostMigrationDisconnectPending)
             {
                 return;
@@ -742,7 +767,8 @@ namespace EchoProtocol.Networking
             }
 
             // Migration now owns the session.
-            if (_hostMigrationInProgress)
+            if (_hostMigrationInProgress
+                || _hostMigrationSceneFencePending)
             {
                 _hostMigrationDisconnectPending = false;
                 return;
@@ -781,7 +807,8 @@ namespace EchoProtocol.Networking
             if (!_sceneTransitionDisconnectPending
                 || Runner != disconnectedRunner
                 || State == NetworkSessionState.ShuttingDown
-                || _hostMigrationInProgress)
+                || _hostMigrationInProgress
+                || _hostMigrationSceneFencePending)
             {
                 return;
             }
@@ -814,6 +841,17 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            if (_hostMigrationSnapshotPushInProgress)
+            {
+                _hostMigrationSnapshotPushQueued = true;
+                _hostMigrationSnapshotQueuedReason =
+                    string.IsNullOrWhiteSpace(reason)
+                        ? "coalesced"
+                        : reason;
+
+                return;
+            }
+
             _ =
                 PushHostMigrationSnapshotCheckpointAsync(
                     runner,
@@ -826,39 +864,70 @@ namespace EchoProtocol.Networking
         {
             if (_hostMigrationSnapshotPushInProgress)
             {
+                _hostMigrationSnapshotPushQueued = true;
+                _hostMigrationSnapshotQueuedReason =
+                    string.IsNullOrWhiteSpace(reason)
+                        ? "coalesced"
+                        : reason;
+
                 return;
             }
 
             _hostMigrationSnapshotPushInProgress =
                 true;
 
+            var currentReason =
+                string.IsNullOrWhiteSpace(reason)
+                    ? "unspecified"
+                    : reason;
+
             try
             {
-                // Let the current lifecycle / scene callback finish
-                // mutating authoritative state before capturing it.
-                await Task.Yield();
-
-                if (Runner != runner
-                    || !runner.IsRunning
-                    || !runner.IsServer
-                    || State == NetworkSessionState.ShuttingDown
-                    || State == NetworkSessionState.Disconnected
-                    || _hostMigrationInProgress)
+                while (true)
                 {
-                    return;
+                    _hostMigrationSnapshotPushQueued =
+                        false;
+
+                    _hostMigrationSnapshotQueuedReason =
+                        null;
+
+                    // Finish authoritative mutations from the current
+                    // callback before the snapshot is captured.
+                    await Task.Yield();
+
+                    if (Runner != runner
+                        || !runner.IsRunning
+                        || !runner.IsServer
+                        || State == NetworkSessionState.ShuttingDown
+                        || State == NetworkSessionState.Disconnected
+                        || _hostMigrationInProgress)
+                    {
+                        return;
+                    }
+
+                    await runner
+                        .PushHostMigrationSnapshot();
+
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.NetworkSession,
+                        $"[NetworkSession] Host Migration snapshot checkpoint pushed. Reason={currentReason}, State={State}, Scene={SceneManager.GetActiveScene().name}.");
+
+                    if (!_hostMigrationSnapshotPushQueued)
+                    {
+                        break;
+                    }
+
+                    currentReason =
+                        string.IsNullOrWhiteSpace(
+                            _hostMigrationSnapshotQueuedReason)
+                            ? "coalesced"
+                            : _hostMigrationSnapshotQueuedReason;
                 }
-
-                await runner
-                    .PushHostMigrationSnapshot();
-
-                RuntimeLog.Log(
-                    RuntimeLogCategory.NetworkSession,
-                    $"[NetworkSession] Host Migration snapshot checkpoint pushed. Reason={reason}, State={State}, Scene={SceneManager.GetActiveScene().name}.");
             }
             catch (Exception exception)
             {
                 Debug.LogWarning(
-                    $"[NetworkSession] Host Migration snapshot checkpoint failed. Reason={reason}, Error={exception.Message}");
+                    $"[NetworkSession] Host Migration snapshot checkpoint failed. Reason={currentReason}, Error={exception.Message}");
             }
             finally
             {
@@ -1019,6 +1088,118 @@ namespace EchoProtocol.Networking
             }
         }
 
+        private async Task HandleHostMigrationAfterSceneReadyAsync(
+            NetworkRunner oldRunner,
+            HostMigrationToken hostMigrationToken)
+        {
+            try
+            {
+                if (Runner != oldRunner
+                    || oldRunner == null
+                    || hostMigrationToken == null)
+                {
+                    return;
+                }
+
+                if (IsSceneLoading)
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.NetworkSession,
+                        "[NetworkSession] Host Migration token received during scene transition. Waiting for local scene load fence.");
+
+                    var deadline =
+                        Time.realtimeSinceStartup
+                        + HostMigrationSceneFenceTimeoutSeconds;
+
+                    while (Runner == oldRunner
+                           && IsSceneLoading
+                           && Time.realtimeSinceStartup
+                               < deadline)
+                    {
+                        await Task.Delay(50);
+                    }
+
+                    if (Runner != oldRunner)
+                    {
+                        return;
+                    }
+
+                    if (IsSceneLoading)
+                    {
+                        Debug.LogWarning(
+                            "[NetworkSession] Host Migration scene fence timed out; continuing with explicit P0-G scene teardown.");
+                    }
+                    else
+                    {
+                        RuntimeLog.Log(
+                            RuntimeLogCategory.NetworkSession,
+                            "[NetworkSession] Host Migration scene fence cleared.");
+                    }
+                }
+
+                await HandleHostMigrationAsync(
+                    oldRunner,
+                    hostMigrationToken);
+            }
+            finally
+            {
+                _hostMigrationSceneFencePending =
+                    false;
+            }
+        }
+        private static async Task PrepareHostMigrationSceneReloadAsync(
+            Scene sourceScene)
+        {
+            if (!sourceScene.IsValid()
+                || !sourceScene.isLoaded
+                || sourceScene.buildIndex < 0)
+            {
+                throw new InvalidOperationException(
+                    "Host Migration source scene is not a valid build scene.");
+            }
+
+            var transitionScene =
+                SceneManager.GetSceneByName(
+                    HostMigrationTransitionSceneName);
+
+            if (!transitionScene.IsValid()
+                || !transitionScene.isLoaded)
+            {
+                transitionScene =
+                    SceneManager.CreateScene(
+                        HostMigrationTransitionSceneName);
+            }
+
+            if (!SceneManager.SetActiveScene(
+                    transitionScene))
+            {
+                throw new InvalidOperationException(
+                    "Could not activate Host Migration transition scene.");
+            }
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                $"[NetworkSession] Host Migration unloading network scene '{sourceScene.name}' before Runner restart.");
+
+            var unload =
+                SceneManager.UnloadSceneAsync(
+                    sourceScene);
+
+            if (unload == null)
+            {
+                throw new InvalidOperationException(
+                    $"Could not unload Host Migration source scene '{sourceScene.name}'.");
+            }
+
+            while (!unload.isDone)
+            {
+                await Task.Yield();
+            }
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                $"[NetworkSession] Host Migration network scene unloaded. TransitionScene='{HostMigrationTransitionSceneName}'.");
+        }
         private async Task HandleHostMigrationAsync(
             NetworkRunner oldRunner,
             HostMigrationToken hostMigrationToken)
@@ -1039,9 +1220,21 @@ namespace EchoProtocol.Networking
             var previousSessionName =
                 CurrentSessionName;
 
+            var migrationSourceScene =
+                SceneManager.GetActiveScene();
+
+            var migrationSceneInfo =
+                BuildSceneInfo();
+
+            _hostMigrationRetainDisconnectedPlayers =
+                previousState ==
+                NetworkSessionState.InMatch;
+
+            _hostMigrationRetainedBackendActors.Clear();
+
             RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
-                $"[NetworkSession] Host migration started. Session='{previousSessionName}', Mode={hostMigrationToken.GameMode}.");
+                $"[NetworkSession] Host migration started. Session='{previousSessionName}', Mode={hostMigrationToken.GameMode}, PreviousState={previousState}, Scene='{migrationSourceScene.name}', RetainDisconnected={_hostMigrationRetainDisconnectedPlayers}.");
 
             LastError = string.Empty;
             SetState(
@@ -1085,6 +1278,9 @@ namespace EchoProtocol.Networking
 
             try
             {
+                await PrepareHostMigrationSceneReloadAsync(
+                    migrationSourceScene);
+
                 migrationRunner = EnsureRunner();
 
                 _realtimeClient =
@@ -1097,7 +1293,7 @@ namespace EchoProtocol.Networking
                     HostMigrationToken = hostMigrationToken,
                     HostMigrationResume =
                         ResumeHostMigration,
-                    Scene = BuildSceneInfo(),
+                    Scene = migrationSceneInfo,
                     SceneManager =
                         migrationRunner.GetComponent<INetworkSceneManager>(),
                     ObjectProvider =
@@ -1186,6 +1382,21 @@ namespace EchoProtocol.Networking
                             "Backend rejected migrated Host authority.");
                     }
 
+                    if (_hostMigrationRetainDisconnectedPlayers
+                        && _hostMigrationRetainedBackendActors.Count > 0)
+                    {
+                        bool rosterReconciled =
+                            await _matchAuthority
+                                .ReconcileMigratedDisconnectedActorsAsync(
+                                    _hostMigrationRetainedBackendActors);
+
+                        if (!rosterReconciled)
+                        {
+                            Debug.LogWarning(
+                                "[NetworkSession] Host Migration completed with one or more backend roster disconnects still pending.");
+                        }
+                    }
+
                     // Publish an immediate fresh snapshot after the new
                     // Host has successfully assumed backend authority.
                     await migrationRunner
@@ -1270,10 +1481,14 @@ namespace EchoProtocol.Networking
                 SetState(
                     NetworkSessionState.Failed,
                     LastError);
+
+                ReturnToBootstrapScene();
             }
             finally
             {
                 IsHostMigrationResumeActive = false;
+                _hostMigrationRetainDisconnectedPlayers = false;
+                _hostMigrationRetainedBackendActors.Clear();
 
                 _callbacksRegistered =
                     Runner != null
@@ -1485,6 +1700,7 @@ namespace EchoProtocol.Networking
 
             var retainedPlayers = 0;
             var conflictingPlayersRemoved = 0;
+            var departedLobbyPlayersRemoved = 0;
 
             // A snapshot PlayerObject is NOT stale merely because its
             // previous PlayerRef is absent from ActivePlayers. The client
@@ -1509,6 +1725,27 @@ namespace EchoProtocol.Networking
                     continue;
                 }
 
+                // Lobby does not preserve disconnected PlayerObjects.
+                // Their loadout can be recreated when the account joins
+                // again, while removing the old snapshot avoids ghost
+                // avatars/nameplates and stale InputAuthority.
+                if (!_hostMigrationRetainDisconnectedPlayers)
+                {
+                    migrationRunner.Despawn(
+                        retainedPlayer);
+
+                    restoredObjects.Remove(
+                        pair.Value);
+
+                    departedLobbyPlayersRemoved++;
+
+                    continue;
+                }
+
+                // InMatch keeps the exact PlayerObject for bounded
+                // reconnect so HP, movement, inventory and other
+                // Networked gameplay state can be reclaimed.
+                //
                 // We cannot keep two logical players under the same
                 // PlayerRef. Remove only this genuine collision case.
                 if (lifecyclePlayerObjects.ContainsKey(
@@ -1526,6 +1763,14 @@ namespace EchoProtocol.Networking
                     conflictingPlayersRemoved++;
 
                     continue;
+                }
+
+                if (retainedPlayer.TryGetComponent<LobbyPlayerState>(
+                        out var retainedLobbyState)
+                    && retainedLobbyState.FusionActorNumber > 0)
+                {
+                    _hostMigrationRetainedBackendActors.Add(
+                        retainedLobbyState.FusionActorNumber);
                 }
 
                 retainedPlayer
@@ -1575,7 +1820,7 @@ namespace EchoProtocol.Networking
 
             RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
-                $"[NetworkSession] Host migration snapshot restored. DynamicObjects={restoredObjects.Count}, PlayerObjects={lifecyclePlayerObjects.Count}, RetainedPlayers={retainedPlayers}, ConflictsRemoved={conflictingPlayersRemoved}.");
+                $"[NetworkSession] Host migration snapshot restored. DynamicObjects={restoredObjects.Count}, PlayerObjects={lifecyclePlayerObjects.Count}, RetainedPlayers={retainedPlayers}, LobbyDepartedRemoved={departedLobbyPlayersRemoved}, ConflictsRemoved={conflictingPlayersRemoved}.");
         }
 
         void INetworkRunnerCallbacks.OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
@@ -1603,7 +1848,9 @@ namespace EchoProtocol.Networking
             NetworkRunner runner,
             HostMigrationToken hostMigrationToken)
         {
-            if (Runner != runner || _hostMigrationInProgress)
+            if (Runner != runner
+                || _hostMigrationInProgress
+                || _hostMigrationSceneFencePending)
             {
                 return;
             }
@@ -1617,8 +1864,11 @@ namespace EchoProtocol.Networking
                 RuntimeLogCategory.NetworkSession,
                 $"[NetworkSession] Host Migration token received. State={State}, SceneLoading={IsSceneLoading}, Session='{CurrentSessionName}'.");
 
+            _hostMigrationSceneFencePending =
+                true;
+
             _hostMigrationTask =
-                HandleHostMigrationAsync(
+                HandleHostMigrationAfterSceneReadyAsync(
                     runner,
                     hostMigrationToken);
         }

@@ -832,6 +832,102 @@ namespace EchoProtocol.Networking.Authority
             }
         }
 
+        public async Task<bool> ReconcileMigratedDisconnectedActorsAsync(
+            IEnumerable<int> actorNumbers)
+        {
+            if (!IsHostBinding
+                || !HasBinding
+                || actorNumbers == null)
+            {
+                return false;
+            }
+
+            var actors =
+                new HashSet<int>();
+
+            foreach (var actorNumber in actorNumbers)
+            {
+                if (actorNumber > 0)
+                {
+                    actors.Add(actorNumber);
+                }
+            }
+
+            var reconciled = 0;
+            var allReconciled = true;
+
+            foreach (var actorNumber in actors)
+            {
+                var actorReconciled = false;
+
+                for (var attempt = 1;
+                     attempt <= 3;
+                     attempt++)
+                {
+                    if (!IsHostBinding
+                        || !HasBinding)
+                    {
+                        return false;
+                    }
+
+                    var result =
+                        await _api.DisconnectPlayerAsync(
+                            MatchId,
+                            actorNumber);
+
+                    if (IsSuccessful(result))
+                    {
+                        actorReconciled = true;
+                        break;
+                    }
+
+                    var errorCode =
+                        !string.IsNullOrWhiteSpace(
+                            result?.ErrorCode)
+                            ? result.ErrorCode
+                            : result?.Data?.errorCode;
+
+                    // Takeover already disconnects the previous Host.
+                    // Repeating that disconnect is therefore idempotent.
+                    if (string.Equals(
+                            errorCode,
+                            "NOT_FOUND",
+                            StringComparison.Ordinal))
+                    {
+                        actorReconciled = true;
+                        break;
+                    }
+
+                    if (attempt < 3)
+                    {
+                        await Task.Delay(250);
+                    }
+                    else
+                    {
+                        Debug.LogWarning(
+                            $"[MatchAuthority] Migration roster disconnect failed. Actor={actorNumber}, Error={Describe(result)}");
+                    }
+                }
+
+                if (actorReconciled)
+                {
+                    _disconnectedActors.Add(
+                        actorNumber);
+
+                    reconciled++;
+                }
+                else
+                {
+                    allReconciled = false;
+                }
+            }
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+                $"MA|MIGRATION_ROSTER_RECONCILE|requested={actors.Count}|reconciled={reconciled}|success={allReconciled}");
+
+            return allReconciled;
+        }
         public async void MarkPlayerDisconnected(int actorNumber)
         {
             if (!IsHostBinding || !HasBinding || actorNumber < 1) return;
