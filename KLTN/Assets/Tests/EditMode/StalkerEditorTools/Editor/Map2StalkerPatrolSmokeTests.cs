@@ -22,7 +22,7 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
         }
 
         [UnityTest]
-        public IEnumerator Map2_SharedStalkerPrefabPatrolMovesOnSceneNavMesh()
+        public IEnumerator Map2_LizardPrefabPatrolMovesOnSceneNavMesh()
         {
             EditorSceneManager.OpenScene("Assets/Scenes/Scene_A.unity", OpenSceneMode.Single);
             yield return new EnterPlayMode();
@@ -34,7 +34,7 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
             var marker = GameObject.Find("MonsterSpawn_Stalker_EMPTY").transform;
             Assert.That(NavMesh.SamplePosition(marker.position, out var spawn, 1f, NavMesh.AllAreas), Is.True);
             var asset = AssetDatabase.LoadAssetAtPath<RegionGraphAsset>(Map2RegionGraphAuthoring.AssetPath);
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/StalkerNetwork.prefab");
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/StalkerNetwork_Lizard.prefab");
             var holder = new GameObject("Map2 patrol smoke test");
             holder.SetActive(false);
             var instance = Object.Instantiate(prefab, spawn.position, marker.rotation, holder.transform);

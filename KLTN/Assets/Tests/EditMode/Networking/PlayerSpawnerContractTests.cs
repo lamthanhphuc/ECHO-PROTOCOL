@@ -196,6 +196,10 @@ namespace EchoProtocol.Networking.Tests
                 Assert.That(serializedSpawner.FindProperty("_playerPrefab"), Is.Null);
                 Assert.That(serializedSpawner.FindProperty("_doorPrefab"), Is.Not.Null);
                 Assert.That(serializedSpawner.FindProperty("_pickupItemPrefab"), Is.Not.Null);
+                var map2Lizard = serializedSpawner.FindProperty("_map2LizardPrefab");
+                Assert.That(map2Lizard, Is.Not.Null);
+                Assert.That(map2Lizard.objectReferenceValue, Is.Not.Null);
+                Assert.That(map2Lizard.objectReferenceValue.name, Is.EqualTo("StalkerNetwork_Lizard"));
             }
             finally
             {

@@ -40,6 +40,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _powerPuzzlePrefab;
         [SerializeField] private NetworkObject _powerPuzzleStationPrefab;
         [SerializeField] private NetworkObject _monsterPrefab;
+        [SerializeField] private NetworkObject _map2LizardPrefab;
         [SerializeField] private RegionGraphAsset _map2RegionGraph;
         [SerializeField] private NetworkObject _creepMinionPrefab;
         [Header("Creep Minion Spawn")]
@@ -243,7 +244,7 @@ namespace EchoProtocol.Networking
             if (SceneManager.GetActiveScene().name == LobbyManager.GameSceneName)
                 EnsureWorldStateExamples(runner);
             else if (_map2RegionGraph != null)
-                EnsureInitialStalker(runner, RegionSemanticZone.Zone01, _map2RegionGraph);
+                EnsureInitialStalker(runner, RegionSemanticZone.Zone01, _map2RegionGraph, _map2LizardPrefab);
             else
                 Debug.LogError("[PlayerSpawner] Map2 Stalker requires its scene RegionGraph.");
         }
@@ -359,14 +360,19 @@ namespace EchoProtocol.Networking
             BindAuthoritativeWorldState();
         }
 
-        private void EnsureInitialStalker(NetworkRunner runner, RegionSemanticZone zone, RegionGraphAsset graph = null)
+        private void EnsureInitialStalker(
+            NetworkRunner runner,
+            RegionSemanticZone zone,
+            RegionGraphAsset graph = null,
+            NetworkObject prefab = null)
         {
-            if (_monsterInstance == null && _monsterPrefab != null)
+            prefab ??= _monsterPrefab;
+            if (_monsterInstance == null && prefab != null)
             {
                 var stalkerSpawn = GameObject.Find("MonsterSpawn_Stalker_EMPTY");
                 if (TryGetStalkerSpawnPosition(stalkerSpawn != null ? stalkerSpawn.transform : null, out var spawnPosition))
                 {
-                    _monsterInstance = SpawnStalker(runner, spawnPosition, stalkerSpawn.transform.rotation, zone, graph);
+                    _monsterInstance = SpawnStalker(runner, spawnPosition, stalkerSpawn.transform.rotation, zone, graph, prefab);
                 }
             }
         }
@@ -798,9 +804,15 @@ namespace EchoProtocol.Networking
             _creepMinionInstances.Clear();
         }
 
-        private NetworkObject SpawnStalker(NetworkRunner runner, Vector3 position, Quaternion rotation, RegionSemanticZone zone, RegionGraphAsset graph = null)
+        private NetworkObject SpawnStalker(
+            NetworkRunner runner,
+            Vector3 position,
+            Quaternion rotation,
+            RegionSemanticZone zone,
+            RegionGraphAsset graph = null,
+            NetworkObject prefab = null)
         {
-            var spawned = runner.Spawn(_monsterPrefab, position, rotation, PlayerRef.None,
+            var spawned = runner.Spawn(prefab != null ? prefab : _monsterPrefab, position, rotation, PlayerRef.None,
                 (_, obj) =>
                 {
                     var controller = obj.GetComponent<StalkerController>();

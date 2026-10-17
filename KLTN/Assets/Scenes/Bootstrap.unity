@@ -191,6 +191,7 @@ MonoBehaviour:
   _powerPuzzlePrefab: {fileID: 0}
   _powerPuzzleStationPrefab: {fileID: 0}
   _monsterPrefab: {fileID: 100002, guid: 3348269a897243f98149bb4f35656540, type: 3}
+  _map2LizardPrefab: {fileID: 100002, guid: 218f37689db761648a3fe58c8bf143e2, type: 3}
   _map2RegionGraph: {fileID: 11400000, guid: 78b4221107831d04f911af15318ed801, type: 2}
 --- !u!1 &143094129
 GameObject:

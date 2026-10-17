@@ -195,11 +195,17 @@ public sealed class PlayerJumpscareController : MonoBehaviour
             _gameplayHud.SetActive(false);
         }
 
-        if (_ghostJumpscarePrefab != null)
+        var jumpscarePrefab = _stalkerBite
+            && _suppressedStalkerPresenter != null
+            && _suppressedStalkerPresenter.BiteJumpscarePrefab != null
+                ? _suppressedStalkerPresenter.BiteJumpscarePrefab
+                : _ghostJumpscarePrefab;
+
+        if (jumpscarePrefab != null)
         {
             _ghost =
                 Instantiate(
-                    _ghostJumpscarePrefab,
+                    jumpscarePrefab,
                     _camera.transform);
 
             _ghost.transform.localPosition =
