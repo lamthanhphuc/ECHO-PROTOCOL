@@ -79,6 +79,34 @@ namespace EchoProtocol.Networking
         private void Update()
         {
             var runner = _bootstrap != null ? _bootstrap.Runner : null;
+
+            // Map 2 - Flooded Grounds: spawn Creep Minion
+            // using the existing Zone01 minion behaviour.
+            if (SceneManager.GetActiveScene().name ==
+                LobbyMapCatalog.ExplorationScene)
+            {
+                if (runner == null ||
+                    !runner.IsServer ||
+                    !runner.IsRunning ||
+                    _bootstrap.State != NetworkSessionState.InMatch)
+                    return;
+
+                PruneInvalidAuthoritativeWorldStateReferences();
+
+                if (!IsValidNetworkObject(_monsterInstance))
+                    return;
+
+                if (Time.time < _nextMinionSpawnCheckAt)
+                    return;
+
+                _nextMinionSpawnCheckAt =
+                    Time.time + _minionSpawnCheckInterval;
+
+                _zone2MinionsActive = false;
+                MaintainCreepMinionPopulation(runner);
+                return;
+            }
+
             if (runner == null || !runner.IsServer || !runner.IsRunning
                 || _matchStateInstance == null
                 || !_matchStateInstance.TryGetComponent<NetworkMatchState>(out var matchState)) return;

@@ -37,6 +37,31 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
+        public void ToolDive_FallsBackAndOnlyFleesWithStolenTool()
+        {
+            string source = File.ReadAllText(MinionSource);
+            string beginToolDive = ExtractMethod(source,
+                "private void BeginToolDive",
+                "private void TickToolDive");
+            string tickToolDive = ExtractMethod(source,
+                "private void TickToolDive",
+                "public void GetToolCarryPose");
+
+            StringAssert.Contains("&& !TryFindFleeDestination(", beginToolDive);
+
+            int guard = tickToolDive.LastIndexOf("if (StolenToolId.IsValid)",
+                System.StringComparison.Ordinal);
+            int blockStart = tickToolDive.IndexOf('{', guard);
+            int flee = tickToolDive.LastIndexOf("BeginFleeTo(",
+                System.StringComparison.Ordinal);
+            int blockEnd = tickToolDive.IndexOf('}', blockStart);
+
+            Assert.That(guard, Is.GreaterThanOrEqualTo(0));
+            Assert.That(flee, Is.GreaterThan(blockStart));
+            Assert.That(flee, Is.LessThan(blockEnd));
+        }
+
+        [Test]
         public void Zone2Minions_UseZone2StalkerAsAnchor()
         {
             string source = File.ReadAllText(SpawnerSource);

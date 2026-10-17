@@ -346,8 +346,7 @@ MonoBehaviour:
   navMeshAgent: {fileID: 100004}
   audioController: {fileID: 7430091134983458005}
   animationAudioEvents: {fileID: 6848666541759064299}
-  controlledRenderers:
-  - {fileID: 0}
+  controlledRenderers: []
   defaultCrossfadeSeconds: 0.1
   movingSpeedThreshold: 0.05
   patrolPlaybackSpeed: 1

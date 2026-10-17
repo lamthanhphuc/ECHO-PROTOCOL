@@ -798,7 +798,8 @@ namespace EchoProtocol.AI.Minions
         private void BeginToolDive(NetworkObject target)
         {
             _toolVictimPosition = target.transform.position;
-            if (!TryFindSabotageDropPosition(target.transform.position, out _fleeDestination))
+            if (!TryFindSabotageDropPosition(target.transform.position, out _fleeDestination)
+                && !TryFindFleeDestination(target.transform.position, out _fleeDestination))
             {
                 AttackCooldown = TickTimer.CreateFromSeconds(Runner, 1f);
                 return;
@@ -856,8 +857,10 @@ namespace EchoProtocol.AI.Minions
             ToolDivePhase = 0;
             _agent.stoppingDistance = 0.4f;
             if (StolenToolId.IsValid)
+            {
                 _toolRouteRetries = 0;
                 BeginFleeTo(_fleeDestination, Mathf.Max(toolFleeSeconds, 15f));
+            }
         }
 
         public void GetToolCarryPose(out Vector3 position, out Quaternion rotation)
