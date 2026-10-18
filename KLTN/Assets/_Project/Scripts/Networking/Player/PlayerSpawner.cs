@@ -238,8 +238,7 @@ namespace EchoProtocol.Networking
                 ConfigureExistingPlayerObject(player, playerObject, gameplay: true);
             }
 
-            // Scene_A is exploration-only: no facility objectives, pickups or monsters.
-            if (SceneManager.GetActiveScene().name == LobbyManager.GameSceneName)
+            if (LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name))
                 EnsureWorldStateExamples(runner);
         }
 
@@ -270,7 +269,7 @@ namespace EchoProtocol.Networking
             {
                 _powerPuzzleStationPrefab = Resources.Load<NetworkObject>("Network/NetworkPowerPuzzleStation");
             }
-            if (_doorInstance == null && _doorPrefab != null && !Zone3MissionDirector.IsSciFiSceneLoaded)
+            if (_doorInstance == null && _doorPrefab != null && !Zone3MissionDirector.IsSciFiSceneLoaded && !FloodedMapMission.IsLoaded)
             {
                 _doorInstance = runner.Spawn(_doorPrefab, new Vector3(0f, 1f, 2.5f), Quaternion.identity);
                 RuntimeLog.Log(

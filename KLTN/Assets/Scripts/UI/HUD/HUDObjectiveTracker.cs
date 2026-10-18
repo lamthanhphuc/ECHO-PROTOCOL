@@ -94,6 +94,14 @@ namespace EchoProtocol.UI.HUD
 
         private void Update()
         {
+            if (EchoProtocol.Networking.FloodedMapMission.TryDescribe(out var mapTitle, out var mapDetail, out var mapProgress))
+            {
+                ResolveComponents();
+                RefreshVisibility();
+                SetPhaseBadge("VÙNG NGẬP", "#7EA6A4");
+                SetObjective(mapTitle, mapDetail, mapProgress, new Color(.49f, .65f, .64f));
+                return;
+            }
             if (matchFlow == null)
             {
                 ResolveReferences();

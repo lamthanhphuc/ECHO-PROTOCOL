@@ -19,6 +19,10 @@ public class PowerPuzzleStation : MonoBehaviour, IInteractable
             if (stationType == PowerPuzzleStationType.PowerControl
                 && TryGetNetworkMatchState(out var matchState))
             {
+                if (FloodedMapMission.IsLoaded)
+                    return matchState.ZoneDoorsUnlocked ? "ĐÃ XÁC THỰC · ĐẾN TRẠM NẠP ĐĨA BAY [E]"
+                        : matchState.SecurityHoldCompleted ? "NHẬP MÃ ĐIỀU KHIỂN ĐĨA BAY [E]"
+                        : "CHƯA CÓ MÃ · HOÀN THÀNH TERMINAL AN NINH";
                 bool isComplete = matchState.ZoneDoorsUnlocked
                     || matchState.PowerPuzzleCompleted
                     || matchState.Zone2Stage == Zone2MissionStage.Zone2Completed;
