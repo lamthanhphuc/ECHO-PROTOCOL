@@ -135,7 +135,7 @@ namespace EchoProtocol.UI
         public void ApplyMap(int map)
         {
             if (!floodedEnvironment || !sciFiEnvironment) return;
-            map = map == 1 ? 1 : 0;
+            map = map >= 1 ? 1 : 0;
             if (_appliedMap == map) return;
             bool flooded = map == 1;
             sciFiEnvironment.SetActive(!flooded);

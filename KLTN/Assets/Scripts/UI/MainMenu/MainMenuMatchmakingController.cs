@@ -1,4 +1,4 @@
-using EchoProtocol.Auth;
+﻿using EchoProtocol.Auth;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Networking;
 using EchoProtocol.Profile;
@@ -34,18 +34,49 @@ namespace EchoProtocol.UI.MainMenu
         private MatchDifficulty _difficulty =
             MatchDifficulty.Normal;
 
+        private GameObject _gameModeRow;
+        private Button _gameModeButton;
+        private Text _gameModeValue;
+        private int _gameMode;
         private bool _hostMode;
         private bool _busy;
 
         private void Awake()
         {
             ResolveServices();
+            BuildGameModePicker();
             RefreshDifficultyText();
 
             if (dialog != null)
             {
                 dialog.SetActive(false);
             }
+        }
+
+        private void BuildGameModePicker()
+        {
+            if (!difficultyRow || _gameModeRow) return;
+            _gameModeRow = Instantiate(difficultyRow,difficultyRow.transform.parent,false);
+            _gameModeRow.name = "GameModeRow";
+            var row = (RectTransform)_gameModeRow.transform;
+            row.anchoredPosition = ((RectTransform)difficultyRow.transform).anchoredPosition + Vector2.down*54;
+            var label = row.Find("Label")?.GetComponent<Text>();
+            if (label) label.text = GameLanguage.Choose("CH? ?? CH?I", "GAME MODE");
+            _gameModeButton = row.GetComponentInChildren<Button>(true);
+            _gameModeButton.onClick = new Button.ButtonClickedEvent();
+            _gameModeValue = _gameModeButton.GetComponentInChildren<Text>(true);
+            _gameModeButton.onClick.AddListener(() => { if (!_busy && _hostMode) { _gameMode = 1-_gameMode; RefreshGameMode(); } });
+            foreach (var component in new Component[] {confirmButton,backButton,statusText})
+                if(component) ((RectTransform)component.transform).anchoredPosition += Vector2.down*54;
+            var window = difficultyRow.transform.parent as RectTransform;
+            if(window) window.sizeDelta += Vector2.up*54;
+            RefreshGameMode();
+        }
+        private void RefreshGameMode()
+        {
+            if (_gameModeValue) _gameModeValue.text = _gameMode == 1
+                ? GameLanguage.Choose("<  THANH TRỪNG  >", "<  PURGE  >")
+                : GameLanguage.Choose("<  KHÁM PHÁ  >", "<  EXPEDITION  >");
         }
 
         private void OnEnable()
@@ -109,6 +140,8 @@ namespace EchoProtocol.UI.MainMenu
                 return;
 
             _hostMode = true;
+            if (_gameModeRow) _gameModeRow.SetActive(true);
+            RefreshGameMode();
 
             if (titleText != null)
                 titleText.text = "HOST GAME";
@@ -127,6 +160,7 @@ namespace EchoProtocol.UI.MainMenu
                 return;
 
             _hostMode = false;
+            if (_gameModeRow) _gameModeRow.SetActive(false);
 
             if (titleText != null)
                 titleText.text = "JOIN GAME";
@@ -247,7 +281,7 @@ namespace EchoProtocol.UI.MainMenu
                         ? await bootstrap.CreateRoomAsync(
                             roomCode,
                             maxPlayers,
-                            _difficulty)
+                            _difficulty, _gameMode)
                         : await bootstrap.JoinRoomAsync(
                             roomCode);
             }
@@ -366,6 +400,7 @@ namespace EchoProtocol.UI.MainMenu
                 difficultyButton.interactable =
                     !_busy && _hostMode;
 
+            if (_gameModeButton) _gameModeButton.interactable = !_busy && _hostMode;
             if (confirmButton != null)
                 confirmButton.interactable = !_busy;
 
