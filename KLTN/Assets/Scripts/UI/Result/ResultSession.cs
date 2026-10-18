@@ -86,26 +86,46 @@ namespace EchoProtocol.UI.Result
                 return;
 
             var players = new List<ResultPlayerSnapshot>(4);
-            var states = UnityEngine.Object.FindObjectsByType<LobbyPlayerState>(
-                FindObjectsInactive.Include, FindObjectsSortMode.None);
-            foreach (var player in states)
+            for (int i = 0; i < 4; i++)
             {
-                if (player == null || !player.IsGameplayPlayer)
-                    continue;
-
-                string name = player.OperatorName.ToString().Trim();
+                var entry = state.GetResultRosterEntry(i);
+                if (!entry.Present) continue;
+                string name = entry.Name.ToString().Trim();
                 if (name.Length == 0) name = "UNKNOWN OPERATOR";
-                bool disconnected = player.Disconnected;
-                var life = player.GetComponent<NetworkPlayerLifeState>();
-                int downs = life != null ? Mathf.Max(0, life.DownCount) : -1;
-                int revives = life != null ? Mathf.Max(0, life.ReviveCount) : -1;
-                string status = disconnected ? "DISCONNECTED" : life == null ? "UNKNOWN" : life.Status switch
+                bool disconnected = entry.Disconnected;
+                string status = disconnected ? "DISCONNECTED" : !entry.HasLifeState ? "UNKNOWN" : entry.LifeStatus switch
                 {
                     NetworkPlayerLifeStatus.Escaped => "SURVIVED",
                     NetworkPlayerLifeStatus.Eliminated => "DECEASED",
                     _ => "MISSING"
                 };
-                players.Add(new ResultPlayerSnapshot(name, status, disconnected, downs, revives));
+                players.Add(new ResultPlayerSnapshot(name, status, disconnected,
+                    entry.DownCount, entry.ReviveCount));
+            }
+
+            // Older or partially initialized match objects may have no replicated roster.
+            // In that case, use only live gameplay objects as a best-effort fallback.
+            if (players.Count == 0)
+            {
+                var states = UnityEngine.Object.FindObjectsByType<LobbyPlayerState>(
+                    FindObjectsInactive.Include);
+                foreach (var player in states)
+                {
+                    if (player == null || !player.IsGameplayPlayer) continue;
+                    string name = player.OperatorName.ToString().Trim();
+                    if (name.Length == 0) name = "UNKNOWN OPERATOR";
+                    bool disconnected = player.Disconnected;
+                    var life = player.GetComponent<NetworkPlayerLifeState>();
+                    string status = disconnected ? "DISCONNECTED" : life == null ? "UNKNOWN" : life.Status switch
+                    {
+                        NetworkPlayerLifeStatus.Escaped => "SURVIVED",
+                        NetworkPlayerLifeStatus.Eliminated => "DECEASED",
+                        _ => "MISSING"
+                    };
+                    players.Add(new ResultPlayerSnapshot(name, status, disconnected,
+                        life != null ? Mathf.Max(0, life.DownCount) : -1,
+                        life != null ? Mathf.Max(0, life.ReviveCount) : -1));
+                }
             }
 
             players.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
