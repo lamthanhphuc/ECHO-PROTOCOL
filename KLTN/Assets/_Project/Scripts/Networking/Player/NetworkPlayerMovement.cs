@@ -358,6 +358,7 @@ namespace EchoProtocol.Networking
             }
 
             Vector3 finalMotion = (worldDirection + Vector3.up * _offlineVelocity.y) * Time.deltaTime;
+            finalMotion = FloodedWaterBoundary.ConstrainMotion(_unityCharacterController, finalMotion);
             _unityCharacterController.Move(finalMotion);
 
         }
@@ -536,7 +537,8 @@ namespace EchoProtocol.Networking
             _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f)
                 * coreCarryMultiplier * GetExternalSlowMultiplier();
 
-            _controller.Move(direction);
+            if (!FloodedWaterBoundary.TryMove(_controller, _unityCharacterController, direction))
+                _controller.Move(direction);
 
             transform.rotation = lookRotation;
             LookPitch = Mathf.Clamp(input.LookPitch, -85f, 85f);
