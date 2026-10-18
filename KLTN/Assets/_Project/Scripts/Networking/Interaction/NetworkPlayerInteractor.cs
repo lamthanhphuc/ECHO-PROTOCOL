@@ -303,7 +303,7 @@ namespace EchoProtocol.Networking
                 CurrentCandidate != null
                 && IsTeamToolPickup(CurrentCandidate)
                 && playerState != null
-                && playerState.ToolId > 0;
+                && (playerState.ToolId > 0 || AlienHuntMission.IsCarrying(gameObject));
 
             var inventory = GetComponent<PlayerInventory>();
             int equippedToolId =
@@ -461,6 +461,8 @@ namespace EchoProtocol.Networking
         public bool RequestDropCarriedItem()
         {
             if (!Object.HasInputAuthority) return false;
+            var hunt = AlienHuntMission.Instance;
+            if (hunt != null && hunt.TryDropLocal(gameObject)) return true;
 
             var fuelCell = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject);
             if (fuelCell != null)
@@ -634,7 +636,7 @@ namespace EchoProtocol.Networking
             if (isOnline && !Object.HasInputAuthority) return false;
 
             var playerState = GetComponent<LobbyPlayerState>();
-            if (isOnline && (playerState == null || !playerState.IsGameplayPlayer || playerState.CarriedCoreId.IsValid)) return false;
+            if (isOnline && (playerState == null || !playerState.IsGameplayPlayer || (playerState.CarriedCoreId.IsValid || AlienHuntMission.IsCarrying(gameObject)))) return false;
             var scanner = GetComponent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>();
             if (scanner != null && scanner.IsScannerEquipped())
             {
@@ -1157,7 +1159,7 @@ namespace EchoProtocol.Networking
                 {
                     result = InteractionValidationResult.InvalidRequester;
                 }
-                else if (state == null || state.CarriedCoreId.IsValid)
+                else if (state == null || state.CarriedCoreId.IsValid || AlienHuntMission.IsCarrying(gameObject))
                 {
                     result = InteractionValidationResult.InvalidTargetState;
                 }
@@ -1314,7 +1316,7 @@ namespace EchoProtocol.Networking
             }
 
             var state = GetComponent<LobbyPlayerState>();
-            if (state != null && state.CarriedCoreId.IsValid)
+            if (AlienHuntMission.IsCarrying(gameObject) || (state != null && state.CarriedCoreId.IsValid))
             {
                 return;
             }
@@ -1541,7 +1543,7 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            if (state != null && state.CarriedCoreId.IsValid)
+            if (AlienHuntMission.IsCarrying(gameObject) || (state != null && state.CarriedCoreId.IsValid))
             {
                 return false;
             }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
 using Fusion;
@@ -238,7 +238,7 @@ namespace EchoProtocol.Tools.Scanner
             // Cannot pick up tool if carrying an Energy Core
             if (context.PlayerState.Object != null && context.PlayerState.Object.IsValid)
             {
-                if (context.PlayerState.CarriedCoreId.IsValid)
+                if (context.PlayerState.CarriedCoreId.IsValid || EchoProtocol.Networking.AlienHuntMission.IsCarrying(context.PlayerState.gameObject))
                 {
                     return InteractionValidationResult.InvalidTargetState;
                 }
@@ -307,7 +307,7 @@ namespace EchoProtocol.Tools.Scanner
         public bool CanInteract(GameObject interactor)
         {
             if (IsPickedUp) return false;
-            if (interactor == null) return false;
+            if (interactor == null || EchoProtocol.Networking.AlienHuntMission.IsCarrying(interactor)) return false;
 
             var carrier = interactor.GetComponentInParent<PlayerEnergyCoreCarrier>();
             if (carrier != null && carrier.IsCarrying) return false;
