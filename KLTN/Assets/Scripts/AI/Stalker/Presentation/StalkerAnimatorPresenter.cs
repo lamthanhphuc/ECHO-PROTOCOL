@@ -51,6 +51,11 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         [Header("Dependencies")]
         [SerializeField]
+        private GameObject biteJumpscarePrefab;
+
+        public GameObject BiteJumpscarePrefab => biteJumpscarePrefab;
+
+        [SerializeField]
         private Animator animator;
 
         [SerializeField]

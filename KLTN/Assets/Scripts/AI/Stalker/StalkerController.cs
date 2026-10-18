@@ -778,6 +778,18 @@ namespace EchoProtocol.AI.Stalker
             }
         }
 
+        public void ConfigureRegionGraph(RegionGraphAsset asset, RegionSemanticZone zone)
+        {
+            if (asset == null) throw new ArgumentNullException(nameof(asset));
+            if (zone == RegionSemanticZone.Unknown || zone == RegionSemanticZone.Isolated)
+                throw new ArgumentOutOfRangeException(nameof(zone));
+            if (_regionGraph != null || _spatialPatrolGraph != null)
+                throw new InvalidOperationException("Configure the RegionGraph before AI initialization.");
+
+            regionGraphAsset = asset;
+            ConfigurePatrolZone(zone);
+        }
+
         public void ConfigurePatrolZone(RegionSemanticZone zone)
         {
             _patrolZone = zone;
