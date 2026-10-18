@@ -109,6 +109,7 @@ namespace EchoProtocol.Networking
                         runner.SetPlayerObject(player, existingObject);
                         existingObject.AssignInputAuthority(player);
                         retained.SetDisconnectedAuthoritative(false);
+                        NetworkMatchState.Instance?.RecordResultRosterPlayerAuthoritative(retained);
                         NotifyPlayerObjectCommitted(new FusionPlayerObjectCommit(
                             player, existingObject, retained.GetComponent<PlayerRuntimeIdentity>().PlayerId));
                         return;
@@ -242,6 +243,7 @@ namespace EchoProtocol.Networking
                             playerObject.transform.rotation, state);
                     }
                     state.SetDisconnectedAuthoritative(true);
+                    NetworkMatchState.Instance?.RecordResultRosterPlayerAuthoritative(state);
                 }
                 playerObject.RemoveInputAuthority();
                 if (_graceTimers.Remove(player, out var oldTimer)) StopCoroutine(oldTimer);
@@ -255,6 +257,8 @@ namespace EchoProtocol.Networking
             PlayerRuntimeIdentity identity = null;
             if (playerObject != null)
             {
+                if (playerObject.TryGetComponent<LobbyPlayerState>(out var departingState))
+                    NetworkMatchState.Instance?.RecordResultRosterPlayerAuthoritative(departingState);
                 identity = playerObject.GetComponent<PlayerRuntimeIdentity>();
             }
 

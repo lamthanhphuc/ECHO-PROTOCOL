@@ -1,9 +1,11 @@
 using System;
+using System.Collections;
 using EchoProtocol.Api;
 using EchoProtocol.Auth;
 using EchoProtocol.Core;
 using EchoProtocol.Profile;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -12,6 +14,9 @@ namespace EchoProtocol.UI.MainMenu
   public class MainMenuProfileController : MonoBehaviour
   {
     private const float ProfileRefreshIntervalSeconds = 20f;
+    private const float ProfileOpenDurationSeconds = 0.27f;
+    // Mirrors the currently registered backend PROGRESSION_V1 policy.
+    private const long ExperiencePerLevel = 500L;
 
     [SerializeField] private Text welcomeText;
     [SerializeField] private Text roleText;
@@ -37,6 +42,23 @@ namespace EchoProtocol.UI.MainMenu
     [SerializeField] private Button package5500Button;
     [SerializeField] private GameObject shopPopup;
     [SerializeField] private GameObject topUpPopup;
+    [SerializeField] private Button profileButton;
+    [SerializeField] private Button profileCloseButton;
+    [SerializeField] private GameObject profileOverlay;
+    [SerializeField] private RectTransform profilePanel;
+    [SerializeField] private CanvasGroup profileCanvasGroup;
+    [SerializeField] private Image profileExperienceFill;
+    [SerializeField] private Image profileOpeningGlitch;
+    [SerializeField] private Text profileUsernameText;
+    [SerializeField] private Text profileIdentityUsernameText;
+    [SerializeField] private Text profileRoleText;
+    [SerializeField] private Text profileLevelText;
+    [SerializeField] private Text profileExperienceText;
+    [SerializeField] private Text profileMatchesText;
+    [SerializeField] private Text profileWinsText;
+    [SerializeField] private Text profileWinRateText;
+    [SerializeField] private Text profileCreditsText;
+    [SerializeField] private Text profileStatusText;
     [SerializeField] private string topUpWebUrl = "https://web.3.1.238.6.sslip.io/wallet";
     [SerializeField] private string webUrl = "https://web.3.1.238.6.sslip.io/";
     [SerializeField] private string lobbySceneName = GameConstants.SceneLobby;
@@ -47,6 +69,7 @@ namespace EchoProtocol.UI.MainMenu
     private bool _catalogRequestInProgress;
     private bool _started;
     private float _nextProfileRefreshAt;
+    private Coroutine _profileOpenRoutine;
 
     private void Start()
     {
@@ -66,6 +89,7 @@ namespace EchoProtocol.UI.MainMenu
       RefreshProfile();
       CloseShop();
       CloseTopUp();
+      CloseProfile();
       ShowPackageStatus("Đang tải gói...");
       RefreshPlayerProfile();
       RefreshPaymentCatalog();
@@ -112,10 +136,13 @@ namespace EchoProtocol.UI.MainMenu
       if (package1200Button != null) package1200Button.onClick.AddListener(OpenPackage1);
       if (package2500Button != null) package2500Button.onClick.AddListener(OpenPackage2);
       if (package5500Button != null) package5500Button.onClick.AddListener(OpenPackage3);
+      if (profileButton != null) profileButton.onClick.AddListener(OpenProfile);
+      if (profileCloseButton != null) profileCloseButton.onClick.AddListener(CloseProfile);
     }
 
     private void OnDisable()
     {
+      StopProfileOpeningAnimation();
       if (playButton != null)
       {
         playButton.onClick.RemoveListener(OnClickPlay);
@@ -152,9 +179,11 @@ namespace EchoProtocol.UI.MainMenu
       if (package1200Button != null) package1200Button.onClick.RemoveListener(OpenPackage1);
       if (package2500Button != null) package2500Button.onClick.RemoveListener(OpenPackage2);
       if (package5500Button != null) package5500Button.onClick.RemoveListener(OpenPackage3);
+      if (profileButton != null) profileButton.onClick.RemoveListener(OpenProfile);
+      if (profileCloseButton != null) profileCloseButton.onClick.RemoveListener(CloseProfile);
     }
 
-    private void RefreshProfile()
+    public void RefreshProfile()
     {
       string display;
 
@@ -220,6 +249,150 @@ namespace EchoProtocol.UI.MainMenu
       }
 
       UpdateCreditsUI();
+      if (profileUsernameText != null) profileUsernameText.text = string.IsNullOrWhiteSpace(display) ? "--" : display;
+      if (profileIdentityUsernameText != null) profileIdentityUsernameText.text = string.IsNullOrWhiteSpace(display) ? "--" : display;
+      if (profileRoleText != null)
+        profileRoleText.text = string.IsNullOrWhiteSpace(AuthSession.Role)
+          ? "OPERATOR"
+          : AuthSession.Role.ToUpperInvariant();
+      if (profileLevelText != null) profileLevelText.text = PlayerProfileSession.HasProfile ? $"CẤP {PlayerProfileSession.Level:N0}" : "CẤP --";
+      if (profileExperienceText != null)
+      {
+        profileExperienceText.text = !PlayerProfileSession.HasProfile
+          ? "-- XP"
+          : IsCurrentProgressionPolicy()
+            ? $"{PlayerProfileSession.ExperiencePoints % ExperiencePerLevel:N0} / {ExperiencePerLevel:N0} XP"
+            : $"{PlayerProfileSession.ExperiencePoints:N0} XP";
+      }
+      UpdateProfileExperienceFill();
+      if (profileMatchesText != null) profileMatchesText.text = PlayerProfileSession.HasProfile ? $"{PlayerProfileSession.TotalMatches:N0}" : "--";
+      if (profileWinsText != null) profileWinsText.text = PlayerProfileSession.HasProfile ? $"{PlayerProfileSession.TotalWins:N0}" : "--";
+      if (profileWinRateText != null)
+      {
+        profileWinRateText.text = PlayerProfileSession.HasProfile
+          ? $"{(PlayerProfileSession.TotalMatches > 0 ? (double)PlayerProfileSession.TotalWins / PlayerProfileSession.TotalMatches * 100d : 0d):0.#}%"
+          : "--";
+      }
+      if (profileCreditsText != null) profileCreditsText.text = PlayerProfileSession.HasProfile ? $"{PlayerProfileSession.WalletBalance:N0}" : "--";
+      if (profileStatusText != null && PlayerProfileSession.HasProfile) profileStatusText.text = "PERSONNEL RECORD ONLINE";
+    }
+
+    public void OpenProfile()
+    {
+      if (profileOverlay == null) return;
+      StopProfileOpeningAnimation();
+      ResolveProfileAnimationComponents();
+      profileOverlay.transform.SetAsLastSibling();
+      profileOverlay.SetActive(true);
+      RefreshProfile();
+      if (!PlayerProfileSession.HasProfile && profileStatusText != null)
+        profileStatusText.text = "LOADING PERSONNEL RECORD...";
+      if (!PlayerProfileSession.HasProfile || Time.unscaledTime >= _nextProfileRefreshAt)
+        RefreshPlayerProfile();
+      if (profileCanvasGroup != null || profilePanel != null)
+        _profileOpenRoutine = StartCoroutine(AnimateProfileOpening());
+    }
+
+    public void CloseProfile()
+    {
+      StopProfileOpeningAnimation();
+      if (profileOverlay != null) profileOverlay.SetActive(false);
+    }
+
+    private void UpdateProfileExperienceFill()
+    {
+      if (profileExperienceFill == null) return;
+
+      long experience = PlayerProfileSession.ExperiencePoints;
+      // If the server switches progression policies, do not show a false level fraction.
+      bool levelMatchesCurrentPolicy = IsCurrentProgressionPolicy();
+      profileExperienceFill.enabled = levelMatchesCurrentPolicy;
+      if (!levelMatchesCurrentPolicy) return;
+
+      profileExperienceFill.type = Image.Type.Filled;
+      profileExperienceFill.fillMethod = Image.FillMethod.Horizontal;
+      profileExperienceFill.fillOrigin = 0;
+      profileExperienceFill.fillAmount = (experience % ExperiencePerLevel) / (float)ExperiencePerLevel;
+    }
+
+    private static bool IsCurrentProgressionPolicy()
+    {
+      long experience = PlayerProfileSession.ExperiencePoints;
+      return PlayerProfileSession.HasProfile
+        && experience >= 0
+        && PlayerProfileSession.Level == (experience / ExperiencePerLevel) + 1L;
+    }
+
+    private void ResolveProfileAnimationComponents()
+    {
+      if (profilePanel == null)
+        profilePanel = profileOverlay.transform.Find("ProfilePanel") as RectTransform;
+      if (profileCanvasGroup == null)
+      {
+        profileCanvasGroup = profileOverlay.GetComponent<CanvasGroup>();
+        if (profileCanvasGroup == null)
+          profileCanvasGroup = profileOverlay.AddComponent<CanvasGroup>();
+      }
+      profileCanvasGroup.blocksRaycasts = true;
+      profileCanvasGroup.interactable = true;
+
+      // The full-screen dim is the raycast surface while the dossier fades in.
+      var dim = profileOverlay.transform.Find("DimBackground");
+      if (dim != null && dim.TryGetComponent<Image>(out var dimImage))
+        dimImage.raycastTarget = true;
+      if (profileOpeningGlitch != null)
+      {
+        profileOpeningGlitch.raycastTarget = false;
+        SetProfileOpeningGlitchAlpha(0f);
+      }
+    }
+
+    private IEnumerator AnimateProfileOpening()
+    {
+      if (profileCanvasGroup != null) profileCanvasGroup.alpha = 0f;
+      if (profilePanel != null) profilePanel.localScale = Vector3.one * 0.96f;
+
+      float elapsed = 0f;
+      while (elapsed < ProfileOpenDurationSeconds)
+      {
+        elapsed += Time.unscaledDeltaTime;
+        float progress = Mathf.Clamp01(elapsed / ProfileOpenDurationSeconds);
+        float easeOut = 1f - Mathf.Pow(1f - progress, 3f);
+        if (profileCanvasGroup != null)
+          profileCanvasGroup.alpha = progress * progress * (3f - 2f * progress);
+        if (profilePanel != null)
+          profilePanel.localScale = Vector3.one * Mathf.LerpUnclamped(0.96f, 1f, easeOut);
+        float glitch = Mathf.Clamp01(elapsed / 0.045f)
+          * Mathf.Clamp01((0.12f - elapsed) / 0.05f);
+        SetProfileOpeningGlitchAlpha(0.16f * glitch);
+        yield return null;
+      }
+
+      if (profileCanvasGroup != null) profileCanvasGroup.alpha = 1f;
+      if (profilePanel != null) profilePanel.localScale = Vector3.one;
+      SetProfileOpeningGlitchAlpha(0f);
+      _profileOpenRoutine = null;
+    }
+
+    private void StopProfileOpeningAnimation()
+    {
+      if (_profileOpenRoutine != null)
+      {
+        StopCoroutine(_profileOpenRoutine);
+        _profileOpenRoutine = null;
+      }
+      if (profileCanvasGroup != null) profileCanvasGroup.alpha = 1f;
+      if (profilePanel != null) profilePanel.localScale = Vector3.one;
+      SetProfileOpeningGlitchAlpha(0f);
+    }
+
+    private void SetProfileOpeningGlitchAlpha(float alpha)
+    {
+      if (profileOpeningGlitch == null) return;
+      profileOpeningGlitch.raycastTarget = false;
+      var color = profileOpeningGlitch.color;
+      color.a = alpha;
+      profileOpeningGlitch.color = color;
     }
 
     public void OnClickPlay()
@@ -340,6 +513,9 @@ namespace EchoProtocol.UI.MainMenu
 
     private void Update()
     {
+      if (profileOverlay != null && profileOverlay.activeSelf
+          && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+        CloseProfile();
       if (_started && AuthSession.IsAuthenticated && Time.unscaledTime >= _nextProfileRefreshAt)
         RefreshPlayerProfile();
     }
@@ -389,6 +565,10 @@ namespace EchoProtocol.UI.MainMenu
 
           Debug.LogWarning(
             $"[MainMenu] Player profile refresh failed: {result.Message}");
+          if (profileOverlay != null && profileOverlay.activeSelf && profileStatusText != null)
+            profileStatusText.text = PlayerProfileSession.HasProfile
+              ? "UPDATE UNAVAILABLE - SHOWING LAST RECORD"
+              : "PERSONNEL RECORD UNAVAILABLE";
         });
     }
 

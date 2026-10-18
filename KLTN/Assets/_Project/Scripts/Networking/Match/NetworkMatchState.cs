@@ -9,6 +9,7 @@ using EchoProtocol.Networking.Authority;
 using EchoProtocol.RelayA;
 using EchoProtocol.RelayB;
 using EchoProtocol.TeamTools;
+using EchoProtocol.UI.Result;
 using Fusion;
 using UnityEngine;
 
@@ -34,6 +35,23 @@ namespace EchoProtocol.Networking
         public byte ActiveFault;
         public Vector2 FaultTimers;
         public int RecoveredFaults;
+    }
+
+    /// <summary>
+    /// Match roster entry retained after a disconnected player's object is despawned.
+    /// The state authority is the only writer; terminal entries travel with the match result.
+    /// </summary>
+    public struct ResultRosterEntry : INetworkStruct
+    {
+        public NetworkBool Present;
+        public NetworkId PlayerObjectId;
+        public NetworkString<_64> BackendUserId;
+        public NetworkString<_32> Name;
+        public NetworkBool Disconnected;
+        public NetworkBool HasLifeState;
+        public NetworkPlayerLifeStatus LifeStatus;
+        public int DownCount;
+        public int ReviveCount;
     }
 
     public enum NetworkMatchPhase
@@ -107,7 +125,7 @@ namespace EchoProtocol.Networking
 
         [SerializeField, Min(1f)] private float _escapeDurationSeconds = DefaultEscapeDurationSeconds;
         [SerializeField, Min(1f)] private float _matchDurationSeconds = DefaultMatchDurationSeconds;
-        [SerializeField, Min(0.1f)] private float _returnToLobbyDelaySeconds = 4f;
+        [SerializeField, Min(0.1f)] private float _resultTransitionDelaySeconds = 1f;
         [SerializeField, Min(0.1f)] private float _zone2InteractionDistance = 3f;
         [SerializeField, Min(0.1f)] private float _zoneAccessCooldownSeconds = 5f;
         [SerializeField, Min(1)] private int _zoneAccessFailuresBeforeCooldown = 3;
@@ -276,11 +294,17 @@ namespace EchoProtocol.Networking
         [Networked] public float Zone3ChargeAccumulatedSeconds { get; private set; }
         [Networked] public uint PhaseOrdinal { get; private set; }
         [Networked] public uint EndOrdinal { get; private set; }
+        [Networked] public float FinalDurationSeconds { get; private set; }
+        [Networked] public float FinalObjectiveCompletion { get; private set; }
+        [Networked] public ResultRosterEntry ResultRoster0 { get; private set; }
+        [Networked] public ResultRosterEntry ResultRoster1 { get; private set; }
+        [Networked] public ResultRosterEntry ResultRoster2 { get; private set; }
+        [Networked] public ResultRosterEntry ResultRoster3 { get; private set; }
         [Networked] private TickTimer EscapeTimer { get; set; }
         [Networked] public float EscapeDurationSeconds { get; private set; }
         [Networked] private TickTimer MatchTimer { get; set; }
-        [Networked] private TickTimer ReturnToLobbyTimer { get; set; }
-        [Networked] private NetworkBool ReturnToLobbyRequested { get; set; }
+        [Networked] private TickTimer ReturnToResultTimer { get; set; }
+        [Networked] private NetworkBool ReturnToResultRequested { get; set; }
         [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
         public uint ScenarioConfigRevision { get; private set; }
         [Networked] public NetworkBool HasAppliedScenarioConfig { get; private set; }
@@ -401,6 +425,7 @@ namespace EchoProtocol.Networking
         {
             EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             Instance = this;
+            ResultSession.Clear();
             NetworkPlayerLifeState.StateChanged += HandlePlayerLifeStateChanged;
             ResolveLegacyPresentation();
             if (Object.HasStateAuthority)
@@ -424,11 +449,17 @@ namespace EchoProtocol.Networking
                 Zone3ChargeAccumulatedSeconds = 0f;
                 PhaseOrdinal = 0;
                 EndOrdinal = 0;
+                FinalDurationSeconds = -1f;
+                FinalObjectiveCompletion = -1f;
+                ResultRoster0 = default;
+                ResultRoster1 = default;
+                ResultRoster2 = default;
+                ResultRoster3 = default;
                 EscapeTimer = TickTimer.None;
                 EscapeDurationSeconds = 0f;
                 MatchTimer = TickTimer.CreateFromSeconds(Runner, _matchDurationSeconds);
-                ReturnToLobbyTimer = TickTimer.None;
-                ReturnToLobbyRequested = false;
+                ReturnToResultTimer = TickTimer.None;
+                ReturnToResultRequested = false;
                 _serverGeneratedAuthCode = UnityEngine.Random.Range(0, 10000).ToString("D4");
                 PowerAuthorizationCode = string.Empty;
                 SecurityHoldCompleted = false;
@@ -501,6 +532,7 @@ namespace EchoProtocol.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            ResultSession.Capture(this);
             if (Instance == this) Instance = null;
             NetworkPlayerLifeState.StateChanged -= HandlePlayerLifeStateChanged;
             _lastPublishedScenarioConfigRevision = 0;
@@ -511,20 +543,18 @@ namespace EchoProtocol.Networking
         {
             if (!Object.HasStateAuthority) return;
 
+            if (!IsEnded) RefreshResultRosterAuthoritative();
+
             if (IsEnded)
             {
-                if (!ReturnToLobbyRequested && ReturnToLobbyTimer.Expired(Runner))
+                ResultSession.Capture(this);
+                if (!ReturnToResultRequested && ReturnToResultTimer.Expired(Runner))
                 {
-                    ReturnToLobbyRequested = true;
                     if (Runner != null && Runner.IsSceneAuthority)
                     {
-                        if (Runner.SessionInfo.IsValid)
-                        {
-                            Runner.SessionInfo.IsOpen = true;
-                            Runner.SessionInfo.IsVisible = true;
-                        }
-
-                        _ = Runner.LoadScene(NetworkBootstrap.LobbySceneName, UnityEngine.SceneManagement.LoadSceneMode.Single);
+                        ReturnToResultRequested = true;
+                        _ = Runner.LoadScene(EchoProtocol.Core.GameConstants.SceneResult,
+                            UnityEngine.SceneManagement.LoadSceneMode.Single);
                     }
                 }
                 return;
@@ -631,6 +661,7 @@ namespace EchoProtocol.Networking
 
         public override void Render()
         {
+            ResultSession.Capture(this);
             if (Object != null
                 && !Object.HasStateAuthority
                 && HasAppliedScenarioConfig
@@ -2354,6 +2385,7 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            RefreshResultRosterAuthoritative();
             CountFinalPlayers(out var survivorCount, out _, out _);
             var objectiveCompletion = CalculateObjectiveCompletion(CurrentPhase, result);
             if (AlienHuntMission.Instance != null)
@@ -2362,6 +2394,9 @@ namespace EchoProtocol.Networking
                 survivorCount += livingPlayers;
                 objectiveCompletion = AlienHuntMission.Instance.Burned / 9f;
             }
+            FinalDurationSeconds = Mathf.Clamp(
+                _matchDurationSeconds - Remaining(MatchTimer), 0f, _matchDurationSeconds);
+            FinalObjectiveCompletion = objectiveCompletion;
             if (result == NetworkMatchResult.Win
                 && CurrentPhase == NetworkMatchPhase.FinalHunt
                 && Zone3MissionDirector.IsSciFiSceneLoaded)
@@ -2380,10 +2415,10 @@ namespace EchoProtocol.Networking
             EscapeTimer = TickTimer.None;
             EscapeDurationSeconds = 0f;
             MatchTimer = TickTimer.None;
-            ReturnToLobbyTimer = TickTimer.CreateFromSeconds(
+            ReturnToResultTimer = TickTimer.CreateFromSeconds(
                 Runner,
-                Mathf.Max(0.1f, _returnToLobbyDelaySeconds));
-            ReturnToLobbyRequested = false;
+                Mathf.Max(0.1f, _resultTransitionDelaySeconds));
+            ReturnToResultRequested = false;
             EndOrdinal++;
             if (EndOrdinal == 0) EndOrdinal = 1;
             AdvancePhaseOrdinal();
@@ -2403,6 +2438,99 @@ namespace EchoProtocol.Networking
 
                 $"[MatchState] Match ended result={result}, reason={reason}, survivors={survivorCount}.");
             return true;
+        }
+
+        public ResultRosterEntry GetResultRosterEntry(int index)
+        {
+            return index switch
+            {
+                0 => ResultRoster0,
+                1 => ResultRoster1,
+                2 => ResultRoster2,
+                3 => ResultRoster3,
+                _ => default
+            };
+        }
+
+        /// <summary>Called before the lifecycle removes a disconnected player's network object.</summary>
+        public void RecordResultRosterPlayerAuthoritative(LobbyPlayerState player)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || IsEnded || player == null || player.Object == null
+                || !player.Object.IsValid || !player.IsGameplayPlayer)
+                return;
+
+            var playerObjectId = player.Object.Id;
+            if (!playerObjectId.IsValid) return;
+            var backendUserId = player.BackendUserId;
+
+            int slot = -1;
+            int firstEmpty = -1;
+            for (int i = 0; i < 4; i++)
+            {
+                var existing = GetResultRosterEntry(i);
+                if (existing.Present
+                    && (existing.PlayerObjectId == playerObjectId
+                        || (backendUserId.Length > 0
+                            && existing.BackendUserId == backendUserId)))
+                {
+                    slot = i;
+                    break;
+                }
+                if (!existing.Present && firstEmpty < 0) firstEmpty = i;
+            }
+
+            if (slot < 0) slot = firstEmpty;
+            if (slot < 0)
+            {
+                Debug.LogWarning("[MatchState] Result roster is full; extra gameplay player was not recorded.");
+                return;
+            }
+
+            var life = player.GetComponent<NetworkPlayerLifeState>();
+            var entry = new ResultRosterEntry
+            {
+                Present = true,
+                PlayerObjectId = playerObjectId,
+                BackendUserId = player.BackendUserId,
+                Name = player.OperatorName,
+                Disconnected = player.Disconnected,
+                HasLifeState = life != null,
+                LifeStatus = life != null ? life.Status : NetworkPlayerLifeStatus.Alive,
+                DownCount = life != null ? Mathf.Max(0, life.DownCount) : -1,
+                ReviveCount = life != null ? Mathf.Max(0, life.ReviveCount) : -1
+            };
+
+            var previous = GetResultRosterEntry(slot);
+            if (previous.Present && previous.PlayerObjectId == entry.PlayerObjectId
+                && previous.BackendUserId == entry.BackendUserId
+                && previous.Name == entry.Name
+                && (bool)previous.Disconnected == (bool)entry.Disconnected
+                && (bool)previous.HasLifeState == (bool)entry.HasLifeState
+                && previous.LifeStatus == entry.LifeStatus
+                && previous.DownCount == entry.DownCount
+                && previous.ReviveCount == entry.ReviveCount)
+                return;
+
+            switch (slot)
+            {
+                case 0: ResultRoster0 = entry; break;
+                case 1: ResultRoster1 = entry; break;
+                case 2: ResultRoster2 = entry; break;
+                case 3: ResultRoster3 = entry; break;
+            }
+        }
+
+        private void RefreshResultRosterAuthoritative()
+        {
+            if (Runner == null) return;
+            foreach (var player in Runner.ActivePlayers)
+            {
+                if (Runner.TryGetPlayerObject(player, out var playerObject)
+                    && playerObject != null
+                    && playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyState))
+                    RecordResultRosterPlayerAuthoritative(lobbyState);
+            }
         }
 
         private void HandlePlayerLifeStateChanged(NetworkPlayerLifeState _)
@@ -3494,6 +3622,7 @@ namespace EchoProtocol.Networking
 
         private void HandleReplicatedStateChanged()
         {
+            ResultSession.Capture(this);
             if (Object == null || !Object.HasStateAuthority)
             {
                 TryPublishReplicatedScenarioConfigToRegistry();
