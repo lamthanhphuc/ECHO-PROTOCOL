@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using EchoProtocol.AI.Common.Spatial;
 using NUnit.Framework;
@@ -12,6 +13,87 @@ namespace EchoProtocol.AI.Stalker.Tests
     public sealed class RoomSweepControllerIntegrationTests
     {
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
+
+        [Test]
+        public void STK_RoomSweep_ProbeFailuresContinueNextTickWithoutClearingRoom()
+        {
+            var controller = CreateController();
+            var room = new RegionId(1);
+            var nodes = new object[9];
+            var mapping = new RegionId[nodes.Length];
+            for (var i = 0; i < nodes.Length; i++)
+            {
+                nodes[i] = Node(i, Vector3.right * i,
+                    i == 0 ? new[] { 1 } : i == nodes.Length - 1 ? new[] { i - 1 } : new[] { i - 1, i + 1 });
+                mapping[i] = room;
+            }
+            var graph = CreateSpatialGraph(nodes);
+            var regions = CreateRegionGraph(graph, mapping, RoomRegion(room, 1, "Room"));
+            var memory = CreateMemory();
+            AttachRoomSweepState(controller, graph, regions, memory);
+            AttachNavigationAndLocalSelector(controller, graph, regions);
+            RegisterRegion(memory, room, Enumerable.Range(0, nodes.Length).ToArray());
+            MarkObserved(memory, room, 0);
+
+            Assert.That((bool)InvokePrivate(controller, "SetRoomSweepPatrolDestination", Type.EmptyTypes), Is.True);
+            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(4));
+            InvokePrivate(controller, "SetRoomSweepPatrolDestination", Type.EmptyTypes);
+            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(4));
+
+            SetPrivateField(controller, "_currentSimulationSeconds", 1d);
+            Assert.That((bool)InvokePrivate(controller, "SetRoomSweepPatrolDestination", Type.EmptyTypes), Is.False);
+            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(8));
+            Assert.That(IsRegionCleared(memory, room), Is.False);
+        }
+
+        [Test]
+        public void STK_RoomSweep_VisualCoverageContinuesPastFirstBatch()
+        {
+            var controller = CreateController();
+            var room = new RegionId(1);
+            var nodes = new object[65];
+            var mapping = new RegionId[nodes.Length];
+            for (var i = 0; i < nodes.Length; i++)
+            {
+                nodes[i] = Node(i, Vector3.zero);
+                mapping[i] = room;
+            }
+            var graph = CreateSpatialGraph(nodes);
+            var regions = CreateRegionGraph(graph, mapping, RoomRegion(room, 1, "Room"));
+            var memory = CreateMemory();
+            RegisterRegion(memory, room, System.Linq.Enumerable.Range(0, nodes.Length).ToArray());
+            AttachRoomSweepState(controller, graph, regions, memory);
+            AttachVision(controller, Vector3.zero, Vector3.forward, 10f, 90f);
+
+            InvokePrivate(controller, "UpdateRoomSweepVisualCoverage", new[] { typeof(RegionId) }, room);
+            Assert.That(IsObserved(memory, room, 31), Is.True);
+            Assert.That(IsObserved(memory, room, 32), Is.False);
+            InvokePrivate(controller, "UpdateRoomSweepVisualCoverage", new[] { typeof(RegionId) }, room);
+            InvokePrivate(controller, "UpdateRoomSweepVisualCoverage", new[] { typeof(RegionId) }, room);
+            Assert.That(IsObserved(memory, room, 64), Is.True);
+        }
+
+        [Test]
+        public void STK_RoomSweep_FallbackCooldownSurvivesDestinationReset()
+        {
+            var controller = CreateController();
+
+            SetPrivateField(
+                controller,
+                "_nextRoomSweepFallbackAttemptSeconds",
+                42f);
+
+            InvokePrivate(
+                controller,
+                "ResetRoomSweepFallbackState",
+                Type.EmptyTypes);
+
+            Assert.That(
+                (float)GetPrivateField(
+                    controller,
+                    "_nextRoomSweepFallbackAttemptSeconds"),
+                Is.EqualTo(42f));
+        }
 
         [TearDown]
         public void TearDown()

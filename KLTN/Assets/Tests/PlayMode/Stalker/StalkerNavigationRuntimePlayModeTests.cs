@@ -61,6 +61,23 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [UnityTest]
+        public IEnumerator NAV_3_OffMeshAgent_ReattachesWithinRecoveryDistance()
+        {
+            BuildRuntimeNavMesh();
+            var agent = CreateInactiveConfiguredAgent(new Vector3(5.2f, 0f, 0f));
+            agent.gameObject.SetActive(true);
+            yield return null;
+            Assert.That(agent.isOnNavMesh, Is.False);
+            var controller = CreateController(agent);
+
+            var recovered = InvokeMethod(controller, "TryReattachToNearestNavMesh",
+                new[] { typeof(float) }, new object[] { 2f });
+            Assert.That(recovered, Is.EqualTo(true));
+            Assert.That(agent.isOnNavMesh, Is.True);
+            Assert.That(Vector3.Distance(agent.transform.position, new Vector3(5.2f, 0f, 0f)), Is.LessThanOrEqualTo(2f));
+        }
+
+        [UnityTest]
         public IEnumerator NAV_3_RequestDestination_SettlesToCompletePath()
         {
             var fixture = CreateUsableNavigationFixture(AgentStart);

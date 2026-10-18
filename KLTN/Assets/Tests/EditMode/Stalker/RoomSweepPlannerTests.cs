@@ -10,6 +10,45 @@ namespace EchoProtocol.AI.Stalker.Tests
     public sealed class RoomSweepPlannerTests
     {
         [Test]
+        public void STK_RoomSweepPlanner_DisconnectedProbesAreNotSelectedOrMarkedObserved()
+        {
+            var graph = CreateSpatialGraph(Node(0), Node(1));
+            var room = new RegionId(1);
+            var regions = CreateRegionGraph(graph, new[] { RegionId.Invalid, room },
+                RoomRegion(room, 1, "BlockedRoom"));
+            var memory = CreateMemory();
+            var planner = CreatePlanner(graph, regions, memory);
+            Assert.That(TryBeginRegion(planner, room), Is.True);
+
+            Assert.That(TrySelectNextProbe(planner, 0, out _), Is.False);
+            Assert.That(GetMemoryInt(memory, "GetObservedCount", room), Is.Zero);
+            Assert.That(IsRegionCleared(memory, room), Is.False);
+        }
+
+        [Test]
+        public void STK_RoomSweepPlanner_ReusesHopDistancesUntilOriginChanges()
+        {
+            var graph = CreateSpatialGraph(Node(0, 1), Node(1, 0, 2), Node(2, 1));
+            var room = new RegionId(1);
+            var regions = CreateRegionGraph(graph, new[] { room, room, room },
+                RoomRegion(room, 1, "Room"));
+            var planner = CreatePlanner(graph, regions, CreateMemory());
+            TryBeginRegion(planner, room);
+            TrySelectNextProbe(planner, 0, out _);
+            var field = planner.GetType().GetField("_hopDistances", BindingFlags.Instance | BindingFlags.NonPublic);
+            var distances = (int[])field.GetValue(planner);
+            RejectProbe(planner, 1);
+
+            Assert.That(TrySelectNextProbe(planner, 0, out var target), Is.True);
+            Assert.That(target, Is.EqualTo(2));
+            Assert.That(field.GetValue(planner), Is.SameAs(distances));
+            Assert.That(distances[0], Is.Zero);
+            TrySelectNextProbe(planner, 2, out _);
+            Assert.That(distances[2], Is.Zero);
+            Assert.That(distances[0], Is.EqualTo(2));
+        }
+
+        [Test]
         public void STK_RoomSweepPlanner_BeginRegion_AcceptsRoomAndRegistersOnlyThatRegionProbes()
         {
             var spatialGraph = CreateSpatialGraph(

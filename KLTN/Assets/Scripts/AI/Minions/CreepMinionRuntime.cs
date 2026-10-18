@@ -518,7 +518,7 @@ namespace EchoProtocol.AI.Minions
             }
 
             // Không tìm được đường thì thử lại sau 1 giây.
-            _nextRoamRetargetAt = Time.time + 0.15f;
+            _nextRoamRetargetAt = Time.time + 1f;
         }
 
         private bool TrySetLongRangeRoamDestination()
