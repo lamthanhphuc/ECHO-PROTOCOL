@@ -451,6 +451,7 @@ namespace EchoProtocol.Tools.Scanner
 
         public bool IsCarryingCore()
         {
+            if (EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject)) return true;
             var lobbyState = GetComponent<LobbyPlayerState>();
             if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid)
             {

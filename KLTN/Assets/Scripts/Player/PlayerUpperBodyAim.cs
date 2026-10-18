@@ -272,7 +272,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             return;
         }
         bool isCarryingCore = IsCarryingCore();
-        bool isHoldingCoreStabilizer = IsHoldingCoreStabilizer();
+        bool isHoldingCoreStabilizer = !EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject) && IsHoldingCoreStabilizer();
         if (isCarryingCore || isHoldingCoreStabilizer)
         {
             float twoHandSpread = jammo && (isHoldingCoreStabilizer || isCarryingCore) ? 0.13f : 0f;
@@ -304,7 +304,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             return;
         }
 
-        if (IsHoldingTeamTool())
+        if (IsHoldingTeamTool() || EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject))
         {
             if (rightHandBone == null || rightUpperArm == null || rightForeArm == null)
             {

@@ -1,4 +1,4 @@
-using EchoProtocol.Networking;
+﻿using EchoProtocol.Networking;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -50,7 +50,7 @@ public sealed class PlayerTeamToolController : MonoBehaviour
             if (equippedObject != null) ClearEquippedTool();
             return;
         }
-        bool pushing = IsPushing() || EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null;
+        bool pushing = IsPushing() || (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null || EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject));
         if (pushing != _wasPushing)
         {
             _wasPushing = pushing;
@@ -70,7 +70,7 @@ public sealed class PlayerTeamToolController : MonoBehaviour
         return inventory != null
             && !inventory.IsTeamToolLocked
             && !IsPushing()
-            && EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) == null
+            && (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) == null && !EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject))
             && equippedTool != null
             && equippedTool.TryUse();
     }
@@ -115,7 +115,7 @@ public sealed class PlayerTeamToolController : MonoBehaviour
     {
         if (equippedObject != null)
         {
-            equippedObject.SetActive(!IsPushing() && EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) == null);
+            equippedObject.SetActive(!IsPushing() && (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) == null && !EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject)));
         }
     }
 

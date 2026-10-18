@@ -92,13 +92,15 @@ public class PlayerInventoryDropInput : MonoBehaviour
     public bool DropCurrentItem()
     {
         if (PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return false;
+        var hunt = EchoProtocol.Networking.AlienHuntMission.Instance;
+        if (hunt != null && hunt.TryDropLocal(gameObject)) return true;
         var fuelCell = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject);
         if (fuelCell != null)
         {
             fuelCell.RequestDrop();
             return true;
         }
-        if (coreCarrier != null && coreCarrier.IsCarrying)
+        if (EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject) || (coreCarrier != null && coreCarrier.IsCarrying))
         {
             return false;
         }
@@ -137,7 +139,7 @@ public class PlayerInventoryDropInput : MonoBehaviour
         var state = GetComponentInParent<EchoProtocol.Networking.LobbyPlayerState>();
         if (state != null && state.Object != null && state.Object.IsValid && !state.IsGameplayPlayer) return false;
         if (PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return false;
-        if (coreCarrier != null && coreCarrier.IsCarrying)
+        if (EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject) || (coreCarrier != null && coreCarrier.IsCarrying))
         {
             return false;
         }

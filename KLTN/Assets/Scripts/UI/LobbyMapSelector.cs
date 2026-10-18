@@ -33,7 +33,7 @@ namespace EchoProtocol.UI
             _title.font = Font; _title.fontSize = 25; _title.alignment = TextAlignmentOptions.Center;
             _title.color = new Color(.8f, .76f, .5f); _title.raycastTarget = false;
             _previous = Button(frame, "Previous", 12, true); _next = Button(frame, "Next", 548, false);
-            _previous.onClick.AddListener(Step); _next.onClick.AddListener(Step);
+            _previous.onClick.AddListener(() => Step(-1)); _next.onClick.AddListener(() => Step(1));
             Move("ReferenceDifficultyLabel", 508); Move("ReferenceDifficultyPicker", 508);
             Move("ReferenceToolLabel", 568); Move("ReferenceToolPicker", 568);
             for (int i = 0; i < 3; i++) { Move("ReferenceSettingLabel" + i, 628 + 60 * i); Move("ReferenceSettingPicker" + i, 628 + 60 * i); }
@@ -66,11 +66,12 @@ namespace EchoProtocol.UI
         }
         private bool CanEdit => _bootstrap != null && _bootstrap.Runner != null && _bootstrap.Runner.IsServer
             && _bootstrap.State == NetworkSessionState.InLobby && _manager != null
-            && !_manager.IsStartingMatch && !_manager.CurrentState.IsReady;
-        private void Step()
+            && !_manager.IsStartingMatch && !_manager.CurrentState.IsReady
+            && !LobbyMapCatalog.MapLocked(_bootstrap.Runner);
+        private void Step(int direction)
         {
             if (!CanEdit) return;
-            int next = 1 - LobbyMapCatalog.Selected(_bootstrap.Runner);
+            int next = (LobbyMapCatalog.Selected(_bootstrap.Runner) + direction + 2) % 2;
             if (LobbyMapCatalog.TrySelect(_bootstrap.Runner, next))
             {
                 LobbySelectionMemory.Write("map", next);
@@ -86,16 +87,18 @@ namespace EchoProtocol.UI
             if (_manager == null) _manager = FindAnyObjectByType<LobbyManager>();
             var runner = _bootstrap != null ? _bootstrap.Runner : null;
             if (CanEdit && runner.SessionInfo.IsValid && !runner.SessionInfo.Properties.ContainsKey(LobbyMapCatalog.PropertyKey))
-                LobbyMapCatalog.TrySelect(runner, Mathf.Clamp(LobbySelectionMemory.Read("map", 0), 0, 1));
+                LobbyMapCatalog.TrySelect(runner, Mathf.Clamp(LobbySelectionMemory.Read("map", 0), 0, LobbyMapCatalog.MapCount - 1));
             int map = LobbyMapCatalog.Selected(runner);
-            _photo.texture = Previews != null && map < Previews.Length ? Previews[map] : null;
+            int preview = map == 2 ? 1 : map;
+            _photo.texture = Previews != null && preview < Previews.Length ? Previews[preview] : null;
             if (_photo.texture != null)
             {
                 float aspect = (float)_photo.texture.width / _photo.texture.height;
                 float height = Mathf.Min(1, aspect / (588f / 154f));
                 _photo.uvRect = new Rect(0, (1-height)*.5f, 1, height);
             }
-            _title.text = GameLanguage.Choose("Bản đồ: ", "Map: ") + (map == 1
+            _title.text = GameLanguage.Choose("Bản đồ: ", "Map: ") + (map == 2
+                ? GameLanguage.Choose("Vùng ngập · Săn alien", "Flooded Grounds · Alien Hunt") : map == 1
                 ? GameLanguage.Choose("Vùng ngập", "Flooded Grounds") : GameLanguage.Choose("Cơ sở nghiên cứu", "Research Facility"));
             _previous.interactable = _next.interactable = CanEdit;
         }

@@ -87,6 +87,7 @@ namespace EchoProtocol.Networking
         EscapeTimeout = 2,
         MatchTimeout = 3,
         AllPlayersEliminated = 4,
+        ObjectiveCompleted = 5,
     }
 
     public static class NetworkMatchStateRules
@@ -568,6 +569,12 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            if (AlienHuntMission.Instance != null)
+            {
+                TickAlienHunt();
+                return;
+            }
+
             if (CurrentPhase == NetworkMatchPhase.Zone2Objective)
             {
                 if (!Zone2RelayRuntimeInitialized)
@@ -611,6 +618,7 @@ namespace EchoProtocol.Networking
                 }
             }
 
+            if (FloodedMapMission.Instance != null) TickFloodedMission();
             var zone3 = Zone3MissionDirector.Instance;
             if (zone3 != null && (CurrentPhase == NetworkMatchPhase.Zone3FindFrigate
                 || CurrentPhase == NetworkMatchPhase.Zone3PushFrigate))
@@ -2380,6 +2388,12 @@ namespace EchoProtocol.Networking
             RefreshResultRosterAuthoritative();
             CountFinalPlayers(out var survivorCount, out _, out _);
             var objectiveCompletion = CalculateObjectiveCompletion(CurrentPhase, result);
+            if (AlienHuntMission.Instance != null)
+            {
+                CountFinalPlayers(out _, out var livingPlayers, out _);
+                survivorCount += livingPlayers;
+                objectiveCompletion = AlienHuntMission.Instance.Burned / 9f;
+            }
             FinalDurationSeconds = Mathf.Clamp(
                 _matchDurationSeconds - Remaining(MatchTimer), 0f, _matchDurationSeconds);
             FinalObjectiveCompletion = objectiveCompletion;
@@ -3554,6 +3568,7 @@ namespace EchoProtocol.Networking
             return reason switch
             {
                 NetworkMatchEndReason.PlayerEscaped => "TEAM_ESCAPED",
+                NetworkMatchEndReason.ObjectiveCompleted => "OBJECTIVE_COMPLETED",
                 NetworkMatchEndReason.AllPlayersEliminated => "TEAM_ELIMINATED",
                 // The telemetry contract only accepts these three terminal reason codes.
                 // Precise timeout semantics remain replicated in NetworkMatchEndReason.

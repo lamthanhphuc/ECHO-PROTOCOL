@@ -104,13 +104,16 @@ namespace EchoProtocol.Networking
         internal Task<bool> StartHost(string sessionName, int maxPlayers) => CreateRoomAsync(sessionName, maxPlayers);
         public Task<bool> JoinGame(string sessionName) => JoinRoomAsync(sessionName);
 
+        private int _requestedGameMode;
         public Task<bool> CreateRoomAsync(
             string sessionName, int maxPlayers = 4,
-            MatchDifficulty difficulty = MatchDifficulty.Normal)
+            MatchDifficulty difficulty = MatchDifficulty.Normal, int gameMode = 0)
         {
             if (maxPlayers is < 2 or > 4)
                 return FailWithoutStarting("A room must allow between 2 and 4 players.");
 
+            if (gameMode < 0 || gameMode > 1) return FailWithoutStarting("Invalid game mode.");
+            _requestedGameMode = gameMode;
             _matchAuthority ??= MatchAuthorityRuntime.EnsureExists(this);
             _matchAuthority.RequestDifficulty((MatchDifficulty)EchoProtocol.UI.LobbySelectionMemory.Read("difficulty", (int)difficulty));
             return StartSessionAsync(GameMode.Host, sessionName, maxPlayers);
@@ -306,6 +309,9 @@ namespace EchoProtocol.Networking
                 if (gameMode == GameMode.Host)
                 {
                     args.SessionProperties = _matchAuthority.BuildHostSessionProperties();
+                    args.SessionProperties[LobbyMapCatalog.GameModeKey] = _requestedGameMode;
+                    args.SessionProperties[LobbyMapCatalog.PropertyKey] = _requestedGameMode == 1 ? 2
+                        : Mathf.Clamp(EchoProtocol.UI.LobbySelectionMemory.Read("map", 0), 0, 1);
                 }
 
                 RuntimeLog.Log(

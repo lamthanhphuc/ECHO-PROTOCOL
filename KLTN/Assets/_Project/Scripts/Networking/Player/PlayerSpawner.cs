@@ -40,6 +40,8 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _powerPuzzlePrefab;
         [SerializeField] private NetworkObject _powerPuzzleStationPrefab;
         [SerializeField] private NetworkObject _monsterPrefab;
+        [SerializeField] private NetworkObject _map2LizardPrefab;
+        [SerializeField] private RegionGraphAsset _map2RegionGraph;
         [SerializeField] private NetworkObject _creepMinionPrefab;
         [Header("Creep Minion Spawn")]
         [SerializeField, Min(1f)] private float _minionSpawnCheckInterval = 3f;
@@ -77,6 +79,34 @@ namespace EchoProtocol.Networking
         private void Update()
         {
             var runner = _bootstrap != null ? _bootstrap.Runner : null;
+
+            // Map 2 - Flooded Grounds: spawn Creep Minion
+            // using the existing Zone01 minion behaviour.
+            if (SceneManager.GetActiveScene().name ==
+                LobbyMapCatalog.ExplorationScene)
+            {
+                if (runner == null ||
+                    !runner.IsServer ||
+                    !runner.IsRunning ||
+                    _bootstrap.State != NetworkSessionState.InMatch)
+                    return;
+
+                PruneInvalidAuthoritativeWorldStateReferences();
+
+                if (!IsValidNetworkObject(_monsterInstance))
+                    return;
+
+                if (Time.time < _nextMinionSpawnCheckAt)
+                    return;
+
+                _nextMinionSpawnCheckAt =
+                    Time.time + _minionSpawnCheckInterval;
+
+                _zone2MinionsActive = false;
+                MaintainCreepMinionPopulation(runner);
+                return;
+            }
+
             if (runner == null || !runner.IsServer || !runner.IsRunning
                 || _matchStateInstance == null
                 || !_matchStateInstance.TryGetComponent<NetworkMatchState>(out var matchState)) return;
@@ -238,8 +268,7 @@ namespace EchoProtocol.Networking
                 ConfigureExistingPlayerObject(player, playerObject, gameplay: true);
             }
 
-            // Scene_A is exploration-only: no facility objectives, pickups or monsters.
-            if (SceneManager.GetActiveScene().name == LobbyManager.GameSceneName)
+            if (LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name))
                 EnsureWorldStateExamples(runner);
         }
 
@@ -262,6 +291,11 @@ namespace EchoProtocol.Networking
                 RuntimeLogCategory.PlayerSpawner,
                 $"[PlayerSpawner] Spawned authoritative Match State {_matchStateInstance.Id}.");
             }
+            if (AlienHuntMission.Instance != null)
+            {
+                BindAuthoritativeWorldState();
+                return;
+            }
             if (_powerPuzzlePrefab == null)
             {
                 _powerPuzzlePrefab = Resources.Load<NetworkObject>("Network/NetworkPowerPuzzle");
@@ -270,7 +304,7 @@ namespace EchoProtocol.Networking
             {
                 _powerPuzzleStationPrefab = Resources.Load<NetworkObject>("Network/NetworkPowerPuzzleStation");
             }
-            if (_doorInstance == null && _doorPrefab != null && !Zone3MissionDirector.IsSciFiSceneLoaded)
+            if (_doorInstance == null && _doorPrefab != null && !Zone3MissionDirector.IsSciFiSceneLoaded && !FloodedMapMission.IsLoaded)
             {
                 _doorInstance = runner.Spawn(_doorPrefab, new Vector3(0f, 1f, 2.5f), Quaternion.identity);
                 RuntimeLog.Log(
@@ -350,15 +384,32 @@ namespace EchoProtocol.Networking
             }
             // Zone 2 uses scene authorization panels with NetworkMatchState as
             // the authoritative multiplayer state. Keep the retired path dormant.
-            if (_monsterInstance == null && _monsterPrefab != null)
+            if (SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene)
+            {
+                if (_map2RegionGraph != null && _map2LizardPrefab != null)
+                    EnsureInitialStalker(runner, RegionSemanticZone.Zone01, _map2RegionGraph, _map2LizardPrefab);
+                else
+                    Debug.LogError("[PlayerSpawner] Map2 Stalker requires its Lizard prefab and scene RegionGraph.");
+            }
+            else EnsureInitialStalker(runner, RegionSemanticZone.Zone01);
+            BindAuthoritativeWorldState();
+        }
+
+        private void EnsureInitialStalker(
+            NetworkRunner runner,
+            RegionSemanticZone zone,
+            RegionGraphAsset graph = null,
+            NetworkObject prefab = null)
+        {
+            prefab ??= _monsterPrefab;
+            if (_monsterInstance == null && prefab != null)
             {
                 var stalkerSpawn = GameObject.Find("MonsterSpawn_Stalker_EMPTY");
                 if (TryGetStalkerSpawnPosition(stalkerSpawn != null ? stalkerSpawn.transform : null, out var spawnPosition))
                 {
-                    _monsterInstance = SpawnStalker(runner, spawnPosition, stalkerSpawn.transform.rotation, RegionSemanticZone.Zone01);
+                    _monsterInstance = SpawnStalker(runner, spawnPosition, stalkerSpawn.transform.rotation, zone, graph, prefab);
                 }
             }
-            BindAuthoritativeWorldState();
         }
 
         public void TrySpawnZone2Stalker(Collider entrant, Transform spawnMarker)
@@ -788,10 +839,22 @@ namespace EchoProtocol.Networking
             _creepMinionInstances.Clear();
         }
 
-        private NetworkObject SpawnStalker(NetworkRunner runner, Vector3 position, Quaternion rotation, RegionSemanticZone zone)
+        private NetworkObject SpawnStalker(
+            NetworkRunner runner,
+            Vector3 position,
+            Quaternion rotation,
+            RegionSemanticZone zone,
+            RegionGraphAsset graph = null,
+            NetworkObject prefab = null)
         {
-            var spawned = runner.Spawn(_monsterPrefab, position, rotation, PlayerRef.None,
-                (_, obj) => obj.GetComponent<StalkerController>()?.ConfigurePatrolZone(zone));
+            var spawned = runner.Spawn(prefab != null ? prefab : _monsterPrefab, position, rotation, PlayerRef.None,
+                (_, obj) =>
+                {
+                    var controller = obj.GetComponent<StalkerController>();
+                    if (controller == null) return;
+                    if (graph != null) controller.ConfigureRegionGraph(graph, zone);
+                    else controller.ConfigurePatrolZone(zone);
+                });
             if (spawned != null)
             {
                 RuntimeLog.Log(RuntimeLogCategory.PlayerSpawner,

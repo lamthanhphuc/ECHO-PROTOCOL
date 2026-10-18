@@ -88,6 +88,7 @@ public class PlayerAnimatorDriver : MonoBehaviour
             || (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid);
         bool useCarryPose = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != "Lobby"
             && EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) == null
+            && !EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject)
             && (isCarryingCore || IsHoldingCoreStabilizer());
         bool isCrouching = !useCarryPose && (movement != null
             ? movement.IsCrouching

@@ -46,7 +46,21 @@ namespace EchoProtocol.AI.Stalker.Spatial
             ISet<int> rejectedNodeIds,
             out LocalPatrolSelection selection)
         {
+            return TrySelect(currentNodeId, previousNodeId, desiredRegionId,
+                rejectedNodeIds, null, out selection, out _);
+        }
+
+        public bool TrySelect(
+            int currentNodeId,
+            int previousNodeId,
+            RegionId desiredRegionId,
+            ISet<int> rejectedNodeIds,
+            Func<bool> trySpendPathCheck,
+            out LocalPatrolSelection selection,
+            out bool deferred)
+        {
             selection = default;
+            deferred = false;
             if (_spatialGraph == null
                 || _regionGraph == null
                 || _coverageMemory == null
@@ -57,8 +71,10 @@ namespace EchoProtocol.AI.Stalker.Spatial
             }
 
             var candidates = GetCandidates(currentNodeId, desiredRegionId);
+            // Score first so lower-ranked nodes never need a native path query.
             var bestNodeId = -1;
             var bestScore = float.NegativeInfinity;
+            var rankedCandidates = new List<SpatialNode>();
             for (var i = 0; i < candidates.Count; i++)
             {
                 var candidateNodeId = candidates[i];
@@ -72,19 +88,34 @@ namespace EchoProtocol.AI.Stalker.Spatial
                     continue;
                 }
 
-                if (_pathValidator != null && !_pathValidator(node.Position))
-                {
-                    continue;
-                }
+                rankedCandidates.Add(node);
+            }
 
-                var score = Score(node, previousNodeId);
-                if (bestNodeId < 0
-                    || score > bestScore + ScoreEpsilon
-                    || (Mathf.Abs(score - bestScore) <= ScoreEpsilon && candidateNodeId < bestNodeId))
+            rankedCandidates.Sort((left, right) =>
+            {
+                var difference = Score(right, previousNodeId) - Score(left, previousNodeId);
+                return Mathf.Abs(difference) <= ScoreEpsilon
+                    ? left.Id.CompareTo(right.Id) : difference > 0f ? 1 : -1;
+            });
+            for (var i = 0; i < rankedCandidates.Count; i++)
+            {
+                var node = rankedCandidates[i];
+                if (_pathValidator != null)
                 {
-                    bestNodeId = candidateNodeId;
-                    bestScore = score;
+                    if (trySpendPathCheck != null && !trySpendPathCheck())
+                    {
+                        deferred = true;
+                        return false;
+                    }
+                    if (!_pathValidator(node.Position))
+                    {
+                        if (trySpendPathCheck != null) rejectedNodeIds?.Add(node.Id);
+                        continue;
+                    }
                 }
+                bestNodeId = node.Id;
+                bestScore = Score(node, previousNodeId);
+                break;
             }
 
             if (bestNodeId < 0 || !_spatialGraph.TryGetNode(bestNodeId, out var bestNode))

@@ -38,7 +38,9 @@ public sealed class SceneAAmbientCulling : MonoBehaviour
         {
             _particles.AddRange(root.GetComponentsInChildren<ParticleSystem>());
             foreach (var a in root.GetComponentsInChildren<Animator>())
-                if (a.enabled && (a.name == "FlyingSaucer_Body" || a.name.StartsWith("Prop_Boat")))
+                if (a.enabled && (a.name == "FlyingSaucer_Body" || a.name.StartsWith("Prop_Boat"))
+                    && !(EchoProtocol.Networking.FloodedMapMission.Instance
+                        && a.transform.IsChildOf(EchoProtocol.Networking.FloodedMapMission.Instance.Escort)))
                     _animators.Add(a);
             foreach (var l in root.GetComponentsInChildren<Light>())
                 if (l.enabled && l.type == LightType.Point) _lights.Add(l);

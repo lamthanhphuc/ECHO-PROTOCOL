@@ -288,6 +288,13 @@ namespace EchoProtocol.AI.Stalker
         private readonly StalkerWorldInteractionDriver _worldInteractionDriver = new StalkerWorldInteractionDriver();
         private int _roomSweepFallbackNodeId = -1;
         private float _nextRoomSweepFallbackAttemptSeconds;
+        private const int RoomSweepPathChecksPerTick = 4;
+        private double _roomSweepPathBudgetSeconds = double.NegativeInfinity;
+        private int _roomSweepPathChecksRemaining;
+        private bool _roomSweepPlanningDeferred;
+        private List<SpatialNode> _roomSweepFallbackCandidates;
+        private int _roomSweepFallbackCandidateIndex;
+        private int _roomSweepVisualCoverageCursor;
         private readonly HashSet<int> _rejectedRoomSweepFallbackNodeIds = new HashSet<int>();
         private RegionId _currentRegionId = RegionId.Invalid;
         private RegionId _previousRegionId = RegionId.Invalid;
@@ -778,6 +785,18 @@ namespace EchoProtocol.AI.Stalker
             }
         }
 
+        public void ConfigureRegionGraph(RegionGraphAsset asset, RegionSemanticZone zone)
+        {
+            if (asset == null) throw new ArgumentNullException(nameof(asset));
+            if (zone == RegionSemanticZone.Unknown || zone == RegionSemanticZone.Isolated)
+                throw new ArgumentOutOfRangeException(nameof(zone));
+            if (_regionGraph != null || _spatialPatrolGraph != null)
+                throw new InvalidOperationException("Configure the RegionGraph before AI initialization.");
+
+            regionGraphAsset = asset;
+            ConfigurePatrolZone(zone);
+        }
+
         public void ConfigurePatrolZone(RegionSemanticZone zone)
         {
             _patrolZone = zone;
@@ -986,6 +1005,8 @@ namespace EchoProtocol.AI.Stalker
                 }
                 else
                 {
+                    if (_navigation?.GetPathStatus() == NavigationPathStatus.AgentNotOnNavMesh)
+                        TickNavigationRecovery();
                     TickCurrentState();
                     TryBeginFlashlightInvestigationFromCurrentFrame();
                     TryBeginHeardNoiseSearchFromCurrentFrame();
@@ -1096,6 +1117,12 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickRoomSweepSpatialPatrol()
         {
+            if (_roomSweepFallbackCandidates != null)
+            {
+                ActivateRoomSweepPatrolFallback();
+                return;
+            }
+
             if (_roomSweepFallbackNodeId >= 0)
             {
                 if (_navigation != null
@@ -5929,7 +5956,7 @@ namespace EchoProtocol.AI.Stalker
 
         private bool TrySetRoomSweepProbeDestination(int currentNodeId, RegionId currentRoomRegionId)
         {
-            var maxAttempts = _spatialPatrolGraph?.NodeCount ?? 0;
+            var maxAttempts = RoomSweepPathChecksPerTick;
             for (var attempt = 0; attempt < maxAttempts; attempt++)
             {
                 if (!_roomSweepPlanner.TrySelectNextProbe(currentNodeId, out var probeNodeId)
@@ -5954,6 +5981,16 @@ namespace EchoProtocol.AI.Stalker
                         $"probeNode={probeNodeId} " +
                         $"seed={GetPatrolVariationDiagnosticValue()}");
                     return true;
+                }
+
+                if (!TrySpendRoomSweepPathCheck())
+                    return true; // Planning continues next tick without clearing the room.
+
+                if (!_navigation.EvaluateDestination(probeNode.Position).IsComplete)
+                {
+                    RejectRoomSweepProbeWithDiagnostic(probeNodeId,
+                        "NO_COMPLETE_PATH", _navigation.CurrentFailureReason);
+                    continue;
                 }
 
                 var result = _navigation.RequestDestination(probeNode.Position);
@@ -5987,7 +6024,7 @@ namespace EchoProtocol.AI.Stalker
                 return true;
             }
 
-            return false;
+            return !_roomSweepPlanner.IsExhausted;
         }
 
         private void BeginRoomSweepSelfProbeScan(int probeNodeId, RegionId roomRegionId)
@@ -6109,7 +6146,7 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            var maxGlobalAttempts = _regionGraph?.Regions?.Count ?? 0;
+            var maxGlobalAttempts = RoomSweepPathChecksPerTick;
             for (var attempt = 0; attempt < maxGlobalAttempts; attempt++)
             {
                 var objective = _roomSweepGlobalPlanner?.CurrentObjective ?? RoomSweepGlobalObjective.Invalid;
@@ -6134,7 +6171,7 @@ namespace EchoProtocol.AI.Stalker
                 }
             }
 
-            return false;
+            return true; // Keep rejected objectives and continue planning next tick.
         }
 
         private bool SetRoomSweepTransitDestination()
@@ -6175,7 +6212,7 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            var maxAttempts = _spatialPatrolGraph?.NodeCount ?? 0;
+            var maxAttempts = RoomSweepPathChecksPerTick;
             for (var attempt = 0; attempt < maxAttempts; attempt++)
             {
                 if (!_localPatrolSelector.TrySelect(
@@ -6183,8 +6220,11 @@ namespace EchoProtocol.AI.Stalker
                         _blackboard.PreviousSpatialNodeId,
                         objective.NextRegionId,
                         _rejectedRoomSweepTransitNodeIds,
-                        out var selection))
+                        TrySpendRoomSweepPathCheck,
+                        out var selection,
+                        out var deferred))
                 {
+                    if (deferred) return true;
                     regionGraphFallbackReason = RegionGraphFallbackReason.NoCompleteLocalPath;
                     return false;
                 }
@@ -6224,7 +6264,7 @@ namespace EchoProtocol.AI.Stalker
                 return true;
             }
 
-            return false;
+            return true; // Preserve remaining transit candidates for the next tick.
         }
 
         private void RejectRoomSweepProbeWithDiagnostic(
@@ -6508,12 +6548,28 @@ namespace EchoProtocol.AI.Stalker
             ClearRoomSweepDestination();
             _rejectedRoomSweepGlobalRegionIds.Clear();
 
-            if (CurrentSimulationTimeSeconds >= _nextRoomSweepFallbackAttemptSeconds
-                && !TrySetRoomSweepLocalFallbackDestination())
-            {
+            if (CurrentSimulationTimeSeconds < _nextRoomSweepFallbackAttemptSeconds)
+                return;
+
+            _roomSweepPlanningDeferred = false;
+            var destinationSet = TrySetRoomSweepLocalFallbackDestination();
+            if (_roomSweepPlanningDeferred) return;
+
+            _nextRoomSweepFallbackAttemptSeconds = CurrentSimulationTimeSeconds + 2.5f;
+            if (!destinationSet)
                 _rejectedRoomSweepFallbackNodeIds.Clear();
-                _nextRoomSweepFallbackAttemptSeconds = CurrentSimulationTimeSeconds + 2.5f;
+        }
+
+        private bool TrySpendRoomSweepPathCheck()
+        {
+            if (_roomSweepPathBudgetSeconds != _currentSimulationSeconds)
+            {
+                _roomSweepPathBudgetSeconds = _currentSimulationSeconds;
+                _roomSweepPathChecksRemaining = RoomSweepPathChecksPerTick;
             }
+            if (_roomSweepPathChecksRemaining <= 0) return false;
+            _roomSweepPathChecksRemaining--;
+            return true;
         }
 
         private bool TrySetRoomSweepLocalFallbackDestination()
@@ -6526,33 +6582,46 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            var agent = GetComponent<NavMeshAgent>();
-            var path = new NavMeshPath();
             SpatialNode bestNode = null;
             var bestRegionId = RegionId.Invalid;
-            var bestDistance = float.PositiveInfinity;
-            var nodes = _spatialPatrolGraph.Nodes;
-            // ponytail: scan paths only after RoomSweep fails; cache zone routes if fallback becomes frequent.
-            for (var i = 0; i < nodes.Count; i++)
+            if (_roomSweepFallbackCandidates == null)
             {
-                var node = nodes[i];
-                var distance = (node.Position - transform.position).sqrMagnitude;
-                if (distance < 1f
-                    || distance >= bestDistance
-                    || _rejectedRoomSweepFallbackNodeIds.Contains(node.Id)
-                    || !IsRoomSweepFallbackNodeInZone(node.Id, out var regionId)
-                    || !_navigation.EvaluateDestination(node.Position).IsComplete
-                    || !agent.CalculatePath(node.Position, path)
-                    || path.status != NavMeshPathStatus.PathComplete
+                _roomSweepFallbackCandidates = new List<SpatialNode>();
+                var origin = transform.position;
+                foreach (var node in _spatialPatrolGraph.Nodes)
+                    if ((node.Position - origin).sqrMagnitude >= 1f
+                        && !_rejectedRoomSweepFallbackNodeIds.Contains(node.Id)
+                        && IsRoomSweepFallbackNodeInZone(node.Id, out _))
+                        _roomSweepFallbackCandidates.Add(node);
+                _roomSweepFallbackCandidates.Sort((left, right) =>
+                {
+                    var comparison = (left.Position - origin).sqrMagnitude.CompareTo(
+                        (right.Position - origin).sqrMagnitude);
+                    return comparison != 0 ? comparison : left.Id.CompareTo(right.Id);
+                });
+                _roomSweepFallbackCandidateIndex = 0;
+            }
+
+            while (_roomSweepFallbackCandidateIndex < _roomSweepFallbackCandidates.Count)
+            {
+                if (!TrySpendRoomSweepPathCheck())
+                {
+                    _roomSweepPlanningDeferred = true;
+                    return false;
+                }
+                var node = _roomSweepFallbackCandidates[_roomSweepFallbackCandidateIndex++];
+                if (!IsRoomSweepFallbackNodeInZone(node.Id, out var regionId)
+                    || !_navigation.EvaluateDestination(node.Position, out var path).IsComplete
                     || !IsRoomSweepFallbackPathInZone(path))
                 {
+                    _rejectedRoomSweepFallbackNodeIds.Add(node.Id);
                     continue;
                 }
-
-                bestDistance = distance;
                 bestNode = node;
                 bestRegionId = regionId;
+                break;
             }
+            _roomSweepFallbackCandidates = null;
 
             if (bestNode == null
                 || !_navigation.RequestDestination(bestNode.Position).IsAccepted)
@@ -6616,7 +6685,7 @@ namespace EchoProtocol.AI.Stalker
         private void ResetRoomSweepFallbackState()
         {
             _roomSweepFallbackNodeId = -1;
-            _nextRoomSweepFallbackAttemptSeconds = 0f;
+            _roomSweepFallbackCandidates = null;
             _rejectedRoomSweepFallbackNodeIds.Clear();
             regionGraphFallbackReason = RegionGraphFallbackReason.None;
             _rejectedRoomSweepTransitNodeIds.Clear();
@@ -6657,19 +6726,23 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            for (var i = 0; i < nodeIds.Count; i++)
+            // Continue the room scan on later ticks instead of raycasting every probe at once.
+            for (var i = 0; i < Mathf.Min(32, nodeIds.Count); i++)
             {
-                var nodeId = nodeIds[i];
-                if (!_spatialPatrolGraph.TryGetNode(nodeId, out var node))
-                {
-                    continue;
-                }
+                _roomSweepVisualCoverageCursor %= nodeIds.Count;
+                var nodeId = nodeIds[_roomSweepVisualCoverageCursor++];
 
-                var observationPoint = visionSensor.GetObservationPointForGroundPoint(node.Position);
+                if (_roomSweepCoverageMemory.IsObserved(roomRegionId, nodeId))
+                    continue;
+
+                if (!_spatialPatrolGraph.TryGetNode(nodeId, out var node))
+                    continue;
+
+                var observationPoint =
+                    visionSensor.GetObservationPointForGroundPoint(node.Position);
+
                 if (visionSensor.CanSeePoint(observationPoint))
-                {
                     _roomSweepCoverageMemory.MarkObserved(roomRegionId, nodeId);
-                }
             }
         }
 
@@ -6681,21 +6754,7 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            var bestSqrDistance = float.PositiveInfinity;
-            var nodes = _spatialPatrolGraph.Nodes;
-            for (var i = 0; i < nodes.Count; i++)
-            {
-                var sqrDistance = (nodes[i].Position - worldPosition).sqrMagnitude;
-                if (sqrDistance >= bestSqrDistance)
-                {
-                    continue;
-                }
-
-                bestSqrDistance = sqrDistance;
-                nodeId = nodes[i].Id;
-            }
-
-            return nodeId >= 0;
+            return _spatialPatrolGraph.TryResolveNearestNode(worldPosition, out nodeId);
         }
 
         private void UpdateCurrentRegion(RegionId nextRegionId)

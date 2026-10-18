@@ -12,6 +12,54 @@ namespace EchoProtocol.AI.Stalker.Tests
     public sealed class StalkerSpatialCanonicalTests
     {
         [Test]
+        public void STK_NearestNode_IndexMatchesFullScanAcrossFloorsAndOutsideGraph()
+        {
+            var random = new System.Random(1031);
+            var points = new Vector3[512];
+            var nodes = new object[points.Length];
+            for (var i = 0; i < points.Length; i++)
+            {
+                points[i] = new Vector3((float)random.NextDouble() * 200f - 100f,
+                    (float)random.NextDouble() * 60f - 30f, (float)random.NextDouble() * 200f - 100f);
+                nodes[i] = Activator.CreateInstance(NodeType, i, points[i], 0, i, 0, 1, 2, Array.Empty<int>());
+            }
+            var graph = Activator.CreateInstance(GraphType, NodeArray(nodes));
+            for (var query = 0; query < 256; query++)
+            {
+                var position = new Vector3((float)random.NextDouble() * 600f - 300f,
+                    (float)random.NextDouble() * 100f - 50f, (float)random.NextDouble() * 600f - 300f);
+                var expected = -1;
+                var best = float.PositiveInfinity;
+                for (var i = 0; i < points.Length; i++)
+                {
+                    var sqr = (points[i] - position).sqrMagnitude;
+                    if (sqr >= best) continue;
+                    best = sqr;
+                    expected = i;
+                }
+                var args = new object[] { position, -1 };
+                Assert.That(Invoke(graph, "TryResolveNearestNode", new[] { typeof(Vector3), typeof(int).MakeByRefType() }, args), Is.True);
+                Assert.That(args[1], Is.EqualTo(expected), $"query={query}, position={position}");
+            }
+        }
+
+        [Test]
+        public void STK_NearestNode_PreservesOriginalOrderTiesAndHandlesEmptyGraph()
+        {
+            var graph = Activator.CreateInstance(GraphType, NodeArray(Node(0, 1f), Node(1, -1f), Node(2, 1f)));
+            var signature = new[] { typeof(Vector3), typeof(int).MakeByRefType() };
+            var args = new object[] { Vector3.zero, -1 };
+            Assert.That(Invoke(graph, "TryResolveNearestNode", signature, args), Is.True);
+            Assert.That(args[1], Is.EqualTo(0));
+            args = new object[] { Vector3.right, -1 };
+            Assert.That(Invoke(graph, "TryResolveNearestNode", signature, args), Is.True);
+            Assert.That(args[1], Is.EqualTo(0));
+            graph = Activator.CreateInstance(GraphType, NodeArray());
+            Assert.That(Invoke(graph, "TryResolveNearestNode", signature, args), Is.False);
+            Assert.That(args[1], Is.EqualTo(-1));
+        }
+
+        [Test]
         public void STK_P3_StableSpatialIds_DefaultIsInvalid_AndSortsDeterministically()
         {
             Assert.That(RegionId.Invalid.IsValid, Is.False);
@@ -228,6 +276,34 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         private static bool IsXLessThanTwo(Vector3 destination) => destination.x < 2f;
+
+        [Test]
+        public void STK_P3_LocalPatrolSelector_DefersAndRemembersFailedCandidatesWhenBudgetRunsOut()
+        {
+            var graph = CreateBranchGraph();
+            var regions = Activator.CreateInstance(RegionGraphType,
+                RegionNodeArray(RegionNode(new RegionId(1)), RegionNode(new RegionId(2))),
+                new[] { new RegionId(1), new RegionId(2), new RegionId(2) },
+                GetProperty(graph, "CompatibilityIdentity"), 1);
+            var coverage = Activator.CreateInstance(CoverageMemoryType, 3, regions);
+            var validator = Delegate.CreateDelegate(PatrolPathValidatorType,
+                typeof(StalkerSpatialCanonicalTests).GetMethod(nameof(IsXLessThanTwo), BindingFlags.Static | BindingFlags.NonPublic));
+            var selector = Activator.CreateInstance(LocalPatrolSelectorType, graph, regions, coverage, 3, validator);
+            var rejected = new HashSet<int>();
+            var checks = 0;
+            Func<bool> budget = () => checks++ < 1;
+            var args = new object[] { 0, -1, new RegionId(2), rejected, budget, null, false };
+            var signature = new[] { typeof(int), typeof(int), typeof(RegionId), typeof(ISet<int>),
+                typeof(Func<bool>), LocalPatrolSelectionType.MakeByRefType(), typeof(bool).MakeByRefType() };
+
+            Assert.That((bool)Invoke(selector, "TrySelect", signature, args), Is.False);
+            Assert.That(args[6], Is.EqualTo(true));
+            Assert.That(rejected, Is.EquivalentTo(new[] { 1 }));
+            checks = 0;
+            Assert.That((bool)Invoke(selector, "TrySelect", signature, args), Is.False);
+            Assert.That(args[6], Is.EqualTo(false));
+            Assert.That(rejected, Is.EquivalentTo(new[] { 1, 2 }));
+        }
 
         private static object CreateLineGraph()
         {

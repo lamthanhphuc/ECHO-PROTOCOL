@@ -94,6 +94,22 @@ namespace EchoProtocol.UI.HUD
 
         private void Update()
         {
+            if (EchoProtocol.Networking.AlienHuntMission.TryDescribe(out var huntTitle, out var huntDetail, out var huntProgress))
+            {
+                ResolveComponents();
+                RefreshVisibility();
+                SetPhaseBadge("SĂN ALIEN", "#7EA6A4");
+                SetObjective(huntTitle, huntDetail, huntProgress, new Color(.49f, .65f, .64f));
+                return;
+            }
+            if (EchoProtocol.Networking.FloodedMapMission.TryDescribe(out var mapTitle, out var mapDetail, out var mapProgress))
+            {
+                ResolveComponents();
+                RefreshVisibility();
+                SetPhaseBadge("VÙNG NGẬP", "#7EA6A4");
+                SetObjective(mapTitle, mapDetail, mapProgress, new Color(.49f, .65f, .64f));
+                return;
+            }
             if (matchFlow == null)
             {
                 ResolveReferences();
@@ -139,7 +155,8 @@ namespace EchoProtocol.UI.HUD
             bool isZone1 = director != null
                 ? director.CurrentStage == EchoProtocol.MatchFlow.Zone2MissionStage.Zone1CoreObjective
                 : matchFlow == null || matchFlow.Phase == MatchPhase.ExploreCore;
-            bool visible = (! _hideZone1Objective || !isZone1) && !PlayerInteractionControlLock.HasModal;
+            bool visible = (EchoProtocol.Networking.AlienHuntMission.Instance != null || ! _hideZone1Objective || !isZone1)
+                && !PlayerInteractionControlLock.HasModal;
             _visibilityGroup.alpha = visible ? 1f : 0f;
             _visibilityGroup.blocksRaycasts = visible;
         }

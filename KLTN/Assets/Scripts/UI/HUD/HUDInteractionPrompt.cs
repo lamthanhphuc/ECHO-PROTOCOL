@@ -166,6 +166,11 @@ namespace EchoProtocol.UI.HUD
                 isHold = true;
                 progress01 = revive.ReviveProgress01;
             }
+            else if (interactable is EchoProtocol.Networking.FloodedChargeInteraction floodedCharge)
+            {
+                isHold = true;
+                progress01 = floodedCharge.Progress01;
+            }
 
             ShowPrompt(prompt, isHold, progress01);
         }
