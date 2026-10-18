@@ -118,6 +118,14 @@ namespace EchoProtocol.UI.HUD
 
         private void RefreshText()
         {
+            if (AlienHuntMission.TryDescribe(out var huntTitle, out var huntDetail, out _))
+            {
+                _title.text = "Nhiệm vụ · Săn alien";
+                _closeHint.text = "[J] Đóng";
+                _compactText.text = huntTitle + "\n" + huntDetail;
+                _body.text = huntTitle + "\n\n" + huntDetail;
+                return;
+            }
             if (FloodedMapMission.TryDescribe(out var mapTitle, out var mapDetail, out _))
             {
                 _title.text = "Nhiệm vụ · Vùng ngập";

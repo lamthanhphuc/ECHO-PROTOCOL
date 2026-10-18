@@ -69,6 +69,7 @@ namespace EchoProtocol.Networking
         EscapeTimeout = 2,
         MatchTimeout = 3,
         AllPlayersEliminated = 4,
+        ObjectiveCompleted = 5,
     }
 
     public static class NetworkMatchStateRules
@@ -535,6 +536,12 @@ namespace EchoProtocol.Networking
                 TryEndMatch(escapedPlayers > 0 ? NetworkMatchResult.Win : NetworkMatchResult.Lose,
                     escapedPlayers > 0 ? NetworkMatchEndReason.PlayerEscaped : NetworkMatchEndReason.MatchTimeout,
                     PlayerRef.None);
+                return;
+            }
+
+            if (AlienHuntMission.Instance != null)
+            {
+                TickAlienHunt();
                 return;
             }
 
@@ -2349,6 +2356,12 @@ namespace EchoProtocol.Networking
 
             CountFinalPlayers(out var survivorCount, out _, out _);
             var objectiveCompletion = CalculateObjectiveCompletion(CurrentPhase, result);
+            if (AlienHuntMission.Instance != null)
+            {
+                CountFinalPlayers(out _, out var livingPlayers, out _);
+                survivorCount += livingPlayers;
+                objectiveCompletion = AlienHuntMission.Instance.Burned / 9f;
+            }
             if (result == NetworkMatchResult.Win
                 && CurrentPhase == NetworkMatchPhase.FinalHunt
                 && Zone3MissionDirector.IsSciFiSceneLoaded)
@@ -3427,6 +3440,7 @@ namespace EchoProtocol.Networking
             return reason switch
             {
                 NetworkMatchEndReason.PlayerEscaped => "TEAM_ESCAPED",
+                NetworkMatchEndReason.ObjectiveCompleted => "OBJECTIVE_COMPLETED",
                 NetworkMatchEndReason.AllPlayersEliminated => "TEAM_ELIMINATED",
                 // The telemetry contract only accepts these three terminal reason codes.
                 // Precise timeout semantics remain replicated in NetworkMatchEndReason.

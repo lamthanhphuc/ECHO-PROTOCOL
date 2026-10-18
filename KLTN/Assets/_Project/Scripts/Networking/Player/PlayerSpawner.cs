@@ -291,6 +291,11 @@ namespace EchoProtocol.Networking
                 RuntimeLogCategory.PlayerSpawner,
                 $"[PlayerSpawner] Spawned authoritative Match State {_matchStateInstance.Id}.");
             }
+            if (AlienHuntMission.Instance != null)
+            {
+                BindAuthoritativeWorldState();
+                return;
+            }
             if (_powerPuzzlePrefab == null)
             {
                 _powerPuzzlePrefab = Resources.Load<NetworkObject>("Network/NetworkPowerPuzzle");
