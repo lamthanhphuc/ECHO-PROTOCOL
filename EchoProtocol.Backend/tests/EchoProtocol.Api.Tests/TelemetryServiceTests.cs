@@ -1095,6 +1095,17 @@ public sealed class TelemetryServiceTests
         public Task<ServiceResult<MatchAuthorityResponse>> CreateAsync(Guid hostUserId, CreateMatchAuthorityRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ServiceResult<JoinProofResponse>> IssueJoinProofAsync(Guid userId, Guid matchId, IssueJoinProofRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ServiceResult<MatchPlayerBindingResponse>> BindPlayerAsync(Guid hostUserId, Guid matchId, BindMatchPlayerRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ServiceResult<MatchAuthorityResponse>> TakeoverAsync(
+            Guid newHostUserId,
+            Guid matchId,
+            TakeoverMatchAuthorityRequest request,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ServiceResult<MatchAuthorityResponse>> RelinquishAsync(
+            Guid hostUserId,
+            Guid matchId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<ServiceResult<MatchAuthorityResponse>> RenewLeaseAsync(Guid hostUserId, Guid matchId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ServiceResult<MatchAuthorityResponse>> StartAsync(Guid hostUserId, Guid matchId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ServiceResult<MatchPlayerBindingResponse>> MarkPlayerDisconnectedAsync(Guid hostUserId, Guid matchId, int fusionActorNumber, CancellationToken cancellationToken) => throw new NotSupportedException();

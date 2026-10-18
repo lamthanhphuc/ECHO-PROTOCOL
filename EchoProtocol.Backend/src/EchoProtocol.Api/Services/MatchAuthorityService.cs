@@ -6,6 +6,7 @@ using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
 
 namespace EchoProtocol.Api.Services;
@@ -97,11 +98,16 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
 
         if (match!.Status == MatchAuthorityStatus.InMatch)
         {
-            var disconnectedMember = await _db.MatchPlayerBindings.AsNoTracking()
-                .AnyAsync(item => item.MatchId == matchId && item.UserId == userId
-                    && item.DisconnectedAtUtc != null, cancellationToken);
-            if (!disconnectedMember)
-                return Failure<JoinProofResponse>("Only disconnected roster members may reconnect", ErrorCodes.MatchAlreadyEnded);
+            var existingMember = await _db.MatchPlayerBindings.AsNoTracking()
+                .AnyAsync(item => item.MatchId == matchId
+                    && item.UserId == userId, cancellationToken);
+
+            if (!existingMember)
+            {
+                return Failure<JoinProofResponse>(
+                    "Only existing roster members may reconnect",
+                    ErrorCodes.MatchAlreadyEnded);
+            }
         }
 
         var expiresAt = UtcNow().AddSeconds(_settings.JoinProofLifetimeSeconds);
@@ -152,10 +158,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         var userBinding = match.Players.SingleOrDefault(
             item => item.UserId == proof.UserId);
 
-        var isCurrentHostActorRemap =
+        var isRosterActorRemap =
             userBinding is not null
-            && proof.UserId == match.HostUserId
-            && userBinding.UserId == match.HostUserId
             && userBinding.DisconnectedAtUtc == null
             && userBinding.FusionActorNumber != request.FusionActorNumber;
 
@@ -167,7 +171,7 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             || (userBinding is not null
                 && userBinding.DisconnectedAtUtc == null
                 && userBinding.FusionActorNumber != request.FusionActorNumber
-                && !isCurrentHostActorRemap))
+                && !isRosterActorRemap))
         {
             return Failure<MatchPlayerBindingResponse>(
                 "Fusion actor or backend user is already bound to another player",
@@ -247,6 +251,19 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                 ErrorCodes.MatchAuthorityForbidden);
         }
 
+        var actorCollision = match.Players.SingleOrDefault(item =>
+            item.Id != candidate.Id
+            && item.FusionActorNumber == request.FusionActorNumber
+            && item.DisconnectedAtUtc == null);
+
+        if (actorCollision is not null
+            && actorCollision.UserId != match.HostUserId)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Migrated Host actor number is already owned by another connected player",
+                ErrorCodes.MatchPlayerBindingConflict);
+        }
+
         if (await HasOtherActiveMatchAsync(
                 newHostUserId,
                 matchId,
@@ -271,6 +288,9 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             match.LeaseExpiresAtUtc =
                 now.AddSeconds(_settings.LeaseLifetimeSeconds);
             match.UpdatedAtUtc = now;
+            candidate.FusionActorNumber =
+                request.FusionActorNumber;
+            candidate.LastSeenAtUtc = now;
 
             await _db.SaveChangesAsync(cancellationToken);
 
@@ -295,20 +315,61 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             previousHost.LastSeenAtUtc = now;
         }
 
-        match.HostUserId = newHostUserId;
-        match.LeaseExpiresAtUtc =
-            now.AddSeconds(_settings.LeaseLifetimeSeconds);
-        match.UpdatedAtUtc = now;
+        IDbContextTransaction? actorReuseTransaction = null;
 
         try
         {
+            // With the PostgreSQL partial unique index, the old Host must be
+            // persisted as disconnected before its actor number can be
+            // assigned to the promoted Host. Keep both writes atomic.
+            if (previousHost is not null
+                && previousHost.FusionActorNumber
+                    == request.FusionActorNumber
+                && _db.Database.IsRelational())
+            {
+                actorReuseTransaction =
+                    await _db.Database.BeginTransactionAsync(
+                        cancellationToken);
+
+                await _db.SaveChangesAsync(
+                    cancellationToken);
+            }
+
+            candidate.FusionActorNumber =
+                request.FusionActorNumber;
+            candidate.LastSeenAtUtc = now;
+
+            match.HostUserId = newHostUserId;
+            match.LeaseExpiresAtUtc =
+                now.AddSeconds(_settings.LeaseLifetimeSeconds);
+            match.UpdatedAtUtc = now;
+
             await _db.SaveChangesAsync(cancellationToken);
+
+            if (actorReuseTransaction is not null)
+            {
+                await actorReuseTransaction.CommitAsync(
+                    cancellationToken);
+            }
         }
         catch (DbUpdateConcurrencyException)
         {
             return Failure<MatchAuthorityResponse>(
                 "Host authority changed concurrently; retry against current authority state",
                 ErrorCodes.MatchAuthorityTakeoverNotReady);
+        }
+        catch (DbUpdateException)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Migrated Host actor remap conflicted with the active roster",
+                ErrorCodes.MatchPlayerBindingConflict);
+        }
+        finally
+        {
+            if (actorReuseTransaction is not null)
+            {
+                await actorReuseTransaction.DisposeAsync();
+            }
         }
 
         return ServiceResult<MatchAuthorityResponse>.Success(

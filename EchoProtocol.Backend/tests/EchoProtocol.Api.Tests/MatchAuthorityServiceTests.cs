@@ -1,8 +1,10 @@
 using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.DTOs.MatchAuthority;
+using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -109,7 +111,7 @@ public sealed class MatchAuthorityServiceTests
     }
 
     [Fact]
-    public async Task InMatch_OnlyDisconnectedRosterMemberGetsReconnectProof()
+    public async Task InMatch_OnlyExistingRosterMemberGetsReconnectProof()
     {
         await using var db = CreateDb();
         var service = CreateService(db);
@@ -128,7 +130,7 @@ public sealed class MatchAuthorityServiceTests
         {
             FusionSessionName = "reconnect-room", FusionActorNumber = 2
         };
-        Assert.False((await service.IssueJoinProofAsync(playerId, matchId, request, CancellationToken.None)).IsSuccess);
+        Assert.True((await service.IssueJoinProofAsync(playerId, matchId, request, CancellationToken.None)).IsSuccess);
         Assert.False((await service.IssueJoinProofAsync(Guid.NewGuid(), matchId, request, CancellationToken.None)).IsSuccess);
 
         var boundPlayer = await db.MatchPlayerBindings.SingleAsync(item => item.UserId == playerId);
@@ -144,7 +146,7 @@ public sealed class MatchAuthorityServiceTests
     }
 
     [Fact]
-    public async Task SameUser_CannotBindTwoActorsInSameMatch()
+    public async Task SameRosterUser_RebindMovesActorWithoutCreatingDuplicate()
     {
         await using var db = CreateDb();
         var service = CreateService(db);
@@ -195,8 +197,13 @@ public sealed class MatchAuthorityServiceTests
             },
             CancellationToken.None);
 
-        Assert.False(secondBind.IsSuccess);
-        Assert.Equal("MATCH_PLAYER_BINDING_CONFLICT", secondBind.ErrorCode);
+        Assert.True(secondBind.IsSuccess);
+        Assert.Equal(2, secondBind.Data!.FusionActorNumber);
+        Assert.Equal(
+            1,
+            await db.MatchPlayerBindings.CountAsync(item =>
+                item.MatchId == matchId
+                && item.UserId == playerId));
     }
 
     [Fact]
@@ -550,6 +557,15 @@ public sealed class MatchAuthorityServiceTests
             nextHostId,
             takeover.Data!.HostUserId);
 
+        var migratedHostBinding =
+            await db.MatchPlayerBindings
+                .SingleAsync(item =>
+                    item.UserId == nextHostId);
+
+        Assert.Equal(
+            1,
+            migratedHostBinding.FusionActorNumber);
+
         var proof =
             await service.IssueJoinProofAsync(
                 nextHostId,
@@ -599,6 +615,86 @@ public sealed class MatchAuthorityServiceTests
         Assert.Equal(
             1,
             newHost.FusionActorNumber);
+    }
+
+    [Fact]
+    public async Task Takeover_AtomicallyReusesDepartedHostActor_WithRelationalUniqueIndex()
+    {
+        await using var connection =
+            new SqliteConnection(
+                "Data Source=:memory:;Foreign Keys=True");
+
+        await connection.OpenAsync();
+
+        var options =
+            new DbContextOptionsBuilder<AppDbContext>()
+                .UseSqlite(connection)
+                .Options;
+
+        await using var db =
+            new AppDbContext(options);
+
+        await db.Database.EnsureCreatedAsync();
+
+        var hostId = Guid.NewGuid();
+        var nextHostId = Guid.NewGuid();
+
+        db.Users.AddRange(
+            CreateUser(hostId, "migration-host"),
+            CreateUser(nextHostId, "migration-next-host"));
+
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var created = await service.CreateAsync(
+            hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "actor-reuse-room",
+                MaxPlayers = 4
+            },
+            CancellationToken.None);
+
+        Assert.True(created.IsSuccess);
+        var matchId = created.Data!.MatchId;
+
+        await BindAsync(
+            service, hostId, hostId,
+            matchId, "actor-reuse-room", 1);
+
+        await BindAsync(
+            service, hostId, nextHostId,
+            matchId, "actor-reuse-room", 2);
+
+        var authority =
+            await db.MatchAuthorityBindings
+                .SingleAsync();
+
+        authority.LeaseExpiresAtUtc =
+            Now.UtcDateTime.AddSeconds(-1);
+
+        await db.SaveChangesAsync();
+
+        var takeover = await service.TakeoverAsync(
+            nextHostId,
+            matchId,
+            new TakeoverMatchAuthorityRequest
+            {
+                FusionSessionName = "actor-reuse-room",
+                FusionActorNumber = 1
+            },
+            CancellationToken.None);
+
+        Assert.True(takeover.IsSuccess);
+
+        var oldHost = await db.MatchPlayerBindings
+            .SingleAsync(item => item.UserId == hostId);
+        var newHost = await db.MatchPlayerBindings
+            .SingleAsync(item => item.UserId == nextHostId);
+
+        Assert.NotNull(oldHost.DisconnectedAtUtc);
+        Assert.Equal(1, newHost.FusionActorNumber);
+        Assert.Null(newHost.DisconnectedAtUtc);
     }
 
     [Fact]
@@ -961,6 +1057,23 @@ public sealed class MatchAuthorityServiceTests
             new MatchJoinProofService(settings, time),
             settings,
             time);
+    }
+
+    private static User CreateUser(
+        Guid userId,
+        string username)
+    {
+        return new User
+        {
+            Id = userId,
+            Email = $"{username}@echo.invalid",
+            Username = username,
+            PasswordHash = "test-hash",
+            Role = UserRole.PLAYER,
+            Status = UserStatus.ACTIVE,
+            CreatedAt = Now.UtcDateTime,
+            UpdatedAt = Now.UtcDateTime
+        };
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
