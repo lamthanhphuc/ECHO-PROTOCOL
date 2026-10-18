@@ -38,6 +38,16 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
         }
 
         [Test]
+        public void Map2_BakeOmitsRegionsBeyondBlockerSeparatedNavMesh()
+        {
+            var graph = Graph();
+            var report = Map2RegionGraphAuthoring.BuildReport(graph,
+                new[] { Region(1, "Room_West", 0.5f, 2f), Region(2, "Room_Outside", 100f, 2f) }, Vector3.zero, _ => true);
+            Assert.That(report.CanBakeRuntimeAsset, Is.True, report.ToDisplayString());
+            Assert.That(report.RuntimeGraph.Regions.Any(r => r.SemanticMetadata.SourcePath.EndsWith("Room_Outside")), Is.False);
+        }
+
+        [Test]
         public void Map2_BakeRejectsOverlappingRegionEvidence()
         {
             var report = Map2RegionGraphAuthoring.BuildReport(Graph(),

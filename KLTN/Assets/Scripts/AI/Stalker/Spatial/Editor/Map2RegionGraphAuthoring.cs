@@ -82,7 +82,7 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
                 else throw new ArgumentException($"Region '{region.name}' must start with Room_ or Route_.");
                 var nodes = graph.Nodes.Where(node => reachable.Contains(node.Id) && region.ContainsWorldPoint(node.Position))
                     .Select(node => node.Id).ToArray();
-                if (nodes.Length == 0) throw new ArgumentException($"Region '{region.name}' contains no spawn-connected NavMesh nodes.");
+                if (nodes.Length == 0) continue;
                 sources.Add(new FullStationRegionGraphAuthoringCore.SemanticSource(sources.Count, SemanticZone.Zone01,
                     kind, "Map2_Regions/" + region.name, region.ToBakeData().WorldBounds.center, FloorEvidenceKind.FloorEvidence, nodes));
             }

@@ -268,13 +268,8 @@ namespace EchoProtocol.Networking
                 ConfigureExistingPlayerObject(player, playerObject, gameplay: true);
             }
 
-            // Facility objectives and pickups belong to SciFi only.
-            if (SceneManager.GetActiveScene().name == LobbyManager.GameSceneName)
+            if (LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name))
                 EnsureWorldStateExamples(runner);
-            else if (_map2RegionGraph != null)
-                EnsureInitialStalker(runner, RegionSemanticZone.Zone01, _map2RegionGraph, _map2LizardPrefab);
-            else
-                Debug.LogError("[PlayerSpawner] Map2 Stalker requires its scene RegionGraph.");
         }
 
         private void EnsureWorldStateExamples(NetworkRunner runner)
@@ -304,7 +299,7 @@ namespace EchoProtocol.Networking
             {
                 _powerPuzzleStationPrefab = Resources.Load<NetworkObject>("Network/NetworkPowerPuzzleStation");
             }
-            if (_doorInstance == null && _doorPrefab != null && !Zone3MissionDirector.IsSciFiSceneLoaded)
+            if (_doorInstance == null && _doorPrefab != null && !Zone3MissionDirector.IsSciFiSceneLoaded && !FloodedMapMission.IsLoaded)
             {
                 _doorInstance = runner.Spawn(_doorPrefab, new Vector3(0f, 1f, 2.5f), Quaternion.identity);
                 RuntimeLog.Log(
@@ -384,7 +379,14 @@ namespace EchoProtocol.Networking
             }
             // Zone 2 uses scene authorization panels with NetworkMatchState as
             // the authoritative multiplayer state. Keep the retired path dormant.
-            EnsureInitialStalker(runner, RegionSemanticZone.Zone01);
+            if (SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene)
+            {
+                if (_map2RegionGraph != null && _map2LizardPrefab != null)
+                    EnsureInitialStalker(runner, RegionSemanticZone.Zone01, _map2RegionGraph, _map2LizardPrefab);
+                else
+                    Debug.LogError("[PlayerSpawner] Map2 Stalker requires its Lizard prefab and scene RegionGraph.");
+            }
+            else EnsureInitialStalker(runner, RegionSemanticZone.Zone01);
             BindAuthoritativeWorldState();
         }
 

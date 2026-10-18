@@ -174,12 +174,12 @@ public class SecurityTerminalUIController : MonoBehaviour
 
                 if (codeDisplayText != null)
                 {
-                    codeDisplayText.text = $"Mã mở cửa Khu vực 2:\n<size=32><color=#7EA6A4><b>{code}</b></color></size>";
+                    codeDisplayText.text = (EchoProtocol.Networking.FloodedMapMission.IsLoaded ? "Mã điều khiển đĩa bay:" : "Mã mở cửa Khu vực 2:") + $"\n<size=32><color=#7EA6A4><b>{code}</b></color></size>";
                 }
 
                 if (instructionText != null)
                 {
-                    instructionText.text = "Nhập mã tại một trong hai bảng mở cửa để mở cửa.";
+                    instructionText.text = EchoProtocol.Networking.FloodedMapMission.IsLoaded ? "Nhập mã tại bảng điều khiển đĩa bay để mở nhiệm vụ hộ tống." : "Nhập mã tại một trong hai bảng mở cửa để mở cửa.";
                 }
             }
             else

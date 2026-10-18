@@ -11,6 +11,21 @@ namespace EchoProtocol.Voice
 
         public VoiceManager Owner { get; set; }
 
+        protected override void OnEnable()
+        {
+            if (Client == null)
+            {
+                base.Awake();
+                base.Start();
+            }
+            base.OnEnable();
+        }
+
+        protected override void OnDestroy()
+        {
+            if (Client != null) base.OnDestroy();
+        }
+
         protected override Speaker InstantiateSpeakerForRemoteVoice(int playerId, byte voiceId, object userData)
         {
             if (Owner == null || !(userData is string key) || !Owner.AcceptStream(key)) return null;

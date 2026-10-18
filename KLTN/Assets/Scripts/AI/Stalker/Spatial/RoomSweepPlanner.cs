@@ -13,6 +13,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
         private readonly List<int> _activeProbeNodeIds = new List<int>();
         private readonly HashSet<int> _activeProbeNodeSet = new HashSet<int>();
         private readonly HashSet<int> _rejectedProbeNodeIds = new HashSet<int>();
+        private int _distanceOriginNodeId = -1;
+        private int[] _hopDistances;
 
         public RoomSweepPlanner(
             NavMeshSpatialGraph spatialGraph,
@@ -168,6 +170,12 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 }
             }
 
+            // Disconnected probes stay unobserved; never turn an unreachable island into a goal.
+            if (bestDistance == int.MaxValue)
+            {
+                return false;
+            }
+
             if (!_useSeededVariation)
             {
                 targetSpatialNodeId = bestNodeId;
@@ -175,20 +183,13 @@ namespace EchoProtocol.AI.Stalker.Spatial
             }
 
             var selectionPool = new List<int>();
-            if (bestDistance == int.MaxValue)
+            for (var i = 0; i < candidates.Count; i++)
             {
-                selectionPool.AddRange(candidates);
-            }
-            else
-            {
-                for (var i = 0; i < candidates.Count; i++)
+                var nodeId = candidates[i];
+                var distance = nodeId >= 0 && nodeId < distances.Length ? distances[nodeId] : -1;
+                if (distance == bestDistance)
                 {
-                    var nodeId = candidates[i];
-                    var distance = nodeId >= 0 && nodeId < distances.Length ? distances[nodeId] : -1;
-                    if (distance == bestDistance)
-                    {
-                        selectionPool.Add(nodeId);
-                    }
+                    selectionPool.Add(nodeId);
                 }
             }
 
@@ -292,7 +293,12 @@ namespace EchoProtocol.AI.Stalker.Spatial
 
         private int[] BuildHopDistances(int startNodeId)
         {
-            var distances = new int[_spatialGraph.NodeCount];
+            if (_distanceOriginNodeId == startNodeId && _hopDistances != null)
+            {
+                return _hopDistances;
+            }
+
+            var distances = _hopDistances ?? new int[_spatialGraph.NodeCount];
             for (var i = 0; i < distances.Length; i++)
             {
                 distances[i] = -1;
@@ -309,8 +315,7 @@ namespace EchoProtocol.AI.Stalker.Spatial
                     continue;
                 }
 
-                var neighbors = new List<int>(node.NeighborIds);
-                neighbors.Sort();
+                var neighbors = node.NeighborIds;
                 for (var i = 0; i < neighbors.Count; i++)
                 {
                     var neighborId = neighbors[i];
@@ -324,6 +329,8 @@ namespace EchoProtocol.AI.Stalker.Spatial
                 }
             }
 
+            _distanceOriginNodeId = startNodeId;
+            _hopDistances = distances;
             return distances;
         }
     }

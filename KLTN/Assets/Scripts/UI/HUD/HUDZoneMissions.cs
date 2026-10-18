@@ -118,6 +118,18 @@ namespace EchoProtocol.UI.HUD
 
         private void RefreshText()
         {
+            if (FloodedMapMission.TryDescribe(out var mapTitle, out var mapDetail, out _))
+            {
+                _title.text = "Nhiệm vụ · Vùng ngập";
+                _closeHint.text = "[J] Đóng";
+                _compactText.text = mapTitle + "\n" + mapDetail;
+                _body.text = "1. Tìm 4 lõi và nạp vào hai trạm cấp điện.\n\n"
+                    + "2. Kiểm tra terminal, sửa 4 relay và xác thực để nhận mã.\n"
+                    + "Nhập mã tại bảng điều khiển đĩa bay.\n\n"
+                    + "3. Giữ [E] để nạp điện, sau đó đi gần hộ tống đĩa bay tới bến.\n"
+                    + "Tuyến cố định · Không cần tiếp nhiên liệu.\n\n" + mapTitle + "\n" + mapDetail;
+                return;
+            }
             _title.text = EchoProtocol.Settings.GameLanguage.Choose("Nhiệm vụ", "Objectives");
             _closeHint.text = EchoProtocol.Settings.GameLanguage.Choose("[J] Đóng", "[J] Close");
             if (_cores == null) _cores = FindAnyObjectByType<EnergyCoreObjectiveProgress>();

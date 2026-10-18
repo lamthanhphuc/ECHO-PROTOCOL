@@ -15,6 +15,7 @@ namespace EchoProtocol.AI.Stalker
         private NavigationFailureReason _currentFailureReason;
         private NavigationRecoveryReason _currentRecoveryReason;
         private bool _authoritativeLocomotion;
+        private Vector3? _lastOnNavMeshPosition;
 
         public StalkerNavigationController(NavMeshAgent agent)
             : this(agent, NavigationProgressSettings.Default)
@@ -67,6 +68,7 @@ namespace EchoProtocol.AI.Stalker
         public void TickAuthoritativeLocomotion(float deltaSeconds)
         {
             AuthoritativeMoveSpeed = 0f;
+            RememberOnNavMeshPosition();
             if (!_authoritativeLocomotion || !IsUsable || deltaSeconds <= 0f
                 || !_agent.hasPath || _agent.pathPending
                 || _agent.pathStatus != NavMeshPathStatus.PathComplete)
@@ -95,6 +97,7 @@ namespace EchoProtocol.AI.Stalker
             _agent.nextPosition = position;
             _agent.Move(direction * distance);
             _agent.transform.position = _agent.nextPosition;
+            RememberOnNavMeshPosition();
             AuthoritativeMoveSpeed = Vector3.Distance(position, _agent.transform.position) / deltaSeconds;
             if (_agent.updateRotation)
             {
@@ -151,6 +154,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (_agent.isOnNavMesh)
             {
+                RememberOnNavMeshPosition();
                 _currentFailureReason = NavigationFailureReason.None;
                 return true;
             }
@@ -160,7 +164,10 @@ namespace EchoProtocol.AI.Stalker
                     _agent.transform.position,
                     out var hit,
                     sampleDistance,
-                    _agent.areaMask))
+                    _agent.areaMask)
+                && (!_lastOnNavMeshPosition.HasValue
+                    || Vector3.Distance(_agent.transform.position, _lastOnNavMeshPosition.Value) > sampleDistance
+                    || !NavMesh.SamplePosition(_lastOnNavMeshPosition.Value, out hit, 0.1f, _agent.areaMask)))
             {
                 _currentFailureReason = NavigationFailureReason.AgentNotOnNavMesh;
                 return false;
@@ -182,6 +189,7 @@ namespace EchoProtocol.AI.Stalker
             _pathPendingTimedOut = false;
             _currentFailureReason = NavigationFailureReason.None;
             _progressMonitor.Reset();
+            RememberOnNavMeshPosition();
 
             return true;
         }
@@ -206,6 +214,12 @@ namespace EchoProtocol.AI.Stalker
 
         public NavigationEvaluationResult EvaluateDestination(Vector3 destination)
         {
+            return EvaluateDestination(destination, out _);
+        }
+
+        public NavigationEvaluationResult EvaluateDestination(Vector3 destination, out NavMeshPath path)
+        {
+            path = _evaluationPath;
             if (_agent == null || !_agent.enabled)
             {
                 _currentFailureReason = NavigationFailureReason.AgentUnavailable;
@@ -347,6 +361,7 @@ namespace EchoProtocol.AI.Stalker
 
         public void TickProgress(float deltaTime)
         {
+            RememberOnNavMeshPosition();
             var pathStatus = GetPathStatus();
             if (pathStatus == NavigationPathStatus.Pending)
             {
@@ -466,6 +481,12 @@ namespace EchoProtocol.AI.Stalker
                 default:
                     return NavigationPathStatus.Invalid;
             }
+        }
+
+        private void RememberOnNavMeshPosition()
+        {
+            if (_agent != null && _agent.enabled && _agent.isOnNavMesh)
+                _lastOnNavMeshPosition = _agent.nextPosition;
         }
 
         private bool DoesPathReachRequestedDestination(

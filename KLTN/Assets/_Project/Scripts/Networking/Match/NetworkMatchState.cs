@@ -581,6 +581,7 @@ namespace EchoProtocol.Networking
                 }
             }
 
+            if (FloodedMapMission.Instance != null) TickFloodedMission();
             var zone3 = Zone3MissionDirector.Instance;
             if (zone3 != null && (CurrentPhase == NetworkMatchPhase.Zone3FindFrigate
                 || CurrentPhase == NetworkMatchPhase.Zone3PushFrigate))
