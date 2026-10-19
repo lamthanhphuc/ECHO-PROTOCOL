@@ -10,6 +10,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.SceneManagement;
 using Assert = NUnit.Framework.Assert;
 
@@ -152,6 +153,71 @@ namespace EchoProtocol.Player.Tests
             {
                 if (opened) EditorSceneManager.CloseScene(scene, true);
             }
+        }
+
+        [Test]
+        public void TEAM_TOOL_Map2SpawnPoints_MatchMap1CountAndNavMesh()
+        {
+            int map1Count = CountSpawnPoints("Assets/Scenes/SciFi.unity");
+            const string map2Path = "Assets/Scenes/Scene_A.unity";
+            Scene scene = SceneManager.GetSceneByPath(map2Path);
+            bool opened = !scene.IsValid() || !scene.isLoaded;
+            if (opened) scene = EditorSceneManager.OpenScene(map2Path, OpenSceneMode.Additive);
+            try
+            {
+                var map2Points = scene.GetRootGameObjects()
+                    .SelectMany(root => root.GetComponentsInChildren<TeamToolSpawnPoint>(true))
+                    .ToArray();
+                Assert.That(map2Points.Length, Is.EqualTo(map1Count));
+                Assert.That(map2Points.All(point => point.transform.parent.name == "TeamToolSpawnPoints_Map2"), Is.True);
+                Assert.That(map2Points.All(point => point.TryGetSpawnPosition(out _)), Is.True);
+
+                var transforms = scene.GetRootGameObjects()
+                    .SelectMany(root => root.GetComponentsInChildren<Transform>(true))
+                    .ToArray();
+                var anchors = transforms
+                    .Where(item => item.name.StartsWith("CoreSpawn_", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var blockers = transforms
+                    .Where(item => item.name.Contains("BLOCKERCUBE", StringComparison.OrdinalIgnoreCase))
+                    .Select(item => item.GetComponent<Collider>())
+                    .Where(item => item != null)
+                    .ToArray();
+
+                foreach (var point in map2Points)
+                {
+                    Assert.That(FloodedWaterBoundary.TryGetSwimSurface(point.transform.position, out _), Is.False);
+                    Assert.That(blockers.All(blocker => blocker.bounds.SqrDistance(point.transform.position) >= 1f), Is.True);
+                    Assert.That(anchors.Any(anchor => HasCompletePathOnSameFloor(anchor.position, point.transform.position)), Is.True);
+                }
+            }
+            finally
+            {
+                if (opened) EditorSceneManager.CloseScene(scene, true);
+            }
+        }
+
+        private static bool HasCompletePathOnSameFloor(Vector3 anchor, Vector3 destination)
+        {
+            if (Mathf.Abs(anchor.y - destination.y) > 3f
+                || !NavMesh.SamplePosition(anchor, out var start, 8f, NavMesh.AllAreas))
+                return false;
+
+            var path = new NavMeshPath();
+            return NavMesh.CalculatePath(start.position, destination, NavMesh.AllAreas, path)
+                && path.status == NavMeshPathStatus.PathComplete;
+        }
+
+        private static int CountSpawnPoints(string scenePath)
+        {
+            Scene scene = SceneManager.GetSceneByPath(scenePath);
+            bool opened = !scene.IsValid() || !scene.isLoaded;
+            if (opened) scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+            int count = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<TeamToolSpawnPoint>(true))
+                .Count();
+            if (opened) EditorSceneManager.CloseScene(scene, true);
+            return count;
         }
 
         private static void ValidateZone(TeamToolSpawnPoint[] points, TeamToolSpawnZone zone)
