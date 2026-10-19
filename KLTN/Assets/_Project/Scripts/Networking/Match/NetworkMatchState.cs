@@ -2838,6 +2838,10 @@ namespace EchoProtocol.Networking
                 || playerObject == null || !playerObject.IsValid || playerObject.InputAuthority != requester
                 || !TryResolveActivePlayer(requester, out _)) return Zone2NetworkCommandResult.InvalidRequester;
 
+            if (playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement)
+                && movement.IsZone2InteractionDisrupted)
+                return Zone2NetworkCommandResult.InvalidRequester;
+
             Vector3 requesterPosition = playerObject.transform.position;
             float closestSqrDistance = float.PositiveInfinity;
             bool foundCollider = false;
@@ -2945,6 +2949,23 @@ namespace EchoProtocol.Networking
                 changed = true;
             }
             if (changed) HandleReplicatedStateChanged();
+        }
+
+        public bool InterruptZone2OperationsAuthoritative(PlayerRef player)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || !player.IsRealPlayer || CurrentPhase != NetworkMatchPhase.Zone2Objective) return false;
+            bool changed = false;
+            for (int index = 0; index < 4; index++)
+            {
+                var slot = (RelaySlot)index;
+                if (GetRelayOperator(slot) != player) continue;
+                SetRelayOperator(slot, PlayerRef.None);
+                changed = true;
+            }
+            if (RemoveSecurityHoldParticipant(player)) changed = true;
+            if (changed) HandleReplicatedStateChanged();
+            return changed;
         }
 
         private bool ClaimRelayOperator(PlayerRef requester, RelaySlot slot)
