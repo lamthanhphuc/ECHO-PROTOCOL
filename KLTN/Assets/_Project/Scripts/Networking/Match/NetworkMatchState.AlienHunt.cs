@@ -1,4 +1,5 @@
 using Fusion;
+using UnityEngine;
 
 namespace EchoProtocol.Networking
 {
@@ -15,6 +16,7 @@ namespace EchoProtocol.Networking
             if (!hunt) return;
             if (!HuntReady) { hunt.Initialize(); HuntReady = true; }
             hunt.Tick(Runner.DeltaTime);
+            if (!IsEnded) TickPurgeDirector();
         }
         public void RequestHuntAction(int entity, int furnace)
         {
@@ -32,10 +34,11 @@ namespace EchoProtocol.Networking
             if (AlienHuntMission.Instance.Act(actor, life.transform, entity, furnace))
                 EchoProtocol.Networking.Authority.MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
         }
-        public void RecordHuntBurn()
+        public void RecordHuntBurn(Vector3? ritualPosition = null)
         {
             if (!Object.HasStateAuthority || IsEnded || !AlienHuntMission.Instance) return;
             HuntBurned++;
+            if (HuntBurned < AlienHuntMission.AlienCount) PurgeBurnCompleted(ritualPosition ?? AlienHuntMission.Instance.Furnaces[0].transform.position);
             if (HuntBurned >= AlienHuntMission.AlienCount)
                 TryEndMatch(NetworkMatchResult.Win, NetworkMatchEndReason.ObjectiveCompleted, PlayerRef.None);
         }

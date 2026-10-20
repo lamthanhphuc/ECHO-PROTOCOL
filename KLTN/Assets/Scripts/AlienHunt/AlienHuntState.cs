@@ -16,6 +16,7 @@ namespace EchoProtocol.Networking
         public float Remaining;
         public int NestIndex;
         public NetworkBool Returning;
+        public NetworkBool Fleeing;
         public Vector3 LastGroundPosition;
         public Vector3 ProgressPosition;
         public float StuckSeconds;
@@ -26,6 +27,7 @@ namespace EchoProtocol.Networking
     public struct HuntFurnaceState : INetworkStruct
     {
         public int Fuel;
+        public int BurnedCount;
         public int AlienSlot; // Index + 1; zero means empty.
         public float BurnRemaining;
     }

@@ -57,11 +57,8 @@ public sealed class PetCompanionController : MonoBehaviour {
   bool ownerTeleported=_initialized && Vector3.Distance(_previousOwnerPosition,transform.position)>5f;
   _previousOwnerPosition=transform.position;
   if (!_initialized || ownerTeleported || _stuckTime>=8f) {
-   if(!NavMesh.SamplePosition(target,out var reset,2f,NavMesh.AllAreas)) {
-    if(!GameplayEnvironmentPhysics.Raycast(target+Vector3.up*1.5f,Vector3.down,out var hit,4f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)) {
-     _owner.SetPetPose(target,transform.rotation,PetMotion.Hidden);return;
-    } _ground=hit.point;
-   } else _ground=reset.position;
+   if(!TryResolveGroundPosition(target,out _ground))
+    _ground=transform.position;
    _initialized=true; _followSpeed=0; _stuckTime=0; _nextPath=0;_height=0;_motion=PetMotion.Idle; _nextFlight=time+FlightDelay();
   }
   if(time>=_nextPath || ownerRunning && Vector3.Distance(_ground,_goal)<0.15f) {
@@ -158,6 +155,7 @@ public sealed class PetCompanionController : MonoBehaviour {
    if(entry!=null && entry.prefab!=null) {
     _renderInitialized=false;_renderMotion=PetMotion.Hidden;_groundingOffset=0;_groundingVelocity=0;
     _visual=Instantiate(entry.prefab);_visual.name="CosmeticPet_"+entry.displayName;
+    SetLayerRecursively(_visual,gameObject.layer);
     _visual.transform.localScale=Vector3.one*(entry.scale*GetVisualScaleMultiplier(_id));
     _animator=_visual.GetComponentInChildren<Animator>();
     var feet=new System.Collections.Generic.List<Transform>();
@@ -224,6 +222,18 @@ public sealed class PetCompanionController : MonoBehaviour {
   else _groundingOffset=Mathf.SmoothDamp(_groundingOffset,desiredGrounding,ref _groundingVelocity,0.2f);
   _visual.transform.SetPositionAndRotation(position+Vector3.up*_groundingOffset,poseRotation);
  }
+ private bool TryResolveGroundPosition(Vector3 target,out Vector3 position) {
+  if(NavMesh.SamplePosition(target,out var hit,2f,NavMesh.AllAreas)) { position=hit.position;return true; }
+  // Some Map2 spawn markers sit beside a narrow NavMesh edge. Fall back to the
+  // owner's reachable polygon before using the physical floor so the pet stays visible.
+  if(NavMesh.SamplePosition(transform.position,out hit,4f,NavMesh.AllAreas)) { position=hit.position;return true; }
+  if(GameplayEnvironmentPhysics.Raycast(target+Vector3.up*1.5f,Vector3.down,out var floor,4f,
+   Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)) { position=floor.point;return true; }
+  position=default;return false;
+ }
+ private static void SetLayerRecursively(GameObject root,int layer) {
+  foreach(var child in root.GetComponentsInChildren<Transform>(true))child.gameObject.layer=layer;
+ }
  private void ApplySelectedSkin() {
   if(_visual==null || _owner==null || _id<=0)return;
   int skinId=Mathf.Clamp(_owner.PetSkinId,0,PetSkinLibrary.SkinCount-1);
@@ -239,7 +249,13 @@ public sealed class PetCompanionController : MonoBehaviour {
   _skinId=skinId;
  }
  private void OnEnable(){SceneManager.activeSceneChanged+=OnSceneChanged;}
- private void OnSceneChanged(Scene previous,Scene current){_initialized=false;_nextPath=0;}
+ private void OnSceneChanged(Scene previous,Scene current){
+  _initialized=false;_nextPath=0;_renderInitialized=false;
+  // Recreate the detached visual in the new active scene. This also reapplies
+  // the gameplay camera layer used by Scene_A and Scene_B.
+  if(_visual!=null)Destroy(_visual);
+  _visual=null;_id=-1;
+ }
  private void OnDisable(){SceneManager.activeSceneChanged-=OnSceneChanged;if(_visual!=null)_visual.SetActive(false);}
  private void OnDestroy(){if(_visual!=null)Destroy(_visual);}
 }

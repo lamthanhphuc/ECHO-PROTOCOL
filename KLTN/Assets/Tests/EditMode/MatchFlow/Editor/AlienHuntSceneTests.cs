@@ -36,6 +36,10 @@ public sealed class AlienHuntSceneTests
         var aliens = mission.Actors.Take(9).ToArray();
         foreach (var meat in mission.Actors.Where(a => a.Kind == HuntKind.Meat))
         {
+            var meatSize = meat.GetComponentInChildren<Renderer>().bounds.size;
+            Assert.That(meatSize.x, Is.InRange(1.20f, 1.44f), meat.name + " should be clearly visible at ground level.");
+            Assert.That(meat.GetComponent<BoxCollider>().size.x, Is.InRange(1.20f, 1.44f),
+                meat.name + " pickup collider should match the model.");
             Assert.That(NavMesh.SamplePosition(meat.transform.position, out _, .2f, NavMesh.AllAreas), Is.True);
             foreach (var alien in aliens)
                 Assert.That(Vector2.Distance(new Vector2(meat.transform.position.x, meat.transform.position.z),
@@ -94,6 +98,12 @@ public sealed class AlienHuntSceneTests
         mission.Request(27, -1, player);
         Assert.That(mission.HeldIndex(actor), Is.EqualTo(27));
         Assert.That(AlienHuntMission.IsCarrying(player), Is.True);
+        mission.Actors[27].Present(mission.Read(27), false, .02f);
+        var heldMeatBounds = mission.Actors[27].GetComponentInChildren<Renderer>().bounds;
+        Assert.That(heldMeatBounds.size.x, Is.InRange(.22f, .30f),
+            "Held meat should fit one hand like a normal tool.");
+        Assert.That(Vector3.Distance(heldMeatBounds.center, mission.Actors[27].transform.position),
+            Is.LessThan(.03f), "Held meat should be centered on the right-hand anchor.");
         mission.HeldPose(actor,HuntKind.Meat,out var heldPosition,out var heldRotation,true);
         var actualAnchor = PlayerHeldItemAnchor.ResolveRightHandAnchor(player);
         Assert.That(Vector3.Distance(heldPosition,actualAnchor.TransformPoint(new Vector3(0,.02f,.1f))),Is.LessThan(.001f));
@@ -116,22 +126,23 @@ public sealed class AlienHuntSceneTests
         Assert.That(mission.Read(27).Stage, Is.EqualTo(2));
         float deadline = Time.realtimeSinceStartup + 25f;
         bool ate = false;
-        while (Time.realtimeSinceStartup < deadline && mission.Read(0).Stage != (int)AlienStage.Stunned)
+        while (Time.realtimeSinceStartup < deadline && mission.Read(0).Stage != (int)AlienStage.Eating)
         {
             ate |= mission.Read(0).Stage == (int)AlienStage.Eating;
             yield return null;
         }
         var debugState = mission.Read(0);
         var debugAgent = mission.Actors[0].Agent;
+        ate |= mission.Read(0).Stage == (int)AlienStage.Eating;
         Assert.That(ate, Is.True, "Alien did not reach and eat the placed bait. stage=" + debugState.Stage
             + " target=" + debugState.Target + " position=" + debugState.Position + " bait=" + mission.Read(27).Position
             + " agent=" + debugAgent.enabled + "/" + debugAgent.isOnNavMesh + " path=" + debugAgent.pathStatus
             + " remaining=" + (debugAgent.enabled ? debugAgent.remainingDistance : -1) + " timeScale=" + Time.timeScale
             + " states=" + string.Join(",", Enumerable.Range(0, 9).Select(i => i + ":" + mission.Read(i).Stage + "/" + mission.Read(i).Target)));
-        Assert.That(mission.Read(0).Stage, Is.EqualTo((int)AlienStage.Stunned));
-        Assert.That(mission.Read(27).Stage, Is.EqualTo(3));
+        Assert.That(mission.Read(0).Stage, Is.EqualTo((int)AlienStage.Eating));
         player.transform.position = mission.Actors[0].transform.position;
         Assert.That(mission.Act(actor, player.transform, 0, -1), Is.True);
+        Assert.That(mission.Read(27).Stage, Is.EqualTo(3));
         Assert.That(mission.Act(PlayerRef.FromIndex(1), player.transform, 0, -1), Is.False, "Two players captured the same alien.");
         player.transform.position = mission.Furnaces[0].transform.position;
         Assert.That(mission.Act(actor, player.transform, -1, 0), Is.True);
@@ -155,6 +166,7 @@ public sealed class AlienHuntSceneTests
         Assert.That(mission.Burned, Is.EqualTo(1));
         Assert.That(mission.Read(0).Stage, Is.EqualTo((int)AlienStage.Burned));
         Assert.That(mission.ReadFurnace(0).AlienSlot, Is.Zero);
+        Assert.That(mission.ReadFurnace(0).BurnedCount, Is.EqualTo(1));
         Assert.That(mission.ReadFurnace(0).Fuel, Is.Zero);
         yield return null;
         Assert.That(mission.Furnaces[0].OilVisible, Is.False);
@@ -228,6 +240,36 @@ public sealed class AlienHuntSceneTests
         abandoned.Remaining=.01f; write.Invoke(mission,new object[]{29,abandoned});
         mission.Tick(.02f);
         Assert.That(mission.Read(29).Stage,Is.Zero,"Abandoned bait must return to a supply point.");
+        // Missing the meal window must not leave a naturally stunned, catchable alien.
+        var missed = mission.Read(7); missed.Stage=(int)AlienStage.Eating; missed.Target=33; missed.Remaining=.01f;
+        var missedBait=mission.Read(33); missedBait.Stage=2;
+        write.Invoke(mission,new object[]{33,missedBait});
+        write.Invoke(mission,new object[]{7,missed});
+        mission.Tick(.02f);
+        Assert.That(mission.Read(7).Stage,Is.EqualTo((int)AlienStage.Wandering));
+        Assert.That((bool)mission.Read(7).Returning,Is.True);
+        Assert.That((bool)mission.Read(7).Fleeing,Is.True);
+        Assert.That(mission.Read(33).Stage,Is.EqualTo(3));
+        player.transform.position=mission.Actors[7].transform.position;
+        Assert.That(mission.Actors[7].CanInteract(player),Is.False);
+        Assert.That(mission.Act(actor,player.transform,7,-1),Is.False);
+        // Catch during eating or recapture a previously dropped, stunned alien; the claimed bait must be consumed once.
+        var eatingAlien = mission.Read(6); eatingAlien.Stage=(int)AlienStage.Eating;
+        eatingAlien.Target=32; eatingAlien.Remaining=4f;
+        var eatingBait=mission.Read(32); eatingBait.Stage=2; eatingBait.Remaining=120;
+        write.Invoke(mission,new object[]{32,eatingBait});
+        write.Invoke(mission,new object[]{6,eatingAlien});
+        player.transform.position=mission.Actors[6].transform.position;
+        Assert.That(mission.Actors[6].CanInteract(player),Is.True);
+        Assert.That(mission.Act(actor,player.transform,6,-1),Is.True);
+        Assert.That(mission.Read(6).Stage,Is.EqualTo((int)AlienStage.Carried));
+        Assert.That(mission.Read(6).Target,Is.EqualTo(-1));
+        Assert.That(mission.Read(32).Stage,Is.EqualTo(3));
+        Assert.That(mission.Read(32).Remaining,Is.EqualTo(60f));
+        Assert.That(mission.IsBaitClaimed(32),Is.False);
+        Assert.That(mission.Act(PlayerRef.FromIndex(1),player.transform,6,-1),Is.False);
+        Assert.That(mission.Act(actor,player.transform,-2,-1),Is.True);
+        Assert.That(mission.Read(6).Stage,Is.EqualTo((int)AlienStage.Stunned));
         // Food can be placed on a real solid floor that has no baked navigation.
         player.transform.position = mission.Actors[31].transform.position;
         mission.Request(31,-1,player);
@@ -251,6 +293,28 @@ public sealed class AlienHuntSceneTests
         player.transform.position=mission.Actors[5].transform.position;
         Assert.That(mission.Act(actor,player.transform,-2,-1),Is.True);
         Object.DestroyImmediate(platform);
+        // Completing a third burn permanently closes only this furnace.
+        var writeFurnace=typeof(AlienHuntMission).GetMethod("WriteFurnace",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance);
+        var finalBurn=mission.ReadFurnace(0); finalBurn.BurnedCount=2; finalBurn.AlienSlot=6;
+        finalBurn.Fuel=1; finalBurn.BurnRemaining=.01f;
+        var burningAlien=mission.Read(5); burningAlien.Stage=(int)AlienStage.Burning;
+        write.Invoke(mission,new object[]{5,burningAlien});
+        writeFurnace.Invoke(mission,new object[]{0,finalBurn});
+        mission.Tick(.02f);
+        Assert.That(mission.ReadFurnace(0).BurnedCount,Is.EqualTo(3));
+        Assert.That(mission.ReadFurnace(0).Fuel,Is.Zero);
+        mission.Tick(.02f);
+        Assert.That(mission.ReadFurnace(0).BurnedCount,Is.EqualTo(3),"A completed burn must count once.");
+        int extraCan=Enumerable.Range(9,18).First(i=>mission.Read(i).Stage==0);
+        player.transform.position=mission.Actors[extraCan].transform.position;
+        Assert.That(mission.Act(actor,player.transform,extraCan,-1),Is.True);
+        player.transform.position=mission.Furnaces[0].transform.position;
+        Assert.That(mission.Act(actor,player.transform,-1,0),Is.False);
+        Assert.That(mission.HeldIndex(actor),Is.EqualTo(extraCan),"A full furnace must not consume another can.");
+        Assert.That(mission.Furnaces[0].InteractionPrompt,Does.Contain("3/3"));
+        Assert.That(mission.ReadFurnace(2).BurnedCount,Is.Zero);
+        player.transform.position=mission.Actors[3].transform.position;
+        Assert.That(mission.Act(actor,player.transform,-2,-1),Is.True);
         // A lost carrier drops on the last nearby floor rather than at the original supply point.
         player.transform.position=mission.Actors[30].transform.position;
         mission.Request(30,-1,player);
@@ -263,6 +327,39 @@ public sealed class AlienHuntSceneTests
         Assert.That(mission.Read(30).Carrier.IsNone,Is.True);
         Assert.That(Vector3.Distance(mission.Read(30).Position,lastFloor),Is.LessThan(4f));
         Assert.That(mission.Read(30).Stage,Is.EqualTo(2));
+        int recoverableCan=Enumerable.Range(9,18).First(i=>mission.Read(i).Stage==0);
+        var droppedCan=mission.Read(recoverableCan);
+        droppedCan.Position=mission.Actors[recoverableCan].Home+Vector3.forward*3f;
+        droppedCan.Remaining=.01f;
+        write.Invoke(mission,new object[]{recoverableCan,droppedCan});
+        mission.Tick(.02f);
+        Assert.That(Vector3.Distance(mission.Read(recoverableCan).Position,mission.Actors[recoverableCan].Home),
+            Is.LessThan(.01f),"An abandoned can must return to its authored pickup point.");
+        int neededFuel=AlienHuntMission.AlienCount-mission.Burned;
+        int usableFuel=Enumerable.Range(9,18).Count(i=>mission.Read(i).Stage==0||mission.Read(i).Stage==1)
+            +Enumerable.Range(0,3).Sum(i=>mission.ReadFurnace(i).Fuel);
+        for(int i=9;i<27&&usableFuel>=neededFuel;i++)
+        {
+            var can=mission.Read(i);
+            if(can.Stage!=0)continue;
+            can.Stage=3;write.Invoke(mission,new object[]{i,can});usableFuel--;
+        }
+        Assert.That(usableFuel,Is.LessThan(neededFuel));
+        mission.Tick(.02f);
+        usableFuel=Enumerable.Range(9,18).Count(i=>mission.Read(i).Stage==0||mission.Read(i).Stage==1)
+            +Enumerable.Range(0,3).Sum(i=>mission.ReadFurnace(i).Fuel);
+        Assert.That(usableFuel,Is.GreaterThanOrEqualTo(neededFuel),
+            "Reserve canisters must prevent an otherwise unwinnable fuel shortage.");
+        int roamingAlien=Enumerable.Range(0,9).First(i=>mission.Read(i).Stage==(int)AlienStage.Wandering);
+        var stuckAlien=mission.Read(roamingAlien);
+        int otherNest=roamingAlien==0?1:0;
+        stuckAlien.NestIndex=otherNest;stuckAlien.Returning=true;stuckAlien.Fleeing=false;
+        stuckAlien.BaitCooldown=100f;stuckAlien.ProgressPosition=mission.Actors[roamingAlien].transform.position;
+        stuckAlien.StuckSeconds=7.99f;stuckAlien.TravelSeconds=1f;
+        write.Invoke(mission,new object[]{roamingAlien,stuckAlien});
+        mission.Tick(.02f);
+        Assert.That(Vector3.Distance(mission.Read(roamingAlien).Position,mission.Actors[otherNest].Home),
+            Is.LessThan(2f),"An alien still stuck after a repath must recover at a connected nest.");
         yield return new ExitPlayMode();
     }
 }

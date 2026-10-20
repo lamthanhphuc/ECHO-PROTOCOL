@@ -87,7 +87,7 @@ public static class AlienHuntSceneSetup
         {
             var position = meatPositions[i];
             entities[27 + i] = Item("Meat_" + (i + 1).ToString("00"), 27 + i, HuntKind.Meat,
-                Imported + "meat/source/Meat.fbx", position, meatRoot, meatMaterial, 2f);
+                Imported + "meat/source/Meat.fbx", position, meatRoot, meatMaterial, 720f);
         }
 
         var stations = new AlienHuntFurnace[3];

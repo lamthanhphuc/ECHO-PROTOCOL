@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common;
@@ -80,10 +80,13 @@ namespace EchoProtocol.AI.Stalker.Networking
                 || controller == null || controller.CurrentState != StalkerState.ATTACK
                 || !CatchCooldown.ExpiredOrNotRunning(Runner) || player == null)
                 return false;
+            if(AlienHuntMission.Instance && NetworkMatchState.Instance
+                && NetworkMatchState.Instance.PurgeMood!=PurgeBossMood.Hunting) return false;
             if (!player.TryCatchAuthoritative(Object, maximumDamageDistance, jumpscareSeconds, catchEndsInDeath))
                 return false;
             CatchCooldown = TickTimer.CreateFromSeconds(Runner, Mathf.Max(jumpscareSeconds, catchCooldownSeconds));
             AttackSequence++;
+            if(AlienHuntMission.Instance) NetworkMatchState.Instance?.PacifyPurgeBoss();
             return true;
         }
 
@@ -514,6 +517,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 null;
         }
 
+        private int _lastPurgeRitualVersion;
         private bool RunAuthoritativePipeline(AiSimulationStep step)
         {
             if (!step.IsValid || controller == null || visionSensor == null)
@@ -586,7 +590,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             // Perception frames have already been built above, so Vision,
             // Hearing and target-status information remain fresh.
             //
-            specialEncounterRuntime?.TickAuthoritative(
+            if(!AlienHuntMission.Instance) specialEncounterRuntime?.TickAuthoritative(
                 Runner,
                 lifecycle,
                 step);
@@ -604,6 +608,21 @@ namespace EchoProtocol.AI.Stalker.Networking
                 sustainedCoreCarrier = null;
             }
 
+            if(AlienHuntMission.Instance && NetworkMatchState.Instance)
+            {
+                var purge=NetworkMatchState.Instance;
+                bool hunt=purge.PurgeMood==PurgeBossMood.Hunting;
+                if(!hunt && purge.PurgeMood==PurgeBossMood.Calm)
+                    foreach(var candidate in _visibleCandidates)
+                        if((candidate.Observation.ObservedPosition-transform.position).sqrMagnitude<=2.5f*2.5f)
+                        {purge.ProvokePurgeBoss();break;}
+                bool frozen=purge.PurgeMood==PurgeBossMood.Warning || purge.PurgeMood==PurgeBossMood.Staggered || purge.IsEnded;
+                controller.ApplyPurgePolicy(hunt,frozen,purge.PurgeChaseSpeed);
+                if(hunt && _lastPurgeRitualVersion!=purge.PurgeRitualVersion)
+                { _lastPurgeRitualVersion=purge.PurgeRitualVersion; controller.InvestigatePurgeRitual(purge.PurgeRitualPosition); }
+                if(!hunt){_visibleCandidates.Clear();_flashlightObservations.Clear();}
+                sustainedCoreCarrier=null;
+            }
             var input =
                 new StalkerSimulationInput(
                     step,

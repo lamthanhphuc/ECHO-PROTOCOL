@@ -1,0 +1,164 @@
+using Fusion;
+using UnityEngine;
+using UnityEngine.AI;
+using EchoProtocol.AI.Stalker.Networking;
+using EchoProtocol.Gameplay;
+using EchoProtocol.Tools.Scanner;
+
+namespace EchoProtocol.Networking
+{
+    public enum PurgeBossMood { Calm, Warning, Hunting, Staggered }
+    public struct PurgeAidSlot : INetworkStruct { public NetworkId Id; public TickTimer Refill; }
+    public sealed partial class NetworkMatchState
+    {
+        [Networked, OnChangedRender(nameof(PurgeMoodChanged))] public PurgeBossMood PurgeMood { get; private set; }
+        [Networked] public NetworkId PurgeBossId { get; private set; }
+        [Networked] public TickTimer PurgeMoodTimer { get; private set; }
+        [Networked] public TickTimer PurgeHuntTimer { get; private set; }
+        [Networked] public TickTimer PurgeUvImmunity { get; private set; }
+        [Networked] public float PurgeUvExposure { get; private set; }
+        [Networked] public int PurgeStaggers { get; private set; }
+        [Networked] public Vector3 PurgeRitualPosition { get; private set; }
+        [Networked] public int PurgeRitualVersion { get; private set; }
+        [Networked] public int PurgeAidAvailable { get; private set; }
+        [Networked, Capacity(3)] public NetworkArray<PurgeAidSlot> PurgeAid => default;
+        private StalkerFusionRuntime _purgeBoss;
+        private static AudioClip _purgeWarningSound;
+        public int PurgeRageTier => HuntBurned >= 8 ? 3 : HuntBurned / 3;
+        public int PurgeMinionCap => HuntBurned < 3 ? 1 : HuntBurned < 6 ? 2 : 3;
+        public int PurgeStaggersRequired => PurgeRageTier + 1;
+        public float PurgeCalmSeconds => new[] { 20f, 14f, 9f, 5f }[PurgeRageTier];
+        public float PurgeChaseSpeed
+        {
+            get
+            {
+                var d = Authority.MatchAuthorityRuntime.Instance ? Authority.MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
+                float baseSpeed = d == MatchDifficulty.Easy ? 6f : d == MatchDifficulty.Hard ? 7.2f : 6.6f;
+                float speed = baseSpeed + PurgeRageTier * .4f;
+                return PurgeMood == PurgeBossMood.Hunting && PurgeUvExposure > 0 && PurgeUvImmunity.ExpiredOrNotRunning(Runner) ? speed * .6f : speed;
+            }
+        }
+        public void BindPurgeBoss(NetworkObject boss)
+        {
+            if (!Object.HasStateAuthority || !boss || PurgeBossId==boss.Id) return;
+            PurgeBossId = boss.Id; _purgeBoss = boss.GetComponent<StalkerFusionRuntime>();
+            PurgeMood = PurgeBossMood.Calm; PurgeMoodTimer = TickTimer.CreateFromSeconds(Runner,45);
+        }
+        public void ProvokePurgeBoss()
+        {
+            if (!Object.HasStateAuthority || IsEnded || !AlienHuntMission.Instance || PurgeMood != PurgeBossMood.Calm
+                || !PurgeUvImmunity.ExpiredOrNotRunning(Runner)) return;
+            BeginPurgeHunt();
+        }
+        private void BeginPurgeHunt()
+        {
+            if (IsEnded) return;
+            PurgeMood = PurgeBossMood.Warning; PurgeMoodTimer = TickTimer.CreateFromSeconds(Runner,3);
+            PurgeHuntTimer = TickTimer.CreateFromSeconds(Runner,90); PurgeStaggers=0; PurgeUvExposure=0;
+        }
+        private void PurgeBurnCompleted(Vector3 position)
+        {
+            if (IsEnded) return;
+            PurgeRitualPosition=position;PurgeRitualVersion++;
+            if (PurgeMood == PurgeBossMood.Calm) BeginPurgeHunt();
+            else PurgeHuntTimer = TickTimer.CreateFromSeconds(Runner,90);
+        }
+        public void PacifyPurgeBoss()
+        {
+            if (!Object.HasStateAuthority || IsEnded || !AlienHuntMission.Instance) return;
+            PurgeMood = PurgeBossMood.Calm; PurgeMoodTimer=TickTimer.CreateFromSeconds(Runner,PurgeCalmSeconds);
+            PurgeUvImmunity=TickTimer.CreateFromSeconds(Runner,Mathf.Min(5,PurgeCalmSeconds));
+            PurgeUvExposure=0; PurgeStaggers=0;
+        }
+        private void TickPurgeDirector()
+        {
+            if (!_purgeBoss && PurgeBossId.IsValid && Runner.TryFindObject(PurgeBossId,out var boss))
+                _purgeBoss=boss.GetComponent<StalkerFusionRuntime>();
+            if (_purgeBoss)
+            {
+                float delta=Runner.DeltaTime;
+                if (PurgeMood==PurgeBossMood.Warning && PurgeMoodTimer.Expired(Runner)) PurgeMood=PurgeBossMood.Hunting;
+                else if(PurgeMood==PurgeBossMood.Calm && PurgeMoodTimer.Expired(Runner) && HuntBurned>0) BeginPurgeHunt();
+                else if(PurgeMood==PurgeBossMood.Staggered && PurgeMoodTimer.Expired(Runner))
+                {
+                    if(PurgeStaggers>=PurgeStaggersRequired) PacifyPurgeBoss();
+                    else { PurgeMood=PurgeBossMood.Hunting; PurgeUvImmunity=TickTimer.CreateFromSeconds(Runner,4); }
+                }
+                if(PurgeMood==PurgeBossMood.Hunting)
+                {
+                    if(PurgeHuntTimer.Expired(Runner)) { PacifyPurgeBoss(); }
+                    else
+                    {
+                        int contributors=0;
+                        foreach(var player in Runner.ActivePlayers)
+                            if(Runner.TryGetPlayerObject(player,out var obj) && obj
+                                && obj.TryGetComponent<NetworkPlayerFlashlight>(out var uv)
+                                && uv.ResonanceActive && uv.PurgeBossTarget==_purgeBoss) contributors++;
+                        if(PurgeUvImmunity.ExpiredOrNotRunning(Runner))
+                            PurgeUvExposure=contributors>0 ? PurgeUvExposure+delta*ResonanceRules.ContributionSpeed(contributors)
+                                : Mathf.Max(0,PurgeUvExposure-delta);
+                        else PurgeUvExposure=0;
+                        if(PurgeUvExposure>=2.25f)
+                        {
+                            PurgeStaggers++; PurgeUvExposure=0; PurgeMood=PurgeBossMood.Staggered;
+                            PurgeMoodTimer=TickTimer.CreateFromSeconds(Runner,2.2f);
+                        }
+                    }
+                }
+            }
+            if(_purgeBoss)
+            {
+                var controller=_purgeBoss.GetComponent<EchoProtocol.AI.Stalker.StalkerController>();
+                controller.ApplyPurgePolicy(PurgeMood==PurgeBossMood.Hunting,
+                    PurgeMood==PurgeBossMood.Warning||PurgeMood==PurgeBossMood.Staggered,PurgeChaseSpeed);
+            }
+            TickPurgeAid();
+        }
+        private void TickPurgeAid()
+        {
+            var mission=AlienHuntMission.Instance; if(!mission || !_teamToolPickupCatalog) return;
+            var prefab=_teamToolPickupCatalog.GetPrefab(LobbyPlayerState.FirstAidKitToolId); if(!prefab)return;
+            int available=0;
+            for(int i=0;i<3;i++)
+            {
+                var slot=PurgeAid[i];
+                bool exists=slot.Id.IsValid && Runner.TryFindObject(slot.Id,out var unused);
+                NetworkObject pickupObject=null;
+                if(exists)Runner.TryFindObject(slot.Id,out pickupObject);
+                bool onFloor=pickupObject && ((pickupObject.TryGetComponent<NetworkTeamToolPickup>(out var teamPickup) && teamPickup.IsAvailable)
+                    || (pickupObject.TryGetComponent<NetworkToolPickup>(out var pickup) && !pickup.IsPickedUp));
+                if(onFloor){available++;continue;}
+                if(slot.Id.IsValid && !slot.Refill.IsRunning) slot.Refill=TickTimer.CreateFromSeconds(Runner,45);
+                if(slot.Refill.ExpiredOrNotRunning(Runner))
+                {
+                    var station=mission.Furnaces[i];
+                    if(NavMesh.SamplePosition(station.transform.position+station.transform.right*2.5f,out var hit,3,NavMesh.AllAreas))
+                    {
+                        if(pickupObject)Runner.Despawn(pickupObject);
+                        var spawned=Runner.Spawn(prefab,hit.position,Quaternion.identity);
+                        slot.Id=spawned.Id; slot.Refill=TickTimer.None; available++;
+                    }
+                }
+                PurgeAid.Set(i,slot);
+            }
+            PurgeAidAvailable=available;
+            if(available==0)for(int i=0;i<3;i++)
+            {
+                var slot=PurgeAid[i];
+                if(slot.Refill.RemainingTime(Runner)>15) {slot.Refill=TickTimer.CreateFromSeconds(Runner,15);PurgeAid.Set(i,slot);}
+            }
+        }
+        private void PurgeMoodChanged()
+        {
+            if(!AlienHuntMission.Instance || PurgeMood!=PurgeBossMood.Warning) return;
+            if(!_purgeWarningSound)
+            {
+                const int rate=22050;var samples=new float[rate];
+                for(int i=0;i<samples.Length;i++){float t=i/(float)rate;samples[i]=Mathf.Sin(t*(220+120*t)*Mathf.PI*2)*Mathf.Sin(t*Mathf.PI)*.25f;}
+                _purgeWarningSound=AudioClip.Create("PurgeHuntWarning",rate,1,rate,false);_purgeWarningSound.SetData(samples,0);
+            }
+            var listener=UnityEngine.Object.FindAnyObjectByType<AudioListener>();
+            if(listener)AudioSource.PlayClipAtPoint(_purgeWarningSound,listener.transform.position,.7f);
+        }
+    }
+}

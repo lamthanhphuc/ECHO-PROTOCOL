@@ -12,7 +12,9 @@ public static class AlienHuntSmokeRunner
     { if (SessionState.GetBool(Running, false)) TestRunnerApi.RegisterTestCallback(new Callback()); }
 
     [MenuItem("Tools/ECHO Protocol/Test Alien Hunt Offline Cycle")]
-    public static void Run()
+    public static void Run() => RunTest("AlienHuntSceneTests.BaitCaptureFuelAndBurnCycleConsumesExactlyOneAlien");
+    public static void RunPurgeDirector() => RunTest("PurgeDirectorTests.DirectorRageUvSupplyAndCatchRunOnStateAuthority");
+    private static void RunTest(string name)
     {
         SessionState.SetBool(Running, true);
         SessionState.SetBool(Running + ".OptionsEnabled", EditorSettings.enterPlayModeOptionsEnabled);
@@ -22,7 +24,7 @@ public static class AlienHuntSmokeRunner
         TestRunnerApi.RegisterTestCallback(new Callback());
         var api = ScriptableObject.CreateInstance<TestRunnerApi>();
         api.Execute(new ExecutionSettings(new Filter { testMode = TestMode.EditMode,
-            testNames = new[] { "AlienHuntSceneTests.BaitCaptureFuelAndBurnCycleConsumesExactlyOneAlien" } }));
+            testNames = new[] { name } }));
     }
 
     private sealed class Callback : ICallbacks

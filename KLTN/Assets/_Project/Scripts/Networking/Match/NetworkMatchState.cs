@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using EchoProtocol.MatchFlow;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Gameplay;
@@ -497,7 +497,7 @@ namespace EchoProtocol.Networking
                     CloseScenarioDecisionWindow();
                 }
 
-                if (!TeamToolWorldSpawnInitialized)
+                if (!TeamToolWorldSpawnInitialized && !AlienHuntMission.Instance)
                 {
                     var difficulty = MatchAuthorityRuntime.Instance != null
                         ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
