@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Spatial;
@@ -14,7 +15,8 @@ using UnityEngine.Serialization;
 namespace EchoProtocol.AI.Minions
 {
     public enum CreepMinionState { Roam = 0, Track = 1, Harass = 2, Flee = 3 }
-    public enum CreepMinionRole { Original = 0, Disruptor = 1 }
+    public enum CreepMinionRole { Original = 0, Disruptor = 1, Catfish = 2 }
+    public enum FishcatEncounterDuty { ActiveHunter = 0, Ambusher = 1, Roamer = 2 }
     public enum CreepMinionAttackKind
     {
         None = 0,
@@ -30,6 +32,120 @@ namespace EchoProtocol.AI.Minions
     [RequireComponent(typeof(NavMeshAgent))]
     public sealed class CreepMinionRuntime : NetworkBehaviour
     {
+        private static readonly HashSet<CreepMinionRuntime> PurgeFishcats = new HashSet<CreepMinionRuntime>();
+        [Networked] public int EncounterDutyValue { get; private set; }
+        private Vector3 _purgeActivityFocus;
+        private bool _hasPurgeActivityFocus;
+        private float _lastNearPlayerAt;
+        private float _nextPurgePatrolAt;
+
+        public void SetPurgeEncounter(FishcatEncounterDuty duty, Vector3 activityPosition)
+        {
+            if (!IsPurgeCatfish || Object == null || !Object.HasStateAuthority) return;
+            EncounterDutyValue = (int)duty;
+            // A coarse area anchor, never a replacement for visual detection.
+            _purgeActivityFocus = new Vector3(Mathf.Round(activityPosition.x / 12f) * 12f,
+                activityPosition.y, Mathf.Round(activityPosition.z / 12f) * 12f);
+            _hasPurgeActivityFocus = true;
+        }
+
+        private int OtherHunters(PlayerRef player)
+        {
+            int count = 0;
+            foreach (var minion in PurgeFishcats)
+                if (minion != null && minion != this && minion.Runner == Runner
+                    && minion.Object != null && minion.Object.IsValid && !minion.IsDying
+                    && minion.TargetPlayer == player) count++;
+            return count;
+        }
+
+        private bool HasPurgeUvContributor()
+        {
+            foreach (var player in Runner.ActivePlayers)
+                if (Runner.TryGetPlayerObject(player, out var obj) && obj != null
+                    && obj.TryGetComponent<NetworkPlayerFlashlight>(out var uv)
+                    && uv.ResonanceActive && uv.ResonanceTarget == this) return true;
+            return false;
+        }
+
+        public static bool IsPositionObserved(NetworkRunner runner, Vector3 point, Transform ignoredRoot = null)
+        {
+            foreach (var player in runner.ActivePlayers)
+            {
+                if (!runner.TryGetPlayerObject(player, out var obj) || obj == null || !obj.IsValid
+                    || !obj.TryGetComponent<LobbyPlayerState>(out var lobby) || !lobby.IsGameplayPlayer) continue;
+                Vector3 eye = obj.transform.position + Vector3.up * 1.6f;
+                Vector3 offset = point - eye;
+                if (offset.sqrMagnitude < 9f) return true;
+                if (offset.sqrMagnitude > 120f * 120f) continue;
+                float pitch = obj.TryGetComponent<NetworkPlayerMovement>(out var movement) ? movement.CurrentPitch : 0f;
+                Vector3 forward = Quaternion.Euler(pitch, obj.transform.eulerAngles.y, 0f) * Vector3.forward;
+                if (Vector3.Angle(forward, offset) > 75f) continue;
+                bool blocked = false;
+                foreach (var hit in Physics.RaycastAll(eye, offset.normalized, offset.magnitude,
+                             Physics.DefaultRaycastLayers & ~(1 << 4), QueryTriggerInteraction.Ignore))
+                {
+                    if (hit.collider.transform.IsChildOf(obj.transform)
+                        || ignoredRoot != null && hit.collider.transform.IsChildOf(ignoredRoot)) continue;
+                    // Players/minions can move before the next frame: do not use them as cover.
+                    if (hit.collider.GetComponentInParent<NetworkPlayerMovement>() != null
+                        || hit.collider.GetComponentInParent<CreepMinionRuntime>() != null) continue;
+                    blocked = true;
+                    break;
+                }
+                if (!blocked) return true;
+            }
+            return false;
+        }
+
+        public bool CanRecyclePurgeFishcat()
+        {
+            if (!IsPurgeCatfish || IsDying || State != CreepMinionState.Roam || TargetPlayer.IsRealPlayer
+                || _distractionUntil > Time.time || !AttackRecovery.ExpiredOrNotRunning(Runner)
+                || Time.time - _lastVisiblePlayerAt < 90f || Time.time - _lastNearPlayerAt < 90f
+                || HasPurgeUvContributor() || FindBestVisibleTarget().IsRealPlayer) return false;
+            foreach (var player in Runner.ActivePlayers)
+                if (Runner.TryGetPlayerObject(player, out var obj) && obj != null && obj.IsValid
+                    && obj.TryGetComponent<LobbyPlayerState>(out var lobby) && lobby.IsGameplayPlayer
+                    && Vector3.Distance(transform.position, obj.transform.position) < 65f) return false;
+            return !IsPositionObserved(Runner, transform.position + Vector3.up, transform)
+                && !IsPositionObserved(Runner, transform.position + Vector3.up * 2f, transform);
+        }
+
+        private bool TryPurgePatrolDestination(out Vector3 destination)
+        {
+            destination = transform.position;
+            if (!IsPurgeCatfish || !_hasPurgeActivityFocus) return false;
+            bool stale = Time.time - _lastVisiblePlayerAt >= 50f;
+            float radius = stale ? 10f : EncounterDutyValue == (int)FishcatEncounterDuty.Ambusher ? 8f
+                : EncounterDutyValue == (int)FishcatEncounterDuty.ActiveHunter ? 16f : 32f;
+            for (int i = 0; i < 12; i++)
+            {
+                Vector2 offset = UnityEngine.Random.insideUnitCircle * radius;
+                Vector3 candidate = _purgeActivityFocus + new Vector3(offset.x, 0f, offset.y);
+                if (_catfishOnLand && EncounterDutyValue == (int)FishcatEncounterDuty.Ambusher
+                    && FloodedWaterBoundary.TryGetSwimSurface(candidate, out _, .1f)
+                    && CrossesMap2Water(candidate) && !IsCatfishStepBlocked(candidate))
+                {
+                    _swimDestination = candidate;
+                    _catfishOnLand = false;
+                    _catfishWasInWater = false;
+                    _catfishPatrolCrossing = true;
+                    destination = candidate;
+                    return true;
+                }
+                if (!_catfishOnLand && FloodedWaterBoundary.TryGetSwimSurface(candidate, out _))
+                { destination = candidate; return true; }
+                if (_catfishOnLand && NavMesh.SamplePosition(candidate, out var hit, 3f, _agent.areaMask))
+                {
+                    var path = new NavMeshPath();
+                    if (NavMesh.CalculatePath(transform.position, hit.position, _agent.areaMask, path)
+                        && path.status == NavMeshPathStatus.PathComplete)
+                    { destination = hit.position; return true; }
+                }
+            }
+            return false;
+        }
         private const float ResonanceDeathSeconds = 1f;
         private const float PlayerSeekTimeoutSeconds = 20f;
         private const float ToolDiveHeight = 0.35f;
@@ -138,11 +254,12 @@ namespace EchoProtocol.AI.Minions
 
         public CreepMinionState State => StateValue >= 0 && StateValue <= 3
             ? (CreepMinionState)StateValue : CreepMinionState.Roam;
-        public CreepMinionRole Role => RoleValue == (int)CreepMinionRole.Disruptor
-            ? CreepMinionRole.Disruptor : CreepMinionRole.Original;
-        private bool IsDisruptor => Role == CreepMinionRole.Disruptor;
+        public CreepMinionRole Role => RoleValue >= 0 && RoleValue <= 2
+            ? (CreepMinionRole)RoleValue : CreepMinionRole.Original;
+        private bool IsPurgeCatfish => Role == CreepMinionRole.Catfish;
+        private bool IsDisruptor => Role == CreepMinionRole.Disruptor || IsPurgeCatfish;
         private float DisruptorAttackRange => Mathf.Min(meleeRange, 2f);
-        private bool IsCatfish => IsDisruptor && SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
+        private bool IsCatfish => IsPurgeCatfish || IsDisruptor && SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
         private bool IsMap2Flyer => !IsDisruptor && SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
         public RegionSemanticZone Zone => ZoneValue == (int)RegionSemanticZone.Zone01
             || ZoneValue == (int)RegionSemanticZone.Zone02
@@ -166,6 +283,8 @@ namespace EchoProtocol.AI.Minions
         private bool _seekingPlayer;
         private float _distractionUntil;
         private Vector3 _lastKnownTargetPosition;
+        private Vector3 _catfishSearchPosition;
+        private float _nextCatfishSearchAt;
         private Vector3 _fleeDestination;
         private int _toolRouteRetries;
         private Vector3 _toolVictimPosition;
@@ -237,6 +356,10 @@ namespace EchoProtocol.AI.Minions
             _renderedAlertSequence = AlertSequence;
             _deathAnimationPlayed = false;
             _lastVisiblePlayerAt = Time.time;
+            _lastNearPlayerAt = Time.time;
+            _nextPurgePatrolAt = 0f;
+            _hasPurgeActivityFocus = false;
+            if (IsPurgeCatfish && Object.HasStateAuthority) PurgeFishcats.Add(this);
             _seekingPlayer = false;
             _hasCatfishLandEntry = false;
             _catfishOnLand = IsCatfish
@@ -299,7 +422,7 @@ namespace EchoProtocol.AI.Minions
             _agent.angularSpeed = 1080f;
             _agent.acceleration = 40f;
             _agent.stoppingDistance = IsDisruptor ? 1.8f : 0.4f;
-            if (!TryActivateAgent())
+            if ((!IsPurgeCatfish || _catfishOnLand) && !TryActivateAgent())
             {
                 // Runtime log intentionally disabled.
             }
@@ -334,6 +457,7 @@ namespace EchoProtocol.AI.Minions
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            PurgeFishcats.Remove(this);
             _navigation?.SetAuthoritativeLocomotion(false);
             _navigation = null;
             if (_noiseService != null) _noiseService.RuntimeNoiseAccepted -= HandleRuntimeNoiseAccepted;
@@ -373,15 +497,29 @@ namespace EchoProtocol.AI.Minions
                 return;
             }
 
+            if (IsPurgeCatfish)
+            {
+                foreach (var player in Runner.ActivePlayers)
+                    if (Runner.TryGetPlayerObject(player, out var nearby) && nearby != null && nearby.IsValid
+                        && nearby.TryGetComponent<LobbyPlayerState>(out var lobby) && lobby.IsGameplayPlayer
+                        && Vector3.Distance(transform.position, nearby.transform.position) < 30f)
+                        _lastNearPlayerAt = Time.time;
+                if (TargetPlayer.IsRealPlayer && OtherHunters(TargetPlayer) >= PurgeFishcatBalance.HuntersPerPlayer)
+                    ResetTracking();
+            }
+
             _resonanceContributors=0;
             foreach(var player in Runner.ActivePlayers)
                 if(Runner.TryGetPlayerObject(player,out var playerObject) && playerObject!=null
                     && playerObject.TryGetComponent<NetworkPlayerFlashlight>(out var emitter)
                     && emitter.ResonanceActive && emitter.ResonanceTarget==this) _resonanceContributors++;
             bool illuminated = _resonanceContributors>0;
-            IsUvStunned = illuminated;
+            IsUvStunned = illuminated && !IsPurgeCatfish;
 
             var exposure=ResonanceRules.TickExposure(new ResonanceExposureState { Seconds=_flashlightExposureSeconds,Grace=_resonanceGrace },_resonanceContributors,Runner.DeltaTime);
+            // PURGE has a longer burn threshold than the shared exposure rule's two-second cap.
+            if (IsPurgeCatfish && illuminated)
+                exposure.Seconds = _flashlightExposureSeconds + Runner.DeltaTime * ResonanceRules.ContributionSpeed(_resonanceContributors);
             _flashlightExposureSeconds=exposure.Seconds;
             _resonanceGrace=exposure.Grace;
 
@@ -397,8 +535,9 @@ namespace EchoProtocol.AI.Minions
             }
 #endif
 
-            ResonanceProgress=Mathf.Clamp01(_flashlightExposureSeconds/ResonanceDeathSeconds);
-            if (_flashlightExposureSeconds >= ResonanceDeathSeconds)
+            float deathExposureSeconds = IsPurgeCatfish ? 2.5f : ResonanceDeathSeconds;
+            ResonanceProgress=Mathf.Clamp01(_flashlightExposureSeconds/deathExposureSeconds);
+            if (_flashlightExposureSeconds >= deathExposureSeconds)
             {
                 BeginFlashlightDeath();
                 return;
@@ -507,11 +646,14 @@ namespace EchoProtocol.AI.Minions
             if (_agent.enabled) _agent.enabled = false;
             bool currentlyInWater = FloodedWaterBoundary.TryGetSwimSurface(
                 transform.position, out float surfaceY, 0.1f);
+            if (IsPurgeCatfish && currentlyInWater) _catfishPatrolCrossing = false;
             _catfishWasInWater |= currentlyInWater;
             float swimY = surfaceY - 0.9f;
             if (currentlyInWater && transform.position.y < swimY - 0.05f)
             {
-                transform.position += Vector3.up * Mathf.Min(Runner.DeltaTime * 1.5f, swimY - transform.position.y);
+                Vector3 risePosition = transform.position + Vector3.up * Mathf.Min(Runner.DeltaTime * 1.5f, swimY - transform.position.y);
+                if (IsPurgeCatfish && IsCatfishStepBlocked(risePosition)) { IsMoving = false; return; }
+                transform.position = risePosition;
                 IsMoving = true;
                 return;
             }
@@ -526,8 +668,9 @@ namespace EchoProtocol.AI.Minions
                     TargetPlayer = visible;
                     _lastVisiblePlayerAt = Time.time;
                     _seekingPlayer = false;
+                    _lastKnownTargetPosition = Runner.GetPlayerObject(visible).transform.position;
                 }
-                else if (Time.time - _lastVisiblePlayerAt >= PlayerSeekTimeoutSeconds)
+                else if (!IsPurgeCatfish && Time.time - _lastVisiblePlayerAt >= PlayerSeekTimeoutSeconds)
                 {
                     TargetPlayer = FindClosestEligibleTarget();
                     _seekingPlayer = TargetPlayer.IsRealPlayer;
@@ -544,30 +687,44 @@ namespace EchoProtocol.AI.Minions
             else if (TryGetEligiblePlayer(TargetPlayer, out var target, out _, out var life))
             {
                 StateValue = (int)CreepMinionState.Harass;
-                destination = target.transform.position;
+                destination = IsPurgeCatfish ? _lastKnownTargetPosition : target.transform.position;
                 if (HasLineOfSight(target))
                 {
+                    destination = target.transform.position;
+                    _lastKnownTargetPosition = destination;
                     _lastVisiblePlayerAt = Time.time;
                     _seekingPlayer = false;
                     if (Vector3.Distance(transform.position, destination) <= meleeRange)
                         AttackPlayer(target, life);
+                }
+                else if (IsPurgeCatfish && Time.time - _lastVisiblePlayerAt > 4f)
+                {
+                    ResetTracking();
+                    _swimDestination = transform.position;
+                    _nextRoamRetargetAt = 0f;
+                    StateValue = (int)CreepMinionState.Roam;
                 }
             }
             else
             {
                 StateValue = (int)CreepMinionState.Roam;
                 if (!_catfishPatrolCrossing
-                    && ((_swimDestination - transform.position).sqrMagnitude < 2f
+                    && ((!IsPurgeCatfish && (_swimDestination - transform.position).sqrMagnitude < 2f)
                         || Time.time >= _nextRoamRetargetAt))
                 {
-                    _nextRoamRetargetAt = Time.time + 3f;
+                    _nextRoamRetargetAt = Time.time + (!IsPurgeCatfish ? 3f
+                        : EncounterDutyValue == (int)FishcatEncounterDuty.Ambusher ? 12f : 6f);
                     Vector2 direction = UnityEngine.Random.insideUnitCircle.normalized;
                     Vector3 next = transform.position + new Vector3(direction.x, 0f, direction.y) * 8f;
-                    if (FloodedWaterBoundary.TryGetSwimSurface(next, out _)) _swimDestination = next;
+                    if (TryPurgePatrolDestination(out var directed)) _swimDestination = directed;
+                    else if (FloodedWaterBoundary.TryGetSwimSurface(next, out _)) _swimDestination = next;
                 }
                 destination = _swimDestination;
             }
 
+            if (IsPurgeCatfish && TargetPlayer.IsRealPlayer && _distractionUntil <= Time.time
+                && Time.time - _lastVisiblePlayerAt > 0.1f)
+                destination = CatfishSearchPosition();
             Vector3 horizontal = Vector3.ProjectOnPlane(destination - transform.position, Vector3.up);
             if (horizontal.sqrMagnitude < 0.2f) { IsMoving = false; return; }
             Vector3 step = horizontal.normalized * Mathf.Min(Runner.DeltaTime * trackSpeed * ResonanceSpeedMultiplier, horizontal.magnitude);
@@ -589,7 +746,15 @@ namespace EchoProtocol.AI.Minions
                 float landingStep = Runner.DeltaTime * trackSpeed * ResonanceSpeedMultiplier;
                 Vector3 landingDirection = _catfishLandEntry - transform.position;
                 Vector3 landingForward = Vector3.ProjectOnPlane(landingDirection, Vector3.up);
-                transform.position = Vector3.MoveTowards(transform.position, _catfishLandEntry, landingStep);
+                Vector3 landingNext = Vector3.MoveTowards(transform.position, _catfishLandEntry, landingStep);
+                if (IsPurgeCatfish && IsCatfishStepBlocked(landingNext))
+                {
+                    _hasCatfishLandEntry = false;
+                    _nextRoamRetargetAt = 0f;
+                    IsMoving = false;
+                    return;
+                }
+                transform.position = landingNext;
                 if (landingForward.sqrMagnitude > 0.01f)
                     transform.rotation = Quaternion.RotateTowards(transform.rotation,
                         Quaternion.LookRotation(landingForward),
@@ -616,9 +781,48 @@ namespace EchoProtocol.AI.Minions
                 IsMoving = false;
                 return;
             }
+            if (IsPurgeCatfish && IsCatfishStepBlocked(nextPosition))
+            {
+                _nextRoamRetargetAt = 0f;
+                IsMoving = false;
+                return;
+            }
             transform.position = nextPosition;
             transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(step), 720f * Runner.DeltaTime);
             IsMoving = true;
+        }
+
+        private Vector3 CatfishSearchPosition()
+        {
+            if (Vector3.ProjectOnPlane(transform.position - _lastKnownTargetPosition, Vector3.up).sqrMagnitude > 9f)
+                return _lastKnownTargetPosition;
+            if (Time.time >= _nextCatfishSearchAt)
+            {
+                _nextCatfishSearchAt = Time.time + 0.9f;
+                _catfishSearchPosition = _lastKnownTargetPosition;
+                Vector2 offset = UnityEngine.Random.insideUnitCircle * 2.5f;
+                Vector3 candidate = _lastKnownTargetPosition + new Vector3(offset.x, 0f, offset.y);
+                if (!_catfishOnLand && FloodedWaterBoundary.TryGetSwimSurface(candidate, out _))
+                    _catfishSearchPosition = candidate;
+                else if (_catfishOnLand && NavMesh.SamplePosition(candidate, out var hit, 1f, _agent.areaMask))
+                    _catfishSearchPosition = hit.position;
+            }
+            return _catfishSearchPosition;
+        }
+
+        private bool IsCatfishStepBlocked(Vector3 nextPosition)
+        {
+            Vector3 delta = nextPosition - transform.position;
+            if (delta.sqrMagnitude < 0.000001f) return false;
+            foreach (var hit in Physics.SphereCastAll(transform.position + Vector3.up * 0.9f,
+                         0.3f, delta.normalized, delta.magnitude + 0.05f,
+                         Physics.DefaultRaycastLayers & ~(1 << 4), QueryTriggerInteraction.Ignore))
+            {
+                if (hit.collider.transform.IsChildOf(transform)) continue;
+                if (hit.collider.GetComponentInParent<NetworkPlayerMovement>() != null) continue;
+                if (hit.normal.y < 0.65f) return true;
+            }
+            return false;
         }
 
         private void UpdateTargetAndMovement()
@@ -640,7 +844,7 @@ namespace EchoProtocol.AI.Minions
                         StateValue = (int)CreepMinionState.Track;
                     }
                 }
-                else if (Time.time - _lastVisiblePlayerAt >= PlayerSeekTimeoutSeconds)
+                else if (!IsPurgeCatfish && Time.time - _lastVisiblePlayerAt >= PlayerSeekTimeoutSeconds)
                 {
                     TargetPlayer = FindClosestEligibleTarget();
                     _seekingPlayer = TargetPlayer.IsRealPlayer;
@@ -659,6 +863,22 @@ namespace EchoProtocol.AI.Minions
 
             if (!HasLineOfSight(targetObject))
             {
+                if (IsPurgeCatfish)
+                {
+                    _lostSightSeconds += Runner.DeltaTime;
+                    if (_lostSightSeconds >= 4f)
+                    {
+                        ResetTracking();
+                        Roam();
+                    }
+                    else
+                    {
+                        StateValue = (int)CreepMinionState.Track;
+                        _agent.speed = trackSpeed * ResonanceSpeedMultiplier;
+                        TrySeekPlayerOnNavMesh(CatfishSearchPosition());
+                    }
+                    return;
+                }
                 if (IsDisruptor)
                 {
                     StateValue = (int)CreepMinionState.Harass;
@@ -860,6 +1080,19 @@ namespace EchoProtocol.AI.Minions
         {
             StateValue = (int)CreepMinionState.Roam;
             _agent.speed = roamSpeed * ResonanceSpeedMultiplier;
+            if (IsPurgeCatfish && _hasPurgeActivityFocus)
+            {
+                if (Time.time >= _nextPurgePatrolAt)
+                {
+                    _nextPurgePatrolAt = Time.time + (EncounterDutyValue == (int)FishcatEncounterDuty.Ambusher ? 12f : 6f);
+                    if (TryPurgePatrolDestination(out var directed))
+                    {
+                        if (!_catfishOnLand) { TickCatfishSwim(); return; }
+                        _navigation.TrySetDestination(directed);
+                    }
+                }
+                return;
+            }
 
             bool stillTravelling = _agent.pathPending
                 || (_agent.hasPath
@@ -1003,6 +1236,7 @@ namespace EchoProtocol.AI.Minions
         private PlayerRef FindBestVisibleTarget()
         {
             if (TryGetEligiblePlayer(TargetPlayer, out var current, out _, out _)
+                && (!IsPurgeCatfish || OtherHunters(TargetPlayer) < PurgeFishcatBalance.HuntersPerPlayer)
                 && HasLineOfSight(current))
                 return TargetPlayer;
 
@@ -1011,10 +1245,12 @@ namespace EchoProtocol.AI.Minions
             foreach (var player in Runner.ActivePlayers)
             {
                 if (!TryGetEligiblePlayer(player, out var obj, out var lobby, out _) || !CanSeePlayer(obj)) continue;
+                if (IsPurgeCatfish && OtherHunters(player) >= PurgeFishcatBalance.HuntersPerPlayer) continue;
                 float score = -Vector3.Distance(transform.position, obj.transform.position);
-                if (lobby.CarriedCoreId.IsValid)
+                if (IsPurgeCatfish) score -= OtherHunters(player) * 12f;
+                if (!IsPurgeCatfish && lobby.CarriedCoreId.IsValid)
                     score += 500f;
-                else if (lobby.ToolId >= 1 && lobby.ToolId <= 6)
+                else if (!IsPurgeCatfish && lobby.ToolId >= 1 && lobby.ToolId <= 6)
                     score += 250f;
                 var match = NetworkMatchState.Instance;
                 if (Zone == RegionSemanticZone.Zone02 && match != null)
@@ -1088,6 +1324,8 @@ namespace EchoProtocol.AI.Minions
         private bool HasLineOfSight(NetworkObject playerObject)
         {
             if (playerObject == null) return false;
+            if (IsPurgeCatfish && Vector3.Distance(transform.position, playerObject.transform.position) > visionRange)
+                return false;
             var origin = IsDisruptor
                 ? transform.position + Vector3.up * 1.35f
                 : transform.position + Vector3.up * (FlightHeightValue > 0.01f ? FlightHeightValue : flightHeight);
@@ -1179,17 +1417,19 @@ namespace EchoProtocol.AI.Minions
                 : Vector3.Distance(transform.position, playerObject.transform.position);
             if (IsDisruptor)
             {
+                if (IsPurgeCatfish && (_resonanceContributors > 0
+                    || Mathf.Abs(playerObject.transform.position.y - transform.position.y) > 2.5f)) return;
                 if (distance > DisruptorAttackRange || !HasLineOfSight(playerObject)) return;
                 var disruptorMovement = playerObject.GetComponent<NetworkPlayerMovement>();
                 if (disruptorMovement == null) return;
                 CommitAttack(CreepMinionAttackKind.MeleeSlow);
-                disruptorMovement.TryApplySlowAuthoritative(slowMultiplier, slowDurationSeconds);
+                disruptorMovement.TryApplySlowAuthoritative(slowMultiplier, IsPurgeCatfish ? 1.25f : slowDurationSeconds);
                 life.TryApplyAuthoritativeDamage(attackDamage, "MINION_DISRUPTOR", transform.position);
-                disruptorMovement.TryApplyKnockbackAuthoritative(
+                if (!IsPurgeCatfish) disruptorMovement.TryApplyKnockbackAuthoritative(
                     playerObject.transform.position - transform.position,
                     attackKnockbackSpeed,
                     attackKnockbackSeconds);
-                if (NetworkMatchState.Instance != null
+                if (!IsPurgeCatfish && NetworkMatchState.Instance != null
                     && NetworkMatchState.Instance.InterruptZone2OperationsAuthoritative(TargetPlayer))
                     disruptorMovement.InterruptZone2InteractionAuthoritative(0.85f);
                 return;
@@ -1617,6 +1857,7 @@ namespace EchoProtocol.AI.Minions
             _trackSeconds = 0f;
             _lostSightSeconds = 0f;
             _stalkerAlertDeliveredForTarget = false;
+            _nextCatfishSearchAt = 0f;
         }
 
         private void CancelForcedPlayerSeek()
