@@ -18,6 +18,12 @@ namespace EchoProtocol.Networking
         private Renderer[] _renderers;
         private string _animation;
         private bool _poseReady;
+        private QuickOutline.Outline _meatOutline;
+        private Transform _meatVisual;
+        private Vector3 _meatWorldScale;
+        private Vector3 _meatWorldPosition;
+        private bool _meatHeldPresentation;
+        private const float HeldMeatScale = 140f;
 
         public void Configure(int id, HuntKind type, Animator animation)
         { index = id; kind = type; animator = animation; }
@@ -30,6 +36,21 @@ namespace EchoProtocol.Networking
             if (Agent) Agent.enabled = false;
             _colliders = GetComponentsInChildren<Collider>(true);
             _renderers = GetComponentsInChildren<Renderer>(true);
+            if (kind == HuntKind.Meat)
+            {
+                _meatVisual = transform.childCount > 0 ? transform.GetChild(0) : null;
+                if (_meatVisual)
+                {
+                    _meatWorldScale = _meatVisual.localScale;
+                    _meatWorldPosition = _meatVisual.localPosition;
+                }
+                _meatOutline = GetComponent<QuickOutline.Outline>();
+                if (!_meatOutline) _meatOutline = gameObject.AddComponent<QuickOutline.Outline>();
+                _meatOutline.OutlineMode = QuickOutline.Outline.Mode.OutlineVisible;
+                _meatOutline.OutlineColor = new Color(1f, .7f, .25f, 1f);
+                _meatOutline.OutlineWidth = 3.5f;
+                _meatOutline.UpdateMaterialProperties();
+            }
         }
 
         private void LateUpdate()
@@ -45,7 +66,7 @@ namespace EchoProtocol.Networking
             var mission = AlienHuntMission.Instance;
             if (!mission || !mission.Ready || mission.Completed || !interactor || mission.LocalHeldIndex >= 0) return false;
             var state = mission.Read(index);
-            return kind == HuntKind.Alien ? state.Stage == (int)AlienStage.Stunned
+            return kind == HuntKind.Alien ? (state.Stage == (int)AlienStage.Stunned || state.Stage == (int)AlienStage.Eating)
                 : state.Stage == 0 || (kind == HuntKind.Meat && state.Stage == 2 && !mission.IsBaitClaimed(index));
         }
 
@@ -56,8 +77,15 @@ namespace EchoProtocol.Networking
         {
             bool visible = kind == HuntKind.Alien ? state.Stage != (int)AlienStage.Burned : state.Stage != 3;
             bool carried = kind == HuntKind.Alien ? state.Stage == (int)AlienStage.Carried : state.Stage == 1;
+            ApplyMeatScale(carried);
             foreach (var r in _renderers) if (r) r.enabled = visible;
             foreach (var c in _colliders) if (c) c.enabled = visible && !carried;
+            if (_meatOutline)
+            {
+                var viewer = Camera.main;
+                _meatOutline.enabled = visible && !carried && viewer
+                    && (viewer.transform.position - transform.position).sqrMagnitude <= 16f * 16f;
+            }
             if (!visible) { if (Agent) Agent.enabled = false; return; }
             Vector3 position = state.Position; Quaternion rotation = state.Rotation;
             if (carried) AlienHuntMission.Instance.HeldPose(state.Carrier, kind, out position, out rotation, true);
@@ -75,11 +103,32 @@ namespace EchoProtocol.Networking
             var stage = (AlienStage)state.Stage;
             string animation = stage == AlienStage.Running ? "Run" : stage == AlienStage.Eating ? "Eating" :
                 stage == AlienStage.Stunned || stage == AlienStage.Carried ? "Stunned" :
+                stage == AlienStage.Wandering && state.Fleeing && moving ? "Run" :
                 stage == AlienStage.Wandering && !moving ? "Idle" :
                 stage == AlienStage.Wandering ? "Walk" : "Idle";
             if (_animation == animation) return;
             _animation = animation;
             animator.CrossFadeInFixedTime(animation, .15f);
+        }
+
+        private void ApplyMeatScale(bool carried)
+        {
+            if (!_meatVisual || _meatHeldPresentation == carried) return;
+            _meatHeldPresentation = carried;
+            if (!carried)
+            {
+                _meatVisual.localScale = _meatWorldScale;
+                _meatVisual.localPosition = _meatWorldPosition;
+                return;
+            }
+
+            _meatVisual.localScale = Vector3.one * HeldMeatScale;
+            _meatVisual.localPosition = Vector3.zero;
+            var renderers = _meatVisual.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0) return;
+            var bounds = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
+            _meatVisual.localPosition -= transform.InverseTransformPoint(bounds.center);
         }
     }
 }

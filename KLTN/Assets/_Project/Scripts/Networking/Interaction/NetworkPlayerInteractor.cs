@@ -600,7 +600,7 @@ namespace EchoProtocol.Networking
 
         public bool CanStartFirstAidReviveAuthoritative(LobbyPlayerState state)
         {
-            if (NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
+            if (AlienHuntMission.IsCarrying(gameObject) || NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
             if (Object == null
                 || !Object.IsValid
                 || !Object.HasStateAuthority

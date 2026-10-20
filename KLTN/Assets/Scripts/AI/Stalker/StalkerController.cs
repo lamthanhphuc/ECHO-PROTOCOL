@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Common.AED;
@@ -470,6 +470,23 @@ namespace EchoProtocol.AI.Stalker
                 decayWindowSeconds);
         }
 
+        public void InvestigatePurgeRitual(Vector3 position)
+        {
+            if(!_purgeControlled || !_purgeHunting || currentState==StalkerState.CHASE || currentState==StalkerState.ATTACK)return;
+            // This is knowledge of a completed ritual, never the hidden position of a player.
+            ClearDetectionContext();ClearTargetContext();
+            currentState=StalkerState.SEARCH;
+            RestartHeardNoiseSearchAt(position);
+        }
+        private bool _purgeControlled, _purgeHunting;
+        private float _purgeChaseSpeed;
+        public void ApplyPurgePolicy(bool hunting, bool frozen, float speed)
+        {
+            bool changed = _purgeControlled && _purgeHunting != hunting;
+            _purgeControlled=true; _purgeHunting=hunting; _purgeChaseSpeed=speed;
+            if(frozen) BeginSpecialEncounterOverride();
+            else if(_specialEncounterOverrideActive || changed) EndSpecialEncounterOverrideToPatrol();
+        }
         public void BeginSpecialEncounterOverride()
         {
             if (_specialEncounterOverrideActive)
@@ -1835,6 +1852,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void EnterAttack()
         {
+            if(_purgeControlled && !_purgeHunting) { EndSpecialEncounterOverrideToPatrol(); return; }
             currentState = StalkerState.ATTACK;
             attackElapsedTime = 0f;
             lastAttackResult = StalkerAttackResult.None;
@@ -4539,6 +4557,7 @@ namespace EchoProtocol.AI.Stalker
 
         private float GetSearchDuration()
         {
+            if(_purgeControlled && _purgeHunting) return 75f;
             var value =
                 ShouldUseScenarioMonsterParameters()
                     ? (float)_scenarioMonsterParameters.SearchDuration
@@ -4549,6 +4568,7 @@ namespace EchoProtocol.AI.Stalker
 
         private float GetChaseSpeed()
         {
+            if(_purgeControlled) return _purgeChaseSpeed;
             var value =
                 ShouldUseScenarioMonsterParameters()
                     ? (float)_scenarioMonsterParameters.ChaseSpeed
@@ -5889,7 +5909,6 @@ namespace EchoProtocol.AI.Stalker
             }
 
             _roomSweepCoverageMemory.MarkRegionCleared(currentRegionId);
-            _roomSweepPlanner.ClearRejectedProbes();
             clearedRoomRegionId = currentRegionId;
             return true;
         }
@@ -5917,7 +5936,6 @@ namespace EchoProtocol.AI.Stalker
             if (_roomSweepPlanner.IsFullyObserved)
             {
                 _roomSweepCoverageMemory.MarkRegionCleared(currentRegionId);
-                _roomSweepPlanner.ClearRejectedProbes();
                 return RoomSweepCurrentRoomResult.RoomCleared;
             }
 
@@ -6839,7 +6857,7 @@ namespace EchoProtocol.AI.Stalker
                 || currentState == StalkerState.ATTACK
                 || rushingToHeardNoiseOrigin
                     ? GetChaseSpeed()
-                    : Mathf.Max(0f, patrolSpeed);
+                    : Mathf.Max(0f, _purgeControlled ? 3.2f : patrolSpeed);
         }
 
         private void LogDiagnosticWarning(string message)

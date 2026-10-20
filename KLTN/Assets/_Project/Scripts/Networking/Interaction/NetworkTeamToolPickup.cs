@@ -1,4 +1,4 @@
-using Fusion;
+﻿using Fusion;
 using QuickOutline;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -25,6 +25,7 @@ namespace EchoProtocol.Networking
         [Networked] public int RemainingUses { get; private set; }
 
         public int ToolId => _toolId;
+        public bool IsAvailable => Object != null && Object.IsValid && !IsConsumed;
 
         public override string InteractionPrompt =>
             string.IsNullOrWhiteSpace(_toolDisplayName)
@@ -173,6 +174,7 @@ namespace EchoProtocol.Networking
             }
 
             var playerState = context.PlayerState;
+            if(playerState != null && AlienHuntMission.IsCarrying(playerState.gameObject)) return InteractionValidationResult.InvalidTargetState;
             if (playerState == null || !playerState.IsGameplayPlayer)
             {
                 return InteractionValidationResult.InvalidRequester;

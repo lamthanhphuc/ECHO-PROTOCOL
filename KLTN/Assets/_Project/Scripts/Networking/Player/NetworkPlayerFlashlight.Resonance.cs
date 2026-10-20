@@ -19,6 +19,7 @@ namespace EchoProtocol.Networking
         [Networked] private float ResonanceRechargeDelay { get; set; }
         [Networked] public Vector3 ResonanceEndpoint { get; private set; }
         private CreepMinionRuntime _resonanceTarget;
+        public EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime PurgeBossTarget { get; private set; }
         private bool _resonanceWasVisible;
         private float _resonanceStartedAt;
         private float _resonanceDistanceGain = 1f;
@@ -48,7 +49,7 @@ namespace EchoProtocol.Networking
                 Locked=ResonanceLocked,NeedsRelease=ResonanceNeedsRelease,RechargeDelay=ResonanceRechargeDelay},held,allowed,Runner.DeltaTime);
             ResonanceEnergy=next.Energy;ResonanceActive=next.Active;ResonanceLocked=next.Locked;
             ResonanceNeedsRelease=next.NeedsRelease;ResonanceRechargeDelay=next.RechargeDelay;
-            _resonanceTarget=null;
+            _resonanceTarget=null; PurgeBossTarget=null;
             if(ResonanceActive)ResolveResonanceTarget(input);
         }
         private void ResolveResonanceTarget(NetworkPlayerInput input)
@@ -63,8 +64,18 @@ namespace EchoProtocol.Networking
             System.Array.Sort(hits,(a,b)=>a.distance.CompareTo(b.distance));
             foreach(var hit in hits) {
                 if(hit.collider.transform.IsChildOf(transform))continue;
-                if(SceneManager.GetActiveScene().name==LobbyMapCatalog.ExplorationScene && hit.collider.gameObject.layer==4)continue;
+                if((SceneManager.GetActiveScene().name==LobbyMapCatalog.ExplorationScene || AlienHuntMission.Instance) && hit.collider.gameObject.layer==4)continue;
                 ResonanceEndpoint=hit.point;
+                var boss=hit.collider.GetComponentInParent<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
+                if(AlienHuntMission.Instance && boss)
+                {
+                    Vector3 bossMuzzle=BeamTransform.position; Vector3 bossPoint=hit.collider.bounds.center;
+                    foreach(var block in Physics.RaycastAll(bossMuzzle,(bossPoint-bossMuzzle).normalized,(bossPoint-bossMuzzle).magnitude,~0,QueryTriggerInteraction.Ignore))
+                        if(!block.collider.transform.IsChildOf(transform)
+                            && block.collider.gameObject.layer!=4
+                            && block.collider.GetComponentInParent<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>()!=boss)return;
+                    PurgeBossTarget=boss;ResonanceEndpoint=bossPoint;return;
+                }
                 var minion=hit.collider.GetComponentInParent<CreepMinionRuntime>();
                 if(minion==null || minion.IsDying)return;
                 // A camera-visible target must also be reachable from the flashlight muzzle.
@@ -73,7 +84,7 @@ namespace EchoProtocol.Networking
                 var obstruction=Physics.RaycastAll(muzzle,(target-muzzle).normalized,(target-muzzle).magnitude,~0,QueryTriggerInteraction.Ignore);
                 foreach(var block in obstruction)
                     if(!block.collider.transform.IsChildOf(transform)
-                        && !(SceneManager.GetActiveScene().name==LobbyMapCatalog.ExplorationScene && block.collider.gameObject.layer==4)
+                        && !((SceneManager.GetActiveScene().name==LobbyMapCatalog.ExplorationScene || AlienHuntMission.Instance) && block.collider.gameObject.layer==4)
                         && block.collider.GetComponentInParent<CreepMinionRuntime>()!=minion)return;
                 _resonanceTarget=minion;ResonanceEndpoint=target;return;
             }

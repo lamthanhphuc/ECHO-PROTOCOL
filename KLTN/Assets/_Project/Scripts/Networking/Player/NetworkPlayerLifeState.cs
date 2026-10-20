@@ -145,6 +145,7 @@ namespace EchoProtocol.Networking
         private bool _hasCharacterVisualRootDefault;
 
         private int MaximumRevivesPerZone =>
+            AlienHuntMission.Instance != null ? int.MaxValue :
             MatchDifficultyProfiles.Get(
                 MatchAuthorityRuntime.Instance != null
                     ? MatchAuthorityRuntime.Instance.Difficulty

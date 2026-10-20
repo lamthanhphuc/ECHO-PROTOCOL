@@ -147,7 +147,7 @@ namespace EchoProtocol.Networking
             }
 
             if (_bootstrap.State != NetworkSessionState.InMatch
-                || SceneManager.GetActiveScene().name != LobbyManager.GameSceneName) return;
+                || (!AlienHuntMission.Instance && SceneManager.GetActiveScene().name != LobbyManager.GameSceneName)) return;
 
             EnsureZone3Stalker(runner, matchState);
 
@@ -168,7 +168,7 @@ namespace EchoProtocol.Networking
 
             _nextMinionSpawnCheckAt =
                 Time.time
-                + _minionSpawnCheckInterval;
+                + (AlienHuntMission.Instance ? Mathf.Max(20f, _minionSpawnCheckInterval) : _minionSpawnCheckInterval);
 
             MaintainCreepMinionPopulation(
                 runner);
@@ -293,6 +293,9 @@ namespace EchoProtocol.Networking
             }
             if (AlienHuntMission.Instance != null)
             {
+                EnsureInitialStalker(runner, RegionSemanticZone.Zone01, _map2RegionGraph, _map2LizardPrefab);
+                if (_matchStateInstance && _monsterInstance)
+                    _matchStateInstance.GetComponent<NetworkMatchState>().BindPurgeBoss(_monsterInstance);
                 BindAuthoritativeWorldState();
                 return;
             }
@@ -405,7 +408,10 @@ namespace EchoProtocol.Networking
             if (_monsterInstance == null && prefab != null)
             {
                 var stalkerSpawn = GameObject.Find("MonsterSpawn_Stalker_EMPTY");
-                if (TryGetStalkerSpawnPosition(stalkerSpawn != null ? stalkerSpawn.transform : null, out var spawnPosition))
+                bool valid = AlienHuntMission.Instance
+                    ? TryGetPurgeBossSpawn(stalkerSpawn ? stalkerSpawn.transform : null, out var spawnPosition)
+                    : TryGetStalkerSpawnPosition(stalkerSpawn ? stalkerSpawn.transform : null, out spawnPosition);
+                if (valid)
                 {
                     _monsterInstance = SpawnStalker(runner, spawnPosition, stalkerSpawn.transform.rotation, zone, graph, prefab);
                 }
@@ -639,7 +645,8 @@ namespace EchoProtocol.Networking
                 AEDv2Authority.TryGetApplied(aedMatchId, out var plan, out _))
                 profile = AEDv2GameplayBridge.ToNormalDifficultyProfile(plan);
             var zone = _zone2MinionsActive ? RegionSemanticZone.Zone02 : RegionSemanticZone.Zone01;
-            int cap = zone == RegionSemanticZone.Zone02 ? profile.Zone2MinionCap : profile.Zone1MinionCap;
+            int cap = AlienHuntMission.Instance && NetworkMatchState.Instance ? NetworkMatchState.Instance.PurgeMinionCap
+                : zone == RegionSemanticZone.Zone02 ? profile.Zone2MinionCap : profile.Zone1MinionCap;
             int originalCount = 0;
             int disruptorCount = 0;
             foreach (var obj in _creepMinionInstances)
@@ -657,7 +664,7 @@ namespace EchoProtocol.Networking
             }
             int count = originalCount + disruptorCount;
             bool disruptor = disruptorCount < originalCount;
-            bool map2 = SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
+            bool map2 = SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene || AlienHuntMission.Instance;
             if (count >= cap) return;
 
             if (map2 && disruptor)
@@ -984,6 +991,29 @@ namespace EchoProtocol.Networking
                     $"[PlayerSpawner] Spawned {zone} Stalker {spawned.Id} at {position}.");
             }
             return spawned;
+        }
+
+        private static bool TryGetPurgeBossSpawn(Transform marker,out Vector3 position)
+        {
+            position=default; var mission=AlienHuntMission.Instance;
+            if(!mission || !marker)return false;
+            var tri=NavMesh.CalculateTriangulation();var path=new NavMeshPath();
+            float best=float.PositiveInfinity;
+            for(int i=0;i+2<tri.indices.Length;i+=9)
+            {
+                var center=(tri.vertices[tri.indices[i]]+tri.vertices[tri.indices[i+1]]+tri.vertices[tri.indices[i+2]])/3f;
+                float score=(center-marker.position).sqrMagnitude;if(score>=best)continue;
+                if(!NavMesh.SamplePosition(center,out var hit,2,NavMesh.AllAreas))continue;
+                if(!NavMesh.CalculatePath(hit.position,mission.Actors[0].Home,NavMesh.AllAreas,path)||path.status!=NavMeshPathStatus.PathComplete)continue;
+                bool blocked=false;
+                foreach(var c in Physics.OverlapCapsule(hit.position+Vector3.up*.65f,hit.position+Vector3.up*1.8f,.5f,
+                    Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore))
+                    if(!(c is TerrainCollider)&&GameplayEnvironmentPhysics.IsEnvironment(c)){blocked=true;break;}
+                if(blocked)continue;
+                best=score;position=hit.position;
+            }
+            if(float.IsPositiveInfinity(best))Debug.LogError("[Purge] No connected clear boss spawn surface found.");
+            return !float.IsPositiveInfinity(best);
         }
 
         private static bool TryGetStalkerSpawnPosition(Transform marker, out Vector3 position)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using NUnit.Framework;
 using UnityEditor;
@@ -136,7 +136,7 @@ namespace EchoProtocol.Player.Tests
                 "Assets/Scripts/TeamTools/TeamToolPickupCatalog.cs");
 
             StringAssert.Contains("RpcSources.InputAuthority, RpcTargets.StateAuthority", source);
-            StringAssert.Contains("Runner.Spawn(prefab, dropPosition, dropRotation)", source);
+            StringAssert.Contains("Runner.Spawn(prefab, dropPosition, dropRotation,", source);
             StringAssert.Contains("_teamToolPickupCatalog.GetPrefab(toolId)", source);
             StringAssert.Contains("LobbyPlayerState.FieldScannerToolId => fieldScannerPrefab", catalog);
             StringAssert.Contains("LobbyPlayerState.NoiseMakerToolId => noiseMakerPrefab", catalog);

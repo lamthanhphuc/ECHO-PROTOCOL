@@ -25,9 +25,19 @@ namespace EchoProtocol.Networking
         {
             get
             {
+                var mission = AlienHuntMission.Instance;
+                if (!mission || !mission.Ready) return ActionPrompt;
+                return "[" + mission.ReadFurnace(index).BurnedCount + "/" + AlienHuntMission.FurnaceCapacity + "] " + ActionPrompt;
+            }
+        }
+        private string ActionPrompt
+        {
+            get
+            {
                 var m = AlienHuntMission.Instance;
                 if (!m || !m.Ready) return "ĐANG CHUẨN BỊ LÒ ĐỐT";
                 var state = m.ReadFurnace(index);
+                if (state.BurnedCount >= AlienHuntMission.FurnaceCapacity) return "LÒ ĐÃ ĐỐT ĐỦ 3 ALIEN";
                 if (state.BurnRemaining > 0) return "ĐANG ĐỐT ALIEN NON…";
                 int held = m.LocalHeldIndex;
                 if (held >= 0) return m.Actors[held].Kind == HuntKind.Jerrycan

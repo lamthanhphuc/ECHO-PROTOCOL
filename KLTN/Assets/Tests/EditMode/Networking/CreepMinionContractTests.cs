@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -292,7 +292,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.DoesNotContain("_agent.isStopped = false", minion);
             StringAssert.Contains("(_nextCreepMinionVisualVariant + 1) % 30", spawner);
             StringAssert.Contains(
-                "SceneManager.GetActiveScene().name == LobbyManager.GameSceneName",
+                "SceneManager.GetActiveScene().name != LobbyManager.GameSceneName",
                 spawner);
             StringAssert.Contains("disruptorCount < originalCount", spawner);
             StringAssert.Contains("int count = originalCount + disruptorCount", spawner);

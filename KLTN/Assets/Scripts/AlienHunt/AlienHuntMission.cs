@@ -9,6 +9,7 @@ namespace EchoProtocol.Networking
     {
         public const string SceneName = "Scene_B";
         public const int AlienCount = 9;
+        public const int FurnaceCapacity = 3;
         public const int JerrycanCount = 10;
         public const int MeatCount = 12;
         public const int EntityCount = 27 + MeatCount;
@@ -21,6 +22,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private float eatingSeconds = 4.84f;
         [SerializeField] private float stunnedSeconds = 30f;
         [SerializeField] private float burnSeconds = 8f;
+        [SerializeField] private float droppedJerrycanRecoverySeconds = 90f;
         private readonly HuntEntityState[] _offline = new HuntEntityState[EntityCount];
         private readonly HuntFurnaceState[] _offlineFurnaces = new HuntFurnaceState[3];
         private bool _offlineReady;
@@ -145,7 +147,7 @@ namespace EchoProtocol.Networking
             {
                 if (furnace >= furnaces.Length || !Near(owner.position, furnaces[furnace])) return false;
                 var f = ReadFurnace(furnace);
-                if (f.BurnRemaining > 0) return false;
+                if (f.BurnRemaining > 0 || f.BurnedCount >= FurnaceCapacity) return false;
                 if (held >= 0)
                 {
                     var h = Read(held);
@@ -163,9 +165,20 @@ namespace EchoProtocol.Networking
             }
             if (entity < 0 || entity >= actors.Length || held >= 0 || !Near(owner.position, actors[entity])) return false;
             var state = Read(entity); var kind = actors[entity].Kind;
-            bool pickable = kind == HuntKind.Alien ? state.Stage == (int)AlienStage.Stunned
+            bool pickable = kind == HuntKind.Alien ? (state.Stage == (int)AlienStage.Stunned || state.Stage == (int)AlienStage.Eating)
                 : state.Stage == 0 || (kind == HuntKind.Meat && state.Stage == 2 && !IsBaitClaimed(entity));
             if (!pickable || !state.Carrier.IsNone) return false;
+            if (kind == HuntKind.Alien && state.Stage == (int)AlienStage.Eating)
+            {
+                // Catching during the meal consumes this bait once and starts its normal refill timer.
+                if (state.Target >= 0 && state.Target < actors.Length && actors[state.Target].Kind == HuntKind.Meat)
+                {
+                    var bait = Read(state.Target);
+                    bait.Stage = 3; bait.Remaining = meatRespawnSeconds;
+                    Write(state.Target, bait);
+                }
+                if (actors[entity].Agent) actors[entity].Agent.enabled = false;
+            }
             state.Stage = kind == HuntKind.Alien ? (int)AlienStage.Carried : 1;
             state.LastGroundPosition = state.Position; state.Carrier = player; state.Target = -1; Write(entity, state); return true;
         }
@@ -204,8 +217,10 @@ namespace EchoProtocol.Networking
             var s = Read(index);
             s.Position = floor; s.Rotation = floorRotation; s.Carrier = PlayerRef.None;
             s.Stage = actors[index].Kind == HuntKind.Alien ? (int)AlienStage.Stunned : actors[index].Kind == HuntKind.Meat ? 2 : 0;
-            s.LastGroundPosition = s.Position;
-            s.Remaining = actors[index].Kind == HuntKind.Meat ? 120f : StunDuration; Write(index, s); return true;
+            s.LastGroundPosition = s.Position; s.Fleeing = false;
+            s.Remaining = actors[index].Kind == HuntKind.Meat ? 120f :
+                actors[index].Kind == HuntKind.Jerrycan ? droppedJerrycanRecoverySeconds : StunDuration;
+            Write(index, s); return true;
         }
         public void Tick(float delta)
         {
@@ -229,7 +244,8 @@ namespace EchoProtocol.Networking
                         if (actor.Kind == HuntKind.Alien && !CanReturnToNests(s.Position)) s.Position = s.LastGroundPosition;
                         s.LastGroundPosition = s.Position; s.Carrier = PlayerRef.None;
                         s.Stage = actor.Kind == HuntKind.Alien ? (int)AlienStage.Stunned : actor.Kind == HuntKind.Meat ? 2 : 0;
-                        s.Remaining = actor.Kind == HuntKind.Meat ? 120f : StunDuration;
+                        s.Remaining = actor.Kind == HuntKind.Meat ? 120f :
+                            actor.Kind == HuntKind.Jerrycan ? droppedJerrycanRecoverySeconds : StunDuration;
                     }
                     else
                     {
@@ -242,6 +258,13 @@ namespace EchoProtocol.Networking
                 }
                 if (actor.Kind != HuntKind.Alien)
                 {
+                    if (actor.Kind == HuntKind.Jerrycan && s.Stage == 0 && s.Remaining > 0f)
+                    {
+                        s.Remaining -= delta;
+                        if (s.Remaining <= 0f)
+                        { s.Position = actor.Home; s.Rotation = actor.HomeRotation; s.Remaining = 0f; }
+                        Write(i, s);
+                    }
                     if (actor.Kind == HuntKind.Meat && s.Stage == 3)
                     {
                         s.Remaining -= delta;
@@ -268,14 +291,22 @@ namespace EchoProtocol.Networking
                     {
                         s.Remaining -= delta;
                         if (s.Remaining <= 0)
-                        { s.NestIndex = ChooseVacantNest(i, s); s.Stage = 0; s.Target = -1; s.Returning = true; }
+                        { s.NestIndex = ChooseVacantNest(i, s); s.Stage = 0; s.Target = -1; s.Returning = true;
+                            s.ProgressPosition = s.Position; s.StuckSeconds = 0f; s.TravelSeconds = 0f; }
                     }
                     Write(i, s); continue;
                 }
                 if (!agent.enabled)
                 {
                     actor.transform.SetPositionAndRotation(s.Position, s.Rotation); agent.enabled = true;
-                    if (!agent.isOnNavMesh || !agent.Warp(s.Position)) { agent.enabled = false; continue; }
+                    if (!agent.isOnNavMesh || !agent.Warp(s.Position))
+                    {
+                        agent.enabled = false;
+                        s.StuckSeconds += delta;
+                        if (s.StuckSeconds >= 8f) RecoverAlienAtNest(actor, ref s);
+                        Write(i, s);
+                        continue;
+                    }
                 }
                 if (stage == AlienStage.Eating)
                 {
@@ -283,7 +314,10 @@ namespace EchoProtocol.Networking
                     if (s.Remaining <= 0)
                     {
                         var bait = Read(s.Target); bait.Stage = 3; bait.Remaining = meatRespawnSeconds; Write(s.Target, bait);
-                        s.Stage = (int)AlienStage.Stunned; s.Remaining = StunDuration; s.Target = -1;
+                        s.Stage = (int)AlienStage.Wandering; s.Remaining = 0; s.Target = -1;
+                        s.Returning = true; s.Fleeing = true; s.BaitCooldown = 3f;
+                        s.ProgressPosition = actor.transform.position; s.StuckSeconds = 0f; s.TravelSeconds = 0f;
+                        agent.isStopped = false;
                     }
                 }
                 else
@@ -293,7 +327,7 @@ namespace EchoProtocol.Networking
                     {
                         int bait = FindBait(i, s.Position);
                         if (bait >= 0)
-                        { s.Stage = (int)AlienStage.Running; s.Target = bait; s.ProgressPosition = actor.transform.position;
+                        { s.Stage = (int)AlienStage.Running; s.Target = bait; s.Fleeing = false; s.ProgressPosition = actor.transform.position;
                             s.StuckSeconds = 0; s.TravelSeconds = 0; }
                     }
                     if (s.Stage == (int)AlienStage.Running)
@@ -308,6 +342,7 @@ namespace EchoProtocol.Networking
                         if (bait.Stage != 2 || blocked)
                         {
                             s.Stage = 0; s.Target = -1; s.BaitCooldown = 8f; s.Returning = true;
+                            s.ProgressPosition = actor.transform.position; s.StuckSeconds = 0f; s.TravelSeconds = 0f;
                             agent.ResetPath(); agent.speed = DifficultyScale;
                         }
                         else
@@ -323,8 +358,9 @@ namespace EchoProtocol.Networking
                     else
                     {
                         var home = actors[Mathf.Clamp(s.NestIndex, 0, AlienCount - 1)].Home;
-                        agent.speed = DifficultyScale; agent.stoppingDistance = .3f; s.Remaining -= delta;
-                        if (s.Returning && (actor.transform.position - home).sqrMagnitude <= .6f * .6f) s.Returning = false;
+                        agent.speed = (s.Fleeing ? 3.8f : 1f) * DifficultyScale; agent.stoppingDistance = .3f; s.Remaining -= delta;
+                        if (s.Returning && (actor.transform.position - home).sqrMagnitude <= .6f * .6f)
+                        { s.Returning = false; s.Fleeing = false; agent.speed = DifficultyScale; }
                         if (s.Returning || (actor.transform.position - home).sqrMagnitude > (roamRadius + 1f) * (roamRadius + 1f))
                         {
                             if (!agent.pathPending && (!agent.hasPath || (agent.destination - home).sqrMagnitude > 1f))
@@ -346,6 +382,21 @@ namespace EchoProtocol.Networking
                             }
                             s.Remaining = Random.Range(2f, 4f);
                         }
+                        bool shouldMove = s.Returning || (agent.hasPath && agent.remainingDistance > .6f);
+                        if (shouldMove)
+                        {
+                            if ((actor.transform.position - s.ProgressPosition).sqrMagnitude > .25f)
+                            { s.ProgressPosition = actor.transform.position; s.StuckSeconds = 0f; s.TravelSeconds = 0f; }
+                            else s.StuckSeconds += delta;
+                            if (s.StuckSeconds >= 8f)
+                            {
+                                s.StuckSeconds = 0f;
+                                s.TravelSeconds += 1f;
+                                if (s.TravelSeconds >= 2f) RecoverAlienAtNest(actor, ref s);
+                                else { agent.ResetPath(); agent.SetDestination(home); }
+                            }
+                        }
+                        else { s.ProgressPosition = actor.transform.position; s.StuckSeconds = 0f; }
                     }
                 }
                 s.Position = actor.transform.position; s.Rotation = actor.transform.rotation; Write(i, s);
@@ -357,10 +408,56 @@ namespace EchoProtocol.Networking
                 if (f.BurnRemaining <= 0)
                 {
                     var a = Read(f.AlienSlot - 1); a.Stage = (int)AlienStage.Burned; Write(f.AlienSlot - 1, a);
-                    f.AlienSlot = 0; f.Fuel = 0;
-                    if (NetworkReady) Match.RecordHuntBurn(); else _offlineBurned++;
+                    f.AlienSlot = 0; f.Fuel = 0; f.BurnedCount++;
+                    if (NetworkReady) Match.RecordHuntBurn(furnaces[i].transform.position); else _offlineBurned++;
                 }
                 WriteFurnace(i, f);
+            }
+            EnsureJerrycanSupply();
+        }
+        private void RecoverAlienAtNest(AlienHuntActor actor, ref HuntEntityState state)
+        {
+            var home = actors[Mathf.Clamp(state.NestIndex, 0, AlienCount - 1)].Home;
+            if (!NavMesh.SamplePosition(home, out var nav, 2f, NavMesh.AllAreas)) return;
+            var agent = actor.Agent;
+            if (!agent.enabled)
+            {
+                actor.transform.position = nav.position;
+                agent.enabled = true;
+            }
+            if (!agent.Warp(nav.position)) { agent.enabled = false; return; }
+            agent.ResetPath();
+            state.Position = nav.position; state.Rotation = actor.HomeRotation;
+            state.Stage = (int)AlienStage.Wandering; state.Target = -1;
+            state.Returning = false; state.Fleeing = false;
+            state.ProgressPosition = nav.position; state.StuckSeconds = 0f; state.TravelSeconds = 0f;
+            state.BaitCooldown = Mathf.Max(state.BaitCooldown, 2f);
+        }
+        private void EnsureJerrycanSupply()
+        {
+            int needed = AlienCount - Burned;
+            if (needed <= 0) return;
+            int available = 0;
+            for (int i = 0; i < actors.Length; i++)
+            {
+                if (actors[i].Kind != HuntKind.Jerrycan) continue;
+                var state = Read(i);
+                if (state.Stage == 0 || state.Stage == 1) available++;
+            }
+            for (int i = 0; i < furnaces.Length; i++) available += ReadFurnace(i).Fuel;
+            if (available >= needed) return;
+            var reserves = new System.Collections.Generic.List<int>();
+            for (int i = 0; i < actors.Length; i++)
+                if (actors[i].Kind == HuntKind.Jerrycan && Read(i).Stage == 3) reserves.Add(i);
+            while (available < needed && reserves.Count > 0)
+            {
+                int pick = Random.Range(0, reserves.Count);
+                int index = reserves[pick]; reserves.RemoveAt(pick);
+                var state = Read(index);
+                state.Stage = 0; state.Position = actors[index].Home;
+                state.Rotation = actors[index].HomeRotation; state.Remaining = 0f;
+                Write(index, state);
+                available++;
             }
         }
         private bool CanReturnToNests(Vector3 point)
@@ -420,9 +517,17 @@ namespace EchoProtocol.Networking
             var m = Instance; if (!m) return false;
             title = "Săn alien non · " + m.Burned + "/9";
             detail = m.Completed ? (m.Burned >= AlienCount ? "Đã tiêu diệt đủ 9 alien non" : "Nhiệm vụ kết thúc")
-                : "Đặt thịt [G] → Bắt alien sau khi ăn [E] → Mang tới chảo\nĐổ nhiên liệu [E] · Đặt alien [E] · Châm lửa [E]";
+                : "Đặt thịt [G] → Bắt alien khi đang ăn [E] → Mang tới chảo\nĐổ nhiên liệu [E] · Đặt alien [E] · Châm lửa [E]";
+            if(m.NetworkReady && !m.Completed)
+            {
+                var match=m.Match;
+                string mood=match.PurgeMood==PurgeBossMood.Hunting ? "BOSS ĐANG SĂN" : match.PurgeMood==PurgeBossMood.Warning
+                    ? "CẢNH BÁO: BOSS SẮP SĂN" : match.PurgeMood==PurgeBossMood.Staggered ? "BOSS BỊ UV KHỐNG CHẾ" : "BOSS TẠM BÌNH TĨNH";
+                detail += "\n"+mood+" | UV: "+match.PurgeStaggers+"/"+match.PurgeStaggersRequired
+                    +" | Sơ cứu tại lò: "+match.PurgeAidAvailable+"/3";
+            }
             if (Time.unscaledTime < m._dropHintUntil)
-                detail = "Kh?ng th? ??t alien ? ??y. H?y t?i m?t ??t c? l?i v? khu v?c ? tr?ng.";
+                detail = "Không thể đặt alien ở đây. Hãy tìm mặt đất có lối về khu vực ổ trứng.";
             detail = detail.Replace("[E]", "[" + InteractKey + "]");
             progress = m.Burned / 9f; return true;
         }
