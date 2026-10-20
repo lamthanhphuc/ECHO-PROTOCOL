@@ -77,6 +77,13 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkBool IsCrouching { get; set; }
         [Networked] private TickTimer ExternalSlowTimer { get; set; }
         [Networked] private float ExternalSlowMultiplier { get; set; }
+        [Networked] private TickTimer ExternalKnockbackTimer { get; set; }
+        [Networked] private Vector3 ExternalKnockbackDirection { get; set; }
+        [Networked] private float ExternalKnockbackSpeed { get; set; }
+        [Networked] private TickTimer Zone2InterruptTimer { get; set; }
+
+        public bool IsZone2InteractionDisrupted => Runner != null
+            && Zone2InterruptTimer.IsRunning && !Zone2InterruptTimer.Expired(Runner);
 
         public float CurrentPitch => LookPitch;
         public float MaxStamina => _maxStamina;
@@ -182,6 +189,51 @@ namespace EchoProtocol.Networking
             ExternalSlowMultiplier = Mathf.Clamp(multiplier, 0.1f, 1f);
             ExternalSlowTimer = TickTimer.CreateFromSeconds(Runner, durationSeconds);
             return true;
+        }
+
+        public bool TryApplyKnockbackAuthoritative(Vector3 direction, float speed, float durationSeconds)
+        {
+            direction = Vector3.ProjectOnPlane(direction, Vector3.up);
+            if (direction.sqrMagnitude < 0.001f) direction = transform.forward;
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || speed <= 0f || durationSeconds <= 0f)
+                return false;
+
+            ExternalKnockbackDirection = direction.normalized;
+            ExternalKnockbackSpeed = speed;
+            ExternalKnockbackTimer = TickTimer.CreateFromSeconds(Runner, durationSeconds);
+            Vector3 motion = ExternalKnockbackDirection * speed * durationSeconds;
+            motion = FloodedWaterBoundary.ConstrainMotion(_unityCharacterController, motion);
+            _unityCharacterController.Move(motion);
+            _controller.Teleport(transform.position, transform.rotation);
+            Physics.SyncTransforms();
+            return true;
+        }
+
+        private bool TickExternalKnockback()
+        {
+            if (!ExternalKnockbackTimer.IsRunning) return false;
+            if (ExternalKnockbackTimer.Expired(Runner))
+            {
+                ExternalKnockbackTimer = TickTimer.None;
+                return false;
+            }
+
+            return true;
+        }
+
+        public void InterruptZone2InteractionAuthoritative(float durationSeconds)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || !Object.InputAuthority.IsRealPlayer || durationSeconds <= 0f) return;
+            Zone2InterruptTimer = TickTimer.CreateFromSeconds(Runner, durationSeconds);
+            RpcInterruptZone2Interaction(Object.InputAuthority);
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+        private void RpcInterruptZone2Interaction([RpcTarget] PlayerRef target)
+        {
+            EchoProtocol.MatchFlow.Zone2MinigameUIFocus.CloseOthers(null);
         }
 
         private float GetExternalSlowMultiplier()
@@ -443,6 +495,14 @@ namespace EchoProtocol.Networking
                 {
                     return;
                 }
+            }
+
+            if (TickExternalKnockback())
+            {
+                AnimationMoveX = AnimationMoveY = 0f;
+                AnimationSprintHeld = false;
+                AnimationPushHeld = false;
+                return;
             }
 
             var lifeState = GetComponent<NetworkPlayerLifeState>();

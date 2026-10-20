@@ -64,6 +64,11 @@ namespace EchoProtocol.Networking
 
         private void Update()
         {
+            if (State != NetworkSessionState.InMatch)
+            {
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
             if (State == NetworkSessionState.InMatch && NetworkMatchState.Instance != null
                 && NetworkMatchState.Instance.IsEnded)
                 _completedMatchObserved = true;
@@ -86,6 +91,8 @@ namespace EchoProtocol.Networking
 
             _instance = this;
             DontDestroyOnLoad(gameObject);
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
             EchoProtocol.Voice.VoiceManager.EnsureExists();
             _matchAuthority = MatchAuthorityRuntime.EnsureExists(this);
         }

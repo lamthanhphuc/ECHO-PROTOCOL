@@ -5613,7 +5613,6 @@ namespace EchoProtocol.AI.Stalker
         private void SetCurrentPatrolDestination()
         {
             ResetRoomSweepFallbackState();
-            _roomSweepPlanner?.ClearRejectedProbes();
             if (!SetRoomSweepPatrolDestination())
             {
                 ActivateRoomSweepPatrolFallback();

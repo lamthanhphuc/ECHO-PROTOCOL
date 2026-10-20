@@ -73,7 +73,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
-        public void NAV_4A_RemainingDistanceImprovement_CountsAsMeaningfulProgress()
+        public void NAV_4A_RemainingDistanceImprovement_WithoutRootMovement_RemainsBlocked()
         {
             var monitor = CreateMonitor();
             Observe(monitor, Vector3.zero, 10f, SampleDeltaTime);
@@ -82,7 +82,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetStateName(monitor), Is.EqualTo("NoProgress"));
 
             Observe(monitor, Vector3.zero, 9.9f, SampleDeltaTime);
-            Assert.That(GetStateName(monitor), Is.EqualTo("Moving"));
+            Assert.That(GetStateName(monitor), Is.EqualTo("NoProgress"));
         }
 
         [Test]

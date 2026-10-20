@@ -959,7 +959,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
-        public void STK_RoomSweepIntegration_FsmResumeClearsProbeRejectsAndPreservesVisualProgressAndClearedRooms()
+        public void STK_RoomSweepIntegration_FsmResumePreservesProbeRejectsAndVisualProgressAndClearedRooms()
         {
             var controller = CreateController();
             var room = new RegionId(1);
@@ -980,7 +980,7 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             InvokePrivate(controller, "SetCurrentPatrolDestination", Type.EmptyTypes);
 
-            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(0));
+            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(1));
             Assert.That(IsObserved(memory, room, 0), Is.True);
             MarkRegionCleared(memory, room);
             InvokePrivate(controller, "SetCurrentPatrolDestination", Type.EmptyTypes);

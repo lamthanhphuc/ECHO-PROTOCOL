@@ -18,6 +18,28 @@ namespace EchoProtocol.Networking
             if (_active == this) _active = null;
         }
 
+        public static bool TryGetSwimSurface(Vector3 point, out float surfaceY, float minDepth = 1.4f)
+        {
+            surfaceY = 0f;
+            if (!_active || !_active.waterSurface || !_active.terrain || !_active.terrain.terrainData) return false;
+            var water = _active.waterSurface.bounds;
+            if (point.x < water.min.x || point.x > water.max.x
+                || point.z < water.min.z || point.z > water.max.z) return false;
+            var local = point - _active.terrain.transform.position;
+            var terrainSize = _active.terrain.terrainData.size;
+            if (local.x < 0f || local.z < 0f || local.x > terrainSize.x || local.z > terrainSize.z) return false;
+            surfaceY = water.center.y;
+            return surfaceY - (_active.terrain.SampleHeight(point) + _active.terrain.transform.position.y) >= minDepth;
+        }
+
+        public static bool TryGetWaterBounds(out Bounds bounds)
+        {
+            bounds = default;
+            if (!_active || !_active.waterSurface || !_active.terrain || !_active.terrain.terrainData) return false;
+            bounds = _active.waterSurface.bounds;
+            return true;
+        }
+
         public static Vector3 ConstrainMotion(CharacterController character, Vector3 motion)
         {
             if (!_active || !_active.waterSurface || !character
