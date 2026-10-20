@@ -305,7 +305,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("FloodedWaterBoundary.TryGetWaterBounds(out var water)", spawner);
             StringAssert.Contains("Object.FindObjectsByType<Collider>(FindObjectsSortMode.None)", spawner);
             StringAssert.Contains("IsInsideBlockerBoundary(blockers, candidate, surfaceY", spawner);
-            StringAssert.Contains("IsCatfishSpawnInPlayerArea(runner, candidate, surfaceY)", spawner);
+            StringAssert.Contains("IsCatfishSpawnInPlayerArea(runner, candidate, surfaceY, focus)", spawner);
             StringAssert.Contains("hit.collider.name.StartsWith(\"_BLOCKERCUBE\")", spawner);
             StringAssert.Contains("path.status == NavMeshPathStatus.PathComplete", spawner);
             StringAssert.Contains("bool approachingLand = _catfishWasInWater && !enteringShallowWater", minion);

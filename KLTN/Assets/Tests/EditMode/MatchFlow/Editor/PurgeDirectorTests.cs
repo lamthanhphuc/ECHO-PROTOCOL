@@ -2,6 +2,7 @@ using System.Collections;
 using System.Linq;
 using System.Reflection;
 using EchoProtocol.Networking;
+using EchoProtocol.Gameplay;
 using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Networking;
 using EchoProtocol.AI.Stalker.Spatial;
@@ -43,7 +44,8 @@ public sealed class PurgeDirectorTests
         Assert.That(runner.TryFindObject(match.PurgeBossId,out var boss),Is.True,"Production spawner must bind a Purge Lizard.");
         var spawnMinions=typeof(PlayerSpawner).GetMethod("MaintainCreepMinionPopulation",flags);
         spawnMinions.Invoke(spawner,new object[]{runner});
-        Assert.That(Object.FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>(FindObjectsSortMode.None).Length,Is.EqualTo(1));
+        Assert.That(Object.FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>(FindObjectsSortMode.None).Length,Is.Zero,
+            "No active gameplay player means no active spawn zone yet.");
         float deadline=Time.realtimeSinceStartup+10;
         while((!match.HuntReady||match.PurgeAidAvailable<3)&&Time.realtimeSinceStartup<deadline)yield return null;
         Assert.That((bool)match.HuntReady,Is.True);
@@ -89,7 +91,8 @@ public sealed class PurgeDirectorTests
         Assert.That(match.PurgeStaggersRequired,Is.EqualTo(4));
         Assert.That(match.PurgeMinionCap,Is.EqualTo(3));
         spawnMinions.Invoke(spawner,new object[]{runner});spawnMinions.Invoke(spawner,new object[]{runner});
-        Assert.That(Object.FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>(FindObjectsSortMode.None).Length,Is.EqualTo(3));
+        Assert.That(Object.FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>(FindObjectsSortMode.None).Length,Is.Zero,
+            "A larger cap must not spawn Fishcat into an empty match.");
         Assert.That(match.PurgeChaseSpeed,Is.LessThanOrEqualTo(8.5f));
         // UV immunity must reject another immediate stagger.
         Set(match,"PurgeMood",PurgeBossMood.Hunting);Set(match,"PurgeUvExposure",2.5f);
@@ -133,6 +136,40 @@ public sealed class PurgeDirectorTests
             (_,o)=>o.GetComponent<LobbyPlayerState>().InitializeAuthoritativeSelection(0,0,true));
         runner.SetPlayerObject(runner.LocalPlayer,player);
         yield return new WaitForSeconds(.1f); // Let the real flashlight muzzle follow the spawned rig.
+        spawnMinions.Invoke(spawner,new object[]{runner});
+        var fishcats=Object.FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>(FindObjectsSortMode.None);
+        Assert.That(fishcats.Length,Is.EqualTo(1),"First population check should add only one Fishcat.");
+        Assert.That(fishcats[0].Role,Is.EqualTo(EchoProtocol.AI.Minions.CreepMinionRole.Catfish));
+        spawnMinions.Invoke(spawner,new object[]{runner});
+        Assert.That(Object.FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>(FindObjectsSortMode.None).Length,Is.EqualTo(1),
+            "Repeated checks may not bypass the 16-second refill cooldown at 8/9.");
+        var refillSchedule=(PurgeFishcatRefillSchedule)typeof(PlayerSpawner).GetField("_purgeRefillSchedule",flags).GetValue(spawner);
+        typeof(PurgeFishcatRefillSchedule).GetField("_refillStartedAt",flags).SetValue(refillSchedule,Time.time-17f);
+        spawnMinions.Invoke(spawner,new object[]{runner});
+        fishcats=Object.FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>(FindObjectsSortMode.None);
+        Assert.That(fishcats.Length,Is.EqualTo(2));
+        var fishPrefab=AssetDatabase.LoadAssetAtPath<NetworkObject>("Assets/Resources/PF_CreepMinionNetwork.prefab");
+        Vector3 thirdPosition=player.transform.position+(boss.transform.position-player.transform.position).normalized*1.5f;
+        var thirdFish=runner.Spawn(fishPrefab,thirdPosition,Quaternion.LookRotation(player.transform.position-thirdPosition),PlayerRef.None,
+            (_,o)=>o.GetComponent<EchoProtocol.AI.Minions.CreepMinionRuntime>().ConfigureBeforeSpawn(
+                RegionSemanticZone.Zone01,EchoProtocol.AI.Minions.CreepMinionRole.Catfish,0));
+        var third=thirdFish.GetComponent<EchoProtocol.AI.Minions.CreepMinionRuntime>();
+        var targetProperty=typeof(EchoProtocol.AI.Minions.CreepMinionRuntime).GetProperty("TargetPlayer");
+        targetProperty.SetValue(fishcats[0],runner.LocalPlayer);
+        targetProperty.SetValue(fishcats[1],runner.LocalPlayer);
+        Physics.SyncTransforms();
+        var findTarget=typeof(EchoProtocol.AI.Minions.CreepMinionRuntime).GetMethod("FindBestVisibleTarget",flags);
+        Assert.That((PlayerRef)findTarget.Invoke(third,null),Is.EqualTo(PlayerRef.None),
+            "A third Fishcat must not reserve a player already pursued by two others.");
+        targetProperty.SetValue(fishcats[1],PlayerRef.None);
+        Assert.That((PlayerRef)findTarget.Invoke(third,null),Is.EqualTo(runner.LocalPlayer),
+            "Releasing one pursuer must make a visible player eligible again.");
+        int capBeforeDown=match.PurgeMinionCap;
+        typeof(NetworkPlayerLifeState).GetProperty("Status").SetValue(player.GetComponent<NetworkPlayerLifeState>(),NetworkPlayerLifeStatus.Downed);
+        Assert.That(match.PurgeMinionCap,Is.EqualTo(capBeforeDown),"Downed players must remain in party scaling.");
+        typeof(NetworkPlayerLifeState).GetProperty("Status").SetValue(player.GetComponent<NetworkPlayerLifeState>(),NetworkPlayerLifeStatus.Alive);
+        runner.Despawn(thirdFish);
+        foreach(var fishcat in fishcats)runner.Despawn(fishcat.Object); // Isolate the following boss UV checks.
         var uv=player.GetComponent<NetworkPlayerFlashlight>();
         var bossCollider=boss.GetComponentInChildren<Collider>();
         var origin=player.transform.position+Vector3.up*1.6f;
@@ -202,4 +239,79 @@ public sealed class PurgeDirectorTests
         if(runner&&runner.IsRunning){var task=runner.Shutdown();while(!task.IsCompleted)yield return null;}
         if(Application.isPlaying)yield return new ExitPlayMode();
     }
+}
+
+namespace EchoProtocol.Networking.Tests
+{
+    public sealed class PurgeFishcatBalanceTests
+    {
+        [Test]
+        public void RefillAllowsOneSpawnThenWaitsAndFailedPlacementCanRetry()
+        {
+            var schedule = new PurgeFishcatRefillSchedule();
+            Assert.That(schedule.IsDue(0f, 0, 3, 35f), Is.True);
+            schedule.Spawned(0f);
+            Assert.That(schedule.IsDue(0f, 1, 3, 35f), Is.False);
+            Assert.That(schedule.IsDue(34.9f, 1, 3, 35f), Is.False);
+            Assert.That(schedule.IsDue(35f, 1, 3, 35f), Is.True);
+            Assert.That(schedule.IsDue(36f, 1, 3, 35f), Is.True, "Failed placement must not restart a full cooldown.");
+            schedule.Spawned(36f);
+            Assert.That(schedule.IsDue(36f, 2, 3, 35f), Is.False);
+        }
+
+        [Test]
+        public void KillStartsCooldownAtLossAndTierGrowthDoesNotFillImmediately()
+        {
+            var schedule = new PurgeFishcatRefillSchedule();
+            schedule.IsDue(0f, 0, 1, 35f);
+            schedule.Spawned(0f);
+            Assert.That(schedule.IsDue(100f, 1, 1, 35f), Is.False);
+            Assert.That(schedule.IsDue(101f, 0, 1, 35f), Is.False);
+            Assert.That(schedule.IsDue(135.9f, 0, 1, 35f), Is.False);
+            Assert.That(schedule.IsDue(136f, 0, 1, 35f), Is.True);
+            schedule.Spawned(136f);
+            Assert.That(schedule.IsDue(136f, 1, 8, 16f), Is.False);
+            Assert.That(schedule.IsDue(152f, 1, 8, 16f), Is.True);
+            schedule.Spawned(152f);
+            Assert.That(schedule.IsDue(152f, 2, 8, 16f), Is.False);
+            schedule.Reset();
+            Assert.That(schedule.IsDue(0f, 0, 1, 35f), Is.True);
+        }
+
+        [TestCase(0, 1, 1)] [TestCase(0, 2, 2)] [TestCase(0, 3, 2)] [TestCase(0, 4, 3)]
+        [TestCase(3, 1, 2)] [TestCase(3, 2, 3)] [TestCase(3, 3, 4)] [TestCase(3, 4, 5)]
+        [TestCase(6, 1, 3)] [TestCase(6, 2, 4)] [TestCase(6, 3, 5)] [TestCase(6, 4, 6)]
+        [TestCase(8, 1, 3)] [TestCase(8, 2, 5)] [TestCase(8, 3, 6)] [TestCase(8, 4, 8)]
+        public void NormalPopulationMatchesApprovedPartyAndProgressTable(int burned, int players, int expected)
+        {
+            Assert.That(PurgeFishcatBalance.Cap(burned, players, MatchDifficulty.Normal), Is.EqualTo(expected));
+        }
+
+        [TestCase(0, 35f)] [TestCase(2, 35f)] [TestCase(3, 28f)] [TestCase(5, 28f)]
+        [TestCase(6, 22f)] [TestCase(7, 22f)] [TestCase(8, 16f)]
+        public void RefillCooldownChangesOnlyAtApprovedProgressBoundaries(int burned, float expected)
+        {
+            Assert.That(PurgeFishcatBalance.SpawnCooldown(burned), Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void PopulationRemainsBoundedAndDifficultyNeverReversesPressure()
+        {
+            Assert.That(PurgeFishcatBalance.Cap(0, 0, MatchDifficulty.Normal), Is.EqualTo(1));
+            Assert.That(PurgeFishcatBalance.Cap(8, 99, MatchDifficulty.Normal), Is.EqualTo(8));
+            for (int players = 1; players <= 4; players++)
+            {
+                int previous = 0;
+                for (int burned = 0; burned <= 8; burned++)
+                {
+                    int normal = PurgeFishcatBalance.Cap(burned, players, MatchDifficulty.Normal);
+                    Assert.That(normal, Is.GreaterThanOrEqualTo(previous));
+                    Assert.That(PurgeFishcatBalance.Cap(burned, players, MatchDifficulty.Easy), Is.InRange(1, normal));
+                    Assert.That(PurgeFishcatBalance.Cap(burned, players, MatchDifficulty.Hard), Is.GreaterThanOrEqualTo(normal));
+                    previous = normal;
+                }
+            }
+        }
+    }
+
 }

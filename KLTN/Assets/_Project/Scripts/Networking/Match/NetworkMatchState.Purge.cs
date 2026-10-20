@@ -7,6 +7,40 @@ using EchoProtocol.Tools.Scanner;
 
 namespace EchoProtocol.Networking
 {
+    public static class PurgeFishcatBalance
+    {
+        private static readonly int[,] NormalCaps = { { 1, 2, 2, 3 }, { 2, 3, 4, 5 }, { 3, 4, 5, 6 }, { 3, 5, 6, 8 } };
+        public static int Tier(int burned) => burned >= 8 ? 3 : burned >= 6 ? 2 : burned >= 3 ? 1 : 0;
+        public static int Cap(int burned, int partySize, MatchDifficulty difficulty)
+        {
+            int normal = NormalCaps[Tier(burned), Mathf.Clamp(partySize, 1, 4) - 1];
+            float scale = difficulty == MatchDifficulty.Easy ? .75f : difficulty == MatchDifficulty.Hard ? 1.25f : 1f;
+            return Mathf.Max(1, Mathf.CeilToInt(normal * scale));
+        }
+        public static float SpawnCooldown(int burned) => Tier(burned) == 3 ? 16f : Tier(burned) == 2 ? 22f : Tier(burned) == 1 ? 28f : 35f;
+        public const int HuntersPerPlayer = 2;
+    }
+
+    public sealed class PurgeFishcatRefillSchedule
+    {
+        private bool _hasSpawned;
+        private float _refillStartedAt;
+        private int _lastPopulation;
+        public bool IsDue(float now, int population, int cap, float cooldown)
+        {
+            if (population < _lastPopulation || population >= cap) _refillStartedAt = now;
+            _lastPopulation = population;
+            return population < cap && (!_hasSpawned || now - _refillStartedAt >= cooldown);
+        }
+        public void Spawned(float now)
+        {
+            _hasSpawned = true;
+            _refillStartedAt = now;
+            _lastPopulation++;
+        }
+        public void Reset() { _hasSpawned = false; _refillStartedAt = 0f; _lastPopulation = 0; }
+    }
+
     public enum PurgeBossMood { Calm, Warning, Hunting, Staggered }
     public struct PurgeAidSlot : INetworkStruct { public NetworkId Id; public TickTimer Refill; }
     public sealed partial class NetworkMatchState
@@ -25,7 +59,20 @@ namespace EchoProtocol.Networking
         private StalkerFusionRuntime _purgeBoss;
         private static AudioClip _purgeWarningSound;
         public int PurgeRageTier => HuntBurned >= 8 ? 3 : HuntBurned / 3;
-        public int PurgeMinionCap => HuntBurned < 3 ? 1 : HuntBurned < 6 ? 2 : 3;
+        [Networked] public int PurgePartySize { get; private set; }
+        public int PurgeMinionCap => PurgeFishcatBalance.Cap(HuntBurned,
+            Mathf.Max(PurgePartySize, CountPurgeGameplayPlayers()),
+            Authority.MatchAuthorityRuntime.Instance ? Authority.MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal);
+        public float PurgeMinionSpawnCooldown => PurgeFishcatBalance.SpawnCooldown(HuntBurned);
+        private int CountPurgeGameplayPlayers()
+        {
+            int count = 0;
+            if (Runner != null)
+                foreach (var player in Runner.ActivePlayers)
+                    if (Runner.TryGetPlayerObject(player, out var obj) && obj != null && obj.IsValid
+                        && obj.TryGetComponent<LobbyPlayerState>(out var lobby) && lobby.IsGameplayPlayer) count++;
+            return Mathf.Clamp(count, 1, 4);
+        }
         public int PurgeStaggersRequired => PurgeRageTier + 1;
         public float PurgeCalmSeconds => new[] { 20f, 14f, 9f, 5f }[PurgeRageTier];
         public float PurgeChaseSpeed
@@ -72,6 +119,7 @@ namespace EchoProtocol.Networking
         }
         private void TickPurgeDirector()
         {
+            PurgePartySize = Mathf.Max(PurgePartySize, CountPurgeGameplayPlayers());
             if (!_purgeBoss && PurgeBossId.IsValid && Runner.TryFindObject(PurgeBossId,out var boss))
                 _purgeBoss=boss.GetComponent<StalkerFusionRuntime>();
             if (_purgeBoss)
