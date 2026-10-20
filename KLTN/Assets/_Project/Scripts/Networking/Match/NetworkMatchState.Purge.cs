@@ -75,6 +75,7 @@ namespace EchoProtocol.Networking
         }
         public int PurgeStaggersRequired => PurgeRageTier + 1;
         public float PurgeCalmSeconds => new[] { 20f, 14f, 9f, 5f }[PurgeRageTier];
+        public float PurgeHuntSeconds => 90f + Mathf.Max(0, HuntBurned - 1) * 15f;
         public float PurgeChaseSpeed
         {
             get
@@ -89,26 +90,27 @@ namespace EchoProtocol.Networking
         {
             if (!Object.HasStateAuthority || !boss || PurgeBossId==boss.Id) return;
             PurgeBossId = boss.Id; _purgeBoss = boss.GetComponent<StalkerFusionRuntime>();
-            PurgeMood = PurgeBossMood.Calm; PurgeMoodTimer = TickTimer.CreateFromSeconds(Runner,45);
+            PurgeMood = PurgeBossMood.Calm; PurgeMoodTimer = TickTimer.None;
         }
         public void ProvokePurgeBoss()
         {
             if (!Object.HasStateAuthority || IsEnded || !AlienHuntMission.Instance || PurgeMood != PurgeBossMood.Calm
-                || !PurgeUvImmunity.ExpiredOrNotRunning(Runner)) return;
+                || !PurgeUvImmunity.ExpiredOrNotRunning(Runner)
+                || !PurgeMoodTimer.ExpiredOrNotRunning(Runner)) return;
             BeginPurgeHunt();
         }
         private void BeginPurgeHunt()
         {
             if (IsEnded) return;
             PurgeMood = PurgeBossMood.Warning; PurgeMoodTimer = TickTimer.CreateFromSeconds(Runner,3);
-            PurgeHuntTimer = TickTimer.CreateFromSeconds(Runner,90); PurgeStaggers=0; PurgeUvExposure=0;
+            PurgeHuntTimer = TickTimer.CreateFromSeconds(Runner,PurgeHuntSeconds); PurgeStaggers=0; PurgeUvExposure=0;
         }
         private void PurgeBurnCompleted(Vector3 position)
         {
             if (IsEnded) return;
             PurgeRitualPosition=position;PurgeRitualVersion++;
             if (PurgeMood == PurgeBossMood.Calm) BeginPurgeHunt();
-            else PurgeHuntTimer = TickTimer.CreateFromSeconds(Runner,90);
+            else PurgeHuntTimer = TickTimer.CreateFromSeconds(Runner,PurgeHuntSeconds);
         }
         public void PacifyPurgeBoss()
         {
@@ -126,7 +128,6 @@ namespace EchoProtocol.Networking
             {
                 float delta=Runner.DeltaTime;
                 if (PurgeMood==PurgeBossMood.Warning && PurgeMoodTimer.Expired(Runner)) PurgeMood=PurgeBossMood.Hunting;
-                else if(PurgeMood==PurgeBossMood.Calm && PurgeMoodTimer.Expired(Runner) && HuntBurned>0) BeginPurgeHunt();
                 else if(PurgeMood==PurgeBossMood.Staggered && PurgeMoodTimer.Expired(Runner))
                 {
                     if(PurgeStaggers>=PurgeStaggersRequired) PacifyPurgeBoss();

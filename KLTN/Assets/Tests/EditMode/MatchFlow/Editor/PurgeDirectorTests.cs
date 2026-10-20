@@ -64,6 +64,7 @@ public sealed class PurgeDirectorTests
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm));
         match.RecordHuntBurn();
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Warning));
+        Assert.That(match.PurgeHuntSeconds,Is.EqualTo(90f));
         Set(match,"PurgeMoodTimer",TickTimer.CreateFromSeconds(runner,.01f));
         yield return new WaitForSeconds(.1f);
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Hunting));
@@ -75,6 +76,13 @@ public sealed class PurgeDirectorTests
         yield return new WaitForSeconds(.1f);
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm));
         Assert.That(match.PurgeUvImmunity.IsRunning,Is.True);
+        match.ProvokePurgeBoss();
+        Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm),
+            "The post-hunt calm grace period must prevent a nearby player from immediately restarting the hunt.");
+        // Calm may investigate players, but a timer alone must not start a new hunt.
+        Set(match,"PurgeMoodTimer",TickTimer.CreateFromSeconds(runner,.01f));
+        yield return new WaitForSeconds(.1f);
+        Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm));
         // Reserve all three kits: no free supply must accelerate refill without bypassing the kit requirement.
         var oldId=match.PurgeAid[0].Id;
         for(int i=0;i<3;i++)
@@ -88,6 +96,8 @@ public sealed class PurgeDirectorTests
         Assert.That(match.PurgeAidAvailable,Is.EqualTo(1));
         for(int i=1;i<8;i++)match.RecordHuntBurn();
         Assert.That(match.HuntBurned,Is.EqualTo(8));
+        Assert.That(match.PurgeHuntSeconds,Is.EqualTo(195f));
+        Assert.That(match.PurgeHuntTimer.RemainingTime(runner),Is.GreaterThan(185f));
         Assert.That(match.PurgeStaggersRequired,Is.EqualTo(4));
         Assert.That(match.PurgeMinionCap,Is.EqualTo(3));
         spawnMinions.Invoke(spawner,new object[]{runner});spawnMinions.Invoke(spawner,new object[]{runner});
