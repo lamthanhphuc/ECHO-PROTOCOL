@@ -26,7 +26,11 @@ public sealed class AlienHuntSceneTests
         Assert.That(mission.Actors.Count(a => a.Kind == HuntKind.Jerrycan), Is.EqualTo(18));
         Assert.That(mission.Actors.Count(a => a.Kind == HuntKind.Meat), Is.EqualTo(12));
         foreach (var fuel in mission.Actors.Where(a => a.Kind == HuntKind.Jerrycan))
+        {
             Assert.That(fuel.GetComponentsInChildren<Collider>().Length, Is.GreaterThan(0), fuel.name);
+            Assert.That(fuel.GetComponentInChildren<Renderer>().bounds.size.y, Is.InRange(.60f, .69f),
+                fuel.name + " should be large enough to see and pick up.");
+        }
         Assert.That(mission.Furnaces.Length, Is.EqualTo(3));
         foreach (var furnace in mission.Furnaces)
         {
@@ -99,14 +103,28 @@ public sealed class AlienHuntSceneTests
         Assert.That(mission.HeldIndex(actor), Is.EqualTo(27));
         Assert.That(AlienHuntMission.IsCarrying(player), Is.True);
         mission.Actors[27].Present(mission.Read(27), false, .02f);
-        var heldMeatBounds = mission.Actors[27].GetComponentInChildren<Renderer>().bounds;
-        Assert.That(heldMeatBounds.size.x, Is.InRange(.22f, .30f),
-            "Held meat should fit one hand like a normal tool.");
-        Assert.That(Vector3.Distance(heldMeatBounds.center, mission.Actors[27].transform.position),
-            Is.LessThan(.03f), "Held meat should be centered on the right-hand anchor.");
+        var heldMeatVisual = mission.Actors[27].transform.GetChild(0);
+        Assert.That(heldMeatVisual.localScale.x, Is.EqualTo(720f).Within(.01f),
+            "Carrying meat must preserve its full world scale.");
         mission.HeldPose(actor,HuntKind.Meat,out var heldPosition,out var heldRotation,true);
         var actualAnchor = PlayerHeldItemAnchor.ResolveRightHandAnchor(player);
-        Assert.That(Vector3.Distance(heldPosition,actualAnchor.TransformPoint(new Vector3(0,.02f,.1f))),Is.LessThan(.001f));
+        var hand = actualAnchor.position + player.transform.forward * .08f;
+        Assert.That(Vector3.Distance(heldPosition + heldRotation * new Vector3(-.04f,.54f,0), hand),
+            Is.LessThan(.001f), "The meat bone must meet the right hand.");
+        Assert.That(Vector3.Angle(heldRotation * Vector3.right, Vector3.up), Is.LessThan(25f),
+            "The meat should rise from the gripped bone.");
+        Assert.That(Vector3.Dot(heldRotation * Vector3.right, player.transform.forward), Is.GreaterThan(.2f),
+            "The meat should lean forward, away from the player's face.");
+        mission.HeldPose(actor,HuntKind.Alien,out var alienPosition,out var alienRotation,true);
+        Assert.That(Vector3.Distance(alienPosition + alienRotation * new Vector3(.05f,.61f,.15f), hand),
+            Is.LessThan(.001f), "The alien torso must meet the right hand.");
+        Assert.That(Vector3.Angle(alienRotation * Vector3.up, Vector3.up), Is.LessThan(.01f),
+            "Carried aliens must stand upright.");
+        mission.HeldPose(actor,HuntKind.Jerrycan,out var canPosition,out var canRotation,true);
+        Assert.That(Vector3.Distance(canPosition + canRotation * new Vector3(0,.39f * AlienHuntActor.JerrycanVisualScale,0), hand),
+            Is.LessThan(.001f), "The can handle must meet the right hand.");
+        Assert.That(Vector3.Angle(canRotation * Vector3.up, Vector3.up), Is.LessThan(.01f),
+            "Carried cans must stand upright.");
 
         bool foundBait = false;
         var origin = mission.Actors[0].transform.position;

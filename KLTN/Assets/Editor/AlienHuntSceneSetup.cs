@@ -81,7 +81,8 @@ public static class AlienHuntSceneSetup
             // The original markers stay untouched; snap their pickup to a nearby reachable floor.
             var position = Nav(candidates[i].position, 3f);
             entities[9 + i] = Item("Jerrycan_" + (i + 1).ToString("00"), 9 + i, HuntKind.Jerrycan,
-                Imported + "jerrycan/source/jerrycan.fbx", position, fuelRoot, fuelMaterial, 1f);
+                Imported + "jerrycan/source/jerrycan.fbx", position, fuelRoot, fuelMaterial,
+                AlienHuntActor.JerrycanVisualScale);
         }
         for (int i = 0; i < AlienHuntMission.MeatCount; i++)
         {
