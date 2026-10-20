@@ -35,6 +35,12 @@ public sealed class MatchDifficultyTests
             var easy = MatchDifficultyProfiles.Get(MatchDifficulty.Easy);
             var normal = MatchDifficultyProfiles.Get(MatchDifficulty.Normal);
             var hard = MatchDifficultyProfiles.Get(MatchDifficulty.Hard);
+            Assert.That(easy.Zone1MinionCap, Is.EqualTo(10));
+            Assert.That(easy.Zone2MinionCap, Is.EqualTo(10));
+            Assert.That(normal.Zone1MinionCap, Is.EqualTo(10));
+            Assert.That(normal.Zone2MinionCap, Is.EqualTo(10));
+            Assert.That(hard.Zone1MinionCap, Is.EqualTo(10));
+            Assert.That(hard.Zone2MinionCap, Is.EqualTo(10));
             Assert.That(easy.DetectionDecayDurationSeconds, Is.EqualTo(20f));
             Assert.That(normal.DetectionDecayDurationSeconds, Is.EqualTo(25f));
             Assert.That(hard.DetectionDecayDurationSeconds, Is.EqualTo(30f));

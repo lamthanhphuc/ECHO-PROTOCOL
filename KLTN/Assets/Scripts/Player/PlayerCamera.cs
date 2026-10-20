@@ -50,6 +50,7 @@ public class PlayerCamera : MonoBehaviour
     private float? _lockedPitch;
     private bool _driveTargetRotation = true;
     private bool _spectateThirdPerson;
+    private bool _wasGameplayScene;
 
     public float Yaw => _yaw;
     public float Pitch => _pitch;
@@ -175,9 +176,14 @@ public class PlayerCamera : MonoBehaviour
 
         _lookAction?.Enable();
 
-        if (lockCursorOnEnable && !PlayerInteractionControlLock.ShouldUnlockCursor)
+        _wasGameplayScene = IsGameplayActive();
+        if (_wasGameplayScene && lockCursorOnEnable && !PlayerInteractionControlLock.ShouldUnlockCursor)
         {
             LockCursor();
+        }
+        else if (!_wasGameplayScene)
+        {
+            UnlockCursor();
         }
     }
 
@@ -189,6 +195,19 @@ public class PlayerCamera : MonoBehaviour
 
     private void Update()
     {
+        bool gameplayScene = IsGameplayActive();
+        if (!gameplayScene)
+        {
+            if (_wasGameplayScene || Cursor.lockState != CursorLockMode.None) UnlockCursor();
+            _wasGameplayScene = false;
+            return;
+        }
+        if (!_wasGameplayScene)
+        {
+            _wasGameplayScene = true;
+            if (lockCursorOnEnable && !PlayerInteractionControlLock.ShouldUnlockCursor) LockCursor();
+        }
+
         if (PlayerInteractionControlLock.ShouldUnlockCursor)
         {
             UnlockCursor();
@@ -364,6 +383,15 @@ public class PlayerCamera : MonoBehaviour
     {
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+    }
+
+    private static bool IsGameplayActive()
+    {
+        var bootstrap = EchoProtocol.Networking.NetworkBootstrap.Instance;
+        return bootstrap != null
+            && bootstrap.State == EchoProtocol.Networking.NetworkSessionState.InMatch
+            && EchoProtocol.Networking.LobbyMapCatalog.IsGameplayScene(
+                UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
     }
 
     private static void UnlockCursor()

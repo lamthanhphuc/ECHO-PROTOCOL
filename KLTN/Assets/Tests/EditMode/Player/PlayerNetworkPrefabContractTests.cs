@@ -207,6 +207,19 @@ namespace EchoProtocol.Player.Tests
         }
 
         [Test]
+        public void CURSOR_IsLockedOnlyInsideCatalogGameplayScenes()
+        {
+            var camera = File.ReadAllText("Assets/Scripts/Player/PlayerCamera.cs");
+            var demoMouse = File.ReadAllText("Assets/SciFi Warehouse Kit/Demo/Scripts/MouseComponent.cs");
+
+            StringAssert.Contains("NetworkSessionState.InMatch", camera);
+            StringAssert.Contains("LobbyMapCatalog.IsGameplayScene", camera);
+            StringAssert.Contains("if (!gameplayScene)", camera);
+            StringAssert.Contains("if (!_wasGameplayScene)", camera);
+            StringAssert.DoesNotContain("Cursor.lockState", demoMouse);
+        }
+
+        [Test]
         public void HIDE_NetworkFlow_UsesAuthoritativeReservationAndRollback()
         {
             var movement = File.ReadAllText(
