@@ -64,6 +64,7 @@ namespace EchoProtocol.Networking
             System.Array.Sort(hits,(a,b)=>a.distance.CompareTo(b.distance));
             foreach(var hit in hits) {
                 if(hit.collider.transform.IsChildOf(transform))continue;
+                if(IsDespawnedMinionCollider(hit.collider))continue;
                 if((SceneManager.GetActiveScene().name==LobbyMapCatalog.ExplorationScene || AlienHuntMission.Instance) && hit.collider.gameObject.layer==4)continue;
                 ResonanceEndpoint=hit.point;
                 var boss=hit.collider.GetComponentInParent<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
@@ -72,6 +73,7 @@ namespace EchoProtocol.Networking
                     Vector3 bossMuzzle=BeamTransform.position; Vector3 bossPoint=hit.collider.bounds.center;
                     foreach(var block in Physics.RaycastAll(bossMuzzle,(bossPoint-bossMuzzle).normalized,(bossPoint-bossMuzzle).magnitude,~0,QueryTriggerInteraction.Ignore))
                         if(!block.collider.transform.IsChildOf(transform)
+                            && !IsDespawnedMinionCollider(block.collider)
                             && block.collider.gameObject.layer!=4
                             && block.collider.GetComponentInParent<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>()!=boss)return;
                     PurgeBossTarget=boss;ResonanceEndpoint=bossPoint;return;
@@ -84,10 +86,16 @@ namespace EchoProtocol.Networking
                 var obstruction=Physics.RaycastAll(muzzle,(target-muzzle).normalized,(target-muzzle).magnitude,~0,QueryTriggerInteraction.Ignore);
                 foreach(var block in obstruction)
                     if(!block.collider.transform.IsChildOf(transform)
+                        && !IsDespawnedMinionCollider(block.collider)
                         && !((SceneManager.GetActiveScene().name==LobbyMapCatalog.ExplorationScene || AlienHuntMission.Instance) && block.collider.gameObject.layer==4)
                         && block.collider.GetComponentInParent<CreepMinionRuntime>()!=minion)return;
                 _resonanceTarget=minion;ResonanceEndpoint=target;return;
             }
+        }
+        private static bool IsDespawnedMinionCollider(Collider collider)
+        {
+            var minion = collider.GetComponentInParent<CreepMinionRuntime>();
+            return minion != null && (minion.Object == null || !minion.Object.IsValid);
         }
         private void ApplyResonanceVisuals()
         {
