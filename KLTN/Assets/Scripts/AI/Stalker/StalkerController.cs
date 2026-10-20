@@ -470,13 +470,14 @@ namespace EchoProtocol.AI.Stalker
                 decayWindowSeconds);
         }
 
-        public void InvestigatePurgeRitual(Vector3 position)
+        public bool InvestigatePurgeRitual(Vector3 position)
         {
-            if(!_purgeControlled || !_purgeHunting || currentState==StalkerState.CHASE || currentState==StalkerState.ATTACK)return;
+            if(!_purgeControlled || !_purgeHunting || currentState==StalkerState.CHASE || currentState==StalkerState.ATTACK)return false;
             // This is knowledge of a completed ritual, never the hidden position of a player.
             ClearDetectionContext();ClearTargetContext();
             currentState=StalkerState.SEARCH;
             RestartHeardNoiseSearchAt(position);
+            return true;
         }
         private bool _purgeControlled, _purgeHunting;
         private float _purgeChaseSpeed;
@@ -485,7 +486,11 @@ namespace EchoProtocol.AI.Stalker
             bool changed = _purgeControlled && _purgeHunting != hunting;
             _purgeControlled=true; _purgeHunting=hunting; _purgeChaseSpeed=speed;
             if(frozen) BeginSpecialEncounterOverride();
-            else if(_specialEncounterOverrideActive || changed) EndSpecialEncounterOverrideToPatrol();
+            else if(_specialEncounterOverrideActive || changed
+                || (!hunting && (currentState == StalkerState.DETECT
+                    || currentState == StalkerState.CHASE
+                    || currentState == StalkerState.ATTACK
+                    || currentState == StalkerState.RECOVER))) EndSpecialEncounterOverrideToPatrol();
         }
         public void BeginSpecialEncounterOverride()
         {
@@ -6855,7 +6860,7 @@ namespace EchoProtocol.AI.Stalker
             agent.speed =
                 currentState == StalkerState.CHASE
                 || currentState == StalkerState.ATTACK
-                || rushingToHeardNoiseOrigin
+                || (rushingToHeardNoiseOrigin && (!_purgeControlled || _purgeHunting))
                     ? GetChaseSpeed()
                     : Mathf.Max(0f, _purgeControlled ? 3.2f : patrolSpeed);
         }

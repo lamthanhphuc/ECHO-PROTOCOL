@@ -618,8 +618,11 @@ namespace EchoProtocol.AI.Stalker.Networking
                         {purge.ProvokePurgeBoss();break;}
                 bool frozen=purge.PurgeMood==PurgeBossMood.Warning || purge.PurgeMood==PurgeBossMood.Staggered || purge.IsEnded;
                 controller.ApplyPurgePolicy(hunt,frozen,purge.PurgeChaseSpeed);
-                if(hunt && _lastPurgeRitualVersion!=purge.PurgeRitualVersion)
-                { _lastPurgeRitualVersion=purge.PurgeRitualVersion; controller.InvestigatePurgeRitual(purge.PurgeRitualPosition); }
+                if(hunt && _lastPurgeRitualVersion!=purge.PurgeRitualVersion
+                    && controller.InvestigatePurgeRitual(purge.PurgeRitualPosition))
+                    _lastPurgeRitualVersion=purge.PurgeRitualVersion;
+                if(purge.PurgeMood==PurgeBossMood.Calm)
+                    _lastPurgeRitualVersion=purge.PurgeRitualVersion;
                 if(!hunt){_visibleCandidates.Clear();_flashlightObservations.Clear();}
                 sustainedCoreCarrier=null;
             }
