@@ -1,5 +1,6 @@
 using EchoProtocol.AI.Stalker.Networking;
 using EchoProtocol.AI.Stalker.Special;
+using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
 using UnityEngine.AI;
@@ -48,6 +49,12 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private static readonly int JumpInStateHash =
             Animator.StringToHash(
                 "Base Layer.JumpIn");
+
+        private static readonly int PurgeHitStateHash =
+            Animator.StringToHash("Base Layer.PurgeHit");
+
+        private static readonly int PurgeStunnedStateHash =
+            Animator.StringToHash("Base Layer.PurgeStunned");
 
         [Header("Dependencies")]
         [SerializeField]
@@ -115,6 +122,9 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 StalkerAttackEpisodeId.Invalid;
 
         private int _presentedAnimatorStateHash;
+        private bool _purgeUvHitPlayed;
+        private float _purgeUvHitStartedAt;
+        private PurgeBossMood? _lastPurgeMood;
         private PlayerRef _presentedDetectNetworkTarget = PlayerRef.None;
         private int _presentedDetectPlayerId;
 
@@ -154,6 +164,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
             _playedBiteEpisodeId = StalkerAttackEpisodeId.Invalid;
             _presentedDetectNetworkTarget = PlayerRef.None;
             _presentedDetectPlayerId = 0;
+            _purgeUvHitPlayed = false;
+            _lastPurgeMood = null;
         }
 
         private void Update()
@@ -463,6 +475,13 @@ namespace EchoProtocol.AI.Stalker.Presentation
                     presentation,
                     moving);
 
+            var purgeMood = ResolvePurgeMood();
+            if (purgeMood.HasValue)
+            {
+                targetHash = ResolvePurgeAnimatorStateHash(
+                    purgeMood.Value, presentation, moving, targetHash);
+            }
+
             var semanticChanged =
                 !_hasPresented
                 || _presentedSemanticState
@@ -475,6 +494,14 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 moving,
                 semanticChanged,
                 detectTargetChanged);
+
+            if (purgeMood == PurgeBossMood.Warning
+                && _lastPurgeMood != PurgeBossMood.Warning)
+            {
+                audioController?.BeginDetectAudioEntry();
+                audioController?.PlayDetect();
+            }
+            _lastPurgeMood = purgeMood;
 
             var actionChanged =
                 !_hasPresented
@@ -498,9 +525,10 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 || _presentedAnimatorStateHash
                     != targetHash;
 
-            animator.speed =
-                ResolvePlaybackSpeed(
-                    presentation);
+            animator.speed = targetHash == PurgeHitStateHash
+                || targetHash == PurgeStunnedStateHash
+                || purgeMood == PurgeBossMood.Warning
+                    ? 1f : ResolvePlaybackSpeed(presentation);
 
             if (!forceRefresh
                 && !semanticChanged
@@ -562,6 +590,55 @@ namespace EchoProtocol.AI.Stalker.Presentation
             _hasPresented = true;
         }
 
+        private PurgeBossMood? ResolvePurgeMood()
+        {
+            var match = NetworkMatchState.Instance;
+            if (match == null || fusionRuntime == null
+                || fusionRuntime.Object == null || !fusionRuntime.Object.IsValid
+                || match.PurgeBossId != fusionRuntime.Object.Id)
+                return null;
+            return match.PurgeMood;
+        }
+
+        private int ResolvePurgeAnimatorStateHash(
+            PurgeBossMood mood,
+            StalkerNetworkPresentationState presentation,
+            bool moving,
+            int normalHash)
+        {
+            if (mood == PurgeBossMood.Warning)
+            {
+                _purgeUvHitPlayed = false;
+                return RoarStateHash;
+            }
+            if (mood == PurgeBossMood.Staggered)
+            {
+                _purgeUvHitPlayed = false;
+                return PurgeStunnedStateHash;
+            }
+
+            var match = NetworkMatchState.Instance;
+            if (mood == PurgeBossMood.Hunting && match != null
+                && match.PurgeUvExposure > 0f)
+            {
+                if (presentation.SemanticState == StalkerState.ATTACK)
+                    return normalHash;
+                if (!_purgeUvHitPlayed)
+                {
+                    _purgeUvHitPlayed = true;
+                    _purgeUvHitStartedAt = Time.unscaledTime;
+                }
+                return Time.unscaledTime - _purgeUvHitStartedAt < .75f
+                    ? PurgeHitStateHash : CrouchStateHash;
+            }
+
+            _purgeUvHitPlayed = false;
+            if (mood == PurgeBossMood.Calm
+                && presentation.SemanticState == StalkerState.SEARCH)
+                return moving ? Walk1StateHash : CrouchStateHash;
+            return normalHash;
+        }
+
         private void ApplyAudioPresentation(
             StalkerNetworkPresentationState presentation,
             bool moving,
@@ -580,7 +657,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             audioController.UpdateChasePresentation(pursuing, isLocalTarget);
 
-            if (presentation.SemanticState != StalkerState.DETECT)
+            if (presentation.SemanticState != StalkerState.DETECT
+                && ResolvePurgeMood() != PurgeBossMood.Warning)
             {
                 audioController.StopDetectVoice();
             }
