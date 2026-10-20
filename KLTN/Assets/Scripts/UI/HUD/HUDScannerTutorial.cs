@@ -262,7 +262,9 @@ namespace EchoProtocol.UI.HUD
                     var scanner = _playerRoot.GetComponent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>();
                     var tuning = scanner != null ? scanner.Tuning : new EchoProtocol.Tools.Scanner.FieldScannerTuning();
                     controls = EchoProtocol.Settings.GameLanguage.Choose($"[Chuột trái] Quét {tuning.ActiveDuration:0.#} giây\n[Chuột phải] Đổi chế độ", $"[Left click] Scan for {tuning.ActiveDuration:0.#} seconds\n[Right click] Switch mode");
-                    description = "Bạn ở giữa radar. Chế độ lõi tìm nguồn năng lượng gần bạn.\nChế độ Stalker chỉ phát hiện Stalker đang di chuyển.";
+                    description = scanner != null && scanner.IsAlienHuntMode
+                        ? "Bạn ở giữa radar.\nChế độ Jerrycan: tìm can nhiên liệu còn khả dụng.\nChế độ Meat: tìm thịt còn có thể nhặt."
+                        : "Bạn ở giữa radar. Chế độ lõi tìm nguồn năng lượng gần bạn.\nChế độ Stalker chỉ phát hiện Stalker đang di chuyển.";
                     break;
                 case 2:
                     title = "Máy tạo tiếng động";

@@ -252,7 +252,9 @@ namespace EchoProtocol.UI.HUD
         private void RenderScannerState()
         {
             bool connected = _boundScanner != null;
-            bool motion = connected && _boundScanner.CurrentMode == FieldScannerMode.Motion;
+            bool motion = connected
+                && !_boundScanner.IsAlienHuntMode
+                && _boundScanner.CurrentMode == FieldScannerMode.Motion;
             string coreTargetLabel = connected
                 ? _boundScanner.CoreTargetLabel
                 : "LÕI NĂNG LƯỢNG";

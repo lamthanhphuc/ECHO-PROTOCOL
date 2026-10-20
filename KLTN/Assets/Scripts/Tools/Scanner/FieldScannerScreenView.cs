@@ -166,13 +166,20 @@ namespace EchoProtocol.Tools.Scanner
             float cooldown = _boundScanner.LocalCooldownRemaining;
 
             // 1. Header
-            string headerText = mode == FieldScannerMode.Core
-                ? "FIELD SCANNER\n<color=#40E0D0>[ CORE MODE ]</color>"
-                : "FIELD SCANNER\n<color=#FF7F50>[ MONSTER MODE ]</color>";
+            bool hunt = _boundScanner.IsAlienHuntMode;
+
+            string headerText = hunt
+                ? mode == FieldScannerMode.Core
+                    ? "FIELD SCANNER\n<color=#40E0D0>[ JERRYCAN MODE ]</color>"
+                    : "FIELD SCANNER\n<color=#40E0D0>[ MEAT MODE ]</color>"
+                : mode == FieldScannerMode.Core
+                    ? "FIELD SCANNER\n<color=#40E0D0>[ CORE MODE ]</color>"
+                    : "FIELD SCANNER\n<color=#FF7F50>[ MONSTER MODE ]</color>";
+
             SetHeaderText(headerText);
 
             // 2. Radar & Signal
-            if (mode == FieldScannerMode.Core)
+            if (hunt || mode == FieldScannerMode.Core)
             {
                 if (hasResult && _boundScanner.CurrentCoreResult.HasTarget)
                 {

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.MatchFlow;
@@ -104,6 +104,13 @@ namespace EchoProtocol.Tools.Scanner
         {
             get
             {
+                if (IsAlienHuntMode)
+                {
+                    return CurrentMode == FieldScannerMode.Core
+                        ? "JERRYCAN"
+                        : "MEAT";
+                }
+
                 var match = NetworkMatchState.Instance;
 
                 if (match != null
@@ -177,6 +184,9 @@ namespace EchoProtocol.Tools.Scanner
         }
 
         public bool IsScanActive => ActiveRemainingTime > 0.02f;
+
+        public bool IsAlienHuntMode =>
+            AlienHuntMission.Instance != null;
 
         public float LocalCooldownRemaining
         {
@@ -400,9 +410,9 @@ namespace EchoProtocol.Tools.Scanner
                 forward = mainCam.transform.forward;
             }
 
-            if (CurrentMode == FieldScannerMode.Core)
+            if (IsAlienHuntMode || CurrentMode == FieldScannerMode.Core)
             {
-                var coreCandidates = CollectCoreCandidates();
+                var coreCandidates = CollectCoreCandidates(CurrentMode);
                 var result = FieldScannerCoreDetector.Evaluate(
                     origin,
                     forward,
@@ -589,7 +599,7 @@ namespace EchoProtocol.Tools.Scanner
 
             PerformRealtimeScan();
 
-            if (requestedMode == FieldScannerMode.Core)
+            if (IsAlienHuntMode || requestedMode == FieldScannerMode.Core)
             {
                 LocalCoreResultReceived?.Invoke(_lastLocalCoreResult);
             }
@@ -659,9 +669,9 @@ namespace EchoProtocol.Tools.Scanner
             if (sequence > _lastProcessedSequence) _lastProcessedSequence = sequence;
 
             // Compute authoritative result
-            if (requestedMode == FieldScannerMode.Core)
+            if (IsAlienHuntMode || requestedMode == FieldScannerMode.Core)
             {
-                var coreCandidates = CollectCoreCandidates();
+                var coreCandidates = CollectCoreCandidates(requestedMode);
                 var result = FieldScannerCoreDetector.Evaluate(
                     transform.position,
                     transform.forward,
@@ -805,9 +815,46 @@ namespace EchoProtocol.Tools.Scanner
                 out effectiveRequester);
         }
 
-        private List<ICoreScanCandidate> CollectCoreCandidates()
+        private List<ICoreScanCandidate> CollectCoreCandidates(
+            FieldScannerMode mode)
         {
-            List<ICoreScanCandidate> candidates = new List<ICoreScanCandidate>();
+            List<ICoreScanCandidate> candidates =
+                new List<ICoreScanCandidate>();
+
+            if (IsAlienHuntMode)
+            {
+                var mission = AlienHuntMission.Instance;
+
+                if (!mission.Ready || mission.Completed ||
+                    mission.Actors == null)
+                    return candidates;
+
+                HuntKind targetKind = mode == FieldScannerMode.Core
+                    ? HuntKind.Jerrycan
+                    : HuntKind.Meat;
+
+                foreach (var actor in mission.Actors)
+                {
+                    if (actor == null ||
+                        !actor.gameObject.activeInHierarchy ||
+                        actor.Kind != targetKind)
+                        continue;
+
+                    var state = mission.Read(actor.Index);
+
+                    bool claimed = state.Stage == 2 &&
+                        mission.IsBaitClaimed(actor.Index);
+
+                    if (!IsHuntTargetAvailable(
+                            targetKind, state, claimed))
+                        continue;
+
+                    candidates.Add(
+                        new ObjectiveScanCandidateAdapter(actor));
+                }
+
+                return candidates;
+            }
 
             var match = NetworkMatchState.Instance;
 
@@ -893,6 +940,18 @@ namespace EchoProtocol.Tools.Scanner
             }
 
             return candidates;
+        }
+
+        private static bool IsHuntTargetAvailable(
+            HuntKind kind,
+            HuntEntityState state,
+            bool baitClaimed)
+        {
+            return state.Carrier.IsNone &&
+                (state.Stage == 0 ||
+                 (kind == HuntKind.Meat &&
+                  state.Stage == 2 &&
+                  !baitClaimed));
         }
 
         private static void CollectZone2Targets(
