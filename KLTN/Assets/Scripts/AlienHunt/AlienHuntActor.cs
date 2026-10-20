@@ -16,10 +16,24 @@ namespace EchoProtocol.Networking
         public NavMeshAgent Agent { get; private set; }
         private Collider[] _colliders;
         private Renderer[] _renderers;
+        private const uint HeldMeatRenderingLayer = 1u << 1;
+        private uint[] _originalRenderingLayerMasks;
         private string _animation;
         private bool _poseReady;
         private QuickOutline.Outline _meatOutline;
-        public const float JerrycanVisualScale = 1.5f;
+        private Transform _meatVisual;
+        private Vector3 _meatGroundPosition;
+        private Quaternion _meatGroundRotation;
+        private Transform _alienVisual;
+        private Vector3 _alienGroundPosition;
+        private Quaternion _alienGroundRotation;
+        private Vector3 _alienGroundScale;
+        private Vector3 _alienRigPosition;
+        private Quaternion _alienRigRotation;
+        private Transform _jerrycanVisual;
+        private Vector3 _jerrycanGroundPosition;
+        private Quaternion _jerrycanGroundRotation;
+        public const float JerrycanVisualScale = 2f;
 
         public void Configure(int id, HuntKind type, Animator animation)
         { index = id; kind = type; animator = animation; }
@@ -32,8 +46,46 @@ namespace EchoProtocol.Networking
             if (Agent) Agent.enabled = false;
             _colliders = GetComponentsInChildren<Collider>(true);
             _renderers = GetComponentsInChildren<Renderer>(true);
+            if (kind == HuntKind.Jerrycan)
+            {
+                _jerrycanVisual = transform.GetChild(0);
+                if (_jerrycanVisual.localScale.x != JerrycanVisualScale)
+                {
+                    _jerrycanVisual.localScale = Vector3.one * JerrycanVisualScale;
+                    _jerrycanVisual.position += Vector3.up * (transform.position.y - _renderers[0].bounds.min.y);
+                    var bounds = _renderers[0].bounds;
+                    var box = GetComponent<BoxCollider>();
+                    box.center = transform.InverseTransformPoint(bounds.center);
+                    box.size = bounds.size;
+                }
+                _jerrycanGroundPosition = _jerrycanVisual.localPosition;
+                _jerrycanGroundRotation = _jerrycanVisual.localRotation;
+            }
+            if (kind == HuntKind.Alien)
+            {
+                _alienVisual = transform.GetChild(0);
+                _alienGroundPosition = _alienVisual.localPosition;
+                _alienGroundRotation = _alienVisual.localRotation;
+                _alienGroundScale = _alienVisual.localScale;
+                _alienRigPosition = animator.transform.localPosition;
+                _alienRigRotation = animator.transform.localRotation;
+            }
             if (kind == HuntKind.Meat)
             {
+                _originalRenderingLayerMasks = new uint[_renderers.Length];
+
+                for (int i = 0; i < _renderers.Length; i++)
+                {
+                    if (_renderers[i])
+                        _originalRenderingLayerMasks[i] =
+                            _renderers[i].renderingLayerMask;
+                }
+            }
+            if (kind == HuntKind.Meat)
+            {
+                _meatVisual = transform.GetChild(0);
+                _meatGroundPosition = _meatVisual.localPosition;
+                _meatGroundRotation = _meatVisual.localRotation;
                 _meatOutline = GetComponent<QuickOutline.Outline>();
                 if (!_meatOutline) _meatOutline = gameObject.AddComponent<QuickOutline.Outline>();
                 _meatOutline.OutlineMode = QuickOutline.Outline.Mode.OutlineVisible;
@@ -67,7 +119,42 @@ namespace EchoProtocol.Networking
         {
             bool visible = kind == HuntKind.Alien ? state.Stage != (int)AlienStage.Burned : state.Stage != 3;
             bool carried = kind == HuntKind.Alien ? state.Stage == (int)AlienStage.Carried : state.Stage == 1;
-            foreach (var r in _renderers) if (r) r.enabled = visible;
+            if (_alienVisual)
+            {
+                _alienVisual.localPosition = carried ? new Vector3(-.037f, .145f, .244f) : _alienGroundPosition;
+                _alienVisual.localRotation = carried ? Quaternion.identity : _alienGroundRotation;
+                _alienVisual.localScale = carried ? Vector3.one * .6f : _alienGroundScale;
+                bool onPan = state.Stage == (int)AlienStage.OnPan || state.Stage == (int)AlienStage.Burning;
+                animator.transform.localPosition = onPan ? new Vector3(-.172f, 1.687f, .13873f) : _alienRigPosition;
+                animator.transform.localRotation = onPan ? Quaternion.Euler(-200f, -90f, 0f) : _alienRigRotation;
+            }
+            if (_meatVisual)
+            {
+                _meatVisual.localPosition = carried ? new Vector3(-.111f, .588f, .12f) : _meatGroundPosition;
+                _meatVisual.localRotation = carried ? Quaternion.Euler(10.643f, -141.51f, -117.218f) : _meatGroundRotation;
+            }
+            if (_jerrycanVisual)
+            {
+                _jerrycanVisual.localPosition = carried ? new Vector3(.0667f, .142f, .7438f) : _jerrycanGroundPosition;
+                _jerrycanVisual.localRotation = carried ? Quaternion.Euler(64.147f, 169.87f, -15.506f) : _jerrycanGroundRotation;
+            }
+            for (int i = 0; i < _renderers.Length; i++)
+            {
+                var renderer = _renderers[i];
+                if (!renderer) continue;
+
+                renderer.enabled = visible;
+
+                if (kind == HuntKind.Meat)
+                {
+                    uint mask = carried
+                        ? HeldMeatRenderingLayer
+                        : _originalRenderingLayerMasks[i];
+
+                    if (renderer.renderingLayerMask != mask)
+                        renderer.renderingLayerMask = mask;
+                }
+            }
             foreach (var c in _colliders) if (c) c.enabled = visible && !carried;
             if (_meatOutline)
             {

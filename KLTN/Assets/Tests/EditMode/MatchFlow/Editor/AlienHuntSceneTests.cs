@@ -99,6 +99,8 @@ public sealed class AlienHuntSceneTests
         anchorSerialized.ApplyModifiedPropertiesWithoutUndo();
         var actor = PlayerRef.FromIndex(0);
         player.transform.position = mission.Actors[27].transform.position;
+        var groundMeatPosition = mission.Actors[27].transform.GetChild(0).localPosition;
+        var groundMeatRotation = mission.Actors[27].transform.GetChild(0).localRotation;
         mission.Request(27, -1, player);
         Assert.That(mission.HeldIndex(actor), Is.EqualTo(27));
         Assert.That(AlienHuntMission.IsCarrying(player), Is.True);
@@ -106,6 +108,9 @@ public sealed class AlienHuntSceneTests
         var heldMeatVisual = mission.Actors[27].transform.GetChild(0);
         Assert.That(heldMeatVisual.localScale.x, Is.EqualTo(720f).Within(.01f),
             "Carrying meat must preserve its full world scale.");
+        Assert.That(heldMeatVisual.localPosition, Is.EqualTo(new Vector3(-.111f, .588f, .12f)));
+        Assert.That(Quaternion.Angle(heldMeatVisual.localRotation,
+            Quaternion.Euler(10.643f, -141.51f, -117.218f)), Is.LessThan(.01f));
         mission.HeldPose(actor,HuntKind.Meat,out var heldPosition,out var heldRotation,true);
         var actualAnchor = PlayerHeldItemAnchor.ResolveRightHandAnchor(player);
         var hand = actualAnchor.position + player.transform.forward * .08f;
@@ -142,6 +147,9 @@ public sealed class AlienHuntSceneTests
         Assert.That(foundBait, Is.True, "No same-floor reachable bait spot beside the alien.");
         Assert.That(mission.Act(actor, player.transform, -2, -1), Is.True);
         Assert.That(mission.Read(27).Stage, Is.EqualTo(2));
+        mission.Actors[27].Present(mission.Read(27), false, .02f);
+        Assert.That(heldMeatVisual.localPosition, Is.EqualTo(groundMeatPosition));
+        Assert.That(Quaternion.Angle(heldMeatVisual.localRotation, groundMeatRotation), Is.LessThan(.01f));
         float deadline = Time.realtimeSinceStartup + 25f;
         bool ate = false;
         while (Time.realtimeSinceStartup < deadline && mission.Read(0).Stage != (int)AlienStage.Eating)
