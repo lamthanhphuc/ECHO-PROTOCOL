@@ -11,7 +11,7 @@ namespace EchoProtocol.Networking
         public const int AlienCount = 9;
         public const int FurnaceCapacity = 3;
         public const int JerrycanCount = 10;
-        public const int MeatCount = 12;
+        public const int MeatCount = 17;
         public const int EntityCount = 27 + MeatCount;
         [SerializeField] private float meatRespawnSeconds = 60f;
         [SerializeField] private float lowSupplyRespawnSeconds = 15f;

@@ -131,7 +131,7 @@ public static class AlienHuntSceneSetup
         if (!EditorBuildSettings.scenes.Any(s => s.path == scene.path))
             EditorBuildSettings.scenes = EditorBuildSettings.scenes.Concat(new[] { new EditorBuildSettingsScene(scene.path, true) }).ToArray();
         EditorSceneManager.MarkSceneDirty(scene); EditorSceneManager.SaveScene(scene); AssetDatabase.SaveAssets();
-        Debug.Log("[AlienHunt] Prepared 9 single-color aliens, 9 egg nests, 18 jerrycans, 12 meat pickups and 3 furnaces.");
+        Debug.Log("[AlienHunt] Prepared 9 single-color aliens, 9 egg nests, 18 jerrycans, 17 meat pickups and 3 furnaces.");
     }
 
     public static void UpdateFurnaceEffects()
@@ -212,7 +212,8 @@ public static class AlienHuntSceneSetup
             if (nests.Any(n => Vector2.Distance(new Vector2(n.x,n.z),new Vector2(snapped.position.x,snapped.position.z)) < 26f)) continue;
             selected.Add(snapped.position);
         }
-        if (selected.Count != AlienHuntMission.MeatCount) throw new InvalidOperationException("Could not find 12 safe bait positions away from nests.");
+        if (selected.Count != AlienHuntMission.MeatCount)
+            throw new InvalidOperationException($"Could not find {AlienHuntMission.MeatCount} safe bait positions away from nests.");
         return selected.ToArray();
     }
 

@@ -24,7 +24,7 @@ public sealed class AlienHuntSceneTests
         Assert.That(mission.Actors.Select(a => a.Index), Is.EqualTo(Enumerable.Range(0, AlienHuntMission.EntityCount)));
         Assert.That(mission.Actors.Count(a => a.Kind == HuntKind.Alien), Is.EqualTo(9));
         Assert.That(mission.Actors.Count(a => a.Kind == HuntKind.Jerrycan), Is.EqualTo(18));
-        Assert.That(mission.Actors.Count(a => a.Kind == HuntKind.Meat), Is.EqualTo(12));
+        Assert.That(mission.Actors.Count(a => a.Kind == HuntKind.Meat), Is.EqualTo(AlienHuntMission.MeatCount));
         foreach (var fuel in mission.Actors.Where(a => a.Kind == HuntKind.Jerrycan))
         {
             Assert.That(fuel.GetComponentsInChildren<Collider>().Length, Is.GreaterThan(0), fuel.name);
@@ -223,9 +223,9 @@ public sealed class AlienHuntSceneTests
         mission.Tick(14f);
         Assert.That(mission.Read(29).Stage, Is.EqualTo(3));
         mission.Tick(1.1f);
-        Assert.That(Enumerable.Range(27, 12).Count(i => mission.Read(i).Stage == 0), Is.EqualTo(3));
+        Assert.That(Enumerable.Range(27, AlienHuntMission.MeatCount).Count(i => mission.Read(i).Stage == 0), Is.EqualTo(3));
         mission.Tick(45f);
-        Assert.That(Enumerable.Range(27, 12).Count(i => mission.Read(i).Stage == 0), Is.EqualTo(12));
+        Assert.That(Enumerable.Range(27, AlienHuntMission.MeatCount).Count(i => mission.Read(i).Stage == 0), Is.EqualTo(AlienHuntMission.MeatCount));
         // Oil can be poured first, but a second can must remain in the player's hand.
         int firstCan = Enumerable.Range(9,18).First(i => mission.Read(i).Stage == 0);
         player.transform.position = mission.Actors[firstCan].transform.position;
