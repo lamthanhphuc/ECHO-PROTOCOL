@@ -133,10 +133,27 @@ namespace EchoProtocol.Networking
             var owner = Carrier(carrier);
             if (!owner) { position = transform.position; rotation = Quaternion.identity; return; }
             var anchor = PlayerHeldItemAnchor.ResolveRightHandAnchor(owner.gameObject);
-            var offset = kind == HuntKind.Alien ? new Vector3(0,-.18f,.12f)
-                : kind == HuntKind.Jerrycan ? new Vector3(0,-.22f,.08f) : new Vector3(0,.02f,.1f);
-            position = anchor.TransformPoint(offset);
-            rotation = anchor.rotation * Quaternion.Euler(0,90,0);
+            // The meshes have different pivots. Keep their grip points at the right
+            // hand and rotate from the player's heading so the alien and can stay upright.
+            var heading = Quaternion.Euler(0f, owner.eulerAngles.y, 0f);
+            Vector3 grip;
+            if (kind == HuntKind.Alien)
+            {
+                rotation = heading;
+                grip = new Vector3(.05f, .61f, .15f); // middle of the torso
+            }
+            else if (kind == HuntKind.Jerrycan)
+            {
+                rotation = heading;
+                grip = new Vector3(0f, .39f * AlienHuntActor.JerrycanVisualScale, 0f); // top handle
+            }
+            else
+            {
+                rotation = heading * Quaternion.Euler(15f, 0f, 0f) * Quaternion.Euler(0f, 0f, 75f);
+                grip = new Vector3(-.04f, .54f, 0f); // middle of the narrow bone
+            }
+            var hand = anchor.position + owner.forward * .08f;
+            position = hand - rotation * grip;
         }
         public bool Act(PlayerRef player, Transform owner, int entity, int furnace)
         {

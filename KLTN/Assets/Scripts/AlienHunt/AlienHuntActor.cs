@@ -19,11 +19,7 @@ namespace EchoProtocol.Networking
         private string _animation;
         private bool _poseReady;
         private QuickOutline.Outline _meatOutline;
-        private Transform _meatVisual;
-        private Vector3 _meatWorldScale;
-        private Vector3 _meatWorldPosition;
-        private bool _meatHeldPresentation;
-        private const float HeldMeatScale = 140f;
+        public const float JerrycanVisualScale = 1.5f;
 
         public void Configure(int id, HuntKind type, Animator animation)
         { index = id; kind = type; animator = animation; }
@@ -38,12 +34,6 @@ namespace EchoProtocol.Networking
             _renderers = GetComponentsInChildren<Renderer>(true);
             if (kind == HuntKind.Meat)
             {
-                _meatVisual = transform.childCount > 0 ? transform.GetChild(0) : null;
-                if (_meatVisual)
-                {
-                    _meatWorldScale = _meatVisual.localScale;
-                    _meatWorldPosition = _meatVisual.localPosition;
-                }
                 _meatOutline = GetComponent<QuickOutline.Outline>();
                 if (!_meatOutline) _meatOutline = gameObject.AddComponent<QuickOutline.Outline>();
                 _meatOutline.OutlineMode = QuickOutline.Outline.Mode.OutlineVisible;
@@ -77,7 +67,6 @@ namespace EchoProtocol.Networking
         {
             bool visible = kind == HuntKind.Alien ? state.Stage != (int)AlienStage.Burned : state.Stage != 3;
             bool carried = kind == HuntKind.Alien ? state.Stage == (int)AlienStage.Carried : state.Stage == 1;
-            ApplyMeatScale(carried);
             foreach (var r in _renderers) if (r) r.enabled = visible;
             foreach (var c in _colliders) if (c) c.enabled = visible && !carried;
             if (_meatOutline)
@@ -111,24 +100,5 @@ namespace EchoProtocol.Networking
             animator.CrossFadeInFixedTime(animation, .15f);
         }
 
-        private void ApplyMeatScale(bool carried)
-        {
-            if (!_meatVisual || _meatHeldPresentation == carried) return;
-            _meatHeldPresentation = carried;
-            if (!carried)
-            {
-                _meatVisual.localScale = _meatWorldScale;
-                _meatVisual.localPosition = _meatWorldPosition;
-                return;
-            }
-
-            _meatVisual.localScale = Vector3.one * HeldMeatScale;
-            _meatVisual.localPosition = Vector3.zero;
-            var renderers = _meatVisual.GetComponentsInChildren<Renderer>(true);
-            if (renderers.Length == 0) return;
-            var bounds = renderers[0].bounds;
-            for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
-            _meatVisual.localPosition -= transform.InverseTransformPoint(bounds.center);
-        }
     }
 }
