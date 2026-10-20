@@ -640,7 +640,8 @@ namespace EchoProtocol.Networking
                 profile = AEDv2GameplayBridge.ToNormalDifficultyProfile(plan);
             var zone = _zone2MinionsActive ? RegionSemanticZone.Zone02 : RegionSemanticZone.Zone01;
             int cap = zone == RegionSemanticZone.Zone02 ? profile.Zone2MinionCap : profile.Zone1MinionCap;
-            int count = 0;
+            int originalCount = 0;
+            int disruptorCount = 0;
             foreach (var obj in _creepMinionInstances)
             {
                 if (!IsValidNetworkObject(obj)
@@ -651,13 +652,117 @@ namespace EchoProtocol.Networking
                     continue;
                 }
 
-                count++;
+                if (minion.Role == CreepMinionRole.Disruptor) disruptorCount++;
+                else originalCount++;
             }
-            if (count >= cap
-                || !TryGetCreepMinionSpawnAnchor(zone, out var stalker)
-                || !TryFindCreepMinionSpawnPosition(runner, stalker, out var position)) return;
+            int count = originalCount + disruptorCount;
+            bool disruptor = disruptorCount < originalCount;
+            bool map2 = SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
+            if (count >= cap) return;
 
-            SpawnCreepMinion(runner, position, zone);
+            if (map2 && disruptor)
+            {
+                if (TryFindCatfishSpawnPosition(runner, out var catfishPosition))
+                {
+                    SpawnCreepMinion(runner, catfishPosition, zone, true);
+                    return;
+                }
+                if (TryGetCreepMinionSpawnAnchor(zone, out var fallbackStalker)
+                    && TryFindCreepMinionSpawnPosition(runner, fallbackStalker, out var landPosition))
+                    SpawnCreepMinion(runner, landPosition, zone, true);
+                return;
+            }
+
+            if (!TryGetCreepMinionSpawnAnchor(zone, out var stalker)) return;
+            if (TryFindCreepMinionSpawnPosition(runner, stalker, out var position))
+                SpawnCreepMinion(runner, position, zone, map2 ? false : disruptor);
+        }
+
+        private bool TryFindCatfishSpawnPosition(NetworkRunner runner, out Vector3 position)
+        {
+            position = default;
+            if (!FloodedWaterBoundary.TryGetWaterBounds(out var water)) return false;
+            var blockers = new List<Collider>();
+            var playBounds = default(Bounds);
+            foreach (var collider in Object.FindObjectsByType<Collider>(FindObjectsSortMode.None))
+            {
+                if (collider == null || !collider.enabled || !collider.name.StartsWith("_BLOCKERCUBE")) continue;
+                if (blockers.Count == 0) playBounds = collider.bounds;
+                else playBounds.Encapsulate(collider.bounds);
+                blockers.Add(collider);
+            }
+            if (blockers.Count == 0) return false;
+            float minX = Mathf.Max(water.min.x, playBounds.min.x);
+            float maxX = Mathf.Min(water.max.x, playBounds.max.x);
+            float minZ = Mathf.Max(water.min.z, playBounds.min.z);
+            float maxZ = Mathf.Min(water.max.z, playBounds.max.z);
+            if (minX >= maxX || minZ >= maxZ) return false;
+            var playerPositions = new List<Vector3>();
+            foreach (var player in runner.ActivePlayers)
+                if (runner.TryGetPlayerObject(player, out var playerObject)
+                    && IsValidNetworkObject(playerObject)
+                    && playerObject.TryGetComponent<LobbyPlayerState>(out var lobby)
+                    && lobby.IsGameplayPlayer
+                    && playerObject.TryGetComponent<NetworkPlayerLifeState>(out var life)
+                    && life.Status == NetworkPlayerLifeStatus.Alive)
+                    playerPositions.Add(playerObject.transform.position);
+            if (playerPositions.Count == 0) return false;
+            for (int attempt = 0; attempt < 72; attempt++)
+            {
+                Vector2 direction = Random.insideUnitCircle.normalized;
+                float distance = Random.Range(
+                    _minionSpawnMinDistanceFromPlayer,
+                    Mathf.Max(_minionSpawnMinDistanceFromPlayer + 1f, _minionSpawnFallbackMaxDistanceFromStalker));
+                Vector3 candidate = playerPositions[attempt % playerPositions.Count]
+                    + new Vector3(direction.x, 0f, direction.y) * distance;
+                if (candidate.x < minX || candidate.x > maxX || candidate.z < minZ || candidate.z > maxZ) continue;
+                if (!FloodedWaterBoundary.TryGetSwimSurface(candidate, out float surfaceY, 2.6f)) continue;
+                if (!IsInsideBlockerBoundary(blockers, candidate, surfaceY, maxX + 1f)) continue;
+                candidate.y = surfaceY - 2.5f;
+                if (!IsCatfishSpawnInPlayerArea(runner, candidate, surfaceY)) continue;
+                if (!IsCreepMinionSpawnFarFromPlayers(runner, candidate)) continue;
+                bool overlaps = false;
+                foreach (var minion in _creepMinionInstances)
+                    if (IsValidNetworkObject(minion)
+                        && (new Vector2(minion.transform.position.x - candidate.x, minion.transform.position.z - candidate.z)).sqrMagnitude < 4f)
+                    { overlaps = true; break; }
+                if (overlaps) continue;
+                position = candidate;
+                return true;
+            }
+            return false;
+        }
+
+        private static bool IsInsideBlockerBoundary(
+            List<Collider> blockers, Vector3 point, float surfaceY, float rayEndX)
+        {
+            var ray = new Ray(new Vector3(point.x, surfaceY + 1f, point.z), Vector3.right);
+            float distance = rayEndX - point.x;
+            int crossings = 0;
+            foreach (var blocker in blockers)
+                if (blocker.Raycast(ray, out _, distance)) crossings++;
+            return crossings % 2 == 1;
+        }
+
+        private static bool IsCatfishSpawnInPlayerArea(NetworkRunner runner, Vector3 candidate, float surfaceY)
+        {
+            if (!NavMesh.SamplePosition(candidate, out var shore, 12f, NavMesh.AllAreas)) return false;
+            var start = new Vector3(candidate.x, surfaceY + 1f, candidate.z);
+            var end = shore.position + Vector3.up;
+            var ray = end - start;
+            foreach (var hit in Physics.RaycastAll(start, ray.normalized, ray.magnitude,
+                         Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+                if (hit.collider != null && hit.collider.name.StartsWith("_BLOCKERCUBE")) return false;
+
+            var path = new NavMeshPath();
+            foreach (var player in runner.ActivePlayers)
+                if (runner.TryGetPlayerObject(player, out var playerObject)
+                    && playerObject != null
+                    && NavMesh.SamplePosition(playerObject.transform.position, out var playerHit, 3f, NavMesh.AllAreas)
+                    && NavMesh.CalculatePath(playerHit.position, shore.position, NavMesh.AllAreas, path)
+                    && path.status == NavMeshPathStatus.PathComplete)
+                    return true;
+            return false;
         }
 
         private bool TryGetCreepMinionSpawnAnchor(
@@ -761,6 +866,18 @@ namespace EchoProtocol.Networking
                     continue;
                 }
 
+                bool overlapsMinion = false;
+                foreach (var minion in _creepMinionInstances)
+                {
+                    if (IsValidNetworkObject(minion)
+                        && (minion.transform.position - hit.position).sqrMagnitude < 4f)
+                    {
+                        overlapsMinion = true;
+                        break;
+                    }
+                }
+                if (overlapsMinion) continue;
+
                 position = hit.position;
                 return true;
             }
@@ -796,12 +913,17 @@ namespace EchoProtocol.Networking
             return true;
         }
 
-        private NetworkObject SpawnCreepMinion(NetworkRunner runner, Vector3 position, RegionSemanticZone zone)
+        private int _nextCreepMinionVisualVariant;
+
+        private NetworkObject SpawnCreepMinion(NetworkRunner runner, Vector3 position, RegionSemanticZone zone, bool disruptor)
         {
             var prefab = ResolveCreepMinionPrefab();
             if (prefab == null) return null;
             var spawned = runner.Spawn(prefab, position, Quaternion.identity, PlayerRef.None,
-                (_, obj) => obj.GetComponent<CreepMinionRuntime>()?.ConfigureBeforeSpawn(zone));
+                (_, obj) => obj.GetComponent<CreepMinionRuntime>()?.ConfigureBeforeSpawn(
+                    zone,
+                    disruptor ? CreepMinionRole.Disruptor : CreepMinionRole.Original,
+                    _nextCreepMinionVisualVariant));
             if (!IsValidNetworkObject(spawned)) return null;
             if (!spawned.TryGetComponent<CreepMinionRuntime>(out _))
             {
@@ -810,6 +932,7 @@ namespace EchoProtocol.Networking
                 return null;
             }
             _creepMinionInstances.Add(spawned);
+            if (disruptor) _nextCreepMinionVisualVariant = (_nextCreepMinionVisualVariant + 1) % 30;
             Debug.Log($"[PlayerSpawner] Spawned {zone} Creep Minion {spawned.Id} at {position}.");
             return spawned;
         }
@@ -1584,6 +1707,7 @@ var toolId =
             _zone2MinionsActive = false;
 
             _nextMinionSpawnCheckAt = 0f;
+            _nextCreepMinionVisualVariant = 0;
             _missingMinionPrefabLogged = false;
             _doorInstance = null;
             _energyCoreInstances.Clear();

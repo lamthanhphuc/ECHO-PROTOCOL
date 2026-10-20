@@ -11,6 +11,7 @@ namespace EchoProtocol.Networking
     {
         public const float ResonanceRange = 24f;
         public const float ResonanceVisualRange = 24f;
+        private const float ResonanceHitRadius = 0.75f;
         [Networked] public float ResonanceEnergy { get; private set; }
         [Networked] public NetworkBool ResonanceActive { get; private set; }
         [Networked] public NetworkBool ResonanceLocked { get; private set; }
@@ -58,10 +59,11 @@ namespace EchoProtocol.Networking
             Vector3 origin=transform.position+Vector3.up*(movement!=null && movement.IsCrouching ? 1f:1.6f);
             Vector3 forward=Quaternion.Euler(Mathf.Clamp(input.LookPitch,-89f,89f),input.LookYaw,0f)*Vector3.forward;
             ResonanceEndpoint=origin+forward*ResonanceRange;
-            var hits=Physics.SphereCastAll(origin,.18f,forward,ResonanceRange,~0,QueryTriggerInteraction.Ignore);
+            var hits=Physics.SphereCastAll(origin,ResonanceHitRadius,forward,ResonanceRange,~0,QueryTriggerInteraction.Ignore);
             System.Array.Sort(hits,(a,b)=>a.distance.CompareTo(b.distance));
             foreach(var hit in hits) {
                 if(hit.collider.transform.IsChildOf(transform))continue;
+                if(SceneManager.GetActiveScene().name==LobbyMapCatalog.ExplorationScene && hit.collider.gameObject.layer==4)continue;
                 ResonanceEndpoint=hit.point;
                 var minion=hit.collider.GetComponentInParent<CreepMinionRuntime>();
                 if(minion==null || minion.IsDying)return;
@@ -71,6 +73,7 @@ namespace EchoProtocol.Networking
                 var obstruction=Physics.RaycastAll(muzzle,(target-muzzle).normalized,(target-muzzle).magnitude,~0,QueryTriggerInteraction.Ignore);
                 foreach(var block in obstruction)
                     if(!block.collider.transform.IsChildOf(transform)
+                        && !(SceneManager.GetActiveScene().name==LobbyMapCatalog.ExplorationScene && block.collider.gameObject.layer==4)
                         && block.collider.GetComponentInParent<CreepMinionRuntime>()!=minion)return;
                 _resonanceTarget=minion;ResonanceEndpoint=target;return;
             }

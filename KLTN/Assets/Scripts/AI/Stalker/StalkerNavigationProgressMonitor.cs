@@ -111,8 +111,8 @@ namespace EchoProtocol.AI.Stalker
             }
 
             var elapsedSampleTime = _sampleAccumulator;
-            var hasMeaningfulProgress = HasMeaningfulDisplacement(position)
-                || HasMeaningfulRemainingDistanceImprovement(remainingDistance);
+            // Root displacement is the source of truth: agent distance can shrink while a collider stays blocked.
+            var hasMeaningfulProgress = HasMeaningfulDisplacement(position);
 
             if (hasMeaningfulProgress)
             {
