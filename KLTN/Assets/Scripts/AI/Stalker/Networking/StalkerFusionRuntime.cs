@@ -590,7 +590,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             // Perception frames have already been built above, so Vision,
             // Hearing and target-status information remain fresh.
             //
-            if(!AlienHuntMission.Instance) specialEncounterRuntime?.TickAuthoritative(
+            if (AlienHuntMission.Instance) specialEncounterRuntime?.SuppressForPurge();
+            else specialEncounterRuntime?.TickAuthoritative(
                 Runner,
                 lifecycle,
                 step);
@@ -1424,6 +1425,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         private void OnPlayerDownedByStalkerAuthoritative(
             StalkerDownedPlayerFact fact)
         {
+            if (AlienHuntMission.Instance) return;
             if (Object == null
                 || !Object.HasStateAuthority
                 || !fact.IsValid)
