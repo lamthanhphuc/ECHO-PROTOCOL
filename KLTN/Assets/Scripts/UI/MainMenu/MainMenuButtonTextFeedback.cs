@@ -28,6 +28,7 @@ namespace EchoProtocol.UI.MainMenu
         [SerializeField] private Color hoverTextColor = new Color(0.94f, 0.91f, 0.87f, 1f);
         [SerializeField] private Color flashTextColor = new Color(0.82f, 0.30f, 0.27f, 1f);
         [SerializeField] private Color hoverGlowColor = new Color(0.40f, 0.035f, 0.03f, 0.48f);
+        [SerializeField] private Color indicatorColor = new Color(0.83f, 0.025f, 0.045f, 0.88f);
 
         private Shadow _legacyGlow;
         private TMP_Text _tmpLabel;
@@ -45,6 +46,10 @@ namespace EchoProtocol.UI.MainMenu
         private float _flashStartedAt = float.NegativeInfinity;
         private bool _pointerOver;
         private bool _selected;
+        private Image _indicator;
+        private RectTransform _indicatorRect;
+        private Vector2 _indicatorRestPosition;
+        private float _hoverStartedAt = float.NegativeInfinity;
 
         /// <summary>Bind a TMP label created after this component was enabled.</summary>
         public void Initialize(Button ownerButton, TMP_Text tmpLabel)
@@ -96,6 +101,8 @@ namespace EchoProtocol.UI.MainMenu
                 _legacyGlow.useGraphicAlpha = true;
             }
             ApplyGlow(0f);
+            EnsureIndicator();
+            ApplyIndicator(0f);
             _hoverAmount = 0f;
             _flashStartedAt = float.NegativeInfinity;
             _pointerOver = false;
@@ -108,6 +115,7 @@ namespace EchoProtocol.UI.MainMenu
             if (!_visualsReady) return;
             if (label != null) label.color = _normalTextColor;
             ApplyGlow(0f);
+            ApplyIndicator(0f);
             _pointerOver = false;
             _selected = false;
             _hoverAmount = 0f;
@@ -191,7 +199,11 @@ namespace EchoProtocol.UI.MainMenu
             _visualsReady = false;
         }
 
-        public void OnPointerEnter(PointerEventData eventData) => _pointerOver = true;
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            _pointerOver = true;
+            _hoverStartedAt = Time.unscaledTime;
+        }
         public void OnPointerExit(PointerEventData eventData)
         {
             _pointerOver = false;
@@ -236,6 +248,50 @@ namespace EchoProtocol.UI.MainMenu
             if (label.color != textColor) label.color = textColor;
 
             ApplyGlow(Mathf.Max(_hoverAmount, flash));
+            ApplyIndicator(Mathf.Max(_hoverAmount, flash));
+        }
+
+        private void EnsureIndicator()
+        {
+            Transform existing = transform.Find("HoverSignalIndicator");
+            bool created = existing == null;
+            if (existing == null)
+            {
+                var marker = new GameObject("HoverSignalIndicator", typeof(RectTransform),
+                    typeof(CanvasRenderer), typeof(Image));
+                marker.layer = gameObject.layer;
+                marker.transform.SetParent(transform, false);
+                existing = marker.transform;
+            }
+
+            _indicatorRect = existing as RectTransform;
+            _indicator = existing.GetComponent<Image>();
+            if (_indicator == null || _indicatorRect == null) return;
+            _indicator.raycastTarget = false;
+            if (created)
+            {
+                _indicatorRect.anchorMin = new Vector2(0f, 0.5f);
+                _indicatorRect.anchorMax = new Vector2(0f, 0.5f);
+                _indicatorRect.pivot = new Vector2(0f, 0.5f);
+                _indicatorRect.anchoredPosition = new Vector2(38f, 0f);
+                _indicatorRect.sizeDelta = new Vector2(3f, 42f);
+            }
+            _indicatorRestPosition = _indicatorRect.anchoredPosition;
+        }
+
+        private void ApplyIndicator(float amount)
+        {
+            if (_indicator == null || _indicatorRect == null) return;
+            Color color = indicatorColor;
+            color.a *= Mathf.Lerp(0.72f, 1f, amount);
+            if (_indicator.color != color) _indicator.color = color;
+
+            // A single registration skip on hover; the Button and its label stay put.
+            float offset = _pointerOver && Time.unscaledTime - _hoverStartedAt < 0.09f
+                ? 1f : 0f;
+            Vector2 position = _indicatorRestPosition + new Vector2(offset, 0f);
+            if (_indicatorRect.anchoredPosition != position)
+                _indicatorRect.anchoredPosition = position;
         }
 
         private void ApplyGlow(float amount)

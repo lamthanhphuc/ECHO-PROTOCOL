@@ -13,9 +13,9 @@ namespace EchoProtocol.UI.MainMenu
     public sealed class MainMenuTypographyController : MonoBehaviour
     {
         private const string ResourceRoot = "UI/MainMenuTypography/";
-        private static readonly Color TitleColor = new Color32(216, 211, 206, 255);
-        private static readonly Color SubtitleColor = new Color32(168, 68, 75, 255);
-        private static readonly Color ButtonColor = new Color32(201, 198, 194, 255);
+        private static readonly Color TitleColor = new Color32(248, 247, 244, 255);
+        private static readonly Color SubtitleColor = new Color32(205, 26, 38, 255);
+        private static readonly Color ButtonColor = new Color32(225, 221, 215, 255);
 
         private static TMP_FontAsset _runtimeOswald;
         private static TMP_FontAsset _runtimeMono;
@@ -48,10 +48,13 @@ namespace EchoProtocol.UI.MainMenu
 
             TMP_FontAsset oswald = Resources.Load<TMP_FontAsset>(ResourceRoot + "OswaldTMP");
             TMP_FontAsset mono = Resources.Load<TMP_FontAsset>(ResourceRoot + "JetBrainsMonoTMP");
+            TMP_FontAsset display = Resources.Load<TMP_FontAsset>(ResourceRoot + "IndustrialTitleTMP")
+                ?? Resources.Load<TMP_FontAsset>(ResourceRoot + "RobotoBlackTMP");
             if (oswald == null)
                 oswald = GetOrCreateFont(ref _runtimeOswald, titleObject.GetComponent<Text>());
             if (mono == null)
                 mono = GetOrCreateFont(ref _runtimeMono, subtitleObject.GetComponent<Text>());
+            if (display == null) display = oswald;
             if (oswald == null || mono == null)
             {
                 Debug.LogWarning("[MainMenuTypography] TMP font could not be loaded; original menu labels remain visible.", this);
@@ -60,24 +63,31 @@ namespace EchoProtocol.UI.MainMenu
 
             // Prewarm the glyphs that the existing localization service can show.
             // The authored assets also remain dynamic for later language changes.
-            bool oswaldReady = oswald.TryAddCharacters(
-                "ECHO PROTOCOL HOST GAME JOIN GAME OPTIONS LOGOUT TẠO PHÒNG VÀO PHÒNG CÀI ĐẶT ĐĂNG XUẤT",
-                out string missingOswald);
-            bool monoReady = mono.TryAddCharacters("THE SIGNAL IS STILL ALIVE", out string missingMono);
+            const string oswaldCharacters =
+                "ECHO PROTOCOL HOST GAME JOIN GAME OPTIONS LOGOUT TẠO PHÒNG VÀO PHÒNG CÀI ĐẶT ĐĂNG XUẤT";
+            const string monoCharacters = "THE SIGNAL IS STILL ALIVE";
+            // This TMP version returns false when every requested glyph is
+            // already present. Check actual coverage after the add attempt.
+            oswald.TryAddCharacters(oswaldCharacters);
+            mono.TryAddCharacters(monoCharacters);
+            if (display.atlasPopulationMode != AtlasPopulationMode.Static)
+                display.TryAddCharacters("ECHO PROTOCOL");
+            bool oswaldReady = oswald.HasCharacters(oswaldCharacters);
+            bool monoReady = mono.HasCharacters(monoCharacters);
             if (!oswaldReady || !monoReady)
             {
-                Debug.LogWarning("[MainMenuTypography] TMP glyph atlas is incomplete (" +
-                    missingOswald + " " + missingMono + "); original menu labels remain visible.", this);
+                Debug.LogWarning("[MainMenuTypography] TMP glyph atlas is incomplete; " +
+                    "check Oswald and JetBrains Mono font assets.", this);
                 return;
             }
 
-            Material titleMaterial = ResolveMaterial("TitleMetal", oswald, ref _runtimeTitleMaterial, true);
+            Material titleMaterial = ResolveMaterial("TitleMetal", display, ref _runtimeTitleMaterial, true);
             Material subtitleMaterial = ResolveMaterial("SubtitleSignal", mono, ref _runtimeSubtitleMaterial, false);
             Material buttonMaterial = ResolveMaterial("ButtonIndustrial", oswald, ref _runtimeButtonMaterial, false);
 
-            Configure(titleObject, oswald, titleMaterial, TitleColor, 48f, 0.35f,
+            Configure(titleObject, display, titleMaterial, TitleColor, 124f, 0f,
                 TextAlignmentOptions.TopLeft, -15f, true);
-            _subtitle = Configure(subtitleObject, mono, subtitleMaterial, SubtitleColor, 13f, 2.3f,
+            _subtitle = Configure(subtitleObject, mono, subtitleMaterial, SubtitleColor, 24f, 8f,
                 TextAlignmentOptions.TopLeft, 0f, false);
             if (_subtitle != null)
             {
@@ -163,7 +173,7 @@ namespace EchoProtocol.UI.MainMenu
             label.fontSharedMaterial = material;
             label.text = original.text;
             label.fontSize = size;
-            label.fontStyle = agedTitle || target.parent.name.EndsWith("Button")
+            label.fontStyle = target.parent.name.EndsWith("Button")
                 ? FontStyles.Bold : FontStyles.Normal;
             label.characterSpacing = spacing;
             label.lineSpacing = lineSpacing;
@@ -177,10 +187,14 @@ namespace EchoProtocol.UI.MainMenu
             label.richText = original.supportRichText;
             if (agedTitle)
             {
+                // The authored face texture spans both title lines, rather than
+                // repeating the blood and wear pattern on every glyph.
+                label.horizontalMapping = TextureMappingOptions.Paragraph;
+                label.verticalMapping = TextureMappingOptions.Paragraph;
                 label.enableVertexGradient = true;
                 label.colorGradient = new VertexGradient(
                     TitleColor, TitleColor,
-                    new Color32(181, 171, 166, 255), new Color32(181, 171, 166, 255));
+                    new Color32(226, 225, 220, 255), new Color32(226, 225, 220, 255));
             }
 
             // Keep the original component and its localization source intact. It is
@@ -191,7 +205,7 @@ namespace EchoProtocol.UI.MainMenu
 
         private static void ConfigureButton(Transform labelObject, TMP_FontAsset font, Material material)
         {
-            TMP_Text label = Configure(labelObject, font, material, ButtonColor, 27f, 0.9f,
+            TMP_Text label = Configure(labelObject, font, material, ButtonColor, 44f, 1.6f,
                 TextAlignmentOptions.MidlineLeft, 0f, false);
             if (label == null) return;
             Button button = labelObject.GetComponentInParent<Button>();
