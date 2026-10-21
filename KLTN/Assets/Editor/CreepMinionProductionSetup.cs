@@ -248,7 +248,7 @@ public static class CreepMinionProductionSetup
             agent.acceleration = 24f;
             agent.stoppingDistance = 0.6f;
             agent.radius = 0.35f;
-            agent.height = 1.2f;
+            agent.height = 1f;
             agent.baseOffset = 0f;
 
             var collider = root.GetComponent<CapsuleCollider>();
@@ -258,8 +258,8 @@ public static class CreepMinionProductionSetup
             }
 
             collider.radius = 0.4f;
-            collider.height = 1.2f;
-            collider.center = new Vector3(0f, 1.6f, 0f);
+            collider.height = 1f;
+            collider.center = new Vector3(0f, 0.5f, 0f);
 
             if (root.GetComponent<CreepMinionRuntime>() == null)
             {

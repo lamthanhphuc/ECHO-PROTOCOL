@@ -66,6 +66,77 @@ namespace EchoProtocol.Networking
         }
         private void FixedUpdate()
         { if (_offlineReady && !NetworkReady && !Completed) Tick(Time.fixedDeltaTime); }
+        private void LateUpdate()
+        {
+            ApplyNetworkNestHomes();
+        }
+
+        public void ApplyNetworkNestHomes()
+        {
+            if (!NetworkReady || !Match.HuntReady)
+                return;
+
+            for (int i = 0; i < AlienCount; i++)
+                actors[i].RelocateNestHome(Match.HuntNestPositions[i]);
+        }
+
+        private void RandomizeNests()
+        {
+            var triangulation = NavMesh.CalculateTriangulation();
+            int triangleCount = triangulation.indices.Length / 3;
+            var selected = new Vector3[AlienCount];
+            bool complete = triangleCount > 0;
+            var path = new NavMeshPath();
+
+            for (int i = 0; i < AlienCount && complete; i++)
+            {
+                bool found = false;
+                Vector3 originalHome = actors[i].Home;
+                Vector3 originalNest = actors[i].transform.parent.position;
+                Vector3 localOffset = originalHome - originalNest;
+
+                for (int attempt = 0; attempt < 512; attempt++)
+                {
+                    int triangle = Random.Range(0, triangleCount) * 3;
+                    Vector3 nestPosition = (triangulation.vertices[triangulation.indices[triangle]]
+                        + triangulation.vertices[triangulation.indices[triangle + 1]]
+                        + triangulation.vertices[triangulation.indices[triangle + 2]]) / 3f;
+                    if (nestPosition.x < 430f || nestPosition.x > 660f || nestPosition.z < 300f || nestPosition.z > 650f || nestPosition.y < 16.15f) continue;
+                    if (!NavMesh.SamplePosition(nestPosition + localOffset, out var hit, 1.5f, NavMesh.AllAreas)) continue;
+                    Vector3 home = hit.position;
+                    Vector3 actualNest = originalNest + home - originalHome;
+                    if (Vector3.Distance(actualNest, nestPosition) > 1.5f || Vector3.Distance(home, originalHome) < 10f) continue;
+
+                    bool separated = true;
+                    for (int j = 0; j < i; j++)
+                        if (Vector3.Distance(home, selected[j]) < 18f) { separated = false; break; }
+                    if (!separated) continue;
+                    foreach (var furnace in furnaces)
+                        if (Vector3.Distance(actualNest, furnace.transform.position) < 12f) { separated = false; break; }
+                    if (!separated) continue;
+                    if (Physics.CheckCapsule(home + Vector3.up * .5f, home + Vector3.up * 1.3f, .6f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) continue;
+                    if (!NavMesh.CalculatePath(actors[0].Home, home, NavMesh.AllAreas, path) || path.status != NavMeshPathStatus.PathComplete) continue;
+
+                    selected[i] = home;
+                    found = true;
+                    break;
+                }
+                if (!found) complete = false;
+            }
+
+            if (!complete)
+            {
+                Debug.LogWarning("[AlienHunt] Cannot find 9 safe random nests; using authored positions.");
+                for (int i = 0; i < AlienCount; i++) selected[i] = actors[i].Home;
+            }
+
+            for (int i = 0; i < AlienCount; i++)
+            {
+                if (NetworkReady) Match.HuntNestPositions.Set(i, selected[i]);
+                actors[i].RelocateNestHome(selected[i]);
+            }
+            Physics.SyncTransforms();
+        }
         // Input is routed through the existing player drop handler, before normal tools.
         public bool TryDropLocal(GameObject interactor)
         {
@@ -86,6 +157,7 @@ namespace EchoProtocol.Networking
         { if (NetworkReady) Match.HuntFurnaces.Set(i, value); else _offlineFurnaces[i] = value; }
         public void Initialize()
         {
+            RandomizeNests();
             for (int i = 0; i < actors.Length; i++) Write(i, new HuntEntityState
             { Position = actors[i].Home, LastGroundPosition = actors[i].Home, Rotation = actors[i].HomeRotation, Target = -1, NestIndex = i < AlienCount ? i : -1 });
             // Keep all 18 authored candidates, but enable only 10 unique locations per match.
@@ -545,7 +617,7 @@ namespace EchoProtocol.Networking
                 if (m.showPurgeDiagnostics)
                     detail += " | UV: " + match.PurgeStaggers + "/" + match.PurgeStaggersRequired;
                 if (match.PurgeCoopAidEnabled)
-                    detail += " | Sơ cứu tại lò: "+match.PurgeAidAvailable+"/3";
+                    detail += " | Sơ cứu: "+match.PurgeAidAvailable+"/9";
             }
             if (Time.unscaledTime < m._dropHintUntil)
                 detail = "Không thể đặt alien ở đây. Hãy tìm mặt đất có lối về khu vực ổ trứng.";

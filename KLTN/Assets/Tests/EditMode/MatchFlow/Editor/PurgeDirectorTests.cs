@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Linq;
 using System.Reflection;
 using EchoProtocol.Networking;
 using EchoProtocol.Gameplay;
@@ -12,6 +11,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.TestTools;
 using Assert=NUnit.Framework.Assert;
 
@@ -51,10 +51,10 @@ public sealed class PurgeDirectorTests
         Assert.That((bool)match.HuntReady,Is.True);
         Assert.That(match.PurgeCoopAidEnabled,Is.False);
         Assert.That(match.PurgeAidAvailable,Is.Zero);
-        for(int i=0;i<3;i++) Assert.That(match.PurgeAid[i].Id.IsValid,Is.False,"Solo must not spawn station medkits.");
+        for(int i=0;i<9;i++) Assert.That(match.PurgeAid[i].Id.IsValid,Is.False,"Solo must not spawn medkits.");
         AlienHuntMission.TryDescribe(out _,out var soloHud,out _);
         StringAssert.DoesNotContain("UV:",soloHud);
-        StringAssert.DoesNotContain("/3",soloHud);
+        StringAssert.DoesNotContain("Sơ cứu:",soloHud);
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm));
         match.RecordHuntBurn();
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Warning));

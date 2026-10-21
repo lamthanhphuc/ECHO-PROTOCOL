@@ -163,6 +163,8 @@ public static class AlienHuntSceneSetup
         foreach (var r in visual.GetComponentsInChildren<Renderer>()) bounds.Encapsulate(r.bounds);
         var collider = root.gameObject.AddComponent<BoxCollider>(); collider.center = root.InverseTransformPoint(bounds.center);
         collider.size = Vector3.Max(bounds.size, Vector3.one * .15f);
+        // Portable pickups must not remove the walkable floor when the scene is rebaked.
+        root.gameObject.AddComponent<Unity.AI.Navigation.NavMeshModifier>().ignoreFromBuild = true;
         var actor = root.gameObject.AddComponent<AlienHuntActor>(); actor.Configure(index, kind, null); return actor;
     }
 

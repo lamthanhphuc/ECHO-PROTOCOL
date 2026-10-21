@@ -20,7 +20,7 @@ namespace EchoProtocol.Networking
         private uint[] _originalRenderingLayerMasks;
         private string _animation;
         private bool _poseReady;
-        private QuickOutline.Outline _meatOutline;
+        private QuickOutline.Outline _pickupOutline;
         private Transform _meatVisual;
         private Vector3 _meatGroundPosition;
         private Quaternion _meatGroundRotation;
@@ -37,6 +37,20 @@ namespace EchoProtocol.Networking
 
         public void Configure(int id, HuntKind type, Animator animation)
         { index = id; kind = type; animator = animation; }
+
+        public void RelocateNestHome(Vector3 newHome)
+        {
+            if (kind != HuntKind.Alien || !transform.parent)
+                return;
+
+            Vector3 delta = newHome - Home;
+            if (delta.sqrMagnitude < .0001f)
+                return;
+            if (Agent && Agent.enabled)
+                Agent.enabled = false;
+            transform.parent.position += delta;
+            Home = newHome;
+        }
 
         private void Awake()
         {
@@ -86,12 +100,18 @@ namespace EchoProtocol.Networking
                 _meatVisual = transform.GetChild(0);
                 _meatGroundPosition = _meatVisual.localPosition;
                 _meatGroundRotation = _meatVisual.localRotation;
-                _meatOutline = GetComponent<QuickOutline.Outline>();
-                if (!_meatOutline) _meatOutline = gameObject.AddComponent<QuickOutline.Outline>();
-                _meatOutline.OutlineMode = QuickOutline.Outline.Mode.OutlineVisible;
-                _meatOutline.OutlineColor = new Color(1f, .7f, .25f, 1f);
-                _meatOutline.OutlineWidth = 3.5f;
-                _meatOutline.UpdateMaterialProperties();
+            }
+
+            if (kind == HuntKind.Meat || kind == HuntKind.Jerrycan)
+            {
+                _pickupOutline = GetComponent<QuickOutline.Outline>();
+                if (!_pickupOutline)
+                    _pickupOutline = gameObject.AddComponent<QuickOutline.Outline>();
+
+                _pickupOutline.OutlineMode = QuickOutline.Outline.Mode.OutlineVisible;
+                _pickupOutline.OutlineColor = Color.white;
+                _pickupOutline.OutlineWidth = 4f;
+                _pickupOutline.UpdateMaterialProperties();
             }
         }
 
@@ -156,11 +176,11 @@ namespace EchoProtocol.Networking
                 }
             }
             foreach (var c in _colliders) if (c) c.enabled = visible && !carried;
-            if (_meatOutline)
+            if (_pickupOutline)
             {
                 var viewer = Camera.main;
-                _meatOutline.enabled = visible && !carried && viewer
-                    && (viewer.transform.position - transform.position).sqrMagnitude <= 16f * 16f;
+                _pickupOutline.enabled = visible && !carried && viewer
+                    && (viewer.transform.position - transform.position).sqrMagnitude <= 20f * 20f;
             }
             if (!visible) { if (Agent) Agent.enabled = false; return; }
             Vector3 position = state.Position; Quaternion rotation = state.Rotation;

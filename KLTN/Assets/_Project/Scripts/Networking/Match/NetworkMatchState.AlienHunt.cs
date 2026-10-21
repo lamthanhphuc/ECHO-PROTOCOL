@@ -6,6 +6,7 @@ namespace EchoProtocol.Networking
     public sealed partial class NetworkMatchState
     {
         [Networked, Capacity(AlienHuntMission.EntityCount)] public NetworkArray<HuntEntityState> HuntEntities => default;
+        [Networked, Capacity(AlienHuntMission.AlienCount)] public NetworkArray<Vector3> HuntNestPositions => default;
         [Networked, Capacity(3)] public NetworkArray<HuntFurnaceState> HuntFurnaces => default;
         [Networked] public NetworkBool HuntReady { get; private set; }
         [Networked] public int HuntBurned { get; private set; }
@@ -15,6 +16,7 @@ namespace EchoProtocol.Networking
             var hunt = AlienHuntMission.Instance;
             if (!hunt) return;
             if (!HuntReady) { hunt.Initialize(); HuntReady = true; }
+            hunt.ApplyNetworkNestHomes();
             hunt.Tick(Runner.DeltaTime);
             if (!IsEnded) TickPurgeDirector();
         }

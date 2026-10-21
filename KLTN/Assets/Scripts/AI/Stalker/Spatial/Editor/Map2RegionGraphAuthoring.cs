@@ -11,13 +11,15 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
     public static class Map2RegionGraphAuthoring
     {
         public const string AssetPath = "Assets/AI/Stalker/Map2/AI_Stalker_Map2_RegionGraph.asset";
+        public const string HuntAssetPath = "Assets/AI/Stalker/Map2/AI_Stalker_Map2_Hunt_RegionGraph.asset";
 
         [MenuItem("Echo Protocol/AI/Stalker/Bake Map2 Region Graph")]
         public static void Bake()
         {
             var scene = SceneManager.GetActiveScene();
-            if (Application.isPlaying || scene.path != "Assets/Scenes/Scene_A.unity")
-                throw new InvalidOperationException("Open Scene_A in Edit Mode before baking its RegionGraph.");
+            if (Application.isPlaying || (scene.path != "Assets/Scenes/Scene_A.unity" && scene.path != "Assets/Scenes/Scene_B.unity"))
+                throw new InvalidOperationException("Open Scene_A or Scene_B in Edit Mode before baking its RegionGraph.");
+            string assetPath = scene.path == "Assets/Scenes/Scene_B.unity" ? HuntAssetPath : AssetPath;
             if (UnityEngine.Object.FindObjectsByType<Unity.AI.Navigation.NavMeshSurface>()
                 .Any(surface => surface.enabled && surface.navMeshData != null && surface.gameObject.scene != scene))
                 throw new InvalidOperationException("Unload other scenes with NavMesh surfaces before baking Map2.");
@@ -37,16 +39,16 @@ namespace EchoProtocol.AI.Stalker.Spatial.Editor
 
             if (!AssetDatabase.IsValidFolder("Assets/AI/Stalker/Map2"))
                 AssetDatabase.CreateFolder("Assets/AI/Stalker", "Map2");
-            var asset = AssetDatabase.LoadAssetAtPath<RegionGraphAsset>(AssetPath);
+            var asset = AssetDatabase.LoadAssetAtPath<RegionGraphAsset>(assetPath);
             if (asset == null)
             {
                 asset = ScriptableObject.CreateInstance<RegionGraphAsset>();
-                AssetDatabase.CreateAsset(asset, AssetPath);
+                AssetDatabase.CreateAsset(asset, assetPath);
             }
             asset.ConfigureFromRuntimeGraph(report.RuntimeGraph, graph.NodeCount);
             EditorUtility.SetDirty(asset);
             AssetDatabase.SaveAssetIfDirty(asset);
-            Debug.Log($"[Map2] Baked {report.RuntimeSemanticRegionCount} regions for {graph.NodeCount} NavMesh nodes: {AssetPath}");
+            Debug.Log($"[Map2] Baked {report.RuntimeSemanticRegionCount} regions for {graph.NodeCount} NavMesh nodes: {assetPath}");
         }
 
         public static FullStationRegionGraphAuthoringCore.DryRunReport BuildReport(

@@ -125,7 +125,7 @@ namespace EchoProtocol.AI.Minions
                 Vector3 candidate = _purgeActivityFocus + new Vector3(offset.x, 0f, offset.y);
                 if (_catfishOnLand && EncounterDutyValue == (int)FishcatEncounterDuty.Ambusher
                     && FloodedWaterBoundary.TryGetSwimSurface(candidate, out _, .1f)
-                    && CrossesMap2Water(candidate) && !IsCatfishStepBlocked(candidate))
+                    && CrossesMap2Water(candidate) && !IsMovementStepBlocked(candidate))
                 {
                     _swimDestination = candidate;
                     _catfishOnLand = false;
@@ -193,7 +193,7 @@ namespace EchoProtocol.AI.Minions
         [SerializeField, Min(0f)] private float attackKnockbackSpeed = 10f;
         [SerializeField, Min(0.05f)] private float attackKnockbackSeconds = 0.3f;
         [SerializeField, Min(0.1f)] private float attackCooldownSeconds = 0.65f;
-        [SerializeField, Min(0.1f)] private float attackRecoverySeconds = 1f;
+        [SerializeField, Min(0.1f)] private float attackRecoverySeconds = 3f;
         [SerializeField, Min(0.5f)] private float toolFleeSeconds = 1.6f;
 
         [Header("Hit Effects")]
@@ -320,6 +320,10 @@ namespace EchoProtocol.AI.Minions
         private Vector3 _map2FlightDestination;
         private bool _map2Flying;
         private bool _map2FlightEnteredWater;
+        private float _recoveryDetourUntil;
+        private Vector3 _recoveryFlightDestination;
+        private readonly NavigationProgressMonitor _stationaryRecovery = new NavigationProgressMonitor(
+            new NavigationProgressSettings(.25f, .05f, .05f, 4.75f, 5f));
 
         public void ConfigureBeforeSpawn(RegionSemanticZone zone) => ZoneValue = (int)zone;
 
@@ -347,11 +351,16 @@ namespace EchoProtocol.AI.Minions
             if (IsDisruptor)
             {
                 _agent.radius = 0.65f;
-                _agent.height = 1.8f;
+                if (IsCatfish)
+                {
+                    float bakedRadius = NavMesh.GetSettingsByID(_agent.agentTypeID).agentRadius;
+                    if (bakedRadius > 0f) _agent.radius = bakedRadius;
+                }
+                _agent.height = 1f;
                 if (_bodyCollider is CapsuleCollider capsule)
                 {
-                    capsule.center = Vector3.up * 0.9f;
-                    capsule.radius = _agent.radius;
+                    capsule.center = Vector3.up * 0.5f;
+                    capsule.radius = Mathf.Min(_agent.radius, 0.5f);
                     capsule.height = _agent.height;
                 }
             }
@@ -378,9 +387,11 @@ namespace EchoProtocol.AI.Minions
             {
                 _visualBaseLocalPosition = _visualRoot.localPosition;
                 _visualRenderers = _visualRoot.GetComponentsInChildren<Renderer>(true);
-                if (TryGetVisualBounds(out var visualBounds))
+                if (TryGetVisualBounds(out var visualBounds) && visualBounds.size.y > 0.01f)
                 {
-                    _visualTopOffset = visualBounds.max.y - _visualRoot.position.y;
+                    _visualRoot.localScale *= 1f / visualBounds.size.y;
+                    if (TryGetVisualBounds(out visualBounds))
+                        _visualTopOffset = visualBounds.max.y - _visualRoot.position.y;
                 }
 
                 foreach (var renderer in _visualRenderers)
@@ -445,6 +456,7 @@ namespace EchoProtocol.AI.Minions
 
             if (_agent.enabled) _agent.enabled = false;
             if (!NavMesh.SamplePosition(transform.position, out var hit, 2f, _agent.areaMask)) return false;
+            if (IsMovementStepBlocked(hit.position, IsDisruptor ? 0f : FlightHeightValue)) return false;
             transform.position = hit.position;
             _agent.enabled = true;
             if (!_agent.isOnNavMesh)
@@ -454,6 +466,7 @@ namespace EchoProtocol.AI.Minions
             }
 
             _navigation ??= new StalkerNavigationController(_agent);
+            _navigation.ClearDestinationCache();
             _navigation.SetAuthoritativeLocomotion(true);
 // #if UNITY_EDITOR || DEVELOPMENT_BUILD
 //             Debug.Log($"[CREEP_SPAWN][READY] id={Object.Id} zone={Zone} position={transform.position}", this);
@@ -491,6 +504,9 @@ namespace EchoProtocol.AI.Minions
         public override void FixedUpdateNetwork()
         {
             if (!Object.HasStateAuthority || _agent == null) return;
+
+            try
+            {
 
             // Dying thực sự phải đứng trước
             // mọi NavMesh/AI activation.
@@ -579,8 +595,7 @@ namespace EchoProtocol.AI.Minions
                 IsMoving = false;
                 return;
             }
-            if (!_agent.isOnNavMesh
-                && (_navigation == null || !_navigation.TryReattachToNearestNavMesh(2f)))
+            if (!_agent.isOnNavMesh && !TryActivateAgent())
             {
                 IsMoving = false;
                 return;
@@ -591,7 +606,7 @@ namespace EchoProtocol.AI.Minions
             if (ToolDivePhase != 0)
             {
                 TickToolDive();
-                _navigation.TickAuthoritativeLocomotion(Runner.DeltaTime);
+                TickNavigationLocomotion(Runner.DeltaTime);
                 IsMoving = _navigation.AuthoritativeMoveSpeed > 0.2f;
                 return;
             }
@@ -637,7 +652,7 @@ namespace EchoProtocol.AI.Minions
                 _distractionUntil = 0f;
                 UpdateTargetAndMovement();
             }
-            _navigation.TickAuthoritativeLocomotion(Runner.DeltaTime);
+            TickNavigationLocomotion(Runner.DeltaTime);
             _navigation.TickProgress(Runner.DeltaTime);
             var execution = _navigation.GetExecutionStatus();
             if (execution == NavigationExecutionStatus.Failed
@@ -647,6 +662,48 @@ namespace EchoProtocol.AI.Minions
                 RecoverFromBlockedNavigation();
             }
             IsMoving = _navigation.AuthoritativeMoveSpeed > 0.2f;
+            }
+            finally { TickStationaryRecovery(); }
+        }
+
+        private void TickStationaryRecovery()
+        {
+            if (IsDying || IsUvStunned || ToolDivePhase != 0 || !AttackRecovery.ExpiredOrNotRunning(Runner)
+                || (TryGetEligiblePlayer(TargetPlayer, out var target, out _, out _)
+                    && Vector3.Distance(transform.position, target.transform.position) <= (IsDisruptor ? DisruptorAttackRange : trackStandOffDistance)
+                    && HasLineOfSight(target)))
+            { _stationaryRecovery.Reset(); return; }
+            _stationaryRecovery.Observe(transform.position, 0f, Runner.DeltaTime);
+            if (_stationaryRecovery.State != NavigationProgressState.Stuck) return;
+            _stationaryRecovery.Reset();
+            _nextRoamRetargetAt = _nextTargetRefreshAt = 0f;
+            _distractionUntil = 0f;
+            _hasCatfishLandEntry = _catfishPatrolCrossing = false;
+            if ((IsCatfish && !_catfishOnLand) || _map2Flying)
+            {
+                // A sideways, collision-checked detour breaks repeated attempts into the same bank or wall.
+                for (int i = 0; i < 8; i++)
+                {
+                    float angle = (i + UnityEngine.Random.Range(0f, 1f)) * Mathf.PI / 4f;
+                    var candidate = transform.position + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * 2f;
+                    if (IsMovementStepBlocked(candidate, IsCatfish ? 0f : FlightHeightValue)) continue;
+                    if (IsCatfish && !FloodedWaterBoundary.TryGetSwimSurface(candidate, out _, .1f)) continue;
+                    if (IsCatfish) { _swimDestination = candidate; _catfishPatrolCrossing = true; _recoveryDetourUntil = Time.time + 2f; }
+                    else
+                    {
+                        _recoveryFlightDestination = _map2FlightDestination;
+                        _map2FlightDestination = candidate;
+                        _recoveryDetourUntil = Time.time + 2f;
+                    }
+                    return;
+                }
+                return;
+            }
+            _navigation ??= new StalkerNavigationController(_agent);
+            var destination = target != null ? target.transform.position
+                : _navigation.TryGetActiveDestination(out var active) ? active : transform.position;
+            if (_navigation.TryRecoverLocalPosition(destination)) _navigation.SetAuthoritativeLocomotion(true);
+            RecoverFromBlockedNavigation();
         }
 
         private void TickCatfishSwim()
@@ -654,13 +711,20 @@ namespace EchoProtocol.AI.Minions
             if (_agent.enabled) _agent.enabled = false;
             bool currentlyInWater = FloodedWaterBoundary.TryGetSwimSurface(
                 transform.position, out float surfaceY, 0.1f);
+            if (!currentlyInWater && !_catfishPatrolCrossing && TryActivateAgent())
+            {
+                _catfishOnLand = true;
+                _catfishWasInWater = _hasCatfishLandEntry = false;
+                IsMoving = false;
+                return;
+            }
             if (IsPurgeCatfish && currentlyInWater) _catfishPatrolCrossing = false;
             _catfishWasInWater |= currentlyInWater;
-            float swimY = surfaceY - 0.9f;
+            float swimY = currentlyInWater ? ResolveSwimHeight(surfaceY) : surfaceY - 0.9f;
             if (currentlyInWater && transform.position.y < swimY - 0.05f)
             {
                 Vector3 risePosition = transform.position + Vector3.up * Mathf.Min(Runner.DeltaTime * 1.5f, swimY - transform.position.y);
-                if (IsPurgeCatfish && IsCatfishStepBlocked(risePosition)) { IsMoving = false; return; }
+                if (IsMovementStepBlocked(risePosition)) { IsMoving = false; return; }
                 transform.position = risePosition;
                 IsMoving = true;
                 return;
@@ -733,18 +797,21 @@ namespace EchoProtocol.AI.Minions
             if (IsPurgeCatfish && TargetPlayer.IsRealPlayer && _distractionUntil <= Time.time
                 && Time.time - _lastVisiblePlayerAt > 0.1f)
                 destination = CatfishSearchPosition();
+            if (Time.time < _recoveryDetourUntil) destination = _swimDestination;
             Vector3 horizontal = Vector3.ProjectOnPlane(destination - transform.position, Vector3.up);
             if (horizontal.sqrMagnitude < 0.2f) { IsMoving = false; return; }
             Vector3 step = horizontal.normalized * Mathf.Min(Runner.DeltaTime * trackSpeed * ResonanceSpeedMultiplier, horizontal.magnitude);
             Vector3 nextPosition = transform.position + step;
             bool enteringShallowWater = FloodedWaterBoundary.TryGetSwimSurface(nextPosition, out _, 0.1f);
-            bool approachingLand = _catfishWasInWater && !enteringShallowWater;
+            bool approachingLand = _catfishWasInWater && (!enteringShallowWater
+                || !FloodedWaterBoundary.TryGetSwimSurface(destination, out _, .1f));
             // shortcut: bridge Map 2's disconnected water/land meshes; author NavMeshLinks if the gap grows beyond 6m.
             if (approachingLand && !_hasCatfishLandEntry
                 && NavMesh.SamplePosition(nextPosition, out var landHit, 6f, _agent.areaMask)
                 && Vector3.Dot(
                     Vector3.ProjectOnPlane(landHit.position - transform.position, Vector3.up),
-                    horizontal) > 0f)
+                    horizontal) > 0f
+                && !IsMovementStepBlocked(landHit.position))
             {
                 _catfishLandEntry = landHit.position;
                 _hasCatfishLandEntry = true;
@@ -755,7 +822,7 @@ namespace EchoProtocol.AI.Minions
                 Vector3 landingDirection = _catfishLandEntry - transform.position;
                 Vector3 landingForward = Vector3.ProjectOnPlane(landingDirection, Vector3.up);
                 Vector3 landingNext = Vector3.MoveTowards(transform.position, _catfishLandEntry, landingStep);
-                if (IsPurgeCatfish && IsCatfishStepBlocked(landingNext))
+                if (IsMovementStepBlocked(landingNext))
                 {
                     _hasCatfishLandEntry = false;
                     _nextRoamRetargetAt = 0f;
@@ -782,14 +849,14 @@ namespace EchoProtocol.AI.Minions
             if ((!enteringShallowWater && !enteringLand)
                 || (enteringShallowWater
                     && FloodedWaterBoundary.TryGetSwimSurface(nextPosition, out _)
-                    && Physics.Raycast(transform.position + Vector3.up * 1.2f, step.normalized,
+                    && Physics.Raycast(transform.position + Vector3.up * 0.75f, step.normalized,
                     step.magnitude + 0.4f, Physics.DefaultRaycastLayers & ~(1 << 4), QueryTriggerInteraction.Ignore)))
             {
                 if (_seekingPlayer) CancelForcedPlayerSeek();
                 IsMoving = false;
                 return;
             }
-            if (IsPurgeCatfish && IsCatfishStepBlocked(nextPosition))
+            if (IsMovementStepBlocked(nextPosition))
             {
                 _nextRoamRetargetAt = 0f;
                 IsMoving = false;
@@ -818,19 +885,102 @@ namespace EchoProtocol.AI.Minions
             return _catfishSearchPosition;
         }
 
-        private bool IsCatfishStepBlocked(Vector3 nextPosition)
+        private float ResolveSwimHeight(float surfaceY)
+        {
+            float height = surfaceY - .9f;
+            var origin = new Vector3(transform.position.x, surfaceY + .1f, transform.position.z);
+            foreach (var hit in Physics.RaycastAll(origin, Vector3.down, 2f,
+                         Physics.DefaultRaycastLayers & ~(1 << 4), QueryTriggerInteraction.Ignore))
+            {
+                if (hit.normal.y < .65f || hit.point.y > surfaceY + .05f
+                    || !GameplayEnvironmentPhysics.IsEnvironment(hit.collider)
+                    || hit.collider.GetComponentInParent<CreepMinionRuntime>() != null) continue;
+                height = Mathf.Max(height, hit.point.y + .05f);
+            }
+            return height;
+        }
+
+        private void TickNavigationLocomotion(float deltaSeconds)
+        {
+            if (!_navigation.IsUsable || !_agent.hasPath || _agent.pathPending)
+            {
+                _navigation.TickAuthoritativeLocomotion(deltaSeconds);
+                return;
+            }
+            Vector3 toCorner = Vector3.ProjectOnPlane(_agent.steeringTarget - transform.position, Vector3.up);
+            float distance = Mathf.Min(toCorner.magnitude, _agent.speed * deltaSeconds);
+            float height = IsDisruptor ? 0f : FlightHeightValue;
+            Vector3 nextPosition = transform.position + toCorner.normalized * distance;
+            var filter = new NavMeshQueryFilter { agentTypeID = _agent.agentTypeID, areaMask = _agent.areaMask };
+            if (NavMesh.SamplePosition(nextPosition, out var nextSurface, .8f, filter)
+                && Vector2.Distance(new Vector2(nextPosition.x, nextPosition.z),
+                    new Vector2(nextSurface.position.x, nextSurface.position.z)) < .15f)
+                nextPosition = nextSurface.position;
+            bool blocked = IsNavigationStepBlocked(nextPosition, height);
+            // NavMesh movement does not resolve collisions against the minion's elevated body.
+            _navigation.TickAuthoritativeLocomotion(blocked ? 0f : deltaSeconds);
+        }
+
+        private bool IsNavigationStepBlocked(Vector3 nextPosition, float heightOffset)
+        {
+            if (!IsMovementStepBlocked(nextPosition, heightOffset)) return false;
+            float climb = NavMesh.GetSettingsByID(_agent.agentTypeID).agentClimb;
+            if (nextPosition.y > transform.position.y + .05f
+                && nextPosition.y - transform.position.y <= climb + .01f
+                && !IsBodyPlacementBlocked(nextPosition, heightOffset)) return false;
+            // The NavMesh agent resolves baked steps; the body sweep must allow the same step height.
+            return climb <= 0f
+                || IsMovementStepBlocked(transform.position + Vector3.up * climb, heightOffset)
+                || IsMovementStepBlocked(nextPosition, heightOffset + climb);
+        }
+
+        private bool IsBodyPlacementBlocked(Vector3 nextPosition, float heightOffset)
+        {
+            if (!(_bodyCollider is CapsuleCollider capsule)) return true;
+            Vector3 scale = transform.lossyScale;
+            float radius = capsule.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z));
+            float segment = Mathf.Max(0f, capsule.height * Mathf.Abs(scale.y) * .5f - radius);
+            Vector3 center = nextPosition + transform.TransformVector(_bodyColliderBaseCenter) + Vector3.up * heightOffset;
+            Vector3 bodyPosition = transform.position + center - transform.TransformPoint(capsule.center);
+            foreach (var other in Physics.OverlapCapsule(center - Vector3.up * segment, center + Vector3.up * segment,
+                         radius, Physics.DefaultRaycastLayers & ~(1 << 4), QueryTriggerInteraction.Ignore))
+            {
+                if (other.transform.IsChildOf(transform) || other.GetComponentInParent<NetworkPlayerMovement>() != null) continue;
+                if (Physics.ComputePenetration(capsule, bodyPosition, transform.rotation,
+                        other, other.transform.position, other.transform.rotation, out var separation, out float depth)
+                    && depth > .05f && separation.y < .65f) return true;
+            }
+            return false;
+        }
+
+        private bool IsMovementStepBlocked(Vector3 nextPosition, float heightOffset = 0f)
         {
             Vector3 delta = nextPosition - transform.position;
             if (delta.sqrMagnitude < 0.000001f) return false;
-            foreach (var hit in Physics.SphereCastAll(transform.position + Vector3.up * 0.9f,
-                         0.3f, delta.normalized, delta.magnitude + 0.05f,
-                         Physics.DefaultRaycastLayers & ~(1 << 4), QueryTriggerInteraction.Ignore))
+            var capsule = _bodyCollider as CapsuleCollider;
+            Vector3 scale = transform.lossyScale;
+            float radius = capsule != null ? capsule.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z)) : 0.3f;
+            float halfSegment = capsule != null ? Mathf.Max(0f, capsule.height * Mathf.Abs(scale.y) * 0.5f - radius) : 0f;
+            Vector3 center = transform.position + (capsule != null ? transform.TransformVector(_bodyColliderBaseCenter) : Vector3.up * 0.9f)
+                + Vector3.up * heightOffset;
+            bool hitBackfaces = Physics.queriesHitBackfaces;
+            try
             {
-                if (hit.collider.transform.IsChildOf(transform)) continue;
-                if (hit.collider.GetComponentInParent<NetworkPlayerMovement>() != null) continue;
-                if (hit.normal.y < 0.65f) return true;
+                // Thin house meshes must block entry from either side.
+                Physics.queriesHitBackfaces = true;
+                foreach (var hit in Physics.CapsuleCastAll(center - Vector3.up * halfSegment, center + Vector3.up * halfSegment,
+                             radius, delta.normalized, delta.magnitude + 0.05f,
+                             Physics.DefaultRaycastLayers & ~(1 << 4), QueryTriggerInteraction.Ignore))
+                {
+                    if (hit.collider.transform.IsChildOf(transform)) continue;
+                    if (hit.collider.GetComponentInParent<NetworkPlayerMovement>() != null) continue;
+                    Vector3 bodyPosition = capsule != null
+                        ? transform.position + center - transform.TransformPoint(capsule.center) : transform.position;
+                    if (StalkerNavigationController.IsMovementHitBlocking(hit, capsule, bodyPosition, delta)) return true;
+                }
+                return false;
             }
-            return false;
+            finally { Physics.queriesHitBackfaces = hitBackfaces; }
         }
 
         private void UpdateTargetAndMovement()
@@ -1019,14 +1169,8 @@ namespace EchoProtocol.AI.Minions
 
         private bool IsFlightBlocked(Vector3 destination)
         {
-            Vector3 origin = transform.position + Vector3.up * Mathf.Max(1f, FlightHeightValue);
-            Vector3 ray = new Vector3(destination.x, origin.y, destination.z) - origin;
-            foreach (var hit in Physics.RaycastAll(origin, ray.normalized, ray.magnitude,
-                         Physics.DefaultRaycastLayers & ~(1 << 4), QueryTriggerInteraction.Ignore))
-                if (hit.collider != null && !hit.collider.transform.IsChildOf(transform)
-                    && hit.collider.GetComponentInParent<LobbyPlayerState>() == null)
-                    return true;
-            return false;
+            Vector3 origin = transform.position;
+            return IsMovementStepBlocked(new Vector3(destination.x, origin.y, destination.z), FlightHeightValue);
         }
 
         private void RecoverFromBlockedNavigation()
@@ -1048,9 +1192,15 @@ namespace EchoProtocol.AI.Minions
         private void TickMap2Flight()
         {
             if (_agent.enabled) _agent.enabled = false;
+            if (_recoveryDetourUntil > 0f && Time.time >= _recoveryDetourUntil)
+            {
+                _map2FlightDestination = _recoveryFlightDestination;
+                _recoveryDetourUntil = 0f;
+            }
             Vector3 horizontal = Vector3.ProjectOnPlane(_map2FlightDestination - transform.position, Vector3.up);
             if (horizontal.sqrMagnitude <= 0.04f)
             {
+                if (Time.time < _recoveryDetourUntil) { IsMoving = false; return; }
                 _map2Flying = false;
                 IsMoving = false;
                 TryActivateAgent();
@@ -1069,7 +1219,8 @@ namespace EchoProtocol.AI.Minions
             bool overWater = FloodedWaterBoundary.TryGetSwimSurface(next, out _, 0.1f);
             _map2FlightEnteredWater |= overWater;
             if (_map2FlightEnteredWater && !overWater
-                && NavMesh.SamplePosition(next, out var landing, 2.5f, _agent.areaMask))
+                && NavMesh.SamplePosition(next, out var landing, 2.5f, _agent.areaMask)
+                && !IsMovementStepBlocked(landing.position, FlightHeightValue))
             {
                 transform.position = landing.position;
                 _map2Flying = false;
@@ -1335,7 +1486,7 @@ namespace EchoProtocol.AI.Minions
             if (IsPurgeCatfish && Vector3.Distance(transform.position, playerObject.transform.position) > visionRange)
                 return false;
             var origin = IsDisruptor
-                ? transform.position + Vector3.up * 1.35f
+                ? transform.position + Vector3.up * 0.75f
                 : transform.position + Vector3.up * (FlightHeightValue > 0.01f ? FlightHeightValue : flightHeight);
             var destination = playerObject.transform.position + Vector3.up;
             var ray = destination - origin;
@@ -1461,7 +1612,7 @@ namespace EchoProtocol.AI.Minions
                 attackCooldownSeconds);
             AttackRecovery = TickTimer.CreateFromSeconds(
                 Runner,
-                IsDisruptor ? attackCooldownSeconds : attackRecoverySeconds);
+                attackRecoverySeconds);
             RpcPlayAttackPresentation((int)kind);
         }
 
@@ -1916,7 +2067,7 @@ namespace EchoProtocol.AI.Minions
                                 _visualRoot.parent.lossyScale.y))
                         : 1f;
                 if (_renderFlightHeight < 0f) _renderFlightHeight = resolvedHeight;
-                _renderFlightHeight = Mathf.MoveTowards(_renderFlightHeight, resolvedHeight, Time.deltaTime * 12f);
+                _renderFlightHeight = Mathf.MoveTowards(_renderFlightHeight, resolvedHeight, Time.deltaTime * FlightHeightChangeSpeed);
                 float localHeight = _renderFlightHeight / parentScaleY;
                 float localBob = bob / parentScaleY;
                 _visualRoot.localPosition =
@@ -1961,18 +2112,24 @@ namespace EchoProtocol.AI.Minions
             _actionAnimationUntil = Time.time + Mathf.Max(attackAnimationLockSeconds, StealClipSeconds());
         }
 
+        private const float FlightHeightChangeSpeed = 12f;
+
         private void UpdateFlightHeightAuthoritative()
         {
             if (Time.time < _nextCeilingProbeAt)
                 return;
 
             _nextCeilingProbeAt = Time.time + 0.05f;
-            FlightHeightValue = ResolveFlightHeight();
+            Vector3 toCorner = Vector3.ProjectOnPlane(_agent.steeringTarget - transform.position, Vector3.up);
+            float lookAhead = flightHeight * _agent.speed / FlightHeightChangeSpeed + _agent.radius + ceilingClearance;
+            Vector3 next = transform.position + toCorner.normalized * Mathf.Min(lookAhead, toCorner.magnitude);
+            FlightHeightValue = Mathf.MoveTowards(FlightHeightValue, ResolveFlightHeight(next), FlightHeightChangeSpeed * 0.05f);
         }
 
-        private float ResolveFlightHeight()
+        private float ResolveFlightHeight(Vector3 lookAheadPosition)
         {
             float visualTopOffset = _visualTopOffset;
+            float height = Mathf.Max(flightHeight, 0.3f);
 
             if (_visualRoot != null
                 && TryGetVisualBounds(out var visualBounds))
@@ -2001,18 +2158,20 @@ namespace EchoProtocol.AI.Minions
                     continue;
                 }
 
-                return Mathf.Max(
+                height = Mathf.Max(
                     0.3f,
                     0.1f
                     + hit.distance
                     - ceilingClearance
                     - visualTopOffset
                     - flightBobAmplitude);
+                break;
             }
 
-            return Mathf.Max(
-                flightHeight,
-                0.3f);
+            // Descend before the doorway rather than flying through the wall above it.
+            if (IsMovementStepBlocked(lookAheadPosition, height) && !IsMovementStepBlocked(lookAheadPosition, 0.3f))
+                return 0.3f;
+            return height;
         }
 
         private bool TryGetVisualBounds(out Bounds bounds)

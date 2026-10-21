@@ -49,7 +49,13 @@ namespace EchoProtocol.Networking
     }
 
     public enum PurgeBossMood { Calm, Warning, Hunting, Staggered }
-    public struct PurgeAidSlot : INetworkStruct { public NetworkId Id; public TickTimer Refill; }
+    public struct PurgeAidSlot : INetworkStruct
+    {
+        public NetworkId Id;
+        public TickTimer Refill;
+        public int LastSpawnIndex;
+        public Vector3 LastPosition;
+    }
     public sealed partial class NetworkMatchState
     {
         [Networked, OnChangedRender(nameof(PurgeMoodChanged))] public PurgeBossMood PurgeMood { get; private set; }
@@ -67,7 +73,8 @@ namespace EchoProtocol.Networking
         [Networked] public Vector3 PurgeRitualPosition { get; private set; }
         [Networked] public int PurgeRitualVersion { get; private set; }
         [Networked] public int PurgeAidAvailable { get; private set; }
-        [Networked, Capacity(3)] public NetworkArray<PurgeAidSlot> PurgeAid => default;
+        private const int PurgeAidCount = 9;
+        [Networked, Capacity(PurgeAidCount)] public NetworkArray<PurgeAidSlot> PurgeAid => default;
         private StalkerFusionRuntime _purgeBoss;
         private static AudioClip _purgeWarningSound;
         public int PurgeRageTier => HuntBurned >= 8 ? 3 : HuntBurned / 3;
@@ -194,8 +201,8 @@ namespace EchoProtocol.Networking
             var mission=AlienHuntMission.Instance; if(!mission || !_teamToolPickupCatalog) return;
             if (!PurgeCoopAidEnabled)
             {
-                // Remove only unclaimed station supplies; never take a carried kit away.
-                for (int i = 0; i < 3; i++)
+                // Remove only unclaimed supplies; never take a carried kit away.
+                for (int i = 0; i < PurgeAidCount; i++)
                 {
                     var slot = PurgeAid[i];
                     if (slot.Id.IsValid && Runner.TryFindObject(slot.Id, out var pickup) && pickup != null)
@@ -209,36 +216,96 @@ namespace EchoProtocol.Networking
                 PurgeAidAvailable = 0;
                 return;
             }
-            var prefab=_teamToolPickupCatalog.GetPrefab(LobbyPlayerState.FirstAidKitToolId); if(!prefab)return;
-            int available=0;
-            for(int i=0;i<3;i++)
+            var prefab = _teamToolPickupCatalog.GetPrefab(
+                LobbyPlayerState.FirstAidKitToolId);
+
+            if (!prefab) return;
+
+            int available = 0;
+
+            for (int i = 0; i < PurgeAidCount; i++)
             {
                 var slot=PurgeAid[i];
-                bool exists=slot.Id.IsValid && Runner.TryFindObject(slot.Id,out var unused);
-                NetworkObject pickupObject=null;
-                if(exists)Runner.TryFindObject(slot.Id,out pickupObject);
-                bool onFloor=pickupObject && ((pickupObject.TryGetComponent<NetworkTeamToolPickup>(out var teamPickup) && teamPickup.IsAvailable)
-                    || (pickupObject.TryGetComponent<NetworkToolPickup>(out var pickup) && !pickup.IsPickedUp));
-                if(onFloor){available++;continue;}
-                if(slot.Id.IsValid && !slot.Refill.IsRunning) slot.Refill=TickTimer.CreateFromSeconds(Runner,45);
-                if(slot.Refill.ExpiredOrNotRunning(Runner))
+                NetworkObject oldPickup = null;
+                if (slot.Id.IsValid)
+                    Runner.TryFindObject(slot.Id, out oldPickup);
+
+                bool onFloor = oldPickup &&
+                    ((oldPickup.TryGetComponent<NetworkTeamToolPickup>(out var teamTool) && teamTool.IsAvailable)
+                    || (oldPickup.TryGetComponent<NetworkToolPickup>(out var pickup) && !pickup.IsPickedUp));
+
+                if (onFloor)
                 {
-                    var station=mission.Furnaces[i];
-                    if(NavMesh.SamplePosition(station.transform.position+station.transform.right*2.5f,out var hit,3,NavMesh.AllAreas))
+                    available++;
+                    continue;
+                }
+
+                if (slot.Id.IsValid && !slot.Refill.IsRunning)
+                    slot.Refill = TickTimer.CreateFromSeconds(Runner, 45f);
+
+                if (slot.Refill.IsRunning && !slot.Refill.Expired(Runner))
+                {
+                    PurgeAid.Set(i, slot);
+                    continue;
+                }
+
+                if (TryFindPurgeAidPosition(i, slot, out var position, out int spawnIndex))
+                {
+                    var spawned = Runner.Spawn(prefab, position, Quaternion.identity);
+                    if (spawned)
                     {
-                        if(pickupObject)Runner.Despawn(pickupObject);
-                        var spawned=Runner.Spawn(prefab,hit.position,Quaternion.identity);
-                        slot.Id=spawned.Id; slot.Refill=TickTimer.None; available++;
+                        if (oldPickup) Runner.Despawn(oldPickup);
+                        slot.Id = spawned.Id;
+                        slot.LastSpawnIndex = spawnIndex;
+                        slot.LastPosition = position;
+                        slot.Refill = TickTimer.None;
+                        available++;
                     }
                 }
-                PurgeAid.Set(i,slot);
+                else slot.Refill = TickTimer.CreateFromSeconds(Runner, 3f);
+
+                PurgeAid.Set(i, slot);
             }
-            PurgeAidAvailable=available;
-            if(available==0)for(int i=0;i<3;i++)
+            PurgeAidAvailable = available;
+        }
+
+        private bool TryFindPurgeAidPosition(int slotIndex, PurgeAidSlot slot, out Vector3 position, out int spawnIndex)
+        {
+            position = default;
+            spawnIndex = -1;
+            var mission = AlienHuntMission.Instance;
+            if (!mission) return false;
+            var path = new NavMeshPath();
+
+            for (int attempt = 0; attempt < 180; attempt++)
             {
-                var slot=PurgeAid[i];
-                if(slot.Refill.RemainingTime(Runner)>15) {slot.Refill=TickTimer.CreateFromSeconds(Runner,15);PurgeAid.Set(i,slot);}
+                int candidateIndex = Random.Range(0, 18);
+                if (slot.Id.IsValid && candidateIndex == slot.LastSpawnIndex) continue;
+                Vector3 origin = mission.Actors[9 + candidateIndex].Home;
+                Vector2 offset = Random.insideUnitCircle * 5f;
+                if (offset.sqrMagnitude < 4f) continue;
+                Vector3 candidate = origin + new Vector3(offset.x, 0f, offset.y);
+                if (!NavMesh.SamplePosition(candidate, out var hit, 1.5f, NavMesh.AllAreas)) continue;
+                if (Mathf.Abs(hit.position.y - origin.y) > 1.5f) continue;
+                if (slot.Id.IsValid && Vector3.Distance(hit.position, slot.LastPosition) < 6f) continue;
+                if (!NavMesh.CalculatePath(origin, hit.position, NavMesh.AllAreas, path) || path.status != NavMeshPathStatus.PathComplete) continue;
+                if (Physics.CheckCapsule(hit.position + Vector3.up * .35f, hit.position + Vector3.up * 1.1f, .35f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) continue;
+                bool occupied = false;
+                for (int j = 0; j < PurgeAidCount; j++)
+                {
+                    if (j == slotIndex) continue;
+                    var other = PurgeAid[j];
+                    if (!other.Id.IsValid || !Runner.TryFindObject(other.Id, out var obj)) continue;
+                    bool active = obj.TryGetComponent<NetworkTeamToolPickup>(out var tool) && tool.IsAvailable;
+                    if (!active && obj.TryGetComponent<NetworkToolPickup>(out var otherPickup)) active = !otherPickup.IsPickedUp;
+                    if (active && Vector3.Distance(hit.position, obj.transform.position) < 12f) { occupied = true; break; }
+                }
+                if (occupied) continue;
+                position = hit.position;
+                spawnIndex = candidateIndex;
+                return true;
             }
+            return false;
         }
         private void PurgeMoodChanged()
         {

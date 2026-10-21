@@ -8,13 +8,74 @@ using EchoProtocol.AI.Stalker.Spatial;
 using EchoProtocol.AI.Stalker.Spatial.Editor;
 using NUnit.Framework;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.AI;
+using UnityEngine.SceneManagement;
 
 namespace EchoProtocol.AI.Stalker.EditorTools.Tests
 {
     public sealed class Map2RegionGraphTests
     {
         private readonly List<UnityEngine.Object> _created = new List<UnityEngine.Object>();
+
+        [TestCase("Assets/Scenes/Scene_A.unity", Map2RegionGraphAuthoring.AssetPath)]
+        [TestCase("Assets/Scenes/Scene_B.unity", Map2RegionGraphAuthoring.HuntAssetPath)]
+        public void Map2_SceneGraphMatchesNavMeshAndIncludesReachableInteriors(string scenePath, string assetPath)
+        {
+            var setup = EditorSceneManager.GetSceneManagerSetup();
+            try
+            {
+                var scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+                var graph = NavMeshSpatialGraphBuilder.Build();
+                var asset = AssetDatabase.LoadAssetAtPath<RegionGraphAsset>(assetPath);
+                Assert.That(asset, Is.Not.Null);
+                var regions = asset.BuildRuntimeGraph();
+                Assert.That(RegionGraph.Validate(regions, graph), Is.EqualTo(RegionGraphValidationFailure.None));
+                var all = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Transform>()).ToArray();
+                Assert.That(all.SelectMany(t => t.GetComponents<Unity.AI.Navigation.NavMeshModifier>())
+                    .Any(m => m.name.Contains("_Door_") && m.ignoreFromBuild), Is.False);
+                var surface = UnityEngine.Object.FindAnyObjectByType<Unity.AI.Navigation.NavMeshSurface>();
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/StalkerNetwork_Lizard.prefab");
+                Assert.That(surface.agentTypeID, Is.EqualTo(prefab.GetComponent<NavMeshAgent>().agentTypeID));
+                Assert.That(NavMesh.GetSettingsByID(0).agentRadius, Is.EqualTo(.65f), "Map1 bake clearance must stay unchanged.");
+                foreach (var door in all.Where(t => t.name.Contains("_Door_")).SelectMany(t => t.GetComponents<BoxCollider>()))
+                {
+                    if (!door.enabled || door.isTrigger) continue;
+                    var foot = door.bounds.center;
+                    foot.y = door.bounds.min.y + .1f;
+                    Assert.That(NavMesh.SamplePosition(foot, out _, .05f, NavMesh.AllAreas), Is.False,
+                        $"NavMesh passes through static door {door.name} at {foot}");
+                }
+                var marker = all.Single(t => t.name == "MonsterSpawn_Stalker_EMPTY");
+                Assert.That(NavMesh.SamplePosition(marker.position, out var spawn, 1f, NavMesh.AllAreas), Is.True);
+                // These floor samples cover a cabin interior and the villa's upper floor.
+                foreach (var point in new[] { new Vector3(421.74f, 17.53f, 536.27f), new Vector3(470.03f, 26.54f, 505.16f) })
+                {
+                    Assert.That(NavMesh.SamplePosition(point, out var hit, .25f, NavMesh.AllAreas), Is.True, point.ToString());
+                    var path = new NavMeshPath();
+                    Assert.That(NavMesh.CalculatePath(spawn.position, hit.position, NavMesh.AllAreas, path), Is.True);
+                    Assert.That(path.status, Is.EqualTo(NavMeshPathStatus.PathComplete), point.ToString());
+                    var node = graph.Nodes.OrderBy(n => (n.Position - hit.position).sqrMagnitude).First();
+                    Assert.That(regions.TryGetNodeSemanticMetadata(node.Id, out var metadata), Is.True);
+                    Assert.That(metadata.Zone, Is.EqualTo(RegionSemanticZone.Zone01), point.ToString());
+                }
+                if (scenePath.EndsWith("Scene_B.unity"))
+                {
+                    var outside = new Vector3(394.29f, 31.53f, 681.67f);
+                    var node = graph.Nodes.OrderBy(n => (n.Position - outside).sqrMagnitude).First();
+                    Assert.That(regions.TryGetNodeSemanticMetadata(node.Id, out var metadata), Is.True);
+                    Assert.That(metadata.Zone, Is.EqualTo(RegionSemanticZone.Isolated), "Northern island must not be a hunt patrol goal.");
+                }
+            }
+            finally
+            {
+                if (setup.Any(s => s.isLoaded && s.isActive && !string.IsNullOrEmpty(s.path)))
+                    EditorSceneManager.RestoreSceneManagerSetup(setup);
+                else
+                    EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            }
+        }
 
         [TearDown]
         public void TearDown()

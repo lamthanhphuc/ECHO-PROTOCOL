@@ -11,6 +11,19 @@ namespace EchoProtocol.Networking.Tests
         private const string SpawnerSource = "Assets/_Project/Scripts/Networking/Player/PlayerSpawner.cs";
 
         [Test]
+        public void MinionBodyIsHalfPlayerHeight_AndVisualIsScaledToMatch()
+        {
+            var minion = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/PF_CreepMinionNetwork.prefab");
+            var player = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/PlayerNetwork.prefab");
+            Assert.That(player.GetComponent<CharacterController>().height, Is.EqualTo(2f));
+            Assert.That(minion.GetComponent<CapsuleCollider>().height, Is.EqualTo(1f));
+            Assert.That(minion.GetComponent<UnityEngine.AI.NavMeshAgent>().height, Is.EqualTo(1f));
+            string source = File.ReadAllText(MinionSource);
+            StringAssert.Contains("_agent.height = 1f", source);
+            StringAssert.Contains("_visualRoot.localScale *= 1f / visualBounds.size.y", source);
+        }
+
+        [Test]
         public void CreepAlert_HasRejectedAlertRetry()
         {
             string source = File.ReadAllText(MinionSource);
@@ -112,7 +125,7 @@ namespace EchoProtocol.Networking.Tests
             string source = File.ReadAllText(MinionSource);
             string fixedUpdate = ExtractMethod(source,
                 "public override void FixedUpdateNetwork",
-                "private void TickCatfishSwim");
+                "private void TickStationaryRecovery");
             string attack = ExtractMethod(source,
                 "private void AttackPlayer",
                 "private void CommitAttack");
@@ -126,7 +139,8 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.DoesNotContain("!AttackRecovery.ExpiredOrNotRunning(Runner)", fixedUpdate);
             StringAssert.Contains("!AttackRecovery.ExpiredOrNotRunning(Runner)", attack);
             StringAssert.Contains("AttackRecovery = TickTimer.CreateFromSeconds", commit);
-            StringAssert.Contains("IsDisruptor ? attackCooldownSeconds : attackRecoverySeconds", commit);
+            StringAssert.Contains("attackRecoverySeconds);", commit);
+            StringAssert.DoesNotContain("IsDisruptor ? attackCooldownSeconds : attackRecoverySeconds", commit);
             StringAssert.Contains("disruptorMovement.TryApplySlowAuthoritative", attack);
             StringAssert.DoesNotContain("|| !disruptorMovement.TryApplySlowAuthoritative", attack);
             StringAssert.DoesNotContain("|| !movement.TryApplySlowAuthoritative", attack);
@@ -140,7 +154,7 @@ namespace EchoProtocol.Networking.Tests
                 "Assets/Resources/PF_CreepMinionNetwork.prefab");
             var runtime = FindComponentByTypeName(prefab, "EchoProtocol.AI.Minions.CreepMinionRuntime");
             Assert.That(new SerializedObject(runtime).FindProperty("attackRecoverySeconds").floatValue,
-                Is.EqualTo(1f));
+                Is.EqualTo(3f));
         }
 
         [Test]
@@ -283,8 +297,13 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("CrossFade(\"Die\")", minion);
             StringAssert.Contains("DeathClipSeconds()", minion);
             StringAssert.Contains("_agent.radius = 0.65f", minion);
-            StringAssert.Contains("capsule.center = Vector3.up * 0.9f", minion);
-            StringAssert.Contains("capsule.radius = _agent.radius", minion);
+            StringAssert.Contains("NavMesh.GetSettingsByID(_agent.agentTypeID).agentRadius", minion);
+            StringAssert.Contains("if (bakedRadius > 0f) _agent.radius = bakedRadius", minion);
+            StringAssert.Contains("!currentlyInWater && !_catfishPatrolCrossing && TryActivateAgent()", minion);
+            StringAssert.Contains("_navigation.ClearDestinationCache()", minion);
+            StringAssert.Contains("currentlyInWater ? ResolveSwimHeight(surfaceY)", minion);
+            StringAssert.Contains("capsule.center = Vector3.up * 0.5f", minion);
+            StringAssert.Contains("capsule.radius = Mathf.Min(_agent.radius, 0.5f)", minion);
             StringAssert.Contains("Physics.IgnoreCollision(_bodyCollider, playerCollider, true)", minion);
             StringAssert.DoesNotContain("private void LateUpdate()", minion);
             StringAssert.Contains("capsule.center = _bodyColliderBaseCenter + Vector3.up * localHeight", minion);
@@ -308,7 +327,8 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("IsCatfishSpawnInPlayerArea(runner, candidate, surfaceY, focus)", spawner);
             StringAssert.Contains("hit.collider.name.StartsWith(\"_BLOCKERCUBE\")", spawner);
             StringAssert.Contains("path.status == NavMeshPathStatus.PathComplete", spawner);
-            StringAssert.Contains("bool approachingLand = _catfishWasInWater && !enteringShallowWater", minion);
+            StringAssert.Contains("bool approachingLand = _catfishWasInWater && (!enteringShallowWater", minion);
+            StringAssert.Contains("!FloodedWaterBoundary.TryGetSwimSurface(destination, out _, .1f)", minion);
             StringAssert.Contains("NavMesh.SamplePosition(nextPosition, out var landHit, 6f", minion);
             StringAssert.Contains("Vector3.Dot(", minion);
             StringAssert.Contains("Vector3.MoveTowards(transform.position, _catfishLandEntry", minion);

@@ -1016,6 +1016,7 @@ namespace EchoProtocol.AI.Stalker
                 ApplyMovementSpeedForCurrentState();
                 if (_specialEncounterOverrideActive)
                 {
+                    _stationaryRecovery.Reset();
                     //
                     // Special Encounter temporarily owns tactical movement.
                     // Perception input has already been copied into the
@@ -1035,6 +1036,7 @@ namespace EchoProtocol.AI.Stalker
                     TryUpdateHeardNoiseSearchFromCurrentFrame();
                     _navigation?.TickProgress(
                         CurrentSimulationDeltaSeconds);
+                    TickStationaryRecovery();
                     TickNavigationRecovery();
                 }
 
@@ -1204,6 +1206,7 @@ namespace EchoProtocol.AI.Stalker
                 }
 
                 MarkRoomSweepDestinationReached();
+                if (_roomSweepSelfProbeScanActive) return;
             }
 
             if (!SetRoomSweepPatrolDestination())
@@ -4725,6 +4728,40 @@ namespace EchoProtocol.AI.Stalker
             }
         }
 
+        private readonly NavigationProgressMonitor _stationaryRecovery = new NavigationProgressMonitor(
+            new NavigationProgressSettings(.25f, .05f, .05f, 4.75f, 5f));
+
+        private void TickStationaryRecovery()
+        {
+            bool hasDestination = TryGetCurrentNavigationRecoveryDestination(out var destination);
+            if (_navigation == null || !IsLocomotionState() || _roomSweepSelfProbeScanActive
+                || (currentState != StalkerState.PATROL && hasDestination
+                    && Vector3.Distance(transform.position, destination) <= 1f))
+            { _stationaryRecovery.Reset(); return; }
+            _stationaryRecovery.Observe(transform.position, 0f, CurrentSimulationDeltaSeconds);
+            if (_stationaryRecovery.State != NavigationProgressState.Stuck) return;
+            _stationaryRecovery.Reset();
+            if (currentState == StalkerState.PATROL && _navigation.HasArrived())
+            {
+                _navigationRecoveryAttemptUsed = true;
+                HandlePatrolNavigationFailure(NavigationFailureReason.Stuck);
+                return;
+            }
+            _navigationRecoveryAttemptUsed = false;
+            if (!hasDestination)
+            {
+                if (currentState == StalkerState.PATROL) ActivateRoomSweepPatrolFallback();
+                return;
+            }
+            _navigation.TryRecoverLocalPosition(destination);
+            if (!TryIssueNavigationRecoveryRepath(NavigationRecoveryReason.EmergencyNavMeshRecovery))
+            {
+                if (currentState == StalkerState.PATROL) HandlePatrolNavigationFailure(NavigationFailureReason.Stuck);
+                else if (currentState == StalkerState.SEARCH) HandleSearchNavigationFailure(NavigationFailureReason.Stuck);
+                else HandleChaseNavigationFailure(NavigationFailureReason.Stuck);
+            }
+        }
+
         private bool TryIssueNavigationRecoveryRepath(NavigationRecoveryReason recoveryReason)
         {
             if (_navigationRecoveryAttemptUsed)
@@ -6092,6 +6129,13 @@ namespace EchoProtocol.AI.Stalker
 
             var navAgent = GetComponent<NavMeshAgent>();
             var deltaTime = Mathf.Max(0f, CurrentSimulationDeltaSeconds);
+            UpdateRoomSweepProbeVisualCoverage(_roomSweepSelfProbeScanRegionId, _roomSweepSelfProbeScanNodeId);
+            if (_roomSweepCoverageMemory.IsObserved(currentRegionId, _roomSweepSelfProbeScanNodeId))
+            {
+                ClearRoomSweepSelfProbeScan();
+                ClearRoomSweepDestination();
+                return;
+            }
             var deltaDegrees = navAgent != null
                 ? Mathf.Max(0f, navAgent.angularSpeed) * deltaTime
                 : 0f;
@@ -6531,6 +6575,7 @@ namespace EchoProtocol.AI.Stalker
         private void MarkRoomSweepDestinationReached()
         {
             var destinationNodeId = _blackboard.DestinationSpatialNodeId;
+            bool reachedRoomProbe = _navigationObjectiveKey.Kind == StalkerNavigationObjectiveKind.RoomSweepProbe;
             if (destinationNodeId < 0)
             {
                 return;
@@ -6548,6 +6593,14 @@ namespace EchoProtocol.AI.Stalker
             }
 
             ClearNavigationObjective();
+            if (reachedRoomProbe && _regionGraph != null
+                && _regionGraph.TryGetRegionForNode(destinationNodeId, out var probeRegion)
+                && _roomSweepCoverageMemory != null)
+            {
+                UpdateRoomSweepProbeVisualCoverage(probeRegion, destinationNodeId);
+                if (!_roomSweepCoverageMemory.IsObserved(probeRegion, destinationNodeId))
+                    BeginRoomSweepSelfProbeScan(destinationNodeId, probeRegion);
+            }
         }
 
         private void ClearRoomSweepDestination()
@@ -6682,6 +6735,7 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
+            bool enteredPatrolZone = false;
             for (var i = 0; i < corners.Length - 1; i++)
             {
                 var samples = Mathf.Max(1, Mathf.CeilToInt(
@@ -6693,15 +6747,17 @@ namespace EchoProtocol.AI.Stalker
                         (float)j / samples);
                     if (!TryResolveNearestSpatialNode(point, out var nodeId)
                         || !_regionGraph.TryGetNodeSemanticMetadata(
-                            nodeId, out var metadata)
-                        || metadata.Zone != _patrolZone)
+                            nodeId, out var metadata))
                     {
                         return false;
                     }
+                    if (metadata.Zone == _patrolZone) enteredPatrolZone = true;
+                    // Recovery can return from an isolated start, but cannot leave the zone or cross another gameplay zone.
+                    else if (enteredPatrolZone || metadata.Zone != RegionSemanticZone.Isolated) return false;
                 }
             }
 
-            return corners.Length > 1;
+            return corners.Length > 1 && enteredPatrolZone;
         }
 
         private void ResetRoomSweepFallbackState()
@@ -6754,18 +6810,17 @@ namespace EchoProtocol.AI.Stalker
                 _roomSweepVisualCoverageCursor %= nodeIds.Count;
                 var nodeId = nodeIds[_roomSweepVisualCoverageCursor++];
 
-                if (_roomSweepCoverageMemory.IsObserved(roomRegionId, nodeId))
-                    continue;
-
-                if (!_spatialPatrolGraph.TryGetNode(nodeId, out var node))
-                    continue;
-
-                var observationPoint =
-                    visionSensor.GetObservationPointForGroundPoint(node.Position);
-
-                if (visionSensor.CanSeePoint(observationPoint))
-                    _roomSweepCoverageMemory.MarkObserved(roomRegionId, nodeId);
+                UpdateRoomSweepProbeVisualCoverage(roomRegionId, nodeId);
             }
+        }
+
+        private void UpdateRoomSweepProbeVisualCoverage(RegionId regionId, int nodeId)
+        {
+            if (visionSensor == null || _roomSweepCoverageMemory == null || _spatialPatrolGraph == null
+                || _roomSweepCoverageMemory.IsObserved(regionId, nodeId)
+                || !_spatialPatrolGraph.TryGetNode(nodeId, out var node)) return;
+            if (visionSensor.CanSeePoint(visionSensor.GetObservationPointForGroundPoint(node.Position)))
+                _roomSweepCoverageMemory.MarkObserved(regionId, nodeId);
         }
 
         private bool TryResolveNearestSpatialNode(Vector3 worldPosition, out int nodeId)

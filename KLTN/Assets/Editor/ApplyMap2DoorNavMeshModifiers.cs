@@ -8,23 +8,23 @@ using UnityEngine.SceneManagement;
 
 public static class ApplyMap2DoorNavMeshModifiers
 {
-    private const string ScenePath = "Assets/Scenes/Scene_A.unity";
     private static readonly Regex DoorName = new Regex(@"^[A-Za-z0-9]+_Door_[A-Z]( \(\d+\))?$", RegexOptions.Compiled);
 
-    [MenuItem("Tools/ECHO/NavMesh/Exclude Map 2 Doors From Bake")]
+    [MenuItem("Tools/ECHO/NavMesh/Include Static Map 2 Doors In Bake")]
     public static void Apply()
     {
         Scene scene = SceneManager.GetActiveScene();
-        if (EditorApplication.isPlayingOrWillChangePlaymode || !scene.IsValid() || scene.path != ScenePath)
+        if (EditorApplication.isPlayingOrWillChangePlaymode || !scene.IsValid()
+            || (scene.path != "Assets/Scenes/Scene_A.unity" && scene.path != "Assets/Scenes/Scene_B.unity"))
         {
-            Debug.LogError("[Map 2 NavMesh] Open Scene_A outside Play Mode before running this tool.");
+            Debug.LogError("[Map 2 NavMesh] Open Scene_A or Scene_B outside Play Mode before running this tool.");
             return;
         }
 
         NavMeshSurface[] surfaces = Object.FindObjectsByType<NavMeshSurface>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        if (surfaces.Length != 1 || surfaces[0].gameObject.scene != scene || surfaces[0].agentTypeID != 0)
+        if (surfaces.Length != 1 || surfaces[0].gameObject.scene != scene)
         {
-            Debug.LogError("[Map 2 NavMesh] Expected one Map 2 NavMeshSurface for agent type 0. Nothing changed.");
+            Debug.LogError("[Map 2 NavMesh] Expected one Map 2 NavMeshSurface. Nothing changed.");
             return;
         }
 
@@ -38,32 +38,20 @@ public static class ApplyMap2DoorNavMeshModifiers
 
                 doors++;
                 NavMeshModifier modifier = child.GetComponent<NavMeshModifier>();
-                if (modifier == null)
+                // Static door geometry must block the bake at its authored open/closed pose.
+                if (modifier != null && modifier.ignoreFromBuild)
                 {
-                    modifier = Undo.AddComponent<NavMeshModifier>(child.gameObject);
-                    modifier.ignoreFromBuild = true;
-                    modifier.applyToChildren = false;
+                    Undo.RecordObject(modifier, "Include static Map 2 door in NavMesh bake");
+                    modifier.ignoreFromBuild = false;
+                    PrefabUtility.RecordPrefabInstancePropertyModifications(modifier);
                     changed++;
                 }
-                else if (!modifier.ignoreFromBuild || modifier.applyToChildren || !modifier.enabled)
-                {
-                    Undo.RecordObject(modifier, "Exclude Map 2 door from NavMesh bake");
-                    modifier.ignoreFromBuild = true;
-                    modifier.applyToChildren = false;
-                    modifier.enabled = true;
-                    changed++;
-                }
-
-                if (!modifier.AffectsAgentType(surfaces[0].agentTypeID))
-                    Debug.LogWarning($"[Map 2 NavMesh] {child.name} modifier does not affect the Stalker agent type.", child);
-
-                PrefabUtility.RecordPrefabInstancePropertyModifications(modifier);
             }
         }
 
         if (changed > 0)
             EditorSceneManager.MarkSceneDirty(scene);
-        Debug.Log($"[Map 2 NavMesh] Found {doors} doors; changed {changed}. Save Scene_A and rebuild Map2_NavMesh. Door colliders remain enabled.");
+        Debug.Log($"[Map 2 NavMesh] Found {doors} static doors; changed {changed}. Rebuild NavMesh and the scene's RegionGraph, then save {scene.name}.");
     }
 }
 #endif

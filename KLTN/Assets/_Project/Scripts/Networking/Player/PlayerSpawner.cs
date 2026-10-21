@@ -42,6 +42,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _monsterPrefab;
         [SerializeField] private NetworkObject _map2LizardPrefab;
         [SerializeField] private RegionGraphAsset _map2RegionGraph;
+        [SerializeField] private RegionGraphAsset _map2HuntRegionGraph;
         [SerializeField] private NetworkObject _creepMinionPrefab;
         [Header("Creep Minion Spawn")]
         [SerializeField, Min(1f)] private float _minionSpawnCheckInterval = 3f;
@@ -293,7 +294,10 @@ namespace EchoProtocol.Networking
             }
             if (AlienHuntMission.Instance != null)
             {
-                EnsureInitialStalker(runner, RegionSemanticZone.Zone01, _map2RegionGraph, _map2LizardPrefab);
+                if (_map2HuntRegionGraph != null && _map2LizardPrefab != null)
+                    EnsureInitialStalker(runner, RegionSemanticZone.Zone01, _map2HuntRegionGraph, _map2LizardPrefab);
+                else
+                    Debug.LogError("[PlayerSpawner] Scene_B Stalker requires its Lizard prefab and scene RegionGraph.");
                 if (_matchStateInstance && _monsterInstance)
                     _matchStateInstance.GetComponent<NetworkMatchState>().BindPurgeBoss(_monsterInstance);
                 BindAuthoritativeWorldState();
@@ -1045,11 +1049,18 @@ namespace EchoProtocol.Networking
             var prefab = ResolveCreepMinionPrefab();
             if (prefab == null) return null;
             var spawned = runner.Spawn(prefab, position, Quaternion.identity, PlayerRef.None,
-                (_, obj) => obj.GetComponent<CreepMinionRuntime>()?.ConfigureBeforeSpawn(
+                (_, obj) =>
+                {
+                    // Map2 uses the same scene agent type for its Stalker and minions.
+                    if ((AlienHuntMission.Instance != null || SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene)
+                        && _map2LizardPrefab != null && obj.TryGetComponent<NavMeshAgent>(out var agent))
+                        agent.agentTypeID = _map2LizardPrefab.GetComponent<NavMeshAgent>().agentTypeID;
+                    obj.GetComponent<CreepMinionRuntime>()?.ConfigureBeforeSpawn(
                     zone,
                     AlienHuntMission.Instance != null ? CreepMinionRole.Catfish
                         : disruptor ? CreepMinionRole.Disruptor : CreepMinionRole.Original,
-                    AlienHuntMission.Instance != null ? 0 : _nextCreepMinionVisualVariant));
+                    AlienHuntMission.Instance != null ? 0 : _nextCreepMinionVisualVariant);
+                });
             if (!IsValidNetworkObject(spawned)) return null;
             if (!spawned.TryGetComponent<CreepMinionRuntime>(out _))
             {

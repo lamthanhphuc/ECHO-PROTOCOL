@@ -27,6 +27,27 @@ namespace EchoProtocol.Networking.Tests
         private const string PlayerSpawnerTypeName = "EchoProtocol.Networking.PlayerSpawner";
 
         [Test]
+        public void MAP2_BootstrapAssignsDistinctGraphsForExplorationAndHunt()
+        {
+            var scene = SceneManager.GetSceneByPath(BootstrapScenePath);
+            bool alreadyLoaded = scene.IsValid() && scene.isLoaded;
+            if (!alreadyLoaded) scene = EditorSceneManager.OpenScene(BootstrapScenePath, OpenSceneMode.Additive);
+            try
+            {
+                var spawner = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<MonoBehaviour>(true))
+                    .Single(component => component != null && component.GetType().FullName == PlayerSpawnerTypeName);
+                var serialized = new SerializedObject(spawner);
+                var exploration = serialized.FindProperty("_map2RegionGraph").objectReferenceValue;
+                var hunt = serialized.FindProperty("_map2HuntRegionGraph").objectReferenceValue;
+                Assert.That(exploration, Is.Not.Null);
+                Assert.That(hunt, Is.Not.Null);
+                Assert.That(hunt, Is.Not.SameAs(exploration));
+                StringAssert.EndsWith("AI_Stalker_Map2_Hunt_RegionGraph.asset", AssetDatabase.GetAssetPath(hunt));
+            }
+            finally { if (!alreadyLoaded) EditorSceneManager.CloseScene(scene, true); }
+        }
+
+        [Test]
         public void MAP2_StalkerSpawn_IsOnNavMeshAndReachableFromPlayerStarts()
         {
             const string scenePath = "Assets/Scenes/Scene_A.unity";
