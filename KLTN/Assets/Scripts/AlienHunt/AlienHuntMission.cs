@@ -13,6 +13,7 @@ namespace EchoProtocol.Networking
         public const int JerrycanCount = 10;
         public const int MeatCount = 17;
         public const int EntityCount = 27 + MeatCount;
+        [SerializeField] private bool showPurgeDiagnostics;
         [SerializeField] private float meatRespawnSeconds = 60f;
         [SerializeField] private float lowSupplyRespawnSeconds = 15f;
         [SerializeField] private AlienHuntActor[] actors;
@@ -540,8 +541,11 @@ namespace EchoProtocol.Networking
                 var match=m.Match;
                 string mood=match.PurgeMood==PurgeBossMood.Hunting ? "BOSS ĐANG SĂN" : match.PurgeMood==PurgeBossMood.Warning
                     ? "CẢNH BÁO: BOSS SẮP SĂN" : match.PurgeMood==PurgeBossMood.Staggered ? "BOSS BỊ UV KHỐNG CHẾ" : "BOSS TẠM BÌNH TĨNH";
-                detail += "\n"+mood+" | UV: "+match.PurgeStaggers+"/"+match.PurgeStaggersRequired
-                    +" | Sơ cứu tại lò: "+match.PurgeAidAvailable+"/3";
+                detail += "\n" + mood;
+                if (m.showPurgeDiagnostics)
+                    detail += " | UV: " + match.PurgeStaggers + "/" + match.PurgeStaggersRequired;
+                if (match.PurgeCoopAidEnabled)
+                    detail += " | Sơ cứu tại lò: "+match.PurgeAidAvailable+"/3";
             }
             if (Time.unscaledTime < m._dropHintUntil)
                 detail = "Không thể đặt alien ở đây. Hãy tìm mặt đất có lối về khu vực ổ trứng.";

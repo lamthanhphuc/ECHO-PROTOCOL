@@ -47,24 +47,20 @@ public sealed class PurgeDirectorTests
         Assert.That(Object.FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>(FindObjectsSortMode.None).Length,Is.Zero,
             "No active gameplay player means no active spawn zone yet.");
         float deadline=Time.realtimeSinceStartup+10;
-        while((!match.HuntReady||match.PurgeAidAvailable<3)&&Time.realtimeSinceStartup<deadline)yield return null;
+        while(!match.HuntReady && Time.realtimeSinceStartup<deadline)yield return null;
         Assert.That((bool)match.HuntReady,Is.True);
-        Assert.That(match.PurgeAidAvailable,Is.EqualTo(3),"Every furnace needs an initial first-aid pickup. ended="+match.IsEnded
-            +" reason="+match.EndReason+" boss="+match.PurgeBossId+" slot="+match.PurgeAid[0].Id
-            +" catalog="+typeof(NetworkMatchState).GetField("_teamToolPickupCatalog",flags).GetValue(match));
-        for(int i=0;i<3;i++)
-        {
-            Assert.That(runner.TryFindObject(match.PurgeAid[i].Id,out var aid),Is.True);
-            Assert.That(aid.GetComponent<NetworkTeamToolPickup>().IsAvailable,Is.True);
-            Assert.That(Vector3.Distance(aid.transform.position,AlienHuntMission.Instance.Furnaces[i].transform.position),
-                Is.LessThan(4f),"The first-aid kit must be within interaction range of furnace "+i);
-            Assert.That(aid.GetComponentsInChildren<Collider>().Any(c=>c.enabled),Is.True,
-                "The first-aid kit at furnace "+i+" needs a usable collider.");
-        }
+        Assert.That(match.PurgeCoopAidEnabled,Is.False);
+        Assert.That(match.PurgeAidAvailable,Is.Zero);
+        for(int i=0;i<3;i++) Assert.That(match.PurgeAid[i].Id.IsValid,Is.False,"Solo must not spawn station medkits.");
+        AlienHuntMission.TryDescribe(out _,out var soloHud,out _);
+        StringAssert.DoesNotContain("UV:",soloHud);
+        StringAssert.DoesNotContain("/3",soloHud);
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm));
         match.RecordHuntBurn();
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Warning));
         Assert.That(match.PurgeHuntSeconds,Is.EqualTo(90f));
+        Assert.That(match.PurgeHuntsStarted,Is.EqualTo(1));
+        Assert.That(match.PurgeLastRitualElapsedSeconds,Is.GreaterThanOrEqualTo(0f));
         Set(match,"PurgeMoodTimer",TickTimer.CreateFromSeconds(runner,.01f));
         yield return new WaitForSeconds(.1f);
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Hunting));
@@ -72,9 +68,12 @@ public sealed class PurgeDirectorTests
         yield return new WaitForSeconds(.08f);
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Staggered));
         Assert.That(match.PurgeStaggers,Is.EqualTo(1));
+        Assert.That(match.PurgeUvStaggersTotal,Is.EqualTo(1));
         Set(match,"PurgeMoodTimer",TickTimer.CreateFromSeconds(runner,.01f));
         yield return new WaitForSeconds(.1f);
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm));
+        Assert.That(match.PurgeHuntsEndedByUv,Is.EqualTo(1));
+        Assert.That(match.PurgeHuntsEndedByTimeout,Is.Zero);
         Assert.That(match.PurgeUvImmunity.IsRunning,Is.True);
         match.ProvokePurgeBoss();
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm),
@@ -83,21 +82,13 @@ public sealed class PurgeDirectorTests
         Set(match,"PurgeMoodTimer",TickTimer.CreateFromSeconds(runner,.01f));
         yield return new WaitForSeconds(.1f);
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm));
-        // Reserve all three kits: no free supply must accelerate refill without bypassing the kit requirement.
-        var oldId=match.PurgeAid[0].Id;
-        for(int i=0;i<3;i++)
-        {Assert.That(runner.TryFindObject(match.PurgeAid[i].Id,out var obj),Is.True);typeof(NetworkTeamToolPickup).GetProperty("IsConsumed",flags).SetValue(obj.GetComponent<NetworkTeamToolPickup>(),(NetworkBool)true);}
-        yield return new WaitForSeconds(.08f);
-        Assert.That(match.PurgeAidAvailable,Is.Zero);
-        Assert.That(match.PurgeAid[0].Refill.RemainingTime(runner),Is.LessThanOrEqualTo(15f));
-        var slot=match.PurgeAid[0];slot.Refill=TickTimer.CreateFromSeconds(runner,.01f);match.PurgeAid.Set(0,slot);
         yield return new WaitForSeconds(.1f);
-        Assert.That(match.PurgeAid[0].Id,Is.Not.EqualTo(oldId));
-        Assert.That(match.PurgeAidAvailable,Is.EqualTo(1));
+        Assert.That(match.PurgeAidAvailable,Is.Zero,"Solo must not refill medkits.");
         for(int i=1;i<8;i++)match.RecordHuntBurn();
         Assert.That(match.HuntBurned,Is.EqualTo(8));
         Assert.That(match.PurgeHuntSeconds,Is.EqualTo(195f));
         Assert.That(match.PurgeHuntTimer.RemainingTime(runner),Is.GreaterThan(185f));
+        Assert.That(match.PurgeHuntsStarted,Is.EqualTo(2));
         Assert.That(match.PurgeStaggersRequired,Is.EqualTo(4));
         Assert.That(match.PurgeMinionCap,Is.EqualTo(3));
         spawnMinions.Invoke(spawner,new object[]{runner});spawnMinions.Invoke(spawner,new object[]{runner});
@@ -202,24 +193,20 @@ public sealed class PurgeDirectorTests
         Object.DestroyImmediate(wall);
         var interactor=player.GetComponent<NetworkPlayerInteractor>();
         var selection=player.GetComponent<LobbyPlayerState>();
-        for(int i=1;i<3;i++)
-        {var refill=match.PurgeAid[i];refill.Refill=TickTimer.CreateFromSeconds(runner,.01f);match.PurgeAid.Set(i,refill);}
-        yield return new WaitForSeconds(.1f);
-        var uvPosition=player.transform.position;
-        for(int i=0;i<3;i++)
-        {
-            Assert.That(runner.TryFindObject(match.PurgeAid[i].Id,out var aid),Is.True);
-            var pickup=aid.GetComponent<NetworkTeamToolPickup>();
-            player.transform.position=aid.transform.position;
-            Physics.SyncTransforms();
-            var context=new InteractionContext(interactor,pickup,runner.LocalPlayer);
-            Assert.That(pickup.ValidateInteraction(context),Is.EqualTo(InteractionValidationResult.Accepted),
-                "A real player must be able to take the kit at furnace "+i);
-            pickup.ExecuteAuthoritative(context);
-            Assert.That(selection.ToolId,Is.EqualTo(LobbyPlayerState.FirstAidKitToolId));
-            selection.SetGameplayToolId(0);
-        }
-        player.transform.position=uvPosition;
+        Assert.That(match.PurgeCoopAidEnabled,Is.False);
+        Assert.That(match.PurgeAidAvailable,Is.Zero);
+        var special=boss.GetComponent<EchoProtocol.AI.Stalker.Special.StalkerSpecialEncounterRuntime>();
+        var specialFlags=BindingFlags.Instance|BindingFlags.NonPublic;
+        typeof(EchoProtocol.AI.Stalker.Special.StalkerSpecialEncounterRuntime).GetField("_phase",specialFlags)
+            .SetValue(special,EchoProtocol.AI.Stalker.Special.StalkerSpecialEncounterPhase.HiddenTransfer);
+        special.SuppressForPurge();
+        Assert.That(special.IsActive,Is.False);
+        Assert.That(special.PresentationVisible,Is.True);
+        Set(match,"PurgeMood",PurgeBossMood.Warning);
+        yield return new WaitForSeconds(.08f);
+        Assert.That(controller.SpecialEncounterOverrideActive,Is.True,"Warning freeze must survive encounter suppression.");
+        Set(match,"PurgeMood",PurgeBossMood.Calm);
+        yield return new WaitForSeconds(.08f);
         Assert.That(interactor.CanStartFirstAidReviveAuthoritative(selection),Is.False,"No kit means no revival.");
         selection.SetGameplayToolId(LobbyPlayerState.FirstAidKitToolId);
         Assert.That(interactor.CanStartFirstAidReviveAuthoritative(selection),Is.True,"A living player with a kit can begin revival.");
@@ -255,6 +242,17 @@ namespace EchoProtocol.Networking.Tests
 {
     public sealed class PurgeFishcatBalanceTests
     {
+        [TestCase(1, MatchDifficulty.Easy, 1f)]
+        [TestCase(1, MatchDifficulty.Normal, 1.25f)]
+        [TestCase(1, MatchDifficulty.Hard, 1.5f)]
+        [TestCase(2, MatchDifficulty.Easy, 2f)]
+        [TestCase(2, MatchDifficulty.Normal, 2.5f)]
+        [TestCase(4, MatchDifficulty.Hard, 2.75f)]
+        public void FishcatUvThresholdScalesByPartyAndDifficulty(int partySize, MatchDifficulty difficulty, float expected)
+        {
+            Assert.That(PurgeFishcatBalance.UvDeathSeconds(partySize, difficulty), Is.EqualTo(expected));
+        }
+
         [Test]
         public void RefillAllowsOneSpawnThenWaitsAndFailedPlacementCanRetry()
         {

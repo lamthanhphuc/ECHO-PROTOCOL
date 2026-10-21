@@ -18,6 +18,13 @@ namespace EchoProtocol.Networking
             return Mathf.Max(1, Mathf.CeilToInt(normal * scale));
         }
         public static float SpawnCooldown(int burned) => Tier(burned) == 3 ? 16f : Tier(burned) == 2 ? 22f : Tier(burned) == 1 ? 28f : 35f;
+        public static float UvDeathSeconds(int partySize, MatchDifficulty difficulty)
+        {
+            bool solo = partySize <= 1;
+            if (difficulty == MatchDifficulty.Easy) return solo ? 1f : 2f;
+            if (difficulty == MatchDifficulty.Hard) return solo ? 1.5f : 2.75f;
+            return solo ? 1.25f : 2.5f;
+        }
         public const int HuntersPerPlayer = 2;
     }
 
@@ -52,6 +59,11 @@ namespace EchoProtocol.Networking
         [Networked] public TickTimer PurgeUvImmunity { get; private set; }
         [Networked] public float PurgeUvExposure { get; private set; }
         [Networked] public int PurgeStaggers { get; private set; }
+        [Networked] public int PurgeHuntsStarted { get; private set; }
+        [Networked] public int PurgeHuntsEndedByUv { get; private set; }
+        [Networked] public int PurgeHuntsEndedByTimeout { get; private set; }
+        [Networked] public int PurgeUvStaggersTotal { get; private set; }
+        [Networked] public float PurgeLastRitualElapsedSeconds { get; private set; }
         [Networked] public Vector3 PurgeRitualPosition { get; private set; }
         [Networked] public int PurgeRitualVersion { get; private set; }
         [Networked] public int PurgeAidAvailable { get; private set; }
@@ -64,6 +76,10 @@ namespace EchoProtocol.Networking
             Mathf.Max(PurgePartySize, CountPurgeGameplayPlayers()),
             Authority.MatchAuthorityRuntime.Instance ? Authority.MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal);
         public float PurgeMinionSpawnCooldown => PurgeFishcatBalance.SpawnCooldown(HuntBurned);
+        public float PurgeFishcatUvDeathSeconds => PurgeFishcatBalance.UvDeathSeconds(
+            Mathf.Max(PurgePartySize, CountPurgeGameplayPlayers()),
+            Authority.MatchAuthorityRuntime.Instance ? Authority.MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal);
+        public bool PurgeCoopAidEnabled => CountPurgeGameplayPlayers() >= 2;
         private int CountPurgeGameplayPlayers()
         {
             int count = 0;
@@ -102,6 +118,7 @@ namespace EchoProtocol.Networking
         private void BeginPurgeHunt()
         {
             if (IsEnded) return;
+            PurgeHuntsStarted++;
             PurgeMood = PurgeBossMood.Warning; PurgeMoodTimer = TickTimer.CreateFromSeconds(Runner,3);
             PurgeHuntTimer = TickTimer.CreateFromSeconds(Runner,PurgeHuntSeconds); PurgeStaggers=0; PurgeUvExposure=0;
         }
@@ -109,6 +126,8 @@ namespace EchoProtocol.Networking
         {
             if (IsEnded) return;
             PurgeRitualPosition=position;PurgeRitualVersion++;
+            PurgeLastRitualElapsedSeconds = Mathf.Clamp(_matchDurationSeconds - Remaining(MatchTimer), 0f, _matchDurationSeconds);
+            Debug.Log($"[PURGE_BALANCE] Ritual {HuntBurned}/{AlienHuntMission.AlienCount} at {PurgeLastRitualElapsedSeconds:F1}s; hunts={PurgeHuntsStarted}, uvEnds={PurgeHuntsEndedByUv}, timeouts={PurgeHuntsEndedByTimeout}, uvStaggers={PurgeUvStaggersTotal}");
             if (PurgeMood == PurgeBossMood.Calm) BeginPurgeHunt();
             else PurgeHuntTimer = TickTimer.CreateFromSeconds(Runner,PurgeHuntSeconds);
         }
@@ -118,6 +137,13 @@ namespace EchoProtocol.Networking
             PurgeMood = PurgeBossMood.Calm; PurgeMoodTimer=TickTimer.CreateFromSeconds(Runner,PurgeCalmSeconds);
             PurgeUvImmunity=TickTimer.CreateFromSeconds(Runner,Mathf.Min(5,PurgeCalmSeconds));
             PurgeUvExposure=0; PurgeStaggers=0;
+        }
+        private void CompletePurgeHunt(bool byUv)
+        {
+            if (byUv) PurgeHuntsEndedByUv++;
+            else PurgeHuntsEndedByTimeout++;
+            Debug.Log($"[PURGE_BALANCE] Hunt ended by {(byUv ? "UV" : "timeout")}; hunts={PurgeHuntsStarted}, uvEnds={PurgeHuntsEndedByUv}, timeouts={PurgeHuntsEndedByTimeout}, uvStaggers={PurgeUvStaggersTotal}");
+            PacifyPurgeBoss();
         }
         private void TickPurgeDirector()
         {
@@ -130,12 +156,12 @@ namespace EchoProtocol.Networking
                 if (PurgeMood==PurgeBossMood.Warning && PurgeMoodTimer.Expired(Runner)) PurgeMood=PurgeBossMood.Hunting;
                 else if(PurgeMood==PurgeBossMood.Staggered && PurgeMoodTimer.Expired(Runner))
                 {
-                    if(PurgeStaggers>=PurgeStaggersRequired) PacifyPurgeBoss();
+                    if(PurgeStaggers>=PurgeStaggersRequired) CompletePurgeHunt(true);
                     else { PurgeMood=PurgeBossMood.Hunting; PurgeUvImmunity=TickTimer.CreateFromSeconds(Runner,4); }
                 }
                 if(PurgeMood==PurgeBossMood.Hunting)
                 {
-                    if(PurgeHuntTimer.Expired(Runner)) { PacifyPurgeBoss(); }
+                    if(PurgeHuntTimer.Expired(Runner)) { CompletePurgeHunt(false); }
                     else
                     {
                         int contributors=0;
@@ -149,7 +175,7 @@ namespace EchoProtocol.Networking
                         else PurgeUvExposure=0;
                         if(PurgeUvExposure>=2.25f)
                         {
-                            PurgeStaggers++; PurgeUvExposure=0; PurgeMood=PurgeBossMood.Staggered;
+                            PurgeStaggers++; PurgeUvStaggersTotal++; PurgeUvExposure=0; PurgeMood=PurgeBossMood.Staggered;
                             PurgeMoodTimer=TickTimer.CreateFromSeconds(Runner,2.2f);
                         }
                     }
@@ -166,6 +192,23 @@ namespace EchoProtocol.Networking
         private void TickPurgeAid()
         {
             var mission=AlienHuntMission.Instance; if(!mission || !_teamToolPickupCatalog) return;
+            if (!PurgeCoopAidEnabled)
+            {
+                // Remove only unclaimed station supplies; never take a carried kit away.
+                for (int i = 0; i < 3; i++)
+                {
+                    var slot = PurgeAid[i];
+                    if (slot.Id.IsValid && Runner.TryFindObject(slot.Id, out var pickup) && pickup != null)
+                    {
+                        bool unclaimed = pickup.TryGetComponent<NetworkTeamToolPickup>(out var team) && team.IsAvailable
+                            || pickup.TryGetComponent<NetworkToolPickup>(out var tool) && !tool.IsPickedUp;
+                        if (unclaimed) Runner.Despawn(pickup);
+                    }
+                    PurgeAid.Set(i, default);
+                }
+                PurgeAidAvailable = 0;
+                return;
+            }
             var prefab=_teamToolPickupCatalog.GetPrefab(LobbyPlayerState.FirstAidKitToolId); if(!prefab)return;
             int available=0;
             for(int i=0;i<3;i++)
