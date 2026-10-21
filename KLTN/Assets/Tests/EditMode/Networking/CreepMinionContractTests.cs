@@ -387,8 +387,13 @@ namespace EchoProtocol.Networking.Tests
             var controller = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>(
                 "Assets/Animations/Minion/AC_CatfishMinion.controller");
             var states = controller.layers[0].stateMachine.states;
-            foreach (string name in new[] { "Idle", "Run", "Attack01", "GetHit", "Die" })
+            foreach (string name in new[] { "Idle", "Walk", "Run", "Attack01", "GetHit", "Die" })
                 Assert.That(System.Array.Exists(states, state => state.state.name == name), Is.True, name);
+            var walk = System.Array.Find(states, state => state.state.name == "Walk").state.motion;
+            Assert.That(walk, Is.Not.Null);
+            Assert.That(walk.name, Is.EqualTo("walk"));
+            Assert.That(AnimationUtility.GetAnimationClipSettings(
+                System.Array.Find(controller.animationClips, clip => clip.name == "die")).loopTime, Is.False);
             Assert.That(AnimationUtility.GetAnimationClipSettings(
                 System.Array.Find(controller.animationClips, clip => clip.name == "hit")).loopTime, Is.True);
         }

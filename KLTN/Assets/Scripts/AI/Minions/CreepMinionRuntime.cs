@@ -217,6 +217,8 @@ namespace EchoProtocol.AI.Minions
         [Header("Resonance counterplay")]
         [SerializeField, Min(0.1f)]
         private float deathVanishSeconds = 0.5f;
+        [SerializeField, Min(0f)] private float catfishDeathPoseHoldSeconds = 1f;
+        [SerializeField, Min(0.1f)] private float catfishDeathFadeSeconds = 1.5f;
         [SerializeField] private float noiseMakerDistractionSeconds = 12f;
         [SerializeField] private float noiseMakerArrivalDistance = 1.5f;
 
@@ -298,6 +300,9 @@ namespace EchoProtocol.AI.Minions
         private float _actionAnimationUntil;
         private string _currentLocomotionAnimation;
         private bool _deathAnimationPlayed;
+        private bool _catfishDeathPoseFrozen;
+        private Material[] _catfishFadeMaterials;
+        private Color[] _catfishFadeBaseColors;
         private bool _stalkerAlertDeliveredForTarget;
         private Transform _visualRoot;
         private Vector3 _visualBaseLocalPosition;
@@ -355,6 +360,7 @@ namespace EchoProtocol.AI.Minions
             _renderedAttackSequence = AttackSequence;
             _renderedAlertSequence = AlertSequence;
             _deathAnimationPlayed = false;
+            _catfishDeathPoseFrozen = false;
             _lastVisiblePlayerAt = Time.time;
             _lastNearPlayerAt = Time.time;
             _nextPurgePatrolAt = 0f;
@@ -457,6 +463,7 @@ namespace EchoProtocol.AI.Minions
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            ReleaseCatfishFadeMaterials();
             PurgeFishcats.Remove(this);
             _navigation?.SetAuthoritativeLocomotion(false);
             _navigation = null;
@@ -535,7 +542,8 @@ namespace EchoProtocol.AI.Minions
             }
 #endif
 
-            float deathExposureSeconds = IsPurgeCatfish ? 2.5f : ResonanceDeathSeconds;
+            float deathExposureSeconds = IsPurgeCatfish && NetworkMatchState.Instance != null
+                ? NetworkMatchState.Instance.PurgeFishcatUvDeathSeconds : ResonanceDeathSeconds;
             ResonanceProgress=Mathf.Clamp01(_flashlightExposureSeconds/deathExposureSeconds);
             if (_flashlightExposureSeconds >= deathExposureSeconds)
             {
@@ -1749,9 +1757,9 @@ namespace EchoProtocol.AI.Minions
                 _agent.enabled = false;
             }
 
-            DeathTimer = TickTimer.CreateFromSeconds(
-                Runner,
-                DeathClipSeconds());
+            float deathSeconds = DeathClipSeconds();
+            if (IsCatfish) deathSeconds += catfishDeathPoseHoldSeconds + catfishDeathFadeSeconds;
+            DeathTimer = TickTimer.CreateFromSeconds(Runner, deathSeconds);
 
 #if false
             // Debug.Log(
@@ -1890,6 +1898,7 @@ namespace EchoProtocol.AI.Minions
                     _currentLocomotionAnimation = null;
                     CrossFade("Die");
                 }
+                if (IsCatfish) RenderCatfishDeath();
                 return;
             }
 
@@ -1936,7 +1945,8 @@ namespace EchoProtocol.AI.Minions
                 return;
             }
             if (Time.time < _actionAnimationUntil) return;
-            string desired = IsMoving ? "Run" : "Idle";
+            string desired = !IsMoving ? "Idle"
+                : IsCatfish && _catfishOnLand && State == CreepMinionState.Roam ? "Walk" : "Run";
             if (desired == _currentLocomotionAnimation) return;
             _currentLocomotionAnimation = desired;
             CrossFade(desired);
@@ -2033,6 +2043,76 @@ namespace EchoProtocol.AI.Minions
         {
             foreach (var animator in _animators)
                 if (animator != null) animator.CrossFade(state, 0.05f);
+        }
+
+        private void RenderCatfishDeath()
+        {
+            float fadeSeconds = Mathf.Max(0.1f, catfishDeathFadeSeconds);
+            float remaining = DeathTimer.RemainingTime(Runner) ?? 0f;
+            if (!_catfishDeathPoseFrozen && remaining <= catfishDeathPoseHoldSeconds + fadeSeconds)
+            {
+                _catfishDeathPoseFrozen = true;
+                foreach (var animator in _animators)
+                {
+                    if (animator == null) continue;
+                    animator.Play("Die", 0, 0.999f);
+                    animator.Update(0f);
+                    animator.speed = 0f;
+                }
+            }
+
+            if (remaining > fadeSeconds) return;
+            EnsureCatfishFadeMaterials();
+            float opacity = Mathf.Clamp01(remaining / fadeSeconds);
+            for (int i = 0; i < _catfishFadeMaterials.Length; i++)
+            {
+                var material = _catfishFadeMaterials[i];
+                if (material == null) continue;
+                var color = _catfishFadeBaseColors[i];
+                color.a *= opacity;
+                material.SetColor("_BaseColor", color);
+            }
+        }
+
+        private void EnsureCatfishFadeMaterials()
+        {
+            if (_catfishFadeMaterials != null) return;
+            var materials = new List<Material>();
+            var colors = new List<Color>();
+            if (_visualRoot != null)
+                foreach (var renderer in _visualRoot.GetComponentsInChildren<Renderer>(false))
+                {
+                    var originals = renderer.sharedMaterials;
+                    var instances = new Material[originals.Length];
+                    for (int i = 0; i < originals.Length; i++)
+                    {
+                        var original = originals[i];
+                        if (original == null) continue;
+                        var material = new Material(original);
+                        material.SetOverrideTag("RenderType", "Transparent");
+                        material.SetFloat("_Surface", 1f);
+                        material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                        material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                        material.SetFloat("_ZWrite", 0f);
+                        material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                        material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+                        instances[i] = material;
+                        materials.Add(material);
+                        colors.Add(material.GetColor("_BaseColor"));
+                    }
+                    renderer.materials = instances;
+                }
+            _catfishFadeMaterials = materials.ToArray();
+            _catfishFadeBaseColors = colors.ToArray();
+        }
+
+        private void ReleaseCatfishFadeMaterials()
+        {
+            if (_catfishFadeMaterials == null) return;
+            foreach (var material in _catfishFadeMaterials)
+                if (material != null) Destroy(material);
+            _catfishFadeMaterials = null;
+            _catfishFadeBaseColors = null;
         }
 
         private void PlayAction(string state)
