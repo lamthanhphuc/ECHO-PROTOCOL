@@ -86,7 +86,7 @@ Các chức năng sau **không triển khai trong MVP**:
 | Real-money payment        | Won’t Have |
 | Dedicated game server     | Won’t Have |
 | Public matchmaking        | Won’t Have |
-| Ranking system            | Won’t Have |
+| Ranking system            | Added after original MVP scope: Solo/Team completion leaderboard |
 | Multiple maps             | Won’t Have |
 | Multiple monster types    | Won’t Have |
 | Procedural map generation | Won’t Have |
@@ -2589,7 +2589,6 @@ Nếu ảnh không load được:
 | Real-money payment     |
 | Dedicated server       |
 | Public matchmaking     |
-| Ranking system         |
 | Multiple maps          |
 | Multiple monster types |
 

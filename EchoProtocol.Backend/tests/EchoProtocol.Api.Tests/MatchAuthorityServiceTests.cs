@@ -65,6 +65,39 @@ public sealed class MatchAuthorityServiceTests
     }
 
     [Fact]
+    public async Task StartContextIsValidatedAndCannotChangeAfterStart()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+        var created = await service.CreateAsync(hostId, new CreateMatchAuthorityRequest
+        {
+            FusionSessionName = "leaderboard-context-room",
+            MaxPlayers = 2
+        }, CancellationToken.None);
+        var matchId = created.Data!.MatchId;
+        await BindAsync(service, hostId, hostId, matchId, "leaderboard-context-room", 1);
+
+        var incomplete = await service.StartAsync(hostId, matchId, CancellationToken.None,
+            new StartMatchAuthorityRequest { MapId = "SciFi" });
+        Assert.False(incomplete.IsSuccess);
+        Assert.Equal(MatchAuthorityStatus.Lobby,
+            (await db.MatchAuthorityBindings.SingleAsync()).Status);
+
+        var started = await service.StartAsync(hostId, matchId, CancellationToken.None,
+            new StartMatchAuthorityRequest { MapId = "SciFi", Difficulty = "normal" });
+        Assert.True(started.IsSuccess);
+        Assert.Equal("SciFi", started.Data!.MapId);
+        Assert.Equal("NORMAL", started.Data.Difficulty);
+
+        var changed = await service.StartAsync(hostId, matchId, CancellationToken.None,
+            new StartMatchAuthorityRequest { MapId = "Scene_A", Difficulty = "HARD" });
+        Assert.False(changed.IsSuccess);
+        Assert.Equal("MATCH_SESSION_CONFLICT", changed.ErrorCode);
+        Assert.Equal("SciFi", (await db.MatchAuthorityBindings.SingleAsync()).MapId);
+    }
+
+    [Fact]
     public async Task UnboundOrNonHostUser_CannotDelegateTelemetry()
     {
         await using var db = CreateDb();

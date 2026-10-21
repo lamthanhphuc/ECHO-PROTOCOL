@@ -15,6 +15,9 @@ public interface IMatchAuthorityService
         Guid hostUserId, Guid matchId, CancellationToken cancellationToken);
     Task<ServiceResult<MatchAuthorityResponse>> StartAsync(
         Guid hostUserId, Guid matchId, CancellationToken cancellationToken);
+    Task<ServiceResult<MatchAuthorityResponse>> StartAsync(
+        Guid hostUserId, Guid matchId, CancellationToken cancellationToken,
+        StartMatchAuthorityRequest? request) => StartAsync(hostUserId, matchId, cancellationToken);
     Task<ServiceResult<MatchPlayerBindingResponse>> MarkPlayerDisconnectedAsync(
         Guid hostUserId, Guid matchId, int fusionActorNumber, CancellationToken cancellationToken);
     Task<ServiceResult<MatchAuthorityResponse>> EndAsync(

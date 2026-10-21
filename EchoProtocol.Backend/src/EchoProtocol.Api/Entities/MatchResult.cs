@@ -12,6 +12,7 @@ public sealed class MatchResult
     public int DurationSeconds { get; set; }
     public decimal ObjectiveCompletion { get; set; }
     public int PlayerCount { get; set; }
+    public string? RosterKey { get; set; }
     public string PayloadHash { get; set; } = string.Empty;
     public MatchRewardStatus RewardStatus { get; set; }
     public DateTime SubmittedAtUtc { get; set; }

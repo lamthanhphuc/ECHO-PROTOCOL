@@ -567,6 +567,41 @@ Telemetry v1.1 pipeline and the staged M4-009/M4-010 delivery.
 
 ---
 
+## Leaderboards
+
+### `GET /api/leaderboards`
+
+**Auth:** Bearer JWT
+
+**Status:** Implemented
+
+Query parameters: `mode=SOLO|TEAM`, `mapId=SciFi|Scene_A|Scene_B`,
+`difficulty=EASY|NORMAL|HARD`, `page` (one-based, default `1`), and `pageSize`
+(default `10`, maximum `50`). The map and difficulty filters are required so
+rankings for different mission contexts never mix. Invalid filters or pagination
+return HTTP 400 with `VALIDATION_ERROR`.
+
+The standard API envelope contains `data.items`, `data.totalCount`, `data.page`,
+`data.pageSize`, `data.maps`, and `data.difficulties`. Each item contains `rank`,
+`matchId`, `displayName`, nullable `avatarUrl`, `durationSeconds`,
+`durationCentiseconds`, nullable
+`squadLabel`, and `players` (`userId`, `displayName`, nullable `avatarUrl`). No
+avatar URL is stored in the current profile schema, so clients show a local
+avatar fallback. The Main Menu formats server whole-second durations as `MM.SS`.
+
+Only accepted Host-reported `WIN` results with `objectiveCompletion = 1`, valid
+start context, and at least one surviving connected player are eligible. SOLO uses one-player
+results and the fastest result per player. TEAM uses two-to-four-player results
+and the fastest result per exact roster. Rankings order by server-derived
+duration ascending, then completion time and match ID for stable ties. Rank and
+pagination are calculated after selecting each player's or roster's best run.
+The existing Result API also accepts `LOSE` for reward processing; those results
+never appear in the leaderboard. The backend validates Host identity, lease,
+roster, and elapsed time. It cannot independently prove in-game mission success
+from Photon Host Mode, so the outcome remains Host-reported.
+
+---
+
 ## Match authority binding (M2 implemented)
 
 All endpoints require the normal Bearer JWT. The backend user ID always comes from the token.
@@ -578,13 +613,20 @@ All endpoints require the normal Bearer JWT. The backend user ID always comes fr
 | POST | `/api/matches/{matchId}/players/bind` | Bound Host | Verify the proof and persist actor-to-user identity |
 | POST | `/api/matches/{matchId}/players/{actor}/disconnect` | Bound Host | Mark a player disconnected |
 | POST | `/api/matches/{matchId}/lease` | Bound Host | Renew the Host lease |
-| POST | `/api/matches/{matchId}/start` | Bound Host | Start under the current M2 minimum-player rule (one bound player) |
+| POST | `/api/matches/{matchId}/start` | Bound Host | Start under the current M2 minimum-player rule (one bound player); freeze map and difficulty for rankings |
 | POST | `/api/matches/{matchId}/end` | Bound Host | End the authority binding idempotently |
 
 Join proofs are HMAC-signed, expire after 120 seconds by default, and bind `matchId`, backend
 `userId`, Fusion session name, and actor number. The proof secret is separate from the JWT secret.
 After binding, the Host may submit telemetry whose `userId` belongs to that match; unrelated users
 still receive `TELEMETRY_USER_MISMATCH`.
+
+The current Unity Host sends `{ "mapId": "SciFi", "difficulty": "NORMAL" }` to `/start`
+before loading the selected gameplay scene. Supported map IDs are `SciFi`, `Scene_A`, and
+`Scene_B`; difficulties are `EASY`, `NORMAL`, and `HARD`. Both fields must be provided
+together. The first successful start freezes them on the match binding. Legacy clients
+may send `{}`; those matches still complete and earn rewards but have no map and
+difficulty context for the leaderboard.
 
 ---
 

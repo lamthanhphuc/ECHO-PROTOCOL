@@ -9,6 +9,13 @@ namespace EchoProtocol.Auth
 {
   public class BootstrapSceneFlowController : MonoBehaviour
   {
+    private static bool _returnToLobbyAfterAuthentication;
+
+    public static void RequestLobbyAfterAuthentication()
+    {
+      _returnToLobbyAfterAuthentication = true;
+    }
+
     private void Start()
     {
       var runtime = AuthRuntime.EnsureExists();
@@ -19,6 +26,7 @@ namespace EchoProtocol.Auth
     {
       if (!TokenStorage.HasUsableSession())
       {
+        _returnToLobbyAfterAuthentication = false;
         if (TokenStorage.HasToken()
             || TokenStorage.HasRefreshToken()
             || TokenStorage.HasStoredExpiry())
@@ -45,10 +53,14 @@ namespace EchoProtocol.Auth
       if (meResult != null && meResult.IsSuccess && meResult.Data != null && meResult.Data.success)
       {
         runtime.SetRestoreState(SessionRestoreState.Succeeded);
-        SceneManager.LoadScene(GameConstants.SceneMainMenu);
+        var destination = _returnToLobbyAfterAuthentication
+          ? GameConstants.SceneLobby : GameConstants.SceneMainMenu;
+        _returnToLobbyAfterAuthentication = false;
+        SceneManager.LoadScene(destination);
         yield break;
       }
 
+      _returnToLobbyAfterAuthentication = false;
       if (meResult != null && AuthApiService.ShouldClearToken(meResult))
       {
         runtime.AuthService.LogoutLocal();

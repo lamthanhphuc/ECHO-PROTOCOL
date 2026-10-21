@@ -52,8 +52,12 @@ public sealed class MatchAuthorityController : ControllerBase
         Respond(await _service.RenewLeaseAsync(UserId(), matchId, cancellationToken));
 
     [HttpPost("{matchId:guid}/start")]
-    public async Task<IActionResult> Start(Guid matchId, CancellationToken cancellationToken) =>
-        Respond(await _service.StartAsync(UserId(), matchId, cancellationToken));
+    public async Task<IActionResult> Start(
+        Guid matchId,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)]
+        StartMatchAuthorityRequest? request,
+        CancellationToken cancellationToken) =>
+        Respond(await _service.StartAsync(UserId(), matchId, cancellationToken, request));
 
     [HttpPost("{matchId:guid}/end")]
     public async Task<IActionResult> End(

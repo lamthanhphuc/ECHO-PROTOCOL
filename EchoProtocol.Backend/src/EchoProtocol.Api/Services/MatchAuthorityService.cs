@@ -206,11 +206,29 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Match authority lease renewed");
     }
 
+    public Task<ServiceResult<MatchAuthorityResponse>> StartAsync(
+        Guid hostUserId,
+        Guid matchId,
+        CancellationToken cancellationToken) =>
+        StartAsync(hostUserId, matchId, cancellationToken, null);
+
     public async Task<ServiceResult<MatchAuthorityResponse>> StartAsync(
         Guid hostUserId,
         Guid matchId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        StartMatchAuthorityRequest? request)
     {
+        var mapId = request?.MapId?.Trim();
+        var difficulty = request?.Difficulty?.Trim().ToUpperInvariant();
+        if ((mapId is null) != (difficulty is null)
+            || (mapId is not null && !LeaderboardCatalog.IsKnownMap(mapId))
+            || (difficulty is not null && !LeaderboardCatalog.IsKnownDifficulty(difficulty)))
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Map and difficulty must be supplied together with supported values",
+                ErrorCodes.ValidationError);
+        }
+
         var match = await _db.MatchAuthorityBindings.Include(item => item.Players)
             .SingleOrDefaultAsync(item => item.MatchId == matchId, cancellationToken);
         var authorityFailure = ValidateActiveHost(match, hostUserId);
@@ -219,7 +237,20 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             return Failure<MatchAuthorityResponse>(authorityFailure.Value.Message, authorityFailure.Value.Code);
         }
 
-        if (match!.Players.Count(item => item.DisconnectedAtUtc is null) < 1)
+        if (match!.Status == MatchAuthorityStatus.InMatch)
+        {
+            if (mapId is not null
+                && (match.MapId != mapId || match.Difficulty != difficulty))
+            {
+                return Failure<MatchAuthorityResponse>(
+                    "Match start context cannot change after the match has started",
+                    ErrorCodes.MatchSessionConflict);
+            }
+
+            return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Match already started");
+        }
+
+        if (match.Players.Count(item => item.DisconnectedAtUtc is null) < 1)
         {
             return Failure<MatchAuthorityResponse>(
                 "At least one bound player is required to start",
@@ -227,6 +258,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         }
 
         var now = UtcNow();
+        match.MapId = mapId;
+        match.Difficulty = difficulty;
         match.Status = MatchAuthorityStatus.InMatch;
         match.StartedAtUtc ??= now;
         match.UpdatedAtUtc = now;
@@ -416,7 +449,9 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         HostUserId = match.HostUserId,
         MaxPlayers = match.MaxPlayers,
         Status = match.Status,
-        LeaseExpiresAtUtc = match.LeaseExpiresAtUtc
+        LeaseExpiresAtUtc = match.LeaseExpiresAtUtc,
+        MapId = match.MapId,
+        Difficulty = match.Difficulty
     };
 
     private static MatchPlayerBindingResponse Map(MatchPlayerBinding player) => new()
