@@ -76,7 +76,17 @@ public sealed class AlienHuntSceneTests
     [UnityTest]
     public IEnumerator BaitCaptureFuelAndBurnCycleConsumesExactlyOneAlien()
     {
-        EditorSceneManager.OpenScene("Assets/Scenes/Scene_B.unity", OpenSceneMode.Single);
+        EditorSceneManager.OpenScene(
+            "Assets/Scenes/Scene_B.unity", OpenSceneMode.Single);
+
+        var authoredHomes = Object.FindObjectsByType<AlienHuntActor>(
+            FindObjectsInactive.Include,
+            FindObjectsSortMode.None)
+            .Where(a => a.Kind == HuntKind.Alien)
+            .OrderBy(a => a.Index)
+            .Select(a => a.transform.position)
+            .ToArray();
+
         yield return new EnterPlayMode(false);
         float initializationDeadline = Time.realtimeSinceStartup + 10f;
         while ((!AlienHuntMission.Instance || !AlienHuntMission.Instance.Ready)
@@ -84,6 +94,33 @@ public sealed class AlienHuntSceneTests
         var mission = AlienHuntMission.Instance;
         Assert.That(mission, Is.Not.Null, "Scene_B mission did not initialize after entering Play mode.");
         Assert.That(mission.Ready, Is.True);
+        Assert.That(authoredHomes.Length, Is.EqualTo(9));
+
+        int relocated = 0;
+
+        for (int i = 0; i < 9; i++)
+        {
+            Vector3 home = mission.Actors[i].Home;
+
+            if (Vector3.Distance(home, authoredHomes[i]) > 1f)
+                relocated++;
+
+            Assert.That(
+                NavMesh.SamplePosition(
+                    home, out _, 1f, NavMesh.AllAreas),
+                Is.True);
+
+            for (int j = 0; j < i; j++)
+            {
+                Assert.That(
+                    Vector3.Distance(
+                        home, mission.Actors[j].Home),
+                    Is.GreaterThanOrEqualTo(18f));
+            }
+        }
+
+        Assert.That(relocated, Is.GreaterThan(0),
+            "All nine nests remained at their authored positions.");
         Assert.That(Enumerable.Range(9, 18).Count(i => mission.Read(i).Stage == 0), Is.EqualTo(10));
         Assert.That(Enumerable.Range(9, 18).Count(i => mission.Read(i).Stage == 3), Is.EqualTo(8));
         var player = new GameObject("AlienHunt_TestInteractor");
@@ -180,6 +217,9 @@ public sealed class AlienHuntSceneTests
         player.transform.position = mission.Furnaces[0].transform.position;
         Assert.That(mission.Act(actor, player.transform, -1, 0), Is.True);
         Assert.That(mission.Read(fuelIndex).Stage, Is.EqualTo(3));
+        Assert.That(
+            mission.Read(fuelIndex).Remaining,
+            Is.EqualTo(90f).Within(.1f));
         Assert.That(mission.ReadFurnace(0).Fuel, Is.EqualTo(1));
         Assert.That(mission.Act(actor, player.transform, -1, 0), Is.True);
         Assert.That(mission.ReadFurnace(0).Fuel, Is.EqualTo(1), "Oil stays reserved until this alien finishes burning.");
@@ -194,11 +234,30 @@ public sealed class AlienHuntSceneTests
         Assert.That(mission.ReadFurnace(0).AlienSlot, Is.Zero);
         Assert.That(mission.ReadFurnace(0).BurnedCount, Is.EqualTo(1));
         Assert.That(mission.ReadFurnace(0).Fuel, Is.Zero);
+        var write = typeof(AlienHuntMission).GetMethod(
+            "Write",
+            System.Reflection.BindingFlags.NonPublic |
+            System.Reflection.BindingFlags.Instance);
+        var consumedCan = mission.Read(fuelIndex);
+        consumedCan.Remaining = .01f;
+        write.Invoke(mission, new object[] { fuelIndex, consumedCan });
+
+        mission.Tick(.02f);
+
+        Assert.That(mission.Read(fuelIndex).Stage, Is.EqualTo(0));
+        Assert.That(
+            mission.Read(fuelIndex).Position,
+            Is.EqualTo(mission.Actors[fuelIndex].Home));
+
+        Assert.That(
+            Enumerable.Range(9, 18)
+                .Count(i => mission.Read(i).Stage == 0 ||
+                            mission.Read(i).Stage == 1),
+            Is.LessThanOrEqualTo(AlienHuntMission.JerrycanCount));
         yield return null;
         Assert.That(mission.Furnaces[0].OilVisible, Is.False);
         Assert.That(mission.Furnaces[0].FireVisible, Is.False);
         // Reproduce recovery after a dropped capture, with the burned alien's nest now vacant.
-        var write = typeof(AlienHuntMission).GetMethod("Write", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         var recovering = mission.Read(1);
         recovering.Stage = (int)AlienStage.Stunned; recovering.Remaining = .01f;
         write.Invoke(mission, new object[] { 1, recovering });

@@ -24,6 +24,8 @@ namespace EchoProtocol.Networking
         [SerializeField] private float stunnedSeconds = 30f;
         [SerializeField] private float burnSeconds = 8f;
         [SerializeField] private float droppedJerrycanRecoverySeconds = 90f;
+        [SerializeField, Min(1f)]
+        private float jerrycanRespawnSeconds = 90f;
         private readonly HuntEntityState[] _offline = new HuntEntityState[EntityCount];
         private readonly HuntFurnaceState[] _offlineFurnaces = new HuntFurnaceState[3];
         private bool _offlineReady;
@@ -85,10 +87,18 @@ namespace EchoProtocol.Networking
             var triangulation = NavMesh.CalculateTriangulation();
             int triangleCount = triangulation.indices.Length / 3;
             var selected = new Vector3[AlienCount];
-            bool complete = triangleCount > 0;
+            if (triangleCount == 0)
+            {
+                for (int i = 0; i < AlienCount; i++)
+                    if (NetworkReady)
+                        Match.HuntNestPositions.Set(i, actors[i].Home);
+
+                Debug.LogError("[AlienHunt] NavMesh triangulation is empty.");
+                return;
+            }
             var path = new NavMeshPath();
 
-            for (int i = 0; i < AlienCount && complete; i++)
+            for (int i = 0; i < AlienCount; i++)
             {
                 bool found = false;
                 Vector3 originalHome = actors[i].Home;
@@ -111,23 +121,44 @@ namespace EchoProtocol.Networking
                     for (int j = 0; j < i; j++)
                         if (Vector3.Distance(home, selected[j]) < 18f) { separated = false; break; }
                     if (!separated) continue;
+                    // Keep unprocessed authored nests available as safe fallbacks.
+                    for (int j = i + 1; j < AlienCount; j++)
+                    {
+                        if (Vector3.Distance(home, actors[j].Home) < 18f)
+                        {
+                            separated = false;
+                            break;
+                        }
+                    }
+
+                    if (!separated) continue;
                     foreach (var furnace in furnaces)
                         if (Vector3.Distance(actualNest, furnace.transform.position) < 12f) { separated = false; break; }
                     if (!separated) continue;
-                    if (Physics.CheckCapsule(home + Vector3.up * .5f, home + Vector3.up * 1.3f, .6f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) continue;
+                    bool blocked = System.Array.Exists(
+                        Physics.OverlapCapsule(
+                            home + Vector3.up * .65f,
+                            home + Vector3.up * 1.3f,
+                            .45f,
+                            Physics.DefaultRaycastLayers,
+                            QueryTriggerInteraction.Ignore),
+                        collider => collider &&
+                            !(collider is TerrainCollider) &&
+                            !collider.transform.IsChildOf(actors[i].transform.parent));
+
+                    if (blocked) continue;
                     if (!NavMesh.CalculatePath(actors[0].Home, home, NavMesh.AllAreas, path) || path.status != NavMeshPathStatus.PathComplete) continue;
 
                     selected[i] = home;
                     found = true;
                     break;
                 }
-                if (!found) complete = false;
-            }
-
-            if (!complete)
-            {
-                Debug.LogWarning("[AlienHunt] Cannot find 9 safe random nests; using authored positions.");
-                for (int i = 0; i < AlienCount; i++) selected[i] = actors[i].Home;
+                if (!found)
+                {
+                    selected[i] = originalHome;
+                    Debug.LogWarning(
+                        $"[AlienHunt] Nest {i} kept its original position.");
+                }
             }
 
             for (int i = 0; i < AlienCount; i++)
@@ -170,7 +201,10 @@ namespace EchoProtocol.Networking
                 int chosen = Random.Range(i, fuelSlots.Count);
                 int slot = fuelSlots[chosen]; fuelSlots[chosen] = fuelSlots[i]; fuelSlots[i] = slot;
                 if (i < JerrycanCount) continue;
-                var unused = Read(slot); unused.Stage = 3; Write(slot, unused);
+                var unused = Read(slot);
+                unused.Stage = 3;
+                unused.Remaining = -1f;
+                Write(slot, unused);
             }
             for (int i = 0; i < furnaces.Length; i++) WriteFurnace(i, default);
         }
@@ -241,7 +275,12 @@ namespace EchoProtocol.Networking
                 if (held >= 0)
                 {
                     var h = Read(held);
-                    if (actors[held].Kind == HuntKind.Jerrycan && f.Fuel == 0) { f.Fuel = 1; h.Stage = 3; }
+                    if (actors[held].Kind == HuntKind.Jerrycan && f.Fuel == 0)
+                    {
+                        f.Fuel = 1;
+                        h.Stage = 3;
+                        h.Remaining = jerrycanRespawnSeconds;
+                    }
                     else if (actors[held].Kind == HuntKind.Alien && f.AlienSlot == 0)
                     { f.AlienSlot = held + 1; h.Stage = (int)AlienStage.OnPan; h.Position = furnaces[furnace].Pan.position;
                         h.Rotation = furnaces[furnace].Pan.rotation; }
@@ -320,6 +359,14 @@ namespace EchoProtocol.Networking
                 var bait = Read(i);
                 if (bait.Carrier.IsNone && (bait.Stage == 0 || bait.Stage == 2) && !IsBaitClaimed(i)) availableMeat++;
             }
+            int activeJerrycans = 0;
+
+            for (int i = 9; i < 27; i++)
+            {
+                var fuel = Read(i);
+                if (fuel.Stage == 0 || fuel.Stage == 1)
+                    activeJerrycans++;
+            }
             for (int i = 0; i < actors.Length; i++)
             {
                 var actor = actors[i]; var s = Read(i);
@@ -353,6 +400,23 @@ namespace EchoProtocol.Networking
                         s.Remaining -= delta;
                         if (s.Remaining <= 0f)
                         { s.Position = actor.Home; s.Rotation = actor.HomeRotation; s.Remaining = 0f; }
+                        Write(i, s);
+                    }
+                    if (actor.Kind == HuntKind.Jerrycan &&
+                        s.Stage == 3 && s.Remaining >= 0f)
+                    {
+                        s.Remaining = Mathf.Max(0f, s.Remaining - delta);
+
+                        if (s.Remaining <= 0f &&
+                            activeJerrycans < JerrycanCount)
+                        {
+                            s.Stage = 0;
+                            s.Position = actor.Home;
+                            s.Rotation = actor.HomeRotation;
+                            s.LastGroundPosition = s.Position;
+                            activeJerrycans++;
+                        }
+
                         Write(i, s);
                     }
                     if (actor.Kind == HuntKind.Meat && s.Stage == 3)
@@ -538,7 +602,12 @@ namespace EchoProtocol.Networking
             if (available >= needed) return;
             var reserves = new System.Collections.Generic.List<int>();
             for (int i = 0; i < actors.Length; i++)
-                if (actors[i].Kind == HuntKind.Jerrycan && Read(i).Stage == 3) reserves.Add(i);
+                if (actors[i].Kind == HuntKind.Jerrycan &&
+                    Read(i).Stage == 3 &&
+                    Read(i).Remaining < 0f)
+                {
+                    reserves.Add(i);
+                }
             while (available < needed && reserves.Count > 0)
             {
                 int pick = Random.Range(0, reserves.Count);

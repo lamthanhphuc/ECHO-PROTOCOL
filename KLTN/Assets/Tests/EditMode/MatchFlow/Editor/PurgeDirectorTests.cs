@@ -243,12 +243,12 @@ namespace EchoProtocol.Networking.Tests
     public sealed class PurgeFishcatBalanceTests
     {
         [TestCase(1, MatchDifficulty.Easy, 1f)]
-        [TestCase(1, MatchDifficulty.Normal, 1.25f)]
-        [TestCase(1, MatchDifficulty.Hard, 1.5f)]
-        [TestCase(2, MatchDifficulty.Easy, 2f)]
-        [TestCase(2, MatchDifficulty.Normal, 2.5f)]
-        [TestCase(4, MatchDifficulty.Hard, 2.75f)]
-        public void FishcatUvThresholdScalesByPartyAndDifficulty(int partySize, MatchDifficulty difficulty, float expected)
+        [TestCase(1, MatchDifficulty.Normal, 1f)]
+        [TestCase(1, MatchDifficulty.Hard, 1f)]
+        [TestCase(2, MatchDifficulty.Easy, 1f)]
+        [TestCase(2, MatchDifficulty.Normal, 1f)]
+        [TestCase(4, MatchDifficulty.Hard, 1f)]
+        public void FishcatUvThresholdIsOneSecond(int partySize, MatchDifficulty difficulty, float expected)
         {
             Assert.That(PurgeFishcatBalance.UvDeathSeconds(partySize, difficulty), Is.EqualTo(expected));
         }

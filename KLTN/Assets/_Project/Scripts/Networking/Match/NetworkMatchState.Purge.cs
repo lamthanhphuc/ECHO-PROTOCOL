@@ -18,13 +18,7 @@ namespace EchoProtocol.Networking
             return Mathf.Max(1, Mathf.CeilToInt(normal * scale));
         }
         public static float SpawnCooldown(int burned) => Tier(burned) == 3 ? 16f : Tier(burned) == 2 ? 22f : Tier(burned) == 1 ? 28f : 35f;
-        public static float UvDeathSeconds(int partySize, MatchDifficulty difficulty)
-        {
-            bool solo = partySize <= 1;
-            if (difficulty == MatchDifficulty.Easy) return solo ? 1f : 2f;
-            if (difficulty == MatchDifficulty.Hard) return solo ? 1.5f : 2.75f;
-            return solo ? 1.25f : 2.5f;
-        }
+        public static float UvDeathSeconds(int partySize, MatchDifficulty difficulty) => 1f;
         public const int HuntersPerPlayer = 2;
     }
 

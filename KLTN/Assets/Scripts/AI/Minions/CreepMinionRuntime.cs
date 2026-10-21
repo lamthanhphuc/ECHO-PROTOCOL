@@ -537,7 +537,7 @@ namespace EchoProtocol.AI.Minions
                     && playerObject.TryGetComponent<NetworkPlayerFlashlight>(out var emitter)
                     && emitter.ResonanceActive && emitter.ResonanceTarget==this) _resonanceContributors++;
             bool illuminated = _resonanceContributors>0;
-            IsUvStunned = illuminated && !IsPurgeCatfish;
+            IsUvStunned = illuminated;
 
             var exposure=ResonanceRules.TickExposure(new ResonanceExposureState { Seconds=_flashlightExposureSeconds,Grace=_resonanceGrace },_resonanceContributors,Runner.DeltaTime);
             // PURGE has a longer burn threshold than the shared exposure rule's two-second cap.
@@ -668,6 +668,7 @@ namespace EchoProtocol.AI.Minions
 
         private void TickStationaryRecovery()
         {
+            if (!Object || !Object.IsValid) return;
             if (IsDying || IsUvStunned || ToolDivePhase != 0 || !AttackRecovery.ExpiredOrNotRunning(Runner)
                 || (TryGetEligiblePlayer(TargetPlayer, out var target, out _, out _)
                     && Vector3.Distance(transform.position, target.transform.position) <= (IsDisruptor ? DisruptorAttackRange : trackStandOffDistance)
@@ -2097,7 +2098,7 @@ namespace EchoProtocol.AI.Minions
             }
             if (Time.time < _actionAnimationUntil) return;
             string desired = !IsMoving ? "Idle"
-                : IsCatfish && _catfishOnLand && State == CreepMinionState.Roam ? "Walk" : "Run";
+                : State == CreepMinionState.Roam ? "Walk" : "Run";
             if (desired == _currentLocomotionAnimation) return;
             _currentLocomotionAnimation = desired;
             CrossFade(desired);
