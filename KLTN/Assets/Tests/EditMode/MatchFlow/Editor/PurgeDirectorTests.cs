@@ -19,6 +19,14 @@ public sealed class PurgeDirectorTests
 {
     private NetworkRunner runner;
     private static void Set(NetworkMatchState m,string property,object value) => typeof(NetworkMatchState).GetProperty(property).SetValue(m,value);
+    [Test]
+    public void PurgeDetectionTimesMatchRageTiers()
+    {
+        var methodFill = typeof(StalkerController).GetMethod("GetDetectionFillRate", BindingFlags.NonPublic | BindingFlags.Instance);
+        var methodDecay = typeof(StalkerController).GetMethod("GetDetectionDecayRate", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.That(methodFill, Is.Not.Null);
+        Assert.That(methodDecay, Is.Not.Null);
+    }
     [UnityTest]
     public IEnumerator DirectorRageUvSupplyAndCatchRunOnStateAuthority()
     {
@@ -57,9 +65,18 @@ public sealed class PurgeDirectorTests
         StringAssert.DoesNotContain("Sơ cứu:",soloHud);
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm));
         match.RecordHuntBurn();
-        Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Warning));
-        Assert.That(match.PurgeHuntSeconds,Is.EqualTo(90f));
-        Assert.That(match.PurgeHuntsStarted,Is.EqualTo(1));
+        Assert.That(match.HuntBurned, Is.EqualTo(1));
+        Assert.That(match.PurgeRageTier, Is.EqualTo(0));
+        Assert.That(match.PurgeMood, Is.EqualTo(PurgeBossMood.Calm));
+        Assert.That(match.PurgeHuntsStarted, Is.Zero);
+        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(6.6f).Within(.01f));
+        match.RecordHuntBurn();
+        Assert.That(match.HuntBurned, Is.EqualTo(2));
+        Assert.That(match.PurgeRageTier, Is.EqualTo(1));
+        Assert.That(match.PurgeMood, Is.EqualTo(PurgeBossMood.Warning));
+        Assert.That(match.PurgeHuntSeconds, Is.EqualTo(105f));
+        Assert.That(match.PurgeHuntsStarted, Is.EqualTo(1));
+        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(7f).Within(.01f));
         Assert.That(match.PurgeLastRitualElapsedSeconds,Is.GreaterThanOrEqualTo(0f));
         Set(match,"PurgeMoodTimer",TickTimer.CreateFromSeconds(runner,.01f));
         yield return new WaitForSeconds(.1f);
@@ -84,7 +101,11 @@ public sealed class PurgeDirectorTests
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm));
         yield return new WaitForSeconds(.1f);
         Assert.That(match.PurgeAidAvailable,Is.Zero,"Solo must not refill medkits.");
-        for(int i=1;i<8;i++)match.RecordHuntBurn();
+        for (int i = 2; i < 6; i++) match.RecordHuntBurn();
+        Assert.That(match.HuntBurned, Is.EqualTo(6));
+        Assert.That(match.PurgeRageTier, Is.EqualTo(2));
+        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(7.8f).Within(.01f));
+        for (int i = 6; i < 8; i++) match.RecordHuntBurn();
         Assert.That(match.HuntBurned,Is.EqualTo(8));
         Assert.That(match.PurgeHuntSeconds,Is.EqualTo(195f));
         Assert.That(match.PurgeHuntTimer.RemainingTime(runner),Is.GreaterThan(185f));
@@ -94,7 +115,8 @@ public sealed class PurgeDirectorTests
         spawnMinions.Invoke(spawner,new object[]{runner});spawnMinions.Invoke(spawner,new object[]{runner});
         Assert.That(Object.FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>(FindObjectsSortMode.None).Length,Is.Zero,
             "A larger cap must not spawn Fishcat into an empty match.");
-        Assert.That(match.PurgeChaseSpeed,Is.LessThanOrEqualTo(8.5f));
+        Assert.That(match.PurgeRageTier, Is.EqualTo(3));
+        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(9f).Within(.01f));
         // UV immunity must reject another immediate stagger.
         Set(match,"PurgeMood",PurgeBossMood.Hunting);Set(match,"PurgeUvExposure",2.5f);
         Set(match,"PurgeUvImmunity",TickTimer.CreateFromSeconds(runner,4));
