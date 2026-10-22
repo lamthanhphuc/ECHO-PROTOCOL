@@ -58,6 +58,7 @@ namespace EchoProtocol.Networking
         [Networked] public TickTimer PurgeHuntTimer { get; private set; }
         [Networked] public TickTimer PurgeUvImmunity { get; private set; }
         [Networked] public float PurgeUvExposure { get; private set; }
+        [Networked] private PurgeBossMood PurgeMoodBeforeUvStagger { get; set; }
         [Networked] public int PurgeStaggers { get; private set; }
         [Networked] public int PurgeHuntsStarted { get; private set; }
         [Networked] public int PurgeHuntsEndedByUv { get; private set; }
@@ -71,7 +72,7 @@ namespace EchoProtocol.Networking
         [Networked, Capacity(PurgeAidCount)] public NetworkArray<PurgeAidSlot> PurgeAid => default;
         private StalkerFusionRuntime _purgeBoss;
         private static AudioClip _purgeWarningSound;
-        public int PurgeRageTier => HuntBurned >= 8 ? 3 : HuntBurned / 3;
+        public int PurgeRageTier => HuntBurned >= 8 ? 3 : HuntBurned >= 6 ? 2 : HuntBurned >= 2 ? 1 : 0;
         [Networked] public int PurgePartySize { get; private set; }
         public int PurgeMinionCap => PurgeFishcatBalance.Cap(HuntBurned,
             Mathf.Max(PurgePartySize, CountPurgeGameplayPlayers()),
@@ -99,8 +100,9 @@ namespace EchoProtocol.Networking
             {
                 var d = Authority.MatchAuthorityRuntime.Instance ? Authority.MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
                 float baseSpeed = d == MatchDifficulty.Easy ? 6f : d == MatchDifficulty.Hard ? 7.2f : 6.6f;
-                float speed = baseSpeed + PurgeRageTier * .4f;
-                return PurgeMood == PurgeBossMood.Hunting && PurgeUvExposure > 0 && PurgeUvImmunity.ExpiredOrNotRunning(Runner) ? speed * .6f : speed;
+                float bonus = PurgeRageTier switch { 0 => 0f, 1 => .4f, 2 => 1.2f, _ => 2.4f };
+                float speed = baseSpeed + bonus;
+                return (PurgeMood == PurgeBossMood.Hunting || PurgeMood == PurgeBossMood.Calm) && PurgeUvExposure > 0 && PurgeUvImmunity.ExpiredOrNotRunning(Runner) ? speed * .6f : speed;
             }
         }
         public void BindPurgeBoss(NetworkObject boss)
@@ -111,7 +113,7 @@ namespace EchoProtocol.Networking
         }
         public void ProvokePurgeBoss()
         {
-            if (!Object.HasStateAuthority || IsEnded || !AlienHuntMission.Instance || PurgeMood != PurgeBossMood.Calm
+            if (!Object.HasStateAuthority || IsEnded || !AlienHuntMission.Instance || PurgeRageTier == 0 || PurgeMood != PurgeBossMood.Calm
                 || !PurgeUvImmunity.ExpiredOrNotRunning(Runner)
                 || !PurgeMoodTimer.ExpiredOrNotRunning(Runner)) return;
             BeginPurgeHunt();
@@ -129,6 +131,7 @@ namespace EchoProtocol.Networking
             PurgeRitualPosition=position;PurgeRitualVersion++;
             PurgeLastRitualElapsedSeconds = Mathf.Clamp(_matchDurationSeconds - Remaining(MatchTimer), 0f, _matchDurationSeconds);
             Debug.Log($"[PURGE_BALANCE] Ritual {HuntBurned}/{AlienHuntMission.AlienCount} at {PurgeLastRitualElapsedSeconds:F1}s; hunts={PurgeHuntsStarted}, uvEnds={PurgeHuntsEndedByUv}, timeouts={PurgeHuntsEndedByTimeout}, uvStaggers={PurgeUvStaggersTotal}");
+            if (PurgeRageTier == 0) return;
             if (PurgeMood == PurgeBossMood.Calm) BeginPurgeHunt();
             else PurgeHuntTimer = TickTimer.CreateFromSeconds(Runner,PurgeHuntSeconds);
         }
@@ -149,44 +152,30 @@ namespace EchoProtocol.Networking
         private void TickPurgeDirector()
         {
             PurgePartySize = Mathf.Max(PurgePartySize, CountPurgeGameplayPlayers());
-            if (!_purgeBoss && PurgeBossId.IsValid && Runner.TryFindObject(PurgeBossId,out var boss))
-                _purgeBoss=boss.GetComponent<StalkerFusionRuntime>();
+            if (!_purgeBoss && PurgeBossId.IsValid && Runner.TryFindObject(PurgeBossId, out var boss))
+                _purgeBoss = boss.GetComponent<StalkerFusionRuntime>();
             if (_purgeBoss)
             {
-                float delta=Runner.DeltaTime;
-                if (PurgeMood==PurgeBossMood.Warning && PurgeMoodTimer.Expired(Runner)) PurgeMood=PurgeBossMood.Hunting;
-                else if(PurgeMood==PurgeBossMood.Staggered && PurgeMoodTimer.Expired(Runner))
+                float delta = Runner.DeltaTime;
+                if (PurgeMood == PurgeBossMood.Warning && PurgeMoodTimer.Expired(Runner)) PurgeMood = PurgeBossMood.Hunting;
+                else if (PurgeMood == PurgeBossMood.Staggered && PurgeMoodTimer.Expired(Runner))
                 {
-                    if(PurgeStaggers>=PurgeStaggersRequired) CompletePurgeHunt(true);
-                    else { PurgeMood=PurgeBossMood.Hunting; PurgeUvImmunity=TickTimer.CreateFromSeconds(Runner,4); }
+                    if (PurgeMoodBeforeUvStagger == PurgeBossMood.Calm) { PurgeMood = PurgeBossMood.Calm; PurgeMoodTimer = TickTimer.CreateFromSeconds(Runner, PurgeCalmSeconds); PurgeUvImmunity = TickTimer.CreateFromSeconds(Runner, 4f); }
+                    else if (PurgeStaggers >= PurgeStaggersRequired) CompletePurgeHunt(true);
+                    else { PurgeMood = PurgeBossMood.Hunting; PurgeUvImmunity = TickTimer.CreateFromSeconds(Runner, 4f); }
                 }
-                if(PurgeMood==PurgeBossMood.Hunting)
+                if (PurgeMood == PurgeBossMood.Hunting && PurgeHuntTimer.Expired(Runner)) CompletePurgeHunt(false);
+                if (PurgeMood == PurgeBossMood.Calm || PurgeMood == PurgeBossMood.Hunting)
                 {
-                    if(PurgeHuntTimer.Expired(Runner)) { CompletePurgeHunt(false); }
-                    else
-                    {
-                        int contributors=0;
-                        foreach(var player in Runner.ActivePlayers)
-                            if(Runner.TryGetPlayerObject(player,out var obj) && obj
-                                && obj.TryGetComponent<NetworkPlayerFlashlight>(out var uv)
-                                && uv.ResonanceActive && uv.PurgeBossTarget==_purgeBoss) contributors++;
-                        if(PurgeUvImmunity.ExpiredOrNotRunning(Runner))
-                            PurgeUvExposure=contributors>0 ? PurgeUvExposure+delta*ResonanceRules.ContributionSpeed(contributors)
-                                : Mathf.Max(0,PurgeUvExposure-delta);
-                        else PurgeUvExposure=0;
-                        if(PurgeUvExposure>=2.25f)
-                        {
-                            PurgeStaggers++; PurgeUvStaggersTotal++; PurgeUvExposure=0; PurgeMood=PurgeBossMood.Staggered;
-                            PurgeMoodTimer=TickTimer.CreateFromSeconds(Runner,2.2f);
-                        }
-                    }
+                    int contributors = 0;
+                    foreach (var player in Runner.ActivePlayers)
+                        if (Runner.TryGetPlayerObject(player, out var obj) && obj && obj.TryGetComponent<NetworkPlayerFlashlight>(out var uv) && uv.ResonanceActive && uv.PurgeBossTarget == _purgeBoss) contributors++;
+                    PurgeUvExposure = PurgeUvImmunity.ExpiredOrNotRunning(Runner) ? (contributors > 0 ? PurgeUvExposure + delta * ResonanceRules.ContributionSpeed(contributors) : Mathf.Max(0f, PurgeUvExposure - delta)) : 0f;
+                    if (PurgeUvExposure >= 2.25f) { PurgeMoodBeforeUvStagger = PurgeMood; PurgeStaggers++; PurgeUvStaggersTotal++; PurgeUvExposure = 0f; PurgeMood = PurgeBossMood.Staggered; PurgeMoodTimer = TickTimer.CreateFromSeconds(Runner, 2.2f); }
                 }
-            }
-            if(_purgeBoss)
-            {
-                var controller=_purgeBoss.GetComponent<EchoProtocol.AI.Stalker.StalkerController>();
-                controller.ApplyPurgePolicy(PurgeMood==PurgeBossMood.Hunting,
-                    PurgeMood==PurgeBossMood.Warning||PurgeMood==PurgeBossMood.Staggered,PurgeChaseSpeed);
+                else PurgeUvExposure = 0f;
+                var controller = _purgeBoss.GetComponent<EchoProtocol.AI.Stalker.StalkerController>();
+                if (controller) controller.ApplyPurgePolicy(PurgeRageTier >= 1, PurgeMood == PurgeBossMood.Warning || PurgeMood == PurgeBossMood.Staggered || IsEnded, PurgeChaseSpeed);
             }
             TickPurgeAid();
         }

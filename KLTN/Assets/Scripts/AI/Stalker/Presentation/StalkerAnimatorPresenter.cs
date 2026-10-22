@@ -618,7 +618,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
             }
 
             var match = NetworkMatchState.Instance;
-            if (mood == PurgeBossMood.Hunting && match != null
+            if ((mood == PurgeBossMood.Hunting || mood == PurgeBossMood.Calm) && match != null
                 && match.PurgeUvExposure > 0f)
             {
                 if (presentation.SemanticState == StalkerState.ATTACK)

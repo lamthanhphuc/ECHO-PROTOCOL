@@ -480,11 +480,19 @@ namespace EchoProtocol.AI.Stalker
             return true;
         }
         private bool _purgeControlled, _purgeHunting;
+        private int PurgeTier => _purgeControlled && AlienHuntMission.Instance != null && NetworkMatchState.Instance != null ? NetworkMatchState.Instance.PurgeRageTier : -1;
+        private float PurgeDetectSeconds => PurgeTier switch { 0 => 2.5f, 1 => 2f, 2 => 1.5f, 3 => .6f, _ => 2f };
+        private double _nextPurgeSeekAt = -1d;
         private float _purgeChaseSpeed;
         public void ApplyPurgePolicy(bool hunting, bool frozen, float speed)
         {
             bool changed = _purgeControlled && _purgeHunting != hunting;
-            _purgeControlled=true; _purgeHunting=hunting; _purgeChaseSpeed=speed;
+            _purgeControlled = true; _purgeHunting = hunting; _purgeChaseSpeed = speed;
+            if (PurgeTier == 3)
+            {
+                smartPatrolSettings ??= new StalkerSmartPatrolSettings();
+                if (smartPatrolSettings.SeekPlayersAfterSeconds != 30f) smartPatrolSettings.SetSeekPlayersAfterSeconds(30f);
+            }
             if(frozen) BeginSpecialEncounterOverride();
             else if(_specialEncounterOverrideActive || changed
                 || (!hunting && (currentState == StalkerState.DETECT
@@ -1076,6 +1084,10 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickCurrentState()
         {
+            if (PurgeTier == 0 && (currentState == StalkerState.CHASE || currentState == StalkerState.SEARCH))
+            {
+                ClearDetectionContext(); ClearTargetContext(); ClearSearchRuntimeContext(); StopAgentPath(); currentState = StalkerState.PATROL;
+            }
             if (TickHideSpotRevealGrace())
             {
                 return;
@@ -1106,6 +1118,12 @@ namespace EchoProtocol.AI.Stalker
             switch (currentState)
             {
                 case StalkerState.PATROL:
+                    if (PurgeTier == 3)
+                    {
+                        if (_nextPurgeSeekAt < 0d) _nextPurgeSeekAt = _currentSimulationSeconds + 30d;
+                        else if (_currentSimulationSeconds >= _nextPurgeSeekAt) { _nextPurgeSeekAt = _currentSimulationSeconds + 30d; ReplanRoomSweepAfterStrategicChange(); }
+                    }
+                    else _nextPurgeSeekAt = -1d;
                     TickPatrol();
                     if (HasTypedTargetFrame)
                     {
@@ -1268,7 +1286,7 @@ namespace EchoProtocol.AI.Stalker
 
         private bool TryBeginTypedDetection(VisionObservation selectedObservation)
         {
-            if (TryConsumeDetectionDecay(selectedObservation.PlayerId))
+            if (PurgeTier < 0 && TryConsumeDetectionDecay(selectedObservation.PlayerId))
             {
                 _memory.SetDetectionTarget(selectedObservation.PlayerId);
                 if (!_memory.TryAcceptDetectionTargetObservation(selectedObservation))
@@ -1391,8 +1409,10 @@ namespace EchoProtocol.AI.Stalker
             if (TryGetVisibleDetectionTargetObservation(out var observedPosition))
             {
                 FaceDetectObservedPosition(observedPosition);
+                if (PurgeTier == 0 && (observedPosition - transform.position).sqrMagnitude <= 4f)
+                { PromoteDetectionTargetToCurrentTarget(observedPosition); EnterAttack(); return; }
 
-                if (_detectWasDecaying && detectionMeter > 0f)
+                if (PurgeTier < 0 && _detectWasDecaying && detectionMeter > 0f)
                 {
                     PromoteDetectionTargetToCurrentTarget(observedPosition);
                     return;
@@ -1401,7 +1421,7 @@ namespace EchoProtocol.AI.Stalker
                 detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
 
-                if (detectionMeter >= GetDetectionMeterFull()
+            if (PurgeTier != 0 && detectionMeter >= GetDetectionMeterFull()
                     && _detectMinimumHoldRemaining <= 0f)
                 {
                     PromoteDetectionTargetToCurrentTarget(observedPosition);
@@ -1471,8 +1491,10 @@ namespace EchoProtocol.AI.Stalker
                 }
 
                 FaceDetectObservedPosition(observation.ObservedPosition);
+                if (PurgeTier == 0 && (observation.ObservedPosition - transform.position).sqrMagnitude <= 4f)
+                { PromoteDetectionTargetToCurrentTarget(observation); EnterAttack(); return; }
 
-                if (_detectWasDecaying
+                if (PurgeTier < 0 && _detectWasDecaying
                     && detectionMeter > 0f)
                 {
                     PromoteDetectionTargetToCurrentTarget(observation);
@@ -1482,7 +1504,7 @@ namespace EchoProtocol.AI.Stalker
                 detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
                 _memory.SetDetectionMeter(detectionMeter);
-                if (detectionMeter >= GetDetectionMeterFull()
+            if (PurgeTier != 0 && detectionMeter >= GetDetectionMeterFull()
                     && _detectMinimumHoldRemaining <= 0f)
                 {
                     PromoteDetectionTargetToCurrentTarget(observation);
@@ -1549,6 +1571,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void EnterDetectState()
         {
+            if (PurgeTier >= 0) _detectMinimumHoldRemaining = Mathf.Min(_detectMinimumHoldRemaining, PurgeDetectSeconds);
             _detectWasDecaying = false;
             currentState = StalkerState.DETECT;
             StopAgentPath();
@@ -1860,7 +1883,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void EnterAttack()
         {
-            if(_purgeControlled && !_purgeHunting) { EndSpecialEncounterOverrideToPatrol(); return; }
+            if (_purgeControlled && !_purgeHunting && PurgeTier != 0) { EndSpecialEncounterOverrideToPatrol(); return; }
             currentState = StalkerState.ATTACK;
             attackElapsedTime = 0f;
             lastAttackResult = StalkerAttackResult.None;
@@ -2069,6 +2092,7 @@ namespace EchoProtocol.AI.Stalker
             attackElapsedTime = 0f;
             recoverElapsedTime = 0f;
             _attackController.ClearActiveEpisode();
+            if (PurgeTier == 0) { ClearTargetContext(); ClearSearchRuntimeContext(); currentState = StalkerState.PATROL; StopAgentPath(); return; }
 
             if (currentTarget == null)
             {
@@ -2112,6 +2136,7 @@ namespace EchoProtocol.AI.Stalker
             attackElapsedTime = 0f;
             recoverElapsedTime = 0f;
             _attackController.ClearActiveEpisode();
+            if (PurgeTier == 0) { ClearTargetContext(); ClearSearchRuntimeContext(); currentState = StalkerState.PATROL; StopAgentPath(); return; }
 
             if (currentTargetId.IsValid
                 && TryGetUniqueTargetStatusDetail(currentTargetId, out var status)
@@ -4545,6 +4570,7 @@ namespace EchoProtocol.AI.Stalker
 
         private float GetDetectionFillRate()
         {
+            if (PurgeTier >= 0) return GetDetectionMeterFull() / PurgeDetectSeconds;
             var value =
                 ShouldUseScenarioMonsterParameters()
                     ? (float)_scenarioMonsterParameters.DetectionFillRate
@@ -4555,6 +4581,7 @@ namespace EchoProtocol.AI.Stalker
 
         private float GetDetectionDecayRate()
         {
+            if (PurgeTier >= 1) { float seconds = PurgeTier switch { 1 => 1f, 2 => 1.5f, _ => 3f }; return GetDetectionMeterFull() / seconds; }
             var value =
                 ShouldUseScenarioMonsterParameters()
                     ? (float)_scenarioMonsterParameters.DetectionDecayRate
@@ -4597,7 +4624,8 @@ namespace EchoProtocol.AI.Stalker
 
         private float GetAttackRange()
         {
-            return Mathf.Max(0f, attackRange);
+            float range = Mathf.Max(0f, attackRange);
+            return PurgeTier == 0 ? Mathf.Min(range, 2f) : range;
         }
 
         private float GetAttackWindup()

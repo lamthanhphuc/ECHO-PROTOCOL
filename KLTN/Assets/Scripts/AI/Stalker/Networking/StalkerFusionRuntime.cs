@@ -80,8 +80,11 @@ namespace EchoProtocol.AI.Stalker.Networking
                 || controller == null || controller.CurrentState != StalkerState.ATTACK
                 || !CatchCooldown.ExpiredOrNotRunning(Runner) || player == null)
                 return false;
-            if(AlienHuntMission.Instance && NetworkMatchState.Instance
-                && NetworkMatchState.Instance.PurgeMood!=PurgeBossMood.Hunting) return false;
+            if (AlienHuntMission.Instance && NetworkMatchState.Instance != null)
+            {
+                var purge = NetworkMatchState.Instance;
+                if (purge.IsEnded || purge.PurgeMood == PurgeBossMood.Warning || purge.PurgeMood == PurgeBossMood.Staggered) return false;
+            }
             if (!player.TryCatchAuthoritative(Object, maximumDamageDistance, jumpscareSeconds, catchEndsInDeath))
                 return false;
             CatchCooldown = TickTimer.CreateFromSeconds(Runner, Mathf.Max(jumpscareSeconds, catchCooldownSeconds));
@@ -609,22 +612,21 @@ namespace EchoProtocol.AI.Stalker.Networking
                 sustainedCoreCarrier = null;
             }
 
-            if(AlienHuntMission.Instance && NetworkMatchState.Instance)
+            if (AlienHuntMission.Instance && NetworkMatchState.Instance)
             {
-                var purge=NetworkMatchState.Instance;
-                bool hunt=purge.PurgeMood==PurgeBossMood.Hunting;
-                if(!hunt && purge.PurgeMood==PurgeBossMood.Calm)
-                    foreach(var candidate in _visibleCandidates)
-                        if((candidate.Observation.ObservedPosition-transform.position).sqrMagnitude<=2.5f*2.5f)
-                        {purge.ProvokePurgeBoss();break;}
-                bool frozen=purge.PurgeMood==PurgeBossMood.Warning || purge.PurgeMood==PurgeBossMood.Staggered || purge.IsEnded;
-                controller.ApplyPurgePolicy(hunt,frozen,purge.PurgeChaseSpeed);
+                var purge = NetworkMatchState.Instance;
+                bool hunt = purge.PurgeMood == PurgeBossMood.Hunting;
+                if (purge.PurgeRageTier >= 1 && !hunt && purge.PurgeMood == PurgeBossMood.Calm)
+                    foreach (var candidate in _visibleCandidates)
+                        if ((candidate.Observation.ObservedPosition - transform.position).sqrMagnitude <= 2.5f * 2.5f) { purge.ProvokePurgeBoss(); break; }
+                bool frozen = purge.PurgeMood == PurgeBossMood.Warning || purge.PurgeMood == PurgeBossMood.Staggered || purge.IsEnded;
+                controller.ApplyPurgePolicy(purge.PurgeRageTier >= 1, frozen, purge.PurgeChaseSpeed);
                 if(hunt && _lastPurgeRitualVersion!=purge.PurgeRitualVersion
                     && controller.InvestigatePurgeRitual(purge.PurgeRitualPosition))
                     _lastPurgeRitualVersion=purge.PurgeRitualVersion;
                 if(purge.PurgeMood==PurgeBossMood.Calm)
                     _lastPurgeRitualVersion=purge.PurgeRitualVersion;
-                if(!hunt){_visibleCandidates.Clear();_flashlightObservations.Clear();}
+                if (purge.PurgeRageTier == 0) { _hearingObservations.Clear(); _flashlightObservations.Clear(); }
                 sustainedCoreCarrier=null;
             }
             var input =
