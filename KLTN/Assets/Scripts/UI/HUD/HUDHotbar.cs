@@ -38,6 +38,7 @@ namespace EchoProtocol.UI.HUD
         private LobbyPlayerState _boundNetworkPlayerState;
         private Text _usesLabel;
         private Text _carryLabel;
+        private HUDPurgeIcon _purgeToolIcon;
 
         private void OnEnable()
         {
@@ -98,6 +99,37 @@ namespace EchoProtocol.UI.HUD
 
             UpdateCooldown();
             UpdateCarryState();
+            if (HUDPurgePresentation.IsPurgeScene) UpdatePurgeSlots();
+        }
+
+        private void UpdatePurgeSlots()
+        {
+            int displayed = 0;
+            var slots = new[] { slot1Container, slot2Container, toolContainer };
+            for (int i = 0; i < slots.Length; i++)
+            {
+                if (slots[i] == null) continue;
+                bool occupied = inventory != null && (i < 2 ? inventory.GetNormalSlot(i) != null : inventory.TeamToolSlot != null);
+                if (i == 2 && _boundNetworkPlayerState != null && _boundNetworkPlayerState.Object != null
+                    && _boundNetworkPlayerState.Object.IsValid) occupied |= _boundNetworkPlayerState.ToolId > 0;
+                slots[i].SetActive(occupied);
+                if (!occupied) continue;
+                var rect = slots[i].GetComponent<RectTransform>();
+                rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1,0);
+                rect.anchoredPosition = new Vector2(-displayed * 98,0);
+                displayed++;
+            }
+            if (_carryLabel != null) _carryLabel.gameObject.SetActive(false);
+            if (toolContainer == null || !toolContainer.activeSelf) return;
+            int toolId = inventory != null ? PlayerInventory.ResolveToolId(inventory.TeamToolSlot) : 0;
+            if (_boundNetworkPlayerState != null && _boundNetworkPlayerState.Object != null && _boundNetworkPlayerState.Object.IsValid)
+                toolId = _boundNetworkPlayerState.ToolId;
+            if (_purgeToolIcon == null)
+                _purgeToolIcon = HUDPurgePresentation.AddIcon(toolContainer.transform, PurgeIcon.Item, new Vector2(32,-24), HUDPresentationStyle.Ink);
+            _purgeToolIcon.Kind = toolId == LobbyPlayerState.FirstAidKitToolId ? PurgeIcon.Medkit : PurgeIcon.Item;
+            bool useVector = toolId == LobbyPlayerState.FirstAidKitToolId || toolIcon == null || toolIcon.sprite == null;
+            _purgeToolIcon.gameObject.SetActive(useVector);
+            if (toolIcon != null && useVector) toolIcon.gameObject.SetActive(false);
         }
 
         private void ResolveReferences()
@@ -214,7 +246,8 @@ namespace EchoProtocol.UI.HUD
         private void UpdateCarryState()
         {
             var fuelCell = inventory != null ? EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(inventory.gameObject) : null;
-            bool isCarrying = carrier != null && carrier.IsCarrying || fuelCell != null;
+            bool isCarrying = carrier != null && carrier.IsCarrying || fuelCell != null
+                || HUDPurgePresentation.IsPurgeScene && inventory != null && AlienHuntMission.IsCarrying(inventory.gameObject);
 
             if (slot1LockOverlay != null) slot1LockOverlay.SetActive(isCarrying);
             if (slot2LockOverlay != null) slot2LockOverlay.SetActive(isCarrying);

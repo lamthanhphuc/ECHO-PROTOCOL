@@ -51,6 +51,7 @@ public class PlayerCamera : MonoBehaviour
     private bool _driveTargetRotation = true;
     private bool _spectateThirdPerson;
     private bool _wasGameplayScene;
+    private PlayerCameraFeedback _feedback;
 
     public float Yaw => _yaw;
     public float Pitch => _pitch;
@@ -190,6 +191,7 @@ public class PlayerCamera : MonoBehaviour
     private void OnDisable()
     {
         _lookAction?.Disable();
+        if (_feedback != null) _feedback.Apply(null, false, false);
         UnlockCursor();
     }
 
@@ -232,6 +234,7 @@ public class PlayerCamera : MonoBehaviour
             AutoFindTarget();
             if (target == null)
             {
+                if (_feedback != null) _feedback.Apply(null, false, false);
                 return;
             }
         }
@@ -372,6 +375,9 @@ public class PlayerCamera : MonoBehaviour
             transform.rotation =
                 Quaternion.Euler(_pitch, _yaw, 0f);
         }
+
+        if (_feedback == null) _feedback = gameObject.AddComponent<PlayerCameraFeedback>();
+        _feedback.Apply(target, _driveTargetRotation && !_spectateThirdPerson, isReviving);
 
         if (target != null && _driveTargetRotation)
         {
