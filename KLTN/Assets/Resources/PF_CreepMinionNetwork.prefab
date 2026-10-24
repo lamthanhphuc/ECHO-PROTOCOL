@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 4512705804792131868}
   - component: {fileID: 7496290594125090925}
   - component: {fileID: 3972618418018248206}
+  - component: {fileID: 5619551821803120978}
   m_Layer: 0
   m_Name: PF_CreepMinionNetwork
   m_TagString: Untagged
@@ -47,7 +48,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
   SortKey: 3351082001
   SendPriority: 1
@@ -155,6 +156,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 55f703aa77f231342a1dbcf07df27688, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Minions.CreepMinionRuntime
+  _EncounterDutyValue: 0
   roamSpeed: 5.5
   trackSpeed: 8
   harassSpeed: 10
@@ -198,6 +200,8 @@ MonoBehaviour:
   animationSpeed: 1.6
   attackAnimationLockSeconds: 0.35
   deathVanishSeconds: 0.5
+  catfishDeathPoseHoldSeconds: 1
+  catfishDeathFadeSeconds: 1.5
   noiseMakerDistractionSeconds: 12
   noiseMakerArrivalDistance: 1.5
   _StateValue: 0
@@ -211,12 +215,44 @@ MonoBehaviour:
   _IsMoving:
     RawValue: 0
   _AttackSequence: 0
+  _ConfirmedHitSequence: 0
   _AttackKindValue: 0
   _FlightHeightValue: 0
   _AlertSequence: 0
   _IsDying:
     RawValue: 0
   _ResonanceProgress: 0
+  _IsUvStunned:
+    RawValue: 0
+--- !u!114 &5619551821803120978
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3552683404539213677}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 03e87e88b34a69f49b7ae25dba55a56a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Minions.PurgeFishcatFeedback
+  alertScreech: {fileID: 8300000, guid: 8f6d37dc2ab0e3949b747a83667720eb, type: 3}
+  idleBreath: {fileID: 8300000, guid: bf6215dcc2c73d947a9bf2148e90b8a2, type: 3}
+  alertVariations:
+  - {fileID: 8300000, guid: 8f6d37dc2ab0e3949b747a83667720eb, type: 3}
+  - {fileID: 8300000, guid: d9f3d03ff3d0e0640a480eae7c9fe8eb, type: 3}
+  - {fileID: 8300000, guid: 87932a14c4aa2534f9a29f1250274f84, type: 3}
+  idleVariations:
+  - {fileID: 8300000, guid: bf6215dcc2c73d947a9bf2148e90b8a2, type: 3}
+  - {fileID: 8300000, guid: 815e6831dc51bad4fae53057febe3cb9, type: 3}
+  - {fileID: 8300000, guid: e39d0a9edfec25c45b4e4f2d86d92769, type: 3}
+  attackScream: {fileID: 8300000, guid: f4bfb88464afcf441ba245eb634317ab, type: 3}
+  uvHiss: {fileID: 8300000, guid: 3d8529ca07ce6c54e99f1cfd9f2b426b, type: 3}
+  uvDeath: {fileID: 8300000, guid: 087a92f0780a1304abe074b1701881a8, type: 3}
+  landSteps:
+  - {fileID: 8300000, guid: 587e13a7bd7c4cc42874b56d514f68a1, type: 3}
+  - {fileID: 8300000, guid: d72557b52fb3aef4ea0bdbd66c660cd9, type: 3}
+  particleMaterial: {fileID: 2100000, guid: b7987f9730f26b94996d4e194976c440, type: 2}
 --- !u!1 &7454137578700211806
 GameObject:
   m_ObjectHideFlags: 0
