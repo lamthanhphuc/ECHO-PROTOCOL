@@ -246,10 +246,17 @@ public static class AlienHuntSceneSetup
         EditorUtility.SetDirty(controller); return controller;
     }
 
-    private static AnimationClip BuildEating()
+    [MenuItem("Tools/ECHO Protocol/Repair Alien Eating Animation")]
+    public static void RepairEatingAnimation()
+    {
+        BuildEating(true);
+        AssetDatabase.SaveAssets();
+    }
+
+    private static AnimationClip BuildEating(bool rebuild = false)
     {
         const string output = AssetsRoot + "/Animations/AlienYoung_Eating.anim";
-        var existing = AssetDatabase.LoadAssetAtPath<AnimationClip>(output); if (existing) return existing;
+        var existing = AssetDatabase.LoadAssetAtPath<AnimationClip>(output); if (existing && !rebuild) return existing;
         var source = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Creep Horror Creature/Meshes/Creep_mesh.fbx"));
         var target = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(Monster));
         source.hideFlags = target.hideFlags = HideFlags.HideAndDontSave;
@@ -261,42 +268,109 @@ public static class AlienHuntSceneSetup
             var sourceBones = source.GetComponentsInChildren<Transform>().ToDictionary(t => t.name);
             var targetBones = target.GetComponentsInChildren<Transform>().ToDictionary(t => t.name);
             var names = new Dictionary<string, string> {
-                {"Torso","spine_01.x"},{"Chest","spine_02.x"},{"Neck","neck.x"},{"Head","head.x"},
+                {"Torso","root.x"},{"Chest","spine_02.x"},{"Neck","neck.x"},{"Head","head.x"},
                 {"Shoulder.L","shoulder.l"},{"Arm1.L","arm_stretch.l"},{"Arm2.L","forearm_stretch.l"},{"Hand.L","hand.l"},
                 {"Shoulder.R","shoulder.r"},{"Arm1.R","arm_stretch.r"},{"Arm2.R","forearm_stretch.r"},{"Hand.R","hand.r"},
                 {"Leg1.L","thigh_stretch.l"},{"Leg2.L","leg_stretch.l"},{"Foot.L","foot.l"},
                 {"Leg1.R","thigh_stretch.r"},{"Leg2.R","leg_stretch.r"},{"Foot.R","foot.r"}
             };
             var keys = names.Keys.ToArray();
+            const string upperSpineName = "spine_03.x";
             var restSource = keys.Select(k => sourceBones[k].rotation).ToArray();
             var restTarget = keys.Select(k => targetBones[names[k]].rotation).ToArray();
             var baseRotations = target.GetComponentsInChildren<Transform>().ToDictionary(t => t, t => t.localRotation);
-            var curves = keys.Select(k => new[] { new AnimationCurve(), new AnimationCurve(), new AnimationCurve(), new AnimationCurve() }).ToArray();
+            var animatedBones = keys.Select(k => names[k]).Concat(new[] { upperSpineName }).Distinct().ToArray();
+            var curves = animatedBones.ToDictionary(k => k, k => new[] { new AnimationCurve(), new AnimationCurve(), new AnimationCurve(), new AnimationCurve() });
+            var pelvis = targetBones["root.x"];
+            Vector3 pelvisRest = pelvis.position;
+            Vector3 sourcePelvisRest = sourceBones["Torso"].position;
+            float bodyScale = Vector3.Distance(pelvis.position, targetBones["foot.l"].position)
+                / Mathf.Max(.001f, Vector3.Distance(sourcePelvisRest, sourceBones["Foot.L"].position));
+            float footFloor = Mathf.Min(targetBones["foot.l"].position.y, targetBones["foot.r"].position.y);
+            var pelvisCurves = new[] { new AnimationCurve(), new AnimationCurve(), new AnimationCurve() };
             int frames = Mathf.CeilToInt(animation.length * 30);
             for (int frame = 0; frame <= frames; frame++)
             {
                 float time = Mathf.Min(animation.length, frame / 30f);
                 animation.SampleAnimation(source, time);
                 foreach (var pair in baseRotations) pair.Key.localRotation = pair.Value;
+                pelvis.position = pelvisRest + (sourceBones["Torso"].position - sourcePelvisRest) * bodyScale;
                 for (int i = 0; i < keys.Length; i++)
                 {
                     var bone = targetBones[names[keys[i]]];
                     bone.rotation = sourceBones[keys[i]].rotation * Quaternion.Inverse(restSource[i]) * restTarget[i];
-                    var q = bone.localRotation;
-                    curves[i][0].AddKey(time,q.x); curves[i][1].AddKey(time,q.y);
-                    curves[i][2].AddKey(time,q.z); curves[i][3].AddKey(time,q.w);
                 }
+                float phase = time / animation.length;
+                float lift = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(.48f, .65f, phase))
+                    * (1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(.78f, .95f, phase)));
+                // The source has a longer neck. Share its bend with the upper back so the
+                // shorter Alien neck does not fold the head into the chest.
+                var upperSpine = targetBones[upperSpineName];
+                var neck = targetBones["neck.x"];
+                var head = targetBones["head.x"];
+                var neckBend = Quaternion.Inverse(baseRotations[neck]) * neck.localRotation;
+                upperSpine.localRotation = baseRotations[upperSpine] * Quaternion.Slerp(Quaternion.identity, neckBend, .35f);
+                neck.localRotation = Quaternion.Slerp(baseRotations[neck], neck.localRotation, .70f);
+                head.localRotation = Quaternion.Slerp(baseRotations[head], head.localRotation, .78f);
+                // The visual face points along a different axis than head.forward.
+                // Pitch the visible face downward during Creep's head-raising phase.
+                head.localRotation *= Quaternion.Euler(85f * lift, 0, 0);
+                // Eating is stationary. Preserve pelvis motion while keeping the supporting foot on the floor.
+                pelvis.position += Vector3.up * (footFloor - Mathf.Min(targetBones["foot.l"].position.y, targetBones["foot.r"].position.y));
+                // Source hands and feet both support the creature. Retarget the hand contact
+                // points, then solve the Alien's shorter upper/forearm chain toward them.
+                foreach (string side in new[] { "L", "R" })
+                {
+                    string suffix = side == "L" ? "l" : "r";
+                    var upperArm = targetBones["arm_stretch." + suffix];
+                    var forearm = targetBones["forearm_stretch." + suffix];
+                    var hand = targetBones["hand." + suffix];
+                    Vector3 sourceOffset = (sourceBones["Hand." + side].position - sourceBones["Torso"].position) * bodyScale;
+                    Vector3 handGoal = pelvis.position + sourceOffset;
+                    handGoal.y = footFloor + .04f;
+                    for (int pass = 0; pass < 4; pass++)
+                    {
+                        AimHand(forearm, hand, handGoal);
+                        AimHand(upperArm, hand, handGoal);
+                    }
+                }
+                foreach (string boneName in animatedBones)
+                {
+                    var q = targetBones[boneName].localRotation;
+                    var c = curves[boneName];
+                    c[0].AddKey(time,q.x); c[1].AddKey(time,q.y);
+                    c[2].AddKey(time,q.z); c[3].AddKey(time,q.w);
+                }
+                var position = pelvis.localPosition;
+                pelvisCurves[0].AddKey(time, position.x); pelvisCurves[1].AddKey(time, position.y); pelvisCurves[2].AddKey(time, position.z);
             }
             var result = new AnimationClip { name = "AlienYoung_Eating", frameRate = 30 };
             string[] components = { "x", "y", "z", "w" };
-            for (int i = 0; i < keys.Length; i++) for (int axis = 0; axis < 4; axis++)
+            foreach (string boneName in animatedBones) for (int axis = 0; axis < 4; axis++)
                 AnimationUtility.SetEditorCurve(result, EditorCurveBinding.FloatCurve(
-                    AnimationUtility.CalculateTransformPath(targetBones[names[keys[i]]], rig), typeof(Transform), "m_LocalRotation." + components[axis]), curves[i][axis]);
+                    AnimationUtility.CalculateTransformPath(targetBones[boneName], rig), typeof(Transform), "m_LocalRotation." + components[axis]), curves[boneName][axis]);
+            for (int axis = 0; axis < 3; axis++)
+                AnimationUtility.SetEditorCurve(result, EditorCurveBinding.FloatCurve(
+                    AnimationUtility.CalculateTransformPath(pelvis, rig), typeof(Transform), "m_LocalPosition." + components[axis]), pelvisCurves[axis]);
             result.EnsureQuaternionContinuity();
             var settings = AnimationUtility.GetAnimationClipSettings(result); settings.loopTime = true;
-            AnimationUtility.SetAnimationClipSettings(result, settings); AssetDatabase.CreateAsset(result, output); return result;
+            AnimationUtility.SetAnimationClipSettings(result, settings);
+            if (existing)
+            {
+                EditorUtility.CopySerialized(result, existing); EditorUtility.SetDirty(existing);
+                Object.DestroyImmediate(result); return existing;
+            }
+            AssetDatabase.CreateAsset(result, output); return result;
         }
         finally { Object.DestroyImmediate(source); Object.DestroyImmediate(target); }
+    }
+
+    private static void AimHand(Transform joint, Transform hand, Vector3 goal)
+    {
+        Vector3 current = hand.position - joint.position;
+        Vector3 desired = goal - joint.position;
+        if (current.sqrMagnitude < .000001f || desired.sqrMagnitude < .000001f) return;
+        joint.rotation = Quaternion.FromToRotation(current, desired) * joint.rotation;
     }
 
     private static void Folder(string path)

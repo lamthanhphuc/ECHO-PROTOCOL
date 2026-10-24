@@ -1,4 +1,5 @@
 using EchoProtocol.Networking;
+using Fusion;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -26,6 +27,9 @@ namespace EchoProtocol.UI
         private CameraRenderType _originalRenderType;
         private bool[] _originalLights;
         private int _appliedMap = -1;
+        private bool _confirmedPurgeMode;
+        private NetworkRunner _confirmedRunner;
+        private string _confirmedRoom;
         private float _nextRefresh;
 
         [System.Serializable]
@@ -114,6 +118,9 @@ namespace EchoProtocol.UI
             for (int i = 0; i < _originalLights.Length; i++)
                 _originalLights[i] = sciFiLights[i] && sciFiLights[i].enabled;
             _appliedMap = -1;
+            _confirmedPurgeMode = false;
+            _confirmedRunner = null;
+            _confirmedRoom = null;
             _nextRefresh = 0;
             _camera = foregroundCamera ? foregroundCamera : Camera.main;
             if (_camera)
@@ -129,7 +136,20 @@ namespace EchoProtocol.UI
             if (Time.unscaledTime < _nextRefresh) return;
             _nextRefresh = Time.unscaledTime + .15f;
             if (!_bootstrap) _bootstrap = FindAnyObjectByType<NetworkBootstrap>();
-            ApplyMap(LobbyMapCatalog.Selected(_bootstrap ? _bootstrap.Runner : null));
+            var runner = _bootstrap ? _bootstrap.Runner : null;
+            if (runner != _confirmedRunner || runner != null && runner.SessionInfo.IsValid
+                && _confirmedRoom != runner.SessionInfo.Name)
+            {
+                _confirmedRunner = runner;
+                _confirmedRoom = runner != null && runner.SessionInfo.IsValid ? runner.SessionInfo.Name : null;
+                _confirmedPurgeMode = false;
+            }
+            if (runner != null && runner.SessionInfo.IsValid
+                && runner.SessionInfo.Properties.TryGetValue(LobbyMapCatalog.GameModeKey, out var mode))
+                _confirmedPurgeMode = (int)mode == 1;
+            else if (_confirmedPurgeMode && _appliedMap == 1)
+                return; // Keep the confirmed PURGE backdrop through partial room snapshots.
+            ApplyMap(LobbyMapCatalog.Selected(runner));
         }
 
         public void ApplyMap(int map)

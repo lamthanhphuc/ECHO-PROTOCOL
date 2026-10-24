@@ -8,7 +8,7 @@ namespace EchoProtocol.Networking
     {
         [SerializeField] private Renderer waterSurface;
         [SerializeField] private Terrain terrain;
-        [SerializeField, Min(0f)] private float surfaceClearance = 0.05f;
+        [SerializeField, Range(0f, 1f)] private float maximumWadingDepth = 0.45f;
         private static FloodedWaterBoundary _active;
         private readonly RaycastHit[] _hits = new RaycastHit[64];
 
@@ -96,14 +96,13 @@ namespace EchoProtocol.Networking
             if (motion.sqrMagnitude < 0.0000001f) return true;
             // Sweep samples also protect fast movement and unusually long simulation frames.
             int samples = Mathf.Max(1, Mathf.CeilToInt(motion.magnitude / Mathf.Max(0.1f, radius * 0.5f)));
-            var forward = motion.normalized * radius * 0.8f;
-            var side = new Vector3(forward.z, 0f, -forward.x);
+            var forward = motion.normalized * radius * 0.35f;
             for (int i = 1; i <= samples; i++)
             {
                 var point = start + motion * (i / (float)samples);
-                if (!HasDrySupport(point + forward, feet, step)
-                    || !HasDrySupport(point + side, feet, step)
-                    || !HasDrySupport(point - side, feet, step)) return false;
+                // A narrow bridge supports the capsule at its center; its sides can overhang water.
+                if (!HasDrySupport(point, feet, step)
+                    || !HasDrySupport(point + forward, feet, step)) return false;
             }
             return true;
         }
@@ -113,25 +112,29 @@ namespace EchoProtocol.Networking
             var bounds = waterSurface.bounds;
             if (point.x < bounds.min.x || point.x > bounds.max.x
                 || point.z < bounds.min.z || point.z > bounds.max.z) return true;
-            float waterHeight = bounds.center.y + surfaceClearance;
+            float minimumFloor = bounds.center.y - maximumWadingDepth;
+            float top = feet + Mathf.Max(step, 0.2f) + 0.1f;
             if (terrain && terrain.terrainData)
             {
                 var local = point - terrain.transform.position;
                 var size = terrain.terrainData.size;
                 if (local.x >= 0f && local.z >= 0f && local.x <= size.x && local.z <= size.z
-                    && terrain.SampleHeight(point) + terrain.transform.position.y >= waterHeight)
+                    && terrain.SampleHeight(point) + terrain.transform.position.y >= minimumFloor
+                    && terrain.SampleHeight(point) + terrain.transform.position.y <= top)
                     return true;
             }
 
             // Search only below reachable foot height: roofs above the player are not support.
-            float top = Mathf.Max(feet + Mathf.Max(step, 0.2f) + 0.1f, waterHeight + 0.1f);
+            if (top < minimumFloor) return false;
             int count = Physics.RaycastNonAlloc(new Vector3(point.x, top, point.z), Vector3.down,
-                _hits, top - waterHeight, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+                _hits, top - minimumFloor, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
             for (int i = 0; i < count; i++)
             {
                 var hit = _hits[i];
                 if (hit.collider.gameObject.scene != gameObject.scene || hit.normal.y < 0.5f
-                    || !GameplayEnvironmentPhysics.IsEnvironment(hit.collider)) continue;
+                    || !GameplayEnvironmentPhysics.IsEnvironment(hit.collider)
+                    || hit.collider.GetComponentInParent<AlienHuntActor>() != null
+                    || hit.collider.GetComponentInParent<EchoProtocol.AI.Minions.CreepMinionRuntime>() != null) continue;
                 return true;
             }
             return false;
