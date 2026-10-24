@@ -251,3 +251,31 @@ MonoBehaviour:
     clip: {fileID: 8300000, guid: 6b402e39a942462eaa3e1a32e5c75265, type: 3}
   - key: objectives/emergency_grid_restored
     clip: {fileID: 8300000, guid: 2019d0b27c3b445d81bb57bed86d0dd6, type: 3}
+  - key: purge_alien/bait_detect
+    clip: {fileID: 8300000, guid: 37a166af0afc2a54ca1a471222974cd5, type: 3}
+  - key: purge_alien/burn_complete
+    clip: {fileID: 8300000, guid: e7e74fc9e61bc5b4d91b967ded7e31a1, type: 3}
+  - key: purge_alien/burn_start
+    clip: {fileID: 8300000, guid: 8c64352d16fa68a4a9558570d1bf0d1c, type: 3}
+  - key: purge_alien/chew_01
+    clip: {fileID: 8300000, guid: 564fc492cecfc2049900fa2b7754b6dc, type: 3}
+  - key: purge_alien/chew_02
+    clip: {fileID: 8300000, guid: 0e5fbbbc1aa1c8440893585bb457f1bb, type: 3}
+  - key: purge_alien/chew_03
+    clip: {fileID: 8300000, guid: 9e5821cab9a9ebe4993fdf5a968ec26d, type: 3}
+  - key: purge_alien/drop
+    clip: {fileID: 8300000, guid: 6bf3ac5c10a8e764593d5ebcdd016ff5, type: 3}
+  - key: purge_alien/idle_01
+    clip: {fileID: 8300000, guid: 4227e011a67040e469a429622f046fa4, type: 3}
+  - key: purge_alien/idle_02
+    clip: {fileID: 8300000, guid: e6a3d33c07076b944921268691c8fd95, type: 3}
+  - key: purge_alien/pickup
+    clip: {fileID: 8300000, guid: b0836590b45cdba46abe8f618f2c0f90, type: 3}
+  - key: purge_furnace/fire_loop
+    clip: {fileID: 8300000, guid: f70026dfce3de744fbb0e1d277a84532, type: 3}
+  - key: purge_furnace/fuel_pour
+    clip: {fileID: 8300000, guid: bb37cd46243fd074cbdc80332d022f44, type: 3}
+  - key: purge_furnace/ignition
+    clip: {fileID: 8300000, guid: 71f76eb78cdbba6479fecc32f6ef376c, type: 3}
+  - key: purge_furnace/pan_place
+    clip: {fileID: 8300000, guid: 9c5e1a21a7f55d04d9bcfd8ba8612a25, type: 3}
