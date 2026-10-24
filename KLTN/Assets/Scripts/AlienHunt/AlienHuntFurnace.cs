@@ -17,8 +17,11 @@ namespace EchoProtocol.Networking
         private void LateUpdate()
         {
             var mission = AlienHuntMission.Instance;
-            if (effects) effects.Present(mission && mission.Ready ? mission.ReadFurnace(index) : default);
+            if (!effects) return;
+            if (!mission || !mission.Ready) { effects.ResetPresentation(); return; }
+            effects.Present(mission.ReadFurnace(index), Time.deltaTime);
         }
+        private void OnDisable() { if (effects) effects.ResetPresentation(); }
         public bool OilVisible => effects && effects.OilVisible;
         public bool FireVisible => effects && effects.FireVisible;
         public string InteractionPrompt
@@ -38,14 +41,16 @@ namespace EchoProtocol.Networking
                 if (!m || !m.Ready) return "ĐANG CHUẨN BỊ LÒ ĐỐT";
                 var state = m.ReadFurnace(index);
                 if (state.BurnedCount >= AlienHuntMission.FurnaceCapacity) return "LÒ ĐÃ ĐỐT ĐỦ 3 ALIEN";
-                if (state.BurnRemaining > 0) return "ĐANG ĐỐT ALIEN NON…";
+                if (state.BurnRemaining > 0) return "ĐANG ĐỐT ALIEN NON · " + Mathf.CeilToInt(state.BurnRemaining) + "s";
+                if (state.Fuel > 0 && state.AlienSlot > 0)
+                    return "[" + AlienHuntMission.InteractKey + "] CHÂM LỬA ĐỐT ALIEN";
                 int held = m.LocalHeldIndex;
                 if (held >= 0) return m.Actors[held].Kind == HuntKind.Jerrycan
                     ? state.Fuel == 0 ? "[" + AlienHuntMission.InteractKey + "] ĐỔ NHIÊN LIỆU VÀO CHẢO" : "CHẢO ĐÃ CÓ NHIÊN LIỆU"
-                    : m.Actors[held].Kind == HuntKind.Alien ? state.AlienSlot == 0
+                    : m.Actors[held].Kind == HuntKind.Alien ? state.Fuel == 0 ? "CẦN ĐỔ NHIÊN LIỆU TRƯỚC" : state.AlienSlot == 0
                         ? "[" + AlienHuntMission.InteractKey + "] ĐẶT ALIEN LÊN CHẢO" : "CHẢO ĐÃ CÓ ALIEN" : "CẦN CAN NHIÊN LIỆU HOẶC ALIEN ĐÃ BẮT";
-                return state.AlienSlot == 0 ? "MANG ALIEN ĐÃ BẮT TỚI ĐÂY" : state.Fuel == 0
-                    ? "CẦN ĐỔ NHIÊN LIỆU VÀO CHẢO" : "[" + AlienHuntMission.InteractKey + "] CHÂM LỬA ĐỐT ALIEN";
+                return state.Fuel == 0 ? "MANG CAN NHIÊN LIỆU TỚI ĐÂY" : state.AlienSlot == 0
+                    ? "MANG ALIEN ĐÃ BẮT TỚI ĐÂY" : "[" + AlienHuntMission.InteractKey + "] CHÂM LỬA ĐỐT ALIEN";
             }
         }
         public bool CanInteract(GameObject interactor) => interactor && AlienHuntMission.Instance

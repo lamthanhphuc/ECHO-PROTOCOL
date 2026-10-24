@@ -29,6 +29,9 @@ namespace EchoProtocol.UI.HUD
         private bool _completedTriggered;
         private GameObject _keyBadge;
         private Text _keyText;
+        private HUDPurgeIcon _purgeIcon;
+
+        internal void SuppressForPurgeFrame() => HidePromptImmediate();
 
         public void BindInteraction(PlayerInteraction interaction)
         {
@@ -102,6 +105,11 @@ namespace EchoProtocol.UI.HUD
 
         private void Update()
         {
+            if (HUDPurgePresentation.IsPurgeScene && PlayerInteractionControlLock.HasModal)
+            {
+                HidePromptImmediate();
+                return;
+            }
             if ((playerInteraction != null && playerInteraction.IsInteractionPromptSuppressed)
                 || (networkPlayerInteractor != null && networkPlayerInteractor.IsInteractionPromptSuppressed))
             {
@@ -172,7 +180,10 @@ namespace EchoProtocol.UI.HUD
                 progress01 = floodedCharge.Progress01;
             }
 
-            ShowPrompt(prompt, isHold, progress01);
+            // A furnace can explain a missing ingredient without advertising an unavailable action.
+            bool available = !(interactable is AlienHuntFurnace furnace)
+                || prompt.Contains("[" + AlienHuntMission.InteractKey + "]");
+            ShowPrompt(prompt, isHold, progress01, available);
         }
 
         private bool TryGetNetworkPrompt(
@@ -256,7 +267,8 @@ namespace EchoProtocol.UI.HUD
             string keyLabel = GameplayInputSettings.GetKeyLabel(GameplayAction.Interact);
 
             // Clean existing [E] or [E GIỮ] if present in source prompt
-            string cleanPrompt = prompt.Replace("[E GIỮ]", "").Replace("[E]", "").Replace("[E ]", "").Trim();
+            string cleanPrompt = prompt.Replace("[E GIỮ]", "").Replace("[E]", "").Replace("[E ]", "")
+                .Replace("[" + keyLabel + "]", "").Trim();
             bool isSpacefrigateRouteChoice = cleanPrompt.StartsWith("SPACEFRIGATE:", System.StringComparison.Ordinal);
             if (isSpacefrigateRouteChoice)
                 cleanPrompt = cleanPrompt.Replace("SPACEFRIGATE:", EchoProtocol.Settings.GameLanguage.Choose("Tàu:", "Ship:"));
@@ -268,6 +280,18 @@ namespace EchoProtocol.UI.HUD
             {
                 labelRect.anchoredPosition = new Vector2(badgeVisible ? 70f : 16f, -8f);
                 labelRect.sizeDelta = new Vector2(badgeVisible ? 388f : 442f, 48f);
+            }
+            if (HUDPurgePresentation.IsPurgeScene)
+            {
+                if (_purgeIcon == null)
+                    _purgeIcon = HUDPurgePresentation.AddIcon(transform, PurgeIcon.Interact, new Vector2(470,-20), HUDPresentationStyle.Ink);
+                var target = playerInteraction != null ? playerInteraction.CurrentInteractable : null;
+                var actor = target as AlienHuntActor;
+                _purgeIcon.Kind = actor != null ? actor.Kind == HuntKind.Meat ? PurgeIcon.Meat
+                    : actor.Kind == HuntKind.Jerrycan ? PurgeIcon.Fuel : PurgeIcon.Alien
+                    : target is AlienHuntFurnace ? PurgeIcon.Purge
+                    : isHold ? PurgeIcon.Medkit : PurgeIcon.Interact;
+                _purgeIcon.gameObject.SetActive(!isHold);
             }
             string formattedText = isHold ? $"Giữ để {cleanPrompt}" : cleanPrompt;
             if (_keyBadge == null && badgeVisible) formattedText = $"[{keyLabel}]  {formattedText}";

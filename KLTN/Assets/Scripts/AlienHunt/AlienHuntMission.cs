@@ -43,6 +43,7 @@ namespace EchoProtocol.Networking
         public static AlienHuntMission Instance { get; private set; }
         private PlayerRef LocalPlayer => NetworkReady ? Match.Runner.LocalPlayer : PlayerRef.FromIndex(0);
         public int LocalHeldIndex => Ready ? HeldIndex(LocalPlayer) : -1;
+        public bool LocalPlacementRejected => Time.unscaledTime < _dropHintUntil;
 
         public static bool IsCarrying(GameObject player)
         {
@@ -116,6 +117,7 @@ namespace EchoProtocol.Networking
                     Vector3 home = hit.position;
                     Vector3 actualNest = originalNest + home - originalHome;
                     if (Vector3.Distance(actualNest, nestPosition) > 1.5f || Vector3.Distance(home, originalHome) < 10f) continue;
+                    if (!AlienHuntActor.TryNestGround(actors[i].transform.parent, home - originalHome, out _)) continue;
 
                     bool separated = true;
                     for (int j = 0; j < i; j++)
@@ -272,6 +274,16 @@ namespace EchoProtocol.Networking
                 if (furnace >= furnaces.Length || !Near(owner.position, furnaces[furnace])) return false;
                 var f = ReadFurnace(furnace);
                 if (f.BurnRemaining > 0 || f.BurnedCount >= FurnaceCapacity) return false;
+                // Ignition is a furnace action. A carried item must not block it.
+                if (f.Fuel > 0 && f.AlienSlot > 0)
+                {
+                    f.BurnRemaining = burnSeconds * DifficultyScale;
+                    var burningAlien = Read(f.AlienSlot - 1);
+                    burningAlien.Stage = (int)AlienStage.Burning;
+                    Write(f.AlienSlot - 1, burningAlien);
+                    WriteFurnace(furnace, f);
+                    return true;
+                }
                 if (held >= 0)
                 {
                     var h = Read(held);
@@ -281,16 +293,13 @@ namespace EchoProtocol.Networking
                         h.Stage = 3;
                         h.Remaining = jerrycanRespawnSeconds;
                     }
-                    else if (actors[held].Kind == HuntKind.Alien && f.AlienSlot == 0)
+                    else if (actors[held].Kind == HuntKind.Alien && f.AlienSlot == 0 && f.Fuel > 0)
                     { f.AlienSlot = held + 1; h.Stage = (int)AlienStage.OnPan; h.Position = furnaces[furnace].Pan.position;
                         h.Rotation = furnaces[furnace].Pan.rotation; }
                     else return false;
                     h.Carrier = PlayerRef.None; Write(held, h); WriteFurnace(furnace, f); return true;
                 }
-                if (f.Fuel == 0 || f.AlienSlot == 0) return false;
-                f.BurnRemaining = burnSeconds * DifficultyScale;
-                var a = Read(f.AlienSlot - 1); a.Stage = (int)AlienStage.Burning;
-                Write(f.AlienSlot - 1, a); WriteFurnace(furnace, f); return true;
+                return false;
             }
             if (entity < 0 || entity >= actors.Length || held >= 0 || !Near(owner.position, actors[entity])) return false;
             var state = Read(entity); var kind = actors[entity].Kind;
@@ -506,7 +515,12 @@ namespace EchoProtocol.Networking
                                 agent.SetDestination(bait.Position);
                             if (!agent.pathPending && agent.pathStatus == NavMeshPathStatus.PathComplete
                                 && (actor.transform.position - bait.Position).sqrMagnitude <= .85f * .85f)
-                            { agent.isStopped = true; s.Stage = (int)AlienStage.Eating; s.Remaining = eatingSeconds * DifficultyScale; }
+                            {
+                                agent.isStopped = true;
+                                var facing = Vector3.ProjectOnPlane(bait.Position - actor.transform.position, Vector3.up);
+                                if (facing.sqrMagnitude > .001f) actor.transform.rotation = Quaternion.LookRotation(facing);
+                                s.Stage = (int)AlienStage.Eating; s.Remaining = eatingSeconds * DifficultyScale;
+                            }
                         }
                     }
                     else
