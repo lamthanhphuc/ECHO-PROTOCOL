@@ -1,4 +1,4 @@
-﻿using EchoProtocol.AI.Minions;
+using EchoProtocol.AI.Minions;
 using EchoProtocol.Settings;
 using Fusion;
 using UnityEngine;
@@ -15,6 +15,7 @@ namespace EchoProtocol.Networking
         [Networked] public float ResonanceEnergy { get; private set; }
         [Networked] public NetworkBool ResonanceActive { get; private set; }
         [Networked] public NetworkBool ResonanceLocked { get; private set; }
+        [Networked] public NetworkBool ResonanceHasValidHit { get; private set; }
         [Networked] private NetworkBool ResonanceNeedsRelease { get; set; }
         [Networked] private float ResonanceRechargeDelay { get; set; }
         [Networked] public Vector3 ResonanceEndpoint { get; private set; }
@@ -51,47 +52,67 @@ namespace EchoProtocol.Networking
             ResonanceNeedsRelease=next.NeedsRelease;ResonanceRechargeDelay=next.RechargeDelay;
             _resonanceTarget=null; PurgeBossTarget=null;
             if(ResonanceActive)ResolveResonanceTarget(input);
+            // Target references are authority-local; the UI contact signal must also reach the owner client.
+            var match = NetworkMatchState.Instance;
+            bool bossAffected = PurgeBossTarget != null && match != null && match.Object != null && match.Object.IsValid
+                && match.PurgeUvImmunity.ExpiredOrNotRunning(Runner)
+                && (match.PurgeMood == PurgeBossMood.Calm || match.PurgeMood == PurgeBossMood.Hunting);
+            ResonanceHasValidHit = ResonanceActive && (_resonanceTarget != null || bossAffected);
         }
         private void ResolveResonanceTarget(NetworkPlayerInput input)
         {
             if(float.IsNaN(input.LookYaw) || float.IsInfinity(input.LookYaw)
                 || float.IsNaN(input.LookPitch) || float.IsInfinity(input.LookPitch))return;
             var movement=GetComponent<NetworkPlayerMovement>();
-            Vector3 origin=transform.position+Vector3.up*(movement!=null && movement.IsCrouching ? 1f:1.6f);
-            Vector3 forward=Quaternion.Euler(Mathf.Clamp(input.LookPitch,-89f,89f),input.LookYaw,0f)*Vector3.forward;
-            ResonanceEndpoint=origin+forward*ResonanceRange;
-            var hits=Physics.SphereCastAll(origin,ResonanceHitRadius,forward,ResonanceRange,~0,QueryTriggerInteraction.Ignore);
-            System.Array.Sort(hits,(a,b)=>a.distance.CompareTo(b.distance));
-            foreach(var hit in hits) {
-                if(hit.collider.transform.IsChildOf(transform))continue;
-                if(IsDespawnedMinionCollider(hit.collider))continue;
-                if((SceneManager.GetActiveScene().name==LobbyMapCatalog.ExplorationScene || AlienHuntMission.Instance) && hit.collider.gameObject.layer==4)continue;
-                ResonanceEndpoint=hit.point;
-                var boss=hit.collider.GetComponentInParent<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
-                if(AlienHuntMission.Instance && boss)
-                {
-                    Vector3 bossMuzzle=BeamTransform.position; Vector3 bossPoint=hit.collider.bounds.center;
-                    foreach(var block in Physics.RaycastAll(bossMuzzle,(bossPoint-bossMuzzle).normalized,(bossPoint-bossMuzzle).magnitude,~0,QueryTriggerInteraction.Ignore))
-                        if(!block.collider.transform.IsChildOf(transform)
-                            && !IsDespawnedMinionCollider(block.collider)
-                            && block.collider.gameObject.layer!=4
-                            && block.collider.GetComponentInParent<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>()!=boss)return;
-                    PurgeBossTarget=boss;ResonanceEndpoint=bossPoint;return;
-                }
-                var minion=hit.collider.GetComponentInParent<CreepMinionRuntime>();
-                if(minion==null || minion.IsDying)return;
-                // A camera-visible target must also be reachable from the flashlight muzzle.
-                Vector3 muzzle=BeamTransform.position;
-                Vector3 target=hit.collider.bounds.center;
-                var obstruction=Physics.RaycastAll(muzzle,(target-muzzle).normalized,(target-muzzle).magnitude,~0,QueryTriggerInteraction.Ignore);
-                foreach(var block in obstruction)
-                    if(!block.collider.transform.IsChildOf(transform)
-                        && !IsDespawnedMinionCollider(block.collider)
-                        && !((SceneManager.GetActiveScene().name==LobbyMapCatalog.ExplorationScene || AlienHuntMission.Instance) && block.collider.gameObject.layer==4)
-                        && block.collider.GetComponentInParent<CreepMinionRuntime>()!=minion)return;
-                _resonanceTarget=minion;ResonanceEndpoint=target;return;
+            Vector3 origin = transform.position + Vector3.up * (movement != null && movement.IsCrouching ? 1.3f : 1.65f);
+            Vector3 forward = Quaternion.Euler(Mathf.Clamp(input.LookPitch, -89f, 89f), input.LookYaw, 0f) * Vector3.forward;
+            ResonanceEndpoint = origin + forward * ResonanceRange;
+            foreach (var collider in QueryResonanceCandidates(transform, origin, forward))
+            {
+                if (IsDespawnedMinionCollider(collider)) continue;
+                var boss = collider.GetComponentInParent<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
+                var minion = collider.GetComponentInParent<CreepMinionRuntime>();
+                if (!(AlienHuntMission.Instance && boss) && (minion == null || minion.IsDying)) continue;
+                if (!ResonanceLineOfSight(transform, origin, collider)) continue;
+                ResonanceEndpoint = collider.bounds.center;
+                if (AlienHuntMission.Instance && boss) PurgeBossTarget = boss;
+                else _resonanceTarget = minion;
+                return;
             }
         }
+
+        // Sphere casts miss colliders overlapping their starting sphere. Keep those candidates too.
+        internal static Collider[] QueryResonanceCandidates(Transform owner, Vector3 origin, Vector3 forward)
+        {
+            var candidates = new System.Collections.Generic.HashSet<Collider>();
+            foreach (var collider in Physics.OverlapSphere(origin, ResonanceHitRadius, ~0, QueryTriggerInteraction.Ignore))
+                candidates.Add(collider);
+            foreach (var hit in Physics.SphereCastAll(origin, ResonanceHitRadius, forward, ResonanceRange, ~0, QueryTriggerInteraction.Ignore))
+                candidates.Add(hit.collider);
+            candidates.RemoveWhere(collider => IgnoreResonanceCollider(owner, collider)
+                || Vector3.Dot(collider.bounds.center - origin, forward) < -.01f
+                || (collider.ClosestPoint(origin) - origin).sqrMagnitude > ResonanceRange * ResonanceRange);
+            var sorted = new Collider[candidates.Count]; candidates.CopyTo(sorted);
+            System.Array.Sort(sorted, (a, b) => (a.ClosestPoint(origin) - origin).sqrMagnitude.CompareTo((b.ClosestPoint(origin) - origin).sqrMagnitude));
+            return sorted;
+        }
+
+        internal static bool ResonanceLineOfSight(Transform owner, Vector3 origin, Collider target)
+        {
+            var minion = target.GetComponentInParent<CreepMinionRuntime>();
+            var boss = target.GetComponentInParent<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
+            var targetRoot = minion != null ? minion.transform : boss != null ? boss.transform : target.transform;
+            Vector3 offset = target.bounds.center - origin;
+            foreach (var hit in Physics.RaycastAll(origin, offset.normalized, offset.magnitude, ~0, QueryTriggerInteraction.Ignore))
+                if (!IgnoreResonanceCollider(owner, hit.collider) && !IsDespawnedMinionCollider(hit.collider)
+                    && !hit.collider.transform.IsChildOf(targetRoot)) return false;
+            return true;
+        }
+
+        private static bool IgnoreResonanceCollider(Transform owner, Collider collider) => collider == null
+            || collider.transform.IsChildOf(owner)
+            || ((SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene || AlienHuntMission.Instance)
+                && collider.gameObject.layer == 4);
         private static bool IsDespawnedMinionCollider(Collider collider)
         {
             var minion = collider.GetComponentInParent<CreepMinionRuntime>();

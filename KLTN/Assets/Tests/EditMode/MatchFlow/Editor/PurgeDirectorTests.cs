@@ -42,11 +42,11 @@ public sealed class PurgeDirectorTests
         var marker=GameObject.Find("MonsterSpawn_Stalker_EMPTY");
         Assert.That(marker,Is.Not.Null);
         var bossPrefab=AssetDatabase.LoadAssetAtPath<NetworkObject>("Assets/Prefabs/StalkerNetwork_Lizard.prefab");
-        var graph=AssetDatabase.LoadAssetAtPath<RegionGraphAsset>("Assets/AI/Stalker/Map2/AI_Stalker_Map2_RegionGraph.asset");
+        var graph=AssetDatabase.LoadAssetAtPath<RegionGraphAsset>("Assets/AI/Stalker/Map2/AI_Stalker_Map2_Hunt_RegionGraph.asset");
         var spawner=new GameObject("Purge_TestSpawner").AddComponent<PlayerSpawner>();
         var flags=BindingFlags.NonPublic|BindingFlags.Instance;
         typeof(PlayerSpawner).GetField("_map2LizardPrefab",flags).SetValue(spawner,bossPrefab);
-        typeof(PlayerSpawner).GetField("_map2RegionGraph",flags).SetValue(spawner,graph);
+        typeof(PlayerSpawner).GetField("_map2HuntRegionGraph",flags).SetValue(spawner,graph);
         typeof(PlayerSpawner).GetMethod("EnsureWorldStateExamples",flags).Invoke(spawner,new object[]{runner});
         var match=NetworkMatchState.Instance;
         Assert.That(runner.TryFindObject(match.PurgeBossId,out var boss),Is.True,"Production spawner must bind a Purge Lizard.");
@@ -84,14 +84,17 @@ public sealed class PurgeDirectorTests
         Set(match,"PurgeUvExposure",2.5f);
         yield return new WaitForSeconds(.08f);
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Staggered));
+        Assert.That(match.PurgeMoodTimer.RemainingTime(runner),Is.InRange(0.1f,3.5f));
         Assert.That(match.PurgeStaggers,Is.EqualTo(1));
         Assert.That(match.PurgeUvStaggersTotal,Is.EqualTo(1));
+        Set(match,"PurgeStaggers",match.PurgeStaggersRequired);
         Set(match,"PurgeMoodTimer",TickTimer.CreateFromSeconds(runner,.01f));
         yield return new WaitForSeconds(.1f);
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm));
         Assert.That(match.PurgeHuntsEndedByUv,Is.EqualTo(1));
         Assert.That(match.PurgeHuntsEndedByTimeout,Is.Zero);
         Assert.That(match.PurgeUvImmunity.IsRunning,Is.True);
+        Assert.That(match.PurgeUvImmunity.RemainingTime(runner),Is.InRange(0.1f,20f));
         match.ProvokePurgeBoss();
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm),
             "The post-hunt calm grace period must prevent a nearby player from immediately restarting the hunt.");
@@ -205,6 +208,51 @@ public sealed class PurgeDirectorTests
         Assert.That(uv.PurgeBossTarget,Is.EqualTo(boss.GetComponent<StalkerFusionRuntime>()),
             "UV origin="+origin+" muzzle="+uv.BeamTransform.position+" boss="+bossCollider.bounds.center
             +" hits="+string.Join(",",System.Array.ConvertAll(Physics.SphereCastAll(origin,.75f,direction,24,~0,QueryTriggerInteraction.Ignore),h=>h.collider.name)));
+        // The presentation signal follows live contact, not the exposure that lingers after release.
+        Set(match,"PurgeMood",PurgeBossMood.Hunting);
+        Set(match,"PurgeUvImmunity",TickTimer.None);
+        float speedBeforeUv=match.PurgeChaseSpeed;
+        typeof(NetworkPlayerFlashlight).GetProperty("ResonanceActive").SetValue(uv,(NetworkBool)true);
+        var tickPurge=typeof(NetworkMatchState).GetMethod("TickPurgeDirector",flags);
+        tickPurge.Invoke(match,null);
+        Assert.That((bool)match.PurgeUvContact,Is.True);
+        Assert.That(match.PurgeUvExposure,Is.GreaterThan(0f));
+        Assert.That(match.PurgeChaseSpeed,Is.EqualTo(speedBeforeUv*.6f).Within(.01f));
+        var presenter=boss.GetComponent<EchoProtocol.AI.Stalker.Presentation.StalkerAnimatorPresenter>();
+        var animator=System.Array.Find(boss.GetComponentsInChildren<Animator>(true),a=>a.enabled);
+        var updatePresentation=typeof(EchoProtocol.AI.Stalker.Presentation.StalkerAnimatorPresenter).GetMethod("Update",flags);
+        Assert.That(presenter,Is.Not.Null);
+        Assert.That(animator,Is.Not.Null);
+        updatePresentation.Invoke(presenter,null);
+        animator.Update(.2f);
+        Assert.That(animator.GetCurrentAnimatorStateInfo(0).fullPathHash,
+            Is.EqualTo(Animator.StringToHash("Base Layer.PurgeHit")));
+        Set(match,"PurgeUvExposure",1f);
+        typeof(NetworkPlayerFlashlight).GetProperty("ResonanceActive").SetValue(uv,(NetworkBool)false);
+        tickPurge.Invoke(match,null);
+        Assert.That((bool)match.PurgeUvContact,Is.False,"UV hit animation must end on beam release.");
+        Assert.That(match.PurgeUvExposure,Is.GreaterThan(0f),"Exposure may remain briefly without holding the hit animation.");
+        Assert.That(match.PurgeChaseSpeed,Is.EqualTo(speedBeforeUv).Within(.01f));
+        updatePresentation.Invoke(presenter,null);
+        animator.Update(.2f);
+        Assert.That(animator.GetCurrentAnimatorStateInfo(0).fullPathHash,
+            Is.Not.EqualTo(Animator.StringToHash("Base Layer.PurgeHit")));
+        Set(match,"PurgeUvExposure",2.24f);
+        typeof(NetworkPlayerFlashlight).GetProperty("ResonanceActive").SetValue(uv,(NetworkBool)true);
+        tickPurge.Invoke(match,null);
+        Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Staggered));
+        Assert.That((bool)match.PurgeUvContact,Is.False);
+        updatePresentation.Invoke(presenter,null);
+        animator.Update(.2f);
+        Assert.That(animator.GetCurrentAnimatorStateInfo(0).fullPathHash,
+            Is.EqualTo(Animator.StringToHash("Base Layer.PurgeStunned")));
+        typeof(NetworkPlayerFlashlight).GetProperty("ResonanceActive").SetValue(uv,(NetworkBool)false);
+        Set(match,"PurgeUvExposure",0f);
+        Set(match,"PurgeMood",PurgeBossMood.Calm);
+        updatePresentation.Invoke(presenter,null);
+        animator.Update(.2f);
+        Assert.That(animator.GetCurrentAnimatorStateInfo(0).fullPathHash,
+            Is.Not.EqualTo(Animator.StringToHash("Base Layer.PurgeStunned")));
         var wall=GameObject.CreatePrimitive(PrimitiveType.Cube);
         wall.transform.position=(origin+bossCollider.bounds.center)*.5f;
         wall.transform.localScale=Vector3.one;

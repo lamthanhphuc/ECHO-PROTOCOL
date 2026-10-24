@@ -56,6 +56,13 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private static readonly int PurgeStunnedStateHash =
             Animator.StringToHash("Base Layer.PurgeStunned");
 
+        private static readonly int PurgeUpperHitStateHash =
+            Animator.StringToHash("Purge Upper.PurgeUpperHit");
+        private static readonly int PurgeUpperBiteStateHash =
+            Animator.StringToHash("Purge Upper.PurgeUpperBite");
+        private static readonly int PurgeMoveRateHash =
+            Animator.StringToHash("PurgeMoveRate");
+
         [Header("Dependencies")]
         [SerializeField]
         private GameObject biteJumpscarePrefab;
@@ -122,11 +129,13 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 StalkerAttackEpisodeId.Invalid;
 
         private int _presentedAnimatorStateHash;
-        private bool _purgeUvHitPlayed;
-        private float _purgeUvHitStartedAt;
+        private int _presentedPurgeUpperStateHash;
+        private bool _hasPurgeMoveRateParameter;
+        private StalkerAttackEpisodeId _presentedPurgeUpperAttackEpisodeId = StalkerAttackEpisodeId.Invalid;
         private PurgeBossMood? _lastPurgeMood;
         private PlayerRef _presentedDetectNetworkTarget = PlayerRef.None;
         private int _presentedDetectPlayerId;
+        private bool _detectRoarAuthorized;
 
         private bool _lastPresentationVisible = true;
 
@@ -160,11 +169,18 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private void OnDisable()
         {
             audioController?.StopAllLoops();
+            if (animator != null)
+            {
+                int upperLayer = animator.GetLayerIndex("Purge Upper");
+                if (upperLayer >= 0) animator.SetLayerWeight(upperLayer, 0f);
+            }
             _hasPresented = false;
+            _presentedPurgeUpperStateHash = 0;
+            _presentedPurgeUpperAttackEpisodeId = StalkerAttackEpisodeId.Invalid;
             _playedBiteEpisodeId = StalkerAttackEpisodeId.Invalid;
             _presentedDetectNetworkTarget = PlayerRef.None;
             _presentedDetectPlayerId = 0;
-            _purgeUvHitPlayed = false;
+            _detectRoarAuthorized = false;
             _lastPurgeMood = null;
         }
 
@@ -194,6 +210,9 @@ namespace EchoProtocol.AI.Stalker.Presentation
             if (!presentation.PresentationVisible)
             {
                 audioController?.StopAllLoops();
+                int upperLayer = animator.GetLayerIndex("Purge Upper");
+                if (upperLayer >= 0) animator.SetLayerWeight(upperLayer, 0f);
+                _presentedPurgeUpperStateHash = 0;
                 _hasPresented = false;
                 _lastPresentationVisible = false;
                 return;
@@ -291,6 +310,13 @@ namespace EchoProtocol.AI.Stalker.Presentation
             }
 
             animator.applyRootMotion = false;
+            _hasPurgeMoveRateParameter = false;
+            for (int i = 0; i < animator.parameterCount; i++)
+                if (animator.GetParameter(i).nameHash == PurgeMoveRateHash)
+                {
+                    _hasPurgeMoveRateParameter = true;
+                    break;
+                }
         }
 
         private void ResetMotionSampling()
@@ -481,6 +507,18 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 targetHash = ResolvePurgeAnimatorStateHash(
                     purgeMood.Value, presentation, moving, targetHash);
             }
+            if (purgeMood == PurgeBossMood.Calm
+                && NetworkMatchState.Instance != null
+                && NetworkMatchState.Instance.PurgeRageTier == 0
+                && presentation.SemanticState == StalkerState.CHASE
+                && targetHash == Walk2StateHash)
+                targetHash = Walk1StateHash;
+            // Walk2 remains the lower-body source under Hit/Bite. Match its stride
+            // to actual travel, especially while valid UV contact cuts speed by 90%.
+            if (_hasPurgeMoveRateParameter)
+                animator.SetFloat(PurgeMoveRateHash, purgeMood.HasValue
+                    ? Mathf.Clamp(moveSpeed / 6.6f, .18f, 1.4f) : 1f);
+            ApplyPurgeUpperBody(presentation, purgeMood, moving, forceRefresh);
 
             var semanticChanged =
                 !_hasPresented
@@ -498,10 +536,19 @@ namespace EchoProtocol.AI.Stalker.Presentation
             if (purgeMood == PurgeBossMood.Warning
                 && _lastPurgeMood != PurgeBossMood.Warning)
             {
-                audioController?.BeginDetectAudioEntry();
-                audioController?.PlayDetect();
+                audioController?.BeginWarningRoarEntry();
             }
             _lastPurgeMood = purgeMood;
+
+            if (_detectRoarAuthorized && presentation.SemanticState == StalkerState.DETECT
+                && purgeMood != PurgeBossMood.Warning
+                && _presentedAnimatorStateHash == RoarStateHash
+                && animator.GetCurrentAnimatorStateInfo(0).normalizedTime >= 0.98f)
+                _detectRoarAuthorized = false;
+
+            if (presentation.SemanticState == StalkerState.DETECT
+                && targetHash == RoarStateHash && !_detectRoarAuthorized)
+                targetHash = moving ? Walk1StateHash : Idle1StateHash;
 
             var actionChanged =
                 !_hasPresented
@@ -529,6 +576,21 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 || targetHash == PurgeStunnedStateHash
                 || purgeMood == PurgeBossMood.Warning
                     ? 1f : ResolvePlaybackSpeed(presentation);
+
+            bool continuousPurgeReaction = targetHash == PurgeHitStateHash
+                || targetHash == PurgeStunnedStateHash;
+            if (!forceRefresh
+                && !animatorStateChanged
+                && continuousPurgeReaction)
+            {
+                _presentedSemanticState = presentation.SemanticState;
+                _presentedAction = presentation.PresentationAction;
+                _presentedActionOrdinal = presentation.PresentationActionOrdinal;
+                _presentedAttackEpisodeId = presentation.AttackEpisodeId;
+                CapturePresentedDetectTarget(presentation);
+                _hasPresented = true;
+                return;
+            }
 
             if (!forceRefresh
                 && !semanticChanged
@@ -608,35 +670,57 @@ namespace EchoProtocol.AI.Stalker.Presentation
         {
             if (mood == PurgeBossMood.Warning)
             {
-                _purgeUvHitPlayed = false;
                 return RoarStateHash;
             }
             if (mood == PurgeBossMood.Staggered)
             {
-                _purgeUvHitPlayed = false;
                 return PurgeStunnedStateHash;
             }
 
             var match = NetworkMatchState.Instance;
             if ((mood == PurgeBossMood.Hunting || mood == PurgeBossMood.Calm) && match != null
-                && match.PurgeUvExposure > 0f)
+                && match.PurgeUvContact)
             {
-                if (presentation.SemanticState == StalkerState.ATTACK)
-                    return normalHash;
-                if (!_purgeUvHitPlayed)
-                {
-                    _purgeUvHitPlayed = true;
-                    _purgeUvHitStartedAt = Time.unscaledTime;
-                }
-                return Time.unscaledTime - _purgeUvHitStartedAt < .75f
-                    ? PurgeHitStateHash : CrouchStateHash;
+                return moving ? Walk2StateHash : PurgeHitStateHash;
             }
 
-            _purgeUvHitPlayed = false;
+            if (presentation.SemanticState == StalkerState.ATTACK && moving)
+                return Walk2StateHash;
+
             if (mood == PurgeBossMood.Calm
                 && presentation.SemanticState == StalkerState.SEARCH)
                 return moving ? Walk1StateHash : CrouchStateHash;
             return normalHash;
+        }
+
+        private void ApplyPurgeUpperBody(StalkerNetworkPresentationState presentation,
+            PurgeBossMood? mood, bool moving, bool forceRefresh)
+        {
+            int layer = animator.GetLayerIndex("Purge Upper");
+            if (layer < 0) return;
+            int target = 0;
+            var match = NetworkMatchState.Instance;
+            if (mood.HasValue && moving && mood != PurgeBossMood.Staggered
+                && mood != PurgeBossMood.Warning)
+            {
+                if (match != null && match.PurgeUvContact)
+                    target = PurgeUpperHitStateHash;
+                else if (presentation.SemanticState == StalkerState.ATTACK)
+                    target = PurgeUpperBiteStateHash;
+            }
+            bool newAttack = target == PurgeUpperBiteStateHash
+                && presentation.AttackEpisodeId.IsValid
+                && _presentedPurgeUpperAttackEpisodeId != presentation.AttackEpisodeId;
+            if (target != 0 && (forceRefresh || target != _presentedPurgeUpperStateHash || newAttack))
+            {
+                animator.Play(target, layer, target == PurgeUpperBiteStateHash
+                    ? ResolveNormalizedStart(presentation) : 0f);
+            }
+            animator.SetLayerWeight(layer, Mathf.MoveTowards(animator.GetLayerWeight(layer),
+                target == 0 ? 0f : 1f, Time.deltaTime * 9f));
+            _presentedPurgeUpperStateHash = target;
+            _presentedPurgeUpperAttackEpisodeId = target == PurgeUpperBiteStateHash
+                ? presentation.AttackEpisodeId : StalkerAttackEpisodeId.Invalid;
         }
 
         private void ApplyAudioPresentation(
@@ -652,14 +736,17 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             audioController.SetMoving(moving);
 
-            var pursuing = IsPursuing(presentation.SemanticState);
+            var purgeMood = ResolvePurgeMood();
+            var pursuing = IsPursuing(presentation.SemanticState)
+                && (!purgeMood.HasValue || purgeMood == PurgeBossMood.Hunting);
             var isLocalTarget = IsTargetingLocalPlayer();
 
             audioController.UpdateChasePresentation(pursuing, isLocalTarget);
 
             if (presentation.SemanticState != StalkerState.DETECT
-                && ResolvePurgeMood() != PurgeBossMood.Warning)
+                && purgeMood != PurgeBossMood.Warning)
             {
+                _detectRoarAuthorized = false;
                 audioController.StopDetectVoice();
             }
 
@@ -671,9 +758,10 @@ namespace EchoProtocol.AI.Stalker.Presentation
                         audioController.EnterIdle();
                         break;
                     case StalkerState.DETECT:
-                        audioController.BeginDetectAudioEntry();
+                        _detectRoarAuthorized = purgeMood != PurgeBossMood.Warning
+                            && audioController.BeginDetectAudioEntry(ResolveDetectTargetKey());
                         audioController.EnterIdle();
-                        audioController.PlayDetect();
+                        if (!purgeMood.HasValue && _detectRoarAuthorized) audioController.PlayDetect();
                         break;
                     case StalkerState.ATTACK:
                         audioController.BeginAttackAudioEpisode();
@@ -688,9 +776,10 @@ namespace EchoProtocol.AI.Stalker.Presentation
             else if (presentation.SemanticState == StalkerState.DETECT
                      && detectTargetChanged)
             {
-                audioController.BeginDetectAudioEntry();
+                _detectRoarAuthorized = purgeMood != PurgeBossMood.Warning
+                    && audioController.BeginDetectAudioEntry(ResolveDetectTargetKey());
                 audioController.EnterIdle();
-                audioController.PlayDetectForNewTarget();
+                if (!purgeMood.HasValue && _detectRoarAuthorized) audioController.PlayDetectForNewTarget();
             }
 
             if (presentation.AttackHitMomentResolved
@@ -723,6 +812,15 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             return controller != null
                 && controller.DetectionTargetId.Value != _presentedDetectPlayerId;
+        }
+
+        private int ResolveDetectTargetKey()
+        {
+            if (fusionRuntime != null && fusionRuntime.Object != null
+                && fusionRuntime.Object.IsValid && fusionRuntime.Runner != null
+                && fusionRuntime.Runner.IsRunning && fusionRuntime.TargetPlayer.IsRealPlayer)
+                return fusionRuntime.TargetPlayer.RawEncoded;
+            return controller != null ? controller.DetectionTargetId.Value : 0;
         }
 
         private void CapturePresentedDetectTarget(

@@ -480,6 +480,8 @@ namespace EchoProtocol.AI.Stalker
             return true;
         }
         private bool _purgeControlled, _purgeHunting;
+        private bool PurgeUvContactActive => _purgeControlled && AlienHuntMission.Instance != null
+            && NetworkMatchState.Instance != null && NetworkMatchState.Instance.PurgeUvContact;
         private int PurgeTier => _purgeControlled && AlienHuntMission.Instance != null && NetworkMatchState.Instance != null ? NetworkMatchState.Instance.PurgeRageTier : -1;
         private float PurgeDetectSeconds => PurgeTier switch { 0 => 2.5f, 1 => 2f, 2 => 1.5f, 3 => .6f, _ => 2f };
         private double _nextPurgeSeekAt = -1d;
@@ -488,6 +490,14 @@ namespace EchoProtocol.AI.Stalker
         {
             bool changed = _purgeControlled && _purgeHunting != hunting;
             _purgeControlled = true; _purgeHunting = hunting; _purgeChaseSpeed = speed;
+            if (!frozen && PurgeUvContactActive && currentState == StalkerState.ATTACK)
+            {
+                _attackController.ClearActiveEpisode();
+                attackElapsedTime = 0f;
+                lastAttackResult = StalkerAttackResult.Miss;
+                currentState = StalkerState.CHASE;
+                ApplyMovementSpeedForCurrentState();
+            }
             if (PurgeTier == 3)
             {
                 smartPatrolSettings ??= new StalkerSmartPatrolSettings();
@@ -1084,10 +1094,6 @@ namespace EchoProtocol.AI.Stalker
 
         private void TickCurrentState()
         {
-            if (PurgeTier == 0 && (currentState == StalkerState.CHASE || currentState == StalkerState.SEARCH))
-            {
-                ClearDetectionContext(); ClearTargetContext(); ClearSearchRuntimeContext(); StopAgentPath(); currentState = StalkerState.PATROL;
-            }
             if (TickHideSpotRevealGrace())
             {
                 return;
@@ -1243,7 +1249,8 @@ namespace EchoProtocol.AI.Stalker
             detectionTarget = visibleCandidate;
             detectionMeter = 0f;
             _detectMinimumHoldRemaining = 0f;
-            EnterDetectState();
+            if (PurgeTier == 0) PromoteDetectionTargetToCurrentTarget(visibleCandidate.position);
+            else EnterDetectState();
         }
 
         private bool TryAcquireTypedDetectionTargetFromVisibleFrame()
@@ -1344,7 +1351,8 @@ namespace EchoProtocol.AI.Stalker
             currentTarget = null;
             detectionMeter = 0f;
             _detectMinimumHoldRemaining = 0f;
-            EnterDetectState();
+            if (PurgeTier == 0) PromoteDetectionTargetToCurrentTarget(selectedObservation);
+            else EnterDetectState();
             return true;
         }
 
@@ -1421,7 +1429,7 @@ namespace EchoProtocol.AI.Stalker
                 detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
 
-            if (PurgeTier != 0 && detectionMeter >= GetDetectionMeterFull()
+            if (detectionMeter >= GetDetectionMeterFull()
                     && _detectMinimumHoldRemaining <= 0f)
                 {
                     PromoteDetectionTargetToCurrentTarget(observedPosition);
@@ -1504,7 +1512,7 @@ namespace EchoProtocol.AI.Stalker
                 detectionMeter += GetDetectionFillRate() * CurrentSimulationDeltaSeconds;
                 detectionMeter = ClampDetectionMeter(detectionMeter);
                 _memory.SetDetectionMeter(detectionMeter);
-            if (PurgeTier != 0 && detectionMeter >= GetDetectionMeterFull()
+            if (detectionMeter >= GetDetectionMeterFull()
                     && _detectMinimumHoldRemaining <= 0f)
                 {
                     PromoteDetectionTargetToCurrentTarget(observation);
@@ -1739,7 +1747,7 @@ namespace EchoProtocol.AI.Stalker
 
             _chaseVisualLossElapsed = 0f;
             lastKnownPosition = observedPosition;
-            if (IsWithinAttackRange(observedPosition))
+            if (IsWithinAttackRange(observedPosition) && !PurgeUvContactActive)
             {
                 EnterAttack();
                 return;
@@ -1812,7 +1820,7 @@ namespace EchoProtocol.AI.Stalker
                     return;
                 }
 
-                if (IsWithinAttackRange(observation.ObservedPosition))
+                if (IsWithinAttackRange(observation.ObservedPosition) && !PurgeUvContactActive)
                 {
                     LogChaseRuntimeDiagnostic(
                         "VISIBLE_ATTACK_RANGE",
@@ -1883,6 +1891,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void EnterAttack()
         {
+            if (PurgeUvContactActive) return;
             if (_purgeControlled && !_purgeHunting && PurgeTier != 0) { EndSpecialEncounterOverrideToPatrol(); return; }
             currentState = StalkerState.ATTACK;
             attackElapsedTime = 0f;
@@ -2092,7 +2101,6 @@ namespace EchoProtocol.AI.Stalker
             attackElapsedTime = 0f;
             recoverElapsedTime = 0f;
             _attackController.ClearActiveEpisode();
-            if (PurgeTier == 0) { ClearTargetContext(); ClearSearchRuntimeContext(); currentState = StalkerState.PATROL; StopAgentPath(); return; }
 
             if (currentTarget == null)
             {
@@ -2136,7 +2144,6 @@ namespace EchoProtocol.AI.Stalker
             attackElapsedTime = 0f;
             recoverElapsedTime = 0f;
             _attackController.ClearActiveEpisode();
-            if (PurgeTier == 0) { ClearTargetContext(); ClearSearchRuntimeContext(); currentState = StalkerState.PATROL; StopAgentPath(); return; }
 
             if (currentTargetId.IsValid
                 && TryGetUniqueTargetStatusDetail(currentTargetId, out var status)
@@ -2655,7 +2662,8 @@ namespace EchoProtocol.AI.Stalker
                 _detectMinimumHoldRemaining =
                     searchReacquireDetectHoldSeconds;
 
-                EnterDetectState();
+                if (PurgeTier == 0) PromoteDetectionTargetToCurrentTarget(observedPosition);
+                else EnterDetectState();
                 return;
             }
 
@@ -3813,7 +3821,8 @@ namespace EchoProtocol.AI.Stalker
             ResetNavigationRecoveryBudget();
 
             _detectMinimumHoldRemaining = 0f;
-            EnterDetectState();
+            if (PurgeTier == 0) currentState = StalkerState.CHASE;
+            else EnterDetectState();
 
             _hideSpotRevealGraceActive = true;
             _hideSpotRevealGraceElapsed = 0f;
