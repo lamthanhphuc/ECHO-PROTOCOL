@@ -107,6 +107,10 @@ namespace EchoProtocol.Tools.Scanner
                 _localPickedUp = false;
                 WorldPosition = transform.position;
                 WorldRotation = transform.rotation;
+                if (RemainingUses <= 0 &&
+                    (_toolId == LobbyPlayerState.NoiseMakerToolId ||
+                     _toolId == LobbyPlayerState.DoorJammerToolId))
+                    RemainingUses = LobbyPlayerState.MultiUseTeamToolUses;
             }
             else
             {

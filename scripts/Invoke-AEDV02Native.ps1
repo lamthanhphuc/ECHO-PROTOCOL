@@ -109,6 +109,9 @@ try {
         Start-Sleep -Seconds 2
     } while ([DateTime]::UtcNow -lt $deadline)
     if ($SessionOnly) {
+        if (Select-String -LiteralPath (Join-Path $output 'Host.log') -Pattern '[AED_P8][TOOL_SOURCE_INVALID]' -SimpleMatch -Quiet) {
+            $record.status='FAIL';throw 'Native tool spawn source was rejected; inspect Host.log before claiming source coverage.'
+        }
         foreach ($label in @('Host','Client')) {
             $rows=@(Read-AEDV02NativeRows -Path (Join-Path $output "$label-world.jsonl"))
             if (!@($rows | Where-Object { $_.phase -and $_.sessionState -eq 'InMatch' }).Count) {
