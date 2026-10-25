@@ -232,6 +232,9 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         match.StartedAtUtc ??= now;
         // Unity scene loading can pause host heartbeats; resume the normal lease on the next renewal.
         match.LeaseExpiresAtUtc = now.AddSeconds(_settings.LeaseLifetimeSeconds * 2);
+        var pendingPreMatch = await _db.AEDV02Decisions.Where(x => x.MatchId == matchId && x.HostUserId == hostUserId &&
+            x.DecisionPoint == "PRE_MATCH" && x.ApprovalStatus == "APPROVED" && x.ApplyStatus == "PENDING").ToListAsync(cancellationToken);
+        foreach (var decision in pendingPreMatch) decision.ExpiresAtUtc = match.LeaseExpiresAtUtc;
         match.UpdatedAtUtc = now;
         await _db.SaveChangesAsync(cancellationToken);
         return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Match started");

@@ -1,6 +1,7 @@
 using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.DTOs.MatchAuthority;
+using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services;
 using Microsoft.EntityFrameworkCore;
@@ -55,8 +56,15 @@ public sealed class MatchAuthorityServiceTests
 
         await BindAsync(service, hostId, hostId, created.Data!.MatchId, "solo-room", 1);
         var binding = await db.MatchAuthorityBindings.SingleAsync();
+        var preMatch = new AEDV02Decision { DecisionId = Guid.NewGuid(), MatchId = created.Data.MatchId, HostUserId = hostId,
+            DecisionPoint = "PRE_MATCH", ApprovalStatus = "APPROVED", ApplyStatus = "PENDING", ExpiresAtUtc = Now.UtcDateTime.AddSeconds(1) };
+        var inMatch = new AEDV02Decision { DecisionId = Guid.NewGuid(), MatchId = created.Data.MatchId, HostUserId = hostId,
+            DecisionPoint = "SAFE_WINDOW", ApprovalStatus = "APPROVED", ApplyStatus = "PENDING", ExpiresAtUtc = Now.UtcDateTime.AddSeconds(1) };
+        db.AEDV02Decisions.AddRange(preMatch, inMatch);
+        await db.SaveChangesAsync();
         binding.LeaseExpiresAtUtc = Now.UtcDateTime.AddSeconds(-1);
         Assert.False((await service.StartAsync(hostId, created.Data.MatchId, CancellationToken.None)).IsSuccess);
+        Assert.Equal(Now.UtcDateTime.AddSeconds(1), preMatch.ExpiresAtUtc);
         binding.LeaseExpiresAtUtc = Now.UtcDateTime.AddSeconds(1);
 
         var started = await service.StartAsync(hostId, created.Data.MatchId, CancellationToken.None);
@@ -67,6 +75,8 @@ public sealed class MatchAuthorityServiceTests
             Now.UtcDateTime,
             (await db.MatchAuthorityBindings.SingleAsync()).StartedAtUtc);
         Assert.Equal(Now.UtcDateTime.AddSeconds(90), started.Data.LeaseExpiresAtUtc);
+        Assert.Equal(started.Data.LeaseExpiresAtUtc, preMatch.ExpiresAtUtc);
+        Assert.Equal(Now.UtcDateTime.AddSeconds(1), inMatch.ExpiresAtUtc);
         var renewed = await service.RenewLeaseAsync(hostId, created.Data.MatchId, CancellationToken.None);
         Assert.True(renewed.IsSuccess);
         Assert.Equal(started.Data.LeaseExpiresAtUtc, renewed.Data!.LeaseExpiresAtUtc);
