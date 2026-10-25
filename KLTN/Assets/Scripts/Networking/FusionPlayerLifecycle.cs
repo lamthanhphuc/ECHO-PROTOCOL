@@ -242,6 +242,7 @@ namespace EchoProtocol.Networking
                             playerObject.transform.rotation, state);
                     }
                     state.SetDisconnectedAuthoritative(true);
+                    state.ClearVerifiedBackendIdentityAuthoritative();
                 }
                 playerObject.RemoveInputAuthority();
                 if (_graceTimers.Remove(player, out var oldTimer)) StopCoroutine(oldTimer);

@@ -998,7 +998,6 @@ namespace EchoProtocol.Networking.Authority
             }
 
             state.SubmitJoinProof(result.Data.data.proof, actorNumber);
-            _bootstrap?.MarkReconnectProofSubmitted();
         }
 
         public async void BindPlayerFromProof(

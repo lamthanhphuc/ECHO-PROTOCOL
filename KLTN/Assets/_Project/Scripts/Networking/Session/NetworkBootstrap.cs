@@ -70,11 +70,17 @@ namespace EchoProtocol.Networking
                 _completedMatchObserved = true;
             if (!_reconnectIdentityPending || !HasRunningRunner
                 || Time.unscaledTime < _nextReconnectProofRetryAt) return;
+            if (Runner.TryGetPlayerObject(Runner.LocalPlayer, out var playerObject)
+                && playerObject != null
+                && playerObject.TryGetComponent<LobbyPlayerState>(out var state)
+                && state.HasVerifiedBackendIdentity && !state.Disconnected)
+            {
+                _reconnectIdentityPending = false;
+                return;
+            }
             _nextReconnectProofRetryAt = Time.unscaledTime + 2f;
             _matchAuthority?.TrySubmitLocalIdentity(force: true);
         }
-
-        public void MarkReconnectProofSubmitted() => _reconnectIdentityPending = false;
 
         private void Awake()
         {

@@ -419,6 +419,12 @@ namespace EchoProtocol.Networking
             AnyStateChanged?.Invoke();
         }
 
+        public void ClearVerifiedBackendIdentityAuthoritative()
+        {
+            if (Object != null && Object.IsValid && Object.HasStateAuthority)
+                BackendUserId = default;
+        }
+
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcSubmitJoinProof(
             string proof,
