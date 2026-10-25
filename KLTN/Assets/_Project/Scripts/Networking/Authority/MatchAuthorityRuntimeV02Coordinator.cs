@@ -38,7 +38,16 @@ namespace EchoProtocol.Networking.Authority
 
         public async Task StageV02PreMatchAsync(CancellationToken cancellation)
         {
-            if (!V02GameplayActive || !AEDV02SceneSource.TryLoad(out _, out var scene)) return;
+            if (!V02GameplayActive)
+            {
+                V02Log("PREMATCH_HOLD", $"HOLD_GAMEPLAY_INACTIVE host={IsHostBinding} mode={RequestedScenarioResolutionMode} difficulty={Difficulty} enabled={ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings?.PacingV02GameplayEnabled}");
+                return;
+            }
+            if (!AEDV02SceneSource.TryLoad(out _, out var scene))
+            {
+                V02Log("PREMATCH_HOLD", "HOLD_UNTRUSTED_SCENE_MANIFEST");
+                return;
+            }
             var snapshot = BackendAdaptiveInputSnapshotProvider.Current;
             if (snapshot == null || snapshot.SnapshotValidity != "Valid" && !snapshot.HasCurrentColdStartProfileOnly)
             { V02Log("PREMATCH_HOLD", "HOLD_INVALID_SNAPSHOT"); return; }

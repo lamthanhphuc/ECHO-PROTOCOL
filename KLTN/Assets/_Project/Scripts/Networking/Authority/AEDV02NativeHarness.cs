@@ -76,9 +76,6 @@ namespace EchoProtocol.Networking.Authority
                 var api = Resources.Load<EchoProtocol.Api.ApiConfiguration>("ApiConfiguration");
                 if (api == null) throw new InvalidOperationException("ApiConfiguration missing.");
                 api.ConfigurePilotLoopback(_config.apiUrl);
-                var settings = Resources.Load<AEDRuntimeSettings>("AED/AEDRuntimeSettings");
-                if (settings == null) throw new InvalidOperationException("AEDRuntimeSettings missing.");
-                settings.ConfigurePilotHarness(_config.gameplay, _config.cabinet);
                 Directory.CreateDirectory(_config.output);
             }
             catch (Exception ex) { Debug.LogError("[AED_NATIVE][CONFIG_FAILED] " + ex.GetType().Name); Application.Quit(2); }
@@ -88,6 +85,9 @@ namespace EchoProtocol.Networking.Authority
         private static void Launch()
         {
             if (_config == null) return;
+            var settings = ScenarioConfigAuthorityRuntime.EnsureExists().RuntimeSettings;
+            if (settings == null) { Fail("RUNTIME_SETTINGS_MISSING"); return; }
+            settings.ConfigurePilotHarness(_config.gameplay, _config.cabinet);
             var go = new GameObject("AEDV02 Native Harness");
             DontDestroyOnLoad(go);
             go.AddComponent<AEDV02NativeHarness>().StartCoroutine(Run());
@@ -108,6 +108,9 @@ namespace EchoProtocol.Networking.Authority
             while (!done && Time.realtimeSinceStartup < deadline) yield return null;
             if (!done || !success) { Fail("IDENTITY_FAILED"); yield break; }
             SceneManager.LoadScene("MainMenu");
+            yield return null;
+            if (ScenarioConfigAuthorityRuntime.EnsureExists().RuntimeSettings?.PacingV02GameplayEnabled != _config.gameplay)
+            { Fail("GAMEPLAY_GATE_LOST"); yield break; }
             deadline = Time.realtimeSinceStartup + 30;
             while (NetworkBootstrap.Instance == null && Time.realtimeSinceStartup < deadline) yield return null;
             var bootstrap = NetworkBootstrap.Instance;
