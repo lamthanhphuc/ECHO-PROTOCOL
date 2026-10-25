@@ -235,6 +235,8 @@ milestone decision and is not implied by the ingestion-age validation.
 | FusionSessionName | VARCHAR(128) | Exact room binding |
 | HostUserId | UUID FK → Users | JWT identity allowed to renew/start/end/delegate |
 | MaxPlayers | INT | API restricts to 2–4 |
+| MapId | VARCHAR(64) NULL | Gameplay scene (`SciFi`, `Scene_A`, or `Scene_B`), frozen at match start; null for older clients |
+| Difficulty | VARCHAR(16) NULL | `EASY`, `NORMAL`, or `HARD`, frozen at match start; null for older clients |
 | Status | VARCHAR(20) | Lobby, InMatch, Ended |
 | LeaseExpiresAtUtc | TIMESTAMPTZ | Expired leases cannot mutate authority state |
 | CreatedAtUtc / UpdatedAtUtc | TIMESTAMPTZ | Audit timestamps |
@@ -268,12 +270,20 @@ The M4-009 migration promotes `(MatchId, UserId)` to an alternate unique key so
 | DurationSeconds | INT | Server-derived, CHECK 60-2760; 2700s gameplay timer + 60s submit grace |
 | ObjectiveCompletion | NUMERIC(5,4) | CHECK 0-1 |
 | PlayerCount | INT | CHECK 1-4; retains the current M2 minimum-player behavior |
+| RosterKey | VARCHAR(131) NULL | Server-computed comma-separated sorted bound user IDs; used to keep each exact team roster's best run |
 | PayloadHash | CHAR(64) | Canonical SHA-256 used for retry/conflict detection |
 | RewardStatus | VARCHAR(20) | `Pending` until idempotent reward processing completes, then `Completed` |
 | SubmittedAtUtc | TIMESTAMPTZ | Server audit timestamp |
 
 `MatchAuthorityBindings.StartedAtUtc` is nullable for compatibility with existing rows and is set
 once by `StartAsync`. A new result requires this value.
+
+The leaderboard reads accepted `WIN` results only. It uses the server-derived
+`DurationSeconds` and the map and difficulty frozen on the authority binding at start.
+Older bindings without both fields remain valid match results but are excluded from
+filtered rankings. Solo and team rankings are separated by the result roster size:
+one player for solo, two to four for team. No leaderboard-only result submission
+or fabricated seed ranking is stored.
 
 ## MatchResultPlayers (M4-009 implemented)
 

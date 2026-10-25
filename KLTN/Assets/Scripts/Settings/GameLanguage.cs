@@ -209,6 +209,7 @@ Tên đăng nhập|Username
 Mật khẩu|Password
 Xác nhận mật khẩu|Confirm password
 Đăng xuất|LOGOUT
+ĐĂNG XUẤT|LOGOUT
 CHƠI|PLAY
 TẠO PHÒNG|HOST GAME
 VÀO PHÒNG|JOIN GAME

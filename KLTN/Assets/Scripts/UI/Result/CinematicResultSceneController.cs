@@ -3,6 +3,7 @@ using System.Collections;
 using System.Threading;
 using System.Threading.Tasks;
 using EchoProtocol.Audio;
+using EchoProtocol.Auth;
 using EchoProtocol.Core;
 using EchoProtocol.Networking;
 using Fusion;
@@ -21,6 +22,12 @@ namespace EchoProtocol.UI.Result
         private static readonly Color VictoryAccent = new(0.43f, 0.65f, 0.57f, 1f);
         private static readonly Color DefeatAccent = new(0.76f, 0.25f, 0.27f, 1f);
         private static readonly Color Muted = new(0.62f, 0.65f, 0.62f, 1f);
+        private static readonly Color PrimaryButtonFill = new(0.20f, 0.035f, 0.045f, 0.96f);
+        private static readonly Color PrimaryButtonBorder = new(0.77f, 0.13f, 0.16f, 1f);
+        private static readonly Color PrimaryButtonText = new(0.94f, 0.82f, 0.78f, 1f);
+        private static readonly Color SecondaryButtonFill = new(0.07f, 0.085f, 0.09f, 0.94f);
+        private static readonly Color SecondaryButtonBorder = new(0.48f, 0.49f, 0.47f, 0.9f);
+        private static readonly Color SecondaryButtonText = new(0.84f, 0.82f, 0.77f, 1f);
 
         [SerializeField] private bool previewDefeatWithoutMatch;
 
@@ -234,15 +241,12 @@ namespace EchoProtocol.UI.Result
             SetText("RewardCredits", "-- CREDITS");
             SetText("RewardStatus", hasResult ? "AWAITING SERVER CONFIRMATION" : "NO MATCH RECORD");
             var runner = NetworkBootstrap.Instance?.Runner;
-            bool host = runner != null && runner.IsRunning && runner.IsSceneAuthority && runner.IsServer;
-            if (_retryButton != null) _retryButton.interactable = host;
-            SetText("RetryLabel", host ? "RETRY MISSION" : "HOST ONLY");
-            SetText("ReturnLabel", runner == null || !runner.IsRunning
-                ? "RETURN TO MAIN MENU"
-                : host ? "RETURN TO LOBBY" : "LEAVE ROOM");
-            SetText("RetryHint", host
-                ? "RESTARTS WHEN THE TEAM IS READY"
-                : "ONLY THE HOST MAY RESTART");
+            bool inRoom = runner != null && runner.IsRunning;
+            bool host = inRoom && runner.IsSceneAuthority && runner.IsServer;
+            SetText("RetryLabel", host ? "RETRY MISSION" : inRoom ? "HOST ONLY" : "PLAY AGAIN");
+            SetText("ReturnLabel", "RETURN TO LOBBY");
+            SetText("RetryHint", host ? "RESTARTS WHEN THE TEAM IS READY"
+                : inRoom ? "ONLY THE HOST MAY RESTART" : "OPEN LOBBY TO START A NEW MISSION");
         }
 
         private void SetTitleLayout(bool victory)
@@ -297,14 +301,50 @@ namespace EchoProtocol.UI.Result
             Color accent = victory ? VictoryAccent : DefeatAccent;
             foreach (var image in GetComponentsInChildren<Image>(true))
                 if (image.name.StartsWith("Accent", StringComparison.Ordinal)) image.color = accent;
-            var primary = Find<Image>("RetryButton");
-            if (primary != null) primary.color = victory
-                ? new Color(0.08f, 0.20f, 0.17f, 0.92f)
-                : new Color(0.27f, 0.065f, 0.08f, 0.94f);
+            var runner = NetworkBootstrap.Instance?.Runner;
+            bool canRetry = runner == null || !runner.IsRunning
+                || runner.IsServer && runner.IsSceneAuthority;
+            bool retryIsPrimary = !victory && canRetry;
+            StyleActionButton("RetryButton", "RetryLabel", retryIsPrimary, canRetry);
+            StyleActionButton("ReturnButton", "ReturnLabel", !retryIsPrimary, true);
             var photo = Find<Image>("SurveillancePhoto");
             if (photo != null) photo.color = victory
                 ? new Color(0.70f, 0.84f, 0.81f, 1f)
                 : new Color(0.90f, 0.50f, 0.50f, 1f);
+        }
+
+        private void StyleActionButton(string buttonName, string labelName, bool primary, bool enabled)
+        {
+            var fill = Find<Image>(buttonName);
+            if (fill != null) fill.color = primary ? PrimaryButtonFill : SecondaryButtonFill;
+
+            Color borderColor = !enabled ? new Color(0.28f, 0.29f, 0.28f, 0.7f)
+                : primary ? PrimaryButtonBorder : SecondaryButtonBorder;
+            foreach (string side in new[] { "Top", "Bottom", "Left", "Right" })
+            {
+                var border = Find<Image>($"{buttonName}Border{side}");
+                if (border != null) border.color = borderColor;
+            }
+
+            var label = Find<Text>(labelName);
+            if (label != null) label.color = !enabled ? Muted
+                : primary ? PrimaryButtonText : SecondaryButtonText;
+
+            var button = Find<Button>(buttonName);
+            if (button == null) return;
+            var colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = primary
+                ? new Color(1.35f, 1.18f, 1.18f, 1f)
+                : new Color(1.25f, 1.28f, 1.28f, 1f);
+            colors.pressedColor = primary
+                ? new Color(0.72f, 0.56f, 0.56f, 1f)
+                : new Color(0.70f, 0.74f, 0.74f, 1f);
+            colors.selectedColor = colors.highlightedColor;
+            colors.disabledColor = new Color(0.42f, 0.42f, 0.42f, 0.75f);
+            colors.colorMultiplier = 1f;
+            colors.fadeDuration = 0.12f;
+            button.colors = colors;
         }
 
         private IEnumerator Reveal()
@@ -386,8 +426,8 @@ namespace EchoProtocol.UI.Result
             if (_retryButton != null)
             {
                 var runner = NetworkBootstrap.Instance?.Runner;
-                _retryButton.interactable = enabled && runner != null && runner.IsRunning
-                    && runner.IsServer && runner.IsSceneAuthority;
+                _retryButton.interactable = enabled && (runner == null || !runner.IsRunning
+                    || runner.IsServer && runner.IsSceneAuthority);
             }
         }
 
@@ -439,13 +479,15 @@ namespace EchoProtocol.UI.Result
             if (_navigating || !_introComplete) return;
             var bootstrap = NetworkBootstrap.Instance;
             NetworkRunner runner = bootstrap?.Runner;
-            bool host = runner != null && runner.IsRunning && runner.IsServer && runner.IsSceneAuthority;
-            if (retry && !host) return;
+            bool inRoom = runner != null && runner.IsRunning;
+            bool host = inRoom && runner.IsServer && runner.IsSceneAuthority;
+            if (retry && inRoom && !host) return;
             _navigating = true;
             SetActionsEnabled(false);
-            if (retry) SetText("ActionStatus", "WAITING FOR TEAM READY IN LOBBY...");
+            if (retry) SetText("ActionStatus", host
+                ? "WAITING FOR TEAM READY IN LOBBY..." : "OPENING LOBBY...");
             else SetText("ActionStatus", host ? "RETURNING TEAM TO LOBBY..."
-                : runner != null && runner.IsRunning ? "LEAVING ROOM..." : "RETURNING TO MAIN MENU...");
+                : inRoom ? "LEAVING ROOM..." : "OPENING LOBBY...");
 
             try
             {
@@ -454,14 +496,20 @@ namespace EchoProtocol.UI.Result
                     if (retry) ResultRetryCoordinator.Begin();
                     await runner.LoadScene(NetworkBootstrap.LobbySceneName, LoadSceneMode.Single);
                 }
-                else if (bootstrap != null && runner != null && runner.IsRunning)
+                else if (bootstrap != null && inRoom)
                     await bootstrap.ShutdownRunnerAsync();
                 else
                 {
                     ResultSession.Clear();
-                    // A direct Result preview has no session services. Entering Lobby directly
-                    // leaves its Host/Join controls without the persistent Bootstrap owner.
-                    GameUIFeedback.LoadScene(GameConstants.SceneBootstrap, LoadSceneMode.Single);
+                    if (bootstrap != null && AuthSession.IsAuthenticated)
+                        GameUIFeedback.LoadScene(GameConstants.SceneLobby, LoadSceneMode.Single);
+                    else
+                    {
+                        // A direct Result preview must initialize persistent session services
+                        // and pass the normal authentication check before entering Lobby.
+                        BootstrapSceneFlowController.RequestLobbyAfterAuthentication();
+                        GameUIFeedback.LoadScene(GameConstants.SceneBootstrap, LoadSceneMode.Single);
+                    }
                 }
             }
             catch (Exception exception)

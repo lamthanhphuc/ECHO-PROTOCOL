@@ -560,7 +560,16 @@ namespace EchoProtocol.Networking.Authority
                 return (false, error);
             }
 
-            var result = await _api.StartAsync(MatchId);
+            var runner = _bootstrap?.Runner;
+            if (runner == null || !runner.IsRunning || !runner.IsServer
+                || !runner.SessionInfo.IsValid)
+            {
+                return (false, "Authoritative room is unavailable at match start.");
+            }
+
+            var mapId = LobbyMapCatalog.SceneName(LobbyMapCatalog.Selected(runner));
+            var difficulty = requestedDifficulty.ToString().ToUpperInvariant();
+            var result = await _api.StartAsync(MatchId, mapId, difficulty);
             var success = IsSuccessful(result);
             if (success)
             {

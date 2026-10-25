@@ -187,12 +187,20 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<MatchAuthorityBinding>(entity =>
         {
-            entity.ToTable("MatchAuthorityBindings");
+            entity.ToTable("MatchAuthorityBindings", table => table.HasCheckConstraint(
+                "CK_MatchAuthorityBindings_LeaderboardContext",
+                "(\"MapId\" IS NULL AND \"Difficulty\" IS NULL) OR " +
+                "(\"MapId\" IS NOT NULL AND \"Difficulty\" IS NOT NULL AND " +
+                "\"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B') AND " +
+                "\"Difficulty\" IN ('EASY', 'NORMAL', 'HARD'))"));
             entity.HasKey(e => e.MatchId);
             entity.Property(e => e.FusionSessionName).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.MapId).HasMaxLength(64);
+            entity.Property(e => e.Difficulty).HasMaxLength(16);
             entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(e => new { e.FusionSessionName, e.Status });
             entity.HasIndex(e => e.HostUserId);
+            entity.HasIndex(e => new { e.MapId, e.Difficulty });
             entity.HasOne(e => e.HostUser)
                 .WithMany()
                 .HasForeignKey(e => e.HostUserId)
@@ -249,9 +257,12 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Outcome).HasConversion<string>().HasMaxLength(20);
             entity.Property(e => e.ObjectiveCompletion).HasPrecision(5, 4);
             entity.Property(e => e.PayloadHash).IsRequired().HasMaxLength(64).IsFixedLength();
+            entity.Property(e => e.RosterKey).HasMaxLength(131);
             entity.Property(e => e.RewardStatus).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(e => e.SubmittedByUserId);
             entity.HasIndex(e => e.SubmittedAtUtc);
+            entity.HasIndex(e => new { e.Outcome, e.PlayerCount, e.DurationSeconds, e.EndedAtUtc });
+            entity.HasIndex(e => e.RosterKey);
             entity.HasOne(e => e.SubmittedByUser)
                 .WithMany()
                 .HasForeignKey(e => e.SubmittedByUserId)

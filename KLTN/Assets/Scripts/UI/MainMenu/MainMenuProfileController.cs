@@ -90,6 +90,7 @@ namespace EchoProtocol.UI.MainMenu
       CloseShop();
       CloseTopUp();
       CloseProfile();
+      MainMenuLeaderboardController.Install(GetComponentInParent<Canvas>());
       ShowPackageStatus("Đang tải gói...");
       RefreshPlayerProfile();
       RefreshPaymentCatalog();

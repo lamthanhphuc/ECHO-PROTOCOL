@@ -52,9 +52,15 @@ namespace EchoProtocol.Networking.Authority
             PostAsync<EmptyMatchAuthorityRequest, MatchAuthorityDto>(
                 $"/api/matches/{matchId:D}/lease", new EmptyMatchAuthorityRequest());
 
-        public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> StartAsync(Guid matchId) =>
-            PostAsync<EmptyMatchAuthorityRequest, MatchAuthorityDto>(
-                $"/api/matches/{matchId:D}/start", new EmptyMatchAuthorityRequest());
+        public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> StartAsync(
+            Guid matchId, string mapId, string difficulty) =>
+            PostAsync<StartMatchAuthorityRequest, MatchAuthorityDto>(
+                $"/api/matches/{matchId:D}/start",
+                new StartMatchAuthorityRequest
+                {
+                    mapId = mapId,
+                    difficulty = difficulty
+                });
 
         public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> EndAsync(Guid matchId, string reason) =>
             PostAsync<EndMatchAuthorityRequest, MatchAuthorityDto>(

@@ -208,6 +208,7 @@ builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<ITelemetryService, TelemetryService>();
 builder.Services.AddScoped<IMatchAuthorityService, MatchAuthorityService>();
 builder.Services.AddScoped<IMatchResultService, MatchResultService>();
+builder.Services.AddScoped<ILeaderboardService, LeaderboardService>();
 builder.Services.AddScoped<IRewardService, RewardService>();
 builder.Services.AddSingleton<IRewardPolicy, RewardPolicyV1>();
 builder.Services.AddScoped<IPlayerProfileService, PlayerProfileService>();

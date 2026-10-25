@@ -6,7 +6,7 @@ namespace EchoProtocol.UI
     public enum SettingsIcon
     {
         Gear, Microphone, Mouse, Audio, Keyboard, Monitor, Team, Interact, Run, Crouch,
-        Flashlight, Inventory, Up, Down, Left, Right, Play, Exit, Dot, Pill, Shop, Web, Profile
+        Flashlight, Inventory, Up, Down, Left, Right, Play, Exit, Dot, Pill, Shop, Web, Profile, Trophy, Radio
     }
 
     /// <summary>Small vector icons, independent of installed fonts and texture resolution.</summary>
@@ -113,6 +113,26 @@ namespace EchoProtocol.UI
                     Disc(50, 63, 14);
                     Arc(50, 17, 28, 0, 180, 8);
                     Stroke(22, 17, 78, 17, 8);
+                    break;
+                case SettingsIcon.Trophy:
+                    Polygon(new[] { new Vector2(25, 82), new Vector2(75, 82),
+                        new Vector2(69, 55), new Vector2(59, 43), new Vector2(41, 43),
+                        new Vector2(31, 55) });
+                    Arc(23, 68, 17, 90, 270, 5);
+                    Arc(77, 68, 17, -90, 90, 5);
+                    Stroke(50, 43, 50, 22, 8);
+                    Stroke(35, 20, 65, 20, 7);
+                    Stroke(28, 12, 72, 12, 6);
+                    break;
+                case SettingsIcon.Radio:
+                    Disc(50, 70, 5);
+                    Polygon(new[] { new Vector2(49, 63), new Vector2(35, 13),
+                        new Vector2(65, 13), new Vector2(51, 63) });
+                    Stroke(25, 13, 75, 13, 4);
+                    Arc(50, 70, 22, 35, 145, 4);
+                    Arc(50, 70, 38, 35, 145, 3);
+                    Stroke(18, 33, 30, 33, 3);
+                    Stroke(70, 45, 82, 45, 3);
                     break;
                 case SettingsIcon.Dot: Disc(50, 50, 48); break;
                 case SettingsIcon.Pill:

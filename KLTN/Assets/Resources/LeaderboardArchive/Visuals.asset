@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 880f31a0166a45ac8b09a3cf037b2a5f, type: 3}
+  m_Name: Visuals
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.UI.MainMenu.LeaderboardArchiveVisuals
+  dossierMetal: {fileID: 21300000, guid: 8a8c2b4526f24328b781d31fb6426ba1, type: 3}
+  surveillanceStill: {fileID: 21300000, guid: ca064643d1554a75ad3678c02f49d1db, type: 3}
+  tornNote: {fileID: 21300000, guid: 7dc3c699b50b4da3a5635c6fa04a1287, type: 3}
+  agedTape: {fileID: 21300000, guid: d69f30c2bce942a9a1c8b3373bd04ebd, type: 3}
+  fingerprint: {fileID: 21300000, guid: 31b15128c74d4a9dab82396a8c0723ab, type: 3}
+  operatorPortrait: {fileID: 21300000, guid: 724284a2ec784e48af0432d8bc4bb342, type: 3}
+  spectralFont: {fileID: 12800000, guid: 256d28ab65e77be4eb14f87b7911b196, type: 3}
+  hoverClip: {fileID: 8300000, guid: d87fd03404344694f93a736d620d1943, type: 3}

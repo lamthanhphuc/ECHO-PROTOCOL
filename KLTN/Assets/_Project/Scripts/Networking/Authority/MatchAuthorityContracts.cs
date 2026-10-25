@@ -56,6 +56,13 @@ namespace EchoProtocol.Networking.Authority
     }
 
     [Serializable]
+    public sealed class StartMatchAuthorityRequest
+    {
+        public string mapId;
+        public string difficulty;
+    }
+
+    [Serializable]
     public sealed class SubmitMatchResultRequestDto
     {
         public string outcome;

@@ -107,6 +107,9 @@ public sealed class MatchResultService : IMatchResultService
                 DurationSeconds = durationSeconds,
                 ObjectiveCompletion = request.ObjectiveCompletion,
                 PlayerCount = request.Players.Count,
+                RosterKey = string.Join(",", request.Players
+                    .Select(player => player.UserId.ToString("N"))
+                    .OrderBy(userId => userId, StringComparer.Ordinal)),
                 PayloadHash = payloadHash,
                 RewardStatus = MatchRewardStatus.Pending,
                 SubmittedAtUtc = now,

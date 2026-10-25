@@ -20,6 +20,17 @@ public sealed class MatchAuthorityResponse
     public int MaxPlayers { get; set; }
     public MatchAuthorityStatus Status { get; set; }
     public DateTime LeaseExpiresAtUtc { get; set; }
+    public string? MapId { get; set; }
+    public string? Difficulty { get; set; }
+}
+
+public sealed class StartMatchAuthorityRequest
+{
+    [StringLength(64)]
+    public string? MapId { get; set; }
+
+    [StringLength(16)]
+    public string? Difficulty { get; set; }
 }
 
 public sealed class IssueJoinProofRequest

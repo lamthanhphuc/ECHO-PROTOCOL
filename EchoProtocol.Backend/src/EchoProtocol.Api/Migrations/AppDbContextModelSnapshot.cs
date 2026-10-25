@@ -246,6 +246,10 @@ namespace EchoProtocol.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Difficulty")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -262,6 +266,10 @@ namespace EchoProtocol.Api.Migrations
 
                     b.Property<DateTime>("LeaseExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MapId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<int>("MaxPlayers")
                         .HasColumnType("integer");
@@ -283,7 +291,12 @@ namespace EchoProtocol.Api.Migrations
 
                     b.HasIndex("FusionSessionName", "Status");
 
-                    b.ToTable("MatchAuthorityBindings", (string)null);
+                    b.HasIndex("MapId", "Difficulty");
+
+                    b.ToTable("MatchAuthorityBindings", t =>
+                        {
+                            t.HasCheckConstraint("CK_MatchAuthorityBindings_LeaderboardContext", "(\"MapId\" IS NULL AND \"Difficulty\" IS NULL) OR (\"MapId\" IS NOT NULL AND \"Difficulty\" IS NOT NULL AND \"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B') AND \"Difficulty\" IN ('EASY', 'NORMAL', 'HARD'))");
+                        });
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.MatchPlayerBinding", b =>
@@ -363,6 +376,10 @@ namespace EchoProtocol.Api.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<string>("RosterKey")
+                        .HasMaxLength(131)
+                        .HasColumnType("character varying(131)");
+
                     b.Property<DateTime>("StartedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -377,6 +394,10 @@ namespace EchoProtocol.Api.Migrations
                     b.HasIndex("SubmittedAtUtc");
 
                     b.HasIndex("SubmittedByUserId");
+
+                    b.HasIndex("RosterKey");
+
+                    b.HasIndex("Outcome", "PlayerCount", "DurationSeconds", "EndedAtUtc");
 
                     b.ToTable("MatchResults", t =>
                         {
