@@ -250,7 +250,7 @@ public static class MainMenuTypographyAuthoring
             var feedback = new SerializedObject(buttonTransform.GetComponent<MainMenuButtonTextFeedback>());
             feedback.FindProperty("indicatorColor").colorValue = new Color(0.83f, 0.025f, 0.045f, 0.88f);
             feedback.ApplyModifiedProperties();
-            AuthorButtonRow(buttonTransform, mono, subtitleMaterial, buttonIndex);
+            AuthorButtonRow(buttonTransform);
         }
 
         AssertRectsUnchanged(originalRects);
@@ -377,8 +377,7 @@ public static class MainMenuTypographyAuthoring
         return image;
     }
 
-    private static void AuthorButtonRow(Transform button, TMP_FontAsset mono,
-        Material material, int index)
+    private static void AuthorButtonRow(Transform button)
     {
         Image surface = RowImage(button, "IndustrialRowSurface", 0f, 0f, 420f, 76f,
             new Color(0.006f, 0.008f, 0.01f, 0.62f));
@@ -394,26 +393,8 @@ public static class MainMenuTypographyAuthoring
         RowImage(button, "IndicatorCore", 39f, 20f, 1f, 36f,
             new Color(1f, 0.29f, 0.24f, 0.82f));
         Transform number = button.Find("RowNumber");
-        if (number == null)
-        {
-            var go = new GameObject("RowNumber", typeof(RectTransform),
-                typeof(CanvasRenderer), typeof(TextMeshProUGUI));
-            go.layer = button.gameObject.layer;
-            go.transform.SetParent(button, false);
-            Undo.RegisterCreatedObjectUndo(go, "Create menu row number");
-            number = go.transform;
-        }
-        TextMeshProUGUI numberText = number.GetComponent<TextMeshProUGUI>();
-        numberText.font = mono;
-        numberText.fontSharedMaterial = material;
-        numberText.text = index.ToString("00");
-        numberText.fontSize = 18f;
-        numberText.characterSpacing = 4f;
-        numberText.color = new Color32(178, 174, 167, 255);
-        numberText.alignment = TextAlignmentOptions.MidlineRight;
-        numberText.raycastTarget = false;
-        PlaceTopLeft(numberText.rectTransform, 310f, 0f, 55f, 76f);
-        EditorUtility.SetDirty(numberText);
+        if (number != null)
+            Undo.DestroyObjectImmediate(number.gameObject);
     }
 
     private struct RectSnapshot
