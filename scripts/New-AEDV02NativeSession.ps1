@@ -12,7 +12,7 @@ param(
 )
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot -Parent
-$root=[IO.Path]::GetFullPath((Join-Path $repo 'KLTN/Temp/AEDV02/Native'))+[IO.Path]::DirectorySeparatorChar
+$root=[IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Temp/AEDV02/Native'))+[IO.Path]::DirectorySeparatorChar
 $path=[IO.Path]::GetFullPath($StackJson)
 if (!$path.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)) { throw 'Owned disposable stack metadata required.' }
 $stack=Get-Content -LiteralPath $path -Raw | ConvertFrom-Json

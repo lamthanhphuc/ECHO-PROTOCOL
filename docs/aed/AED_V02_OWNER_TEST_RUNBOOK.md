@@ -29,7 +29,7 @@ These commands create a new disposable Development stack, not the owner's existi
 ```powershell
 rtk proxy powershell -NoProfile -File scripts/Start-AEDV02NativeBackend.ps1
 # Copy the stack.json path printed above into this variable; do not print compose.json.
-$pilotStackFile = 'D:\Bin\KLTN\KLTN\Temp\AEDV02\Native\<run-id>\stack.json'
+$pilotStackFile = "$env:LOCALAPPDATA\Temp\AEDV02\Native\<run-id>\stack.json"
 $pilotStack = Get-Content -LiteralPath $pilotStackFile -Raw | ConvertFrom-Json
 $pilotCompose = Get-Content -LiteralPath $pilotStack.compose -Raw | ConvertFrom-Json
 

@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 & (Join-Path $PSScriptRoot 'Assert-AEDV02LocalDocker.ps1')
 $repo = Split-Path $PSScriptRoot -Parent
 $stackPath = [IO.Path]::GetFullPath($StackJson)
-$nativeRoot = [IO.Path]::GetFullPath((Join-Path $repo 'KLTN/Temp/AEDV02/Native')) + [IO.Path]::DirectorySeparatorChar
+$nativeRoot = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Temp/AEDV02/Native')) + [IO.Path]::DirectorySeparatorChar
 if (!$stackPath.StartsWith($nativeRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Stack metadata must belong to the isolated native test workspace.' }
 $stack = Get-Content -LiteralPath $stackPath -Raw | ConvertFrom-Json
 $candidate = (& rtk proxy git -C $repo rev-parse HEAD | Out-String).Trim()

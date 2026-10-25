@@ -3,7 +3,7 @@ param([Parameter(Mandatory)][string]$StackJson, [switch]$ResetData,
 $ErrorActionPreference = 'Stop'
 & (Join-Path $PSScriptRoot 'Assert-AEDV02LocalDocker.ps1')
 $repo = Split-Path $PSScriptRoot -Parent
-$root = [IO.Path]::GetFullPath((Join-Path $repo 'KLTN/Temp/AEDV02/Native')) + [IO.Path]::DirectorySeparatorChar
+$root = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Temp/AEDV02/Native')) + [IO.Path]::DirectorySeparatorChar
 $path = [IO.Path]::GetFullPath($StackJson)
 if (!$path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { throw 'Only disposable AED native stack metadata is allowed.' }
 $stack = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json

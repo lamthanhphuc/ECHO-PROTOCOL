@@ -13,7 +13,7 @@ foreach ($port in @($ApiPort,$PostgresPort,$MongoPort)) {
     if (Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue) { throw "Port $port already owned; choose another test port." }
 }
 $repo = Split-Path $PSScriptRoot -Parent
-$directory = Join-Path $repo "KLTN/Temp/AEDV02/Native/$RunId"
+$directory = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "Temp/AEDV02/Native/$RunId"
 if (Test-Path -LiteralPath $directory) { throw 'Run directory exists; preserve its evidence and use a new RunId.' }
 New-Item -ItemType Directory -Path $directory -Force | Out-Null
 $password = [Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N')
