@@ -225,6 +225,8 @@ namespace EchoProtocol.AI.AED
                 try
                 {
                     var result = await completion.Task;
+                    AEDv2E2ELog.Write("PREMATCH_RESULT", matchId, decisionId,
+                        fields: $"success={result.IsSuccess} http={result.StatusCode} apiSuccess={result.Data?.success} error={result.Data?.errorCode}");
                     return result.IsSuccess && result.Data?.success == true
                         && Guid.TryParse(result.Data.data?.decisionId, out var returnedId)
                         && returnedId == decisionId ? result.Data.data : null;
