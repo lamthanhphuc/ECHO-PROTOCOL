@@ -52,12 +52,15 @@ namespace EchoProtocol.Networking
     }
     public sealed partial class NetworkMatchState
     {
-        [Networked, OnChangedRender(nameof(PurgeMoodChanged))] public PurgeBossMood PurgeMood { get; private set; }
+        private const float PurgeUvStaggerSeconds = 3.5f;
+        private const float PurgeUvImmunitySeconds = 20f;
+        [Networked] public PurgeBossMood PurgeMood { get; private set; }
         [Networked] public NetworkId PurgeBossId { get; private set; }
         [Networked] public TickTimer PurgeMoodTimer { get; private set; }
         [Networked] public TickTimer PurgeHuntTimer { get; private set; }
         [Networked] public TickTimer PurgeUvImmunity { get; private set; }
         [Networked] public float PurgeUvExposure { get; private set; }
+        [Networked] public NetworkBool PurgeUvContact { get; private set; }
         [Networked] private PurgeBossMood PurgeMoodBeforeUvStagger { get; set; }
         [Networked] public int PurgeStaggers { get; private set; }
         [Networked] public int PurgeHuntsStarted { get; private set; }
@@ -71,7 +74,6 @@ namespace EchoProtocol.Networking
         private const int PurgeAidCount = 9;
         [Networked, Capacity(PurgeAidCount)] public NetworkArray<PurgeAidSlot> PurgeAid => default;
         private StalkerFusionRuntime _purgeBoss;
-        private static AudioClip _purgeWarningSound;
         public int PurgeRageTier => HuntBurned >= 8 ? 3 : HuntBurned >= 6 ? 2 : HuntBurned >= 2 ? 1 : 0;
         [Networked] public int PurgePartySize { get; private set; }
         public int PurgeMinionCap => PurgeFishcatBalance.Cap(HuntBurned,
@@ -99,10 +101,9 @@ namespace EchoProtocol.Networking
             get
             {
                 var d = Authority.MatchAuthorityRuntime.Instance ? Authority.MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
-                float baseSpeed = d == MatchDifficulty.Easy ? 6f : d == MatchDifficulty.Hard ? 7.2f : 6.6f;
-                float bonus = PurgeRageTier switch { 0 => 0f, 1 => .4f, 2 => 1.2f, _ => 2.4f };
-                float speed = baseSpeed + bonus;
-                return (PurgeMood == PurgeBossMood.Hunting || PurgeMood == PurgeBossMood.Calm) && PurgeUvExposure > 0 && PurgeUvImmunity.ExpiredOrNotRunning(Runner) ? speed * .6f : speed;
+                float normalSpeed = PurgeRageTier switch { 0 => 4f, 1 => 5.5f, 2 => 7f, _ => 8.5f };
+                float speed = normalSpeed + (d == MatchDifficulty.Easy ? -.5f : d == MatchDifficulty.Hard ? .5f : 0f);
+                return (PurgeMood == PurgeBossMood.Hunting || PurgeMood == PurgeBossMood.Calm) && PurgeUvContact ? speed * .1f : speed;
             }
         }
         public void BindPurgeBoss(NetworkObject boss)
@@ -110,11 +111,11 @@ namespace EchoProtocol.Networking
             if (!Object.HasStateAuthority || !boss || PurgeBossId==boss.Id) return;
             PurgeBossId = boss.Id; _purgeBoss = boss.GetComponent<StalkerFusionRuntime>();
             PurgeMood = PurgeBossMood.Calm; PurgeMoodTimer = TickTimer.None;
+            PurgeUvContact = false;
         }
         public void ProvokePurgeBoss()
         {
             if (!Object.HasStateAuthority || IsEnded || !AlienHuntMission.Instance || PurgeRageTier == 0 || PurgeMood != PurgeBossMood.Calm
-                || !PurgeUvImmunity.ExpiredOrNotRunning(Runner)
                 || !PurgeMoodTimer.ExpiredOrNotRunning(Runner)) return;
             BeginPurgeHunt();
         }
@@ -124,6 +125,7 @@ namespace EchoProtocol.Networking
             PurgeHuntsStarted++;
             PurgeMood = PurgeBossMood.Warning; PurgeMoodTimer = TickTimer.CreateFromSeconds(Runner,3);
             PurgeHuntTimer = TickTimer.CreateFromSeconds(Runner,PurgeHuntSeconds); PurgeStaggers=0; PurgeUvExposure=0;
+            PurgeUvContact = false;
         }
         private void PurgeBurnCompleted(Vector3 position)
         {
@@ -139,8 +141,9 @@ namespace EchoProtocol.Networking
         {
             if (!Object.HasStateAuthority || IsEnded || !AlienHuntMission.Instance) return;
             PurgeMood = PurgeBossMood.Calm; PurgeMoodTimer=TickTimer.CreateFromSeconds(Runner,PurgeCalmSeconds);
-            PurgeUvImmunity=TickTimer.CreateFromSeconds(Runner,Mathf.Min(5,PurgeCalmSeconds));
+            PurgeUvImmunity=TickTimer.CreateFromSeconds(Runner,PurgeUvImmunitySeconds);
             PurgeUvExposure=0; PurgeStaggers=0;
+            PurgeUvContact = false;
         }
         private void CompletePurgeHunt(bool byUv)
         {
@@ -160,9 +163,9 @@ namespace EchoProtocol.Networking
                 if (PurgeMood == PurgeBossMood.Warning && PurgeMoodTimer.Expired(Runner)) PurgeMood = PurgeBossMood.Hunting;
                 else if (PurgeMood == PurgeBossMood.Staggered && PurgeMoodTimer.Expired(Runner))
                 {
-                    if (PurgeMoodBeforeUvStagger == PurgeBossMood.Calm) { PurgeMood = PurgeBossMood.Calm; PurgeMoodTimer = TickTimer.CreateFromSeconds(Runner, PurgeCalmSeconds); PurgeUvImmunity = TickTimer.CreateFromSeconds(Runner, 4f); }
+                    if (PurgeMoodBeforeUvStagger == PurgeBossMood.Calm) { PurgeMood = PurgeBossMood.Calm; PurgeMoodTimer = TickTimer.CreateFromSeconds(Runner, PurgeCalmSeconds); PurgeUvImmunity = TickTimer.CreateFromSeconds(Runner, PurgeUvImmunitySeconds); }
                     else if (PurgeStaggers >= PurgeStaggersRequired) CompletePurgeHunt(true);
-                    else { PurgeMood = PurgeBossMood.Hunting; PurgeUvImmunity = TickTimer.CreateFromSeconds(Runner, 4f); }
+                    else { PurgeMood = PurgeBossMood.Hunting; PurgeUvImmunity = TickTimer.CreateFromSeconds(Runner, PurgeUvImmunitySeconds); }
                 }
                 if (PurgeMood == PurgeBossMood.Hunting && PurgeHuntTimer.Expired(Runner)) CompletePurgeHunt(false);
                 if (PurgeMood == PurgeBossMood.Calm || PurgeMood == PurgeBossMood.Hunting)
@@ -170,13 +173,15 @@ namespace EchoProtocol.Networking
                     int contributors = 0;
                     foreach (var player in Runner.ActivePlayers)
                         if (Runner.TryGetPlayerObject(player, out var obj) && obj && obj.TryGetComponent<NetworkPlayerFlashlight>(out var uv) && uv.ResonanceActive && uv.PurgeBossTarget == _purgeBoss) contributors++;
-                    PurgeUvExposure = PurgeUvImmunity.ExpiredOrNotRunning(Runner) ? (contributors > 0 ? PurgeUvExposure + delta * ResonanceRules.ContributionSpeed(contributors) : Mathf.Max(0f, PurgeUvExposure - delta)) : 0f;
-                    if (PurgeUvExposure >= 2.25f) { PurgeMoodBeforeUvStagger = PurgeMood; PurgeStaggers++; PurgeUvStaggersTotal++; PurgeUvExposure = 0f; PurgeMood = PurgeBossMood.Staggered; PurgeMoodTimer = TickTimer.CreateFromSeconds(Runner, 2.2f); }
+                    PurgeUvContact = contributors > 0 && PurgeUvImmunity.ExpiredOrNotRunning(Runner);
+                    PurgeUvExposure = PurgeUvContact ? PurgeUvExposure + delta * ResonanceRules.ContributionSpeed(contributors) : PurgeUvImmunity.ExpiredOrNotRunning(Runner) ? Mathf.Max(0f, PurgeUvExposure - delta) : 0f;
+                    if (PurgeUvExposure >= 2.25f) { PurgeMoodBeforeUvStagger = PurgeMood; PurgeStaggers++; PurgeUvStaggersTotal++; PurgeUvExposure = 0f; PurgeUvContact = false; PurgeMood = PurgeBossMood.Staggered; PurgeMoodTimer = TickTimer.CreateFromSeconds(Runner, PurgeUvStaggerSeconds); }
                 }
-                else PurgeUvExposure = 0f;
+                else { PurgeUvExposure = 0f; PurgeUvContact = false; }
                 var controller = _purgeBoss.GetComponent<EchoProtocol.AI.Stalker.StalkerController>();
-                if (controller) controller.ApplyPurgePolicy(PurgeRageTier >= 1, PurgeMood == PurgeBossMood.Warning || PurgeMood == PurgeBossMood.Staggered || IsEnded, PurgeChaseSpeed);
+                if (controller) controller.ApplyPurgePolicy(PurgeRageTier == 0 || PurgeMood == PurgeBossMood.Hunting, PurgeMood == PurgeBossMood.Warning || PurgeMood == PurgeBossMood.Staggered || IsEnded, PurgeChaseSpeed);
             }
+            else PurgeUvContact = false;
             TickPurgeAid();
         }
         private void TickPurgeAid()
@@ -289,18 +294,6 @@ namespace EchoProtocol.Networking
                 return true;
             }
             return false;
-        }
-        private void PurgeMoodChanged()
-        {
-            if(!AlienHuntMission.Instance || PurgeMood!=PurgeBossMood.Warning) return;
-            if(!_purgeWarningSound)
-            {
-                const int rate=22050;var samples=new float[rate];
-                for(int i=0;i<samples.Length;i++){float t=i/(float)rate;samples[i]=Mathf.Sin(t*(220+120*t)*Mathf.PI*2)*Mathf.Sin(t*Mathf.PI)*.25f;}
-                _purgeWarningSound=AudioClip.Create("PurgeHuntWarning",rate,1,rate,false);_purgeWarningSound.SetData(samples,0);
-            }
-            var listener=UnityEngine.Object.FindAnyObjectByType<AudioListener>();
-            if(listener)AudioSource.PlayClipAtPoint(_purgeWarningSound,listener.transform.position,.7f);
         }
     }
 }

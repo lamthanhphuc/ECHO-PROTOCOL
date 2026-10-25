@@ -79,6 +79,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
         // ──────────────────────────────────────────────────────────────────────
         [Header("Detect Voice Tuning")]
         [SerializeField, Range(0f, 1f)]     private float detectVolume       = 1.00f;
+        [SerializeField, Min(0f)] private float detectCooldownSeconds = 35f;
+        [SerializeField, Min(0f)] private float sameTargetDetectCooldownSeconds = 45f;
 
         [Header("Footstep Tuning")]
         [SerializeField, Range(0f, 2f)]     private float walkFootstepVolume = 0.85f;
@@ -131,6 +133,9 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private bool      _breathingRequested;
         private float     _breathingTargetVolume;
         private bool      _suppressDetectAnimationEvent;
+        private bool      _detectEntryAuthorized;
+        private float     _lastDetectPlayTime = float.NegativeInfinity;
+        private int       _lastDetectTargetKey;
         private bool      _biteAudioPlayedForEpisode;
 
         // ──────────────────────────────────────────────────────────────────────
@@ -199,6 +204,13 @@ namespace EchoProtocol.AI.Stalker.Presentation
             EchoProtocol.Audio.GameAudioSettings.RouteEffects(movementSource);
             EchoProtocol.Audio.GameAudioSettings.RouteEffects(breathingSource);
             EchoProtocol.Audio.GameAudioSettings.RouteMusic(chaseSource);
+            if (GetComponent<PurgeBossFeedback>() != null)
+            {
+                EchoProtocol.Audio.PurgeSpatialAudio.Attach(detectSource, transform);
+                EchoProtocol.Audio.PurgeSpatialAudio.Attach(voiceSource, transform);
+                EchoProtocol.Audio.PurgeSpatialAudio.Attach(movementSource, transform);
+                EchoProtocol.Audio.PurgeSpatialAudio.Attach(breathingSource, transform);
+            }
 
             // if (detectSource    == null) Debug.LogError("[StalkerAudio] detectSource is not assigned.",    this);
             // if (voiceSource     == null) Debug.LogError("[StalkerAudio] voiceSource is not assigned.",     this);
@@ -386,8 +398,10 @@ namespace EchoProtocol.AI.Stalker.Presentation
         /// </summary>
         public void PlayDetect()
         {
+            if (!_detectEntryAuthorized) return;
             _suppressDetectAnimationEvent = true;
             PlayDetectClip();
+            _detectEntryAuthorized = false;
         }
 
         public void PlayDetectForNewTarget()
@@ -403,20 +417,40 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         public void StopDetectVoice()
         {
+            _detectEntryAuthorized = false;
             var src = detectSource != null ? detectSource : voiceSource;
             if (src == null || !src.isPlaying || src.clip != detectClip) return;
             src.Stop();
         }
 
-        public void BeginDetectAudioEntry()
+        public bool BeginDetectAudioEntry(int targetKey)
         {
             _suppressDetectAnimationEvent = false;
+            _detectEntryAuthorized = false;
+            var src = detectSource != null ? detectSource : voiceSource;
+            if (!ClipAndSourceReady(src, detectClip) || !IsSourceInRange(src, detectMaxDistance)) return false;
+            float elapsed = Time.time - _lastDetectPlayTime;
+            if (elapsed < detectCooldownSeconds || targetKey != 0 && targetKey == _lastDetectTargetKey
+                && elapsed < sameTargetDetectCooldownSeconds) return false;
+            _lastDetectPlayTime = Time.time;
+            _lastDetectTargetKey = targetKey;
+            _detectEntryAuthorized = true;
+            return true;
+        }
+
+        public void BeginWarningRoarEntry()
+        {
+            StopDetectVoice();
+            _suppressDetectAnimationEvent = false;
+            _detectEntryAuthorized = true;
         }
 
         public void PlayDetectFromAnimation()
         {
             if (_suppressDetectAnimationEvent) return;
+            if (!_detectEntryAuthorized && !BeginDetectAudioEntry(0)) return;
             PlayDetectClip();
+            _detectEntryAuthorized = false;
         }
 
         private void PlayDetectClip()
@@ -458,6 +492,9 @@ namespace EchoProtocol.AI.Stalker.Presentation
         /// </summary>
         public void PlayFootstep()
         {
+            // PURGE Lizard steps are driven by travel distance in PurgeBossFeedback.
+            var purgeFeedback = GetComponent<PurgeBossFeedback>();
+            if (purgeFeedback != null && purgeFeedback.IsActive) return;
             var clip = _chaseActive ? chaseFootstepClip : walkClip;
             if (!ClipAndSourceReady(movementSource, clip)) return;
             if (!IsSourceInRange(movementSource, movementMaxDistance)) return;
@@ -579,6 +616,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
             _isMoving = false;
             _breathingRequested = false;
             _suppressDetectAnimationEvent = false;
+            _detectEntryAuthorized = false;
             _biteAudioPlayedForEpisode = false;
         }
 

@@ -20,6 +20,9 @@ namespace EchoProtocol.UI
         private NetworkBootstrap _bootstrap;
         private LobbyManager _manager;
         private float _refreshAt;
+        private bool _confirmedPurgeMode;
+        private NetworkRunner _confirmedRunner;
+        private string _confirmedRoom;
 
         private void Start()
         {
@@ -67,7 +70,7 @@ namespace EchoProtocol.UI
         private bool CanEdit => _bootstrap != null && _bootstrap.Runner != null && _bootstrap.Runner.IsServer
             && _bootstrap.State == NetworkSessionState.InLobby && _manager != null
             && !_manager.IsStartingMatch && !_manager.CurrentState.IsReady
-            && !LobbyMapCatalog.MapLocked(_bootstrap.Runner);
+            && !_confirmedPurgeMode && !LobbyMapCatalog.MapLocked(_bootstrap.Runner);
         private void Step(int direction)
         {
             if (!CanEdit) return;
@@ -86,9 +89,19 @@ namespace EchoProtocol.UI
             if (_bootstrap == null) _bootstrap = FindAnyObjectByType<NetworkBootstrap>();
             if (_manager == null) _manager = FindAnyObjectByType<LobbyManager>();
             var runner = _bootstrap != null ? _bootstrap.Runner : null;
+            if (runner != _confirmedRunner || runner != null && runner.SessionInfo.IsValid
+                && _confirmedRoom != runner.SessionInfo.Name)
+            {
+                _confirmedRunner = runner;
+                _confirmedRoom = runner != null && runner.SessionInfo.IsValid ? runner.SessionInfo.Name : null;
+                _confirmedPurgeMode = false;
+            }
+            if (runner != null && runner.SessionInfo.IsValid
+                && runner.SessionInfo.Properties.TryGetValue(LobbyMapCatalog.GameModeKey, out var mode))
+                _confirmedPurgeMode = (int)mode == 1;
             if (CanEdit && runner.SessionInfo.IsValid && !runner.SessionInfo.Properties.ContainsKey(LobbyMapCatalog.PropertyKey))
                 LobbyMapCatalog.TrySelect(runner, Mathf.Clamp(LobbySelectionMemory.Read("map", 0), 0, LobbyMapCatalog.MapCount - 1));
-            int map = LobbyMapCatalog.Selected(runner);
+            int map = _confirmedPurgeMode ? 2 : LobbyMapCatalog.Selected(runner);
             int preview = map == 2 ? 1 : map;
             _photo.texture = Previews != null && preview < Previews.Length ? Previews[preview] : null;
             if (_photo.texture != null)

@@ -1,3 +1,4 @@
+using EchoProtocol.Audio;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -8,18 +9,23 @@ namespace EchoProtocol.Networking
     {
         private GameObject oil;
         private ParticleSystem flame;
+        private ParticleSystem smoke, embers, fuelDrops;
         private Light glow;
-        private AudioSource fireAudio;
-        private Material oilMaterial, fireMaterial;
+        private AudioSource fireAudio, actionAudio, phaseAudio;
+        private GameAudioCatalog catalog;
+        private Material oilMaterial, fireMaterial, softMaterial;
         private Mesh oilMesh;
         private Texture2D flameTexture;
-        private static AudioClip fireLoop;
+        private HuntFurnaceState previous;
+        private bool hasState;
+        private float burnWeight, flashRemaining;
         private Vector3 oilPosition;
         public bool OilVisible => oil && oil.activeSelf;
         public bool FireVisible => flame && flame.isPlaying;
 
         public void Initialize(Material template)
         {
+            if (oil) return;
             Renderer bowl = null;
             foreach (var renderer in GetComponentsInChildren<Renderer>())
                 if (renderer.name == "LP_Cotl") { bowl = renderer; break; }
@@ -78,33 +84,158 @@ namespace EchoProtocol.Networking
             flame.Stop(true,ParticleSystemStopBehavior.StopEmittingAndClear);
             glow = fire.AddComponent<Light>(); glow.type = LightType.Point; glow.range = 3;
             glow.color = new Color(1,.38f,.07f); glow.shadows = LightShadows.None; glow.enabled = false;
-            fireAudio = fire.AddComponent<AudioSource>(); fireAudio.playOnAwake = false; fireAudio.loop = true;
-            fireAudio.spatialBlend = 1; fireAudio.minDistance = 2; fireAudio.maxDistance = 20;
-            fireAudio.rolloffMode = AudioRolloffMode.Linear; fireAudio.volume = .16f; fireAudio.dopplerLevel = 0;
-            if (!fireLoop)
-            {
-                const int rate = 22050; var samples = new float[rate*2]; var random = new System.Random(719);
-                float filtered = 0;
-                for (int i=0;i<samples.Length;i++)
-                { filtered = Mathf.Lerp(filtered,(float)random.NextDouble()*2-1,.16f); samples[i]=filtered*.6f; }
-                fireLoop = AudioClip.Create("AlienHuntFireCrackle",samples.Length,1,rate,false); fireLoop.SetData(samples,0);
-            }
-            fireAudio.clip = fireLoop;
+            catalog = Resources.Load<GameAudioCatalog>("GameAudioCatalog");
+            fireAudio = GameAudioRuntime.CreateSource(fire, true);
+            fireAudio.loop = true; fireAudio.rolloffMode = AudioRolloffMode.Linear;
+            fireAudio.maxDistance = 20f; fireAudio.volume = 0f;
+            fireAudio.clip = catalog != null ? catalog.Find("purge_furnace/fire_loop") : null;
+            PurgeSpatialAudio.Attach(fireAudio, transform);
+            actionAudio = CreateAudio("Furnace Action", center);
+            phaseAudio = CreateAudio("Furnace Phase", center);
+
+            // Alpha-blended dark smoke/drops; additive flame material is reserved for hot embers.
+            softMaterial = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
+            softMaterial.SetTexture("_BaseMap", flameTexture);
+            softMaterial.SetFloat("_Surface", 1f);
+            softMaterial.SetFloat("_Blend", 0f);
+            softMaterial.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+            softMaterial.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+            softMaterial.SetFloat("_ZWrite", 0f);
+            softMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            softMaterial.renderQueue = 3000;
+            float radius = Mathf.Min(bounds.size.x, bounds.size.z) * .20f;
+            smoke = CreateParticles("PanSmoke", center + Vector3.up * .15f, softMaterial,
+                1.2f, 1.8f, .18f, .34f, new Color(.22f, .20f, .18f, .18f), radius);
+            var smokeMain = smoke.main; smokeMain.startSpeed = new ParticleSystem.MinMaxCurve(.18f, .35f);
+            var smokeSize = smoke.sizeOverLifetime; smokeSize.enabled = true;
+            smokeSize.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, .5f, 1f, 1.7f));
+            embers = CreateParticles("PanEmbers", center + Vector3.up * .10f, fireMaterial,
+                .7f, 1.4f, .012f, .028f, new Color(1f, .40f, .08f, .7f), radius);
+            var emberMain = embers.main; emberMain.startSpeed = new ParticleSystem.MinMaxCurve(.18f, .5f);
+            fuelDrops = CreateParticles("FuelDrops", center + Vector3.up * .13f, softMaterial,
+                .18f, .38f, .025f, .045f, new Color(.34f, .20f, .045f, .85f), radius * .55f);
+            var dropMain = fuelDrops.main; dropMain.loop = false; dropMain.gravityModifier = .7f;
+            dropMain.startSpeed = new ParticleSystem.MinMaxCurve(.25f, .6f);
         }
-        public void Present(HuntFurnaceState state)
+
+        private AudioSource CreateAudio(string name, Vector3 position)
+        {
+            var child = new GameObject(name); child.transform.SetParent(transform, false);
+            child.transform.position = position;
+            var source = GameAudioRuntime.CreateSource(child, true);
+            source.rolloffMode = AudioRolloffMode.Linear; source.maxDistance = 18f;
+            PurgeSpatialAudio.Attach(source, transform);
+            return source;
+        }
+
+        private ParticleSystem CreateParticles(string name, Vector3 position, Material material,
+            float minLife, float maxLife, float minSize, float maxSize, Color tint, float radius)
+        {
+            var child = new GameObject(name); child.transform.SetParent(transform, false);
+            child.transform.position = position;
+            var particles = child.AddComponent<ParticleSystem>();
+            particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            var main = particles.main; main.playOnAwake = false; main.loop = true;
+            main.simulationSpace = ParticleSystemSimulationSpace.World; main.maxParticles = 40;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(minLife, maxLife);
+            main.startSize = new ParticleSystem.MinMaxCurve(minSize, maxSize); main.startColor = tint;
+            var emission = particles.emission; emission.rateOverTime = 0f;
+            var shape = particles.shape; shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 28f; shape.radius = radius; shape.rotation = new Vector3(-90f, 0f, 0f);
+            var color = particles.colorOverLifetime; color.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, .15f), new GradientAlphaKey(0f, 1f) });
+            color.color = gradient;
+            var renderer = particles.GetComponent<ParticleSystemRenderer>();
+            renderer.sharedMaterial = material; renderer.shadowCastingMode = ShadowCastingMode.Off;
+            return particles;
+        }
+
+        private float EffectsVolume => catalog != null ? catalog.effectsVolume : 1f;
+
+        private void PlayCue(AudioSource source, string key, float volume)
+        {
+            var clip = catalog != null ? catalog.Find(key) : null;
+            var camera = Camera.main;
+            if (source == null || clip == null || camera == null
+                || (camera.transform.position - source.transform.position).sqrMagnitude > source.maxDistance * source.maxDistance) return;
+            source.clip = clip;
+            if (Application.isPlaying) source.PlayOneShot(clip, volume * EffectsVolume);
+        }
+
+        public void Present(HuntFurnaceState state, float delta)
         {
             if (!oil) return;
             bool burning = state.BurnRemaining > 0;
             oil.SetActive(state.Fuel > 0 || burning);
             if (oil.activeSelf) oil.transform.localPosition = oilPosition + Vector3.up * (Mathf.Sin(Time.time*2.5f)*.002f);
             if (!flame) return;
-            if (burning && !flame.isPlaying) flame.Play();
-            if (!burning && flame.isPlaying) flame.Stop(true,ParticleSystemStopBehavior.StopEmittingAndClear);
-            glow.enabled = burning; glow.intensity = 1.4f + Mathf.Sin(Time.time*19)*.2f;
-            if (burning && !fireAudio.isPlaying) fireAudio.Play();
-            if (!burning && fireAudio.isPlaying) fireAudio.Stop();
+            bool wasBurning = previous.BurnRemaining > 0;
+            if (hasState)
+            {
+                if (state.Fuel > previous.Fuel)
+                {
+                    PlayCue(actionAudio, "purge_furnace/fuel_pour", .65f);
+                    PurgeVfx.Emit(fuelDrops, 14, 20f);
+                }
+                if (state.AlienSlot != 0 && state.AlienSlot != previous.AlienSlot)
+                    PlayCue(actionAudio, "purge_furnace/pan_place", .70f);
+                if (burning && !wasBurning)
+                {
+                    PlayCue(phaseAudio, "purge_furnace/ignition", .68f);
+                    flashRemaining = .22f;
+                    flame.Play();
+                    flame.Emit(18);
+                }
+                if (state.BurnedCount > previous.BurnedCount)
+                {
+                    PlayCue(phaseAudio, "purge_alien/burn_complete", .65f);
+                    PurgeVfx.Emit(embers, 18, 28f);
+                }
+            }
+            // Initial/late-join state restores active loops without replaying one-shots.
+            hasState = true; previous = state;
+            flashRemaining = Mathf.Max(0f, flashRemaining - delta);
+            burnWeight = burning ? 1f : Mathf.MoveTowards(burnWeight, 0f, delta / .8f);
+            if (burning && !flame.isEmitting) flame.Play();
+            if (!burning && flame.isEmitting) flame.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+            float flash = flashRemaining / .22f;
+            var main = flame.main; main.startSizeMultiplier = Mathf.Lerp(.32f, .48f, flash);
+            var emission = flame.emission; emission.rateOverTime = 45f * (1f + flash);
+            PurgeVfx.SetLoop(smoke, burning, 28f, 3f);
+            PurgeVfx.SetLoop(embers, burning, 28f, 3f);
+            PurgeVfx.Cull(fuelDrops, 20f);
+            glow.enabled = burnWeight > 0f && PurgeVfx.InRange(glow.transform.position, 35f);
+            glow.intensity = burnWeight * (1.4f + Mathf.Sin(Time.time * 19f) * .2f + flash * 2f);
+            fireAudio.volume = .32f * EffectsVolume * burnWeight;
+            if (burnWeight > 0f && fireAudio.clip != null && !fireAudio.isPlaying && Application.isPlaying) fireAudio.Play();
+            if (burnWeight <= 0f && fireAudio.isPlaying) fireAudio.Stop();
         }
+
+        public void ResetPresentation()
+        {
+            hasState = false; previous = default; burnWeight = 0f; flashRemaining = 0f;
+            if (oil) oil.SetActive(false);
+            if (glow) glow.enabled = false;
+            if (fireAudio) { fireAudio.Stop(); fireAudio.volume = 0f; }
+            if (actionAudio) { actionAudio.Stop(); actionAudio.clip = null; }
+            if (phaseAudio) { phaseAudio.Stop(); phaseAudio.clip = null; }
+            if (flame) flame.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            if (smoke) smoke.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            if (embers) embers.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            if (fuelDrops) fuelDrops.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+
+        private void OnDisable() => ResetPresentation();
+
+        private static void Release(Object resource)
+        {
+            if (!resource) return;
+            if (Application.isPlaying) Destroy(resource); else DestroyImmediate(resource);
+        }
+
         private void OnDestroy()
-        { if(oilMaterial)Destroy(oilMaterial); if(fireMaterial)Destroy(fireMaterial); if(oilMesh)Destroy(oilMesh); if(flameTexture)Destroy(flameTexture); }
+        { Release(oilMaterial); Release(fireMaterial); Release(softMaterial); Release(oilMesh); Release(flameTexture); }
     }
 }

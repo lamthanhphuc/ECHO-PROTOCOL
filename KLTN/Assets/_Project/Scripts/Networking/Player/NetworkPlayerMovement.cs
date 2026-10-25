@@ -1,4 +1,4 @@
-﻿using EchoProtocol.AI.Listener.Noise;
+using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Settings;
 using Fusion;
@@ -35,7 +35,7 @@ namespace EchoProtocol.Networking
         private float StaminaResumeThreshold =>
             Mathf.Max(
                 _minStaminaToSprint,
-                _maxStamina * 0.3f);
+                MaxStamina * 0.3f);
 
         private NetworkCharacterController _controller;
         private CharacterController _unityCharacterController;
@@ -86,7 +86,13 @@ namespace EchoProtocol.Networking
             && Zone2InterruptTimer.IsRunning && !Zone2InterruptTimer.Expired(Runner);
 
         public float CurrentPitch => LookPitch;
-        public float MaxStamina => _maxStamina;
+        private bool UsesPurgeStamina => SceneManager.GetActiveScene().name == AlienHuntMission.SceneName;
+        public float MaxStamina => UsesPurgeStamina ? 250f : _maxStamina;
+        private float SprintStaminaDrain => UsesPurgeStamina ? 22f : _sprintStaminaDrainPerSecond;
+        private float StaminaRegen => UsesPurgeStamina ? 50f : _staminaRegenPerSecond;
+        public bool IsPresentationGrounded => Runner != null && Object != null && Object.IsValid
+            ? _controller != null && _controller.Grounded
+            : _unityCharacterController != null && _unityCharacterController.isGrounded;
         public float CurrentStamina
         {
             get
@@ -256,7 +262,7 @@ namespace EchoProtocol.Networking
             EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             _controller = GetComponent<NetworkCharacterController>();
             _unityCharacterController = GetComponent<CharacterController>();
-            _offlineCurrentStamina = _maxStamina;
+            _offlineCurrentStamina = MaxStamina;
             ApplyCharacterControllerDimensions(_standingHeight, immediate: true);
 
             if (_inputActions != null)
@@ -423,7 +429,7 @@ namespace EchoProtocol.Networking
                 CurrentHideSpotId = 0UL;
 
                 NetworkCurrentStamina =
-                    _maxStamina;
+                    MaxStamina;
 
                 StaminaExhausted =
                     false;
@@ -699,7 +705,7 @@ namespace EchoProtocol.Networking
                 && lifeState.DebugGodMode)
             {
                 NetworkCurrentStamina =
-                    _maxStamina;
+                    MaxStamina;
 
                 StaminaExhausted =
                     false;
@@ -724,10 +730,10 @@ namespace EchoProtocol.Networking
                 NetworkCurrentStamina =
                     Mathf.Clamp(
                         NetworkCurrentStamina
-                        + _staminaRegenPerSecond
+                        + StaminaRegen
                         * delta,
                         0f,
-                        _maxStamina);
+                        MaxStamina);
 
                 AnimationSprintHeld =
                     false;
@@ -745,13 +751,13 @@ namespace EchoProtocol.Networking
             if (isSprinting)
             {
                 NetworkCurrentStamina -=
-                    _sprintStaminaDrainPerSecond
+                    SprintStaminaDrain
                     * delta;
             }
             else
             {
                 NetworkCurrentStamina +=
-                    _staminaRegenPerSecond
+                    StaminaRegen
                     * delta;
             }
 
@@ -759,7 +765,7 @@ namespace EchoProtocol.Networking
                 Mathf.Clamp(
                     NetworkCurrentStamina,
                     0f,
-                    _maxStamina);
+                    MaxStamina);
 
             if (NetworkCurrentStamina
                 <= _minStaminaToSprint)
@@ -790,10 +796,10 @@ namespace EchoProtocol.Networking
                 _offlineCurrentStamina =
                     Mathf.Clamp(
                         _offlineCurrentStamina
-                        + _staminaRegenPerSecond
+                        + StaminaRegen
                         * delta,
                         0f,
-                        _maxStamina);
+                        MaxStamina);
 
                 _offlineAnimationSprinting =
                     false;
@@ -811,13 +817,13 @@ namespace EchoProtocol.Networking
             if (isSprinting)
             {
                 _offlineCurrentStamina -=
-                    _sprintStaminaDrainPerSecond
+                    SprintStaminaDrain
                     * delta;
             }
             else
             {
                 _offlineCurrentStamina +=
-                    _staminaRegenPerSecond
+                    StaminaRegen
                     * delta;
             }
 
@@ -825,7 +831,7 @@ namespace EchoProtocol.Networking
                 Mathf.Clamp(
                     _offlineCurrentStamina,
                     0f,
-                    _maxStamina);
+                    MaxStamina);
 
             if (_offlineCurrentStamina
                 <= _minStaminaToSprint)

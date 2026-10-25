@@ -238,6 +238,7 @@ namespace EchoProtocol.AI.Minions
         private float _renderFlightHeight = -1f;
         [Networked] public NetworkBool IsMoving { get; private set; }
         [Networked] public uint AttackSequence { get; private set; }
+        [Networked] public uint ConfirmedHitSequence { get; private set; }
         [Networked] public int AttackKindValue { get; private set; }
         [Networked] public float FlightHeightValue { get; private set; }
         [Networked] public uint AlertSequence { get; private set; }
@@ -301,6 +302,7 @@ namespace EchoProtocol.AI.Minions
         private string _currentLocomotionAnimation;
         private bool _deathAnimationPlayed;
         private bool _catfishDeathPoseFrozen;
+        public float DeathVisualAlpha { get; private set; } = 1f;
         private Material[] _catfishFadeMaterials;
         private Color[] _catfishFadeBaseColors;
         private bool _stalkerAlertDeliveredForTarget;
@@ -315,6 +317,7 @@ namespace EchoProtocol.AI.Minions
         private Vector3 _catfishLandEntry;
         private bool _hasCatfishLandEntry;
         private bool _catfishOnLand;
+        public bool IsOnLand => !FloodedWaterBoundary.TryGetSwimSurface(transform.position, out _, 0.1f);
         private bool _catfishWasInWater;
         private bool _catfishPatrolCrossing;
         private Vector3 _map2FlightDestination;
@@ -370,6 +373,7 @@ namespace EchoProtocol.AI.Minions
             _renderedAlertSequence = AlertSequence;
             _deathAnimationPlayed = false;
             _catfishDeathPoseFrozen = false;
+            DeathVisualAlpha = 1f;
             _lastVisiblePlayerAt = Time.time;
             _lastNearPlayerAt = Time.time;
             _nextPurgePatrolAt = 0f;
@@ -1583,8 +1587,10 @@ namespace EchoProtocol.AI.Minions
                 var disruptorMovement = playerObject.GetComponent<NetworkPlayerMovement>();
                 if (disruptorMovement == null) return;
                 CommitAttack(CreepMinionAttackKind.MeleeSlow);
-                disruptorMovement.TryApplySlowAuthoritative(slowMultiplier, IsPurgeCatfish ? 1.25f : slowDurationSeconds);
-                life.TryApplyAuthoritativeDamage(attackDamage, "MINION_DISRUPTOR", transform.position);
+                bool damaged = IsPurgeCatfish ? life.TryApplyPurgeFishcatDamage(transform.position)
+                    : life.TryApplyAuthoritativeDamage(attackDamage, "MINION_DISRUPTOR", transform.position);
+                if (damaged && IsPurgeCatfish) ConfirmedHitSequence++;
+                if (damaged) disruptorMovement.TryApplySlowAuthoritative(slowMultiplier, IsPurgeCatfish ? 1.25f : slowDurationSeconds);
                 if (!IsPurgeCatfish) disruptorMovement.TryApplyKnockbackAuthoritative(
                     playerObject.transform.position - transform.position,
                     attackKnockbackSpeed,
@@ -2224,6 +2230,7 @@ namespace EchoProtocol.AI.Minions
             if (remaining > fadeSeconds) return;
             EnsureCatfishFadeMaterials();
             float opacity = Mathf.Clamp01(remaining / fadeSeconds);
+            DeathVisualAlpha = opacity;
             for (int i = 0; i < _catfishFadeMaterials.Length; i++)
             {
                 var material = _catfishFadeMaterials[i];

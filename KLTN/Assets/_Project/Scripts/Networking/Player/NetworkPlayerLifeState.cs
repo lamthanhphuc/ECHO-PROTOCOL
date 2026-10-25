@@ -197,6 +197,7 @@ namespace EchoProtocol.Networking
                 BleedoutTimer = TickTimer.None;
                 ReviveTimer = TickTimer.None;
                 ProtectionTimer = TickTimer.None;
+                PurgeFishcatDamageProtection = TickTimer.None;
                 PausedBleedoutRemainingSeconds = 0f;
                 CatchTimer = TickTimer.None;
                 CaughtByGhostId = default;
@@ -319,6 +320,17 @@ namespace EchoProtocol.Networking
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             GetComponent<PlayerJumpscareController>()?.StopJumpscare();
+        }
+
+        [Networked] private TickTimer PurgeFishcatDamageProtection { get; set; }
+
+        public bool TryApplyPurgeFishcatDamage(Vector3 hitPosition)
+        {
+            if (Object == null || !Object.HasStateAuthority || Runner == null
+                || !PurgeFishcatDamageProtection.ExpiredOrNotRunning(Runner)) return false;
+            if (!TryApplyAuthoritativeDamage(12f, "PURGE_FISHCAT", hitPosition)) return false;
+            PurgeFishcatDamageProtection = TickTimer.CreateFromSeconds(Runner, .5f);
+            return true;
         }
 
         public bool TryApplyAuthoritativeDamage(float damage, string sourceType, Vector3 hitPosition)

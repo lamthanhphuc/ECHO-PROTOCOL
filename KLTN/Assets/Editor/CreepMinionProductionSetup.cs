@@ -127,14 +127,14 @@ public static class CreepMinionProductionSetup
         var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(CatfishControllerPath)
             ?? AnimatorController.CreateAnimatorControllerAtPath(CatfishControllerPath);
         var machine = controller.layers[0].stateMachine;
-        var names = new[] { "Idle", "Run", "Attack01", "GetHit", "Die" };
-        var sources = new[] { "idle", "run", "attack1", "hit", "die" };
+        var names = new[] { "Idle", "Run", "Attack01", "GetHit", "Die", "Walk" };
+        var sources = new[] { "idle", "run", "attack1", "hit", "die", "walk" };
         for (int i = 0; i < names.Length; i++)
         {
             string path = $"{CatfishDirectory}/Animation/Catfish@{sources[i]}.FBX";
             var importer = (ModelImporter)AssetImporter.GetAtPath(path);
             if (importer == null) throw new InvalidOperationException("Missing Catfish animation: " + path);
-            if (names[i] == "Idle" || names[i] == "Run" || names[i] == "GetHit")
+            if (names[i] == "Idle" || names[i] == "Run" || names[i] == "Walk" || names[i] == "GetHit")
             {
                 var clips = importer.clipAnimations.Length > 0 ? importer.clipAnimations : importer.defaultClipAnimations;
                 if (clips.Any(clip => !clip.loopTime))
