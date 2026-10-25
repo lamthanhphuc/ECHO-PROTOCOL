@@ -30,7 +30,13 @@ namespace EchoProtocol.AI.AED
         public static string MarkerId(Transform item)
         {
             var parts = new Stack<string>();
-            for (var current = item; current != null; current = current.parent) parts.Push(current.name + ":" + current.GetSiblingIndex());
+            for (var current = item; current != null; current = current.parent)
+            {
+                int index = current.parent == null
+                    ? current.gameObject.scene.GetRootGameObjects().TakeWhile(x => x != current.gameObject).Count(x => x.name == current.name)
+                    : current.GetSiblingIndex();
+                parts.Push(current.name + ":" + index);
+            }
             return AEDV02Plan.Hash(item.gameObject.scene.path + "/" + string.Join("/", parts));
         }
         public static Transform[] Zone2ExitGates(Scene scene)

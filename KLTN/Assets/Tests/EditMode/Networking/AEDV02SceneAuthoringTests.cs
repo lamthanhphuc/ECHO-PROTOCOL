@@ -11,6 +11,33 @@ namespace EchoProtocol.Networking.Tests
     public sealed class AEDV02SceneAuthoringTests
     {
         [Test]
+        public void AEDV02_MarkerIdentityIgnoresUnrelatedRootReordering()
+        {
+            var source = Type.GetType("EchoProtocol.AI.AED.AEDV02SceneSource, Assembly-CSharp", true);
+            var markerId = source.GetMethod("MarkerId");
+            var root = new GameObject("AEDV02 identity root");
+            var child = new GameObject("Door");
+            var unrelated = new GameObject("AEDV02 unrelated root");
+            var duplicate = new GameObject(root.name);
+            var duplicateChild = new GameObject(child.name);
+            try
+            {
+                child.transform.SetParent(root.transform);
+                duplicateChild.transform.SetParent(duplicate.transform);
+                var expected = markerId.Invoke(null, new object[] { child.transform });
+                unrelated.transform.SetAsFirstSibling();
+                Assert.That(markerId.Invoke(null, new object[] { child.transform }), Is.EqualTo(expected));
+                Assert.That(markerId.Invoke(null, new object[] { duplicateChild.transform }), Is.Not.EqualTo(expected));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+                UnityEngine.Object.DestroyImmediate(unrelated);
+                UnityEngine.Object.DestroyImmediate(duplicate);
+            }
+        }
+
+        [Test]
         public void AEDV02_SafeRoomRegistryFailsClosedAndRejectsCrossingRoute()
         {
             var manifest = new AEDV02SceneManifest
