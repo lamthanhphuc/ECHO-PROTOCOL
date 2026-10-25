@@ -1,5 +1,9 @@
 # AED v0.2 — remaining decisions and verification boundaries
 
+## Current checkpoint — 2026-10-25 (`3c1d0e3`)
+
+The historical profile now includes the independent `ResourceManagement` axis, and the Host uses it for resource increase proposals. Backend build and 707 tests passed. SciFi has one Safe Room marker and matching Unity/Backend manifests; this is static evidence, pending current Unity scene verification. Unity batch, Windows build, native Host/Client transaction, twelve owner scenarios, fairness and audiovisual judgments remain unverified. Phase C Adaptive-only public UI and release flags stay gated. Older checkpoint text below is historical.
+
 
 ## Mandatory implementation blockers — final static review
 

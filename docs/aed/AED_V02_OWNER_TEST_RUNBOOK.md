@@ -1,5 +1,9 @@
 # AED v0.2 Rev02 — owner verification runbook
 
+## Current checkpoint — 2026-10-25 (`3c1d0e3`)
+
+Backend build and 707/707 tests passed on an isolated local stack. SciFi now has one authored Safe Room marker and both manifest copies match. The project Unity Editor was open during this checkpoint; Unity batch, Windows build, native Host/Client, Fixed runtime and twelve owner scenarios remain NOT RUN. Use a fresh matching build for later native acceptance. The older status and Safe Room statements below refer to an earlier source checkpoint.
+
 ## 1. Status and environment
 
 This candidate is **IMPLEMENTATION INCOMPLETE — Backend CI 703 PASS**. The Backend validation and regression suite passed in CI; Unity/native verification still has not run. Commands below remain instructions for the owner's later verification, not multiplayer acceptance proof. The shipped manifests still require owner-authored Safe Room export for live scenes.

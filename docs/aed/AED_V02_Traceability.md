@@ -1,5 +1,7 @@
 # Rev02 scenario traceability
 
+Current checkpoint 2026-10-25 (`3c1d0e3`): Backend 707/707 PASS and ResourceManagement profile/Host-axis mismatch fixed. SciFi has one authored Safe Room marker and byte-identical manifests. Unity/native/owner E2E and Fixed runtime regression are NOT RUN; all twelve E2E rows below remain UNVERIFIED. Phase C remains gated.
+
 All 323 scenario rows remain UNVERIFIED. Implementation is INCOMPLETE: ResourceManagement and Safe Room source paths have been added, but focused regression coverage, valid scene export and full deterministic scenario orchestration remain mandatory blockers (see Remaining Contract Decisions). Rows are implementation/test pointers, not executed acceptance proof. This shell-only continuation did not run Unity Editor operations, tests/build/native gameplay.
 
 Earlier source additions include Scanner -> NetworkFieldScanner / independent periodic Scannables / AEDV02ScannerVerification / twelve ingested cases; Jammer -> existing deploy gateway / actual driver progress / stable match-phase-user provenance / AEDV02JammerVerification / eight ingested cases. Tool shape/serialization adds seven cases and Cabinet reservation adds five. Native topology comparator adds six cases. Those earlier tests remain authored, NOT RUN. This continuation adds ResourceManagement action ingestion/reconstruction and Safe Room source guards, but adds no new regression tests.

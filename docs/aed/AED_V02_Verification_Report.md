@@ -1,5 +1,9 @@
 # AED v0.2 Rev02 verification — 2026-10-15
 
+## Current checkpoint — 2026-10-25 (`3c1d0e3`)
+
+Branch `feature/ltp-aed-v02-map1-completion` started from LTP `0f69c6dfa48366f4e6f990547d7ae2ce3fdcd3ce`. Backend build succeeded with 0 errors and 2 existing xUnit analyzer warnings. `scripts/Test-AEDV02.ps1 -BackendOnly` passed 707/707 tests against an isolated local PostgreSQL/MongoDB stack; output: `KLTN/Temp/AEDV02/Current/Backend/backend-full.trx`. ResourceManagement focused tests passed 6/6. `scripts/Test-AEDV02NativeProof.ps1` passed 16 comparator fixtures, which are not native proof. Shared contract check passed. SciFi contains one authored Safe Room marker and both manifest copies are byte identical (SHA256 `d2a04ab400d9bdd50622cf7929bb615bbe7f1b75c8ddc136611772d83b8fd1ec`). Unity Editor was open, so Unity batch, Windows Development build, native Host/Client E2E, Fixed runtime regression and all twelve owner scenarios were NOT RUN. Adaptive-only public UI and release flags remain unchanged. This checkpoint is **BLOCKED**, not release ready. The older report below records earlier source states.
+
 
 ## Mandatory implementation blockers — final static review
 
