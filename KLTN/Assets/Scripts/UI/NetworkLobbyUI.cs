@@ -1088,7 +1088,7 @@ int petId = 0;
             {
                 if (bootstrap != null)
                     await bootstrap.LeaveToMainMenuAsync();
-                else SceneManager.LoadScene(GameConstants.SceneMainMenu);
+                else GameUIFeedback.LoadScene(GameConstants.SceneMainMenu);
             }
             catch (Exception exception)
             {

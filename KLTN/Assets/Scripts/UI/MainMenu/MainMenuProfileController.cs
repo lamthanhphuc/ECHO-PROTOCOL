@@ -77,7 +77,7 @@ namespace EchoProtocol.UI.MainMenu
 
       if (!AuthSession.IsAuthenticated)
       {
-        SceneManager.LoadScene(loginSceneName);
+        GameUIFeedback.LoadScene(loginSceneName);
         return;
       }
 
@@ -399,11 +399,11 @@ namespace EchoProtocol.UI.MainMenu
     {
       if (!AuthSession.IsAuthenticated)
       {
-        SceneManager.LoadScene(loginSceneName);
+        GameUIFeedback.LoadScene(loginSceneName);
         return;
       }
 
-      SceneManager.LoadScene(lobbySceneName);
+      GameUIFeedback.LoadScene(lobbySceneName);
     }
 
     public void OnClickOptions()
@@ -420,7 +420,7 @@ namespace EchoProtocol.UI.MainMenu
         runtime.SetRestoreState(
           SessionRestoreState.None);
 
-        SceneManager.LoadScene(loginSceneName);
+        GameUIFeedback.LoadScene(loginSceneName);
       });
     }
 
@@ -559,7 +559,7 @@ namespace EchoProtocol.UI.MainMenu
 
           if (!AuthSession.IsAuthenticated)
           {
-            SceneManager.LoadScene(loginSceneName);
+            GameUIFeedback.LoadScene(loginSceneName);
             return;
           }
 

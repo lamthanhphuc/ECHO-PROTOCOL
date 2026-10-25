@@ -36,6 +36,22 @@ namespace EchoProtocol.Networking
             if (AlienHuntMission.Instance.Act(actor, life.transform, entity, furnace))
                 EchoProtocol.Networking.Authority.MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
         }
+        public void RequestDebugHuntItem(HuntKind kind)
+        {
+            if (!HasValidNetworkObject() || (kind != HuntKind.Meat && kind != HuntKind.Jerrycan)) return;
+            if (Object.HasStateAuthority)
+            { if (TryGetLocalRequester(out var player)) TryDebugHuntItem(player, kind); }
+            else RpcDebugHuntItem(kind);
+        }
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcDebugHuntItem(HuntKind kind, RpcInfo info = default) => TryDebugHuntItem(info.Source, kind);
+        private void TryDebugHuntItem(PlayerRef player, HuntKind kind)
+        {
+            if (!Object.HasStateAuthority || IsEnded || !HuntReady ||
+                (kind != HuntKind.Meat && kind != HuntKind.Jerrycan) ||
+                !TryResolveActivePlayer(player, out var life) || !life.DebugGodMode) return;
+            AlienHuntMission.Instance?.DebugGive(player, kind);
+        }
         public void RecordHuntBurn(Vector3? ritualPosition = null)
         {
             if (!Object.HasStateAuthority || IsEnded || !AlienHuntMission.Instance) return;

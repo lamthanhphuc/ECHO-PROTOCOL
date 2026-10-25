@@ -2,6 +2,7 @@ using System.Collections;
 using EchoProtocol.Api;
 using EchoProtocol.Auth;
 using EchoProtocol.Core;
+using EchoProtocol.UI;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -11,12 +12,14 @@ namespace EchoProtocol.Auth
   {
     private void Start()
     {
+      GameUIFeedback.Instance.ShowStartup();
       var runtime = AuthRuntime.EnsureExists();
       StartCoroutine(RunBootstrapFlow(runtime));
     }
 
     private IEnumerator RunBootstrapFlow(AuthRuntime runtime)
     {
+      yield return null;
       if (!TokenStorage.HasUsableSession())
       {
         if (TokenStorage.HasToken()
@@ -27,7 +30,7 @@ namespace EchoProtocol.Auth
         }
 
         runtime.SetRestoreState(SessionRestoreState.None);
-        SceneManager.LoadScene(GameConstants.SceneLogin);
+        GameUIFeedback.LoadScene(GameConstants.SceneLogin);
         yield break;
       }
 
@@ -45,7 +48,7 @@ namespace EchoProtocol.Auth
       if (meResult != null && meResult.IsSuccess && meResult.Data != null && meResult.Data.success)
       {
         runtime.SetRestoreState(SessionRestoreState.Succeeded);
-        SceneManager.LoadScene(GameConstants.SceneMainMenu);
+        GameUIFeedback.LoadScene(GameConstants.SceneMainMenu);
         yield break;
       }
 
@@ -53,12 +56,12 @@ namespace EchoProtocol.Auth
       {
         runtime.AuthService.LogoutLocal();
         runtime.SetRestoreState(SessionRestoreState.FailedUnauthorized);
-        SceneManager.LoadScene(GameConstants.SceneLogin);
+        GameUIFeedback.LoadScene(GameConstants.SceneLogin);
         yield break;
       }
 
       runtime.SetRestoreState(SessionRestoreState.FailedNetwork);
-      SceneManager.LoadScene(GameConstants.SceneLogin);
+      GameUIFeedback.LoadScene(GameConstants.SceneLogin);
     }
   }
 }

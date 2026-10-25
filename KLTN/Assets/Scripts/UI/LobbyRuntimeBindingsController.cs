@@ -500,7 +500,7 @@ namespace EchoProtocol.UI
                         .ShutdownRunnerAsync();
                 }
 
-                SceneManager.LoadScene(
+                GameUIFeedback.LoadScene(
                     GameConstants.SceneMainMenu);
             }
             catch (Exception exception)

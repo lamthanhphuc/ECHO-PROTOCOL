@@ -22,7 +22,8 @@ namespace EchoProtocol.UI
         private Button _accept, _cancel, _progressCancel;
         private Action _accepted, _cancelled;
         private Func<string> _bodyProvider;
-        private bool _resolutionDialog, _returning;
+        private bool _resolutionDialog, _returning, _startup, _sceneTransition;
+        private int _sceneChangeFrame = -1;
         private float _toastUntil, _lastRejection;
         private NetworkSessionState _previousState;
         private NetworkBootstrap _previousBootstrap;
@@ -69,7 +70,8 @@ namespace EchoProtocol.UI
 
             _progress = Layer("NetworkTransition", new Color(0.018f, 0.022f, 0.024f, 1f));
             var progressCard = Card(_progress.transform, 600, 230);
-            _progressText = Label(progressCard, 28, 30, 544, 112, 19);
+            Label(progressCard, 28, 22, 544, 42, 32).text = "ECHO PROTOCOL";
+            _progressText = Label(progressCard, 28, 74, 544, 82, 19);
             _progressCancel = Button(progressCard, "ReturnToMenu", 28, 162, 544, 40, out var progressCancelText);
             progressCancelText.text = GameLanguage.Choose("Hủy và về menu", "Cancel and return to menu");
             _progressCancel.onClick.AddListener(ReturnToMenu);
@@ -101,6 +103,14 @@ namespace EchoProtocol.UI
             _lock.Acquire(LocalPlayer(), () => Complete(false), allowWhileDowned: true);
             _modal.SetActive(true);
             _cancel.Select();
+        }
+
+        public void ShowStartup() => _startup = true;
+        public void BeginSceneTransition() => _sceneTransition = true;
+        public static void LoadScene(string sceneName, LoadSceneMode mode = LoadSceneMode.Single)
+        {
+            Instance.BeginSceneTransition();
+            SceneManager.LoadScene(sceneName, mode);
         }
 
         public static string LeaveWarning() => NetworkBootstrap.Instance != null && NetworkBootstrap.Instance.Runner != null
@@ -141,7 +151,14 @@ namespace EchoProtocol.UI
             bool retry = network != null && network.IsReconnecting;
             bool loading = network != null && network.IsSceneLoading;
             bool joining = network != null && network.State == NetworkSessionState.Connecting;
-            bool show = retry || loading || _returning || joining;
+            bool leaving = network != null && network.State == NetworkSessionState.ShuttingDown;
+            bool settling = _sceneChangeFrame >= 0 &&
+                (Time.frameCount <= _sceneChangeFrame + 1 ||
+                 (network != null && network.Runner != null &&
+                  LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name) &&
+                  !LocalGameplaySpawnReady(network)));
+            if (!settling) _sceneChangeFrame = -1;
+            bool show = _startup || _sceneTransition || settling || retry || loading || leaving || _returning || joining;
             bool opened = show && !_progress.activeSelf;
             if (show && !_progress.activeSelf)
             {
@@ -164,7 +181,8 @@ namespace EchoProtocol.UI
                     $"Reconnecting…\nAttempt {network.ReconnectAttempt} · {Mathf.CeilToInt(network.ReconnectSecondsRemaining)} seconds remaining\nCheck your network, or cancel to return to the menu.");
                 _progressCancel.GetComponentInChildren<TMP_Text>().text = GameLanguage.Choose("Hủy và về menu", "Cancel and return to menu");
             }
-            else _progressText.text = _returning ? GameLanguage.Choose("Đang rời phòng…", "Leaving room…")
+            else _progressText.text = _startup ? GameLanguage.Choose("Đang khởi động…\nVui lòng chờ.", "Starting…\nPlease wait.")
+                : _returning || leaving ? GameLanguage.Choose("Đang rời phòng…", "Leaving room…")
                 : loading ? GameLanguage.Choose("Đang tải khu vực…\nVui lòng chờ.", "Loading area…\nPlease wait.")
                 : GameLanguage.Choose("Đang kết nối…\nVui lòng chờ.", "Connecting…\nPlease wait.");
             if (network != null && network.State != _previousState)
@@ -187,7 +205,7 @@ namespace EchoProtocol.UI
             try
             {
                 if (NetworkBootstrap.Instance != null) await NetworkBootstrap.Instance.LeaveToMainMenuAsync();
-                else SceneManager.LoadScene(EchoProtocol.Core.GameConstants.SceneMainMenu);
+                else LoadScene(EchoProtocol.Core.GameConstants.SceneMainMenu);
             }
             catch (Exception exception)
             {
@@ -222,6 +240,9 @@ namespace EchoProtocol.UI
 
         private void SceneChanged(Scene oldScene, Scene newScene)
         {
+            _startup = false;
+            _sceneTransition = false;
+            _sceneChangeFrame = Time.frameCount;
             Complete(false);
             _toastUntil = 0;
             _lock.Release();
@@ -241,6 +262,17 @@ namespace EchoProtocol.UI
         {
             var camera = FindAnyObjectByType<PlayerCamera>();
             return camera != null && camera.Target != null ? camera.Target.gameObject : gameObject;
+        }
+        private static bool LocalGameplaySpawnReady(NetworkBootstrap network)
+        {
+            var runner = network.Runner;
+            if (!runner.LocalPlayer.IsRealPlayer ||
+                !runner.TryGetPlayerObject(runner.LocalPlayer, out var playerObject) ||
+                playerObject == null || !playerObject.IsValid ||
+                !playerObject.TryGetComponent<LobbyPlayerState>(out var playerState) ||
+                !playerState.IsGameplayPlayer || !playerState.GameplaySpawnReady) return false;
+            var camera = FindAnyObjectByType<PlayerCamera>();
+            return camera != null && camera.Target == playerObject.transform;
         }
         private static void EnsureEventSystem()
         {

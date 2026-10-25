@@ -190,7 +190,10 @@ namespace EchoProtocol.Networking
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
             if (SceneManager.GetActiveScene().name != LobbySceneName)
+            {
+                EchoProtocol.UI.GameUIFeedback.Instance.BeginSceneTransition();
                 _ = SceneManager.LoadSceneAsync(LobbySceneName, LoadSceneMode.Single);
+            }
         }
 
         public Task ShutdownRunnerAsync() => ShutdownAsync(returnToLobby: true);
@@ -212,6 +215,8 @@ namespace EchoProtocol.Networking
 
         private static async Task LoadDestinationAsync(string sceneName)
         {
+            if (SceneManager.GetActiveScene().name != sceneName)
+                EchoProtocol.UI.GameUIFeedback.Instance.BeginSceneTransition();
             var operation = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
             if (operation != null) while (!operation.isDone) await Task.Yield();
         }
@@ -681,6 +686,7 @@ namespace EchoProtocol.Networking
             var activeScene = SceneManager.GetActiveScene();
             if (activeScene.IsValid() && activeScene.name != BootstrapSceneName)
             {
+                EchoProtocol.UI.GameUIFeedback.Instance.BeginSceneTransition();
                 _ = SceneManager.LoadSceneAsync(BootstrapSceneName, LoadSceneMode.Single);
             }
         }

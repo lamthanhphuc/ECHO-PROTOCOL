@@ -461,7 +461,7 @@ namespace EchoProtocol.UI.Result
                     ResultSession.Clear();
                     // A direct Result preview has no session services. Entering Lobby directly
                     // leaves its Host/Join controls without the persistent Bootstrap owner.
-                    SceneManager.LoadScene(GameConstants.SceneBootstrap, LoadSceneMode.Single);
+                    GameUIFeedback.LoadScene(GameConstants.SceneBootstrap, LoadSceneMode.Single);
                 }
             }
             catch (Exception exception)

@@ -1707,6 +1707,7 @@ var toolId =
             else if (gameplay && movement != null && playerObject.HasStateAuthority)
             {
                 movement.ApplyGameplaySpawnViewAuthoritative(pose.Rotation);
+                state?.MarkGameplaySpawnReadyAuthoritative();
             }
 
             RuntimeLog.Log(

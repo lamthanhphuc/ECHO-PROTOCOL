@@ -112,6 +112,9 @@ namespace EchoProtocol.Networking
         public NetworkBool IsGameplayPlayer { get; private set; }
 
         [Networked]
+        public NetworkBool GameplaySpawnReady { get; private set; }
+
+        [Networked]
         public NetworkBool Disconnected { get; private set; }
 
         public void SetDisconnectedAuthoritative(bool disconnected)
@@ -131,6 +134,7 @@ namespace EchoProtocol.Networking
 
             IsReady = false;
             IsGameplayPlayer = false;
+            GameplaySpawnReady = false;
             IsCoreStabilized = false;
             CarriedCoreId = default;
             Disconnected = false;
@@ -173,8 +177,15 @@ namespace EchoProtocol.Networking
             TeamToolUsesRemaining = UsesForTool(toolId);
             IsReady = false;
             IsGameplayPlayer = isGameplayPlayer;
+            GameplaySpawnReady = false;
             IsCoreStabilized = false;
             if (!isGameplayPlayer) CarriedCoreId = default;
+        }
+
+        public void MarkGameplaySpawnReadyAuthoritative()
+        {
+            if (Object != null && Object.IsValid && Object.HasStateAuthority && IsGameplayPlayer)
+                GameplaySpawnReady = true;
         }
 
         public void SetStabilizerBuffedAuthoritative(

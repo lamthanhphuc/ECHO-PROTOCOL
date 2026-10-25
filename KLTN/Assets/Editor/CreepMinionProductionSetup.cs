@@ -86,14 +86,16 @@ public static class CreepMinionProductionSetup
         var existing = AssetDatabase.LoadAssetAtPath<AnimatorController>(DisruptorControllerPath);
         if (existing != null)
         {
+            EnsureState(existing, "Walk", "Assets/Stylized3DMonster/Monster10/Anim/InPlace_Anim/Monster10_Walk_InPlace.anim");
             EnsureState(existing, "GetHit", "Assets/Stylized3DMonster/Monster10/Anim/InPlace_Anim/Monster10_GetHit.anim");
             EnsureState(existing, "Die", "Assets/Stylized3DMonster/Monster10/Anim/InPlace_Anim/Monster10_Die.anim");
             return existing;
         }
-        var names = new[] { "Idle", "Run", "Shoot", "Attack2", "Attack01", "GetHit", "Die" };
+        var names = new[] { "Idle", "Walk", "Run", "Shoot", "Attack2", "Attack01", "GetHit", "Die" };
         var sourcePaths = new[]
         {
             "Assets/Stylized3DMonster/Monster10/Anim/InPlace_Anim/Monster10_Idle.anim",
+            "Assets/Stylized3DMonster/Monster10/Anim/InPlace_Anim/Monster10_Walk_InPlace.anim",
             "Assets/Stylized3DMonster/Monster10/Anim/InPlace_Anim/Monster10_Run_InPlace.anim",
             "Assets/Stylized3DMonster/Monster10/Anim/InPlace_Anim/Monster10_Shoot.anim",
             "Assets/Stylized3DMonster/Monster10/Anim/InPlace_Anim/Monster10_Attack02_InPlace.anim",
@@ -110,7 +112,7 @@ public static class CreepMinionProductionSetup
         {
             var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(sourcePaths[i]);
             if (clip == null) throw new InvalidOperationException("Missing Monster10 animation clip: " + sourcePaths[i]);
-            if (names[i] == "Run") MakeLoopingInPlace(clip);
+            if (names[i] == "Walk" || names[i] == "Run") MakeLoopingInPlace(clip);
             else if (names[i] == "GetHit") MakeLooping(clip);
             var state = machine.AddState(names[i]);
             state.motion = clip;
@@ -180,6 +182,7 @@ public static class CreepMinionProductionSetup
         var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath);
         if (clip == null) throw new InvalidOperationException("Missing animation clip: " + clipPath);
         if (stateName == "GetHit") MakeLooping(clip);
+        else if (stateName == "Walk") MakeLoopingInPlace(clip);
 
         var machine = controller.layers[0].stateMachine;
         if (machine.states.Any(child => child.state.name == stateName)) return;

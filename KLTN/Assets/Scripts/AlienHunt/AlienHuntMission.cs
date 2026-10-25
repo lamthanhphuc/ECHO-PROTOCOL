@@ -214,6 +214,22 @@ namespace EchoProtocol.Networking
             for (int i = 0; i < actors.Length; i++) if (Read(i).Carrier == player) return i;
             return -1;
         }
+        public bool DebugGive(PlayerRef player, HuntKind kind)
+        {
+            if (!Authority || !Ready || Completed || HeldIndex(player) >= 0 || kind == HuntKind.Alien) return false;
+            for (int i = 0; i < actors.Length; i++)
+            {
+                if (actors[i].Kind != kind) continue;
+                var state = Read(i);
+                if (!state.Carrier.IsNone || (state.Stage != 0 && !(kind == HuntKind.Meat && state.Stage == 2 && !IsBaitClaimed(i)))) continue;
+                state.Stage = 1;
+                state.Carrier = player;
+                state.LastGroundPosition = state.Position;
+                Write(i, state);
+                return true;
+            }
+            return false;
+        }
         public bool IsBaitClaimed(int index)
         {
             for (int i = 0; i < AlienCount; i++)
