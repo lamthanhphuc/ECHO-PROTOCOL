@@ -229,6 +229,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         var now = UtcNow();
         match.Status = MatchAuthorityStatus.InMatch;
         match.StartedAtUtc ??= now;
+        // Unity scene loading can pause host heartbeats; resume the normal lease on the next renewal.
+        match.LeaseExpiresAtUtc = now.AddSeconds(_settings.LeaseLifetimeSeconds * 2);
         match.UpdatedAtUtc = now;
         await _db.SaveChangesAsync(cancellationToken);
         return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Match started");

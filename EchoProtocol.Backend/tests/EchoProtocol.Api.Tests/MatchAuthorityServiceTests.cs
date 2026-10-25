@@ -54,6 +54,10 @@ public sealed class MatchAuthorityServiceTests
         Assert.True(created.IsSuccess);
 
         await BindAsync(service, hostId, hostId, created.Data!.MatchId, "solo-room", 1);
+        var binding = await db.MatchAuthorityBindings.SingleAsync();
+        binding.LeaseExpiresAtUtc = Now.UtcDateTime.AddSeconds(-1);
+        Assert.False((await service.StartAsync(hostId, created.Data.MatchId, CancellationToken.None)).IsSuccess);
+        binding.LeaseExpiresAtUtc = Now.UtcDateTime.AddSeconds(1);
 
         var started = await service.StartAsync(hostId, created.Data.MatchId, CancellationToken.None);
 
@@ -62,6 +66,7 @@ public sealed class MatchAuthorityServiceTests
         Assert.Equal(
             Now.UtcDateTime,
             (await db.MatchAuthorityBindings.SingleAsync()).StartedAtUtc);
+        Assert.Equal(Now.UtcDateTime.AddSeconds(90), started.Data.LeaseExpiresAtUtc);
     }
 
     [Fact]
