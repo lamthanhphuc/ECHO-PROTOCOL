@@ -7,6 +7,15 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed class AEDV02ResourceManagementOpportunityTests
 {
+    [Fact, Trait("Category", "AEDV02")]
+    public void HistoricalResourceIncreaseRequiresDedicatedAxis()
+    {
+        Assert.Contains(AEDV02PilotOpportunities.ResourceManagementAxis, AEDV02PilotOpportunities.HistoricalIncreaseAxes);
+        Assert.False(AEDV02PilotOpportunities.HasResourceManagementHistory(["Tool"]));
+        Assert.True(AEDV02PilotOpportunities.HasResourceManagementHistory([AEDV02PilotOpportunities.ResourceManagementAxis]));
+        Assert.False(AEDV02PilotOpportunities.HasResourceManagementHistory(null!));
+    }
+
     [Theory, Trait("Category", "AEDV02")]
     [InlineData("Success")]
     [InlineData("Failure")]

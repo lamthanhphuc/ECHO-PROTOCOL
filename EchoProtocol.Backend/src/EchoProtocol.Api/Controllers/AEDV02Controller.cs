@@ -64,7 +64,7 @@ public sealed class AEDV02Controller(AppDbContext db, AEDV02SourceVerifier sourc
     {
         var axes = new List<string>();
         if (users.Length is >= 1 and <= 4)
-            foreach (string axis in new[] { "Stalker", "Minion", "Tool", "ResourceManagement" })
+            foreach (string axis in EchoProtocol.AI.Common.AED.AEDV02PilotOpportunities.HistoricalIncreaseAxes)
             {
                 var history = await new AEDV02HistoricalCompetenceService(db, telemetry, clock).ReadAsync(match, users, scene, axis, ct);
                 if (history.Count == users.Length && history.Values.All(x => x.ReadyForIncrease)) axes.Add(axis);

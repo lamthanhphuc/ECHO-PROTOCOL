@@ -16,8 +16,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const int MaxDetectFrames = 5;
         private const int MaxChaseFrames = 30;
         private const int MaxAttackFrames = 5;
-        private const int MaxTimedRecoverFrames = 300;
-        private const int MaxPreRecoveryWindowFrames = 600;
+        private const float MaxWallWaitSeconds = 30f;
         private const float FloatTolerance = 0.0001f;
         private const float AttackRange = 2f;
         private const float AttackWindup = 0.15f;
@@ -58,7 +57,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetEnumPropertyName(fixture.Controller, "LastAttackResult"), Is.EqualTo("None"));
             Assert.That(GetFloatProperty(fixture.Controller, "AttackElapsedTime"), Is.LessThan(AttackWindup));
 
-            yield return WaitUntilStateWithinGameTime(fixture.Controller, "RECOVER", AttackToRecoverTimeout, MaxTimedRecoverFrames);
+            yield return WaitUntilStateWithinGameTime(fixture.Controller, "RECOVER", AttackToRecoverTimeout);
 
             AssertState(fixture.Controller, "RECOVER");
             Assert.That(GetEnumPropertyName(fixture.Controller, "LastAttackResult"), Is.EqualTo("Hit"));
@@ -75,11 +74,11 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             fixture.PlayerDummy.transform.position = new Vector3(0f, 1f, 1f);
             yield return WaitUntilState(fixture.Controller, "ATTACK", MaxAttackFrames);
-            yield return WaitUntilStateWithinGameTime(fixture.Controller, "RECOVER", AttackToRecoverTimeout, MaxTimedRecoverFrames);
+            yield return WaitUntilStateWithinGameTime(fixture.Controller, "RECOVER", AttackToRecoverTimeout);
 
             var observedTime = 0f;
-            var frameCount = 0;
-            while (observedTime < PreRecoveryObservationWindow && frameCount < MaxPreRecoveryWindowFrames)
+            var wallDeadline = Time.realtimeSinceStartup + MaxWallWaitSeconds;
+            while (observedTime < PreRecoveryObservationWindow && Time.realtimeSinceStartup < wallDeadline)
             {
                 AssertState(fixture.Controller, "RECOVER");
                 Assert.That(GetFloatProperty(fixture.Controller, "RecoverElapsedTime"), Is.LessThan(AttackRecovery));
@@ -87,13 +86,12 @@ namespace EchoProtocol.AI.Stalker.Tests
                 yield return null;
 
                 observedTime += Time.deltaTime;
-                frameCount++;
             }
 
             Assert.That(
                 observedTime,
                 Is.GreaterThanOrEqualTo(PreRecoveryObservationWindow),
-                $"RECOVER pre-duration observation reached the {MaxPreRecoveryWindowFrames}-frame safety cap before accumulating {PreRecoveryObservationWindow:0.###} gameplay seconds. ObservedTime={observedTime:0.###}, ObservedFrames={frameCount}, CurrentState={GetEnumPropertyName(fixture.Controller, "CurrentState")}, RecoverElapsedTime={GetFloatProperty(fixture.Controller, "RecoverElapsedTime"):0.###}.");
+                $"RECOVER pre-duration observation did not reach {PreRecoveryObservationWindow:0.###} gameplay seconds within {MaxWallWaitSeconds:0.###} wall seconds. ObservedTime={observedTime:0.###}, CurrentState={GetEnumPropertyName(fixture.Controller, "CurrentState")}, RecoverElapsedTime={GetFloatProperty(fixture.Controller, "RecoverElapsedTime"):0.###}.");
             AssertState(fixture.Controller, "RECOVER");
             Assert.That(GetFloatProperty(fixture.Controller, "RecoverElapsedTime"), Is.LessThan(AttackRecovery));
         }
@@ -165,25 +163,24 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.Fail($"Expected Stalker CurrentState '{expectedStateName}' within {maxFrames} frames, but was '{GetEnumPropertyName(controller, "CurrentState")}'.");
         }
 
-        private static IEnumerator WaitUntilStateWithinGameTime(Component controller, string expectedStateName, float maxGameTime, int maxFrames)
+        private static IEnumerator WaitUntilStateWithinGameTime(Component controller, string expectedStateName, float maxGameTime)
         {
             var elapsedGameTime = 0f;
-            var frameCount = 0;
+            var wallDeadline = Time.realtimeSinceStartup + MaxWallWaitSeconds;
 
             while (GetEnumPropertyName(controller, "CurrentState") != expectedStateName
                 && elapsedGameTime < maxGameTime
-                && frameCount < maxFrames)
+                && Time.realtimeSinceStartup < wallDeadline)
             {
                 yield return null;
 
                 elapsedGameTime += Time.deltaTime;
-                frameCount++;
             }
 
             Assert.That(
                 GetEnumPropertyName(controller, "CurrentState"),
                 Is.EqualTo(expectedStateName),
-                $"Expected Stalker CurrentState '{expectedStateName}' within {maxGameTime:0.###} gameplay seconds and {maxFrames} frames, but was '{GetEnumPropertyName(controller, "CurrentState")}' after {elapsedGameTime:0.###} gameplay seconds and {frameCount} frames.");
+                $"Expected Stalker CurrentState '{expectedStateName}' within {maxGameTime:0.###} gameplay seconds and {MaxWallWaitSeconds:0.###} wall seconds, but was '{GetEnumPropertyName(controller, "CurrentState")}' after {elapsedGameTime:0.###} gameplay seconds.");
         }
 
         private static Type ResolveType(string fullTypeName)

@@ -5,6 +5,14 @@ using NUnit.Framework;
 public sealed class AEDV02PlanTests
 {
     [Test]
+    public void HistoricalResourceIncreaseRequiresDedicatedAxis()
+    {
+        Assert.That(AEDV02PilotOpportunities.HistoricalIncreaseAxes, Does.Contain(AEDV02PilotOpportunities.ResourceManagementAxis));
+        Assert.That(AEDV02PilotOpportunities.HasResourceManagementHistory(new[] { "Tool" }), Is.False);
+        Assert.That(AEDV02PilotOpportunities.HasResourceManagementHistory(new[] { AEDV02PilotOpportunities.ResourceManagementAxis }), Is.True);
+    }
+
+    [Test]
     public void HandoffWaitsForRealZone3DespawnBeforeAllocatingAnotherPositiveAxis()
     {
         var normal = AEDV02Plan.Normal();

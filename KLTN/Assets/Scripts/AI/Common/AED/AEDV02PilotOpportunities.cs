@@ -9,6 +9,11 @@ namespace EchoProtocol.AI.Common.AED
     public static class AEDV02PilotOpportunities
     {
         public const string Version = "AED_V02_PILOT_OPPORTUNITIES_2";
+        public const string ResourceManagementAxis = "ResourceManagement";
+        public static IReadOnlyList<string> HistoricalIncreaseAxes { get; } =
+            Array.AsReadOnly(new[] { "Stalker", "Minion", "Tool", ResourceManagementAxis });
+        public static bool HasResourceManagementHistory(IEnumerable<string> axes) =>
+            axes?.Contains(ResourceManagementAxis) == true;
         public const double MinimumExposureSeconds = 5;
         public const double SafeResolutionSeconds = 10;
         public const double LongChaseSeconds = 20;

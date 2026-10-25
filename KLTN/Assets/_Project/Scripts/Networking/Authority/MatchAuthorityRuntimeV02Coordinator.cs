@@ -149,7 +149,7 @@ namespace EchoProtocol.Networking.Authority
             }
             if (source.increaseAxes.Contains("Stalker") && previous.PositiveTokens(initial) == 0 && previous.Get(AEDV02Key.DetectionAcquireSeconds) >= 1.25)
             { next = previous.With(AEDV02Key.DetectionAcquireSeconds, previous.Get(AEDV02Key.DetectionAcquireSeconds) > 1.25 ? 1.25 : 1); return true; }
-            if (source.increaseAxes.Contains("ResourceManagement") && previous.PositiveTokens(initial) == 0 && supply != null)
+            if (AEDV02PilotOpportunities.HasResourceManagementHistory(source.increaseAxes) && previous.PositiveTokens(initial) == 0 && supply != null)
             {
                 int reduced = (int)previous.Get(AEDV02Key.OptionalToolBudget) - 1;
                 if (reduced >= 0 && EchoProtocol.TeamTools.TeamToolWorldSpawn.CanSetV02SupplyBudget(_bootstrap.Runner, MatchId, reduced))

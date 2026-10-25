@@ -15,7 +15,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const float PathSettleTimeoutSeconds = 2f;
         private const float ArrivalTimeoutSeconds = 8f;
         private const int PathSettleFrameCap = 300;
-        private const int ArrivalFrameCap = 10000;
+        private const float ArrivalWallTimeoutSeconds = 30f;
 
         private static readonly Vector3 AgentStart = new Vector3(-3f, 0f, 0f);
         private static readonly Vector3 Destination = new Vector3(3f, 0f, 0f);
@@ -95,7 +95,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             yield return fixture.ActivateAndWait();
 
             AssertPlanResult(RequestDestination(fixture.Controller, Destination), "Accepted", Destination, true);
-            yield return WaitUntilArrived(fixture.Controller, ArrivalTimeoutSeconds, ArrivalFrameCap);
+            yield return WaitUntilArrived(fixture.Controller, ArrivalTimeoutSeconds);
 
             Assert.That(GetPathStatusName(fixture.Controller), Is.EqualTo("Complete"));
             Assert.That(GetExecutionStatusName(fixture.Controller), Is.EqualTo("Arrived"));
@@ -302,23 +302,22 @@ namespace EchoProtocol.AI.Stalker.Tests
                 $"Expected to observe Complete path before arrival within {timeoutSeconds:0.###} gameplay seconds and {frameCap} frames.");
         }
 
-        private static IEnumerator WaitUntilArrived(object controller, float timeoutSeconds, int frameCap)
+        private static IEnumerator WaitUntilArrived(object controller, float timeoutSeconds)
         {
             var elapsed = 0f;
-            var frames = 0;
+            var wallDeadline = Time.realtimeSinceStartup + ArrivalWallTimeoutSeconds;
             while (!HasArrived(controller)
                 && elapsed < timeoutSeconds
-                && frames < frameCap)
+                && Time.realtimeSinceStartup < wallDeadline)
             {
                 yield return null;
                 elapsed += Time.deltaTime;
-                frames++;
             }
 
             Assert.That(
                 HasArrived(controller),
                 Is.True,
-                $"Expected current HasArrived semantics to become true within {timeoutSeconds:0.###} gameplay seconds and {frameCap} frames.");
+                $"Expected current HasArrived semantics to become true within {timeoutSeconds:0.###} gameplay seconds and {ArrivalWallTimeoutSeconds:0.###} wall seconds; observed {elapsed:0.###} gameplay seconds.");
         }
 
         private static string GetPathStatusName(object controller)
