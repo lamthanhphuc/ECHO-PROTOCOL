@@ -67,6 +67,9 @@ public sealed class MatchAuthorityServiceTests
             Now.UtcDateTime,
             (await db.MatchAuthorityBindings.SingleAsync()).StartedAtUtc);
         Assert.Equal(Now.UtcDateTime.AddSeconds(90), started.Data.LeaseExpiresAtUtc);
+        var renewed = await service.RenewLeaseAsync(hostId, created.Data.MatchId, CancellationToken.None);
+        Assert.True(renewed.IsSuccess);
+        Assert.Equal(started.Data.LeaseExpiresAtUtc, renewed.Data!.LeaseExpiresAtUtc);
     }
 
     [Fact]

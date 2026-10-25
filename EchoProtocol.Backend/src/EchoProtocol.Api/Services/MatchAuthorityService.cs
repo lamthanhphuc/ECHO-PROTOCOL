@@ -200,7 +200,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         }
 
         var now = UtcNow();
-        match!.LeaseExpiresAtUtc = now.AddSeconds(_settings.LeaseLifetimeSeconds);
+        var renewedUntil = now.AddSeconds(_settings.LeaseLifetimeSeconds);
+        if (match!.LeaseExpiresAtUtc < renewedUntil) match.LeaseExpiresAtUtc = renewedUntil;
         match.UpdatedAtUtc = now;
         await _db.SaveChangesAsync(cancellationToken);
         return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Match authority lease renewed");
