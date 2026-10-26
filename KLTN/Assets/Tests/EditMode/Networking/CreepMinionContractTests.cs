@@ -91,6 +91,39 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("GetComponent<CreepMinionRuntime>()", source);
         }
 
+        [Test]
+        public void CreepHostMigration_PersistsFleeAndToolDiveAuthoritativeState()
+        {
+            string source = File.ReadAllText(MinionSource);
+            StringAssert.Contains("[Networked] private Vector3 ReplicatedFleeDestination", source);
+            StringAssert.Contains("[Networked] private float ReplicatedDiveDuration", source);
+            StringAssert.Contains("[Networked] private NetworkBool ReplicatedToolContactResolved", source);
+            StringAssert.Contains("[Networked] private Vector3 ReplicatedToolVictimPosition", source);
+            StringAssert.Contains("[Networked] private int ReplicatedToolRouteRetries", source);
+            Assert.That(source.Contains("out ReplicatedFleeDestination"), Is.False);
+        }
+
+        [Test]
+        public void CreepHostMigration_PersistsDistractionAndDetectionProgress()
+        {
+            string source = File.ReadAllText(MinionSource);
+            StringAssert.Contains("[Networked] private TickTimer ReplicatedDistractionTimer", source);
+            StringAssert.Contains("[Networked] private Vector3 ReplicatedDistractionPoint", source);
+            StringAssert.Contains("[Networked] private float ReplicatedLostSightSeconds", source);
+            StringAssert.Contains("[Networked] private float ReplicatedFlashlightExposureSeconds", source);
+            StringAssert.Contains("ReplicatedDistractionTimer.ExpiredOrNotRunning(Runner)", source);
+            StringAssert.Contains("HM_AI_MINION_RESTORE", source);
+        }
+
+        [Test]
+        public void StalkerHostMigration_LogsSnapshotAndFirstSimulationDivergence()
+        {
+            string stalker = File.ReadAllText("Assets/Scripts/AI/Stalker/Networking/StalkerFusionRuntime.cs");
+            StringAssert.Contains("HM_AI_STALKER_RESTORE", stalker);
+            StringAssert.Contains("HM_AI_STALKER_FIRST_TICK", stalker);
+            StringAssert.Contains("HM_AI_STALKER_STATE_CHANGED", stalker);
+        }
+
         private static Component FindComponentByTypeName(GameObject root, string fullTypeName)
         {
             var components = root.GetComponents<Component>();

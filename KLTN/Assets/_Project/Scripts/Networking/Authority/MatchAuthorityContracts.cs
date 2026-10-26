@@ -111,5 +111,11 @@ namespace EchoProtocol.Networking.Authority
     }
 
     [Serializable]
+    public sealed class DisconnectMatchPlayerRequest
+    {
+        public string expectedUserId;
+    }
+
+    [Serializable]
     public sealed class EmptyMatchAuthorityRequest { }
 }

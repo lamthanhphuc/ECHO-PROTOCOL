@@ -111,6 +111,51 @@ public sealed class MatchAuthorityServiceTests
     }
 
     [Fact]
+    public async Task ActorBeyondRoomCapacity_ProofBindsWithoutExpandingMaxPlayers()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+        var playerId = Guid.NewGuid();
+        var thirdUserId = Guid.NewGuid();
+        var created = await service.CreateAsync(hostId, new CreateMatchAuthorityRequest
+        {
+            FusionSessionName = "rejoin-actor-room",
+            MaxPlayers = 2
+        }, CancellationToken.None);
+        Assert.True(created.IsSuccess);
+
+        var matchId = created.Data!.MatchId;
+        await BindAsync(service, hostId, hostId, matchId, "rejoin-actor-room", 1);
+        await BindAsync(service, hostId, playerId, matchId, "rejoin-actor-room", 8);
+
+        var bound = await db.MatchPlayerBindings.SingleAsync(item =>
+            item.MatchId == matchId && item.UserId == playerId);
+        Assert.Equal(8, bound.FusionActorNumber);
+        Assert.Equal(2, await db.MatchPlayerBindings.CountAsync(item =>
+            item.MatchId == matchId && item.DisconnectedAtUtc == null));
+
+        // Actor 11 is valid as an identifier, but a third player must still
+        // be rejected because only two concurrent players are permitted.
+        var extraProof = await service.IssueJoinProofAsync(
+            thirdUserId, matchId, new IssueJoinProofRequest
+            {
+                FusionActorNumber = 11,
+                FusionSessionName = "rejoin-actor-room"
+            }, CancellationToken.None);
+        Assert.True(extraProof.IsSuccess);
+
+        var excessBinding = await service.BindPlayerAsync(
+            hostId, matchId, new BindMatchPlayerRequest
+            {
+                FusionActorNumber = 11,
+                JoinProof = extraProof.Data!.Proof
+            }, CancellationToken.None);
+        Assert.False(excessBinding.IsSuccess);
+        Assert.Equal("MATCH_CAPACITY_REACHED", excessBinding.ErrorCode);
+    }
+
+    [Fact]
     public async Task InMatch_OnlyExistingRosterMemberGetsReconnectProof()
     {
         await using var db = CreateDb();
@@ -302,6 +347,7 @@ public sealed class MatchAuthorityServiceTests
             hostA,
             matchA.Data.MatchId,
             2,
+            playerId,
             CancellationToken.None);
 
         Assert.True(disconnected.IsSuccess);
@@ -1009,6 +1055,90 @@ public sealed class MatchAuthorityServiceTests
         Assert.Equal(
             "MATCH_LEASE_EXPIRED",
             result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Disconnect_RejectsUnexpectedIdentity_WithoutMutatingRoster()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+        var originalUserId = Guid.NewGuid();
+        var match = await service.CreateAsync(hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "disconnect-identity-room",
+                MaxPlayers = 4
+            }, CancellationToken.None);
+
+        Assert.True(match.IsSuccess);
+        await BindAsync(service, hostId, originalUserId,
+            match.Data!.MatchId, "disconnect-identity-room", 2);
+
+        var result = await service.MarkPlayerDisconnectedAsync(
+            hostId, match.Data.MatchId, 2, Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("MATCH_PLAYER_BINDING_CONFLICT", result.ErrorCode);
+        Assert.Null((await db.MatchPlayerBindings.SingleAsync()).DisconnectedAtUtc);
+    }
+
+    [Fact]
+    public async Task Disconnect_StaleIdentityCannotDisconnectReusedActor_Relational()
+    {
+        await using var connection = new SqliteConnection(
+            "Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(connection)
+            .Options;
+        await using var db = new AppDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var hostId = Guid.NewGuid();
+        var departedUserId = Guid.NewGuid();
+        var survivingUserId = Guid.NewGuid();
+        db.Users.AddRange(
+            CreateUser(hostId, "disconnect-actor-host"),
+            CreateUser(departedUserId, "disconnect-actor-departed"),
+            CreateUser(survivingUserId, "disconnect-actor-survivor"));
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var created = await service.CreateAsync(hostId,
+            new CreateMatchAuthorityRequest
+            {
+                FusionSessionName = "disconnect-actor-reuse",
+                MaxPlayers = 4
+            }, CancellationToken.None);
+        Assert.True(created.IsSuccess);
+        var matchId = created.Data!.MatchId;
+
+        await BindAsync(service, hostId, hostId, matchId, "disconnect-actor-reuse", 1);
+        await BindAsync(service, hostId, departedUserId, matchId, "disconnect-actor-reuse", 2);
+
+        var leave = await service.MarkPlayerDisconnectedAsync(
+            hostId, matchId, 2, departedUserId, CancellationToken.None);
+        Assert.True(leave.IsSuccess);
+
+        // A different account is legitimately assigned the same actor number.
+        await BindAsync(service, hostId, survivingUserId, matchId,
+            "disconnect-actor-reuse", 2);
+
+        var stale = await service.MarkPlayerDisconnectedAsync(
+            hostId, matchId, 2, departedUserId, CancellationToken.None);
+        Assert.False(stale.IsSuccess);
+        Assert.Equal("MATCH_PLAYER_BINDING_CONFLICT", stale.ErrorCode);
+
+        var survivor = await db.MatchPlayerBindings
+            .SingleAsync(item => item.UserId == survivingUserId);
+        Assert.Null(survivor.DisconnectedAtUtc);
+
+        var actual = await service.MarkPlayerDisconnectedAsync(
+            hostId, matchId, 2, survivingUserId, CancellationToken.None);
+        Assert.True(actual.IsSuccess);
+        Assert.NotNull(survivor.DisconnectedAtUtc);
     }
 
     private static async Task BindAsync(

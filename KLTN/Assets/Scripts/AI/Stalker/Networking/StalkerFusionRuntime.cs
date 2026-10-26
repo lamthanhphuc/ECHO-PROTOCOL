@@ -133,6 +133,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         private StalkerNetworkLifeStateConsequenceSink _productionConsequenceSink;
         private StalkerProductionTelemetryProducer _productionTelemetryProducer;
         private StalkerNetworkPresentationState _lastAuthoritativePresentationState;
+        private bool _hostMigrationFirstSimulationPending;
         private float _nextHearingDiagnosticTime;
 
         [Networked] public int ReplicatedSemanticState { get; private set; }
@@ -257,6 +258,14 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             if (Object != null) ApplyReplicatedPresentation();
+
+            if (Object != null && Object.HasStateAuthority
+                && NetworkBootstrap.IsHostMigrationResumeActive)
+            {
+                _hostMigrationFirstSimulationPending = true;
+                Debug.Log(
+                    $"[HM_AI_STALKER_RESTORE]|id={Object.Id}|snapshotState={ReplicatedState}|snapshotTarget={TargetPlayer}|attackSequence={AttackSequence}|attackEpisode={ReplicatedAttackEpisodeId}|controllerState={(controller != null ? controller.CurrentState.ToString() : "missing")}");
+            }
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -316,6 +325,11 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return;
             }
 
+            var auditFirstSimulation = _hostMigrationFirstSimulationPending;
+            var stateBeforeFirstSimulation = ReplicatedState;
+            var targetBeforeFirstSimulation = TargetPlayer;
+            var attackBeforeFirstSimulation = AttackSequence;
+
             RefreshAEDv2ProfileAuthoritative();
             BindPatrolVariationFromMatchAuthority();
             BindScenarioConfigFromRegistry();
@@ -331,6 +345,19 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             PublishAuthoritativeState();
+            if (auditFirstSimulation)
+            {
+                _hostMigrationFirstSimulationPending = false;
+                Debug.Log(
+                    $"[HM_AI_STALKER_FIRST_TICK]|id={Object.Id}|snapshotState={stateBeforeFirstSimulation}|currentState={ReplicatedState}|snapshotTarget={targetBeforeFirstSimulation}|currentTarget={TargetPlayer}|snapshotAttackSeq={attackBeforeFirstSimulation}|currentAttackSeq={AttackSequence}|controllerState={controller.CurrentState}");
+
+                if (stateBeforeFirstSimulation != ReplicatedState
+                    || targetBeforeFirstSimulation != TargetPlayer)
+                {
+                    Debug.LogWarning(
+                        $"[HM_AI_STALKER_STATE_CHANGED]|id={Object.Id}|from={stateBeforeFirstSimulation}|to={ReplicatedState}|targetFrom={targetBeforeFirstSimulation}|targetTo={TargetPlayer}|note=inspect whether transition used restored or fresh AI memory");
+                }
+            }
             ResolveAuthoritativeAttack();
         }
 

@@ -57,6 +57,43 @@ namespace EchoProtocol.Networking
                 $"[Objective] Sector Box {Object.Id} bound to Match State {matchStateId}.");
         }
 
+        // A scene-placed SectorBox receives a new NetworkId when the scene is
+        // reloaded during Fusion Host Migration. Rebind the new scene object
+        // without erasing restored objectives or inventing a new placement.
+        public bool TryRestoreMigratedPlacementStateAuthoritative(NetworkId matchStateId, int placedCount)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || !matchStateId.IsValid || placedCount < 0
+                || placedCount > _requiredCoreCount
+                || (PlacedCoreCount != 0 && PlacedCoreCount != placedCount))
+            {
+                return false;
+            }
+
+            MatchStateId = matchStateId;
+            if (PlacedCoreCount != placedCount)
+            {
+                PlacedCoreCount = placedCount;
+                HandleObjectiveChanged();
+            }
+            return true;
+        }
+
+        // Use the exact same socket/fallback pose as PlaceCarriedCore, so
+        // spatial remapping cannot silently associate a Core with a wrong box.
+        public bool TryGetPlacementPoseForMigration(int slotIndex, out Vector3 position)
+        {
+            position = default;
+            if (Object == null || !Object.IsValid || slotIndex < 0
+                || slotIndex >= _requiredCoreCount)
+            {
+                return false;
+            }
+
+            GetPlacementPose(slotIndex, out position, out _);
+            return true;
+        }
+
         protected override InteractionValidationResult ValidateCurrentState(in InteractionContext context)
         {
             if (context.PlayerState == null || !context.PlayerState.IsGameplayPlayer)
@@ -156,6 +193,10 @@ namespace EchoProtocol.Networking
             MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(context.Player);
             AdvanceObjectiveOrdinal();
             HandleObjectiveChanged();
+            // A placement commits BOTH the Sector Box count and the Core pose.
+            // Capture it before an unexpected Host exit can use a stale snapshot.
+            NetworkBootstrap.Instance?.RequestHostMigrationSnapshotCheckpoint(
+                $"zone1-core-placed:{Object.Id}:{ObjectiveOrdinal}");
             if (IsCoreObjectiveComplete)
             {
                 matchState.TryCompleteCoreObjective(this);

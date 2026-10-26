@@ -41,6 +41,10 @@ namespace EchoProtocol.Networking
         [SerializeField] private Vector3 _holderLocalPosition = new Vector3(0f, 1.25f, 0.35f);
         [SerializeField] private Vector3 _holderLocalEulerAngles;
 
+        // Local-only diagnostic state. Never written to Fusion snapshot.
+        private LobbyPlayerState _retainedMigrationCarrier;
+        private bool _migrationCarryHoldLogged;
+
         [Networked, OnChangedRender(nameof(ApplyReplicatedState))]
         public NetworkItemState State { get; private set; }
 
@@ -70,9 +74,14 @@ namespace EchoProtocol.Networking
         public override void Spawned()
         {
             EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
-            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
+            // Only PlayerSpawner's explicit NEW-Core spawn path may initialize
+            // availability/holder/pose. This callback also runs on objects
+            // restored with CopyStateFrom() during Host Migration: resetting
+            // their replicated fields here loses the snapshot's world pose.
+            if (Object.HasStateAuthority && NetworkBootstrap.IsHostMigrationResumeActive)
             {
-                InitializeAuthoritativePose(transform.position, transform.rotation);
+                RuntimeLog.Log(RuntimeLogCategory.Inventory,
+                    $"HM_CORE_RESTORE_SPAWNED|core={Object.Id}|state={State}|holder={Holder}|worldPos={WorldPosition}|worldRot={WorldRotation}|transformPos={transform.position}");
             }
             if (gameObject.name.StartsWith("PF_EnergyCore_Imported", StringComparison.OrdinalIgnoreCase))
             {
@@ -87,6 +96,14 @@ namespace EchoProtocol.Networking
 
         public void InitializeAuthoritativePose(Vector3 position, Quaternion rotation)
         {
+            // Fail closed if a fresh-spawn initializer accidentally reaches a
+            // snapshot-restored Core while migration reconciliation is active.
+            if (NetworkBootstrap.IsHostMigrationReconciliationPending)
+            {
+                throw new InvalidOperationException(
+                    "Core fresh-spawn initialization attempted during Host Migration reconciliation.");
+            }
+
             if (Object != null && Object.IsValid && !Object.HasStateAuthority)
             {
                 return;
@@ -118,12 +135,30 @@ namespace EchoProtocol.Networking
 
             if (TryGetHolderPose(out var carriedPosition, out var carriedRotation))
             {
+                _migrationCarryHoldLogged = false;
+                _retainedMigrationCarrier = null;
                 // This is the authoritative recovery pose if the holder disconnects before the next tick.
                 WorldPosition = carriedPosition;
                 WorldRotation = carriedRotation;
                 return;
             }
 
+            // The new Host has restored the Core before every PlayerObject
+            // can reconnect. Do not convert Carried -> Dropped during handoff.
+            if (NetworkBootstrap.IsHostMigrationReconciliationPending
+                || HasRetainedMigrationCarrier())
+            {
+                if (!_migrationCarryHoldLogged)
+                {
+                    RuntimeLog.Log(RuntimeLogCategory.Inventory,
+                        $"HM_CORE_RECONNECT_HOLD|core={Object.Id}|holder={Holder}|pose={WorldPosition}");
+                    _migrationCarryHoldLogged = true;
+                }
+                return;
+            }
+
+            _migrationCarryHoldLogged = false;
+            _retainedMigrationCarrier = null;
             var disconnectedHolder = Holder;
             RuntimeLog.Log(RuntimeLogCategory.Inventory, $"[NetworkItem] Holder {disconnectedHolder} left; dropping item {Object.Id} at its last authoritative pose {transform.position}.");
             WorldPosition = transform.position;
@@ -227,6 +262,25 @@ namespace EchoProtocol.Networking
                     position,
                     out _);
             RuntimeLog.Log(RuntimeLogCategory.Inventory, $"[NetworkItem] {actor} dropped item {Object.Id} at {position}.");
+            return true;
+        }
+
+        // Reference-only Host Migration repair. Do not alter state, slot,
+        // transition ordinal, pose, holder, or objective progress here.
+        public bool TryRebindPlacedSectorAfterMigration(NetworkId oldSectorId, NetworkId newSectorId)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || State != NetworkItemState.Placed || !oldSectorId.IsValid
+                || !newSectorId.IsValid || PlacedSectorId != oldSectorId
+                || !Runner.TryFindObject(newSectorId, out var sectorObject)
+                || sectorObject == null || !sectorObject.IsValid
+                || !sectorObject.HasStateAuthority
+                || !sectorObject.TryGetComponent<NetworkSectorBox>(out _))
+            {
+                return false;
+            }
+
+            PlacedSectorId = newSectorId;
             return true;
         }
 
@@ -412,10 +466,88 @@ namespace EchoProtocol.Networking
             transform.SetPositionAndRotation(WorldPosition, WorldRotation);
         }
 
+        // Keep the Core only while a real snapshot-restored PlayerObject
+        // claims this exact Core and is still inside the lifecycle reconnect
+        // window. When the lifecycle despawns that player, the normal drop
+        // branch runs on the next simulation tick.
+        private bool HasRetainedMigrationCarrier()
+        {
+            if (Runner == null || !Runner.IsRunning || !Holder.IsRealPlayer)
+                return false;
+
+            if (IsValidRetainedMigrationCarrier(_retainedMigrationCarrier))
+                return true;
+
+            _retainedMigrationCarrier = null;
+            var states = FindObjectsByType<LobbyPlayerState>(FindObjectsInactive.Include);
+            var matches = 0;
+            LobbyPlayerState matched = null;
+            foreach (var state in states)
+            {
+                if (!IsValidRetainedMigrationCarrier(state)) continue;
+                matches++;
+                matched = state;
+            }
+
+            if (matches > 1)
+            {
+                Debug.LogError($"HM_CORE_DUPLICATE_CARRIER|core={Object.Id}|matches={matches}");
+                // Do not destructively drop the item in an ambiguous state.
+                return true;
+            }
+
+            _retainedMigrationCarrier = matches == 1 ? matched : null;
+            return _retainedMigrationCarrier != null;
+        }
+
+        private bool IsValidRetainedMigrationCarrier(LobbyPlayerState state)
+        {
+            return state != null
+                && state.Object != null
+                && state.Object.IsValid
+                && state.Object.HasStateAuthority
+                && state.Runner == Runner
+                && state.IsGameplayPlayer
+                && state.Disconnected
+                && state.CarriedCoreId == Object.Id;
+        }
+
+        // Called only by FusionPlayerLifecycle AFTER the verified player
+        // has been bound to the new PlayerRef / PlayerObject.
+        public bool TryRebindHolderAuthoritative(PlayerRef activePlayer, LobbyPlayerState carrier)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || State != NetworkItemState.Carried || !Holder.IsRealPlayer
+                || !activePlayer.IsRealPlayer || carrier == null
+                || carrier.Object == null || !carrier.Object.IsValid
+                || !carrier.Object.HasStateAuthority || carrier.Runner != Runner
+                || carrier.CarriedCoreId != Object.Id
+                || carrier.Object.InputAuthority != activePlayer
+                || !IsActivePlayer(activePlayer)
+                || !Runner.TryGetPlayerObject(activePlayer, out var mappedPlayer)
+                || mappedPlayer != carrier.Object)
+                return false;
+
+            if (Holder == activePlayer) return true;
+
+            var previous = Holder;
+            Holder = activePlayer;
+            _retainedMigrationCarrier = null;
+            _migrationCarryHoldLogged = false;
+            ApplyReplicatedState();
+            RuntimeLog.Log(RuntimeLogCategory.Inventory,
+                $"HM_CORE_HOLDER_REBIND|core={Object.Id}|oldHolder={previous}|newHolder={activePlayer}|ordinal={TransitionOrdinal}");
+            // This is an identity correction, not an item pickup/drop event.
+            // Do NOT increment TransitionOrdinal or publish a transition.
+            return true;
+        }
+
         private bool TryGetHolderPose(out Vector3 position, out Quaternion rotation)
         {
             if (Holder.IsRealPlayer && Runner != null && IsActivePlayer(Holder)
-                && Runner.TryGetPlayerObject(Holder, out var playerObject) && playerObject != null)
+                && Runner.TryGetPlayerObject(Holder, out var playerObject) && playerObject != null
+                && playerObject.TryGetComponent<LobbyPlayerState>(out var holderState)
+                && holderState.CarriedCoreId == Object.Id)
             {
                 Transform coreAnchor = PlayerHeldItemAnchor.ResolveCoreCarryAnchor(playerObject.gameObject);
                 if (coreAnchor != null)

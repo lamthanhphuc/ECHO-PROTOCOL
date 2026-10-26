@@ -484,8 +484,16 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         Guid hostUserId,
         Guid matchId,
         int fusionActorNumber,
+        Guid expectedUserId,
         CancellationToken cancellationToken)
     {
+        if (fusionActorNumber < 1 || expectedUserId == Guid.Empty)
+        {
+            return Failure<MatchPlayerBindingResponse>(
+                "An expected bound user is required for disconnect",
+                ErrorCodes.MatchPlayerBindingConflict);
+        }
+
         var match = await _db.MatchAuthorityBindings.Include(item => item.Players)
             .SingleOrDefaultAsync(item => item.MatchId == matchId, cancellationToken);
         var authorityFailure = ValidateActiveHost(match, hostUserId);
@@ -502,9 +510,55 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             return Failure<MatchPlayerBindingResponse>("Player binding not found", ErrorCodes.NotFound);
         }
 
-        player.DisconnectedAtUtc = UtcNow();
-        player.LastSeenAtUtc = player.DisconnectedAtUtc.Value;
-        await _db.SaveChangesAsync(cancellationToken);
+        if (player.UserId != expectedUserId)
+        {
+            return Failure<MatchPlayerBindingResponse>(
+                "Fusion actor no longer belongs to the expected player",
+                ErrorCodes.MatchPlayerBindingConflict);
+        }
+
+        var now = UtcNow();
+
+        if (_db.Database.IsRelational())
+        {
+            // Use a single conditional SQL UPDATE: a rebind to another user,
+            // Host transfer, or expired lease between SELECT and UPDATE must
+            // not disconnect the new roster owner.
+            var affected = await _db.MatchPlayerBindings
+                .Where(item => item.MatchId == matchId
+                    && item.FusionActorNumber == fusionActorNumber
+                    && item.UserId == expectedUserId
+                    && item.DisconnectedAtUtc == null
+                    && _db.MatchAuthorityBindings.Any(binding =>
+                        binding.MatchId == matchId
+                        && binding.HostUserId == hostUserId
+                        && binding.Status != MatchAuthorityStatus.Ended
+                        && binding.LeaseExpiresAtUtc > now))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.DisconnectedAtUtc, (DateTime?)now)
+                    .SetProperty(item => item.LastSeenAtUtc, now),
+                    cancellationToken);
+
+            if (affected != 1)
+            {
+                return Failure<MatchPlayerBindingResponse>(
+                    "Disconnect rejected because the roster binding changed",
+                    ErrorCodes.MatchPlayerBindingConflict);
+            }
+
+            // ExecuteUpdate bypasses EF change tracking; refresh this object
+            // so the API response reports the committed disconnect state.
+            player.DisconnectedAtUtc = now;
+            player.LastSeenAtUtc = now;
+        }
+        else
+        {
+            // Unit-test in-memory provider does not support ExecuteUpdate.
+            player.DisconnectedAtUtc = now;
+            player.LastSeenAtUtc = now;
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
         return ServiceResult<MatchPlayerBindingResponse>.Success(Map(player), "Player marked disconnected");
     }
 

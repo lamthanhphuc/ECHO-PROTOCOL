@@ -50,6 +50,7 @@ namespace EchoProtocol.Networking.Authority
         private float _nextLeaseRenewal;
         private bool _leaseRequestInProgress;
         private bool _identityRequestInProgress;
+        private int _bindingGeneration;
 
         // Only one backend bind may run for the same player in the
         // same match. Multiple local identity triggers may otherwise
@@ -112,8 +113,128 @@ namespace EchoProtocol.Networking.Authority
         public bool HasBinding => MatchId != Guid.Empty;
         public int BoundPlayerCount =>
             _boundPlayers.Count;
+
+        public bool IsPlayerBound(
+            int actorNumber,
+            string backendUserId)
+        {
+            return actorNumber > 0
+                && Guid.TryParse(
+                    backendUserId,
+                    out var userId)
+                && _boundPlayers.TryGetValue(
+                    actorNumber,
+                    out var boundUserId)
+                && boundUserId == userId;
+        }
+
+        public bool RebuildMigratedPlayerBindings(
+            NetworkRunner runner)
+        {
+            if (!IsHostBinding
+                || !HasBinding
+                || runner == null
+                || !runner.IsRunning
+                || !runner.IsServer)
+            {
+                return false;
+            }
+
+            var rebuilt =
+                new Dictionary<int, Guid>();
+
+            var pendingIdentityCount = 0;
+            var localBindingRebuilt = false;
+
+            bool hasLocalBackendUser =
+                Guid.TryParse(
+                    AuthSession.CurrentUserId,
+                    out var localBackendUserId);
+
+            foreach (var player in
+                     runner.ActivePlayers)
+            {
+                var actorNumber =
+                    runner.GetPlayerActorId(player)
+                    ?? (player == runner.LocalPlayer
+                        ? player.PlayerId
+                        : 0);
+
+                // Backend takeover has already authenticated the promoted
+                // Host. Its replicated LobbyPlayerState can still be one
+                // frame behind while Fusion finishes adding the local
+                // player, so use the authenticated local identity here.
+                if (player == runner.LocalPlayer
+                    && actorNumber > 0
+                    && hasLocalBackendUser)
+                {
+                    rebuilt[actorNumber] =
+                        localBackendUserId;
+
+                    localBindingRebuilt = true;
+
+                    continue;
+                }
+
+                if (!runner.TryGetPlayerObject(
+                        player,
+                        out var playerObject)
+                    || playerObject == null
+                    || !playerObject.IsValid
+                    || !playerObject.TryGetComponent<LobbyPlayerState>(
+                        out var state)
+                    || !state.HasVerifiedBackendIdentity
+                    || !Guid.TryParse(
+                        state.BackendUserId.ToString(),
+                        out var userId))
+                {
+                    // Remote clients issue a fresh proof after migration.
+                    // Do not tear down the restored session merely because
+                    // their Networked identity has not arrived in this frame.
+                    pendingIdentityCount++;
+                    continue;
+                }
+
+                if (actorNumber < 1
+                    || rebuilt.ContainsKey(actorNumber)
+                    || rebuilt.ContainsValue(userId))
+                {
+                    pendingIdentityCount++;
+                    continue;
+                }
+
+                rebuilt[actorNumber] =
+                    userId;
+            }
+
+            if (!localBindingRebuilt)
+            {
+                return false;
+            }
+
+            _boundPlayers.Clear();
+
+            foreach (var binding in
+                     rebuilt)
+            {
+                _boundPlayers[binding.Key] =
+                    binding.Value;
+
+                _disconnectedActors.Remove(
+                    binding.Key);
+            }
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+                $"MA|MIGRATION_BINDINGS_REBUILT|players={rebuilt.Count}|pending={pendingIdentityCount}");
+
+            return true;
+        }
+
         public bool RequiresFreshHostBinding =>
-            !HasBinding || !IsHostBinding;
+            !HasBinding
+            || !IsHostBinding
+            || HasQueuedResult(MatchId);
         public bool IsCompletingMatch =>
             _backendEndRequestInProgress
             || _pendingBackendMatchResult;
@@ -302,6 +423,10 @@ namespace EchoProtocol.Networking.Authority
                 Debug.LogError("[MatchAuthority] Host takeover could not resolve the local Fusion actor number.");
                 return false;
             }
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchAuthority,
+                $"MA|TAKEOVER_REQUEST|match={sessionMatchId:D}|actor={actorNumber}|session={sessionName}");
 
             MatchId = sessionMatchId;
             IsHostBinding = false;
@@ -658,17 +783,65 @@ namespace EchoProtocol.Networking.Authority
                 return;
             }
 
+            // A retained BackendUserId is NOT proof of a connected backend
+            // roster row after a deliberate Leave / rejoin. Only a fresh
+            // backend bind acknowledgment can complete this identity cycle.
+            if (force && state.HasVerifiedBackendIdentity)
+            {
+                RuntimeLog.Log(
+                    RuntimeLogCategory.MatchAuthority,
+                    $"MA|REJOIN_PROOF_REQUEST|actor={actorNumber}|match={MatchId:D}");
+            }
+
             _identityRequestInProgress =
                 true;
 
-            var result =
-                await _api.IssueJoinProofAsync(
-                    MatchId,
-                    _bootstrap.CurrentSessionName,
-                    actorNumber);
+            var bindingGeneration =
+                _bindingGeneration;
 
-            _identityRequestInProgress =
-                false;
+            var bindingMatchId =
+                MatchId;
+
+            var bindingSessionName =
+                _bootstrap.CurrentSessionName;
+
+            EchoProtocol.Api.ApiResult<EchoProtocol.Api.ApiResponse<JoinProofDto>> result;
+
+            try
+            {
+                result =
+                    await _api.IssueJoinProofAsync(
+                        bindingMatchId,
+                        bindingSessionName,
+                        actorNumber);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning(
+                    $"[MatchAuthority] Join proof request failed: {exception.Message}");
+
+                return;
+            }
+            finally
+            {
+                if (_bindingGeneration == bindingGeneration)
+                {
+                    _identityRequestInProgress =
+                        false;
+                }
+            }
+
+            if (_bindingGeneration != bindingGeneration
+                || MatchId != bindingMatchId
+                || _bootstrap?.Runner != runner
+                || !runner.IsRunning
+                || state == null
+                || state.Object == null
+                || !state.Object.IsValid
+                || !state.Object.HasInputAuthority)
+            {
+                return;
+            }
 
             if (!IsSuccessful(result))
             {
@@ -682,8 +855,12 @@ namespace EchoProtocol.Networking.Authority
                 result.Data.data.proof,
                 actorNumber);
 
-            _bootstrap
-                ?.MarkReconnectProofSubmitted();
+            if (force && state.HasVerifiedBackendIdentity)
+            {
+                RuntimeLog.Log(
+                    RuntimeLogCategory.MatchAuthority,
+                    $"MA|REJOIN_PROOF_SENT|actor={actorNumber}|match={bindingMatchId:D}");
+            }
         }
 
         public async void BindPlayerFromProof(
@@ -776,6 +953,9 @@ namespace EchoProtocol.Networking.Authority
                             $"Actor={actorNumber}, " +
                             $"User={result.Data.data.userId}, " +
                             $"Match={bindingMatchId:D}.");
+                        RuntimeLog.Log(
+                            RuntimeLogCategory.MatchAuthority,
+                            $"MA|ROSTER_BIND_ACK|actor={actorNumber}|match={bindingMatchId:D}");
 
                         return;
                     }
@@ -833,47 +1013,122 @@ namespace EchoProtocol.Networking.Authority
         }
 
         public async Task<bool> ReconcileMigratedDisconnectedActorsAsync(
-            IEnumerable<int> actorNumbers)
+            IEnumerable<KeyValuePair<int, Guid>> actorBindings)
         {
             if (!IsHostBinding
                 || !HasBinding
-                || actorNumbers == null)
+                || actorBindings == null)
+            {
+                return false;
+            }
+
+            // Pin cleanup to the exact backend match and authoritative Runner.
+            var reconciliationGeneration = _bindingGeneration;
+            var reconciliationMatchId = MatchId;
+            var reconciliationRunner = _bootstrap?.Runner;
+
+            if (reconciliationRunner == null
+                || !reconciliationRunner.IsRunning
+                || !reconciliationRunner.IsServer)
             {
                 return false;
             }
 
             var actors =
-                new HashSet<int>();
+                new Dictionary<int, Guid>();
 
-            foreach (var actorNumber in actorNumbers)
+            foreach (var binding in actorBindings)
             {
-                if (actorNumber > 0)
+                if (binding.Key < 1 || binding.Value == Guid.Empty)
                 {
-                    actors.Add(actorNumber);
+                    continue;
                 }
+
+                if (actors.TryGetValue(binding.Key, out var priorUserId)
+                    && priorUserId != binding.Value)
+                {
+                    Debug.LogWarning(
+                        $"[MatchAuthority] Conflicting retained actor identity. Actor={binding.Key}.");
+                    return false;
+                }
+
+                actors[binding.Key] = binding.Value;
             }
 
             var reconciled = 0;
             var allReconciled = true;
 
-            foreach (var actorNumber in actors)
+            foreach (var expectedBinding in actors)
             {
+                var actorNumber = expectedBinding.Key;
+                var expectedUserId = expectedBinding.Value;
+
+                if (_bindingGeneration != reconciliationGeneration
+                    || MatchId != reconciliationMatchId
+                    || !IsHostBinding
+                    || _bootstrap?.Runner != reconciliationRunner
+                    || !reconciliationRunner.IsRunning
+                    || !reconciliationRunner.IsServer)
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.MatchAuthority,
+                        $"MA|MIGRATION_ROSTER_RECONCILE_ABORT_STALE|match={reconciliationMatchId:D}");
+                    return false;
+                }
+                // Fusion may reuse the departed Host's transport actor for
+                // an active player during migration. The active roster was
+                // rebuilt before this cleanup, so never disconnect a number
+                // that is currently owned by a verified survivor.
+                if (_boundPlayers.ContainsKey(
+                        actorNumber)
+                    || IsActiveFusionActor(
+                        actorNumber))
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.MatchAuthority,
+                        $"MA|MIGRATION_ROSTER_RECONCILE_SKIP_ACTIVE|actor={actorNumber}");
+
+                    continue;
+                }
+
                 var actorReconciled = false;
 
                 for (var attempt = 1;
                      attempt <= 3;
                      attempt++)
                 {
-                    if (!IsHostBinding
-                        || !HasBinding)
+                    if (_bindingGeneration != reconciliationGeneration
+                        || MatchId != reconciliationMatchId
+                        || !IsHostBinding
+                        || !HasBinding
+                        || _bootstrap?.Runner != reconciliationRunner
+                        || !reconciliationRunner.IsRunning
+                        || !reconciliationRunner.IsServer)
                     {
+                        RuntimeLog.Log(
+                            RuntimeLogCategory.MatchAuthority,
+                            $"MA|MIGRATION_ROSTER_RECONCILE_ABORT_STALE|match={reconciliationMatchId:D}");
                         return false;
                     }
 
                     var result =
                         await _api.DisconnectPlayerAsync(
-                            MatchId,
-                            actorNumber);
+                            reconciliationMatchId,
+                            actorNumber,
+                            expectedUserId);
+
+                    if (_bindingGeneration != reconciliationGeneration
+                        || MatchId != reconciliationMatchId
+                        || !IsHostBinding
+                        || _bootstrap?.Runner != reconciliationRunner
+                        || !reconciliationRunner.IsRunning
+                        || !reconciliationRunner.IsServer)
+                    {
+                        RuntimeLog.Log(
+                            RuntimeLogCategory.MatchAuthority,
+                            $"MA|MIGRATION_ROSTER_RECONCILE_ABORT_STALE|match={reconciliationMatchId:D}");
+                        return false;
+                    }
 
                     if (IsSuccessful(result))
                     {
@@ -928,17 +1183,159 @@ namespace EchoProtocol.Networking.Authority
 
             return allReconciled;
         }
+
+        private bool IsActiveFusionActor(
+            int actorNumber)
+        {
+            var runner =
+                _bootstrap?.Runner;
+
+            if (runner == null
+                || !runner.IsRunning
+                || actorNumber < 1)
+            {
+                return false;
+            }
+
+            foreach (var player in
+                     runner.ActivePlayers)
+            {
+                var activeActor =
+                    runner.GetPlayerActorId(player)
+                    ?? (player == runner.LocalPlayer
+                        ? player.PlayerId
+                        : 0);
+
+                if (activeActor == actorNumber)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public async void MarkPlayerDisconnected(int actorNumber)
         {
-            if (!IsHostBinding || !HasBinding || actorNumber < 1) return;
-            var result = await _api.DisconnectPlayerAsync(MatchId, actorNumber);
-            if (!IsSuccessful(result))
+            if (!IsHostBinding || !HasBinding || actorNumber < 1)
             {
-                Debug.LogWarning($"[MatchAuthority] Disconnect binding failed: {Describe(result)}");
                 return;
             }
 
-            _disconnectedActors.Add(actorNumber);
+            var runner = _bootstrap?.Runner;
+
+            if (runner == null
+                || !runner.IsRunning
+                || !runner.IsServer)
+            {
+                return;
+            }
+
+            var bindingGeneration = _bindingGeneration;
+            var bindingMatchId = MatchId;
+
+            if (!_boundPlayers.TryGetValue(
+                    actorNumber,
+                    out var expectedUserId)
+                || _disconnectedActors.Contains(actorNumber))
+            {
+                RuntimeLog.Log(
+                    RuntimeLogCategory.MatchAuthority,
+                    $"MA|DISCONNECT_SKIP_UNBOUND|match={bindingMatchId:D}|actor={actorNumber}");
+                return;
+            }
+
+            try
+            {
+                // Allow Fusion to finish updating ActivePlayers.
+                await Task.Yield();
+
+                if (_bindingGeneration != bindingGeneration
+                    || MatchId != bindingMatchId
+                    || !IsHostBinding
+                    || _bootstrap?.Runner != runner
+                    || !runner.IsRunning
+                    || !runner.IsServer)
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.MatchAuthority,
+                        $"MA|DISCONNECT_SKIP_STALE|match={bindingMatchId:D}|actor={actorNumber}");
+                    return;
+                }
+
+                if (!_boundPlayers.TryGetValue(
+                        actorNumber,
+                        out var currentUserId)
+                    || currentUserId != expectedUserId
+                    || _disconnectedActors.Contains(actorNumber))
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.MatchAuthority,
+                        $"MA|DISCONNECT_SKIP_REMAPPED|match={bindingMatchId:D}|actor={actorNumber}");
+                    return;
+                }
+
+                if (IsActiveFusionActor(actorNumber))
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.MatchAuthority,
+                        $"MA|DISCONNECT_SKIP_ACTIVE|match={bindingMatchId:D}|actor={actorNumber}");
+                    return;
+                }
+
+                RuntimeLog.Log(
+                    RuntimeLogCategory.MatchAuthority,
+                    $"MA|DISCONNECT_REQUEST|match={bindingMatchId:D}|actor={actorNumber}|generation={bindingGeneration}");
+
+                var result =
+                    await _api.DisconnectPlayerAsync(
+                        bindingMatchId,
+                        actorNumber,
+                        expectedUserId);
+
+                if (_bindingGeneration != bindingGeneration
+                    || MatchId != bindingMatchId
+                    || !IsHostBinding
+                    || _bootstrap?.Runner != runner
+                    || !runner.IsRunning
+                    || !runner.IsServer)
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.MatchAuthority,
+                        $"MA|DISCONNECT_RESPONSE_STALE|match={bindingMatchId:D}|actor={actorNumber}");
+                    return;
+                }
+
+                if (!_boundPlayers.TryGetValue(
+                        actorNumber,
+                        out currentUserId)
+                    || currentUserId != expectedUserId
+                    || IsActiveFusionActor(actorNumber))
+                {
+                    RuntimeLog.Log(
+                        RuntimeLogCategory.MatchAuthority,
+                        $"MA|DISCONNECT_RESPONSE_REMAPPED|match={bindingMatchId:D}|actor={actorNumber}");
+                    return;
+                }
+
+                if (!IsSuccessful(result))
+                {
+                    Debug.LogWarning(
+                        $"[MatchAuthority] Disconnect binding failed: {Describe(result)}");
+                    return;
+                }
+
+                _disconnectedActors.Add(actorNumber);
+
+                RuntimeLog.Log(
+                    RuntimeLogCategory.MatchAuthority,
+                    $"MA|DISCONNECT_COMMIT|match={bindingMatchId:D}|actor={actorNumber}");
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning(
+                    $"[MatchAuthority] Disconnect processing failed. Actor={actorNumber}, Error={exception.Message}");
+            }
         }
 
         public async Task<(bool Accepted, string Error)> StartMatchAsync()
@@ -991,6 +1388,7 @@ namespace EchoProtocol.Networking.Authority
 
         public void ResetBinding()
         {
+            _bindingGeneration++;
             var oldMatchId = MatchId;
             MatchId = Guid.Empty;
             IsHostBinding = false;
@@ -1302,49 +1700,77 @@ namespace EchoProtocol.Networking.Authority
 
         private void HandlePickupStateCommitted(NetworkItemTransition transition)
         {
+            // Telemetry is observational. Its lifecycle may still be attached to
+            // a previous match after Host Migration; it must never interrupt an
+            // authoritative inventory or objective state transition.
             var item = transition.Item;
             var actor = transition.Actor;
-            if (!HasStateAuthority || !actor.IsValid || item == null
-                || _telemetry == null || !_telemetry.IsInitialized)
+            if (!HasStateAuthority || !actor.IsValid || item == null)
             {
                 return;
             }
 
-            if (!TryResolveBackendUser(actor, out var userId))
+            if (!CanEmitProductionTelemetry())
             {
+                var allocator = _telemetry?.SequenceAllocator;
+                if (allocator != null && allocator.IsActive
+                    && allocator.MatchId != MatchId)
+                {
+                    Debug.LogWarning(
+                        $"P04O_TELEMETRY_SKIPPED|reason=MatchIdMismatch|authority={MatchId:D}|" +
+                        $"allocator={allocator.MatchId:D}|item={item.Object.Id}|state={transition.State}");
+                }
                 return;
             }
 
-            var coreId = item.Object.Id.ToString();
-            string eventType;
-            string transitionName;
-            switch (transition.State)
+            try
             {
-                case NetworkItemState.Carried:
-                    eventType = TelemetryEventTypes.CorePickedUp;
-                    transitionName = "pickup";
-                    break;
-                case NetworkItemState.Dropped:
-                    eventType = TelemetryEventTypes.CoreDropped;
-                    transitionName = "drop";
-                    break;
-                case NetworkItemState.Placed:
-                    eventType = TelemetryEventTypes.CorePlaced;
-                    transitionName = "place";
-                    break;
-                default:
+                if (!TryResolveBackendUser(actor, out var userId))
+                {
                     return;
-            }
+                }
 
-            _telemetry.ObjectiveAdapter.EmitCoreTransition(
-                $"{coreId}:{transitionName}:{transition.Ordinal}",
-                DateTime.UtcNow,
-                eventType,
-                userId,
-                coreId,
-                out _,
-                out _,
-                Snapshot(transition.Position));
+                var coreId = item.Object.Id.ToString();
+                string eventType;
+                string transitionName;
+                switch (transition.State)
+                {
+                    case NetworkItemState.Carried:
+                        eventType = TelemetryEventTypes.CorePickedUp;
+                        transitionName = "pickup";
+                        break;
+                    case NetworkItemState.Dropped:
+                        eventType = TelemetryEventTypes.CoreDropped;
+                        transitionName = "drop";
+                        break;
+                    case NetworkItemState.Placed:
+                        eventType = TelemetryEventTypes.CorePlaced;
+                        transitionName = "place";
+                        break;
+                    default:
+                        return;
+                }
+
+                _telemetry.ObjectiveAdapter.EmitCoreTransition(
+                    $"{coreId}:{transitionName}:{transition.Ordinal}",
+                    DateTime.UtcNow,
+                    eventType,
+                    userId,
+                    coreId,
+                    out _,
+                    out _,
+                    Snapshot(transition.Position));
+            }
+            catch (Exception exception)
+            {
+                // Do not rethrow into NetworkPickupItem.TryPlace(): it has
+                // already committed the Core pose and carrier state. Rethrowing
+                // here would prevent NetworkSectorBox.PlacedCoreCount advancing.
+                Debug.LogWarning(
+                    $"P04O_TELEMETRY_NONBLOCKING_ERROR|item={item.Object.Id}|" +
+                    $"state={transition.State}|kind={exception.GetType().Name}|" +
+                    $"message={exception.Message}");
+            }
         }
 
         private void EmitAbortedMatchEndIfActive()

@@ -43,10 +43,13 @@ namespace EchoProtocol.Networking.Authority
                 });
 
         public Task<ApiResult<ApiResponse<MatchPlayerBindingDto>>> DisconnectPlayerAsync(
-            Guid matchId, int actorNumber) =>
-            PostAsync<EmptyMatchAuthorityRequest, MatchPlayerBindingDto>(
+            Guid matchId, int actorNumber, Guid expectedUserId) =>
+            PostAsync<DisconnectMatchPlayerRequest, MatchPlayerBindingDto>(
                 $"/api/matches/{matchId:D}/players/{actorNumber}/disconnect",
-                new EmptyMatchAuthorityRequest());
+                new DisconnectMatchPlayerRequest
+                {
+                    expectedUserId = expectedUserId.ToString("D")
+                });
 
         public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> TakeoverAsync(
             Guid matchId,

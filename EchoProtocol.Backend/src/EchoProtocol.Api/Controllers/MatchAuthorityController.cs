@@ -43,9 +43,10 @@ public sealed class MatchAuthorityController : ControllerBase
     public async Task<IActionResult> DisconnectPlayer(
         Guid matchId,
         int fusionActorNumber,
+        [FromBody] DisconnectMatchPlayerRequest request,
         CancellationToken cancellationToken) =>
         Respond(await _service.MarkPlayerDisconnectedAsync(
-            UserId(), matchId, fusionActorNumber, cancellationToken));
+            UserId(), matchId, fusionActorNumber, request.ExpectedUserId, cancellationToken));
 
     [HttpPost("{matchId:guid}/authority/takeover")]
     public async Task<IActionResult> Takeover(

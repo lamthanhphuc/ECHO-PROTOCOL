@@ -23,7 +23,7 @@ public interface IMatchAuthorityService
     Task<ServiceResult<MatchAuthorityResponse>> StartAsync(
         Guid hostUserId, Guid matchId, CancellationToken cancellationToken);
     Task<ServiceResult<MatchPlayerBindingResponse>> MarkPlayerDisconnectedAsync(
-        Guid hostUserId, Guid matchId, int fusionActorNumber, CancellationToken cancellationToken);
+        Guid hostUserId, Guid matchId, int fusionActorNumber, Guid expectedUserId, CancellationToken cancellationToken);
     Task<ServiceResult<MatchAuthorityResponse>> EndAsync(
         Guid hostUserId, Guid matchId, EndMatchAuthorityRequest request, CancellationToken cancellationToken);
     Task<bool> CanSubmitTelemetryAsync(

@@ -508,8 +508,49 @@ namespace EchoProtocol.Networking
             {
                 TryPublishReplicatedScenarioConfigToRegistry();
             }
+            if (Object != null
+                && Object.HasStateAuthority
+                && NetworkBootstrap.IsHostMigrationResumeActive
+                && CurrentPhase == NetworkMatchPhase.Zone2Objective
+                && Zone2RelayRuntimeInitialized)
+            {
+                _hostMigrationZone2RestorePending = true;
+                _hostMigrationZone2RestoreStartedAt = Time.unscaledTime;
+                _hostMigrationZone2RestoreTimeoutLogged = false;
+                RuntimeLog.Log(RuntimeLogCategory.MatchState,
+                    "[MatchState] HM_ZONE2_REHYDRATE_PENDING|source=Spawned");
+            }
+            if (Object != null
+                && Object.HasStateAuthority
+                && NetworkBootstrap.IsHostMigrationResumeActive)
+            {
+                RuntimeLog.Log(RuntimeLogCategory.MatchState,
+                    $"[MatchState] HM_MISSION_RESTORE|phase={CurrentPhase}|ordinal={PhaseOrdinal}|zone2Stage={Zone2Stage}|relayMask={RelayCompletionMask}|convoyInitialized={Zone3ConvoyInitialized}|convoyFuel={Zone3FuelPointsRemaining}");
+
+                if (Zone3ConvoyInitialized
+                    && (CurrentPhase == NetworkMatchPhase.Zone3FindFrigate
+                        || CurrentPhase == NetworkMatchPhase.Zone3PushFrigate))
+                {
+                    // The scene-local convoy is not a NetworkObject; restore it
+                    // from the replicated snapshot before authoritative ticking.
+                    _hostMigrationZone3RestorePending = true;
+                    _hostMigrationZone3RestoreStartedAt = Time.unscaledTime;
+                    _hostMigrationZone3RestoreTimeoutLogged = false;
+                }
+            }
+
             ApplyPresentation(notifyListeners: true);
         }
+
+        // Transient rehydration gate (not gameplay state, intentionally not [Networked]).
+        private bool _hostMigrationZone2RestorePending;
+        private float _hostMigrationZone2RestoreStartedAt;
+        private bool _hostMigrationZone2RestoreTimeoutLogged;
+        private bool _hostMigrationZone3RestorePending;
+        private float _hostMigrationZone3RestoreStartedAt;
+        private bool _hostMigrationZone3RestoreTimeoutLogged;
+        private string _lastMissionCheckpointKey;
+        private float _nextZone3CheckpointCheckAt;
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
@@ -522,6 +563,61 @@ namespace EchoProtocol.Networking
         public override void FixedUpdateNetwork()
         {
             if (!Object.HasStateAuthority) return;
+
+            if (_hostMigrationZone2RestorePending)
+            {
+                var director = Zone2MissionDirector.Instance;
+                if (director == null
+                    || !director.TryRehydrateAuthoritativeRelayRuntimeFromSnapshot(this))
+                {
+                    if (!_hostMigrationZone2RestoreTimeoutLogged
+                        && Time.unscaledTime - _hostMigrationZone2RestoreStartedAt > 15f)
+                    {
+                        _hostMigrationZone2RestoreTimeoutLogged = true;
+                        Debug.LogError(
+                            "[MatchState] HM_ZONE2_REHYDRATE_STALLED|No Relay ticks/captures will run until snapshot state can be restored.");
+                    }
+                    return;
+                }
+
+                _hostMigrationZone2RestorePending = false;
+                RuntimeLog.Log(RuntimeLogCategory.MatchState,
+                    $"[MatchState] HM_ZONE2_REHYDRATE_OK|phase={CurrentPhase}|relayMask={RelayCompletionMask}|b1Seed={RelayB1Surge.Seed}|b2Seed={RelayB2Surge.Seed}");
+            }
+
+            if (_hostMigrationZone3RestorePending)
+            {
+                var zone3Director = Zone3MissionDirector.Instance;
+                var convoy = zone3Director != null ? zone3Director.Convoy : null;
+                var restoredPosition = Zone3FrigatePosition;
+                bool invalidPose = restoredPosition.sqrMagnitude <= 1f
+                    || float.IsNaN(restoredPosition.x) || float.IsNaN(restoredPosition.y)
+                    || float.IsNaN(restoredPosition.z)
+                    || float.IsInfinity(restoredPosition.x) || float.IsInfinity(restoredPosition.y)
+                    || float.IsInfinity(restoredPosition.z);
+                if (convoy == null || invalidPose)
+                {
+                    if (!_hostMigrationZone3RestoreTimeoutLogged
+                        && Time.unscaledTime - _hostMigrationZone3RestoreStartedAt > 15f)
+                    {
+                        _hostMigrationZone3RestoreTimeoutLogged = true;
+                        Debug.LogError($"[MatchState] HM_ZONE3_REHYDRATE_STALLED|convoyReady={convoy != null}|validPose={!invalidPose}|phase={CurrentPhase}|fuel={Zone3FuelPointsRemaining}");
+                    }
+                    // Never let an un-restored scene-local ship overwrite the
+                    // networked convoy pose on the new Host's first tick.
+                    return;
+                }
+
+                convoy.ApplyReplicatedState(Zone3ConvoyInitialized,
+                    Zone3FuelPointsRemaining,
+                    (Zone3ConvoyRoutePoint)Zone3ConvoyCurrentPoint,
+                    (Zone3ConvoyRoutePoint)Zone3ConvoyTargetPoint,
+                    Zone3ConvoyRouteLocked, Zone3ConvoyWaitingForRoute);
+                convoy.ApplyReplicatedPose(Zone3FrigatePosition, Zone3FrigateRotation);
+                _hostMigrationZone3RestorePending = false;
+                RuntimeLog.Log(RuntimeLogCategory.MatchState,
+                    $"[MatchState] HM_ZONE3_REHYDRATE_OK|position={Zone3FrigatePosition}|fuel={Zone3FuelPointsRemaining}|current={Zone3ConvoyCurrentPoint}|target={Zone3ConvoyTargetPoint}");
+            }
 
             if (IsEnded)
             {
@@ -607,6 +703,11 @@ namespace EchoProtocol.Networking
                     zone3.Convoy != null ? zone3.Convoy.transform.rotation
                     : (zone3.Frigate != null ? zone3.Frigate.transform.rotation : Quaternion.identity));
                 PublishZone3ConvoyState(zone3.Convoy);
+                if (Time.unscaledTime >= _nextZone3CheckpointCheckAt)
+                {
+                    _nextZone3CheckpointCheckAt = Time.unscaledTime + 0.5f;
+                    RequestMissionSnapshotCheckpointIfChanged();
+                }
                 AdvanceZone3RefuelAuthoritative();
                 EmitFrigatePushNoiseAuthoritative(zone3);
             }
@@ -2949,6 +3050,17 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            if (CurrentPhase == NetworkMatchPhase.Zone2Objective
+                && Zone2RelayRuntimeInitialized
+                && !_hostMigrationZone2RestorePending)
+            {
+                _hostMigrationZone2RestorePending = true;
+                _hostMigrationZone2RestoreStartedAt = Time.unscaledTime;
+                _hostMigrationZone2RestoreTimeoutLogged = false;
+                RuntimeLog.Log(RuntimeLogCategory.MatchState,
+                    "[MatchState] HM_ZONE2_REHYDRATE_PENDING|source=Reconcile");
+            }
+
             var changed = false;
             var releasedRelayOperators = 0;
             var restoredSecurityHoldLeases = 0;
@@ -3705,7 +3817,37 @@ namespace EchoProtocol.Networking
             {
                 TryPublishReplicatedScenarioConfigToRegistry();
             }
+            else
+            {
+                RequestMissionSnapshotCheckpointIfChanged();
+            }
             ApplyPresentation(notifyListeners: true);
+        }
+
+        // Capture durable objective milestones without uploading a snapshot on
+        // every Relay simulation tick or every frame of convoy movement.
+        private void RequestMissionSnapshotCheckpointIfChanged()
+        {
+            var bootstrap = NetworkBootstrap.Instance;
+            if (Object == null || !Object.HasStateAuthority || Runner == null
+                || !Runner.IsRunning || !Runner.IsServer
+                || NetworkBootstrap.IsHostMigrationResumeActive
+                || bootstrap == null || bootstrap.Runner != Runner)
+            {
+                return;
+            }
+
+            string key = $"{Status}|{CurrentPhase}|{PhaseOrdinal}|{Zone2Stage}|{RelayCompletionMask}|{SecurityTerminalDiscovered}|{SecurityHoldCompleted}|{ZoneDoorsUnlocked}|{PowerPuzzleCompleted}|{RestoreMainPowerCompleted}|{Zone3ConvoyInitialized}|{Zone3FuelPointsRemaining}|{Zone3ConvoyCurrentPoint}|{Zone3ConvoyTargetPoint}|{Zone3ConvoyRouteLocked}|{Zone3ConvoyWaitingForRoute}|{EndOrdinal}";
+            if (string.Equals(_lastMissionCheckpointKey, key, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _lastMissionCheckpointKey = key;
+            string reason = $"mission-progress:{CurrentPhase}:{PhaseOrdinal}";
+            bootstrap.RequestHostMigrationSnapshotCheckpoint(reason);
+            RuntimeLog.Log(RuntimeLogCategory.MatchState,
+                $"[MatchState] HM_MISSION_CHECKPOINT_REQUEST|phase={CurrentPhase}|ordinal={PhaseOrdinal}|zone2Stage={Zone2Stage}|relayMask={RelayCompletionMask}|convoyFuel={Zone3FuelPointsRemaining}|reason={reason}");
         }
 
         private void OpenScenarioDecisionWindow(

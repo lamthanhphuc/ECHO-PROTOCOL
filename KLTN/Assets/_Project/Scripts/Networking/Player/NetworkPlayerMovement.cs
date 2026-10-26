@@ -20,7 +20,9 @@ namespace EchoProtocol.Networking
     }
 
     [RequireComponent(typeof(NetworkCharacterController))]
-    public sealed class NetworkPlayerMovement : NetworkBehaviour
+    public sealed class NetworkPlayerMovement : NetworkBehaviour,
+        IInputAuthorityGained,
+        IInputAuthorityLost
     {
         [SerializeField] private InputActionAsset _inputActions;
         [SerializeField, Min(0f)] private float _walkSpeed = 4f;
@@ -47,6 +49,7 @@ namespace EchoProtocol.Networking
         private PlayerUpperBodyAim _upperBodyAim;
         private NetworkBootstrap _bootstrap;
         private bool _isSceneLoadDoneSubscribed;
+        private bool _localInputInitialized;
         private TickTimer _nextMovementNoise;
         private RuntimeNoiseType _lastMovementNoiseType;
         private bool _hasLastMovementNoiseType;
@@ -391,16 +394,47 @@ namespace EchoProtocol.Networking
                 }
             }
 
-            if (!Object.HasInputAuthority) return;
+            if (Object.HasInputAuthority)
+            {
+                ActivateLocalInput(
+                    preserveReplicatedState: migrationResume);
+            }
+        }
+
+        public void InputAuthorityGained()
+        {
+            // Spawned is not invoked again when a restored/reconnected
+            // PlayerObject receives InputAuthority after its initial spawn.
+            ActivateLocalInput(
+                preserveReplicatedState: true);
+        }
+
+        public void InputAuthorityLost()
+        {
+            DeactivateLocalInput();
+        }
+
+        private void ActivateLocalInput(
+            bool preserveReplicatedState)
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasInputAuthority)
+            {
+                return;
+            }
 
             var hiding =
                 GetComponent<PlayerHidingController>();
 
-            if (migrationResume)
+            if (!_localInputInitialized
+                && preserveReplicatedState)
             {
                 RestoreMigratedLocalHiding(hiding);
             }
-            else if (hiding != null && hiding.IsHidden)
+            else if (!_localInputInitialized
+                     && hiding != null
+                     && hiding.IsHidden)
             {
                 hiding.ExitHiding();
             }
@@ -418,10 +452,54 @@ namespace EchoProtocol.Networking
             _jumpAction?.Enable();
             _sprintAction?.Enable();
             _crouchAction?.Enable();
-            _bootstrap?.RegisterLocalInputProvider(Object, ReadLocalInput);
+
+            if (_bootstrap == null
+                || !_bootstrap.RegisterLocalInputProvider(
+                    Object,
+                    ReadLocalInput))
+            {
+                _moveAction?.Disable();
+                _jumpAction?.Disable();
+                _sprintAction?.Disable();
+                _crouchAction?.Disable();
+                return;
+            }
+
+            var firstInitialization =
+                !_localInputInitialized;
+
+            _localInputInitialized = true;
+
+            if (!firstInitialization)
+            {
+                return;
+            }
+
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerMovement,
                 $"[NetworkMovement] Local input provider registered for {Object.InputAuthority}.");
+        }
+
+        private void DeactivateLocalInput()
+        {
+            if (_bootstrap != null
+                && _isSceneLoadDoneSubscribed)
+            {
+                _bootstrap.NetworkSceneLoadDone -=
+                    HandleNetworkSceneLoadDone;
+
+                _isSceneLoadDoneSubscribed = false;
+            }
+
+            _bootstrap?.UnregisterLocalInputProvider(
+                Object);
+
+            _moveAction?.Disable();
+            _jumpAction?.Disable();
+            _sprintAction?.Disable();
+            _crouchAction?.Disable();
+            _playerCamera = null;
+            _localInputInitialized = false;
         }
 
         private void RestoreMigratedHidingAuthority()
@@ -507,17 +585,7 @@ namespace EchoProtocol.Networking
                     Object.InputAuthority);
             }
 
-            if (_bootstrap != null && _isSceneLoadDoneSubscribed)
-            {
-                _bootstrap.NetworkSceneLoadDone -= HandleNetworkSceneLoadDone;
-                _isSceneLoadDoneSubscribed = false;
-            }
-
-            _bootstrap?.UnregisterLocalInputProvider(Object);
-            _moveAction?.Disable();
-            _jumpAction?.Disable();
-            _sprintAction?.Disable();
-            _crouchAction?.Disable();
+            DeactivateLocalInput();
         }
 
         public override void FixedUpdateNetwork()
@@ -1217,14 +1285,10 @@ namespace EchoProtocol.Networking
 
         private void HandleNetworkSceneLoadDone(NetworkRunner runner)
         {
-            BindLocalPlayerCameraIfNeeded();
             if (Object != null && Object.IsValid && Object.HasInputAuthority)
             {
-                _moveAction?.Enable();
-                _jumpAction?.Enable();
-                _sprintAction?.Enable();
-                _crouchAction?.Enable();
-                _bootstrap?.RegisterLocalInputProvider(Object, ReadLocalInput);
+                ActivateLocalInput(
+                    preserveReplicatedState: true);
             }
         }
 

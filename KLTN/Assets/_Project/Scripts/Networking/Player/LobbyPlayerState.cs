@@ -558,7 +558,25 @@ namespace EchoProtocol.Networking
             BackendUserId =
                 userId;
 
+            NetworkBootstrap.Instance
+                ?.RequestHostMigrationSnapshotCheckpoint(
+                    "backend-identity-verified");
+
+            if (Object.InputAuthority.IsRealPlayer)
+            {
+                RpcConfirmBackendIdentity(
+                    Object.InputAuthority);
+            }
+
             AnyStateChanged?.Invoke();
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+        private void RpcConfirmBackendIdentity(
+            [RpcTarget] PlayerRef target)
+        {
+            NetworkBootstrap.Instance
+                ?.MarkReconnectProofSubmitted();
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
@@ -967,6 +985,19 @@ namespace EchoProtocol.Networking
         }
         private bool CanSendSelectionRequest(LobbySelectionKind kind, int requestedId)
         {
+            if (NetworkBootstrap.Instance?.IsMatchStartPending == true)
+            {
+                Debug.LogWarning(
+                    $"[LobbyPlayerState] Cannot request {kind}={requestedId}: match start is pending.");
+                LocalSelectionRequestCompleted?.Invoke(
+                    new LobbySelectionResult(
+                        kind,
+                        requestedId,
+                        false,
+                        LobbySelectionError.SelectionLockedWhileReady));
+                return false;
+            }
+
             if (Object.HasInputAuthority) return true;
             Debug.LogWarning($"[LobbyPlayerState] Cannot request {kind}={requestedId}: no input authority.");
             LocalSelectionRequestCompleted?.Invoke(
@@ -981,6 +1012,13 @@ namespace EchoProtocol.Networking
             {
                 Debug.LogWarning(
                     $"[LobbyPlayerState] Rejected ready request from {info.Source}; owner is {Object.InputAuthority}.");
+                return;
+            }
+
+            if (NetworkBootstrap.Instance?.IsMatchStartPending == true)
+            {
+                Debug.LogWarning(
+                    $"[LobbyPlayerState] Ready change rejected while match start is pending for {requester}.");
                 return;
             }
 
@@ -1104,6 +1142,11 @@ namespace EchoProtocol.Networking
 
         private LobbySelectionError ValidateOwnedRequest(PlayerRef source)
         {
+            if (NetworkBootstrap.Instance?.IsMatchStartPending == true)
+            {
+                return LobbySelectionError.SelectionLockedWhileReady;
+            }
+
             if (!Object.HasStateAuthority || source != Object.InputAuthority)
             {
                 return LobbySelectionError.InvalidPlayer;

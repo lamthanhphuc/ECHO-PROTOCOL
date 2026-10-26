@@ -110,9 +110,9 @@ namespace EchoProtocol.AI.Minions
         [Networked] public NetworkId StolenToolId { get; private set; }
         [Networked] private int ToolDivePhase { get; set; }
         [Networked] private TickTimer ToolDiveTimer { get; set; }
-        private float _diveDuration;
-        private float _diveStartHeight;
-        private bool _toolContactResolved;
+        [Networked] private float ReplicatedDiveDuration { get; set; }
+        [Networked] private float ReplicatedDiveStartHeight { get; set; }
+        [Networked] private NetworkBool ReplicatedToolContactResolved { get; set; }
         private Transform _toolHand;
         private float _renderFlightHeight = -1f;
         [Networked] public NetworkBool IsMoving { get; private set; }
@@ -142,17 +142,17 @@ namespace EchoProtocol.AI.Minions
         private StalkerNavigationController _navigation;
         private Animator[] _animators;
         private HostRuntimeNoiseService _noiseService;
-        private float _trackSeconds;
-        private float _lostSightSeconds;
-        private float _flashlightExposureSeconds;
+        [Networked] private float ReplicatedTrackSeconds { get; set; }
+        [Networked] private float ReplicatedLostSightSeconds { get; set; }
+        [Networked] private float ReplicatedFlashlightExposureSeconds { get; set; }
         private float _nextTargetRefreshAt;
         private float _nextRoamRetargetAt;
-        private float _distractionUntil;
-        private Vector3 _lastKnownTargetPosition;
-        private Vector3 _fleeDestination;
-        private int _toolRouteRetries;
-        private Vector3 _toolVictimPosition;
-        private Vector3 _distractionPoint;
+        [Networked] private TickTimer ReplicatedDistractionTimer { get; set; }
+        [Networked] private Vector3 ReplicatedLastKnownTargetPosition { get; set; }
+        [Networked] private Vector3 ReplicatedFleeDestination { get; set; }
+        [Networked] private int ReplicatedToolRouteRetries { get; set; }
+        [Networked] private Vector3 ReplicatedToolVictimPosition { get; set; }
+        [Networked] private Vector3 ReplicatedDistractionPoint { get; set; }
         private long _alertOrdinal;
         private uint _renderedAttackSequence;
         private uint _renderedAlertSequence;
@@ -233,6 +233,11 @@ namespace EchoProtocol.AI.Minions
                 AlertCooldown = TickTimer.None;
                 FleeTimer = TickTimer.None;
             }
+            if (global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
+            {
+                Debug.Log(
+                    $"[HM_AI_MINION_RESTORE]|id={Object.Id}|state={State}|target={TargetPlayer}|core={StolenCoreId}|tool={StolenToolId}|flee={ReplicatedFleeDestination}|divePhase={ToolDivePhase}|diveResolved={ReplicatedToolContactResolved}|noiseActive={!ReplicatedDistractionTimer.ExpiredOrNotRunning(Runner)}");
+            }
             _noiseService = HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance);
             _noiseService.RuntimeNoiseAccepted += HandleRuntimeNoiseAccepted;
             _agent.enabled = false;
@@ -293,8 +298,8 @@ namespace EchoProtocol.AI.Minions
             {
                 return;
             }
-            _distractionPoint = noiseEvent.WorldPosition;
-            _distractionUntil = Time.time + noiseMakerDistractionSeconds;
+            ReplicatedDistractionPoint = noiseEvent.WorldPosition;
+            ReplicatedDistractionTimer = TickTimer.CreateFromSeconds(Runner, noiseMakerDistractionSeconds);
             ResetTracking();
             StateValue = (int)CreepMinionState.Roam;
         }
@@ -334,18 +339,18 @@ namespace EchoProtocol.AI.Minions
 
             if (illuminated)
             {
-                _flashlightExposureSeconds =
+                ReplicatedFlashlightExposureSeconds =
                     Mathf.Min(
                         flashlightKillExposureSeconds,
-                        _flashlightExposureSeconds
+                        ReplicatedFlashlightExposureSeconds
                         + Runner.DeltaTime);
             }
             else
             {
-                _flashlightExposureSeconds =
+                ReplicatedFlashlightExposureSeconds =
                     Mathf.Max(
                         0f,
-                        _flashlightExposureSeconds
+                        ReplicatedFlashlightExposureSeconds
                         - Runner.DeltaTime
                           * flashlightExposureDecayPerSecond);
             }
@@ -356,13 +361,13 @@ namespace EchoProtocol.AI.Minions
                 // Debug.Log(
                     // $"[CREEP_FLASHLIGHT][EXPOSURE] " +
                     // $"id={Object.Id} " +
-                    // $"exposure={_flashlightExposureSeconds:F2}/" +
+                    // $"exposure={ReplicatedFlashlightExposureSeconds:F2}/" +
                     // $"{flashlightKillExposureSeconds:F2}",
                     // this);
             }
 #endif
 
-            if (_flashlightExposureSeconds
+            if (ReplicatedFlashlightExposureSeconds
                 >= flashlightKillExposureSeconds)
             {
                 BeginFlashlightDeath();
@@ -379,19 +384,19 @@ namespace EchoProtocol.AI.Minions
             if (State == CreepMinionState.Flee)
             {
                 _agent.speed = fleeSpeed;
-                _agent.SetDestination(_fleeDestination);
+                _agent.SetDestination(ReplicatedFleeDestination);
                 if (StolenCoreId.IsValid && Runner.TryFindObject(StolenCoreId, out var coreObject)
                     && coreObject != null && coreObject.TryGetComponent<NetworkPickupItem>(out var core))
                 {
                     core.TryUpdateMonsterCarryPoseAuthoritative(Object.Id, CarryPosition(), transform.rotation);
                 }
-                bool reachedDropPoint = Vector3.Distance(transform.position, _fleeDestination) <= 1f;
+                bool reachedDropPoint = Vector3.Distance(transform.position, ReplicatedFleeDestination) <= 1f;
                 if (StolenToolId.IsValid && !reachedDropPoint && FleeTimer.Expired(Runner))
                 {
                     // A blocked route must not drop the tool back in the victim's room.
-                    _agent.SetDestination(_fleeDestination);
-                    if (_toolRouteRetries++ < 2 && TryFindSabotageDropPosition(_toolVictimPosition, out var alternative))
-                        _fleeDestination = alternative;
+                    _agent.SetDestination(ReplicatedFleeDestination);
+                    if (ReplicatedToolRouteRetries++ < 2 && TryFindSabotageDropPosition(ReplicatedToolVictimPosition, out var alternative))
+                        ReplicatedFleeDestination = alternative;
                     else
                     {
                         // No reachable destination remains: return the tool to a recoverable
@@ -406,16 +411,16 @@ namespace EchoProtocol.AI.Minions
                     ReleaseStolenCoreAuthoritative();
                 }
             }
-            else if (_distractionUntil > Time.time && !StolenCoreId.IsValid)
+            else if (!ReplicatedDistractionTimer.ExpiredOrNotRunning(Runner) && !StolenCoreId.IsValid)
             {
                 _agent.speed = trackSpeed;
-                _agent.SetDestination(_distractionPoint);
-                if (Vector3.Distance(transform.position, _distractionPoint) <= noiseMakerArrivalDistance)
-                    _distractionUntil = 0f;
+                _agent.SetDestination(ReplicatedDistractionPoint);
+                if (Vector3.Distance(transform.position, ReplicatedDistractionPoint) <= noiseMakerArrivalDistance)
+                    ReplicatedDistractionTimer = TickTimer.None;
             }
             else
             {
-                _distractionUntil = 0f;
+                ReplicatedDistractionTimer = TickTimer.None;
                 UpdateTargetAndMovement();
             }
             _navigation.TickAuthoritativeLocomotion(Runner.DeltaTime);
@@ -432,8 +437,8 @@ namespace EchoProtocol.AI.Minions
                 {
                     TargetPlayer = best;
                     _stalkerAlertDeliveredForTarget = false;
-                    _trackSeconds = 0f;
-                    _lostSightSeconds = 0f;
+                    ReplicatedTrackSeconds = 0f;
+                    ReplicatedLostSightSeconds = 0f;
                     StateValue = (int)CreepMinionState.Track;
                 }
             }
@@ -447,8 +452,8 @@ namespace EchoProtocol.AI.Minions
 
             if (!CanSeePlayer(targetObject))
             {
-                _lostSightSeconds += Runner.DeltaTime;
-                if (_lostSightSeconds > lostSightGraceSeconds)
+                ReplicatedLostSightSeconds += Runner.DeltaTime;
+                if (ReplicatedLostSightSeconds > lostSightGraceSeconds)
                 {
                     ResetTracking();
                     Roam();
@@ -456,20 +461,20 @@ namespace EchoProtocol.AI.Minions
                 else
                 {
                     _agent.speed = trackSpeed;
-                    _agent.SetDestination(_lastKnownTargetPosition);
+                    _agent.SetDestination(ReplicatedLastKnownTargetPosition);
                 }
                 return;
             }
 
-            _lastKnownTargetPosition = targetObject.transform.position;
-            _lostSightSeconds = 0f;
+            ReplicatedLastKnownTargetPosition = targetObject.transform.position;
+            ReplicatedLostSightSeconds = 0f;
             if (State != CreepMinionState.Harass)
             {
                 StateValue = (int)CreepMinionState.Track;
-                _trackSeconds += Runner.DeltaTime;
+                ReplicatedTrackSeconds += Runner.DeltaTime;
                 _agent.speed = trackSpeed;
-                if (Vector3.Distance(transform.position, _lastKnownTargetPosition) > trackStandOffDistance)
-                    _agent.SetDestination(_lastKnownTargetPosition);
+                if (Vector3.Distance(transform.position, ReplicatedLastKnownTargetPosition) > trackStandOffDistance)
+                    _agent.SetDestination(ReplicatedLastKnownTargetPosition);
                 else if (_agent.hasPath)
                     _agent.ResetPath();
 
@@ -477,7 +482,7 @@ namespace EchoProtocol.AI.Minions
                 float required = Zone == RegionSemanticZone.Zone02
                     && (stage == Zone2MissionStage.SecurityHoldReady || stage == Zone2MissionStage.SecurityHold)
                     ? zone2SecurityTrackRequiredSeconds : trackRequiredSeconds;
-                if (_trackSeconds >= required && AlertCooldown.ExpiredOrNotRunning(Runner)) EmitStalkerAlert();
+                if (ReplicatedTrackSeconds >= required && AlertCooldown.ExpiredOrNotRunning(Runner)) EmitStalkerAlert();
             }
 
             if (State == CreepMinionState.Harass)
@@ -696,7 +701,7 @@ namespace EchoProtocol.AI.Minions
         private void EmitStalkerAlert()
         {
             _stalkerAlertDeliveredForTarget = TrySendStalkerAlert();
-            _trackSeconds = 0f;
+            ReplicatedTrackSeconds = 0f;
             StateValue = (int)CreepMinionState.Harass;
             AlertCooldown = TickTimer.CreateFromSeconds(
                 Runner,
@@ -709,15 +714,15 @@ namespace EchoProtocol.AI.Minions
                 TargetPlayer,
                 RuntimeNoiseType.MINION_ALERT,
                 new RuntimeNoiseSourceOccurrenceKey($"minion-alert:{Object.Id}", ++_alertOrdinal),
-                _lastKnownTargetPosition,
+                ReplicatedLastKnownTargetPosition,
                 out _);
 
             if (accepted) AlertSequence++;
 #if false
             if (!accepted)
-                // Debug.LogWarning($"[CREEP_ALERT][REJECTED] target={TargetPlayer} zone={Zone} position={_lastKnownTargetPosition}", this);
+                // Debug.LogWarning($"[CREEP_ALERT][REJECTED] target={TargetPlayer} zone={Zone} position={ReplicatedLastKnownTargetPosition}", this);
             else
-                // Debug.Log($"[CREEP_ALERT][ACCEPTED] target={TargetPlayer} zone={Zone} position={_lastKnownTargetPosition}", this);
+                // Debug.Log($"[CREEP_ALERT][ACCEPTED] target={TargetPlayer} zone={Zone} position={ReplicatedLastKnownTargetPosition}", this);
 #endif
             return accepted;
         }
@@ -817,18 +822,19 @@ namespace EchoProtocol.AI.Minions
 
         private void BeginToolDive(NetworkObject target)
         {
-            _toolVictimPosition = target.transform.position;
-            if (!TryFindSabotageDropPosition(target.transform.position, out _fleeDestination))
+            ReplicatedToolVictimPosition = target.transform.position;
+            if (!TryFindSabotageDropPosition(target.transform.position, out var chosenFleeDestination))
             {
                 AttackCooldown = TickTimer.CreateFromSeconds(Runner, 1f);
                 return;
             }
-            _diveStartHeight = Mathf.Max(1.2f, FlightHeightValue);
-            _diveDuration = Mathf.Max(0.45f, (_diveStartHeight - 1.2f) / 8f);
+            ReplicatedFleeDestination = chosenFleeDestination;
+            ReplicatedDiveStartHeight = Mathf.Max(1.2f, FlightHeightValue);
+            ReplicatedDiveDuration = Mathf.Max(0.45f, (ReplicatedDiveStartHeight - 1.2f) / 8f);
             ToolDivePhase = 1;
-            _toolContactResolved = false;
-            ToolDiveTimer = TickTimer.CreateFromSeconds(Runner, _diveDuration);
-            AttackCooldown = TickTimer.CreateFromSeconds(Runner, _diveDuration + StealClipSeconds() + attackCooldownSeconds);
+            ReplicatedToolContactResolved = false;
+            ToolDiveTimer = TickTimer.CreateFromSeconds(Runner, ReplicatedDiveDuration);
+            AttackCooldown = TickTimer.CreateFromSeconds(Runner, ReplicatedDiveDuration + StealClipSeconds() + attackCooldownSeconds);
         }
 
         private void TickToolDive()
@@ -839,7 +845,7 @@ namespace EchoProtocol.AI.Minions
                 {
                     FlightHeightValue = 1.2f;
                     if (!ToolDiveTimer.Expired(Runner)) return;
-                    BeginFleeTo(_fleeDestination, 12f);
+                    BeginFleeTo(ReplicatedFleeDestination, 12f);
                 }
                 ToolDivePhase = 0;
                 _agent.stoppingDistance = 0.4f;
@@ -851,8 +857,8 @@ namespace EchoProtocol.AI.Minions
             IsMoving = _agent.velocity.sqrMagnitude > 0.05f;
             if (ToolDivePhase == 1)
             {
-                float t = 1f - (ToolDiveTimer.RemainingTime(Runner) ?? 0f) / _diveDuration;
-                FlightHeightValue = Mathf.Lerp(_diveStartHeight, 1.2f, Mathf.SmoothStep(0f, 1f, t));
+                float t = 1f - (ToolDiveTimer.RemainingTime(Runner) ?? 0f) / ReplicatedDiveDuration;
+                FlightHeightValue = Mathf.Lerp(ReplicatedDiveStartHeight, 1.2f, Mathf.SmoothStep(0f, 1f, t));
                 if (!ToolDiveTimer.Expired(Runner)) return;
                 ToolDivePhase = 2;
                 AttackKindValue = (int)(lobby.CarriedCoreId.IsValid ? CreepMinionAttackKind.StealCore : CreepMinionAttackKind.StealTool);
@@ -860,9 +866,9 @@ namespace EchoProtocol.AI.Minions
                 ToolDiveTimer = TickTimer.CreateFromSeconds(Runner, StealClipSeconds());
             }
             FlightHeightValue = 1.2f;
-            if (!_toolContactResolved && (ToolDiveTimer.RemainingTime(Runner) ?? 0f) <= StealClipSeconds() * 0.45f)
+            if (!ReplicatedToolContactResolved && (ToolDiveTimer.RemainingTime(Runner) ?? 0f) <= StealClipSeconds() * 0.45f)
             {
-                _toolContactResolved = true;
+                ReplicatedToolContactResolved = true;
                 if (Vector3.Distance(transform.position, target.transform.position) <= 2.5f
                     && CanSeePlayer(target))
                 {
@@ -876,8 +882,8 @@ namespace EchoProtocol.AI.Minions
             ToolDivePhase = 0;
             _agent.stoppingDistance = 0.4f;
             if (StolenToolId.IsValid)
-                _toolRouteRetries = 0;
-                BeginFleeTo(_fleeDestination, Mathf.Max(toolFleeSeconds, 15f));
+                ReplicatedToolRouteRetries = 0;
+                BeginFleeTo(ReplicatedFleeDestination, Mathf.Max(toolFleeSeconds, 15f));
         }
 
         public void GetToolCarryPose(out Vector3 position, out Quaternion rotation)
@@ -987,7 +993,7 @@ namespace EchoProtocol.AI.Minions
             StolenCoreId = coreId;
             BeginFlee(playerObject.transform.position, coreCarryTimeoutSeconds);
 #if false
-            // Debug.Log($"[CREEP_STEAL_CORE][SUCCESS] core={coreId} destination={_fleeDestination}", this);
+            // Debug.Log($"[CREEP_STEAL_CORE][SUCCESS] core={coreId} destination={ReplicatedFleeDestination}", this);
 #endif
             return true;
         }
@@ -1018,8 +1024,8 @@ namespace EchoProtocol.AI.Minions
             IsDying = true;
             ResetTracking();
 
-            _distractionUntil = 0f;
-            _flashlightExposureSeconds = 0f;
+            ReplicatedDistractionTimer = TickTimer.None;
+            ReplicatedFlashlightExposureSeconds = 0f;
 
             AttackCooldown = TickTimer.None;
             AlertCooldown = TickTimer.None;
@@ -1050,14 +1056,15 @@ namespace EchoProtocol.AI.Minions
 
         private void BeginFlee(Vector3 threatPosition, float seconds)
         {
-            if (!TryFindFleeDestination(threatPosition, out _fleeDestination))
+            if (!TryFindFleeDestination(threatPosition, out var chosenFleeDestination))
             {
-                _fleeDestination = transform.position;
+                chosenFleeDestination = transform.position;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 // Debug.LogWarning($"[CREEP_FLEE][NO_DESTINATION] id={Object.Id} position={transform.position}", this);
 #endif
             }
 
+            ReplicatedFleeDestination = chosenFleeDestination;
             _agent.speed = fleeSpeed;
             StateValue = (int)CreepMinionState.Flee;
             FleeTimer = TickTimer.CreateFromSeconds(Runner, seconds);
@@ -1073,17 +1080,17 @@ namespace EchoProtocol.AI.Minions
                     2f,
                     NavMesh.AllAreas))
             {
-                _fleeDestination = hit.position;
+                ReplicatedFleeDestination = hit.position;
             }
             else
             {
-                _fleeDestination = destination;
+                ReplicatedFleeDestination = destination;
             }
 
             _agent.speed = fleeSpeed;
             StateValue = (int)CreepMinionState.Flee;
             FleeTimer = TickTimer.CreateFromSeconds(Runner, seconds);
-            _agent.SetDestination(_fleeDestination);
+            _agent.SetDestination(ReplicatedFleeDestination);
         }
 
         private bool TryFindFleeDestination(Vector3 threatPosition, out Vector3 destination)
@@ -1139,8 +1146,8 @@ namespace EchoProtocol.AI.Minions
         private void ResetTracking()
         {
             TargetPlayer = PlayerRef.None;
-            _trackSeconds = 0f;
-            _lostSightSeconds = 0f;
+            ReplicatedTrackSeconds = 0f;
+            ReplicatedLostSightSeconds = 0f;
             _stalkerAlertDeliveredForTarget = false;
         }
 

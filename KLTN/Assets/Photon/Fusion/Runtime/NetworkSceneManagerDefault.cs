@@ -73,7 +73,7 @@ namespace Fusion {
     /// </summary>
     public NetworkRunner Runner { get; private set; }
 
-    private bool IsMultiplePeer => Runner.Config.PeerMode == NetworkProjectConfig.PeerModes.Multiple;
+    private bool IsMultiplePeer => Runner != null && Runner.Config.PeerMode == NetworkProjectConfig.PeerModes.Multiple;
     private bool _isLoading;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -657,7 +657,18 @@ namespace Fusion {
     /// Post-processes the loaded scene. Overrides need to call the base implementation.
     /// </summary>
     protected virtual IEnumerator OnSceneLoaded(SceneRef sceneRef, Scene scene, NetworkLoadSceneParameters sceneParams) {
-      Log.TraceSceneManager(Runner, $"Finished loading, starting processing {scene.Dump()} for {sceneRef}");
+      // A transport shutdown can complete after Unity finished the async
+      // scene load but before this continuation is resumed. Shutdown() clears
+      // Runner, so never process/register a scene for a runner that no longer
+      // owns this manager. This also lets the wrapping FusionCoroutine finish
+      // normally instead of leaving a stopped async operation behind.
+      var runner = Runner;
+      if (runner == null || runner.IsShutdown) {
+        Log.Warn($"Skipping loaded scene processing for {sceneRef}: the owning NetworkRunner is already shut down.");
+        yield break;
+      }
+
+      Log.TraceSceneManager(runner, $"Finished loading, starting processing {scene.Dump()} for {sceneRef}");
 
       var sceneObjects = scene.GetComponents<NetworkObject>(includeInactive: true, out var rootObjects);
 
@@ -697,10 +708,10 @@ namespace Fusion {
       // register scene objects; this will deactivate GameObjects for clients
       // the additional loadId parameter is passed to ensure each scene load
       // yields unique type ids for scene objects
-      Runner.RegisterSceneObjects(sceneRef, sceneObjects, loadId: sceneParams.LoadId);
+      runner.RegisterSceneObjects(sceneRef, sceneObjects, loadId: sceneParams.LoadId);
       
-      Log.TraceSceneManager(Runner, $"Finished loading & processing {scene.Dump()} for {sceneRef}");
-      Runner.InvokeSceneLoadDone(new SceneLoadDoneArgs(sceneRef, sceneObjects, scene, rootObjects));
+      Log.TraceSceneManager(runner, $"Finished loading & processing {scene.Dump()} for {sceneRef}");
+      runner.InvokeSceneLoadDone(new SceneLoadDoneArgs(sceneRef, sceneObjects, scene, rootObjects));
       yield break;
     }
 

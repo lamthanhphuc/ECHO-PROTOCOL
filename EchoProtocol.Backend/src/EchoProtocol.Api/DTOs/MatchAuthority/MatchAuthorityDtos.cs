@@ -53,6 +53,12 @@ public sealed class MatchPlayerBindingResponse
     public DateTime BoundAtUtc { get; set; }
 }
 
+public sealed class DisconnectMatchPlayerRequest
+{
+    [Required]
+    public Guid ExpectedUserId { get; set; }
+}
+
 public sealed class TakeoverMatchAuthorityRequest
 {
     [Required, StringLength(128, MinimumLength = 1)]

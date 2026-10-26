@@ -31,7 +31,12 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject playerPrefab;
         [SerializeField] private Vector3 spawnOrigin = Vector3.zero;
         [SerializeField] private float spawnSpacing = 2f;
-        [SerializeField, Min(1f)] private float reconnectGraceSeconds = 60f;
+        // Migrations can spend up to 90 seconds restoring a new Host and
+        // acquiring the backend authority lease. 60 seconds can expire a
+        // retained PlayerObject before its previous owner can rejoin.
+        // Enforce a minimum even when an older serialized component says 60.
+        private const float MinimumReconnectGraceSeconds = 300f;
+        [SerializeField, Min(1f)] private float reconnectGraceSeconds = MinimumReconnectGraceSeconds;
 
         private readonly FusionPlayerIdentityRegistry _identityRegistry = new FusionPlayerIdentityRegistry();
         private readonly PlayerRuntimeEntityRegistry _entityRegistry = new PlayerRuntimeEntityRegistry();
@@ -44,7 +49,8 @@ namespace EchoProtocol.Networking
         private readonly HashSet<PlayerRef> _expiring = new();
 
         public FusionPlayerIdentityRegistry IdentityRegistry => _identityRegistry;
-        public float ReconnectGraceSeconds => reconnectGraceSeconds;
+        public float ReconnectGraceSeconds =>
+            Mathf.Max(MinimumReconnectGraceSeconds, reconnectGraceSeconds);
 
         public PlayerRuntimeEntityRegistry EntityRegistry => _entityRegistry;
 
@@ -289,6 +295,15 @@ namespace EchoProtocol.Networking
             {
                 if (playerObject.TryGetComponent<LobbyPlayerState>(out var state))
                 {
+                    // A late duplicate OnPlayerLeft during migration must
+                    // not turn a retained carried Core into a world drop.
+                    // Expiry uses _expiring and still takes the normal despawn path.
+                    if (state.Disconnected)
+                    {
+                        RuntimeLog.Log(RuntimeLogCategory.PlayerLifecycle,
+                            $"HM_ADMISSION_DUPLICATE_LEFT_IGNORED|player={player}");
+                        return;
+                    }
                     if (state.CarriedCoreId.IsValid
                         && runner.TryFindObject(state.CarriedCoreId, out var core)
                         && core.TryGetComponent<NetworkPickupItem>(out var item))
@@ -301,6 +316,8 @@ namespace EchoProtocol.Networking
                 playerObject.RemoveInputAuthority();
                 if (_graceTimers.Remove(player, out var oldTimer)) StopCoroutine(oldTimer);
                 _graceTimers[player] = StartCoroutine(ExpireDisconnectedPlayer(runner, player, playerObject));
+                RuntimeLog.Log(RuntimeLogCategory.PlayerLifecycle,
+                    $"FPL|RECONNECT_RESERVATION_STARTED|player={player}|object={playerObject.Id}|graceSeconds={ReconnectGraceSeconds:0}");
                 return;
             }
 
@@ -469,6 +486,14 @@ namespace EchoProtocol.Networking
 
                 if (isActive)
                 {
+                    var validatedToken = runner.GetPlayerConnectionToken(player);
+                    if (validatedToken == null || validatedToken.Length == 0
+                        || !ReconnectTokenMatches(lobbyState, validatedToken))
+                    {
+                        Debug.LogError(
+                            $"HM_ADMISSION_SNAPSHOT_IDENTITY_REJECTED|player={player}|object={playerObject.Id}");
+                        return false;
+                    }
                     runner.SetPlayerObject(
                         player,
                         playerObject);
@@ -477,21 +502,14 @@ namespace EchoProtocol.Networking
                         .AssignInputAuthority(
                             player);
 
-                    var token =
-                        runner.GetPlayerConnectionToken(
-                            player);
-
-                    _connectionTokens[player] =
-                        token;
-
-                    lobbyState
-                        .SetReconnectTokenHashAuthoritative(
-                            ComputeConnectionTokenHash(
-                                token));
+                    // Keep the snapshot's verified token hash unchanged.
+                    _connectionTokens[player] = validatedToken;
 
                     lobbyState
                         .SetDisconnectedAuthoritative(
                             false);
+
+                    RebindMigratedCarriedCore(runner, player, lobbyState);
                 }
                 else
                 {
@@ -514,6 +532,8 @@ namespace EchoProtocol.Networking
                                 player,
                                 playerObject));
 
+                    RuntimeLog.Log(RuntimeLogCategory.PlayerLifecycle,
+                        $"FPL|RECONNECT_RESERVATION_MIGRATED|player={player}|object={playerObject.Id}|graceSeconds={ReconnectGraceSeconds:0}");
                     retained++;
                 }
 
@@ -533,6 +553,120 @@ namespace EchoProtocol.Networking
             // reset presentation/gameplay state as if the player were new.
             return rebuilt > 0;
         }
+        // Called once after the authoritative snapshot restore and backend
+        // Host takeover. Callback ordering can skip joins/leaves during the
+        // recovery window, so reconcile the actual Fusion roster rather than
+        // assuming every callback has been delivered.
+        public bool ReconcilePostMigrationRoster(NetworkRunner runner)
+        {
+            if (!CanMutateLifecycle(runner)
+                || NetworkBootstrap.IsHostMigrationResumeActive)
+                return false;
+
+            var active = new HashSet<PlayerRef>(runner.ActivePlayers);
+            var tracked = new List<PlayerRef>(_playerObjects.Keys);
+            foreach (var player in tracked)
+            {
+                if (active.Contains(player)
+                    || !_playerObjects.TryGetValue(player, out var obj)
+                    || obj == null || !obj.IsValid
+                    || !obj.TryGetComponent<LobbyPlayerState>(out var state)
+                    || state.Disconnected)
+                    continue;
+                // A disconnect during Host migration is not a voluntary
+                // Leave. Keep the same PlayerObject and carried Core for
+                // bounded reconnect instead of calling OnPlayerLeft/TryDrop.
+                if (NetworkBootstrap.Instance != null
+                    && NetworkBootstrap.Instance.State == NetworkSessionState.InMatch)
+                {
+                    state.SetDisconnectedAuthoritative(true);
+                    obj.RemoveInputAuthority();
+                    if (_graceTimers.Remove(player, out var oldTimer)
+                        && oldTimer != null)
+                        StopCoroutine(oldTimer);
+                    _graceTimers[player] = StartCoroutine(
+                        ExpireDisconnectedPlayer(runner, player, obj));
+                    RuntimeLog.Log(RuntimeLogCategory.PlayerLifecycle,
+                        $"HM_ADMISSION_LATE_LEFT_RETAINED|player={player}|object={obj.Id}");
+                }
+                else
+                {
+                    OnPlayerLeft(runner, player);
+                }
+            }
+
+            foreach (var player in active)
+            {
+                var attached = _playerObjects.TryGetValue(player, out var trackedObject)
+                    && trackedObject != null && trackedObject.IsValid
+                    && runner.TryGetPlayerObject(player, out var fusedObject)
+                    && fusedObject == trackedObject
+                    && trackedObject.TryGetComponent<LobbyPlayerState>(out var state)
+                    && !state.Disconnected;
+                if (!attached)
+                    OnPlayerJoined(runner, player);
+            }
+
+            // Any unbound in-match connection must not be left as a ghost
+            // whose callbacks were suppressed by the resume fence.
+            if (NetworkBootstrap.Instance != null
+                && NetworkBootstrap.Instance.State == NetworkSessionState.InMatch)
+            {
+                foreach (var player in active)
+                {
+                    var identityMapped = _playerObjects.TryGetValue(player, out var owned)
+                        && owned != null && owned.IsValid
+                        && runner.TryGetPlayerObject(player, out var attached)
+                        && attached == owned
+                        && owned.TryGetComponent<LobbyPlayerState>(out var state)
+                        && !state.Disconnected;
+                    if (identityMapped)
+                        continue;
+                    RuntimeLog.Log(RuntimeLogCategory.PlayerLifecycle,
+                        $"HM_ADMISSION_UNVERIFIED_PEER_DISCONNECTED|player={player}");
+                    // Preserve an original PlayerObject if a late join
+                    // reused its PlayerRef without matching its identity.
+                    if (owned != null && owned.IsValid
+                        && owned.TryGetComponent<LobbyPlayerState>(out var orphanState)
+                        && !orphanState.Disconnected)
+                    {
+                        orphanState.SetDisconnectedAuthoritative(true);
+                        owned.RemoveInputAuthority();
+                        if (_graceTimers.Remove(player, out var timer)
+                            && timer != null)
+                            StopCoroutine(timer);
+                        _graceTimers[player] = StartCoroutine(
+                            ExpireDisconnectedPlayer(runner, player, owned));
+                    }
+                    runner.Disconnect(player);
+                }
+            }
+            RuntimeLog.Log(RuntimeLogCategory.PlayerLifecycle,
+                $"HM_ADMISSION_ROSTER_RECONCILED|active={active.Count}|tracked={_playerObjects.Count}");
+            return true;
+        }
+
+        private static void RebindMigratedCarriedCore(
+            NetworkRunner runner, PlayerRef activePlayer, LobbyPlayerState carrier)
+        {
+            if (runner == null || !runner.IsServer || carrier == null
+                || !carrier.CarriedCoreId.IsValid)
+                return;
+
+            if (!runner.TryFindObject(carrier.CarriedCoreId, out var coreObject)
+                || coreObject == null || !coreObject.IsValid
+                || !coreObject.TryGetComponent<NetworkPickupItem>(out var core))
+            {
+                Debug.LogError($"HM_CORE_REBIND_MISSING|player={activePlayer}|core={carrier.CarriedCoreId}");
+                return;
+            }
+
+            if (!core.TryRebindHolderAuthoritative(activePlayer, carrier))
+            {
+                Debug.LogError($"HM_CORE_REBIND_REJECTED|player={activePlayer}|core={carrier.CarriedCoreId}|holder={core.Holder}");
+            }
+        }
+
         private bool TryReconnectRetainedPlayer(
             NetworkRunner runner,
             PlayerRef player,
@@ -710,6 +844,8 @@ namespace EchoProtocol.Networking
                 .SetDisconnectedAuthoritative(
                     false);
 
+            RebindMigratedCarriedCore(runner, player, retainedState);
+
             NotifyPlayerObjectCommitted(
                 new FusionPlayerObjectCommit(
                     player,
@@ -772,7 +908,37 @@ namespace EchoProtocol.Networking
             return false;
         }
 
-        private static bool ReconnectTokenMatches(
+        // Diagnostics only: never expose the raw connection token or its hash.
+        public string GetReconnectAdmissionDiagnostic(byte[] token)
+        {
+            if (token == null || token.Length == 0)
+                return "reason=MissingToken|retained=unknown";
+
+            var retained = 0;
+            var matched = 0;
+            foreach (var entry in _playerObjects)
+            {
+                if (entry.Value == null || !entry.Value.IsValid
+                    || !entry.Value.TryGetComponent<LobbyPlayerState>(out var state)
+                    || !state.Disconnected)
+                    continue;
+
+                retained++;
+                if (_connectionTokens.TryGetValue(entry.Key, out var previous)
+                    && TokensMatch(previous, token)
+                    || ReconnectTokenMatches(state, token))
+                    matched++;
+            }
+
+            var reason = retained == 0
+                ? "NoRetainedPlayerObject"
+                : matched == 0
+                    ? "RetainedTokenMismatch"
+                    : "MatchedDuringAdmissionRace";
+            return $"reason={reason}|retained={retained}|matched={matched}|graceSeconds={ReconnectGraceSeconds:0}";
+        }
+
+        internal static bool ReconnectTokenMatches(
             LobbyPlayerState state,
             byte[] token)
         {
@@ -821,10 +987,32 @@ namespace EchoProtocol.Networking
 
         private IEnumerator ExpireDisconnectedPlayer(NetworkRunner runner, PlayerRef player, NetworkObject obj)
         {
-            yield return new WaitForSecondsRealtime(reconnectGraceSeconds);
+            yield return new WaitForSecondsRealtime(ReconnectGraceSeconds);
             _graceTimers.Remove(player);
-            if (runner == null || !runner.IsRunning || obj == null || !obj.IsValid) yield break;
-            if (!obj.TryGetComponent<LobbyPlayerState>(out var state) || !state.Disconnected) yield break;
+            if (runner == null || !runner.IsRunning || obj == null || !obj.IsValid)
+                yield break;
+            if (NetworkBootstrap.IsHostMigrationResumeActive
+                || NetworkBootstrap.Instance == null
+                || NetworkBootstrap.Instance.Runner != runner)
+                yield break;
+            if (!_playerObjects.TryGetValue(player, out var currentObject)
+                || currentObject != obj)
+                yield break;
+            // OnPlayerJoined can lag behind Fusion.ActivePlayers. Never despawn
+            // the retained object while a matching PlayerRef is connected.
+            foreach (var active in runner.ActivePlayers)
+            {
+                if (active == player)
+                {
+                    RuntimeLog.Log(RuntimeLogCategory.PlayerLifecycle,
+                        $"FPL|RECONNECT_EXPIRY_DEFERRED_ACTIVE|player={player}|object={obj.Id}");
+                    yield break;
+                }
+            }
+            if (!obj.TryGetComponent<LobbyPlayerState>(out var state) || !state.Disconnected)
+                yield break;
+            RuntimeLog.Log(RuntimeLogCategory.PlayerLifecycle,
+                $"FPL|RECONNECT_RESERVATION_EXPIRED|player={player}|object={obj.Id}|graceSeconds={ReconnectGraceSeconds:0}");
             _expiring.Add(player);
             OnPlayerLeft(runner, player);
         }
