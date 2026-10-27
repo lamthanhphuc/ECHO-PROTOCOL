@@ -246,6 +246,18 @@ public sealed class AEDPhase8AuthoritySourceCollectorTests
     }
 
     [Test]
+    public void SceneToolSpawn_PreservesVerifiedSceneZone()
+    {
+        var collector = new AEDPhase8AuthoritySourceCollectorV1();
+        collector.BeginMatch(Guid.NewGuid());
+        collector.RecordSceneToolSpawnWithCharges("scene-tool", 4, 10, "scene-spawn", 3, 1);
+        Assert.True(collector.TryGetLatestTool("scene-tool", out var source));
+        Assert.AreEqual("ScenePlaced", source.Origin);
+        Assert.AreEqual(1, source.Zone);
+        Assert.AreEqual(3, source.RemainingCharges);
+    }
+
+    [Test]
     public void SceneToolSpawn_DuplicateInstanceRejected()
     {
         var collector = new AEDPhase8AuthoritySourceCollectorV1();

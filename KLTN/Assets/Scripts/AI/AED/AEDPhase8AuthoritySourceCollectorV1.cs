@@ -85,10 +85,10 @@ namespace EchoProtocol.AI.AED
         }
 
         public void RecordSceneToolSpawn(string instanceId, int toolId, long tick, string occurrenceKey) =>
-            RecordSceneToolSpawnWithCharges(instanceId, toolId, tick, occurrenceKey, null);
-        public void RecordSceneToolSpawnWithCharges(string instanceId, int toolId, long tick, string occurrenceKey, int? remainingCharges)
+            RecordSceneToolSpawnWithCharges(instanceId, toolId, tick, occurrenceKey, null, 0);
+        public void RecordSceneToolSpawnWithCharges(string instanceId, int toolId, long tick, string occurrenceKey, int? remainingCharges, int zone)
         {
-            RecordOriginToolSpawn(instanceId, toolId, 0, tick, occurrenceKey, "ScenePlaced", remainingCharges);
+            RecordOriginToolSpawn(instanceId, toolId, zone, tick, occurrenceKey, "ScenePlaced", remainingCharges);
         }
 
         private void RecordOriginToolSpawn(string instanceId, int toolId, int zone, long tick, string occurrenceKey, string origin, int? remainingCharges)

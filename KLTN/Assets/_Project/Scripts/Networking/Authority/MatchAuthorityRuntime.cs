@@ -344,17 +344,22 @@ namespace EchoProtocol.Networking.Authority
             try
             {
                 var occurrenceKey = $"p8:tool:{instanceId}:scene-spawn";
+                if (!_bootstrap.Runner.TryFindObject(instanceId, out var sceneTool) ||
+                    !AEDV02SceneSource.TryLoad(out var sceneManifest, out _) ||
+                    sceneManifest.Markers.SingleOrDefault(x => x.Id == AEDV02SceneSource.MarkerId(sceneTool.transform) &&
+                        x.Kind == "TOOL" && x.AllowedToolIds.Contains(toolId)) is not { } marker)
+                    throw new InvalidOperationException("AED_P8_SCENE_TOOL_MARKER_INVALID");
                 int? charges = null;
                 if (toolId is 2 or 4 && _bootstrap.Runner.TryFindObject(instanceId, out var toolObject))
                     charges = toolObject.TryGetComponent<NetworkTeamToolPickup>(out var pickup) ? pickup.RemainingUses :
                         toolObject.TryGetComponent<EchoProtocol.Tools.Scanner.NetworkToolPickup>(out var scannerPickup) ? scannerPickup.RemainingUses : (int?)null;
                 _aedPhase8Source.RecordSceneToolSpawnWithCharges(
-                    instanceId.ToString(), toolId, tick, occurrenceKey, charges);
+                    instanceId.ToString(), toolId, tick, occurrenceKey, charges, marker.Zone);
                 TryPublishPhase8Lifecycle(
                     occurrenceKey,
                     () => _telemetry.Phase8LifecycleAdapter.EmitToolSpawnWithCharges(
                         occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase,
-                        instanceId.ToString(), toolId, 0, "ScenePlaced", out _, out _, charges));
+                        instanceId.ToString(), toolId, marker.Zone, "ScenePlaced", out _, out _, charges));
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 Debug.Log($"[AED_P8][TOOL_SOURCE] action=SPAWN origin=ScenePlaced id={instanceId} tool={toolId} tick={tick}");
 #endif
