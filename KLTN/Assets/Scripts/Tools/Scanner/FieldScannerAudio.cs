@@ -30,12 +30,17 @@ namespace EchoProtocol.Tools.Scanner
         {
             if (_currentIntensityLevel <= 0) return;
 
-            _beepTimer -= Time.deltaTime;
-            if (_beepTimer <= 0f)
-            {
-                PlayBeep();
-                _beepTimer = _beepInterval;
-            }
+            UpdateFeedback(Time.deltaTime);
+        }
+
+        private void UpdateFeedback(float deltaTime)
+        {
+            if (_currentIntensityLevel <= 0) return;
+            _beepTimer -= deltaTime;
+            if (_beepTimer > 0f) return;
+            PlayBeep();
+            _beepTimer += _beepInterval;
+            if (_beepTimer <= 0f) _beepTimer = _beepInterval;
         }
 
         public void PlayScanPulse()
@@ -48,7 +53,9 @@ namespace EchoProtocol.Tools.Scanner
 
         public void SetFeedbackSignal(int intensityLevel) // 0 to 4
         {
-            _currentIntensityLevel = Mathf.Clamp(intensityLevel, 0, 4);
+            int nextLevel = Mathf.Clamp(intensityLevel, 0, 4);
+            if (nextLevel == _currentIntensityLevel) return;
+            _currentIntensityLevel = nextLevel;
             switch (_currentIntensityLevel)
             {
                 case 4: // Critical / 4 bars

@@ -1007,6 +1007,13 @@ namespace EchoProtocol.Tools.Scanner
         private static void CollectZone3FrigateTarget(
             List<ICoreScanCandidate> candidates)
         {
+            var flooded = FloodedMapMission.Instance;
+            if (flooded != null)
+            {
+                AddObjectiveCandidate(candidates, flooded.ChargeTarget);
+                return;
+            }
+
             var zone3 = Zone3MissionDirector.Instance;
             if (zone3 == null || zone3.Frigate == null)
             {
@@ -1016,9 +1023,23 @@ namespace EchoProtocol.Tools.Scanner
             AddObjectiveCandidate(candidates, zone3.Frigate);
         }
 
+        private static Component ResolveFloodedPushTarget(FloodedMapMission flooded, bool arrived)
+        {
+            return arrived && flooded.ExitTarget != null ? flooded.ExitTarget : flooded.Escort;
+        }
+
         private static void CollectZone3FuelTargets(
             List<ICoreScanCandidate> candidates)
         {
+            var flooded = FloodedMapMission.Instance;
+            if (flooded != null)
+            {
+                var match = NetworkMatchState.Instance;
+                AddObjectiveCandidate(candidates, ResolveFloodedPushTarget(flooded,
+                    match != null && match.FloodedEscortArrived));
+                return;
+            }
+
             Zone3FuelCell[] cells = FindObjectsByType<Zone3FuelCell>(FindObjectsInactive.Exclude);
 
             for (int i = 0; i < cells.Length; i++)

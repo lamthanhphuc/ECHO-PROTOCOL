@@ -11,6 +11,73 @@ namespace EchoProtocol.Tests.EditMode.Tools
 {
     public sealed class FieldScannerTests
     {
+        [TestCase("CollectZone3FrigateTarget", "chargeTarget")]
+        [TestCase("CollectZone3FuelTargets", "escort")]
+        public void FloodedFinalObjectivesRemainScannable(string collectorName, string targetField)
+        {
+            var root = new GameObject("FloodedScannerFixture");
+            var previous = FloodedMapMission.Instance;
+            var instance = typeof(FloodedMapMission).GetProperty("Instance");
+            try
+            {
+                var mission = root.AddComponent<FloodedMapMission>();
+                var charge = new GameObject("ChargeStation");
+                charge.transform.SetParent(root.transform);
+                charge.transform.position = Vector3.forward * 8f;
+                var chargeCollider = charge.AddComponent<BoxCollider>();
+                var escort = new GameObject("Saucer");
+                escort.transform.SetParent(root.transform);
+                escort.transform.position = Vector3.right * 12f;
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                typeof(FloodedMapMission).GetField("chargeTarget", flags).SetValue(mission, chargeCollider);
+                typeof(FloodedMapMission).GetField("escort", flags).SetValue(mission, escort.transform);
+                instance.SetValue(null, mission);
+                var candidates = new List<ICoreScanCandidate>();
+                var collector = typeof(NetworkFieldScanner).GetMethod(collectorName,
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+                collector.Invoke(null, new object[] { candidates });
+                Assert.That(candidates.Count, Is.EqualTo(1));
+                var expected = targetField == "chargeTarget" ? charge.transform : escort.transform;
+                Assert.That(candidates[0].WorldPosition, Is.EqualTo(expected.position));
+                Assert.That(candidates[0].IsAvailableInWorld, Is.True);
+                var scan = FieldScannerCoreDetector.Evaluate(Vector3.zero, Vector3.forward,
+                    candidates, isOccludedFunc: (_, _) => false);
+                Assert.That(scan.HasTarget, Is.True);
+                expected.gameObject.SetActive(false);
+                Assert.That(candidates[0].IsAvailableInWorld, Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+                instance.SetValue(null, previous);
+            }
+        }
+
+        [Test]
+        public void FloodedEscortArrival_SwitchesScannerToBoardingTarget()
+        {
+            var root = new GameObject("FloodedPushScannerFixture");
+            root.SetActive(false);
+            try
+            {
+                var mission = root.AddComponent<FloodedMapMission>();
+                var escort = new GameObject("Escort").transform;
+                escort.SetParent(root.transform);
+                var exit = new GameObject("BoardingPoint");
+                exit.transform.SetParent(root.transform);
+                var boarding = exit.AddComponent<FloodedEscapeInteraction>();
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                typeof(FloodedMapMission).GetField("escort", flags).SetValue(mission, escort);
+                typeof(FloodedMapMission).GetField("exitTarget", flags).SetValue(mission, boarding);
+                var method = typeof(NetworkFieldScanner).GetMethod("ResolveFloodedPushTarget",
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+                Assert.That(method, Is.Not.Null);
+                Assert.That(method.Invoke(null, new object[] { mission, false }), Is.SameAs(escort));
+                Assert.That(method.Invoke(null, new object[] { mission, true }), Is.SameAs(boarding));
+            }
+            finally { UnityEngine.Object.DestroyImmediate(root); }
+        }
+
         [Test]
         public void CoreScanner_UsesZone2ObjectivesAndZone3Fuel()
         {
