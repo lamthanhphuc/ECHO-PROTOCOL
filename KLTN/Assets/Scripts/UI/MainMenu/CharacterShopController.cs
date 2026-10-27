@@ -1,6 +1,7 @@
 using System;
 using EchoProtocol.Api;
 using EchoProtocol.Auth;
+using EchoProtocol.Networking;
 using EchoProtocol.Profile;
 using UnityEngine;
 using UnityEngine.UI;
@@ -184,6 +185,26 @@ namespace EchoProtocol.UI.MainMenu
         private bool _loading;
         private bool _purchasing;
         private bool _previewMode;
+
+        private void OnEnable() => LobbyPlayerState.LocalSelectionRequestCompleted += HandleSelectionResult;
+
+        private void OnDisable() => LobbyPlayerState.LocalSelectionRequestCompleted -= HandleSelectionResult;
+
+        private void HandleSelectionResult(LobbySelectionResult result)
+        {
+            if (result.Accepted || result.RequestedId != (_purchaseTarget == PurchaseTarget.Outfit
+                    ? _selectedOutfitId : _selectedCharacterId)
+                || result.Kind != (_purchaseTarget == PurchaseTarget.Outfit
+                    ? LobbySelectionKind.CharacterOutfit : LobbySelectionKind.Character)) return;
+
+            SetStatus(result.Error == LobbySelectionError.OwnershipNotVerified
+                ? EchoProtocol.Settings.GameLanguage.Choose(
+                    "Chưa xác minh được sở hữu. Chờ phòng đồng bộ với máy chủ rồi thử lại.",
+                    "Ownership could not be verified. Wait for the lobby to sync, then retry.")
+                : EchoProtocol.Settings.GameLanguage.Choose(
+                    "Không thể trang bị lúc này: " + result.Error,
+                    "Cannot equip right now: " + result.Error));
+        }
 
         public void EnsureBuilt()
         {

@@ -18,6 +18,8 @@ namespace EchoProtocol.Networking
 
         [SerializeField] private NetworkBootstrap _bootstrap;
         private bool _matchStartInProgress;
+        private Task<bool> _lobbyBindingTask;
+        private float _nextLobbyBindingAttempt;
         public bool IsStartingMatch => _matchStartInProgress;
         private string _localOperatorName = string.Empty;
         private LobbyPlayerState _namedPlayer;
@@ -36,9 +38,22 @@ namespace EchoProtocol.Networking
         private void Update()
         {
             // Player objects can spawn after StartGame completes. Submit once per owned object.
-            if (_localOperatorName.Length == 0 || !IsInRoom) return;
-            if (!TryGetLocalPlayerState(out var player, false) || player == _namedPlayer) return;
-            if (player.RequestOperatorName(_localOperatorName)) _namedPlayer = player;
+            if (_localOperatorName.Length != 0 && IsInRoom
+                && TryGetLocalPlayerState(out var player, false) && player != _namedPlayer
+                && player.RequestOperatorName(_localOperatorName))
+                _namedPlayer = player;
+
+            var runner = _bootstrap?.Runner;
+            if (_bootstrap?.State != NetworkSessionState.InLobby
+                || runner == null || !runner.IsRunning || !runner.IsServer
+                || !runner.IsSceneAuthority || !runner.SessionInfo.IsValid
+                || _matchStartInProgress || Time.realtimeSinceStartup < _nextLobbyBindingAttempt
+                || _lobbyBindingTask is { IsCompleted: false }) return;
+
+            var authority = MatchAuthorityRuntime.EnsureExists(_bootstrap);
+            if (authority.IsCompletingMatch || !authority.RequiresFreshHostBinding) return;
+            _nextLobbyBindingAttempt = Time.realtimeSinceStartup + 3f;
+            _lobbyBindingTask = PrepareLobbyBindingAsync(runner, authority);
         }
 
         public event Action<RoomInfoViewModel> OnRoomUpdated;
@@ -205,51 +220,10 @@ namespace EchoProtocol.Networking
                     return;
                 }
 
-                if (authority.RequiresFreshHostBinding)
+                if (!await EnsureLobbyBindingAsync(runner, authority))
                 {
-                    if (runner == null
-                        || !runner.IsRunning
-                        || !runner.IsServer
-                        || !runner.SessionInfo.IsValid)
-                    {
-                        ReportError(
-                            "Cannot prepare next match.");
-                        return;
-                    }
-
-                    bool prepared =
-                        await authority.PrepareNextMatchAsync(
-                            runner.SessionInfo.Name,
-                            runner.SessionInfo.MaxPlayers);
-
-                    if (!prepared)
-                    {
-                        ReportError(
-                            "Backend rejected next match.");
-                        return;
-                    }
-
-                    if (!_bootstrap.UpdateRoomProperties(
-                            authority.BuildHostSessionProperties()))
-                    {
-                        ReportError(
-                            "Could not publish next match properties to Fusion room.");
-                        return;
-                    }
-
-                    if (!TryGetLocalPlayerState(
-                            out var localPlayerState,
-                            false))
-                    {
-                        ReportError(
-                            "Local player is not available for backend binding.");
-                        return;
-                    }
-
-                    authority.TrySubmitLocalIdentity(
-                        localPlayerState,
-                        force: true);
-
+                    ReportError("Cannot prepare backend authority for this lobby.");
+                    return;
                 }
 
                 float bindingDeadline =
@@ -377,6 +351,42 @@ namespace EchoProtocol.Networking
             {
                 _bootstrap?.CancelMatchStartGate();
                 _matchStartInProgress = false;
+            }
+        }
+
+        private Task<bool> EnsureLobbyBindingAsync(NetworkRunner runner, MatchAuthorityRuntime authority)
+        {
+            if (_lobbyBindingTask is { IsCompleted: false }) return _lobbyBindingTask;
+            if (!authority.RequiresFreshHostBinding) return Task.FromResult(true);
+            _lobbyBindingTask = PrepareLobbyBindingAsync(runner, authority);
+            return _lobbyBindingTask;
+        }
+
+        private async Task<bool> PrepareLobbyBindingAsync(NetworkRunner runner, MatchAuthorityRuntime authority)
+        {
+            try
+            {
+                if (runner == null || !runner.IsRunning || !runner.IsServer
+                    || !runner.IsSceneAuthority || !runner.SessionInfo.IsValid) return false;
+                if (!await authority.PrepareNextMatchAsync(
+                        runner.SessionInfo.Name, runner.SessionInfo.MaxPlayers)) return false;
+
+                if (this == null || runner != _bootstrap?.Runner || !runner.IsRunning
+                    || !runner.IsServer || _bootstrap.State != NetworkSessionState.InLobby
+                    || !_bootstrap.UpdateRoomProperties(authority.BuildHostSessionProperties()))
+                {
+                    await authority.EndAsync("LOBBY_BINDING_NOT_PUBLISHED");
+                    return false;
+                }
+
+                if (TryGetLocalPlayerState(out var localPlayerState, false))
+                    authority.TrySubmitLocalIdentity(localPlayerState, force: true);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[LobbyManager] Backend lobby binding failed: {exception.Message}");
+                return false;
             }
         }
 
