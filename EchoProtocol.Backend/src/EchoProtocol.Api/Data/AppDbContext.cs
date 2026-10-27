@@ -1,3 +1,4 @@
+using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -237,7 +238,7 @@ public class AppDbContext : DbContext
             {
                 t.HasCheckConstraint(
                     "CK_MatchResults_DurationSeconds_Range",
-                    "\"DurationSeconds\" >= 60 AND \"DurationSeconds\" <= 2760");
+                    $"\"DurationSeconds\" >= {GameConstants.MinimumMatchDurationSeconds} AND \"DurationSeconds\" <= {GameConstants.MaximumAcceptedMatchDurationSeconds}");
                 t.HasCheckConstraint(
                     "CK_MatchResults_Outcome_Allowed",
                     "\"Outcome\" IN ('WIN', 'LOSE')");

@@ -236,13 +236,31 @@ public sealed class MatchResultServiceTests
     public async Task MatchBeyondSubmissionGraceIsRejected()
     {
         await using var harness = await UnitHarness.CreateAsync(
-            matchAge: TimeSpan.FromMinutes(46).Add(TimeSpan.FromSeconds(1)));
+            matchAge: TimeSpan.FromMinutes(121).Add(TimeSpan.FromSeconds(1)));
 
         var result = await harness.Service.SubmitAsync(
             harness.HostId, harness.MatchId, harness.ValidRequest(), CancellationToken.None);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorCodes.MatchResultInvalidDuration, result.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData(2761)]
+    [InlineData(5400)]
+    [InlineData(7200)]
+    [InlineData(7260)]
+    public async Task TwoHourGameplayAndSubmissionGraceAreAccepted(int durationSeconds)
+    {
+        await using var harness = await UnitHarness.CreateAsync(
+            matchAge: TimeSpan.FromSeconds(durationSeconds));
+
+        var result = await harness.Service.SubmitAsync(
+            harness.HostId, harness.MatchId, harness.ValidRequest(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal(durationSeconds, result.Data!.DurationSeconds);
+        Assert.Single(harness.Db.MatchResults);
     }
 
     [Fact, Trait("Category", "M4Unit")]
