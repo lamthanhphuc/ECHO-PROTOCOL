@@ -133,7 +133,11 @@ namespace EchoProtocol.Networking
 
             if (!Object.HasStateAuthority || State != NetworkItemState.Carried) return;
 
-            if (TryGetHolderPose(out var carriedPosition, out var carriedRotation))
+            bool holderCanCarry = TryGetCarrier(Holder, out var carrierState)
+                && carrierState.IsGameplayPlayer && !carrierState.Disconnected
+                && carrierState.TryGetComponent<NetworkPlayerLifeState>(out var lifeState)
+                && lifeState.CanInitiateAction;
+            if (holderCanCarry && TryGetHolderPose(out var carriedPosition, out var carriedRotation))
             {
                 _migrationCarryHoldLogged = false;
                 _retainedMigrationCarrier = null;
@@ -160,9 +164,13 @@ namespace EchoProtocol.Networking
             _migrationCarryHoldLogged = false;
             _retainedMigrationCarrier = null;
             var disconnectedHolder = Holder;
-            RuntimeLog.Log(RuntimeLogCategory.Inventory, $"[NetworkItem] Holder {disconnectedHolder} left; dropping item {Object.Id} at its last authoritative pose {transform.position}.");
-            WorldPosition = transform.position;
-            WorldRotation = transform.rotation;
+            carrierState?.TryClearCarriedCore(Object.Id);
+            ItemDropPlacementUtility.GetFloorSnappedPose(
+                carrierState != null ? carrierState.transform : transform,
+                1.35f, 0.1f, out var dropPosition, out var dropRotation);
+            RuntimeLog.Log(RuntimeLogCategory.Inventory, $"[NetworkItem] Holder {disconnectedHolder} cannot carry; recovering item {Object.Id} at {dropPosition}.");
+            WorldPosition = dropPosition;
+            WorldRotation = dropRotation;
             State = NetworkItemState.Dropped;
             Holder = PlayerRef.None;
             MonsterCarrierId = default;
@@ -197,6 +205,9 @@ namespace EchoProtocol.Networking
         protected override InteractionValidationResult ValidateCurrentState(in InteractionContext context)
         {
             if (MonsterCarrierId.IsValid) return InteractionValidationResult.InvalidTargetState;
+            if (!context.Requester.TryGetComponent<NetworkPlayerLifeState>(out var lifeState)
+                || !lifeState.CanInitiateAction)
+                return InteractionValidationResult.InvalidRequester;
             return EnergyCoreAuthorityRules.CanPickup(
                     State,
                     Holder,
@@ -208,7 +219,8 @@ namespace EchoProtocol.Networking
 
         protected override void ExecuteInteraction(in InteractionContext context)
         {
-            if (!context.PlayerState.TryBeginCarryingCore(Object.Id)) return;
+            if (ValidateCurrentState(context) != InteractionValidationResult.Accepted
+                || !context.PlayerState.TryBeginCarryingCore(Object.Id)) return;
             State = NetworkItemState.Carried;
             Holder = context.Player;
             MonsterCarrierId = default;
@@ -509,6 +521,8 @@ namespace EchoProtocol.Networking
                 && state.Runner == Runner
                 && state.IsGameplayPlayer
                 && state.Disconnected
+                && state.TryGetComponent<NetworkPlayerLifeState>(out var lifeState)
+                && lifeState.CanInitiateAction
                 && state.CarriedCoreId == Object.Id;
         }
 

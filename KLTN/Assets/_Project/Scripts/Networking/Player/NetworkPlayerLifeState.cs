@@ -657,6 +657,7 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            GetComponent<NetworkPlayerInteractor>()?.DropHeldItemsAuthoritative(Object.InputAuthority);
             Health = 0f;
             IsCrawling = false;
             ClearSurvivalTimers();

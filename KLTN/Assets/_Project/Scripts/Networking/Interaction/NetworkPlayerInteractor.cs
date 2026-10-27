@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.Diagnostics;
@@ -2139,7 +2139,7 @@ namespace EchoProtocol.Networking
         private void RpcRequestHelpPing(uint sequence, RpcInfo info = default)
         {
             if (!TryResolveRequester(info.Source, out var requester)
-                || ValidateRequester(requester, sequence) != InteractionValidationResult.Accepted)
+                || ValidateRequester(requester, sequence, requireActivePlayer: false) != InteractionValidationResult.Accepted)
             {
                 return;
             }
@@ -2446,7 +2446,7 @@ namespace EchoProtocol.Networking
                 out requester);
         }
 
-        private InteractionValidationResult ValidateRequester(PlayerRef source, uint sequence)
+        private InteractionValidationResult ValidateRequester(PlayerRef source, uint sequence, bool requireActivePlayer = true)
         {
             if (NetworkPlayerFlashlight.IsResonating(gameObject)) return InteractionValidationResult.InvalidRequester;
             if (!Object.HasStateAuthority || !source.IsValid || source != Object.InputAuthority)
@@ -2463,6 +2463,13 @@ namespace EchoProtocol.Networking
             {
                 return InteractionValidationResult.InvalidRequester;
             }
+            var lifeState = GetComponent<NetworkPlayerLifeState>();
+            if ((requireActivePlayer && (lifeState == null || !lifeState.CanInitiateAction))
+                || NetworkMatchState.Instance != null && NetworkMatchState.Instance.IsEnded)
+            {
+                return InteractionValidationResult.InvalidRequester;
+            }
+
             return sequence == 0 || sequence <= LastProcessedSequence
                 ? InteractionValidationResult.DuplicateRequest
                 : InteractionValidationResult.Accepted;
