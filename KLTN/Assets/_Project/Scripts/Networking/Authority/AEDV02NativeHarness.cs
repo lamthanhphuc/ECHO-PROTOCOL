@@ -73,6 +73,8 @@ namespace EchoProtocol.Networking.Authority
                 if (EvidenceRole is not ("Host" or "Client" or "Client2" or "Client3") ||
                     (_config.role == "Host") != (EvidenceRole == "Host")) throw new InvalidOperationException("Invalid evidence role.");
                 AEDPilotTokenPrefs.UseMemory = true;
+                // SciFi scene load can stall Fusion updates longer than the normal 10-second timeout.
+                Fusion.NetworkProjectConfig.Global.Network.ConnectionTimeout = 90f;
                 var api = Resources.Load<EchoProtocol.Api.ApiConfiguration>("ApiConfiguration");
                 if (api == null) throw new InvalidOperationException("ApiConfiguration missing.");
                 api.ConfigurePilotLoopback(_config.apiUrl);

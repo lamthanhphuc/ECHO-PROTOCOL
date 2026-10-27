@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Reflection;
 using EchoProtocol.AI.Common.AED;
 using NUnit.Framework;
@@ -8,6 +9,14 @@ namespace EchoProtocol.Networking.Tests
 {
     public sealed class AEDV02HostGuardTests
     {
+        [Test]
+        public void V02_NativeSceneLoadUsesPilotOnlyConnectionTimeout()
+        {
+            var source = File.ReadAllText("Assets/_Project/Scripts/Networking/Authority/AEDV02NativeHarness.cs");
+            StringAssert.Contains("#if AED_V02_PILOT_HARNESS", source);
+            StringAssert.Contains("Fusion.NetworkProjectConfig.Global.Network.ConnectionTimeout = 90f", source);
+        }
+
         private static Type Authority => Type.GetType("EchoProtocol.AI.AED.AEDv2Authority, Assembly-CSharp", true);
         private readonly Guid _match = Guid.NewGuid();
         private readonly DateTime _now = new DateTime(2026, 10, 14, 12, 0, 0, DateTimeKind.Utc);
