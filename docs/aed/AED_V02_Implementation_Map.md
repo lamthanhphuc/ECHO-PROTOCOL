@@ -1,5 +1,9 @@
 # AED v0.2 Rev02 — implementation map
 
+## Current checkpoint — 2026-10-27 (`68af7d7`)
+
+The native pre-match approval → Host commit → Stalker consumer → Backend receipt path has been observed on the local isolated stack. The remote Client stayed in SciFi after a pilot-only Fusion timeout adjustment. Full safe-window E2E remains blocked: the next source check found ScenePlaced tool zone telemetry recorded as 0 while the validated scene marker zone is 1. The producer now records the authored zone and fails closed on invalid marker/tool identity; EditMode, PlayMode and Windows Development build passed. Native verification of this fix awaits Docker Desktop. Fixed native regression, twelve acceptance scenarios and Adaptive-only public UI remain gated.
+
 ## Current checkpoint — 2026-10-25 (`3c1d0e3`)
 
 Map 1 / Mode 1 source now exposes `ResourceManagement` through the Backend historical profile and uses that axis for Host resource increase proposals. The earlier `Tool`/`ResourceManagement` mismatch is fixed. The SciFi scene already contains one authored Safe Room marker; both shipped manifest copies are byte identical. Backend build and 707 Backend tests passed on this source. Unity batch, Windows build, native Host/Client effects and owner acceptance remain blocked while the project Editor is open. Adaptive-only public UI remains gated and unchanged. Older checkpoints below describe their own source state.
