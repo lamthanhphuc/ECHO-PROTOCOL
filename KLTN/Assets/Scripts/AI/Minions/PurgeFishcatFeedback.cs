@@ -42,7 +42,6 @@ namespace EchoProtocol.AI.Minions
         private bool _wasUv;
         private bool _wasDying;
         private bool _awaitingThrust;
-        private bool _pendingImpact;
         private float _attackStartedAt;
         private float _nextIdleTime;
         private float _lastStepPhase;
@@ -188,24 +187,10 @@ namespace EchoProtocol.AI.Minions
             if (_minion.ConfirmedHitSequence != _hitSequence)
             {
                 _hitSequence = _minion.ConfirmedHitSequence;
-                _pendingImpact = true;
-            }
-            if (_pendingImpact && _animator != null)
-            {
-                var state = _animator.GetCurrentAnimatorStateInfo(0);
-                if (state.shortNameHash == AttackHash && state.normalizedTime >= 0.5f
-                    || Time.time - _attackStartedAt > 0.5f)
+                if (spearImpactParticles != null)
                 {
-                    _pendingImpact = false;
-                    Vector3 point = transform.position + transform.forward + Vector3.up * 0.8f;
-                    if (_minion.Runner != null && hasTarget
-                        && _minion.Runner.TryGetPlayerObject(_minion.TargetPlayer, out var target)
-                        && target != null) point = target.transform.position + Vector3.up;
-                    if (spearImpactParticles != null)
-                    {
-                        spearImpactParticles.transform.position = point;
-                        PurgeVfx.Burst(spearImpactParticles, 25f);
-                    }
+                    spearImpactParticles.transform.position = _minion.ConfirmedHitPosition;
+                    PurgeVfx.Burst(spearImpactParticles, 25f);
                 }
             }
 
@@ -294,7 +279,6 @@ namespace EchoProtocol.AI.Minions
             _initialized = false;
             _wasDying = false;
             _awaitingThrust = false;
-            _pendingImpact = false;
             _alertPendingUntil = 0f;
             PurgeVoiceBudget.Cancel(_voice);
             StopUv();

@@ -276,6 +276,9 @@ namespace EchoProtocol.AI.Minions
         [Networked] private float ReplicatedLostSightSeconds { get; set; }
         [Networked] private float ReplicatedFlashlightExposureSeconds { get; set; }
         [Networked] private float ReplicatedResonanceGrace { get; set; }
+        private TickTimer _spearContactTimer;
+        private PlayerRef _spearVictim;
+        [Networked] public Vector3 ConfirmedHitPosition { get; private set; }
         private int _resonanceContributors;
         private float ResonanceSpeedMultiplier => _resonanceContributors > 0 ? .6f : 1f;
         [Networked] public float ResonanceProgress { get; private set; }
@@ -493,6 +496,7 @@ namespace EchoProtocol.AI.Minions
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            _spearContactTimer = TickTimer.None;
             ReleaseCatfishFadeMaterials();
             PurgeFishcats.Remove(this);
             _navigation?.SetAuthoritativeLocomotion(false);
@@ -529,6 +533,7 @@ namespace EchoProtocol.AI.Minions
             // mọi NavMesh/AI activation.
             if (IsDying)
             {
+                _spearContactTimer = TickTimer.None;
                 IsMoving = false;
                 if (DeathTimer.Expired(Runner))
                 {
@@ -585,6 +590,7 @@ namespace EchoProtocol.AI.Minions
             }
             if (IsUvStunned)
             {
+                _spearContactTimer = TickTimer.None;
                 if (_agent.enabled && _agent.isOnNavMesh)
                 {
                     _agent.isStopped = true;
@@ -593,6 +599,7 @@ namespace EchoProtocol.AI.Minions
                 IsMoving = false;
                 return;
             }
+            TickSpearContact();
             // Authoritative locomotion owns the root; the agent only calculates paths.
             if (_agent.enabled && _agent.isOnNavMesh) _agent.isStopped = true;
 
@@ -1610,9 +1617,13 @@ namespace EchoProtocol.AI.Minions
                 var disruptorMovement = playerObject.GetComponent<NetworkPlayerMovement>();
                 if (disruptorMovement == null) return;
                 CommitAttack(CreepMinionAttackKind.MeleeSlow);
-                bool damaged = IsPurgeCatfish ? life.TryApplyPurgeFishcatDamage(transform.position)
-                    : life.TryApplyAuthoritativeDamage(attackDamage, "MINION_DISRUPTOR", transform.position);
-                if (damaged && IsPurgeCatfish) ConfirmedHitSequence++;
+                if (IsPurgeCatfish)
+                {
+                    _spearVictim = TargetPlayer;
+                    _spearContactTimer = TickTimer.CreateFromSeconds(Runner, SpearContactSeconds());
+                    return;
+                }
+                bool damaged = life.TryApplyAuthoritativeDamage(attackDamage, "MINION_DISRUPTOR", transform.position);
                 if (damaged) disruptorMovement.TryApplySlowAuthoritative(slowMultiplier, IsPurgeCatfish ? 1.25f : slowDurationSeconds);
                 if (!IsPurgeCatfish) disruptorMovement.TryApplyKnockbackAuthoritative(
                     playerObject.transform.position - transform.position,
@@ -1644,6 +1655,33 @@ namespace EchoProtocol.AI.Minions
                 Runner,
                 attackRecoverySeconds);
             RpcPlayAttackPresentation((int)kind);
+        }
+
+        private float SpearContactSeconds()
+        {
+            if (_animators != null)
+                foreach (var animator in _animators)
+                    if (animator != null && animator.gameObject.activeInHierarchy && animator.runtimeAnimatorController != null)
+                        foreach (var clip in animator.runtimeAnimatorController.animationClips)
+                            if (clip != null && clip.name.IndexOf("Attack01", StringComparison.OrdinalIgnoreCase) >= 0)
+                                return clip.length * .5f / Mathf.Max(.1f, animator.speed);
+            return .5f / Mathf.Max(.1f, animationSpeed);
+        }
+
+        private void TickSpearContact()
+        {
+            if (!_spearContactTimer.IsRunning || !_spearContactTimer.Expired(Runner)) return;
+            _spearContactTimer = TickTimer.None;
+            if (!IsPurgeCatfish || IsDying || IsUvStunned || _resonanceContributors > 0
+                || TargetPlayer != _spearVictim || NetworkMatchState.Instance != null && NetworkMatchState.Instance.IsEnded
+                || !TryGetEligiblePlayer(_spearVictim, out var target, out _, out var life)
+                || Mathf.Abs(target.transform.position.y - transform.position.y) > 2.5f
+                || Vector3.ProjectOnPlane(target.transform.position - transform.position, Vector3.up).magnitude > DisruptorAttackRange
+                || !HasLineOfSight(target)) return;
+            if (!life.TryApplyPurgeFishcatDamage(transform.position)) return;
+            ConfirmedHitPosition = target.transform.position + Vector3.up;
+            ConfirmedHitSequence++;
+            target.GetComponent<NetworkPlayerMovement>()?.TryApplySlowAuthoritative(slowMultiplier, 1.25f);
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
