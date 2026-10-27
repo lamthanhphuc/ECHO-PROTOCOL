@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using EchoProtocol.Networking;
 using EchoProtocol.UI.MainMenu;
 using TMPro;
@@ -416,6 +416,11 @@ namespace EchoProtocol.UI
 
                 LobbySelectionError.InvalidSelection =>
                     "INVALID TOOL",
+
+                LobbySelectionError.OwnershipNotVerified =>
+                    EchoProtocol.Settings.GameLanguage.Choose(
+                        "KHÔNG XÁC MINH ĐƯỢC QUYỀN SỞ HỮU",
+                        "OWNERSHIP COULD NOT BE VERIFIED"),
 
                 LobbySelectionError.NotInputAuthority =>
                     "NO PLAYER AUTHORITY",

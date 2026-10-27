@@ -18,6 +18,8 @@ public interface IMatchAuthorityService
     Task<ServiceResult<MatchAuthorityResponse>> RelinquishAsync(
         Guid hostUserId, Guid matchId, CancellationToken cancellationToken);
 
+    Task<ServiceResult<MatchPlayerEntitlementsResponse>> GetPlayerEntitlementsAsync(
+        Guid hostUserId, Guid matchId, int fusionActorNumber, CancellationToken cancellationToken);
     Task<ServiceResult<MatchAuthorityResponse>> RenewLeaseAsync(
         Guid hostUserId, Guid matchId, CancellationToken cancellationToken);
     Task<ServiceResult<MatchAuthorityResponse>> StartAsync(

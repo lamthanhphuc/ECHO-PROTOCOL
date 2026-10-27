@@ -79,6 +79,12 @@ public sealed class TakeoverMatchAuthorityRequest
     public int FusionActorNumber { get; set; }
 }
 
+public sealed class MatchPlayerEntitlementsResponse
+{
+    public Guid UserId { get; set; }
+    public Guid[] ShopItemIds { get; set; } = [];
+}
+
 public sealed class EndMatchAuthorityRequest
 {
     [StringLength(64)]

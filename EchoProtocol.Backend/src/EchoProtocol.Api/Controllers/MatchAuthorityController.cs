@@ -39,6 +39,12 @@ public sealed class MatchAuthorityController : ControllerBase
         CancellationToken cancellationToken) =>
         Respond(await _service.BindPlayerAsync(UserId(), matchId, request, cancellationToken));
 
+    [HttpGet("{matchId:guid}/players/{fusionActorNumber:int}/entitlements")]
+    public async Task<IActionResult> GetPlayerEntitlements(
+        Guid matchId, int fusionActorNumber, CancellationToken cancellationToken) =>
+        Respond(await _service.GetPlayerEntitlementsAsync(
+            UserId(), matchId, fusionActorNumber, cancellationToken));
+
     [HttpPost("{matchId:guid}/players/{fusionActorNumber:int}/disconnect")]
     public async Task<IActionResult> DisconnectPlayer(
         Guid matchId,

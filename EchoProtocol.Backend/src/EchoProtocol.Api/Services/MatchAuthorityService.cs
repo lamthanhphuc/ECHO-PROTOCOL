@@ -432,6 +432,37 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             "Host authority relinquished");
     }
 
+    public async Task<ServiceResult<MatchPlayerEntitlementsResponse>> GetPlayerEntitlementsAsync(
+        Guid hostUserId,
+        Guid matchId,
+        int fusionActorNumber,
+        CancellationToken cancellationToken)
+    {
+        var match = await _db.MatchAuthorityBindings.AsNoTracking()
+            .Include(item => item.Players)
+            .SingleOrDefaultAsync(item => item.MatchId == matchId, cancellationToken);
+        var authorityFailure = ValidateActiveHost(match, hostUserId);
+        if (authorityFailure is not null)
+            return Failure<MatchPlayerEntitlementsResponse>(
+                authorityFailure.Value.Message, authorityFailure.Value.Code);
+
+        var player = match!.Players.SingleOrDefault(item =>
+            item.FusionActorNumber == fusionActorNumber && item.DisconnectedAtUtc == null);
+        if (player is null)
+            return Failure<MatchPlayerEntitlementsResponse>(
+                "Player is not bound to this match", ErrorCodes.MatchPlayerBindingConflict);
+
+        var itemIds = await _db.InventoryItems.AsNoTracking()
+            .Where(item => item.UserId == player.UserId)
+            .Select(item => item.ShopItemId)
+            .ToArrayAsync(cancellationToken);
+        return ServiceResult<MatchPlayerEntitlementsResponse>.Success(new MatchPlayerEntitlementsResponse
+        {
+            UserId = player.UserId,
+            ShopItemIds = itemIds
+        });
+    }
+
     public async Task<ServiceResult<MatchAuthorityResponse>> RenewLeaseAsync(
         Guid hostUserId,
         Guid matchId,

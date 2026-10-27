@@ -4,6 +4,7 @@ using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using Fusion;
 using EchoProtocol.Networking.Authority;
+using EchoProtocol.UI.MainMenu;
 using UnityEngine;
 
 namespace EchoProtocol.Networking
@@ -50,6 +51,44 @@ namespace EchoProtocol.Networking
         ToolAlreadyClaimed,
         SelectionLockedWhileReady,
         NotInputAuthority,
+        OwnershipNotVerified,
+    }
+
+    public static class LobbySelectionEntitlements
+    {
+        public static bool TryGetRequiredItems(LobbySelectionKind kind, int characterId,
+            int requestedId, out string[] requiredItemIds)
+        {
+            requiredItemIds = Array.Empty<string>();
+            switch (kind)
+            {
+                case LobbySelectionKind.Character:
+                    if (!CharacterShopAssets.TryGetByCharacterId(requestedId, out var character))
+                        return false;
+                    if (!character.DefaultOwned)
+                        requiredItemIds = new[] { character.ItemId };
+                    return true;
+                case LobbySelectionKind.CharacterOutfit:
+                    if (!CharacterShopAssets.TryGetByCharacterId(characterId, out var parent)
+                        || !CharacterOutfitShopAssets.TryGet(characterId, requestedId, out var outfit))
+                        return false;
+                    if (!parent.DefaultOwned && !outfit.DefaultOwned)
+                        requiredItemIds = new[] { parent.ItemId, outfit.ItemId };
+                    else if (!parent.DefaultOwned)
+                        requiredItemIds = new[] { parent.ItemId };
+                    else if (!outfit.DefaultOwned)
+                        requiredItemIds = new[] { outfit.ItemId };
+                    return true;
+                case LobbySelectionKind.Tool:
+                    if (requestedId == 0) return true;
+                    if (!TeamToolShopAssets.TryGetByToolId(requestedId, out var tool))
+                        return false;
+                    requiredItemIds = new[] { tool.ItemId };
+                    return true;
+                default:
+                    return false;
+            }
+        }
     }
 
     public readonly struct LobbySelectionResult
@@ -90,6 +129,9 @@ namespace EchoProtocol.Networking
 
         [SerializeField, Min(1)] private int _teamCount = 4;
         [SerializeField] private LobbyToolDefinition[] _toolDefinitions = Array.Empty<LobbyToolDefinition>();
+        private int _characterSelectionSerial;
+        private int _outfitSelectionSerial;
+        private int _toolSelectionSerial;
 
         [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
         public NetworkBool IsReady { get; private set; }
@@ -894,6 +936,7 @@ namespace EchoProtocol.Networking
             if (!TryResolveRequester(info.Source, out var requester))
                 return;
 
+            int serial = ++_characterSelectionSerial;
             var error =
                 ValidateOwnedRequest(requester);
 
@@ -909,6 +952,18 @@ namespace EchoProtocol.Networking
             {
                 error =
                     LobbySelectionError.InvalidSelection;
+            }
+
+            string[] requiredItems = Array.Empty<string>();
+            if (error == LobbySelectionError.None
+                && !LobbySelectionEntitlements.TryGetRequiredItems(
+                    LobbySelectionKind.Character, 0, characterId, out requiredItems))
+                error = LobbySelectionError.InvalidSelection;
+            if (error == LobbySelectionError.None && requiredItems.Length > 0)
+            {
+                ConfirmOwnedSelection(requester, LobbySelectionKind.Character,
+                    characterId, 0, requiredItems, serial);
+                return;
             }
 
             if (error == LobbySelectionError.None)
@@ -958,6 +1013,7 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            int serial = ++_outfitSelectionSerial;
             var error =
                 ValidateOwnedRequest(requester);
 
@@ -980,6 +1036,18 @@ namespace EchoProtocol.Networking
             {
                 error =
                     LobbySelectionError.InvalidSelection;
+            }
+
+            string[] requiredItems = Array.Empty<string>();
+            if (error == LobbySelectionError.None
+                && !LobbySelectionEntitlements.TryGetRequiredItems(
+                    LobbySelectionKind.CharacterOutfit, CharacterId, outfitId, out requiredItems))
+                error = LobbySelectionError.InvalidSelection;
+            if (error == LobbySelectionError.None && requiredItems.Length > 0)
+            {
+                ConfirmOwnedSelection(requester, LobbySelectionKind.CharacterOutfit,
+                    outfitId, CharacterId, requiredItems, serial);
+                return;
             }
 
             if (error == LobbySelectionError.None)
@@ -1094,6 +1162,7 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            int serial = ++_toolSelectionSerial;
             var error = ValidateOwnedRequest(requester);
             if (error == LobbySelectionError.None && toolId < 0)
             {
@@ -1119,6 +1188,18 @@ namespace EchoProtocol.Networking
                 error = LobbySelectionError.ToolAlreadyClaimed;
             }
 
+            string[] requiredItems = Array.Empty<string>();
+            if (error == LobbySelectionError.None
+                && !LobbySelectionEntitlements.TryGetRequiredItems(
+                    LobbySelectionKind.Tool, 0, toolId, out requiredItems))
+                error = LobbySelectionError.InvalidSelection;
+            if (error == LobbySelectionError.None && requiredItems.Length > 0)
+            {
+                ConfirmOwnedSelection(requester, LobbySelectionKind.Tool,
+                    toolId, 0, requiredItems, serial);
+                return;
+            }
+
             if (error == LobbySelectionError.None)
             {
                 ToolId = toolId;
@@ -1126,6 +1207,53 @@ namespace EchoProtocol.Networking
             }
 
             SendSelectionResult(requester, LobbySelectionKind.Tool, toolId, error);
+        }
+
+        private async void ConfirmOwnedSelection(PlayerRef requester, LobbySelectionKind kind,
+            int requestedId, int characterId, string[] requiredItems, int serial)
+        {
+            bool verified = await MatchAuthorityRuntime.EnsureExists(NetworkBootstrap.Instance)
+                .VerifyPlayerEntitlementsAsync(this, requiredItems);
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || (kind == LobbySelectionKind.Character && serial != _characterSelectionSerial)
+                || (kind == LobbySelectionKind.CharacterOutfit && serial != _outfitSelectionSerial)
+                || (kind == LobbySelectionKind.Tool && serial != _toolSelectionSerial))
+                return;
+
+            var error = ValidateOwnedRequest(requester);
+            if (error == LobbySelectionError.None && !verified)
+                error = LobbySelectionError.OwnershipNotVerified;
+            if (error == LobbySelectionError.None && IsReady)
+                error = LobbySelectionError.SelectionLockedWhileReady;
+            if (error == LobbySelectionError.None
+                && kind != LobbySelectionKind.Tool && IsGameplayPlayer)
+                error = LobbySelectionError.SelectionLockedWhileReady;
+            if (error == LobbySelectionError.None && kind == LobbySelectionKind.CharacterOutfit
+                && CharacterId != characterId)
+                error = LobbySelectionError.InvalidSelection;
+            if (error == LobbySelectionError.None && kind == LobbySelectionKind.Tool
+                && (!TryGetTool(requestedId, out var definition)
+                    || definition.IsUnique && IsToolClaimedByAnother(requestedId)))
+                error = LobbySelectionError.ToolAlreadyClaimed;
+
+            if (error == LobbySelectionError.None)
+            {
+                switch (kind)
+                {
+                    case LobbySelectionKind.Character:
+                        if (CharacterId != requestedId) CharacterOutfitId = 0;
+                        CharacterId = requestedId;
+                        break;
+                    case LobbySelectionKind.CharacterOutfit:
+                        CharacterOutfitId = requestedId;
+                        break;
+                    case LobbySelectionKind.Tool:
+                        ToolId = requestedId;
+                        break;
+                }
+                AnyStateChanged?.Invoke();
+            }
+            SendSelectionResult(requester, kind, requestedId, error);
         }
 
         private bool TryResolveRequester(PlayerRef source, out PlayerRef requester)

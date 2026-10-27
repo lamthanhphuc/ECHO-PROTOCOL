@@ -16,6 +16,46 @@ public sealed class MatchAuthorityServiceTests
     private static readonly DateTimeOffset Now = new(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public async Task HostReadsOnlyBoundPlayersCurrentInventory()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var hostId = Guid.NewGuid();
+        var playerId = Guid.NewGuid();
+        var otherId = Guid.NewGuid();
+        var ownedItem = Guid.NewGuid();
+        var unrelatedItem = Guid.NewGuid();
+        var match = await service.CreateAsync(hostId, new CreateMatchAuthorityRequest
+        {
+            FusionSessionName = "entitlement-room", MaxPlayers = 4
+        }, CancellationToken.None);
+        var matchId = match.Data!.MatchId;
+        await BindAsync(service, hostId, playerId, matchId, "entitlement-room", 2);
+        db.InventoryItems.AddRange(
+            new InventoryItem { InventoryItemId = Guid.NewGuid(), UserId = playerId,
+                ShopItemId = ownedItem, AcquiredAtUtc = Now.UtcDateTime },
+            new InventoryItem { InventoryItemId = Guid.NewGuid(), UserId = otherId,
+                ShopItemId = unrelatedItem, AcquiredAtUtc = Now.UtcDateTime });
+        await db.SaveChangesAsync();
+
+        var accepted = await service.GetPlayerEntitlementsAsync(hostId, matchId, 2, CancellationToken.None);
+        Assert.True(accepted.IsSuccess);
+        Assert.Equal(playerId, accepted.Data!.UserId);
+        Assert.Equal(new[] { ownedItem }, accepted.Data.ShopItemIds);
+        Assert.False((await service.GetPlayerEntitlementsAsync(otherId, matchId, 2, CancellationToken.None)).IsSuccess);
+        Assert.False((await service.GetPlayerEntitlementsAsync(hostId, matchId, 3, CancellationToken.None)).IsSuccess);
+
+        db.InventoryItems.Add(new InventoryItem { InventoryItemId = Guid.NewGuid(), UserId = playerId,
+            ShopItemId = unrelatedItem, AcquiredAtUtc = Now.UtcDateTime });
+        await db.SaveChangesAsync();
+        var refreshed = await service.GetPlayerEntitlementsAsync(hostId, matchId, 2, CancellationToken.None);
+        Assert.Contains(unrelatedItem, refreshed.Data!.ShopItemIds);
+
+        await service.MarkPlayerDisconnectedAsync(hostId, matchId, 2, playerId, CancellationToken.None);
+        Assert.False((await service.GetPlayerEntitlementsAsync(hostId, matchId, 2, CancellationToken.None)).IsSuccess);
+    }
+
+    [Fact]
     public async Task BoundHost_CanDelegateTelemetryForVerifiedPlayer()
     {
         await using var db = CreateDb();

@@ -56,6 +56,12 @@ namespace EchoProtocol.Networking.Authority
         public int fusionActorNumber;
     }
 
+    public sealed class MatchPlayerEntitlementsDto
+    {
+        public string userId;
+        public string[] shopItemIds = Array.Empty<string>();
+    }
+
     [Serializable]
     public sealed class EndMatchAuthorityRequest
     {

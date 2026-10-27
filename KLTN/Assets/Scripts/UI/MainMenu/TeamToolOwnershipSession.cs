@@ -32,11 +32,35 @@ namespace EchoProtocol.UI.MainMenu
 
         public static event Action Changed;
 
-        public static bool IsLoaded { get; private set; }
-        public static bool IsLoading { get; private set; }
+        private static bool _isLoaded;
+        private static bool _isLoading;
+        public static bool IsLoaded
+        {
+            get { EnsureCurrentUser(); return _isLoaded; }
+            private set => _isLoaded = value;
+        }
+        public static bool IsLoading
+        {
+            get { EnsureCurrentUser(); return _isLoading; }
+            private set => _isLoading = value;
+        }
+        private static string _sessionUserId = string.Empty;
+        private static int _revision;
+
+        private static void EnsureCurrentUser()
+        {
+            var currentUserId = AuthSession.CurrentUserId;
+            if (!string.Equals(_sessionUserId, currentUserId, StringComparison.OrdinalIgnoreCase))
+            {
+                Clear();
+                _sessionUserId = currentUserId;
+            }
+        }
 
         public static void Clear()
         {
+            _revision++;
+            _sessionUserId = AuthSession.CurrentUserId;
             OwnedItemIds.Clear();
             IsLoaded = false;
             IsLoading = false;
@@ -46,6 +70,7 @@ namespace EchoProtocol.UI.MainMenu
         public static bool OwnsItem(
             string itemId)
         {
+            EnsureCurrentUser();
             return !string.IsNullOrWhiteSpace(itemId)
                 && OwnedItemIds.Contains(itemId);
         }
@@ -62,7 +87,8 @@ namespace EchoProtocol.UI.MainMenu
         public static void MarkOwned(
             string itemId)
         {
-            if (string.IsNullOrWhiteSpace(itemId))
+            EnsureCurrentUser();
+            if (string.IsNullOrEmpty(_sessionUserId) || string.IsNullOrWhiteSpace(itemId))
                 return;
 
             if (OwnedItemIds.Add(itemId))
@@ -78,6 +104,12 @@ namespace EchoProtocol.UI.MainMenu
         public static void Refresh(
             Action<bool> completed = null)
         {
+            EnsureCurrentUser();
+            if (string.IsNullOrEmpty(_sessionUserId))
+            {
+                completed?.Invoke(false);
+                return;
+            }
             if (IsLoading)
             {
                 completed?.Invoke(false);
@@ -95,12 +127,21 @@ namespace EchoProtocol.UI.MainMenu
             }
 
             IsLoading = true;
+            int requestRevision = _revision;
+            string requestUserId = _sessionUserId;
 
             runtime.Client.GetJson<InventoryResponse>(
                 ApiEndpoints.InventoryMe,
                 true,
                 result =>
                 {
+                    if (requestRevision != _revision
+                        || !string.Equals(requestUserId, AuthSession.CurrentUserId,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        completed?.Invoke(false);
+                        return;
+                    }
                     IsLoading = false;
 
                     if (!result.IsSuccess

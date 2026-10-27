@@ -867,6 +867,51 @@ namespace EchoProtocol.Networking.Authority
             }
         }
 
+        public async Task<bool> VerifyPlayerEntitlementsAsync(
+            LobbyPlayerState playerState, string[] requiredItemIds)
+        {
+            if (!HasStateAuthority || !HasBinding || _api == null
+                || playerState == null || playerState.Object == null
+                || !playerState.Object.IsValid || !playerState.Object.HasStateAuthority
+                || requiredItemIds == null)
+                return false;
+            if (requiredItemIds.Length == 0) return true;
+
+            var matchId = MatchId;
+            var player = playerState.Object.InputAuthority;
+            var actorNumber = _bootstrap.Runner.GetPlayerActorId(player) ?? player.PlayerId;
+            if (!_boundPlayers.TryGetValue(actorNumber, out var userId)
+                || !Guid.TryParse(playerState.BackendUserId.ToString(), out var replicatedUserId)
+                || replicatedUserId != userId)
+                return false;
+
+            try
+            {
+                var response = await _api.GetPlayerEntitlementsAsync(matchId, actorNumber);
+                if (!IsSuccessful(response) || MatchId != matchId || !HasStateAuthority
+                    || playerState == null || playerState.Object == null
+                    || !playerState.Object.IsValid || playerState.Object.InputAuthority != player
+                    || !_boundPlayers.TryGetValue(actorNumber, out var currentUserId)
+                    || currentUserId != userId
+                    || !Guid.TryParse(response.Data.data.userId, out var verifiedUserId)
+                    || verifiedUserId != userId)
+                    return false;
+
+                var owned = new HashSet<string>(
+                    response.Data.data.shopItemIds ?? Array.Empty<string>(),
+                    StringComparer.OrdinalIgnoreCase);
+                foreach (var itemId in requiredItemIds)
+                    if (!Guid.TryParse(itemId, out _) || !owned.Contains(itemId))
+                        return false;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[MatchAuthority] Entitlement check failed: {exception.Message}");
+                return false;
+            }
+        }
+
         public async void BindPlayerFromProof(
             LobbyPlayerState playerState,
             int actorNumber,

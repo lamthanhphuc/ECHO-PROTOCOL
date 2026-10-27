@@ -42,6 +42,11 @@ namespace EchoProtocol.Networking.Authority
                     joinProof = proof
                 });
 
+        public Task<ApiResult<ApiResponse<MatchPlayerEntitlementsDto>>> GetPlayerEntitlementsAsync(
+            Guid matchId, int actorNumber) =>
+            GetAsync<MatchPlayerEntitlementsDto>(
+                $"/api/matches/{matchId:D}/players/{actorNumber}/entitlements");
+
         public Task<ApiResult<ApiResponse<MatchPlayerBindingDto>>> DisconnectPlayerAsync(
             Guid matchId, int actorNumber, Guid expectedUserId) =>
             PostAsync<DisconnectMatchPlayerRequest, MatchPlayerBindingDto>(
