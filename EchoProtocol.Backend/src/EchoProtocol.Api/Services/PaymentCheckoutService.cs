@@ -84,6 +84,18 @@ public sealed class PaymentCheckoutService(
 
         var checkout = await db.PaymentCheckouts.SingleOrDefaultAsync(
             item => item.PaymentOrderId == paymentOrderId, cancellationToken);
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        if (order.ExpiresAtUtc is { } expiresAt && expiresAt <= now)
+        {
+            if (order.Status == PaymentOrderStatus.CREATED && checkout is null)
+            {
+                order.Status = PaymentOrderStatus.EXPIRED;
+                order.UpdatedAtUtc = now;
+                await db.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+            return ReservationResult.Fail(Fail("Payment order has expired", ErrorCodes.PaymentOrderExpired));
+        }
         if (order.Status == PaymentOrderStatus.PENDING_PAYMENT && checkout?.Status == PaymentCheckoutStatus.READY)
         {
             await transaction.RollbackAsync(cancellationToken);
@@ -136,6 +148,8 @@ public sealed class PaymentCheckoutService(
         if (order is null || order.UserId != userId)
             return Fail("Payment order is no longer available to the authenticated user",
                 ErrorCodes.PaymentOrderForbidden);
+        if (order.ExpiresAtUtc is { } expiresAt && expiresAt <= timeProvider.GetUtcNow().UtcDateTime)
+            return Fail("Payment order has expired", ErrorCodes.PaymentOrderExpired);
         if (checkout.Status == PaymentCheckoutStatus.READY && order.Status == PaymentOrderStatus.PENDING_PAYMENT)
         {
             await transaction.RollbackAsync(cancellationToken);

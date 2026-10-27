@@ -91,6 +91,7 @@ public static class ErrorCodes
     public const string PaymentOrderConflict = "PAYMENT_ORDER_CONFLICT";
     public const string PaymentOrderNotFound = "PAYMENT_ORDER_NOT_FOUND";
     public const string PaymentOrderForbidden = "PAYMENT_ORDER_FORBIDDEN";
+    public const string PaymentOrderExpired = "PAYMENT_ORDER_EXPIRED";
     public const string PaymentInvalidStateTransition = "PAYMENT_INVALID_STATE_TRANSITION";
     public const string PaymentInvalidTransitionPayload = "PAYMENT_INVALID_TRANSITION_PAYLOAD";
     public const string PaymentProviderIdentityConflict = "PAYMENT_PROVIDER_IDENTITY_CONFLICT";
@@ -105,4 +106,5 @@ public static class ErrorCodes
     public const string PaymentFulfillmentNotConfigured = "PAYMENT_FULFILLMENT_NOT_CONFIGURED";
     public const string PaymentFulfillmentTargetInvalid = "PAYMENT_FULFILLMENT_TARGET_INVALID";
     public const string PaymentFulfillmentConflict = "PAYMENT_FULFILLMENT_CONFLICT";
+    public const string PaymentFulfillmentPending = "PAYMENT_FULFILLMENT_PENDING";
 }

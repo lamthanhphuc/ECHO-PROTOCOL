@@ -8,6 +8,9 @@ public static class PaymentOrderStateMachine
         (current, target) switch
         {
             (PaymentOrderStatus.CREATED, PaymentOrderStatus.PENDING_PAYMENT) => true,
+            (PaymentOrderStatus.CREATED, PaymentOrderStatus.FAILED) => true,
+            (PaymentOrderStatus.CREATED, PaymentOrderStatus.CANCELLED) => true,
+            (PaymentOrderStatus.CREATED, PaymentOrderStatus.EXPIRED) => true,
             (PaymentOrderStatus.PENDING_PAYMENT, PaymentOrderStatus.PAID) => true,
             (PaymentOrderStatus.PENDING_PAYMENT, PaymentOrderStatus.FAILED) => true,
             (PaymentOrderStatus.PENDING_PAYMENT, PaymentOrderStatus.CANCELLED) => true,

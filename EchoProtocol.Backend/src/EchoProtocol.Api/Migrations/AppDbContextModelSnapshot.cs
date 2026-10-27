@@ -726,9 +726,16 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<DateTime?>("FulfilledAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("FulfillmentKind")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
                     b.Property<string>("FulfillmentReference")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("FulfillmentShopItemId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("IdempotencyKey")
                         .IsRequired()
@@ -777,6 +784,9 @@ namespace EchoProtocol.Api.Migrations
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("WalletCreditAmount")
+                        .HasColumnType("integer");
 
                     b.HasKey("PaymentOrderId");
 

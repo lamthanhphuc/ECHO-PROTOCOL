@@ -85,6 +85,42 @@ public sealed class PaymentProcessingTests
     }
 
     [Fact, Trait("Category", "M4PaymentProcessingUnit")]
+    public async Task ExpiredReadyCheckoutIsNotReturnedOnRetry()
+    {
+        await using var harness = await Harness.CreateAsync(pending: true);
+        var order = await harness.Db.PaymentOrders.SingleAsync();
+        order.CreatedAtUtc = Now.AddMinutes(-10).UtcDateTime;
+        order.ExpiresAtUtc = Now.AddMinutes(-1).UtcDateTime;
+        await harness.Db.SaveChangesAsync();
+        var provider = new FakeProvider();
+
+        var result = await harness.CheckoutService(provider).CreateCheckoutAsync(harness.UserId, harness.OrderId);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.PaymentOrderExpired, result.ErrorCode);
+        Assert.Equal(0, provider.CreateCalls);
+    }
+
+    [Fact, Trait("Category", "M4PaymentProcessingUnit")]
+    public async Task ExpiredOrderWithoutCheckoutClosesBeforeProviderCall()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var order = await harness.Db.PaymentOrders.SingleAsync();
+        order.CreatedAtUtc = Now.AddMinutes(-10).UtcDateTime;
+        order.ExpiresAtUtc = Now.AddMinutes(-1).UtcDateTime;
+        await harness.Db.SaveChangesAsync();
+        var provider = new FakeProvider();
+
+        var result = await harness.CheckoutService(provider).CreateCheckoutAsync(harness.UserId, harness.OrderId);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.PaymentOrderExpired, result.ErrorCode);
+        Assert.Equal(PaymentOrderStatus.EXPIRED, order.Status);
+        Assert.Equal(0, provider.CreateCalls);
+        Assert.Empty(await harness.Db.PaymentCheckouts.ToListAsync());
+    }
+
+    [Fact, Trait("Category", "M4PaymentProcessingUnit")]
     public async Task NonOwnerCannotCreateCheckout()
     {
         await using var harness = await Harness.CreateAsync();
@@ -118,6 +154,19 @@ public sealed class PaymentProcessingTests
         Assert.True(result.IsValid);
         Assert.Equal("TX-1", result.Event!.ProviderEventId);
         Assert.Equal(PaymentProviderEventStatus.PAID, result.Event.Status);
+    }
+
+    [Theory, Trait("Category", "M4PaymentProcessingUnit")]
+    [InlineData("CANCELLED", PaymentProviderEventStatus.CANCELLED)]
+    [InlineData("EXPIRED", PaymentProviderEventStatus.EXPIRED)]
+    [InlineData("FAILED", PaymentProviderEventStatus.FAILED)]
+    public void PayOSSignedTerminalStatusIsNormalized(string providerStatus, PaymentProviderEventStatus expected)
+    {
+        var provider = CreatePayOSProvider(new StubHttpHandler(
+            _ => Task.FromException<HttpResponseMessage>(new NotSupportedException())));
+        using var payload = PayOSWebhook("TX-terminal", 125_000, "1", status: providerStatus);
+
+        Assert.Equal(expected, provider.VerifyAndParseWebhook(payload.RootElement).Event!.Status);
     }
 
     [Fact, Trait("Category", "M4PaymentProcessingUnit")]
@@ -195,7 +244,7 @@ public sealed class PaymentProcessingTests
     [Fact, Trait("Category", "M4PaymentProcessingUnit")]
     public async Task DuplicateWebhookIsIdempotent()
     {
-        await using var harness = await Harness.CreateAsync(pending: true);
+        await using var harness = await Harness.CreateAsync(pending: true, fulfillmentConfigured: true);
         var paymentEvent = Event("duplicate-event", harness.ProviderOrderId, 125_000);
         await harness.WebhookService().ProcessVerifiedAsync(paymentEvent);
 
@@ -204,6 +253,134 @@ public sealed class PaymentProcessingTests
         Assert.True(replay.IsSuccess);
         Assert.True(replay.Data!.IsReplay);
         Assert.Single(await harness.Db.PaymentProviderEvents.ToListAsync());
+    }
+
+    [Fact, Trait("Category", "M4PaymentProcessingUnit")]
+    public async Task PaidOrderUsesStoredEntitlementAfterCatalogProductIsRemoved()
+    {
+        await using var harness = await Harness.CreateAsync(pending: true);
+        var order = await harness.Db.PaymentOrders.SingleAsync();
+        order.FulfillmentKind = PaymentFulfillmentKind.WALLET_CREDIT;
+        order.WalletCreditAmount = 275;
+        await harness.Db.SaveChangesAsync();
+
+        var result = await harness.WebhookService().ProcessVerifiedAsync(
+            Event("stored-terms", harness.ProviderOrderId, 125_000));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(PaymentOrderStatus.FULFILLED, order.Status);
+        Assert.Equal(375, (await harness.Db.Wallets.SingleAsync()).Balance);
+        Assert.Equal(275, (await harness.Db.WalletTransactions.SingleAsync()).Amount);
+    }
+
+    [Theory, Trait("Category", "M4PaymentProcessingUnit")]
+    [InlineData(PaymentProviderEventStatus.FAILED, PaymentOrderStatus.FAILED)]
+    [InlineData(PaymentProviderEventStatus.CANCELLED, PaymentOrderStatus.CANCELLED)]
+    [InlineData(PaymentProviderEventStatus.EXPIRED, PaymentOrderStatus.EXPIRED)]
+    public async Task VerifiedTerminalWebhookClosesUnpaidOrder(
+        PaymentProviderEventStatus providerStatus, PaymentOrderStatus expected)
+    {
+        await using var harness = await Harness.CreateAsync(pending: true);
+        var paymentEvent = Event($"terminal-{expected}", harness.ProviderOrderId, 125_000)
+            with { Status = providerStatus };
+
+        var result = await harness.WebhookService().ProcessVerifiedAsync(paymentEvent);
+        var replay = await harness.WebhookService().ProcessVerifiedAsync(paymentEvent);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("TERMINAL_APPLIED", result.Data!.Outcome);
+        Assert.True(replay.Data!.IsReplay);
+        Assert.Equal(expected, (await harness.Db.PaymentOrders.SingleAsync()).Status);
+        Assert.Empty(await harness.Db.WalletTransactions.ToListAsync());
+    }
+
+    [Theory, Trait("Category", "M4PaymentProcessingUnit")]
+    [InlineData("CANCELLED", PaymentOrderStatus.CANCELLED)]
+    [InlineData("FAILED", PaymentOrderStatus.FAILED)]
+    [InlineData("EXPIRED", PaymentOrderStatus.EXPIRED)]
+    public async Task ProviderReconciliationClosesUnpaidOrder(string providerStatus, PaymentOrderStatus expected)
+    {
+        await using var harness = await Harness.CreateAsync(pending: true);
+        var provider = new FakeProvider
+        {
+            Queried = new PaymentProviderCheckoutResult(harness.ProviderOrderId, "seed-link",
+                new Uri("https://pay.test/seed-link"), providerStatus, 125_000, "VND")
+        };
+        var service = new PaymentOrderReconciliationService(harness.Db,
+            new PaymentProviderRegistry([provider]), harness.WebhookService(), new FixedTimeProvider(Now));
+
+        Assert.Contains(harness.OrderId, await service.DueAsync(default));
+        Assert.Equal(expected, await service.ReconcileAsync(harness.OrderId, default));
+        Assert.Null(await service.ReconcileAsync(harness.OrderId, default));
+        Assert.Equal(expected, (await harness.Db.PaymentOrders.SingleAsync()).Status);
+    }
+
+    [Fact, Trait("Category", "M4PaymentProcessingUnit")]
+    public async Task ReconciliationDoesNotClosePaidOrMismatchedProviderEvidence()
+    {
+        await using var harness = await Harness.CreateAsync(pending: true);
+        var provider = new FakeProvider
+        {
+            Queried = new PaymentProviderCheckoutResult(harness.ProviderOrderId, "seed-link",
+                new Uri("https://pay.test/seed-link"), "FAILED", 1, "VND")
+        };
+        var service = new PaymentOrderReconciliationService(harness.Db,
+            new PaymentProviderRegistry([provider]), harness.WebhookService(), new FixedTimeProvider(Now));
+        Assert.Null(await service.ReconcileAsync(harness.OrderId, default));
+        Assert.Equal(PaymentOrderStatus.PENDING_PAYMENT, (await harness.Db.PaymentOrders.SingleAsync()).Status);
+
+        provider.Queried = provider.Queried with { Amount = 125_000, Status = "PAID" };
+        Assert.Equal(PaymentOrderStatus.PAID, await service.ReconcileAsync(harness.OrderId, default));
+        Assert.Equal(PaymentOrderStatus.PAID, (await harness.Db.PaymentOrders.SingleAsync()).Status);
+    }
+
+    [Fact, Trait("Category", "M4PaymentProcessingUnit")]
+    public async Task ProviderPaidQueryFulfillsOnceWhenWebhookIsMissing()
+    {
+        await using var harness = await Harness.CreateAsync(pending: true, fulfillmentConfigured: true);
+        var provider = new FakeProvider
+        {
+            Queried = new PaymentProviderCheckoutResult(harness.ProviderOrderId, "seed-link",
+                new Uri("https://pay.test/seed-link"), "PAID", 125_000, "VND")
+        };
+        var service = new PaymentOrderReconciliationService(harness.Db,
+            new PaymentProviderRegistry([provider]), harness.WebhookService(), new FixedTimeProvider(Now));
+
+        Assert.Equal(PaymentOrderStatus.FULFILLED, await service.ReconcileAsync(harness.OrderId, default));
+        Assert.Null(await service.ReconcileAsync(harness.OrderId, default));
+        Assert.Equal(250, (await harness.Db.Wallets.SingleAsync()).Balance);
+        Assert.Single(await harness.Db.WalletTransactions.ToListAsync());
+        Assert.Single(await harness.Db.PaymentFulfillments.ToListAsync());
+    }
+
+    [Fact, Trait("Category", "M4PaymentProcessingUnit")]
+    public async Task ReconciliationPagesPastPersistentPendingOrders()
+    {
+        await using var harness = await Harness.CreateAsync(pending: true);
+        for (var i = 0; i < 35; i++)
+        {
+            var id = Guid.NewGuid();
+            harness.Db.PaymentOrders.Add(new PaymentOrder
+            {
+                PaymentOrderId = id, UserId = harness.UserId, Provider = "PAYOS",
+                ProviderOrderId = $"pending-{i}", Purpose = "AUTOMATED_TEST_ONLY",
+                ProductReference = "TEST_PRODUCT", Amount = 125_000, Currency = "VND",
+                Status = PaymentOrderStatus.PENDING_PAYMENT,
+                IdempotencyKey = $"page-{id:N}", RequestFingerprint = new string('B', 64),
+                CreatedAtUtc = Now.AddHours(-1).UtcDateTime,
+                UpdatedAtUtc = Now.AddMinutes(-i - 2).UtcDateTime,
+                ExpiresAtUtc = Now.AddMinutes(30).UtcDateTime
+            });
+        }
+        await harness.Db.SaveChangesAsync();
+        var service = new PaymentOrderReconciliationService(harness.Db,
+            new PaymentProviderRegistry([new FakeProvider()]), harness.WebhookService(), new FixedTimeProvider(Now));
+
+        var firstPage = await service.DueAsync(default);
+        var secondPage = await service.DueAsync(default, firstPage.Count);
+        Assert.Equal(30, firstPage.Count);
+        Assert.Equal(6, secondPage.Count);
+        Assert.Empty(firstPage.Intersect(secondPage));
     }
 
     [Fact, Trait("Category", "M4PaymentProcessingUnit")]
@@ -250,7 +427,7 @@ public sealed class PaymentProcessingTests
     [Fact, Trait("Category", "M4PaymentProcessingUnit")]
     public async Task WebhookBeforeCheckoutFinalizationIsDeferredAndRetryable()
     {
-        await using var harness = await Harness.CreateAsync();
+        await using var harness = await Harness.CreateAsync(fulfillmentConfigured: true);
         var order = await harness.Db.PaymentOrders.SingleAsync();
         var reservation = new PaymentCheckout
         {
@@ -276,7 +453,7 @@ public sealed class PaymentProcessingTests
 
         Assert.True(retry.IsSuccess);
         Assert.True(retry.Data!.IsReplay);
-        Assert.Equal(PaymentOrderStatus.PAID,
+        Assert.Equal(PaymentOrderStatus.FULFILLED,
             (await harness.Db.PaymentOrders.SingleAsync()).Status);
         Assert.Single(await harness.Db.PaymentProviderEvents.ToListAsync());
     }
@@ -338,6 +515,41 @@ public sealed class PaymentProcessingTests
         "PAYOS", eventId, orderId, amount, "VND", PaymentProviderEventStatus.PAID,
         Now.UtcDateTime, new string(fingerprintSeed[0], 64));
 
+    [Fact]
+    public async Task PendingFulfillmentReturnsRetryableFailureAndRecoversExactlyOnce()
+    {
+        await using var harness = await Harness.CreateAsync(pending: true);
+        var webhook = await harness.WebhookService().ProcessVerifiedAsync(Event("recover-event", harness.ProviderOrderId, 125_000));
+        Assert.False(webhook.IsSuccess);
+        Assert.Equal(ErrorCodes.PaymentFulfillmentPending, webhook.ErrorCode);
+        Assert.Equal(PaymentProviderEventOutcome.FULFILLMENT_PENDING, (await harness.Db.PaymentProviderEvents.SingleAsync()).ProcessingOutcome);
+        Assert.Equal(100, (await harness.Db.Wallets.SingleAsync()).Balance);
+
+        harness.EnableFulfillment();
+        var recovery = new PaymentRecoveryService(harness.Db, harness.FulfillmentService(), new FixedTimeProvider(Now));
+        Assert.Contains(harness.OrderId, await recovery.PendingAsync(default));
+        Assert.True((await recovery.RecoverAsync(harness.OrderId, default)).IsSuccess);
+        var replay = await recovery.RecoverAsync(harness.OrderId, default);
+        Assert.True(replay.IsSuccess);
+        Assert.True(replay.Data!.IsReplay);
+        Assert.Equal(250, (await harness.Db.Wallets.SingleAsync()).Balance);
+        Assert.Single(await harness.Db.WalletTransactions.ToListAsync());
+        Assert.Empty(await recovery.PendingAsync(default));
+        Assert.Equal(PaymentProviderEventOutcome.FULFILLED, (await harness.Db.PaymentProviderEvents.SingleAsync()).ProcessingOutcome);
+    }
+
+    [Fact]
+    public async Task RecoveryRejectsPaidOrderWithoutVerifiedEvidence()
+    {
+        await using var harness = await Harness.CreateAsync(initialStatus: PaymentOrderStatus.PAID, fulfillmentConfigured: true);
+        var recovery = new PaymentRecoveryService(harness.Db, harness.FulfillmentService(), new FixedTimeProvider(Now));
+        var result = await recovery.RecoverAsync(harness.OrderId, default);
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.PaymentProviderEvidenceMismatch, result.ErrorCode);
+        Assert.Empty(await recovery.PendingAsync(default));
+        Assert.Equal(100, (await harness.Db.Wallets.SingleAsync()).Balance);
+    }
+
     private static PayOSPaymentProvider CreatePayOSProvider(HttpMessageHandler handler) => new(
         new HttpClient(handler),
         Options.Create(new PayOSSettings
@@ -349,15 +561,16 @@ public sealed class PaymentProcessingTests
         }));
 
     private static JsonDocument PayOSWebhook(
-        string reference, long amount, string orderCode, bool validSignature = true)
+        string reference, long amount, string orderCode, bool validSignature = true, string? status = null)
     {
         var data = new Dictionary<string, object>
         {
-            ["amount"] = amount, ["code"] = "00", ["currency"] = "VND",
+            ["amount"] = amount, ["code"] = status is null ? "00" : "01", ["currency"] = "VND",
             ["description"] = "EP0000001", ["orderCode"] = long.Parse(orderCode),
             ["paymentLinkId"] = "link-1", ["reference"] = reference,
             ["transactionDateTime"] = "2026-09-21T15:00:00Z"
         };
+        if (status is not null) data["status"] = status;
         var signature = Sign(Canonical(data));
         if (!validSignature) signature = new string('0', 64);
         return JsonDocument.Parse(JsonSerializer.Serialize(new
@@ -407,6 +620,7 @@ public sealed class PaymentProcessingTests
         public int CreateCalls { get; private set; }
         public PaymentProviderCheckoutRequest? LastRequest { get; private set; }
         public PaymentProviderCheckoutResult? Stored { get; private set; }
+        public PaymentProviderCheckoutResult? Queried { get; set; }
 
         public Task<PaymentProviderCheckoutResult> CreateCheckoutAsync(
             PaymentProviderCheckoutRequest request, CancellationToken cancellationToken = default)
@@ -423,7 +637,7 @@ public sealed class PaymentProcessingTests
 
         public Task<PaymentProviderCheckoutResult?> QueryPaymentAsync(
             string providerOrderId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Stored);
+            Task.FromResult(Queried ?? Stored);
 
         public PaymentWebhookVerificationResult VerifyAndParseWebhook(JsonElement payload) =>
             throw new NotSupportedException();
@@ -432,7 +646,7 @@ public sealed class PaymentProcessingTests
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
-        private readonly IOptions<PaymentCatalogSettings> _catalog;
+        private IOptions<PaymentCatalogSettings> _catalog;
 
         private Harness(
             SqliteConnection connection, AppDbContext db, Guid userId,
@@ -518,6 +732,26 @@ public sealed class PaymentProcessingTests
 
         public PaymentFulfillmentService FulfillmentService() => new(
             Db, _catalog, new FixedTimeProvider(Now));
+
+        public void EnableFulfillment()
+        {
+            var product = _catalog.Value.Products[0];
+            _catalog = Options.Create(new PaymentCatalogSettings
+            {
+                AllowedProviders = _catalog.Value.AllowedProviders,
+                Products = [new PaymentProductSettings
+                {
+                    ProductReference = product.ProductReference,
+                    Purpose = product.Purpose,
+                    Amount = product.Amount,
+                    Currency = product.Currency,
+                    IsActive = product.IsActive,
+                    ExpiresAfterMinutes = product.ExpiresAfterMinutes,
+                    FulfillmentKind = "WALLET_CREDIT",
+                    WalletCreditAmount = 150
+                }]
+            });
+        }
 
         public PaymentWebhookService WebhookService() => new(
             Db, FulfillmentService(), new FixedTimeProvider(Now));

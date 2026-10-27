@@ -512,6 +512,7 @@ public class AppDbContext : DbContext
             entity.Property(item => item.ProviderOrderId).HasMaxLength(200);
             entity.Property(item => item.Purpose).IsRequired().HasMaxLength(100);
             entity.Property(item => item.ProductReference).IsRequired().HasMaxLength(128);
+            entity.Property(item => item.FulfillmentKind).HasConversion<string>().HasMaxLength(30);
             entity.Property(item => item.Amount).HasPrecision(18, 2);
             entity.Property(item => item.Currency).IsRequired().HasMaxLength(3).IsFixedLength();
             entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(30);

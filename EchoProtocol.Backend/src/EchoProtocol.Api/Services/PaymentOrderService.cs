@@ -70,6 +70,9 @@ public sealed class PaymentOrderService : IPaymentOrderService
             Provider = configuredProvider,
             Purpose = product.Purpose.Trim(),
             ProductReference = product.ProductReference.Trim(),
+            FulfillmentKind = Enum.Parse<PaymentFulfillmentKind>(product.FulfillmentKind!, true),
+            WalletCreditAmount = product.WalletCreditAmount,
+            FulfillmentShopItemId = product.ShopItemId,
             Amount = product.Amount,
             Currency = product.Currency.Trim().ToUpperInvariant(),
             Status = PaymentOrderStatus.CREATED,
@@ -211,12 +214,22 @@ public sealed class PaymentOrderService : IPaymentOrderService
         if (product.Amount <= 0 ||
             string.IsNullOrWhiteSpace(product.Purpose) ||
             !IsCurrency(product.Currency) ||
-            product.ExpiresAfterMinutes is <= 0)
+            product.ExpiresAfterMinutes is not > 0)
         {
             return ServiceResult<PaymentProductSettings>.Failure(
                 "Payment product configuration is invalid",
                 ErrorCodes.PaymentConfigurationInvalid);
         }
+
+        if (!Enum.TryParse<PaymentFulfillmentKind>(product.FulfillmentKind, true, out var kind) ||
+            kind is not (PaymentFulfillmentKind.WALLET_CREDIT or PaymentFulfillmentKind.INVENTORY_ITEM) ||
+            kind == PaymentFulfillmentKind.WALLET_CREDIT &&
+                (product.WalletCreditAmount is not > 0 || product.ShopItemId is not null) ||
+            kind == PaymentFulfillmentKind.INVENTORY_ITEM &&
+                (product.ShopItemId is null || product.ShopItemId == Guid.Empty ||
+                 product.WalletCreditAmount is not null))
+            return ServiceResult<PaymentProductSettings>.Failure(
+                "Payment product fulfillment terms are invalid", ErrorCodes.PaymentConfigurationInvalid);
 
         return ServiceResult<PaymentProductSettings>.Success(product);
     }

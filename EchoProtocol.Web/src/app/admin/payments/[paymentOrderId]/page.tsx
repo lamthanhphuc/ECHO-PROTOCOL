@@ -2,6 +2,7 @@ import { PageHeader, Panel, StatCard } from "@/components/ui/panel";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { adminApi } from "@/lib/api/server-api";
 import { formatDate, formatMoney, formatNumber } from "@/lib/utils/format";
+import { PaymentRecoveryButton } from "@/components/admin/payment-recovery-button";
 
 export default async function PaymentDetailPage({ params }: { params: Promise<{ paymentOrderId: string }> }) {
   const { paymentOrderId } = await params;
@@ -31,6 +32,7 @@ export default async function PaymentDetailPage({ params }: { params: Promise<{ 
         {detail.checkout ? <dl className="grid gap-3 text-sm sm:grid-cols-2"><Field label="Checkout status" value={detail.checkout.status} /><Field label="Sequence" value={String(detail.checkout.checkoutSequenceId)} /><Field label="Payment link ID" value={detail.checkout.providerPaymentLinkId} code /><Field label="Ready at" value={formatDate(detail.checkout.readyAtUtc)} /></dl> : <p className="muted text-sm">Chưa có checkout.</p>}
         <hr className="my-5 border-[#1d3942]" />
         {detail.fulfillment ? <dl className="grid gap-3 text-sm sm:grid-cols-2"><Field label="Kind" value={detail.fulfillment.kind} /><Field label="Reference" value={detail.fulfillment.fulfillmentReference} code /><Field label="Wallet transaction" value={detail.fulfillment.walletTransactionId} code /><Field label="Completed" value={formatDate(detail.fulfillment.completedAtUtc)} /></dl> : <p className="muted text-sm">Chưa có fulfillment.</p>}
+        {order.status === "PAID" && !detail.fulfillment && <PaymentRecoveryButton orderId={order.paymentOrderId} />}
       </Panel>
     </div>
     <Panel className="mt-5"><h2 className="mb-4 text-lg text-white">Provider event timeline</h2>

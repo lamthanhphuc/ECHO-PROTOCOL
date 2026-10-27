@@ -4,6 +4,7 @@ using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using EchoProtocol.Api.Services;
 
 namespace EchoProtocol.Api.Controllers;
 
@@ -47,6 +48,11 @@ public sealed class AdminController(
         Guid paymentOrderId,
         CancellationToken cancellationToken) => Execute(
             () => service.GetPaymentAsync(paymentOrderId, cancellationToken), cancellationToken);
+
+    [HttpPost("payments/{paymentOrderId:guid}/retry-fulfillment")]
+    public Task<IActionResult> RetryFulfillment(Guid paymentOrderId,
+        [FromServices] PaymentRecoveryService recovery, CancellationToken cancellationToken) => Execute(
+            () => recovery.RecoverAsync(paymentOrderId, cancellationToken), cancellationToken);
 
     [HttpGet("wallet-transactions")]
     public Task<IActionResult> WalletTransactions(

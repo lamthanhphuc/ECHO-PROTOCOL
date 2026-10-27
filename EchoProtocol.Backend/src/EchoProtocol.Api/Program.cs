@@ -236,6 +236,10 @@ builder.Services.AddScoped<IPaymentProvider>(services =>
 builder.Services.AddScoped<IPaymentProviderRegistry, PaymentProviderRegistry>();
 builder.Services.AddScoped<IPaymentCheckoutService, PaymentCheckoutService>();
 builder.Services.AddScoped<IPaymentFulfillmentService, PaymentFulfillmentService>();
+builder.Services.AddScoped<PaymentRecoveryService>();
+builder.Services.AddHostedService<PaymentFulfillmentRecoveryWorker>();
+builder.Services.AddScoped<PaymentOrderReconciliationService>();
+builder.Services.AddHostedService<PaymentOrderReconciliationWorker>();
 builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
 builder.Services.AddSingleton<IMatchJoinProofService, MatchJoinProofService>();
 builder.Services.AddSingleton(TimeProvider.System);

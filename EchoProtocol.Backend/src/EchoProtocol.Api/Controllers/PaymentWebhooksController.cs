@@ -48,7 +48,7 @@ public sealed class PaymentWebhooksController(
         {
             ErrorCodes.PaymentWebhookConflict => StatusCodes.Status409Conflict,
             ErrorCodes.PaymentWebhookUnknownOrder => StatusCodes.Status404NotFound,
-            ErrorCodes.PaymentCheckoutRecoveryPending => StatusCodes.Status503ServiceUnavailable,
+            ErrorCodes.PaymentCheckoutRecoveryPending or ErrorCodes.PaymentFulfillmentPending => StatusCodes.Status503ServiceUnavailable,
             _ => StatusCodes.Status400BadRequest
         }, ApiResponse<object>.Fail(result.Message, result.ErrorCode!));
     }
