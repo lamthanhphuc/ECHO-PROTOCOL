@@ -15,11 +15,12 @@
 
 | Server | When |
 |---|---|
-| `unity-editor` | Unity scene/object/component operations |
-| `codegraph` | Structure exploration before create/refactor |
-| `context7` | Library/API documentation |
-| `gamecodex` | Game architecture patterns |
-| `headroom` | Long context sessions |
+| `unityMCP` | Unity scene/object/component/console operations via `http://127.0.0.1:8080/mcp` |
+| Unity CLI/Pipeline | Recompile and Unity tests via Pipeline Server port `7800` |
+| `codegraph` | Structure exploration before create/refactor, when available |
+| `context7` | Library/API documentation, only when configured and available |
+| `gamecodex` | Game architecture patterns, only when configured and available |
+| `headroom` | Long context sessions, when available |
 
 ## Manual gates (stop and ask user)
 
@@ -29,13 +30,13 @@
 4. Production secrets / cloud deploy → never automate
 
 ## Shell
-- Use `rtk` prefix: `rtk git status`, `rtk dotnet build`
+- Use installed `rtk` 0.48.0 prefix: `rtk git status`, `rtk dotnet build`
 
 ## Workflow
 1. Read SRS/API_SPEC for scope
-2. CodeGraph explore affected areas
+2. CodeGraph explore affected areas when available
 3. Implement backend in `EchoProtocol.Backend/`
-4. Unity changes via `unity-editor` MCP when Editor is ready
+4. Unity changes via `unityMCP` when Editor is ready
 5. Validate build + document manual steps
 
 ## Skills
