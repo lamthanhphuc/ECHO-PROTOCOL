@@ -509,8 +509,10 @@ MonoBehaviour:
   warningImpact: {fileID: 8300000, guid: 76925a6324897374b84ebf2229d5abb1, type: 3}
   huntingSting: {fileID: 8300000, guid: fafa7a6b26942db468fd46f8abcb929f, type: 3}
   uvHiss: {fileID: 8300000, guid: c69743d47dfe27b4ea2c59dabff4f028, type: 3}
+  uvResist: {fileID: 8300000, guid: 0b50576fa061a0b4498bf489f8229d4c, type: 3}
   staggerCry: {fileID: 8300000, guid: 7f0d11704d490e14680dd8f2c331dcbf, type: 3}
   recoveryGrowl: {fileID: 8300000, guid: 6d4ad7ff4c2e97f4bb17ecd74e9711dc, type: 3}
+  huntRelease: {fileID: 8300000, guid: 6e1ba7b4a09f2e34bb836777adad29c3, type: 3}
   attackImpact: {fileID: 8300000, guid: ceb74adb29d5cd9428c02acd358d1a6c, type: 3}
   heavyFootsteps:
   - {fileID: 8300000, guid: 363702006fe7adb40a92966de07a3fbe, type: 3}
