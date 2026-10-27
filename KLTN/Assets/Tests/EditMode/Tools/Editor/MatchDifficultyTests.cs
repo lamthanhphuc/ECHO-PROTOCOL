@@ -17,6 +17,11 @@ public sealed class MatchDifficultyTests
             authority.RequestDifficulty(MatchDifficulty.Hard);
             Assert.That((string)authority.BuildHostSessionProperties()[
                 MatchAuthorityRuntime.MatchDifficultySessionProperty], Is.EqualTo("HARD"));
+            var bindingUpdate = authority.BuildBindingSessionProperties();
+            Assert.That(bindingUpdate.Keys, Is.EquivalentTo(new[]
+            {
+                MatchAuthorityRuntime.MatchIdSessionProperty
+            }), "Refreshing the backend binding must not overwrite live room settings.");
 
             authority.RequestDifficulty((MatchDifficulty)99);
             Assert.That(authority.Difficulty, Is.EqualTo(MatchDifficulty.Normal));

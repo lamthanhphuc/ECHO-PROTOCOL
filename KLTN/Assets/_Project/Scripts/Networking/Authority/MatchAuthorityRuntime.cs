@@ -553,6 +553,12 @@ namespace EchoProtocol.Networking.Authority
                 [LobbyMapCatalog.PropertyKey] = Mathf.Clamp(EchoProtocol.UI.LobbySelectionMemory.Read("map", 0), 0, 1)
             };
 
+        public Dictionary<string, SessionProperty> BuildBindingSessionProperties() =>
+            new Dictionary<string, SessionProperty>
+            {
+                [MatchIdSessionProperty] = MatchId.ToString("D")
+            };
+
         public bool AttachJoinedSession(NetworkRunner runner)
         {
             if (runner == null || !runner.SessionInfo.IsValid)

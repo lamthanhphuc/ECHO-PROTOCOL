@@ -23,7 +23,7 @@ namespace EchoProtocol.UI
                 if (_bootstrap == null) _bootstrap = Object.FindAnyObjectByType<NetworkBootstrap>();
                 runner = _bootstrap != null ? _bootstrap.Runner : null;
             }
-            return runner == null || !runner.SessionInfo.IsValid
+            return runner == null || runner.SessionInfo.Properties == null
                 || !runner.SessionInfo.Properties.TryGetValue(key, out var value) || (int)value != 0;
         }
 
@@ -51,7 +51,8 @@ namespace EchoProtocol.UI
             _refreshAt = Time.unscaledTime + .2f;
             if (_bootstrap == null) _bootstrap = Object.FindAnyObjectByType<NetworkBootstrap>();
             bool canEdit = _bootstrap != null && _bootstrap.State == NetworkSessionState.InLobby
-                && _bootstrap.Runner != null && _bootstrap.Runner.IsServer;
+                && _bootstrap.Runner != null && _bootstrap.Runner.IsServer
+                && _bootstrap.Runner.SessionInfo.IsValid;
             for (int i = 0; i < Keys.Length; i++) {
                 Previous[i].interactable = Next[i].interactable = canEdit;
                 Values[i].text = Enabled(Keys[i]) ? GameLanguage.Choose("Bật", "On") : GameLanguage.Choose("Tắt", "Off");

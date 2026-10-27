@@ -70,6 +70,7 @@ namespace EchoProtocol.UI
         private bool CanEdit => _bootstrap != null && _bootstrap.Runner != null && _bootstrap.Runner.IsServer
             && _bootstrap.State == NetworkSessionState.InLobby && _manager != null
             && !_manager.IsStartingMatch && !_manager.CurrentState.IsReady
+            && _bootstrap.Runner.SessionInfo.IsValid
             && !_confirmedPurgeMode && !LobbyMapCatalog.MapLocked(_bootstrap.Runner);
         private void Step(int direction)
         {
