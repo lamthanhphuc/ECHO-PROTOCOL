@@ -224,6 +224,25 @@ namespace EchoProtocol.Networking
 
         private void HandleNetworkSceneLoadDone(NetworkRunner runner)
         {
+            if (NetworkBootstrap.IsHostMigrationReconciliationPending)
+            {
+                TryAttachLifecycle(runner);
+
+                _spawnSlots.Clear();
+                foreach (var player in runner.ActivePlayers)
+                {
+                    GetOrAssignSlot(player);
+                }
+
+                // Fusion may signal SceneLoadDone BEFORE it invokes the
+                // snapshot resume callback. That callback performs the
+                // authoritative world adoption after all snapshot objects
+                // have been spawned; NEVER spawn or adopt the world here.
+                RuntimeLog.Log(
+                    RuntimeLogCategory.PlayerSpawner,
+                    "PSP|MIGRATION_SCENE_READY_DEFERRED|awaiting_snapshot_restore");
+                return;
+            }
             if (!LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name))
             {
                 ClearAuthoritativeWorldStateReferences();
@@ -269,8 +288,772 @@ namespace EchoProtocol.Networking
                 ConfigureExistingPlayerObject(player, playerObject, gameplay: true);
             }
 
-            if (LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name))
-                EnsureWorldStateExamples(runner);
+            // A delayed scene-ready callback after a Runner handoff must
+            // reuse an already-restored MatchState. Spawning a second one
+            // makes the next Host migration fail as duplicate authority.
+            var existingMatchStates =
+                FindObjectsByType<NetworkMatchState>(
+                    FindObjectsInactive.Include);
+
+            foreach (var existing in existingMatchStates)
+            {
+                if (existing == null
+                    || existing.Runner != runner
+                    || existing.Object == null
+                    || !existing.Object.IsValid
+                    || !existing.Object.HasStateAuthority)
+                {
+                    continue;
+                }
+
+                RuntimeLog.Log(
+                    RuntimeLogCategory.PlayerSpawner,
+                    $"PSP|WORLD_STATE_ALREADY_EXISTS|object={existing.Object.Id}|adopting_without_respawn");
+
+                if (!AdoptMigratedAuthoritativeWorldState(runner))
+                {
+                    Debug.LogError(
+                        "[PlayerSpawner] Existing authoritative world state could not be adopted. Not spawning another NetworkMatchState.");
+                }
+
+                return;
+            }
+
+            EnsureWorldStateExamples(runner);
+        }
+
+        public bool AdoptMigratedAuthoritativeWorldState(
+            NetworkRunner runner)
+        {
+            if (runner == null
+                || !runner.IsRunning
+                || !runner.IsServer
+                || SceneManager.GetActiveScene().name
+                    != LobbyManager.GameSceneName)
+            {
+                return false;
+            }
+
+            ClearAuthoritativeWorldStateReferences();
+
+            NetworkMatchState migratedMatch = null;
+
+            var matchStates =
+                FindObjectsByType<NetworkMatchState>(
+                    FindObjectsInactive.Include);
+
+            for (int i = 0; i < matchStates.Length; i++)
+            {
+                var candidate = matchStates[i];
+
+                if (candidate == null
+                    || candidate.Runner != runner
+                    || candidate.Object == null
+                    || !candidate.Object.IsValid
+                    || !candidate.Object.HasStateAuthority)
+                {
+                    continue;
+                }
+
+                if (migratedMatch != null
+                    && migratedMatch != candidate)
+                {
+                    Debug.LogError(
+                        $"[PlayerSpawner] Host Migration found multiple authoritative NetworkMatchState objects on the same Runner. First={migratedMatch.Object.Id}, Conflicting={candidate.Object.Id}. Refusing to discard either state silently.");
+                    return false;
+                }
+
+                migratedMatch = candidate;
+            }
+
+            if (migratedMatch == null)
+            {
+                Debug.LogError("[PlayerSpawner] Host Migration restored no authoritative NetworkMatchState.");
+                return false;
+            }
+
+            _matchStateInstance =
+                migratedMatch.Object;
+
+
+            // Restore SectorBox references from the replicated objective
+            // source first, then retain every other valid box.
+            var sectorBoxes =
+                FindObjectsByType<NetworkSectorBox>(
+                    FindObjectsInactive.Include);
+
+            System.Array.Sort(
+                sectorBoxes,
+                (left, right) =>
+                    string.CompareOrdinal(
+                        left != null ? left.name : string.Empty,
+                        right != null ? right.name : string.Empty));
+
+            for (int i = 0; i < sectorBoxes.Length; i++)
+            {
+                var box = sectorBoxes[i];
+
+                if (box == null
+                    || box.Object == null
+                    || !box.Object.IsValid
+                    || !box.Object.HasStateAuthority)
+                {
+                    continue;
+                }
+
+                _sectorBoxInstances.Add(box.Object);
+            }
+
+            if (migratedMatch.ObjectiveSourceId.IsValid
+                && runner.TryFindObject(
+                    migratedMatch.ObjectiveSourceId,
+                    out var objectiveObject)
+                && objectiveObject != null
+                && objectiveObject.IsValid
+                && objectiveObject.TryGetComponent<NetworkSectorBox>(
+                    out _))
+            {
+                _sectorBoxInstance =
+                    objectiveObject;
+            }
+            else if (_sectorBoxInstances.Count > 0)
+            {
+                _sectorBoxInstance =
+                    _sectorBoxInstances[0];
+            }
+
+
+            // EscapeDoorId is already replicated by NetworkMatchState.
+            if (migratedMatch.EscapeDoorId.IsValid
+                && runner.TryFindObject(
+                    migratedMatch.EscapeDoorId,
+                    out var escapeDoorObject)
+                && escapeDoorObject != null
+                && escapeDoorObject.IsValid
+                && escapeDoorObject.TryGetComponent<NetworkDoor>(
+                    out _))
+            {
+                _doorInstance =
+                    escapeDoorObject;
+            }
+
+
+            var puzzles =
+                FindObjectsByType<NetworkPowerPuzzle>(
+                    FindObjectsInactive.Include);
+
+            for (int i = 0; i < puzzles.Length; i++)
+            {
+                var puzzle = puzzles[i];
+
+                if (puzzle != null
+                    && puzzle.Object != null
+                    && puzzle.Object.IsValid
+                    && puzzle.Object.HasStateAuthority)
+                {
+                    _powerPuzzleInstance =
+                        puzzle.Object;
+                    break;
+                }
+            }
+
+
+            var stations =
+                FindObjectsByType<NetworkPowerPuzzleStation>(
+                    FindObjectsInactive.Include);
+
+            System.Array.Sort(
+                stations,
+                (left, right) =>
+                    (left != null ? left.InputId : int.MaxValue)
+                        .CompareTo(
+                            right != null
+                                ? right.InputId
+                                : int.MaxValue));
+
+            for (int i = 0; i < stations.Length; i++)
+            {
+                var station = stations[i];
+
+                if (station != null
+                    && station.Object != null
+                    && station.Object.IsValid
+                    && station.Object.HasStateAuthority)
+                {
+                    _powerPuzzleStationInstances.Add(
+                        station.Object);
+                }
+            }
+
+
+            // NetworkPickupItem is the authoritative Energy Core runtime
+            // object in this flow. Preserve carried/placed cores as-is.
+            var cores =
+                FindObjectsByType<NetworkPickupItem>(
+                    FindObjectsInactive.Include);
+
+            System.Array.Sort(
+                cores,
+                (left, right) =>
+                    string.CompareOrdinal(
+                        left != null ? left.name : string.Empty,
+                        right != null ? right.name : string.Empty));
+
+            for (int i = 0; i < cores.Length; i++)
+            {
+                var core = cores[i];
+
+                if (core != null
+                    && core.Object != null
+                    && core.Object.IsValid
+                    && core.Object.HasStateAuthority)
+                {
+                    _energyCoreInstances.Add(
+                        core.Object);
+                }
+            }
+
+
+            // Scene-placed NetworkSectorBox objects can receive new NetworkIds
+            // after a scene reload. The snapshot still contains old IDs in
+            // ObjectiveSourceId and in previously placed Energy Cores.
+            if (!RestoreMigratedSectorReferences(runner, migratedMatch))
+            {
+                Debug.LogError("P04N_CORE_SECTOR_RESTORE_FAILED|refusing_partial_migration_world");
+                return false;
+            }
+
+            // Never silently accept a missing, duplicate, or origin-reset
+            // Core snapshot as a successfully restored authoritative world.
+            if (!ValidateMigratedCoreState(migratedMatch))
+            {
+                return false;
+            }
+
+            var minions =
+                FindObjectsByType<CreepMinionRuntime>(
+                    FindObjectsInactive.Include);
+
+            for (int i = 0; i < minions.Length; i++)
+            {
+                var minion = minions[i];
+
+                if (minion != null
+                    && minion.Object != null
+                    && minion.Object.IsValid
+                    && minion.Object.HasStateAuthority)
+                {
+                    _creepMinionInstances.Add(
+                        minion.Object);
+                }
+            }
+
+
+            // Zone transitions despawn the previous Stalker. Therefore
+            // the surviving Stalker can be reattached from match phase
+            // without inventing a new runtime identity.
+            NetworkObject migratedStalker = null;
+
+            var stalkers =
+                FindObjectsByType<StalkerController>(
+                    FindObjectsInactive.Include);
+
+            for (int i = 0; i < stalkers.Length; i++)
+            {
+                var stalker = stalkers[i];
+                var stalkerObject =
+                    stalker != null
+                        ? stalker.GetComponentInParent<NetworkObject>()
+                        : null;
+
+                if (!IsValidNetworkObject(stalkerObject)
+                    || !stalkerObject.HasStateAuthority)
+                {
+                    continue;
+                }
+
+                if (migratedStalker == null)
+                {
+                    migratedStalker =
+                        stalkerObject;
+                }
+            }
+
+            if (migratedStalker != null)
+            {
+                switch (migratedMatch.CurrentPhase)
+                {
+                    case NetworkMatchPhase.CoreObjective:
+                        _monsterInstance =
+                            migratedStalker;
+                        break;
+
+                    case NetworkMatchPhase.Zone2Objective:
+                    case NetworkMatchPhase.Puzzle:
+                    case NetworkMatchPhase.SecurityHold:
+                        _zone2MonsterInstance =
+                            migratedStalker;
+                        _zone2MonsterSpawned = true;
+                        break;
+
+                    default:
+                        _zone3MonsterInstance =
+                            migratedStalker;
+                        _zone3MonsterSpawned = true;
+                        break;
+                }
+            }
+
+            _zone2MinionsActive =
+                migratedMatch.CurrentPhase ==
+                    NetworkMatchPhase.Zone2Objective
+                || migratedMatch.CurrentPhase ==
+                    NetworkMatchPhase.Puzzle
+                || migratedMatch.CurrentPhase ==
+                    NetworkMatchPhase.SecurityHold;
+
+            _zone3SpawnFailureLogged = false;
+            _nextMinionSpawnCheckAt =
+                Time.time + _minionSpawnCheckInterval;
+
+            migratedMatch
+                .ReconcileAfterHostMigrationAuthoritative();
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"PSP|MIGRATION_WORLD_ADOPT|match={_matchStateInstance.Id}|phase={migratedMatch.CurrentPhase}|cores={_energyCoreInstances.Count}|sectorBoxes={_sectorBoxInstances.Count}|stations={_powerPuzzleStationInstances.Count}|minions={_creepMinionInstances.Count}|stalker={(migratedStalker != null ? migratedStalker.Id.ToString() : "none")}");
+
+            LogMigrationGameplayAudit(runner, migratedMatch);
+            return true;
+        }
+
+        // Restore the references, not the Core objects. Match scene-local
+        // SectorBoxes to already-placed Core sockets with a strict distance
+        // bound and a one-to-one map from old box ID to new box instance.
+        private bool RestoreMigratedSectorReferences(NetworkRunner runner, NetworkMatchState match)
+        {
+            if (runner == null || match == null || match.Object == null
+                || !match.Object.IsValid || !match.Object.HasStateAuthority
+                || _sectorBoxInstances.Count == 0)
+            {
+                return false;
+            }
+
+            var boxes = new List<NetworkSectorBox>();
+            foreach (var boxObject in _sectorBoxInstances)
+            {
+                if (boxObject == null || !boxObject.IsValid
+                    || !boxObject.HasStateAuthority
+                    || !boxObject.TryGetComponent<NetworkSectorBox>(out var box))
+                {
+                    return false;
+                }
+                boxes.Add(box);
+            }
+
+            var placements = new List<(NetworkPickupItem Core, NetworkSectorBox Box)>();
+            var oldToNew = new Dictionary<NetworkId, NetworkSectorBox>();
+            var occupiedSlots = new HashSet<string>();
+            var expectedCounts = new int[boxes.Count];
+
+            foreach (var coreObject in _energyCoreInstances)
+            {
+                if (coreObject == null || !coreObject.IsValid
+                    || !coreObject.TryGetComponent<NetworkPickupItem>(out var core))
+                {
+                    return false;
+                }
+                if (core.State != NetworkItemState.Placed)
+                {
+                    continue;
+                }
+                if (!core.PlacedSectorId.IsValid || core.PlacementSlot < 0)
+                {
+                    Debug.LogError($"P04N_CORE_BAD_PLACEMENT|core={coreObject.Id}|sector={core.PlacedSectorId}|slot={core.PlacementSlot}");
+                    return false;
+                }
+
+                int bestIndex = -1;
+                float bestSquaredDistance = float.MaxValue;
+                float secondSquaredDistance = float.MaxValue;
+                for (int i = 0; i < boxes.Count; i++)
+                {
+                    if (!boxes[i].TryGetPlacementPoseForMigration(core.PlacementSlot, out var socketPosition))
+                    {
+                        continue;
+                    }
+                    float sqrDist = (core.WorldPosition - socketPosition).sqrMagnitude;
+                    if (sqrDist < bestSquaredDistance)
+                    {
+                        secondSquaredDistance = bestSquaredDistance;
+                        bestSquaredDistance = sqrDist;
+                        bestIndex = i;
+                    }
+                    else if (sqrDist < secondSquaredDistance)
+                    {
+                        secondSquaredDistance = sqrDist;
+                    }
+                }
+
+                // WorldPosition is the exact socket pose saved by TryPlace.
+                // A mismatch greater than 1m, or two equally good candidates,
+                // indicates we cannot safely infer the old scene-object ID.
+                if (bestIndex < 0 || bestSquaredDistance > 1.0f
+                    || secondSquaredDistance - bestSquaredDistance < 0.01f)
+                {
+                    Debug.LogError($"P04N_CORE_SOCKET_UNRESOLVED|core={coreObject.Id}|oldSector={core.PlacedSectorId}|slot={core.PlacementSlot}|bestSqr={bestSquaredDistance}|secondSqr={secondSquaredDistance}");
+                    return false;
+                }
+
+                var resolvedBox = boxes[bestIndex];
+                if (oldToNew.TryGetValue(core.PlacedSectorId, out var earlierBox)
+                    && earlierBox != resolvedBox)
+                {
+                    Debug.LogError($"P04N_CORE_SECTOR_CONFLICT|oldSector={core.PlacedSectorId}|first={earlierBox.Object.Id}|other={resolvedBox.Object.Id}");
+                    return false;
+                }
+                oldToNew[core.PlacedSectorId] = resolvedBox;
+
+                string slotKey = bestIndex + ":" + core.PlacementSlot;
+                if (!occupiedSlots.Add(slotKey))
+                {
+                    Debug.LogError($"P04N_CORE_DUPLICATE_SLOT|core={coreObject.Id}|slot={slotKey}");
+                    return false;
+                }
+                placements.Add((core, resolvedBox));
+                expectedCounts[bestIndex] = Mathf.Max(expectedCounts[bestIndex], core.PlacementSlot + 1);
+            }
+
+            // Placement slots must be contiguous: an orphaned slot is not an
+            // acceptable substitute for a restored Core count.
+            for (int i = 0; i < boxes.Count; i++)
+            {
+                for (int slot = 0; slot < expectedCounts[i]; slot++)
+                {
+                    if (!occupiedSlots.Contains(i + ":" + slot))
+                    {
+                        Debug.LogError($"P04N_CORE_SLOT_GAP|sector={boxes[i].Object.Id}|slot={slot}");
+                        return false;
+                    }
+                }
+            }
+
+            NetworkSectorBox objectiveBox = null;
+            var previousObjectiveId = match.ObjectiveSourceId;
+            if (previousObjectiveId.IsValid
+                && runner.TryFindObject(previousObjectiveId, out var currentObjective)
+                && currentObjective != null && currentObjective.IsValid
+                && currentObjective.TryGetComponent<NetworkSectorBox>(out var currentObjectiveBox)
+                && boxes.Contains(currentObjectiveBox))
+            {
+                objectiveBox = currentObjectiveBox;
+            }
+            else if (previousObjectiveId.IsValid
+                     && oldToNew.TryGetValue(previousObjectiveId, out var mappedObjective))
+            {
+                objectiveBox = mappedObjective;
+            }
+            else
+            {
+                // The normal fresh-match objective source is the first
+                // scene box ordered by name (see RegisterExistingNetworkSectorBoxes).
+                // If no placed Core identifies the old source, use that same
+                // deterministic scene ordering instead of an arbitrary ID.
+                objectiveBox = boxes[0];
+            }
+
+            if (objectiveBox == null) return false;
+
+            for (int i = 0; i < boxes.Count; i++)
+            {
+                if (!boxes[i].TryRestoreMigratedPlacementStateAuthoritative(
+                        match.Object.Id, expectedCounts[i]))
+                {
+                    Debug.LogError($"P04N_SECTOR_RESTORE_REJECT|sector={boxes[i].Object.Id}|current={boxes[i].PlacedCoreCount}|expected={expectedCounts[i]}");
+                    return false;
+                }
+            }
+
+            foreach (var placement in placements)
+            {
+                if (!placement.Core.TryRebindPlacedSectorAfterMigration(
+                        placement.Core.PlacedSectorId, placement.Box.Object.Id))
+                {
+                    Debug.LogError($"P04N_CORE_REBIND_REJECT|core={placement.Core.Object.Id}|sector={placement.Box.Object.Id}");
+                    return false;
+                }
+            }
+
+            // InitializeAuthoritative only changes ObjectiveSourceId and
+            // EscapeDoorId; it does NOT reset match status or mission progress.
+            if (match.ObjectiveSourceId != objectiveBox.Object.Id)
+            {
+                match.InitializeAuthoritative(objectiveBox.Object.Id, match.EscapeDoorId);
+            }
+            _sectorBoxInstance = objectiveBox.Object;
+
+            // Final authoritative guard: all restored placements and the
+            // objective source must point to live scene objects and MatchState.
+            if (match.ObjectiveSourceId != objectiveBox.Object.Id)
+            {
+                return false;
+            }
+            foreach (var box in boxes)
+            {
+                if (box.MatchStateId != match.Object.Id) return false;
+            }
+            foreach (var placement in placements)
+            {
+                if (placement.Core.PlacedSectorId != placement.Box.Object.Id) return false;
+            }
+
+            RuntimeLog.Log(RuntimeLogCategory.PlayerSpawner,
+                $"P04N_CORE_SECTOR_REBOUND|match={match.Object.Id}|objective={objectiveBox.Object.Id}|boxes={boxes.Count}|placed={placements.Count}|mappedOldSectors={oldToNew.Count}|result=PASS");
+            return true;
+        }
+
+        // Read-only migration invariant. Never spawn replacement Cores or
+        // teleport invalid snapshots; the session must fail closed instead.
+        private bool ValidateMigratedCoreState(NetworkMatchState match)
+        {
+            var expected = Mathf.Clamp(_energyCoreCount, 1, 4);
+            var count = _energyCoreInstances.Count;
+            var countValid = count <= expected
+                && (match.CurrentPhase != NetworkMatchPhase.CoreObjective
+                    || count == expected);
+            var seen = new HashSet<NetworkId>();
+            var badIdentity = 0;
+            var badPose = 0;
+
+            foreach (var coreObject in _energyCoreInstances)
+            {
+                if (!IsValidNetworkObject(coreObject)
+                    || !seen.Add(coreObject.Id)
+                    || !coreObject.TryGetComponent<NetworkPickupItem>(out var item))
+                {
+                    badIdentity++;
+                    continue;
+                }
+
+                if (item.State == NetworkItemState.Carried)
+                {
+                    // Carried Cores follow their verified holder. The last
+                    // world pose may be unavailable until the holder reconnects.
+                    continue;
+                }
+
+                var pose = item.WorldPosition;
+                var rotation = item.WorldRotation;
+                var missingRotation = rotation.x == 0f && rotation.y == 0f
+                    && rotation.z == 0f && rotation.w == 0f;
+                var missingAvailableSpawn = item.State == NetworkItemState.Available
+                    && pose == Vector3.zero;
+                if (missingRotation || missingAvailableSpawn)
+                {
+                    badPose++;
+                    Debug.LogError(
+                        $"HM_CORE_RESTORE_BAD_POSE|core={coreObject.Id}|state={item.State}|worldPos={pose}|worldRot={rotation}|transformPos={coreObject.transform.position}");
+                }
+            }
+
+            var valid = countValid && badIdentity == 0 && badPose == 0;
+            RuntimeLog.Log(RuntimeLogCategory.Inventory,
+                $"HM_CORE_RESTORE_INVARIANT|phase={match.CurrentPhase}|expected={expected}|actual={count}|badIdentity={badIdentity}|badPose={badPose}|result={(valid ? "PASS" : "FAIL")}");
+            if (!valid)
+            {
+                Debug.LogError(
+                    $"Host Migration Core snapshot failed integrity checks: phase={match.CurrentPhase}, count={count}/{expected}, badIdentity={badIdentity}, badPose={badPose}. Refusing to adopt a corrupted world.");
+            }
+
+            return valid;
+        }
+
+        // Diagnostic-only: no gameplay state is written by this method.
+        // Called once after world adoption and migration reconciliation.
+        private void LogMigrationGameplayAudit(NetworkRunner runner, NetworkMatchState match)
+        {
+            if (runner == null || match == null
+                || !RuntimeLog.IsEnabled(RuntimeLogCategory.PlayerSpawner))
+            {
+                return;
+            }
+
+            var unresolved = 0;
+            var carriedCoreCount = 0;
+            var playerCount = 0;
+            var players = FindObjectsByType<LobbyPlayerState>(FindObjectsInactive.Include);
+
+            foreach (var player in players)
+            {
+                if (player == null || player.Runner != runner
+                    || player.Object == null || !player.Object.IsValid
+                    || !player.Object.HasStateAuthority)
+                {
+                    continue;
+                }
+
+                playerCount++;
+                var playerObject = player.Object;
+                var hasLife = player.TryGetComponent<NetworkPlayerLifeState>(out var life)
+                    && life != null && life.Object != null && life.Object.IsValid;
+                RuntimeLog.Log(RuntimeLogCategory.PlayerSpawner,
+                    $"HM_AUDIT_PLAYER|id={playerObject.Id}|authority={playerObject.InputAuthority}|disconnected={player.Disconnected}|pos={player.transform.position}|coreId={player.CarriedCoreId}|tool={player.ToolId}|toolUses={player.TeamToolUsesRemaining}|health={(hasLife ? life.Health.ToString("F1") : "NA")}|life={(hasLife ? life.Status.ToString() : "NA")}|reviver={(hasLife ? life.Reviver.ToString() : "NA")}");
+
+                if (player.CarriedCoreId.IsValid)
+                {
+                    NetworkObject ownedCore;
+                    if (!runner.TryFindObject(player.CarriedCoreId, out ownedCore)
+                        || ownedCore == null || !ownedCore.IsValid
+                        || !ownedCore.TryGetComponent<NetworkPickupItem>(out var core)
+                        || core.State != NetworkItemState.Carried)
+                    {
+                        unresolved++;
+                        Debug.LogWarning($"HM_AUDIT_REF_UNRESOLVED|kind=PlayerCarriedCore|player={playerObject.Id}|core={player.CarriedCoreId}|note=may_need_reconnect_mapping");
+                    }
+                }
+            }
+
+            foreach (var coreObject in _energyCoreInstances)
+            {
+                if (coreObject == null || !coreObject.IsValid
+                    || !coreObject.TryGetComponent<NetworkPickupItem>(out var item))
+                {
+                    continue;
+                }
+
+                if (item.State == NetworkItemState.Carried)
+                {
+                    carriedCoreCount++;
+                }
+
+                RuntimeLog.Log(RuntimeLogCategory.Inventory,
+                    $"HM_AUDIT_CORE|id={coreObject.Id}|state={item.State}|holder={item.Holder}|monster={item.MonsterCarrierId}|sector={item.PlacedSectorId}|slot={item.PlacementSlot}|ordinal={item.TransitionOrdinal}|pos={item.WorldPosition}");
+
+                if (item.PlacedSectorId.IsValid)
+                {
+                    NetworkObject sector;
+                    if (!runner.TryFindObject(item.PlacedSectorId, out sector)
+                        || sector == null || !sector.IsValid
+                        || !sector.TryGetComponent<NetworkSectorBox>(out _))
+                    {
+                        unresolved++;
+                        Debug.LogWarning($"HM_AUDIT_REF_UNRESOLVED|kind=CoreSector|core={coreObject.Id}|sector={item.PlacedSectorId}");
+                    }
+                }
+            }
+
+            if (match.ObjectiveSourceId.IsValid)
+            {
+                NetworkObject objective;
+                if (!runner.TryFindObject(match.ObjectiveSourceId, out objective)
+                    || objective == null || !objective.IsValid
+                    || !objective.TryGetComponent<NetworkSectorBox>(out _))
+                {
+                    unresolved++;
+                    Debug.LogWarning($"HM_AUDIT_REF_UNRESOLVED|kind=ObjectiveSource|id={match.ObjectiveSourceId}");
+                }
+            }
+
+            if (match.EscapeDoorId.IsValid)
+            {
+                NetworkObject exitDoor;
+                if (!runner.TryFindObject(match.EscapeDoorId, out exitDoor)
+                    || exitDoor == null || !exitDoor.IsValid
+                    || !exitDoor.TryGetComponent<NetworkDoor>(out _))
+                {
+                    unresolved++;
+                    Debug.LogWarning($"HM_AUDIT_REF_UNRESOLVED|kind=EscapeDoor|id={match.EscapeDoorId}");
+                }
+            }
+
+            var slidingDoors = FindObjectsByType<NetworkSlidingDoor>(FindObjectsInactive.Include);
+            foreach (var door in slidingDoors)
+            {
+                if (door == null || door.Runner != runner
+                    || door.Object == null || !door.Object.IsValid
+                    || !door.ActiveJammerId.IsValid)
+                {
+                    continue;
+                }
+
+                NetworkObject jammer;
+                if (!runner.TryFindObject(door.ActiveJammerId, out jammer)
+                    || jammer == null || !jammer.IsValid
+                    || !jammer.TryGetComponent<NetworkDoorJammer>(out _))
+                {
+                    unresolved++;
+                    Debug.LogWarning($"HM_AUDIT_REF_UNRESOLVED|kind=DoorJammer|door={door.Object.Id}|jammer={door.ActiveJammerId}");
+                }
+            }
+
+            RuntimeLog.Log(RuntimeLogCategory.MatchState,
+                $"HM_AUDIT_MATCH|id={match.Object.Id}|status={match.Status}|phase={match.CurrentPhase}|phaseOrdinal={match.PhaseOrdinal}|relayMask={match.RelayCompletionMask}|securityStage={match.Zone2Stage}|securityCompleted={match.SecurityHoldCompleted}|securityParticipants={match.SecurityHoldParticipantCount}|puzzleCompleted={match.PowerPuzzleCompleted}|matchSeconds={match.MatchRemainingSeconds:F1}|frigateInitialized={match.Zone3ConvoyInitialized}|frigateFuel={match.Zone3FuelPointsRemaining}|frigateCurrentPoint={match.Zone3ConvoyCurrentPoint}|frigateTargetPoint={match.Zone3ConvoyTargetPoint}|frigateWaiting={match.Zone3ConvoyWaitingForRoute}|frigatePos={match.Zone3FrigatePosition}|zone3Pusher={match.Zone3Pusher}|refuel={match.Zone3RefuelOperator}|charge={match.Zone3ChargeOperator}|chargeProgress={match.Zone3ChargeAccumulatedSeconds:F1}");
+
+            var zone3 = Zone3MissionDirector.Instance;
+            if (zone3 != null && zone3.Convoy != null && match.Zone3ConvoyInitialized)
+            {
+                RuntimeLog.Log(RuntimeLogCategory.MatchState,
+                    $"HM_AUDIT_ZONE3|replicatedPose={match.Zone3FrigatePosition}|scenePose={zone3.Convoy.transform.position}|poseDelta={Vector3.Distance(match.Zone3FrigatePosition, zone3.Convoy.transform.position):F2}|sceneFuel={zone3.Convoy.FuelPointsRemaining}|networkFuel={match.Zone3FuelPointsRemaining}|sceneCurrent={zone3.Convoy.CurrentPoint}|networkCurrent={match.Zone3ConvoyCurrentPoint}");
+            }
+
+            RuntimeLog.Log(RuntimeLogCategory.PlayerSpawner,
+                $"HM_AUDIT_SUMMARY|players={playerCount}|cores={_energyCoreInstances.Count}|carriedCores={carriedCoreCount}|sectorBoxes={_sectorBoxInstances.Count}|stations={_powerPuzzleStationInstances.Count}|minions={_creepMinionInstances.Count}|unresolvedRefs={unresolved}|note=diagnostic_only_not_migration_pass");
+        }
+
+        public bool RebuildMigratedLobbyPlacementAuthoritative(
+            NetworkRunner runner)
+        {
+            if (runner == null
+                || !runner.IsRunning
+                || !runner.IsServer
+                || SceneManager.GetActiveScene().name
+                    != NetworkBootstrap.LobbySceneName)
+            {
+                return false;
+            }
+
+            _spawnSlots.Clear();
+
+            var placedPlayers = 0;
+
+            foreach (var player in
+                     runner.ActivePlayers)
+            {
+                if (!runner.TryGetPlayerObject(
+                        player,
+                        out var playerObject)
+                    || playerObject == null
+                    || !playerObject.IsValid)
+                {
+                    Debug.LogError(
+                        $"[PlayerSpawner] Migrated Lobby PlayerObject missing for {player}.");
+
+                    return false;
+                }
+
+                var slot =
+                    GetOrAssignSlot(
+                        player);
+
+                if (!TryTeleportExistingPlayer(
+                        playerObject,
+                        GetLobbySpawnPose(slot),
+                        projectToGround: false))
+                {
+                    Debug.LogError(
+                        $"[PlayerSpawner] Could not place migrated Lobby player {player} in slot {slot}.");
+
+                    return false;
+                }
+
+                placedPlayers++;
+            }
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.PlayerSpawner,
+                $"PSP|MIGRATION_LOBBY_PLACEMENT|players={placedPlayers}|uniqueSlots={_spawnSlots.Count}");
+
+            return placedPlayers > 0;
         }
 
         private void EnsureWorldStateExamples(NetworkRunner runner)

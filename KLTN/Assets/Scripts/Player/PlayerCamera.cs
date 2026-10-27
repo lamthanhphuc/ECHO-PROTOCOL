@@ -102,12 +102,36 @@ public class PlayerCamera : MonoBehaviour
         {
             if (nm != null && nm.gameObject.activeInHierarchy)
             {
-                if (nm.Object == null || !nm.Object.IsValid || nm.Object.HasInputAuthority)
+                var networkObject = nm.Object;
+                if (networkObject == null) continue;
+
+                bool hasLocalInputAuthority;
+                try
+                {
+                    hasLocalInputAuthority = networkObject.IsValid && networkObject.HasInputAuthority;
+                }
+                catch (System.ArgumentOutOfRangeException)
+                {
+                    // Fusion may invalidate an old Runner during Host Migration.
+                    continue;
+                }
+
+                if (hasLocalInputAuthority)
                 {
                     SetTarget(nm.transform);
                     return true;
                 }
             }
+        }
+
+        // Never attach to an arbitrary remote player while Fusion owns the session.
+        var bootstrap = EchoProtocol.Networking.NetworkBootstrap.Instance;
+        if (bootstrap != null
+            && (bootstrap.HasRunningRunner
+                || bootstrap.State != EchoProtocol.Networking.NetworkSessionState.Disconnected
+                || EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationReconciliationPending))
+        {
+            return false;
         }
 
         // 2. Tim GameObject co Tag Player

@@ -262,6 +262,7 @@ namespace EchoProtocol.Api.Migrations
                         .HasColumnType("character varying(128)");
 
                     b.Property<Guid>("HostUserId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("LeaseExpiresAtUtc")
@@ -337,7 +338,8 @@ namespace EchoProtocol.Api.Migrations
                     b.HasIndex("UserId");
 
                     b.HasIndex("MatchId", "FusionActorNumber")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"DisconnectedAtUtc\" IS NULL");
 
                     b.ToTable("MatchPlayerBindings", (string)null);
                 });

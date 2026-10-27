@@ -48,7 +48,7 @@ namespace EchoProtocol.Networking
         public override void Spawned()
         {
             EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 State = NetworkPowerPuzzleState.Idle;
                 CurrentSequenceIndex = 0;

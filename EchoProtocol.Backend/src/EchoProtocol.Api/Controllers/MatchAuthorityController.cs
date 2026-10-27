@@ -43,9 +43,25 @@ public sealed class MatchAuthorityController : ControllerBase
     public async Task<IActionResult> DisconnectPlayer(
         Guid matchId,
         int fusionActorNumber,
+        [FromBody] DisconnectMatchPlayerRequest request,
         CancellationToken cancellationToken) =>
         Respond(await _service.MarkPlayerDisconnectedAsync(
-            UserId(), matchId, fusionActorNumber, cancellationToken));
+            UserId(), matchId, fusionActorNumber, request.ExpectedUserId, cancellationToken));
+
+    [HttpPost("{matchId:guid}/authority/takeover")]
+    public async Task<IActionResult> Takeover(
+        Guid matchId,
+        [FromBody] TakeoverMatchAuthorityRequest request,
+        CancellationToken cancellationToken) =>
+        Respond(await _service.TakeoverAsync(
+            UserId(), matchId, request, cancellationToken));
+
+    [HttpPost("{matchId:guid}/authority/relinquish")]
+    public async Task<IActionResult> Relinquish(
+        Guid matchId,
+        CancellationToken cancellationToken) =>
+        Respond(await _service.RelinquishAsync(
+            UserId(), matchId, cancellationToken));
 
     [HttpPost("{matchId:guid}/lease")]
     public async Task<IActionResult> RenewLease(Guid matchId, CancellationToken cancellationToken) =>
@@ -88,6 +104,7 @@ public sealed class MatchAuthorityController : ControllerBase
         ErrorCodes.MatchNotFound or ErrorCodes.NotFound => StatusCodes.Status404NotFound,
         ErrorCodes.MatchAuthorityForbidden => StatusCodes.Status403Forbidden,
         ErrorCodes.MatchSessionConflict or ErrorCodes.MatchPlayerBindingConflict => StatusCodes.Status409Conflict,
+        ErrorCodes.MatchAuthorityTakeoverNotReady => StatusCodes.Status409Conflict,
         ErrorCodes.MatchLeaseExpired or ErrorCodes.MatchAlreadyEnded => StatusCodes.Status410Gone,
         ErrorCodes.MatchCapacityReached => StatusCodes.Status409Conflict,
         _ => StatusCodes.Status400BadRequest

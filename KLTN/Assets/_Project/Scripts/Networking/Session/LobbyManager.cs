@@ -169,7 +169,13 @@ namespace EchoProtocol.Networking
             var state = BuildStateFromRunner();
             if (!state.CanStartMatch)
             {
-                ReportError("Start rejected: at least 1 player is required and every player must be ready.");
+                ReportError("Start rejected: 1-4 players are required and every non-host player must be ready.");
+                return false;
+            }
+
+            if (!_bootstrap.TryBeginMatchStartGate())
+            {
+                ReportError("Start rejected: the room roster could not be frozen.");
                 return false;
             }
 
@@ -244,38 +250,78 @@ namespace EchoProtocol.Networking
                         localPlayerState,
                         force: true);
 
-                    int expectedBoundPlayers = 0;
-
-                    foreach (var _ in runner.ActivePlayers)
-                    {
-                        expectedBoundPlayers++;
-                    }
-
-                    float bindingDeadline =
-                        Time.realtimeSinceStartup + 8f;
-
-                    while (authority.BoundPlayerCount
-                               < expectedBoundPlayers
-                           && Time.realtimeSinceStartup
-                               < bindingDeadline)
-                    {
-                        await Task.Delay(100);
-                    }
-
-                    if (authority.BoundPlayerCount
-                        < expectedBoundPlayers)
-                    {
-                        ReportError(
-                            $"Backend player binding timed out " +
-                            $"({authority.BoundPlayerCount}/" +
-                            $"{expectedBoundPlayers}).");
-
-                        return;
-                    }
                 }
 
+                float bindingDeadline =
+                    Time.realtimeSinceStartup + 8f;
+
+                string rosterError =
+                    "Active roster is not committed.";
+
+                while (!TryValidateCommittedRoster(
+                           runner,
+                           authority,
+                           out rosterError)
+                       && Time.realtimeSinceStartup
+                           < bindingDeadline)
+                {
+                    await Task.Delay(100);
+                }
+
+                if (!TryValidateCommittedRoster(
+                        runner,
+                        authority,
+                        out rosterError))
+                {
+                    ReportError(
+                        $"Backend player binding timed out: {rosterError}");
+
+                    return;
+                }
+
+                Debug.LogWarning(
+                    $"[NETDIAG][BeforeBackendStart] " +
+                    $"SameRunner={ReferenceEquals(runner, _bootstrap?.Runner)}; " +
+                    $"Running={runner != null && runner.IsRunning}; " +
+                    $"Server={runner != null && runner.IsServer}; " +
+                    $"SceneAuthority={runner != null && runner.IsSceneAuthority}; " +
+                    $"SessionValid={runner != null && runner.SessionInfo.IsValid}; " +
+                    $"BootstrapState={_bootstrap?.State}");
+                // SessionInfo.IsValid is transiently false while Photon acknowledges
+                // any pending IsOpen/IsVisible/custom-property update.
+                var sessionReadyDeadline = Time.realtimeSinceStartup + 10f;
+                while (ReferenceEquals(runner, _bootstrap?.Runner)
+                       && runner != null
+                       && runner.IsRunning
+                       && runner.IsServer
+                       && _bootstrap.State == NetworkSessionState.InLobby
+                       && !runner.SessionInfo.IsValid
+                       && Time.realtimeSinceStartup < sessionReadyDeadline)
+                {
+                    await Task.Delay(100);
+                }
+
+                if (runner == null
+                    || !ReferenceEquals(runner, _bootstrap?.Runner)
+                    || !runner.IsRunning
+                    || !runner.IsServer
+                    || !runner.IsSceneAuthority
+                    || _bootstrap.State != NetworkSessionState.InLobby
+                    || !runner.SessionInfo.IsValid)
+                {
+                    ReportError("Fusion room information is not ready. Match was not started; retry after room synchronization.");
+                    return;
+                }
                 var (accepted, error) =
                     await authority.StartMatchAsync();
+                Debug.LogWarning(
+                    $"[NETDIAG][BackendStartResult] Accepted={accepted}; " +
+                    $"SameRunner={ReferenceEquals(runner, _bootstrap?.Runner)}; " +
+                    $"Running={runner != null && runner.IsRunning}; " +
+                    $"Server={runner != null && runner.IsServer}; " +
+                    $"SceneAuthority={runner != null && runner.IsSceneAuthority}; " +
+                    $"SessionValid={runner != null && runner.SessionInfo.IsValid}; " +
+                    $"BootstrapState={_bootstrap?.State}");
                 if (!accepted)
                 {
                     ReportError($"Backend rejected match start: {error}");
@@ -291,10 +337,26 @@ namespace EchoProtocol.Networking
                     return;
                 }
 
+                var cloudReadyDeadline = Time.realtimeSinceStartup + 10f;
+                while (ReferenceEquals(runner, _bootstrap?.Runner)
+                       && runner != null
+                       && runner.IsRunning
+                       && runner.IsServer
+                       && _bootstrap.State == NetworkSessionState.InLobby
+                       && !runner.SessionInfo.IsValid
+                       && Time.realtimeSinceStartup < cloudReadyDeadline)
+                {
+                    await Task.Delay(100);
+                }
                 if (!_bootstrap.CloseRoomForMatchStart())
                 {
-                    ReportError("Could not close the Fusion room before match start.");
-                    await _bootstrap.ShutdownRunnerAsync();
+                    ReportError("Fusion room was not ready after backend start; aborting backend match without shutting down the Lobby.");
+                    if (ReferenceEquals(runner, _bootstrap?.Runner))
+                    {
+                        bool backendAborted = await authority.EndAsync("FUSION_ROOM_NOT_READY");
+                        if (!backendAborted)
+                            Debug.LogWarning("[LobbyManager] Backend match abort was not confirmed; check backend state before retry.");
+                    }
                     return;
                 }
 
@@ -313,8 +375,103 @@ namespace EchoProtocol.Networking
             }
             finally
             {
+                _bootstrap?.CancelMatchStartGate();
                 _matchStartInProgress = false;
             }
+        }
+
+        private static bool TryValidateCommittedRoster(
+            NetworkRunner runner,
+            MatchAuthorityRuntime authority,
+            out string error)
+        {
+            error = string.Empty;
+
+            if (runner == null
+                || !runner.IsRunning
+                || !runner.IsServer
+                || authority == null
+                || !authority.IsHostBinding)
+            {
+                error = "authoritative session is unavailable";
+                return false;
+            }
+
+            var playerObjects =
+                new HashSet<NetworkId>();
+
+            var backendUsers =
+                new HashSet<Guid>();
+
+            var count = 0;
+
+            foreach (var player in
+                     runner.ActivePlayers)
+            {
+                count++;
+
+                if (!runner.TryGetPlayerObject(
+                        player,
+                        out var playerObject)
+                    || playerObject == null
+                    || !playerObject.IsValid
+                    || playerObject.InputAuthority != player
+                    || !playerObjects.Add(playerObject.Id)
+                    || !playerObject.TryGetComponent<LobbyPlayerState>(
+                        out var lobbyState)
+                    || lobbyState.Disconnected
+                    || !lobbyState.HasVerifiedBackendIdentity
+                    || !Guid.TryParse(
+                        lobbyState.BackendUserId.ToString(),
+                        out var backendUserId)
+                    || !backendUsers.Add(backendUserId))
+                {
+                    error =
+                        $"player {player} has no unique committed PlayerObject/backend identity";
+                    return false;
+                }
+
+                var actorNumber =
+                    runner.GetPlayerActorId(player)
+                    ?? (runner.LocalPlayer == player
+                        ? player.PlayerId
+                        : 0);
+
+                if (actorNumber < 1
+                    || lobbyState.FusionActorNumber != actorNumber
+                    || !authority.IsPlayerBound(
+                        actorNumber,
+                        backendUserId.ToString("D")))
+                {
+                    error =
+                        $"player {player} actor/backend binding is not current";
+                    return false;
+                }
+
+                if (player != runner.LocalPlayer
+                    && !lobbyState.IsReady)
+                {
+                    error =
+                        $"non-host player {player} is not ready";
+                    return false;
+                }
+            }
+
+            if (count is < 1 or > 4)
+            {
+                error =
+                    $"active roster size {count} is outside the supported 1-4 range";
+                return false;
+            }
+
+            if (authority.BoundPlayerCount != count)
+            {
+                error =
+                    $"backend roster count {authority.BoundPlayerCount} does not match active Fusion roster {count}";
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>Rebuilds the display snapshot exclusively from Fusion ActivePlayers.</summary>
@@ -377,6 +534,14 @@ namespace EchoProtocol.Networking
             members.Sort((left, right) => left.ActorId.CompareTo(right.ActorId));
 
             var session = runner.SessionInfo;
+            var supportedRoster =
+                members.Count is >= 1 and <= 4;
+
+            var requiredPlayersReady =
+                members.TrueForAll(
+                    member => member.PlayerRef == runner.LocalPlayer
+                              || member.IsReady);
+
             return new RoomInfoViewModel
             {
                 RoomName = session.IsValid ? session.Name : _bootstrap.CurrentSessionName,
@@ -384,7 +549,10 @@ namespace EchoProtocol.Networking
                 CurrentPlayers = members.Count,
                 IsHost = runner.IsServer,
                 IsReady = localReady,
-                CanStartMatch = runner.IsServer && members.Count >= 1 && members.TrueForAll(member => member.IsReady),
+                CanStartMatch = runner.IsServer
+                                && !_bootstrap.IsMatchStartPending
+                                && supportedRoster
+                                && requiredPlayersReady,
                 Members = members,
             };
         }

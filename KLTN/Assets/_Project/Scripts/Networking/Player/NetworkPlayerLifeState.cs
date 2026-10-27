@@ -181,7 +181,8 @@ namespace EchoProtocol.Networking
         public override void Spawned()
         {
             EnsureLegacyPresentationComponents();
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority
+                && !NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 DebugGodMode = false;
                 Status = NetworkPlayerLifeStatus.Alive;

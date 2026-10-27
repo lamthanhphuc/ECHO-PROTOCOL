@@ -217,7 +217,9 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasAlternateKey(e => new { e.MatchId, e.UserId })
                 .HasName("AK_MatchPlayerBindings_MatchId_UserId");
-            entity.HasIndex(e => new { e.MatchId, e.FusionActorNumber }).IsUnique();
+            entity.HasIndex(e => new { e.MatchId, e.FusionActorNumber })
+                .IsUnique()
+                .HasFilter("\"DisconnectedAtUtc\" IS NULL");
             entity.HasIndex(e => e.JoinProofId).IsUnique();
             entity.HasOne(e => e.Match)
                 .WithMany(e => e.Players)

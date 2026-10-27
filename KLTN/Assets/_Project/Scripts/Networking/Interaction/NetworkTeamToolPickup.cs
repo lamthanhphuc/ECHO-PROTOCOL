@@ -37,7 +37,7 @@ namespace EchoProtocol.Networking
             EnsureOutline();
             ConfigureWorldPickupShadows();
 
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 IsConsumed = false;
                 WorldPosition = transform.position;

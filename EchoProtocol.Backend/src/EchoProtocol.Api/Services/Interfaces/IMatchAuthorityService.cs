@@ -11,6 +11,13 @@ public interface IMatchAuthorityService
         Guid userId, Guid matchId, IssueJoinProofRequest request, CancellationToken cancellationToken);
     Task<ServiceResult<MatchPlayerBindingResponse>> BindPlayerAsync(
         Guid hostUserId, Guid matchId, BindMatchPlayerRequest request, CancellationToken cancellationToken);
+    Task<ServiceResult<MatchAuthorityResponse>> TakeoverAsync(
+        Guid newHostUserId, Guid matchId, TakeoverMatchAuthorityRequest request,
+        CancellationToken cancellationToken);
+
+    Task<ServiceResult<MatchAuthorityResponse>> RelinquishAsync(
+        Guid hostUserId, Guid matchId, CancellationToken cancellationToken);
+
     Task<ServiceResult<MatchAuthorityResponse>> RenewLeaseAsync(
         Guid hostUserId, Guid matchId, CancellationToken cancellationToken);
     Task<ServiceResult<MatchAuthorityResponse>> StartAsync(
@@ -19,7 +26,7 @@ public interface IMatchAuthorityService
         Guid hostUserId, Guid matchId, CancellationToken cancellationToken,
         StartMatchAuthorityRequest? request) => StartAsync(hostUserId, matchId, cancellationToken);
     Task<ServiceResult<MatchPlayerBindingResponse>> MarkPlayerDisconnectedAsync(
-        Guid hostUserId, Guid matchId, int fusionActorNumber, CancellationToken cancellationToken);
+        Guid hostUserId, Guid matchId, int fusionActorNumber, Guid expectedUserId, CancellationToken cancellationToken);
     Task<ServiceResult<MatchAuthorityResponse>> EndAsync(
         Guid hostUserId, Guid matchId, EndMatchAuthorityRequest request, CancellationToken cancellationToken);
     Task<bool> CanSubmitTelemetryAsync(

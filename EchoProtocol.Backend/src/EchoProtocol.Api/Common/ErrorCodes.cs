@@ -23,6 +23,7 @@ public static class ErrorCodes
     public const string TelemetryUnavailable = "TELEMETRY_UNAVAILABLE";
     public const string MatchNotFound = "MATCH_NOT_FOUND";
     public const string MatchAuthorityForbidden = "MATCH_AUTHORITY_FORBIDDEN";
+    public const string MatchAuthorityTakeoverNotReady = "MATCH_AUTHORITY_TAKEOVER_NOT_READY";
     public const string MatchLeaseExpired = "MATCH_LEASE_EXPIRED";
     public const string MatchAlreadyEnded = "MATCH_ALREADY_ENDED";
     public const string MatchSessionConflict = "MATCH_SESSION_CONFLICT";

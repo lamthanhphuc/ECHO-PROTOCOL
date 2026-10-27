@@ -48,7 +48,7 @@ namespace EchoProtocol.Networking
         public override void Spawned()
         {
             EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 State = _startsOpen ? NetworkDoorState.Open : (_startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed);
                 Broken = false;

@@ -283,7 +283,7 @@ namespace EchoProtocol.Tools.Scanner
 
         public override void Spawned()
         {
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 CurrentMode = FieldScannerMode.Core;
                 ScanPulseOrdinal = 0;

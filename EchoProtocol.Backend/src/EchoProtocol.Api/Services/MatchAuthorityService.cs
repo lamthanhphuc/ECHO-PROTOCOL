@@ -6,6 +6,7 @@ using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
 
 namespace EchoProtocol.Api.Services;
@@ -97,11 +98,16 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
 
         if (match!.Status == MatchAuthorityStatus.InMatch)
         {
-            var disconnectedMember = await _db.MatchPlayerBindings.AsNoTracking()
-                .AnyAsync(item => item.MatchId == matchId && item.UserId == userId
-                    && item.DisconnectedAtUtc != null, cancellationToken);
-            if (!disconnectedMember)
-                return Failure<JoinProofResponse>("Only disconnected roster members may reconnect", ErrorCodes.MatchAlreadyEnded);
+            var existingMember = await _db.MatchPlayerBindings.AsNoTracking()
+                .AnyAsync(item => item.MatchId == matchId
+                    && item.UserId == userId, cancellationToken);
+
+            if (!existingMember)
+            {
+                return Failure<JoinProofResponse>(
+                    "Only existing roster members may reconnect",
+                    ErrorCodes.MatchAlreadyEnded);
+            }
         }
 
         var expiresAt = UtcNow().AddSeconds(_settings.JoinProofLifetimeSeconds);
@@ -147,12 +153,25 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         }
 
         var actorBinding = match.Players.SingleOrDefault(
-            item => item.FusionActorNumber == request.FusionActorNumber);
-        var userBinding = match.Players.SingleOrDefault(item => item.UserId == proof.UserId);
-        if ((actorBinding is not null && actorBinding.UserId != proof.UserId)
-            || (userBinding is not null && actorBinding is not null && userBinding.Id != actorBinding.Id)
-            || (userBinding is not null && userBinding.DisconnectedAtUtc is null
-                && userBinding.FusionActorNumber != request.FusionActorNumber))
+            item => item.FusionActorNumber == request.FusionActorNumber
+                && item.DisconnectedAtUtc == null);
+        var userBinding = match.Players.SingleOrDefault(
+            item => item.UserId == proof.UserId);
+
+        var isRosterActorRemap =
+            userBinding is not null
+            && userBinding.DisconnectedAtUtc == null
+            && userBinding.FusionActorNumber != request.FusionActorNumber;
+
+        if ((actorBinding is not null
+                && actorBinding.UserId != proof.UserId)
+            || (userBinding is not null
+                && actorBinding is not null
+                && userBinding.Id != actorBinding.Id)
+            || (userBinding is not null
+                && userBinding.DisconnectedAtUtc == null
+                && userBinding.FusionActorNumber != request.FusionActorNumber
+                && !isRosterActorRemap))
         {
             return Failure<MatchPlayerBindingResponse>(
                 "Fusion actor or backend user is already bound to another player",
@@ -184,6 +203,233 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
 
         await _db.SaveChangesAsync(cancellationToken);
         return ServiceResult<MatchPlayerBindingResponse>.Success(Map(binding), "Player identity bound");
+    }
+
+    public async Task<ServiceResult<MatchAuthorityResponse>> TakeoverAsync(
+        Guid newHostUserId,
+        Guid matchId,
+        TakeoverMatchAuthorityRequest request,
+        CancellationToken cancellationToken)
+    {
+        var match = await _db.MatchAuthorityBindings
+            .Include(item => item.Players)
+            .SingleOrDefaultAsync(item => item.MatchId == matchId, cancellationToken);
+
+        if (match is null)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Match not found",
+                ErrorCodes.MatchNotFound);
+        }
+
+        if (match.Status == MatchAuthorityStatus.Ended)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Match already ended",
+                ErrorCodes.MatchAlreadyEnded);
+        }
+
+        var sessionName = request.FusionSessionName?.Trim() ?? string.Empty;
+        if (!string.Equals(
+                match.FusionSessionName,
+                sessionName,
+                StringComparison.Ordinal))
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Fusion session does not match",
+                ErrorCodes.MatchSessionConflict);
+        }
+
+        var candidate = match.Players.SingleOrDefault(item =>
+            item.UserId == newHostUserId
+            && item.DisconnectedAtUtc == null);
+
+        if (candidate is null)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Only a connected bound roster member can take over Host authority",
+                ErrorCodes.MatchAuthorityForbidden);
+        }
+
+        var actorCollision = match.Players.SingleOrDefault(item =>
+            item.Id != candidate.Id
+            && item.FusionActorNumber == request.FusionActorNumber
+            && item.DisconnectedAtUtc == null);
+
+        if (actorCollision is not null
+            && actorCollision.UserId != match.HostUserId)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Migrated Host actor number is already owned by another connected player",
+                ErrorCodes.MatchPlayerBindingConflict);
+        }
+
+        if (await HasOtherActiveMatchAsync(
+                newHostUserId,
+                matchId,
+                cancellationToken))
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Account is already participating in another active match",
+                ErrorCodes.AccountAlreadyInActiveMatch);
+        }
+
+        var now = UtcNow();
+
+        if (match.HostUserId == newHostUserId)
+        {
+            if (match.LeaseExpiresAtUtc <= now)
+            {
+                return Failure<MatchAuthorityResponse>(
+                    "Match authority lease expired",
+                    ErrorCodes.MatchLeaseExpired);
+            }
+
+            match.LeaseExpiresAtUtc =
+                now.AddSeconds(_settings.LeaseLifetimeSeconds);
+            match.UpdatedAtUtc = now;
+            candidate.FusionActorNumber =
+                request.FusionActorNumber;
+            candidate.LastSeenAtUtc = now;
+
+            await _db.SaveChangesAsync(cancellationToken);
+
+            return ServiceResult<MatchAuthorityResponse>.Success(
+                Map(match),
+                "Host authority already assigned");
+        }
+
+        if (match.LeaseExpiresAtUtc > now)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Current Host authority lease is still active",
+                ErrorCodes.MatchAuthorityTakeoverNotReady);
+        }
+        var previousHost = match.Players.SingleOrDefault(item =>
+            item.UserId == match.HostUserId
+            && item.DisconnectedAtUtc == null);
+
+        if (previousHost is not null)
+        {
+            previousHost.DisconnectedAtUtc = now;
+            previousHost.LastSeenAtUtc = now;
+        }
+
+        IDbContextTransaction? actorReuseTransaction = null;
+
+        try
+        {
+            // With the PostgreSQL partial unique index, the old Host must be
+            // persisted as disconnected before its actor number can be
+            // assigned to the promoted Host. Keep both writes atomic.
+            if (previousHost is not null
+                && previousHost.FusionActorNumber
+                    == request.FusionActorNumber
+                && _db.Database.IsRelational())
+            {
+                actorReuseTransaction =
+                    await _db.Database.BeginTransactionAsync(
+                        cancellationToken);
+
+                await _db.SaveChangesAsync(
+                    cancellationToken);
+            }
+
+            candidate.FusionActorNumber =
+                request.FusionActorNumber;
+            candidate.LastSeenAtUtc = now;
+
+            match.HostUserId = newHostUserId;
+            match.LeaseExpiresAtUtc =
+                now.AddSeconds(_settings.LeaseLifetimeSeconds);
+            match.UpdatedAtUtc = now;
+
+            await _db.SaveChangesAsync(cancellationToken);
+
+            if (actorReuseTransaction is not null)
+            {
+                await actorReuseTransaction.CommitAsync(
+                    cancellationToken);
+            }
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Host authority changed concurrently; retry against current authority state",
+                ErrorCodes.MatchAuthorityTakeoverNotReady);
+        }
+        catch (DbUpdateException)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Migrated Host actor remap conflicted with the active roster",
+                ErrorCodes.MatchPlayerBindingConflict);
+        }
+        finally
+        {
+            if (actorReuseTransaction is not null)
+            {
+                await actorReuseTransaction.DisposeAsync();
+            }
+        }
+
+        return ServiceResult<MatchAuthorityResponse>.Success(
+            Map(match),
+            "Host authority transferred");
+    }
+
+    public async Task<ServiceResult<MatchAuthorityResponse>> RelinquishAsync(
+        Guid hostUserId,
+        Guid matchId,
+        CancellationToken cancellationToken)
+    {
+        var match = await _db.MatchAuthorityBindings
+            .Include(item => item.Players)
+            .SingleOrDefaultAsync(
+                item => item.MatchId == matchId,
+                cancellationToken);
+
+        var authorityFailure =
+            ValidateActiveHost(match, hostUserId);
+
+        if (authorityFailure is not null)
+        {
+            return Failure<MatchAuthorityResponse>(
+                authorityFailure.Value.Message,
+                authorityFailure.Value.Code);
+        }
+
+        var now = UtcNow();
+
+        var hostPlayer =
+            match!.Players.SingleOrDefault(item =>
+                item.UserId == hostUserId
+                && item.DisconnectedAtUtc == null);
+
+        if (hostPlayer is not null)
+        {
+            hostPlayer.DisconnectedAtUtc = now;
+            hostPlayer.LastSeenAtUtc = now;
+        }
+
+        // Preserve Lobby/InMatch status. Expiring only the Host lease
+        // lets a Fusion-promoted connected roster member take over.
+        match.LeaseExpiresAtUtc = now;
+        match.UpdatedAtUtc = now;
+
+        try
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Host authority changed concurrently; relinquish was not applied",
+                ErrorCodes.MatchAuthorityTakeoverNotReady);
+        }
+
+        return ServiceResult<MatchAuthorityResponse>.Success(
+            Map(match),
+            "Host authority relinquished");
     }
 
     public async Task<ServiceResult<MatchAuthorityResponse>> RenewLeaseAsync(
@@ -271,8 +517,16 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         Guid hostUserId,
         Guid matchId,
         int fusionActorNumber,
+        Guid expectedUserId,
         CancellationToken cancellationToken)
     {
+        if (fusionActorNumber < 1 || expectedUserId == Guid.Empty)
+        {
+            return Failure<MatchPlayerBindingResponse>(
+                "An expected bound user is required for disconnect",
+                ErrorCodes.MatchPlayerBindingConflict);
+        }
+
         var match = await _db.MatchAuthorityBindings.Include(item => item.Players)
             .SingleOrDefaultAsync(item => item.MatchId == matchId, cancellationToken);
         var authorityFailure = ValidateActiveHost(match, hostUserId);
@@ -281,15 +535,63 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             return Failure<MatchPlayerBindingResponse>(authorityFailure.Value.Message, authorityFailure.Value.Code);
         }
 
-        var player = match!.Players.SingleOrDefault(item => item.FusionActorNumber == fusionActorNumber);
+        var player = match!.Players.SingleOrDefault(item =>
+            item.FusionActorNumber == fusionActorNumber
+            && item.DisconnectedAtUtc == null);
         if (player is null)
         {
             return Failure<MatchPlayerBindingResponse>("Player binding not found", ErrorCodes.NotFound);
         }
 
-        player.DisconnectedAtUtc = UtcNow();
-        player.LastSeenAtUtc = player.DisconnectedAtUtc.Value;
-        await _db.SaveChangesAsync(cancellationToken);
+        if (player.UserId != expectedUserId)
+        {
+            return Failure<MatchPlayerBindingResponse>(
+                "Fusion actor no longer belongs to the expected player",
+                ErrorCodes.MatchPlayerBindingConflict);
+        }
+
+        var now = UtcNow();
+
+        if (_db.Database.IsRelational())
+        {
+            // Use a single conditional SQL UPDATE: a rebind to another user,
+            // Host transfer, or expired lease between SELECT and UPDATE must
+            // not disconnect the new roster owner.
+            var affected = await _db.MatchPlayerBindings
+                .Where(item => item.MatchId == matchId
+                    && item.FusionActorNumber == fusionActorNumber
+                    && item.UserId == expectedUserId
+                    && item.DisconnectedAtUtc == null
+                    && _db.MatchAuthorityBindings.Any(binding =>
+                        binding.MatchId == matchId
+                        && binding.HostUserId == hostUserId
+                        && binding.Status != MatchAuthorityStatus.Ended
+                        && binding.LeaseExpiresAtUtc > now))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.DisconnectedAtUtc, (DateTime?)now)
+                    .SetProperty(item => item.LastSeenAtUtc, now),
+                    cancellationToken);
+
+            if (affected != 1)
+            {
+                return Failure<MatchPlayerBindingResponse>(
+                    "Disconnect rejected because the roster binding changed",
+                    ErrorCodes.MatchPlayerBindingConflict);
+            }
+
+            // ExecuteUpdate bypasses EF change tracking; refresh this object
+            // so the API response reports the committed disconnect state.
+            player.DisconnectedAtUtc = now;
+            player.LastSeenAtUtc = now;
+        }
+        else
+        {
+            // Unit-test in-memory provider does not support ExecuteUpdate.
+            player.DisconnectedAtUtc = now;
+            player.LastSeenAtUtc = now;
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
         return ServiceResult<MatchPlayerBindingResponse>.Success(Map(player), "Player marked disconnected");
     }
 

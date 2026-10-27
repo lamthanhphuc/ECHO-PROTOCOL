@@ -13,7 +13,7 @@ using EchoProtocol.Networking.Authority;
 namespace EchoProtocol.Networking
 {
     /// <summary>Owned-player command gateway. All interaction RPCs pass through this behaviour.</summary>
-    public sealed class NetworkPlayerInteractor : NetworkBehaviour
+    public sealed class NetworkPlayerInteractor : NetworkBehaviour, IInputAuthorityGained
     {
         private const float DoorJammerInteractionDistance = 4f;
 
@@ -117,7 +117,7 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 FirstAidRevivesUsedThisMatch = 0;
             }
@@ -128,6 +128,19 @@ namespace EchoProtocol.Networking
             _teamToolAction?.Enable();
             _placementPreviewAction?.Enable();
             _helpPingAction?.Enable();
+        }
+
+        // Fusion does not invoke Spawned again when a restored player gains InputAuthority.
+        public void InputAuthorityGained()
+        {
+            if (Object == null || !Object.HasInputAuthority) return;
+            _interactAction?.Enable();
+            _dropCoreAction?.Enable();
+            _teamToolAction?.Enable();
+            _placementPreviewAction?.Enable();
+            _helpPingAction?.Enable();
+            RuntimeLog.Log(RuntimeLogCategory.Interaction,
+                $"NPI_INPUT_REBIND|cause=authority-gained|object={Object.Id}|gEnabled={_dropCoreAction?.enabled}");
         }
 
         public void ResetForMatchAuthoritative()
@@ -237,6 +250,33 @@ namespace EchoProtocol.Networking
 
         private void Update()
         {
+            // Diagnostic only: one line per local G press, including early-return conditions.
+            if (Runner != null && Runner.IsRunning
+                && Object != null && Object.HasInputAuthority
+                && Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame)
+            {
+                var debugState = GetComponent<LobbyPlayerState>();
+                RuntimeLog.Log(
+                    RuntimeLogCategory.Interaction,
+                    $"TT_DROP_KEY|player={Runner.LocalPlayer}|object={Object.Id}|tool={debugState?.ToolId}|core={debugState?.CarriedCoreId}|gameplay={debugState?.IsGameplayPlayer}|gActionEnabled={_dropCoreAction?.enabled}|suppressed={_suppressInteractionPrompt}|locked={PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)}|voicePanel={EchoProtocol.Voice.VoiceSettingsPanel.IsOpen}|localSequence={_nextSequence}|serverSequence={LastProcessedSequence}");
+            }
+
+            // A migration/rejoin can keep this PlayerObject but restore its InputAuthority
+            // without rerunning Spawned. Repair locally disabled actions without touching
+            // authoritative gameplay state or creating any NetworkObjects.
+            if (Runner != null && Runner.IsRunning && Object != null
+                && Object.HasInputAuthority
+                && _dropCoreAction != null && !_dropCoreAction.enabled)
+            {
+                _interactAction?.Enable();
+                _dropCoreAction.Enable();
+                _teamToolAction?.Enable();
+                _placementPreviewAction?.Enable();
+                _helpPingAction?.Enable();
+                RuntimeLog.Log(RuntimeLogCategory.Interaction,
+                    $"NPI_INPUT_REBIND|cause=local-update|object={Object.Id}|gEnabled={_dropCoreAction.enabled}");
+            }
+
             string scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
             if (_toolInputScene != scene) { _toolInputScene = scene; _toolInputArmed = false; }
             if (scene == "Lobby") { _toolInputArmed = false; return; }
@@ -357,9 +397,18 @@ namespace EchoProtocol.Networking
                     : null;
             }
 
-            if (_dropCoreAction?.WasPerformedThisFrame() == true)
+            // One dispatch per G press, even when Fusion restores a disabled InputAction.
+            // The keyboard path is also used by PlayerInventoryDropInput, but its local
+            // inventory drop is explicitly rejected in active Fusion sessions; only this
+            // NetworkPlayerInteractor sends the authoritative drop RPC.
+            bool dropActionPressed = _dropCoreAction?.WasPerformedThisFrame() == true;
+            bool dropKeyboardPressed = isOnline && Object.HasInputAuthority
+                && Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame;
+            if (dropActionPressed || dropKeyboardPressed)
             {
-                RequestDropCarriedItem();
+                bool submitted = RequestDropCarriedItem();
+                RuntimeLog.Log(RuntimeLogCategory.Interaction,
+                    $"TT_DROP_DISPATCH|object={Object.Id}|source={(dropActionPressed ? "action" : "keyboard")}|submitted={submitted}|localSequence={_nextSequence}|serverSequence={LastProcessedSequence}");
             }
 
             bool useTeamToolPressed =
@@ -1146,9 +1195,13 @@ namespace EchoProtocol.Networking
         {
             if (!TryResolveRequester(info.Source, out var requester))
             {
+                RuntimeLog.Log(
+                    RuntimeLogCategory.Interaction,
+                    $"TT_DROP_RPC_REJECT|source={info.Source}|owner={Object.InputAuthority}|sequence={sequence}|reason=UnresolvedRequester");
                 return;
             }
 
+            uint previousProcessed = LastProcessedSequence;
             var result = ValidateRequester(requester, sequence);
             var state = GetComponent<LobbyPlayerState>();
             var targetId = default(NetworkId);
@@ -1183,6 +1236,9 @@ namespace EchoProtocol.Networking
             }
 
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+            RuntimeLog.Log(
+                RuntimeLogCategory.Interaction,
+                $"TT_DROP_RPC_RESULT|requester={requester}|object={Object.Id}|sequence={sequence}|previousProcessed={previousProcessed}|lastProcessed={LastProcessedSequence}|tool={state?.ToolId}|result={result}");
             RpcInteractionResult(requester, targetId, sequence, (int)result);
         }
 
@@ -2424,6 +2480,15 @@ namespace EchoProtocol.Networking
 
         private uint NextSequence()
         {
+            // The networked watermark survives migration; the local counter does not.
+            // Rebase before every RPC so a newly restored interactor never replays IDs.
+            if (_nextSequence < LastProcessedSequence)
+            {
+                RuntimeLog.Log(
+                    RuntimeLogCategory.Interaction,
+                    $"NPI_SEQUENCE_RESYNC|object={Object.Id}|localBefore={_nextSequence}|networkedWatermark={LastProcessedSequence}");
+                _nextSequence = LastProcessedSequence;
+            }
             _nextSequence++;
             if (_nextSequence == 0) _nextSequence = 1;
             return _nextSequence;

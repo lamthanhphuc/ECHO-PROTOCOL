@@ -59,7 +59,7 @@ namespace EchoProtocol.Networking
         {
             _spawnVisualGraceUntil = Time.unscaledTime + SpawnVisualGraceSeconds;
 
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 State = NetworkDoorJammerState.NotDeployed;
                 DoorId = default;

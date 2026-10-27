@@ -179,7 +179,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("target.transform.position + playerForward * 1.35f", dive);
             StringAssert.Contains(": CreepMinionAttackKind.ShootSlow", dive);
             StringAssert.Contains("CommitAttack(attackKind)", dive);
-            StringAssert.Contains("if (_toolDiveApproaching)", dive);
+            StringAssert.Contains("if (ReplicatedToolDiveApproaching)", dive);
             StringAssert.Contains("if (frontDistance > 1.4f)", dive);
             StringAssert.Contains("ToolDivePhase = 0", dive);
         }
@@ -211,7 +211,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("RpcPlayAttackPresentation((int)kind)", source);
             StringAssert.Contains("private const float ToolDiveHeight = 0.35f", source);
             StringAssert.Contains("FlightHeightValue = ToolDiveHeight", dive);
-            StringAssert.Contains("Mathf.Lerp(_diveStartHeight, ToolDiveHeight", dive);
+            StringAssert.Contains("Mathf.Lerp(ReplicatedDiveStartHeight, ToolDiveHeight", dive);
 
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
                 "Assets/Resources/PF_CreepMinionNetwork.prefab");
@@ -293,7 +293,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("CrossFade(\"GetHit\")", minion);
             StringAssert.Contains("private const float ResonanceDeathSeconds = 1f", minion);
             StringAssert.Contains("private const float ResonanceHitRadius = 0.75f", flashlight);
-            StringAssert.Contains("Physics.SphereCastAll(origin,ResonanceHitRadius", flashlight);
+            StringAssert.Contains("Physics.SphereCastAll(origin, ResonanceHitRadius", flashlight);
             StringAssert.Contains("CrossFade(\"Die\")", minion);
             StringAssert.Contains("DeathClipSeconds()", minion);
             StringAssert.Contains("_agent.radius = 0.65f", minion);
@@ -335,7 +335,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("_catfishOnLand = true", minion);
             StringAssert.Contains("bool enteringShallowWater = FloodedWaterBoundary.TryGetSwimSurface(nextPosition, out _, 0.1f)", minion);
             StringAssert.Contains("if (visible.IsRealPlayer)", minion);
-            StringAssert.Contains("destination = _distractionPoint", minion);
+            StringAssert.Contains("destination = ReplicatedDistractionPoint", minion);
             StringAssert.Contains("private const float PlayerSeekTimeoutSeconds = 20f", minion);
             StringAssert.Contains("TargetPlayer = FindClosestEligibleTarget()", minion);
             StringAssert.Contains("if (_seekingPlayer)", minion);
@@ -416,6 +416,39 @@ namespace EchoProtocol.Networking.Tests
                 System.Array.Find(controller.animationClips, clip => clip.name == "die")).loopTime, Is.False);
             Assert.That(AnimationUtility.GetAnimationClipSettings(
                 System.Array.Find(controller.animationClips, clip => clip.name == "hit")).loopTime, Is.True);
+        }
+
+        [Test]
+        public void CreepHostMigration_PersistsFleeAndToolDiveAuthoritativeState()
+        {
+            string source = File.ReadAllText(MinionSource);
+            StringAssert.Contains("[Networked] private Vector3 ReplicatedFleeDestination", source);
+            StringAssert.Contains("[Networked] private float ReplicatedDiveDuration", source);
+            StringAssert.Contains("[Networked] private NetworkBool ReplicatedToolContactResolved", source);
+            StringAssert.Contains("[Networked] private Vector3 ReplicatedToolVictimPosition", source);
+            StringAssert.Contains("[Networked] private int ReplicatedToolRouteRetries", source);
+            Assert.That(source.Contains("out ReplicatedFleeDestination"), Is.False);
+        }
+
+        [Test]
+        public void CreepHostMigration_PersistsDistractionAndDetectionProgress()
+        {
+            string source = File.ReadAllText(MinionSource);
+            StringAssert.Contains("[Networked] private TickTimer ReplicatedDistractionTimer", source);
+            StringAssert.Contains("[Networked] private Vector3 ReplicatedDistractionPoint", source);
+            StringAssert.Contains("[Networked] private float ReplicatedLostSightSeconds", source);
+            StringAssert.Contains("[Networked] private float ReplicatedFlashlightExposureSeconds", source);
+            StringAssert.Contains("ReplicatedDistractionTimer.ExpiredOrNotRunning(Runner)", source);
+            StringAssert.Contains("HM_AI_MINION_RESTORE", source);
+        }
+
+        [Test]
+        public void StalkerHostMigration_LogsSnapshotAndFirstSimulationDivergence()
+        {
+            string stalker = File.ReadAllText("Assets/Scripts/AI/Stalker/Networking/StalkerFusionRuntime.cs");
+            StringAssert.Contains("HM_AI_STALKER_RESTORE", stalker);
+            StringAssert.Contains("HM_AI_STALKER_FIRST_TICK", stalker);
+            StringAssert.Contains("HM_AI_STALKER_STATE_CHANGED", stalker);
         }
 
         private static Component FindComponentByTypeName(GameObject root, string fullTypeName)

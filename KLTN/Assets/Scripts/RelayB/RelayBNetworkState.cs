@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace EchoProtocol.RelayB
 {
-    public sealed class RelayBNetworkState : NetworkBehaviour
+    public sealed class RelayBNetworkState : NetworkBehaviour, IAfterHostMigration
     {
         [SerializeField] private RelayBController controller;
 
@@ -26,10 +26,15 @@ namespace EchoProtocol.RelayB
 
             if (Object.HasStateAuthority)
             {
-                // Host picks preset
+                // Host picks a preset only for a fresh spawn.
+                // A migrated Host re-applies the replicated preset.
                 if (controller != null && controller.Config != null && controller.Config.Presets.Count > 0)
                 {
-                    ActivePresetIndex = UnityEngine.Random.Range(0, controller.Config.Presets.Count);
+                    if (!global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
+                    {
+                        ActivePresetIndex = UnityEngine.Random.Range(0, controller.Config.Presets.Count);
+                    }
+
                     controller.SetPresetIndex(ActivePresetIndex);
                 }
 
@@ -47,6 +52,26 @@ namespace EchoProtocol.RelayB
                 {
                     controller.SetPresetIndex(ActivePresetIndex);
                 }
+            }
+
+            ApplyOnlineState();
+        }
+
+        public void AfterHostMigration()
+        {
+            if (controller == null)
+            {
+                controller = GetComponent<RelayBController>();
+            }
+
+            // ActivePresetIndex is replicated, but the RelayBController
+            // presentation is local-only and must be rebuilt after
+            // the Host Migration snapshot has been copied.
+            if (controller != null
+                && controller.Config != null
+                && controller.Config.Presets.Count > 0)
+            {
+                controller.SetPresetIndex(ActivePresetIndex);
             }
 
             ApplyOnlineState();

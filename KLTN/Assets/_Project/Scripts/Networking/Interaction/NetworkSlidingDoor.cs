@@ -344,7 +344,7 @@ namespace EchoProtocol.Networking
             ResolveDoorVisualReferences();
             CacheClosedPositions();
 
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 State = _startsBroken
                     ? NetworkDoorState.Open
