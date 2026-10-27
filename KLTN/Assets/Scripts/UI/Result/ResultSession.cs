@@ -72,6 +72,16 @@ namespace EchoProtocol.UI.Result
             ResultTransitionFade.Clear();
         }
 
+        private static string PlayerStatus(
+            NetworkPlayerLifeStatus status, bool hasLifeState, bool disconnected, bool isPurge, bool won)
+        {
+            if (disconnected) return "DISCONNECTED";
+            if (!hasLifeState) return "UNKNOWN";
+            if (NetworkPlayerLifeStateRules.SurvivedMatch(status, isPurge, won, disconnected))
+                return "SURVIVED";
+            return status == NetworkPlayerLifeStatus.Eliminated ? "DECEASED" : "MISSING";
+        }
+
         public static void Capture(NetworkMatchState state)
         {
             if (state == null || !state.IsEnded || state.EndOrdinal == 0
@@ -93,12 +103,8 @@ namespace EchoProtocol.UI.Result
                 string name = entry.Name.ToString().Trim();
                 if (name.Length == 0) name = "UNKNOWN OPERATOR";
                 bool disconnected = entry.Disconnected;
-                string status = disconnected ? "DISCONNECTED" : !entry.HasLifeState ? "UNKNOWN" : entry.LifeStatus switch
-                {
-                    NetworkPlayerLifeStatus.Escaped => "SURVIVED",
-                    NetworkPlayerLifeStatus.Eliminated => "DECEASED",
-                    _ => "MISSING"
-                };
+                string status = PlayerStatus(entry.LifeStatus, entry.HasLifeState, disconnected,
+                    state.HuntReady, state.Result == NetworkMatchResult.Win);
                 players.Add(new ResultPlayerSnapshot(name, status, disconnected,
                     entry.DownCount, entry.ReviveCount));
             }
@@ -116,12 +122,8 @@ namespace EchoProtocol.UI.Result
                     if (name.Length == 0) name = "UNKNOWN OPERATOR";
                     bool disconnected = player.Disconnected;
                     var life = player.GetComponent<NetworkPlayerLifeState>();
-                    string status = disconnected ? "DISCONNECTED" : life == null ? "UNKNOWN" : life.Status switch
-                    {
-                        NetworkPlayerLifeStatus.Escaped => "SURVIVED",
-                        NetworkPlayerLifeStatus.Eliminated => "DECEASED",
-                        _ => "MISSING"
-                    };
+                    string status = PlayerStatus(life != null ? life.Status : default, life != null,
+                        disconnected, state.HuntReady, state.Result == NetworkMatchResult.Win);
                     players.Add(new ResultPlayerSnapshot(name, status, disconnected,
                         life != null ? Mathf.Max(0, life.DownCount) : -1,
                         life != null ? Mathf.Max(0, life.ReviveCount) : -1));

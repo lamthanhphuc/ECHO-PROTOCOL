@@ -1703,7 +1703,9 @@ namespace EchoProtocol.Networking.Authority
                 experimentCondition:
                     activeExperimentCondition,
                 experimentProtocolVersion:
-                    activeExperimentProtocolVersion))
+                    activeExperimentProtocolVersion,
+                gameMode: LobbyMapCatalog.TelemetryGameMode(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name),
+                difficulty: Difficulty.ToString().ToUpperInvariant()))
             {
                 Debug.LogWarning($"[Telemetry] MATCH_STARTED was not buffered: {startFailure}.");
                 return;

@@ -75,6 +75,13 @@ namespace EchoProtocol.Networking
 
         public static bool CanInitiateAction(NetworkPlayerLifeStatus status) =>
             status == NetworkPlayerLifeStatus.Alive;
+
+        public static bool SurvivedMatch(
+            NetworkPlayerLifeStatus status, bool isPurge, bool won, bool disconnected) =>
+            !disconnected && (status == NetworkPlayerLifeStatus.Escaped
+                || isPurge && won && (status == NetworkPlayerLifeStatus.Alive
+                    || status == NetworkPlayerLifeStatus.Downed
+                    || status == NetworkPlayerLifeStatus.Caught));
     }
 
     /// <summary>Single State-Authority owner for health, down, revive, protection and elimination.</summary>

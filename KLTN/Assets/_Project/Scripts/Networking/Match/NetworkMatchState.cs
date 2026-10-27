@@ -2500,14 +2500,19 @@ namespace EchoProtocol.Networking
             }
 
             RefreshResultRosterAuthoritative();
-            CountFinalPlayers(out var survivorCount, out _, out _);
-            var objectiveCompletion = CalculateObjectiveCompletion(CurrentPhase, result);
-            if (AlienHuntMission.Instance != null)
+            bool isPurge = AlienHuntMission.Instance != null;
+            int survivorCount = 0;
+            for (int i = 0; i < 4; i++)
             {
-                CountFinalPlayers(out _, out var livingPlayers, out _);
-                survivorCount += livingPlayers;
-                objectiveCompletion = AlienHuntMission.Instance.Burned / 9f;
+                var entry = GetResultRosterEntry(i);
+                if (entry.Present && entry.HasLifeState
+                    && NetworkPlayerLifeStateRules.SurvivedMatch(entry.LifeStatus, isPurge,
+                        result == NetworkMatchResult.Win, entry.Disconnected))
+                    survivorCount++;
             }
+            var objectiveCompletion = CalculateObjectiveCompletion(CurrentPhase, result);
+            if (isPurge)
+                objectiveCompletion = AlienHuntMission.Instance.Burned / 9f;
             FinalDurationSeconds = Mathf.Clamp(
                 _matchDurationSeconds - Remaining(MatchTimer), 0f, _matchDurationSeconds);
             FinalObjectiveCompletion = objectiveCompletion;
