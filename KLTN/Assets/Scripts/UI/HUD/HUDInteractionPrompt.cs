@@ -179,6 +179,11 @@ namespace EchoProtocol.UI.HUD
                 isHold = true;
                 progress01 = floodedCharge.Progress01;
             }
+            else if (interactable is EchoProtocol.MatchFlow.Zone3FuelPort fuelPort)
+            {
+                isHold = true;
+                progress01 = fuelPort.Progress01;
+            }
 
             // A furnace can explain a missing ingredient without advertising an unavailable action.
             bool available = !(interactable is AlienHuntFurnace furnace)
