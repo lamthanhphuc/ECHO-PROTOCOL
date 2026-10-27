@@ -16,6 +16,7 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkBool ResonanceActive { get; private set; }
         [Networked] public NetworkBool ResonanceLocked { get; private set; }
         [Networked] public NetworkBool ResonanceHasValidHit { get; private set; }
+        [Networked] public NetworkBool ResonanceBossImmuneHit { get; private set; }
         [Networked] private NetworkBool ResonanceNeedsRelease { get; set; }
         [Networked] private float ResonanceRechargeDelay { get; set; }
         [Networked] public Vector3 ResonanceEndpoint { get; private set; }
@@ -24,6 +25,10 @@ namespace EchoProtocol.Networking
         private bool _resonanceWasVisible;
         private float _resonanceStartedAt;
         private float _resonanceDistanceGain = 1f;
+        private Collider[] _uvOverlap = new Collider[64];
+        private RaycastHit[] _uvCast = new RaycastHit[128];
+        private RaycastHit[] _uvSight = new RaycastHit[64];
+        private readonly System.Collections.Generic.List<Collider> _uvCandidates = new(128);
         public CreepMinionRuntime ResonanceTarget => _resonanceTarget;
         public static bool IsResonating(GameObject player)
         {
@@ -57,6 +62,9 @@ namespace EchoProtocol.Networking
             bool bossAffected = PurgeBossTarget != null && match != null && match.Object != null && match.Object.IsValid
                 && match.PurgeUvImmunity.ExpiredOrNotRunning(Runner)
                 && (match.PurgeMood == PurgeBossMood.Calm || match.PurgeMood == PurgeBossMood.Hunting);
+            ResonanceBossImmuneHit = ResonanceActive && PurgeBossTarget != null && match != null
+                && match.Object != null && match.Object.IsValid && !match.PurgeUvImmunity.ExpiredOrNotRunning(Runner)
+                && (match.PurgeMood == PurgeBossMood.Calm || match.PurgeMood == PurgeBossMood.Hunting);
             ResonanceHasValidHit = ResonanceActive && (_resonanceTarget != null || bossAffected);
         }
         private void ResolveResonanceTarget(NetworkPlayerInput input)
@@ -67,45 +75,74 @@ namespace EchoProtocol.Networking
             Vector3 origin = transform.position + Vector3.up * (movement != null && movement.IsCrouching ? 1.3f : 1.65f);
             Vector3 forward = Quaternion.Euler(Mathf.Clamp(input.LookPitch, -89f, 89f), input.LookYaw, 0f) * Vector3.forward;
             ResonanceEndpoint = origin + forward * ResonanceRange;
-            foreach (var collider in QueryResonanceCandidates(transform, origin, forward))
+            FillResonanceCandidates(transform, origin, forward, ref _uvOverlap, ref _uvCast, _uvCandidates);
+            float nearest = float.PositiveInfinity;
+            foreach (var collider in _uvCandidates)
             {
                 if (IsDespawnedMinionCollider(collider)) continue;
                 var boss = collider.GetComponentInParent<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
                 var minion = collider.GetComponentInParent<CreepMinionRuntime>();
                 if (!(AlienHuntMission.Instance && boss) && (minion == null || minion.IsDying)) continue;
-                if (!ResonanceLineOfSight(transform, origin, collider)) continue;
+                float distance = (collider.ClosestPoint(origin) - origin).sqrMagnitude;
+                if (distance >= nearest || !HasResonanceLineOfSight(transform, origin, collider, ref _uvSight)) continue;
+                nearest = distance;
                 ResonanceEndpoint = collider.bounds.center;
-                if (AlienHuntMission.Instance && boss) PurgeBossTarget = boss;
-                else _resonanceTarget = minion;
-                return;
+                PurgeBossTarget = AlienHuntMission.Instance && boss ? boss : null;
+                _resonanceTarget = PurgeBossTarget == null ? minion : null;
             }
         }
 
         // Sphere casts miss colliders overlapping their starting sphere. Keep those candidates too.
         internal static Collider[] QueryResonanceCandidates(Transform owner, Vector3 origin, Vector3 forward)
         {
-            var candidates = new System.Collections.Generic.HashSet<Collider>();
-            foreach (var collider in Physics.OverlapSphere(origin, ResonanceHitRadius, ~0, QueryTriggerInteraction.Ignore))
-                candidates.Add(collider);
-            foreach (var hit in Physics.SphereCastAll(origin, ResonanceHitRadius, forward, ResonanceRange, ~0, QueryTriggerInteraction.Ignore))
-                candidates.Add(hit.collider);
-            candidates.RemoveWhere(collider => IgnoreResonanceCollider(owner, collider)
-                || Vector3.Dot(collider.bounds.center - origin, forward) < -.01f
-                || (collider.ClosestPoint(origin) - origin).sqrMagnitude > ResonanceRange * ResonanceRange);
-            var sorted = new Collider[candidates.Count]; candidates.CopyTo(sorted);
-            System.Array.Sort(sorted, (a, b) => (a.ClosestPoint(origin) - origin).sqrMagnitude.CompareTo((b.ClosestPoint(origin) - origin).sqrMagnitude));
-            return sorted;
+            // Diagnostic/test entry point. Gameplay reuses the owner's buffers above.
+            var overlap = new Collider[64];
+            var hits = new RaycastHit[128];
+            var candidates = new System.Collections.Generic.List<Collider>();
+            FillResonanceCandidates(owner, origin, forward, ref overlap, ref hits, candidates);
+            candidates.Sort((a, b) => (a.ClosestPoint(origin) - origin).sqrMagnitude.CompareTo((b.ClosestPoint(origin) - origin).sqrMagnitude));
+            return candidates.ToArray();
+        }
+
+        private static void FillResonanceCandidates(Transform owner, Vector3 origin, Vector3 forward,
+            ref Collider[] overlap, ref RaycastHit[] hits, System.Collections.Generic.List<Collider> candidates)
+        {
+            candidates.Clear();
+            int count;
+            while ((count = Physics.OverlapSphereNonAlloc(origin, ResonanceHitRadius, overlap, ~0, QueryTriggerInteraction.Ignore)) == overlap.Length)
+                System.Array.Resize(ref overlap, overlap.Length * 2);
+            for (int i = 0; i < count; i++) Add(overlap[i]);
+            while ((count = Physics.SphereCastNonAlloc(origin, ResonanceHitRadius, forward, hits, ResonanceRange, ~0, QueryTriggerInteraction.Ignore)) == hits.Length)
+                System.Array.Resize(ref hits, hits.Length * 2);
+            for (int i = 0; i < count; i++) Add(hits[i].collider);
+
+            void Add(Collider collider)
+            {
+                if (!IgnoreResonanceCollider(owner, collider)
+                    && Vector3.Dot(collider.bounds.center - origin, forward) >= -.01f
+                    && (collider.ClosestPoint(origin) - origin).sqrMagnitude <= ResonanceRange * ResonanceRange
+                    && !candidates.Contains(collider)) candidates.Add(collider);
+            }
         }
 
         internal static bool ResonanceLineOfSight(Transform owner, Vector3 origin, Collider target)
+        {
+            var hits = new RaycastHit[64];
+            return HasResonanceLineOfSight(owner, origin, target, ref hits);
+        }
+
+        private static bool HasResonanceLineOfSight(Transform owner, Vector3 origin, Collider target, ref RaycastHit[] hits)
         {
             var minion = target.GetComponentInParent<CreepMinionRuntime>();
             var boss = target.GetComponentInParent<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
             var targetRoot = minion != null ? minion.transform : boss != null ? boss.transform : target.transform;
             Vector3 offset = target.bounds.center - origin;
-            foreach (var hit in Physics.RaycastAll(origin, offset.normalized, offset.magnitude, ~0, QueryTriggerInteraction.Ignore))
-                if (!IgnoreResonanceCollider(owner, hit.collider) && !IsDespawnedMinionCollider(hit.collider)
-                    && !hit.collider.transform.IsChildOf(targetRoot)) return false;
+            int count;
+            while ((count = Physics.RaycastNonAlloc(origin, offset.normalized, hits, offset.magnitude, ~0, QueryTriggerInteraction.Ignore)) == hits.Length)
+                System.Array.Resize(ref hits, hits.Length * 2);
+            for (int i = 0; i < count; i++)
+                if (!IgnoreResonanceCollider(owner, hits[i].collider) && !IsDespawnedMinionCollider(hits[i].collider)
+                    && !hits[i].collider.transform.IsChildOf(targetRoot)) return false;
             return true;
         }
 
@@ -155,7 +192,7 @@ namespace EchoProtocol.Networking
                 || !_flashlight.Object.HasInputAuthority || !_flashlight.ResonanceActive
                 || _flashlight.ResonanceEnergy>15f || Time.unscaledTime<_nextBeep)return;
             _nextBeep=Time.unscaledTime+.8f;
-            if(_audio==null){_audio=gameObject.AddComponent<AudioSource>();_audio.playOnAwake=false;_audio.spatialBlend=0f;_audio.volume=.1f;}
+            if(_audio==null){_audio=EchoProtocol.Audio.GameAudioRuntime.CreateSource(gameObject, false);_audio.volume=.1f;}
             if(_beep==null){int count=4410;var samples=new float[count];for(int i=0;i<count;i++)samples[i]=Mathf.Sin(i*2f*Mathf.PI*880f/44100f)*(1f-i/(float)count);_beep=AudioClip.Create("ResonanceLowEnergy",count,1,44100,false);_beep.SetData(samples,0);}
             _audio.PlayOneShot(_beep);
         }

@@ -17,8 +17,10 @@ namespace EchoProtocol.AI.Stalker.Presentation
         [SerializeField] private AudioClip warningImpact;
         [SerializeField] private AudioClip huntingSting;
         [SerializeField] private AudioClip uvHiss;
+        [SerializeField] private AudioClip uvResist;
         [SerializeField] private AudioClip staggerCry;
         [SerializeField] private AudioClip recoveryGrowl;
+        [SerializeField] private AudioClip huntRelease;
         [SerializeField] private AudioClip attackImpact;
         [SerializeField] private AudioClip[] heavyFootsteps;
         [SerializeField] private ParticleSystem uvContactParticles;
@@ -29,7 +31,13 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private PurgeBossMood _lastMood;
         private long _lastAttackResolvedTick;
         private bool _bound;
+        private bool _joinCuePending;
+        private float _nextJoinCueAt;
         private bool _uvActive;
+        private bool _uvBlocked;
+        private float _nextUvResistAt;
+        private ParticleSystem.MinMaxGradient _uvContactColor;
+        private ParticleSystem.MinMaxCurve _uvContactRate;
         private float _flashUntil;
         private Collider _bodyCollider;
         private Animator _visualAnimator;
@@ -67,6 +75,11 @@ namespace EchoProtocol.AI.Stalker.Presentation
             PurgeSpatialAudio.Attach(voiceSource, transform);
             PurgeSpatialAudio.Attach(uvSource, transform);
             PurgeSpatialAudio.Attach(impactSource, transform);
+            if (uvContactParticles != null)
+            {
+                _uvContactColor = uvContactParticles.main.startColor;
+                _uvContactRate = uvContactParticles.emission.rateOverTime;
+            }
             if (uvFlash != null) uvFlash.enabled = false;
         }
 
@@ -84,17 +97,27 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             var mood = match.PurgeMood;
             var presentation = boss.GetReplicatedPresentationState();
+            bool localReady = match.Runner != null
+                && match.Runner.TryGetPlayerObject(match.Runner.LocalPlayer, out var localPlayer)
+                && localPlayer != null && localPlayer.IsValid
+                && localPlayer.TryGetComponent<LobbyPlayerState>(out var lobby) && lobby.IsGameplayPlayer
+                && Camera.main != null;
             if (!_bound)
             {
                 _lastMood = mood;
                 _lastAttackResolvedTick = presentation.AttackResolvedTick;
                 _lastStepPosition = transform.position;
                 _lastStepState = 0;
+                _joinCuePending = mood == PurgeBossMood.Warning || mood == PurgeBossMood.Hunting;
                 _bound = true;
             }
             else
             {
-                if (mood != _lastMood) OnMoodChanged(_lastMood, mood);
+                if (mood != _lastMood)
+                {
+                    if (localReady && !_joinCuePending) OnMoodChanged(_lastMood, mood);
+                    else if (mood == PurgeBossMood.Warning || mood == PurgeBossMood.Hunting) _joinCuePending = true;
+                }
                 if (presentation.AttackResolvedTick != _lastAttackResolvedTick)
                 {
                     if (presentation.AttackHitMomentResolved
@@ -105,10 +128,39 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 _lastMood = mood;
             }
 
+            if (_joinCuePending && localReady)
+            {
+                if (Time.unscaledTime >= _nextJoinCueAt)
+                {
+                    PlayPhaseCue(mood == PurgeBossMood.Warning ? warningImpact
+                        : mood == PurgeBossMood.Hunting ? huntingSting : null, .5f);
+                    _nextJoinCueAt = Time.unscaledTime + 10f;
+                }
+                _joinCuePending = false;
+            }
+
             SetUvContact(match.PurgeUvContact
                 && (mood == PurgeBossMood.Calm || mood == PurgeBossMood.Hunting));
-            if (_uvActive) UpdateUvContactPosition();
-            PurgeVfx.SetLoop(uvContactParticles, _uvActive, 32f, -1f);
+            _uvBlocked = false;
+            if (!_uvActive && boss.Runner != null)
+                foreach (var player in boss.Runner.ActivePlayers)
+                    if (boss.Runner.TryGetPlayerObject(player, out var obj) && obj != null
+                        && obj.TryGetComponent<NetworkPlayerFlashlight>(out var uv) && uv.ResonanceBossImmuneHit)
+                    { _uvBlocked = true; break; }
+            if (_uvActive || _uvBlocked) UpdateUvContactPosition(_uvBlocked);
+            if (uvContactParticles != null)
+            {
+                var main = uvContactParticles.main;
+                main.startColor = _uvBlocked ? new Color(.85f, .95f, 1f, .45f) : _uvContactColor;
+                var emission = uvContactParticles.emission;
+                emission.rateOverTime = _uvBlocked ? 5f : _uvContactRate;
+            }
+            PurgeVfx.SetLoop(uvContactParticles, _uvActive || _uvBlocked, 32f, -1f);
+            if (_uvBlocked && Time.time >= _nextUvResistAt)
+            {
+                Play(phaseSource, uvResist, .55f);
+                _nextUvResistAt = Time.time + 3f;
+            }
             PurgeVfx.Cull(uvStaggerParticles, 32f);
             PurgeVfx.Cull(attackContactParticles, 25f);
             UpdateFootsteps(mood);
@@ -132,18 +184,32 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private void OnMoodChanged(PurgeBossMood previous, PurgeBossMood current)
         {
             if (current == PurgeBossMood.Warning)
-                Play(phaseSource, warningImpact, 0.8f);
+                PlayPhaseCue(warningImpact, 0.8f);
             else if (current == PurgeBossMood.Hunting)
             {
-                if (previous == PurgeBossMood.Warning) Play(phaseSource, huntingSting, 0.85f);
+                if (previous == PurgeBossMood.Warning) PlayPhaseCue(huntingSting, 0.85f);
                 else if (previous == PurgeBossMood.Staggered) Play(voiceSource, recoveryGrowl, 0.8f);
             }
+            else if (current == PurgeBossMood.Calm && previous != PurgeBossMood.Calm)
+                PlayPhaseCue(huntRelease, 0.55f);
             else if (current == PurgeBossMood.Staggered)
             {
                 Play(voiceSource, staggerCry, 0.9f);
                 PurgeVfx.Burst(uvStaggerParticles, 32f);
                 _flashUntil = Time.time + 0.3f;
             }
+        }
+
+        private void PlayPhaseCue(AudioClip clip, float volume)
+        {
+            if (clip == null) return;
+            var camera = Camera.main;
+            if (camera != null && Vector3.Distance(camera.transform.position, transform.position) > 35f)
+            {
+                var towardBoss = (transform.position - camera.transform.position).normalized;
+                GameAudioRuntime.AtPoint(clip, camera.transform.position + towardBoss * 4f, volume * .65f);
+            }
+            else Play(phaseSource, clip, volume);
         }
 
         private void SetUvContact(bool active)
@@ -174,7 +240,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
             Play(impactSource, attackImpact, 0.75f);
         }
 
-        private void UpdateUvContactPosition()
+        private void UpdateUvContactPosition(bool blocked)
         {
             if (uvContactParticles == null || boss.Runner == null) return;
             var closestBeamDistance = float.PositiveInfinity;
@@ -183,7 +249,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
             {
                 if (!boss.Runner.TryGetPlayerObject(player, out var obj) || obj == null
                     || !obj.TryGetComponent<NetworkPlayerFlashlight>(out var flashlight)
-                    || !flashlight.ResonanceActive || !flashlight.ResonanceHasValidHit) continue;
+                    || !flashlight.ResonanceActive
+                    || (blocked ? !flashlight.ResonanceBossImmuneHit : !flashlight.ResonanceHasValidHit)) continue;
                 var origin = obj.transform.position + Vector3.up * 1.65f;
                 var direction = (flashlight.ResonanceEndpoint - origin).normalized;
                 var towardBoss = (_bodyCollider != null ? _bodyCollider.bounds.center : contactPoint) - origin;
@@ -246,8 +313,17 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private void ResetFeedback()
         {
             _bound = false;
+            _joinCuePending = false;
             _uvActive = false;
+            _uvBlocked = false;
             _lastStepState = 0;
+            if (uvContactParticles != null)
+            {
+                var main = uvContactParticles.main;
+                main.startColor = _uvContactColor;
+                var emission = uvContactParticles.emission;
+                emission.rateOverTime = _uvContactRate;
+            }
             if (phaseSource != null) phaseSource.Stop();
             if (voiceSource != null) voiceSource.Stop();
             if (uvSource != null) uvSource.Stop();
