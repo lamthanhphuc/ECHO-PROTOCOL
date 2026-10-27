@@ -935,6 +935,8 @@ namespace EchoProtocol.MatchFlow
                 ApplyBreakerTelemetry(relayA2, matchState.RelayA2Breakers);
                 ApplyStabilizationTelemetry(relayA1, matchState.RelayA1Stabilization);
                 ApplyStabilizationTelemetry(relayA2, matchState.RelayA2Stabilization);
+                relayA1?.PresentReplicatedAudio();
+                relayA2?.PresentReplicatedAudio();
             }
 
             if (relayB1 != null)
