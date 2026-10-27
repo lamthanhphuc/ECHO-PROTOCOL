@@ -12,7 +12,7 @@ if (!$stackPath.StartsWith($nativeRoot, [StringComparison]::OrdinalIgnoreCase)) 
 $stack = Get-Content -LiteralPath $stackPath -Raw | ConvertFrom-Json
 $candidate = (& rtk proxy git -C $repo rev-parse HEAD | Out-String).Trim()
 $branch = (& rtk proxy git -C $repo branch --show-current | Out-String).Trim()
-if ($branch -ne 'feature/aed-v02-full-integration' -or !$stack.ready -or $stack.candidate -ne $candidate -or $stack.runId -notmatch '^aedv02-[a-z0-9-]{1,48}$') {
+if ($branch -ne 'feature/ltp-aed-v02-map1-completion' -or !$stack.ready -or $stack.candidate -ne $candidate -or $stack.runId -notmatch '^aedv02-[a-z0-9-]{1,48}$') {
     throw 'Campaign requires the feature branch and a healthy isolated Backend built from the same candidate HEAD.'
 }
 $api = [Uri]$stack.apiUrl
