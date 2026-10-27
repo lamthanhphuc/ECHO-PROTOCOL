@@ -28,6 +28,21 @@ public sealed class MatchResultServiceTests
         Assert.Equal(MatchRewardStatus.Pending, result.Data.RewardStatus);
     }
 
+    [Fact]
+    public async Task LostSuccessResponseCanReplayAfterLeaseExpires()
+    {
+        await using var harness = await UnitHarness.CreateAsync();
+        var request = harness.ValidRequest();
+        Assert.True((await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request)).IsSuccess);
+        var match = await harness.Db.MatchAuthorityBindings.SingleAsync();
+        match.LeaseExpiresAtUtc = Now.AddMinutes(-1).UtcDateTime;
+        await harness.Db.SaveChangesAsync();
+        var replay = await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request);
+        Assert.True(replay.IsSuccess);
+        Assert.True(replay.Data!.IsReplay);
+        Assert.Single(await harness.Db.MatchResults.ToListAsync());
+    }
+
     [Fact, Trait("Category", "M4Unit")]
     public async Task NonHostIsRejected()
     {

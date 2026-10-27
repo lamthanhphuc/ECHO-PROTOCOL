@@ -6,6 +6,7 @@ using EchoProtocol.Audio;
 using EchoProtocol.Auth;
 using EchoProtocol.Core;
 using EchoProtocol.Networking;
+using EchoProtocol.Networking.Authority;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -139,6 +140,11 @@ namespace EchoProtocol.UI.Result
         private void Update()
         {
             UpdateResponsiveLayout();
+            if (!_navigating && _snapshot != null && MatchAuthorityRuntime.Instance != null)
+            {
+                var saveStatus = MatchAuthorityRuntime.Instance.GetResultSaveStatus(_snapshot.MatchId);
+                if (!string.IsNullOrEmpty(saveStatus)) SetText("ActionStatus", saveStatus);
+            }
             if (_recordingDot != null)
                 _recordingDot.color = new Color(0.78f, 0.15f, 0.18f,
                     _reducedMotion ? 1f : 0.55f + 0.45f * Mathf.Sin(Time.unscaledTime * 2.8f));
@@ -447,6 +453,12 @@ namespace EchoProtocol.UI.Result
         {
             while (!token.IsCancellationRequested)
             {
+                var authority = MatchAuthorityRuntime.Instance;
+                if (authority != null && authority.IsResultPermanentlyRejected(matchId.ToString("D")))
+                {
+                    SetText("RewardStatus", authority.GetResultSaveStatus(matchId.ToString("D")));
+                    return;
+                }
                 var reward = await ResultRewardBridge.LoadAsync(matchId, token);
                 if (token.IsCancellationRequested) return;
                 if (reward.HasConfirmedReward)

@@ -4,6 +4,31 @@ using EchoProtocol.Networking.Authority;
 
 public sealed class MatchResultOutboxSerializationTests
 {
+    [TestCase(401, "TOKEN_EXPIRED", true, false)]
+    [TestCase(429, "RATE_LIMITED", true, false)]
+    [TestCase(503, "UNAVAILABLE", true, false)]
+    [TestCase(410, "MATCH_LEASE_EXPIRED", true, true)]
+    [TestCase(400, "MATCH_RESULT_INVALID_DURATION", true, false)]
+    [TestCase(400, "MATCH_RESULT_INVALID_DURATION", false, true)]
+    public void TransientFailuresRemainRetryable(long status, string code, bool durationCanRetry, bool permanent)
+    {
+        Assert.That(MatchAuthorityRuntime.IsPermanentResultFailure(status, code, durationCanRetry), Is.EqualTo(permanent));
+    }
+
+    [Test]
+    public void RestartRetainsRetryScheduleAndSavedReceiptWithoutPayload()
+    {
+        var queue = new PendingMatchResultQueue();
+        queue.items.Add(new PendingMatchResultRecord { matchId = "saved", ownerId = "host-a", saved = true });
+        queue.items.Add(new PendingMatchResultRecord { matchId = "pending", ownerId = "host-b", nextAttemptUtc = 1234,
+            attempts = 3, lastErrorCode = "UNAVAILABLE" });
+        var restored = JsonUtility.FromJson<PendingMatchResultQueue>(JsonUtility.ToJson(queue));
+        Assert.That(restored.items[0].saved, Is.True);
+        Assert.That(restored.items[0].request, Is.Null);
+        Assert.That(restored.items[1].ownerId, Is.EqualTo("host-b"));
+        Assert.That(restored.items[1].nextAttemptUtc, Is.EqualTo(1234));
+        Assert.That(restored.items[1].attempts, Is.EqualTo(3));
+    }
     [Test]
     public void RestartPayload_PreservesHostRosterAndResult()
     {
