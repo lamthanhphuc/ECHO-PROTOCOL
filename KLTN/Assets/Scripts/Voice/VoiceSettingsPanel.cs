@@ -416,7 +416,8 @@ namespace EchoProtocol.Voice
                     : "Chọn giá trị để chuyển sang tùy chọn tiếp theo.";
             }
             if (_tab != 2) return;
-            TextAt(Body + "Devices/DeviceText").text = !string.IsNullOrEmpty(_voice.Devices.Error) ? "Không thể thu mic. Kiểm tra thiết bị và chọn lại."
+            TextAt(Body + "Devices/DeviceText").text = !string.IsNullOrEmpty(_voice.Devices.Error)
+                ? _voice.Devices.Selected + " · " + GameLanguage.Choose("Không khả dụng. Kiểm tra thiết bị hoặc chọn lại.", "Unavailable. Check the device or select another.")
                 : string.IsNullOrEmpty(_voice.Devices.Selected) ? "Chọn microphone để bắt đầu nói" : _voice.Devices.Selected;
             TextAt(Body + "Devices/Test/Label").text = _voice.Devices.Testing ? "DỪNG THỬ MIC" : "THỬ MICROPHONE";
             Find<Button>(Body + "Devices/Test").interactable = _voice.Devices.Ready;

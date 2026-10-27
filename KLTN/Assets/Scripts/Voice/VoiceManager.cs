@@ -231,7 +231,7 @@ namespace EchoProtocol.Voice
         private void UpdateCapture(bool connected)
         {
             bool canCapture = VoiceTransmissionRules.CanCapture(connected, MicrophoneEnabled, SelfMuted,
-                Devices.Ready, Devices.Testing, _focused, _paused, false);
+                Devices.Ready, Devices.Testing, _focused, _paused, VoiceSettingsPanel.IsOpen);
             if (!canCapture) { StopCapture(); return; }
             if (!_recorder.RecordingEnabled)
             {
