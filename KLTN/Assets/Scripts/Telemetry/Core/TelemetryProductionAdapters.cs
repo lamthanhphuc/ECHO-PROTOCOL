@@ -60,7 +60,9 @@ namespace EchoProtocol.Telemetry
             out TelemetryEvent telemetryEvent,
             out TelemetryBufferFailureReason failureReason,
             string experimentCondition = null,
-            string experimentProtocolVersion = null)
+            string experimentProtocolVersion = null,
+            string gameMode = null,
+            string difficulty = null)
         {
             RequireText(mapId, nameof(mapId));
             RequireText(buildVersion, nameof(buildVersion));
@@ -89,6 +91,8 @@ namespace EchoProtocol.Telemetry
                 .AddString("mapContentVersion", mapContentVersion)
                 .AddString("contentWhitelistVersion", contentWhitelistVersion)
                 .AddBoolean("researchCaptureEnabled", researchCaptureEnabled);
+            if (gameMode != null) context.AddString("gameMode", gameMode);
+            if (difficulty != null) context.AddString("difficulty", difficulty);
             if (experimentCondition != null)
             {
                 context

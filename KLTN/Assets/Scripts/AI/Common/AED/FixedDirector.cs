@@ -27,13 +27,13 @@ namespace EchoProtocol.AI.Common.AED
         public const string FixedBaselineContentWhitelistVersion =
     "M2-WHITELIST-1";
 
-        public static ScenarioConfig CreateFixedBaseline()
+        public static ScenarioConfig CreateFixedBaseline(string mapId = FixedBaselineMapId)
         {
             return new ScenarioConfig(
                 FixedBaselineScenarioVersion,
                 AEDPolicyDefinition.PolicySemanticId,
                 ScenarioConfigSource.Fixed,
-                FixedBaselineMapId,
+                mapId,
                 FixedBaselineMonsterType,
                 FixedBaselineObjectiveSpawnSetId,
                 FixedBaselineSupportItemBudget,

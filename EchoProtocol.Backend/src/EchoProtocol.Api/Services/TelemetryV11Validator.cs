@@ -62,6 +62,8 @@ internal static class TelemetryV11Validator
 
     private static readonly HashSet<string> MatchStartedOptionalContextFields =
     [
+        "gameMode",
+        "difficulty",
         "experimentCondition",
         "experimentProtocolVersion",
         "testRunId",
@@ -270,6 +272,12 @@ internal static class TelemetryV11Validator
         {
             return Reject(string.IsNullOrEmpty(reason) ? "TELEMETRY_MATCH_STARTED_INVALID" : reason, out reason);
         }
+
+        if ((context.TryGetProperty("gameMode", out var mode) &&
+             (mode.ValueKind != JsonValueKind.String || mode.GetString() is not ("EXPEDITION" or "PURGE"))) ||
+            (context.TryGetProperty("difficulty", out var difficulty) &&
+             (difficulty.ValueKind != JsonValueKind.String || difficulty.GetString() is not ("EASY" or "NORMAL" or "HARD"))))
+            return Reject("TELEMETRY_GAMEPLAY_PROVENANCE_INVALID", out reason);
 
         var hasCondition = context.TryGetProperty("experimentCondition", out var condition);
         var hasProtocol = context.TryGetProperty("experimentProtocolVersion", out var protocol);

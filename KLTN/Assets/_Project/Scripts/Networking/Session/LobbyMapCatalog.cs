@@ -13,6 +13,9 @@ namespace EchoProtocol.Networking
         public const string ExplorationScene = "Scene_A";
         public const string ExplorationPath = "Assets/Scenes/Scene_A.unity";
         public const int MapCount = 3;
+        public static string TelemetryMapId(string scene) => scene == AlienHuntMission.SceneName
+            ? "PURGE-SCENE-B" : scene == ExplorationScene ? "EXPEDITION-SCENE-A" : "M2-MAP-1";
+        public static string TelemetryGameMode(string scene) => scene == AlienHuntMission.SceneName ? "PURGE" : "EXPEDITION";
         private static NetworkRunner _hostRunner;
         private static int _hostSelection;
         public static bool IsGameplayScene(string name) => name == LobbyManager.GameSceneName || name == ExplorationScene || name == AlienHuntMission.SceneName;

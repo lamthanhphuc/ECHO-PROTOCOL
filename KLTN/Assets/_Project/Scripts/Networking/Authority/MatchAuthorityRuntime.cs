@@ -1695,7 +1695,7 @@ namespace EchoProtocol.Networking.Authority
                 applied.MapId,
                 teamSize,
                 Application.version,
-                telemetryMapContentVersion,
+                applied.MapId + ":" + telemetryMapContentVersion,
                 resolvedContentWhitelistVersion,
                 _researchCaptureEnabled,
                 out _,
@@ -2088,7 +2088,10 @@ namespace EchoProtocol.Networking.Authority
                     && playerObject != null
                     && playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState))
                 {
-                    survived = lifeState.Status == NetworkPlayerLifeStatus.Escaped;
+                    var matchState = NetworkMatchState.Instance;
+                    survived = NetworkPlayerLifeStateRules.SurvivedMatch(
+                        lifeState.Status, matchState != null && matchState.HuntReady,
+                        _pendingBackendOutcome == "WIN", disconnected);
                     downedCount = Mathf.Max(0, lifeState.DownCount);
                     reviveCount = Mathf.Max(0, lifeState.ReviveCount);
                 }

@@ -169,7 +169,8 @@ namespace EchoProtocol.AI.Common.AED
             ScenarioResolutionMode resolutionMode,
             ScenarioDecisionPoint decisionPoint,
             string phaseContext,
-            string experimentCondition)
+            string experimentCondition,
+            string mapId = FixedDirector.FixedBaselineMapId)
         {
             if (resolutionId == Guid.Empty) throw new ArgumentException("Resolution id is required.", nameof(resolutionId));
             if (targetMatchId == Guid.Empty) throw new ArgumentException("Target match id is required.", nameof(targetMatchId));
@@ -180,6 +181,7 @@ namespace EchoProtocol.AI.Common.AED
             DecisionPoint = decisionPoint;
             PhaseContext = phaseContext ?? string.Empty;
             ExperimentCondition = experimentCondition ?? string.Empty;
+            MapId = ScenarioConfig.RequireText(mapId, nameof(mapId));
         }
 
         public Guid ResolutionId { get; }
@@ -188,5 +190,6 @@ namespace EchoProtocol.AI.Common.AED
         public ScenarioDecisionPoint DecisionPoint { get; }
         public string PhaseContext { get; }
         public string ExperimentCondition { get; }
+        public string MapId { get; }
     }
 }

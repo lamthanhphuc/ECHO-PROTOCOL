@@ -77,7 +77,8 @@ namespace EchoProtocol.AI.AED
                 mode,
                 decisionPoint,
                 phaseContext ?? string.Empty,
-                experimentCondition ?? string.Empty);
+                experimentCondition ?? string.Empty,
+                EchoProtocol.Networking.LobbyMapCatalog.TelemetryMapId(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name));
 
             AEDPolicyConfig policyConfig = null;
             AEDEvidencePolicy evidencePolicy = null;

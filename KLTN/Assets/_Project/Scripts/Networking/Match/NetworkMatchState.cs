@@ -4102,7 +4102,7 @@ namespace EchoProtocol.Networking
 
             var currentBase =
                 decisionPoint == ScenarioDecisionPoint.PreMatch
-                    ? FixedDirector.CreateFixedBaseline()
+                    ? FixedDirector.CreateFixedBaseline(LobbyMapCatalog.TelemetryMapId(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name))
                     : scenarioRuntime.CurrentAppliedScenarioConfig;
 
             if (currentBase == null
@@ -4185,7 +4185,7 @@ namespace EchoProtocol.Networking
             }
 
             var currentResolvedBase =
-                FixedDirector.CreateFixedBaseline();
+                FixedDirector.CreateFixedBaseline(LobbyMapCatalog.TelemetryMapId(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name));
 
             if (!FixedDirector.MatchesBaseRef(
                     result.CapturedBaseRef,
@@ -4229,7 +4229,7 @@ namespace EchoProtocol.Networking
             Guid matchId)
         {
             var fixedConfig =
-                FixedDirector.CreateFixedBaseline();
+                FixedDirector.CreateFixedBaseline(LobbyMapCatalog.TelemetryMapId(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name));
 
             var validation =
                 ScenarioValidator.ValidateFixedBaseline(
