@@ -45,6 +45,7 @@ jobs:
           done
           exit 1
       - name: Check mirrored contract and scene manifest
+        if: hashFiles('scripts/Sync-AEDV02Contract.ps1') != ''
         shell: pwsh
         run: ./scripts/Sync-AEDV02Contract.ps1 -Check
       - name: Restore and build Backend solution
@@ -109,3 +110,22 @@ jobs:
         with:
           name: web-check-results
           path: TestResults/web/*.log
+
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build linux/amd64 application images
+        run: |
+          docker build --platform linux/amd64 -t "echo-ci-backend:$GITHUB_SHA" -f EchoProtocol.Backend/Dockerfile EchoProtocol.Backend
+          docker build --platform linux/amd64 -t "echo-ci-web:$GITHUB_SHA" -f EchoProtocol.Web/Dockerfile EchoProtocol.Web
+          mkdir -p TestResults/images
+          printf '%s\n' "$GITHUB_SHA" > TestResults/images/COMMIT
+          docker image inspect "echo-ci-backend:$GITHUB_SHA" --format '{{.Id}}' > TestResults/images/backend-image-id.txt
+          docker image inspect "echo-ci-web:$GITHUB_SHA" --format '{{.Id}}' > TestResults/images/web-image-id.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: image-build-provenance
+          path: TestResults/images/

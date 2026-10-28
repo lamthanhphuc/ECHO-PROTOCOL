@@ -2,8 +2,9 @@
 
 ## What runs now
 
-- `.github/workflows/aed-backend.yml` checks pull requests and pushes to `LTP` and `main`: the mirrored AED contract, .NET 8 solution build, all Backend tests with isolated PostgreSQL 16 and a MongoDB replica set, plus Next.js lint, typecheck and build. It uploads Backend TRX and Web check logs.
+- `.github/workflows/aed-backend.yml` checks pull requests and pushes to `LTP` and `main`: the mirrored AED contract when that script exists, .NET 8 solution build, all Backend tests with isolated PostgreSQL 16 and a MongoDB replica set, plus Next.js lint, typecheck and build. A separate job also builds both `linux/amd64` Docker images on the hosted runner. It uploads Backend TRX, Web check logs and image IDs.
 - `.github/workflows/ec2-release-candidate.yml` is manual. From `LTP` or `main`, it builds `linux/amd64` Backend and/or Web images on a GitHub runner, tags each with the **full** Git commit SHA, and uploads compressed `docker save` archives with SHA-256 and image IDs. It does not access EC2 or production secrets.
+- GitHub requires a `workflow_dispatch` workflow file on the default branch before it can be dispatched. The workflow must land on `main` before its first candidate build; a PR that exists only on `LTP` is insufficient.
 - Unity EditMode/PlayMode are not CI gates yet. A licensed Unity 6000.5.8f1 runner with the required Photon Fusion packages and a reproducible noninteractive test setup is needed before those results can be trusted in GitHub Actions. Current local Editor results cannot certify a different CI commit.
 - At implementation time, `npm audit --omit=dev` found 3 production dependency advisories (Next.js critical; `sharp` and `source-map-js` high). This PR records the risk; dependency remediation and Web release require a separately reviewed change.
 
