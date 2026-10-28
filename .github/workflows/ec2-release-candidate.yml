@@ -1,0 +1,49 @@
+name: EC2 release candidate
+on:
+  workflow_dispatch:
+    inputs:
+      services:
+        description: Images to build for the existing EC2 Compose project
+        type: choice
+        required: true
+        default: backend
+        options: [backend, web, both]
+permissions:
+  contents: read
+concurrency:
+  group: ec2-release-candidate-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  images:
+    if: github.ref == 'refs/heads/LTP' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build immutable linux/amd64 images
+        env:
+          SERVICES: ${{ inputs.services }}
+        run: |
+          set -euo pipefail
+          mkdir release
+          printf '%s\n' "$GITHUB_SHA" > release/COMMIT
+          date -u +%Y-%m-%dT%H:%M:%SZ > release/BUILT_AT_UTC
+          if [[ "$SERVICES" == backend || "$SERVICES" == both ]]; then
+            docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+              -t "aws-lightsail-backend:$GITHUB_SHA" -f EchoProtocol.Backend/Dockerfile EchoProtocol.Backend
+            docker image inspect "aws-lightsail-backend:$GITHUB_SHA" --format '{{.Id}}' > release/backend-image-id.txt
+            docker save "aws-lightsail-backend:$GITHUB_SHA" | gzip -1 > release/backend-image.tar.gz
+          fi
+          if [[ "$SERVICES" == web || "$SERVICES" == both ]]; then
+            docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+              -t "aws-lightsail-web:$GITHUB_SHA" -f EchoProtocol.Web/Dockerfile EchoProtocol.Web
+            docker image inspect "aws-lightsail-web:$GITHUB_SHA" --format '{{.Id}}' > release/web-image-id.txt
+            docker save "aws-lightsail-web:$GITHUB_SHA" | gzip -1 > release/web-image.tar.gz
+          fi
+          (cd release && sha256sum *-image.tar.gz > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ec2-images-${{ github.sha }}
+          path: release/
+          retention-days: 7
+          compression-level: 0
