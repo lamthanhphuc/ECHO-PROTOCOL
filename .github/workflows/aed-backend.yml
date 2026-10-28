@@ -33,7 +33,7 @@ jobs:
           dotnet-version: 8.0.x
       - name: Start isolated MongoDB replica set
         run: |
-          docker run -d --name aed_mongo_ci -p 127.0.0.1:27017:27017 mongo:8 --replSet rs0 --bind_ip_all
+          docker run -d --name aed_mongo_ci -p 127.0.0.1:27017:27017 -e GLIBC_TUNABLES=glibc.pthread.rseq=1 mongo:8 --replSet rs0 --bind_ip_all
           for attempt in $(seq 1 30); do
             if docker exec aed_mongo_ci mongosh --quiet --eval 'db.adminCommand({ping:1})' >/dev/null 2>&1; then break; fi
             sleep 1
